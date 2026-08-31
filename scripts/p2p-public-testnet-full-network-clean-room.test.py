@@ -8,6 +8,7 @@ import json
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 
@@ -78,6 +79,17 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
     def _input(self) -> dict[str, object]:
         transaction_id = "txn-clean-room-001"
         capture_window_id = "capture-window-20260901-001"
+        task_uid = "task_174f0a5a87394012b071171cc4a52372"
+        head_oid = "e" * 40
+        network_id = "oasis7-public-testnet-governed-20260606"
+        authority_bindings = {
+            "task_uid": task_uid,
+            "head_oid": head_oid,
+            "network_id": network_id,
+            "signer_allowlist": ["governance-signer"],
+            "trust_root_id": "oasis7-public-testnet-governance-root-v1",
+            "verifier_id": "governed-receipt-verifier",
+        }
         execution_bindings = {
             "execution_records_root": {
                 "path": "/operator/truth/execution-records/root",
@@ -143,7 +155,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 "receipt": self._receipt("oasis7.package_provenance.v1"),
             },
             "genesis": {
-                "network_id": "oasis7-public-testnet-governed-20260606",
+                "network_id": network_id,
                 "chain_id": "oasis7-public-testnet-governed-20260606",
                 "world_id": "oasis7-public-testnet-governed-20260606",
                 "path": "/operator/truth/genesis.json",
@@ -341,13 +353,13 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             "schema_version": "oasis7.public_testnet_full_network_clean_room_input.v1",
             "transaction_id": transaction_id,
             "capture_window_id": capture_window_id,
-            "task_uid": "task_174f0a5a87394012b071171cc4a52372",
-            "head_oid": "e" * 40,
+            "task_uid": task_uid,
+            "head_oid": head_oid,
             "authority": {
                 "authorized": True,
-                "task_uid": "task_174f0a5a87394012b071171cc4a52372",
-                "head_oid": "e" * 40,
-                "frozen_head_oid": "e" * 40,
+                "task_uid": task_uid,
+                "head_oid": head_oid,
+                "frozen_head_oid": head_oid,
                 "signer_allowlist": ["governance-signer"],
                 "crypto_verifier_receipt": {
                     "schema_version": "oasis7.crypto_verifier_receipt.v1",
@@ -364,7 +376,17 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                     "executable_sha256": "f" * 64,
                     "bindings": json.loads(json.dumps(execution_bindings)),
                 },
-                "receipt": self._receipt("oasis7.clean_room_authority.v1"),
+                "trust_root": {
+                    **self._receipt("oasis7.governed_trust_root_receipt.v1"),
+                    "trust_root_id": "oasis7-public-testnet-governance-root-v1",
+                    "verifier_id": "governed-receipt-verifier",
+                    "signer_allowlist": ["governance-signer"],
+                    "bindings": authority_bindings,
+                },
+                "receipt": {
+                    **self._receipt("oasis7.clean_room_authority.v1"),
+                    "bindings": authority_bindings,
+                },
             },
             "truth": truth,
             "fresh_root_probe": {
@@ -437,6 +459,25 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                     },
                 },
             },
+            "adapter_verification": {
+                "schema_version": "oasis7.clean_room_adapter_verification.v1",
+                "authenticated": True,
+                "verified": True,
+                "signer_id": "governance-signer",
+                "signed_payload_sha256": "a" * 64,
+                "signature_hex": "b" * 128,
+                "canonical_digest": "c" * 64,
+                "adapter_id": "external-clean-room-adapter",
+                "transaction_id": transaction_id,
+                "capture_window_id": capture_window_id,
+                "live_receipts_verified": True,
+                "credential_nonce_ledger_verified": True,
+                "backup_or_no_backup_authority_verified": True,
+                "apply_authority_granted": False,
+                "durable_journal_authoritative": False,
+                "durable_journal_receipt_required": True,
+                "receipt": self._receipt("oasis7.clean_room_adapter_verification_receipt.v1"),
+            },
             "nodes": nodes,
         }
 
@@ -484,6 +525,69 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             set(plan["truth"]["package"]["platforms"]),
             {"linux-x64", "windows-x64", "macos-arm64"},
         )
+
+    def test_observer_destructive_phases_follow_fresh_root_probe(self) -> None:
+        plan = self.module.build_plan(self._input())
+        order = plan["global_order"]
+        probe_index = order.index("fresh-root-probe")
+        for name in ("linux-lan-observer", "windows-observer", "macos-observer"):
+            for phase in ("stop", "delete", "rebuild"):
+                self.assertGreater(order.index(f"{phase}:{name}"), probe_index)
+
+        invalid = list(order)
+        invalid.remove("stop:windows-observer")
+        invalid.insert(probe_index, "stop:windows-observer")
+        with patch.object(self.module, "_global_order", return_value=invalid):
+            with self.assertRaises(SystemExit) as raised:
+                self.module.build_plan(self._input())
+        self.assertRegex(str(raised.exception), r"(?i)order|probe|observer|destructive")
+
+    def test_plan_rejects_attacker_endpoint_host_port_or_path(self) -> None:
+        request = self._input()
+        request["nodes"][0]["endpoints"]["healthz"] = "http://attacker.invalid:6631/healthz"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)canonical|endpoint|host|port|binding")
+
+    def test_plan_requires_code_owned_external_trust_root_and_receipt_bindings(self) -> None:
+        request = self._input()
+        request["authority"]["trust_root"]["trust_root_id"] = "caller-owned-root"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)trust|root|authority|identity")
+
+        request = self._input()
+        request["authority"]["receipt"]["bindings"]["head_oid"] = "f" * 40
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)authority|head|receipt|binding")
+
+        request = self._input()
+        request["truth"]["genesis"]["network_id"] = "caller-owned-network"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)network|genesis|trust|code-owned")
+
+    def test_plan_requires_adapter_live_receipt_and_never_treats_plan_as_apply_proof(self) -> None:
+        request = self._input()
+        request.pop("adapter_verification")
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)adapter|live|receipt|ledger")
+
+        request = self._input()
+        request["adapter_verification"]["apply_authority_granted"] = True
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)apply|proof|adapter|authority")
+
+    def test_plan_marks_operation_journal_non_authoritative_and_adapter_owned(self) -> None:
+        plan = self.module.build_plan(self._input())
+        contract = plan["operation_journal_contract"]
+        self.assertFalse(contract["authoritative"])
+        self.assertFalse(contract["apply_usable"])
+        self.assertTrue(contract["adapter_owned"])
+        self.assertTrue(contract["durable_receipt_required"])
 
     def test_plan_rejects_missing_fresh_root_probe_before_windows_or_macos(self) -> None:
         request = self._input()
@@ -780,7 +884,8 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             plan = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(plan["execution"]["mode"], "plan-only")
-            self.assertNotIn("apply", result.stdout.lower())
+            self.assertFalse(plan["execution"]["plan_is_apply_proof"])
+            self.assertFalse(plan["execution"]["provider_mutation_performed"])
 
 
 if __name__ == "__main__":

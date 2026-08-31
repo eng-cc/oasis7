@@ -134,6 +134,35 @@ CANONICAL_HOST_INVENTORY: dict[str, dict[str, str]] = {
     },
 }
 
+CANONICAL_ENDPOINT_INVENTORY: dict[str, dict[str, str]] = {
+    "sequencer-204": {
+        "healthz": "http://127.0.0.1:6631/healthz",
+        "evidence": "http://127.0.0.1:6631/v1/chain/rebuild-proof",
+    },
+    "storage-205": {
+        "healthz": "http://127.0.0.1:6632/healthz",
+        "evidence": "http://127.0.0.1:6632/v1/chain/status",
+    },
+    "linux-lan-observer": {
+        "healthz": "http://127.0.0.1:6633/healthz",
+        "evidence": "http://127.0.0.1:6633/v1/chain/status",
+    },
+    "windows-observer": {
+        "healthz": "http://127.0.0.1:5121/healthz",
+        "evidence": "http://127.0.0.1:5121/v1/chain/status",
+    },
+    "macos-observer": {
+        "healthz": "http://127.0.0.1:19083/healthz",
+        "evidence": "http://127.0.0.1:19083/v1/chain/status",
+    },
+}
+
+CANONICAL_SIGNER_ALLOWLIST = frozenset({"governance-signer"})
+CANONICAL_VERIFIER_ID = "governed-receipt-verifier"
+CANONICAL_TRUST_ROOT_ID = "oasis7-public-testnet-governance-root-v1"
+CANONICAL_ADAPTER_ID = "external-clean-room-adapter"
+CANONICAL_NETWORK_ID = "oasis7-public-testnet-governed-20260606"
+
 
 def die(message: str) -> NoReturn:
     raise SystemExit(f"error: full-network clean-room: {message}")
@@ -294,9 +323,34 @@ def _validate_authority(request: dict[str, Any]) -> dict[str, Any]:
     signer_allowlist = {require_string(item, "authority.signer_allowlist[]") for item in raw_signers}
     if len(signer_allowlist) != len(raw_signers):
         die("authority signer allowlist contains duplicates")
+    if signer_allowlist != CANONICAL_SIGNER_ALLOWLIST:
+        die("authority signer allowlist does not match the code-owned trust root")
     receipt = validate_authenticated_receipt(
         authority.get("receipt"), "authority.receipt", signer_allowlist
     )
+    if receipt.get("schema_version") != "oasis7.clean_room_authority.v1":
+        die("authority receipt schema is unsupported")
+    receipt_bindings = require_object(receipt.get("bindings"), "authority.receipt.bindings")
+    if (
+        receipt_bindings.get("task_uid") != task_uid
+        or str(receipt_bindings.get("head_oid", "")).lower() != head_oid
+        or receipt_bindings.get("signer_allowlist") != sorted(CANONICAL_SIGNER_ALLOWLIST)
+        or receipt_bindings.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID
+        or receipt_bindings.get("verifier_id") != CANONICAL_VERIFIER_ID
+    ):
+        die("authority receipt task/head/trust-root binding mismatch")
+    trust_root = require_object(authority.get("trust_root"), "authority.trust_root")
+    validate_authenticated_receipt(trust_root, "authority.trust_root", signer_allowlist)
+    if (
+        trust_root.get("schema_version") != "oasis7.governed_trust_root_receipt.v1"
+        or trust_root.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID
+        or trust_root.get("verifier_id") != CANONICAL_VERIFIER_ID
+        or trust_root.get("signer_allowlist") != sorted(CANONICAL_SIGNER_ALLOWLIST)
+    ):
+        die("authority trust-root identity is not code-owned")
+    trust_bindings = require_object(trust_root.get("bindings"), "authority.trust_root.bindings")
+    if trust_bindings != receipt_bindings:
+        die("authority trust-root and authority receipt bindings disagree")
     verifier = require_object(
         authority.get("crypto_verifier_receipt"), "authority.crypto_verifier_receipt"
     )
@@ -310,6 +364,8 @@ def _validate_authority(request: dict[str, Any]) -> dict[str, Any]:
     if verifier.get("scope") != "all-plan-receipts":
         die("crypto verifier receipt scope must cover all plan receipts")
     require_string(verifier.get("verifier_id"), "crypto_verifier_receipt.verifier_id")
+    if verifier.get("verifier_id") != CANONICAL_VERIFIER_ID:
+        die("crypto verifier identity is not code-owned")
     require_string(verifier.get("executable_path"), "crypto_verifier_receipt.executable_path")
     require_hex(verifier.get("executable_sha256"), "crypto_verifier_receipt.executable_sha256")
     return {
@@ -317,6 +373,7 @@ def _validate_authority(request: dict[str, Any]) -> dict[str, Any]:
         "head_oid": head_oid,
         "frozen_head_oid": head_oid,
         "signer_allowlist": sorted(signer_allowlist),
+        "trust_root": trust_root,
         "crypto_verifier_receipt": verifier,
         "receipt": receipt,
     }
@@ -422,6 +479,16 @@ def _validate_verifier_bindings(
         die("crypto verifier receipt execution/world/CAS/index binding mismatch")
 
 
+def _validate_external_truth_binding(
+    authority: dict[str, Any], truth: dict[str, Any]
+) -> None:
+    expected_network = truth["genesis"]["network_id"]
+    authority_network = authority["receipt"]["bindings"].get("network_id")
+    trust_network = authority["trust_root"]["bindings"].get("network_id")
+    if authority_network != expected_network or trust_network != expected_network:
+        die("external authority/trust-root network binding mismatch")
+
+
 def _validate_truth(truth: Any, allowed_signers: set[str]) -> dict[str, Any]:
     value = require_object(truth, "truth")
     package = require_object(value.get("package"), "truth.package")
@@ -460,6 +527,8 @@ def _validate_truth(truth: Any, allowed_signers: set[str]) -> dict[str, Any]:
     genesis = require_object(value.get("genesis"), "truth.genesis")
     for field in ("network_id", "chain_id", "world_id", "path"):
         require_string(genesis.get(field), f"truth.genesis.{field}")
+    if any(genesis.get(field) != CANONICAL_NETWORK_ID for field in ("network_id", "chain_id", "world_id")):
+        die("truth genesis network identity is not the code-owned public-testnet network")
     _positive_size(genesis.get("size_bytes"), "truth.genesis.size_bytes")
     genesis_sha = require_hex(genesis.get("sha256"), "truth.genesis.sha256")
     if genesis_sha != package_genesis_sha:
@@ -601,8 +670,11 @@ def _validate_host_and_endpoints(
         die(f"{name}.host_binding.known_host_fingerprint is malformed")
 
     endpoints = require_object(node.get("endpoints"), f"{name}.endpoints")
+    canonical_endpoints = CANONICAL_ENDPOINT_INVENTORY[name]
     healthz = require_string(endpoints.get("healthz"), f"{name}.endpoints.healthz")
     evidence = require_string(endpoints.get("evidence"), f"{name}.endpoints.evidence")
+    if healthz != canonical_endpoints["healthz"] or evidence != canonical_endpoints["evidence"]:
+        die(f"{name}.endpoints do not match the code-owned canonical endpoint inventory")
     if not healthz.startswith(("http://", "https://")) or not healthz.endswith("/healthz"):
         die(f"{name}.endpoints.healthz must be an HTTP /healthz endpoint")
     if not evidence.startswith(("http://", "https://")):
@@ -633,7 +705,10 @@ def _validate_host_and_endpoints(
         die(f"{name}.credential_seam must be one-shot")
     return (
         {"target": target, "known_hosts_path": known_hosts_path, "known_host_fingerprint": fingerprint},
-        {"healthz": healthz, "evidence": evidence},
+        {
+            "healthz": canonical_endpoints["healthz"],
+            "evidence": canonical_endpoints["evidence"],
+        },
         {
             "kind": seam["kind"],
             "environment_name": environment_name,
@@ -796,6 +871,54 @@ def _validate_credential_nonce_ledger(
     }
 
 
+def _validate_adapter_verification(
+    raw_adapter: Any,
+    context: dict[str, str],
+    allowed_signers: set[str],
+) -> dict[str, Any]:
+    adapter = require_object(raw_adapter, "adapter_verification")
+    validate_authenticated_receipt(adapter, "adapter_verification", allowed_signers)
+    if adapter.get("schema_version") != "oasis7.clean_room_adapter_verification.v1":
+        die("adapter_verification schema is unsupported")
+    if adapter.get("adapter_id") != CANONICAL_ADAPTER_ID:
+        die("adapter_verification adapter identity is not code-owned")
+    if adapter.get("transaction_id") != context["transaction_id"]:
+        die("adapter_verification transaction binding mismatch")
+    if adapter.get("capture_window_id") != context["capture_window_id"]:
+        die("adapter_verification capture-window binding mismatch")
+    for field in (
+        "live_receipts_verified",
+        "credential_nonce_ledger_verified",
+        "backup_or_no_backup_authority_verified",
+    ):
+        if adapter.get(field) is not True:
+            die(f"adapter_verification.{field} must be true before any apply adapter")
+    if adapter.get("apply_authority_granted") is not False:
+        die("adapter_verification cannot grant apply authority")
+    if adapter.get("durable_journal_authoritative") is not False:
+        die("adapter_verification durable journal cannot be apply authority")
+    if adapter.get("durable_journal_receipt_required") is not True:
+        die("adapter_verification must require a durable adapter receipt")
+    validate_authenticated_receipt(
+        adapter.get("receipt"), "adapter_verification.receipt", allowed_signers
+    )
+    return {
+        "schema_version": adapter["schema_version"],
+        "authenticated": True,
+        "verified": True,
+        "adapter_id": CANONICAL_ADAPTER_ID,
+        "transaction_id": context["transaction_id"],
+        "capture_window_id": context["capture_window_id"],
+        "live_receipts_verified": True,
+        "credential_nonce_ledger_verified": True,
+        "backup_or_no_backup_authority_verified": True,
+        "apply_authority_granted": False,
+        "durable_journal_authoritative": False,
+        "durable_journal_receipt_required": True,
+        "receipt": adapter["receipt"],
+    }
+
+
 def _validate_no_old_state_copy(request: dict[str, Any]) -> None:
     recovery = request.get("recovery")
     if recovery is None:
@@ -907,15 +1030,56 @@ def _global_order(backup_required: bool) -> list[str]:
     phases = ["preflight"]
     if backup_required:
         phases.append("forensic-backup")
-    phases.extend(("stop", "delete", "rebuild"))
     for phase in phases:
         order.extend(f"{phase}:{name}" for name in NODE_ORDER)
+    for phase in ("stop", "delete", "rebuild"):
+        order.extend(f"{phase}:{name}" for name in ("storage-205", "sequencer-204"))
     order.extend(("start:sequencer-204", "verify:sequencer-204", "start:storage-205", "verify:storage-205"))
     order.append("fresh-root-probe")
     for name in ("linux-lan-observer", "windows-observer", "macos-observer"):
+        for phase in ("stop", "delete", "rebuild"):
+            order.append(f"{phase}:{name}")
         order.extend((f"start:{name}", f"verify:{name}"))
     order.append("fleet-health")
     return order
+
+
+def _validate_global_order(global_order: list[str]) -> None:
+    if len(set(global_order)) != len(global_order):
+        die("global operation order contains duplicate entries")
+    positions = {entry: index for index, entry in enumerate(global_order)}
+    required = {
+        "fresh-root-probe",
+        "start:sequencer-204",
+        "verify:sequencer-204",
+        "start:storage-205",
+        "verify:storage-205",
+    }
+    required.update(
+        f"{phase}:{name}"
+        for phase in ("stop", "delete", "rebuild", "start", "verify")
+        for name in ("linux-lan-observer", "windows-observer", "macos-observer")
+    )
+    if not required.issubset(positions):
+        die("global operation order is incomplete")
+    probe_index = positions["fresh-root-probe"]
+    for name in ("linux-lan-observer", "windows-observer", "macos-observer"):
+        for phase in ("stop", "delete", "rebuild"):
+            if positions[f"{phase}:{name}"] <= probe_index:
+                die("observer destructive phases must follow the fresh-root probe")
+        if not (
+            positions[f"stop:{name}"]
+            < positions[f"delete:{name}"]
+            < positions[f"rebuild:{name}"]
+            < positions[f"start:{name}"]
+            < positions[f"verify:{name}"]
+        ):
+            die(f"{name} operation order is not stop/delete/rebuild/start/verify")
+    if not (
+        positions["verify:sequencer-204"] < probe_index
+        and positions["verify:storage-205"] < probe_index
+    ):
+        die("fresh-root probe must follow both validator verify outputs")
 
 
 def _operation_journal(
@@ -970,14 +1134,19 @@ def build_plan(request: dict[str, Any]) -> dict[str, Any]:
     _validate_no_old_state_copy(request)
     allowed_signers = set(authority["signer_allowlist"])
     truth = _validate_truth(request.get("truth"), allowed_signers)
+    _validate_external_truth_binding(authority, truth)
     _validate_verifier_bindings(authority["crypto_verifier_receipt"], truth["execution"])
     probe = _validate_probe(request.get("fresh_root_probe"), truth, allowed_signers, context)
     nodes = _validate_nodes(request.get("nodes"), truth, allowed_signers)
     credential_nonce_ledger = _validate_credential_nonce_ledger(
         request.get("credential_nonce_ledger"), nodes, context, allowed_signers
     )
+    adapter_verification = _validate_adapter_verification(
+        request.get("adapter_verification"), context, allowed_signers
+    )
     backup_policy = _validate_backup_policy(request, authority, allowed_signers, context)
     global_order = _global_order(backup_policy["required_before_reset"])
+    _validate_global_order(global_order)
     plan: dict[str, Any] = {
         "schema_version": PLAN_SCHEMA,
         "task_uid": authority["task_uid"],
@@ -989,11 +1158,21 @@ def build_plan(request: dict[str, Any]) -> dict[str, Any]:
             "mode": "plan-only",
             "provider_mutation_performed": False,
             "provider_mutation_boundary": "external-governed-adapter-required",
+            "plan_is_apply_proof": False,
+            "apply_requires_fresh_adapter_receipt": True,
         },
         "node_order": list(NODE_ORDER),
         "global_order": global_order,
         "operation_journal": _operation_journal(global_order, nodes, truth, context),
+        "operation_journal_contract": {
+            "authoritative": False,
+            "apply_usable": False,
+            "adapter_owned": True,
+            "durable_receipt_required": True,
+            "planner_output_is_not_apply_proof": True,
+        },
         "canonical_host_inventory": CANONICAL_HOST_INVENTORY,
+        "canonical_endpoint_inventory": CANONICAL_ENDPOINT_INVENTORY,
         "surfaces": {
             "validators": list(VALIDATOR_RESET_SURFACES),
             "observers": list(OBSERVER_RESET_SURFACES),
@@ -1009,6 +1188,7 @@ def build_plan(request: dict[str, Any]) -> dict[str, Any]:
         },
         "fresh_root_probe": probe,
         "credential_nonce_ledger": credential_nonce_ledger,
+        "adapter_verification": adapter_verification,
         "nodes": [nodes[name] for name in NODE_ORDER],
         "forensic_backup": {
             "mode": backup_policy["mode"],
