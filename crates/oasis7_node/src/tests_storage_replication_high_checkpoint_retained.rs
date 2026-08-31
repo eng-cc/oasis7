@@ -663,11 +663,69 @@ fn fetch_commit_handler_rejects_same_size_corrupt_checkpoint_member_before_provi
         serde_json::from_slice(&response_payload).expect("decode response");
     assert!(response.found, "handler should still return the persisted commit");
 
-    std::thread::sleep(Duration::from_millis(100));
+    let marker_height = height + 1;
+    let marker_message = replication
+        .build_local_commit_message(
+            "node-storage",
+            world_id,
+            7_065,
+            &PosDecision {
+                height: marker_height,
+                slot: marker_height,
+                epoch: 0,
+                proposer_id: "node-storage".to_string(),
+                status: PosConsensusStatus::Committed,
+                block_hash: "block-65".to_string(),
+                action_root: empty_action_root(),
+                committed_actions: Vec::new(),
+                approved_stake: 100,
+                rejected_stake: 0,
+                required_stake: 67,
+                total_stake: 100,
+            },
+            None,
+            None,
+        )
+        .expect("build completion marker")
+        .expect("completion marker");
+    let marker_request = replication
+        .build_fetch_commit_request(world_id, marker_height)
+        .expect("marker fetch request");
+    let marker_response_payload = network
+        .request(
+            REPLICATION_FETCH_COMMIT_PROTOCOL,
+            serde_json::to_vec(&marker_request)
+                .expect("encode marker request")
+                .as_slice(),
+        )
+        .expect("marker fetch commit response");
+    let marker_response: super::replication::FetchCommitResponse =
+        serde_json::from_slice(&marker_response_payload).expect("decode marker response");
+    assert!(marker_response.found, "completion marker should be served");
+
+    let marker_published = wait_until(Instant::now() + Duration::from_secs(2), || {
+        dht.published_records().iter().any(
+            |(published_world, content_hash, provider_id)| published_world == world_id
+                && content_hash == &marker_message.record.content_hash
+                && provider_id == "storage-provider",
+        )
+    });
     assert!(
-        dht.published_records().is_empty(),
-        "corrupt checkpoint closure must not advertise the payload or any checkpoint member: {:?}",
+        marker_published,
+        "completion marker must publish after the corrupt job reaches terminal failure, got {:?}",
         dht.published_records()
+    );
+    let published = dht.published_records();
+    assert!(
+        published == vec![
+            (
+                world_id.to_string(),
+                marker_message.record.content_hash.clone(),
+                "storage-provider".to_string(),
+            )
+        ],
+        "corrupt checkpoint closure must not advertise the payload or any checkpoint member: {:?}",
+        published
     );
     let _ = fs::remove_dir_all(&dir);
 }
