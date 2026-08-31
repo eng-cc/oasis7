@@ -159,6 +159,12 @@ fn authenticated_remote_checkpoint_rejects_same_size_corrupt_local_member_before
         corrupt_bytes.as_slice(),
     )
     .expect("seed corrupt local CAS member");
+    replication_b
+        .store_blob_by_hash(
+            descriptor.manifest_ref.as_str(),
+            bundle.manifest_json.as_slice(),
+        )
+        .expect("seed valid local checkpoint manifest");
 
     let network: Arc<
         dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
@@ -166,13 +172,8 @@ fn authenticated_remote_checkpoint_rejects_same_size_corrupt_local_member_before
         inner: Arc::new(TestInMemoryNetwork::default()),
         fetch_protocols: Arc::new(Mutex::new(Vec::new())),
     });
-    register_replication_fetch_handlers(
-        &NodeReplicationNetworkHandle::new(Arc::clone(&network)),
-        &replication_config_a,
-        world_id,
-        &config_a.network_policy,
-    )
-    .expect("register remote checkpoint closure handler");
+    // Leave the advertised provider route without a fetch handler to model an
+    // unavailable authenticated refetch while the local manifest remains valid.
     let dht = Arc::new(TestReplicaMaintenanceDht::new(
         "remote-checkpoint-provider",
         "local-checkpoint-provider",
@@ -194,7 +195,7 @@ fn authenticated_remote_checkpoint_rejects_same_size_corrupt_local_member_before
     );
     assert!(
         result.is_err(),
-        "same-size wrong-hash local checkpoint member must fail closed before publication: {result:?}"
+        "unavailable authenticated refetch must fail closed before publication: {result:?}"
     );
     assert!(
         dht.published_records().is_empty(),
