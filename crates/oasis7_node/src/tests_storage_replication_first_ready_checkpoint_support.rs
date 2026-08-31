@@ -201,3 +201,120 @@ fn authenticated_remote_checkpoint_refetches_same_size_corrupt_local_member_from
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
 }
+
+#[test]
+fn authenticated_remote_checkpoint_rejects_descriptor_size_mismatch_before_fetch() {
+    let world_id = "world-authenticated-remote-checkpoint-size-mismatch";
+    let dir_a = temp_dir("authenticated-remote-checkpoint-size-mismatch-a");
+    let dir_b = temp_dir("authenticated-remote-checkpoint-size-mismatch-b");
+    let (_, public_key_a) = deterministic_keypair_hex(232);
+    let (_, public_key_b) = deterministic_keypair_hex(233);
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 232)],
+    );
+    let replication_config_a = signed_replication_config(dir_a.clone(), 232)
+        .with_remote_writer_allowlist(vec![public_key_b.clone()])
+        .expect("allowlist a")
+        .with_fetch_requester_allowlist(vec![public_key_b])
+        .expect("fetch allowlist a");
+    let replication_config_b = signed_replication_config(dir_b.clone(), 233)
+        .with_remote_writer_allowlist(vec![public_key_a.clone()])
+        .expect("allowlist b")
+        .with_fetch_requester_allowlist(vec![public_key_a])
+        .expect("fetch allowlist b");
+    let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config a")
+        .with_pos_config(pos_config.clone())
+        .expect("pos config a")
+        .with_replication(replication_config_a);
+    let config_b = NodeConfig::new("node-b", world_id, NodeRole::Observer)
+        .expect("config b")
+        .with_pos_config(pos_config)
+        .expect("pos config b")
+        .with_require_execution_on_commit(true)
+        .with_replication(replication_config_b.clone());
+    let bundle = checkpoint_bundle(65, "exec-block-65", "exec-state-65");
+    let replication_a =
+        ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
+            .expect("runtime a");
+    let descriptor = replication_a
+        .store_execution_checkpoint_bundle(&bundle)
+        .expect("store remote checkpoint closure");
+    let blob = bundle.blobs.first().expect("checkpoint blob");
+    let blob_path = dir_b
+        .join("store")
+        .join("blobs")
+        .join(format!("{}.blob", blob.content_hash));
+    let replication_b =
+        ReplicationRuntime::new(config_b.replication.as_ref().expect("repl b"), "node-b")
+            .expect("runtime b");
+    replication_b
+        .store_blob_by_hash(descriptor.manifest_ref.as_str(), bundle.manifest_json.as_slice())
+        .expect("seed valid local checkpoint manifest");
+    replication_b
+        .store_blob_by_hash(blob.content_hash.as_str(), blob.bytes.as_slice())
+        .expect("seed hash-valid local checkpoint blob");
+    assert_eq!(fs::read(&blob_path).expect("read local checkpoint blob"), blob.bytes);
+
+    let mut mismatched_descriptor = descriptor.clone();
+    mismatched_descriptor
+        .blobs
+        .first_mut()
+        .expect("checkpoint blob ref")
+        .size_bytes += 1;
+    let fetch_protocols = Arc::new(Mutex::new(Vec::new()));
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(FirstReadyHeadCheckpointNetwork {
+        inner: Arc::new(TestInMemoryNetwork::default()),
+        fetch_protocols: Arc::clone(&fetch_protocols),
+    });
+    let dht = Arc::new(TestReplicaMaintenanceDht::new(
+        "remote-checkpoint-provider",
+        "local-checkpoint-provider",
+    ));
+    let handle_b = NodeReplicationNetworkHandle::new(Arc::clone(&network))
+        .with_dht(dht.clone())
+        .with_local_provider_id("local-checkpoint-provider");
+    let endpoint_b =
+        ReplicationNetworkEndpoint::new(&handle_b, world_id, false, &config_b.network_policy)
+            .expect("fresh observer endpoint");
+    let mut engine_b = PosNodeEngine::new(&config_b).expect("fresh observer engine");
+
+    let result = engine_b.fetch_execution_checkpoint_bundle(
+        &endpoint_b,
+        world_id,
+        &replication_b,
+        &mismatched_descriptor,
+        true,
+    );
+    assert!(
+        result.is_err(),
+        "descriptor size mismatch must fail closed before provider fetch: {result:?}"
+    );
+    assert_eq!(
+        fs::read(&blob_path).expect("read preserved local checkpoint blob"),
+        blob.bytes,
+        "hash-valid local CAS bytes/path must be preserved on descriptor mismatch"
+    );
+    let observed_fetch_protocols = fetch_protocols
+        .lock()
+        .expect("lock checkpoint fetch protocols")
+        .clone();
+    assert!(
+        observed_fetch_protocols.is_empty(),
+        "descriptor size mismatch must not request a provider: {observed_fetch_protocols:?}"
+    );
+    assert!(
+        dht.published_records().is_empty(),
+        "descriptor size mismatch must not advertise any provider records: {:?}",
+        dht.published_records()
+    );
+
+    let _ = fs::remove_dir_all(&dir_a);
+    let _ = fs::remove_dir_all(&dir_b);
+}
