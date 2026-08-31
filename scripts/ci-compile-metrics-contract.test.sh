@@ -411,10 +411,15 @@ PATH="$fake_bin:$PATH" \
   ./scripts/ci-compile-metrics.sh \
     --package fake_library \
     --out-dir "$release_out_dir" \
-    --binary fake_library
+    --binary fake_library \
+    --no-default-features
 
 if ! grep -Eq '^build ' "$tmp_dir/release-cargo.log"; then
   echo "release compile metrics did not invoke cargo build" >&2
+  exit 1
+fi
+if ! grep -Eq '^build .*--no-default-features([[:space:]]|$)' "$tmp_dir/release-cargo.log"; then
+  echo "release compile metrics must pass --no-default-features to cargo build" >&2
   exit 1
 fi
 

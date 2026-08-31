@@ -312,13 +312,20 @@ measure_checkout() {
   local release_seconds=""
   local binary_bytes=""
   if [[ "$check_only" != true ]]; then
+    local cargo_build_release_args=(
+      "${compile_metrics_cargo_env[@]}" cargo build --offline --locked
+      -p "$package_name" --release --bin "$binary_name"
+    )
+    if [[ "$no_default_features" == true ]]; then
+      cargo_build_release_args+=(--no-default-features)
+    fi
     release_seconds=$(
       measure_command_seconds \
         "$checkout_path" \
         "$release_target" \
         "$cargo_home" \
         "$out_dir/logs/${label}-cargo-build-release.log" \
-        "${compile_metrics_cargo_env[@]}" cargo build --offline --locked -p "$package_name" --release --bin "$binary_name"
+        "${cargo_build_release_args[@]}"
     )
 
     local binary_path
