@@ -188,6 +188,7 @@ import sys
 from pathlib import Path
 
 config_path, ci_tests_path, workflow_path, planner_path = map(Path, sys.argv[1:])
+repo_root = config_path.parent.parent
 config = json.loads(config_path.read_text(encoding="utf-8"))
 ownership = config.get("selector_ownership")
 if not isinstance(ownership, list):
@@ -247,6 +248,103 @@ planner_outputs = {
     if "=" in line
     for key, value in [line.split("=", 1)]
 }
+
+# Every public-testnet package/rollout/observer/fleet-health implementation
+# source must stay paired with an operational fixture that invokes or imports
+# it. Audit both sides here: a missing fixture reference is a contract gap,
+# while an unmatched source would otherwise silently widen the required gate
+# through the planner's fail-closed fallback.
+operational_source_fixtures = {
+    "scripts/p2p-public-testnet-package-rollout.py": [
+        "scripts/p2p-public-testnet-package-rollout.test.sh",
+        "scripts/p2p-observer-checkpoint-closure-probe-safety.test.py",
+    ],
+    "scripts/p2p-public-testnet-package-node-upgrade.sh": [
+        "scripts/p2p-public-testnet-package-rollout.test.sh",
+        "scripts/p2p-public-testnet-package-node-upgrade.test.sh",
+        "scripts/p2p-public-testnet-package-node-upgrade-health.test.sh",
+        "scripts/p2p-public-testnet-package-node-upgrade-order.test.sh",
+        "scripts/p2p-public-testnet-package-node-upgrade-rollback-contract.test.sh",
+    ],
+    "scripts/p2p-public-testnet-bootstrap-fresh-validator-host.sh": [
+        "scripts/p2p-public-testnet-bootstrap-fresh-validator-host.test.sh",
+    ],
+    "scripts/p2p-public-testnet-local-observer-sync.sh": [
+        "scripts/p2p-public-testnet-local-observer-sync.test.sh",
+    ],
+    "scripts/p2p-observer-checkpoint-closure-probe.py": [
+        "scripts/p2p-observer-checkpoint-closure-probe.test.sh",
+        "scripts/p2p-observer-checkpoint-closure-probe-safety.test.py",
+    ],
+    "scripts/p2p-public-testnet-fleet-health.py": [
+        "scripts/p2p-public-testnet-fleet-health.test.py",
+    ],
+    "scripts/p2p-verify-linux-package-bundle.py": [
+        "scripts/p2p-public-testnet-package-rollout.test.sh",
+        "scripts/p2p-public-testnet-bootstrap-fresh-validator-host.test.sh",
+        "scripts/p2p-public-testnet-package-node-upgrade.test.sh",
+        "scripts/testnet-packages-linux-bundle-bootstrap-contract.test.sh",
+    ],
+    "scripts/p2p-rebuild-linux-bundle-checksums.py": [
+        "scripts/p2p-public-testnet-package-rollout.test.sh",
+        "scripts/p2p-public-testnet-package-node-upgrade.test.sh",
+    ],
+}
+for source_path, fixture_paths in operational_source_fixtures.items():
+    source = repo_root / source_path
+    if not source.is_file():
+        raise SystemExit(f"operational source is missing: {source_path}")
+    source_name = source.name
+    source_plan = subprocess.run(
+        [
+            str(planner_path),
+            "--event-name",
+            "pull_request",
+            "--config",
+            str(config_path),
+            "--changed-path",
+            source_path,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if source_plan.returncode != 0:
+        raise SystemExit(
+            f"planner failed for operational source {source_path}: "
+            + source_plan.stderr.strip()
+        )
+    source_outputs = {
+        key: value
+        for line in source_plan.stdout.splitlines()
+        if "=" in line
+        for key, value in [line.split("=", 1)]
+    }
+    for key, expected in {
+        "scope": "targeted",
+        "selected_capabilities": "operational_contracts",
+        "run_operational_contracts": "true",
+        "run_rust_baseline": "false",
+        "needs_rust_toolchain": "false",
+    }.items():
+        if source_outputs.get(key) != expected:
+            raise SystemExit(
+                f"operational source planner drift for {source_path}: "
+                f"expected {key}={expected}, got {source_outputs.get(key)!r}"
+            )
+    if "unclassified_or_unresolvable:" in source_outputs.get("reason_summary", ""):
+        raise SystemExit(
+            f"operational source remains unmatched in planner: {source_path}"
+        )
+    for fixture_path in fixture_paths:
+        fixture = repo_root / fixture_path
+        if not fixture.is_file():
+            raise SystemExit(f"operational fixture is missing: {fixture_path}")
+        if source_name not in fixture.read_text(encoding="utf-8"):
+            raise SystemExit(
+                f"operational fixture does not invoke/import {source_path}: "
+                f"{fixture_path}"
+            )
 
 workflow_text = workflow_path.read_text(encoding="utf-8")
 required_gate_match = re.search(
