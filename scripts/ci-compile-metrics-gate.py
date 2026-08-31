@@ -40,6 +40,19 @@ def parse_regression_threshold(raw_value: str) -> float:
     return value
 
 
+def is_finite_number(value: object) -> bool:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value)
+    except (OverflowError, ValueError):
+        return False
+
+
+def is_finite_non_negative_number(value: object) -> bool:
+    return is_finite_number(value) and value >= 0
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Enforce compile-metrics regression thresholds from comparison.json."
@@ -374,19 +387,56 @@ def main() -> int:
         if row is None:
             failures.append(f"missing comparison row for {metric}")
             continue
+        baseline_value = row.get("baseline")
+        current_value = row.get("current")
+        delta_value = row.get("delta")
+        baseline_valid = is_finite_non_negative_number(baseline_value)
+        current_valid = is_finite_non_negative_number(current_value)
+        delta_valid = is_finite_number(delta_value)
+        if not baseline_valid:
+            failures.append(
+                f"comparison row {metric} baseline must be a finite non-negative number"
+            )
+        if not current_valid:
+            failures.append(
+                f"comparison row {metric} current must be a finite non-negative number"
+            )
+        if not delta_valid:
+            failures.append(
+                f"comparison row {metric} delta must be a finite number"
+            )
+        elif baseline_valid and current_valid and not math.isclose(
+            delta_value,
+            current_value - baseline_value,
+            rel_tol=1e-9,
+            abs_tol=1e-9,
+        ):
+            failures.append(
+                f"comparison row {metric} delta must equal current - baseline"
+            )
         percent = row.get("percent")
         if percent is None:
             failures.append(f"cannot evaluate {metric} regression percentage")
             continue
-        if (
-            not isinstance(percent, (int, float))
-            or isinstance(percent, bool)
-            or not math.isfinite(percent)
-        ):
+        if not is_finite_number(percent):
             failures.append(
                 f"comparison row {metric} percent must be a finite number"
             )
             continue
+        if baseline_valid and baseline_value > 0 and current_valid:
+            expected_percent = (
+                (current_value - baseline_value) / baseline_value
+            ) * 100.0
+            if not math.isclose(
+                percent,
+                expected_percent,
+                rel_tol=1e-9,
+                abs_tol=1e-9,
+            ):
+                failures.append(
+                    "comparison row "
+                    f"{metric} percent must equal ((current - baseline) / baseline) * 100"
+                )
         if percent > threshold:
             failures.append(
                 f"{metric_labels[metric]} regressed by {percent:+.2f}% (threshold {threshold:+.2f}%)"

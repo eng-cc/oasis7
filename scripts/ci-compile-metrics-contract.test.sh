@@ -941,10 +941,126 @@ if (
         f"{non_finite.stdout}{non_finite.stderr}"
     )
 
+negative_metric_cases = (
+    (
+        "baseline",
+        -1,
+        {"current": 9, "delta": 10, "percent": -1000.0},
+    ),
+    (
+        "current",
+        -1,
+        {"baseline": 10, "delta": -11, "percent": -110.0},
+    ),
+)
+for field, value, consistent_updates in negative_metric_cases:
+    negative_metric = deepcopy(matching_comparison)
+    negative_metric["metric_rows"][0][field] = value
+    negative_metric["metric_rows"][0].update(consistent_updates)
+    result = run_gate(negative_metric)
+    expected_fragment = (
+        f"comparison row package_count {field} must be a finite non-negative number"
+    )
+    if result.returncode == 0 or expected_fragment not in result.stdout or result.stderr:
+        raise SystemExit(
+            f"negative comparison {field} value unexpectedly passed or used wrong error: "
+            f"{result.stdout}{result.stderr}"
+        )
+
+inconsistent_delta = deepcopy(matching_comparison)
+inconsistent_delta["metric_rows"][0]["delta"] = 9
+invalid = run_gate(inconsistent_delta)
+if (
+    invalid.returncode == 0
+    or "comparison row package_count delta must equal current - baseline" not in invalid.stdout
+    or invalid.stderr
+):
+    raise SystemExit(
+        "inconsistent comparison delta unexpectedly passed or used wrong error: "
+        f"{invalid.stdout}{invalid.stderr}"
+    )
+
 print("ci-compile-metrics-gate threshold contract: OK")
 print("measurement identity missing/mismatch contract: OK")
 print("measurement identity semantic validation contract: OK")
 print("non-finite metric payload contract: OK")
+print("negative and inconsistent metric payload contract: OK")
+
+fabricated_percent = deepcopy(matching_comparison)
+fabricated_percent["metric_rows"][0].update(
+    {
+        "baseline": 10,
+        "current": 20,
+        "delta": 10,
+        # ci-compile-metrics.sh computes ((current - baseline) / baseline) * 100.
+        "percent": 1.0,
+    }
+)
+invalid = run_gate(fabricated_percent)
+if (
+    invalid.returncode == 0
+    or "comparison row package_count percent must equal ((current - baseline) / baseline) * 100"
+    not in invalid.stdout
+    or invalid.stderr
+):
+    raise SystemExit(
+        "fabricated comparison percentage unexpectedly passed or used wrong error: "
+        f"{invalid.stdout}{invalid.stderr}"
+    )
+
+print("percent arithmetic consistency contract: OK")
+
+oversized_baseline = deepcopy(matching_comparison)
+oversized_baseline["metric_rows"][0].update(
+    {
+        "baseline": 10**1000,
+        "current": 20,
+        "delta": 0,
+        "percent": 0.0,
+    }
+)
+invalid = run_gate(oversized_baseline)
+expected_oversized_output = (
+    "gate: FAIL: comparison row package_count baseline must be a finite non-negative number\n"
+)
+if (
+    invalid.returncode == 0
+    or invalid.stdout != expected_oversized_output
+    or invalid.stderr
+):
+    raise SystemExit(
+        "oversized comparison baseline did not fail closed with a deterministic "
+        "diagnostic: "
+        f"{invalid.stdout}{invalid.stderr}"
+    )
+
+print("oversized metric payload contract: OK")
+
+oversized_percent = deepcopy(matching_comparison)
+oversized_percent["metric_rows"][0].update(
+    {
+        "baseline": 10,
+        "current": 20,
+        "delta": 10,
+        "percent": 10**1000,
+    }
+)
+invalid = run_gate(oversized_percent)
+expected_oversized_percent_output = (
+    "gate: FAIL: comparison row package_count percent must be a finite number\n"
+)
+if (
+    invalid.returncode == 0
+    or invalid.stdout != expected_oversized_percent_output
+    or invalid.stderr
+):
+    raise SystemExit(
+        "oversized comparison percent did not fail closed with a deterministic "
+        "diagnostic: "
+        f"{invalid.stdout}{invalid.stderr}"
+    )
+
+print("oversized percent payload contract: OK")
 PY
 
 echo "ci-compile-metrics-contract.test: OK"
