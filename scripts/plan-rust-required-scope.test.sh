@@ -235,6 +235,32 @@ assert_reason_contains "$operational_contract_output" \
   "operational_contracts:scripts/p2p-public-testnet-package-rollout.test.sh"
 assert_reason_absent "$operational_contract_output" "unclassified_or_unresolvable:"
 
+# Keep the implementation sources paired with their fixture-backed operational
+# contracts. Source-only changes must select the same non-Rust lane rather than
+# widening to the full required gate through the unmatched-path fallback.
+operational_source_paths=(
+  scripts/p2p-public-testnet-package-rollout.py
+  scripts/p2p-public-testnet-package-node-upgrade.sh
+  scripts/p2p-public-testnet-bootstrap-fresh-validator-host.sh
+  scripts/p2p-public-testnet-local-observer-sync.sh
+  scripts/p2p-observer-checkpoint-closure-probe.py
+  scripts/p2p-public-testnet-fleet-health.py
+  scripts/p2p-verify-linux-package-bundle.py
+  scripts/p2p-rebuild-linux-bundle-checksums.py
+)
+for operational_source_path in "${operational_source_paths[@]}"; do
+  operational_source_output="$(plan_for_path "$operational_source_path")"
+  assert_key_equals "$operational_source_output" scope targeted
+  assert_key_equals "$operational_source_output" selected_capabilities operational_contracts
+  assert_key_equals "$operational_source_output" run_operational_contracts true
+  assert_key_equals "$operational_source_output" run_rust_baseline false
+  assert_key_equals "$operational_source_output" needs_rust_toolchain false
+  assert_key_equals "$operational_source_output" needs_system_deps false
+  assert_reason_contains "$operational_source_output" \
+    "operational_contracts:$operational_source_path"
+  assert_reason_absent "$operational_source_output" "unclassified_or_unresolvable:"
+done
+
 # Native installer and split Viewer delivery helpers are pure packaging
 # contracts. They must run their focused non-Rust fixtures without inheriting
 # the Rust baseline or the viewer JS build capability.
