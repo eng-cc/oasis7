@@ -1641,11 +1641,21 @@ def command_refresh_task(args: argparse.Namespace) -> int:
 def command_record_pr(args: argparse.Namespace) -> int:
     mapping_path, mapping, record = require_record(args)
     previous = str(record.get("status") or "")
+    previous_phase = str(record.get("workflow_phase") or "")
+    is_draft_candidate = bool(getattr(args, "draft_candidate", False))
+    if previous == "done" or previous_phase in TERMINAL_WORKFLOW_PHASES:
+        die(
+            "record-pr: terminal task cannot be reclassified; use its canonical finalizer or terminal runbook"
+        )
+    if not is_draft_candidate and (previous, previous_phase) != ("ready", "pre_pr_ready"):
+        die(
+            "record-pr: non-draft pr_watch transition requires task truth at ready/pre_pr_ready; "
+            "use prepare-task-pr.sh --promote-draft with canonical CI/review evidence"
+        )
     record["pr_url"] = args.pr_url
     number = pr_number_from_url(args.pr_url)
     if number is not None:
         record["pr_number"] = number
-    is_draft_candidate = bool(getattr(args, "draft_candidate", False))
     target_status = "committed" if is_draft_candidate else "pr_watch"
     target_phase = "verification" if is_draft_candidate else "pr_watch"
     record["status"] = target_status

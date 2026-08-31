@@ -53,6 +53,22 @@ def args(root: pathlib.Path, target: str) -> Namespace:
     )
 
 
+def record_pr_args(root: pathlib.Path) -> Namespace:
+    return Namespace(
+        root=root,
+        mapping=".pm/github-project-sync/tasks.json",
+        repo="eng-cc/oasis7",
+        project_owner="eng-cc",
+        project_number=1,
+        task_uid=UID,
+        pr_url="https://github.com/eng-cc/oasis7/pull/2001",
+        role="tpm",
+        validation_command="record-pr lifecycle contract",
+        draft_candidate=False,
+        json=True,
+    )
+
+
 class MoveTaskLifecycleContract(unittest.TestCase):
     def write_mapping(self, root: pathlib.Path, record: dict[str, object]) -> pathlib.Path:
         path = root / ".pm/github-project-sync/tasks.json"
@@ -132,6 +148,87 @@ class MoveTaskLifecycleContract(unittest.TestCase):
                 self.assertEqual(before, self.digest(mapping_path))
                 update_issue.assert_not_called()
                 update_project.assert_not_called()
+
+    def test_record_pr_requires_ready_pre_pr_ready_authority(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            mapping_path = self.write_mapping(root, mapping_record(status="committed", phase="execution"))
+            before = self.digest(mapping_path)
+            with (
+                mock.patch.object(MODULE, "update_issue_body") as update_issue,
+                mock.patch.object(MODULE, "issue_comment", return_value="comment-url") as comment,
+                mock.patch.object(MODULE, "merge_task_mapping") as merge_mapping,
+                mock.patch.object(MODULE, "update_project_fields", return_value=0) as update_project,
+            ):
+                with self.assertRaisesRegex(
+                    MODULE._CommandExit,
+                    "record-pr: non-draft pr_watch transition requires task truth at ready/pre_pr_ready",
+                ):
+                    MODULE.command_record_pr(record_pr_args(root))
+            self.assertEqual(before, self.digest(mapping_path))
+            update_issue.assert_not_called()
+            comment.assert_not_called()
+            merge_mapping.assert_not_called()
+            update_project.assert_not_called()
+
+    def test_record_pr_cannot_rewrite_terminal_task(self) -> None:
+        for phase in ("post_merge_done", "closed_without_merge"):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
+                root = pathlib.Path(directory)
+                mapping_path = self.write_mapping(root, mapping_record(status="done", phase=phase))
+                before = self.digest(mapping_path)
+                with (
+                    mock.patch.object(MODULE, "update_issue_body") as update_issue,
+                    mock.patch.object(MODULE, "issue_comment", return_value="comment-url") as comment,
+                    mock.patch.object(MODULE, "merge_task_mapping") as merge_mapping,
+                    mock.patch.object(MODULE, "update_project_fields", return_value=0) as update_project,
+                ):
+                    with self.assertRaisesRegex(
+                        MODULE._CommandExit,
+                        "record-pr: terminal task cannot be reclassified",
+                    ):
+                        MODULE.command_record_pr(record_pr_args(root))
+                self.assertEqual(before, self.digest(mapping_path))
+                update_issue.assert_not_called()
+                comment.assert_not_called()
+                merge_mapping.assert_not_called()
+                update_project.assert_not_called()
+
+    def test_record_pr_replay_after_pr_watch_is_rejected_without_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            mapping_path = self.write_mapping(root, mapping_record(status="pr_watch", phase="pr_watch"))
+            before = self.digest(mapping_path)
+            with (
+                mock.patch.object(MODULE, "update_issue_body") as update_issue,
+                mock.patch.object(MODULE, "issue_comment", return_value="comment-url") as comment,
+                mock.patch.object(MODULE, "merge_task_mapping") as merge_mapping,
+                mock.patch.object(MODULE, "update_project_fields", return_value=0) as update_project,
+            ):
+                with self.assertRaisesRegex(
+                    MODULE._CommandExit,
+                    "record-pr: non-draft pr_watch transition requires task truth at ready/pre_pr_ready",
+                ):
+                    MODULE.command_record_pr(record_pr_args(root))
+            self.assertEqual(before, self.digest(mapping_path))
+            update_issue.assert_not_called()
+            comment.assert_not_called()
+            merge_mapping.assert_not_called()
+            update_project.assert_not_called()
+
+    def test_record_pr_preserves_authoritative_ready_writer(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            mapping_path = self.write_mapping(root, mapping_record(status="ready", phase="pre_pr_ready"))
+            with (
+                mock.patch.object(MODULE, "update_issue_body"),
+                mock.patch.object(MODULE, "issue_comment", return_value="comment-url"),
+                mock.patch.object(MODULE, "merge_task_mapping") as merge_mapping,
+                mock.patch.object(MODULE, "update_project_fields", return_value=0),
+            ):
+                result = MODULE.command_record_pr(record_pr_args(root))
+            self.assertEqual(0, result)
+            merge_mapping.assert_called_once()
 
 
 if __name__ == "__main__":
