@@ -162,6 +162,20 @@ CANONICAL_VERIFIER_ID = "governed-receipt-verifier"
 CANONICAL_TRUST_ROOT_ID = "oasis7-public-testnet-governance-root-v1"
 CANONICAL_ADAPTER_ID = "external-clean-room-adapter"
 CANONICAL_NETWORK_ID = "oasis7-public-testnet-governed-20260606"
+CONSUMER_IMPACT_FIELDS = frozenset(
+    {
+        "impact",
+        "evidence_source",
+        "timestamp",
+        "validators_already_stopped",
+        "outage_update_channel",
+        "recovery_update_checkpoint",
+        "producer_wording_approval",
+        "decision",
+    }
+)
+CONSUMER_IMPACT_REFERENCE_FIELDS = frozenset({"path", "sha256"})
+CONSUMER_IMPACT_MAX_AGE_SECONDS = 24 * 60 * 60
 
 
 def die(message: str) -> NoReturn:
@@ -201,6 +215,63 @@ def _parse_utc(value: Any, label: str) -> datetime:
     if parsed.tzinfo is None:
         die(f"{label} must include a timezone")
     return parsed.astimezone(timezone.utc)
+
+
+def _impact_locator(value: dict[str, Any]) -> dict[str, str]:
+    return {"path": value["path"], "sha256": value["sha256"]}
+
+
+def _validate_consumer_impact_record(value: Any, label: str = "consumer_impact_record") -> dict[str, Any]:
+    reference = require_object(value, label)
+    if set(reference) != CONSUMER_IMPACT_REFERENCE_FIELDS:
+        die(f"{label} must contain only path and sha256")
+    raw_path = require_string(reference.get("path"), f"{label}.path")
+    path = _normalized_path(raw_path, "posix", f"{label}.path")
+    digest = require_hex(reference.get("sha256"), f"{label}.sha256")
+    path_obj = Path(path)
+    if path_obj.is_symlink() or not path_obj.is_file():
+        die(f"{label}.path must reference a regular immutable record file")
+    try:
+        payload = path_obj.read_bytes()
+    except OSError as error:
+        die(f"cannot read {label}.path: {error}")
+    actual_digest = hashlib.sha256(payload).hexdigest()
+    if actual_digest != digest:
+        die(f"{label} path/sha256 binding mismatch")
+    try:
+        record = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        die(f"{label}.path does not contain valid JSON: {error}")
+    record = require_object(record, f"{label}.record")
+    if set(record) != CONSUMER_IMPACT_FIELDS:
+        die(f"{label}.record schema fields are not exact")
+    impact = require_string(record.get("impact"), f"{label}.record.impact")
+    if impact not in {"active", "none", "unknown"}:
+        die(f"{label}.record.impact is unsupported")
+    require_string(record.get("evidence_source"), f"{label}.record.evidence_source")
+    timestamp = _parse_utc(record.get("timestamp"), f"{label}.record.timestamp")
+    age = (datetime.now(timezone.utc) - timestamp).total_seconds()
+    if age < -5:
+        die(f"{label}.record.timestamp is in the future")
+    if age > CONSUMER_IMPACT_MAX_AGE_SECONDS:
+        die(f"{label}.record.timestamp is stale")
+    if not isinstance(record.get("validators_already_stopped"), bool):
+        die(f"{label}.record.validators_already_stopped must be boolean")
+    for field in (
+        "outage_update_channel",
+        "recovery_update_checkpoint",
+        "producer_wording_approval",
+    ):
+        field_value = require_string(record.get(field), f"{label}.record.{field}")
+        if impact in {"active", "unknown"} and field_value.strip().lower() == "n/a":
+            die(f"{label}.record.{field} must be bound for active or unknown impact")
+    if record.get("decision") != "proceed":
+        die(f"{label}.record.decision must be proceed")
+    return {
+        "path": path,
+        "sha256": digest,
+        "record": record,
+    }
 
 
 def _validate_transaction_context(request: dict[str, Any]) -> dict[str, str]:
@@ -305,7 +376,9 @@ def _validate_state_paths(node: dict[str, Any], expected: dict[str, str]) -> lis
     return actual
 
 
-def _validate_authority(request: dict[str, Any]) -> dict[str, Any]:
+def _validate_authority(
+    request: dict[str, Any], consumer_impact_record: dict[str, Any]
+) -> dict[str, Any]:
     task_uid = require_string(request.get("task_uid"), "task_uid")
     if not SAFE_NAME_RE.fullmatch(task_uid.replace("_", "-")):
         die("task_uid is not a safe identifier")
@@ -317,6 +390,11 @@ def _validate_authority(request: dict[str, Any]) -> dict[str, Any]:
         die("authority task/head binding mismatch")
     if str(authority.get("frozen_head_oid", "")).lower() != head_oid:
         die("authority frozen head binding mismatch")
+    authority_impact = require_object(
+        authority.get("consumer_impact_record"), "authority.consumer_impact_record"
+    )
+    if authority_impact != _impact_locator(consumer_impact_record):
+        die("authority consumer-impact path/sha256 binding mismatch")
     raw_signers = authority.get("signer_allowlist")
     if not isinstance(raw_signers, list) or not raw_signers:
         die("authority signer allowlist is missing")
@@ -337,8 +415,10 @@ def _validate_authority(request: dict[str, Any]) -> dict[str, Any]:
         or receipt_bindings.get("signer_allowlist") != sorted(CANONICAL_SIGNER_ALLOWLIST)
         or receipt_bindings.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID
         or receipt_bindings.get("verifier_id") != CANONICAL_VERIFIER_ID
+        or receipt_bindings.get("consumer_impact_record")
+        != _impact_locator(consumer_impact_record)
     ):
-        die("authority receipt task/head/trust-root binding mismatch")
+        die("authority receipt task/head/trust-root/consumer-impact binding mismatch")
     trust_root = require_object(authority.get("trust_root"), "authority.trust_root")
     validate_authenticated_receipt(trust_root, "authority.trust_root", signer_allowlist)
     if (
@@ -372,6 +452,7 @@ def _validate_authority(request: dict[str, Any]) -> dict[str, Any]:
         "task_uid": task_uid,
         "head_oid": head_oid,
         "frozen_head_oid": head_oid,
+        "consumer_impact_record": consumer_impact_record,
         "signer_allowlist": sorted(signer_allowlist),
         "trust_root": trust_root,
         "crypto_verifier_receipt": verifier,
@@ -942,6 +1023,7 @@ def _validate_backup_policy(
     authority: dict[str, Any],
     allowed_signers: set[str],
     context: dict[str, str],
+    consumer_impact_record: dict[str, Any],
 ) -> dict[str, Any]:
     raw_policy = request.get("backup_policy")
     if raw_policy is None:
@@ -1013,6 +1095,7 @@ def _validate_backup_policy(
         "issued_at": issued_at.isoformat().replace("+00:00", "Z"),
         "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
         "current_authorization": True,
+        "consumer_impact_record": _impact_locator(consumer_impact_record),
     }
     if receipt_bindings != expected_bindings:
         die("backup_policy authority receipt binding mismatch")
@@ -1095,6 +1178,7 @@ def _operation_journal(
     nodes: dict[str, dict[str, Any]],
     truth: dict[str, Any],
     context: dict[str, str],
+    consumer_impact_record: dict[str, Any],
 ) -> list[dict[str, Any]]:
     journal: list[dict[str, Any]] = []
     for sequence, entry in enumerate(global_order, 1):
@@ -1106,6 +1190,7 @@ def _operation_journal(
             "operation": entry,
             "transaction_id": context["transaction_id"],
             "capture_window_id": context["capture_window_id"],
+            "consumer_impact_record": _impact_locator(consumer_impact_record),
             "package_commit": truth["package"]["commit"],
             "checkpoint_id": truth["checkpoint"]["checkpoint_id"],
             "checkpoint_manifest_hash": truth["checkpoint"]["manifest_hash"],
@@ -1138,7 +1223,10 @@ def build_plan(request: dict[str, Any]) -> dict[str, Any]:
     if request.get("schema_version") != INPUT_SCHEMA:
         die("input schema is unsupported")
     context = _validate_transaction_context(request)
-    authority = _validate_authority(request)
+    consumer_impact_record = _validate_consumer_impact_record(
+        request.get("consumer_impact_record")
+    )
+    authority = _validate_authority(request, consumer_impact_record)
     _validate_no_old_state_copy(request)
     allowed_signers = set(authority["signer_allowlist"])
     truth = _validate_truth(request.get("truth"), allowed_signers)
@@ -1152,7 +1240,9 @@ def build_plan(request: dict[str, Any]) -> dict[str, Any]:
     adapter_verification = _validate_adapter_verification(
         request.get("adapter_verification"), context, allowed_signers
     )
-    backup_policy = _validate_backup_policy(request, authority, allowed_signers, context)
+    backup_policy = _validate_backup_policy(
+        request, authority, allowed_signers, context, consumer_impact_record
+    )
     global_order = _global_order(backup_policy["required_before_reset"])
     _validate_global_order(global_order)
     plan: dict[str, Any] = {
@@ -1169,6 +1259,7 @@ def build_plan(request: dict[str, Any]) -> dict[str, Any]:
             "ends_at": credential_nonce_ledger["expires_at"],
         },
         "authority": authority,
+        "consumer_impact_record": consumer_impact_record,
         "execution": {
             "mode": "plan-only",
             "provider_mutation_performed": False,
@@ -1178,7 +1269,9 @@ def build_plan(request: dict[str, Any]) -> dict[str, Any]:
         },
         "node_order": list(NODE_ORDER),
         "global_order": global_order,
-        "operation_journal": _operation_journal(global_order, nodes, truth, context),
+        "operation_journal": _operation_journal(
+            global_order, nodes, truth, context, consumer_impact_record
+        ),
         "operation_journal_contract": {
             "authoritative": False,
             "apply_usable": False,

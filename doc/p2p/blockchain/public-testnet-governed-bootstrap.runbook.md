@@ -432,6 +432,8 @@ any additional signing requirements.
 从零重建 validator pair。
 本 phase 的顺序是硬约束：`consumer-impact record gate -> preflight both -> reset both -> stage both -> sequencer liveness -> storage`。任一步未通过，都不得提前执行后一步；特别是 consumer-impact record 未通过时不得建立 SSH/network connection 或执行 host preflight，且不得在只 reset 一台 validator 后向任一 host staging。
 
+五节点 clean-room planner/adapter 也必须在同一 Phase C0 口径下工作：输入 envelope 必须携带 `consumer_impact_record: {"path": <absolute-record-path>, "sha256": <record-file-sha256>}`；planner 会在生成 plan 前读取并校验精确 schema、RFC3339 新鲜度及 `active`/`unknown` 的 outage/recovery/producer wording 绑定，`none` 仍要求三个字段存在但允许 `n/a`。生成的 plan、authority、transaction journal 与每份 provider receipt 固定该 path+SHA-256；adapter 在 trust-root、nonce reservation、provider connection 或 destructive callback 前再次校验。缺失、过期、内容/绑定漂移均 fail closed；record 只控制 testnet reset/redeploy，不扩大 testnet 边界，也不构成旧 chain state、资产或 mainnet continuity 的恢复承诺。
+
 ### C0.5 Canonical pair transaction (task #3324; predecessor task #3318)
 
 新的受治理入口是 `scripts/p2p-public-testnet-rebuild-validators.sh plan|apply|resume|rollback`，它将请求转发到 local-first 执行器 `scripts/p2p-public-testnet-validator-pair-rebuild.py`。它必须先以 `plan` 模式验证签名的 `oasis7.validator_pair_rebuild_provenance.v1`、package `BUILDINFO`/`SHA256SUMS`、deployment manifest、genesis、registry、bootstrap 和 world 的 hash/size 绑定，以及每台 host 的同文件系统容量/inode receipt；plan 同时执行 live GitHub/SSH bounded read-only re-observation，但不调用 systemd 或修改节点。可复核的证据模板位于 `doc/testing/templates/public-testnet-validator-pair-rebuild-evidence-v1.json`。

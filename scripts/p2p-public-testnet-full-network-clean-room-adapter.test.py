@@ -121,6 +121,10 @@ class ApplyTransport:
             "node": node_name,
             "peer_id": peer_id,
             "ledger_path": self.plan["credential_nonce_ledger"]["path"],
+            "consumer_impact_record": {
+                "path": self.plan["consumer_impact_record"]["path"],
+                "sha256": self.plan["consumer_impact_record"]["sha256"],
+            },
         }
         if evidence is not None:
             bindings["evidence_sha256"] = self.adapter._remote_evidence_digest(evidence)
@@ -331,6 +335,7 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
             "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
             "trust_root_path": self.adapter.CANONICAL_TRUST_ROOT_PATH,
             "trust_root_digest": self.adapter.CANONICAL_TRUST_ROOT_DIGEST,
+            "consumer_impact_record": copy.deepcopy(plan["consumer_impact_record"]),
             "trust_root_file": {
                 "path": self.adapter.CANONICAL_TRUST_ROOT_PATH,
                 "sha256": self.adapter.CANONICAL_TRUST_ROOT_FILE_SHA256,
@@ -372,6 +377,10 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
                         "owner_uid": os.getuid(),
                         "mode": "0600",
                         "regular_file": True,
+                    },
+                    "consumer_impact_record": {
+                        "path": plan["consumer_impact_record"]["path"],
+                        "sha256": plan["consumer_impact_record"]["sha256"],
                     },
                 },
             },
@@ -1814,6 +1823,71 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
                     ledger_path=alternate_ledger,
                     dry_run=True,
                 )
+
+    def test_consumer_impact_binding_covers_transport_authority_journal_and_receipts(self) -> None:
+        impact_locator = {
+            "path": self.plan["consumer_impact_record"]["path"],
+            "sha256": self.plan["consumer_impact_record"]["sha256"],
+        }
+        self.assertEqual(
+            self.adapter._transport_plan(self.plan)["consumer_impact_record"],
+            self.plan["consumer_impact_record"],
+        )
+        authority = self._authority()
+        self.adapter.validate_authority(self.plan, authority)
+        self.assertEqual(
+            authority["receipt"]["bindings"]["consumer_impact_record"], impact_locator
+        )
+        node = next(node for node in self.plan["nodes"] if node["name"] == "storage-205")
+        receipt = ApplyTransport(self.adapter, self.plan)._receipt("preflight:storage-205", node)
+        validated = self.adapter._validate_provider_receipt(
+            self.plan, "preflight:storage-205", "storage-205", receipt, None
+        )
+        self.assertEqual(validated["bindings"]["consumer_impact_record"], impact_locator)
+        journal = self.adapter._journal_record(self.plan, "dry-run-complete", 0, [])
+        self.assertEqual(journal["consumer_impact_record"], impact_locator)
+
+    def test_consumer_impact_change_fails_before_any_provider_callback(self) -> None:
+        impact_path = self.fixture._impact_path
+        impact_path.write_text(
+            json.dumps({"impact": "active"}), encoding="utf-8"
+        )
+        transport = mock.Mock()
+        authority = self._authority()
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(self.adapter.AdapterError):
+                self.adapter.execute(
+                    self.plan,
+                    authority,
+                    journal_path=Path(directory) / "journal.json",
+                    ledger_path=self.ledger_path,
+                    transport=transport,
+                    dry_run=False,
+                )
+        transport.inspect_node.assert_not_called()
+        transport.preflight.assert_not_called()
+        transport.mutate.assert_not_called()
+
+    def test_provider_receipt_without_consumer_impact_binding_is_rejected(self) -> None:
+        node = next(node for node in self.plan["nodes"] if node["name"] == "storage-205")
+        receipt = ApplyTransport(self.adapter, self.plan)._receipt("preflight:storage-205", node)
+        del receipt["bindings"]["consumer_impact_record"]
+        with self.assertRaises(self.adapter.AdapterError):
+            self.adapter._validate_provider_receipt(
+                self.plan, "preflight:storage-205", "storage-205", receipt, None
+            )
+
+    def test_nonce_ledger_symlinked_ancestor_is_rejected_before_read(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            real_parent = root / "real-parent"
+            real_parent.mkdir()
+            linked_parent = root / "linked-parent"
+            linked_parent.symlink_to(real_parent, target_is_directory=True)
+            ledger = linked_parent / "nonce.jsonl"
+            self._write_ledger(ledger)
+            with self.assertRaises(self.adapter.AdapterError):
+                self.adapter.validate_credential_ledger(self.plan, ledger)
 
 
 if __name__ == "__main__":

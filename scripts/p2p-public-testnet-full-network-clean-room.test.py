@@ -4,12 +4,14 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +30,35 @@ def load_module():
 class FullNetworkCleanRoomPlanTests(unittest.TestCase):
     def setUp(self) -> None:
         self.module = load_module()
+        self._impact_directory = tempfile.TemporaryDirectory()
+        self._impact_path = Path(self._impact_directory.name) / "consumer-impact.json"
+
+    def tearDown(self) -> None:
+        self._impact_directory.cleanup()
+
+    def _consumer_impact_reference(self) -> dict[str, str]:
+        record = {
+            "impact": "none",
+            "evidence_source": "test-fixture-direct-observation",
+            "timestamp": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+            "validators_already_stopped": False,
+            "outage_update_channel": "n/a",
+            "recovery_update_checkpoint": "n/a",
+            "producer_wording_approval": "n/a",
+            "decision": "proceed",
+        }
+        payload = json.dumps(record, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        self._impact_path.write_bytes(payload)
+        return {"path": str(self._impact_path), "sha256": hashlib.sha256(payload).hexdigest()}
+
+    def _rewrite_consumer_impact(self, request: dict[str, object], **changes: object) -> None:
+        record = json.loads(self._impact_path.read_text(encoding="utf-8"))
+        record.update(changes)
+        payload = json.dumps(record, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        self._impact_path.write_bytes(payload)
+        reference = {"path": str(self._impact_path), "sha256": hashlib.sha256(payload).hexdigest()}
+        request["consumer_impact_record"] = reference
+        request["authority"]["consumer_impact_record"] = dict(reference)
 
     @staticmethod
     def _receipt(schema: str = "oasis7.authenticated_receipt.v1") -> dict[str, object]:
@@ -72,6 +103,10 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             "issued_at": "2026-08-30T00:00:00Z",
             "expires_at": expires_at,
             "current_authorization": True,
+            "consumer_impact_record": {
+                "path": request["consumer_impact_record"]["path"],
+                "sha256": request["consumer_impact_record"]["sha256"],
+            },
         }
         return receipt
 
@@ -94,6 +129,8 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             "trust_root_id": "oasis7-public-testnet-governance-root-v1",
             "verifier_id": "governed-receipt-verifier",
         }
+        consumer_impact_record = self._consumer_impact_reference()
+        authority_bindings["consumer_impact_record"] = dict(consumer_impact_record)
         execution_bindings = {
             "execution_records_root": {
                 "path": "/operator/truth/execution-records/root",
@@ -364,6 +401,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 "task_uid": task_uid,
                 "head_oid": head_oid,
                 "frozen_head_oid": head_oid,
+                "consumer_impact_record": consumer_impact_record,
                 "signer_allowlist": ["governance-signer"],
                 "crypto_verifier_receipt": {
                     "schema_version": "oasis7.crypto_verifier_receipt.v1",
@@ -392,6 +430,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                     "bindings": authority_bindings,
                 },
             },
+            "consumer_impact_record": consumer_impact_record,
             "truth": truth,
             "fresh_root_probe": {
                 "schema_version": "oasis7.fresh_root_probe.v1",
@@ -489,6 +528,13 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
         plan = self.module.build_plan(self._input())
 
         self.assertEqual(
+            plan["consumer_impact_record"]["path"], str(self._impact_path)
+        )
+        self.assertEqual(
+            plan["authority"]["consumer_impact_record"], plan["consumer_impact_record"]
+        )
+
+        self.assertEqual(
             plan["node_order"],
             [
                 "storage-205",
@@ -537,6 +583,32 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 "ends_at": plan["credential_nonce_ledger"]["expires_at"],
             },
         )
+
+    def test_plan_requires_fresh_bound_consumer_impact_record(self) -> None:
+        request = self._input()
+        request.pop("consumer_impact_record")
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)consumer|impact|record|binding")
+
+        request = self._input()
+        self._rewrite_consumer_impact(request, timestamp="2020-01-01T00:00:00Z")
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)consumer|impact|stale|fresh|timestamp")
+
+        request = self._input()
+        self._rewrite_consumer_impact(request, impact="active", outage_update_channel="n/a")
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)consumer|impact|outage|channel|n/a")
+
+        request = self._input()
+        request["consumer_impact_record"]["sha256"] = "0" * 64
+        request["authority"]["consumer_impact_record"] = dict(request["consumer_impact_record"])
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)consumer|impact|sha|digest|binding")
 
     def test_observer_destructive_phases_follow_fresh_root_probe(self) -> None:
         plan = self.module.build_plan(self._input())

@@ -104,6 +104,7 @@ SECRET_FIELD_NAMES = frozenset(
 SECRET_VALUE_RE = re.compile(r"(?:password|secret|token|private[_ -]?key|sshpass)", re.I)
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 MIN_FREE_BYTES = 64 * 1024 * 1024
+_PLANNER_MODULE: Any | None = None
 
 # This registry is code-owned.  It is not derived from plan input, a host
 # response, or a caller-supplied peer list.
@@ -158,6 +159,7 @@ TRANSPORT_PLAN_FIELDS = frozenset(
         "operation_journal",
         "operation_journal_contract",
         "adapter_verification",
+        "consumer_impact_record",
     }
 )
 
@@ -219,17 +221,39 @@ def canonical_plan_digest(plan: dict[str, Any]) -> str:
     return hashlib.sha256(_canonical_bytes(plan, omit="plan_digest")).hexdigest()
 
 
+def _consumer_impact_locator(plan: dict[str, Any]) -> dict[str, str]:
+    impact = _object(plan.get("consumer_impact_record"), "consumer impact record")
+    if set(impact) != {"path", "sha256", "record"}:
+        _fail("consumer impact record binding is incomplete")
+    path = _string(impact.get("path"), "consumer impact record path")
+    digest = _digest(impact.get("sha256"), "consumer impact record digest")
+    record = _object(impact.get("record"), "consumer impact record contents")
+    try:
+        validated = _load_planner()._validate_consumer_impact_record(
+            {"path": path, "sha256": digest}
+        )
+    except SystemExit as error:
+        _fail(str(error))
+    if validated["path"] != path or validated["sha256"] != digest or validated["record"] != record:
+        _fail("consumer impact record path, digest, or contents drifted")
+    return {"path": path, "sha256": digest}
+
+
 def journal_digest(record: dict[str, Any]) -> str:
     return hashlib.sha256(_canonical_bytes(record, omit="journal_digest")).hexdigest()
 
 
 def _load_planner() -> Any:
+    global _PLANNER_MODULE
+    if _PLANNER_MODULE is not None:
+        return _PLANNER_MODULE
     path = Path(__file__).with_name("p2p-public-testnet-full-network-clean-room.py")
     spec = importlib.util.spec_from_file_location("oasis7_full_network_clean_room_planner", path)
     if spec is None or spec.loader is None:
         _fail("cannot load the canonical full-network planner")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    _PLANNER_MODULE = module
     return module
 
 
@@ -287,6 +311,10 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     if actual_digest != canonical_plan_digest(plan):
         _fail("plan digest does not match the frozen plan contents")
     planner = _load_planner()
+    _consumer_impact_locator(plan)
+    authority_plan = _object(plan.get("authority"), "plan authority")
+    if authority_plan.get("consumer_impact_record") != plan["consumer_impact_record"]:
+        _fail("plan authority is not bound to the consumer impact record")
     if plan.get("node_order") != list(planner.NODE_ORDER):
         _fail("plan node order is not the code-owned five-node order")
     if plan.get("canonical_host_inventory") != planner.CANONICAL_HOST_INVENTORY:
@@ -576,6 +604,7 @@ def _validate_no_backup_authority(plan: dict[str, Any]) -> None:
         "issued_at": issued_at.isoformat().replace("+00:00", "Z"),
         "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
         "current_authorization": True,
+        "consumer_impact_record": _consumer_impact_locator(plan),
     }
     if _object(receipt.get("bindings"), "no-backup authority bindings") != expected_bindings:
         _fail("no-backup authority receipt bindings are not exact")
@@ -590,6 +619,7 @@ def validate_authority(plan: dict[str, Any], authority: dict[str, Any]) -> dict[
         "schema_version", "repository", "task_uid", "frozen_head_oid", "plan_digest",
         "adapter_id", "network_id", "verifier_id", "trust_root_id", "trust_root_path",
         "trust_root_digest", "trust_root_file", "apply_authorized", "receipt", "provenance_helper",
+        "consumer_impact_record",
     }:
         _fail("adapter authority contains an unsafe field")
     if authority.get("schema_version") != AUTHORITY_SCHEMA:
@@ -609,6 +639,8 @@ def validate_authority(plan: dict[str, Any], authority: dict[str, Any]) -> dict[
     for field, expected_value in expected.items():
         if authority.get(field) != expected_value:
             _fail(f"adapter authority {field} is not bound to the frozen plan")
+    if authority.get("consumer_impact_record") != plan["consumer_impact_record"]:
+        _fail("adapter authority is not bound to the consumer impact record")
     trust_root_file = _object(authority.get("trust_root_file"), "pinned trust-root file contract")
     if set(trust_root_file) != {
         "path",
@@ -673,6 +705,7 @@ def validate_authority(plan: dict[str, Any], authority: dict[str, Any]) -> dict[
         "trust_root_path": CANONICAL_TRUST_ROOT_PATH,
         "trust_root_digest": CANONICAL_TRUST_ROOT_DIGEST,
         "trust_root_file": copy.deepcopy(trust_root_file),
+        "consumer_impact_record": _consumer_impact_locator(plan),
     }
     if bindings != expected_bindings:
         _fail("adapter authority receipt binding set is not exact")
@@ -835,6 +868,7 @@ def _node_nonce(plan: dict[str, Any], node: dict[str, Any]) -> str:
 
 
 def _ledger_metadata(path: Path) -> os.stat_result:
+    _reject_symlink_ancestors(path, "credential nonce ledger")
     if path.is_symlink() or not path.is_file():
         _fail("credential nonce ledger must be an existing regular file")
     try:
@@ -1347,6 +1381,7 @@ def _journal_record(
         "plan_digest": plan["plan_digest"],
         "transaction_id": plan["transaction_id"],
         "capture_window_id": plan["capture_window_id"],
+        "consumer_impact_record": _consumer_impact_locator(plan),
         "status": status,
         "execution_mode": execution_mode,
         "next_operation_index": next_index,
@@ -1508,10 +1543,16 @@ def _validate_provider_receipt(
         "backup_manifest",
         "seed_eligible",
         "fleet_health_closure",
+        "consumer_impact_record",
     }
     _reject_secret_fields(receipt, f"{operation} provider receipt")
     if set(receipt) - allowed:
         _fail(f"{operation} provider receipt contains an unsafe field")
+    if (
+        "consumer_impact_record" in receipt
+        and receipt["consumer_impact_record"] != plan["consumer_impact_record"]
+    ):
+        _fail(f"{operation} provider receipt consumer-impact record drifted")
     phase = _receipt_phase(operation)
     if receipt.get("schema_version") != PHASE_RECEIPT_SCHEMAS[phase]:
         _fail(f"{operation} provider receipt schema is unsupported for phase {phase}")
@@ -1557,6 +1598,7 @@ def _validate_provider_receipt(
         "node": node_name,
         "peer_id": peer_id,
         "ledger_path": plan["credential_nonce_ledger"]["path"],
+        "consumer_impact_record": _consumer_impact_locator(plan),
     }
     if evidence is not None:
         expected_bindings["evidence_sha256"] = _remote_evidence_digest(evidence)
@@ -1911,6 +1953,9 @@ def _execute_unlocked(
     requested_ledger = Path(ledger_path).absolute()
     if requested_ledger != declared_ledger:
         _fail("requested credential nonce ledger is not the plan-bound canonical path")
+    # Re-check the live record before any externally supplied verifier callback
+    # can run, keeping the consumer-impact gate ahead of all apply work.
+    _consumer_impact_locator(plan)
     provenance_verified = _verify_provenance(plan, authority, provenance_verifier)
     if resume_record is None:
         ledger_summary = validate_credential_ledger(plan, Path(ledger_path))
@@ -1967,6 +2012,7 @@ def _execute_unlocked(
             "resumed": False,
             "plan_digest": plan["plan_digest"],
             "transaction_id": plan["transaction_id"],
+            "consumer_impact_record": _consumer_impact_locator(plan),
             "operations": operations,
             "ledger_rows": ledger_summary["rows"],
             "provider_mutation_performed": False,
@@ -1995,6 +2041,7 @@ def _execute_unlocked(
         _fail("apply requires an independently executed provenance verifier")
     # Re-check the code-owned trust root against the live filesystem after
     # authority/provenance validation and before journal/nonce/provider work.
+    _consumer_impact_locator(plan)
     validate_live_trust_root_file()
     # One-shot reservations precede every remote observation.  Values stay in
     # the external ledger and never enter a journal, receipt, or log.
@@ -2379,6 +2426,7 @@ def _execute_unlocked(
         "resumed": resumed,
         "plan_digest": plan["plan_digest"],
         "transaction_id": plan["transaction_id"],
+        "consumer_impact_record": _consumer_impact_locator(plan),
         "operations": operations,
         "provider_mutation_performed": True,
         "provider_receipts": provider_receipts,
@@ -2448,6 +2496,7 @@ def _resume_transaction_unlocked(
         ("plan_digest", plan["plan_digest"]),
         ("transaction_id", plan["transaction_id"]),
         ("capture_window_id", plan["capture_window_id"]),
+        ("consumer_impact_record", _consumer_impact_locator(plan)),
     ):
         if record.get(field) != expected:
             _fail("transaction journal is bound to a different task, head, plan, or capture window")
@@ -2582,6 +2631,7 @@ def _resume_transaction_unlocked(
             "dry_run": status == "dry-run-complete",
             "plan_digest": plan["plan_digest"],
             "transaction_id": plan["transaction_id"],
+            "consumer_impact_record": _consumer_impact_locator(plan),
             "operations": list(plan["global_order"]),
             "provider_mutation_performed": status == "complete",
             "provider_receipts": provider_receipts,
@@ -2635,6 +2685,7 @@ def _resume_transaction_unlocked(
             "dry_run": True,
             "plan_digest": plan["plan_digest"],
             "transaction_id": plan["transaction_id"],
+            "consumer_impact_record": _consumer_impact_locator(plan),
             "operations": list(plan["global_order"]),
             "provider_mutation_performed": False,
             "provider_receipts": [],
