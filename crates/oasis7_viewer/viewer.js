@@ -4580,7 +4580,11 @@ function normalizeMajorEvent(value2, { worldId, reorgEpoch, eventSeq }) {
     source: { authority: "runtime_journal", event_kind: value2.source.event_kind },
     freshness: value2.freshness,
     visibility: value2.visibility,
-    logical_time: value2.logical_time,
+    // Keep the validated logical clock lossless and stable across runtime
+    // compatibility payloads. Safe numeric values may be accepted for legacy
+    // callers, but they must not remain as a Number or fingerprint differently
+    // from the canonical decimal-string representation.
+    logical_time: logicalTime,
     causal_reference: causalReference,
     world_anchor: worldAnchor
   };

@@ -452,6 +452,102 @@ describe("World Feed v1 state", () => {
     expect(event.receipt_ref).toBeNull();
   });
 
+  it("stores logical_time as an exact decimal string and deduplicates compatible numeric input", () => {
+    const first = consumeWorldFeed(createInitialWorldFeedState(), feed({
+      events: [{
+        event_seq: 7,
+        kind: "major_world_event",
+        summary: "A crisis is active",
+        detail: "ambient context",
+        receipt_ref: null,
+        major_event: majorEvent({ logical_time: 42 }),
+      }],
+    }));
+    expect(first.state.events[0].major_event.logical_time).toBe("42");
+
+    const replay = consumeWorldFeed(first.state, feed({
+      events: [{
+        event_seq: 7,
+        kind: "major_world_event",
+        summary: "A crisis is active",
+        detail: "ambient context",
+        receipt_ref: null,
+        major_event: majorEvent({ logical_time: "42" }),
+      }],
+    }));
+    expect(replay.requiresSnapshotReload).toBe(false);
+    expect(replay.state.events).toHaveLength(1);
+    expect(replay.state.events[0].major_event.logical_time).toBe("42");
+    expect(replay.state.dedupedCount).toBe(1);
+  });
+
+  it("preserves a decimal-string logical_time beyond the JavaScript safe-integer range", () => {
+    const logicalTime = "9007199254740993";
+    const consumed = consumeWorldFeed(createInitialWorldFeedState(), feed({
+      events: [{
+        event_seq: 7,
+        kind: "major_world_event",
+        summary: "A crisis is active",
+        detail: "ambient context",
+        receipt_ref: null,
+        major_event: majorEvent({ logical_time: logicalTime }),
+      }],
+    }));
+
+    expect(consumed.state.status).toBe("ready");
+    expect(consumed.state.events[0].major_event.logical_time).toBe(logicalTime);
+  });
+
+  it.each([
+    "",
+    "  ",
+    "-1",
+    "1.5",
+    "not-a-number",
+    "18446744073709551616",
+    null,
+    {},
+  ])("fails closed for malformed logical_time %p", (logicalTime) => {
+    const consumed = consumeWorldFeed(createInitialWorldFeedState(), feed({
+      events: [{
+        event_seq: 7,
+        kind: "major_world_event",
+        summary: "invalid logical time",
+        detail: "",
+        receipt_ref: null,
+        major_event: majorEvent({ logical_time: logicalTime }),
+      }],
+    }));
+
+    expect(consumed).toMatchObject({ requiresSnapshotReload: true });
+    expect(consumed.state).toMatchObject({
+      status: "unavailable",
+      unavailableReason: "source_unavailable",
+      events: [],
+    });
+  });
+
+  it("fails closed for an unsafe numeric logical_time instead of inferring a rounded value", () => {
+    const unsafeNumericLogicalTime = 9007199254740993;
+    const consumed = consumeWorldFeed(createInitialWorldFeedState(), feed({
+      events: [{
+        event_seq: 7,
+        kind: "major_world_event",
+        summary: "unsafe logical time",
+        detail: "",
+        receipt_ref: null,
+        major_event: majorEvent({ logical_time: unsafeNumericLogicalTime }),
+      }],
+    }));
+
+    expect(consumed).toMatchObject({ requiresSnapshotReload: true });
+    expect(consumed.state).toMatchObject({
+      status: "unavailable",
+      unavailableReason: "source_unavailable",
+      events: [],
+    });
+  });
+
   it("accepts only exact crisis lifecycle/source pairs and the numeric severity range", () => {
     for (const [eventKind, lifecycle] of [
       ["crisis_spawned", "active"],

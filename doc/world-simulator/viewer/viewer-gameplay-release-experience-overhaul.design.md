@@ -92,7 +92,7 @@ relationships, plan/memory/rationale, provider or cost data, multi-Agent graphs,
 verbs require producer/runtime/agent definitions for source, freshness, permission, missing-state,
 idempotency, and receipt semantics before visual design is treated as implementable.
 
-#### P1-A Agent Context Lite（源码、自动化与 headed 验收已完成）
+#### P1-A Agent Context Lite（源码与聚焦自动化已完成；headed 证据部分完成）
 
 P1-A 先实现一个 Agent-only composition，作为后续实体 Inspector 的窄入口；Location、
 Facility、Territory、Organization、Depot、Module 的 generalized Inspector 明确是 post-P1-A。
@@ -130,8 +130,10 @@ Facility、Territory、Organization、Depot、Module 的 generalized Inspector �
 P1-A 的视觉验收只针对 selected Agent、缺失/陈旧/不可用态和非 Agent honest-unavailable 态；
 必须覆盖 `1440x1000`、`1024x768`、`768x1024`、`390x844`、键盘/IME/CJK/长文本、Focus 返回
 路径和单一正式 Receipt，并覆盖 current、last-known/stale、reconnecting、unknown、conflict、
-replay、gap、reorg、unavailable 与 control/permission lost。源码、
-focused 自动化和真实 WebGL headed 验收已完成；本节仍不单独构成发行放行证明。
+replay、gap、reorg、unavailable 与 control/permission lost。当前源码与聚焦自动化已完成；headed
+证据仅覆盖外部 Chrome 的 GPU-unavailable fallback（`1440x1000`、`390x844`）。`ready=true`
+WebGL2/Cinematic 正常路径、probe 后异步 GPU 失败和 tablet `641–1240` 宽度仍待验证，因此当前
+只维持 technical preview；本节不单独构成完整 headed 验收或发行放行结论。
 
 P1-A 的 canonical acceptance crosswalk 为：`P1A-CTX-01 → ENT-01/CTX-01/EMP-01`、
 `P1A-CTX-02 → STA-01/CTX-01/FED-01/FED-02`、`P1A-CTX-03 → INT-01/REC-01/REC-02`、
