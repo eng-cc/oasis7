@@ -23,6 +23,19 @@ from typing import Any, NoReturn
 INPUT_SCHEMA = "oasis7.public_testnet_full_network_clean_room_input.v1"
 PLAN_SCHEMA = "oasis7.public_testnet_full_network_clean_room_plan.v1"
 DEPLOYMENT_INVENTORY_SCHEMA = "oasis7.deployment_inventory.v1"
+DEPLOYMENT_INVENTORY_RECEIPT_FIELDS = frozenset(
+    {
+        "schema_version",
+        "authenticated",
+        "verified",
+        "signer_id",
+        "verifier_id",
+        "trust_root_id",
+        "signed_payload_sha256",
+        "signature_hex",
+        "canonical_digest",
+    }
+)
 OID_RE = re.compile(r"^[0-9a-fA-F]{40,64}$")
 HEX64_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 SIGNATURE_RE = re.compile(r"^[0-9a-fA-F]{128}$")
@@ -370,59 +383,10 @@ def _expected_surfaces(name: str) -> tuple[str, ...]:
     return tuple(item.replace("{node_id}", node_id) for item in OBSERVER_RESET_SURFACES)
 
 
-def _default_deployment_inventory() -> dict[str, Any]:
-    """Return the repository-owned baseline deployment evidence.
-
-    The observed identity receipts are never allowed to define their own
-    expected ownership.  Inputs that do not carry a separately captured
-    inventory still use this code-owned, authenticated baseline so legacy
-    envelopes remain deterministic while explicit deployment evidence can
-    override roots, surfaces, and service-account ownership.
-    """
-    receipt = {
-        "schema_version": "oasis7.deployment_inventory_receipt.v1",
-        "authenticated": True,
-        "verified": True,
-        "signer_id": "governance-signer",
-        "verifier_id": CANONICAL_VERIFIER_ID,
-        "trust_root_id": CANONICAL_TRUST_ROOT_ID,
-        "signed_payload_sha256": "a" * 64,
-        "signature_hex": "b" * 128,
-        "canonical_digest": "c" * 64,
-    }
-    nodes: dict[str, dict[str, Any]] = {}
-    for name in NODE_ORDER:
-        expected = EXPECTED_NODES[name]
-        platform = expected["platform"]
-        path_style = "windows" if platform == "windows-x64" else "posix"
-        root = _normalized_path(expected["node_root"], path_style, f"{name}.default_node_root")
-        nodes[name] = {
-            "node_id": expected["node_id"],
-            "node_root": root,
-            "persistent_state_paths": [
-                _normalized_path(
-                    f"{root}/{surface}",
-                    path_style,
-                    f"{name}.default_surface[{index}]",
-                )
-                for index, surface in enumerate(_expected_surfaces(name))
-            ],
-            "expected_key_uid": 0,
-            "expected_key_gid": 0,
-        }
-    return {
-        "schema_version": DEPLOYMENT_INVENTORY_SCHEMA,
-        "authenticated": True,
-        "verified": True,
-        "signer_id": "governance-signer",
-        "trust_root_id": CANONICAL_TRUST_ROOT_ID,
-        "nodes": nodes,
-        "receipt": receipt,
-    }
-
-
 def _validate_deployment_inventory(raw: Any, allowed_signers: set[str]) -> dict[str, Any]:
-    inventory = _default_deployment_inventory() if raw is None else require_object(raw, "deployment_inventory")
+    if raw is None:
+        die("deployment_inventory is required and must be independently authenticated")
+    inventory = require_object(raw, "deployment_inventory")
     if set(inventory) != {
         "schema_version",
         "authenticated",
@@ -445,6 +409,8 @@ def _validate_deployment_inventory(raw: Any, allowed_signers: set[str]) -> dict[
     receipt = validate_authenticated_receipt(
         inventory.get("receipt"), "deployment_inventory.receipt", allowed_signers
     )
+    if set(receipt) != DEPLOYMENT_INVENTORY_RECEIPT_FIELDS:
+        die("deployment_inventory receipt fields are not exact")
     if (
         receipt.get("signer_id") != signer_id
         or receipt.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID
@@ -465,41 +431,29 @@ def _validate_deployment_inventory(raw: Any, allowed_signers: set[str]) -> dict[
             "expected_key_uid",
             "expected_key_gid",
         }
-        if set(raw_node) - allowed_fields:
-            die(f"deployment_inventory.nodes.{name} contains an unsafe field")
-        if "node_id" in raw_node and raw_node["node_id"] != expected["node_id"]:
+        if set(raw_node) != allowed_fields:
+            die(f"deployment_inventory.nodes.{name} fields are not complete")
+        if raw_node["node_id"] != expected["node_id"]:
             die(f"deployment_inventory.nodes.{name}.node_id does not match the governed identity")
         platform = expected["platform"]
         path_style = "windows" if platform == "windows-x64" else "posix"
         root = _normalized_path(
-            raw_node.get("node_root", expected["node_root"]),
+            raw_node.get("node_root"),
             path_style,
             f"deployment_inventory.nodes.{name}.node_root",
         )
-        expected_uid = raw_node.get("expected_key_uid", 0)
-        expected_gid = raw_node.get("expected_key_gid", 0)
+        expected_uid = raw_node["expected_key_uid"]
+        expected_gid = raw_node["expected_key_gid"]
         for field, value in (("expected_key_uid", expected_uid), ("expected_key_gid", expected_gid)):
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                 die(f"deployment_inventory.nodes.{name}.{field} must be a non-negative integer")
-        if expected_uid != expected_gid:
-            die(f"deployment_inventory.nodes.{name} expected uid/gid do not match")
         raw_paths = raw_node.get("persistent_state_paths")
-        if raw_paths is None:
-            paths = [
-                _normalized_path(
-                    f"{root}/{surface}",
-                    path_style,
-                    f"deployment_inventory.nodes.{name}.default_surface[{index}]",
-                )
-                for index, surface in enumerate(_expected_surfaces(name))
-            ]
-        else:
-            if not isinstance(raw_paths, list) or not raw_paths:
-                die(f"deployment_inventory.nodes.{name}.persistent_state_paths must be a non-empty list")
-            paths = [
-                _normalized_path(path, path_style, f"deployment_inventory.nodes.{name}.persistent_state_paths[{index}]")
-                for index, path in enumerate(raw_paths)
-            ]
+        if not isinstance(raw_paths, list) or not raw_paths:
+            die(f"deployment_inventory.nodes.{name}.persistent_state_paths must be a non-empty list")
+        paths = [
+            _normalized_path(path, path_style, f"deployment_inventory.nodes.{name}.persistent_state_paths[{index}]")
+            for index, path in enumerate(raw_paths)
+        ]
         if len(set(paths)) != len(paths) or any(not _path_under(root, path, path_style) for path in paths):
             die(f"deployment_inventory.nodes.{name}.persistent_state_paths escape or duplicate node_root")
         normalized_nodes[name] = {
@@ -1008,6 +962,7 @@ def _validate_nodes(
     if not isinstance(nodes, list) or len(nodes) != len(NODE_ORDER):
         die("nodes must contain exactly the five managed nodes")
     by_name: dict[str, dict[str, Any]] = {}
+    seen_peer_ids: set[str] = set()
     for index, raw in enumerate(nodes):
         node = require_object(raw, f"nodes[{index}]")
         name = require_string(node.get("name"), f"nodes[{index}].name")
@@ -1022,7 +977,10 @@ def _validate_nodes(
         if identity_receipt.get("node_id") != expected["node_id"]:
             die(f"{name}.identity_receipt node_id binding mismatch")
         validate_authenticated_receipt(identity_receipt, f"{name}.identity_receipt", allowed_signers)
-        require_string(identity_receipt.get("peer_id"), f"{name}.identity_receipt.peer_id")
+        peer_id = require_string(identity_receipt.get("peer_id"), f"{name}.identity_receipt.peer_id")
+        if peer_id in seen_peer_ids:
+            die(f"{name}.identity_receipt.peer_id duplicates another managed node")
+        seen_peer_ids.add(peer_id)
         require_hex(identity_receipt.get("key_sha256"), f"{name}.identity_receipt.key_sha256")
         key_size = identity_receipt.get("key_size_bytes")
         if isinstance(key_size, bool) or not isinstance(key_size, int) or key_size <= 0:
@@ -1033,8 +991,6 @@ def _validate_nodes(
             owner_value = identity_receipt.get(owner)
             if isinstance(owner_value, bool) or not isinstance(owner_value, int) or owner_value < 0:
                 die(f"{name}.identity_receipt.{owner} must be a non-negative integer")
-        if identity_receipt["key_gid"] != identity_receipt["key_uid"]:
-            die(f"{name}.identity_receipt uid/gid do not match the governed service account")
         expected_uid = governed["expected_key_uid"]
         expected_gid = governed["expected_key_gid"]
         if identity_receipt["key_uid"] != expected_uid or identity_receipt["key_gid"] != expected_gid:

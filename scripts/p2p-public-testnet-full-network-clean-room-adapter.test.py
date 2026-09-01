@@ -1909,6 +1909,97 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
                 if "opaque-" in serialized:
                     self.fail(f"{field} leaked opaque credential value")
 
+    def test_transport_surfaces_use_only_the_canonical_node_aware_observer_inventory(self) -> None:
+        """Provider truth cannot expose a conflicting generic seven-path observer list."""
+        transport_surfaces = self.adapter._transport_plan(self.plan)["surfaces"]
+        self.assertNotIn("observers", transport_surfaces)
+        self.assertEqual(
+            transport_surfaces["observers_by_node"],
+            {
+                node["name"]: node["persistent_state_paths"]
+                for node in self.plan["nodes"]
+                if node["role"] == "observer"
+            },
+        )
+
+    def test_transport_projects_every_provider_bound_nested_section_by_exact_schema(self) -> None:
+        """Unknown nested plan fields must never cross through shallow copies."""
+        sections = (
+            "capture_window",
+            "canonical_host_inventory",
+            "canonical_endpoint_inventory",
+            "execution",
+            "fresh_root_probe",
+            "observer_gate",
+            "operation_journal_contract",
+            "adapter_verification",
+            "consumer_impact_record",
+        )
+        for section in sections:
+            with self.subTest(section=section):
+                plan = copy.deepcopy(self.plan)
+                self.assertIsInstance(plan[section], dict)
+                plan[section]["__unexpected_transport_field__"] = "must-not-cross"
+                try:
+                    projected = self.adapter._transport_plan(plan)
+                except self.adapter.AdapterError:
+                    continue
+                self.assertNotIn(
+                    "__unexpected_transport_field__",
+                    json.dumps(projected.get(section, {}), sort_keys=True),
+                )
+
+    def test_planner_and_adapter_share_deployment_receipt_extension_schema(self) -> None:
+        """Planner and adapter must reject an unmodeled receipt extension consistently."""
+        extension = {
+            "schema_version": "oasis7.deployment_inventory_receipt_extension.v1",
+            "deployment_epoch": "deployment-epoch-001",
+            "inventory_digest": "d" * 64,
+        }
+        request = self.fixture._input()
+        request["deployment_inventory"]["receipt"]["extensions"] = extension
+        planner_error = None
+        try:
+            self.planner.build_plan(request)
+        except SystemExit as error:
+            planner_error = error
+        self.assertIsNotNone(planner_error, "planner accepted an unmodeled receipt extension")
+        if planner_error is not None:
+            self.assertRegex(str(planner_error), r"(?i)receipt|extension|unsafe|schema")
+
+        plan = copy.deepcopy(self.plan)
+        plan["deployment_inventory"]["receipt"]["extensions"] = extension
+        plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+        adapter_error = None
+        try:
+            self.adapter.validate_plan(plan)
+        except self.adapter.AdapterError as error:
+            adapter_error = error
+        self.assertIsNotNone(adapter_error, "adapter accepted an unmodeled receipt extension")
+        if adapter_error is not None:
+            self.assertRegex(str(adapter_error), r"(?i)receipt|extension|unsafe|schema")
+
+    def test_adapter_accepts_independent_authenticated_uid_and_gid_truth(self) -> None:
+        """The adapter must verify distinct deployment service UID and primary GID values."""
+        request = self.fixture._input()
+        request["deployment_inventory"] = self.fixture._deployment_inventory(
+            request["nodes"], expected_uid=1001, expected_gid=1002
+        )
+        for node in request["nodes"]:
+            node["identity_receipt"]["key_uid"] = 1001
+            node["identity_receipt"]["key_gid"] = 1002
+        plan = self._bind_test_ledger(self.planner.build_plan(request))
+        self.adapter.validate_plan(plan)
+
+    def test_adapter_rejects_duplicate_authenticated_peer_ids(self) -> None:
+        """Provider admission must preserve one authenticated peer identity per node."""
+        plan = copy.deepcopy(self.plan)
+        plan["nodes"][1]["identity_receipt"]["peer_id"] = plan["nodes"][0]["identity_receipt"]["peer_id"]
+        plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+        with self.assertRaises(self.adapter.AdapterError) as raised:
+            self.adapter.validate_plan(plan)
+        self.assertRegex(str(raised.exception), r"(?i)peer|identity|duplicate|unique")
+
     def test_identity_receipt_requires_governed_gid(self) -> None:
         plan = copy.deepcopy(self.plan)
         plan["nodes"][0]["identity_receipt"]["key_gid"] = 4242

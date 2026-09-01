@@ -395,8 +395,6 @@ def _validate_deployment_inventory(
             owner = value.get(field)
             if not isinstance(owner, int) or isinstance(owner, bool) or owner < 0:
                 _fail(f"deployment inventory {name} {field} is malformed")
-        if value["expected_key_uid"] != value["expected_key_gid"]:
-            _fail(f"deployment inventory {name} expected uid/gid do not match")
         normalized[name] = {
             "node_id": value["node_id"],
             "node_root": root,
@@ -473,6 +471,7 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     if [node.get("name") for node in nodes] != list(planner.NODE_ORDER):
         _fail("plan nodes are not in the code-owned five-node order")
     by_name: dict[str, dict[str, Any]] = {}
+    seen_peer_ids: set[str] = set()
     for node_value in nodes:
         node = _object(node_value, "plan node")
         name = _string(node.get("name"), "plan node name")
@@ -530,13 +529,15 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
             value = identity.get(owner)
             if not isinstance(value, int) or isinstance(value, bool) or value < 0:
                 _fail(f"{name} identity {owner} is malformed")
-        if identity["key_gid"] != identity["key_uid"]:
-            _fail(f"{name} identity uid/gid do not match the governed service account")
         if (
             identity["key_uid"] != governed["expected_key_uid"]
             or identity["key_gid"] != governed["expected_key_gid"]
         ):
             _fail(f"{name} identity uid/gid do not match independently authenticated deployment inventory")
+        peer_id = _string(identity.get("peer_id"), f"{name} identity peer id")
+        if peer_id in seen_peer_ids:
+            _fail(f"{name} identity peer id duplicates another managed node")
+        seen_peer_ids.add(peer_id)
         paths = _safe_relative_paths(
             node["node_root"],
             node.get("persistent_state_paths"),
@@ -2110,6 +2111,18 @@ def _project_exact_object(
     return {key: copy.deepcopy(value[key]) for key in allowed}
 
 
+def _project_transport_string_list(value: Any, label: str) -> list[str]:
+    if not isinstance(value, list):
+        _fail(f"{label} must be a list")
+    return [_string(item, f"{label} entry") for item in value]
+
+
+def _project_transport_list(value: Any, label: str) -> list[Any]:
+    if not isinstance(value, list):
+        _fail(f"{label} must be a list")
+    return value
+
+
 _TRANSPORT_RECEIPT_FIELDS = {
     "schema_version",
     "authenticated",
@@ -2250,24 +2263,212 @@ def _project_transport_inventory(value: Any) -> dict[str, Any]:
 
 
 def _project_transport_surfaces(value: Any) -> dict[str, Any]:
+    raw = _object(value, "transport surfaces")
+    input_fields = {"validators", "observers", "validator_count", "observer_count", "observers_by_node"}
+    if set(raw) - input_fields:
+        _fail("transport surfaces contains a field outside the recursive allowlist")
+    # The planner retains its generic observer reset list for local validation,
+    # but provider truth must consume only the node-aware inventory.  Accepting
+    # that compatibility field here while omitting it from the DTO prevents two
+    # competing observer truths from crossing the transport boundary.
     surfaces = _project_exact_object(
-        value,
-        {"validators", "observers", "validator_count", "observer_count", "observers_by_node"},
+        {key: raw[key] for key in input_fields if key != "observers"},
+        {"validators", "validator_count", "observer_count", "observers_by_node"},
         "transport surfaces",
     )
     observers = _object(surfaces["observers_by_node"], "transport observer surfaces by node")
     if set(observers) != {"linux-lan-observer", "windows-observer", "macos-observer"}:
         _fail("transport observer surface map is not canonical")
     surfaces["observers_by_node"] = {
-        name: [
-            _string(path, f"transport observer surfaces {name} entry")
-            for path in _object({"paths": observers[name]}, "transport observer paths")["paths"]
-        ]
+        name: _project_transport_string_list(
+            observers[name], f"transport observer surfaces {name}"
+        )
         for name in observers
     }
-    surfaces["validators"] = [_string(path, "transport validator surface") for path in surfaces["validators"]]
-    surfaces["observers"] = [_string(path, "transport observer surface") for path in surfaces["observers"]]
+    surfaces["validators"] = _project_transport_string_list(
+        surfaces["validators"], "transport validator surfaces"
+    )
     return surfaces
+
+
+def _project_transport_host_inventory(value: Any) -> dict[str, Any]:
+    inventory = _object(value, "transport canonical host inventory")
+    if set(inventory) != set(CANONICAL_PEER_REGISTRY):
+        _fail("transport canonical host inventory node set is not canonical")
+    return {
+        name: _project_exact_object(
+            inventory[name],
+            {"target", "known_hosts_path", "known_host_fingerprint"},
+            f"transport canonical host inventory {name}",
+        )
+        for name in CANONICAL_PEER_REGISTRY
+    }
+
+
+def _project_transport_endpoint_inventory(value: Any) -> dict[str, Any]:
+    inventory = _object(value, "transport canonical endpoint inventory")
+    if set(inventory) != set(CANONICAL_PEER_REGISTRY):
+        _fail("transport canonical endpoint inventory node set is not canonical")
+    return {
+        name: _project_exact_object(
+            inventory[name],
+            {"healthz", "evidence"},
+            f"transport canonical endpoint inventory {name}",
+        )
+        for name in CANONICAL_PEER_REGISTRY
+    }
+
+
+def _project_transport_capture_window(value: Any) -> dict[str, Any]:
+    return _project_exact_object(
+        value, {"id", "starts_at", "ends_at"}, "transport capture window"
+    )
+
+
+def _project_transport_execution(value: Any) -> dict[str, Any]:
+    return _project_exact_object(
+        value,
+        {
+            "mode",
+            "provider_mutation_performed",
+            "provider_mutation_boundary",
+            "plan_is_apply_proof",
+            "apply_requires_fresh_adapter_receipt",
+        },
+        "transport execution",
+    )
+
+
+def _project_transport_fresh_root_probe(value: Any) -> dict[str, Any]:
+    probe = _project_exact_object(
+        value,
+        {
+            "schema_version",
+            "authenticated",
+            "verified",
+            "transaction_id",
+            "capture_window_id",
+            "replayed",
+            "post_validator_verify",
+            "package_commit",
+            "checkpoint_id",
+            "manifest_hash",
+            "height",
+            "validator_verify_outputs",
+            "receipt",
+        },
+        "transport fresh-root probe",
+    )
+    outputs = _object(
+        probe["validator_verify_outputs"],
+        "transport fresh-root probe validator verify outputs",
+    )
+    if set(outputs) != {"storage-205", "sequencer-204"}:
+        _fail("transport fresh-root probe validator output set is not canonical")
+    output_fields = {
+        "schema_version",
+        "authenticated",
+        "verified",
+        "signer_id",
+        "signed_payload_sha256",
+        "signature_hex",
+        "canonical_digest",
+        "node",
+        "transaction_id",
+        "capture_window_id",
+        "package_commit",
+        "checkpoint_id",
+        "manifest_hash",
+        "height",
+        "output_sha256",
+    }
+    probe["validator_verify_outputs"] = {
+        name: _project_exact_object(
+            outputs[name], output_fields, f"transport fresh-root probe validator output {name}"
+        )
+        for name in ("storage-205", "sequencer-204")
+    }
+    probe["receipt"] = _project_transport_receipt(
+        probe["receipt"], "transport fresh-root probe receipt"
+    )
+    return probe
+
+
+def _project_transport_observer_gate(value: Any) -> dict[str, Any]:
+    gate = _project_exact_object(
+        value,
+        {"required_before", "fresh_root_probe_required", "checkpoint_receipt_required", "fail_closed"},
+        "transport observer gate",
+    )
+    required_before = gate["required_before"]
+    if not isinstance(required_before, list):
+        _fail("transport observer gate required_before must be a list")
+    gate["required_before"] = [
+        _string(node, "transport observer gate required_before entry")
+        for node in required_before
+    ]
+    return gate
+
+
+def _project_transport_journal_contract(value: Any) -> dict[str, Any]:
+    return _project_exact_object(
+        value,
+        {
+            "authoritative",
+            "apply_usable",
+            "adapter_owned",
+            "durable_receipt_required",
+            "planner_output_is_not_apply_proof",
+        },
+        "transport operation journal contract",
+    )
+
+
+def _project_transport_adapter_verification(value: Any) -> dict[str, Any]:
+    verification = _project_exact_object(
+        value,
+        {
+            "schema_version",
+            "authenticated",
+            "verified",
+            "adapter_id",
+            "transaction_id",
+            "capture_window_id",
+            "live_receipts_verified",
+            "credential_nonce_ledger_verified",
+            "backup_or_no_backup_authority_verified",
+            "apply_authority_granted",
+            "durable_journal_authoritative",
+            "durable_journal_receipt_required",
+            "receipt",
+        },
+        "transport adapter verification",
+    )
+    verification["receipt"] = _project_transport_receipt(
+        verification["receipt"], "transport adapter verification receipt"
+    )
+    return verification
+
+
+def _project_transport_consumer_impact(value: Any) -> dict[str, Any]:
+    impact = _project_exact_object(
+        value, {"path", "sha256", "record"}, "transport consumer impact record"
+    )
+    impact["record"] = _project_exact_object(
+        impact["record"],
+        {
+            "impact",
+            "evidence_source",
+            "timestamp",
+            "validators_already_stopped",
+            "outage_update_channel",
+            "recovery_update_checkpoint",
+            "producer_wording_approval",
+            "decision",
+        },
+        "transport consumer impact contents",
+    )
+    return impact
 
 
 def _transport_node(node: dict[str, Any]) -> dict[str, Any]:
@@ -2327,20 +2528,47 @@ def _transport_plan(plan: dict[str, Any]) -> dict[str, Any]:
     if set(plan) - TRANSPORT_PLAN_FIELDS - {"authority", "credential_nonce_ledger"}:
         _fail("transport plan contains a field outside the allowlist")
     result = {
-        key: copy.deepcopy(value)
-        for key, value in plan.items()
-        if key not in {
-            "authority",
-            "credential_nonce_ledger",
-            "forensic_backup",
-            "rollback",
-            "operation_journal",
-        }
+        "schema_version": _string(plan.get("schema_version"), "transport plan schema version"),
+        "task_uid": _string(plan.get("task_uid"), "transport plan task uid"),
+        "head_oid": _string(plan.get("head_oid"), "transport plan head oid"),
+        "plan_digest": _string(plan.get("plan_digest"), "transport plan digest"),
+        "transaction_id": _string(plan.get("transaction_id"), "transport plan transaction id"),
+        "capture_window_id": _string(
+            plan.get("capture_window_id"), "transport plan capture window id"
+        ),
+        "capture_window": _project_transport_capture_window(plan.get("capture_window")),
+        "node_order": _project_transport_string_list(
+            plan.get("node_order"), "transport plan node order"
+        ),
+        "global_order": _project_transport_string_list(
+            plan.get("global_order"), "transport plan global order"
+        ),
+        "canonical_host_inventory": _project_transport_host_inventory(
+            plan.get("canonical_host_inventory")
+        ),
+        "canonical_endpoint_inventory": _project_transport_endpoint_inventory(
+            plan.get("canonical_endpoint_inventory")
+        ),
+        "nodes": [
+            _transport_node(node)
+            for node in _project_transport_list(plan.get("nodes"), "transport plan nodes")
+        ],
+        "surfaces": _project_transport_surfaces(plan.get("surfaces")),
+        "deployment_inventory": _project_transport_inventory(plan.get("deployment_inventory")),
+        "truth": _project_transport_truth(plan.get("truth")),
+        "execution": _project_transport_execution(plan.get("execution")),
+        "fresh_root_probe": _project_transport_fresh_root_probe(plan.get("fresh_root_probe")),
+        "observer_gate": _project_transport_observer_gate(plan.get("observer_gate")),
+        "operation_journal_contract": _project_transport_journal_contract(
+            plan.get("operation_journal_contract")
+        ),
+        "adapter_verification": _project_transport_adapter_verification(
+            plan.get("adapter_verification")
+        ),
+        "consumer_impact_record": _project_transport_consumer_impact(
+            plan.get("consumer_impact_record")
+        ),
     }
-    result["nodes"] = [_transport_node(node) for node in result["nodes"]]
-    result["truth"] = _project_transport_truth(result["truth"])
-    result["deployment_inventory"] = _project_transport_inventory(result["deployment_inventory"])
-    result["surfaces"] = _project_transport_surfaces(result["surfaces"])
     _reject_transport_auth_aliases(result, "transport plan")
     _reject_secret_fields(result, "transport plan")
     return result

@@ -115,6 +115,39 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
         surface = surface.replace("{node_id}", "triad-testnet-windows-observer")
         return rf"C:\\oasis7-deploy\\{surface.replace('/', chr(92))}"
 
+    def _deployment_inventory(
+        self,
+        nodes: list[dict[str, object]],
+        *,
+        expected_uid: int = 0,
+        expected_gid: int = 0,
+        include_layout: bool = True,
+    ) -> dict[str, object]:
+        inventory_nodes: dict[str, dict[str, object]] = {}
+        for node in nodes:
+            entry: dict[str, object] = {
+                "node_id": node["node_id"],
+                "expected_key_uid": expected_uid,
+                "expected_key_gid": expected_gid,
+            }
+            if include_layout:
+                entry.update(
+                    {
+                        "node_root": node["node_root"],
+                        "persistent_state_paths": list(node["persistent_state_paths"]),
+                    }
+                )
+            inventory_nodes[str(node["name"])] = entry
+        return {
+            "schema_version": "oasis7.deployment_inventory.v1",
+            "authenticated": True,
+            "verified": True,
+            "signer_id": "governance-signer",
+            "trust_root_id": "oasis7-public-testnet-governance-root-v1",
+            "nodes": inventory_nodes,
+            "receipt": self._receipt("oasis7.deployment_inventory_receipt.v1"),
+        }
+
     def _input(self) -> dict[str, object]:
         transaction_id = "txn-clean-room-001"
         capture_window_id = "capture-window-20260901-001"
@@ -390,6 +423,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 "identity_receipt": self._identity_receipt("triad-testnet-fourth-local"),
             },
         ]
+        deployment_inventory = self._deployment_inventory(nodes)
         return {
             "schema_version": "oasis7.public_testnet_full_network_clean_room_input.v1",
             "transaction_id": transaction_id,
@@ -521,6 +555,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 "durable_journal_receipt_required": True,
                 "receipt": self._receipt("oasis7.clean_room_adapter_verification_receipt.v1"),
             },
+            "deployment_inventory": deployment_inventory,
             "nodes": nodes,
         }
 
@@ -652,6 +687,8 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 "node_id": node["node_id"],
                 "node_root": node["node_root"],
                 "persistent_state_paths": list(node["persistent_state_paths"]),
+                "expected_key_uid": 0,
+                "expected_key_gid": 0,
             }
             for node in request["nodes"]
         }
@@ -659,6 +696,8 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             "node_id": "triad-testnet-fourth-local",
             "node_root": root,
             "persistent_state_paths": declared_paths,
+            "expected_key_uid": 0,
+            "expected_key_gid": 0,
         }
         request["deployment_inventory"] = {
             "schema_version": "oasis7.deployment_inventory.v1",
@@ -689,6 +728,53 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             summary["observers_by_node"]["linux-lan-observer"],
             linux["persistent_state_paths"],
         )
+
+    def test_plan_requires_explicit_authenticated_deployment_inventory(self) -> None:
+        """Release admission cannot silently replace absent deployment truth."""
+        request = self._input()
+        request.pop("deployment_inventory")
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)deployment|inventory|missing|authenticated")
+
+    def test_plan_allows_independent_authenticated_uid_and_gid_truth(self) -> None:
+        """Deployment truth may authenticate distinct service UID and primary GID."""
+        request = self._input()
+        request["deployment_inventory"] = self._deployment_inventory(
+            request["nodes"], expected_uid=1001, expected_gid=1002
+        )
+        for node in request["nodes"]:
+            node["identity_receipt"]["key_uid"] = 1001
+            node["identity_receipt"]["key_gid"] = 1002
+
+        plan = self.module.build_plan(request)
+        for node in plan["nodes"]:
+            inventory_node = plan["deployment_inventory"]["nodes"][node["name"]]
+            self.assertEqual(inventory_node["expected_key_uid"], 1001)
+            self.assertEqual(inventory_node["expected_key_gid"], 1002)
+            self.assertEqual(node["identity_receipt"]["key_uid"], 1001)
+            self.assertEqual(node["identity_receipt"]["key_gid"], 1002)
+
+    def test_plan_requires_authenticated_root_and_reset_surfaces_per_managed_node(self) -> None:
+        """Inventory layout is required per node; code-owned defaults are not evidence."""
+        for node_name in self.module.NODE_ORDER:
+            for field in ("node_root", "persistent_state_paths"):
+                with self.subTest(node=node_name, field=field):
+                    request = self._input()
+                    inventory = self._deployment_inventory(request["nodes"])
+                    inventory["nodes"][node_name].pop(field)
+                    request["deployment_inventory"] = inventory
+                    with self.assertRaises(SystemExit) as raised:
+                        self.module.build_plan(request)
+                    self.assertRegex(str(raised.exception), r"(?i)deployment|inventory|root|surface|path")
+
+    def test_plan_rejects_duplicate_authenticated_peer_ids(self) -> None:
+        """Distinct managed nodes cannot share one authenticated peer identity."""
+        request = self._input()
+        request["nodes"][1]["identity_receipt"]["peer_id"] = request["nodes"][0]["identity_receipt"]["peer_id"]
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)peer|identity|duplicate|unique")
 
     def test_plan_requires_fresh_bound_consumer_impact_record(self) -> None:
         request = self._input()
@@ -821,6 +907,9 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
 
         request = self._input()
         request["nodes"][2]["persistent_state_paths"] = request["nodes"][2]["persistent_state_paths"][:-1]
+        request["deployment_inventory"]["nodes"]["linux-lan-observer"]["persistent_state_paths"] = [
+            "/operator/not-the-authenticated-observer-root"
+        ]
         with self.assertRaises(SystemExit) as raised:
             self.module.build_plan(request)
         self.assertRegex(str(raised.exception), r"(?i)surface|persistent|state")
