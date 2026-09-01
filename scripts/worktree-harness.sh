@@ -497,6 +497,21 @@ PY
       sleep 1
     done
 
+    # The metadata can become ready after the startup deadline while a test
+    # synchronization hook is holding the handoff. Revalidate the recorded
+    # harness identity before publishing ready, even when the deadline loop
+    # did not get another iteration.
+    recorded_harness_pid=$(wh_state_get "$STATE_FILE" harness_pid 2>/dev/null || true)
+    recorded_harness_pgid=$(wh_state_get "$STATE_FILE" harness_pgid 2>/dev/null || true)
+    recorded_harness_identity=$(wh_state_get "$STATE_FILE" harness_identity 2>/dev/null || true)
+    if ! wh_process_record_alive "$recorded_harness_pid" "$recorded_harness_pgid" "$recorded_harness_identity"; then
+      wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "failed", "failure_reason": "run-launcher-stack.sh identity changed before STACK_READY"}'
+      kill_recorded_processes
+      echo "error: worktree harness identity changed before readiness" >&2
+      tail -n 120 "$STARTUP_LOG" >&2 || true
+      exit 1
+    fi
+
     if [[ ! -f "$META_FILE" ]] || [[ "$(wh_env_file_get "$META_FILE" STACK_READY 2>/dev/null || true)" != "1" ]]; then
       wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "failed", "failure_reason": "startup deadline exceeded waiting for STACK_READY"}'
       kill_recorded_processes

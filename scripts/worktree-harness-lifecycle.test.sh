@@ -326,6 +326,10 @@ else:
 PY
 
 STARTUP_TIMEOUT_SECS=5
+# Launch synchronization begins before the harness establishes its own
+# startup deadline. Allow one bounded startup budget for setup and one for
+# the post-launch handoff without changing the harness deadline itself.
+LAUNCH_SYNC_TIMEOUT_SECS=$((STARTUP_TIMEOUT_SECS * 2))
 READINESS_DELAY_FILE="$TMP_DIR/readiness-delay.marker"
 READINESS_ACK_FILE="$TMP_DIR/readiness-delay.ack"
 READINESS_ACKED_FILE="$TMP_DIR/readiness-delay.acked"
@@ -339,7 +343,7 @@ OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_ACKED_FILE="$READINESS_ACKED_FILE" \
 OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_SECS=2 \
 ./scripts/worktree-harness.sh up --startup-timeout "$STARTUP_TIMEOUT_SECS" >"$TMP_DIR/readiness-up.log" 2>&1 &
 readiness_up_pid=$!
-wait_for_marker "$READINESS_DELAY_FILE" "$STARTUP_TIMEOUT_SECS" "readiness launch synchronization" || {
+wait_for_marker "$READINESS_DELAY_FILE" "$LAUNCH_SYNC_TIMEOUT_SECS" "readiness launch synchronization" || {
   cat "$TMP_DIR/readiness-up.log" >&2 || true
   exit 1
 }
@@ -392,7 +396,7 @@ OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_FILE="$CONCURRENT_DELAY_FILE" \
 OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_SECS=2 \
 ./scripts/worktree-harness.sh up --startup-timeout "$STARTUP_TIMEOUT_SECS" >"$TMP_DIR/concurrent-up.log" 2>&1 &
 concurrent_up_pid=$!
-if ! wait_for_marker "$CONCURRENT_DELAY_FILE" "$STARTUP_TIMEOUT_SECS" "concurrent-up launch synchronization"; then
+if ! wait_for_marker "$CONCURRENT_DELAY_FILE" "$LAUNCH_SYNC_TIMEOUT_SECS" "concurrent-up launch synchronization"; then
   cat "$TMP_DIR/concurrent-up.log" >&2 || true
   exit 1
 fi
