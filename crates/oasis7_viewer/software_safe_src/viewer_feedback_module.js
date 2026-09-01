@@ -604,7 +604,7 @@ export function createViewerFeedbackModule({
     const factoryProductionFailureDisposition = normalizeFactoryProductionFailureDisposition(
       gameplay.factory_production_failure_disposition ?? gameplay.factoryProductionFailureDisposition,
       locale,
-      localeText,
+      localeText, availableActions,
     );
     const narrativeNextStep = pendingEmptyWorldClaimSync
       ? localeText(

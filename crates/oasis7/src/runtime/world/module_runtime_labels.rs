@@ -156,6 +156,9 @@ pub(super) fn event_kind_label(body: &WorldEventBody) -> &'static str {
             DomainEvent::CrisisTimedOut { .. } => "domain.gameplay.crisis_timed_out",
             DomainEvent::MetaProgressGranted { .. } => "domain.gameplay.meta_progress_granted",
             DomainEvent::ProductValidated { .. } => "domain.economy.product_validated",
+            DomainEvent::ProductValidationRecorded { .. } => {
+                "domain.economy.product_validation_recorded"
+            }
             DomainEvent::MaterialProfileGoverned { .. } => {
                 "domain.economy.material_profile_governed"
             }

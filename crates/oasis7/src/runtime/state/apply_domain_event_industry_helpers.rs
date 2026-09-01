@@ -1,6 +1,64 @@
 use super::*;
 
 impl WorldState {
+    pub(super) fn prepare_product_validation_blocker(
+        &mut self,
+        action_id: &ActionId,
+        requester_agent_id: &str,
+        factory_id: &str,
+        recipe_id: &str,
+        blocker_kind: &str,
+        blocker_detail: &str,
+    ) -> Result<bool, WorldError> {
+        if let Some(existing) = self.factory_production_failure_dispositions.get(action_id) {
+            if existing.requester_agent_id == requester_agent_id
+                && existing.factory_id == factory_id
+                && existing.recipe_id == recipe_id
+                && existing.blocker_kind == blocker_kind
+                && existing.blocker_detail == blocker_detail
+            {
+                return Ok(false);
+            }
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "product-validation blocker conflicts with persisted disposition: job_id={action_id}"
+                ),
+            });
+        }
+        let Some(pending) = self.pending_recipe_jobs.get(action_id).cloned() else {
+            return Ok(false);
+        };
+        if pending.requester_agent_id != requester_agent_id
+            || pending.factory_id != factory_id
+            || pending.recipe_id != recipe_id
+        {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "product-validation blocker does not match pending commitment: job_id={action_id}"
+                ),
+            });
+        }
+        self.factory_production_failure_dispositions.insert(
+            *action_id,
+            FactoryProductionFailureDispositionV1 {
+                action_id: *action_id,
+                requester_agent_id: pending.requester_agent_id,
+                factory_id: pending.factory_id,
+                recipe_id: pending.recipe_id,
+                blocker_kind: blocker_kind.to_string(),
+                blocker_detail: blocker_detail.to_string(),
+                disposition_kind: "consumed_lost".to_string(),
+                consumed_inputs: pending.consume.clone(),
+                lost_inputs: pending.consume,
+                consumed_power: pending.power_required,
+                lost_power: pending.power_required,
+                next_action: "inspect_product_validation_and_reschedule".to_string(),
+                next_recheck: None,
+            },
+        );
+        Ok(true)
+    }
+
     pub(super) fn apply_factory_build_started(
         &mut self,
         now: WorldTime,
@@ -218,6 +276,102 @@ impl WorldState {
             }
         }
         if let Some(obligation) = construction_power_obligation {
+            if let (Some(before), Some(after)) =
+                (obligation.electricity_before, obligation.electricity_after)
+            {
+                let available = self
+                    .agents
+                    .get(builder_agent_id)
+                    .map(|cell| cell.state.resources.get(ResourceKind::Electricity))
+                    .unwrap_or(0);
+                let expected_after = before
+                    .checked_sub(obligation.electricity_amount)
+                    .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "factory build construction electricity facts underflow: factory_id={}",
+                            spec.factory_id
+                        ),
+                    })?;
+                if available != before || after != expected_after {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "factory build construction electricity facts mismatch: factory_id={} before={} current={} after={} expected_after={}",
+                            spec.factory_id, before, available, after, expected_after
+                        ),
+                    });
+                }
+            } else if obligation.electricity_before.is_some()
+                || obligation.electricity_after.is_some()
+            {
+                return Err(WorldError::ResourceBalanceInvalid {
+                    reason: format!(
+                        "factory build construction electricity facts must include before and after: factory_id={}",
+                        spec.factory_id
+                    ),
+                });
+            }
+            if let (Some(before), Some(after)) = (
+                obligation.material_balances_before.as_ref(),
+                obligation.material_balances_after.as_ref(),
+            ) {
+                if before.len() != required_by_kind.len() || after.len() != required_by_kind.len() {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "factory build material facts do not cover build cost: factory_id={}",
+                            spec.factory_id
+                        ),
+                    });
+                }
+                for (kind, required) in &required_by_kind {
+                    let current = self
+                        .material_ledgers
+                        .get(consume_ledger)
+                        .and_then(|ledger| ledger.get(kind))
+                        .copied()
+                        .unwrap_or(0);
+                    let Some(before_balance) = before.get(kind) else {
+                        return Err(WorldError::ResourceBalanceInvalid {
+                            reason: format!(
+                                "factory build material facts missing before balance: factory_id={} kind={kind}",
+                                spec.factory_id
+                            ),
+                        });
+                    };
+                    let Some(after_balance) = after.get(kind) else {
+                        return Err(WorldError::ResourceBalanceInvalid {
+                            reason: format!(
+                                "factory build material facts missing after balance: factory_id={} kind={kind}",
+                                spec.factory_id
+                            ),
+                        });
+                    };
+                    let expected_after = before_balance.checked_sub(*required).ok_or_else(
+                        || WorldError::ResourceBalanceInvalid {
+                            reason: format!(
+                                "factory build material facts underflow: factory_id={} kind={kind}",
+                                spec.factory_id
+                            ),
+                        },
+                    )?;
+                    if current != *before_balance || *after_balance != expected_after {
+                        return Err(WorldError::ResourceBalanceInvalid {
+                            reason: format!(
+                                "factory build material facts mismatch: factory_id={} kind={kind} before={} current={} after={} expected_after={expected_after}",
+                                spec.factory_id, before_balance, current, after_balance
+                            ),
+                        });
+                    }
+                }
+            } else if obligation.material_balances_before.is_some()
+                || obligation.material_balances_after.is_some()
+            {
+                return Err(WorldError::ResourceBalanceInvalid {
+                    reason: format!(
+                        "factory build material facts must include before and after: factory_id={}",
+                        spec.factory_id
+                    ),
+                });
+            }
             if let Some(cell) = self.agents.get_mut(builder_agent_id) {
                 cell.state
                     .resources
@@ -346,6 +500,10 @@ impl WorldState {
                 built_at: now,
             },
         );
+        if let Some(obligation) = pending.construction_power_obligation {
+            self.factory_construction_receipts
+                .insert(spec.factory_id.clone(), obligation);
+        }
         self.settled_factory_build_ids.insert(*job_id);
         self.refresh_industry_progress_stage(now);
         if let Some(cell) = self.agents.get_mut(builder_agent_id) {
@@ -438,8 +596,29 @@ impl WorldState {
         factory_id: &str,
         recycle_ledger: &MaterialLedgerId,
         recovered: &[MaterialStack],
+        durability_ppm: &i64,
     ) -> Result<(), WorldError> {
+        let recycle_receipt = FactoryRecycleReceiptV1 {
+            operator_agent_id: operator_agent_id.to_string(),
+            factory_id: factory_id.to_string(),
+            recycle_ledger: recycle_ledger.clone(),
+            recovered: recovered.to_vec(),
+            durability_ppm: *durability_ppm,
+        };
+        if let Some(existing) = self.factory_recycle_receipts.get(factory_id) {
+            if existing == &recycle_receipt {
+                return Ok(());
+            }
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "factory recycle conflicts with persisted receipt: factory_id={factory_id}"
+                ),
+            });
+        }
         if self.retired_factory_ids.contains(factory_id) {
+            // Pre-receipt snapshots only have the tombstone. Preserve their
+            // old idempotent replay behavior; new events always write the
+            // full payload receipt below.
             return Ok(());
         }
         let Some(factory) = self.factories.get(factory_id).cloned() else {
@@ -472,6 +651,8 @@ impl WorldState {
             })?;
         self.factories.remove(factory_id);
         self.retired_factory_ids.insert(factory_id.to_string());
+        self.factory_recycle_receipts
+            .insert(factory_id.to_string(), recycle_receipt);
         self.pending_recipe_jobs
             .retain(|_, job| job.factory_id != factory_id);
         for stack in recovered {
@@ -490,6 +671,34 @@ impl WorldState {
             cell.last_active = now;
         }
         Ok(())
+    }
+}
+
+pub(super) fn recipe_completion_receipt(
+    job_id: &ActionId,
+    requester_agent_id: &str,
+    factory_id: &str,
+    recipe_id: &str,
+    accepted_batches: u32,
+    produce: &[MaterialStack],
+    byproducts: &[MaterialStack],
+    output_ledger: &MaterialLedgerId,
+    bottleneck_tags: &[String],
+    logistics_route_ids: &[String],
+    logistics_path_ids: &[String],
+) -> RecipeCompletionReceiptV1 {
+    RecipeCompletionReceiptV1 {
+        job_id: *job_id,
+        requester_agent_id: requester_agent_id.to_string(),
+        factory_id: factory_id.to_string(),
+        recipe_id: recipe_id.to_string(),
+        accepted_batches,
+        produce: produce.to_vec(),
+        byproducts: byproducts.to_vec(),
+        output_ledger: output_ledger.clone(),
+        bottleneck_tags: bottleneck_tags.to_vec(),
+        logistics_route_ids: logistics_route_ids.to_vec(),
+        logistics_path_ids: logistics_path_ids.to_vec(),
     }
 }
 

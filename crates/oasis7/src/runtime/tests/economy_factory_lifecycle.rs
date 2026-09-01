@@ -219,6 +219,9 @@ mod depreciation_and_maintenance;
 #[path = "economy_factory_lifecycle/site_material_authority.rs"]
 mod site_material_authority;
 
+#[path = "economy_factory_lifecycle/receipts.rs"]
+mod receipts;
+
 #[test]
 fn build_factory_rejects_site_unknown_without_material_or_power_sink() {
     let mut world = World::new();

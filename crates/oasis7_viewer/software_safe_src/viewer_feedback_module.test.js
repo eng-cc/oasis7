@@ -370,11 +370,25 @@ describe("viewer feedback module", () => {
       snapshot: {
         model: { agents: { "agent-0": { id: "agent-0" } }, locations: { base: { id: "base" } } },
         player_gameplay: {
+          available_actions: [
+            {
+              action_id: "schedule_recipe_smelter_iron_ingot",
+              label: "Queue iron ingot run",
+              protocol_action: "gameplay_action.submit",
+              target_agent_id: "agent-0",
+              disabled_reason: "insufficient iron_ore in site ledger",
+            },
+            {
+              action_id: "request_snapshot",
+              label: "Refresh gameplay snapshot",
+              protocol_action: "request_snapshot",
+            },
+          ],
           factory_production_failure_disposition: {
             action_id: 19,
             requester_agent_id: "agent-0",
             factory_id: "factory.target",
-            recipe_id: "recipe.target",
+            recipe_id: "recipe.smelter.iron_ingot",
             blocker_kind: "product_validation_rejected",
             blocker_detail: "product profile rejected the committed output",
             disposition_kind: "consumed_lost",
@@ -399,7 +413,7 @@ describe("viewer feedback module", () => {
       actionId: "19",
       requesterAgentId: "agent-0",
       factoryId: "factory.target",
-      recipeId: "recipe.target",
+      recipeId: "recipe.smelter.iron_ingot",
       blockerKind: "Product validation failed",
       blockerDetail: "product profile rejected the committed output",
       dispositionKind: "Inputs consumed and lost",
@@ -407,7 +421,19 @@ describe("viewer feedback module", () => {
       lostInputs: [{ kind: "iron_ore", amount: 3 }],
       consumedPower: 7,
       lostPower: 7,
-      nextAction: "Inspect product validation and reschedule",
+      nextAction: "Queue iron ingot run",
+      recoveryAction: {
+        actionId: "schedule_recipe_smelter_iron_ingot",
+        label: "Queue iron ingot run",
+        protocolAction: "gameplay_action.submit",
+        targetAgentId: "agent-0",
+        disabledReason: "insufficient iron_ore in site ledger",
+        executeKind: "gameplay_action",
+      },
+      recoveryActionId: "schedule_recipe_smelter_iron_ingot",
+      recoveryActionLabel: "Queue iron ingot run",
+      recoveryActionDisabledReason: "insufficient iron_ore in site ledger",
+      nextRecheckBoundary: "next committed snapshot",
       nextRecheck: null,
     });
     expect(summary.waitResolutionQuote).toBeNull();
@@ -449,7 +475,11 @@ describe("viewer feedback module", () => {
       actionId: "20",
       blockerKind: "产品验证失败",
       dispositionKind: "投入已消费且损失",
-      nextAction: "检查产品验证并重新排程",
+      nextAction: "刷新玩法快照",
+      recoveryActionId: "request_snapshot",
+      recoveryActionLabel: "刷新玩法快照",
+      recoveryActionDisabledReason: null,
+      nextRecheckBoundary: "世界时刻 12",
       nextRecheck: 12,
     }));
     expect(summaryFor({}).factoryProductionFailureDisposition).toBeNull();

@@ -35,13 +35,6 @@ pub(super) fn schedule_recipe_disabled_reason(
             readiness.electricity_cost, available_electricity
         ));
     }
-    let available_data = resources.get(ResourceKind::Data);
-    if available_data < readiness.data_cost {
-        return Some(format!(
-            "insufficient data: need {}, have {}; replenish data before scheduling this run",
-            readiness.data_cost, available_data
-        ));
-    }
     let factory = state.factories.get(factory_id.as_str())?;
     if factory.builder_agent_id != agent_id {
         return Some(format!(
@@ -73,6 +66,34 @@ pub(super) fn schedule_recipe_disabled_reason(
         ));
     }
     None
+}
+
+/// Returns the simulator's Data estimate as display-only context.
+///
+/// Runtime factory scheduling has no Data admission rule. Keep the estimate
+/// visible so players can compare it with simulator quotes, but label it as
+/// non-authoritative and never use it to disable the runtime action.
+pub(super) fn schedule_recipe_data_advisory(agent_id: &str, action_id: &str) -> Option<String> {
+    let RuntimeAction::ScheduleRecipe {
+        recipe_id, plan, ..
+    } = build_runtime_action_from_gameplay_request(&GameplayActionRequest {
+        action_id: action_id.to_string(),
+        target_agent_id: agent_id.to_string(),
+        actor_agent_id: None,
+        player_id: String::new(),
+        public_key: None,
+        auth: None,
+    })
+    .ok()?
+    else {
+        return None;
+    };
+    let readiness =
+        default_schedule_recipe_readiness(recipe_id.as_str(), i64::from(plan.accepted_batches))?;
+    Some(format!(
+        "Data estimate only (simulator advisory; non-authoritative): {}",
+        readiness.data_cost
+    ))
 }
 
 fn recipe_consume_with_maintenance_sinks(

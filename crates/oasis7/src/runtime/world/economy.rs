@@ -14,7 +14,8 @@ use super::super::{
     M4_PRODUCT_CONTROL_CHIP_MODULE_ID, M4_PRODUCT_FACTORY_CORE_MODULE_ID,
     M4_PRODUCT_IRON_INGOT_MODULE_ID, M4_PRODUCT_LOGISTICS_DRONE_MODULE_ID,
     M4_PRODUCT_MODULE_RACK_MODULE_ID, M4_PRODUCT_MOTOR_MODULE_ID, M4_PRODUCT_SENSOR_PACK_MODULE_ID,
-    MaterialLedgerId, RejectReason, WorldError, WorldEvent, WorldEventBody,
+    MaterialLedgerId, ProductValidationReceiptV1, RejectReason, WorldError, WorldEvent,
+    WorldEventBody,
 };
 use super::World;
 use crate::simulator::ResourceKind;
@@ -340,13 +341,23 @@ impl World {
                     stack: stack.clone(),
                     deterministic_seed: *deterministic_seed,
                 };
-                let decision = self.evaluate_product_with_module(
-                    module_id.as_str(),
+                let decision = if let Some(cached) = self.cached_product_validation_decision(
                     envelope.id,
                     None,
-                    &request,
-                    sandbox,
-                )?;
+                    requester_agent_id,
+                    module_id,
+                    stack,
+                )? {
+                    cached
+                } else {
+                    self.evaluate_product_with_module(
+                        module_id.as_str(),
+                        envelope.id,
+                        None,
+                        &request,
+                        sandbox,
+                    )?
+                };
                 if !decision.accepted {
                     let notes = if decision.notes.is_empty() {
                         vec![format!("product module denied: {}", decision.product_id)]
@@ -502,7 +513,22 @@ impl World {
 
             let outputs = job.produce.iter().chain(job.byproducts.iter());
             for (output_index, stack) in outputs.enumerate() {
-                let Some(module_id) = self.resolve_product_module_for_stack(stack.kind.as_str())
+                let validation_index = Some(output_index as u32);
+                // A committed receipt is authoritative across recovery even
+                // if the module is no longer active. Resolve its pinned
+                // module first so a retry cannot silently skip validation.
+                let receipt_module_id = self
+                    .state
+                    .product_validation_receipts
+                    .get(&job.job_id)
+                    .and_then(|receipts| {
+                        receipts
+                            .iter()
+                            .find(|receipt| receipt.validation_index == validation_index)
+                    })
+                    .map(|receipt| receipt.module_id.clone());
+                let Some(module_id) = receipt_module_id
+                    .or_else(|| self.resolve_product_module_for_stack(stack.kind.as_str()))
                 else {
                     continue;
                 };
@@ -515,18 +541,36 @@ impl World {
                         .wrapping_add(output_index as u64)
                         .wrapping_add(self.state.time),
                 };
-                let decision = self.evaluate_product_with_module(
-                    module_id.as_str(),
+                let decision = if let Some(cached) = self.cached_product_validation_decision(
                     job.job_id,
-                    Some(output_index),
-                    &request,
-                    sandbox,
-                )?;
+                    validation_index,
+                    job.requester_agent_id.as_str(),
+                    module_id.as_str(),
+                    stack,
+                )? {
+                    cached
+                } else {
+                    self.evaluate_product_with_module(
+                        module_id.as_str(),
+                        job.job_id,
+                        Some(output_index),
+                        &request,
+                        sandbox,
+                    )?
+                };
+                let validation_receipt = ProductValidationReceiptV1 {
+                    job_id: job.job_id,
+                    validation_index,
+                    requester_agent_id: job.requester_agent_id.clone(),
+                    module_id: module_id.clone(),
+                    stack: stack.clone(),
+                    decision: decision.clone(),
+                };
                 let validation_event = self.action_to_event(&ActionEnvelope {
                     id: job.job_id,
                     action: Action::ValidateProduct {
                         requester_agent_id: job.requester_agent_id.clone(),
-                        module_id,
+                        module_id: module_id.clone(),
                         stack: stack.clone(),
                         decision,
                     },
@@ -535,6 +579,15 @@ impl World {
                     validation_event,
                     WorldEventBody::Domain(DomainEvent::ActionRejected { .. })
                 );
+                self.append_event(
+                    WorldEventBody::Domain(DomainEvent::ProductValidationRecorded {
+                        receipt: validation_receipt,
+                    }),
+                    None,
+                )?;
+                if let Some(event) = self.journal.events.last() {
+                    emitted.push(event.clone());
+                }
                 self.append_event(validation_event, None)?;
                 if let Some(event) = self.journal.events.last() {
                     emitted.push(event.clone());
@@ -826,6 +879,36 @@ impl World {
             );
         }
         self.extract_economy_emit(module_id, &trace_id, &output, PRODUCT_VALIDATION_EMIT_KIND)
+    }
+
+    fn cached_product_validation_decision(
+        &self,
+        job_id: ActionId,
+        validation_index: Option<u32>,
+        requester_agent_id: &str,
+        module_id: &str,
+        stack: &MaterialStack,
+    ) -> Result<Option<ProductValidationDecision>, WorldError> {
+        let Some(receipts) = self.state.product_validation_receipts.get(&job_id) else {
+            return Ok(None);
+        };
+        let Some(receipt) = receipts
+            .iter()
+            .find(|receipt| receipt.validation_index == validation_index)
+        else {
+            return Ok(None);
+        };
+        if receipt.requester_agent_id != requester_agent_id
+            || receipt.module_id != module_id
+            || receipt.stack != *stack
+        {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "product validation retry conflicts with persisted receipt: job_id={job_id} index={validation_index:?}"
+                ),
+            });
+        }
+        Ok(Some(receipt.decision.clone()))
     }
 
     fn resolve_product_module_for_stack(&self, product_kind: &str) -> Option<String> {

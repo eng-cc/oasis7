@@ -97,6 +97,104 @@ pub struct FactoryBuildPowerObligationV1 {
     pub electricity_amount: i64,
     #[serde(default)]
     pub mode: FactoryConstructionPowerMode,
+    /// Admission-time electricity facts.  These are optional so snapshots
+    /// containing the pre-receipt obligation continue to decode and replay.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub electricity_before: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub electricity_after: Option<i64>,
+    /// Admission-time material facts keyed only by required build-cost kind.
+    /// Keeping the maps scoped to the requirement avoids treating unrelated
+    /// ledger balances as part of the construction receipt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material_balances_before: Option<BTreeMap<String, i64>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material_balances_after: Option<BTreeMap<String, i64>>,
+}
+
+/// Durable receipt for a product-module decision.  The job and output index
+/// bind a decision to one production commitment, allowing crash recovery to
+/// reuse the decision without invoking a module again.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProductValidationReceiptV1 {
+    #[serde(default)]
+    pub job_id: ActionId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_index: Option<u32>,
+    #[serde(default)]
+    pub requester_agent_id: String,
+    #[serde(default)]
+    pub module_id: String,
+    #[serde(default = "default_receipt_material_stack")]
+    pub stack: MaterialStack,
+    #[serde(default = "default_receipt_product_validation_decision")]
+    pub decision: ProductValidationDecision,
+}
+
+impl Default for ProductValidationReceiptV1 {
+    fn default() -> Self {
+        Self {
+            job_id: 0,
+            validation_index: None,
+            requester_agent_id: String::new(),
+            module_id: String::new(),
+            stack: default_receipt_material_stack(),
+            decision: default_receipt_product_validation_decision(),
+        }
+    }
+}
+
+fn default_receipt_material_stack() -> MaterialStack {
+    MaterialStack::new(String::new(), 0)
+}
+
+fn default_receipt_product_validation_decision() -> ProductValidationDecision {
+    ProductValidationDecision::rejected(String::new(), 0, false, Vec::new(), Vec::new())
+}
+
+/// Full replay identity for a settled recipe completion.  The legacy
+/// settled-id set remains for old snapshots, while new completions persist
+/// the payload needed to reject same-id tampering.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct RecipeCompletionReceiptV1 {
+    #[serde(default)]
+    pub job_id: ActionId,
+    #[serde(default)]
+    pub requester_agent_id: String,
+    #[serde(default)]
+    pub factory_id: String,
+    #[serde(default)]
+    pub recipe_id: String,
+    #[serde(default)]
+    pub accepted_batches: u32,
+    #[serde(default)]
+    pub produce: Vec<MaterialStack>,
+    #[serde(default)]
+    pub byproducts: Vec<MaterialStack>,
+    #[serde(default)]
+    pub output_ledger: MaterialLedgerId,
+    #[serde(default)]
+    pub bottleneck_tags: Vec<String>,
+    #[serde(default)]
+    pub logistics_route_ids: Vec<String>,
+    #[serde(default)]
+    pub logistics_path_ids: Vec<String>,
+}
+
+/// Full replay identity for a retired factory event.  A tombstone alone is
+/// insufficient to distinguish an exact duplicate from a conflicting event.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct FactoryRecycleReceiptV1 {
+    #[serde(default)]
+    pub operator_agent_id: String,
+    #[serde(default)]
+    pub factory_id: String,
+    #[serde(default)]
+    pub recycle_ledger: MaterialLedgerId,
+    #[serde(default)]
+    pub recovered: Vec<MaterialStack>,
+    #[serde(default)]
+    pub durability_ppm: i64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

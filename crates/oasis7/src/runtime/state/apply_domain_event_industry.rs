@@ -1,3 +1,4 @@
+use super::apply_domain_event_industry_helpers::recipe_completion_receipt;
 use super::apply_domain_event_industry_helpers::{
     aggregate_recipe_material_stacks, validate_recipe_material_stacks,
     validate_recipe_output_capacity,
@@ -565,7 +566,7 @@ impl WorldState {
                 factory_id,
                 recycle_ledger,
                 recovered,
-                ..
+                durability_ppm,
             } => {
                 self.apply_factory_recycled(
                     now,
@@ -573,6 +574,7 @@ impl WorldState {
                     factory_id,
                     recycle_ledger,
                     recovered,
+                    durability_ppm,
                 )?;
             }
             DomainEvent::RecipeStarted {
@@ -869,7 +871,33 @@ impl WorldState {
                 logistics_path_ids,
                 ..
             } => {
+                let completion_receipt = recipe_completion_receipt(
+                    job_id,
+                    requester_agent_id,
+                    factory_id,
+                    recipe_id,
+                    *accepted_batches,
+                    produce,
+                    byproducts,
+                    output_ledger,
+                    bottleneck_tags,
+                    logistics_route_ids,
+                    logistics_path_ids,
+                );
+                if let Some(existing) = self.recipe_completion_receipts.get(job_id) {
+                    if existing == &completion_receipt {
+                        return Ok(());
+                    }
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "recipe completion conflicts with persisted receipt: job_id={job_id}"
+                        ),
+                    });
+                }
                 if self.settled_recipe_job_ids.contains(job_id) {
+                    // Pre-receipt snapshots only have the terminal ID. Keep
+                    // their historical replay behavior while all new
+                    // settlements below persist the full payload.
                     return Ok(());
                 }
                 let Some(pending) = self.pending_recipe_jobs.get(job_id).cloned() else {
@@ -936,6 +964,8 @@ impl WorldState {
                     })?;
                 }
                 self.settled_recipe_job_ids.insert(*job_id);
+                self.recipe_completion_receipts
+                    .insert(*job_id, completion_receipt);
                 self.industry_progress.completed_recipe_jobs = self
                     .industry_progress
                     .completed_recipe_jobs
@@ -993,59 +1023,16 @@ impl WorldState {
             } => {
                 let product_validation_failure = blocker_kind == "product_validation";
                 if product_validation_failure {
-                    if let Some(existing) =
-                        self.factory_production_failure_dispositions.get(action_id)
-                    {
-                        if existing.requester_agent_id == *requester_agent_id
-                            && existing.factory_id == *factory_id
-                            && existing.recipe_id == *recipe_id
-                            && existing.blocker_kind == *blocker_kind
-                            && existing.blocker_detail == *blocker_detail
-                        {
-                            // An exact replay has already terminated this
-                            // job; leave every state field byte-stable.
-                            return Ok(());
-                        }
-                        return Err(WorldError::ResourceBalanceInvalid {
-                            reason: format!(
-                                "product-validation blocker conflicts with persisted disposition: job_id={action_id}"
-                            ),
-                        });
-                    }
-                    let Some(pending) = self.pending_recipe_jobs.get(action_id).cloned() else {
-                        // Preserve the existing legacy replay behavior for a
-                        // pre-receipt terminal job. New failures always write
-                        // the disposition below before terminating the job.
+                    if !self.prepare_product_validation_blocker(
+                        action_id,
+                        requester_agent_id,
+                        factory_id,
+                        recipe_id,
+                        blocker_kind,
+                        blocker_detail,
+                    )? {
                         return Ok(());
-                    };
-                    if pending.requester_agent_id != *requester_agent_id
-                        || pending.factory_id != *factory_id
-                        || pending.recipe_id != *recipe_id
-                    {
-                        return Err(WorldError::ResourceBalanceInvalid {
-                            reason: format!(
-                                "product-validation blocker does not match pending commitment: job_id={action_id}"
-                            ),
-                        });
                     }
-                    self.factory_production_failure_dispositions.insert(
-                        *action_id,
-                        FactoryProductionFailureDispositionV1 {
-                            action_id: *action_id,
-                            requester_agent_id: pending.requester_agent_id.clone(),
-                            factory_id: pending.factory_id.clone(),
-                            recipe_id: pending.recipe_id.clone(),
-                            blocker_kind: blocker_kind.clone(),
-                            blocker_detail: blocker_detail.clone(),
-                            disposition_kind: "consumed_lost".to_string(),
-                            consumed_inputs: pending.consume.clone(),
-                            lost_inputs: pending.consume.clone(),
-                            consumed_power: pending.power_required,
-                            lost_power: pending.power_required,
-                            next_action: "inspect_product_validation_and_reschedule".to_string(),
-                            next_recheck: None,
-                        },
-                    );
                 }
                 let terminated_job = if product_validation_failure {
                     self.pending_recipe_jobs.remove(action_id)

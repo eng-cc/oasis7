@@ -24,6 +24,55 @@ function normalizedCode(value) {
   return displayableString(value)?.toLowerCase() || null;
 }
 
+function normalizedActionToken(value) {
+  return normalizedCode(value)?.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || null;
+}
+
+function actionField(action, snakeKey, camelKey) {
+  return action?.[snakeKey] ?? action?.[camelKey] ?? null;
+}
+
+function recoveryActionForDisposition(value, availableActions, locale, localeText) {
+  const actions = Array.isArray(availableActions) ? availableActions : [];
+  const recipeToken = normalizedActionToken(value.recipe_id ?? value.recipeId);
+  const recipeSuffix = recipeToken?.startsWith("recipe_")
+    ? recipeToken.slice("recipe_".length)
+    : recipeToken;
+  const isExecutable = (action) => ["gameplay_action", "request_snapshot", "step", "play"]
+    .includes(normalizedCode(actionField(action, "execute_kind", "executeKind")));
+  const matchingScheduleAction = actions.find((action) => {
+    if (!isExecutable(action)) return false;
+    const actionId = normalizedActionToken(actionField(action, "action_id", "actionId"));
+    return actionId?.startsWith("schedule_recipe_")
+      && recipeSuffix
+      && (actionId.endsWith(`_${recipeSuffix}`) || actionId.endsWith(`_${recipeToken}`));
+  });
+  const snapshotAction = actions.find((action) => {
+    const actionId = normalizedActionToken(actionField(action, "action_id", "actionId"));
+    const protocolAction = normalizedActionToken(actionField(action, "protocol_action", "protocolAction"));
+    return isExecutable(action) && (actionId === "request_snapshot" || protocolAction === "request_snapshot");
+  });
+  const selected = matchingScheduleAction || snapshotAction || {
+    actionId: "request_snapshot",
+    label: localeText(locale, "刷新玩法快照", "Refresh gameplay snapshot"),
+    protocolAction: "request_snapshot",
+    targetAgentId: null,
+    disabledReason: null,
+    executeKind: "request_snapshot",
+  };
+  const actionId = displayableString(actionField(selected, "action_id", "actionId")) || "request_snapshot";
+  const label = displayableString(selected.label)
+    || localeText(locale, "刷新玩法快照", "Refresh gameplay snapshot");
+  return {
+    actionId,
+    label,
+    protocolAction: displayableString(actionField(selected, "protocol_action", "protocolAction")) || "request_snapshot",
+    targetAgentId: displayableString(actionField(selected, "target_agent_id", "targetAgentId")),
+    disabledReason: displayableString(actionField(selected, "disabled_reason", "disabledReason")),
+    executeKind: displayableString(actionField(selected, "execute_kind", "executeKind")) || "request_snapshot",
+  };
+}
+
 function localizedCodeLabel(code, locale, localeText, labels, fallbackZh, fallbackEn) {
   const label = labels[code];
   return label
@@ -59,18 +108,20 @@ const DISPOSITION_LABELS = {
   consumed_lost: ["投入已消费且损失", "Inputs consumed and lost"],
 };
 
-const NEXT_ACTION_LABELS = {
-  inspect_product_validation_and_reschedule: ["检查产品验证并重新排程", "Inspect product validation and reschedule"],
-};
-
-export function normalizeFactoryProductionFailureDisposition(value, locale, localeText) {
+export function normalizeFactoryProductionFailureDisposition(
+  value,
+  locale,
+  localeText,
+  availableActions = [],
+) {
   if (!isRecord(value)) {
     return null;
   }
 
   const blockerCode = normalizedCode(value.blocker_kind ?? value.blockerKind);
   const dispositionCode = normalizedCode(value.disposition_kind ?? value.dispositionKind);
-  const nextActionCode = normalizedCode(value.next_action ?? value.nextAction);
+  const recoveryAction = recoveryActionForDisposition(value, availableActions, locale, localeText);
+  const nextRecheck = finiteNumber(value.next_recheck ?? value.nextRecheck);
 
   return {
     actionId: displayableString(value.action_id ?? value.actionId),
@@ -98,14 +149,14 @@ export function normalizeFactoryProductionFailureDisposition(value, locale, loca
     lostInputs: normalizeInputs(value.lost_inputs ?? value.lostInputs),
     consumedPower: finiteNumber(value.consumed_power ?? value.consumedPower),
     lostPower: finiteNumber(value.lost_power ?? value.lostPower),
-    nextAction: localizedCodeLabel(
-      nextActionCode,
-      locale,
-      localeText,
-      NEXT_ACTION_LABELS,
-      "按已发布的下一步处理",
-      "Follow the published next step",
-    ),
-    nextRecheck: finiteNumber(value.next_recheck ?? value.nextRecheck),
+    nextAction: recoveryAction.label,
+    recoveryAction,
+    recoveryActionId: recoveryAction.actionId,
+    recoveryActionLabel: recoveryAction.label,
+    recoveryActionDisabledReason: recoveryAction.disabledReason,
+    nextRecheck,
+    nextRecheckBoundary: nextRecheck == null
+      ? localeText(locale, "下一次 committed 快照", "next committed snapshot")
+      : localeText(locale, `世界时刻 ${nextRecheck}`, `world tick ${nextRecheck}`),
   };
 }

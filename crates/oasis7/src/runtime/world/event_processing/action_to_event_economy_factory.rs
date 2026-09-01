@@ -172,26 +172,19 @@ impl World {
                 },
             }));
         }
-        let construction_power_obligation = FactoryBuildPowerObligationV1 {
-            payer_agent_id: builder_agent_id.clone(),
-            profile_key: spec.factory_id.clone(),
-            profile_revision: power_profile.authority_revision,
-            electricity_amount: power_profile.electricity_amount,
-            mode: power_profile.mode,
-        };
         let available_power = self
             .state
             .agents
             .get(builder_agent_id)
             .map(|cell| cell.state.resources.get(ResourceKind::Electricity))
             .unwrap_or(0);
-        if available_power < construction_power_obligation.electricity_amount {
+        if available_power < power_profile.electricity_amount {
             return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                 action_id,
                 reason: RejectReason::InsufficientResource {
                     agent_id: builder_agent_id.clone(),
                     kind: ResourceKind::Electricity,
-                    requested: construction_power_obligation.electricity_amount,
+                    requested: power_profile.electricity_amount,
                     available: available_power,
                 },
             }));
@@ -213,19 +206,38 @@ impl World {
                     }));
                 }
             };
-        for (material_kind, requested) in required_materials {
+        let mut material_balances_before = BTreeMap::new();
+        let mut material_balances_after = BTreeMap::new();
+        for (material_kind, requested) in &required_materials {
             let available = self.ledger_material_balance(&consume_ledger, material_kind.as_str());
-            if available < requested {
+            if available < *requested {
                 return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                     action_id,
                     reason: RejectReason::InsufficientMaterial {
-                        material_kind,
-                        requested,
+                        material_kind: material_kind.clone(),
+                        requested: *requested,
                         available,
                     },
                 }));
             }
+            material_balances_before.insert(material_kind.clone(), available);
+            material_balances_after
+                .insert(material_kind.clone(), available.saturating_sub(*requested));
         }
+
+        let construction_power_obligation = FactoryBuildPowerObligationV1 {
+            payer_agent_id: builder_agent_id.clone(),
+            profile_key: spec.factory_id.clone(),
+            profile_revision: power_profile.authority_revision,
+            electricity_amount: power_profile.electricity_amount,
+            mode: power_profile.mode,
+            electricity_before: Some(available_power),
+            electricity_after: Some(
+                available_power.saturating_sub(power_profile.electricity_amount),
+            ),
+            material_balances_before: Some(material_balances_before),
+            material_balances_after: Some(material_balances_after),
+        };
 
         let build_ticks = spec.build_time_ticks.max(1);
         let ready_at = self.state.time.saturating_add(build_ticks as u64);

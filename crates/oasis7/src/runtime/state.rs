@@ -4,7 +4,7 @@ use crate::models::AgentState;
 use crate::simulator::{ModuleInstallTarget, ResourceKind};
 use oasis7_wasm_abi::{
     FactoryModuleSpec, FactoryProfileV1, MaterialProfileV1, MaterialStack, ModuleManifest,
-    ProductProfileV1, RecipeProfileV1,
+    ProductProfileV1, ProductValidationDecision, RecipeProfileV1,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -111,7 +111,8 @@ const ALLIANCE_MIN_MEMBER_COUNT: usize = 2;
 pub use self::industry_state::{
     AgentLocationAuthorityV1, FactoryBuildPowerObligationV1, FactoryConstructionPowerMode,
     FactoryConstructionPowerProfileV1, FactoryProductionSnapshot, FactoryProductionState,
-    FactoryProductionStatus, FactorySiteAuthorityV1, LocationAnchorV1,
+    FactoryProductionStatus, FactoryRecycleReceiptV1, FactorySiteAuthorityV1, LocationAnchorV1,
+    ProductValidationReceiptV1, RecipeCompletionReceiptV1,
 };
 
 /// Persisted factory instance state.
@@ -505,6 +506,14 @@ pub struct WorldState {
     /// receipt distinguishes an exact replay from a tampered same-id event.
     #[serde(default)]
     pub direct_material_transfer_receipts: BTreeMap<ActionId, MaterialTransferReceiptV1>,
+    /// Product-module decisions are scoped to a production job/output and
+    /// survive snapshots so retries do not invoke the module twice.
+    #[serde(
+        default,
+        skip_serializing_if = "BTreeMap::is_empty",
+        deserialize_with = "deserialize_btreemap_u64_keys"
+    )]
+    pub product_validation_receipts: BTreeMap<ActionId, Vec<ProductValidationReceiptV1>>,
     #[serde(default)]
     pub product_profiles: BTreeMap<String, ProductProfileV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -540,6 +549,10 @@ pub struct WorldState {
     /// a settled duplicate from an unknown/reordered completion.
     #[serde(default)]
     pub settled_factory_build_ids: BTreeSet<ActionId>,
+    /// Construction obligations remain auditable after FactoryBuilt settles
+    /// the pending job; old snapshots decode this as an empty map.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub factory_construction_receipts: BTreeMap<String, FactoryBuildPowerObligationV1>,
     #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
     pub pending_factory_builds: BTreeMap<ActionId, FactoryBuildJobState>,
     #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
@@ -549,6 +562,18 @@ pub struct WorldState {
     /// the same completion/start identity must not sink or credit it again.
     #[serde(default)]
     pub settled_recipe_job_ids: BTreeSet<ActionId>,
+    /// Full completion payloads for new recipe settlements.  The ID set above
+    /// remains a compatibility projection for pre-receipt snapshots.
+    #[serde(
+        default,
+        skip_serializing_if = "BTreeMap::is_empty",
+        deserialize_with = "deserialize_btreemap_u64_keys"
+    )]
+    pub recipe_completion_receipts: BTreeMap<ActionId, RecipeCompletionReceiptV1>,
+    /// Full recycle payloads for new retired-factory tombstones.  The legacy
+    /// ID set remains authoritative only when no receipt exists.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub factory_recycle_receipts: BTreeMap<String, FactoryRecycleReceiptV1>,
     #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
     pub pending_material_transits: BTreeMap<ActionId, MaterialTransitJobState>,
     #[serde(default)]
@@ -1076,7 +1101,8 @@ impl WorldState {
             | DomainEvent::CrisisResolved { .. }
             | DomainEvent::CrisisTimedOut { .. }
             | DomainEvent::MetaProgressGranted { .. }
-            | DomainEvent::ProductValidated { .. } => {
+            | DomainEvent::ProductValidated { .. }
+            | DomainEvent::ProductValidationRecorded { .. } => {
                 self.apply_domain_event_governance_meta(event, now)?
             }
         }

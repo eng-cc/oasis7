@@ -888,6 +888,12 @@ pub enum DomainEvent {
         quality_levels: Vec<String>,
         notes: Vec<String>,
     },
+    /// Durable product-module decision for a rejected output. The generic
+    /// ActionRejected event remains in the journal for the caller, while this
+    /// runtime event makes crash/retry reuse the settled module decision.
+    ProductValidationRecorded {
+        receipt: ProductValidationReceiptV1,
+    },
     MaterialProfileGoverned {
         operator_agent_id: String,
         proposal_id: ProposalId,
@@ -1135,6 +1141,9 @@ impl DomainEvent {
             DomainEvent::ProductValidated {
                 requester_agent_id, ..
             } => Some(requester_agent_id.as_str()),
+            DomainEvent::ProductValidationRecorded { receipt } => {
+                Some(receipt.requester_agent_id.as_str())
+            }
             DomainEvent::MaterialProfileGoverned {
                 operator_agent_id, ..
             } => Some(operator_agent_id.as_str()),

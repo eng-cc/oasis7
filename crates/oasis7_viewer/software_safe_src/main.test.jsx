@@ -1590,11 +1590,15 @@ describe("viewer web ui automation baseline", () => {
   it("renders the factory production failure disposition before generic wait and recovery choices", async () => {
     const { container } = await renderViewerApp({ snapshot: sampleSnapshot({ player_gameplay: {
       ...sampleSnapshot().player_gameplay,
+      available_actions: [
+        { action_id: "schedule_recipe_smelter_iron_ingot", label: "Queue iron ingot run", protocol_action: "gameplay_action.submit", target_agent_id: "agent-0", disabled_reason: "insufficient iron_ore in site ledger" },
+        { action_id: "request_snapshot", label: "Refresh gameplay snapshot", protocol_action: "request_snapshot" },
+      ],
       factory_production_failure_disposition: {
         action_id: "19",
         requester_agent_id: "agent-0",
         factory_id: "factory.target",
-        recipe_id: "recipe.target",
+        recipe_id: "recipe.smelter.iron_ingot",
         blocker_kind: "product_validation_rejected",
         blocker_detail: "product profile rejected the committed output",
         disposition_kind: "consumed_lost",
@@ -1614,18 +1618,11 @@ describe("viewer web ui automation baseline", () => {
 
     const details = container.querySelector("#viewer-gameplay-details");
     const card = within(details).getByTestId("viewer-factory-production-failure-disposition");
-    expect(card).toBeInTheDocument();
-    expect(within(card).getByText(/factory\.target/)).toBeInTheDocument();
-    expect(within(card).getByText(/recipe\.target/)).toBeInTheDocument();
-    expect(within(card).getByText(/Detail: product profile rejected the committed output/)).toBeInTheDocument();
-    expect(within(card).getAllByText(/iron_ore × 3/)).toHaveLength(2);
-    expect(within(card).getAllByText("7").length).toBeGreaterThanOrEqual(2);
-    expect(within(card).getByText("Inspect product validation and reschedule")).toBeInTheDocument();
-    expect(within(card).queryByText(/Next recheck/i)).not.toBeInTheDocument();
-    expect(card.querySelector("button")).toBeNull();
-    expect(card.textContent).not.toMatch(
-      /product_validation_rejected|consumed_lost|inspect_product_validation_and_reschedule/,
-    );
+    const cardText = card.textContent;
+    for (const text of ["factory.target", "recipe.smelter.iron_ingot", "Detail: product profile rejected the committed output", "Queue iron ingot run", "Recovery action: schedule_recipe_smelter_iron_ingot", "Unavailable: insufficient iron_ore in site ledger", "Next recheck: next committed snapshot"]) expect(cardText).toContain(text);
+    expect(within(card).getAllByText(/iron_ore × 3/)).toHaveLength(2); expect(within(card).getAllByText("7").length).toBeGreaterThanOrEqual(2);
+    expect(card.querySelector("button")).toBeDisabled();
+    expect(card.textContent).not.toMatch(/product_validation_rejected|consumed_lost|inspect_product_validation_and_reschedule/);
     expect(within(details).queryByText("synthetic wait should be hidden")).not.toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
@@ -3299,12 +3296,14 @@ describe("viewer web ui automation baseline", () => {
         expect(within(card).getByText("Production result failed validation")).toBeInTheDocument();
         expect(card).toHaveAttribute("role", "status");
         expect(card).toHaveAttribute("aria-live", "polite");
-        expect(card).toHaveTextContent("Factory: factory.target · Recipe: recipe.target");
+        expect(card).toHaveTextContent("Factory: factory.target · Recipe: recipe.smelter.iron_ingot");
         expect(card).toHaveTextContent("Consumed inputs");
         expect(card).toHaveTextContent("iron_ore × 3");
         expect(card).toHaveTextContent("Consumed power");
-        expect(card).toHaveTextContent("Inspect product validation and reschedule");
-        expect(card).not.toHaveTextContent(/Next recheck/i);
+        expect(card).toHaveTextContent("Queue iron ingot run");
+        expect(card).toHaveTextContent("Recovery action: schedule_recipe_smelter_iron_ingot");
+        expect(card).toHaveTextContent("Unavailable: insufficient iron_ore in site ledger");
+        expect(card).toHaveTextContent("Next recheck: next committed snapshot");
         expect(card.textContent).not.toMatch(
           /product_validation_rejected|consumed_lost|inspect_product_validation_and_reschedule/,
         );

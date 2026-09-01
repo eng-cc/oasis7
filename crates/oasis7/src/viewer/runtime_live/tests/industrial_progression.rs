@@ -311,7 +311,7 @@ fn runtime_gameplay_snapshot_gates_every_smelter_schedule_by_authoritative_resou
 
     for (electricity, data, expected_reason) in [
         (0, i64::MAX, Some("insufficient electricity")),
-        (i64::MAX, 0, Some("insufficient data")),
+        (i64::MAX, 0, None),
         (i64::MAX, i64::MAX, None),
     ] {
         server
@@ -334,7 +334,15 @@ fn runtime_gameplay_snapshot_gates_every_smelter_schedule_by_authoritative_resou
                     assert!(disabled_reason.contains(expected_reason));
                     assert!(disabled_reason.contains("replenish"));
                 }
-                None => assert_eq!(action.disabled_reason, None, "{action_id}"),
+                None => {
+                    assert_eq!(action.disabled_reason, None, "{action_id}");
+                    assert!(
+                        action.label.contains("Data estimate only")
+                            && action.label.contains("non-authoritative"),
+                        "{action_id} should retain Data only as an advisory label: {}",
+                        action.label
+                    );
+                }
             }
         }
         assert_eq!(
@@ -419,7 +427,7 @@ fn runtime_gameplay_snapshot_gates_every_smelter_schedule_by_authoritative_resou
         .expect("seed alloy copper wire");
     for (electricity, data, expected_reason) in [
         (0, i64::MAX, Some("insufficient electricity")),
-        (i64::MAX, 0, Some("insufficient data")),
+        (i64::MAX, 0, None),
         (i64::MAX, i64::MAX, None),
     ] {
         scale_out_server
@@ -448,7 +456,15 @@ fn runtime_gameplay_snapshot_gates_every_smelter_schedule_by_authoritative_resou
                 assert!(disabled_reason.contains(expected_reason));
                 assert!(disabled_reason.contains("replenish"));
             }
-            None => assert_eq!(alloy.disabled_reason, None),
+            None => {
+                assert_eq!(alloy.disabled_reason, None);
+                assert!(
+                    alloy.label.contains("Data estimate only")
+                        && alloy.label.contains("non-authoritative"),
+                    "alloy schedule should retain Data only as an advisory label: {}",
+                    alloy.label
+                );
+            }
         }
         assert_eq!(
             scale_out_server

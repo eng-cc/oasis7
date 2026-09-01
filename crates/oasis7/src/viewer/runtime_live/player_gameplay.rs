@@ -35,7 +35,7 @@ use std::collections::BTreeMap;
 mod power_survival_quote;
 #[path = "schedule_readiness.rs"]
 mod schedule_readiness;
-use schedule_readiness::schedule_recipe_disabled_reason;
+use schedule_readiness::{schedule_recipe_data_advisory, schedule_recipe_disabled_reason};
 #[path = "smelter_actions.rs"]
 mod smelter_actions;
 use smelter_actions::extend_smelter_actions;

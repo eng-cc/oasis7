@@ -1,4 +1,5 @@
 use super::*;
+use crate::runtime::ProductValidationReceiptV1;
 
 #[test]
 fn schedule_recipe_with_module_auto_validates_outputs_before_commit() {
@@ -83,6 +84,161 @@ fn schedule_recipe_with_module_auto_validates_outputs_before_commit() {
         )
     });
     assert!(has_product_validated);
+}
+
+#[test]
+fn product_validation_receipt_reuses_decision_after_crash_window_without_module_call() {
+    let mut world = logistics_drone_module_recipe_world("factory.recipe.validation-retry");
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: "factory.recipe.validation-retry".to_string(),
+        recipe_id: "recipe.assembler.logistics_drone".to_string(),
+        plan: RecipeExecutionPlan::accepted(
+            1,
+            vec![
+                MaterialStack::new("motor_mk1", 2),
+                MaterialStack::new("control_chip", 1),
+                MaterialStack::new("chassis_plate", 1),
+            ],
+            vec![MaterialStack::new("logistics_drone", 1)],
+            vec![MaterialStack::new("assembly_scrap", 1)],
+            10,
+            1,
+        ),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
+    });
+    world.step().expect("start recipe");
+    let pending = world
+        .state()
+        .pending_recipe_jobs
+        .values()
+        .next()
+        .expect("pending recipe");
+    let validation = DomainEvent::ProductValidationRecorded {
+        receipt: ProductValidationReceiptV1 {
+            job_id: pending.job_id,
+            validation_index: Some(0),
+            requester_agent_id: pending.requester_agent_id.clone(),
+            module_id: "m4.product.logistics_drone".to_string(),
+            stack: pending.produce[0].clone(),
+            decision: ProductValidationDecision::accepted(
+                "logistics_drone",
+                32,
+                true,
+                vec!["fleet_grade".to_string()],
+            ),
+        },
+    };
+    // Simulate a crash after the validation event committed but before the
+    // due-job loop could append RecipeCompleted.
+    let mut journal = world.journal().clone();
+    let event_id = journal
+        .events
+        .last()
+        .map_or(1, |event| event.id.saturating_add(1));
+    journal.append(WorldEvent {
+        id: event_id,
+        time: world.state().time,
+        caused_by: None,
+        body: WorldEventBody::Domain(validation),
+    });
+    world = World::from_snapshot(world.snapshot(), journal)
+        .expect("recover after committed validation receipt");
+
+    let mut sandbox = CaptureContextSandbox::with_outputs(Vec::new());
+    world
+        .step_with_modules(&mut sandbox)
+        .expect("retry due recipe from persisted receipt");
+    assert!(
+        !sandbox
+            .requests
+            .iter()
+            .any(|request| request.module_id == "m4.product.logistics_drone")
+    );
+    assert_eq!(world.pending_recipe_jobs_len(), 0);
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::site("site-1"), "logistics_drone"),
+        1
+    );
+}
+
+#[test]
+fn rejected_product_validation_receipt_reuses_decision_after_crash_window() {
+    let mut world = logistics_drone_module_recipe_world("factory.recipe.validation-reject-retry");
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: "factory.recipe.validation-reject-retry".to_string(),
+        recipe_id: "recipe.assembler.logistics_drone".to_string(),
+        plan: RecipeExecutionPlan::accepted(
+            1,
+            vec![
+                MaterialStack::new("motor_mk1", 2),
+                MaterialStack::new("control_chip", 1),
+                MaterialStack::new("chassis_plate", 1),
+            ],
+            vec![MaterialStack::new("logistics_drone", 1)],
+            Vec::new(),
+            10,
+            1,
+        ),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
+    });
+    world.step().expect("start recipe");
+    let pending = world
+        .state()
+        .pending_recipe_jobs
+        .values()
+        .next()
+        .expect("pending recipe")
+        .clone();
+    let validation = DomainEvent::ProductValidationRecorded {
+        receipt: ProductValidationReceiptV1 {
+            job_id: pending.job_id,
+            validation_index: Some(0),
+            requester_agent_id: pending.requester_agent_id.clone(),
+            module_id: "m4.product.logistics_drone".to_string(),
+            stack: pending.produce[0].clone(),
+            decision: ProductValidationDecision::rejected(
+                "logistics_drone",
+                0,
+                true,
+                vec!["fleet_grade".to_string()],
+                vec!["stack exceeds limit".to_string()],
+            ),
+        },
+    };
+    let mut journal = world.journal().clone();
+    let event_id = journal
+        .events
+        .last()
+        .map_or(1, |event| event.id.saturating_add(1));
+    journal.append(WorldEvent {
+        id: event_id,
+        time: world.state().time,
+        caused_by: None,
+        body: WorldEventBody::Domain(validation),
+    });
+    world = World::from_snapshot(world.snapshot(), journal)
+        .expect("recover after committed rejected validation receipt");
+    let mut sandbox = CaptureContextSandbox::with_outputs(Vec::new());
+    world
+        .step_with_modules(&mut sandbox)
+        .expect("retry rejected due recipe from receipt");
+    assert!(
+        !sandbox
+            .requests
+            .iter()
+            .any(|request| request.module_id == "m4.product.logistics_drone")
+    );
+    assert_eq!(world.pending_recipe_jobs_len(), 0);
+    assert!(
+        world
+            .state()
+            .factory_production_failure_dispositions
+            .contains_key(&pending.job_id)
+    );
 }
 
 #[test]
@@ -266,7 +422,9 @@ fn product_validation_failure_disposition_survives_non_empty_snapshot_roundtrip(
         .state()
         .factory_production_failure_dispositions
         .clone();
+    let expected_validation_receipts = world.state().product_validation_receipts.clone();
     assert!(!expected.is_empty());
+    assert!(!expected_validation_receipts.is_empty());
 
     let restored = World::from_snapshot(world.snapshot(), world.journal().clone())
         .expect("restore product-validation disposition snapshot");
@@ -274,6 +432,11 @@ fn product_validation_failure_disposition_survives_non_empty_snapshot_roundtrip(
         restored.state().factory_production_failure_dispositions,
         expected,
         "non-empty failure disposition must survive snapshot replay"
+    );
+    assert_eq!(
+        restored.state().product_validation_receipts,
+        expected_validation_receipts,
+        "product validation receipt must survive snapshot replay"
     );
 }
 

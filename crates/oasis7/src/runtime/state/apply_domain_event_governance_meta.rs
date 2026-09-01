@@ -315,6 +315,40 @@ impl WorldState {
                     cell.last_active = now;
                 }
             }
+            DomainEvent::ProductValidationRecorded { receipt } => {
+                if let Some(existing) = self
+                    .product_validation_receipts
+                    .get(&receipt.job_id)
+                    .and_then(|receipts| {
+                        receipts
+                            .iter()
+                            .find(|existing| existing.validation_index == receipt.validation_index)
+                    })
+                {
+                    if existing == receipt {
+                        return Ok(());
+                    }
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "product validation conflicts with persisted receipt: job_id={} index={:?}",
+                            receipt.job_id, receipt.validation_index
+                        ),
+                    });
+                }
+                self.product_validation_receipts
+                    .entry(receipt.job_id)
+                    .or_default()
+                    .push(receipt.clone());
+                if receipt.decision.accepted {
+                    self.latest_product_validation = Some(LastProductValidationState {
+                        product_id: receipt.stack.kind.clone(),
+                        tradable: receipt.decision.tradable,
+                    });
+                }
+                if let Some(cell) = self.agents.get_mut(&receipt.requester_agent_id) {
+                    cell.last_active = now;
+                }
+            }
             _ => unreachable!(
                 "apply_domain_event_governance_meta received unsupported event variant"
             ),

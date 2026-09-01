@@ -23,6 +23,7 @@ import {
 import { recoveryOptionVisualFixture } from "./viewer_recovery_option_fixture.js";
 import { AgentActivitySurface } from "./agent_activity_surface.jsx";
 import { AgentIntentSurface } from "./agent_intent_surface.jsx";
+import { FactoryProductionFailureDispositionCard } from "./factory_production_failure_disposition_card.jsx";
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
 const [viewerStateRevision, setViewerStateRevision] = createSignal(0);
 function observeViewerStateRevision() {
@@ -584,85 +585,6 @@ function EventCard(props) {
       </Show>
       {props.children}
     </div>
-  );
-}
-
-function formatFactoryFailureInputs(inputs, locale) {
-  if (!Array.isArray(inputs) || inputs.length === 0) {
-    return tr(locale, "未记录", "None recorded");
-  }
-  return inputs.map((input) => {
-    const kind = input?.kind || tr(locale, "未知物料", "Unknown material");
-    return input?.amount == null ? kind : `${kind} × ${input.amount}`;
-  }).join(", ");
-}
-
-function formatFactoryFailurePower(value, locale) {
-  return value == null ? tr(locale, "未记录", "Not recorded") : String(value);
-}
-
-function FactoryProductionFailureDispositionCard(props) {
-  const locale = () => props.locale;
-  const disposition = () => props.disposition || null;
-  const text = (zh, en) => tr(locale(), zh, en);
-
-  return (
-    <Show when={disposition()}>
-      <EventCard
-        class="event-card event-card--factory-failure"
-        testId="viewer-factory-production-failure-disposition"
-        title={text("生产结果未通过验证", "Production result failed validation")}
-        role="status"
-        ariaLive="polite"
-        badge={disposition().dispositionKind || text("已记录", "Recorded")}
-        badgeClass="badge badge--warn"
-        meta={`${text("工厂", "Factory")}: ${disposition().factoryId || text("未知", "unknown")} · ${text("配方", "Recipe")}: ${disposition().recipeId || text("未知", "unknown")}`}
-      >
-        <div class="feedback-summary">
-          {`${text("阻塞", "Blocker")}: ${disposition().blockerKind || text("生产受阻", "Production blocked")}`}
-        </div>
-        <Show when={disposition().blockerDetail}>
-          <div class="feedback-detail">
-            {`${text("详情", "Detail")}: ${disposition().blockerDetail}`}
-          </div>
-        </Show>
-        <Show when={disposition().actionId || disposition().requesterAgentId}>
-          <div class="feedback-detail">
-            {[
-              disposition().actionId ? `${text("动作", "Action")}: ${disposition().actionId}` : null,
-              disposition().requesterAgentId ? `${text("请求者", "Requester")}: ${disposition().requesterAgentId}` : null,
-            ].filter(Boolean).join(" · ")}
-          </div>
-        </Show>
-        <div class="summary-grid">
-          <MetricCard
-            label={text("已消费投入", "Consumed inputs")}
-            value={formatFactoryFailureInputs(disposition().consumedInputs, locale())}
-          />
-          <MetricCard
-            label={text("已损失投入", "Lost inputs")}
-            value={formatFactoryFailureInputs(disposition().lostInputs, locale())}
-          />
-          <MetricCard
-            label={text("已消费电力", "Consumed power")}
-            value={formatFactoryFailurePower(disposition().consumedPower, locale())}
-          />
-          <MetricCard
-            label={text("已损失电力", "Lost power")}
-            value={formatFactoryFailurePower(disposition().lostPower, locale())}
-          />
-        </div>
-        <div class="badge-row badge-row--spaced">
-          <Badge class="badge badge--accent">{text("下一动作", "Next action")}</Badge>
-        </div>
-        <div class="feedback-summary">{disposition().nextAction || text("按已发布的下一步处理", "Follow the published next step")}</div>
-        <Show when={disposition().nextRecheck != null}>
-          <div class="feedback-detail" data-testid="factory-failure-next-recheck">
-            {`${text("下一次复查", "Next recheck")}: ${disposition().nextRecheck}`}
-          </div>
-        </Show>
-      </EventCard>
-    </Show>
   );
 }
 
@@ -2524,6 +2446,8 @@ function WorldSummaryPanel(props = {}) {
               <FactoryProductionFailureDispositionCard
                 disposition={gameplay().factoryProductionFailureDisposition}
                 locale={locale()}
+                localeText={tr}
+                onAction={renderGameplayAction}
               />
               <EventCard
                 title={tr(locale(), "控制证明", "Control Proof")}
@@ -4369,11 +4293,25 @@ function installViewerVisualFixture() {
     factory_production_failure_disposition() {
       core.injectSnapshot(viewerFixtureBaseSnapshot({
         player_gameplay: {
+          available_actions: [
+            {
+              action_id: "schedule_recipe_smelter_iron_ingot",
+              label: "Queue iron ingot run",
+              protocol_action: "gameplay_action.submit",
+              target_agent_id: "agent-0",
+              disabled_reason: "insufficient iron_ore in site ledger",
+            },
+            {
+              action_id: "request_snapshot",
+              label: "Refresh gameplay snapshot",
+              protocol_action: "request_snapshot",
+            },
+          ],
           factory_production_failure_disposition: {
             action_id: "19",
             requester_agent_id: "agent-0",
             factory_id: "factory.target",
-            recipe_id: "recipe.target",
+            recipe_id: "recipe.smelter.iron_ingot",
             blocker_kind: "product_validation_rejected",
             blocker_detail: "product profile rejected the committed output",
             disposition_kind: "consumed_lost",
