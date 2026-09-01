@@ -175,6 +175,7 @@ import hashlib
 import json
 import os
 import socket
+import subprocess
 import sys
 import tempfile
 import uuid
@@ -202,6 +203,53 @@ def pid_alive(pid: int) -> bool:
     except OSError:
         return False
     return True
+
+
+def process_identity(pid: int) -> str | None:
+    if pid <= 1:
+        return None
+    proc_stat = Path(f"/proc/{pid}/stat")
+    try:
+        contents = proc_stat.read_text(encoding="utf-8")
+    except OSError:
+        contents = ""
+    if contents:
+        right_paren = contents.rfind(") ")
+        if right_paren >= 0:
+            fields = contents[right_paren + 2 :].split()
+            if len(fields) > 19:
+                return f"proc-starttime:{fields[19]}"
+    try:
+        result = subprocess.run(
+            ["ps", "-o", "pid=,lstart=", "-p", str(pid)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    snapshot = result.stdout.strip()
+    if not snapshot:
+        return None
+    return f"ps-start:{hashlib.sha256(snapshot.encode('utf-8')).hexdigest()}"
+
+
+def reservation_owner_status(record: dict) -> str:
+    try:
+        pid = int(record.get("owner_pid", 0))
+    except (TypeError, ValueError):
+        return "unknown"
+    if pid <= 1:
+        return "unknown"
+    if not pid_alive(pid):
+        return "stale"
+    expected_identity = record.get("owner_identity")
+    if not isinstance(expected_identity, str) or not expected_identity:
+        return "unknown"
+    current_identity = process_identity(pid)
+    if not current_identity:
+        return "unknown"
+    return "live" if current_identity == expected_identity else "stale"
 
 
 def atomic_write(path: Path, contents: str) -> None:
@@ -272,28 +320,39 @@ with local_lock_path.open("a+", encoding="utf-8") as local_lock:
                 local_reservation = json.loads(reservation_path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
                 raise SystemExit(f"error: invalid harness port reservation: {exc}")
-            local_owner = int(local_reservation.get("owner_pid", 0))
-            if pid_alive(local_owner):
+            local_owner_status = reservation_owner_status(local_reservation)
+            if local_owner_status == "live":
                 raise SystemExit(
-                    f"error: harness ports are already reserved by live owner {local_owner}"
+                    f"error: harness ports are already reserved by live owner {local_reservation.get('owner_pid')}"
+                )
+            if local_owner_status == "unknown":
+                raise SystemExit(
+                    "error: harness port reservation owner identity is unavailable; reservation retained"
                 )
             reservation_path.unlink()
 
         registry = load_registry()
         reservations = registry["reservations"]
-        stale_tokens = [
-            token
-            for token, record in reservations.items()
-            if not pid_alive(int(record.get("owner_pid", 0)))
-        ]
-        for token in stale_tokens:
-            del reservations[token]
+        for token, record in list(reservations.items()):
+            owner_status = reservation_owner_status(record)
+            if owner_status == "stale":
+                del reservations[token]
+            elif owner_status == "unknown":
+                raise SystemExit(
+                    f"error: shared harness port reservation {token} has a live owner with unavailable identity; reservation retained"
+                )
 
         for token, record in reservations.items():
-            if record.get("harness_root") == str(harness_root) and pid_alive(int(record.get("owner_pid", 0))):
+            if record.get("harness_root") == str(harness_root) and reservation_owner_status(record) == "live":
                 raise SystemExit(
                     f"error: harness ports are already reserved by live owner {record.get('owner_pid')}"
                 )
+
+        owner_identity = process_identity(owner_pid)
+        if not owner_identity:
+            raise SystemExit(
+                f"error: unable to capture stable identity for reservation owner {owner_pid}"
+            )
 
         reserved_ports = set()
         for record in reservations.values():
@@ -318,6 +377,7 @@ with local_lock_path.open("a+", encoding="utf-8") as local_lock:
                     "schema": 1,
                     "reservation_token": token,
                     "owner_pid": owner_pid,
+                    "owner_identity": owner_identity,
                     "worktree_path": worktree_path,
                     "harness_root": str(harness_root),
                     "common_dir": str(common_dir),
@@ -347,9 +407,11 @@ wh_bind_ports_owner() {
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import json
 import os
 import pathlib
+import subprocess
 import tempfile
 import sys
 
@@ -359,6 +421,45 @@ old_owner_pid = int(sys.argv[3]) if sys.argv[3] else os.getppid()
 new_owner_pid = int(sys.argv[4])
 common_dir = pathlib.Path(sys.argv[5]).resolve() if sys.argv[5] else None
 reservation_path = harness_root / ".ports.reservation.json"
+
+
+def pid_alive(pid: int) -> bool:
+    if pid <= 1:
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def process_identity(pid: int) -> str | None:
+    if pid <= 1:
+        return None
+    proc_stat = pathlib.Path(f"/proc/{pid}/stat")
+    try:
+        contents = proc_stat.read_text(encoding="utf-8")
+    except OSError:
+        contents = ""
+    if contents:
+        right_paren = contents.rfind(") ")
+        if right_paren >= 0:
+            fields = contents[right_paren + 2 :].split()
+            if len(fields) > 19:
+                return f"proc-starttime:{fields[19]}"
+    try:
+        result = subprocess.run(
+            ["ps", "-o", "pid=,lstart=", "-p", str(pid)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    snapshot = result.stdout.strip()
+    if not snapshot:
+        return None
+    return f"ps-start:{hashlib.sha256(snapshot.encode('utf-8')).hexdigest()}"
 
 
 def atomic_write(path: pathlib.Path, contents: str) -> None:
@@ -389,6 +490,17 @@ with local_lock_path.open("a+", encoding="utf-8") as local_lock:
         raise SystemExit("error: harness port reservation token changed before owner binding")
     if int(reservation.get("owner_pid", 0)) != old_owner_pid:
         raise SystemExit("error: harness port reservation owner changed before owner binding")
+    recorded_owner_identity = reservation.get("owner_identity")
+    if not isinstance(recorded_owner_identity, str) or not recorded_owner_identity:
+        raise SystemExit(
+            "error: harness port reservation owner identity is unavailable before owner binding"
+        )
+    current_old_identity = process_identity(old_owner_pid) if pid_alive(old_owner_pid) else None
+    if not current_old_identity or current_old_identity != recorded_owner_identity:
+        raise SystemExit("error: harness port reservation owner identity changed before owner binding")
+    new_owner_identity = process_identity(new_owner_pid)
+    if not new_owner_identity:
+        raise SystemExit(f"error: unable to identify new harness owner {new_owner_pid}")
     registry_path = pathlib.Path(reservation.get("registry_path", ""))
     if not registry_path.is_absolute():
         if common_dir is None:
@@ -406,8 +518,12 @@ with local_lock_path.open("a+", encoding="utf-8") as local_lock:
             raise SystemExit("error: shared harness port reservation changed before owner binding")
         if int(record.get("owner_pid", 0)) != old_owner_pid:
             raise SystemExit("error: shared harness port owner changed before owner binding")
+        if record.get("owner_identity") != recorded_owner_identity:
+            raise SystemExit("error: shared harness port owner identity changed before owner binding")
         reservation["owner_pid"] = new_owner_pid
+        reservation["owner_identity"] = new_owner_identity
         record["owner_pid"] = new_owner_pid
+        record["owner_identity"] = new_owner_identity
         atomic_write(registry_path, json.dumps(registry, sort_keys=True) + "\n")
         atomic_write(reservation_path, json.dumps(reservation, sort_keys=True) + "\n")
 PY

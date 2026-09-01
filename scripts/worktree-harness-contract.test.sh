@@ -312,6 +312,196 @@ wh_release_ports_reservation "$STALE_PORT_ROOT" "$stale_token" "$PORT_COMMON_DIR
   exit 1
 }
 
+IDENTITY_FRESH_ROOT="$TMP_DIR/identity-fresh-reservation"
+IDENTITY_FRESH_COMMON_DIR="$TMP_DIR/identity-fresh-registry"
+mkdir -p "$IDENTITY_FRESH_ROOT"
+identity_fresh_ports_json="$TMP_DIR/identity-fresh-ports.json"
+wh_resolve_ports_json "$IDENTITY_FRESH_ROOT" "$$" "/tmp/oasis7-port-identity-fresh" "$IDENTITY_FRESH_COMMON_DIR" >"$identity_fresh_ports_json"
+python3 - "$identity_fresh_ports_json" "$IDENTITY_FRESH_ROOT/.ports.reservation.json" "$IDENTITY_FRESH_COMMON_DIR/.oasis7-harness-port-registry/reservations.json" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
+local_reservation = json.loads(pathlib.Path(sys.argv[2]).read_text())
+registry = json.loads(pathlib.Path(sys.argv[3]).read_text())
+token = payload["reservation_token"]
+assert local_reservation["owner_identity"], local_reservation
+assert registry["reservations"][token]["owner_identity"] == local_reservation["owner_identity"], registry
+PY
+identity_fresh_token="$(python3 - "$identity_fresh_ports_json" <<'PY'
+import json
+import pathlib
+import sys
+
+print(json.loads(pathlib.Path(sys.argv[1]).read_text())["reservation_token"])
+PY
+)"
+wh_release_ports_reservation "$IDENTITY_FRESH_ROOT" "$identity_fresh_token" "$IDENTITY_FRESH_COMMON_DIR"
+
+IDENTITY_RECLAIM_ROOT="$TMP_DIR/identity-reclaim"
+IDENTITY_RECLAIM_COMMON_DIR="$TMP_DIR/identity-reclaim-registry"
+IDENTITY_RECLAIM_WORKTREE="/tmp/oasis7-port-identity-reclaim"
+mkdir -p "$IDENTITY_RECLAIM_ROOT" "$IDENTITY_RECLAIM_COMMON_DIR"
+wh_start_managed sleep 30 >"$TMP_DIR/identity-reclaim-owner.log" 2>&1
+identity_reclaim_owner_pid="$WH_MANAGED_PID"
+identity_reclaim_owner_pgid="$WH_MANAGED_PGID"
+identity_reclaim_owner_identity="$WH_MANAGED_IDENTITY"
+identity_reclaim_seed="$(python3 - "$IDENTITY_RECLAIM_WORKTREE" <<'PY'
+import hashlib
+import pathlib
+import sys
+
+seed = int(hashlib.sha256(str(pathlib.Path(sys.argv[1]).resolve()).encode()).hexdigest()[:8], 16)
+print(43000 + (seed % 1500) * 10)
+PY
+)"
+python3 - "$IDENTITY_RECLAIM_COMMON_DIR" "$IDENTITY_RECLAIM_ROOT" "$IDENTITY_RECLAIM_WORKTREE" "$identity_reclaim_owner_pid" "$identity_reclaim_seed" <<'PY'
+import json
+import pathlib
+import sys
+
+common_dir = pathlib.Path(sys.argv[1])
+harness_root = pathlib.Path(sys.argv[2])
+worktree = sys.argv[3]
+owner_pid = int(sys.argv[4])
+base = int(sys.argv[5])
+registry_dir = common_dir / ".oasis7-harness-port-registry"
+registry_dir.mkdir(parents=True, exist_ok=True)
+registry = {
+    "schema": 1,
+    "reservations": {
+        "identity-reclaim-token": {
+            "schema": 1,
+            "reservation_token": "identity-reclaim-token",
+            "owner_pid": owner_pid,
+            "owner_identity": "old-process-incarnation",
+            "worktree_path": worktree,
+            "harness_root": str(common_dir / "old-harness"),
+            "common_dir": str(common_dir),
+            "registry_path": str(registry_dir / "reservations.json"),
+            "ports": {
+                "viewer_port": base,
+                "web_bind": f"127.0.0.1:{base + 1}",
+                "live_bind": f"127.0.0.1:{base + 2}",
+                "chain_status_bind": f"127.0.0.1:{base + 3}",
+            },
+        }
+    },
+}
+(harness_root / ".ports.reservation.json").write_text(
+    json.dumps(registry["reservations"]["identity-reclaim-token"]) + "\n",
+    encoding="utf-8",
+)
+(registry_dir / "reservations.json").write_text(json.dumps(registry) + "\n", encoding="utf-8")
+PY
+identity_reclaim_ports_json="$TMP_DIR/identity-reclaim-ports.json"
+wh_resolve_ports_json "$IDENTITY_RECLAIM_ROOT" "$$" "$IDENTITY_RECLAIM_WORKTREE" "$IDENTITY_RECLAIM_COMMON_DIR" >"$identity_reclaim_ports_json"
+python3 - "$identity_reclaim_ports_json" "$IDENTITY_RECLAIM_COMMON_DIR/.oasis7-harness-port-registry/reservations.json" "$identity_reclaim_seed" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
+registry = json.loads(pathlib.Path(sys.argv[2]).read_text())
+assert payload["viewer_port"] == int(sys.argv[3]), payload
+assert "identity-reclaim-token" not in registry["reservations"], registry
+PY
+identity_reclaim_token="$(python3 - "$identity_reclaim_ports_json" <<'PY'
+import json
+import pathlib
+import sys
+
+print(json.loads(pathlib.Path(sys.argv[1]).read_text())["reservation_token"])
+PY
+)"
+wh_release_ports_reservation "$IDENTITY_RECLAIM_ROOT" "$identity_reclaim_token" "$IDENTITY_RECLAIM_COMMON_DIR"
+wh_terminate_process_group "$identity_reclaim_owner_pid" "$identity_reclaim_owner_pgid" 100 "$identity_reclaim_owner_identity"
+
+IDENTITY_MISSING_ROOT="$TMP_DIR/identity-missing"
+IDENTITY_MISSING_COMMON_DIR="$TMP_DIR/identity-missing-registry"
+IDENTITY_MISSING_WORKTREE="/tmp/oasis7-port-identity-missing"
+mkdir -p "$IDENTITY_MISSING_ROOT" "$IDENTITY_MISSING_COMMON_DIR"
+wh_start_managed sleep 30 >"$TMP_DIR/identity-missing-owner.log" 2>&1
+identity_missing_owner_pid="$WH_MANAGED_PID"
+identity_missing_owner_pgid="$WH_MANAGED_PGID"
+identity_missing_owner_identity="$WH_MANAGED_IDENTITY"
+identity_missing_seed="$(python3 - "$IDENTITY_MISSING_WORKTREE" <<'PY'
+import hashlib
+import pathlib
+import sys
+
+seed = int(hashlib.sha256(str(pathlib.Path(sys.argv[1]).resolve()).encode()).hexdigest()[:8], 16)
+print(43000 + (seed % 1500) * 10)
+PY
+)"
+python3 - "$IDENTITY_MISSING_COMMON_DIR" "$IDENTITY_MISSING_ROOT" "$IDENTITY_MISSING_WORKTREE" "$identity_missing_owner_pid" "$identity_missing_seed" <<'PY'
+import json
+import pathlib
+import sys
+
+common_dir = pathlib.Path(sys.argv[1])
+harness_root = pathlib.Path(sys.argv[2])
+worktree = sys.argv[3]
+owner_pid = int(sys.argv[4])
+base = int(sys.argv[5])
+registry_dir = common_dir / ".oasis7-harness-port-registry"
+registry_dir.mkdir(parents=True, exist_ok=True)
+registry = {
+    "schema": 1,
+    "reservations": {
+        "identity-missing-token": {
+            "schema": 1,
+            "reservation_token": "identity-missing-token",
+            "owner_pid": owner_pid,
+            "worktree_path": worktree,
+            "harness_root": str(common_dir / "old-harness"),
+            "common_dir": str(common_dir),
+            "registry_path": str(registry_dir / "reservations.json"),
+            "ports": {
+                "viewer_port": base,
+                "web_bind": f"127.0.0.1:{base + 1}",
+                "live_bind": f"127.0.0.1:{base + 2}",
+                "chain_status_bind": f"127.0.0.1:{base + 3}",
+            },
+        }
+    },
+}
+(harness_root / ".ports.reservation.json").write_text(
+    json.dumps(registry["reservations"]["identity-missing-token"]) + "\n",
+    encoding="utf-8",
+)
+(registry_dir / "reservations.json").write_text(json.dumps(registry) + "\n", encoding="utf-8")
+PY
+set +e
+wh_resolve_ports_json "$IDENTITY_MISSING_ROOT" "$$" "$IDENTITY_MISSING_WORKTREE" "$IDENTITY_MISSING_COMMON_DIR" >"$TMP_DIR/identity-missing-ports.json" 2>"$TMP_DIR/identity-missing.err"
+identity_missing_status="$?"
+set -e
+[[ "$identity_missing_status" -ne 0 ]] || {
+  echo "port reservation contract: live owner without identity was not rejected" >&2
+  exit 1
+}
+python3 - "$IDENTITY_MISSING_COMMON_DIR/.oasis7-harness-port-registry/reservations.json" <<'PY'
+import json
+import pathlib
+import sys
+
+registry = json.loads(pathlib.Path(sys.argv[1]).read_text())
+assert "identity-missing-token" in registry["reservations"], registry
+PY
+wh_terminate_process_group "$identity_missing_owner_pid" "$identity_missing_owner_pgid" 100 "$identity_missing_owner_identity"
+identity_missing_reclaim_json="$TMP_DIR/identity-missing-reclaim.json"
+wh_resolve_ports_json "$IDENTITY_MISSING_ROOT" "$$" "$IDENTITY_MISSING_WORKTREE" "$IDENTITY_MISSING_COMMON_DIR" >"$identity_missing_reclaim_json"
+identity_missing_reclaim_token="$(python3 - "$identity_missing_reclaim_json" <<'PY'
+import json
+import pathlib
+import sys
+
+print(json.loads(pathlib.Path(sys.argv[1]).read_text())["reservation_token"])
+PY
+)"
+wh_release_ports_reservation "$IDENTITY_MISSING_ROOT" "$identity_missing_reclaim_token" "$IDENTITY_MISSING_COMMON_DIR"
+
 collision_paths="$(python3 - <<'PY'
 import hashlib
 import pathlib

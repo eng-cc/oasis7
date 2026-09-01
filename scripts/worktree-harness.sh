@@ -52,6 +52,7 @@ META_FILE="$(wh_runtime_meta_file "$HARNESS_ROOT")"
 BROWSER_SESSION="$(wh_browser_session "$WORKTREE_ID")"
 PORT_RESERVATION_TOKEN=""
 HARNESS_IDENTITY=""
+CLEANUP_PENDING_REASON=""
 
 wh_prepare_dirs "$HARNESS_ROOT"
 
@@ -70,6 +71,8 @@ fi
 kill_recorded_processes() {
   local harness_pid harness_pgid launcher_pid launcher_pgid reservation_token
   local harness_identity launcher_identity cleanup_status=0
+  local -a legacy_identityless_records=()
+  CLEANUP_PENDING_REASON=""
   harness_pid=$(wh_state_get "$STATE_FILE" harness_pid 2>/dev/null || true)
   harness_pgid=$(wh_state_get "$STATE_FILE" harness_pgid 2>/dev/null || true)
   harness_identity=$(wh_state_get "$STATE_FILE" harness_identity 2>/dev/null || true)
@@ -77,6 +80,28 @@ kill_recorded_processes() {
   launcher_pgid=$(wh_state_get "$STATE_FILE" launcher_pgid 2>/dev/null || true)
   launcher_identity=$(wh_state_get "$STATE_FILE" launcher_identity 2>/dev/null || true)
   reservation_token=$(wh_state_get "$STATE_FILE" port_reservation_token 2>/dev/null || true)
+
+  # Legacy records may contain only a PID/PGID.  A live process or process
+  # group without a captured identity is intentionally not actionable: the
+  # PID may have been reused by a foreign process.  Keep the complete record
+  # and reservation for operator-owned recovery rather than guessing.
+  if [[ -z "$launcher_identity" ]] && {
+    { [[ -n "$launcher_pid" ]] && wh_pid_alive "$launcher_pid"; } ||
+    { [[ -n "$launcher_pgid" ]] && wh_process_group_alive "$launcher_pgid"; }
+  }; then
+    legacy_identityless_records+=("launcher")
+  fi
+  if [[ -z "$harness_identity" ]] && {
+    { [[ -n "$harness_pid" ]] && wh_pid_alive "$harness_pid"; } ||
+    { [[ -n "$harness_pgid" ]] && wh_process_group_alive "$harness_pgid"; }
+  }; then
+    legacy_identityless_records+=("harness")
+  fi
+  if [[ "${#legacy_identityless_records[@]}" -gt 0 ]]; then
+    CLEANUP_PENDING_REASON="cannot safely clean live legacy ${legacy_identityless_records[*]} process record: stable identity unavailable; no signal sent; operator-owned recovery required; reservation retained"
+    echo "error: $CLEANUP_PENDING_REASON" >&2
+    return 1
+  fi
 
   # Older state records predate PGID publication.  Derive the group only
   # while its recorded PID is live; otherwise leave the stale record alone so
@@ -126,6 +151,15 @@ kill_recorded_processes() {
   fi
 }
 
+write_cleanup_failure_state() {
+  local fallback_reason=$1
+  if [[ -n "$CLEANUP_PENDING_REASON" ]]; then
+    wh_state_write "$STATE_FILE" "{\"status\": \"failed\", \"phase\": \"cleanup_pending\", \"failure_reason\": $(json_quote "$CLEANUP_PENDING_REASON") }"
+  else
+    wh_state_write "$STATE_FILE" "{\"status\": \"failed\", \"phase\": \"cleanup_failed\", \"failure_reason\": $(json_quote "$fallback_reason") }"
+  fi
+}
+
 viewer_http_ready() {
   local viewer_url
   viewer_url=$(wh_state_get "$STATE_FILE" viewer_url 2>/dev/null || true)
@@ -136,6 +170,7 @@ viewer_http_ready() {
 refresh_state() {
   local current_status harness_pid harness_pgid harness_identity launcher_pid launcher_pgid launcher_identity
   local harness_live=0 launcher_live=0 stale_record=0
+  local -a legacy_identityless_records=()
 
   [[ -f "$STATE_FILE" ]] || return 0
   current_status=$(wh_state_get "$STATE_FILE" status 2>/dev/null || true)
@@ -147,6 +182,23 @@ refresh_state() {
   launcher_identity=$(wh_state_get "$STATE_FILE" launcher_identity 2>/dev/null || true)
 
   if [[ "$current_status" == "ready" ]]; then
+    if [[ -z "$harness_identity" ]] && {
+      { [[ -n "$harness_pid" ]] && wh_pid_alive "$harness_pid"; } ||
+      { [[ -n "$harness_pgid" ]] && wh_process_group_alive "$harness_pgid"; }
+    }; then
+      legacy_identityless_records+=("harness")
+    fi
+    if [[ -z "$launcher_identity" ]] && {
+      { [[ -n "$launcher_pid" ]] && wh_pid_alive "$launcher_pid"; } ||
+      { [[ -n "$launcher_pgid" ]] && wh_process_group_alive "$launcher_pgid"; }
+    }; then
+      legacy_identityless_records+=("launcher")
+    fi
+    if [[ "${#legacy_identityless_records[@]}" -gt 0 ]]; then
+      local legacy_reason="cannot validate live legacy ${legacy_identityless_records[*]} process record: stable identity unavailable; no signal sent; operator-owned recovery required; reservation retained"
+      wh_state_write "$STATE_FILE" "{\"status\": \"failed\", \"phase\": \"cleanup_pending\", \"failure_reason\": $(json_quote "$legacy_reason") }"
+      return 1
+    fi
     if [[ -n "$harness_pid" ]]; then
       if wh_process_record_alive "$harness_pid" "$harness_pgid" "$harness_identity"; then
         harness_live=1
@@ -342,7 +394,7 @@ case "$action" in
     fi
 
     if ! kill_recorded_processes; then
-      wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "cleanup_failed", "failure_reason": "unable to prove previous harness quiescence"}'
+      write_cleanup_failure_state "unable to prove previous harness quiescence"
       exit 1
     fi
     rm -f "$META_FILE" "$STARTUP_LOG"
@@ -462,7 +514,7 @@ PY
           if (( $(wh_clock_ms) >= STARTUP_DEADLINE_MS )); then
             wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "failed", "failure_reason": "test launch synchronization acknowledgement deadline exceeded"}'
             if ! kill_recorded_processes; then
-              wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "cleanup_failed", "failure_reason": "test launch synchronization acknowledgement cleanup failed"}'
+              write_cleanup_failure_state "test launch synchronization acknowledgement cleanup failed"
             fi
             exit 1
           fi
@@ -475,8 +527,11 @@ PY
       sleep "${OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_SECS:-1}"
     fi
     if ! wh_bind_ports_owner "$HARNESS_ROOT" "$PORT_RESERVATION_TOKEN" "$$" "$HARNESS_PID" "$PORT_REGISTRY_COMMON_DIR"; then
-      kill_recorded_processes
-      wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "failed", "failure_reason": "unable to bind port reservation to managed harness process"}'
+      if ! kill_recorded_processes; then
+        write_cleanup_failure_state "unable to bind port reservation to managed harness process; cleanup failed"
+      else
+        wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "failed", "failure_reason": "unable to bind port reservation to managed harness process"}'
+      fi
       exit 1
     fi
 
@@ -489,7 +544,9 @@ PY
       attempt=$((attempt + 1))
       if ! wh_process_record_alive "$recorded_harness_pid" "$recorded_harness_pgid" "$recorded_harness_identity"; then
         wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "failed", "failure_reason": "run-launcher-stack.sh exited before STACK_READY"}'
-        kill_recorded_processes
+        if ! kill_recorded_processes; then
+          write_cleanup_failure_state "run-launcher-stack.sh exited before STACK_READY; cleanup failed"
+        fi
         echo "error: worktree harness boot failed; run-launcher-stack.sh exited unexpectedly" >&2
         tail -n 120 "$STARTUP_LOG" >&2 || true
         exit 1
@@ -514,7 +571,9 @@ PY
     recorded_harness_identity=$(wh_state_get "$STATE_FILE" harness_identity 2>/dev/null || true)
     if ! wh_process_record_alive "$recorded_harness_pid" "$recorded_harness_pgid" "$recorded_harness_identity"; then
       wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "failed", "failure_reason": "run-launcher-stack.sh identity changed before STACK_READY"}'
-      kill_recorded_processes
+      if ! kill_recorded_processes; then
+        write_cleanup_failure_state "run-launcher-stack.sh identity changed before STACK_READY; cleanup failed"
+      fi
       echo "error: worktree harness identity changed before readiness" >&2
       tail -n 120 "$STARTUP_LOG" >&2 || true
       exit 1
@@ -522,7 +581,9 @@ PY
 
     if [[ ! -f "$META_FILE" ]] || [[ "$(wh_env_file_get "$META_FILE" STACK_READY 2>/dev/null || true)" != "1" ]]; then
       wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "failed", "failure_reason": "startup deadline exceeded waiting for STACK_READY"}'
-      kill_recorded_processes
+      if ! kill_recorded_processes; then
+        write_cleanup_failure_state "startup deadline exceeded waiting for STACK_READY; cleanup failed"
+      fi
       echo "error: timed out waiting for worktree harness readiness" >&2
       tail -n 120 "$STARTUP_LOG" >&2 || true
       exit 1
@@ -534,7 +595,9 @@ PY
     launcher_identity=$(wh_env_file_get "$META_FILE" LAUNCHER_IDENTITY 2>/dev/null || true)
     if ! wh_process_record_alive "$launcher_pid" "$launcher_pgid" "$launcher_identity"; then
       wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "failed", "failure_reason": "launcher process identity changed before readiness"}'
-      kill_recorded_processes
+      if ! kill_recorded_processes; then
+        write_cleanup_failure_state "launcher process identity changed before readiness; cleanup failed"
+      fi
       echo "error: launcher identity changed before readiness" >&2
       tail -n 120 "$STARTUP_LOG" >&2 || true
       exit 1
@@ -573,7 +636,7 @@ PY
     ;;
   down)
     if ! kill_recorded_processes; then
-      wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "cleanup_failed", "failure_reason": "unable to prove harness quiescence; reservation retained"}'
+      write_cleanup_failure_state "unable to prove harness quiescence; reservation retained"
       echo "error: worktree harness shutdown did not reach quiescence; reservation retained" >&2
       exit 1
     fi

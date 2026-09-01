@@ -42,6 +42,12 @@ READY_HARNESS_IDENTITY=""
 READINESS_HARNESS_PID=""
 READINESS_HARNESS_PGID=""
 READINESS_HARNESS_IDENTITY=""
+LEGACY_DOWN_PID=""
+LEGACY_DOWN_PGID=""
+LEGACY_DOWN_IDENTITY=""
+LEGACY_UP_PID=""
+LEGACY_UP_PGID=""
+LEGACY_UP_IDENTITY=""
 
 cleanup_recorded_group() {
   local pid=${1:-}
@@ -58,6 +64,8 @@ cleanup() {
     wait "$SENTINEL_PID" >/dev/null 2>&1 || true
   fi
   OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" ./scripts/worktree-harness.sh down >/dev/null 2>&1 || true
+  cleanup_recorded_group "$LEGACY_DOWN_PID" "$LEGACY_DOWN_PGID" "$LEGACY_DOWN_IDENTITY"
+  cleanup_recorded_group "$LEGACY_UP_PID" "$LEGACY_UP_PGID" "$LEGACY_UP_IDENTITY"
   cleanup_recorded_group "$UNRELATED_PID" "$UNRELATED_PGID" "$UNRELATED_IDENTITY"
   cleanup_recorded_group "$READINESS_HARNESS_PID" "$READINESS_HARNESS_PGID" "$READINESS_HARNESS_IDENTITY"
   cleanup_recorded_group "$READY_HARNESS_PID" "$READY_HARNESS_PGID" "$READY_HARNESS_IDENTITY"
@@ -116,6 +124,132 @@ done
 FAKE
 chmod +x "$FAKE_LAUNCHER"
 
+# A pre-upgrade record may contain only PIDs.  A live PID without a captured
+# identity is not safe to signal because it may have been reused by a foreign
+# process; down/up must retain the record and reservation for operator-owned
+# recovery instead of guessing.
+LEGACY_PID_ONLY_TOKEN="legacy-pid-only-token"
+wh_start_managed sleep 300 >"$TMP_DIR/legacy-pid-only-down-group.log" 2>&1
+LEGACY_DOWN_PID="$WH_MANAGED_PID"
+LEGACY_DOWN_PGID="$WH_MANAGED_PGID"
+LEGACY_DOWN_IDENTITY="$WH_MANAGED_IDENTITY"
+wh_state_write "$HARNESS_ROOT/state.json" "$(python3 - "$LEGACY_DOWN_PID" "$LEGACY_PID_ONLY_TOKEN" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "status": "ready",
+    "phase": "ready",
+    "harness_pid": int(sys.argv[1]),
+    "launcher_pid": int(sys.argv[1]),
+    "port_reservation_token": sys.argv[2],
+}))
+PY
+)"
+set +e
+./scripts/worktree-harness.sh status --json >"$TMP_DIR/legacy-pid-only-status.log" 2>&1
+legacy_status_rc=$?
+set -e
+[[ "$legacy_status_rc" -ne 0 ]] || {
+  echo "lifecycle acceptance: status accepted a live identity-less legacy record" >&2
+  exit 1
+}
+python3 - "$HARNESS_ROOT/state.json" <<'PY'
+import json
+import pathlib
+import sys
+
+state = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert state["phase"] == "cleanup_pending", state
+assert "identity" in state["failure_reason"], state
+PY
+set +e
+./scripts/worktree-harness.sh down >"$TMP_DIR/legacy-pid-only-down.log" 2>&1
+legacy_down_status="$?"
+set -e
+[[ "$legacy_down_status" -ne 0 ]] || {
+  echo "lifecycle acceptance: down accepted live identity-less legacy record" >&2
+  exit 1
+}
+python3 - "$HARNESS_ROOT/state.json" "$LEGACY_PID_ONLY_TOKEN" <<'PY'
+import json
+import pathlib
+import sys
+
+state = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert state["status"] == "failed", state
+assert state["phase"] == "cleanup_pending", state
+assert "identity" in state["failure_reason"], state
+assert state["harness_pid"], state
+assert state["launcher_pid"], state
+assert state["port_reservation_token"] == sys.argv[2], state
+PY
+if ! kill -0 "$LEGACY_DOWN_PID" >/dev/null 2>&1; then
+  echo "lifecycle acceptance: down signalled a live identity-less legacy process" >&2
+  exit 1
+fi
+wh_terminate_process_group "$LEGACY_DOWN_PID" "$LEGACY_DOWN_PGID" 100 "$LEGACY_DOWN_IDENTITY"
+
+wh_start_managed sleep 300 >"$TMP_DIR/legacy-pid-only-up-group.log" 2>&1
+LEGACY_UP_PID="$WH_MANAGED_PID"
+LEGACY_UP_PGID="$WH_MANAGED_PGID"
+LEGACY_UP_IDENTITY="$WH_MANAGED_IDENTITY"
+wh_state_write "$HARNESS_ROOT/state.json" "$(python3 - "$LEGACY_UP_PID" "$LEGACY_PID_ONLY_TOKEN" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "status": "ready",
+    "phase": "ready",
+    "harness_pid": int(sys.argv[1]),
+    "launcher_pid": int(sys.argv[1]),
+    "port_reservation_token": sys.argv[2],
+}))
+PY
+)"
+set +e
+OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" ./scripts/worktree-harness.sh up --with-llm --startup-timeout 1 >"$TMP_DIR/legacy-pid-only-up.log" 2>&1
+legacy_up_status="$?"
+set -e
+[[ "$legacy_up_status" -ne 0 ]] || {
+  echo "lifecycle acceptance: up accepted live identity-less legacy record" >&2
+  exit 1
+}
+python3 - "$HARNESS_ROOT/state.json" "$LEGACY_PID_ONLY_TOKEN" <<'PY'
+import json
+import pathlib
+import sys
+
+state = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert state["status"] == "failed", state
+assert state["phase"] == "cleanup_pending", state
+assert "identity" in state["failure_reason"], state
+assert state["harness_pid"], state
+assert state["launcher_pid"], state
+assert state["port_reservation_token"] == sys.argv[2], state
+PY
+if ! kill -0 "$LEGACY_UP_PID" >/dev/null 2>&1; then
+  echo "lifecycle acceptance: up signalled a live identity-less legacy process" >&2
+  exit 1
+fi
+wh_terminate_process_group "$LEGACY_UP_PID" "$LEGACY_UP_PGID" 100 "$LEGACY_UP_IDENTITY"
+
+# Dead identity-less records are safe to tombstone and should not leave a
+# cleanup-pending state behind.
+wh_state_write "$HARNESS_ROOT/state.json" '{"status":"ready","phase":"ready","harness_pid":999999999,"launcher_pid":999999999}'
+OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" ./scripts/worktree-harness.sh down >"$TMP_DIR/legacy-dead-down.log" 2>&1
+python3 - "$HARNESS_ROOT/state.json" <<'PY'
+import json
+import pathlib
+import sys
+
+state = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert state["status"] == "stopped", state
+assert state["phase"] == "stopped", state
+assert state["harness_pid"] is None, state
+assert state["launcher_pid"] is None, state
+PY
+
 SENTINEL_PID=""
 sleep 300 &
 SENTINEL_PID=$!
@@ -123,18 +257,21 @@ FAKE_LAUNCHER_CHILD_PID_FILE="$READY_CHILD_PID_FILE" \
 OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" \
 ./scripts/worktree-harness.sh up --startup-timeout 5 >"$TMP_DIR/ready-up.log" 2>&1
 
-python3 - "$HARNESS_ROOT/state.json" <<'PY'
+python3 - "$HARNESS_ROOT/state.json" "$HARNESS_ROOT/.ports.reservation.json" <<'PY'
 import json
 import pathlib
 import sys
 
 state = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+reservation = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
 assert state["status"] == "ready", state
 assert state["launcher_pgid"] == state["harness_pgid"], state
 assert state["launcher_pid"] != state["harness_pid"], state
 assert state["port_reservation_token"], state
 assert state["harness_identity"], state
 assert state["launcher_identity"], state
+assert reservation["owner_pid"] == state["harness_pid"], reservation
+assert reservation["owner_identity"] == state["harness_identity"], reservation
 PY
 
 status_json="$TMP_DIR/status.json"
