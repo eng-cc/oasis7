@@ -155,7 +155,7 @@ known/stale、reconnecting、unknown、conflict、unavailable、control lost 要
    relationship/经济字段和新的取消/批准/重排动作，待产品、玩法、runtime、agent 的规则、
    source、freshness、permission、idempotency 与 receipt 合同明确后再实现。
 
-### P1-A Agent Context Lite（源码、自动化与 headed 验收已完成）
+### P1-A Agent Context Lite（源码与聚焦自动化已完成；headed 证据部分完成）
 
 P1-A 是当前 Viewer 的第一个 Agent-only context slice，不是通用多实体 Inspector。
 
@@ -175,11 +175,14 @@ P1-A 是当前 Viewer 的第一个 Agent-only context slice，不是通用多实
   projection 和权限合同完成后，才可由后续 slice 注入内容；通用多实体 Inspector 是
   P1-A 之后的目标，不属于本切片。
 
-该 slice 的验收包括：Agent selected 的 current、last-known/stale、missing、reconnecting、
+该 slice 的完整验收仍要求：Agent selected 的 current、last-known/stale、missing、reconnecting、
 unknown、conflict、replay、gap、reorg、unavailable、control/permission-lost 状态可区分；
-非 Agent 选择不泄漏 Agent 状态；Player/Cinematic 每个呈现只有一个正式 Receipt；并通过
+非 Agent 选择不泄漏 Agent 状态；Player/Cinematic 每个呈现只有一个正式 Receipt；并补齐
 headed `1440x1000`、`1024x768`、`768x1024`、`390x844`、键盘/IME、CJK、长文本和空态验证。
-源码、自动化与真实 WebGL headed 证据已覆盖该边界；发行放行仍服从仓库 terminal gates。
+当前源码与聚焦自动化已覆盖语义边界；外部 Chrome headed 仅验证 GPU-unavailable fallback
+（`1440x1000`、`390x844`）。`ready=true` WebGL2/Cinematic 正常路径、probe 后异步 GPU
+失败和 tablet `641–1240` 宽度仍未验证，因此当前保持 technical preview，不构成完整 headed
+验收或发行放行结论。
 
 ### P1-B/P1-C 当前实现边界
 

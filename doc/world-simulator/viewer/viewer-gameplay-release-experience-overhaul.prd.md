@@ -65,7 +65,7 @@ Player shell、World Feed v1 DTO/anchor，以及 Director 的服务端核验与 
 文档决定不是运行时或发行放行证明；每阶段只在对应 owner 的实现、自动化和 headed QA 证据
 齐备后才可宣称完成。
 
-### P1-A Agent Context Lite（源码、自动化与 headed 验收已完成）
+### P1-A Agent Context Lite（源码与聚焦自动化已完成；headed 证据部分完成）
 
 P1 的第一个实现 slice 只收敛 **selected Agent** 的 entity-first context；通用的多实体
 Inspector（Agent 之外的 Location、Facility、Territory、Organization、Depot、Module）明确
@@ -119,13 +119,15 @@ stale、reconnecting、conflict、control lost 或 permission denied 必须保�
   verbs；不把 Market、War、Governance、Production、Contracts、Relations 变成一级 Player
   route，也不实现 ETA、energy、cargo、health、relationship、plan、memory 或 rationale。
 
-首 slice 的实现完成条件是：选中 Agent 的显示模型和组件有窄单测/稳定 DOM 合同；Location、
+首 slice 的完整验收条件是：选中 Agent 的显示模型和组件有窄单测/稳定 DOM 合同；Location、
 Facility、Territory、Organization、Depot、Module 选择不会泄漏 Agent 状态；普通 feedback
-不会被计作 Receipt；正常与 Cinematic presentation 各只有一个正式可见 Receipt；并在
-headed desktop/mobile、`1024x768`、`768x1024` tablet、键盘、CJK、长文本、空/不可用态完成
+不会被计作 Receipt；正常与 Cinematic presentation 各只有一个正式可见 Receipt；并补齐
+headed desktop/mobile、`1024x768`、`768x1024` tablet、键盘、CJK、长文本、空/不可用态的
 S6 证据。状态覆盖 current、last-known/stale、reconnecting、unknown、conflict、replay、
-gap、reorg、unavailable 和 control/permission lost。上述
-这些条件在本切片已有源码、自动化与真实 WebGL headed 证据；发行放行仍服从仓库 terminal gates。
+gap、reorg、unavailable 和 control/permission lost。当前源码与聚焦自动化已覆盖这些语义边界；
+headed 证据只覆盖外部 Chrome 的 GPU-unavailable fallback（`1440x1000`、`390x844`）。
+`ready=true` WebGL2/Cinematic 正常路径、probe 后异步 GPU 失败和 tablet `641–1240` 宽度仍待验证，
+因此本切片保持 technical preview，不构成完整 headed 验收或发行放行结论。
 
 #### P1-A → canonical acceptance crosswalk
 

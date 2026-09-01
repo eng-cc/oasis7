@@ -260,9 +260,11 @@ source tests, and CSS arithmetic do not prove exact-head headed readiness.
 - Escape 先关闭局部 surface/drawer，再退出 Focus/presentation；IME composition
   期间由 IME 消费 Escape，关闭后焦点回到 invoker。
 - 实施顺序固定为 anchors/tests → shell layout → console/receipt → focus/a11y →
-  World Feed v1 → headed QA；当前 P1 切片已有源码/协议实现、自动化与真实 WebGL browser smoke。
-  issuer-backed Director allowed path 和仓库级 runtime/QA release verdict 仍是独立终端证据，
-  不由本切片的 headed 结果替代。
+  World Feed v1 → headed QA；当前 P1 切片已有源码/协议实现与聚焦自动化，headed 证据仅覆盖
+  外部 Chrome 的 GPU-unavailable fallback（`1440x1000`、`390x844`）。`ready=true`
+  WebGL2/Cinematic 正常路径、probe 后异步 GPU 失败和 tablet `641–1240` 宽度仍待验证，
+  因此当前只维持 technical preview。issuer-backed Director allowed path 和仓库级 runtime/QA
+  release verdict 仍是独立终端证据，不由这部分 headed 结果替代。
 
 World Feed 现作为 `world_feed/v1` additive ambient projection：identity/dedup 为
 `(world_id,reorg_epoch,event_seq)`，source order ascending；nullable receipt link
