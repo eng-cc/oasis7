@@ -108,7 +108,13 @@ fn derive_agent_chat_intent_id(player_id: &str, agent_id: &str, intent_seq: u64)
     format!("agent-intent-v2:{}", sha256_hex(&payload))
 }
 
-fn derive_agent_chat_request_digest(
+/// Derive the canonical authenticated Agent Chat request binding.
+///
+/// Runtime cognition treats this value as an Agent-owned opaque digest; this
+/// helper is exposed within the crate so runtime fixtures and adjacent
+/// boundaries can construct the same durable intent binding without dummy
+/// values or a second hash formula.
+pub(crate) fn derive_agent_chat_request_digest(
     player_id: &str,
     agent_id: &str,
     intent_seq: u64,

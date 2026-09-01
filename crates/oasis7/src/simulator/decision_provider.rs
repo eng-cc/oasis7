@@ -9,6 +9,7 @@ use serde_json::{Value, json};
 
 use crate::capability_invocation_context::CapabilityInvocationContext;
 
+use super::continuous_agent_harness::ContinuousAgentTurnContextV1;
 use super::{
     Action, ActionId, ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, AgentQuery,
     AgentQueryResult, LlmChatMessageTrace, LlmChatRole, LlmDecisionDiagnostics,
@@ -17,6 +18,8 @@ use super::{
 
 #[path = "decision_provider_capability.rs"]
 mod decision_provider_capability;
+#[path = "decision_provider_cognition.rs"]
+mod decision_provider_cognition;
 #[path = "decision_provider_support.rs"]
 mod decision_provider_support;
 
@@ -441,6 +444,8 @@ pub struct ProviderBackedAgentBehavior<P: DecisionProvider> {
     memory_summary: Option<String>,
     recent_event_summary: VecDeque<String>,
     pending_trace: Option<AgentDecisionTrace>,
+    continuous_turn_context: Option<ContinuousAgentTurnContextV1>,
+    pending_memory_write_intents: Vec<MemoryWriteIntent>,
 }
 
 impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
@@ -469,6 +474,8 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
             memory_summary: None,
             recent_event_summary: VecDeque::new(),
             pending_trace: None,
+            continuous_turn_context: None,
+            pending_memory_write_intents: Vec::new(),
         }
     }
 
@@ -622,50 +629,6 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
         })
     }
 
-    fn build_request(&self, observation: &Observation) -> DecisionRequest {
-        let memory_summary = self.composed_memory_summary();
-        DecisionRequest {
-            observation: ObservationEnvelope {
-                agent_id: self.agent_id.clone(),
-                world_time: observation.time,
-                mode: self.execution_mode,
-                observation_schema_version: self.observation_schema_version.clone(),
-                action_schema_version: self.action_schema_version.clone(),
-                environment_class: self.environment_class.clone(),
-                fallback_reason: self.fallback_reason.clone(),
-                observation: provider_observation_from_runtime_observation(
-                    self.execution_mode,
-                    observation,
-                    memory_summary.as_deref(),
-                    &self
-                        .recent_event_summary
-                        .iter()
-                        .cloned()
-                        .collect::<Vec<_>>(),
-                    &self.action_catalog,
-                ),
-                recent_event_summary: self.recent_event_summary.iter().cloned().collect(),
-                memory_summary: memory_summary.clone(),
-                action_catalog: self.action_catalog.clone(),
-                module_command_catalog: self.module_command_catalog.clone(),
-                timeout_budget_ms: self.timeout_budget_ms,
-            },
-            provider_config_ref: self.provider_config_ref.clone(),
-            agent_profile: self.agent_profile.clone(),
-            fixture_id: self.fixture_id.clone(),
-            replay_id: self.replay_id.clone(),
-            capability_catalog: self
-                .capability_context
-                .as_ref()
-                .map(|context| context.catalog.clone()),
-            capability_invocation_context: self
-                .capability_context
-                .as_ref()
-                .map(|context| context.invocation.clone()),
-            timeout_budget_ms: self.timeout_budget_ms,
-        }
-    }
-
     fn provider_error_to_trace(error: &DecisionProviderError) -> AgentDecisionTrace {
         let mut llm_output = json!({
             "provider_error": {
@@ -812,6 +775,24 @@ fn provider_observation_from_runtime_observation(
     memory_summary: Option<&str>,
     recent_event_summary: &[String],
     action_catalog: &[ActionCatalogEntry],
+) -> ProviderObservation {
+    provider_observation_from_runtime_observation_with_goal(
+        mode,
+        observation,
+        memory_summary,
+        recent_event_summary,
+        action_catalog,
+        None,
+    )
+}
+
+fn provider_observation_from_runtime_observation_with_goal(
+    mode: ProviderExecutionMode,
+    observation: &Observation,
+    _memory_summary: Option<&str>,
+    recent_event_summary: &[String],
+    action_catalog: &[ActionCatalogEntry],
+    goal_summary: Option<&str>,
 ) -> ProviderObservation {
     let mut sorted_visible_locations = observation.visible_locations.clone();
     sorted_visible_locations.sort_by(|left, right| {
@@ -986,7 +967,7 @@ fn provider_observation_from_runtime_observation(
                 .collect(),
         },
         mission_context: ProviderMissionContext {
-            goal_summary: memory_summary
+            goal_summary: goal_summary
                 .map(str::to_string)
                 .unwrap_or_else(|| match mode {
                     ProviderExecutionMode::PlayerParity => {
@@ -1026,6 +1007,7 @@ impl<P: DecisionProvider> AgentBehavior for ProviderBackedAgentBehavior<P> {
     }
 
     fn decide(&mut self, observation: &Observation) -> AgentDecision {
+        self.pending_memory_write_intents.clear();
         let request = self.build_request(observation);
         let started_at = Instant::now();
         let response = match self.provider.decide(&request) {
@@ -1038,6 +1020,7 @@ impl<P: DecisionProvider> AgentBehavior for ProviderBackedAgentBehavior<P> {
                 return AgentDecision::Wait;
             }
         };
+        self.pending_memory_write_intents = response.memory_write_intents.clone();
         let latency_ms = started_at.elapsed().as_millis() as u64;
         let mut provider_error = response
             .provider_error
@@ -1189,5 +1172,13 @@ impl<P: DecisionProvider> AgentBehavior for ProviderBackedAgentBehavior<P> {
 
     fn take_decision_trace(&mut self) -> Option<AgentDecisionTrace> {
         self.pending_trace.take()
+    }
+
+    fn set_continuous_turn_context(&mut self, context: Option<&ContinuousAgentTurnContextV1>) {
+        self.continuous_turn_context = context.cloned();
+    }
+
+    fn take_memory_write_intents(&mut self) -> Vec<MemoryWriteIntent> {
+        std::mem::take(&mut self.pending_memory_write_intents)
     }
 }

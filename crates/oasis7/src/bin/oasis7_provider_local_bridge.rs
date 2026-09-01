@@ -15,7 +15,7 @@ use oasis7::simulator::{
     DecisionRequest, DecisionResponse, FeedbackEnvelope, ProviderAgentChatRequest,
     ProviderAgentChatResponse, ProviderDecision, ProviderDiagnostics, ProviderErrorEnvelope,
     ProviderHealth, ProviderInfo, ProviderTokenUsage, ProviderTraceEnvelope,
-    ProviderTranscriptEntry, provider_agent_chat_log_key,
+    ProviderTranscriptEntry, h_v1, provider_agent_chat_log_key,
 };
 use reqwest::blocking::Client;
 use serde::Deserialize;
@@ -82,7 +82,8 @@ use self::letai_direct::{
 use self::letai_direct::{error_diagnostics_json, invoke_rust_direct_letai};
 use self::options::default_gateway_health_url;
 use self::support::{
-    agent_output_from_json, local_session_id_from_session_key, should_fallback_to_local_agent,
+    agent_output_from_json, legacy_provider_invocation_key, local_session_id_from_session_key,
+    should_fallback_to_local_agent,
 };
 
 #[derive(Debug, Clone)]
@@ -472,7 +473,10 @@ impl ProviderState {
             session_key: session_key.clone(),
             timeout_seconds,
             prompt,
-            idempotency_key: format!("{session_key}-{timeout_seconds}"),
+            // Timeout is a transport budget, not cognition identity.  Keep
+            // the bridge's legacy inner request stable across timeout changes
+            // until callers migrate to the outer V1 context.
+            idempotency_key: legacy_provider_invocation_key(&request),
             chat_request_key: None,
             route_label: route_label.map(ToOwned::to_owned),
         });

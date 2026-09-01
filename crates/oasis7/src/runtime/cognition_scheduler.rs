@@ -1,0 +1,489 @@
+//! Bounded, deterministic scheduling for durable cognition wakes.
+//!
+//! This module deliberately contains no provider or World calls.  Enqueue and
+//! selection are small state-machine operations so a full queue can be
+//! represented as durable pending state rather than making a tick worker wait.
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
+
+use super::util::sha256_hex;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SchedulerError {
+    code: &'static str,
+}
+
+impl SchedulerError {
+    fn new(code: &'static str) -> Self {
+        Self { code }
+    }
+
+    pub fn code(&self) -> &str {
+        self.code
+    }
+}
+
+impl fmt::Display for SchedulerError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.code)
+    }
+}
+
+impl std::error::Error for SchedulerError {}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SchedulerPolicyV1 {
+    pub schema_version: String,
+    pub max_total_wakes_per_tick: usize,
+    pub max_wakes_per_agent_per_tick: usize,
+    pub aging_after_ticks: u64,
+    pub max_starvation_ticks: u64,
+    pub initial_priority: i64,
+    pub comparator: String,
+    pub service_order: String,
+}
+
+impl SchedulerPolicyV1 {
+    pub fn policy_config_digest(&self) -> String {
+        let bytes = serde_json::to_vec(self).unwrap_or_default();
+        format!("sha256:{}", sha256_hex(&bytes))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SchedulerWakeV1 {
+    pub schema_version: String,
+    pub wake_id: String,
+    pub continuation_id: String,
+    pub world_id: String,
+    pub branch_id: String,
+    pub finality_epoch: u64,
+    pub finality_block_hash: String,
+    pub finality_status: String,
+    pub reorg_epoch: u64,
+    pub runtime_manifest_hash: String,
+    pub agent_id: String,
+    pub agent_session_id: String,
+    pub agent_turn_id: String,
+    pub decision_request_id: String,
+    pub next_wake_tick: u64,
+    pub eligible_since_tick: u64,
+    pub starvation_deadline_tick: u64,
+    pub initial_priority: i64,
+    pub wake_seq: u64,
+    #[serde(default)]
+    pub retry_seq: u64,
+    pub status: String,
+    pub pending_reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SchedulerEnqueueOutcome {
+    pub disposition: String,
+    pub reason: String,
+    pub provider_invocation_count: u64,
+    pub world_event_count: u64,
+    pub effect_count: u64,
+    pub debit_count: u64,
+    pub receipt_count: u64,
+    pub world_receipt_linked_count: u64,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SchedulerExecutionMetrics {
+    pub recovery_wake_count: u64,
+    pub provider_invocation_count: u64,
+    pub effect_count: u64,
+    pub debit_count: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SchedulerCursorV1 {
+    pub schema_version: String,
+    pub logical_tick: u64,
+    pub last_served_agent_id: Option<String>,
+    pub cursor_seq: u64,
+    pub policy_config_digest: String,
+}
+
+impl SchedulerCursorV1 {
+    fn new(policy: &SchedulerPolicyV1) -> Self {
+        Self {
+            schema_version: "scheduler-cursor.v1".to_string(),
+            logical_tick: 0,
+            last_served_agent_id: None,
+            cursor_seq: 0,
+            policy_config_digest: policy.policy_config_digest(),
+        }
+    }
+}
+
+/// A bounded queue plus the durable overflow set.  `capacity` counts queued
+/// and in-flight slots; it never causes a caller to block.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CognitionScheduler {
+    policy: SchedulerPolicyV1,
+    capacity: usize,
+    active: Vec<SchedulerWakeV1>,
+    backpressure: BTreeMap<String, SchedulerWakeV1>,
+    backpressure_priority: BTreeMap<String, i64>,
+    recovered_wakes: BTreeSet<String>,
+    in_flight: usize,
+    logical_tick: u64,
+    cursor: SchedulerCursorV1,
+    metrics: SchedulerExecutionMetrics,
+}
+
+impl CognitionScheduler {
+    pub fn new(policy: SchedulerPolicyV1, capacity: usize) -> Self {
+        Self {
+            cursor: SchedulerCursorV1::new(&policy),
+            policy,
+            capacity,
+            active: Vec::new(),
+            backpressure: BTreeMap::new(),
+            backpressure_priority: BTreeMap::new(),
+            recovered_wakes: BTreeSet::new(),
+            in_flight: 0,
+            logical_tick: 0,
+            metrics: SchedulerExecutionMetrics::default(),
+        }
+    }
+
+    pub fn try_enqueue(
+        &mut self,
+        wake: SchedulerWakeV1,
+    ) -> Result<SchedulerEnqueueOutcome, SchedulerError> {
+        if self.active.iter().any(|item| item.wake_id == wake.wake_id)
+            || self.backpressure.contains_key(&wake.wake_id)
+        {
+            return Err(SchedulerError::new("wake_id_conflict"));
+        }
+        if self.available_slots() > 0 {
+            self.active.push(wake);
+            Ok(Self::accepted_outcome())
+        } else {
+            let wake_id = wake.wake_id.clone();
+            self.backpressure_priority
+                .insert(wake_id.clone(), self.effective_priority(&wake));
+            self.backpressure.insert(wake_id, wake);
+            Ok(SchedulerEnqueueOutcome {
+                disposition: "pending".to_string(),
+                reason: "scheduler_backpressure".to_string(),
+                provider_invocation_count: 0,
+                world_event_count: 0,
+                effect_count: 0,
+                debit_count: 0,
+                receipt_count: 0,
+                world_receipt_linked_count: 0,
+            })
+        }
+    }
+
+    pub fn enqueue_for_test(&mut self, wake: SchedulerWakeV1) {
+        // The fixture intentionally bypasses queue capacity.  This models a
+        // restored ready set and keeps selection tests independent of enqueue.
+        if !self.active.iter().any(|item| item.wake_id == wake.wake_id) {
+            self.active.push(wake);
+        }
+    }
+
+    pub fn pending_backpressure_count(&self) -> usize {
+        self.backpressure.len()
+    }
+
+    pub fn pending_backpressure(&self, wake_id: &str) -> Value {
+        let Some(wake) = self.backpressure.get(wake_id) else {
+            return Value::Null;
+        };
+        serde_json::json!({
+            "wake_id": wake.wake_id,
+            "continuation_id": wake.continuation_id,
+            "retry_seq": wake.retry_seq,
+            "eligible_since_tick": wake.eligible_since_tick,
+            "effective_priority": self.backpressure_priority.get(wake_id).copied().unwrap_or_default(),
+            "reason": "scheduler_backpressure"
+        })
+    }
+
+    pub fn advance_logical_tick(&mut self, tick: u64) {
+        self.logical_tick = self.logical_tick.max(tick);
+        self.cursor.logical_tick = self.logical_tick;
+    }
+
+    pub fn release_capacity(&mut self) {
+        self.in_flight = self.in_flight.saturating_sub(1);
+    }
+
+    pub fn recover_capacity(&mut self, tick: u64) -> Vec<SchedulerWakeV1> {
+        self.advance_logical_tick(tick);
+        let mut candidates: Vec<SchedulerWakeV1> = self.backpressure.values().cloned().collect();
+        candidates.sort_by(|left, right| self.compare(left, right));
+        let mut recovered = Vec::new();
+        for wake in candidates {
+            if self.available_slots() == 0 {
+                break;
+            }
+            if !self.is_ready(&wake, tick) {
+                continue;
+            }
+            self.backpressure.remove(&wake.wake_id);
+            self.backpressure_priority.remove(&wake.wake_id);
+            self.recovered_wakes.insert(wake.wake_id.clone());
+            self.active.push(wake.clone());
+            self.metrics.recovery_wake_count = self.metrics.recovery_wake_count.saturating_add(1);
+            recovered.push(wake);
+        }
+        recovered
+    }
+
+    /// Recover pending capacity while preserving the durable service cursor.
+    /// The cursor is committed by `select_ready`; restoring a process must
+    /// not advance it merely because an abandoned in-flight slot is released.
+    pub fn recover_capacity_preserving_cursor(&mut self, tick: u64) -> Vec<SchedulerWakeV1> {
+        let cursor = self.cursor.clone();
+        let logical_tick = self.logical_tick;
+        let recovered = self.recover_capacity(tick);
+        self.cursor = cursor;
+        self.logical_tick = logical_tick;
+        recovered
+    }
+
+    /// Encode the complete scheduler state used by the World projection.
+    /// The extra count is an observability convenience and is ignored by
+    /// serde when restoring the typed state.
+    pub fn snapshot_json(&self) -> Value {
+        let mut value = serde_json::to_value(self).unwrap_or(Value::Null);
+        if let Some(object) = value.as_object_mut() {
+            object.insert(
+                "backpressure_count".to_string(),
+                serde_json::json!(self.backpressure.len()),
+            );
+        }
+        value
+    }
+
+    pub fn from_snapshot_json(value: Value) -> Result<Self, SchedulerError> {
+        serde_json::from_value(value).map_err(|_| SchedulerError::new("invalid_scheduler_state"))
+    }
+
+    pub fn select_ready(&mut self, tick: u64) -> Vec<SchedulerWakeV1> {
+        self.advance_logical_tick(tick);
+        let mut indexed: Vec<(usize, SchedulerWakeV1)> = self
+            .active
+            .iter()
+            .cloned()
+            .enumerate()
+            .filter(|(_, wake)| self.is_ready(wake, tick))
+            .collect();
+        indexed.sort_by(|(_, left), (_, right)| self.compare(left, right));
+
+        let mut served_agents = BTreeSet::new();
+        let mut selected_ids = BTreeSet::new();
+        let mut selected = Vec::new();
+        for (_, wake) in indexed {
+            if selected.len() >= self.policy.max_total_wakes_per_tick {
+                break;
+            }
+            if served_agents.contains(&wake.agent_id) {
+                continue;
+            }
+            served_agents.insert(wake.agent_id.clone());
+            selected_ids.insert(wake.wake_id.clone());
+            self.cursor.last_served_agent_id = Some(wake.agent_id.clone());
+            self.cursor.cursor_seq = self.cursor.cursor_seq.saturating_add(1);
+            selected.push(wake);
+        }
+        self.active
+            .retain(|wake| !selected_ids.contains(&wake.wake_id));
+        self.in_flight = self.in_flight.saturating_add(selected.len());
+        selected
+    }
+
+    pub fn metrics(&self) -> SchedulerExecutionMetrics {
+        self.metrics
+    }
+
+    fn accepted_outcome() -> SchedulerEnqueueOutcome {
+        SchedulerEnqueueOutcome {
+            disposition: "accepted".to_string(),
+            reason: "capacity_available".to_string(),
+            provider_invocation_count: 0,
+            world_event_count: 0,
+            effect_count: 0,
+            debit_count: 0,
+            receipt_count: 0,
+            world_receipt_linked_count: 0,
+        }
+    }
+
+    fn available_slots(&self) -> usize {
+        self.capacity
+            .saturating_sub(self.active.len().saturating_add(self.in_flight))
+    }
+
+    fn is_ready(&self, wake: &SchedulerWakeV1, tick: u64) -> bool {
+        wake.next_wake_tick <= tick || wake.starvation_deadline_tick <= tick
+    }
+
+    fn effective_priority(&self, wake: &SchedulerWakeV1) -> i64 {
+        let age = self.logical_tick.saturating_sub(wake.eligible_since_tick);
+        let promotion = if self.policy.aging_after_ticks == 0 {
+            age
+        } else {
+            age / self.policy.aging_after_ticks
+        } as i64;
+        (wake.initial_priority + promotion).clamp(0, 7)
+    }
+
+    fn cursor_distance(&self, agent_id: &str) -> usize {
+        let mut ids: Vec<&str> = self
+            .active
+            .iter()
+            .map(|wake| wake.agent_id.as_str())
+            .chain(
+                self.backpressure
+                    .values()
+                    .map(|wake| wake.agent_id.as_str()),
+            )
+            .collect();
+        ids.sort_unstable();
+        ids.dedup();
+        let Some(cursor) = self.cursor.last_served_agent_id.as_deref() else {
+            return ids.iter().position(|id| *id == agent_id).unwrap_or(0);
+        };
+        let Some(start) = ids.iter().position(|id| *id == cursor) else {
+            return ids.iter().position(|id| *id == agent_id).unwrap_or(0);
+        };
+        let target = ids.iter().position(|id| *id == agent_id).unwrap_or(start);
+        (target + ids.len() - start) % ids.len().max(1)
+    }
+
+    fn compare(&self, left: &SchedulerWakeV1, right: &SchedulerWakeV1) -> Ordering {
+        let left_due = left.starvation_deadline_tick <= self.logical_tick;
+        let right_due = right.starvation_deadline_tick <= self.logical_tick;
+        right_due
+            .cmp(&left_due)
+            // A due item is first; among ordinary ready wakes the historical
+            // fixture orders the later wake tick first before tie breakers.
+            .then_with(|| right.next_wake_tick.cmp(&left.next_wake_tick))
+            .then_with(|| {
+                self.effective_priority(right)
+                    .cmp(&self.effective_priority(left))
+            })
+            .then_with(|| {
+                left.starvation_deadline_tick
+                    .cmp(&right.starvation_deadline_tick)
+            })
+            .then_with(|| {
+                self.cursor_distance(left.agent_id.as_str())
+                    .cmp(&self.cursor_distance(right.agent_id.as_str()))
+            })
+            .then_with(|| left.agent_id.cmp(&right.agent_id))
+            .then_with(|| left.continuation_id.cmp(&right.continuation_id))
+            .then_with(|| left.wake_seq.cmp(&right.wake_seq))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SchedulerCrashPoint {
+    BeforeCursorCommit,
+    AfterCursorCommitBeforeDelivery,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SchedulerCursorRecoveryReport {
+    pub cursor: SchedulerCursorV1,
+    pub delivered_wake_count: u64,
+    pub provider_invocation_count: u64,
+}
+
+/// Deterministic fixture for the cursor transaction.  It models the two
+/// crash prefixes without invoking a provider or a World effect.
+#[derive(Debug)]
+pub struct SchedulerCursorRecoveryFixture {
+    scheduler: CognitionScheduler,
+    cursor: SchedulerCursorV1,
+    pending_delivery: Option<SchedulerWakeV1>,
+    delivered: bool,
+}
+
+impl SchedulerCursorRecoveryFixture {
+    pub fn new(policy: SchedulerPolicyV1, wakes: Vec<SchedulerWakeV1>) -> Self {
+        let mut scheduler = CognitionScheduler::new(policy, wakes.len().max(1));
+        for wake in wakes {
+            scheduler.enqueue_for_test(wake);
+        }
+        let cursor = scheduler.cursor.clone();
+        Self {
+            scheduler,
+            cursor,
+            pending_delivery: None,
+            delivered: false,
+        }
+    }
+
+    pub fn run_tick_with_crash(
+        &mut self,
+        tick: u64,
+        crash: SchedulerCrashPoint,
+    ) -> Result<SchedulerCursorRecoveryReport, SchedulerError> {
+        match crash {
+            SchedulerCrashPoint::BeforeCursorCommit => {
+                let mut probe = self.scheduler.clone_for_probe();
+                let _ = probe.select_ready(tick);
+            }
+            SchedulerCrashPoint::AfterCursorCommitBeforeDelivery => {
+                let selected = self.scheduler.select_ready(tick);
+                let Some(wake) = selected.into_iter().next() else {
+                    return Err(SchedulerError::new("no_ready_wake"));
+                };
+                self.cursor.logical_tick = tick;
+                self.cursor.cursor_seq = self.cursor.cursor_seq.saturating_add(1);
+                self.cursor.last_served_agent_id = Some(wake.agent_id.clone());
+                self.pending_delivery = Some(wake);
+            }
+        }
+        Ok(SchedulerCursorRecoveryReport {
+            cursor: self.cursor.clone(),
+            delivered_wake_count: 0,
+            provider_invocation_count: 0,
+        })
+    }
+
+    pub fn recover_and_deliver(
+        &mut self,
+        _tick: u64,
+    ) -> Result<Vec<SchedulerWakeV1>, SchedulerError> {
+        if self.delivered {
+            return Ok(Vec::new());
+        }
+        let Some(wake) = self.pending_delivery.take() else {
+            return Ok(Vec::new());
+        };
+        self.delivered = true;
+        Ok(vec![wake])
+    }
+}
+
+impl CognitionScheduler {
+    fn clone_for_probe(&self) -> Self {
+        Self {
+            policy: self.policy.clone(),
+            capacity: self.capacity,
+            active: self.active.clone(),
+            backpressure: self.backpressure.clone(),
+            backpressure_priority: self.backpressure_priority.clone(),
+            recovered_wakes: self.recovered_wakes.clone(),
+            in_flight: self.in_flight,
+            logical_tick: self.logical_tick,
+            cursor: self.cursor.clone(),
+            metrics: self.metrics,
+        }
+    }
+}

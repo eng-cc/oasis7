@@ -7,7 +7,7 @@
 
 ## 1. Executive Summary
 - Problem Statement: `Decision Provider` 标准层已经明确了“外部 provider 可参与 Agent 决策，但不得替代 runtime 权威”的边界；但若要回答“安装在用户机器上的 `Local Provider` 怎么玩这个游戏”，还缺一份面向真实用户安装场景的接入方案，尤其是本地发现、握手、配置、玩家-agent 绑定、决策接口、失败恢复与最小可玩范围。
-- Proposed Solution: 首期采用“`Local Provider` 本地进程 + `localhost HTTP/JSON`”方案。`Local Provider` 在用户机器上以本地服务形式运行，仅监听 `127.0.0.1`；world-simulator 侧通过 `Local ProviderAdapter` 调用其本地 HTTP API，发送结构化 `DecisionRequest`，接收结构化 `DecisionResponse`。运行时仍由本地 runtime/kernel 权威执行动作、校验规则并产出 trace。Launcher / Viewer 仅负责配置、发现与可观测性展示。 在真实用户机缺少原生 world-simulator provider 时，允许通过 `oasis7_provider_local_bridge` 这一 loopback-only 兼容桥，把已安装的 `Local Provider Gateway/CLI` 转译成 `/v1/provider/info`、`/v1/provider/health`、`/v1/world-simulator/decision`、`/v1/world-simulator/feedback` 四个端点，作为 `experimental` 的首期可跑实现。
+- Proposed Solution: 首期采用“`Local Provider` 本地进程 + `localhost HTTP/JSON`”方案。`Local Provider` 在用户机器上以本地服务形式运行，仅监听 `127.0.0.1`；world-simulator 侧通过 `Local ProviderAdapter` 调用其本地 HTTP API，发送 Continuous Harness `ContinuousAgentRequestContextV1` outer wrapper（其中保留既有 `DecisionRequest` inner DTO），接收 `ContinuousAgentResponseContextV1` outer wrapper。运行时仍由本地 runtime/kernel 权威执行动作、校验规则并产出 trace。Launcher / Viewer 仅负责配置、发现与可观测性展示。 在真实用户机缺少原生 world-simulator provider 时，允许通过 `oasis7_provider_local_bridge` 这一 loopback-only 兼容桥，把已安装的 `Local Provider Gateway/CLI` 转译成 `/v1/provider/info`、`/v1/provider/health`、`/v1/world-simulator/decision`、`/v1/world-simulator/feedback` 四个端点，作为 `experimental` 的首期可跑实现。
 - Success Criteria:
   - SC-1: 用户在本机安装并启动 `Local Provider` 后，可在 launcher 中发现并选择 `Local Provider(Local HTTP)` 作为 agent provider。
   - SC-2: 首期 `test_tier_required` 依赖 `localhost HTTP/JSON` 完成单一低频 NPC 的 `wait` / `wait_ticks` / `move_agent` / `speak_to_nearby` / `inspect_target` / `simple_interact` 决策闭环；其中后三者先以 lightweight event 语义落地，并继续受 parity 门禁约束。
@@ -34,7 +34,7 @@
   2. Flow-OC-LOCAL-002（玩家绑定与启动）:
      `选择 provider -> 绑定 player_id / agent_id 或 NPC profile -> 启动游戏 -> runtime 为目标 agent 使用 Local ProviderAdapter`。
   3. Flow-OC-LOCAL-003（决策闭环）:
-     `ObservationEnvelope -> POST /v1/world-simulator/decision -> DecisionResponse -> runtime validate/execute -> feedback/trace`。
+     `ObservationEnvelope -> ContinuousAgentRequestContextV1 -> POST /v1/world-simulator/decision -> ContinuousAgentResponseContextV1 -> runtime validate/execute -> target FeedbackEnvelope/trace`；旧 DTO 仅可在显式 `compatibility_lane=legacy_v1` 使用。
   4. Flow-OC-LOCAL-004（失败恢复）:
      `provider offline / version mismatch / timeout / invalid action -> launcher/viewer 告警 -> fallback 内置 provider 或禁用 provider`。
   5. Flow-OC-LOCAL-005（用户可观测）:
@@ -44,9 +44,9 @@
 | --- | --- | --- | --- | --- | --- |
 | Provider 发现 | `provider_id/version/capabilities/health` | launcher 自动探测或手动刷新本机 provider | `offline -> discovered -> ready` | 仅探测 allowlist 端口/路径 | 仅本机回环地址 |
 | Provider 选择 | `agent_decision_source=provider_backed`、`agent_provider_backend=provider_local_bridge`、`agent_provider_contract=worldsim_provider_v1`、`agent_provider_transport=loopback_http`、`compat_aliases=[agent_direct_connect,provider_loopback_http]` | 用户在设置中心选择本地 Local Provider | `builtin_llm -> provider_backed` | UI/文档使用结构化 provider 维度；旧接入方式/实现名只保留兼容说明 | 仅本地用户可配 |
-| 决策请求 | `DecisionRequest` | runtime 对目标 agent 发起一次决策请求 | `observed -> requesting -> responded` | 每 tick 每 agent 至多一请求 | 仅本地 runtime 发起 |
-| 结构化决策 | `decision/action_ref/args/diagnostics` | provider 返回 wait/act | `responded -> validated -> executed/rejected` | 动作必须先过 schema | runtime 权威裁定 |
-| 状态反馈 | `FeedbackEnvelope` | runtime 把执行结果回写 provider | `executed/rejected -> feedback_sent` | 顺序跟随 action_id | 仅对应会话可写 |
+| 决策请求 | `ContinuousAgentRequestContextV1` outer（inner `DecisionRequest`） | runtime 对目标 agent 发起一次带 cognition identity 的决策请求 | `observed -> requesting -> responded` | 每 tick 每 agent 至多一请求 | 仅本地 runtime 发起 |
+| 结构化决策 | inner `decision/module_command?/provider_error?/diagnostics/trace_payload/memory_write_intents` | provider 可返回 `wait/wait_ticks/act/query/module_command/module_command_response`；outer wrapper 保留 variant | `responded -> validated -> executed/rejected` | candidate 必须先过 schema、capability 与 Runtime validation | Runtime 权威裁定 |
+| 状态反馈 | target `FeedbackEnvelope` outer contract | runtime 把执行结果按 session/turn/request/receipt correlation 回写 provider | `executed/rejected -> feedback_sent` | 顺序跟随 action_id/feedback_seq | 仅对应会话可写 |
 | 故障回退 | `error_code/error/detail/retryable` | launcher/viewer 显示错误并允许回退 | `ready -> degraded -> fallback` | retryable 错误优先重试一次 | 不得自动切远端 |
 - Acceptance Criteria:
   - AC-1: 文档定义 `Local Provider(Local HTTP)` 的用户安装与接入路径，覆盖发现、选择、绑定、启动、调试与恢复。
@@ -92,16 +92,18 @@
   - `GET /v1/provider/health`
     - 返回 `ok/status/uptime_ms/last_error/queue_depth`。
   - `POST /v1/world-simulator/decision`
-    - 请求体：`DecisionRequest`。
-    - 响应体：`DecisionResponse`。
+    - target 请求体：`ContinuousAgentRequestContextV1` outer wrapper（inner `DecisionRequest` 位于 `base_decision_request`）。
+    - target 响应体：`ContinuousAgentResponseContextV1` outer wrapper（inner `DecisionResponse` 位于 `base_decision_response`）。
+    - 只有显式 `compatibility_lane=legacy_v1` 才可发送/接收没有 cognition outer proof 的旧 `DecisionRequest`/`DecisionResponse` DTO，并记录 `legacy_no_cognition_proof`；缺省 lane 不得回退旧 body。
   - `POST /v1/world-simulator/feedback`
-    - 请求体：`FeedbackEnvelope`。
+    - target 请求体：Harness target `FeedbackEnvelope` outer contract（包含 session/turn/request/digest/receipt correlation）。
+    - 只有显式 `compatibility_lane=legacy_v1` 才可发送旧 `FeedbackEnvelope` DTO，并按 field-level mapping 记录 `legacy_no_cognition_proof`；旧 DTO 不得关闭 target turn 或进入 target memory/continuation。
     - 响应体：`ok/error_code/error`。
 - Discovery & Configuration:
   - 默认探测地址：`127.0.0.1:5841`（可配置）。
   - launcher 设置项：
     - `agent_decision_source`：`builtin_llm` / `provider_backed`
-    - `agent_provider_backend`：当前固定为 `provider`
+    - `agent_provider_backend`：target loopback 默认使用 `provider_local_bridge`；required mock lane 可使用 `provider_local_mock`。
     - `agent_provider_contract`：当前固定为 `worldsim_provider_v1`
     - `agent_provider_transport`：当前固定为 `loopback_http`
     - `agent_provider_mode`：仅兼容读取 `agent_direct_connect` / `provider_loopback_http`
@@ -110,25 +112,28 @@
     - `provider_auto_discover`
     - `agent_provider_connect_timeout_ms`
     - `agent_provider_profile`
-  - profile 约定：首期 `P0` / parity / experimental 试点默认使用 `oasis7_p0_low_freq_npc`；旧别名 `oasis7_p0_low_freq_npc` 已移除。若 provider 不识别当前默认 profile，必须返回结构化 `unsupported_agent_profile`，禁止静默改用通用玩法。
+  - profile 约定：首期 `P0` / parity / experimental 试点默认使用 `oasis7_p0_low_freq_npc`；旧别名 `legacy_p0_low_freq_npc` 已移除。若 provider 不识别当前默认 profile，必须返回结构化 `unsupported_agent_profile`，禁止静默改用通用玩法。
   - 发现逻辑：优先读取显式配置；若未配置且开启 auto-discover，则探测默认地址。
   - 产品主链路：`oasis7_client_launcher -> oasis7_game_launcher -> oasis7_viewer_live` 现已透传 `agent_decision_source + agent_provider_* + agent_execution_lane`，并通过子进程环境把 Local Provider 设置送入 runtime live sidecar；`agent_provider_mode/agent_provider_*` 仅保留兼容透传。
-- DecisionRequest Shape:
-  - 顶层字段：`request_id/agent_id/world_time/provider_session_id?/provider_config_ref?/agent_profile?/timeout_ms`
-  - `observation`: 当前可见世界状态摘要、附近实体、最近事件、目标与资源摘要。
-  - `memory`: 短期记忆摘要、长期记忆命中结果、最近失败动作。
-  - `action_catalog`: 动作白名单、参数 schema、枚举值范围、cooldown / cost hint。
-  - `player_context`: `player_id`、是否允许外部 provider 接管、绑定关系版本。
-  - `trace_context`: 是否要求 provider 返回 transcript/tool summary/diagnostics。
-  - `agent_profile`: provider-side 玩法 profile / skill 标识；首期 required 路径至少支持 `oasis7_p0_low_freq_npc`，旧别名 `oasis7_p0_low_freq_npc` 必须返回 `unsupported_agent_profile`。
-- DecisionResponse Shape:
-  - `ok`
-  - `decision`: `wait` / `wait_ticks` / `act`
-  - `action_ref`：仅当 `decision=act` 时出现
-  - `args`
-  - `diagnostics`: `provider/model/latency_ms/retry_count`
-  - `trace_payload`: `messages/tool_calls/tool_results/summary/error`
-  - `error_code/error/retryable`
+- DecisionRequest Shape（当前 Rust inner DTO；target endpoint 必须由 outer wrapper 携带）:
+  - 顶层字段固定为 `observation/provider_config_ref?/agent_profile?/fixture_id?/replay_id?/
+    capability_catalog?/capability_invocation_context?/timeout_budget_ms`；不得使用旧 HTTP
+    projection 的 `request_id/agent_id/world_time/provider_session_id/timeout_ms` 作为当前 inner DTO。
+  - `observation` 自身携带当前可见世界状态、catalog/module command catalog、目标与资源摘要；
+    capability 两字段继续由 trusted host 生成，provider 不得扩权。
+  - `agent_profile`: provider-side 玩法 profile / skill 标识；首期 required 路径至少支持 `oasis7_p0_low_freq_npc`，旧别名 `legacy_p0_low_freq_npc` 必须返回 `unsupported_agent_profile`。
+  - Continuous Harness target 请求使用显式 `context_discriminator/context_version` outer wrapper；仅 `compatibility_lane=legacy_v1` 可发送没有 cognition outer proof 的旧 body，并必须记录 `legacy_no_cognition_proof`。
+- DecisionResponse Shape（当前 Rust inner DTO；target endpoint 必须由 outer wrapper 携带）:
+  - 顶层字段固定为 `decision/module_command?/provider_error?/diagnostics/trace_payload/
+    memory_write_intents`；不得把旧 HTTP projection 的 `ok/action_ref/args/error_code/error/
+    retryable` 当作当前 inner DTO 字段。
+  - `decision`: tagged `wait` / `wait_ticks` / `act` / `query` / `module_command` /
+    `module_command_response`；
+    target outer wrapper 保留完整 variant discriminator。
+  - `module_command?`：typed module candidate extension；必须经过 host schema encoding 与 Runtime
+    validation；不得覆盖 `decision=module_command_response` 的完整 `AgentCommandResponse` variant。
+  - target `memory_write_intents` 投影为 `MemoryWriteIntentV1[]`；当前 Rust
+    `MemoryWriteIntent[]` 只通过显式 `compatibility_lane=legacy_v1` 映射。
 - Phase-1 Action Whitelist:
   - `wait`
   - `wait_ticks`
@@ -150,7 +155,7 @@
   - `repo_bootstrap_unavailable`: `oasis7 doctor` 必须把 bundle-first no-`cargo` 可玩性（bundle + bridge 是否就绪）与 repo-backed bridge/bootstrap 能力（repo root + `cargo`）分开汇报；缺少 `cargo` 或 repo root 时，若 bundle-first reuse path 仍可用，不得把其伪装成通用阻断。`play` 若落到 repo-backed bridge/bootstrap 依赖，必须输出可执行指引：安装 `cargo` / 提供 `--repo-root`，或改走 `--reuse-bridge --skip-agent-setup`。
   - `play_wrapper_orphan_subtree`: `run-local-letai-game-test.sh`、`run-producer-playtest.sh` 或 `worktree-harness.sh` 被中断/退出时，必须尽最大努力终止其启动的 launcher 子树；不能出现 wrapper 已退但 `oasis7_game_launcher` / `oasis7_chain_runtime` / `oasis7_viewer_live` 继续常驻并占端口的假停止状态。
   - `bundle_download_observability_gap`: `oasis7` 的 bundle-first 下载辅助必须输出可见阶段日志（至少覆盖 asset download / checksum / extract / bundle ready）；当 stderr 非 TTY 且下载耗时较长时，必须持续输出周期性 heartbeat，避免首轮下载被误判为卡死。
-  - `bridge_model_output_invalid`: 兼容桥若拿到非 JSON、缺字段或超出 phase-1 白名单的输出，必须在 provider 侧记录结构化 diagnostics/trace；若当前 profile/fixture 已明确给出低风险可达动作（如 `P0-001` 巡游移动），允许通过 profile guardrail 把无效输出重路由到最近可达的合法动作，否则才降级为 `Wait`。
+  - `bridge_model_output_invalid`: 兼容桥若拿到非 JSON、缺字段或超出 phase-1 白名单的输出，必须在 provider 侧记录结构化 diagnostics/trace 并降级为 `Wait`。仅当显式声明 `compatibility_lane=legacy_heuristic_v1` 且 fixture/profile 明确允许低风险动作时，才可记录 `legacy_heuristic_used` 后重路由到合法动作；该结果不得作为 target/proven parity 或自动 memory/continuation 证据。
   - `session_cross_talk`: 兼容桥必须使用 `provider_config_ref + agent_profile + agent_id` 派生 Local Provider session scope，防止不同 benchmark run / runtime live 进程复用同一 session 造成旧世界状态串线。
 - Non-Functional Requirements:
   - NFR-1: 本地 HTTP 仅绑定 `127.0.0.1`，默认不使用 `0.0.0.0`。

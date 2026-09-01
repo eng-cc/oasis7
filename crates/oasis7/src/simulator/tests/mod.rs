@@ -49,6 +49,13 @@ fn seed_owner_resource(
         WorldKernel::from_snapshot(snapshot, journal).expect("rebuild kernel from seeded snapshot");
 }
 
+mod agent_cognition_continuation;
+mod agent_cognition_goal_snapshot;
+mod agent_cognition_identity;
+mod agent_cognition_live_actor;
+mod agent_cognition_live_harness;
+mod agent_cognition_live_pilot_parity;
+mod agent_cognition_memory;
 mod asteroid_fragment;
 mod basics;
 mod boundary_extremes;

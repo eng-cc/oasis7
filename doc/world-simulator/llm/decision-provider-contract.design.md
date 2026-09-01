@@ -2,6 +2,8 @@
 
 - 对应需求文档: `doc/world-simulator/llm/decision-provider-contract.prd.md`
 - 专题入口与权威边界: `doc/world-simulator/llm/README.md`
+- 连续认知上层设计: `doc/world-simulator/llm/continuous-agent-harness.design.md`
+- 异步调度、MVCC 与恢复设计: `doc/world-runtime/runtime/agent-cognition-lifecycle.design.md`
 
 ## 1. 设计定位
 定义 world-simulator 中“世界内 Agent 契约”与“具体外部 agent provider”之间的标准层，使 `Local Provider` 之类的外部框架可通过 adapter 参与模拟，但不侵入 runtime 权威、规则执行与回放边界。
@@ -72,6 +74,33 @@ The current explicit `with_capability_context` constructor path is useful for fi
 host-loop experiments, but it is not the per-turn generator and must not be described as
 production auto-wiring.
 
+### 2.2 Continuous Harness compatibility
+
+The legacy `DecisionRequest/DecisionResponse/FeedbackEnvelope` DTOs are additive inner payloads,
+not a replacement for the Continuous Harness outer context. The target tagged
+`DecisionResponse.decision` variants include `wait`, `wait_ticks`, `act`, `query`,
+`module_command`, and `module_command_response`; Query is read-only against the frozen snapshot,
+while module responses must pass host schema/context/nonce validation plus Runtime validation.
+`DecisionResponse.module_command` is a candidate typed module intent and must pass host schema encoding plus
+like `action_ref`; a provider tool call is never committed execution. `FeedbackEnvelope` v1 maps
+`action_id -> candidate_action_id`; `success=true` requires a committed Runtime receipt, while
+`success=false` requires an explicit Runtime disposition or becomes
+`legacy_feedback_ambiguous`. Missing session/turn/request/digest/receipt correlation is
+`legacy_no_cognition_proof` and cannot enter the production async lane.
+
+The request digest is computed from canonical V1 outer-context bytes excluding the output
+`request_digest` field and transport-only `transport_attempt`, under
+`oasis7.cognition.request.v1`; provider invocation uses the shared domain-separated derivation.
+`FinalityBindingV1` and world binding fields follow the paired Runtime shape and use the shared
+`H_v1` registry. The default target lane is strict. Legacy scope `short_term` may map
+to `turn_private` only with explicit `compatibility_lane=legacy_v1` and
+`memory_scope_alias_used`; heuristic action fallback requires
+`compatibility_lane=legacy_heuristic_v1` plus `legacy_heuristic_used` and is excluded from target
+parity/proven evidence and automatic memory/continuation semantics.
+P0 memory writes allow only `turn_private | session_private`; the reserved
+`agent_private_long_term` enum value is disabled by default and deferred to P2/independent memory
+authority.
+
 ## 3. 关键接口 / 入口
 - `AgentBehavior`：`crates/oasis7/src/simulator/agent.rs`
 - `AgentDecisionTrace`：`crates/oasis7/src/simulator/agent.rs`
@@ -85,7 +114,18 @@ production auto-wiring.
 - 所有 world action 必须先经过本地 action schema 白名单，再进入 runtime 校验。
 - provider trace 需要可脱敏、可裁剪、可映射；不得把外部协议泄露为 viewer 唯一调试口径。
 - trace 必须有界并脱敏，同时保留 provider latency、token/cost、repair diagnostics 与 action/result 关联。
+- target trace bounds：每 turn 最多 64 条 transcript、64 条 tool trace；单条分别最多 2 KiB、1 KiB；input/output summary 各最多 1 KiB；upstream trace 最多 4 KiB；canonical trace 总计最多 32 KiB。超限不得静默截断：非-authority diagnostics 以 `trace_payload_too_large` 丢弃，authority-bearing overflow fail closed；credential/token/authorization/private-key/path 统一替换为 `<redacted>`。
 - memory 的权威副本保留在本地 world-simulator；外部 memory 仅可作为 provider 内部缓存或检索辅助。
+- Empty memory retrieval uses an explicit schema-defined snapshot (`revision=0`, empty entries,
+  explicit scope and canonical digest), never omission/null/empty-string; it does not block a
+  decision, while writes still require the Harness policy and committed Runtime outcome gate.
+- Target `MemoryWriteIntentPolicyV1` encodes optional `summary` with explicit `present=false` when
+  omitted; a present summary must be non-empty after NFC/trim. The legacy inner DTO must carry a
+  non-empty summary string. Tags may be an empty list (omitted tags have the explicit canonical
+  empty-list encoding), but empty tag elements are rejected.
+- Target `DecisionResponse.memory_write_intents` carries `MemoryWriteIntentV1` (`schema_version`,
+  `scope`, optional `summary`, and `tags`); the existing `MemoryWriteIntent` DTO remains unchanged
+  and is accepted only through explicit `compatibility_lane=legacy_v1` mapping.
 - `Local Provider` PoC 只允许在低频、低破坏性 agent 类型上试点；高频强一致 actor 不在首轮范围。
 - required 测试必须可离线执行，因此标准层必须先支持 `MockProvider`，不能以外部联网能力作为主验证前提。
 

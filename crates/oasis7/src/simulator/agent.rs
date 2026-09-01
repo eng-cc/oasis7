@@ -6,6 +6,8 @@ use std::collections::BTreeMap;
 
 use oasis7_wasm_abi::AgentCommandResponse;
 
+use super::continuous_agent_harness::ContinuousAgentTurnContextV1;
+use super::decision_provider::MemoryWriteIntent;
 use super::kernel::{
     MicroDepotActionKind, MicroDepotInstallQuote, MicroDepotPressureClass, MicroDepotQuotePreview,
     Observation, RejectReason, WorldEvent, WorldEventKind,
@@ -58,6 +60,18 @@ pub trait AgentBehavior {
     /// (e.g. LLM prompt/completion I/O).
     fn take_decision_trace(&mut self) -> Option<AgentDecisionTrace> {
         None
+    }
+
+    /// Install the host-owned cognition projection before a turn executes.
+    /// Legacy behaviors ignore it; continuous Builtin/ProviderBacked
+    /// behaviors consume the same typed context.
+    fn set_continuous_turn_context(&mut self, _context: Option<&ContinuousAgentTurnContextV1>) {}
+
+    /// Return provider memory candidates produced by the latest decision.
+    /// Candidates remain non-authoritative until Runtime feedback commits the
+    /// matching receipt.
+    fn take_memory_write_intents(&mut self) -> Vec<MemoryWriteIntent> {
+        Vec::new()
     }
 }
 

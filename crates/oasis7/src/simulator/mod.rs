@@ -13,7 +13,13 @@
 mod agent;
 mod agent_intent_summary;
 mod asteroid_fragment;
+#[cfg(not(target_arch = "wasm32"))]
+mod async_agent_pilot;
+#[cfg(not(target_arch = "wasm32"))]
+mod async_agent_runner;
 mod chunking;
+mod cognition_policy;
+mod continuous_agent_harness;
 mod decision_provider;
 mod frag_spawn;
 mod fragment_physics;
@@ -56,9 +62,29 @@ pub use agent_intent_summary::{
     AgentIntentSummaryV1, canonical_agent_intent_summary,
 };
 pub use asteroid_fragment::generate_fragments;
+#[cfg(not(target_arch = "wasm32"))]
+pub use async_agent_runner::{
+    AsyncAgentRunner, AsyncAgentRunnerError, AsyncAgentTurnOutcome, AsyncTurnFeedback, AsyncTurnId,
+    AsyncTurnLifecycle, AsyncWorldEffect, AsyncWorldProgress,
+};
 pub use chunking::{
     CHUNK_SIZE_X_CM, CHUNK_SIZE_Y_CM, CHUNK_SIZE_Z_CM, ChunkBounds, ChunkCoord, chunk_bounds,
     chunk_coord_of, chunk_coords, chunk_grid_dims, chunk_seed,
+};
+pub use cognition_policy::{
+    ContinuationBudgetV1, ContinuationHandle, ContinuationHarness, ContinuationInvalidationReason,
+    ContinuationProjectionV1, ContinuationProposalV1, GoalSnapshotInputV1, GoalSnapshotProjector,
+    GoalSnapshotV1, MemoryContextEntryV1, MemoryContextSnapshotV1, MemoryWriteIntentPolicyV1,
+    MemoryWritePolicyContextV1, MemoryWritePolicyOutcome, MemoryWriteStore,
+    NormalizedMemoryWriteIntentV1, RuntimeContinuationStatusV1, WakeConditionSubjectV1,
+    WakeConditionV1,
+};
+pub use continuous_agent_harness::{
+    AgentCognitionStore, BudgetContractV1, COGNITION_PROVIDER_INVOCATION_DOMAIN,
+    COGNITION_REQUEST_DIGEST_DOMAIN, CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR,
+    CONTINUOUS_AGENT_CONTEXT_VERSION, CognitionError, ContinuousAgentRequestContextV1,
+    ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1, Digest32, FeedbackEnvelopeV1,
+    FinalityBindingV1, MemoryWriteIntentV1, RuntimeBindingV1, h_v1,
 };
 pub use decision_provider::{
     ActionCatalogEntry, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,

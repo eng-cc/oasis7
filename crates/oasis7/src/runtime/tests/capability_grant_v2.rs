@@ -1,8 +1,5 @@
-//! RED/GREEN contract for the trusted module-command authorization lane.
-//!
-//! These tests exercise the runtime boundary, not the legacy `CapabilityGrant`
-//! effect map. Provider responses are candidates; the executor re-checks live
-//! module, catalog, grant, proof, identity and nonce state before the sandbox.
+//! Runtime contract for the trusted module-command authorization lane; provider
+//! responses remain candidates until all live authority checks pass.
 use super::super::*;
 use super::pos;
 use ed25519_dalek::{Signer, SigningKey};
@@ -302,6 +299,9 @@ pub(super) fn prepared_catalog(
             .last()
             .map(|event| event.id)
             .unwrap_or(0);
+    }
+    if catalog.logical_tick == 10 {
+        catalog.logical_tick = world.state().time;
     }
     if catalog.module_registry_hash == "registry-hash-1" {
         catalog.module_registry_hash =

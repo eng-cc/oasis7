@@ -15,6 +15,11 @@ mod blob_store;
 mod builtin_wasm_identity_manifest;
 mod builtin_wasm_materializer;
 mod capability_authorization;
+mod cognition;
+mod cognition_recovery;
+mod cognition_retention;
+mod cognition_scheduler;
+mod cognition_wake;
 mod consensus;
 mod effect;
 mod error;
@@ -95,6 +100,36 @@ pub use consensus::{
     RuntimeCommittedTickContext, TICK_BLOCK_HEADER_SCHEMA_V1, TICK_BLOCK_HEADER_SCHEMA_V2,
     TickBlock, TickBlockHeader, TickCertificate, TickConsensusDriftReport, TickConsensusRecord,
     TickConsensusRejectionAuditEvent, TickConsensusSubmissionRole, TickExecutionDigest,
+};
+
+// Agent cognition admission boundary
+pub use cognition::{
+    AGENT_DECISION_ENVELOPE_V1_SCHEMA, AgentCognitionDisposition, AgentCognitionMailbox,
+    AgentDecisionEnvelopeV1, CognitionValidationError, MvccValidator, PreconditionSubjectV1,
+    PreconditionV1,
+};
+
+// Durable cognition commit/recovery boundary
+pub use cognition_recovery::{
+    CognitionCrashPrefix, CognitionReceiptViewV1, CognitionRecovery, CognitionRecoveryError,
+    CognitionRecoveryFixture, CognitionRecoveryProbe, CognitionRecoveryReport,
+    CognitionResponseRecordV1, CognitionSnapshotV1, WorldCommitRecordV1, WorldRootViewV1,
+};
+
+// Durable cognition scheduler, wake and continuation projections
+pub use cognition_retention::{
+    CognitionRetentionStore, RetentionError, RetentionExecutionProbe, RetentionGcReport,
+    RetentionRecordV1, RetentionReplayRequestV1, RetentionReplayResult,
+};
+pub use cognition_scheduler::{
+    CognitionScheduler, SchedulerCrashPoint, SchedulerCursorRecoveryFixture,
+    SchedulerCursorRecoveryReport, SchedulerCursorV1, SchedulerEnqueueOutcome, SchedulerError,
+    SchedulerExecutionMetrics, SchedulerPolicyV1, SchedulerWakeV1,
+};
+pub use cognition_wake::{
+    AgentContinuation, ContinuationBudgetV1, ContinuationReorgReport, ContinuationStatusV1,
+    ContinuationTransition, WakeConditionError, WakeConditionV1, WakeConditionValidator,
+    WakeEvaluation, WakeEvaluationContext,
 };
 
 // Events

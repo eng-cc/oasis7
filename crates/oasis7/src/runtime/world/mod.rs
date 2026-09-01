@@ -4,6 +4,7 @@ mod actions;
 mod agent_claims;
 mod agent_intent;
 mod agent_intent_terminal;
+pub(crate) use agent_intent::derive_agent_chat_request_digest;
 pub use agent_intent::{AgentIntentProviderFailureDisposition, AgentIntentRecordOutcome};
 mod audit;
 mod base_layer;
@@ -16,6 +17,9 @@ mod capability_authorization_admin;
 mod capability_authorization_events;
 mod capability_authorization_state;
 mod capability_authorization_validation;
+mod cognition_command;
+mod cognition_orchestration;
+mod cognition_persistence;
 mod economy;
 mod effects;
 mod event_processing;
@@ -79,6 +83,7 @@ use super::capability_authorization::{
     CapabilityBudgetAccount, CapabilityEffectReceiptLink, CapabilityInvocationContext,
     CapabilityRevocationState,
 };
+use super::cognition_recovery::default_cognition_persistence_projection;
 use super::consensus::{TickConsensusRecord, TickConsensusRejectionAuditEvent};
 use super::effect::{CapabilityGrant, EffectIntent};
 use super::error::WorldError;
@@ -275,6 +280,12 @@ fn default_allow_runtime_source_compile() -> bool {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct World {
     manifest: Manifest,
+    /// Additive durable cognition state.  Kept as JSON at the World boundary
+    /// so old snapshots and forward-compatible scheduler/continuation
+    /// projections survive without coupling the core world schema to the
+    /// provider wire format.
+    #[serde(default = "super::cognition_recovery::default_cognition_persistence_projection")]
+    cognition: JsonValue,
     module_registry: ModuleRegistry,
     module_artifacts: BTreeSet<String>,
     #[serde(skip)]
@@ -435,6 +446,7 @@ impl World {
         }
         let mut world = Self {
             manifest: Manifest::default(),
+            cognition: default_cognition_persistence_projection(),
             module_registry: ModuleRegistry::default(),
             module_artifacts: BTreeSet::new(),
             module_artifact_bytes: BTreeMap::new(),
@@ -547,6 +559,13 @@ impl World {
 
     pub fn capability_revocation_state(&self) -> &CapabilityRevocationState {
         &self.capability_revocation_state
+    }
+
+    /// The chain-side world identity is the runtime's only persisted world
+    /// binding.  Cognition admission uses it when the manifest is bound;
+    /// `unbound` is retained for the explicitly legacy/bootstrap world.
+    pub fn chain_resource_manifest(&self) -> &ChainResourceManifest {
+        &self.chain_resource_manifest
     }
 
     pub fn capability_nonce_records(

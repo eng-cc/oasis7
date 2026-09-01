@@ -54,6 +54,19 @@ fn letai_env_guard() -> MutexGuard<'static, ()> {
 }
 
 #[test]
+fn decision_identity_uses_the_shared_v1_domain_hash() {
+    let digest = oasis7::simulator::h_v1("oasis7.cognition.request.v1", b"bridge-fixture");
+    assert_eq!(
+        digest,
+        oasis7::simulator::h_v1("oasis7.cognition.request.v1", b"bridge-fixture")
+    );
+    assert_ne!(
+        digest,
+        oasis7::simulator::h_v1("oasis7.cognition.provider-invocation.v1", b"bridge-fixture")
+    );
+}
+
+#[test]
 fn parse_model_decision_accepts_code_fence_and_maps_move_agent() {
     let request = sample_request();
     let raw = "```json\n{\"decision\":\"act\",\"action_ref\":\"move_agent\",\"args\":{\"to\":\"loc-2\"}}\n```";

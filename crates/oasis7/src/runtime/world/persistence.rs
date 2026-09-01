@@ -685,7 +685,6 @@ impl World {
     // ---------------------------------------------------------------------
     // Persistence
     // ---------------------------------------------------------------------
-
     pub fn snapshot(&self) -> Snapshot {
         let manifest_hash = super::super::util::hash_json(&self.manifest).unwrap_or_default();
         let mut snapshot = self.snapshot_with_chain_resource_context(
@@ -709,7 +708,6 @@ impl World {
         }
         snapshot
     }
-
     pub fn snapshot_with_chain_resource_context(
         &self,
         chain_resource_context: super::super::ChainResourceDerivationContext<'_>,
@@ -738,6 +736,7 @@ impl World {
         Snapshot {
             snapshot_catalog: self.snapshot_catalog.clone(),
             manifest: self.manifest.clone(),
+            cognition: self.cognition.clone(),
             chain_resource_manifest,
             latest_chain_resource_delta,
             module_registry: self.module_registry.clone(),
@@ -1034,6 +1033,7 @@ impl World {
         world.rollback_nonce_outcomes = snapshot.rollback_nonce_outcomes;
         world.journal = journal;
         world.manifest = snapshot.manifest;
+        world.cognition = snapshot.cognition;
         world.module_registry = snapshot.module_registry;
         world.module_artifacts = snapshot.module_artifacts;
         world.module_artifact_bytes = BTreeMap::new();

@@ -9,6 +9,7 @@ use super::capability_authorization::{
     CapabilityBudgetAccount, CapabilityEffectReceiptLink, CapabilityInvocationContext,
     CapabilityRevocationState,
 };
+use super::cognition_recovery::default_cognition_persistence_projection;
 use super::consensus::{TickConsensusRecord, TickConsensusRejectionAuditEvent};
 use super::effect::{CapabilityGrant, EffectIntent};
 use super::error::WorldError;
@@ -71,6 +72,11 @@ impl Default for SnapshotCatalog {
 pub struct Snapshot {
     pub snapshot_catalog: SnapshotCatalog,
     pub manifest: Manifest,
+    /// Additive durable cognition projection.  `default` keeps snapshots
+    /// written before the cognition protocol readable while making the
+    /// compatibility state explicit on the next save.
+    #[serde(default = "default_cognition_persistence_projection")]
+    pub cognition: serde_json::Value,
     #[serde(default)]
     pub chain_resource_manifest: ChainResourceManifest,
     #[serde(default)]
