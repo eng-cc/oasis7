@@ -769,9 +769,12 @@ PY
 # Serialize up/down transitions before they touch state, process records, or
 # port reservations.  The symlink target is the owner PID plus its launch
 # identity, allowing a later invocation to recover a lock left by a crashed
-# process without trusting a reused PID.  The lifecycle lock is acquired
-# before the per-harness port lock; port helpers retain their local-then-shared
-# registry lock order.
+# process without trusting a reused PID.  Stale-lock recovery claims a second
+# symlink before removing the lock; the claim serializes recovery and prevents
+# one recoverer from unlinking a lock that another recoverer has acquired.  An
+# unavailable identity is never treated as stale.  The lifecycle lock is
+# acquired before the per-harness port lock; port helpers retain their
+# local-then-shared registry lock order.
 WH_LIFECYCLE_LOCK_PATH=""
 WH_LIFECYCLE_LOCK_RECORD=""
 wh_lifecycle_lock_acquire() {
@@ -779,42 +782,99 @@ wh_lifecycle_lock_acquire() {
   [[ -n "$harness_root" ]] || return 2
   mkdir -p "$harness_root"
   local lock_path="$harness_root/.lifecycle.lock"
+  local recovery_path="$lock_path.recovery"
   local owner_identity
   owner_identity=$(wh_process_identity "$$") || {
     echo "error: unable to identify lifecycle lock owner $$" >&2
     return 1
   }
   local owner_record="$$:$owner_identity"
+  local lock_timeout_ms=${OASIS7_HARNESS_LIFECYCLE_LOCK_TIMEOUT_MS:-120000}
+  [[ "$lock_timeout_ms" =~ ^[0-9]+$ ]] || {
+    echo "error: invalid lifecycle lock timeout: $lock_timeout_ms" >&2
+    return 2
+  }
   local waited_ms=0 current_record current_pid current_identity observed_identity
+  local recovery_record
 
-  while ! ln -s "$owner_record" "$lock_path" 2>/dev/null; do
+  while true; do
+    # A recovery claim is deliberately fail-closed.  If its owner is killed
+    # between removing the stale lock and publishing the replacement, no
+    # other invocation may guess whether it is safe to remove that claim.
+    if [[ -L "$recovery_path" ]]; then
+      if (( waited_ms >= lock_timeout_ms )); then
+        echo "error: timed out waiting for lifecycle lock: $lock_path" >&2
+        return 1
+      fi
+      sleep 0.05
+      waited_ms=$((waited_ms + 50))
+      continue
+    fi
+
+    if ln -s "$owner_record" "$lock_path" 2>/dev/null; then
+      WH_LIFECYCLE_LOCK_PATH="$lock_path"
+      WH_LIFECYCLE_LOCK_RECORD="$owner_record"
+      return 0
+    fi
+
     current_record=$(readlink "$lock_path" 2>/dev/null || true)
     if [[ "$current_record" =~ ^([1-9][0-9]*):(.+)$ ]]; then
       current_pid="${BASH_REMATCH[1]}"
       current_identity="${BASH_REMATCH[2]}"
-      observed_identity=$(wh_process_identity "$current_pid" 2>/dev/null || true)
-      if [[ -z "$observed_identity" || "$observed_identity" != "$current_identity" ]]; then
-        if [[ "$(readlink "$lock_path" 2>/dev/null || true)" == "$current_record" ]]; then
-          rm -f "$lock_path"
+      if ! wh_pid_alive "$current_pid"; then
+        observed_identity="stopped"
+      else
+        # A live PID with an unavailable identity is an uncertainty, not a
+        # stale owner.  Waiting is the only safe choice because removing the
+        # lock could permit two lifecycle transitions at once.
+        observed_identity=$(wh_process_identity "$current_pid" 2>/dev/null || true)
+      fi
+      if [[ "$observed_identity" == "stopped" || \
+        ( -n "$observed_identity" && "$observed_identity" != "$current_identity" ) ]]; then
+        # ln is the atomic claim.  Once it succeeds, all other invocations
+        # wait on this claim and cannot race the compare-then-remove below.
+        recovery_record="$owner_record"
+        if ln -s "$recovery_record" "$recovery_path" 2>/dev/null; then
+          if [[ "$(readlink "$lock_path" 2>/dev/null || true)" == "$current_record" ]]; then
+            rm -f "$lock_path"
+            if ln -s "$owner_record" "$lock_path" 2>/dev/null; then
+              if [[ "$(readlink "$recovery_path" 2>/dev/null || true)" == "$recovery_record" ]]; then
+                rm -f "$recovery_path"
+              fi
+              WH_LIFECYCLE_LOCK_PATH="$lock_path"
+              WH_LIFECYCLE_LOCK_RECORD="$owner_record"
+              return 0
+            fi
+          fi
+          if [[ "$(readlink "$recovery_path" 2>/dev/null || true)" == "$recovery_record" ]]; then
+            rm -f "$recovery_path"
+          fi
         fi
         continue
       fi
     fi
-    if (( waited_ms >= 120000 )); then
+    if (( waited_ms >= lock_timeout_ms )); then
       echo "error: timed out waiting for lifecycle lock: $lock_path" >&2
       return 1
     fi
     sleep 0.05
     waited_ms=$((waited_ms + 50))
   done
-  WH_LIFECYCLE_LOCK_PATH="$lock_path"
-  WH_LIFECYCLE_LOCK_RECORD="$owner_record"
 }
 
 wh_lifecycle_lock_release() {
   [[ -n "$WH_LIFECYCLE_LOCK_PATH" && -n "$WH_LIFECYCLE_LOCK_RECORD" ]] || return 0
-  if [[ "$(readlink "$WH_LIFECYCLE_LOCK_PATH" 2>/dev/null || true)" == "$WH_LIFECYCLE_LOCK_RECORD" ]]; then
-    rm -f "$WH_LIFECYCLE_LOCK_PATH"
+  local recovery_path="$WH_LIFECYCLE_LOCK_PATH.recovery"
+  # Claim the recovery marker before checking and unlinking our lock.  This
+  # keeps release ownership serialized with stale recovery, including the
+  # small window between the readlink check and rm.
+  if ln -s "$WH_LIFECYCLE_LOCK_RECORD" "$recovery_path" 2>/dev/null; then
+    if [[ "$(readlink "$WH_LIFECYCLE_LOCK_PATH" 2>/dev/null || true)" == "$WH_LIFECYCLE_LOCK_RECORD" ]]; then
+      rm -f "$WH_LIFECYCLE_LOCK_PATH"
+    fi
+    if [[ "$(readlink "$recovery_path" 2>/dev/null || true)" == "$WH_LIFECYCLE_LOCK_RECORD" ]]; then
+      rm -f "$recovery_path"
+    fi
   fi
   WH_LIFECYCLE_LOCK_PATH=""
   WH_LIFECYCLE_LOCK_RECORD=""

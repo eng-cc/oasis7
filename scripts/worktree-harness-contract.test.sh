@@ -58,6 +58,123 @@ while True:
 PY
 wait "$atomic_writer_pid"
 
+LIFECYCLE_LOCK_UNCERTAINTY_ROOT="$TMP_DIR/lifecycle-lock-identity-uncertainty"
+mkdir -p "$LIFECYCLE_LOCK_UNCERTAINTY_ROOT"
+LIFECYCLE_LOCK_UNCERTAINTY_PATH="$LIFECYCLE_LOCK_UNCERTAINTY_ROOT/.lifecycle.lock"
+lifecycle_lock_uncertainty_stop="$TMP_DIR/lifecycle-lock-identity-uncertainty.stop"
+lifecycle_lock_uncertainty_owner() {
+  while [[ ! -e "$lifecycle_lock_uncertainty_stop" ]]; do
+    sleep 0.05
+  done
+}
+lifecycle_lock_uncertainty_owner &
+lifecycle_lock_uncertainty_owner_pid="$!"
+lifecycle_lock_uncertainty_owner_identity="$(wh_process_identity "$lifecycle_lock_uncertainty_owner_pid")"
+ln -s \
+  "$lifecycle_lock_uncertainty_owner_pid:$lifecycle_lock_uncertainty_owner_identity" \
+  "$LIFECYCLE_LOCK_UNCERTAINTY_PATH"
+(
+  set +e
+  original_identity_definition="$(declare -f wh_process_identity)"
+  eval "$(printf '%s\n' "$original_identity_definition" | sed 's/^wh_process_identity /original_wh_process_identity /')"
+  wh_process_identity() {
+    if [[ "${1:-}" == "$lifecycle_lock_uncertainty_owner_pid" ]]; then
+      return 1
+    fi
+    original_wh_process_identity "$@"
+  }
+  OASIS7_HARNESS_LIFECYCLE_LOCK_TIMEOUT_MS=100 \
+    wh_lifecycle_lock_acquire "$LIFECYCLE_LOCK_UNCERTAINTY_ROOT" \
+    >"$TMP_DIR/lifecycle-lock-identity-uncertainty.log" 2>&1
+  uncertainty_status="$?"
+  touch "$lifecycle_lock_uncertainty_stop"
+  wait "$lifecycle_lock_uncertainty_owner_pid" >/dev/null 2>&1 || true
+  uncertainty_record="$(readlink "$LIFECYCLE_LOCK_UNCERTAINTY_PATH" 2>/dev/null || true)"
+  if [[ "$uncertainty_status" -eq 0 || "$uncertainty_record" != \
+    "$lifecycle_lock_uncertainty_owner_pid:$lifecycle_lock_uncertainty_owner_identity" ]]; then
+    echo "lifecycle lock contract: unavailable owner identity was treated as stale" >&2
+    exit 1
+  fi
+)
+rm -f "$LIFECYCLE_LOCK_UNCERTAINTY_PATH"
+
+LIFECYCLE_LOCK_RACE_ROOT="$TMP_DIR/lifecycle-lock-race"
+LIFECYCLE_LOCK_RACE_PATH="$LIFECYCLE_LOCK_RACE_ROOT/.lifecycle.lock"
+mkdir -p "$LIFECYCLE_LOCK_RACE_ROOT"
+ln -s '999999999:stale-incarnation' "$LIFECYCLE_LOCK_RACE_PATH"
+LIFECYCLE_LOCK_RACE_BIN="$TMP_DIR/lifecycle-lock-race-bin"
+mkdir -p "$LIFECYCLE_LOCK_RACE_BIN"
+LIFECYCLE_LOCK_RACE_PAUSED="$TMP_DIR/lifecycle-lock-race-paused"
+LIFECYCLE_LOCK_RACE_RELEASE="$TMP_DIR/lifecycle-lock-race-release"
+LIFECYCLE_LOCK_RACE_A_ACQUIRED="$TMP_DIR/lifecycle-lock-race-a-acquired"
+LIFECYCLE_LOCK_RACE_B_ACQUIRED="$TMP_DIR/lifecycle-lock-race-b-acquired"
+cat >"$LIFECYCLE_LOCK_RACE_BIN/rm" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+target="${OASIS7_HARNESS_TEST_RM_TARGET:?}"
+paused="${OASIS7_HARNESS_TEST_RM_PAUSED:?}"
+release="${OASIS7_HARNESS_TEST_RM_RELEASE:?}"
+if [[ "$*" == *"$target"* && ! -e "$paused" ]]; then
+  : >"$paused"
+  while [[ ! -e "$release" ]]; do
+    sleep 0.01
+  done
+fi
+exec /bin/rm "$@"
+EOF
+chmod +x "$LIFECYCLE_LOCK_RACE_BIN/rm"
+(
+  export PATH="$LIFECYCLE_LOCK_RACE_BIN:$PATH"
+  export OASIS7_HARNESS_TEST_RM_TARGET="$LIFECYCLE_LOCK_RACE_PATH"
+  export OASIS7_HARNESS_TEST_RM_PAUSED="$LIFECYCLE_LOCK_RACE_PAUSED"
+  export OASIS7_HARNESS_TEST_RM_RELEASE="$LIFECYCLE_LOCK_RACE_RELEASE"
+  if wh_lifecycle_lock_acquire "$LIFECYCLE_LOCK_RACE_ROOT"; then
+    : >"$LIFECYCLE_LOCK_RACE_A_ACQUIRED"
+    sleep 2
+    wh_lifecycle_lock_release
+  fi
+) &
+lifecycle_lock_race_a_pid="$!"
+for _ in $(seq 1 40); do
+  [[ -e "$LIFECYCLE_LOCK_RACE_PAUSED" ]] && break
+  sleep 0.05
+done
+[[ -e "$LIFECYCLE_LOCK_RACE_PAUSED" ]] || {
+  echo "lifecycle lock contract: stale recovery did not reach the ownership handoff" >&2
+  touch "$LIFECYCLE_LOCK_RACE_RELEASE"
+  kill "$lifecycle_lock_race_a_pid" >/dev/null 2>&1 || true
+  wait "$lifecycle_lock_race_a_pid" >/dev/null 2>&1 || true
+  exit 1
+}
+(
+  if wh_lifecycle_lock_acquire "$LIFECYCLE_LOCK_RACE_ROOT"; then
+    : >"$LIFECYCLE_LOCK_RACE_B_ACQUIRED"
+    sleep 2
+    wh_lifecycle_lock_release
+  fi
+) &
+lifecycle_lock_race_b_pid="$!"
+lifecycle_lock_race_b_early=0
+for _ in $(seq 1 10); do
+  if [[ -e "$LIFECYCLE_LOCK_RACE_B_ACQUIRED" ]]; then
+    lifecycle_lock_race_b_early=1
+    break
+  fi
+  sleep 0.05
+done
+touch "$LIFECYCLE_LOCK_RACE_RELEASE"
+set +e
+wait "$lifecycle_lock_race_a_pid"
+lifecycle_lock_race_a_status="$?"
+wait "$lifecycle_lock_race_b_pid"
+lifecycle_lock_race_b_status="$?"
+set -e
+if [[ "$lifecycle_lock_race_b_early" -ne 0 || "$lifecycle_lock_race_a_status" -ne 0 || \
+  "$lifecycle_lock_race_b_status" -ne 0 ]]; then
+  echo "lifecycle lock contract: concurrent stale recovery lost lock ownership" >&2
+  exit 1
+fi
+
 if ! declare -F wh_terminate_process_group >/dev/null 2>&1; then
   echo "process-tree shutdown contract: missing wh_terminate_process_group helper" >&2
   exit 1
