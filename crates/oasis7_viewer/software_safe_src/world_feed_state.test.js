@@ -114,6 +114,48 @@ describe("World Feed v1 state", () => {
     });
   });
 
+  it("deduplicates equivalent numeric and canonical decimal-string identities", () => {
+    const event = {
+      event_seq: 7,
+      kind: "major_world_event",
+      summary: "Same crisis",
+      detail: "ambient only",
+      receipt_ref: null,
+      major_event: majorEvent(),
+    };
+    const first = consumeWorldFeed(createInitialWorldFeedState(), feed({ events: [event] })).state;
+    const replay = consumeWorldFeed(first, feed({
+      status: "replay",
+      events: [{
+        ...event,
+        event_seq: "7",
+        major_event: {
+          ...event.major_event,
+          identity: { world_id: "world-a", reorg_epoch: "2", event_seq: "7" },
+        },
+      }],
+    }));
+
+    expect(replay.requiresSnapshotReload).toBe(false);
+    expect(replay.state.status).toBe("replay");
+    expect(replay.state.events).toHaveLength(1);
+    expect(replay.state.dedupedCount).toBe(1);
+  });
+
+  it("normalizes a blank receipt reference to no receipt", () => {
+    const consumed = consumeWorldFeed(createInitialWorldFeedState(), feed({
+      events: [{
+        event_seq: 7,
+        kind: "resource_change",
+        summary: "No durable receipt",
+        detail: "",
+        receipt_ref: "   ",
+      }],
+    }));
+
+    expect(consumed.state.events[0].receipt_ref).toBeNull();
+  });
+
   it("fails closed when one page contains conflicting rows for the same identity", () => {
     const conflict = consumeWorldFeed(createInitialWorldFeedState(), feed({
       events: [

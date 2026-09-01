@@ -191,6 +191,7 @@ function normalizeEvent(event, context) {
   if (event.receipt_ref != null && typeof event.receipt_ref !== "string") {
     return null;
   }
+  const receiptRef = String(event.receipt_ref ?? "").trim() || null;
   const normalizedSeq = normalizeUnsignedInteger(event.event_seq);
   const majorEvent = normalizeMajorEvent(event.major_event, {
     ...context,
@@ -204,9 +205,27 @@ function normalizeEvent(event, context) {
     kind,
     summary,
     detail,
-    receipt_ref: event.receipt_ref == null ? null : event.receipt_ref,
+    receipt_ref: receiptRef,
     ...(majorEvent ? { major_event: majorEvent } : {}),
   };
+}
+
+function eventFingerprint(event) {
+  const canonical = {
+    ...event,
+    event_seq: normalizeUnsignedInteger(event.event_seq),
+  };
+  if (event.major_event?.identity) {
+    canonical.major_event = {
+      ...event.major_event,
+      identity: {
+        ...event.major_event.identity,
+        reorg_epoch: normalizeUnsignedInteger(event.major_event.identity.reorg_epoch),
+        event_seq: normalizeUnsignedInteger(event.major_event.identity.event_seq),
+      },
+    };
+  }
+  return JSON.stringify(canonical);
 }
 
 function invalidState(previous, reason, error, { requiresSnapshotReload = true } = {}) {
@@ -373,7 +392,7 @@ export function consumeWorldFeed(previous, feed) {
     if (conflicted.has(identity)) continue;
     const previous = byIdentity.get(identity);
     if (previous) {
-      if (JSON.stringify(previous) !== JSON.stringify(event)) {
+      if (eventFingerprint(previous) !== eventFingerprint(event)) {
         byIdentity.delete(identity);
         conflicted.add(identity);
         continue;
