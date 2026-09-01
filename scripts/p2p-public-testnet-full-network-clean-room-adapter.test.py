@@ -1671,6 +1671,55 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
                 },
             )
 
+    def test_adapter_requires_complete_canonical_state_surfaces_per_managed_node(self) -> None:
+        """Adapter admission must reject sparse or nested omissions in reset surfaces."""
+        for node_name in self.planner.NODE_ORDER:
+            for omission in ("sparse", "nested"):
+                with self.subTest(node=node_name, omission=omission):
+                    plan = copy.deepcopy(self.plan)
+                    node = next(item for item in plan["nodes"] if item["name"] == node_name)
+                    full_paths = list(node["persistent_state_paths"])
+                    if omission == "sparse":
+                        incomplete_paths = [full_paths[0]]
+                    else:
+                        incomplete_paths = full_paths[:2] + full_paths[3:]
+                    node["persistent_state_paths"] = incomplete_paths
+                    plan["deployment_inventory"]["nodes"][node_name][
+                        "persistent_state_paths"
+                    ] = incomplete_paths
+                    if node["role"] == "observer":
+                        plan["surfaces"]["observers_by_node"][node_name] = incomplete_paths
+                    plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+                    with self.assertRaises(self.adapter.AdapterError) as raised:
+                        self.adapter.validate_plan(plan)
+                    self.assertRegex(str(raised.exception), r"(?i)surface|canonical|complete|path")
+
+    def test_adapter_enforces_component_aware_windows_state_containment(self) -> None:
+        """Windows root and sibling-prefix paths cannot masquerade as descendants."""
+        windows_name = "windows-observer"
+        windows_index = next(
+            index for index, node in enumerate(self.plan["nodes"])
+            if node["name"] == windows_name
+        )
+        for label, invalid_path in (
+            ("exact-root", "C:/oasis7-deploy"),
+            ("sibling-prefix", "C:/oasis7-deploy-evil/state"),
+        ):
+            with self.subTest(path=label):
+                plan = copy.deepcopy(self.plan)
+                plan["nodes"][windows_index]["persistent_state_paths"] = [invalid_path]
+                plan["deployment_inventory"]["nodes"][windows_name][
+                    "persistent_state_paths"
+                ] = [invalid_path]
+                plan["surfaces"]["observers_by_node"][windows_name] = [invalid_path]
+                plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+                with self.assertRaises(self.adapter.AdapterError) as raised:
+                    self.adapter.validate_plan(plan)
+                self.assertRegex(str(raised.exception), r"(?i)root|surface|path|contain")
+
+        # The fixture's complete Windows inventory consists of true descendants.
+        self.adapter.validate_plan(self.plan)
+
     def test_remote_preflight_requires_exact_pin_symlink_and_capacity_evidence(self) -> None:
         node = self.plan["nodes"][0]
         required_bytes, required_inodes = self.adapter.capacity_requirement(self.plan, node)

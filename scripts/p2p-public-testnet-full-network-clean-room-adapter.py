@@ -288,9 +288,7 @@ def _safe_relative_paths(root: str, paths: Any, platform: str, label: str) -> li
         path = _string(raw, f"{label} entry")
         if platform == "windows-x64":
             pieces = re.split(r"[\\/]", path)
-            if ".." in pieces or not ntpath.normcase(ntpath.normpath(path)).startswith(
-                ntpath.normcase(ntpath.normpath(root))
-            ):
+            if ".." in pieces or not _under_root(root, path, "windows-x64"):
                 _fail(f"{label} contains a path outside its canonical root")
         else:
             pieces = PurePosixPath(path).parts
@@ -391,6 +389,17 @@ def _validate_deployment_inventory(
         )
         if len(set(paths)) != len(paths):
             _fail(f"deployment inventory {name} state paths contain duplicates")
+        expected_path_variants = [
+            [
+                root.rstrip("/")
+                + "/"
+                + surface.replace("{node_id}", expected["node_id"]).replace("\\", "/")
+                for surface in surface_set
+            ]
+            for surface_set in planner._canonical_state_surface_variants(name)
+        ]
+        if paths not in expected_path_variants:
+            _fail(f"deployment inventory {name} state paths must cover the exact canonical surfaces")
         for field in ("expected_key_uid", "expected_key_gid"):
             owner = value.get(field)
             if not isinstance(owner, int) or isinstance(owner, bool) or owner < 0:

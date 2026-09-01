@@ -383,6 +383,22 @@ def _expected_surfaces(name: str) -> tuple[str, ...]:
     return tuple(item.replace("{node_id}", node_id) for item in OBSERVER_RESET_SURFACES)
 
 
+def _canonical_state_surface_variants(name: str) -> tuple[tuple[str, ...], ...]:
+    """Return the code-owned complete surface set(s) for a node role/layout."""
+    canonical = _expected_surfaces(name)
+    if name == "macos-observer":
+        node_id = EXPECTED_NODES[name]["node_id"]
+        stack_layout = tuple(
+            item.replace("{node_id}", node_id)
+            for item in LINUX_OBSERVER_PERSISTENT_STATE_SURFACES
+        )
+        # macOS has an authenticated legacy data layout and a governed stack
+        # layout; both are complete inventories, while neither permits a
+        # sparse or caller-invented surface list.
+        return (canonical, stack_layout)
+    return (canonical,)
+
+
 def _validate_deployment_inventory(raw: Any, allowed_signers: set[str]) -> dict[str, Any]:
     if raw is None:
         die("deployment_inventory is required and must be independently authenticated")
@@ -456,6 +472,19 @@ def _validate_deployment_inventory(raw: Any, allowed_signers: set[str]) -> dict[
         ]
         if len(set(paths)) != len(paths) or any(not _path_under(root, path, path_style) for path in paths):
             die(f"deployment_inventory.nodes.{name}.persistent_state_paths escape or duplicate node_root")
+        expected_path_variants = [
+            [
+                _normalized_path(
+                    f"{root}/{surface}",
+                    path_style,
+                    f"deployment_inventory.nodes.{name}.canonical_surface[{index}]",
+                )
+                for index, surface in enumerate(surface_set)
+            ]
+            for surface_set in _canonical_state_surface_variants(name)
+        ]
+        if paths not in expected_path_variants:
+            die(f"deployment_inventory.nodes.{name}.persistent_state_paths must cover the exact canonical surfaces")
         normalized_nodes[name] = {
             "node_id": expected["node_id"],
             "node_root": root,

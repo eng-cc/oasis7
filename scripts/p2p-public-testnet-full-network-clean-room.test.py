@@ -768,6 +768,50 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                         self.module.build_plan(request)
                     self.assertRegex(str(raised.exception), r"(?i)deployment|inventory|root|surface|path")
 
+    def test_plan_requires_complete_canonical_state_surfaces_per_managed_node(self) -> None:
+        """Authenticated state inventory must cover every role/platform surface."""
+        for node_name in self.module.NODE_ORDER:
+            for omission in ("sparse", "nested"):
+                with self.subTest(node=node_name, omission=omission):
+                    request = self._input()
+                    inventory = self._deployment_inventory(request["nodes"])
+                    node = next(item for item in request["nodes"] if item["name"] == node_name)
+                    full_paths = list(node["persistent_state_paths"])
+                    if omission == "sparse":
+                        incomplete_paths = [full_paths[0]]
+                    else:
+                        incomplete_paths = full_paths[:2] + full_paths[3:]
+                    inventory["nodes"][node_name]["persistent_state_paths"] = incomplete_paths
+                    node["persistent_state_paths"] = incomplete_paths
+                    request["deployment_inventory"] = inventory
+                    with self.assertRaises(SystemExit) as raised:
+                        self.module.build_plan(request)
+                    self.assertRegex(str(raised.exception), r"(?i)surface|canonical|complete|path")
+
+    def test_plan_enforces_component_aware_windows_state_containment(self) -> None:
+        """Windows roots are components: root and sibling-prefix paths are not surfaces."""
+        windows_name = "windows-observer"
+        windows_index = next(
+            index for index, node in enumerate(self._input()["nodes"])
+            if node["name"] == windows_name
+        )
+        for label, invalid_path in (
+            ("exact-root", "C:/oasis7-deploy"),
+            ("sibling-prefix", "C:/oasis7-deploy-evil/state"),
+        ):
+            with self.subTest(path=label):
+                request = self._input()
+                inventory = self._deployment_inventory(request["nodes"])
+                inventory["nodes"][windows_name]["persistent_state_paths"] = [invalid_path]
+                request["nodes"][windows_index]["persistent_state_paths"] = [invalid_path]
+                request["deployment_inventory"] = inventory
+                with self.assertRaises(SystemExit) as raised:
+                    self.module.build_plan(request)
+                self.assertRegex(str(raised.exception), r"(?i)root|surface|path|contain")
+
+        # Existing complete inventory paths are genuine descendants and remain accepted.
+        self.module.build_plan(self._input())
+
     def test_plan_rejects_duplicate_authenticated_peer_ids(self) -> None:
         """Distinct managed nodes cannot share one authenticated peer identity."""
         request = self._input()
