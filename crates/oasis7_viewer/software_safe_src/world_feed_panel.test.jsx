@@ -78,6 +78,33 @@ describe("WorldFeedPanel", () => {
     expect(screen.queryByRole("button", { name: /reload authoritative snapshot/i })).not.toBeInTheDocument();
   });
 
+  it("explains identity conflicts and offers authoritative snapshot recovery", () => {
+    const onReloadSnapshot = vi.fn();
+    render(() => (
+      <WorldFeedPanel
+        feed={() => ({
+          status: "gap",
+          events: [],
+          worldId: "world-a",
+          reorgEpoch: 2,
+          gapReason: "event_identity_conflict",
+          snapshotReloadRequired: true,
+          stale: true,
+        })}
+        locale={() => "en"}
+        tr={tr}
+        onReloadSnapshot={onReloadSnapshot}
+      />
+    ));
+
+    expect(screen.getByText(
+      "The runtime found conflicting payloads for the same world-event identity. The feed was cleared; reload the authoritative snapshot.",
+    )).toBeInTheDocument();
+    const reloadButton = screen.getByRole("button", { name: /reload authoritative snapshot/i });
+    fireEvent.click(reloadButton);
+    expect(onReloadSnapshot).toHaveBeenCalledTimes(1);
+  });
+
   it("explains why an empty feed is expected and names the next authoritative signal", () => {
     render(() => (
       <WorldFeedPanel

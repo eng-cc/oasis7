@@ -4450,6 +4450,7 @@ const FEED_STATUSES = /* @__PURE__ */ new Set([
 ]);
 const GAP_REASONS = /* @__PURE__ */ new Set(["cursor_gap", "reorg_epoch_changed", "cursor_invalid"]);
 const UNAVAILABLE_REASONS = /* @__PURE__ */ new Set(["source_unavailable", "schema_unsupported", "permission_denied"]);
+const EVENT_IDENTITY_CONFLICT_GAP_REASON = "event_identity_conflict";
 function createInitialWorldFeedState() {
   return {
     status: "loading",
@@ -4775,6 +4776,28 @@ function consumeWorldFeed(previous, feed) {
   const storedEvents = [...byIdentity.values()].sort(
     (left, right) => compareUnsignedDecimal(left.event_seq, right.event_seq)
   );
+  if (conflicted.size > 0) {
+    const [identity] = conflicted;
+    return {
+      state: {
+        ...state2,
+        status: "gap",
+        schemaVersion: WORLD_FEED_SCHEMA_VERSION,
+        worldId,
+        reorgEpoch,
+        cursor,
+        events: [],
+        stale: true,
+        gapReason: EVENT_IDENTITY_CONFLICT_GAP_REASON,
+        unavailableReason: null,
+        snapshotReloadRequired: true,
+        requestInFlight: false,
+        dedupedCount: 0,
+        lastError: `conflicting payloads for world feed identity ${identity}`
+      },
+      requiresSnapshotReload: true
+    };
+  }
   return {
     state: {
       ...state2,
@@ -12127,6 +12150,9 @@ function statusBadgeClass(status) {
 }
 function reasonCopy(locale, tr2, feed) {
   if (feed.status === "gap") {
+    if (feed.gapReason === "event_identity_conflict") {
+      return tr2(locale, "运行时发现同一世界事件身份对应互相冲突的载荷。已清除动态，必须重新加载权威快照。", "The runtime found conflicting payloads for the same world-event identity. The feed was cleared; reload the authoritative snapshot.");
+    }
     const reason = String(feed.gapReason || "cursor_invalid").replace(/_/g, " ");
     return tr2(locale, `游标或历史分叉不连续（${reason}）。已停止追加，必须重新加载权威快照。`, `The cursor or history is discontinuous (${reason}). Appending stopped; reload the authoritative snapshot.`);
   }
@@ -17316,8 +17342,15 @@ function stateModel(value2, locale) {
 }
 function freshnessModel(value2, connectionStatus, locale) {
   let kind = normalized(value2);
+  const connection = normalized(connectionStatus);
+  if (kind === "current") {
+    if (connection === "connecting" || connection === "reconnecting") {
+      kind = "reconnecting";
+    } else if (connection && connection !== "connected") {
+      kind = "unavailable";
+    }
+  }
   if (!kind) {
-    const connection = normalized(connectionStatus);
     if (connection === "connecting" || connection === "reconnecting") {
       kind = "reconnecting";
     } else if (connection && connection !== "connected") {
@@ -17373,8 +17406,17 @@ function intentModel(candidate, selectedId, locale, connectionStatus) {
     source
   };
 }
-function feedbackModel(feedback, locale) {
+function feedbackModel(feedback, selectedId, locale) {
   if (!isRecord(feedback)) return { kind: "none", state: "none" };
+  const feedbackAgentId = firstValue(
+    feedback.agent_id,
+    feedback.agentId,
+    feedback.target_agent_id,
+    feedback.targetAgentId
+  );
+  if (!feedbackAgentId || !selectedId || normalized(feedbackAgentId) !== normalized(selectedId)) {
+    return { kind: "none", state: "none" };
+  }
   const stage = firstValue(feedback.stage, feedback.status);
   const value2 = firstValue(
     feedback.effect,
@@ -17445,7 +17487,7 @@ function buildAgentContextDisplayModel(input = {}) {
       blocker: section(null),
       playerLeverage: section(null),
       intent: intentModel(null, id, locale, input.connectionStatus),
-      feedback: feedbackModel(null, locale),
+      feedback: feedbackModel(null, id, locale),
       receipt: receiptModel(null),
       unavailableReason: localeIsZh(locale) ? "当前 Agent 对本地会话不可用。" : "This Agent is unavailable to the current session."
     };
@@ -17498,7 +17540,7 @@ function buildAgentContextDisplayModel(input = {}) {
       gameplay.player_leverage
     )),
     intent: intentModel(candidateIntent, id, locale, connectionStatus),
-    feedback: feedbackModel(input.feedback, locale),
+    feedback: feedbackModel(input.feedback, id, locale),
     receipt: receiptModel(input.receipt, id),
     connectionStatus,
     control: firstValue(input.controlState, candidateIntent?.control_state, candidateIntent?.controlState) || "unknown"
@@ -21774,7 +21816,7 @@ function InteractionPanel() {
     intent: selectedAgentIntent(),
     freshness: selectedAgentFreshness(),
     connectionStatus: selectedAgentIntentConnectionStatus(),
-    feedback: chatFeedback() || promptFeedback(),
+    feedback: selectedAgentFeedback(),
     receipt: null,
     locale: locale()
   });
@@ -21791,6 +21833,13 @@ function InteractionPanel() {
   };
   const promptFeedbackDisplay = () => describeSemanticFeedback(promptFeedback(), locale());
   const chatFeedbackDisplay = () => describeSemanticFeedback(chatFeedback(), locale());
+  const selectedAgentFeedback = () => {
+    const selectedId = normalizedId(agentId());
+    if (!selectedId) {
+      return null;
+    }
+    return [chatFeedback(), promptFeedback()].find((feedback) => normalizedId(feedback?.agentId || feedback?.agent_id) === selectedId) || null;
+  };
   const promptVersionState = () => describePromptVersionState(promptFeedback(), locale());
   const chatHistory = () => {
     revision();

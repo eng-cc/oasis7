@@ -92,7 +92,7 @@ describe("World Feed v1 state", () => {
     expect(replay.state.dedupedCount).toBe(2);
   });
 
-  it("fails closed for a materially conflicting duplicate identity", () => {
+  it("fails closed and requests snapshot recovery for a materially conflicting duplicate identity", () => {
     const first = consumeWorldFeed(createInitialWorldFeedState(), feed()).state;
     const conflict = consumeWorldFeed(first, feed({
       status: "replay",
@@ -104,7 +104,42 @@ describe("World Feed v1 state", () => {
         receipt_ref: null,
       }],
     }));
-    expect(conflict.state.events.find((event) => event.event_seq === 1)).toBeUndefined();
+    expect(conflict).toMatchObject({ requiresSnapshotReload: true });
+    expect(conflict.state).toMatchObject({
+      status: "gap",
+      gapReason: "event_identity_conflict",
+      stale: true,
+      snapshotReloadRequired: true,
+      events: [],
+    });
+  });
+
+  it("fails closed when one page contains conflicting rows for the same identity", () => {
+    const conflict = consumeWorldFeed(createInitialWorldFeedState(), feed({
+      events: [
+        {
+          event_seq: 7,
+          kind: "resource_change",
+          summary: "First payload",
+          detail: "ore +1",
+          receipt_ref: null,
+        },
+        {
+          event_seq: 7,
+          kind: "resource_change",
+          summary: "Conflicting payload",
+          detail: "ore +2",
+          receipt_ref: null,
+        },
+      ],
+    }));
+    expect(conflict).toMatchObject({ requiresSnapshotReload: true });
+    expect(conflict.state).toMatchObject({
+      status: "gap",
+      gapReason: "event_identity_conflict",
+      snapshotReloadRequired: true,
+      events: [],
+    });
   });
 
   it("treats every consumable envelope that changes epoch as reorg requiring snapshot reload", () => {

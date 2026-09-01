@@ -191,6 +191,7 @@ describe("AgentContextLite player-facing contract", () => {
     const model = contextModel({ kind: "agent", id: AGENT_ID }, {
       feedback: {
         kind: "gameplay_action",
+        agentId: AGENT_ID,
         stage: "ack",
         effect: "The request was queued for runtime evaluation.",
       },
@@ -204,6 +205,38 @@ describe("AgentContextLite player-facing contract", () => {
     expect(surface.querySelectorAll('[data-viewer-overlay="receipt"]')).toHaveLength(0);
     expect(surface.querySelectorAll("#viewer-action-receipt")).toHaveLength(0);
     expect(surface).not.toHaveTextContent(/Action Receipt|World change confirmed/i);
+  });
+
+  it("clears Agent A feedback from the rendered Context after selection switches to Agent B", () => {
+    const feedback = {
+      kind: "chat",
+      agentId: AGENT_ID,
+      stage: "ack",
+      effect: "Agent A received the instruction.",
+    };
+    const firstModel = contextModel({ kind: "agent", id: AGENT_ID }, { feedback });
+    const secondModel = contextModel({ kind: "agent", id: "agent-1" }, {
+      snapshot: {
+        model: {
+          agents: {
+            [AGENT_ID]: agent,
+            "agent-1": { ...agent, id: "agent-1", name: "Boreal", label: "Southline Scout" },
+          },
+          locations: { [LOCATION_ID]: location },
+        },
+      },
+      feedback,
+    });
+
+    const first = render(() => <AgentContextLite model={firstModel} locale="en" />);
+    const firstSurface = screen.getByRole("region", { name: /Agent Context/i });
+    expect(firstSurface).toHaveTextContent(feedback.effect);
+    first.unmount();
+
+    render(() => <AgentContextLite model={secondModel} locale="en" />);
+    const secondSurface = screen.getByRole("region", { name: /Agent Context/i });
+    expect(secondSurface).not.toHaveTextContent(feedback.effect);
+    expect(secondSurface.querySelectorAll('[data-agent-context-feedback="status"]')).toHaveLength(0);
   });
 
   it("can reference one supplied Receipt without owning or duplicating the formal Receipt surface", () => {

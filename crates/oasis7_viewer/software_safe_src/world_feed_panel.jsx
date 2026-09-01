@@ -26,6 +26,13 @@ function statusBadgeClass(status) {
 
 function reasonCopy(locale, tr, feed) {
   if (feed.status === "gap") {
+    if (feed.gapReason === "event_identity_conflict") {
+      return tr(
+        locale,
+        "运行时发现同一世界事件身份对应互相冲突的载荷。已清除动态，必须重新加载权威快照。",
+        "The runtime found conflicting payloads for the same world-event identity. The feed was cleared; reload the authoritative snapshot.",
+      );
+    }
     const reason = String(feed.gapReason || "cursor_invalid").replace(/_/g, " ");
     return tr(
       locale,

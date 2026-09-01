@@ -135,6 +135,20 @@ describe("Agent Context Lite display model", () => {
     expect(model.freshness).toEqual(expect.objectContaining({ kind: expectedKind }));
   });
 
+  it.each([
+    ["disconnected", "unavailable"],
+    ["error", "unavailable"],
+    ["connecting", "reconnecting"],
+    ["reconnecting", "reconnecting"],
+  ])("downgrades retained current freshness while the connection is %s", (connectionStatus, expectedKind) => {
+    const model = buildAgentContextDisplayModel(buildInput({
+      freshness: "current",
+      connectionStatus,
+    }));
+
+    expect(model.freshness).toEqual(expect.objectContaining({ kind: expectedKind }));
+  });
+
   it("does not wrap a player-global or mismatched Intent as selected-Agent Intent", () => {
     const mismatchedIntent = {
       ...MATCHED_INTENT,
@@ -211,6 +225,7 @@ describe("Agent Context Lite display model", () => {
       },
       feedback: {
         kind: "gameplay_action",
+        agentId: AGENT_ID,
         stage: "ack",
         effect: "The request was queued for runtime evaluation.",
       },
@@ -220,6 +235,25 @@ describe("Agent Context Lite display model", () => {
     expect(model.feedback).toMatchObject({ kind: "status" });
     expect(model.receipt).toMatchObject({ state: "none" });
     expect(model.receipt).not.toMatchObject({ present: true, confidence: "world_delta" });
+  });
+
+  it("does not render Agent A feedback after selection switches to Agent B", () => {
+    const feedback = {
+      kind: "chat",
+      agentId: AGENT_ID,
+      stage: "ack",
+      effect: "Agent A received the instruction.",
+    };
+    const selectedA = buildAgentContextDisplayModel(buildInput({ feedback }));
+    const selectedB = buildAgentContextDisplayModel(buildInput({
+      selected: { kind: "agent", id: "agent-1" },
+      agent: { ...AGENT, id: "agent-1", name: "Boreal", label: "Southline Scout" },
+      feedback,
+    }));
+
+    expect(selectedA.feedback).toMatchObject({ kind: "status", value: feedback.effect });
+    expect(selectedB.feedback).toEqual({ kind: "none", state: "none" });
+    expect(JSON.stringify(selectedB)).not.toContain(feedback.effect);
   });
 
   it("uses only a supplied authoritative Receipt and never derives one from feedback", () => {

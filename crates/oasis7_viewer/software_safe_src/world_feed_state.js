@@ -12,6 +12,7 @@ const FEED_STATUSES = new Set([
 
 const GAP_REASONS = new Set(["cursor_gap", "reorg_epoch_changed", "cursor_invalid"]);
 const UNAVAILABLE_REASONS = new Set(["source_unavailable", "schema_unsupported", "permission_denied"]);
+const EVENT_IDENTITY_CONFLICT_GAP_REASON = "event_identity_conflict";
 
 export function createInitialWorldFeedState() {
   return {
@@ -379,6 +380,28 @@ export function consumeWorldFeed(previous, feed) {
   const storedEvents = [...byIdentity.values()].sort(
     (left, right) => compareUnsignedDecimal(left.event_seq, right.event_seq),
   );
+  if (conflicted.size > 0) {
+    const [identity] = conflicted;
+    return {
+      state: {
+        ...state,
+        status: "gap",
+        schemaVersion: WORLD_FEED_SCHEMA_VERSION,
+        worldId,
+        reorgEpoch,
+        cursor,
+        events: [],
+        stale: true,
+        gapReason: EVENT_IDENTITY_CONFLICT_GAP_REASON,
+        unavailableReason: null,
+        snapshotReloadRequired: true,
+        requestInFlight: false,
+        dedupedCount: 0,
+        lastError: `conflicting payloads for world feed identity ${identity}`,
+      },
+      requiresSnapshotReload: true,
+    };
+  }
   return {
     state: {
       ...state,

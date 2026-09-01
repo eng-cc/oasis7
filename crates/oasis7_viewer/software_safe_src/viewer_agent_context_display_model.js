@@ -70,8 +70,15 @@ function stateModel(value, locale) {
 
 function freshnessModel(value, connectionStatus, locale) {
   let kind = normalized(value);
+  const connection = normalized(connectionStatus);
+  if (kind === "current") {
+    if (connection === "connecting" || connection === "reconnecting") {
+      kind = "reconnecting";
+    } else if (connection && connection !== "connected") {
+      kind = "unavailable";
+    }
+  }
   if (!kind) {
-    const connection = normalized(connectionStatus);
     if (connection === "connecting" || connection === "reconnecting") {
       kind = "reconnecting";
     } else if (connection && connection !== "connected") {
@@ -131,8 +138,17 @@ function intentModel(candidate, selectedId, locale, connectionStatus) {
   };
 }
 
-function feedbackModel(feedback, locale) {
+function feedbackModel(feedback, selectedId, locale) {
   if (!isRecord(feedback)) return { kind: "none", state: "none" };
+  const feedbackAgentId = firstValue(
+    feedback.agent_id,
+    feedback.agentId,
+    feedback.target_agent_id,
+    feedback.targetAgentId,
+  );
+  if (!feedbackAgentId || !selectedId || normalized(feedbackAgentId) !== normalized(selectedId)) {
+    return { kind: "none", state: "none" };
+  }
   const stage = firstValue(feedback.stage, feedback.status);
   const value = firstValue(
     feedback.effect,
@@ -209,7 +225,7 @@ export function buildAgentContextDisplayModel(input = {}) {
       blocker: section(null),
       playerLeverage: section(null),
       intent: intentModel(null, id, locale, input.connectionStatus),
-      feedback: feedbackModel(null, locale),
+      feedback: feedbackModel(null, id, locale),
       receipt: receiptModel(null),
       unavailableReason: localeIsZh(locale)
         ? "当前 Agent 对本地会话不可用。"
@@ -271,7 +287,7 @@ export function buildAgentContextDisplayModel(input = {}) {
       gameplay.player_leverage,
     )),
     intent: intentModel(candidateIntent, id, locale, connectionStatus),
-    feedback: feedbackModel(input.feedback, locale),
+    feedback: feedbackModel(input.feedback, id, locale),
     receipt: receiptModel(input.receipt, id),
     connectionStatus,
     control: firstValue(input.controlState, candidateIntent?.control_state, candidateIntent?.controlState) || "unknown",

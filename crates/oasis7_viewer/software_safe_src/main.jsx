@@ -3289,7 +3289,7 @@ function InteractionPanel() {
     intent: selectedAgentIntent(),
     freshness: selectedAgentFreshness(),
     connectionStatus: selectedAgentIntentConnectionStatus(),
-    feedback: chatFeedback() || promptFeedback(),
+    feedback: selectedAgentFeedback(),
     receipt: null,
     locale: locale(),
   });
@@ -3306,6 +3306,14 @@ function InteractionPanel() {
   };
   const promptFeedbackDisplay = () => core.describeSemanticFeedback(promptFeedback(), locale());
   const chatFeedbackDisplay = () => core.describeSemanticFeedback(chatFeedback(), locale());
+  const selectedAgentFeedback = () => {
+    const selectedId = normalizedId(agentId());
+    if (!selectedId) {
+      return null;
+    }
+    return [chatFeedback(), promptFeedback()]
+      .find((feedback) => normalizedId(feedback?.agentId || feedback?.agent_id) === selectedId) || null;
+  };
   const promptVersionState = () => core.describePromptVersionState(promptFeedback(), locale());
   const chatHistory = () => {
     revision();
