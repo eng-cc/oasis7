@@ -10,9 +10,14 @@ const FEED_STATUSES = new Set([
   "unavailable",
 ]);
 
-const GAP_REASONS = new Set(["cursor_gap", "reorg_epoch_changed", "cursor_invalid"]);
-const UNAVAILABLE_REASONS = new Set(["source_unavailable", "schema_unsupported", "permission_denied"]);
 const EVENT_IDENTITY_CONFLICT_GAP_REASON = "event_identity_conflict";
+const GAP_REASONS = new Set([
+  "cursor_gap",
+  "reorg_epoch_changed",
+  "cursor_invalid",
+  EVENT_IDENTITY_CONFLICT_GAP_REASON,
+]);
+const UNAVAILABLE_REASONS = new Set(["source_unavailable", "schema_unsupported", "permission_denied"]);
 
 export function createInitialWorldFeedState() {
   return {

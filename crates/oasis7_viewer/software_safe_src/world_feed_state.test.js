@@ -142,6 +142,23 @@ describe("World Feed v1 state", () => {
     });
   });
 
+  it("preserves an explicit runtime identity-conflict gap", () => {
+    const conflict = consumeWorldFeed(createInitialWorldFeedState(), feed({
+      status: "gap",
+      events: [],
+      gap_reason: "event_identity_conflict",
+      snapshot_reload_required: true,
+    }));
+
+    expect(conflict).toMatchObject({ requiresSnapshotReload: true });
+    expect(conflict.state).toMatchObject({
+      status: "gap",
+      gapReason: "event_identity_conflict",
+      snapshotReloadRequired: true,
+      events: [],
+    });
+  });
+
   it("treats every consumable envelope that changes epoch as reorg requiring snapshot reload", () => {
     for (const status of ["ready", "empty", "replay"]) {
       const first = consumeWorldFeed(createInitialWorldFeedState(), feed()).state;

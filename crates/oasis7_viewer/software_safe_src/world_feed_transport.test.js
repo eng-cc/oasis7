@@ -333,6 +333,33 @@ describe("World Feed transport", () => {
       .toBeGreaterThan(snapshotRequestsBeforeConflict);
   });
 
+  it("preserves a runtime identity-conflict gap and requests snapshot recovery", async () => {
+    const { sockets, sentMessages } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+    core.initializeSoftwareSafeCore();
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+    sockets[0].receive(readyFeed());
+    const snapshotRequestsBeforeConflict = sentMessages.filter((message) => message.type === "request_snapshot").length;
+
+    sockets[0].receive(readyFeed({
+      status: "gap",
+      gap_reason: "event_identity_conflict",
+      snapshot_reload_required: true,
+      events: [],
+    }));
+
+    expect(core.state.worldFeed).toMatchObject({
+      status: "gap",
+      gapReason: "event_identity_conflict",
+      stale: true,
+      snapshotReloadRequired: true,
+      events: [],
+    });
+    expect(sentMessages.filter((message) => message.type === "request_snapshot").length)
+      .toBeGreaterThan(snapshotRequestsBeforeConflict);
+  });
+
   it("does not request a snapshot loop for source unavailable", async () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
