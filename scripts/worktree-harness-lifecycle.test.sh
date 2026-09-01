@@ -48,6 +48,56 @@ LEGACY_DOWN_IDENTITY=""
 LEGACY_UP_PID=""
 LEGACY_UP_PGID=""
 LEGACY_UP_IDENTITY=""
+LIFECYCLE_STEP="initialization"
+
+lifecycle_step() {
+  LIFECYCLE_STEP="$1"
+  echo "lifecycle acceptance: step=${LIFECYCLE_STEP:-unknown}" >&2
+}
+
+lifecycle_process_snapshot() {
+  local label=${1:-}
+  local pid=${2:-}
+  local pgid=${3:-}
+  local state actual_pgid pid_live group_live
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 0
+  state=$(ps -o stat= -p "$pid" 2>/dev/null | awk 'NF { print $1; exit }' || true)
+  actual_pgid=$(ps -o pgid= -p "$pid" 2>/dev/null | awk 'NF { print $1; exit }' || true)
+  pid_live=0
+  group_live=0
+  if wh_pid_alive "$pid"; then
+    pid_live=1
+  fi
+  if [[ "$pgid" =~ ^[1-9][0-9]*$ ]] && wh_process_group_alive "$pgid"; then
+    group_live=1
+  fi
+  printf 'lifecycle acceptance: process=%s pid=%s state=%s actual_pgid=%s recorded_pgid=%s helper_pid_live=%s helper_group_live=%s\n' "$label" "$pid" "${state:-unknown}" "${actual_pgid:-unknown}" "${pgid:-unknown}" "$pid_live" "$group_live" >&2
+}
+
+lifecycle_error_trap() {
+  local rc=$?
+  case "$-" in
+    *e*) ;;
+    *) return "$rc" ;;
+  esac
+  echo "lifecycle acceptance: ERR step=${LIFECYCLE_STEP:-unknown} source=${BASH_SOURCE[1]:-$0} line=${BASH_LINENO[0]:-unknown} rc=$rc command=${BASH_COMMAND:-unknown}" >&2
+  lifecycle_process_snapshot "legacy-down" "${LEGACY_DOWN_PID:-}" "${LEGACY_DOWN_PGID:-}"
+  lifecycle_process_snapshot "legacy-up" "${LEGACY_UP_PID:-}" "${LEGACY_UP_PGID:-}"
+  lifecycle_process_snapshot "unrelated" "${UNRELATED_PID:-}" "${UNRELATED_PGID:-}"
+  lifecycle_process_snapshot "sentinel" "${SENTINEL_PID:-}" ""
+  lifecycle_process_snapshot "ready-child" "${ready_child_pid:-}" ""
+  lifecycle_process_snapshot "ready-launcher" "${ready_launcher_pid:-}" "${ready_launcher_pgid:-}"
+  lifecycle_process_snapshot "ready-harness" "${READY_HARNESS_PID:-}" "${READY_HARNESS_PGID:-}"
+  lifecycle_process_snapshot "readiness-child" "${readiness_child_pid:-}" ""
+  lifecycle_process_snapshot "readiness-harness" "${READINESS_HARNESS_PID:-}" "${READINESS_HARNESS_PGID:-}"
+  lifecycle_process_snapshot "handoff-child" "${handoff_child_pid:-}" ""
+  lifecycle_process_snapshot "concurrent-child" "${concurrent_child_pid:-}" ""
+  lifecycle_process_snapshot "timeout-child" "${timeout_child_pid:-}" ""
+  lifecycle_process_snapshot "failure" "${failure_pid:-}" "${failure_pgid:-}"
+  return "$rc"
+}
+
+trap lifecycle_error_trap ERR
 
 cleanup_recorded_group() {
   local pid=${1:-}
@@ -128,6 +178,7 @@ chmod +x "$FAKE_LAUNCHER"
 # identity is not safe to signal because it may have been reused by a foreign
 # process; down/up must retain the record and reservation for operator-owned
 # recovery instead of guessing.
+lifecycle_step "legacy identity-less down"
 LEGACY_PID_ONLY_TOKEN="legacy-pid-only-token"
 wh_start_managed sleep 300 >"$TMP_DIR/legacy-pid-only-down-group.log" 2>&1
 LEGACY_DOWN_PID="$WH_MANAGED_PID"
@@ -190,6 +241,7 @@ if ! wh_pid_alive "$LEGACY_DOWN_PID"; then
 fi
 wh_terminate_process_group "$LEGACY_DOWN_PID" "$LEGACY_DOWN_PGID" 100 "$LEGACY_DOWN_IDENTITY"
 
+lifecycle_step "legacy identity-less up"
 wh_start_managed sleep 300 >"$TMP_DIR/legacy-pid-only-up-group.log" 2>&1
 LEGACY_UP_PID="$WH_MANAGED_PID"
 LEGACY_UP_PGID="$WH_MANAGED_PGID"
@@ -236,6 +288,7 @@ wh_terminate_process_group "$LEGACY_UP_PID" "$LEGACY_UP_PGID" 100 "$LEGACY_UP_ID
 
 # Dead identity-less records are safe to tombstone and should not leave a
 # cleanup-pending state behind.
+lifecycle_step "dead legacy record cleanup"
 wh_state_write "$HARNESS_ROOT/state.json" '{"status":"ready","phase":"ready","harness_pid":999999999,"launcher_pid":999999999}'
 OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" ./scripts/worktree-harness.sh down >"$TMP_DIR/legacy-dead-down.log" 2>&1
 python3 - "$HARNESS_ROOT/state.json" <<'PY'
@@ -251,6 +304,7 @@ assert state["launcher_pid"] is None, state
 PY
 
 SENTINEL_PID=""
+lifecycle_step "ready launch and state validation"
 sleep 300 &
 SENTINEL_PID=$!
 FAKE_LAUNCHER_CHILD_PID_FILE="$READY_CHILD_PID_FILE" \
@@ -416,6 +470,7 @@ PY
   )"
 }
 
+lifecycle_step "stale identity status rejection"
 set_stale_live_record
 set +e
 OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" ./scripts/worktree-harness.sh status --json >"$TMP_DIR/stale-status.log" 2>&1
@@ -431,6 +486,7 @@ restore_ready_record
 # launcher records must fail closed for status instead of retaining or
 # reporting ready.  The stale launcher case below also guards the
 # already-running up fast path.
+lifecycle_step "missing and dead launcher status rejection"
 set_launcher_record
 set +e
 OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" ./scripts/worktree-harness.sh status --json >"$TMP_DIR/missing-launcher-status.log" 2>&1
@@ -442,6 +498,7 @@ set -e
 }
 restore_ready_record
 
+lifecycle_step "stale launcher identity status rejection"
 set_launcher_record "999999999" "999999999" "dead-launcher-incarnation"
 set +e
 OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" ./scripts/worktree-harness.sh status --json >"$TMP_DIR/dead-launcher-status.log" 2>&1
@@ -453,6 +510,7 @@ set -e
 }
 restore_ready_record
 
+lifecycle_step "stale launcher record up rejection"
 set_launcher_record "$UNRELATED_PID" "$UNRELATED_PGID" "stale-unrelated-launcher-incarnation"
 set +e
 FAKE_LAUNCHER_CHILD_PID_FILE="$READY_CHILD_PID_FILE" \
@@ -465,6 +523,7 @@ set -e
 }
 restore_ready_record
 
+lifecycle_step "stale identity URL/up rejection"
 set_stale_live_record
 set +e
 OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" ./scripts/worktree-harness.sh url >"$TMP_DIR/stale-url.log" 2>&1
@@ -488,6 +547,7 @@ set -e
 }
 restore_ready_record
 
+lifecycle_step "ready down and process-tree cleanup"
 OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" ./scripts/worktree-harness.sh down
 python3 - "$HARNESS_ROOT/state.json" <<'PY'
 import json
@@ -531,6 +591,7 @@ else:
 PY
 
 STARTUP_TIMEOUT_SECS=5
+lifecycle_step "stale readiness identity rejection"
 # Launch synchronization begins before the harness establishes its own
 # startup deadline. Allow one bounded startup budget for setup and one for
 # the post-launch handoff without changing the harness deadline itself.
@@ -592,6 +653,7 @@ if [[ -e "$READINESS_CHILD_PID_FILE" ]]; then
 fi
 echo "unrelated live PID identity rejection: status_rc=$stale_status_rc url_rc=$stale_url_rc up_rc=$stale_up_rc readiness_rc=$readiness_up_rc"
 
+lifecycle_step "stale launcher handoff rejection"
 HANDOFF_DELAY_FILE="$TMP_DIR/launcher-handoff-delay.marker"
 HANDOFF_ACK_FILE="$TMP_DIR/launcher-handoff.ack"
 HANDOFF_ACKED_FILE="$TMP_DIR/launcher-handoff.acked"
@@ -669,6 +731,7 @@ if [[ -e "$HANDOFF_CHILD_PID_FILE" ]]; then
   fi
 fi
 
+lifecycle_step "concurrent up/down serialization"
 CONCURRENT_DELAY_FILE="$TMP_DIR/concurrent-delay.marker"
 CONCURRENT_CHILD_PID_FILE="$TMP_DIR/concurrent-child.pid"
 rm -f "$CONCURRENT_DELAY_FILE" "$CONCURRENT_CHILD_PID_FILE"
@@ -716,6 +779,7 @@ if wh_pid_alive "$concurrent_child_pid"; then
   exit 1
 fi
 
+lifecycle_step "startup timeout cleanup"
 FAKE_LAUNCHER_CHILD_PID_FILE="$TIMEOUT_CHILD_PID_FILE" \
 FAKE_LAUNCHER_MODE=timeout \
 OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" \
@@ -745,6 +809,7 @@ if wh_pid_alive "$timeout_child_pid"; then
   exit 1
 fi
 
+lifecycle_step "identity-protected cleanup failure"
 FAILURE_COMMON_DIR="$TMP_DIR/failure-common"
 failure_ports_json="$TMP_DIR/failure-ports.json"
 wh_start_managed sleep 300 >"$TMP_DIR/failure-group.log" 2>&1
