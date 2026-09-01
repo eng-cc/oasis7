@@ -1609,34 +1609,62 @@ function recoveryActionForDisposition(value2, availableActions, locale, localeTe
   const actions = Array.isArray(availableActions) ? availableActions : [];
   const recipeToken = normalizedActionToken(value2.recipe_id ?? value2.recipeId);
   const recipeSuffix = recipeToken?.startsWith("recipe_") ? recipeToken.slice("recipe_".length) : recipeToken;
-  const isExecutable = (action2) => ["gameplay_action", "request_snapshot", "step", "play"].includes(normalizedCode(actionField(action2, "execute_kind", "executeKind")));
+  const executeKind = (action2) => {
+    const rawKind = normalizedCode(actionField(action2, "execute_kind", "executeKind"));
+    if (rawKind) return rawKind;
+    const protocol = normalizedActionToken(actionField(action2, "protocol_action", "protocolAction"));
+    const actionId2 = normalizedActionToken(actionField(action2, "action_id", "actionId"));
+    if (protocol === "request_snapshot" || protocol === "world_request_snapshot") return "request_snapshot";
+    if (protocol === "live_control_step") return "step";
+    if (protocol === "live_control_play") return "play";
+    if (protocol === "prompt_control_apply") return "reprioritize";
+    if (protocol === "gameplay_action_submit" && actionId2) return "gameplay_action";
+    return null;
+  };
+  const isExecutable = (action2) => ["gameplay_action", "request_snapshot", "step", "play", "reprioritize"].includes(executeKind(action2));
+  const isEnabled = (action2) => isExecutable(action2) && !displayableString$1(
+    actionField(action2, "disabled_reason", "disabledReason")
+  );
   const matchingScheduleAction = actions.find((action2) => {
-    if (!isExecutable(action2)) return false;
+    if (!isEnabled(action2)) return false;
     const actionId2 = normalizedActionToken(actionField(action2, "action_id", "actionId"));
     return actionId2?.startsWith("schedule_recipe_") && recipeSuffix && (actionId2.endsWith(`_${recipeSuffix}`) || actionId2.endsWith(`_${recipeToken}`));
   });
   const snapshotAction = actions.find((action2) => {
     const actionId2 = normalizedActionToken(actionField(action2, "action_id", "actionId"));
     const protocolAction = normalizedActionToken(actionField(action2, "protocol_action", "protocolAction"));
-    return isExecutable(action2) && (actionId2 === "request_snapshot" || protocolAction === "request_snapshot");
+    return isEnabled(action2) && (actionId2 === "request_snapshot" || protocolAction === "request_snapshot");
   });
-  const selected = matchingScheduleAction || snapshotAction || {
-    actionId: "request_snapshot",
-    label: localeText2(locale, "刷新玩法快照", "Refresh gameplay snapshot"),
-    protocolAction: "request_snapshot",
+  const otherRecoveryAction = actions.find((action2) => {
+    if (!isEnabled(action2) || matchingScheduleAction === action2 || snapshotAction === action2) return false;
+    const token = [
+      actionField(action2, "action_id", "actionId"),
+      actionField(action2, "protocol_action", "protocolAction"),
+      executeKind(action2)
+    ].map(normalizedActionToken).filter(Boolean).join("_");
+    return executeKind(action2) === "reprioritize" || /repair|rebuild|reroute|replenish|refill|requote|quote|wait|snapshot|step|play/.test(token);
+  });
+  const selected = matchingScheduleAction || otherRecoveryAction || snapshotAction || {
+    actionId: "no_safe_path",
+    label: localeText2(locale, "暂无安全恢复路径", "No safe recovery path"),
+    protocolAction: null,
     targetAgentId: null,
-    disabledReason: null,
-    executeKind: "request_snapshot"
+    disabledReason: localeText2(
+      locale,
+      "当前 committed 快照没有可执行的排程、修复、补给或刷新动作；等待下一次复查。",
+      "The committed snapshot has no enabled schedule, repair, replenishment, reprioritize, or snapshot action; wait for the next recheck."
+    ),
+    executeKind: "none"
   };
-  const actionId = displayableString$1(actionField(selected, "action_id", "actionId")) || "request_snapshot";
-  const label = displayableString$1(selected.label) || localeText2(locale, "刷新玩法快照", "Refresh gameplay snapshot");
+  const actionId = displayableString$1(actionField(selected, "action_id", "actionId")) || "no_safe_path";
+  const label = displayableString$1(selected.label) || localeText2(locale, "暂无安全恢复路径", "No safe recovery path");
   return {
     actionId,
     label,
-    protocolAction: displayableString$1(actionField(selected, "protocol_action", "protocolAction")) || "request_snapshot",
+    protocolAction: displayableString$1(actionField(selected, "protocol_action", "protocolAction")),
     targetAgentId: displayableString$1(actionField(selected, "target_agent_id", "targetAgentId")),
     disabledReason: displayableString$1(actionField(selected, "disabled_reason", "disabledReason")),
-    executeKind: displayableString$1(actionField(selected, "execute_kind", "executeKind")) || "request_snapshot"
+    executeKind: executeKind(selected) || "none"
   };
 }
 function localizedCodeLabel(code, locale, localeText2, labels, fallbackZh, fallbackEn) {
@@ -17095,15 +17123,17 @@ function FactoryProductionFailureDispositionCard(props) {
             insert(_el$16, () => `${text2("暂不可用", "Unavailable")}: ${action2().disabledReason}`);
             return _el$16;
           }
-        }), (() => {
-          var _el$17 = _tmpl$6$1();
-          _el$17.$$click = () => {
-            if (!action2().disabledReason) props.onAction?.(action2());
-          };
-          insert(_el$17, () => action2().label);
-          createRenderEffect(() => _el$17.disabled = Boolean(action2().disabledReason));
-          return _el$17;
-        })()]
+        }), createComponent(Show, {
+          get when() {
+            return action2().executeKind !== "none";
+          },
+          get children() {
+            var _el$17 = _tmpl$6$1();
+            _el$17.$$click = () => props.onAction?.(action2());
+            insert(_el$17, () => action2().label);
+            return _el$17;
+          }
+        })]
       }), _el$11);
       insert(_el$11, () => `${text2("下一次复查", "Next recheck")}: ${disposition().nextRecheckBoundary || text2("下一次 committed 快照", "next committed snapshot")}`);
       return _el$;

@@ -104,7 +104,7 @@ pub(super) fn build_first_smelter_via_gameplay_action(
         .expect("seed factory-builder electricity for repeated recipes");
 }
 
-fn build_first_assembler_via_gameplay_action(
+pub(super) fn build_first_assembler_via_gameplay_action(
     server: &mut ViewerRuntimeLiveServer,
     agent_id: &str,
     public_key: &str,
@@ -600,83 +600,6 @@ fn runtime_gameplay_snapshot_marks_forced_major_power_dependency_when_no_local_r
 }
 
 #[test]
-fn runtime_gameplay_actions_allow_assembler_build_from_agent_ledger_fallback() {
-    let _guard = lock_test_llm_env();
-    let (mut server, agent_id, public_key, private_key) =
-        setup_runtime_industrial_gameplay_session(35);
-    build_first_smelter_via_gameplay_action(
-        &mut server,
-        agent_id.as_str(),
-        public_key.as_str(),
-        private_key.as_str(),
-        35,
-    );
-    let agent_ledger = crate::runtime::MaterialLedgerId::agent(agent_id.as_str());
-    server
-        .world
-        .set_ledger_material_balance(agent_ledger.clone(), "iron_ingot", 10)
-        .expect("seed agent iron ingot");
-    server
-        .world
-        .set_ledger_material_balance(agent_ledger.clone(), "copper_wire", 8)
-        .expect("seed agent copper wire");
-    server
-        .world
-        .set_ledger_material_balance(agent_ledger, "structural_frame", 8)
-        .expect("seed agent structural frame");
-
-    let gameplay = expect_player_gameplay(
-        &mut server,
-        "player gameplay after seeding assembler build materials on agent ledger",
-    );
-    let assembler_action = gameplay
-        .available_actions
-        .iter()
-        .find(|action| action.action_id == "build_factory_assembler_mk1")
-        .expect("assembler build action");
-    assert_eq!(assembler_action.disabled_reason, None);
-}
-
-#[test]
-fn runtime_gameplay_actions_keep_assembler_build_disabled_when_cost_is_split_across_ledgers() {
-    let _guard = lock_test_llm_env();
-    let (mut server, agent_id, public_key, private_key) =
-        setup_runtime_industrial_gameplay_session(36);
-    build_first_smelter_via_gameplay_action(
-        &mut server,
-        agent_id.as_str(),
-        public_key.as_str(),
-        private_key.as_str(),
-        36,
-    );
-    let agent_ledger = crate::runtime::MaterialLedgerId::agent(agent_id.as_str());
-    server
-        .world
-        .set_ledger_material_balance(agent_ledger.clone(), "iron_ingot", 10)
-        .expect("seed agent iron ingot");
-    server
-        .world
-        .set_ledger_material_balance(agent_ledger, "copper_wire", 8)
-        .expect("seed agent copper wire");
-
-    let gameplay = expect_player_gameplay(
-        &mut server,
-        "player gameplay with split assembler build materials across ledgers",
-    );
-    let assembler_action = gameplay
-        .available_actions
-        .iter()
-        .find(|action| action.action_id == "build_factory_assembler_mk1")
-        .expect("assembler build action");
-    let disabled_reason = assembler_action
-        .disabled_reason
-        .as_deref()
-        .expect("split ledger cost should keep assembler action disabled");
-    assert!(disabled_reason.contains("requires one ledger with"));
-    assert!(disabled_reason.contains("structural_frame>=8"));
-}
-
-#[test]
 fn runtime_gameplay_snapshot_publishes_complete_distinguishable_recovery_options() {
     let _guard = lock_test_llm_env();
     let mut server = setup_industrial_gameplay_with_completed_jobs(42, 4);
@@ -939,6 +862,29 @@ fn runtime_gameplay_actions_expose_scale_out_and_governance_recipes_once_assembl
         private_key.as_str(),
         build_nonce + 10,
     );
+    let assembler_site_ledger = crate::runtime::MaterialLedgerId::site(
+        server
+            .world
+            .state()
+            .factories
+            .get("factory.assembler.mk1")
+            .expect("governance-ready assembler")
+            .site_id
+            .as_str(),
+    );
+    for (kind, amount) in [
+        ("control_chip", 20),
+        ("copper_wire", 20),
+        ("sensor_pack", 10),
+        ("module_rack", 4),
+        ("alloy_plate", 10),
+        ("hardware_part", 20),
+    ] {
+        server
+            .world
+            .set_ledger_material_balance(assembler_site_ledger.clone(), kind, amount)
+            .expect("seed governance-ready assembler site ledger");
+    }
 
     let gameplay = expect_player_gameplay(
         &mut server,

@@ -27,7 +27,47 @@ pub(super) fn schedule_recipe_disabled_reason(
         return None;
     };
     let readiness = default_schedule_recipe_readiness(recipe_id.as_str(), 1)?;
-    let resources = &state.agents.get(agent_id)?.state.resources;
+    let Some(factory) = state.factories.get(factory_id.as_str()) else {
+        return Some(format!(
+            "factory {} is not present in the committed world; wait for the factory snapshot",
+            factory_id
+        ));
+    };
+    if factory.builder_agent_id != agent_id {
+        return Some(format!(
+            "factory {} is owned by {}; only the factory owner may schedule this run",
+            factory_id, factory.builder_agent_id
+        ));
+    }
+    if let Some(reason) = factory_site_operational_disabled_reason(state, agent_id, factory) {
+        return Some(reason);
+    }
+    let expected_input_ledger = MaterialLedgerId::site(factory.site_id.clone());
+    if factory.input_ledger != expected_input_ledger
+        || factory.output_ledger != expected_input_ledger
+    {
+        return Some(format!(
+            "factory {} has no authoritative site ledger route; expected input/output ledger {}",
+            factory_id, expected_input_ledger
+        ));
+    }
+    let active_jobs = state
+        .pending_recipe_jobs
+        .values()
+        .filter(|job| job.factory_id == *factory_id)
+        .count();
+    if active_jobs >= usize::from(factory.spec.recipe_slots)
+        || usize::from(factory.production.active_jobs) >= usize::from(factory.spec.recipe_slots)
+    {
+        return Some(format!(
+            "factory {} has no free execution slot; wait for a committed recipe completion (active_jobs={} recipe_slots={})",
+            factory_id, active_jobs, factory.spec.recipe_slots
+        ));
+    }
+    let Some(agent) = state.agents.get(agent_id) else {
+        return Some(format!("builder agent unavailable: agent_id={agent_id}"));
+    };
+    let resources = &agent.state.resources;
     let available_electricity = resources.get(ResourceKind::Electricity);
     if available_electricity < readiness.electricity_cost {
         return Some(format!(
@@ -35,15 +75,14 @@ pub(super) fn schedule_recipe_disabled_reason(
             readiness.electricity_cost, available_electricity
         ));
     }
-    let factory = state.factories.get(factory_id.as_str())?;
-    if factory.builder_agent_id != agent_id {
+    let consume = recipe_consume_with_maintenance_sinks(state, &plan.consume, &plan.produce);
+    let consume_ledger = expected_input_ledger;
+    if !state.material_ledgers.contains_key(&consume_ledger) {
         return Some(format!(
-            "factory {} is owned by {}; only the factory owner may schedule this run",
-            factory_id, factory.builder_agent_id
+            "authoritative site material ledger unavailable: {}; replenish through a committed logistics route before scheduling",
+            consume_ledger
         ));
     }
-    let consume = recipe_consume_with_maintenance_sinks(state, &plan.consume, &plan.produce);
-    let consume_ledger = factory.input_ledger.clone();
     for stack in &consume {
         let available = ledger_material_balance(state, &consume_ledger, stack.kind.as_str());
         if available < stack.amount {
@@ -53,16 +92,228 @@ pub(super) fn schedule_recipe_disabled_reason(
             ));
         }
     }
-    let available_owner_electricity = state
-        .agents
-        .get(factory.builder_agent_id.as_str())?
-        .state
-        .resources
-        .get(ResourceKind::Electricity);
+    let Some(owner) = state.agents.get(factory.builder_agent_id.as_str()) else {
+        return Some(format!(
+            "factory-owner agent unavailable: agent_id={}",
+            factory.builder_agent_id
+        ));
+    };
+    let available_owner_electricity = owner.state.resources.get(ResourceKind::Electricity);
     if available_owner_electricity < plan.power_required {
         return Some(format!(
             "insufficient factory-owner electricity: need {}, have {}; replenish electricity before scheduling this run",
             plan.power_required, available_owner_electricity
+        ));
+    }
+    None
+}
+
+pub(super) fn factory_build_disabled_reason(
+    state: &WorldState,
+    agent_id: &str,
+    action_id: &str,
+) -> Option<String> {
+    let RuntimeAction::BuildFactory { site_id, spec, .. } =
+        build_runtime_action_from_gameplay_request(&GameplayActionRequest {
+            action_id: action_id.to_string(),
+            target_agent_id: agent_id.to_string(),
+            actor_agent_id: None,
+            player_id: String::new(),
+            public_key: None,
+            auth: None,
+        })
+        .ok()?
+    else {
+        return None;
+    };
+    if state.factories.contains_key(spec.factory_id.as_str())
+        || state
+            .pending_factory_builds
+            .values()
+            .any(|job| job.spec.factory_id == spec.factory_id)
+    {
+        return Some(format!(
+            "factory {} build is already queued or committed; wait for the committed factory state",
+            spec.factory_id
+        ));
+    }
+    if let Some(reason) = site_location_authority_disabled_reason(state, agent_id, site_id.as_str())
+    {
+        return Some(reason);
+    }
+    let Some(power_profile) = state
+        .factory_construction_power_profiles
+        .get(spec.factory_id.as_str())
+    else {
+        return Some(format!(
+            "construction power profile unavailable: factory_id={}",
+            spec.factory_id
+        ));
+    };
+    if power_profile.factory_id != spec.factory_id
+        || power_profile.factory_kind != spec.factory_id
+        || !power_profile.active
+        || power_profile.authority_revision == 0
+        || power_profile.electricity_amount < 0
+    {
+        return Some(format!(
+            "construction power profile inactive_or_stale: factory_id={} revision={} active={} kind={}",
+            spec.factory_id,
+            power_profile.authority_revision,
+            power_profile.active,
+            power_profile.factory_kind
+        ));
+    }
+    let Some(agent) = state.agents.get(agent_id) else {
+        return Some(format!("builder agent unavailable: agent_id={agent_id}"));
+    };
+    let available_electricity = agent.state.resources.get(ResourceKind::Electricity);
+    if available_electricity < power_profile.electricity_amount {
+        return Some(format!(
+            "insufficient builder electricity: need {}, have {}; replenish electricity before building {}",
+            power_profile.electricity_amount, available_electricity, spec.factory_id
+        ));
+    }
+    let builder_ledger_id = MaterialLedgerId::agent(agent_id.to_string());
+    let Some(builder_materials) = state.material_ledgers.get(&builder_ledger_id) else {
+        return Some(format!(
+            "authoritative builder material ledger unavailable: {}; replenish construction materials into this ledger",
+            builder_ledger_id
+        ));
+    };
+    let mut required = BTreeMap::new();
+    for stack in &spec.build_cost {
+        if stack.kind.trim().is_empty() || stack.amount <= 0 {
+            return Some(format!(
+                "factory {} build cost is not actionable: {}={}",
+                spec.factory_id, stack.kind, stack.amount
+            ));
+        }
+        let amount = required.entry(stack.kind.clone()).or_insert(0_i64);
+        *amount = amount.checked_add(stack.amount).unwrap_or(i64::MAX);
+    }
+    for (kind, requested) in required {
+        let available = material_balance(builder_materials, kind.as_str());
+        if available < requested {
+            return Some(format!(
+                "insufficient builder material in {}: {} need {}, have {}; replenish {} before building {}",
+                builder_ledger_id, kind, requested, available, kind, spec.factory_id
+            ));
+        }
+    }
+    None
+}
+
+fn material_balance(materials: &BTreeMap<String, i64>, kind: &str) -> i64 {
+    materials.get(kind).copied().unwrap_or_default()
+}
+
+fn factory_site_operational_disabled_reason(
+    state: &WorldState,
+    agent_id: &str,
+    factory: &crate::runtime::FactoryState,
+) -> Option<String> {
+    if let Some(reason) =
+        site_location_authority_disabled_reason(state, agent_id, factory.site_id.as_str())
+    {
+        return Some(reason);
+    }
+    let Some(site_location_id) = factory.site_location_id.as_deref() else {
+        return Some(format!(
+            "factory {} site location authority commitment unavailable; refresh the committed factory snapshot",
+            factory.factory_id
+        ));
+    };
+    let Some(site_authority_revision) = factory.site_authority_revision else {
+        return Some(format!(
+            "factory {} site authority revision unavailable; refresh the committed factory snapshot",
+            factory.factory_id
+        ));
+    };
+    let Some(site) = state.factory_site_authorities.get(factory.site_id.as_str()) else {
+        return Some(format!(
+            "site authority unavailable: site={} is not registered",
+            factory.site_id
+        ));
+    };
+    if site.location_id != site_location_id {
+        return Some(format!(
+            "factory {} site location authority is stale: expected {}, got {}",
+            factory.factory_id, site.location_id, site_location_id
+        ));
+    }
+    if site.authority_revision != site_authority_revision {
+        return Some(format!(
+            "factory {} site authority revision is stale: expected {}, got {}",
+            factory.factory_id, site.authority_revision, site_authority_revision
+        ));
+    }
+    None
+}
+
+fn site_location_authority_disabled_reason(
+    state: &WorldState,
+    agent_id: &str,
+    site_id: &str,
+) -> Option<String> {
+    let Some(site) = state.factory_site_authorities.get(site_id) else {
+        return Some(format!(
+            "site authority unavailable: site={} is not registered",
+            site_id
+        ));
+    };
+    if site.site_id != site_id || !site.active || !site.chunk_ready || site.authority_revision == 0
+    {
+        return Some(format!(
+            "site authority inactive_or_stale: site={} active={} chunk_ready={} revision={}",
+            site_id, site.active, site.chunk_ready, site.authority_revision
+        ));
+    }
+    if site.owner_agent_id != agent_id && !site.authorized_agent_ids.iter().any(|id| id == agent_id)
+    {
+        return Some(format!(
+            "builder is not authorized for site {}: prepare the site owner grant before scheduling",
+            site_id
+        ));
+    }
+    let Some(anchor) = state.location_anchors.get(site.location_id.as_str()) else {
+        return Some(format!(
+            "location anchor unavailable: location_id={}",
+            site.location_id
+        ));
+    };
+    if anchor.location_id != site.location_id || !anchor.active || anchor.authority_revision == 0 {
+        return Some(format!(
+            "location anchor inactive_or_stale: location_id={} revision={} active={}",
+            site.location_id, anchor.authority_revision, anchor.active
+        ));
+    }
+    if anchor.effective_at > state.time {
+        return Some(format!(
+            "location anchor not yet effective: location_id={} effective_at={} now={}",
+            site.location_id, anchor.effective_at, state.time
+        ));
+    }
+    let Some(location) = state.agent_location_authorities.get(agent_id) else {
+        return Some(format!(
+            "builder location authority unavailable: agent_id={}",
+            agent_id
+        ));
+    };
+    if location.agent_id != agent_id
+        || !location.active
+        || location.authority_revision == 0
+        || location.location_id != site.location_id
+    {
+        return Some(format!(
+            "builder location authority inactive_or_mismatched: agent_id={} location={} active={} revision={}",
+            agent_id, location.location_id, location.active, location.authority_revision
+        ));
+    }
+    if location.effective_at > state.time {
+        return Some(format!(
+            "builder location authority not yet effective: agent_id={} effective_at={} now={}",
+            agent_id, location.effective_at, state.time
         ));
     }
     None

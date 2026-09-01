@@ -431,6 +431,15 @@ fn build_factory_site_available_start_only_debits_construction_power_once_and_re
     assert!(world.has_factory("factory.site-power-start-only"));
     assert_eq!(
         world
+            .state()
+            .factory_construction_receipts
+            .get("factory.site-power-start-only")
+            .and_then(|obligation| obligation.material_ledger.clone()),
+        Some(MaterialLedgerId::agent("builder-a")),
+        "settled construction must retain its source ledger"
+    );
+    assert_eq!(
+        world
             .agent_resource_balance("builder-a", ResourceKind::Electricity)
             .expect("builder power after completion"),
         0,

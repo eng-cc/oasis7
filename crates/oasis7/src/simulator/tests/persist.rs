@@ -436,6 +436,7 @@ fn snapshot_runtime_snapshot_accepts_stringified_numeric_map_keys() {
             },
             consume_ledger: MaterialLedgerId::world(),
             ready_at: 2,
+            contract_version: 0,
             site_authority_revision: None,
             site_location_id: None,
             location_anchor_revision: None,

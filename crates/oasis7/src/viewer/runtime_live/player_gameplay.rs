@@ -24,18 +24,19 @@ use super::control_plane::{
     ensure_agent_player_access_runtime, ensure_agent_player_binding_target_runtime,
     map_auth_verify_error_code, normalize_optional_public_key,
 };
-use crate::runtime::{Action as RuntimeAction, IndustryStage, MaterialLedgerId, WorldState};
+use crate::runtime::{Action as RuntimeAction, IndustryStage, WorldState};
 use crate::simulator::{
     PlayerGameplayAction, PlayerGameplayRecentFeedback, ResourceKind, ResourceOwner, WorldKernel,
 };
 use oasis7_wasm_abi::MaterialStack;
-use std::collections::BTreeMap;
 
 #[path = "power_survival_quote.rs"]
 mod power_survival_quote;
 #[path = "schedule_readiness.rs"]
 mod schedule_readiness;
-use schedule_readiness::{schedule_recipe_data_advisory, schedule_recipe_disabled_reason};
+use schedule_readiness::{
+    factory_build_disabled_reason, schedule_recipe_data_advisory, schedule_recipe_disabled_reason,
+};
 #[path = "smelter_actions.rs"]
 mod smelter_actions;
 use smelter_actions::extend_smelter_actions;
@@ -153,15 +154,6 @@ pub(super) fn extend_available_actions(
         });
     }
 
-    let empty_materials = BTreeMap::new();
-    let world_materials = state
-        .material_ledgers
-        .get(&MaterialLedgerId::world())
-        .unwrap_or(&empty_materials);
-    let agent_materials = state
-        .material_ledgers
-        .get(&MaterialLedgerId::agent(agent_id.to_string()))
-        .unwrap_or(&empty_materials);
     let smelter_exists = state.factories.contains_key(FACTORY_SMELTER_MK1);
     let assembler_exists = state.factories.contains_key(FACTORY_ASSEMBLER_MK1);
     let industry_stage = state.industry_progress.stage;
@@ -172,14 +164,10 @@ pub(super) fn extend_available_actions(
             label: "Queue Smelter MK1 construction".to_string(),
             protocol_action: GAMEPLAY_ACTION_PROTOCOL.to_string(),
             target_agent_id: Some(agent_id.to_string()),
-            disabled_reason: missing_materials_reason_with_world_fallback(
-                &agent_materials,
-                &world_materials,
-                &[
-                    ("structural_frame", 12),
-                    ("heat_coil", 4),
-                    ("refractory_brick", 6),
-                ],
+            disabled_reason: factory_build_disabled_reason(
+                state,
+                agent_id,
+                ACTION_BUILD_SMELTER_MK1,
             ),
         });
         return;
@@ -193,14 +181,10 @@ pub(super) fn extend_available_actions(
             label: "Queue Assembler MK1 construction".to_string(),
             protocol_action: GAMEPLAY_ACTION_PROTOCOL.to_string(),
             target_agent_id: Some(agent_id.to_string()),
-            disabled_reason: missing_materials_reason_with_world_fallback(
-                &agent_materials,
-                &world_materials,
-                &[
-                    ("structural_frame", 8),
-                    ("iron_ingot", 10),
-                    ("copper_wire", 8),
-                ],
+            disabled_reason: factory_build_disabled_reason(
+                state,
+                agent_id,
+                ACTION_BUILD_ASSEMBLER_MK1,
             ),
         });
         return;
@@ -212,49 +196,86 @@ pub(super) fn extend_available_actions(
             label: "Queue gear run".to_string(),
             protocol_action: GAMEPLAY_ACTION_PROTOCOL.to_string(),
             target_agent_id: Some(agent_id.to_string()),
-            disabled_reason: None,
+            disabled_reason: schedule_recipe_disabled_reason(
+                state,
+                agent_id,
+                ACTION_SCHEDULE_ASSEMBLER_GEAR,
+            ),
         },
         PlayerGameplayAction {
             action_id: ACTION_SCHEDULE_ASSEMBLER_CONTROL_CHIP.to_string(),
             label: "Queue control chip run".to_string(),
             protocol_action: GAMEPLAY_ACTION_PROTOCOL.to_string(),
             target_agent_id: Some(agent_id.to_string()),
-            disabled_reason: None,
+            disabled_reason: schedule_recipe_disabled_reason(
+                state,
+                agent_id,
+                ACTION_SCHEDULE_ASSEMBLER_CONTROL_CHIP,
+            ),
         },
         PlayerGameplayAction {
             action_id: ACTION_SCHEDULE_ASSEMBLER_MOTOR_MK1.to_string(),
             label: "Queue motor MK1 run".to_string(),
             protocol_action: GAMEPLAY_ACTION_PROTOCOL.to_string(),
             target_agent_id: Some(agent_id.to_string()),
-            disabled_reason: None,
+            disabled_reason: schedule_recipe_disabled_reason(
+                state,
+                agent_id,
+                ACTION_SCHEDULE_ASSEMBLER_MOTOR_MK1,
+            ),
         },
         PlayerGameplayAction {
             action_id: ACTION_SCHEDULE_ASSEMBLER_LOGISTICS_DRONE.to_string(),
             label: "Queue logistics drone run".to_string(),
             protocol_action: GAMEPLAY_ACTION_PROTOCOL.to_string(),
             target_agent_id: Some(agent_id.to_string()),
-            disabled_reason: None,
+            disabled_reason: schedule_recipe_disabled_reason(
+                state,
+                agent_id,
+                ACTION_SCHEDULE_ASSEMBLER_LOGISTICS_DRONE,
+            ),
         },
         PlayerGameplayAction {
             action_id: ACTION_SCHEDULE_ASSEMBLER_SENSOR_PACK.to_string(),
             label: "Queue sensor pack run".to_string(),
             protocol_action: GAMEPLAY_ACTION_PROTOCOL.to_string(),
             target_agent_id: Some(agent_id.to_string()),
-            disabled_reason: stage_gate_disabled_reason(industry_stage, IndustryStage::ScaleOut),
+            disabled_reason: stage_gate_disabled_reason(industry_stage, IndustryStage::ScaleOut)
+                .or_else(|| {
+                    schedule_recipe_disabled_reason(
+                        state,
+                        agent_id,
+                        ACTION_SCHEDULE_ASSEMBLER_SENSOR_PACK,
+                    )
+                }),
         },
         PlayerGameplayAction {
             action_id: ACTION_SCHEDULE_ASSEMBLER_MODULE_RACK.to_string(),
             label: "Queue module rack run".to_string(),
             protocol_action: GAMEPLAY_ACTION_PROTOCOL.to_string(),
             target_agent_id: Some(agent_id.to_string()),
-            disabled_reason: stage_gate_disabled_reason(industry_stage, IndustryStage::Governance),
+            disabled_reason: stage_gate_disabled_reason(industry_stage, IndustryStage::Governance)
+                .or_else(|| {
+                    schedule_recipe_disabled_reason(
+                        state,
+                        agent_id,
+                        ACTION_SCHEDULE_ASSEMBLER_MODULE_RACK,
+                    )
+                }),
         },
         PlayerGameplayAction {
             action_id: ACTION_SCHEDULE_ASSEMBLER_FACTORY_CORE.to_string(),
             label: "Queue factory core run".to_string(),
             protocol_action: GAMEPLAY_ACTION_PROTOCOL.to_string(),
             target_agent_id: Some(agent_id.to_string()),
-            disabled_reason: stage_gate_disabled_reason(industry_stage, IndustryStage::Governance),
+            disabled_reason: stage_gate_disabled_reason(industry_stage, IndustryStage::Governance)
+                .or_else(|| {
+                    schedule_recipe_disabled_reason(
+                        state,
+                        agent_id,
+                        ACTION_SCHEDULE_ASSEMBLER_FACTORY_CORE,
+                    )
+                }),
         },
     ]);
 }
@@ -1037,38 +1058,6 @@ impl ViewerRuntimeLiveServer {
         }
         Ok(())
     }
-}
-
-fn missing_materials_reason_with_world_fallback(
-    agent_materials: &BTreeMap<String, i64>,
-    world_materials: &BTreeMap<String, i64>,
-    required: &[(&str, i64)],
-) -> Option<String> {
-    if has_required_materials(agent_materials, required)
-        || has_required_materials(world_materials, required)
-    {
-        return None;
-    }
-
-    let details = required
-        .iter()
-        .map(|(kind, amount)| {
-            let agent_current = material_balance(agent_materials, kind);
-            let world_current = material_balance(world_materials, kind);
-            format!("{kind}>={amount} (agent {agent_current}, world {world_current})")
-        })
-        .collect::<Vec<_>>();
-    Some(format!("requires one ledger with {}", details.join(", ")))
-}
-
-fn has_required_materials(materials: &BTreeMap<String, i64>, required: &[(&str, i64)]) -> bool {
-    required
-        .iter()
-        .all(|(kind, amount)| material_balance(materials, kind) >= *amount)
-}
-
-fn material_balance(materials: &BTreeMap<String, i64>, kind: &str) -> i64 {
-    materials.get(kind).copied().unwrap_or_default()
 }
 
 fn stage_gate_disabled_reason(

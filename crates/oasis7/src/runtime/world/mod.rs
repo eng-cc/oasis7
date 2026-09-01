@@ -17,6 +17,7 @@ mod capability_authorization_events;
 mod capability_authorization_state;
 mod capability_authorization_validation;
 mod economy;
+mod economy_product_validation;
 mod effects;
 mod event_processing;
 mod factory_authority;

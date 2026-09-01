@@ -109,9 +109,10 @@ fn default_module_release_required_roles() -> Vec<String> {
 const ALLIANCE_MIN_MEMBER_COUNT: usize = 2;
 
 pub use self::industry_state::{
-    AgentLocationAuthorityV1, FactoryBuildPowerObligationV1, FactoryConstructionPowerMode,
-    FactoryConstructionPowerProfileV1, FactoryProductionSnapshot, FactoryProductionState,
-    FactoryProductionStatus, FactoryRecycleReceiptV1, FactorySiteAuthorityV1, LocationAnchorV1,
+    AgentLocationAuthorityV1, FACTORY_BUILD_STARTED_MODERN_VERSION, FactoryBuildPowerObligationV1,
+    FactoryConstructionPowerMode, FactoryConstructionPowerProfileV1, FactoryProductionSnapshot,
+    FactoryProductionState, FactoryProductionStatus, FactoryRecycleReceiptV1,
+    FactorySiteAuthorityV1, LocationAnchorV1, ProductValidationAttemptV1,
     ProductValidationReceiptV1, RecipeCompletionReceiptV1,
 };
 
@@ -151,6 +152,9 @@ pub struct FactoryBuildJobState {
     #[serde(default = "default_world_material_ledger")]
     pub consume_ledger: MaterialLedgerId,
     pub ready_at: WorldTime,
+    /// Build event contract discriminator; zero is legacy replay only.
+    #[serde(default)]
+    pub contract_version: u8,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub site_authority_revision: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -553,6 +557,14 @@ pub struct WorldState {
     /// the pending job; old snapshots decode this as an empty map.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub factory_construction_receipts: BTreeMap<String, FactoryBuildPowerObligationV1>,
+    /// Pre-call intents prevent a crash between module side effects and the
+    /// validation receipt from causing a second validator invocation.
+    #[serde(
+        default,
+        skip_serializing_if = "BTreeMap::is_empty",
+        deserialize_with = "deserialize_btreemap_u64_keys"
+    )]
+    pub product_validation_attempts: BTreeMap<ActionId, Vec<ProductValidationAttemptV1>>,
     #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
     pub pending_factory_builds: BTreeMap<ActionId, FactoryBuildJobState>,
     #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
@@ -1102,7 +1114,8 @@ impl WorldState {
             | DomainEvent::CrisisTimedOut { .. }
             | DomainEvent::MetaProgressGranted { .. }
             | DomainEvent::ProductValidated { .. }
-            | DomainEvent::ProductValidationRecorded { .. } => {
+            | DomainEvent::ProductValidationRecorded { .. }
+            | DomainEvent::ProductValidationAttemptStarted { .. } => {
                 self.apply_domain_event_governance_meta(event, now)?
             }
         }

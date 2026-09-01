@@ -1619,9 +1619,9 @@ describe("viewer web ui automation baseline", () => {
     const details = container.querySelector("#viewer-gameplay-details");
     const card = within(details).getByTestId("viewer-factory-production-failure-disposition");
     const cardText = card.textContent;
-    for (const text of ["factory.target", "recipe.smelter.iron_ingot", "Detail: product profile rejected the committed output", "Queue iron ingot run", "Recovery action: schedule_recipe_smelter_iron_ingot", "Unavailable: insufficient iron_ore in site ledger", "Next recheck: next committed snapshot"]) expect(cardText).toContain(text);
+    for (const text of ["factory.target", "recipe.smelter.iron_ingot", "Detail: product profile rejected the committed output", "Refresh gameplay snapshot", "Recovery action: request_snapshot", "Next recheck: next committed snapshot"]) expect(cardText).toContain(text);
     expect(within(card).getAllByText(/iron_ore × 3/)).toHaveLength(2); expect(within(card).getAllByText("7").length).toBeGreaterThanOrEqual(2);
-    expect(card.querySelector("button")).toBeDisabled();
+    expect(card.querySelector("button")).toBeEnabled();
     expect(card.textContent).not.toMatch(/product_validation_rejected|consumed_lost|inspect_product_validation_and_reschedule/);
     expect(within(details).queryByText("synthetic wait should be hidden")).not.toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
@@ -3300,9 +3300,8 @@ describe("viewer web ui automation baseline", () => {
         expect(card).toHaveTextContent("Consumed inputs");
         expect(card).toHaveTextContent("iron_ore × 3");
         expect(card).toHaveTextContent("Consumed power");
-        expect(card).toHaveTextContent("Queue iron ingot run");
-        expect(card).toHaveTextContent("Recovery action: schedule_recipe_smelter_iron_ingot");
-        expect(card).toHaveTextContent("Unavailable: insufficient iron_ore in site ledger");
+        expect(card).toHaveTextContent("Refresh gameplay snapshot");
+        expect(card).toHaveTextContent("Recovery action: request_snapshot");
         expect(card).toHaveTextContent("Next recheck: next committed snapshot");
         expect(card.textContent).not.toMatch(
           /product_validation_rejected|consumed_lost|inspect_product_validation_and_reschedule/,

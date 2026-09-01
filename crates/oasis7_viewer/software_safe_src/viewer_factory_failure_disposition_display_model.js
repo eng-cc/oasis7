@@ -38,10 +38,25 @@ function recoveryActionForDisposition(value, availableActions, locale, localeTex
   const recipeSuffix = recipeToken?.startsWith("recipe_")
     ? recipeToken.slice("recipe_".length)
     : recipeToken;
-  const isExecutable = (action) => ["gameplay_action", "request_snapshot", "step", "play"]
-    .includes(normalizedCode(actionField(action, "execute_kind", "executeKind")));
+  const executeKind = (action) => {
+    const rawKind = normalizedCode(actionField(action, "execute_kind", "executeKind"));
+    if (rawKind) return rawKind;
+    const protocol = normalizedActionToken(actionField(action, "protocol_action", "protocolAction"));
+    const actionId = normalizedActionToken(actionField(action, "action_id", "actionId"));
+    if (protocol === "request_snapshot" || protocol === "world_request_snapshot") return "request_snapshot";
+    if (protocol === "live_control_step") return "step";
+    if (protocol === "live_control_play") return "play";
+    if (protocol === "prompt_control_apply") return "reprioritize";
+    if (protocol === "gameplay_action_submit" && actionId) return "gameplay_action";
+    return null;
+  };
+  const isExecutable = (action) => ["gameplay_action", "request_snapshot", "step", "play", "reprioritize"]
+    .includes(executeKind(action));
+  const isEnabled = (action) => isExecutable(action) && !displayableString(
+    actionField(action, "disabled_reason", "disabledReason"),
+  );
   const matchingScheduleAction = actions.find((action) => {
-    if (!isExecutable(action)) return false;
+    if (!isEnabled(action)) return false;
     const actionId = normalizedActionToken(actionField(action, "action_id", "actionId"));
     return actionId?.startsWith("schedule_recipe_")
       && recipeSuffix
@@ -50,26 +65,40 @@ function recoveryActionForDisposition(value, availableActions, locale, localeTex
   const snapshotAction = actions.find((action) => {
     const actionId = normalizedActionToken(actionField(action, "action_id", "actionId"));
     const protocolAction = normalizedActionToken(actionField(action, "protocol_action", "protocolAction"));
-    return isExecutable(action) && (actionId === "request_snapshot" || protocolAction === "request_snapshot");
+    return isEnabled(action) && (actionId === "request_snapshot" || protocolAction === "request_snapshot");
   });
-  const selected = matchingScheduleAction || snapshotAction || {
-    actionId: "request_snapshot",
-    label: localeText(locale, "刷新玩法快照", "Refresh gameplay snapshot"),
-    protocolAction: "request_snapshot",
+  const otherRecoveryAction = actions.find((action) => {
+    if (!isEnabled(action) || matchingScheduleAction === action || snapshotAction === action) return false;
+    const token = [
+      actionField(action, "action_id", "actionId"),
+      actionField(action, "protocol_action", "protocolAction"),
+      executeKind(action),
+    ].map(normalizedActionToken).filter(Boolean).join("_");
+    return executeKind(action) === "reprioritize"
+      || /repair|rebuild|reroute|replenish|refill|requote|quote|wait|snapshot|step|play/.test(token);
+  });
+  const selected = matchingScheduleAction || otherRecoveryAction || snapshotAction || {
+    actionId: "no_safe_path",
+    label: localeText(locale, "暂无安全恢复路径", "No safe recovery path"),
+    protocolAction: null,
     targetAgentId: null,
-    disabledReason: null,
-    executeKind: "request_snapshot",
+    disabledReason: localeText(
+      locale,
+      "当前 committed 快照没有可执行的排程、修复、补给或刷新动作；等待下一次复查。",
+      "The committed snapshot has no enabled schedule, repair, replenishment, reprioritize, or snapshot action; wait for the next recheck.",
+    ),
+    executeKind: "none",
   };
-  const actionId = displayableString(actionField(selected, "action_id", "actionId")) || "request_snapshot";
+  const actionId = displayableString(actionField(selected, "action_id", "actionId")) || "no_safe_path";
   const label = displayableString(selected.label)
-    || localeText(locale, "刷新玩法快照", "Refresh gameplay snapshot");
+    || localeText(locale, "暂无安全恢复路径", "No safe recovery path");
   return {
     actionId,
     label,
-    protocolAction: displayableString(actionField(selected, "protocol_action", "protocolAction")) || "request_snapshot",
+    protocolAction: displayableString(actionField(selected, "protocol_action", "protocolAction")),
     targetAgentId: displayableString(actionField(selected, "target_agent_id", "targetAgentId")),
     disabledReason: displayableString(actionField(selected, "disabled_reason", "disabledReason")),
-    executeKind: displayableString(actionField(selected, "execute_kind", "executeKind")) || "request_snapshot",
+    executeKind: executeKind(selected) || "none",
   };
 }
 

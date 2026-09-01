@@ -432,7 +432,23 @@ impl World {
         while let Some(envelope) = self.pending_actions.pop_front() {
             let mut action_envelope = envelope.clone();
             let mut post_action_result_event: Option<WorldEvent> = None;
-            match self.resolve_module_backed_economy_action(&envelope, sandbox)? {
+            let module_resolution =
+                match self.resolve_module_backed_economy_action(&envelope, sandbox) {
+                    Ok(resolution) => resolution,
+                    Err(error @ WorldError::ModuleCallFailed { .. }) => {
+                        // Module traps and malformed outputs are action-scoped
+                        // failures. The module runtime has already journaled the
+                        // failure; convert it to the same durable correlated
+                        // ActionRejected path as a declared module denial.
+                        EconomyActionResolution::Rejected(RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "economy module evaluation failed; action rejected: {error:?}"
+                            )],
+                        })
+                    }
+                    Err(error) => return Err(error),
+                };
+            match module_resolution {
                 EconomyActionResolution::Resolved(action) => {
                     action_envelope.action = action;
                 }

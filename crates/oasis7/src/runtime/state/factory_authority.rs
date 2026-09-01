@@ -112,11 +112,24 @@ impl WorldState {
                 agent_id: authority.agent_id.clone(),
             });
         }
-        require_active_location_anchor(
-            &self.location_anchors,
-            authority.location_id.as_str(),
-            now,
-        )?;
+        if authority.effective_at > now {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "agent location authority not yet effective: agent_id={} effective_at={} now={now}",
+                    authority.agent_id, authority.effective_at
+                ),
+            });
+        }
+        // Revocation is allowed to close an assignment while its anchor is
+        // inactive. Activation remains fail-closed against both anchor state
+        // and the assignment's effective anchor.
+        if authority.active {
+            require_active_location_anchor(
+                &self.location_anchors,
+                authority.location_id.as_str(),
+                now,
+            )?;
+        }
         let current = self
             .agent_location_authorities
             .get(authority.agent_id.as_str())
@@ -142,11 +155,13 @@ impl WorldState {
     ) -> Result<(), WorldError> {
         let mut normalized = authority.clone();
         normalize_allowlist(&mut normalized)?;
-        require_active_location_anchor(
-            &self.location_anchors,
-            normalized.location_id.as_str(),
-            now,
-        )?;
+        if normalized.active {
+            require_active_location_anchor(
+                &self.location_anchors,
+                normalized.location_id.as_str(),
+                now,
+            )?;
+        }
         let current = self
             .factory_site_authorities
             .get(normalized.site_id.as_str())

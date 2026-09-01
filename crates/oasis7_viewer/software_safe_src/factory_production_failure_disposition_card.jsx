@@ -75,17 +75,16 @@ export function FactoryProductionFailureDispositionCard(props) {
                   {`${text("暂不可用", "Unavailable")}: ${action().disabledReason}`}
                 </div>
               </Show>
-              <button
-                class="button button--secondary"
-                type="button"
-                data-testid="factory-failure-recovery-action"
-                disabled={Boolean(action().disabledReason)}
-                onClick={() => {
-                  if (!action().disabledReason) props.onAction?.(action());
-                }}
-              >
-                {action().label}
-              </button>
+              <Show when={action().executeKind !== "none"}>
+                <button
+                  class="button button--secondary"
+                  type="button"
+                  data-testid="factory-failure-recovery-action"
+                  onClick={() => props.onAction?.(action())}
+                >
+                  {action().label}
+                </button>
+              </Show>
             </>
           )}
         </Show>

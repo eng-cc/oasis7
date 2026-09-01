@@ -1,4 +1,5 @@
 use super::*;
+use crate::runtime::FACTORY_BUILD_STARTED_MODERN_VERSION;
 use oasis7_wasm_abi::FactoryModuleSpec;
 
 impl World {
@@ -123,6 +124,7 @@ impl World {
             || site_authority.location_id.trim().is_empty()
             || !location_authority.active
             || location_authority.location_id != site_authority.location_id
+            || location_authority.effective_at > self.state.time
             || !authorized
         {
             return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
@@ -231,6 +233,7 @@ impl World {
             profile_revision: power_profile.authority_revision,
             electricity_amount: power_profile.electricity_amount,
             mode: power_profile.mode,
+            material_ledger: Some(consume_ledger.clone()),
             electricity_before: Some(available_power),
             electricity_after: Some(
                 available_power.saturating_sub(power_profile.electricity_amount),
@@ -248,6 +251,7 @@ impl World {
             spec: spec.clone(),
             consume_ledger,
             ready_at,
+            contract_version: FACTORY_BUILD_STARTED_MODERN_VERSION,
             site_authority_revision: Some(site_authority.authority_revision),
             site_location_id: Some(site_authority.location_id.clone()),
             location_anchor_revision: Some(location_anchor_revision),

@@ -267,13 +267,14 @@ pub use snapshot::{
 
 // State
 pub use state::{
-    AgentLocationAuthorityV1, FactoryBuildJobState, FactoryBuildPowerObligationV1,
-    FactoryConstructionPowerMode, FactoryConstructionPowerProfileV1,
+    AgentLocationAuthorityV1, FACTORY_BUILD_STARTED_MODERN_VERSION, FactoryBuildJobState,
+    FactoryBuildPowerObligationV1, FactoryConstructionPowerMode, FactoryConstructionPowerProfileV1,
     FactoryProductionFailureDispositionV1, FactoryProductionState, FactoryProductionStatus,
     FactoryRecycleReceiptV1, FactorySiteAuthorityV1, FactoryState, IndustryProgressState,
     LocationAnchorV1, LogisticsRouteV1, MaterialTransferReceiptV1, MaterialTransitJobState,
     ModuleInstanceState, ModuleReleaseAttestationState, ModuleReleaseManifestMappingState,
-    ProductValidationReceiptV1, RecipeCompletionReceiptV1, RecipeJobState, WorldState,
+    ProductValidationAttemptV1, ProductValidationReceiptV1, RecipeCompletionReceiptV1,
+    RecipeJobState, WorldState,
 };
 
 // World

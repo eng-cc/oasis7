@@ -527,7 +527,19 @@ impl World {
                             .find(|receipt| receipt.validation_index == validation_index)
                     })
                     .map(|receipt| receipt.module_id.clone());
+                let prior_attempt = self.product_validation_attempt_for_output(
+                    job.job_id,
+                    validation_index,
+                    job.requester_agent_id.as_str(),
+                    stack,
+                    receipt_module_id.as_deref(),
+                )?;
                 let Some(module_id) = receipt_module_id
+                    .or_else(|| {
+                        prior_attempt
+                            .as_ref()
+                            .map(|attempt| attempt.module_id.clone())
+                    })
                     .or_else(|| self.resolve_product_module_for_stack(stack.kind.as_str()))
                 else {
                     continue;
@@ -541,6 +553,7 @@ impl World {
                         .wrapping_add(output_index as u64)
                         .wrapping_add(self.state.time),
                 };
+                let mut failure_detail = None;
                 let decision = if let Some(cached) = self.cached_product_validation_decision(
                     job.job_id,
                     validation_index,
@@ -549,14 +562,51 @@ impl World {
                     stack,
                 )? {
                     cached
+                } else if let Some(attempt) = prior_attempt {
+                    if attempt.requester_agent_id != job.requester_agent_id
+                        || attempt.module_id != module_id
+                        || attempt.stack != *stack
+                    {
+                        return Err(WorldError::ResourceBalanceInvalid {
+                            reason: format!(
+                                "product validation retry conflicts with persisted attempt: job_id={} index={validation_index:?}",
+                                job.job_id
+                            ),
+                        });
+                    }
+                    let (decision, detail) = Self::fail_closed_product_validation(
+                        module_id.as_str(),
+                        stack,
+                        "attempt had no committed decision; module call was not retried",
+                    );
+                    failure_detail = Some(detail);
+                    decision
                 } else {
-                    self.evaluate_product_with_module(
+                    self.record_product_validation_attempt(
+                        job.job_id,
+                        validation_index,
+                        job.requester_agent_id.as_str(),
+                        module_id.as_str(),
+                        stack,
+                    )?;
+                    match self.evaluate_product_with_module(
                         module_id.as_str(),
                         job.job_id,
                         Some(output_index),
                         &request,
                         sandbox,
-                    )?
+                    ) {
+                        Ok(decision) => decision,
+                        Err(error) => {
+                            let (decision, detail) = Self::fail_closed_product_validation(
+                                module_id.as_str(),
+                                stack,
+                                format!("{error:?}"),
+                            );
+                            failure_detail = Some(detail);
+                            decision
+                        }
+                    }
                 };
                 let validation_receipt = ProductValidationReceiptV1 {
                     job_id: job.job_id,
@@ -565,6 +615,7 @@ impl World {
                     module_id: module_id.clone(),
                     stack: stack.clone(),
                     decision: decision.clone(),
+                    failure_detail: failure_detail.clone(),
                 };
                 let validation_event = self.action_to_event(&ActionEnvelope {
                     id: job.job_id,
@@ -593,6 +644,12 @@ impl World {
                     emitted.push(event.clone());
                 }
                 if rejected {
+                    let blocker_detail = failure_detail.unwrap_or_else(|| {
+                        format!(
+                            "product validation rejected for {} before production settlement",
+                            stack.kind
+                        )
+                    });
                     self.append_event(
                         WorldEventBody::Domain(DomainEvent::FactoryProductionBlocked {
                             action_id: job.job_id,
@@ -600,10 +657,7 @@ impl World {
                             factory_id: job.factory_id.clone(),
                             recipe_id: job.recipe_id.clone(),
                             blocker_kind: "product_validation".to_string(),
-                            blocker_detail: format!(
-                                "product validation rejected for {} before production settlement",
-                                stack.kind
-                            ),
+                            blocker_detail,
                         }),
                         None,
                     )?;

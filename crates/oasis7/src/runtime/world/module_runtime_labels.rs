@@ -159,6 +159,9 @@ pub(super) fn event_kind_label(body: &WorldEventBody) -> &'static str {
             DomainEvent::ProductValidationRecorded { .. } => {
                 "domain.economy.product_validation_recorded"
             }
+            DomainEvent::ProductValidationAttemptStarted { .. } => {
+                "domain.economy.product_validation_attempt_started"
+            }
             DomainEvent::MaterialProfileGoverned { .. } => {
                 "domain.economy.material_profile_governed"
             }

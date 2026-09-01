@@ -1,7 +1,7 @@
 use super::industrial_progression::{
-    build_first_smelter_via_gameplay_action, expect_player_gameplay,
-    setup_industrial_gameplay_with_completed_jobs, setup_runtime_industrial_gameplay_session,
-    smelter_schedule_action,
+    build_first_assembler_via_gameplay_action, build_first_smelter_via_gameplay_action,
+    expect_player_gameplay, setup_industrial_gameplay_with_completed_jobs,
+    setup_runtime_industrial_gameplay_session, smelter_schedule_action,
 };
 use super::*;
 use crate::simulator::{PlayerGameplayGoalKind, PlayerGameplayStageStatus, ResourceKind};
@@ -350,4 +350,243 @@ fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
             .as_deref()
             .is_some_and(|detail| detail.contains("repair"))
     );
+}
+
+#[test]
+fn runtime_gameplay_actions_allow_assembler_build_from_authoritative_builder_ledger() {
+    let _guard = lock_test_llm_env();
+    let (mut server, agent_id, public_key, private_key) =
+        setup_runtime_industrial_gameplay_session(35);
+    build_first_smelter_via_gameplay_action(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        35,
+    );
+    let agent_ledger = crate::runtime::MaterialLedgerId::agent(agent_id.as_str());
+    server
+        .world
+        .set_ledger_material_balance(agent_ledger.clone(), "iron_ingot", 10)
+        .expect("seed agent iron ingot");
+    server
+        .world
+        .set_ledger_material_balance(agent_ledger.clone(), "copper_wire", 8)
+        .expect("seed agent copper wire");
+    server
+        .world
+        .set_ledger_material_balance(agent_ledger, "structural_frame", 8)
+        .expect("seed agent structural frame");
+
+    let gameplay = expect_player_gameplay(
+        &mut server,
+        "player gameplay after seeding assembler build materials on agent ledger",
+    );
+    let assembler_action = gameplay
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == "build_factory_assembler_mk1")
+        .expect("assembler build action");
+    assert_eq!(assembler_action.disabled_reason, None);
+}
+
+#[test]
+fn runtime_gameplay_actions_do_not_enable_assembler_build_from_world_ledger() {
+    let _guard = lock_test_llm_env();
+    let (mut server, agent_id, public_key, private_key) =
+        setup_runtime_industrial_gameplay_session(37);
+    build_first_smelter_via_gameplay_action(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        37,
+    );
+    let builder_ledger = crate::runtime::MaterialLedgerId::agent(agent_id.as_str());
+    let world_ledger = crate::runtime::MaterialLedgerId::world();
+    for (kind, amount) in [
+        ("structural_frame", 8),
+        ("iron_ingot", 10),
+        ("copper_wire", 8),
+    ] {
+        server
+            .world
+            .set_ledger_material_balance(builder_ledger.clone(), kind, 0)
+            .expect("drain authoritative builder ledger");
+        server
+            .world
+            .set_ledger_material_balance(world_ledger.clone(), kind, amount)
+            .expect("seed world compatibility ledger");
+    }
+
+    let gameplay = expect_player_gameplay(
+        &mut server,
+        "player gameplay with construction materials only on world ledger",
+    );
+    let assembler_action = gameplay
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == "build_factory_assembler_mk1")
+        .expect("assembler build action");
+    let disabled_reason = assembler_action
+        .disabled_reason
+        .as_deref()
+        .expect("world ledger must not enable builder construction");
+    assert!(disabled_reason.contains("insufficient builder material"));
+    assert!(disabled_reason.contains(builder_ledger.to_string().as_str()));
+    assert!(disabled_reason.contains("replenish"));
+}
+
+#[test]
+fn runtime_gameplay_actions_disable_factory_build_when_builder_power_is_insufficient() {
+    let _guard = lock_test_llm_env();
+    let (mut server, agent_id, _, _) = setup_runtime_industrial_gameplay_session(38);
+    server
+        .world
+        .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Electricity, 0)
+        .expect("drain builder construction power");
+
+    let gameplay = expect_player_gameplay(&mut server, "builder power readiness snapshot");
+    let action = gameplay
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == "build_factory_smelter_mk1")
+        .expect("smelter build action");
+    let disabled_reason = action
+        .disabled_reason
+        .as_deref()
+        .expect("missing builder power must disable construction");
+    assert!(disabled_reason.contains("insufficient builder electricity"));
+    assert!(disabled_reason.contains("replenish electricity"));
+}
+
+#[test]
+fn runtime_gameplay_actions_disable_factory_build_when_site_authority_is_inactive() {
+    let _guard = lock_test_llm_env();
+    let (mut server, agent_id, _, _) = setup_runtime_industrial_gameplay_session(39);
+    let mut site_authority = server
+        .world
+        .state()
+        .factory_site_authorities
+        .get("site-smelter")
+        .expect("smelter site authority")
+        .clone();
+    site_authority.authority_revision = site_authority.authority_revision.saturating_add(1);
+    site_authority.active = false;
+    server
+        .world
+        .set_factory_site_authority(site_authority)
+        .expect("deactivate smelter site authority");
+
+    let gameplay = expect_player_gameplay(&mut server, "inactive site readiness snapshot");
+    let action = gameplay
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == "build_factory_smelter_mk1")
+        .expect("smelter build action");
+    let disabled_reason = action
+        .disabled_reason
+        .as_deref()
+        .expect("inactive site authority must disable construction");
+    assert!(disabled_reason.contains("site authority inactive_or_stale"));
+    assert!(disabled_reason.contains("chunk_ready=true"));
+    assert!(
+        disabled_reason.contains(agent_id.as_str()) || disabled_reason.contains("site-smelter")
+    );
+}
+
+#[test]
+fn runtime_gameplay_actions_keep_assembler_build_disabled_when_cost_is_split_across_ledgers() {
+    let _guard = lock_test_llm_env();
+    let (mut server, agent_id, public_key, private_key) =
+        setup_runtime_industrial_gameplay_session(36);
+    build_first_smelter_via_gameplay_action(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        36,
+    );
+    let agent_ledger = crate::runtime::MaterialLedgerId::agent(agent_id.as_str());
+    server
+        .world
+        .set_ledger_material_balance(agent_ledger.clone(), "iron_ingot", 10)
+        .expect("seed agent iron ingot");
+    server
+        .world
+        .set_ledger_material_balance(agent_ledger, "copper_wire", 8)
+        .expect("seed agent copper wire");
+
+    let gameplay = expect_player_gameplay(
+        &mut server,
+        "player gameplay with split assembler build materials across ledgers",
+    );
+    let assembler_action = gameplay
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == "build_factory_assembler_mk1")
+        .expect("assembler build action");
+    let disabled_reason = assembler_action
+        .disabled_reason
+        .as_deref()
+        .expect("split ledger cost should keep assembler action disabled");
+    assert!(disabled_reason.contains("insufficient builder material"));
+    assert!(disabled_reason.contains("structural_frame"));
+    assert!(disabled_reason.contains("replenish"));
+}
+
+#[test]
+fn runtime_gameplay_actions_do_not_enable_assembler_schedule_from_world_ledger() {
+    let _guard = lock_test_llm_env();
+    let (mut server, agent_id, public_key, private_key) =
+        setup_runtime_industrial_gameplay_session(40);
+    build_first_smelter_via_gameplay_action(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        40,
+    );
+    build_first_assembler_via_gameplay_action(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        50,
+    );
+    let assembler_site = server
+        .world
+        .state()
+        .factories
+        .get("factory.assembler.mk1")
+        .expect("assembler factory state")
+        .site_id
+        .clone();
+    let site_ledger = crate::runtime::MaterialLedgerId::site(assembler_site);
+    let world_ledger = crate::runtime::MaterialLedgerId::world();
+    server
+        .world
+        .set_ledger_material_balance(site_ledger.clone(), "iron_ingot", 0)
+        .expect("drain authoritative assembler site ledger");
+    server
+        .world
+        .set_ledger_material_balance(world_ledger, "iron_ingot", 8)
+        .expect("seed world compatibility ledger");
+
+    let gameplay = expect_player_gameplay(
+        &mut server,
+        "player gameplay with assembler inputs only on world ledger",
+    );
+    let gear_action = gameplay
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == "schedule_recipe_assembler_gear")
+        .expect("assembler gear schedule action");
+    let disabled_reason = gear_action
+        .disabled_reason
+        .as_deref()
+        .expect("world ledger must not enable assembler scheduling");
+    assert!(disabled_reason.contains("insufficient iron_ingot"));
+    assert!(disabled_reason.contains(site_ledger.to_string().as_str()));
+    assert!(disabled_reason.contains("replenish"));
 }

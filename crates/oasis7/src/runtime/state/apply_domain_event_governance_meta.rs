@@ -349,6 +349,39 @@ impl WorldState {
                     cell.last_active = now;
                 }
             }
+            DomainEvent::ProductValidationAttemptStarted { attempt } => {
+                if attempt.job_id == 0 || attempt.module_id.trim().is_empty() {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "product validation attempt identity is invalid: job_id={} module_id={}",
+                            attempt.job_id, attempt.module_id
+                        ),
+                    });
+                }
+                if let Some(existing) = self
+                    .product_validation_attempts
+                    .get(&attempt.job_id)
+                    .and_then(|attempts| {
+                        attempts
+                            .iter()
+                            .find(|existing| existing.validation_index == attempt.validation_index)
+                    })
+                {
+                    if existing == attempt {
+                        return Ok(());
+                    }
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "product validation attempt conflicts with persisted intent: job_id={} index={:?}",
+                            attempt.job_id, attempt.validation_index
+                        ),
+                    });
+                }
+                self.product_validation_attempts
+                    .entry(attempt.job_id)
+                    .or_default()
+                    .push(attempt.clone());
+            }
             _ => unreachable!(
                 "apply_domain_event_governance_meta received unsupported event variant"
             ),

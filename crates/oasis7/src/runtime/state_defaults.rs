@@ -72,6 +72,7 @@ impl Default for WorldState {
             factory_production_failure_dispositions: BTreeMap::new(),
             direct_material_transfer_receipts: BTreeMap::new(),
             product_validation_receipts: BTreeMap::new(),
+            product_validation_attempts: BTreeMap::new(),
             product_profiles: BTreeMap::new(),
             latest_product_validation: None,
             recipe_profiles: BTreeMap::new(),

@@ -128,6 +128,7 @@ fn product_validation_receipt_reuses_decision_after_crash_window_without_module_
                 true,
                 vec!["fleet_grade".to_string()],
             ),
+            failure_detail: None,
         },
     };
     // Simulate a crash after the validation event committed but before the
@@ -207,6 +208,7 @@ fn rejected_product_validation_receipt_reuses_decision_after_crash_window() {
                 vec!["fleet_grade".to_string()],
                 vec!["stack exceeds limit".to_string()],
             ),
+            failure_detail: None,
         },
     };
     let mut journal = world.journal().clone();
@@ -413,6 +415,202 @@ fn schedule_recipe_with_module_blocks_commit_when_product_validation_fails() {
         )
     });
     assert!(has_rejected);
+}
+
+#[test]
+fn product_validation_module_failure_settles_correlated_blocker_once() {
+    let mut world = logistics_drone_module_recipe_world("factory.recipe.validation-failure");
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: "factory.recipe.validation-failure".to_string(),
+        recipe_id: "recipe.assembler.logistics_drone".to_string(),
+        plan: RecipeExecutionPlan::accepted(
+            1,
+            vec![
+                MaterialStack::new("motor_mk1", 2),
+                MaterialStack::new("control_chip", 1),
+                MaterialStack::new("chassis_plate", 1),
+            ],
+            vec![MaterialStack::new("logistics_drone", 1)],
+            Vec::new(),
+            10,
+            1,
+        ),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
+    });
+    world.step().expect("start recipe before module failure");
+    let job_id = world
+        .state()
+        .pending_recipe_jobs
+        .keys()
+        .next()
+        .copied()
+        .expect("pending recipe job");
+
+    // Empty module output is an invalid product-validation response. The
+    // due-job loop must turn it into a receipt, rejection, and terminal
+    // disposition instead of rolling back the whole tick.
+    let mut sandbox = CaptureContextSandbox::with_outputs(Vec::new());
+    world
+        .step_with_modules(&mut sandbox)
+        .expect("invalid product output becomes durable rejection");
+    assert_eq!(
+        sandbox.requests.len(),
+        1,
+        "one validator call before failure"
+    );
+    assert_eq!(world.pending_recipe_jobs_len(), 0);
+    let receipt = world
+        .state()
+        .product_validation_receipts
+        .get(&job_id)
+        .and_then(|receipts| receipts.first())
+        .expect("failed validator receipt");
+    assert!(receipt.failure_detail.is_some());
+    assert_eq!(
+        world
+            .state()
+            .factory_production_failure_dispositions
+            .get(&job_id)
+            .map(|disposition| disposition.blocker_kind.as_str()),
+        Some("product_validation")
+    );
+    let attempts = world
+        .state()
+        .product_validation_attempts
+        .get(&job_id)
+        .expect("pre-call validation attempt");
+    assert_eq!(attempts.len(), 1);
+
+    let calls_after_settlement = sandbox.requests.len();
+    world
+        .step_with_modules(&mut sandbox)
+        .expect("settled validation does not retry");
+    assert_eq!(sandbox.requests.len(), calls_after_settlement);
+    assert_eq!(
+        world.state().factory_production_failure_dispositions.len(),
+        1,
+        "terminal disposition is exactly once"
+    );
+}
+
+#[test]
+fn product_validation_attempt_without_receipt_fails_closed_after_crash() {
+    let mut world = logistics_drone_module_recipe_world("factory.recipe.validation-crash");
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: "factory.recipe.validation-crash".to_string(),
+        recipe_id: "recipe.assembler.logistics_drone".to_string(),
+        plan: RecipeExecutionPlan::accepted(
+            1,
+            vec![
+                MaterialStack::new("motor_mk1", 2),
+                MaterialStack::new("control_chip", 1),
+                MaterialStack::new("chassis_plate", 1),
+            ],
+            vec![MaterialStack::new("logistics_drone", 1)],
+            Vec::new(),
+            10,
+            1,
+        ),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
+    });
+    world.step().expect("start recipe before simulated crash");
+    let pending = world
+        .state()
+        .pending_recipe_jobs
+        .values()
+        .next()
+        .expect("pending recipe")
+        .clone();
+    let mut journal = world.journal().clone();
+    journal.append(WorldEvent {
+        id: journal.events.last().map_or(1, |event| event.id + 1),
+        time: world.state().time,
+        caused_by: None,
+        body: WorldEventBody::Domain(DomainEvent::ProductValidationAttemptStarted {
+            attempt: crate::runtime::ProductValidationAttemptV1 {
+                job_id: pending.job_id,
+                validation_index: Some(0),
+                requester_agent_id: pending.requester_agent_id.clone(),
+                module_id: "m4.product.logistics_drone".to_string(),
+                stack: pending.produce[0].clone(),
+            },
+        }),
+    });
+    world = World::from_snapshot(world.snapshot(), journal)
+        .expect("recover after pre-call intent committed");
+    let mut sandbox = CaptureContextSandbox::with_outputs(vec![ModuleOutput {
+        new_state: None,
+        effects: Vec::new(),
+        emits: vec![ModuleEmit {
+            kind: "economy.product_validation".to_string(),
+            payload: serde_json::to_value(ProductValidationDecision::accepted(
+                "logistics_drone",
+                32,
+                true,
+                vec!["fleet_grade".to_string()],
+            ))
+            .expect("serialize would-be retry output"),
+        }],
+        tick_lifecycle: None,
+        output_bytes: 256,
+    }]);
+    world
+        .step_with_modules(&mut sandbox)
+        .expect("crash interval must settle fail-closed");
+    assert!(
+        sandbox.requests.is_empty(),
+        "pre-call intent forbids retry call"
+    );
+    assert_eq!(world.pending_recipe_jobs_len(), 0);
+    assert!(
+        world
+            .state()
+            .product_validation_receipts
+            .get(&pending.job_id)
+            .is_some_and(|receipts| receipts
+                .iter()
+                .any(|receipt| receipt.failure_detail.is_some()))
+    );
+    assert!(
+        world
+            .state()
+            .factory_production_failure_dispositions
+            .contains_key(&pending.job_id)
+    );
+}
+
+#[test]
+fn schedule_recipe_module_failure_is_correlated_action_rejection() {
+    let mut world = logistics_drone_module_recipe_world("factory.recipe.schedule-failure");
+    world.submit_action(Action::ScheduleRecipeWithModule {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: "factory.recipe.schedule-failure".to_string(),
+        recipe_id: "recipe.assembler.logistics_drone".to_string(),
+        module_id: "m4.recipe.logistics_drone".to_string(),
+        desired_batches: 1,
+        deterministic_seed: 20260902,
+    });
+    let journal_start = world.journal().events.len();
+    let mut sandbox = CaptureContextSandbox::with_outputs(Vec::new());
+    world
+        .step_with_modules(&mut sandbox)
+        .expect("schedule module failure becomes durable rejection");
+    assert_eq!(sandbox.requests.len(), 1);
+    assert_eq!(world.pending_recipe_jobs_len(), 0);
+    assert!(world.journal().events[journal_start..].iter().any(|event| {
+        matches!(
+            &event.body,
+            WorldEventBody::Domain(DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied { notes },
+            }) if *action_id > 0
+                && notes.iter().any(|note| note.contains("economy module evaluation failed"))
+        )
+    }));
 }
 
 #[test]

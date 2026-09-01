@@ -627,6 +627,10 @@ pub enum DomainEvent {
         #[serde(default = "default_world_material_ledger")]
         consume_ledger: MaterialLedgerId,
         ready_at: WorldTime,
+        /// `0` is an explicitly classified historical event; current
+        /// producers must emit version `1` with complete admission facts.
+        #[serde(default)]
+        contract_version: u8,
         /// Optional for backward-compatible replay of pre-authority events.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         site_authority_revision: Option<u64>,
@@ -894,6 +898,12 @@ pub enum DomainEvent {
     ProductValidationRecorded {
         receipt: ProductValidationReceiptV1,
     },
+    /// Durable pre-call intent for job-scoped product validation. A retry
+    /// seeing this without a receipt must fail closed instead of invoking the
+    /// validator twice.
+    ProductValidationAttemptStarted {
+        attempt: ProductValidationAttemptV1,
+    },
     MaterialProfileGoverned {
         operator_agent_id: String,
         proposal_id: ProposalId,
@@ -1143,6 +1153,9 @@ impl DomainEvent {
             } => Some(requester_agent_id.as_str()),
             DomainEvent::ProductValidationRecorded { receipt } => {
                 Some(receipt.requester_agent_id.as_str())
+            }
+            DomainEvent::ProductValidationAttemptStarted { attempt } => {
+                Some(attempt.requester_agent_id.as_str())
             }
             DomainEvent::MaterialProfileGoverned {
                 operator_agent_id, ..

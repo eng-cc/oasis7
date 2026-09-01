@@ -68,6 +68,7 @@ impl WorldState {
         spec: &FactoryModuleSpec,
         consume_ledger: &MaterialLedgerId,
         ready_at: &WorldTime,
+        contract_version: u8,
         site_authority_revision: Option<&u64>,
         site_location_id: Option<&str>,
         location_anchor_revision: Option<&u64>,
@@ -126,9 +127,34 @@ impl WorldState {
             });
         }
 
+        let modern_contract = match contract_version {
+            0 => false,
+            FACTORY_BUILD_STARTED_MODERN_VERSION => true,
+            unsupported => {
+                return Err(WorldError::ResourceBalanceInvalid {
+                    reason: format!(
+                        "unsupported factory build event contract version: {unsupported}"
+                    ),
+                });
+            }
+        };
+        if modern_contract
+            && (site_authority_revision.is_none()
+                || site_location_id.is_none()
+                || location_anchor_revision.is_none()
+                || construction_power_obligation.is_none())
+        {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "modern factory build event is missing authority or construction facts: factory_id={}",
+                    spec.factory_id
+                ),
+            });
+        }
+
         // New authority-bound events carry all facts needed for deterministic
-        // admission and replay. Legacy events omit them and intentionally
-        // retain their historical material-only semantics.
+        // admission and replay. Legacy events are the only events allowed to
+        // retain the historical material-only semantics.
         if let Some(obligation) = construction_power_obligation {
             let site_revision =
                 site_authority_revision.ok_or_else(|| WorldError::ResourceBalanceInvalid {
@@ -152,10 +178,7 @@ impl WorldState {
                         "factory build builder location authority missing: builder_agent_id={builder_agent_id}"
                     ),
                 })?;
-            // The pin was added after the power-obligation fields. Keep the
-            // field optional so old journal events still replay, but validate
-            // it whenever a newer event carries it.
-            let anchor_matches = location_anchor_revision.map_or(true, |revision| {
+            let anchor_matches = location_anchor_revision.map_or(!modern_contract, |revision| {
                 self.location_anchors
                     .get(site_location)
                     .is_some_and(|anchor| {
@@ -173,6 +196,7 @@ impl WorldState {
                 || !site.chunk_ready
                 || !location.active
                 || location.location_id != site.location_id
+                || location.effective_at > now
                 || !anchor_matches
                 || (site.owner_agent_id != builder_agent_id
                     && !site
@@ -198,6 +222,27 @@ impl WorldState {
                         spec.factory_id, builder_agent_id
                     ),
                 });
+            }
+            if modern_contract && obligation.material_ledger.as_ref() != Some(consume_ledger) {
+                return Err(WorldError::ResourceBalanceInvalid {
+                    reason: format!(
+                        "modern factory build construction ledger does not match consume ledger: factory_id={}",
+                        spec.factory_id
+                    ),
+                });
+            }
+            if modern_contract {
+                let Some(profile) = self.factory_profiles.get(spec.factory_id.as_str()) else {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "modern factory build canonical profile missing: factory_id={}",
+                            spec.factory_id
+                        ),
+                    });
+                };
+                if let Err(reason) = canonical_factory_profile_matches_spec(profile, spec) {
+                    return Err(WorldError::ResourceBalanceInvalid { reason });
+                }
             }
             let profile = self
                 .factory_construction_power_profiles
@@ -302,6 +347,7 @@ impl WorldState {
                 }
             } else if obligation.electricity_before.is_some()
                 || obligation.electricity_after.is_some()
+                || modern_contract
             {
                 return Err(WorldError::ResourceBalanceInvalid {
                     reason: format!(
@@ -364,6 +410,7 @@ impl WorldState {
                 }
             } else if obligation.material_balances_before.is_some()
                 || obligation.material_balances_after.is_some()
+                || modern_contract
             {
                 return Err(WorldError::ResourceBalanceInvalid {
                     reason: format!(
@@ -401,6 +448,7 @@ impl WorldState {
                 spec: spec.clone(),
                 consume_ledger: consume_ledger.clone(),
                 ready_at: *ready_at,
+                contract_version,
                 site_authority_revision: site_authority_revision.copied(),
                 site_location_id: site_location_id.map(ToOwned::to_owned),
                 location_anchor_revision: location_anchor_revision.copied(),
@@ -672,6 +720,43 @@ impl WorldState {
         }
         Ok(())
     }
+}
+
+fn canonical_factory_profile_matches_spec(
+    profile: &FactoryProfileV1,
+    spec: &FactoryModuleSpec,
+) -> Result<(), String> {
+    let normalize = |tags: &[String]| {
+        tags.iter()
+            .map(|tag| tag.trim().to_ascii_lowercase())
+            .filter(|tag| !tag.is_empty())
+            .collect::<BTreeSet<_>>()
+    };
+    if profile.factory_id != spec.factory_id {
+        return Err(format!(
+            "modern factory build canonical profile identity mismatch: profile={} spec={}",
+            profile.factory_id, spec.factory_id
+        ));
+    }
+    if profile.tier != spec.tier {
+        return Err(format!(
+            "modern factory build canonical profile tier mismatch: factory_id={} profile={} spec={}",
+            spec.factory_id, profile.tier, spec.tier
+        ));
+    }
+    if profile.recipe_slots != spec.recipe_slots {
+        return Err(format!(
+            "modern factory build canonical profile recipe_slots mismatch: factory_id={} profile={} spec={}",
+            spec.factory_id, profile.recipe_slots, spec.recipe_slots
+        ));
+    }
+    if normalize(&profile.tags) != normalize(&spec.tags) {
+        return Err(format!(
+            "modern factory build canonical profile tags mismatch: factory_id={}",
+            spec.factory_id
+        ));
+    }
+    Ok(())
 }
 
 pub(super) fn recipe_completion_receipt(

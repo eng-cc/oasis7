@@ -1,5 +1,9 @@
 use super::*;
 
+/// Current authority-bound factory build event contract. Version zero is
+/// reserved for explicitly classified historical replay only.
+pub const FACTORY_BUILD_STARTED_MODERN_VERSION: u8 = 1;
+
 /// Runtime-owned identity for a location used by site and agent authority.
 ///
 /// The registry is intentionally keyed by this exact `location_id`; physical
@@ -97,6 +101,10 @@ pub struct FactoryBuildPowerObligationV1 {
     pub electricity_amount: i64,
     #[serde(default)]
     pub mode: FactoryConstructionPowerMode,
+    /// Exact source ledger committed at admission and retained in the settled
+    /// construction receipt. This is optional only for legacy replay.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material_ledger: Option<MaterialLedgerId>,
     /// Admission-time electricity facts.  These are optional so snapshots
     /// containing the pre-receipt obligation continue to decode and replay.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -110,6 +118,23 @@ pub struct FactoryBuildPowerObligationV1 {
     pub material_balances_before: Option<BTreeMap<String, i64>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub material_balances_after: Option<BTreeMap<String, i64>>,
+}
+
+/// Durable intent written before a product validation module call. If a
+/// retry observes this intent without a settled receipt it must fail closed,
+/// rather than invoke the module a second time.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProductValidationAttemptV1 {
+    #[serde(default)]
+    pub job_id: ActionId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_index: Option<u32>,
+    #[serde(default)]
+    pub requester_agent_id: String,
+    #[serde(default)]
+    pub module_id: String,
+    #[serde(default = "default_receipt_material_stack")]
+    pub stack: MaterialStack,
 }
 
 /// Durable receipt for a product-module decision.  The job and output index
@@ -129,6 +154,10 @@ pub struct ProductValidationReceiptV1 {
     pub stack: MaterialStack,
     #[serde(default = "default_receipt_product_validation_decision")]
     pub decision: ProductValidationDecision,
+    /// Structured module trap/invalid-output context, retained with the
+    /// correlated rejection and blocker for replay/audit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_detail: Option<String>,
 }
 
 impl Default for ProductValidationReceiptV1 {
@@ -140,6 +169,7 @@ impl Default for ProductValidationReceiptV1 {
             module_id: String::new(),
             stack: default_receipt_material_stack(),
             decision: default_receipt_product_validation_decision(),
+            failure_detail: None,
         }
     }
 }

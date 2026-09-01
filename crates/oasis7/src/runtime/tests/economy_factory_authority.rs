@@ -39,6 +39,178 @@ fn legacy_location_anchor_without_effective_at_defaults_to_immediate() {
 }
 
 #[test]
+fn future_agent_assignment_is_rejected_at_admission_and_replay() {
+    let mut world = World::new();
+    register_builder(&mut world, "builder-future");
+    world
+        .set_location_anchor(LocationAnchorV1 {
+            location_id: "location-future".to_string(),
+            active: true,
+            authority_revision: 1,
+            effective_at: 0,
+        })
+        .expect("seed active anchor");
+    let result = world.set_agent_location_authority(AgentLocationAuthorityV1 {
+        agent_id: "builder-future".to_string(),
+        location_id: "location-future".to_string(),
+        active: true,
+        authority_revision: 1,
+        effective_at: world.state().time.saturating_add(1),
+    });
+    assert!(matches!(
+        result,
+        Err(WorldError::ResourceBalanceInvalid { reason })
+            if reason.contains("not yet effective")
+    ));
+    let future_event = DomainEvent::AgentLocationAuthorityUpdated {
+        authority: AgentLocationAuthorityV1 {
+            agent_id: "builder-future".to_string(),
+            location_id: "location-future".to_string(),
+            active: true,
+            authority_revision: 1,
+            effective_at: world.state().time.saturating_add(1),
+        },
+    };
+    let mut replay_state = world.state().clone();
+    let replay_error = replay_state
+        .apply_domain_event(&future_event, replay_state.time)
+        .expect_err("future assignment must also fail during replay");
+    assert!(matches!(
+        replay_error,
+        WorldError::ResourceBalanceInvalid { reason }
+            if reason.contains("not yet effective")
+    ));
+    let future_revocation = world.set_agent_location_authority(AgentLocationAuthorityV1 {
+        agent_id: "builder-future".to_string(),
+        location_id: "location-future".to_string(),
+        active: false,
+        authority_revision: 1,
+        effective_at: world.state().time.saturating_add(1),
+    });
+    assert!(matches!(
+        future_revocation,
+        Err(WorldError::ResourceBalanceInvalid { reason })
+            if reason.contains("not yet effective")
+    ));
+}
+
+#[test]
+fn inactive_anchor_allows_revocation_then_requires_anchor_for_reactivation() {
+    let mut world = World::new();
+    register_builder(&mut world, "builder-revoke");
+    let location_id = "location-revoke".to_string();
+    world
+        .set_location_anchor(LocationAnchorV1 {
+            location_id: location_id.clone(),
+            active: true,
+            authority_revision: 1,
+            effective_at: 0,
+        })
+        .expect("seed active anchor");
+    world
+        .set_agent_location_authority(AgentLocationAuthorityV1 {
+            agent_id: "builder-revoke".to_string(),
+            location_id: location_id.clone(),
+            active: true,
+            authority_revision: 1,
+            effective_at: 0,
+        })
+        .expect("activate assignment");
+    world
+        .set_location_anchor(LocationAnchorV1 {
+            location_id: location_id.clone(),
+            active: false,
+            authority_revision: 2,
+            effective_at: 0,
+        })
+        .expect("deactivate anchor");
+    world
+        .set_agent_location_authority(AgentLocationAuthorityV1 {
+            agent_id: "builder-revoke".to_string(),
+            location_id: location_id.clone(),
+            active: false,
+            authority_revision: 2,
+            effective_at: 0,
+        })
+        .expect("revoke assignment while anchor is inactive");
+    let reactivate_before_anchor = world.set_agent_location_authority(AgentLocationAuthorityV1 {
+        agent_id: "builder-revoke".to_string(),
+        location_id: location_id.clone(),
+        active: true,
+        authority_revision: 3,
+        effective_at: 0,
+    });
+    assert!(matches!(
+        reactivate_before_anchor,
+        Err(WorldError::ResourceBalanceInvalid { reason })
+            if reason.contains("inactive_or_stale")
+    ));
+    world
+        .set_location_anchor(LocationAnchorV1 {
+            location_id: location_id.clone(),
+            active: true,
+            authority_revision: 3,
+            effective_at: 0,
+        })
+        .expect("reactivate anchor");
+    world
+        .set_agent_location_authority(AgentLocationAuthorityV1 {
+            agent_id: "builder-revoke".to_string(),
+            location_id,
+            active: true,
+            authority_revision: 3,
+            effective_at: 0,
+        })
+        .expect("reactivate assignment after anchor");
+}
+
+#[test]
+fn factory_profile_duplicate_is_exact_replay_only_and_conflict_is_atomic() {
+    let mut world = World::new();
+    register_builder(&mut world, "profile-operator");
+    let profile = FactoryProfileV1 {
+        factory_id: "factory.immutable-profile".to_string(),
+        tier: 1,
+        recipe_slots: 2,
+        tags: vec!["assembly".to_string()],
+    };
+    let event = DomainEvent::FactoryProfileGoverned {
+        operator_agent_id: "profile-operator".to_string(),
+        proposal_id: 1,
+        profile: profile.clone(),
+    };
+    let mut state = world.state().clone();
+    state
+        .apply_domain_event(&event, state.time)
+        .expect("initial immutable profile");
+    let before_exact = serde_json::to_vec(&state).expect("serialize exact profile state");
+    state
+        .apply_domain_event(&event, state.time)
+        .expect("exact profile replay");
+    assert_eq!(
+        serde_json::to_vec(&state).expect("serialize exact replay state"),
+        before_exact
+    );
+
+    let mut conflict = profile;
+    conflict.recipe_slots = 3;
+    let conflicting_event = DomainEvent::FactoryProfileGoverned {
+        operator_agent_id: "profile-operator".to_string(),
+        proposal_id: 2,
+        profile: conflict,
+    };
+    let before_conflict = serde_json::to_vec(&state).expect("serialize conflict state");
+    let error = state
+        .apply_domain_event(&conflicting_event, state.time)
+        .expect_err("conflicting immutable profile must fail closed");
+    assert!(matches!(error, WorldError::ResourceBalanceInvalid { .. }));
+    assert_eq!(
+        serde_json::to_vec(&state).expect("serialize after conflict"),
+        before_conflict
+    );
+}
+
+#[test]
 fn location_anchor_is_required_for_authority_and_build_admission() {
     let mut world = World::new();
     register_builder(&mut world, "builder-a");
@@ -272,6 +444,26 @@ fn factory_build_pins_location_anchor_revision_and_replays_after_anchor_mutation
         Some(1)
     );
 
+    let mut stripped_modern_journal = world.journal().clone();
+    for event in &mut stripped_modern_journal.events {
+        if let WorldEventBody::Domain(DomainEvent::FactoryBuildStarted {
+            contract_version,
+            location_anchor_revision,
+            ..
+        }) = &mut event.body
+        {
+            assert_eq!(*contract_version, 1);
+            *location_anchor_revision = None;
+        }
+    }
+    let modern_error = World::from_snapshot(snapshot_before_build.clone(), stripped_modern_journal)
+        .expect_err("stripped modern construction facts must not be replayed as legacy");
+    assert!(matches!(
+        modern_error,
+        WorldError::ResourceBalanceInvalid { reason }
+            if reason.contains("modern factory build event is missing")
+    ));
+
     world
         .set_location_anchor(LocationAnchorV1 {
             location_id: "location-site-1".to_string(),
@@ -291,10 +483,12 @@ fn factory_build_pins_location_anchor_revision_and_replays_after_anchor_mutation
     let mut legacy_journal = world.journal().clone();
     for event in &mut legacy_journal.events {
         if let WorldEventBody::Domain(DomainEvent::FactoryBuildStarted {
+            contract_version,
             location_anchor_revision,
             ..
         }) = &mut event.body
         {
+            *contract_version = 0;
             *location_anchor_revision = None;
         }
     }
@@ -434,4 +628,57 @@ fn build_factory_accepts_profile_tags_after_normalization() {
     });
     world.step().expect("normalized profile permits build");
     assert_eq!(world.pending_factory_builds_len(), 1);
+}
+
+#[test]
+fn modern_factory_build_replay_rejects_forged_profile_capabilities() {
+    let mut world = World::new();
+    register_builder(&mut world, "builder-forged");
+    let spec = factory_spec("factory.forged-replay", 1, 1, 1);
+    let ledger = MaterialLedgerId::agent("builder-forged");
+    for stack in &spec.build_cost {
+        world
+            .set_ledger_material_balance(ledger.clone(), stack.kind.as_str(), stack.amount)
+            .expect("seed forged replay material");
+    }
+    world
+        .set_agent_resource_balance("builder-forged", ResourceKind::Electricity, 10)
+        .expect("seed forged replay power");
+    install_factory_authority(
+        &mut world,
+        "builder-forged",
+        "site-1",
+        spec.factory_id.as_str(),
+        10,
+    );
+    world
+        .upsert_factory_profile(FactoryProfileV1 {
+            factory_id: spec.factory_id.clone(),
+            tier: spec.tier,
+            recipe_slots: spec.recipe_slots,
+            tags: spec.tags.clone(),
+        })
+        .expect("install canonical replay profile");
+    let snapshot = world.snapshot();
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-forged".to_string(),
+        site_id: "site-1".to_string(),
+        spec,
+    });
+    world.step().expect("accept canonical build");
+    let mut journal = world.journal().clone();
+    for event in &mut journal.events {
+        if let WorldEventBody::Domain(DomainEvent::FactoryBuildStarted { spec, .. }) =
+            &mut event.body
+        {
+            spec.tier = spec.tier.saturating_add(1);
+        }
+    }
+    let error = World::from_snapshot(snapshot, journal)
+        .expect_err("forged modern build profile must fail replay");
+    assert!(matches!(
+        error,
+        WorldError::ResourceBalanceInvalid { reason }
+            if reason.contains("canonical profile tier mismatch")
+    ));
 }
