@@ -449,6 +449,21 @@ PY
     wh_state_write "$STATE_FILE" "{\"harness_pid\": $HARNESS_PID, \"harness_pgid\": $HARNESS_PGID, \"harness_identity\": \"$HARNESS_IDENTITY\"}"
     if [[ -n "${OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_FILE:-}" ]]; then
       : >"$OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_FILE"
+      if [[ -n "${OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_ACK_FILE:-}" ]]; then
+        while [[ ! -e "$OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_ACK_FILE" ]]; do
+          if (( $(wh_clock_ms) >= STARTUP_DEADLINE_MS )); then
+            wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "failed", "failure_reason": "test launch synchronization acknowledgement deadline exceeded"}'
+            if ! kill_recorded_processes; then
+              wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "cleanup_failed", "failure_reason": "test launch synchronization acknowledgement cleanup failed"}'
+            fi
+            exit 1
+          fi
+          sleep 0.05
+        done
+        if [[ -n "${OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_ACKED_FILE:-}" ]]; then
+          : >"$OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_ACKED_FILE"
+        fi
+      fi
       sleep "${OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_SECS:-1}"
     fi
     if ! wh_bind_ports_owner "$HARNESS_ROOT" "$PORT_RESERVATION_TOKEN" "$$" "$HARNESS_PID" "$PORT_REGISTRY_COMMON_DIR"; then

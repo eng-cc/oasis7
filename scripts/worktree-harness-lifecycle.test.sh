@@ -5,6 +5,20 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 source "$ROOT_DIR/scripts/worktree-harness-lib.sh"
 
+wait_for_marker() {
+  local marker=$1
+  local timeout_secs=$2
+  local description=$3
+  local deadline_ms=$(( $(wh_clock_ms) + timeout_secs * 1000 ))
+  while [[ ! -e "$marker" ]]; do
+    if (( $(wh_clock_ms) >= deadline_ms )); then
+      echo "lifecycle acceptance: timed out waiting for ${description}: ${marker}" >&2
+      return 1
+    fi
+    sleep 0.05
+  done
+}
+
 TMP_DIR="$(mktemp -d)"
 WORKTREE_ID="$(python3 - "$PWD" <<'PY'
 import hashlib
@@ -311,21 +325,21 @@ else:
     raise SystemExit("lifecycle acceptance: viewer port was not released after down")
 PY
 
+STARTUP_TIMEOUT_SECS=5
 READINESS_DELAY_FILE="$TMP_DIR/readiness-delay.marker"
+READINESS_ACK_FILE="$TMP_DIR/readiness-delay.ack"
+READINESS_ACKED_FILE="$TMP_DIR/readiness-delay.acked"
 READINESS_CHILD_PID_FILE="$TMP_DIR/readiness-child.pid"
-rm -f "$READINESS_DELAY_FILE" "$READINESS_CHILD_PID_FILE"
+rm -f "$READINESS_DELAY_FILE" "$READINESS_ACK_FILE" "$READINESS_ACKED_FILE" "$READINESS_CHILD_PID_FILE"
 FAKE_LAUNCHER_CHILD_PID_FILE="$READINESS_CHILD_PID_FILE" \
 OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" \
 OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_FILE="$READINESS_DELAY_FILE" \
+OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_ACK_FILE="$READINESS_ACK_FILE" \
+OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_ACKED_FILE="$READINESS_ACKED_FILE" \
 OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_SECS=2 \
-./scripts/worktree-harness.sh up --startup-timeout 5 >"$TMP_DIR/readiness-up.log" 2>&1 &
+./scripts/worktree-harness.sh up --startup-timeout "$STARTUP_TIMEOUT_SECS" >"$TMP_DIR/readiness-up.log" 2>&1 &
 readiness_up_pid=$!
-for _ in $(seq 1 200); do
-  [[ -e "$READINESS_DELAY_FILE" ]] && break
-  sleep 0.05
-done
-[[ -e "$READINESS_DELAY_FILE" ]] || {
-  echo "lifecycle acceptance: readiness test did not reach synchronization point" >&2
+wait_for_marker "$READINESS_DELAY_FILE" "$STARTUP_TIMEOUT_SECS" "readiness launch synchronization" || {
   cat "$TMP_DIR/readiness-up.log" >&2 || true
   exit 1
 }
@@ -333,6 +347,11 @@ READINESS_HARNESS_PID="$(wh_state_get "$HARNESS_ROOT/state.json" harness_pid)"
 READINESS_HARNESS_PGID="$(wh_state_get "$HARNESS_ROOT/state.json" harness_pgid)"
 READINESS_HARNESS_IDENTITY="$(wh_state_get "$HARNESS_ROOT/state.json" harness_identity)"
 wh_state_write "$HARNESS_ROOT/state.json" '{"harness_identity": "stale-readiness-incarnation"}'
+: >"$READINESS_ACK_FILE"
+wait_for_marker "$READINESS_ACKED_FILE" "$STARTUP_TIMEOUT_SECS" "stale identity mutation acknowledgement" || {
+  cat "$TMP_DIR/readiness-up.log" >&2 || true
+  exit 1
+}
 set +e
 wait "$readiness_up_pid"
 readiness_up_rc=$?
@@ -371,16 +390,12 @@ FAKE_LAUNCHER_CHILD_PID_FILE="$CONCURRENT_CHILD_PID_FILE" \
 OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" \
 OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_FILE="$CONCURRENT_DELAY_FILE" \
 OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_SECS=2 \
-./scripts/worktree-harness.sh up --startup-timeout 5 >"$TMP_DIR/concurrent-up.log" 2>&1 &
+./scripts/worktree-harness.sh up --startup-timeout "$STARTUP_TIMEOUT_SECS" >"$TMP_DIR/concurrent-up.log" 2>&1 &
 concurrent_up_pid=$!
-for _ in $(seq 1 40); do
-  [[ -e "$CONCURRENT_DELAY_FILE" ]] && break
-  sleep 0.05
-done
-[[ -e "$CONCURRENT_DELAY_FILE" ]] || {
-  echo "lifecycle acceptance: concurrent up did not reach the synchronization point" >&2
+if ! wait_for_marker "$CONCURRENT_DELAY_FILE" "$STARTUP_TIMEOUT_SECS" "concurrent-up launch synchronization"; then
+  cat "$TMP_DIR/concurrent-up.log" >&2 || true
   exit 1
-}
+fi
 OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" \
 ./scripts/worktree-harness.sh down >"$TMP_DIR/concurrent-down.log" 2>&1 &
 concurrent_down_pid=$!
