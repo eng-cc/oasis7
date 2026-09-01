@@ -345,6 +345,59 @@ tracked = [
 ]
 
 entries: list[str] = []
+
+def append_nested_tree(relative: Path, path: Path) -> None:
+    for git in git_candidates:
+        head = subprocess.run(
+            [git, "-C", str(path), "rev-parse", "--verify", "HEAD^{commit}"],
+            capture_output=True,
+            check=False,
+        )
+        if head.returncode == 0 and head.stdout.strip():
+            entries.append(
+                f"gitlink-head:{relative}:"
+                f"{head.stdout.decode('ascii', 'replace').strip()}"
+            )
+            break
+    for current_root, directory_names, file_names in os.walk(path, followlinks=False):
+        current = Path(current_root)
+        directory_names[:] = sorted(name for name in directory_names if name != ".git")
+        for name in list(directory_names):
+            nested = current / name
+            nested_relative = relative / nested.relative_to(path)
+            stat = nested.lstat()
+            mode = stat.st_mode & 0o7777
+            if nested.is_symlink():
+                entries.append(
+                    f"gitlink-symlink:{nested_relative}:{mode:o}:{os.readlink(nested)}"
+                )
+                directory_names.remove(name)
+            else:
+                entries.append(f"gitlink-dir:{nested_relative}:{mode:o}")
+        for name in sorted(file_names):
+            if name == ".git":
+                continue
+            nested = current / name
+            nested_relative = relative / nested.relative_to(path)
+            stat = nested.lstat()
+            mode = stat.st_mode & 0o7777
+            if nested.is_symlink():
+                entries.append(
+                    f"gitlink-symlink:{nested_relative}:{mode:o}:{os.readlink(nested)}"
+                )
+            elif nested.is_file():
+                digest = hashlib.sha256()
+                with nested.open("rb") as handle:
+                    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                        digest.update(chunk)
+                entries.append(
+                    f"gitlink-file:{nested_relative}:{mode:o}:{digest.hexdigest()}"
+                )
+            else:
+                entries.append(
+                    f"gitlink-other:{nested_relative}:{mode:o}:{stat.st_mode:o}"
+                )
+
 for relative in tracked:
     path = checkout / relative
     if under(path, output):
@@ -365,6 +418,8 @@ for relative in tracked:
         entries.append(f"tracked-file:{relative}:{mode:o}:{digest.hexdigest()}")
     else:
         entries.append(f"tracked-other:{relative}:{mode:o}:{stat.st_mode:o}")
+        if path.is_dir():
+            append_nested_tree(relative, path)
 
 def add_untracked_entry(relative: Path, category: str) -> None:
     path = checkout / relative

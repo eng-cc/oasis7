@@ -1359,6 +1359,9 @@ case "${1:-}" in
         ignored)
           printf 'ignored mutation\n' >"$PWD/config.toml"
           ;;
+        gitlink)
+          printf 'nested gitlink mutation\n' >"$PWD/third_party/agent-os/.v2-gitlink-mutation"
+          ;;
         *)
           echo "unknown fake V2 mutation mode: $FAKE_MUTATION_MODE" >&2
           exit 1
@@ -2067,13 +2070,16 @@ mutation_fake_bin="$tmp_dir/mutation-bin"
 mkdir -p "$mutation_fake_bin"
 cp "$v2_fake_bin/cargo" "$mutation_fake_bin/cargo"
 chmod +x "$mutation_fake_bin/cargo"
-for mutation_mode in content mode type symlink untracked ignored; do
+for mutation_mode in content mode type symlink untracked ignored gitlink; do
   mutation_worktree="$tmp_dir/mutation-$mutation_mode"
   git worktree add --detach "$mutation_worktree" "$expected_commit_oid" >/dev/null
   cp "$repo_root/scripts/ci-compile-metrics.sh" "$mutation_worktree/scripts/ci-compile-metrics.sh"
   if [[ "$mutation_mode" == symlink ]]; then
     ln -s README.md "$mutation_worktree/.v2-tracked-symlink"
     git -C "$mutation_worktree" add .v2-tracked-symlink
+  elif [[ "$mutation_mode" == gitlink ]]; then
+    mkdir -p "$mutation_worktree/third_party/agent-os"
+    printf 'stable nested fixture\n' >"$mutation_worktree/third_party/agent-os/stable.txt"
   fi
   mutation_out="$tmp_dir/mutation-out-$mutation_mode"
   mutation_log="$tmp_dir/mutation-log-$mutation_mode"
@@ -2107,6 +2113,8 @@ for mutation_mode in content mode type symlink untracked ignored; do
     expected_mutation_path=".v2-untracked-mutation"
   elif [[ "$mutation_mode" == "ignored" ]]; then
     expected_mutation_path="config.toml"
+  elif [[ "$mutation_mode" == "gitlink" ]]; then
+    expected_mutation_path="third_party/agent-os/.v2-gitlink-mutation"
   fi
   if ! grep -Fq "$expected_mutation_path" "$mutation_error"; then
     echo "source mutation $mutation_mode diagnostic did not identify $expected_mutation_path: $(cat "$mutation_error")" >&2
