@@ -736,6 +736,99 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
                 list(reversed(receipts)),
             )
 
+    def test_prepared_journal_rejects_preflight_receipts_instead_of_appending(self) -> None:
+        authority = self._authority(apply_authorized=True)
+
+        def verifier(plan: dict[str, object], receipt: dict[str, object]) -> dict[str, object]:
+            return {
+                "verified": True,
+                "bindings": receipt["bindings"],
+                "verifier_id": self.adapter.CANONICAL_VERIFIER_ID,
+                "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
+                "signer_id": "governance-signer",
+            }
+
+        transport = ApplyTransport(self.adapter, self.plan)
+        receipt = transport.inspect_node(self.plan["nodes"][0])["receipt"]
+        with tempfile.TemporaryDirectory() as directory:
+            journal = Path(directory) / "journal.json"
+            self.adapter._write_journal(
+                journal,
+                self.adapter._journal_record(
+                    self.plan,
+                    "prepared",
+                    0,
+                    [],
+                    execution_mode="apply",
+                    preflight_evidence_receipts=[receipt],
+                    preflight_status="pending",
+                    nonce_reservation_state=self.adapter._nonce_reservation_state(self.plan, 0),
+                ),
+            )
+            with self.assertRaisesRegex(self.adapter.AdapterError, "prepared journal must not contain preflight evidence"):
+                self.adapter.resume_transaction(
+                    self.plan,
+                    authority,
+                    journal,
+                    ledger_path=self.ledger_path,
+                    transport=transport,
+                    dry_run=False,
+                    provenance_verifier=verifier,
+                )
+        self.assertEqual(transport.operations, [])
+
+    def test_v1_journal_is_rejected_with_migration_reconciliation_message(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            journal = Path(directory) / "journal.json"
+            self.adapter.execute(
+                self.plan,
+                self._authority(),
+                journal_path=journal,
+                ledger_path=self.ledger_path,
+                dry_run=True,
+            )
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            record["schema_version"] = "oasis7.clean_room_mutation_journal.v1"
+            record["journal_digest"] = self.adapter.journal_digest(record)
+            journal.write_text(json.dumps(record) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(self.adapter.AdapterError, "v1.*migration.*reconciliation"):
+                self.adapter._read_journal(journal)
+
+    def test_nonce_append_then_error_terminal_state_uses_ledger_readback(self) -> None:
+        authority = self._authority(apply_authorized=True)
+
+        def verifier(plan: dict[str, object], receipt: dict[str, object]) -> dict[str, object]:
+            return {
+                "verified": True,
+                "bindings": receipt["bindings"],
+                "verifier_id": self.adapter.CANONICAL_VERIFIER_ID,
+                "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
+                "signer_id": "governance-signer",
+            }
+
+        original_reserve = self.adapter.reserve_nonce
+
+        def append_then_error(path: Path, transaction_id: str, nonce: str) -> None:
+            original_reserve(path, transaction_id, nonce)
+            raise RuntimeError("append succeeded before callback error")
+
+        with tempfile.TemporaryDirectory() as directory:
+            journal = Path(directory) / "journal.json"
+            with mock.patch.object(self.adapter, "reserve_nonce", side_effect=append_then_error):
+                with self.assertRaises(self.adapter.AdapterError):
+                    self.adapter.execute(
+                        self.plan,
+                        authority,
+                        journal_path=journal,
+                        ledger_path=self.ledger_path,
+                        transport=ApplyTransport(self.adapter, self.plan),
+                        dry_run=False,
+                        provenance_verifier=verifier,
+                    )
+            record = json.loads(journal.read_text(encoding="utf-8"))
+        self.assertEqual(record["status"], "terminal-failure")
+        self.assertEqual(record["nonce_reservation_state"]["reserved_count"], 1)
+
     def test_repository_trust_root_fixture_matches_provenance_helper_without_monkeypatch(self) -> None:
         provenance = load_module("validator_pair_provenance_fixture", PROVENANCE_PATH)
         fixture = ROOT / "scripts" / "fixtures" / "oasis7-governance-root.v1.json"

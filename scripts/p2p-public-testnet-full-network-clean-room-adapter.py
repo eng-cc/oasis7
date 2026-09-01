@@ -51,7 +51,8 @@ PROVIDER_RECEIPT_SCHEMA = "oasis7.clean_room_provider_receipt.v1"
 NO_BACKUP_AUTHORITY_SCHEMA = "oasis7.no_backup_authority.v1"
 RECOVERY_RECEIPT_SCHEMA = "oasis7.recovery_receipt.v1"
 IDENTITY_RECEIPT_SCHEMA = "oasis7.identity_receipt.v1"
-JOURNAL_SCHEMA = "oasis7.clean_room_mutation_journal.v1"
+JOURNAL_SCHEMA = "oasis7.clean_room_mutation_journal.v2"
+LEGACY_JOURNAL_SCHEMA = "oasis7.clean_room_mutation_journal.v1"
 NODE_RECEIPT_SCHEMA = "oasis7.clean_room_node_receipt.v1"
 NONCE_ROW_SCHEMA = "oasis7.clean_room_adapter_nonce.v1"
 REPOSITORY = "eng-cc/oasis7"
@@ -942,13 +943,8 @@ def _nonce_reservation_state(
     }
 
 
-def _reconcile_nonce_reservations(plan: dict[str, Any], path: Path) -> dict[str, Any]:
-    """Reuse matching reservations and append only missing plan nonces.
-
-    The ledger remains the sole nonce-value authority.  The returned state is
-    deliberately count-only so journals never become a second credential
-    store.
-    """
+def _read_plan_nonce_reservations(plan: dict[str, Any], path: Path) -> set[str]:
+    """Read matching one-shot reservations without changing the ledger."""
     rows = _read_ledger(Path(path))
     expected = {_node_nonce(plan, node) for node in plan["nodes"]}
     reserved: set[str] = set()
@@ -963,6 +959,27 @@ def _reconcile_nonce_reservations(plan: dict[str, Any], path: Path) -> dict[str,
         if row["transaction_id"] != plan["transaction_id"]:
             _fail("plan nonce is reserved by a different transaction")
         reserved.add(nonce)
+    return reserved
+
+
+def _reservation_state_from_ledger(plan: dict[str, Any], path: Path) -> dict[str, Any]:
+    """Derive the count-only audit state from the authoritative ledger."""
+    reserved = _read_plan_nonce_reservations(plan, Path(path))
+    expected = {_node_nonce(plan, node) for node in plan["nodes"]}
+    return _nonce_reservation_state(
+        plan, len(reserved), complete=reserved == expected
+    )
+
+
+def _reconcile_nonce_reservations(plan: dict[str, Any], path: Path) -> dict[str, Any]:
+    """Reuse matching reservations and append only missing plan nonces.
+
+    The ledger remains the sole nonce-value authority.  The returned state is
+    deliberately count-only so journals never become a second credential
+    store.
+    """
+    expected = {_node_nonce(plan, node) for node in plan["nodes"]}
+    reserved = _read_plan_nonce_reservations(plan, Path(path))
     for node in plan["nodes"]:
         nonce = _node_nonce(plan, node)
         if nonce not in reserved:
@@ -981,20 +998,8 @@ def _validate_committed_nonce_reservations(
     It must never silently reserve a missing nonce after the checkpoint: that
     would make the checkpoint's evidence and credential boundary ambiguous.
     """
-    rows = _read_ledger(Path(path))
     expected = {_node_nonce(plan, node) for node in plan["nodes"]}
-    reserved: set[str] = set()
-    seen: set[str] = set()
-    for row in rows:
-        nonce = row["nonce"]
-        if nonce in seen:
-            _fail("credential nonce ledger contains a replayed nonce")
-        seen.add(nonce)
-        if nonce not in expected:
-            continue
-        if row["transaction_id"] != plan["transaction_id"]:
-            _fail("plan nonce is reserved by a different transaction")
-        reserved.add(nonce)
+    reserved = _read_plan_nonce_reservations(plan, Path(path))
     if reserved != expected:
         _fail("preflight-complete checkpoint is missing a committed nonce reservation")
     if state.get("reserved_count") != len(reserved) or state.get("complete") is not True:
@@ -1243,7 +1248,13 @@ def _read_journal(path: Path) -> dict[str, Any]:
         record = _object(json.loads(path.read_text(encoding="utf-8")), "transaction journal")
     except (OSError, json.JSONDecodeError):
         _fail("transaction journal is unreadable")
-    if record.get("schema_version") != JOURNAL_SCHEMA or record.get("journal_digest") != journal_digest(record):
+    schema_version = record.get("schema_version")
+    if schema_version == LEGACY_JOURNAL_SCHEMA:
+        _fail(
+            "transaction journal schema v1 is unsupported; migration requires a "
+            "new v2 journal or governed reconciliation before resuming"
+        )
+    if schema_version != JOURNAL_SCHEMA or record.get("journal_digest") != journal_digest(record):
         _fail("transaction journal digest or schema is invalid")
     return record
 
@@ -2043,6 +2054,8 @@ def _execute_unlocked(
         backup_status = resume_record.get("backup_status", backup_status)
         preflight_status = resume_record.get("preflight_status", "pending")
         nonce_state = copy.deepcopy(resume_record.get("nonce_reservation_state", nonce_state))
+        if resume_record.get("status") == "prepared" and preflight_evidence_receipts:
+            _fail("prepared journal must not contain preflight evidence")
         if resume_record.get("status") == "preflight-complete":
             nonce_state = _validate_committed_nonce_reservations(
                 plan, Path(ledger_path), nonce_state
@@ -2082,6 +2095,33 @@ def _execute_unlocked(
             )
             preflight_status = "complete"
         except Exception as error:
+            nonce_readback_error: AdapterError | None = None
+            try:
+                nonce_state = _reservation_state_from_ledger(
+                    plan, Path(ledger_path)
+                )
+            except AdapterError as readback_error:
+                nonce_readback_error = readback_error
+            if nonce_readback_error is not None:
+                _persist_terminal(
+                    Path(journal_path),
+                    _journal_record(
+                        plan,
+                        "terminal-failure",
+                        0,
+                        [],
+                        error=error.__class__.__name__,
+                        provider_receipts=provider_receipts,
+                        preflight_evidence_receipts=preflight_evidence_receipts,
+                        preflight_status=preflight_status,
+                        nonce_reservation_state=nonce_state,
+                        rollback_status="reconciliation-blocked",
+                        rollback_error="nonce-ledger-readback-failed",
+                        execution_mode="apply",
+                        backup_status=backup_status,
+                    ),
+                )
+                _fail("nonce reservation or remote preflight failed; authoritative ledger readback is blocked")
             _persist_terminal(
                 Path(journal_path),
                 _journal_record(
@@ -2504,6 +2544,8 @@ def _resume_transaction_unlocked(
         ):
             _fail("preflight-complete journal is not a safe mutation-free checkpoint")
     if status == "prepared" and expected_mode == "apply":
+        if preflight_evidence_receipts:
+            _fail("prepared journal must not contain preflight evidence")
         if preflight_status != "pending" or completed or provider_receipts or next_index != 0:
             _fail("prepared journal has crossed an unsafe operation boundary")
     if (
