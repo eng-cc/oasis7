@@ -202,6 +202,31 @@ def pid_alive(pid: int) -> bool:
         os.kill(pid, 0)
     except OSError:
         return False
+    proc_stat = Path(f"/proc/{pid}/stat")
+    try:
+        contents = proc_stat.read_text(encoding="utf-8")
+    except OSError:
+        contents = ""
+    if contents:
+        right_paren = contents.rfind(") ")
+        if right_paren >= 0:
+            fields = contents[right_paren + 2 :].split()
+            if fields and fields[0].startswith("Z"):
+                return False
+    else:
+        try:
+            result = subprocess.run(
+                ["ps", "-o", "stat=", "-p", str(pid)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except OSError:
+            result = None
+        if result is not None:
+            status = result.stdout.strip().split(maxsplit=1)
+            if status and status[0].startswith("Z"):
+                return False
     return True
 
 
@@ -430,6 +455,31 @@ def pid_alive(pid: int) -> bool:
         os.kill(pid, 0)
     except OSError:
         return False
+    proc_stat = pathlib.Path(f"/proc/{pid}/stat")
+    try:
+        contents = proc_stat.read_text(encoding="utf-8")
+    except OSError:
+        contents = ""
+    if contents:
+        right_paren = contents.rfind(") ")
+        if right_paren >= 0:
+            fields = contents[right_paren + 2 :].split()
+            if fields and fields[0].startswith("Z"):
+                return False
+    else:
+        try:
+            result = subprocess.run(
+                ["ps", "-o", "stat=", "-p", str(pid)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except OSError:
+            result = None
+        if result is not None:
+            status = result.stdout.strip().split(maxsplit=1)
+            if status and status[0].startswith("Z"):
+                return False
     return True
 
 
@@ -800,7 +850,10 @@ wh_state_show() {
 wh_pid_alive() {
   local pid=$1
   [[ -n "$pid" ]] || return 1
-  kill -0 "$pid" >/dev/null 2>&1
+  kill -0 "$pid" >/dev/null 2>&1 || return 1
+  local process_state
+  process_state=$(ps -o stat= -p "$pid" 2>/dev/null | awk 'NF { print $1; exit }' || true)
+  [[ -z "$process_state" || "$process_state" != Z* ]]
 }
 
 wh_process_group_id() {
@@ -812,7 +865,8 @@ wh_process_group_id() {
 wh_process_group_alive() {
   local pgid=$1
   [[ "$pgid" =~ ^[1-9][0-9]*$ ]] || return 1
-  ps -axo pid=,pgid= | awk -v target="$pgid" '$2 == target { found = 1 } END { exit found ? 0 : 1 }'
+  ps -axo pid=,pgid=,stat= |
+    awk -v target="$pgid" '$2 == target && $3 !~ /^Z/ { found = 1 } END { exit found ? 0 : 1 }'
 }
 
 # Validate a recorded process incarnation before treating it as live.  A PID

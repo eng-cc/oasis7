@@ -205,6 +205,88 @@ if kill -0 "$process_tree_pid" >/dev/null 2>&1 || kill -0 "$process_tree_child_p
   exit 1
 fi
 
+ZOMBIE_FIXTURE_PID_FILE="$TMP_DIR/zombie-fixture.pid"
+zombie_fixture() {
+  python3 - "$ZOMBIE_FIXTURE_PID_FILE" <<'PY'
+import os
+import pathlib
+import subprocess
+import sys
+import time
+
+metadata_path = pathlib.Path(sys.argv[1])
+child_pid = os.fork()
+if child_pid == 0:
+    os.setpgid(0, 0)
+    os._exit(0)
+
+
+def process_state(pid: int) -> str:
+    proc_stat = pathlib.Path(f"/proc/{pid}/stat")
+    try:
+        contents = proc_stat.read_text(encoding="utf-8")
+    except OSError:
+        contents = ""
+    if contents:
+        right_paren = contents.rfind(") ")
+        if right_paren >= 0:
+            fields = contents[right_paren + 2 :].split()
+            if fields:
+                return fields[0]
+    result = subprocess.run(
+        ["ps", "-o", "stat=", "-p", str(pid)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip().split(maxsplit=1)[0] if result.stdout.strip() else ""
+
+
+deadline = time.monotonic() + 10
+while not process_state(child_pid).startswith("Z"):
+    if time.monotonic() >= deadline:
+        raise SystemExit("child did not become a zombie before timeout")
+    time.sleep(0.01)
+
+metadata_path.write_text(
+    "\n".join(
+        str(value)
+        for value in (child_pid, child_pid, os.getpid(), os.getpgrp())
+    )
+    + "\n",
+    encoding="utf-8",
+)
+while True:
+    time.sleep(1)
+PY
+}
+
+wh_start_managed zombie_fixture >"$TMP_DIR/zombie-fixture.log" 2>&1
+zombie_managed_pid="$WH_MANAGED_PID"
+zombie_managed_pgid="$WH_MANAGED_PGID"
+zombie_managed_identity="${WH_MANAGED_IDENTITY:-}"
+for _ in $(seq 1 200); do
+  [[ -s "$ZOMBIE_FIXTURE_PID_FILE" ]] && break
+  sleep 0.05
+done
+[[ -s "$ZOMBIE_FIXTURE_PID_FILE" ]] || {
+  echo "process liveness contract: zombie fixture did not publish metadata" >&2
+  exit 1
+}
+zombie_pid="$(sed -n '1p' "$ZOMBIE_FIXTURE_PID_FILE")"
+zombie_pgid="$(sed -n '2p' "$ZOMBIE_FIXTURE_PID_FILE")"
+zombie_parent_pid="$(sed -n '3p' "$ZOMBIE_FIXTURE_PID_FILE")"
+zombie_parent_pgid="$(sed -n '4p' "$ZOMBIE_FIXTURE_PID_FILE")"
+if wh_pid_alive "$zombie_pid" || wh_process_group_alive "$zombie_pgid"; then
+  echo "process liveness contract: zombie-only PID/group was treated as live" >&2
+  exit 1
+fi
+if ! wh_pid_alive "$zombie_parent_pid" || ! wh_process_group_alive "$zombie_parent_pgid"; then
+  echo "process liveness contract: active non-zombie process/group was treated as dead" >&2
+  exit 1
+fi
+wh_terminate_process_group "$zombie_managed_pid" "$zombie_managed_pgid" 100 "$zombie_managed_identity"
+
 wh_start_managed sleep 30 >"$TMP_DIR/reused-identity.log" 2>&1
 reused_identity_pid="$WH_MANAGED_PID"
 reused_identity_pgid="$WH_MANAGED_PGID"
