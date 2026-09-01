@@ -11,7 +11,7 @@ use super::types::{ActionId, WorldEventId, WorldTime};
 use super::{WorldEvent, WorldEventBody};
 use crate::geometry::GeoPos;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub const MAJOR_WORLD_EVENT_PROJECTION_SCHEMA_VERSION: &str = "major_world_event/v1";
 
@@ -287,19 +287,17 @@ pub(crate) fn project_major_world_events(
         return Vec::new();
     }
 
-    let mut by_id: BTreeMap<WorldEventId, Vec<&WorldEvent>> = BTreeMap::new();
-    for event in events {
-        by_id.entry(event.id).or_default().push(event);
-    }
+    let (unique_events, conflicted_crises) = unique_events_and_conflicted_crises(events);
+    let history_index = CrisisHistoryIndex::build(&unique_events);
 
-    by_id
+    unique_events
         .into_iter()
-        .filter_map(|(event_id, candidates)| {
-            let first = candidates.first().copied()?;
-            if event_id == 0 || candidates.iter().any(|candidate| *candidate != first) {
+        .filter_map(|event| {
+            let crisis_id = crisis_id(event)?;
+            if conflicted_crises.contains(crisis_id) {
                 return None;
             }
-            project_major_world_event(first, events, context)
+            project_major_world_event(event, &history_index, context)
         })
         .collect()
 }
@@ -312,31 +310,20 @@ pub fn project_major_world_events_with_canonical_state(
     canonical_crises: &BTreeMap<String, CrisisState>,
     context: &MajorWorldEventProjectionContext,
 ) -> Vec<MajorWorldEventProjection> {
+    project_major_world_events_with_canonical_state_indexed(events, canonical_crises, context).0
+}
+
+fn project_major_world_events_with_canonical_state_indexed(
+    events: &[WorldEvent],
+    canonical_crises: &BTreeMap<String, CrisisState>,
+    context: &MajorWorldEventProjectionContext,
+) -> (Vec<MajorWorldEventProjection>, CrisisHistoryIndex) {
     if !context.allows_projection() {
-        return Vec::new();
+        return (Vec::new(), CrisisHistoryIndex::default());
     }
 
-    let mut by_id: BTreeMap<WorldEventId, Vec<&WorldEvent>> = BTreeMap::new();
-    for event in events {
-        by_id.entry(event.id).or_default().push(event);
-    }
-
-    let mut conflicted_crises = std::collections::BTreeSet::new();
-    let mut unique_events = Vec::new();
-    for (event_id, candidates) in by_id {
-        let Some(first) = candidates.first().copied() else {
-            continue;
-        };
-        if event_id == 0 || candidates.iter().any(|candidate| *candidate != first) {
-            for candidate in candidates {
-                if let Some(crisis_id) = crisis_id(candidate) {
-                    conflicted_crises.insert(crisis_id.to_string());
-                }
-            }
-            continue;
-        }
-        unique_events.push(first);
-    }
+    let (unique_events, conflicted_crises) = unique_events_and_conflicted_crises(events);
+    let history_index = CrisisHistoryIndex::build(&unique_events);
 
     let mut lifecycle_by_crisis: BTreeMap<&str, Vec<&WorldEvent>> = BTreeMap::new();
     for event in &unique_events {
@@ -360,12 +347,15 @@ pub fn project_major_world_events_with_canonical_state(
         })
         .collect();
 
-    unique_events
+    let projections = unique_events
         .into_iter()
         .filter_map(|event| {
             let crisis_id = crisis_id(event)?;
+            if conflicted_crises.contains(crisis_id) {
+                return None;
+            }
             let (canonical, latest_event_id) = valid_authority.get(crisis_id)?;
-            let mut projection = project_major_world_event(event, events, context)?;
+            let mut projection = project_major_world_event(event, &history_index, context)?;
             projection.subtype = canonical.kind.clone();
             projection.severity = canonical.severity;
             projection.freshness = if context.stream_state == MajorWorldEventStreamState::Replay {
@@ -377,7 +367,133 @@ pub fn project_major_world_events_with_canonical_state(
             };
             Some(projection)
         })
-        .collect()
+        .collect::<Vec<_>>();
+
+    (projections, history_index)
+}
+
+fn unique_events_and_conflicted_crises(
+    events: &[WorldEvent],
+) -> (Vec<&WorldEvent>, BTreeSet<String>) {
+    let mut by_id: BTreeMap<WorldEventId, Vec<&WorldEvent>> = BTreeMap::new();
+    for event in events {
+        by_id.entry(event.id).or_default().push(event);
+    }
+
+    let mut conflicted_crises = BTreeSet::new();
+    let mut unique_events = Vec::with_capacity(by_id.len());
+    for (event_id, candidates) in by_id {
+        let Some(first) = candidates.first().copied() else {
+            continue;
+        };
+        if event_id == 0 || candidates.iter().any(|candidate| *candidate != first) {
+            for candidate in candidates {
+                if let Some(crisis_id) = crisis_id(candidate) {
+                    conflicted_crises.insert(crisis_id.to_string());
+                }
+            }
+            continue;
+        }
+        unique_events.push(first);
+    }
+    (unique_events, conflicted_crises)
+}
+
+#[derive(Default)]
+struct CrisisHistoryIndex {
+    by_crisis: BTreeMap<String, CrisisHistoryMetadata>,
+    indexed_event_count: usize,
+}
+
+#[derive(Default)]
+struct CrisisHistoryMetadata {
+    spawn: Option<CrisisSpawnMetadata>,
+    multiple_spawns: bool,
+}
+
+struct CrisisSpawnMetadata {
+    event_id: WorldEventId,
+    kind: String,
+    severity: u32,
+}
+
+impl CrisisHistoryIndex {
+    fn build(events: &[&WorldEvent]) -> Self {
+        let mut index = Self {
+            indexed_event_count: events.len(),
+            ..Self::default()
+        };
+        for event in events {
+            let WorldEventBody::Domain(DomainEvent::CrisisSpawned {
+                crisis_id,
+                kind,
+                severity,
+                ..
+            }) = &event.body
+            else {
+                continue;
+            };
+            let metadata = index.by_crisis.entry(crisis_id.clone()).or_default();
+            if metadata.spawn.is_some() {
+                metadata.multiple_spawns = true;
+            } else {
+                metadata.spawn = Some(CrisisSpawnMetadata {
+                    event_id: event.id,
+                    kind: kind.clone(),
+                    severity: *severity,
+                });
+            }
+        }
+        index
+    }
+
+    fn metadata(&self, crisis_id: &str) -> Option<&CrisisHistoryMetadata> {
+        self.by_crisis.get(crisis_id)
+    }
+
+    fn is_consistent(&self, crisis_id: &str) -> bool {
+        self.metadata(crisis_id)
+            .is_some_and(CrisisHistoryMetadata::is_consistent)
+    }
+
+    fn prior_kind(&self, crisis_id: &str, event_id: WorldEventId) -> Option<String> {
+        self.metadata(crisis_id)?.prior_kind(event_id)
+    }
+
+    fn prior_severity(&self, crisis_id: &str, event_id: WorldEventId) -> Option<u32> {
+        self.metadata(crisis_id)?.prior_severity(event_id)
+    }
+}
+
+impl CrisisHistoryMetadata {
+    fn is_consistent(&self) -> bool {
+        !self.multiple_spawns
+            && self
+                .spawn
+                .as_ref()
+                .is_some_and(|spawn| (1..=5).contains(&spawn.severity))
+    }
+
+    fn prior_kind(&self, event_id: WorldEventId) -> Option<String> {
+        let spawn = self.spawn.as_ref()?;
+        (spawn.event_id < event_id && !spawn.kind.trim().is_empty()).then(|| spawn.kind.clone())
+    }
+
+    fn prior_severity(&self, event_id: WorldEventId) -> Option<u32> {
+        let spawn = self.spawn.as_ref()?;
+        (spawn.event_id < event_id && (1..=5).contains(&spawn.severity)).then_some(spawn.severity)
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn project_major_world_events_with_canonical_state_indexed_for_test(
+    events: &[WorldEvent],
+    canonical_crises: &BTreeMap<String, CrisisState>,
+    context: &MajorWorldEventProjectionContext,
+) -> (Vec<MajorWorldEventProjection>, usize) {
+    let (projections, history_index) =
+        project_major_world_events_with_canonical_state_indexed(events, canonical_crises, context);
+    (projections, history_index.indexed_event_count)
 }
 
 fn crisis_id(event: &WorldEvent) -> Option<&str> {
@@ -469,7 +585,7 @@ fn validate_canonical_crisis(
 /// supplied journal history.
 fn project_major_world_event(
     event: &WorldEvent,
-    history: &[WorldEvent],
+    history: &CrisisHistoryIndex,
     context: &MajorWorldEventProjectionContext,
 ) -> Option<MajorWorldEventProjection> {
     if !context.allows_projection() || event.id == 0 {
@@ -491,15 +607,15 @@ fn project_major_world_event(
         ),
         WorldEventBody::Domain(DomainEvent::CrisisResolved { crisis_id, .. }) => (
             crisis_id,
-            prior_crisis_kind(history, crisis_id, event.id)?,
-            prior_crisis_severity(history, crisis_id, event.id)?,
+            history.prior_kind(crisis_id, event.id)?,
+            history.prior_severity(crisis_id, event.id)?,
             MajorWorldEventLifecycle::Resolved,
             "crisis_resolved",
         ),
         WorldEventBody::Domain(DomainEvent::CrisisTimedOut { crisis_id, .. }) => (
             crisis_id,
-            prior_crisis_kind(history, crisis_id, event.id)?,
-            prior_crisis_severity(history, crisis_id, event.id)?,
+            history.prior_kind(crisis_id, event.id)?,
+            history.prior_severity(crisis_id, event.id)?,
             MajorWorldEventLifecycle::TimedOut,
             "crisis_timed_out",
         ),
@@ -508,7 +624,7 @@ fn project_major_world_event(
     if crisis_id.trim().is_empty() {
         return None;
     }
-    if !crisis_spawn_history_is_consistent(history, crisis_id) {
+    if !history.is_consistent(crisis_id) {
         return None;
     }
 
@@ -537,98 +653,6 @@ fn project_major_world_event(
             position: None,
         }),
     })
-}
-
-fn prior_crisis_kind(
-    history: &[WorldEvent],
-    crisis_id: &str,
-    event_id: WorldEventId,
-) -> Option<String> {
-    let mut kinds_by_event_id = BTreeMap::new();
-    for candidate in history.iter().filter(|candidate| candidate.id < event_id) {
-        let WorldEventBody::Domain(DomainEvent::CrisisSpawned {
-            crisis_id: candidate_id,
-            kind,
-            ..
-        }) = &candidate.body
-        else {
-            continue;
-        };
-        if candidate_id != crisis_id || kind.trim().is_empty() {
-            continue;
-        }
-        if let Some(previous) = kinds_by_event_id.insert(candidate.id, kind.clone()) {
-            if previous != *kind {
-                return None;
-            }
-        }
-    }
-    (kinds_by_event_id.len() == 1).then(|| {
-        kinds_by_event_id
-            .values()
-            .next()
-            .cloned()
-            .expect("one crisis kind entry")
-    })
-}
-
-fn prior_crisis_severity(
-    history: &[WorldEvent],
-    crisis_id: &str,
-    event_id: WorldEventId,
-) -> Option<u32> {
-    let mut severities_by_event_id = BTreeMap::new();
-    for candidate in history.iter().filter(|candidate| candidate.id < event_id) {
-        let WorldEventBody::Domain(DomainEvent::CrisisSpawned {
-            crisis_id: candidate_id,
-            severity,
-            ..
-        }) = &candidate.body
-        else {
-            continue;
-        };
-        if candidate_id != crisis_id || !(1..=5).contains(severity) {
-            continue;
-        }
-        if let Some(previous) = severities_by_event_id.insert(candidate.id, *severity) {
-            if previous != *severity {
-                return None;
-            }
-        }
-    }
-    (severities_by_event_id.len() == 1).then(|| {
-        severities_by_event_id
-            .values()
-            .next()
-            .copied()
-            .expect("one crisis severity entry")
-    })
-}
-
-fn crisis_spawn_history_is_consistent(history: &[WorldEvent], crisis_id: &str) -> bool {
-    let mut severities_by_event_id = BTreeMap::new();
-    for candidate in history {
-        let WorldEventBody::Domain(DomainEvent::CrisisSpawned {
-            crisis_id: candidate_id,
-            severity,
-            ..
-        }) = &candidate.body
-        else {
-            continue;
-        };
-        if candidate_id != crisis_id {
-            continue;
-        }
-        if !(1..=5).contains(severity) {
-            return false;
-        }
-        if let Some(previous) = severities_by_event_id.insert(candidate.id, *severity) {
-            if previous != *severity {
-                return false;
-            }
-        }
-    }
-    severities_by_event_id.len() == 1
 }
 
 fn causal_reference(caused_by: &CausedBy) -> MajorWorldEventCausalReference {

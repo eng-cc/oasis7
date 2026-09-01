@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::geometry::GeoPos;
+use crate::runtime::major_world_event::project_major_world_events_with_canonical_state_indexed_for_test;
 use crate::runtime::{
     CausedBy, CrisisState, CrisisStatus, DomainEvent, MajorWorldEventCategory,
     MajorWorldEventFreshness, MajorWorldEventLifecycle, MajorWorldEventProjectionContext,
@@ -427,5 +428,59 @@ fn cursor_replay_makes_every_canonical_transition_historical() {
         projections
             .iter()
             .all(|projection| projection.freshness == MajorWorldEventFreshness::LastKnown)
+    );
+}
+
+#[test]
+fn bounded_journal_projection_builds_one_linear_history_index() {
+    const JOURNAL_SIZE: u64 = 65_536;
+    const CRISIS_STRIDE: u64 = 32;
+    let mut events = Vec::with_capacity(JOURNAL_SIZE as usize);
+    let mut canonical = BTreeMap::new();
+    for id in 1..=JOURNAL_SIZE {
+        if id % CRISIS_STRIDE == 0 {
+            let crisis_id = format!("crisis-{id}");
+            events.push(crisis_spawned(id, &crisis_id, (id % 5 + 1) as u32));
+            canonical.insert(
+                crisis_id.clone(),
+                canonical_crisis(
+                    &crisis_id,
+                    "power_shortage",
+                    (id % 5 + 1) as u32,
+                    CrisisStatus::Active,
+                    id,
+                    id + 20,
+                    None,
+                ),
+            );
+        } else {
+            events.push(WorldEvent {
+                id,
+                time: id,
+                caused_by: None,
+                body: WorldEventBody::Domain(DomainEvent::AgentRegistered {
+                    agent_id: format!("ambient-{id}"),
+                    pos: GeoPos::new(id as i64, 0, 0),
+                }),
+            });
+        }
+    }
+    let context = MajorWorldEventProjectionContext::current_public("world-a", 1);
+
+    let (projections, indexed_event_count) =
+        project_major_world_events_with_canonical_state_indexed_for_test(
+            &events, &canonical, &context,
+        );
+
+    assert_eq!(indexed_event_count, JOURNAL_SIZE as usize);
+    assert_eq!(projections.len(), (JOURNAL_SIZE / CRISIS_STRIDE) as usize);
+    assert_eq!(projections[0].identity.event_seq, CRISIS_STRIDE);
+    assert_eq!(
+        projections
+            .last()
+            .expect("last crisis projection")
+            .identity
+            .event_seq,
+        JOURNAL_SIZE
     );
 }
