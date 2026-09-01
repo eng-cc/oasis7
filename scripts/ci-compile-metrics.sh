@@ -288,7 +288,8 @@ PY
 source_fingerprint() {
   local checkout_path="$1"
   local output_path="$2"
-  python3 - "$checkout_path" "$output_path" "$repo_root" <<'PY'
+  local manifest_path="$3"
+  python3 - "$checkout_path" "$output_path" "$repo_root" "$manifest_path" <<'PY'
 from __future__ import annotations
 
 import hashlib
@@ -301,6 +302,7 @@ import shutil
 checkout = Path(sys.argv[1]).resolve()
 output = Path(sys.argv[2]).resolve()
 canonical = Path(sys.argv[3]).resolve()
+manifest = Path(sys.argv[4])
 
 def under(path: Path, parent: Path) -> bool:
     try:
@@ -385,6 +387,7 @@ for raw in untracked_result.stdout.split(b"\0"):
     entries.append(f"untracked:{relative}")
 
 entries.sort()
+manifest.write_text("\n".join(entries) + "\n", encoding="utf-8", errors="surrogateescape")
 print(hashlib.sha256("\0".join(entries).encode("utf-8", "surrogateescape")).hexdigest())
 PY
 }
@@ -586,7 +589,10 @@ measure_checkout() {
   local checkout_path="$2"
   local result_path="$3"
   local before_fingerprint
-  before_fingerprint=$(source_fingerprint "$checkout_path" "$out_dir")
+  local fingerprint_label="${label//[^A-Za-z0-9_.-]/_}"
+  local before_manifest="$tmp_root/fingerprint-${fingerprint_label}-before.txt"
+  local after_manifest="$tmp_root/fingerprint-${fingerprint_label}-after.txt"
+  before_fingerprint=$(source_fingerprint "$checkout_path" "$out_dir" "$before_manifest")
 
   local status=0
   # Run the fail-fast measurement body in a child so failures still allow the
@@ -603,12 +609,17 @@ measure_checkout() {
   fi
 
   local after_fingerprint
-  after_fingerprint=$(source_fingerprint "$checkout_path" "$out_dir")
-    if [[ "$before_fingerprint" != "$after_fingerprint" ]]; then
-      echo "error: source/worktree state changed during ${label} measurement" >&2
+  after_fingerprint=$(source_fingerprint "$checkout_path" "$out_dir" "$after_manifest")
+  if [[ "$before_fingerprint" != "$after_fingerprint" ]] || ! cmp -s "$before_manifest" "$after_manifest"; then
+      local changed_state
+      changed_state=$(
+        { diff -u "$before_manifest" "$after_manifest" || true; } |
+          sed -n '/^[+-][^+-]/ { s/^[+-]//; p; q; }'
+      )
+      echo "error: source/worktree state changed during ${label} measurement: ${changed_state:-unknown path state}" >&2
       rm -f "$result_path"
       status=1
-    fi
+  fi
   return "$status"
 }
 

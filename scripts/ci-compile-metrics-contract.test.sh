@@ -1400,10 +1400,9 @@ v2_run_metrics() {
 # A caller-controlled TMPDIR may accidentally point inside the checkout.  The
 # harness must reject that unsafe layout (or relocate its run-owned targets)
 # before a Cargo target is created there.
-inside_tmp_parent="$repo_root/.compile-metrics-contract-tmpdir"
+inside_tmp_parent=$(mktemp -d "$repo_root/.compile-metrics-contract-tmpdir.XXXXXX")
 inside_tmp_out="$tmp_dir/v2-tmpdir-inside-out"
 inside_tmp_target_log="$tmp_dir/v2-tmpdir-inside-target.log"
-mkdir -p "$inside_tmp_parent"
 inside_tmp_status=0
 if TMPDIR="$inside_tmp_parent" \
   v2_run_metrics \
@@ -1427,7 +1426,10 @@ if [[ -f "$inside_tmp_target_log" ]]; then
     fi
   done <"$inside_tmp_target_log"
 fi
-rm -rf "$inside_tmp_parent"
+if ! rmdir "$inside_tmp_parent"; then
+  echo "TMPDIR-inside-checkout fixture left unexpected data at its run-owned path: $inside_tmp_parent" >&2
+  exit 1
+fi
 if [[ -n "$inside_tmp_violation" ]]; then
   echo "TMPDIR inside checkout created an in-checkout Cargo target: $inside_tmp_violation" >&2
   exit 1
@@ -2075,6 +2077,7 @@ for mutation_mode in content mode type symlink untracked; do
   mutation_count="$tmp_dir/mutation-count-$mutation_mode"
   mutation_reuse="$tmp_dir/mutation-reuse-$mutation_mode"
   mutation_target="$tmp_dir/mutation-target-$mutation_mode"
+  mutation_error="$tmp_dir/mutation-error-$mutation_mode.log"
   if FAKE_CARGO_LOG="$mutation_log" \
     FAKE_CARGO_CHECK_COUNT_LOG="$mutation_count" \
     FAKE_CHECK_REUSE_LOG="$mutation_reuse" \
@@ -2083,13 +2086,25 @@ for mutation_mode in content mode type symlink untracked; do
     FAKE_HOST_TARGET="$host_target" \
     PATH="$mutation_fake_bin:$PATH" \
       "$mutation_worktree/scripts/ci-compile-metrics.sh" \
-        --package fake_library --out-dir "$mutation_out" --check-only --measure-warm-check; then
+        --package fake_library --out-dir "$mutation_out" --check-only --measure-warm-check \
+        2>"$mutation_error"; then
     echo "source mutation $mutation_mode unexpectedly produced a successful measurement" >&2
     git worktree remove --force "$mutation_worktree" >/dev/null
     exit 1
   fi
   if [[ -e "$mutation_out/current.metrics.json" ]]; then
     echo "source mutation $mutation_mode emitted successful metrics JSON" >&2
+    git worktree remove --force "$mutation_worktree" >/dev/null
+    exit 1
+  fi
+  expected_mutation_path="README.md"
+  if [[ "$mutation_mode" == "symlink" ]]; then
+    expected_mutation_path=".v2-tracked-symlink"
+  elif [[ "$mutation_mode" == "untracked" ]]; then
+    expected_mutation_path=".v2-untracked-mutation"
+  fi
+  if ! grep -Fq "$expected_mutation_path" "$mutation_error"; then
+    echo "source mutation $mutation_mode diagnostic did not identify $expected_mutation_path: $(cat "$mutation_error")" >&2
     git worktree remove --force "$mutation_worktree" >/dev/null
     exit 1
   fi
@@ -2150,19 +2165,25 @@ fi
 git worktree remove --force "$safety_worktree" >/dev/null
 echo "output-path alias safety contract: OK"
 
-# Parse the workflow with a real YAML parser and inspect the resulting step.
+# Parse the workflow with Ruby's standard-library YAML parser and inspect the
+# resulting JSON from Python's standard library.  Keep the contract independent
+# of undeclared third-party Python modules on a clean required-gate runner.
 # This catches heredoc bodies that are accidentally emitted at column zero:
 # textual presence checks alone cannot detect that malformed YAML structure.
-python3 - <<'PY'
+workflow_json="$tmp_dir/compile-metrics-workflow.json"
+if ! command -v ruby >/dev/null 2>&1; then
+  echo "workflow YAML contract requires ruby with its standard-library yaml/json modules" >&2
+  exit 1
+fi
+ruby -ryaml -rjson -e \
+  'puts JSON.generate(YAML.safe_load(File.read(ARGV.fetch(0)), aliases: true))' \
+  .github/workflows/compile-metrics.yml >"$workflow_json"
+python3 - "$workflow_json" <<'PY'
+import json
 from pathlib import Path
+import sys
 
-import yaml
-
-workflow_path = Path(".github/workflows/compile-metrics.yml")
-try:
-    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
-except yaml.YAMLError as exc:
-    raise SystemExit(f"workflow YAML parse failed: {exc}") from exc
+workflow = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 
 if not isinstance(workflow, dict):
     raise SystemExit("workflow YAML must parse as a mapping")
@@ -2186,16 +2207,14 @@ PY
 
 # Execute the validator exactly as parsed from the workflow.  Textual wiring
 # checks cannot prove that malformed inputs are rejected before any measurement.
-python3 - <<'PY'
+python3 - "$workflow_json" <<'PY'
+import json
 import os
 import subprocess
 from pathlib import Path
+import sys
 
-import yaml
-
-workflow = yaml.safe_load(
-    Path(".github/workflows/compile-metrics.yml").read_text(encoding="utf-8")
-)
+workflow = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 steps = workflow["jobs"]["compile-metrics"]["steps"]
 validator = next(
     step
@@ -2279,19 +2298,16 @@ PY
 # comparison. A warm threshold is forwarded only when both the threshold and
 # warm opt-in are active; the gate's explicit no-baseline SKIP makes that
 # command wiring observable without a fake gate binary.
-python3 - "$warm_out_dir" "$tmp_dir" <<'PY'
+python3 - "$workflow_json" "$warm_out_dir" "$tmp_dir" <<'PY'
+import json
 import os
 import subprocess
 import sys
 from pathlib import Path
 
-import yaml
-
-output_dir = Path(sys.argv[1]).resolve()
-scratch_dir = Path(sys.argv[2]).resolve()
-workflow = yaml.safe_load(
-    Path(".github/workflows/compile-metrics.yml").read_text(encoding="utf-8")
-)
+workflow = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+output_dir = Path(sys.argv[2]).resolve()
+scratch_dir = Path(sys.argv[3]).resolve()
 steps = workflow["jobs"]["compile-metrics"]["steps"]
 gate_step = next(
     step
@@ -2305,7 +2321,7 @@ gate_run = gate_run.replace(
 gate_run = gate_run.replace("${{ inputs.metric_target }}", "oasis7_node_default_features")
 
 
-def invoke(measure_warm_check, threshold):
+def invoke(measure_warm_check, threshold, cold_thresholds=None):
     environment = os.environ.copy()
     summary_path = scratch_dir / f"gate-summary-{measure_warm_check}-{threshold or 'empty'}.md"
     environment.update(
@@ -2319,6 +2335,8 @@ def invoke(measure_warm_check, threshold):
             "GITHUB_STEP_SUMMARY": str(summary_path),
         }
     )
+    if cold_thresholds is not None:
+        environment.update(cold_thresholds)
     command = gate_run.replace("${{ inputs.measure_warm_check }}", measure_warm_check)
     result = subprocess.run(
         ["bash", "-c", command],
@@ -2351,6 +2369,20 @@ for measure_warm_check, threshold, expected_forwarding in (
             f"expected={expected_forwarding}, output={output}"
         )
 print("workflow gate warm-threshold conditional wiring contract: OK")
+
+empty_cold_thresholds = {
+    "MAX_PACKAGE_COUNT_REGRESSION_PCT": "",
+    "MAX_CARGO_CHECK_REGRESSION_PCT": "",
+    "MAX_CARGO_BUILD_RELEASE_REGRESSION_PCT": "",
+    "MAX_RELEASE_BINARY_BYTES_REGRESSION_PCT": "",
+}
+empty_result = invoke("false", "", empty_cold_thresholds)
+if empty_result.returncode != 0:
+    raise SystemExit(
+        "workflow gate must omit empty optional cold thresholds: "
+        f"{empty_result.stdout}{empty_result.stderr}{empty_result.summary}"
+    )
+print("workflow gate empty optional threshold omission contract: OK")
 PY
 
 # Exercise the production report serializer with deterministic payloads so the
