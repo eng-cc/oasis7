@@ -504,7 +504,18 @@ impl World {
                             if !self.try_apply_runtime_module_action(&action_envelope)? {
                                 let followup_context =
                                     self.factory_production_followup_context(&envelope);
-                                let event_body = self.action_to_event(&action_envelope)?;
+                                let allow_legacy_module_recipe_world_fallback = matches!(
+                                    (&envelope.action, &action_envelope.action),
+                                    (
+                                        Action::ScheduleRecipeWithModule { .. },
+                                        Action::ScheduleRecipe { .. }
+                                    )
+                                );
+                                let event_body = self
+                                    .action_to_event_with_legacy_module_recipe_compat(
+                                        &action_envelope,
+                                        allow_legacy_module_recipe_world_fallback,
+                                    )?;
                                 self.preflight_domain_event(&event_body)?;
                                 self.append_action_accepted_event(&envelope)?;
                                 self.append_event(

@@ -145,6 +145,58 @@ fn runtime_gameplay_smelter_readiness_matches_submit_material_and_owner_power_ch
 }
 
 #[test]
+fn runtime_gameplay_smelter_readiness_does_not_fallback_to_global_material_ledger() {
+    let _guard = lock_test_llm_env();
+    let (mut server, agent_id, public_key, private_key) =
+        setup_runtime_industrial_gameplay_session(46);
+    build_first_smelter_via_gameplay_action(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        46,
+    );
+    server
+        .world
+        .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Electricity, i64::MAX)
+        .expect("fund agent electricity");
+    server
+        .world
+        .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Data, i64::MAX)
+        .expect("fund agent data");
+
+    let factory = server
+        .world
+        .state()
+        .factories
+        .get("factory.smelter.mk1")
+        .expect("smelter factory");
+    let input_ledger = factory.input_ledger.clone();
+    let site_id = factory.site_id.clone();
+    for kind in ["iron_ore", "carbon_fuel"] {
+        server
+            .world
+            .set_ledger_material_balance(input_ledger.clone(), kind, 0)
+            .expect("drain factory input ledger");
+        server
+            .world
+            .set_material_balance(kind, 200)
+            .expect("seed global fallback material");
+    }
+
+    let gameplay = expect_player_gameplay(&mut server, "site material readiness snapshot");
+    let action =
+        smelter_schedule_action(&gameplay, crate::viewer::ACTION_SCHEDULE_SMELTER_IRON_INGOT);
+    let disabled_reason = action
+        .disabled_reason
+        .as_deref()
+        .expect("missing site inputs must disable scheduling even when world has materials");
+    assert!(disabled_reason.contains("insufficient iron_ore"));
+    assert!(disabled_reason.contains(format!("site:{site_id}").as_str()));
+    assert!(disabled_reason.contains("replenish iron_ore"));
+}
+
+#[test]
 fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
     let _guard = lock_test_llm_env();
     let mut server = setup_industrial_gameplay_with_completed_jobs(41, 4);
@@ -164,14 +216,35 @@ fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
         .world
         .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Data, i64::MAX)
         .expect("fund scale-out agent data");
+    let smelter_site_ledger = crate::runtime::MaterialLedgerId::site(
+        server
+            .world
+            .state()
+            .factories
+            .get(crate::viewer::FACTORY_SMELTER_MK1)
+            .expect("scale-out smelter")
+            .site_id
+            .as_str(),
+    );
     server
         .world
-        .set_material_balance("iron_ingot", 200)
+        .set_ledger_material_balance(smelter_site_ledger.clone(), "iron_ingot", 200)
         .expect("seed scale-out alloy iron ingot");
     server
         .world
-        .set_material_balance("copper_wire", 200)
+        .set_ledger_material_balance(smelter_site_ledger, "copper_wire", 200)
         .expect("seed scale-out alloy copper wire");
+    let builder_ledger = crate::runtime::MaterialLedgerId::agent(agent_id.as_str());
+    for (kind, amount) in [
+        ("structural_frame", 8),
+        ("iron_ingot", 10),
+        ("copper_wire", 8),
+    ] {
+        server
+            .world
+            .set_ledger_material_balance(builder_ledger.clone(), kind, amount)
+            .expect("seed scale-out assembler construction material");
+    }
     server
         .world
         .set_resource_balance(ResourceKind::Electricity, 2_000);

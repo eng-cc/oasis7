@@ -1587,6 +1587,48 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getByText("Build alloy factory core: missing structural frames")).toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("renders the factory production failure disposition before generic wait and recovery choices", async () => {
+    const { container } = await renderViewerApp({ snapshot: sampleSnapshot({ player_gameplay: {
+      ...sampleSnapshot().player_gameplay,
+      factory_production_failure_disposition: {
+        action_id: "19",
+        requester_agent_id: "agent-0",
+        factory_id: "factory.target",
+        recipe_id: "recipe.target",
+        blocker_kind: "product_validation_rejected",
+        blocker_detail: "product profile rejected the committed output",
+        disposition_kind: "consumed_lost",
+        consumed_inputs: [{ kind: "iron_ore", amount: 3 }],
+        lost_inputs: [{ kind: "iron_ore", amount: 3 }],
+        consumed_power: 7,
+        lost_power: 7,
+        next_action: "inspect_product_validation_and_reschedule",
+        next_recheck: null,
+      },
+      wait_resolution_quote: {
+        safe_to_wait: true,
+        resolution_trigger: "synthetic wait should be hidden",
+      },
+      fallback_tradeoff_preview: [{ value_class: "safe_wait", available: true }],
+    } }) });
+
+    const details = container.querySelector("#viewer-gameplay-details");
+    const card = within(details).getByTestId("viewer-factory-production-failure-disposition");
+    expect(card).toBeInTheDocument();
+    expect(within(card).getByText(/factory\.target/)).toBeInTheDocument();
+    expect(within(card).getByText(/recipe\.target/)).toBeInTheDocument();
+    expect(within(card).getByText(/Detail: product profile rejected the committed output/)).toBeInTheDocument();
+    expect(within(card).getAllByText(/iron_ore × 3/)).toHaveLength(2);
+    expect(within(card).getAllByText("7").length).toBeGreaterThanOrEqual(2);
+    expect(within(card).getByText("Inspect product validation and reschedule")).toBeInTheDocument();
+    expect(within(card).queryByText(/Next recheck/i)).not.toBeInTheDocument();
+    expect(card.querySelector("button")).toBeNull();
+    expect(card.textContent).not.toMatch(
+      /product_validation_rejected|consumed_lost|inspect_product_validation_and_reschedule/,
+    );
+    expect(within(details).queryByText("synthetic wait should be hidden")).not.toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("marks branch-hint-only guidance as legacy and incomplete", async () => {
     const { container } = await renderViewerApp({ snapshot: sampleSnapshot({ player_gameplay: {
       ...sampleSnapshot().player_gameplay, goal_kind: "ChooseFirstExpansionTradeoff",
@@ -3237,6 +3279,7 @@ describe("viewer web ui automation baseline", () => {
       "shell_selected_blocker",
       "agent_chat_history",
       "gameplay_diagnostics_expanded",
+      "factory_production_failure_disposition",
       "hosted_login_gate",
       "empty_world_recovery",
     ];
@@ -3250,6 +3293,27 @@ describe("viewer web ui automation baseline", () => {
       expect(window.__OASIS7_VIEWER_VISUAL_FIXTURES__).toBeTruthy();
       expect(container).toHaveAttribute("data-viewer-visual-fixture", fixtureName);
       expect(document.body).toHaveAttribute("data-viewer-visual-fixture", fixtureName);
+
+      if (fixtureName === "factory_production_failure_disposition") {
+        const card = within(container).getByTestId("viewer-factory-production-failure-disposition");
+        expect(within(card).getByText("Production result failed validation")).toBeInTheDocument();
+        expect(card).toHaveAttribute("role", "status");
+        expect(card).toHaveAttribute("aria-live", "polite");
+        expect(card).toHaveTextContent("Factory: factory.target · Recipe: recipe.target");
+        expect(card).toHaveTextContent("Consumed inputs");
+        expect(card).toHaveTextContent("iron_ore × 3");
+        expect(card).toHaveTextContent("Consumed power");
+        expect(card).toHaveTextContent("Inspect product validation and reschedule");
+        expect(card).not.toHaveTextContent(/Next recheck/i);
+        expect(card.textContent).not.toMatch(
+          /product_validation_rejected|consumed_lost|inspect_product_validation_and_reschedule/,
+        );
+        expect(container.querySelector("#viewer-gameplay-details")).toHaveAttribute("open");
+        expect(elementPrecedes(
+          card,
+          within(container.querySelector("#viewer-gameplay-details")).getByText("Control Proof").closest(".event-card"),
+        )).toBe(true);
+      }
 
       cleanup();
     }

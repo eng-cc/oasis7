@@ -171,7 +171,50 @@ proposer 可以提交候选 receipt；active validator 必须从同一 committed
 | Input join | 没有 dedicated `join_id` / parent-edge receipt-set schema；多个 `consume` stack 不构成 join identity。 | 显式 `logistics_path_ids` 已具备 settled quantity 与 remaining recipe authority，按排序 `path_id` 原子分配/扣减；无 path binding 继续走 aggregate-ledger compatibility。当前 schema 仍不能表达 required parent set、batch/custody lineage 或完整 join remaining obligations。 | canonical join ID、稳定 parent set、atomic default、staged-intake opt-in 和单次 parent disposition。 | M4 join domain contract；`PRD-WORLD_RUNTIME-043` 执行目标；bounded path-quantity implementation evidence。 |
 | Service window / terminal | recipe/transit 的 `ready_at` 或 output ledger 不是 service-window、lease、terminal 或 delivery identity。 | 当前事件没有独立 window/lease/terminal/delivery finality；production output 不能据此视为 delivery settlement。 | 独立 window identity、reservation mode/disposition，以及 production 与 delivery settlement 分离。 | M4 window/terminal domain contract；gameplay 玩家承诺；`PRD-WORLD_RUNTIME-043` 执行目标。 |
 | Output bundle / branch | `produce`/`byproducts` vectors 与 output ledger 没有 bundle/branch identity。 | 当前不能表达 atomic-vs-split disposition、branch pending/residual 或 branch receipt/finality。 | 单一 bundle identity、branch identities、atomic default 或显式 split fan-out，以及逐 branch finality。 | M4 bundle domain contract；`PRD-WORLD_RUNTIME-043` 执行目标。 |
-| Factory construction power quote | simulator legacy/current-local config 与 event 有 `factory_build_electricity_cost`；该事实不自动成为 runtime authority。 | runtime `BuildFactory` 校验 material `build_cost` 并进入 pending construction；尚未与 simulator electricity/Data sink、Viewer availability 或 read-only quote 对齐。 | 先共同记录唯一成本/资源映射、construction power mode、activation boundary 与 authority revision，再暴露权威 quote。 | 产品 `BuildFactory` 报价合同；gameplay 选择；runtime/simulator current evidence。 |
+| Factory construction power quote | simulator legacy/current-local config 与 event 有 `factory_build_electricity_cost`；该事实不自动成为 runtime authority。 | runtime `BuildFactory` 校验 material `build_cost` 并进入 pending construction；尚未与 simulator electricity/Data sink、Viewer availability 或 read-only quote 对齐。 | 最小目标由 [Factory site admission and construction power contract](#factory-site-admission-and-construction-power-contract) 冻结：site/access 持久 authority、builder-held `start-only sink`、resolved obligation revision 与 legacy replay 边界；仍须 fresh runtime/QA evidence 才能写成 current。 | 产品 `BuildFactory` 报价合同；M4 construction profile；runtime event/state/replay；gameplay 选择。 |
+
+### Factory site admission and construction power contract
+
+本节是 `BuildFactory` 的最小 runtime execution contract，承接产品层的站点选择承诺与 M4 的 construction profile 语义；它冻结持久字段和原子边界，但不把本节的 target contract 误写成当前实现。`world-runtime` 拥有 event、state、apply order、persistence、replay 与 exactly-once；M4 拥有建设 profile 的成本/电力语义；产品/gameplay 拥有玩家选择、机会成本与可读性。
+
+#### Persistent authority and backward-compatible fields
+
+最小持久 authority 由以下 versioned records 组成。字段名是 runtime/M4 的实现契约，允许使用 serde default 读取旧 snapshot，但新增提交不得因缺字段而绕过校验。
+
+| record | required fields | semantics |
+| --- | --- | --- |
+| `AgentLocationAuthorityV1`，存于 `WorldState.agent_location_authorities: BTreeMap<agent_id, ...>` | `agent_id`、`location_id`、`active`、`authority_revision`、`effective_at` | 这是 builder 的 canonical location assignment；`AgentState.pos: GeoPos` 只表示物理坐标，不能推导或替代 `location_id`。缺 assignment、`active=false`、非当前 revision 或 location 不存在时，co-location 为 `unknown/blocked`。assignment 只能由可回放的 movement/location authority event 更新，revision 单调递增。 |
+| `FactorySiteAuthorityV1`，存于 `WorldState.factory_site_authorities: BTreeMap<site_id, ...>` | `site_id`、`location_id`、`owner_agent_id`、`authorized_agent_ids`、`chunk_ready`、`active`、`authority_revision`、`registered_at` | `site_id` 是稳定 key，`location_id` 必须引用同一 authoritative location anchor；owner 自动拥有 access，其他 builder 只能命中显式 allowlist；空 allowlist 不表示公开访问；`active=false` 或 `chunk_ready=false` 不可新建。所有 ID 非空，allowlist 排序去重，revision 单调递增。 |
+| `FactoryConstructionPowerProfileV1`，存于 `WorldState.factory_construction_power_profiles: BTreeMap<factory_id, ...>` | `factory_id`、`factory_kind`、`source_module_id`（可为 `None` 的 direct profile source）、`electricity_amount`、`mode`、`authority_revision`、`active` | map key 必须与 `FactoryModuleSpec.factory_id` **逐字相等**，不得规范化、从 tag/display name 推导或由 caller 选择另一 key；`factory_kind`、`source_module_id` 与 amount/revision 来自 M4-governed profile authority event/state。module lane 还要求请求的 `module_id == source_module_id`；direct lane 只按 exact `factory_id` 查 profile，不接受 caller 自带 amount。`electricity_amount >= 0`，本批次 `mode` 只允许 `start_only_sink`，inactive/missing/stale profile fail closed。 |
+| `FactoryBuildPowerObligationV1`，随 build job/event 持久化 | `payer_agent_id`、`profile_key`（exact `factory_id`）、`profile_revision`、`electricity_amount`、`mode` | obligation 只能由上表 profile 解析产生，不能由 Action、WASM module output、simulator config 或 Viewer 填写；`payer_agent_id` 必须是 builder，`profile_key` 必须等于提交的 `FactoryModuleSpec.factory_id`，`profile_revision` 指向该 profile 的权威版本。`base_power_draw`、maintenance、recipe power 和 battery runway 不能填充此 obligation。 |
+| `FactoryBuildJobState` additions | `site_authority_revision`、`site_location_id`、`construction_power_obligation`（旧数据允许 `None`） | pending job 固定开始时的 site identity/location 与已解析的 power obligation；站点后续 metadata/access 变化不得静默改绑该 job。 |
+| `FactoryState` additions | `site_authority_revision`、`site_location_id`、`construction_power_profile_key`、`construction_power_profile_revision`（旧数据允许 `None`） | 建成工厂保留其采用的 site authority/location anchor 与 exact construction-profile identity，供后续读取和 replay 对账；不把建设 receipt 解释为 recipe、物流或 terminal readiness。 |
+
+Site registration、location anchor、Agent location assignment、ownership/access 变更和 readiness 变更必须通过 runtime 可回放的 authority event（或等价的已认证 authority input）发生；generic `BuildFactory` caller、Viewer、Agent、simulator config 不能直接写 registry。新 registration 从 revision `1` 开始；更新必须携带当前 revision 并原子产生下一 revision，stale/conflicting update 拒绝。runtime 不从 `site_id` 字符串、Agent 坐标、最近地点或客户端缓存推导 `location_id`、access 或 chunk readiness。co-location 只在同一 fresh snapshot 中同时满足：site active、site `location_id` 引用有效 anchor、builder 的 `AgentLocationAuthorityV1.location_id` 与 site `location_id` 精确相等且 assignment active；不能用 GeoPos 距离或“同一格”近似。
+
+#### Admission and electricity settlement
+
+`BuildFactory` admission 在同一 fresh authoritative snapshot 中按以下顺序裁决：builder 存在 → site registration/active/access/co-location/chunk readiness → factory identity 未 active/pending/retired → 用提交的 `FactoryModuleSpec.factory_id` exact lookup active `FactoryConstructionPowerProfileV1`（module lane 再校验 `source_module_id`）→ construction materials 与由该 profile 解析出的 `FactoryBuildPowerObligationV1` 均可支付。材料 obligation 使用 builder-owned material ledger；global/world material 不能作为新提交的隐式 fallback。Power obligation 使用 builder-held `Electricity`；Location electricity pool、global pool、`PowerStorage`、caller-provided amount 和 `base_power_draw` 都不是 payer。
+
+成功只在一个 staged commit 中同时完成：
+
+1. 持久化 site authority revision、location anchor 和 power obligation；
+2. 扣除 construction materials 与 `electricity_amount` 各一次；
+3. 写入 `FactoryBuildStarted`/pending job；
+4. 后续按该 job identity 只产生一次 `FactoryBuilt`。
+
+任一材料、电力、site/access/readiness、Agent location assignment、profile exact lookup 或 authority revision 缺失/冲突，都必须 atomic reject/`unknown`，不扣任何资源、不建立 pending、不产生设施。`start_only_sink` 不保留 completion hold，也不在 completion 再扣电或自动退款；站点变化不能自动迁移、取消、改路或重算已接受 job。PowerPlant 若未来由 factory profile 声明，必须在 profile 选定的 build-completion/activation boundary 后才生效。
+
+同一 action/job identity 的重试、重连、snapshot restore、乱序和 replay 只能重读原 disposition；相同 payload 是 no-op，冲突 payload fail closed。任何 site/location authority、construction profile 或 power obligation 字段变化都必须进入 event/state root 与 replay 比较，不能只存在于 quote 或日志。
+
+#### Legacy replay and non-goals
+
+- 旧 snapshot 缺少 `factory_site_authorities`、`agent_location_authorities` 或 `factory_construction_power_profiles` 时按空 registry 读取；它只可进入显式 legacy replay/diagnostic adapter，不能凭空获得新建厂资格。旧 `GeoPos` 不得回填 Agent location assignment。
+- 旧 `FactoryBuildStarted`/`FactoryBuilt` 事件缺少 site revision 或 power obligation 时，按原事件字段 replay，不能 retroactively 充电、补 site access 或从 simulator `factory_build_electricity_cost` 猜测金额；新事件必须写入上述字段。
+- `BuildFactoryWithModule` 的 module output 只能提供候选材料/工期；profile 的 exact `factory_id` key、canonical kind、source module、power amount/revision 与 site/access/ledger 的最终裁决仍回到同一 runtime admission。不得保留 module-only 的 global electricity fallback。
+- 本节不实现站点拓扑搜索、路径/容量/损耗算法、relocation/cutover、maintenance/runway、recipe lifecycle、terminal settlement、PowerStorage 或 UI 布局；这些能力仍服从各自 authority。
+
+`test_tier_required` 至少证明：site registration/access/readiness、Agent location assignment/co-location 与 stale revision 的正负样例；材料或 builder electricity 不足时无 mutation；global/Location electricity 不能补贴；exact `FactoryModuleSpec.factory_id` profile lookup、module source mismatch、missing/inactive profile 均 fail closed；start-only sink 与 pending/completion/replay 各至多一次；snapshot/replay 保留 site/location/profile key+revision/power identity；旧事件可读但不能取得新提交资格；direct/module BuildFactory 对同一 authority snapshot 结果一致。`test_tier_full` 再覆盖并发 site update/profile update、重复/冲突 action identity、crash/recovery、PowerPlant boundary 与跨 adapter replay。
 
 ### Consumer compatibility: gameplay lifecycle protocol boundary
 

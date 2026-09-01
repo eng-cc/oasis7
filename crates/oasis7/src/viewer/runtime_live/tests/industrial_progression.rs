@@ -81,8 +81,16 @@ pub(super) fn build_first_smelter_via_gameplay_action(
         .expect("seed iron ore for repeated recipes");
     server
         .world
-        .set_ledger_material_balance(site_ledger, "carbon_fuel", 120)
+        .set_ledger_material_balance(site_ledger.clone(), "carbon_fuel", 120)
         .expect("seed carbon fuel for repeated recipes");
+    server
+        .world
+        .set_ledger_material_balance(site_ledger.clone(), "copper_ore", 60)
+        .expect("seed copper ore for smelter recipes");
+    server
+        .world
+        .set_ledger_material_balance(site_ledger, "silicate_ore", 20)
+        .expect("seed silicate ore for smelter recipes");
     server
         .world
         .set_material_balance("hardware_part", 200)
@@ -391,13 +399,23 @@ fn runtime_gameplay_snapshot_gates_every_smelter_schedule_by_authoritative_resou
         scale_out_server.world.state().industry_progress.stage,
         IndustryStage::ScaleOut
     );
+    let scale_out_site_ledger = MaterialLedgerId::site(
+        scale_out_server
+            .world
+            .state()
+            .factories
+            .get(FACTORY_SMELTER_MK1)
+            .expect("scale-out smelter")
+            .site_id
+            .as_str(),
+    );
     scale_out_server
         .world
-        .set_material_balance("iron_ingot", 200)
+        .set_ledger_material_balance(scale_out_site_ledger.clone(), "iron_ingot", 200)
         .expect("seed alloy iron ingot");
     scale_out_server
         .world
-        .set_material_balance("copper_wire", 200)
+        .set_ledger_material_balance(scale_out_site_ledger, "copper_wire", 200)
         .expect("seed alloy copper wire");
     for (electricity, data, expected_reason) in [
         (0, i64::MAX, Some("insufficient electricity")),
@@ -695,7 +713,7 @@ fn runtime_gameplay_snapshot_publishes_complete_distinguishable_recovery_options
 }
 
 #[test]
-fn runtime_gameplay_snapshot_blocks_branch_ready_when_no_commitment_is_executable() {
+fn runtime_gameplay_snapshot_does_not_borrow_retired_agent_factory_for_branch_progress() {
     let mut state = WorldState::default();
     state.industry_progress.stage = IndustryStage::ScaleOut;
     state.industry_progress.completed_recipe_jobs = 4;
@@ -715,6 +733,10 @@ fn runtime_gameplay_snapshot_blocks_branch_ready_when_no_commitment_is_executabl
                 last_completed_recipe_id: Some("recipe.smelter.iron_ingot".to_string()),
                 ..FactoryProductionState::default()
             },
+            site_authority_revision: None,
+            site_location_id: None,
+            construction_power_profile_key: None,
+            construction_power_profile_revision: None,
             built_at: 1,
         },
     );
@@ -731,20 +753,16 @@ fn runtime_gameplay_snapshot_blocks_branch_ready_when_no_commitment_is_executabl
         true,
         None,
     );
-    assert_eq!(gameplay.stage_status, PlayerGameplayStageStatus::Blocked);
+    assert_eq!(gameplay.stage_status, PlayerGameplayStageStatus::Active);
     assert_eq!(
         gameplay.execution_state,
-        crate::simulator::PlayerGameplayExecutionState::Blocked
+        crate::simulator::PlayerGameplayExecutionState::Executing
     );
     assert!(gameplay.branch_recommendations.is_empty());
+    assert_eq!(gameplay.blocker_kind, None);
     assert_eq!(
-        gameplay.blocker_kind.as_deref(),
-        Some("branch_commitment_unavailable")
-    );
-    assert!(
-        gameplay
-            .next_step_hint
-            .contains("Restore the inputs or capability")
+        gameplay.goal_kind,
+        PlayerGameplayGoalKind::EstablishFirstCapability
     );
     assert_eq!(gameplay.branch_hint, None);
 }
@@ -769,13 +787,23 @@ fn runtime_gameplay_action_promotes_to_generic_midloop_after_governance_ready() 
         .world
         .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Data, i64::MAX)
         .expect("fund governance-ready agent data");
+    let smelter_site_ledger = MaterialLedgerId::site(
+        server
+            .world
+            .state()
+            .factories
+            .get(FACTORY_SMELTER_MK1)
+            .expect("governance-ready smelter")
+            .site_id
+            .as_str(),
+    );
     server
         .world
-        .set_material_balance("iron_ingot", 200)
+        .set_ledger_material_balance(smelter_site_ledger.clone(), "iron_ingot", 200)
         .expect("seed governance alloy iron ingot");
     server
         .world
-        .set_material_balance("copper_wire", 200)
+        .set_ledger_material_balance(smelter_site_ledger, "copper_wire", 200)
         .expect("seed governance alloy copper wire");
     server
         .world

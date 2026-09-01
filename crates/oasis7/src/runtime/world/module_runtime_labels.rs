@@ -7,6 +7,15 @@ pub(super) fn event_kind_label(body: &WorldEventBody) -> &'static str {
         WorldEventBody::Domain(event) => match event {
             DomainEvent::AgentRegistered { .. } => "domain.agent_registered",
             DomainEvent::AgentMoved { .. } => "domain.agent_moved",
+            DomainEvent::AgentLocationAuthorityUpdated { .. } => {
+                "domain.agent_location_authority_updated"
+            }
+            DomainEvent::FactorySiteAuthorityUpdated { .. } => {
+                "domain.economy.factory_site_authority_updated"
+            }
+            DomainEvent::FactoryConstructionPowerProfileUpdated { .. } => {
+                "domain.economy.factory_construction_power_profile_updated"
+            }
             DomainEvent::ActionAccepted { .. } => "domain.action_accepted",
             DomainEvent::ActionRejected { .. } => "domain.action_rejected",
             DomainEvent::AgentIntentProposed { .. } => "domain.agent_intent_proposed",

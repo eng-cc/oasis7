@@ -1,4 +1,36 @@
 use crate::runtime::WorldError;
+use crate::models::AgentState;
+use crate::runtime::state::FactoryProductionSnapshot;
+use crate::runtime::{AgentCell, FactoryProductionState, FactoryState, WorldState};
+
+fn stable_line_minimal_state(factory_id: &str) -> WorldState {
+    let agent_id = "stable-line-test-agent";
+    let site_id = "stable-line-test-site";
+    let mut state = WorldState::default();
+    state.agents.insert(
+        agent_id.to_string(),
+        AgentCell::new(AgentState::new(agent_id, pos(0, 0)), 0),
+    );
+    state.factories.insert(
+        factory_id.to_string(),
+        FactoryState {
+            factory_id: factory_id.to_string(),
+            site_id: site_id.to_string(),
+            builder_agent_id: agent_id.to_string(),
+            spec: factory_spec(factory_id, 1, 1),
+            input_ledger: MaterialLedgerId::site(site_id),
+            output_ledger: MaterialLedgerId::site(site_id),
+            durability_ppm: 1_000_000,
+            production: FactoryProductionState::default(),
+            site_authority_revision: None,
+            site_location_id: None,
+            construction_power_profile_key: None,
+            construction_power_profile_revision: None,
+            built_at: 0,
+        },
+    );
+    state
+}
 
 fn stable_identity_fixture(factory_id: &str) -> World {
     let mut world = World::new();
@@ -13,10 +45,12 @@ fn stable_identity_fixture(factory_id: &str) -> World {
     world
         .set_material_balance("circuit_board", 4)
         .expect("seed build circuits");
+    let spec = factory_spec(factory_id, 1, 1);
+    prepare_factory_build(&mut world, "builder-a", "site-1", &spec);
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
-        spec: factory_spec(factory_id, 1, 1),
+        spec,
     });
     world.step().expect("start build");
     world.step().expect("factory ready");
@@ -62,7 +96,7 @@ fn complete_identity_recipe(
 }
 
 #[test]
-fn stable_line_input_ledger_change_starts_fresh_candidate() {
+fn stable_line_input_ledger_does_not_fallback_to_world_ledger() {
     let factory_id = "factory.identity.input";
     let recipe_id = "recipe.identity.input";
     let mut world = stable_identity_fixture(factory_id);
@@ -97,10 +131,10 @@ fn stable_line_input_ledger_change_starts_fresh_candidate() {
 
     world
         .set_ledger_material_balance(MaterialLedgerId::site("site-1"), "iron_ingot", 0)
-        .expect("clear local input for world fallback");
+        .expect("clear local input for site-bound recipe");
     world
         .set_material_balance("iron_ingot", 2)
-        .expect("seed world fallback input");
+        .expect("seed world stock that must not satisfy site-bound recipe");
     let journal_start = world.journal().events.len();
     world.submit_action(Action::ScheduleRecipe {
         requester_agent_id: "builder-a".to_string(),
@@ -110,38 +144,43 @@ fn stable_line_input_ledger_change_starts_fresh_candidate() {
         logistics_route_ids: Vec::new(),
         logistics_path_ids: Vec::new(),
     });
-    world.step().expect("start world-fallback recipe");
+    world.step().expect("reject recipe without local input");
+    assert!(!world.journal().events[journal_start..].iter().any(|event| {
+        matches!(
+            &event.body,
+            WorldEventBody::Domain(DomainEvent::RecipeStarted { .. })
+        )
+    }), "direct recipe scheduling must not fall back to world stock");
     assert!(world.journal().events[journal_start..].iter().any(|event| {
         matches!(
             &event.body,
-            WorldEventBody::Domain(DomainEvent::RecipeStarted {
-                consume_ledger,
-                output_ledger,
+            WorldEventBody::Domain(DomainEvent::ActionRejected {
+                reason: RejectReason::InsufficientMaterial { material_kind, .. },
                 ..
-            }) if *consume_ledger == MaterialLedgerId::world()
-                && *output_ledger == MaterialLedgerId::world()
+            }) if material_kind == "iron_ingot"
         )
     }));
-    world.step().expect("advance world-fallback scarcity delay");
-    world
-        .step()
-        .expect("advance final world-fallback scarcity delay");
-    world.step().expect("complete world-fallback recipe");
 
     assert_eq!(
         world.state().industry_progress.stage,
         IndustryStage::Bootstrap
     );
+    let factory = world
+        .state()
+        .factories
+        .get(factory_id)
+        .expect("factory after rejected world fallback");
     assert_eq!(
-        world
-            .state()
-            .factories
-            .get(factory_id)
-            .expect("factory after world fallback")
+        factory.production.same_recipe_repeat_count,
+        0,
+        "rejected input must reset the stable-line candidate to W=0"
+    );
+    assert!(
+        factory
             .production
-            .same_recipe_repeat_count,
-        1,
-        "changing the effective consume/output ledger starts a fresh candidate"
+            .last_completed_canonical_snapshot
+            .is_none(),
+        "rejected input must clear the stable-line canonical snapshot"
     );
 }
 
@@ -272,6 +311,79 @@ fn stable_line_logistics_snapshot_change_starts_fresh_candidate() {
             .same_recipe_repeat_count,
         1,
         "changing the normalized logistics snapshot starts a fresh candidate"
+    );
+}
+
+#[test]
+fn stable_line_requires_canonical_snapshot_before_scale_out() {
+    let mut state = stable_line_minimal_state("factory.identity.missing-snapshot");
+    let factory = state
+        .factories
+        .get_mut("factory.identity.missing-snapshot")
+        .expect("factory after identity fixture");
+    factory.production.same_recipe_repeat_count = 3;
+    factory.production.last_completed_recipe_id =
+        Some("recipe.identity.missing-snapshot".to_string());
+    factory.production.last_completed_canonical_snapshot = None;
+
+    state
+        .apply_domain_event(
+            &DomainEvent::GameplayPolicyUpdated {
+                operator_agent_id: "stable-line-test-agent".to_string(),
+                electricity_tax_bps: 0,
+                data_tax_bps: 0,
+                power_trade_fee_bps: 0,
+                max_open_contracts_per_agent: 16,
+                blocked_agents: Vec::new(),
+                forbidden_location_ids: Vec::new(),
+            },
+            100,
+        )
+        .expect("refresh stage through public domain-event reducer");
+
+    assert_eq!(
+        state.industry_progress.stage,
+        IndustryStage::Bootstrap,
+        "a repeat count without a canonical snapshot must not unlock scale-out"
+    );
+}
+
+#[test]
+fn stable_line_requires_snapshot_recipe_to_match_last_completed_recipe() {
+    let mut state = stable_line_minimal_state("factory.identity.recipe-mismatch");
+    let factory = state
+        .factories
+        .get_mut("factory.identity.recipe-mismatch")
+        .expect("factory after identity fixture");
+    factory.production.same_recipe_repeat_count = 3;
+    factory.production.last_completed_recipe_id =
+        Some("recipe.identity.current".to_string());
+    factory.production.last_completed_canonical_snapshot = Some(
+        FactoryProductionSnapshot {
+            recipe_id: "recipe.identity.stale".to_string(),
+            ..FactoryProductionSnapshot::default()
+        },
+    );
+
+    state
+        .apply_domain_event(
+            &DomainEvent::GameplayPolicyUpdated {
+                operator_agent_id: "stable-line-test-agent".to_string(),
+                electricity_tax_bps: 0,
+                data_tax_bps: 0,
+                power_trade_fee_bps: 0,
+                max_open_contracts_per_agent: 16,
+                blocked_agents: Vec::new(),
+                forbidden_location_ids: Vec::new(),
+            },
+            100,
+        )
+        .expect("refresh stage through public domain-event reducer");
+
+    assert_eq!(
+        state.industry_progress.stage,
+        IndustryStage::Bootstrap,
+        "a snapshot for another recipe must not unlock scale-out"
     );
 }
 

@@ -50,11 +50,7 @@ pub(super) fn schedule_recipe_disabled_reason(
         ));
     }
     let consume = recipe_consume_with_maintenance_sinks(state, &plan.consume, &plan.produce);
-    let consume_ledger = if ledger_has_materials(state, &factory.input_ledger, &consume) {
-        factory.input_ledger.clone()
-    } else {
-        MaterialLedgerId::world()
-    };
+    let consume_ledger = factory.input_ledger.clone();
     for stack in &consume {
         let available = ledger_material_balance(state, &consume_ledger, stack.kind.as_str());
         if available < stack.amount {
@@ -85,7 +81,11 @@ fn recipe_consume_with_maintenance_sinks(
     produce: &[MaterialStack],
 ) -> Vec<MaterialStack> {
     let mut merged = BTreeMap::new();
+    let mut order = Vec::new();
     for stack in consume {
+        if !merged.contains_key(stack.kind.as_str()) {
+            order.push(stack.kind.clone());
+        }
         let amount = merged.entry(stack.kind.clone()).or_insert(0_i64);
         *amount = amount.saturating_add(stack.amount);
     }
@@ -98,24 +98,21 @@ fn recipe_consume_with_maintenance_sinks(
             .iter()
             .filter(|sink| sink.amount > 0)
         {
+            if !merged.contains_key(sink.kind.as_str()) {
+                order.push(sink.kind.clone());
+            }
             let amount = merged.entry(sink.kind.clone()).or_insert(0_i64);
             *amount = amount.saturating_add(sink.amount.saturating_mul(stack.amount));
         }
     }
-    merged
+    order
         .into_iter()
-        .map(|(kind, amount)| MaterialStack::new(kind, amount))
+        .filter_map(|kind| {
+            merged
+                .remove(&kind)
+                .map(|amount| MaterialStack::new(kind, amount))
+        })
         .collect()
-}
-
-fn ledger_has_materials(
-    state: &WorldState,
-    ledger_id: &MaterialLedgerId,
-    consume: &[MaterialStack],
-) -> bool {
-    consume
-        .iter()
-        .all(|stack| ledger_material_balance(state, ledger_id, stack.kind.as_str()) >= stack.amount)
 }
 
 fn ledger_material_balance(state: &WorldState, ledger_id: &MaterialLedgerId, kind: &str) -> i64 {

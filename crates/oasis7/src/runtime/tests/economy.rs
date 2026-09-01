@@ -198,6 +198,73 @@ fn build_factory_prefers_builder_material_ledger_when_available() {
 }
 
 #[test]
+fn build_factory_does_not_fallback_to_world_material_ledger_when_builder_ledger_is_empty() {
+    let mut world = World::new();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "builder-a".to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("register agent");
+
+    let builder_ledger = MaterialLedgerId::agent("builder-a");
+    world
+        .set_ledger_material_balance(builder_ledger.clone(), "steel_plate", 0)
+        .expect("drain builder steel");
+    world
+        .set_ledger_material_balance(builder_ledger, "circuit_board", 0)
+        .expect("drain builder circuits");
+    world
+        .set_material_balance("steel_plate", 100)
+        .expect("seed world steel fallback");
+    world
+        .set_material_balance("circuit_board", 100)
+        .expect("seed world circuits fallback");
+
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-1".to_string(),
+        spec: factory_spec("factory.no-world-fallback", 1, 1),
+    });
+    world
+        .step()
+        .expect("reject build without builder materials");
+
+    assert_eq!(
+        world.pending_factory_builds_len(),
+        0,
+        "global materials must not make a build schedulable when the builder ledger is empty"
+    );
+    assert!(!world.has_factory("factory.no-world-fallback"));
+    assert_eq!(world.material_balance("steel_plate"), 100);
+    assert_eq!(world.material_balance("circuit_board"), 100);
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::agent("builder-a"), "steel_plate"),
+        0
+    );
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::agent("builder-a"), "circuit_board"),
+        0
+    );
+
+    let rejected = world.journal().events.last().expect("rejection event");
+    match &rejected.body {
+        WorldEventBody::Domain(DomainEvent::ActionRejected { reason, .. }) => match reason {
+            RejectReason::InsufficientMaterial {
+                material_kind,
+                requested,
+                available,
+            } => {
+                assert_eq!(material_kind, "steel_plate");
+                assert_eq!(*requested, 10);
+                assert_eq!(*available, 0);
+            }
+            other => panic!("expected InsufficientMaterial reject reason, got {other:?}"),
+        },
+        other => panic!("expected ActionRejected, got {other:?}"),
+    }
+}
+
+#[test]
 fn schedule_recipe_consumes_inputs_and_power_then_produces_outputs() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
@@ -223,8 +290,8 @@ fn schedule_recipe_consumes_inputs_and_power_then_produces_outputs() {
     assert!(world.has_factory("factory.recipe"));
 
     world
-        .set_material_balance("iron_ingot", 6)
-        .expect("seed recipe input");
+        .set_ledger_material_balance(MaterialLedgerId::site("site-1"), "iron_ingot", 6)
+        .expect("seed site recipe input");
     world
         .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 20)
         .expect("seed builder electricity");
@@ -250,7 +317,10 @@ fn schedule_recipe_consumes_inputs_and_power_then_produces_outputs() {
 
     world.step().expect("start recipe");
     assert_eq!(world.pending_recipe_jobs_len(), 1);
-    assert_eq!(world.material_balance("iron_ingot"), 0);
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::site("site-1"), "iron_ingot"),
+        0
+    );
     assert_eq!(
         world
             .agent_resource_balance("builder-a", ResourceKind::Electricity)
@@ -274,8 +344,14 @@ fn schedule_recipe_consumes_inputs_and_power_then_produces_outputs() {
         world.step().expect("advance recipe toward completion");
     }
     assert_eq!(world.pending_recipe_jobs_len(), 0);
-    assert_eq!(world.material_balance("motor_mk1"), 2);
-    assert_eq!(world.material_balance("metal_scrap"), 1);
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::site("site-1"), "motor_mk1"),
+        2
+    );
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::site("site-1"), "metal_scrap"),
+        1
+    );
 
     let completed = world
         .journal()
@@ -726,8 +802,8 @@ fn schedule_recipe_rejects_when_factory_slots_are_full() {
     world.step().expect("factory ready");
 
     world
-        .set_material_balance("gear", 8)
-        .expect("seed recipe input");
+        .set_ledger_material_balance(MaterialLedgerId::site("site-1"), "gear", 8)
+        .expect("seed site recipe input");
     world
         .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 50)
         .expect("seed builder electricity");

@@ -2,11 +2,17 @@ use std::collections::HashSet;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+use crate::runtime::{
+    AgentLocationAuthorityV1, FactoryConstructionPowerMode, FactoryConstructionPowerProfileV1,
+    FactorySiteAuthorityV1, MaterialLedgerId,
+};
 use crate::simulator::runtime_perf::unsupported_runtime_perf_snapshot;
 use crate::simulator::{
     ChunkRuntimeConfig, Location, RuntimePerfHealth, RuntimePerfSnapshot, WorldKernel, WorldModel,
 };
-use crate::viewer::gameplay_actions::formal_release_default_seed_model;
+use crate::viewer::gameplay_actions::{
+    FACTORY_ASSEMBLER_MK1, FACTORY_SMELTER_MK1, formal_release_default_seed_model,
+};
 
 use super::*;
 
@@ -493,6 +499,20 @@ fn bootstrap_runtime_world_from_model(
             .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Data, data)
             .map_err(|err| format!("{label} set data failed agent={} err={err:?}", agent_id))?;
     }
+    let authority_agents = world
+        .state()
+        .agents
+        .keys()
+        .map(|agent_id| {
+            let location_id = model
+                .agents
+                .get(agent_id)
+                .map(|agent| agent.location_id.clone())
+                .unwrap_or_else(|| "runtime-bootstrap-location".to_string());
+            (agent_id.clone(), location_id)
+        })
+        .collect::<Vec<_>>();
+    install_starter_factory_authorities(&mut world, authority_agents.as_slice(), label)?;
     world
         .step()
         .map_err(|err| format!("{label} resource seed consensus step failed: {err:?}"))?;
@@ -568,10 +588,84 @@ pub fn bootstrap_formal_release_runtime_world() -> Result<(RuntimeWorld, WorldCo
                 FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID
             )
         })?;
+    install_starter_factory_authorities(
+        &mut world,
+        &[(
+            FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID.to_string(),
+            starter_agent.location_id.clone(),
+        )],
+        "formal release bootstrap",
+    )?;
     world.step().map_err(|err| {
         format!("formal release bootstrap resource consensus step failed: {err:?}")
     })?;
     Ok((world, config))
+}
+
+fn install_starter_factory_authorities(
+    world: &mut RuntimeWorld,
+    agents: &[(String, String)],
+    label: &str,
+) -> Result<(), String> {
+    let Some((owner_agent_id, starter_location_id)) = agents.first() else {
+        return Ok(());
+    };
+    for (agent_id, location_id) in agents {
+        world
+            .set_agent_location_authority(AgentLocationAuthorityV1 {
+                agent_id: agent_id.clone(),
+                location_id: location_id.clone(),
+                active: true,
+                authority_revision: 1,
+                effective_at: world.state().time,
+            })
+            .map_err(|err| format!("{label} install agent location authority failed: {err:?}"))?;
+    }
+    let authorized_agent_ids = agents
+        .iter()
+        .skip(1)
+        .map(|(agent_id, _)| agent_id.clone())
+        .collect::<Vec<_>>();
+    for site_id in ["site-smelter", "site-assembler"] {
+        world
+            .set_factory_site_authority(FactorySiteAuthorityV1 {
+                site_id: site_id.to_string(),
+                location_id: starter_location_id.clone(),
+                owner_agent_id: owner_agent_id.clone(),
+                authorized_agent_ids: authorized_agent_ids.clone(),
+                chunk_ready: true,
+                active: true,
+                authority_revision: 1,
+                registered_at: world.state().time,
+            })
+            .map_err(|err| format!("{label} install factory site authority failed: {err:?}"))?;
+    }
+    for factory_id in [FACTORY_SMELTER_MK1, FACTORY_ASSEMBLER_MK1] {
+        world
+            .set_factory_construction_power_profile(FactoryConstructionPowerProfileV1 {
+                factory_id: factory_id.to_string(),
+                factory_kind: factory_id.to_string(),
+                source_module_id: None,
+                electricity_amount: 10,
+                mode: FactoryConstructionPowerMode::StartOnlySink,
+                authority_revision: 1,
+                active: true,
+            })
+            .map_err(|err| {
+                format!("{label} install factory construction power profile failed: {err:?}")
+            })?;
+    }
+    let owner_ledger = MaterialLedgerId::agent(owner_agent_id);
+    for (material, amount) in [
+        ("structural_frame", 12),
+        ("heat_coil", 4),
+        ("refractory_brick", 6),
+    ] {
+        world
+            .set_ledger_material_balance(owner_ledger.clone(), material, amount)
+            .map_err(|err| format!("{label} seed starter build material failed: {err:?}"))?;
+    }
+    Ok(())
 }
 
 pub(super) fn formal_release_default_seed_location_for_pos(pos: GeoPos) -> Option<Location> {

@@ -11,10 +11,12 @@ fn recipe_route_fixture(factory_id: &str) -> World {
     world
         .set_material_balance("circuit_board", 4)
         .expect("seed factory circuits");
+    let spec = factory_spec(factory_id, 1, 1);
+    prepare_factory_build(&mut world, "builder-a", "site-1", &spec);
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
-        spec: factory_spec(factory_id, 1, 1),
+        spec,
     });
     world.step().expect("start recipe route factory");
     world.step().expect("finish recipe route factory");

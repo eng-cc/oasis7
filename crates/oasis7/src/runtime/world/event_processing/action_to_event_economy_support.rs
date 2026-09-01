@@ -15,10 +15,10 @@ impl World {
             .ok_or_else(|| format!("factory not found: {factory_id}"))?;
         let effective_consume = merge_recipe_consume_with_maintenance_sink(self, consume, produce);
         let preferred_consume_ledger = factory.input_ledger.clone();
-        let consume_ledger = self.select_material_consume_ledger_with_world_fallback(
-            preferred_consume_ledger.clone(),
-            &effective_consume,
-        );
+        // Quote the same site-bound ledger that ScheduleRecipe will use. The
+        // BuildFactory compatibility fallback must not make a recipe quote
+        // appear affordable from global stock.
+        let consume_ledger = preferred_consume_ledger.clone();
         for stack in &effective_consume {
             if stack.amount <= 0 {
                 return Err(format!(

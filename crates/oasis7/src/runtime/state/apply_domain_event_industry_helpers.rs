@@ -10,6 +10,9 @@ impl WorldState {
         spec: &FactoryModuleSpec,
         consume_ledger: &MaterialLedgerId,
         ready_at: &WorldTime,
+        site_authority_revision: Option<&u64>,
+        site_location_id: Option<&str>,
+        construction_power_obligation: Option<&FactoryBuildPowerObligationV1>,
     ) -> Result<(), WorldError> {
         if self.pending_factory_builds.contains_key(job_id)
             || self.settled_factory_build_ids.contains(job_id)
@@ -64,6 +67,102 @@ impl WorldState {
             });
         }
 
+        // New authority-bound events carry all facts needed for deterministic
+        // admission and replay. Legacy events omit them and intentionally
+        // retain their historical material-only semantics.
+        if let Some(obligation) = construction_power_obligation {
+            let site_revision =
+                site_authority_revision.ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                    reason: "factory build power obligation requires site authority revision"
+                        .to_string(),
+                })?;
+            let site_location =
+                site_location_id.ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                    reason: "factory build power obligation requires site location".to_string(),
+                })?;
+            let site = self.factory_site_authorities.get(site_id).ok_or_else(|| {
+                WorldError::ResourceBalanceInvalid {
+                    reason: format!("factory build site authority missing: site_id={site_id}"),
+                }
+            })?;
+            let location = self
+                .agent_location_authorities
+                .get(builder_agent_id)
+                .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                    reason: format!(
+                        "factory build builder location authority missing: builder_agent_id={builder_agent_id}"
+                    ),
+                })?;
+            if site.site_id != site_id
+                || location.agent_id != builder_agent_id
+                || *site_revision != site.authority_revision
+                || site_location != site.location_id
+                || !site.active
+                || !site.chunk_ready
+                || !location.active
+                || location.location_id != site.location_id
+                || (site.owner_agent_id != builder_agent_id
+                    && !site
+                        .authorized_agent_ids
+                        .iter()
+                        .any(|agent_id| agent_id == builder_agent_id))
+            {
+                return Err(WorldError::ResourceBalanceInvalid {
+                    reason: format!(
+                        "factory build authority changed or is unavailable: site_id={site_id} builder_agent_id={builder_agent_id}"
+                    ),
+                });
+            }
+            if obligation.payer_agent_id != builder_agent_id
+                || obligation.profile_key != spec.factory_id
+                || obligation.profile_revision == 0
+                || obligation.electricity_amount < 0
+                || obligation.mode != FactoryConstructionPowerMode::StartOnlySink
+            {
+                return Err(WorldError::ResourceBalanceInvalid {
+                    reason: format!(
+                        "factory build power obligation is invalid: factory_id={} builder_agent_id={}",
+                        spec.factory_id, builder_agent_id
+                    ),
+                });
+            }
+            let profile = self
+                .factory_construction_power_profiles
+                .get(spec.factory_id.as_str())
+                .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                    reason: format!(
+                        "factory build construction power profile missing: factory_id={}",
+                        spec.factory_id
+                    ),
+                })?;
+            if !profile.active
+                || profile.authority_revision != obligation.profile_revision
+                || profile.factory_id != spec.factory_id
+                || profile.electricity_amount != obligation.electricity_amount
+                || profile.mode != obligation.mode
+            {
+                return Err(WorldError::ResourceBalanceInvalid {
+                    reason: format!(
+                        "factory build construction power profile changed: factory_id={}",
+                        spec.factory_id
+                    ),
+                });
+            }
+            let available_power = self
+                .agents
+                .get(builder_agent_id)
+                .map(|cell| cell.state.resources.get(ResourceKind::Electricity))
+                .unwrap_or(0);
+            if available_power < obligation.electricity_amount {
+                return Err(WorldError::ResourceBalanceInvalid {
+                    reason: format!(
+                        "factory build consume failed: insufficient construction electricity requested={} available={}",
+                        obligation.electricity_amount, available_power
+                    ),
+                });
+            }
+        }
+
         // Validate and aggregate every cost before debiting any material.
         // A build event may contain duplicate material stacks; checking each
         // stack independently would allow the second debit to fail after the
@@ -103,6 +202,16 @@ impl WorldState {
                 });
             }
         }
+        if let Some(obligation) = construction_power_obligation {
+            if let Some(cell) = self.agents.get_mut(builder_agent_id) {
+                cell.state
+                    .resources
+                    .remove(ResourceKind::Electricity, obligation.electricity_amount)
+                    .map_err(|err| WorldError::ResourceBalanceInvalid {
+                        reason: format!("factory construction electricity debit failed: {err:?}"),
+                    })?;
+            }
+        }
         for stack in &spec.build_cost {
             remove_material_balance_for_ledger(
                 &mut self.material_ledgers,
@@ -123,6 +232,9 @@ impl WorldState {
                 spec: spec.clone(),
                 consume_ledger: consume_ledger.clone(),
                 ready_at: *ready_at,
+                site_authority_revision: site_authority_revision.copied(),
+                site_location_id: site_location_id.map(ToOwned::to_owned),
+                construction_power_obligation: construction_power_obligation.cloned(),
             },
         );
         if let Some(cell) = self.agents.get_mut(builder_agent_id) {
@@ -205,6 +317,16 @@ impl WorldState {
                 output_ledger: site_ledger,
                 durability_ppm: 1_000_000,
                 production: FactoryProductionState::default(),
+                site_authority_revision: pending.site_authority_revision,
+                site_location_id: pending.site_location_id.clone(),
+                construction_power_profile_key: pending
+                    .construction_power_obligation
+                    .as_ref()
+                    .map(|obligation| obligation.profile_key.clone()),
+                construction_power_profile_revision: pending
+                    .construction_power_obligation
+                    .as_ref()
+                    .map(|obligation| obligation.profile_revision),
                 built_at: now,
             },
         );

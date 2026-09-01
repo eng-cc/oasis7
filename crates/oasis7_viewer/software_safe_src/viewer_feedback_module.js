@@ -3,6 +3,7 @@ import { buildGameplayEconomicSurface } from "./viewer_feedback_gameplay_economi
 import { buildValidationUnlockPreviewDisplayModel } from "./viewer_validation_unlock_preview_display_model.js";
 import { buildWaitResolutionQuoteDisplayModel } from "./viewer_wait_resolution_quote_display_model.js";
 import { normalizeFirstDeliveryPreview } from "./first_delivery_preview_display_model.js";
+import { normalizeFactoryProductionFailureDisposition } from "./viewer_factory_failure_disposition_display_model.js";
 function isRecord(value) {
   return value != null && typeof value === "object" && !Array.isArray(value);
 }
@@ -593,10 +594,18 @@ export function createViewerFeedbackModule({
           return localeText(locale, "执行世界未就绪", "Execution World Not Ready");
         case "runtime_snapshot_empty_entities":
           return localeText(locale, "认领第一个 Agent", "Claim the first Agent");
+        case "product_validation":
+        case "product_validation_rejected":
+          return localeText(locale, "产品验证失败", "Product validation failed");
         default:
           return resolvedBlockerKind || null;
       }
     })();
+    const factoryProductionFailureDisposition = normalizeFactoryProductionFailureDisposition(
+      gameplay.factory_production_failure_disposition ?? gameplay.factoryProductionFailureDisposition,
+      locale,
+      localeText,
+    );
     const narrativeNextStep = pendingEmptyWorldClaimSync
       ? localeText(
         locale,
@@ -889,11 +898,16 @@ export function createViewerFeedbackModule({
         reason: displayableString(option.reason) || null,
         recommended: option.recommended === true,
       }));
-    const waitResolutionQuote = buildWaitResolutionQuoteDisplayModel(
-      gameplay.wait_resolution_quote ?? gameplay.waitResolutionQuote,
-      locale,
-      localeText,
-    );
+    if (factoryProductionFailureDisposition) {
+      fallbackTradeoffPreview.length = 0;
+    }
+    const waitResolutionQuote = factoryProductionFailureDisposition
+      ? null
+      : buildWaitResolutionQuoteDisplayModel(
+        gameplay.wait_resolution_quote ?? gameplay.waitResolutionQuote,
+        locale,
+        localeText,
+      );
     if (waitResolutionQuote) {
       const safeWaitIndex = fallbackTradeoffPreview.findIndex((option) => option.valueClass === "safe_wait");
       fallbackTradeoffPreview.splice(safeWaitIndex < 0 ? fallbackTradeoffPreview.length : safeWaitIndex, safeWaitIndex < 0 ? 0 : 1, waitResolutionQuote.fallbackTradeoffOption);
@@ -907,7 +921,7 @@ export function createViewerFeedbackModule({
     const requiredNextDecisionClass = displayableString(
       gameplay.required_next_decision_class ?? gameplay.requiredNextDecisionClass,
     );
-    const noSafeFallbackHandoff = noSafeFallbackReason
+    const noSafeFallbackHandoff = !factoryProductionFailureDisposition && (noSafeFallbackReason
       || requiredNextDecisionActionId
       || requiredNextDecisionClass
       ? {
@@ -915,7 +929,7 @@ export function createViewerFeedbackModule({
         requiredNextDecisionActionId,
         requiredNextDecisionClass,
       }
-      : null;
+      : null);
     const recoveryOptionComparisons = (
       Array.isArray(gameplay.recovery_options)
         ? gameplay.recovery_options
@@ -1164,6 +1178,7 @@ export function createViewerFeedbackModule({
       branchRecommendations,
       microDepotFacilities,
       validationUnlockPreview,
+      factoryProductionFailureDisposition,
       narrativeBlockerDetail,
       narrativeNextStep,
       economicSurface,

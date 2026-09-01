@@ -1,7 +1,9 @@
 use super::*;
 use crate::runtime::tests::signed_test_artifact_identity;
 use crate::runtime::{
-    Manifest, ModuleSubscription, ModuleSubscriptionStage, WorldError, WorldEvent,
+    AgentLocationAuthorityV1, FactoryConstructionPowerMode, FactoryConstructionPowerProfileV1,
+    FactorySiteAuthorityV1, Manifest, MaterialLedgerId, ModuleSubscription,
+    ModuleSubscriptionStage, WorldError, WorldEvent,
 };
 use oasis7_wasm_abi::{
     ModuleCallFailure, ModuleCallInput, ModuleCallRequest, ModuleOutput, ModuleSandbox,
@@ -65,6 +67,64 @@ fn activate_module_manifest_for_test(world: &mut World, manifest: ModuleManifest
     world.apply_proposal(proposal_id).unwrap();
 }
 
+fn prepare_module_test_factory_build(
+    world: &mut World,
+    builder_agent_id: &str,
+    site_id: &str,
+    spec: &FactoryModuleSpec,
+) {
+    let location_id = format!("location-{site_id}");
+    world
+        .set_agent_location_authority(AgentLocationAuthorityV1 {
+            agent_id: builder_agent_id.to_string(),
+            location_id: location_id.clone(),
+            active: true,
+            authority_revision: 1,
+            effective_at: 0,
+        })
+        .expect("install module-test agent location authority");
+    world
+        .set_factory_site_authority(FactorySiteAuthorityV1 {
+            site_id: site_id.to_string(),
+            location_id,
+            owner_agent_id: builder_agent_id.to_string(),
+            authorized_agent_ids: Vec::new(),
+            chunk_ready: true,
+            active: true,
+            authority_revision: 1,
+            registered_at: 0,
+        })
+        .expect("install module-test factory site authority");
+    const CONSTRUCTION_POWER: i64 = 10;
+    world
+        .set_factory_construction_power_profile(FactoryConstructionPowerProfileV1 {
+            factory_id: spec.factory_id.clone(),
+            factory_kind: "test".to_string(),
+            source_module_id: None,
+            electricity_amount: CONSTRUCTION_POWER,
+            mode: FactoryConstructionPowerMode::StartOnlySink,
+            authority_revision: 1,
+            active: true,
+        })
+        .expect("install module-test construction power profile");
+    let builder_ledger = MaterialLedgerId::agent(builder_agent_id);
+    for stack in &spec.build_cost {
+        world
+            .set_ledger_material_balance(builder_ledger.clone(), stack.kind.as_str(), stack.amount)
+            .expect("seed module-test construction material");
+    }
+    let existing_power = world
+        .agent_resource_balance(builder_agent_id, ResourceKind::Electricity)
+        .expect("read module-test construction power");
+    world
+        .set_agent_resource_balance(
+            builder_agent_id,
+            ResourceKind::Electricity,
+            existing_power.saturating_add(CONSTRUCTION_POWER),
+        )
+        .expect("seed module-test construction power");
+}
+
 fn logistics_drone_module_recipe_world(factory_id: &str) -> World {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
@@ -74,10 +134,12 @@ fn logistics_drone_module_recipe_world(factory_id: &str) -> World {
     world.step().expect("register agent");
     world.set_material_balance("steel_plate", 10).unwrap();
     world.set_material_balance("circuit_board", 2).unwrap();
+    let spec = factory_spec(factory_id, 1, 1);
+    prepare_module_test_factory_build(&mut world, "builder-a", "site-1", &spec);
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
-        spec: factory_spec(factory_id, 1, 1),
+        spec,
     });
     world.step().expect("start build");
     world.step().expect("build complete");
@@ -93,115 +155,8 @@ fn logistics_drone_module_recipe_world(factory_id: &str) -> World {
     world
 }
 
-#[test]
-fn schedule_recipe_with_module_auto_validates_outputs_before_commit() {
-    let mut world = logistics_drone_module_recipe_world("factory.recipe.auto_validate");
-
-    world.submit_action(Action::ScheduleRecipeWithModule {
-        requester_agent_id: "builder-a".to_string(),
-        factory_id: "factory.recipe.auto_validate".to_string(),
-        recipe_id: "recipe.assembler.logistics_drone".to_string(),
-        module_id: "m4.recipe.logistics_drone".to_string(),
-        desired_batches: 1,
-        deterministic_seed: 20260214,
-    });
-
-    let output = ModuleOutput {
-        new_state: None,
-        effects: Vec::new(),
-        emits: vec![
-            ModuleEmit {
-                kind: "economy.recipe_execution_plan".to_string(),
-                payload: serde_json::to_value(RecipeExecutionPlan::accepted(
-                    1,
-                    vec![
-                        MaterialStack::new("motor_mk1", 2),
-                        MaterialStack::new("control_chip", 1),
-                        MaterialStack::new("chassis_plate", 1),
-                    ],
-                    vec![MaterialStack::new("logistics_drone", 1)],
-                    vec![MaterialStack::new("assembly_scrap", 1)],
-                    10,
-                    1,
-                ))
-                .expect("serialize recipe execution plan"),
-            },
-            ModuleEmit {
-                kind: "economy.product_validation".to_string(),
-                payload: serde_json::to_value(ProductValidationDecision::accepted(
-                    "logistics_drone",
-                    32,
-                    true,
-                    vec!["fleet_grade".to_string()],
-                ))
-                .expect("serialize product validation decision"),
-            },
-        ],
-        tick_lifecycle: None,
-        output_bytes: 512,
-    };
-    let mut sandbox = FixedSandbox::succeed(output);
-    world
-        .step_with_modules(&mut sandbox)
-        .expect("start recipe with module");
-    assert_eq!(world.pending_recipe_jobs_len(), 1);
-
-    for _ in 0..4 {
-        if world.pending_recipe_jobs_len() == 0 {
-            break;
-        }
-        world
-            .step_with_modules(&mut sandbox)
-            .expect("advance module recipe toward validated completion");
-    }
-    assert_eq!(world.pending_recipe_jobs_len(), 0);
-    assert_eq!(world.material_balance("logistics_drone"), 1);
-    assert_eq!(world.material_balance("assembly_scrap"), 1);
-
-    let has_product_validated = world.journal().events.iter().any(|event| {
-        matches!(
-            &event.body,
-            WorldEventBody::Domain(DomainEvent::ProductValidated {
-                module_id,
-                stack,
-                ..
-            }) if module_id == "m4.product.logistics_drone" && stack.kind == "logistics_drone"
-        )
-    });
-    assert!(has_product_validated);
-}
-
-#[test]
-fn schedule_recipe_with_module_blocks_commit_when_product_validation_fails() {
-    let mut world = logistics_drone_module_recipe_world("factory.recipe.auto_reject");
-
-    world.submit_action(Action::ScheduleRecipeWithModule {
-        requester_agent_id: "builder-a".to_string(),
-        factory_id: "factory.recipe.auto_reject".to_string(),
-        recipe_id: "recipe.assembler.logistics_drone".to_string(),
-        module_id: "m4.recipe.logistics_drone".to_string(),
-        desired_batches: 1,
-        deterministic_seed: 20260214,
-    });
-
-    let factory_completion_count_before = world
-        .state()
-        .factories
-        .get("factory.recipe.auto_reject")
-        .expect("factory state before rejected settlement")
-        .production
-        .completed_jobs;
-    let stable_line_repeat_count_before = world
-        .state()
-        .factories
-        .get("factory.recipe.auto_reject")
-        .expect("factory state before rejected settlement")
-        .production
-        .same_recipe_repeat_count;
-    let completed_recipe_jobs_before = world.state().industry_progress.completed_recipe_jobs;
-    let industry_stage_before = world.state().industry_progress.stage;
-
-    let output = ModuleOutput {
+fn rejected_logistics_drone_recipe_module_output() -> ModuleOutput {
+    ModuleOutput {
         new_state: None,
         effects: Vec::new(),
         emits: vec![
@@ -235,13 +190,23 @@ fn schedule_recipe_with_module_blocks_commit_when_product_validation_fails() {
         ],
         tick_lifecycle: None,
         output_bytes: 512,
-    };
-    let mut sandbox = FixedSandbox::succeed(output);
+    }
+}
+
+fn settled_product_validation_rejection_world(factory_id: &str) -> World {
+    let mut world = logistics_drone_module_recipe_world(factory_id);
+    world.submit_action(Action::ScheduleRecipeWithModule {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: factory_id.to_string(),
+        recipe_id: "recipe.assembler.logistics_drone".to_string(),
+        module_id: "m4.recipe.logistics_drone".to_string(),
+        desired_batches: 1,
+        deterministic_seed: 20260214,
+    });
+    let mut sandbox = FixedSandbox::succeed(rejected_logistics_drone_recipe_module_output());
     world
         .step_with_modules(&mut sandbox)
         .expect("start recipe with module");
-    assert_eq!(world.pending_recipe_jobs_len(), 1);
-
     for _ in 0..4 {
         if world.pending_recipe_jobs_len() == 0 {
             break;
@@ -251,55 +216,31 @@ fn schedule_recipe_with_module_blocks_commit_when_product_validation_fails() {
             .expect("advance module recipe toward rejection settlement");
     }
     assert_eq!(world.pending_recipe_jobs_len(), 0);
-    assert_eq!(world.material_balance("logistics_drone"), 0);
-    assert_eq!(world.material_balance("assembly_scrap"), 0);
-
-    let factory = world
-        .state()
-        .factories
-        .get("factory.recipe.auto_reject")
-        .expect("factory state after rejected settlement");
     assert_eq!(
-        factory.production.completed_jobs, factory_completion_count_before,
-        "rejected product validation must not complete a factory job"
+        world.state().factory_production_failure_dispositions.len(),
+        1
     );
-    assert_eq!(
-        factory.production.same_recipe_repeat_count, stable_line_repeat_count_before,
-        "rejected product validation must not advance stable-line progress"
-    );
-    assert!(
-        factory.production.last_completed_recipe_id.is_none(),
-        "rejected product validation must not record a completed recipe"
-    );
-    assert!(
-        factory
-            .production
-            .last_completed_canonical_snapshot
-            .is_none(),
-        "rejected product validation must not retain stable-line identity"
-    );
-    assert_eq!(
-        world.state().industry_progress.completed_recipe_jobs,
-        completed_recipe_jobs_before,
-        "rejected product validation must not advance recipe completion progress"
-    );
-    assert_eq!(
-        world.state().industry_progress.stage,
-        industry_stage_before,
-        "rejected product validation must leave the industry stage unchanged"
-    );
-
-    let has_rejected = world.journal().events.iter().any(|event| {
-        matches!(
-            &event.body,
-            WorldEventBody::Domain(DomainEvent::ActionRejected {
-                reason: RejectReason::RuleDenied { notes },
-                ..
-            }) if notes.iter().any(|note| note.contains("stack exceeds limit"))
-        )
-    });
-    assert!(has_rejected);
+    world
 }
+
+fn product_validation_blocker_event(world: &World) -> DomainEvent {
+    world
+        .journal()
+        .events
+        .iter()
+        .find_map(|event| match &event.body {
+            WorldEventBody::Domain(
+                blocker @ DomainEvent::FactoryProductionBlocked { blocker_kind, .. },
+            ) if blocker_kind == "product_validation" => Some(blocker.clone()),
+            _ => None,
+        })
+        .expect("product-validation blocker event")
+}
+
+#[path = "economy_module_validation/identity_guard.rs"]
+mod identity_guard;
+#[path = "economy_module_validation/product_validation.rs"]
+mod product_validation;
 
 #[test]
 fn schedule_recipe_with_module_blocks_atomic_commit_when_byproduct_validation_fails() {
@@ -473,14 +414,15 @@ fn industrial_integrity_schedule_recipe_with_module_rejects_plan_over_requested_
         .set_material_balance("iron_ingot", 1)
         .expect("seed recipe input");
     world.set_resource_balance(ResourceKind::Electricity, 40);
+    let spec = factory_spec("factory.recipe.batch-bound", 1, 1);
+    prepare_module_test_factory_build(&mut world, "builder-a", "site-1", &spec);
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
-        spec: factory_spec("factory.recipe.batch-bound", 1, 1),
+        spec,
     });
     world.step().expect("start build");
     world.step().expect("build complete");
-
     activate_pure_module(
         &mut world,
         "m4.recipe.batch-bound",
@@ -547,108 +489,6 @@ fn industrial_integrity_schedule_recipe_with_module_rejects_plan_over_requested_
             })
         )
     }));
-}
-
-#[test]
-fn industrial_integrity_product_validation_blocker_rejects_tampered_identity_before_mutation() {
-    let mut world = World::new();
-    world.submit_action(Action::RegisterAgent {
-        agent_id: "builder-a".to_string(),
-        pos: pos(0, 0),
-    });
-    world.step().expect("register agent");
-
-    world
-        .set_material_balance("steel_plate", 10)
-        .expect("seed steel");
-    world
-        .set_material_balance("circuit_board", 2)
-        .expect("seed circuits");
-    world
-        .set_material_balance("iron_ingot", 1)
-        .expect("seed recipe input");
-    world
-        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 40)
-        .expect("seed builder electricity");
-    world.set_resource_balance(ResourceKind::Electricity, 40);
-    world.submit_action(Action::BuildFactory {
-        builder_agent_id: "builder-a".to_string(),
-        site_id: "site-1".to_string(),
-        spec: factory_spec("factory.recipe.identity-guard", 1, 1),
-    });
-    world.step().expect("start build");
-    world.step().expect("build complete");
-
-    activate_pure_module(
-        &mut world,
-        "m4.recipe.identity-guard",
-        b"identity-guard-recipe-module",
-    );
-    world.submit_action(Action::ScheduleRecipeWithModule {
-        requester_agent_id: "builder-a".to_string(),
-        factory_id: "factory.recipe.identity-guard".to_string(),
-        recipe_id: "recipe.identity-guard".to_string(),
-        module_id: "m4.recipe.identity-guard".to_string(),
-        desired_batches: 1,
-        deterministic_seed: 20260214,
-    });
-
-    let output = ModuleOutput {
-        new_state: None,
-        effects: Vec::new(),
-        emits: vec![ModuleEmit {
-            kind: "economy.recipe_execution_plan".to_string(),
-            payload: serde_json::to_value(RecipeExecutionPlan::accepted(
-                1,
-                vec![MaterialStack::new("iron_ingot", 1)],
-                vec![MaterialStack::new("gear", 1)],
-                Vec::new(),
-                10,
-                1,
-            ))
-            .expect("serialize identity-guard recipe plan"),
-        }],
-        tick_lifecycle: None,
-        output_bytes: 256,
-    };
-    let mut sandbox = FixedSandbox::succeed(output);
-    world
-        .step_with_modules(&mut sandbox)
-        .expect("start module recipe");
-    let pending = world
-        .state()
-        .pending_recipe_jobs
-        .values()
-        .next()
-        .expect("pending module recipe")
-        .clone();
-
-    let mut replay = world.state().clone();
-    let before = serde_json::to_vec(&replay).expect("serialize state before tampered blocker");
-    let event = DomainEvent::FactoryProductionBlocked {
-        action_id: pending.job_id,
-        requester_agent_id: "forged-requester".to_string(),
-        factory_id: "forged-factory".to_string(),
-        recipe_id: "forged-recipe".to_string(),
-        blocker_kind: "product_validation".to_string(),
-        blocker_detail: "forged product validation disposition".to_string(),
-    };
-
-    let result = replay.apply_domain_event(&event, replay.time);
-    assert!(
-        matches!(result, Err(WorldError::ResourceBalanceInvalid { .. })),
-        "tampered product-validation blocker must fail closed: {result:?}"
-    );
-    assert_eq!(
-        serde_json::to_vec(&replay).expect("serialize state after tampered blocker"),
-        before,
-        "tampered blocker must not mutate serialized world state"
-    );
-    assert_eq!(
-        replay.pending_recipe_jobs.get(&pending.job_id),
-        Some(&pending),
-        "tampered blocker must retain the pending recipe commitment"
-    );
 }
 
 #[test]
@@ -836,10 +676,12 @@ fn schedule_recipe_marks_factory_blocked_and_resumes_after_inputs_recover() {
     world
         .set_material_balance("circuit_board", 4)
         .expect("seed build circuits");
+    let spec = factory_spec("factory.blocked_resume", 1, 1);
+    prepare_module_test_factory_build(&mut world, "builder-a", "site-1", &spec);
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
-        spec: factory_spec("factory.blocked_resume", 1, 1),
+        spec,
     });
     world.step().expect("start build");
     world.step().expect("finish build");
@@ -953,6 +795,104 @@ fn schedule_recipe_marks_factory_blocked_and_resumes_after_inputs_recover() {
 }
 
 #[test]
+fn schedule_recipe_does_not_fallback_to_world_when_site_input_ledger_is_empty() {
+    let mut world = World::new();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "builder-a".to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("register builder");
+
+    world
+        .set_material_balance("steel_plate", 10)
+        .expect("seed build steel");
+    world
+        .set_material_balance("circuit_board", 2)
+        .expect("seed build circuits");
+    let spec = factory_spec("factory.ledger-boundary", 1, 1);
+    prepare_module_test_factory_build(&mut world, "builder-a", "site-ledger-boundary", &spec);
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-ledger-boundary".to_string(),
+        spec,
+    });
+    world.step().expect("start build");
+    world.step().expect("finish build");
+
+    let site_ledger = MaterialLedgerId::site("site-ledger-boundary");
+    assert_eq!(
+        world.ledger_material_balance(&site_ledger, "iron_ingot"),
+        0,
+        "the factory input ledger starts without the recipe material"
+    );
+    world
+        .set_material_balance("iron_ingot", 2)
+        .expect("seed only the global world ledger");
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 5)
+        .expect("seed builder electricity");
+
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: "factory.ledger-boundary".to_string(),
+        recipe_id: "recipe.ledger-boundary".to_string(),
+        plan: RecipeExecutionPlan::accepted(
+            1,
+            vec![MaterialStack::new("iron_ingot", 2)],
+            vec![MaterialStack::new("motor_mk1", 1)],
+            Vec::new(),
+            1,
+            1,
+        ),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
+    });
+    let journal_start = world.journal().events.len();
+    world.step().expect("site-bound schedule rejection");
+
+    assert_eq!(
+        world.pending_recipe_jobs_len(),
+        0,
+        "a missing site input must not create a pending job from world stock"
+    );
+    assert_eq!(
+        world.ledger_material_balance(&site_ledger, "iron_ingot"),
+        0,
+        "the empty site ledger remains empty"
+    );
+    assert_eq!(
+        world.material_balance("iron_ingot"),
+        2,
+        "global stock must not be silently consumed as a site input"
+    );
+    assert!(
+        world.journal().events[journal_start..].iter().any(|event| {
+            matches!(
+                &event.body,
+                WorldEventBody::Domain(DomainEvent::ActionRejected {
+                    reason: RejectReason::InsufficientMaterial {
+                        material_kind,
+                        requested,
+                        available,
+                    },
+                    ..
+                }) if material_kind == "iron_ingot" && *requested == 2 && *available == 0
+            )
+        }),
+        "site-bound scheduling must reject with the site ledger availability"
+    );
+    assert!(
+        !world.journal().events[journal_start..]
+            .iter()
+            .any(|event| matches!(
+                event.body,
+                WorldEventBody::Domain(DomainEvent::RecipeStarted { .. })
+            )),
+        "site-bound scheduling must not start a job against global stock"
+    );
+}
+
+#[test]
 fn schedule_recipe_post_action_uses_primary_result_event_before_followup() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
@@ -967,10 +907,12 @@ fn schedule_recipe_post_action_uses_primary_result_event_before_followup() {
     world
         .set_material_balance("circuit_board", 4)
         .expect("seed build circuits");
+    let spec = factory_spec("factory.blocked_resume.post_action", 1, 1);
+    prepare_module_test_factory_build(&mut world, "builder-a", "site-1", &spec);
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
-        spec: factory_spec("factory.blocked_resume.post_action", 1, 1),
+        spec,
     });
     world.step().expect("start build");
     world.step().expect("finish build");
@@ -1110,10 +1052,12 @@ fn non_owner_schedule_recipe_with_module_rejects_before_module_plan_or_sink() {
     world
         .set_material_balance("circuit_board", 2)
         .expect("seed circuits");
+    let spec = factory_spec("factory.recipe.module-owner", 1, 1);
+    prepare_module_test_factory_build(&mut world, "builder-a", "site-1", &spec);
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
-        spec: factory_spec("factory.recipe.module-owner", 1, 1),
+        spec,
     });
     world.step().expect("start build");
     world.step().expect("complete build");

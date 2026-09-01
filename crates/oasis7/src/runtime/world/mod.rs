@@ -19,6 +19,7 @@ mod capability_authorization_validation;
 mod economy;
 mod effects;
 mod event_processing;
+mod factory_authority;
 mod gameplay_layer;
 mod gameplay_loop;
 mod governance;

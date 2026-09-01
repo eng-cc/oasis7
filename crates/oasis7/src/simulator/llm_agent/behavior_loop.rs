@@ -944,14 +944,7 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
                     Some(factory_kind.as_str()),
                 );
             }
-            Action::ScheduleRecipe {
-                factory_id,
-                recipe_id,
-                ..
-            } => {
-                if result.success {
-                    self.recipe_coverage.mark_completed(recipe_id.as_str());
-                }
+            Action::ScheduleRecipe { factory_id, .. } => {
                 if let Some(RejectReason::AgentNotAtLocation { location_id, .. }) =
                     result.reject_reason()
                 {
@@ -1067,9 +1060,6 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
                 location_id.as_str(),
                 Some(factory_kind.as_str()),
             );
-        }
-        if let WorldEventKind::RecipeScheduled { recipe_id, .. } = &event.kind {
-            self.recipe_coverage.mark_completed(recipe_id.as_str());
         }
         if matches!(event.kind, WorldEventKind::FragmentsReplenished { .. }) {
             self.known_compound_availability_by_location.clear();

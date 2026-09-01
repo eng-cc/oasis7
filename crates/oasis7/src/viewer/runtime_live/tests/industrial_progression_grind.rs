@@ -1,8 +1,10 @@
 use crate::runtime::{
-    FactoryModuleSpec, FactoryProductionState, FactoryState, IndustryStage, MaterialLedgerId,
-    MaterialStack, WorldState,
+    FactoryModuleSpec, FactoryProductionFailureDispositionV1, FactoryProductionState,
+    FactoryProductionStatus, FactoryState, IndustryStage, MaterialLedgerId, MaterialStack,
+    WorldState,
 };
 use crate::viewer::FACTORY_SMELTER_MK1;
+use serde_json::{Value, json};
 
 fn small_player_test_factory_spec(factory_id: &str) -> FactoryModuleSpec {
     FactoryModuleSpec {
@@ -17,6 +19,138 @@ fn small_player_test_factory_spec(factory_id: &str) -> FactoryModuleSpec {
         throughput_bps: 10_000,
         maintenance_per_tick: 1,
     }
+}
+
+fn failure_disposition(
+    action_id: u64,
+    requester_agent_id: &str,
+    factory_id: &str,
+    recipe_id: &str,
+) -> FactoryProductionFailureDispositionV1 {
+    FactoryProductionFailureDispositionV1 {
+        action_id,
+        requester_agent_id: requester_agent_id.to_string(),
+        factory_id: factory_id.to_string(),
+        recipe_id: recipe_id.to_string(),
+        blocker_kind: "product_validation_rejected".to_string(),
+        blocker_detail: "product profile rejected the committed output".to_string(),
+        disposition_kind: "consumed_lost".to_string(),
+        consumed_inputs: vec![MaterialStack::new("iron_ore", 3)],
+        lost_inputs: vec![MaterialStack::new("iron_ore", 3)],
+        consumed_power: 7,
+        lost_power: 7,
+        next_action: "inspect_product_validation_and_reschedule".to_string(),
+        next_recheck: None,
+    }
+}
+
+fn failure_disposition_world_state() -> WorldState {
+    let mut state = WorldState::default();
+    state.industry_progress.stage = IndustryStage::Bootstrap;
+    state.factories.insert(
+        "factory.target".to_string(),
+        FactoryState {
+            factory_id: "factory.target".to_string(),
+            site_id: "site-target".to_string(),
+            builder_agent_id: "agent-a".to_string(),
+            spec: small_player_test_factory_spec("factory.target"),
+            input_ledger: MaterialLedgerId::site("site-target"),
+            output_ledger: MaterialLedgerId::site("site-target"),
+            durability_ppm: 1_000_000,
+            production: FactoryProductionState {
+                status: FactoryProductionStatus::Blocked,
+                active_jobs: 0,
+                current_job_id: None,
+                current_recipe_id: None,
+                completed_jobs: 5,
+                last_completed_at: Some(20),
+                last_completed_recipe_id: Some("recipe.target".to_string()),
+                last_blocked_at: Some(21),
+                current_blocker_kind: Some("product_validation_rejected".to_string()),
+                current_blocker_detail: Some(
+                    "product profile rejected the committed output".to_string(),
+                ),
+                ..FactoryProductionState::default()
+            },
+            site_authority_revision: None,
+            site_location_id: None,
+            construction_power_profile_key: None,
+            construction_power_profile_revision: None,
+            built_at: 1,
+        },
+    );
+    state.factories.insert(
+        "factory.decoy".to_string(),
+        FactoryState {
+            factory_id: "factory.decoy".to_string(),
+            site_id: "site-decoy".to_string(),
+            builder_agent_id: "agent-b".to_string(),
+            spec: small_player_test_factory_spec("factory.decoy"),
+            input_ledger: MaterialLedgerId::site("site-decoy"),
+            output_ledger: MaterialLedgerId::site("site-decoy"),
+            durability_ppm: 1_000_000,
+            production: FactoryProductionState {
+                completed_jobs: 1,
+                last_completed_at: Some(10),
+                last_completed_recipe_id: Some("recipe.decoy".to_string()),
+                ..FactoryProductionState::default()
+            },
+            site_authority_revision: None,
+            site_location_id: None,
+            construction_power_profile_key: None,
+            construction_power_profile_revision: None,
+            built_at: 1,
+        },
+    );
+    state.factory_production_failure_dispositions.insert(
+        17,
+        failure_disposition(17, "agent-b", "factory.target", "recipe.foreign-requester"),
+    );
+    state.factory_production_failure_dispositions.insert(
+        18,
+        failure_disposition(18, "agent-a", "factory.decoy", "recipe.foreign-factory"),
+    );
+    state.factory_production_failure_dispositions.insert(
+        19,
+        failure_disposition(19, "agent-a", "factory.target", "recipe.target"),
+    );
+
+    state
+}
+
+fn failure_disposition_gameplay_snapshot() -> crate::simulator::PlayerGameplaySnapshot {
+    let state = failure_disposition_world_state();
+    super::super::gameplay_snapshot::build_player_gameplay_snapshot(
+        &state,
+        Some("agent-a"),
+        true,
+        None,
+        None,
+        None,
+        true,
+        None,
+        false,
+        true,
+        None,
+    )
+}
+
+fn gameplay_snapshot_for_failure_state(
+    state: &WorldState,
+) -> crate::simulator::PlayerGameplaySnapshot {
+    super::super::gameplay_snapshot::build_player_gameplay_snapshot(
+        state,
+        Some("agent-a"),
+        true,
+        None,
+        None,
+        None,
+        true,
+        None,
+        false,
+        true,
+        None,
+    )
 }
 
 #[test]
@@ -41,6 +175,10 @@ fn runtime_gameplay_snapshot_flags_grind_only_after_repeating_same_loop_without_
                 same_recipe_repeat_count: 3,
                 ..FactoryProductionState::default()
             },
+            site_authority_revision: None,
+            site_location_id: None,
+            construction_power_profile_key: None,
+            construction_power_profile_revision: None,
             built_at: 1,
         },
     );
@@ -56,4 +194,191 @@ fn runtime_gameplay_snapshot_flags_grind_only_after_repeating_same_loop_without_
     assert_eq!(gameplay.same_loop_repeat_count, 3);
     assert_eq!(gameplay.leverage_class.as_deref(), Some("throughput_only"));
     assert!(gameplay.grind_only_flag);
+}
+
+#[test]
+fn runtime_gameplay_snapshot_projects_requester_factory_scoped_failure_disposition() {
+    let gameplay = failure_disposition_gameplay_snapshot();
+    let encoded = serde_json::to_value(&gameplay).expect("serialize gameplay snapshot");
+    let projection = encoded
+        .get("factory_production_failure_disposition")
+        .and_then(Value::as_object)
+        .expect("player snapshot must expose the scoped failure disposition");
+
+    assert_eq!(projection.get("action_id"), Some(&json!("19")));
+    assert_eq!(
+        projection.get("requester_agent_id"),
+        Some(&json!("agent-a"))
+    );
+    assert_eq!(projection.get("factory_id"), Some(&json!("factory.target")));
+    assert_eq!(projection.get("recipe_id"), Some(&json!("recipe.target")));
+    assert_eq!(
+        projection.get("blocker_kind"),
+        Some(&json!("product_validation_rejected"))
+    );
+    assert_eq!(
+        projection.get("blocker_detail"),
+        Some(&json!("product profile rejected the committed output"))
+    );
+    assert_eq!(
+        projection.get("disposition_kind"),
+        Some(&json!("consumed_lost"))
+    );
+    assert_eq!(
+        projection.get("consumed_inputs"),
+        Some(&json!([{ "kind": "iron_ore", "amount": 3 }]))
+    );
+    assert_eq!(
+        projection.get("lost_inputs"),
+        Some(&json!([{ "kind": "iron_ore", "amount": 3 }]))
+    );
+    assert_eq!(projection.get("consumed_power"), Some(&json!(7)));
+    assert_eq!(projection.get("lost_power"), Some(&json!(7)));
+    assert_eq!(
+        projection.get("next_action"),
+        Some(&json!("inspect_product_validation_and_reschedule"))
+    );
+    assert_eq!(projection.get("next_recheck"), Some(&Value::Null));
+    for generic_field in [
+        "repair_available",
+        "rebuild_available",
+        "pivot_available",
+        "wait_resolution_quote",
+    ] {
+        assert!(
+            !projection.contains_key(generic_field),
+            "failure disposition must not synthesize generic {generic_field}"
+        );
+    }
+}
+
+#[test]
+fn player_gameplay_snapshot_failure_disposition_roundtrips_and_accepts_legacy_omission() {
+    let gameplay = failure_disposition_gameplay_snapshot();
+    let encoded = serde_json::to_value(&gameplay).expect("serialize gameplay snapshot");
+    let mut legacy = encoded.clone();
+    legacy
+        .as_object_mut()
+        .expect("snapshot object")
+        .remove("factory_production_failure_disposition");
+    let restored_legacy: crate::simulator::PlayerGameplaySnapshot =
+        serde_json::from_value(legacy).expect("legacy snapshot without optional disposition");
+    let restored_legacy = serde_json::to_value(restored_legacy).expect("serialize legacy snapshot");
+    assert!(
+        restored_legacy
+            .get("factory_production_failure_disposition")
+            .is_none(),
+        "legacy snapshots must omit the optional failure disposition"
+    );
+
+    let mut enriched = encoded;
+    enriched["factory_production_failure_disposition"] = json!({
+        "action_id": "19",
+        "requester_agent_id": "agent-a",
+        "factory_id": "factory.target",
+        "recipe_id": "recipe.target",
+        "blocker_kind": "product_validation_rejected",
+        "blocker_detail": "product profile rejected the committed output",
+        "disposition_kind": "consumed_lost",
+        "consumed_inputs": [{ "kind": "iron_ore", "amount": 3 }],
+        "lost_inputs": [{ "kind": "iron_ore", "amount": 3 }],
+        "consumed_power": 7,
+        "lost_power": 7,
+        "next_action": "inspect_product_validation_and_reschedule",
+        "next_recheck": null,
+    });
+    let restored: crate::simulator::PlayerGameplaySnapshot =
+        serde_json::from_value(enriched.clone()).expect("decode enriched snapshot");
+    let reencoded = serde_json::to_value(restored).expect("re-encode enriched snapshot");
+    assert_eq!(
+        reencoded.get("factory_production_failure_disposition"),
+        enriched.get("factory_production_failure_disposition"),
+        "failure disposition must survive snapshot persistence"
+    );
+}
+
+#[test]
+fn runtime_gameplay_snapshot_hides_stale_failure_disposition_when_target_factory_is_running() {
+    let mut state = failure_disposition_world_state();
+    let target = state
+        .factories
+        .get_mut("factory.target")
+        .expect("target factory");
+    target.production.status = FactoryProductionStatus::Running;
+    target.production.active_jobs = 1;
+    target.production.current_job_id = Some(20);
+    target.production.current_recipe_id = Some("recipe.retry".to_string());
+    target.production.current_blocker_kind = None;
+    target.production.current_blocker_detail = None;
+
+    let gameplay = gameplay_snapshot_for_failure_state(&state);
+    assert!(gameplay.factory_production_failure_disposition.is_none());
+    assert!(
+        state
+            .factory_production_failure_dispositions
+            .contains_key(&19)
+    );
+}
+
+#[test]
+fn runtime_gameplay_snapshot_hides_stale_failure_disposition_after_target_completion() {
+    let mut state = failure_disposition_world_state();
+    let target = state
+        .factories
+        .get_mut("factory.target")
+        .expect("target factory");
+    target.production.status = FactoryProductionStatus::Idle;
+    target.production.last_completed_at = Some(22);
+    target.production.last_completed_recipe_id = Some("recipe.retry".to_string());
+    target.production.current_blocker_kind = None;
+    target.production.current_blocker_detail = None;
+
+    let gameplay = gameplay_snapshot_for_failure_state(&state);
+    assert!(gameplay.factory_production_failure_disposition.is_none());
+    assert!(
+        state
+            .factory_production_failure_dispositions
+            .contains_key(&19)
+    );
+}
+
+#[test]
+fn runtime_gameplay_snapshot_keeps_target_failure_when_only_unrelated_factory_is_running() {
+    let mut state = failure_disposition_world_state();
+    let decoy = state
+        .factories
+        .get_mut("factory.decoy")
+        .expect("decoy factory");
+    decoy.production.status = FactoryProductionStatus::Running;
+    decoy.production.active_jobs = 1;
+    decoy.production.current_job_id = Some(20);
+    decoy.production.current_recipe_id = Some("recipe.decoy.retry".to_string());
+
+    let gameplay = gameplay_snapshot_for_failure_state(&state);
+    assert_eq!(
+        gameplay
+            .factory_production_failure_disposition
+            .as_ref()
+            .map(|receipt| receipt.action_id.as_str()),
+        Some("19")
+    );
+}
+
+#[test]
+fn runtime_gameplay_snapshot_hides_old_failure_when_target_blocker_changed() {
+    let mut state = failure_disposition_world_state();
+    let target = state
+        .factories
+        .get_mut("factory.target")
+        .expect("target factory");
+    target.production.current_blocker_kind = Some("material_shortage".to_string());
+    target.production.current_blocker_detail = Some("iron input exhausted".to_string());
+
+    let gameplay = gameplay_snapshot_for_failure_state(&state);
+    assert!(gameplay.factory_production_failure_disposition.is_none());
+    assert!(
+        state
+            .factory_production_failure_dispositions
+            .contains_key(&19)
+    );
 }

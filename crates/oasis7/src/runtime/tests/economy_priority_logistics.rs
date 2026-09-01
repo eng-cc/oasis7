@@ -1,9 +1,10 @@
 use super::pos;
 use crate::runtime::{
-    Action, DomainEvent, FactoryProfileV1, GovernanceProposalStatus, IndustryStage,
-    MaterialDefaultPriority, MaterialLedgerId, MaterialProfileV1, MaterialTransitPriority,
-    MaterialTransportLossClass, ProductProfileV1, ProposalDecision, RecipeProfileV1, RejectReason,
-    World, WorldEventBody,
+    Action, AgentLocationAuthorityV1, DomainEvent, FactoryConstructionPowerMode,
+    FactoryConstructionPowerProfileV1, FactoryProfileV1, FactorySiteAuthorityV1,
+    GovernanceProposalStatus, IndustryStage, MaterialDefaultPriority, MaterialLedgerId,
+    MaterialProfileV1, MaterialTransitPriority, MaterialTransportLossClass, ProductProfileV1,
+    ProposalDecision, RecipeProfileV1, RejectReason, World, WorldEventBody,
 };
 use crate::simulator::ResourceKind;
 use oasis7_wasm_abi::{FactoryModuleSpec, MaterialStack, RecipeExecutionPlan};
@@ -27,6 +28,61 @@ fn factory_spec(factory_id: &str, build_time_ticks: u32, recipe_slots: u16) -> F
         throughput_bps: 10_000,
         maintenance_per_tick: 1,
     }
+}
+
+fn prepare_factory_build(
+    world: &mut World,
+    builder_agent_id: &str,
+    site_id: &str,
+    spec: &FactoryModuleSpec,
+) {
+    let location_id = format!("location-{site_id}");
+    world
+        .set_agent_location_authority(AgentLocationAuthorityV1 {
+            agent_id: builder_agent_id.to_string(),
+            location_id: location_id.clone(),
+            active: true,
+            authority_revision: 1,
+            effective_at: 0,
+        })
+        .expect("install agent location authority");
+    world
+        .set_factory_site_authority(FactorySiteAuthorityV1 {
+            site_id: site_id.to_string(),
+            location_id,
+            owner_agent_id: builder_agent_id.to_string(),
+            authorized_agent_ids: Vec::new(),
+            chunk_ready: true,
+            active: true,
+            authority_revision: 1,
+            registered_at: 0,
+        })
+        .expect("install factory site authority");
+    const CONSTRUCTION_POWER: i64 = 10;
+    world
+        .set_factory_construction_power_profile(FactoryConstructionPowerProfileV1 {
+            factory_id: spec.factory_id.clone(),
+            factory_kind: "test".to_string(),
+            source_module_id: None,
+            electricity_amount: CONSTRUCTION_POWER,
+            mode: FactoryConstructionPowerMode::StartOnlySink,
+            authority_revision: 1,
+            active: true,
+        })
+        .expect("install construction power profile");
+    let builder_ledger = MaterialLedgerId::agent(builder_agent_id);
+    for stack in &spec.build_cost {
+        world
+            .set_ledger_material_balance(builder_ledger.clone(), stack.kind.as_str(), stack.amount)
+            .expect("seed builder construction material");
+    }
+    world
+        .set_agent_resource_balance(
+            builder_agent_id,
+            ResourceKind::Electricity,
+            CONSTRUCTION_POWER,
+        )
+        .expect("seed builder construction power");
 }
 
 fn authorize_policy_update(world: &mut World, operator_agent_id: &str, proposal_key: &str) {
@@ -125,3 +181,4 @@ include!("economy_priority_logistics_priority_tests.rs");
 include!("economy_priority_logistics_recipe_tests.rs");
 include!("economy_priority_logistics_recipe_path_authority_tests.rs");
 include!("economy_priority_logistics_network_tests.rs");
+include!("economy_priority_logistics_network_integrity_tests.rs");

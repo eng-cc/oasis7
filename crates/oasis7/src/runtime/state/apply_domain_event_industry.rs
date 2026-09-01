@@ -298,6 +298,14 @@ impl WorldState {
                         ),
                     });
                 };
+                if now < pending.ready_at {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "material transit completion is early: job_id={job_id} ready_at={} now={now}",
+                            pending.ready_at
+                        ),
+                    });
+                }
                 let expected_loss = {
                     let amount = pending.amount.max(0);
                     ((amount as i128)
@@ -500,6 +508,9 @@ impl WorldState {
                 spec,
                 consume_ledger,
                 ready_at,
+                site_authority_revision,
+                site_location_id,
+                construction_power_obligation,
             } => {
                 self.apply_factory_build_started(
                     now,
@@ -509,6 +520,9 @@ impl WorldState {
                     spec,
                     consume_ledger,
                     ready_at,
+                    site_authority_revision.as_ref(),
+                    site_location_id.as_deref(),
+                    construction_power_obligation.as_ref(),
                 )?;
             }
             DomainEvent::FactoryBuilt {
@@ -660,6 +674,10 @@ impl WorldState {
                         ),
                     });
                 }
+                // Direct ScheduleRecipe actions are site-bound before they
+                // produce this event. Keep accepting the historical world
+                // ledger shape here so module-resolved legacy events can be
+                // replayed without rewriting their journal payloads.
                 let expected_output_ledger = if *consume_ledger == MaterialLedgerId::world() {
                     MaterialLedgerId::world()
                 } else if *consume_ledger == factory.input_ledger {
@@ -667,7 +685,7 @@ impl WorldState {
                 } else {
                     return Err(WorldError::ResourceBalanceInvalid {
                         reason: format!(
-                            "recipe consume ledger does not match factory input or world fallback: factory_id={factory_id} consume_ledger={consume_ledger} input_ledger={}",
+                            "recipe consume ledger does not match factory input or world compatibility ledger: factory_id={factory_id} consume_ledger={consume_ledger} input_ledger={}",
                             factory.input_ledger
                         ),
                     });
@@ -973,9 +991,29 @@ impl WorldState {
             } => {
                 let product_validation_failure = blocker_kind == "product_validation";
                 if product_validation_failure {
-                    let Some(pending) = self.pending_recipe_jobs.get(action_id) else {
-                        // A validation disposition already applied is a
-                        // terminal replay and must remain byte-stable.
+                    if let Some(existing) =
+                        self.factory_production_failure_dispositions.get(action_id)
+                    {
+                        if existing.requester_agent_id == *requester_agent_id
+                            && existing.factory_id == *factory_id
+                            && existing.recipe_id == *recipe_id
+                            && existing.blocker_kind == *blocker_kind
+                            && existing.blocker_detail == *blocker_detail
+                        {
+                            // An exact replay has already terminated this
+                            // job; leave every state field byte-stable.
+                            return Ok(());
+                        }
+                        return Err(WorldError::ResourceBalanceInvalid {
+                            reason: format!(
+                                "product-validation blocker conflicts with persisted disposition: job_id={action_id}"
+                            ),
+                        });
+                    }
+                    let Some(pending) = self.pending_recipe_jobs.get(action_id).cloned() else {
+                        // Preserve the existing legacy replay behavior for a
+                        // pre-receipt terminal job. New failures always write
+                        // the disposition below before terminating the job.
                         return Ok(());
                     };
                     if pending.requester_agent_id != *requester_agent_id
@@ -988,6 +1026,24 @@ impl WorldState {
                             ),
                         });
                     }
+                    self.factory_production_failure_dispositions.insert(
+                        *action_id,
+                        FactoryProductionFailureDispositionV1 {
+                            action_id: *action_id,
+                            requester_agent_id: pending.requester_agent_id.clone(),
+                            factory_id: pending.factory_id.clone(),
+                            recipe_id: pending.recipe_id.clone(),
+                            blocker_kind: blocker_kind.clone(),
+                            blocker_detail: blocker_detail.clone(),
+                            disposition_kind: "consumed_lost".to_string(),
+                            consumed_inputs: pending.consume.clone(),
+                            lost_inputs: pending.consume.clone(),
+                            consumed_power: pending.power_required,
+                            lost_power: pending.power_required,
+                            next_action: "inspect_product_validation_and_reschedule".to_string(),
+                            next_recheck: None,
+                        },
+                    );
                 }
                 let terminated_job = if product_validation_failure {
                     self.pending_recipe_jobs.remove(action_id)
@@ -1091,10 +1147,20 @@ impl WorldState {
             .sum::<u64>();
         let mut next = IndustryStage::Bootstrap;
 
-        let stable_canonical_line_ready = self
-            .factories
-            .values()
-            .any(|factory| factory.production.same_recipe_repeat_count >= 3);
+        let stable_canonical_line_ready = self.factories.values().any(|factory| {
+            let production = &factory.production;
+            let Some(snapshot) = production.last_completed_canonical_snapshot.as_ref() else {
+                return false;
+            };
+            let Some(last_completed_recipe_id) = production.last_completed_recipe_id.as_ref()
+            else {
+                return false;
+            };
+            production.same_recipe_repeat_count >= 3
+                && !snapshot.recipe_id.is_empty()
+                && !last_completed_recipe_id.is_empty()
+                && snapshot.recipe_id == *last_completed_recipe_id
+        });
         if stable_canonical_line_ready {
             next = IndustryStage::ScaleOut;
         }

@@ -1,6 +1,8 @@
 use super::pos;
 use crate::runtime::{
-    Action, DomainEvent, MaterialLedgerId, RejectReason, World, WorldError, WorldEventBody,
+    Action, AgentLocationAuthorityV1, DomainEvent, FactoryConstructionPowerMode,
+    FactoryConstructionPowerProfileV1, FactorySiteAuthorityV1, MaterialLedgerId, RejectReason,
+    World, WorldError, WorldEventBody,
 };
 use crate::simulator::ResourceKind;
 use oasis7_wasm_abi::{FactoryModuleSpec, MaterialStack, RecipeExecutionPlan};
@@ -36,18 +38,89 @@ fn register_builder(world: &mut World, agent_id: &str) {
     world.step().expect("register builder");
 }
 
+fn install_factory_authority(
+    world: &mut World,
+    builder_agent_id: &str,
+    site_id: &str,
+    factory_id: &str,
+    construction_power: i64,
+) {
+    let location_id = format!("location-{site_id}");
+    let location_revision = world
+        .state()
+        .agent_location_authorities
+        .get(builder_agent_id)
+        .map_or(1, |authority| {
+            authority.authority_revision.saturating_add(1)
+        });
+    world
+        .set_agent_location_authority(AgentLocationAuthorityV1 {
+            agent_id: builder_agent_id.to_string(),
+            location_id: location_id.clone(),
+            active: true,
+            authority_revision: location_revision,
+            effective_at: 0,
+        })
+        .expect("install agent location authority");
+    let site_revision = world
+        .state()
+        .factory_site_authorities
+        .get(site_id)
+        .map_or(1, |authority| {
+            authority.authority_revision.saturating_add(1)
+        });
+    world
+        .set_factory_site_authority(FactorySiteAuthorityV1 {
+            site_id: site_id.to_string(),
+            location_id,
+            owner_agent_id: builder_agent_id.to_string(),
+            authorized_agent_ids: Vec::new(),
+            chunk_ready: true,
+            active: true,
+            authority_revision: site_revision,
+            registered_at: 0,
+        })
+        .expect("install factory site authority");
+    world
+        .set_factory_construction_power_profile(FactoryConstructionPowerProfileV1 {
+            factory_id: factory_id.to_string(),
+            factory_kind: "lifecycle".to_string(),
+            source_module_id: None,
+            electricity_amount: construction_power,
+            mode: FactoryConstructionPowerMode::StartOnlySink,
+            authority_revision: 1,
+            active: true,
+        })
+        .expect("install construction power profile");
+}
+
 fn build_factory_ready(
     world: &mut World,
     builder_agent_id: &str,
     site_id: &str,
     spec: FactoryModuleSpec,
 ) {
+    let builder_ledger = MaterialLedgerId::agent(builder_agent_id);
+    for stack in &spec.build_cost {
+        world
+            .set_ledger_material_balance(builder_ledger.clone(), stack.kind.as_str(), stack.amount)
+            .expect("seed builder construction material");
+    }
+    const CONSTRUCTION_POWER: i64 = 10;
     world
-        .set_material_balance("steel_plate", 20)
-        .expect("seed steel");
-    world
-        .set_material_balance("circuit_board", 4)
-        .expect("seed circuits");
+        .set_agent_resource_balance(
+            builder_agent_id,
+            ResourceKind::Electricity,
+            CONSTRUCTION_POWER,
+        )
+        .expect("seed builder construction power");
+    install_factory_authority(
+        world,
+        builder_agent_id,
+        site_id,
+        spec.factory_id.as_str(),
+        CONSTRUCTION_POWER,
+    );
     world.submit_action(Action::BuildFactory {
         builder_agent_id: builder_agent_id.to_string(),
         site_id: site_id.to_string(),
@@ -55,6 +128,280 @@ fn build_factory_ready(
     });
     world.step().expect("start build");
     world.step().expect("complete build");
+}
+
+#[path = "economy_factory_lifecycle/depreciation_and_maintenance.rs"]
+mod depreciation_and_maintenance;
+
+#[path = "economy_factory_lifecycle/site_material_authority.rs"]
+mod site_material_authority;
+
+#[test]
+fn build_factory_rejects_site_unknown_without_material_or_power_sink() {
+    let mut world = World::new();
+    register_builder(&mut world, "builder-a");
+    world
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "steel_plate", 20)
+        .expect("seed builder steel");
+    world
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "circuit_board", 4)
+        .expect("seed builder circuits");
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 10)
+        .expect("seed builder construction power");
+    world.set_resource_balance(ResourceKind::Electricity, 100);
+
+    let spec = factory_spec("factory.site-unknown", 1, 1, 1);
+    let steel_before =
+        world.ledger_material_balance(&MaterialLedgerId::agent("builder-a"), "steel_plate");
+    let circuits_before =
+        world.ledger_material_balance(&MaterialLedgerId::agent("builder-a"), "circuit_board");
+    let owner_power_before = world
+        .agent_resource_balance("builder-a", ResourceKind::Electricity)
+        .expect("builder power before unknown site");
+    let world_power_before = world.resource_balance(ResourceKind::Electricity);
+    let journal_start = world.journal().events.len();
+
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-not-registered".to_string(),
+        spec,
+    });
+    world
+        .step()
+        .expect("unknown site should become a structured rejection");
+
+    assert_eq!(world.pending_factory_builds_len(), 0);
+    assert!(!world.has_factory("factory.site-unknown"));
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::agent("builder-a"), "steel_plate"),
+        steel_before,
+        "site_unknown must not consume construction steel"
+    );
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::agent("builder-a"), "circuit_board"),
+        circuits_before,
+        "site_unknown must not consume construction circuits"
+    );
+    assert_eq!(
+        world
+            .agent_resource_balance("builder-a", ResourceKind::Electricity)
+            .expect("builder power after unknown site"),
+        owner_power_before,
+        "site_unknown must not consume owner-held construction power"
+    );
+    assert_eq!(
+        world.resource_balance(ResourceKind::Electricity),
+        world_power_before,
+        "site_unknown must not fall back to world electricity"
+    );
+    assert!(world.journal().events[journal_start..].iter().any(|event| {
+        matches!(
+            &event.body,
+            WorldEventBody::Domain(DomainEvent::ActionRejected {
+                reason: RejectReason::RuleDenied { notes },
+                ..
+            }) if notes.iter().any(|note| note.contains("site_unknown") || note.contains("site"))
+        )
+    }));
+}
+
+#[test]
+fn build_factory_site_available_start_only_rejects_insufficient_construction_power_atomically() {
+    const CONSTRUCTION_POWER: i64 = 10;
+
+    let mut world = World::new();
+    register_builder(&mut world, "builder-a");
+    world
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "steel_plate", 20)
+        .expect("seed builder steel");
+    world
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "circuit_board", 4)
+        .expect("seed builder circuits");
+    world
+        .set_agent_resource_balance(
+            "builder-a",
+            ResourceKind::Electricity,
+            CONSTRUCTION_POWER - 1,
+        )
+        .expect("seed insufficient builder construction power");
+    world.set_resource_balance(ResourceKind::Electricity, CONSTRUCTION_POWER + 100);
+
+    let spec = factory_spec("factory.site-power-shortage", 1, 1, 1);
+    install_factory_authority(
+        &mut world,
+        "builder-a",
+        "site-1",
+        spec.factory_id.as_str(),
+        CONSTRUCTION_POWER,
+    );
+    let steel_before =
+        world.ledger_material_balance(&MaterialLedgerId::agent("builder-a"), "steel_plate");
+    let circuits_before =
+        world.ledger_material_balance(&MaterialLedgerId::agent("builder-a"), "circuit_board");
+    let owner_power_before = world
+        .agent_resource_balance("builder-a", ResourceKind::Electricity)
+        .expect("builder power before shortage");
+    let world_power_before = world.resource_balance(ResourceKind::Electricity);
+    let journal_start = world.journal().events.len();
+
+    // The explicit authority events above make `site-1` the canonical
+    // site_available/authorized/colocated fixture for this admission test.
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-1".to_string(),
+        spec,
+    });
+    world
+        .step()
+        .expect("insufficient construction power should reject before sink");
+
+    assert_eq!(world.pending_factory_builds_len(), 0);
+    assert!(!world.has_factory("factory.site-power-shortage"));
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::agent("builder-a"), "steel_plate"),
+        steel_before,
+        "construction power shortage must not consume steel"
+    );
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::agent("builder-a"), "circuit_board"),
+        circuits_before,
+        "construction power shortage must not consume circuits"
+    );
+    assert_eq!(
+        world
+            .agent_resource_balance("builder-a", ResourceKind::Electricity)
+            .expect("builder power after shortage"),
+        owner_power_before,
+        "construction power shortage must not partially debit owner power"
+    );
+    assert_eq!(
+        world.resource_balance(ResourceKind::Electricity),
+        world_power_before,
+        "construction power shortage must not debit world electricity"
+    );
+    assert!(world.journal().events[journal_start..].iter().any(|event| {
+        matches!(
+            &event.body,
+            WorldEventBody::Domain(DomainEvent::ActionRejected {
+                reason: RejectReason::InsufficientResource {
+                    kind: ResourceKind::Electricity,
+                    ..
+                },
+                ..
+            })
+        )
+    }));
+}
+
+#[test]
+fn build_factory_site_available_start_only_debits_construction_power_once_and_replays_without_duplication()
+ {
+    const CONSTRUCTION_POWER: i64 = 10;
+
+    let mut world = World::new();
+    register_builder(&mut world, "builder-a");
+    world
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "steel_plate", 20)
+        .expect("seed builder steel");
+    world
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "circuit_board", 4)
+        .expect("seed builder circuits");
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, CONSTRUCTION_POWER)
+        .expect("seed builder construction power");
+    world.set_resource_balance(ResourceKind::Electricity, 100);
+    install_factory_authority(
+        &mut world,
+        "builder-a",
+        "site-1",
+        "factory.site-power-start-only",
+        CONSTRUCTION_POWER,
+    );
+    let snapshot_before_build = world.snapshot();
+
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-1".to_string(),
+        spec: factory_spec("factory.site-power-start-only", 1, 1, 1),
+    });
+    world.step().expect("start site_available factory build");
+    assert_eq!(
+        world
+            .agent_resource_balance("builder-a", ResourceKind::Electricity)
+            .expect("builder power after start"),
+        0,
+        "start_only construction power must debit the owner exactly once at start"
+    );
+    assert_eq!(world.resource_balance(ResourceKind::Electricity), 100);
+    assert_eq!(world.pending_factory_builds_len(), 1);
+
+    // A start-only commitment must not reinterpret later owner-power drift as
+    // a second construction sink at completion.
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 0)
+        .expect("clear owner power after start-only debit");
+    world.step().expect("complete start-only factory build");
+    assert!(world.has_factory("factory.site-power-start-only"));
+    assert_eq!(
+        world
+            .agent_resource_balance("builder-a", ResourceKind::Electricity)
+            .expect("builder power after completion"),
+        0,
+        "completion must not debit start_only construction power again"
+    );
+
+    let mut journal = world.journal().clone();
+    let mut duplicate_built = journal
+        .events
+        .iter()
+        .rev()
+        .find_map(|event| match &event.body {
+            WorldEventBody::Domain(DomainEvent::FactoryBuilt { .. }) => Some(event.clone()),
+            _ => None,
+        })
+        .expect("FactoryBuilt event");
+    duplicate_built.id = journal.events.last().expect("journal event").id + 1;
+    journal.append(duplicate_built);
+
+    let restored = World::from_snapshot(snapshot_before_build, journal)
+        .expect("snapshot/replay must preserve one construction settlement");
+    assert_eq!(
+        restored.state().factories,
+        world.state().factories,
+        "replay must preserve the settled factory without duplication"
+    );
+    assert_eq!(
+        restored.state().pending_factory_builds,
+        world.state().pending_factory_builds,
+        "replay must preserve an empty pending-build set"
+    );
+    assert_eq!(
+        restored.state().settled_factory_build_ids,
+        world.state().settled_factory_build_ids,
+        "replay must preserve exactly one settled build id"
+    );
+    let builder_ledger = MaterialLedgerId::agent("builder-a");
+    for kind in ["steel_plate", "circuit_board"] {
+        assert_eq!(
+            restored.ledger_material_balance(&builder_ledger, kind),
+            world.ledger_material_balance(&builder_ledger, kind),
+            "replay must not duplicate consumed construction material: {kind}"
+        );
+    }
+    assert_eq!(
+        restored.agent_resource_balance("builder-a", ResourceKind::Electricity),
+        world.agent_resource_balance("builder-a", ResourceKind::Electricity),
+        "replay must not duplicate the construction power sink"
+    );
+    assert_eq!(restored.pending_factory_builds_len(), 0);
+    assert!(restored.has_factory("factory.site-power-start-only"));
+    assert_eq!(
+        restored
+            .agent_resource_balance("builder-a", ResourceKind::Electricity)
+            .expect("restored builder power"),
+        0
+    );
 }
 
 #[test]
@@ -114,9 +461,8 @@ fn factory_depreciation_scales_with_active_recipe_load() {
         "site-1",
         factory_spec("factory.load", 1, 2, 3),
     );
-
     world
-        .set_material_balance("iron_ingot", 2)
+        .set_ledger_material_balance(MaterialLedgerId::site("site-1"), "iron_ingot", 2)
         .expect("seed recipe input");
     world
         .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 20)
@@ -165,189 +511,6 @@ fn factory_depreciation_scales_with_active_recipe_load() {
 }
 
 #[test]
-fn factory_depreciation_counts_only_jobs_for_each_factory() {
-    let mut world = World::new();
-    register_builder(&mut world, "builder-a");
-    build_factory_ready(
-        &mut world,
-        "builder-a",
-        "site-1",
-        factory_spec("factory.target", 1, 2, 3),
-    );
-    build_factory_ready(
-        &mut world,
-        "builder-a",
-        "site-2",
-        factory_spec("factory.other", 1, 2, 3),
-    );
-
-    world
-        .set_material_balance("iron_ingot", 4)
-        .expect("seed recipe inputs");
-    world
-        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 40)
-        .expect("seed builder electricity");
-    world.set_resource_balance(ResourceKind::Electricity, 40);
-    for factory_id in ["factory.target", "factory.other"] {
-        world.submit_action(Action::ScheduleRecipe {
-            requester_agent_id: "builder-a".to_string(),
-            factory_id: factory_id.to_string(),
-            recipe_id: format!("recipe.{factory_id}"),
-            plan: RecipeExecutionPlan::accepted(
-                1,
-                vec![MaterialStack::new("iron_ingot", 1)],
-                vec![MaterialStack::new("control_chip", 1)],
-                Vec::new(),
-                1,
-                3,
-            ),
-            logistics_route_ids: Vec::new(),
-            logistics_path_ids: Vec::new(),
-        });
-    }
-    world.step().expect("start recipes");
-    assert_eq!(world.pending_recipe_jobs_len(), 2);
-
-    let durability_before_loaded_tick = world
-        .snapshot()
-        .state
-        .factories
-        .get("factory.target")
-        .expect("target factory exists")
-        .durability_ppm;
-
-    world
-        .step()
-        .expect("depreciation under independent factory loads");
-
-    let durability_after_loaded_tick = world
-        .snapshot()
-        .state
-        .factories
-        .get("factory.target")
-        .expect("target factory exists")
-        .durability_ppm;
-    assert_eq!(
-        durability_before_loaded_tick - durability_after_loaded_tick,
-        4_500
-    );
-}
-
-#[test]
-fn maintain_factory_consumes_hardware_part_and_recovers_durability() {
-    let mut world = World::new();
-    register_builder(&mut world, "builder-a");
-    build_factory_ready(
-        &mut world,
-        "builder-a",
-        "site-1",
-        factory_spec("factory.alpha", 1, 1, 4),
-    );
-    world.step().expect("depreciate once");
-    world
-        .set_material_balance("hardware_part", 10)
-        .expect("seed hardware part");
-
-    world.submit_action(Action::MaintainFactory {
-        operator_agent_id: "builder-a".to_string(),
-        factory_id: "factory.alpha".to_string(),
-        parts: 2,
-    });
-    world.step().expect("maintain factory");
-
-    let snapshot = world.snapshot();
-    let durability_after = snapshot
-        .state
-        .factories
-        .get("factory.alpha")
-        .expect("factory exists")
-        .durability_ppm;
-    assert_eq!(durability_after, 1_000_000);
-    assert_eq!(world.material_balance("hardware_part"), 9);
-
-    let last = world.journal().events.last().expect("maintain event");
-    match &last.body {
-        WorldEventBody::Domain(DomainEvent::FactoryMaintained {
-            factory_id,
-            consumed_parts,
-            durability_ppm,
-            ..
-        }) => {
-            assert_eq!(factory_id, "factory.alpha");
-            assert_eq!(*consumed_parts, 1);
-            assert_eq!(*durability_ppm, 1_000_000);
-        }
-        other => panic!("expected FactoryMaintained, got {other:?}"),
-    }
-}
-
-#[test]
-fn industrial_integrity_factory_maintained_wrong_operator_rejects_before_debit() {
-    let mut world = World::new();
-    register_builder(&mut world, "builder-a");
-    build_factory_ready(
-        &mut world,
-        "builder-a",
-        "site-maintain-owner",
-        factory_spec("factory.maintain-owner", 1, 1, 1),
-    );
-    world
-        .set_material_balance("hardware_part", 2)
-        .expect("seed maintenance parts");
-
-    let mut replay = world.state().clone();
-    let before = serde_json::to_vec(&replay).expect("serialize state before wrong operator");
-    let event = DomainEvent::FactoryMaintained {
-        operator_agent_id: "operator-not-builder".to_string(),
-        factory_id: "factory.maintain-owner".to_string(),
-        consume_ledger: MaterialLedgerId::world(),
-        consumed_parts: 1,
-        durability_ppm: 1_000_000,
-    };
-
-    let result = replay.apply_domain_event(&event, replay.time);
-    assert!(
-        matches!(result, Err(WorldError::ResourceBalanceInvalid { .. })),
-        "maintenance by a non-builder must fail closed: {result:?}"
-    );
-    assert_eq!(
-        serde_json::to_vec(&replay).expect("serialize state after wrong operator"),
-        before,
-        "wrong-operator maintenance must not debit hardware or mutate factory state"
-    );
-}
-
-#[test]
-fn industrial_integrity_factory_maintained_unknown_factory_rejects_before_debit() {
-    let mut world = World::new();
-    register_builder(&mut world, "builder-a");
-    world
-        .set_material_balance("hardware_part", 2)
-        .expect("seed maintenance parts");
-
-    let mut replay = world.state().clone();
-    let before = serde_json::to_vec(&replay).expect("serialize state before unknown factory");
-    let event = DomainEvent::FactoryMaintained {
-        operator_agent_id: "builder-a".to_string(),
-        factory_id: "factory.unknown-maintenance".to_string(),
-        consume_ledger: MaterialLedgerId::world(),
-        consumed_parts: 1,
-        durability_ppm: 1_000_000,
-    };
-
-    let result = replay.apply_domain_event(&event, replay.time);
-    assert!(
-        matches!(result, Err(WorldError::ResourceBalanceInvalid { .. })),
-        "maintenance for an unknown factory must fail closed: {result:?}"
-    );
-    assert_eq!(
-        serde_json::to_vec(&replay).expect("serialize state after unknown factory"),
-        before,
-        "unknown-factory maintenance must not debit hardware or mutate state"
-    );
-}
-
-#[test]
 fn schedule_recipe_uses_factory_builder_electricity_and_debits_owner() {
     let mut world = World::new();
     register_builder(&mut world, "builder-a");
@@ -358,7 +521,7 @@ fn schedule_recipe_uses_factory_builder_electricity_and_debits_owner() {
         factory_spec("factory.owner-power", 1, 1, 1),
     );
     world
-        .set_material_balance("iron_ingot", 1)
+        .set_ledger_material_balance(MaterialLedgerId::site("site-owner-power"), "iron_ingot", 1)
         .expect("seed recipe input");
     world
         .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 5)
@@ -410,14 +573,19 @@ fn schedule_recipe_rejects_when_builder_electricity_is_insufficient_even_if_worl
         factory_spec("factory.owner-power-reject", 1, 1, 1),
     );
     world
-        .set_material_balance("iron_ingot", 1)
+        .set_ledger_material_balance(
+            MaterialLedgerId::site("site-owner-power-reject"),
+            "iron_ingot",
+            1,
+        )
         .expect("seed recipe input");
     world
         .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 0)
         .expect("clear builder electricity");
     world.set_resource_balance(ResourceKind::Electricity, 5);
 
-    let material_before = world.material_balance("iron_ingot");
+    let recipe_ledger = MaterialLedgerId::site("site-owner-power-reject");
+    let material_before = world.ledger_material_balance(&recipe_ledger, "iron_ingot");
     let journal_start = world.journal().events.len();
     world.submit_action(Action::ScheduleRecipe {
         requester_agent_id: "builder-a".to_string(),
@@ -439,7 +607,10 @@ fn schedule_recipe_rejects_when_builder_electricity_is_insufficient_even_if_worl
         .expect("insufficient owner electricity should be an action rejection");
 
     assert_eq!(world.pending_recipe_jobs_len(), 0);
-    assert_eq!(world.material_balance("iron_ingot"), material_before);
+    assert_eq!(
+        world.ledger_material_balance(&recipe_ledger, "iron_ingot"),
+        material_before
+    );
     assert_eq!(
         world
             .agent_resource_balance("builder-a", ResourceKind::Electricity)
@@ -743,146 +914,6 @@ fn industrial_integrity_retired_factory_id_keeps_old_recycle_replay_byte_stable(
 }
 
 #[test]
-fn schedule_recipe_world_fallback_adds_one_tick_delay_for_moderate_bottleneck_deficit() {
-    let mut world = World::new();
-    register_builder(&mut world, "builder-a");
-    world
-        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "steel_plate", 20)
-        .expect("seed agent steel");
-    world
-        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "circuit_board", 4)
-        .expect("seed agent circuits");
-    world.submit_action(Action::BuildFactory {
-        builder_agent_id: "builder-a".to_string(),
-        site_id: "site-1".to_string(),
-        spec: factory_spec("factory.scarcity.moderate", 1, 1, 1),
-    });
-    world.step().expect("start build");
-    world.step().expect("complete build");
-
-    world
-        .set_ledger_material_balance(MaterialLedgerId::site("site-1"), "iron_ingot", 6)
-        .expect("seed partial local bottleneck");
-    world
-        .set_material_balance("iron_ingot", 20)
-        .expect("seed world bottleneck");
-    world
-        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 20)
-        .expect("seed builder electricity");
-    world.set_resource_balance(ResourceKind::Electricity, 20);
-
-    world.submit_action(Action::ScheduleRecipe {
-        requester_agent_id: "builder-a".to_string(),
-        factory_id: "factory.scarcity.moderate".to_string(),
-        recipe_id: "recipe.scarcity.moderate".to_string(),
-        plan: RecipeExecutionPlan::accepted(
-            1,
-            vec![MaterialStack::new("iron_ingot", 10)],
-            vec![MaterialStack::new("motor_mk1", 1)],
-            Vec::new(),
-            1,
-            3,
-        ),
-        logistics_route_ids: Vec::new(),
-        logistics_path_ids: Vec::new(),
-    });
-    world.step().expect("start delayed recipe");
-
-    let now = world.snapshot().state.time;
-    let started = world.journal().events.last().expect("recipe started");
-    match &started.body {
-        WorldEventBody::Domain(DomainEvent::RecipeStarted {
-            consume_ledger,
-            output_ledger,
-            duration_ticks,
-            ready_at,
-            ..
-        }) => {
-            assert_eq!(consume_ledger, &MaterialLedgerId::world());
-            assert_eq!(output_ledger, &MaterialLedgerId::world());
-            assert_eq!(*duration_ticks, 4);
-            assert_eq!(*ready_at, now.saturating_add(4));
-        }
-        other => panic!("expected RecipeStarted, got {other:?}"),
-    }
-
-    for _ in 0..3 {
-        world.step().expect("wait delayed completion");
-    }
-    assert_eq!(world.pending_recipe_jobs_len(), 1);
-    world.step().expect("complete delayed recipe");
-    assert_eq!(world.pending_recipe_jobs_len(), 0);
-}
-
-#[test]
-fn schedule_recipe_world_fallback_adds_two_tick_delay_for_severe_bottleneck_deficit() {
-    let mut world = World::new();
-    register_builder(&mut world, "builder-a");
-    world
-        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "steel_plate", 20)
-        .expect("seed agent steel");
-    world
-        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "circuit_board", 4)
-        .expect("seed agent circuits");
-    world.submit_action(Action::BuildFactory {
-        builder_agent_id: "builder-a".to_string(),
-        site_id: "site-1".to_string(),
-        spec: factory_spec("factory.scarcity.severe", 1, 1, 1),
-    });
-    world.step().expect("start build");
-    world.step().expect("complete build");
-
-    world
-        .set_ledger_material_balance(MaterialLedgerId::site("site-1"), "iron_ingot", 2)
-        .expect("seed severe local bottleneck");
-    world
-        .set_material_balance("iron_ingot", 20)
-        .expect("seed world bottleneck");
-    world
-        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 20)
-        .expect("seed builder electricity");
-    world.set_resource_balance(ResourceKind::Electricity, 20);
-
-    world.submit_action(Action::ScheduleRecipe {
-        requester_agent_id: "builder-a".to_string(),
-        factory_id: "factory.scarcity.severe".to_string(),
-        recipe_id: "recipe.scarcity.severe".to_string(),
-        plan: RecipeExecutionPlan::accepted(
-            1,
-            vec![MaterialStack::new("iron_ingot", 10)],
-            vec![MaterialStack::new("motor_mk1", 1)],
-            Vec::new(),
-            1,
-            3,
-        ),
-        logistics_route_ids: Vec::new(),
-        logistics_path_ids: Vec::new(),
-    });
-    world.step().expect("start delayed recipe");
-
-    let now = world.snapshot().state.time;
-    let started = world.journal().events.last().expect("recipe started");
-    match &started.body {
-        WorldEventBody::Domain(DomainEvent::RecipeStarted {
-            duration_ticks,
-            ready_at,
-            ..
-        }) => {
-            assert_eq!(*duration_ticks, 5);
-            assert_eq!(*ready_at, now.saturating_add(5));
-        }
-        other => panic!("expected RecipeStarted, got {other:?}"),
-    }
-
-    for _ in 0..4 {
-        world.step().expect("wait severe delayed completion");
-    }
-    assert_eq!(world.pending_recipe_jobs_len(), 1);
-    world.step().expect("complete severe delayed recipe");
-    assert_eq!(world.pending_recipe_jobs_len(), 0);
-}
-
-#[test]
 fn recycle_factory_rejects_when_recipe_job_is_active() {
     let mut world = World::new();
     register_builder(&mut world, "builder-a");
@@ -894,7 +925,7 @@ fn recycle_factory_rejects_when_recipe_job_is_active() {
     );
 
     world
-        .set_material_balance("iron_ingot", 1)
+        .set_ledger_material_balance(MaterialLedgerId::site("site-1"), "iron_ingot", 1)
         .expect("seed recipe input");
     world
         .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 10)
@@ -947,7 +978,7 @@ fn industrial_integrity_direct_factory_recycle_with_active_recipe_is_byte_stable
     );
 
     world
-        .set_material_balance("iron_ingot", 1)
+        .set_ledger_material_balance(MaterialLedgerId::site("site-1"), "iron_ingot", 1)
         .expect("seed recipe input");
     world
         .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 10)
@@ -970,7 +1001,10 @@ fn industrial_integrity_direct_factory_recycle_with_active_recipe_is_byte_stable
     });
     world.step().expect("start recipe with active WIP");
     assert_eq!(world.pending_recipe_jobs_len(), 1);
-    assert_eq!(world.material_balance("iron_ingot"), 0);
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::site("site-1"), "iron_ingot"),
+        0
+    );
     assert_eq!(
         world
             .agent_resource_balance("builder-a", ResourceKind::Electricity)

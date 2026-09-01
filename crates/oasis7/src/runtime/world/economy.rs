@@ -140,11 +140,34 @@ impl World {
                         },
                     ));
                 }
+                let Some(power_profile) = self
+                    .state
+                    .factory_construction_power_profiles
+                    .get(spec.factory_id.as_str())
+                else {
+                    return Ok(EconomyActionResolution::Rejected(
+                        RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "construction power profile unknown: factory_id={}",
+                                spec.factory_id
+                            )],
+                        },
+                    ));
+                };
+                if power_profile.source_module_id.as_deref() != Some(module_id.as_str()) {
+                    return Ok(EconomyActionResolution::Rejected(
+                        RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "construction power profile source mismatch: factory_id={} module_id={}",
+                                spec.factory_id, module_id
+                            )],
+                        },
+                    ));
+                }
                 let preferred_ledger = MaterialLedgerId::agent(builder_agent_id.clone());
-                let request_ledger = self.select_material_consume_ledger_for_module_request(
-                    preferred_ledger,
-                    &spec.build_cost,
-                );
+                // Module output may alter the candidate cost, but it may not
+                // make a new submission affordable from the world ledger.
+                let request_ledger = preferred_ledger;
                 let request = FactoryBuildRequest {
                     factory_id: spec.factory_id.clone(),
                     site_id: site_id.clone(),
@@ -160,7 +183,9 @@ impl World {
                         })
                         .collect(),
                     available_inputs_by_ledger: Some(self.material_stacks_by_ledger()),
-                    available_power: self.resource_balance(ResourceKind::Electricity),
+                    available_power: self
+                        .agent_resource_balance(builder_agent_id, ResourceKind::Electricity)
+                        .unwrap_or(0),
                 };
                 let decision = self.evaluate_factory_build_with_module(
                     module_id.as_str(),

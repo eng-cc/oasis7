@@ -20,6 +20,18 @@ pub enum DomainEvent {
         from: GeoPos,
         to: GeoPos,
     },
+    /// Replayable authority update for an agent's canonical location.
+    AgentLocationAuthorityUpdated {
+        authority: AgentLocationAuthorityV1,
+    },
+    /// Replayable site registration/access/readiness update.
+    FactorySiteAuthorityUpdated {
+        authority: FactorySiteAuthorityV1,
+    },
+    /// Replayable M4 construction electricity profile update.
+    FactoryConstructionPowerProfileUpdated {
+        profile: FactoryConstructionPowerProfileV1,
+    },
     ActionAccepted {
         action_id: ActionId,
         action_kind: String,
@@ -611,6 +623,15 @@ pub enum DomainEvent {
         #[serde(default = "default_world_material_ledger")]
         consume_ledger: MaterialLedgerId,
         ready_at: WorldTime,
+        /// Optional for backward-compatible replay of pre-authority events.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        site_authority_revision: Option<u64>,
+        /// Optional for backward-compatible replay of pre-authority events.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        site_location_id: Option<String>,
+        /// Optional for backward-compatible replay of pre-power-obligation events.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        construction_power_obligation: Option<FactoryBuildPowerObligationV1>,
     },
     FactoryBuilt {
         job_id: ActionId,
@@ -887,6 +908,13 @@ impl DomainEvent {
         match self {
             DomainEvent::AgentRegistered { agent_id, .. } => Some(agent_id.as_str()),
             DomainEvent::AgentMoved { agent_id, .. } => Some(agent_id.as_str()),
+            DomainEvent::AgentLocationAuthorityUpdated { authority } => {
+                Some(authority.agent_id.as_str())
+            }
+            DomainEvent::FactorySiteAuthorityUpdated { authority } => {
+                Some(authority.owner_agent_id.as_str())
+            }
+            DomainEvent::FactoryConstructionPowerProfileUpdated { .. } => None,
             DomainEvent::ActionAccepted { actor_id, .. } => Some(actor_id.as_str()),
             DomainEvent::AgentIntentProposed { intent }
             | DomainEvent::AgentIntentSubmitted { intent }
@@ -1115,62 +1143,6 @@ impl DomainEvent {
     }
 }
 
-/// Reasons why an action was rejected.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "data")]
-pub enum RejectReason {
-    AgentAlreadyExists {
-        agent_id: String,
-    },
-    AgentNotFound {
-        agent_id: String,
-    },
-    AgentsNotCoLocated {
-        agent_id: String,
-        other_agent_id: String,
-    },
-    InvalidAmount {
-        amount: i64,
-    },
-    InsufficientResource {
-        agent_id: String,
-        kind: ResourceKind,
-        requested: i64,
-        available: i64,
-    },
-    InsufficientResources {
-        deficits: BTreeMap<ResourceKind, i64>,
-    },
-    InsufficientMaterial {
-        material_kind: String,
-        requested: i64,
-        available: i64,
-    },
-    MaterialTransferDistanceExceeded {
-        distance_km: i64,
-        max_distance_km: i64,
-    },
-    MaterialTransitCapacityExceeded {
-        in_flight: usize,
-        max_in_flight: usize,
-    },
-    FactoryNotFound {
-        factory_id: String,
-    },
-    FactoryBusy {
-        factory_id: String,
-        active_jobs: usize,
-        recipe_slots: u16,
-    },
-    RuleDenied {
-        notes: Vec<String>,
-    },
-}
-
-/// The cause of an event, for audit purposes.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "data")]
-pub enum CausedBy {
-    Action(ActionId),
-    Effect { intent_id: String },
-}
+#[path = "domain_event_rejections.rs"]
+mod domain_event_rejections;
+pub use domain_event_rejections::{CausedBy, RejectReason};
