@@ -165,9 +165,13 @@ refresh_state() {
       wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "cleanup_failed", "failure_reason": "recorded process identity or process group no longer matches"}'
       return 1
     fi
-    if [[ "$harness_live" -eq 0 && "$launcher_live" -eq 0 ]]; then
-      wh_state_write "$STATE_FILE" '{"status": "stopped", "phase": "stopped", "harness_pid": null, "harness_pgid": null, "harness_identity": null, "launcher_pid": null, "launcher_pgid": null, "launcher_identity": null, "port_reservation_token": null}'
-      return 0
+    if [[ "$harness_live" -ne 1 || "$launcher_live" -ne 1 ]]; then
+      if [[ "$harness_live" -eq 0 && "$launcher_live" -eq 0 ]]; then
+        wh_state_write "$STATE_FILE" '{"status": "stopped", "phase": "stopped", "harness_pid": null, "harness_pgid": null, "harness_identity": null, "launcher_pid": null, "launcher_pgid": null, "launcher_identity": null, "port_reservation_token": null}'
+        return 0
+      fi
+      wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "cleanup_failed", "failure_reason": "ready state requires live valid harness and launcher process records"}'
+      return 1
     fi
   fi
 }
@@ -327,7 +331,11 @@ case "$action" in
     if wh_process_record_alive \
       "$(wh_state_get "$STATE_FILE" harness_pid 2>/dev/null || true)" \
       "$(wh_state_get "$STATE_FILE" harness_pgid 2>/dev/null || true)" \
-      "$(wh_state_get "$STATE_FILE" harness_identity 2>/dev/null || true)"; then
+      "$(wh_state_get "$STATE_FILE" harness_identity 2>/dev/null || true)" && \
+      wh_process_record_alive \
+      "$(wh_state_get "$STATE_FILE" launcher_pid 2>/dev/null || true)" \
+      "$(wh_state_get "$STATE_FILE" launcher_pgid 2>/dev/null || true)" \
+      "$(wh_state_get "$STATE_FILE" launcher_identity 2>/dev/null || true)"; then
       echo "info: harness already running for $WORKTREE_ID"
       wh_state_show "$STATE_FILE"
       exit 0
@@ -524,6 +532,13 @@ PY
     launcher_pid=$(wh_env_file_get "$META_FILE" LAUNCHER_PID 2>/dev/null || true)
     launcher_pgid=$(wh_env_file_get "$META_FILE" LAUNCHER_PGID 2>/dev/null || true)
     launcher_identity=$(wh_env_file_get "$META_FILE" LAUNCHER_IDENTITY 2>/dev/null || true)
+    if ! wh_process_record_alive "$launcher_pid" "$launcher_pgid" "$launcher_identity"; then
+      wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "failed", "failure_reason": "launcher process identity changed before readiness"}'
+      kill_recorded_processes
+      echo "error: launcher identity changed before readiness" >&2
+      tail -n 120 "$STARTUP_LOG" >&2 || true
+      exit 1
+    fi
     wh_state_write "$STATE_FILE" "$(python3 - \
       "$viewer_url" \
       "$launcher_pid" \

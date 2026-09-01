@@ -231,7 +231,8 @@ PY
 restore_ready_record() {
   wh_state_write "$HARNESS_ROOT/state.json" "$(python3 - \
     "$READY_HARNESS_PID" "$READY_HARNESS_PGID" "$READY_HARNESS_IDENTITY" \
-    "$ready_launcher_pid" "$ready_launcher_pgid" "$ready_launcher_identity" <<'PY'
+    "$ready_launcher_pid" "$ready_launcher_pgid" "$ready_launcher_identity" \
+    "$ready_viewer_port" <<'PY'
 import json
 import sys
 
@@ -244,9 +245,38 @@ print(json.dumps({
     "launcher_pid": int(sys.argv[4]),
     "launcher_pgid": int(sys.argv[5]),
     "launcher_identity": sys.argv[6],
+    "viewer_url": f"http://127.0.0.1:{sys.argv[7]}/",
 }))
 PY
 )"
+}
+
+set_launcher_record() {
+  local launcher_pid=${1:-}
+  local launcher_pgid=${2:-}
+  local launcher_identity=${3:-}
+  wh_state_write "$HARNESS_ROOT/state.json" "$(python3 - \
+    "$READY_HARNESS_PID" "$READY_HARNESS_PGID" "$READY_HARNESS_IDENTITY" \
+    "$launcher_pid" "$launcher_pgid" "$launcher_identity" \
+    "$ready_viewer_port" <<'PY'
+import json
+import sys
+
+launcher_pid = sys.argv[4]
+launcher_pgid = sys.argv[5]
+print(json.dumps({
+    "status": "ready",
+    "phase": "ready",
+    "harness_pid": int(sys.argv[1]),
+    "harness_pgid": int(sys.argv[2]),
+    "harness_identity": sys.argv[3],
+    "launcher_pid": int(launcher_pid) if launcher_pid else None,
+    "launcher_pgid": int(launcher_pgid) if launcher_pgid else None,
+    "launcher_identity": sys.argv[6] or None,
+    "viewer_url": f"http://127.0.0.1:{sys.argv[7]}/",
+}))
+PY
+  )"
 }
 
 set_stale_live_record
@@ -256,6 +286,44 @@ stale_status_rc=$?
 set -e
 [[ "$stale_status_rc" -ne 0 ]] || {
   echo "lifecycle acceptance: status accepted unrelated live PID with stale identity" >&2
+  exit 1
+}
+restore_ready_record
+
+# A ready harness record is not sufficient on its own.  Missing and dead
+# launcher records must fail closed for status instead of retaining or
+# reporting ready.  The stale launcher case below also guards the
+# already-running up fast path.
+set_launcher_record
+set +e
+OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" ./scripts/worktree-harness.sh status --json >"$TMP_DIR/missing-launcher-status.log" 2>&1
+missing_launcher_status_rc=$?
+set -e
+[[ "$missing_launcher_status_rc" -ne 0 ]] || {
+  echo "lifecycle acceptance: status retained ready with missing launcher record" >&2
+  exit 1
+}
+restore_ready_record
+
+set_launcher_record "999999999" "999999999" "dead-launcher-incarnation"
+set +e
+OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" ./scripts/worktree-harness.sh status --json >"$TMP_DIR/dead-launcher-status.log" 2>&1
+dead_launcher_status_rc=$?
+set -e
+[[ "$dead_launcher_status_rc" -ne 0 ]] || {
+  echo "lifecycle acceptance: status retained ready with dead launcher record" >&2
+  exit 1
+}
+restore_ready_record
+
+set_launcher_record "$UNRELATED_PID" "$UNRELATED_PGID" "stale-unrelated-launcher-incarnation"
+set +e
+FAKE_LAUNCHER_CHILD_PID_FILE="$READY_CHILD_PID_FILE" \
+OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" ./scripts/worktree-harness.sh up --startup-timeout 5 >"$TMP_DIR/stale-launcher-up.log" 2>&1
+stale_launcher_up_rc=$?
+set -e
+[[ "$stale_launcher_up_rc" -ne 0 ]] || {
+  echo "lifecycle acceptance: up accepted live harness with stale launcher identity" >&2
   exit 1
 }
 restore_ready_record
@@ -386,6 +454,83 @@ if [[ -e "$READINESS_CHILD_PID_FILE" ]]; then
   fi
 fi
 echo "unrelated live PID identity rejection: status_rc=$stale_status_rc url_rc=$stale_url_rc up_rc=$stale_up_rc readiness_rc=$readiness_up_rc"
+
+HANDOFF_DELAY_FILE="$TMP_DIR/launcher-handoff-delay.marker"
+HANDOFF_ACK_FILE="$TMP_DIR/launcher-handoff.ack"
+HANDOFF_ACKED_FILE="$TMP_DIR/launcher-handoff.acked"
+HANDOFF_CHILD_PID_FILE="$TMP_DIR/launcher-handoff-child.pid"
+HANDOFF_META_FILE="$(wh_runtime_meta_file "$HARNESS_ROOT")"
+rm -f "$HANDOFF_DELAY_FILE" "$HANDOFF_ACK_FILE" "$HANDOFF_ACKED_FILE" "$HANDOFF_CHILD_PID_FILE"
+FAKE_LAUNCHER_CHILD_PID_FILE="$HANDOFF_CHILD_PID_FILE" \
+OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" \
+OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_FILE="$HANDOFF_DELAY_FILE" \
+OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_ACK_FILE="$HANDOFF_ACK_FILE" \
+OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_ACKED_FILE="$HANDOFF_ACKED_FILE" \
+OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_SECS=2 \
+./scripts/worktree-harness.sh up --startup-timeout "$STARTUP_TIMEOUT_SECS" >"$TMP_DIR/launcher-handoff-up.log" 2>&1 &
+handoff_up_pid=$!
+wait_for_marker "$HANDOFF_DELAY_FILE" "$LAUNCH_SYNC_TIMEOUT_SECS" "launcher readiness handoff synchronization" || {
+  cat "$TMP_DIR/launcher-handoff-up.log" >&2 || true
+  exit 1
+}
+for _ in $(seq 1 40); do
+  [[ "$(wh_env_file_get "$HANDOFF_META_FILE" STACK_READY 2>/dev/null || true)" == "1" ]] && break
+  sleep 0.05
+done
+[[ "$(wh_env_file_get "$HANDOFF_META_FILE" STACK_READY 2>/dev/null || true)" == "1" ]] || {
+  cat "$TMP_DIR/launcher-handoff-up.log" >&2 || true
+  echo "lifecycle acceptance: launcher handoff did not publish STACK_READY" >&2
+  exit 1
+}
+python3 - "$HANDOFF_META_FILE" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+lines = path.read_text(encoding="utf-8").splitlines()
+updated = []
+found = False
+for line in lines:
+    if line.startswith("LAUNCHER_IDENTITY="):
+        updated.append("LAUNCHER_IDENTITY=stale-final-handoff-incarnation")
+        found = True
+    else:
+        updated.append(line)
+assert found, lines
+path.write_text("\n".join(updated) + "\n", encoding="utf-8")
+PY
+: >"$HANDOFF_ACK_FILE"
+wait_for_marker "$HANDOFF_ACKED_FILE" "$STARTUP_TIMEOUT_SECS" "launcher handoff mutation acknowledgement" || {
+  cat "$TMP_DIR/launcher-handoff-up.log" >&2 || true
+  exit 1
+}
+set +e
+wait "$handoff_up_pid"
+handoff_up_rc=$?
+set -e
+[[ "$handoff_up_rc" -ne 0 ]] || {
+  echo "lifecycle acceptance: ready handoff accepted stale launcher identity" >&2
+  exit 1
+}
+python3 - "$HARNESS_ROOT/state.json" <<'PY'
+import json
+import pathlib
+import sys
+
+state = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert state["status"] != "ready", state
+PY
+if [[ -e "$HANDOFF_CHILD_PID_FILE" ]]; then
+  handoff_child_pid="$(cat "$HANDOFF_CHILD_PID_FILE")"
+  for _ in $(seq 1 40); do
+    kill -0 "$handoff_child_pid" >/dev/null 2>&1 || break
+    sleep 0.05
+  done
+  if kill -0 "$handoff_child_pid" >/dev/null 2>&1; then
+    echo "lifecycle acceptance: stale launcher handoff child survived cleanup" >&2
+    exit 1
+  fi
+fi
 
 CONCURRENT_DELAY_FILE="$TMP_DIR/concurrent-delay.marker"
 CONCURRENT_CHILD_PID_FILE="$TMP_DIR/concurrent-child.pid"
