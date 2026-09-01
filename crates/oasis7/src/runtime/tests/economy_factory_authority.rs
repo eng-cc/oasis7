@@ -1,0 +1,437 @@
+use super::economy_factory_lifecycle::{factory_spec, install_factory_authority, register_builder};
+use crate::runtime::{
+    Action, AgentLocationAuthorityV1, DomainEvent, FactoryProfileV1, FactorySiteAuthorityV1,
+    LocationAnchorV1, MaterialLedgerId, RejectReason, World, WorldError, WorldEventBody,
+    WorldState,
+};
+use crate::simulator::ResourceKind;
+
+#[test]
+fn legacy_snapshot_without_location_anchor_registry_remains_decodable() {
+    let mut value = serde_json::to_value(World::new().state()).expect("serialize world state");
+    value
+        .as_object_mut()
+        .expect("world state object")
+        .remove("location_anchors");
+    let restored: WorldState = serde_json::from_value(value).expect("decode legacy world state");
+    assert!(restored.location_anchors.is_empty());
+}
+
+#[test]
+fn legacy_location_anchor_without_effective_at_defaults_to_immediate() {
+    let mut value = serde_json::to_value(World::new().state()).expect("serialize world state");
+    value["location_anchors"] = serde_json::json!({
+        "legacy-location": {
+            "location_id": "legacy-location",
+            "active": true,
+            "authority_revision": 1
+        }
+    });
+    let restored: WorldState = serde_json::from_value(value).expect("decode legacy anchor");
+    assert_eq!(
+        restored
+            .location_anchors
+            .get("legacy-location")
+            .expect("legacy anchor")
+            .effective_at,
+        0
+    );
+}
+
+#[test]
+fn location_anchor_is_required_for_authority_and_build_admission() {
+    let mut world = World::new();
+    register_builder(&mut world, "builder-a");
+
+    let authority = AgentLocationAuthorityV1 {
+        agent_id: "builder-a".to_string(),
+        location_id: "location-site-1".to_string(),
+        active: true,
+        authority_revision: 1,
+        effective_at: 0,
+    };
+    let missing_anchor = world.set_agent_location_authority(authority.clone());
+    assert!(matches!(
+        missing_anchor,
+        Err(WorldError::ResourceBalanceInvalid { reason }) if reason.contains("location anchor unknown")
+    ));
+
+    world
+        .set_location_anchor(LocationAnchorV1 {
+            location_id: "location-site-1".to_string(),
+            active: true,
+            authority_revision: 1,
+            effective_at: 0,
+        })
+        .expect("register exact location anchor");
+    world
+        .set_agent_location_authority(authority)
+        .expect("active anchor permits agent assignment");
+
+    world
+        .set_location_anchor(LocationAnchorV1 {
+            location_id: "location-site-1".to_string(),
+            active: false,
+            authority_revision: 2,
+            effective_at: 0,
+        })
+        .expect("deactivate location anchor");
+    let site_result = world.set_factory_site_authority(FactorySiteAuthorityV1 {
+        site_id: "site-1".to_string(),
+        location_id: "location-site-1".to_string(),
+        owner_agent_id: "builder-a".to_string(),
+        authorized_agent_ids: Vec::new(),
+        chunk_ready: true,
+        active: true,
+        authority_revision: 1,
+        registered_at: 0,
+    });
+    assert!(matches!(
+        site_result,
+        Err(WorldError::ResourceBalanceInvalid { reason })
+            if reason.contains("location anchor inactive_or_stale")
+    ));
+}
+
+#[test]
+fn inactive_exact_anchor_blocks_build_without_resource_sink() {
+    const CONSTRUCTION_POWER: i64 = 10;
+    let mut world = World::new();
+    register_builder(&mut world, "builder-a");
+    let spec = factory_spec("factory.anchor-gated", 1, 1, 1);
+    let builder_ledger = MaterialLedgerId::agent("builder-a");
+    world
+        .set_ledger_material_balance(builder_ledger.clone(), "steel_plate", 10)
+        .expect("seed build steel");
+    world
+        .set_ledger_material_balance(builder_ledger.clone(), "circuit_board", 2)
+        .expect("seed build circuits");
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, CONSTRUCTION_POWER)
+        .expect("seed build power");
+    install_factory_authority(
+        &mut world,
+        "builder-a",
+        "site-1",
+        spec.factory_id.as_str(),
+        CONSTRUCTION_POWER,
+    );
+    world
+        .set_location_anchor(LocationAnchorV1 {
+            location_id: "location-site-1".to_string(),
+            active: false,
+            authority_revision: 2,
+            effective_at: 0,
+        })
+        .expect("deactivate exact location anchor");
+
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-1".to_string(),
+        spec,
+    });
+    world.step().expect("anchor-gated build rejection");
+
+    assert_eq!(world.pending_factory_builds_len(), 0);
+    assert_eq!(
+        world.ledger_material_balance(&builder_ledger, "steel_plate"),
+        10
+    );
+    assert_eq!(
+        world
+            .agent_resource_balance("builder-a", ResourceKind::Electricity)
+            .expect("read build power"),
+        CONSTRUCTION_POWER
+    );
+    assert!(world.journal().events.iter().any(|event| {
+        matches!(
+            &event.body,
+            WorldEventBody::Domain(DomainEvent::ActionRejected {
+                reason: RejectReason::RuleDenied { notes },
+                ..
+            }) if notes
+                .iter()
+                .any(|note| note.contains("location anchor inactive_or_stale"))
+        )
+    }));
+}
+
+#[test]
+fn future_exact_anchor_blocks_build_without_resource_sink() {
+    const CONSTRUCTION_POWER: i64 = 10;
+    let mut world = World::new();
+    register_builder(&mut world, "builder-a");
+    let spec = factory_spec("factory.future-anchor", 1, 1, 1);
+    let builder_ledger = MaterialLedgerId::agent("builder-a");
+    world
+        .set_ledger_material_balance(builder_ledger.clone(), "steel_plate", 10)
+        .expect("seed future-anchor steel");
+    world
+        .set_ledger_material_balance(builder_ledger.clone(), "circuit_board", 2)
+        .expect("seed future-anchor circuits");
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, CONSTRUCTION_POWER)
+        .expect("seed future-anchor power");
+    install_factory_authority(
+        &mut world,
+        "builder-a",
+        "site-1",
+        spec.factory_id.as_str(),
+        CONSTRUCTION_POWER,
+    );
+    world
+        .set_location_anchor(LocationAnchorV1 {
+            location_id: "location-site-1".to_string(),
+            active: true,
+            authority_revision: 2,
+            effective_at: world.state().time.saturating_add(2),
+        })
+        .expect("register future location anchor");
+
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-1".to_string(),
+        spec,
+    });
+    world
+        .step()
+        .expect("future anchor should become a structured rejection");
+
+    assert_eq!(world.pending_factory_builds_len(), 0);
+    assert_eq!(
+        world.ledger_material_balance(&builder_ledger, "steel_plate"),
+        10
+    );
+    assert_eq!(
+        world
+            .agent_resource_balance("builder-a", ResourceKind::Electricity)
+            .expect("read future-anchor power"),
+        CONSTRUCTION_POWER
+    );
+    assert!(world.journal().events.iter().any(|event| {
+        matches!(
+            &event.body,
+            WorldEventBody::Domain(DomainEvent::ActionRejected {
+                reason: RejectReason::RuleDenied { notes },
+                ..
+            }) if notes.iter().any(|note| note.contains("not yet effective"))
+        )
+    }));
+}
+
+#[test]
+fn factory_build_pins_location_anchor_revision_and_replays_after_anchor_mutation() {
+    const CONSTRUCTION_POWER: i64 = 10;
+    let mut world = World::new();
+    register_builder(&mut world, "builder-a");
+    let spec = factory_spec("factory.pinned-anchor", 1, 1, 1);
+    let builder_ledger = MaterialLedgerId::agent("builder-a");
+    for stack in &spec.build_cost {
+        world
+            .set_ledger_material_balance(builder_ledger.clone(), stack.kind.as_str(), stack.amount)
+            .expect("seed pinned-anchor construction material");
+    }
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, CONSTRUCTION_POWER)
+        .expect("seed pinned-anchor power");
+    install_factory_authority(
+        &mut world,
+        "builder-a",
+        "site-1",
+        spec.factory_id.as_str(),
+        CONSTRUCTION_POWER,
+    );
+    let snapshot_before_build = world.snapshot();
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-1".to_string(),
+        spec,
+    });
+    world.step().expect("start pinned-anchor build");
+
+    let started = world
+        .journal()
+        .events
+        .iter()
+        .find_map(|event| match &event.body {
+            WorldEventBody::Domain(DomainEvent::FactoryBuildStarted {
+                location_anchor_revision,
+                ..
+            }) => Some(*location_anchor_revision),
+            _ => None,
+        })
+        .expect("FactoryBuildStarted event");
+    assert_eq!(started, Some(1));
+    assert_eq!(
+        world
+            .state()
+            .pending_factory_builds
+            .values()
+            .next()
+            .and_then(|job| job.location_anchor_revision),
+        Some(1)
+    );
+
+    world
+        .set_location_anchor(LocationAnchorV1 {
+            location_id: "location-site-1".to_string(),
+            active: true,
+            authority_revision: 2,
+            effective_at: 0,
+        })
+        .expect("rotate location anchor after acceptance");
+    world.step().expect("complete pinned-anchor build");
+    assert!(world.has_factory("factory.pinned-anchor"));
+
+    let restored = World::from_snapshot(snapshot_before_build.clone(), world.journal().clone())
+        .expect("replay must preserve accepted anchor pin");
+    assert!(restored.has_factory("factory.pinned-anchor"));
+    assert_eq!(restored.state(), world.state());
+
+    let mut legacy_journal = world.journal().clone();
+    for event in &mut legacy_journal.events {
+        if let WorldEventBody::Domain(DomainEvent::FactoryBuildStarted {
+            location_anchor_revision,
+            ..
+        }) = &mut event.body
+        {
+            *location_anchor_revision = None;
+        }
+    }
+    let legacy_restored = World::from_snapshot(snapshot_before_build, legacy_journal)
+        .expect("historical build event without location pin must replay");
+    assert!(legacy_restored.has_factory("factory.pinned-anchor"));
+}
+
+#[test]
+fn factory_build_apply_rejects_mismatched_location_anchor_revision() {
+    const CONSTRUCTION_POWER: i64 = 10;
+    let mut world = World::new();
+    register_builder(&mut world, "builder-a");
+    let spec = factory_spec("factory.stale-anchor-event", 1, 1, 1);
+    let builder_ledger = MaterialLedgerId::agent("builder-a");
+    for stack in &spec.build_cost {
+        world
+            .set_ledger_material_balance(builder_ledger.clone(), stack.kind.as_str(), stack.amount)
+            .expect("seed stale-anchor construction material");
+    }
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, CONSTRUCTION_POWER)
+        .expect("seed stale-anchor power");
+    install_factory_authority(
+        &mut world,
+        "builder-a",
+        "site-1",
+        spec.factory_id.as_str(),
+        CONSTRUCTION_POWER,
+    );
+    let snapshot_before_build = world.snapshot();
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-1".to_string(),
+        spec,
+    });
+    world.step().expect("start stale-anchor build");
+
+    let mut journal = world.journal().clone();
+    for event in &mut journal.events {
+        if let WorldEventBody::Domain(DomainEvent::FactoryBuildStarted {
+            location_anchor_revision,
+            ..
+        }) = &mut event.body
+        {
+            *location_anchor_revision = Some(99);
+        }
+    }
+    let error = World::from_snapshot(snapshot_before_build, journal)
+        .expect_err("mismatched anchor revision must fail replay");
+    assert!(matches!(
+        error,
+        WorldError::ResourceBalanceInvalid { reason }
+            if reason.contains("factory build authority changed or is unavailable")
+    ));
+}
+
+#[test]
+fn build_factory_requires_canonical_profile_capabilities() {
+    for (label, mismatch) in [("tier", 0_u8), ("recipe_slots", 1_u8), ("tags", 2_u8)] {
+        let mut world = World::new();
+        register_builder(&mut world, "builder-a");
+        let mut spec = factory_spec("factory.profile-gated", 1, 1, 1);
+        match mismatch {
+            0 => spec.tier = 2,
+            1 => spec.recipe_slots = 2,
+            _ => spec.tags = vec!["forged".to_string()],
+        }
+        let builder_ledger = MaterialLedgerId::agent("builder-a");
+        world
+            .set_ledger_material_balance(builder_ledger.clone(), "steel_plate", 10)
+            .expect("seed profile test steel");
+        world
+            .set_ledger_material_balance(builder_ledger.clone(), "circuit_board", 2)
+            .expect("seed profile test circuits");
+        world
+            .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 10)
+            .expect("seed profile test power");
+        install_factory_authority(
+            &mut world,
+            "builder-a",
+            "site-1",
+            spec.factory_id.as_str(),
+            10,
+        );
+        world.submit_action(Action::BuildFactory {
+            builder_agent_id: "builder-a".to_string(),
+            site_id: "site-1".to_string(),
+            spec,
+        });
+        world
+            .step()
+            .unwrap_or_else(|error| panic!("{label} mismatch should be rejected: {error:?}"));
+        assert_eq!(world.pending_factory_builds_len(), 0, "{label} mismatch");
+        assert_eq!(
+            world.ledger_material_balance(&builder_ledger, "steel_plate"),
+            10,
+            "{label} mismatch must not consume materials"
+        );
+    }
+}
+
+#[test]
+fn build_factory_accepts_profile_tags_after_normalization() {
+    let mut world = World::new();
+    register_builder(&mut world, "builder-a");
+    let spec = factory_spec("factory.profile-normalized", 1, 1, 1);
+    let builder_ledger = MaterialLedgerId::agent("builder-a");
+    world
+        .set_ledger_material_balance(builder_ledger, "steel_plate", 10)
+        .expect("seed normalized profile steel");
+    world
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "circuit_board", 2)
+        .expect("seed normalized profile circuits");
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 10)
+        .expect("seed normalized profile power");
+    install_factory_authority(
+        &mut world,
+        "builder-a",
+        "site-1",
+        spec.factory_id.as_str(),
+        10,
+    );
+    world
+        .upsert_factory_profile(FactoryProfileV1 {
+            factory_id: spec.factory_id.clone(),
+            tier: spec.tier,
+            recipe_slots: spec.recipe_slots,
+            tags: vec![" LIFECYCLE ".to_string(), "lifecycle".to_string()],
+        })
+        .expect("install normalized factory profile");
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-1".to_string(),
+        spec,
+    });
+    world.step().expect("normalized profile permits build");
+    assert_eq!(world.pending_factory_builds_len(), 1);
+}

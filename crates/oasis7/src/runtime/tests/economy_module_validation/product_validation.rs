@@ -62,8 +62,15 @@ fn schedule_recipe_with_module_auto_validates_outputs_before_commit() {
             .expect("advance module recipe toward validated completion");
     }
     assert_eq!(world.pending_recipe_jobs_len(), 0);
-    assert_eq!(world.material_balance("logistics_drone"), 1);
-    assert_eq!(world.material_balance("assembly_scrap"), 1);
+    let site_ledger = MaterialLedgerId::site("site-1");
+    assert_eq!(
+        world.ledger_material_balance(&site_ledger, "logistics_drone"),
+        1
+    );
+    assert_eq!(
+        world.ledger_material_balance(&site_ledger, "assembly_scrap"),
+        1
+    );
 
     let has_product_validated = world.journal().events.iter().any(|event| {
         matches!(
@@ -165,8 +172,15 @@ fn schedule_recipe_with_module_blocks_commit_when_product_validation_fails() {
             .expect("advance module recipe toward rejection settlement");
     }
     assert_eq!(world.pending_recipe_jobs_len(), 0);
-    assert_eq!(world.material_balance("logistics_drone"), 0);
-    assert_eq!(world.material_balance("assembly_scrap"), 0);
+    let site_ledger = MaterialLedgerId::site("site-1");
+    assert_eq!(
+        world.ledger_material_balance(&site_ledger, "logistics_drone"),
+        0
+    );
+    assert_eq!(
+        world.ledger_material_balance(&site_ledger, "assembly_scrap"),
+        0
+    );
 
     let factory = world
         .state()

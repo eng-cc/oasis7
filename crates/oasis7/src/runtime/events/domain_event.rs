@@ -24,6 +24,10 @@ pub enum DomainEvent {
     AgentLocationAuthorityUpdated {
         authority: AgentLocationAuthorityV1,
     },
+    /// Replayable exact location identity update.
+    LocationAnchorUpdated {
+        anchor: LocationAnchorV1,
+    },
     /// Replayable site registration/access/readiness update.
     FactorySiteAuthorityUpdated {
         authority: FactorySiteAuthorityV1,
@@ -629,6 +633,9 @@ pub enum DomainEvent {
         /// Optional for backward-compatible replay of pre-authority events.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         site_location_id: Option<String>,
+        /// Optional for backward-compatible replay of pre-location-anchor events.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        location_anchor_revision: Option<u64>,
         /// Optional for backward-compatible replay of pre-power-obligation events.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         construction_power_obligation: Option<FactoryBuildPowerObligationV1>,
@@ -911,6 +918,7 @@ impl DomainEvent {
             DomainEvent::AgentLocationAuthorityUpdated { authority } => {
                 Some(authority.agent_id.as_str())
             }
+            DomainEvent::LocationAnchorUpdated { .. } => None,
             DomainEvent::FactorySiteAuthorityUpdated { authority } => {
                 Some(authority.owner_agent_id.as_str())
             }

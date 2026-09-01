@@ -333,14 +333,6 @@ impl World {
         &self,
         envelope: &ActionEnvelope,
     ) -> Result<WorldEventBody, WorldError> {
-        self.action_to_event_with_legacy_module_recipe_compat(envelope, false)
-    }
-
-    pub(super) fn action_to_event_with_legacy_module_recipe_compat(
-        &self,
-        envelope: &ActionEnvelope,
-        allow_legacy_module_recipe_world_fallback: bool,
-    ) -> Result<WorldEventBody, WorldError> {
         let action_id = envelope.id;
         match &envelope.action {
             Action::RegisterAgent { .. }
@@ -437,11 +429,9 @@ impl World {
             | Action::GovernMaterialProfile { .. }
             | Action::GovernProductProfile { .. }
             | Action::GovernRecipeProfile { .. }
-            | Action::GovernFactoryProfile { .. } => self.action_to_event_economy(
-                action_id,
-                &envelope.action,
-                allow_legacy_module_recipe_world_fallback,
-            ),
+            | Action::GovernFactoryProfile { .. } => {
+                self.action_to_event_economy(action_id, &envelope.action)
+            }
         }
     }
 

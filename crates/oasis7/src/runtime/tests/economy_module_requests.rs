@@ -1,9 +1,10 @@
 use super::pos;
 use crate::runtime::{
-    Action, AgentLocationAuthorityV1, CapabilityGrant, FactoryConstructionPowerMode,
-    FactoryConstructionPowerProfileV1, FactorySiteAuthorityV1, MaterialLedgerId, ModuleAbiContract,
-    ModuleActivation, ModuleChangeSet, ModuleKind, ModuleLimits, ModuleManifest, ModuleRegistry,
-    ModuleRole, PolicySet, ProposalDecision, World, util,
+    Action, AgentLocationAuthorityV1, CapabilityGrant, DomainEvent, FactoryConstructionPowerMode,
+    FactoryConstructionPowerProfileV1, FactoryProfileV1, FactorySiteAuthorityV1, LocationAnchorV1,
+    MaterialLedgerId, ModuleAbiContract, ModuleActivation, ModuleChangeSet, ModuleKind,
+    ModuleLimits, ModuleManifest, ModuleRegistry, ModuleRole, PolicySet, ProposalDecision,
+    RejectReason, World, WorldEventBody, util,
 };
 use crate::simulator::ResourceKind;
 use oasis7_wasm_abi::{
@@ -40,6 +41,14 @@ fn prepare_factory_build(
 ) {
     let location_id = format!("location-{site_id}");
     world
+        .set_location_anchor(LocationAnchorV1 {
+            location_id: location_id.clone(),
+            active: true,
+            authority_revision: 1,
+            effective_at: 0,
+        })
+        .expect("install builder location anchor");
+    world
         .set_agent_location_authority(AgentLocationAuthorityV1 {
             agent_id: builder_agent_id.to_string(),
             location_id: location_id.clone(),
@@ -71,6 +80,14 @@ fn prepare_factory_build(
             active: true,
         })
         .expect("install construction power profile");
+    world
+        .upsert_factory_profile(FactoryProfileV1 {
+            factory_id: factory_id.to_string(),
+            tier: 1,
+            recipe_slots: 1,
+            tags: vec!["assembly".to_string()],
+        })
+        .expect("install factory capability profile");
     world
         .set_agent_resource_balance(builder_agent_id, ResourceKind::Electricity, 10)
         .expect("seed construction power");
@@ -411,4 +428,96 @@ fn schedule_recipe_with_module_request_exposes_available_inputs_by_ledger() {
         21
     );
     assert_eq!(world.resource_balance(ResourceKind::Electricity), 0);
+}
+
+#[test]
+fn schedule_recipe_with_module_does_not_fallback_to_world_materials() {
+    let mut world = World::new();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "builder-a".to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("register agent");
+    let spec = factory_spec("factory.recipe.no-world-fallback", 1, 1);
+    let builder_ledger = MaterialLedgerId::agent("builder-a");
+    for stack in &spec.build_cost {
+        world
+            .set_ledger_material_balance(builder_ledger.clone(), stack.kind.as_str(), stack.amount)
+            .expect("seed builder construction material");
+    }
+    prepare_factory_build(
+        &mut world,
+        "builder-a",
+        "site-1",
+        spec.factory_id.as_str(),
+        None,
+    );
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-1".to_string(),
+        spec,
+    });
+    world.step().expect("start build");
+    world.step().expect("complete build");
+
+    world
+        .set_material_balance("iron_ingot", 1)
+        .expect("seed only world recipe input");
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 30)
+        .expect("seed recipe power");
+    activate_pure_module(
+        &mut world,
+        "m4.recipe.no-world-fallback",
+        b"recipe-no-fallback",
+    );
+    world.submit_action(Action::ScheduleRecipeWithModule {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: "factory.recipe.no-world-fallback".to_string(),
+        recipe_id: "recipe.no-world-fallback".to_string(),
+        module_id: "m4.recipe.no-world-fallback".to_string(),
+        desired_batches: 1,
+        deterministic_seed: 20260902,
+    });
+
+    let output = ModuleOutput {
+        new_state: None,
+        effects: Vec::new(),
+        emits: vec![ModuleEmit {
+            kind: "economy.recipe_execution_plan".to_string(),
+            payload: serde_json::to_value(RecipeExecutionPlan::accepted(
+                1,
+                vec![MaterialStack::new("iron_ingot", 1)],
+                vec![MaterialStack::new("motor_mk1", 1)],
+                Vec::new(),
+                1,
+                1,
+            ))
+            .expect("serialize recipe plan"),
+        }],
+        tick_lifecycle: None,
+        output_bytes: 256,
+    };
+    let mut sandbox = CaptureEconomyRequestSandbox::with_outputs(vec![output]);
+    world
+        .step_with_modules(&mut sandbox)
+        .expect("world-only recipe input should be rejected structurally");
+
+    let request: RecipeExecutionRequest = decode_captured_action_request(&sandbox.requests[0]);
+    assert_eq!(stack_amount(&request.available_inputs, "iron_ingot"), 0);
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::site("site-1"), "iron_ingot"),
+        0
+    );
+    assert_eq!(world.material_balance("iron_ingot"), 1);
+    assert_eq!(world.pending_recipe_jobs_len(), 0);
+    assert!(world.journal().events.iter().any(|event| {
+        matches!(
+            &event.body,
+            WorldEventBody::Domain(DomainEvent::ActionRejected {
+                reason: RejectReason::InsufficientMaterial { material_kind, .. },
+                ..
+            }) if material_kind == "iron_ingot"
+        )
+    }));
 }

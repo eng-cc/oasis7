@@ -1,13 +1,13 @@
 use super::pos;
 use crate::runtime::{
     Action, AgentLocationAuthorityV1, DomainEvent, FactoryConstructionPowerMode,
-    FactoryConstructionPowerProfileV1, FactorySiteAuthorityV1, MaterialLedgerId, RejectReason,
-    World, WorldError, WorldEventBody,
+    FactoryConstructionPowerProfileV1, FactoryProfileV1, FactorySiteAuthorityV1, LocationAnchorV1,
+    MaterialLedgerId, RejectReason, World, WorldError, WorldEventBody,
 };
 use crate::simulator::ResourceKind;
 use oasis7_wasm_abi::{FactoryModuleSpec, MaterialStack, RecipeExecutionPlan};
 
-fn factory_spec(
+pub(super) fn factory_spec(
     factory_id: &str,
     build_time_ticks: u32,
     recipe_slots: u16,
@@ -30,7 +30,7 @@ fn factory_spec(
     }
 }
 
-fn register_builder(world: &mut World, agent_id: &str) {
+pub(super) fn register_builder(world: &mut World, agent_id: &str) {
     world.submit_action(Action::RegisterAgent {
         agent_id: agent_id.to_string(),
         pos: pos(0, 0),
@@ -38,7 +38,7 @@ fn register_builder(world: &mut World, agent_id: &str) {
     world.step().expect("register builder");
 }
 
-fn install_factory_authority(
+pub(super) fn install_factory_authority(
     world: &mut World,
     builder_agent_id: &str,
     site_id: &str,
@@ -46,6 +46,16 @@ fn install_factory_authority(
     construction_power: i64,
 ) {
     let location_id = format!("location-{site_id}");
+    if !world.state().location_anchors.contains_key(&location_id) {
+        world
+            .set_location_anchor(LocationAnchorV1 {
+                location_id: location_id.clone(),
+                active: true,
+                authority_revision: 1,
+                effective_at: 0,
+            })
+            .expect("install location anchor");
+    }
     let location_revision = world
         .state()
         .agent_location_authorities
@@ -92,6 +102,14 @@ fn install_factory_authority(
             active: true,
         })
         .expect("install construction power profile");
+    world
+        .upsert_factory_profile(FactoryProfileV1 {
+            factory_id: factory_id.to_string(),
+            tier: 1,
+            recipe_slots: 1,
+            tags: vec!["lifecycle".to_string()],
+        })
+        .expect("install factory capability profile");
 }
 
 fn build_factory_ready(
@@ -121,6 +139,14 @@ fn build_factory_ready(
         spec.factory_id.as_str(),
         CONSTRUCTION_POWER,
     );
+    world
+        .upsert_factory_profile(FactoryProfileV1 {
+            factory_id: spec.factory_id.clone(),
+            tier: spec.tier,
+            recipe_slots: spec.recipe_slots,
+            tags: spec.tags.clone(),
+        })
+        .expect("install exact factory capability profile");
     world.submit_action(Action::BuildFactory {
         builder_agent_id: builder_agent_id.to_string(),
         site_id: site_id.to_string(),

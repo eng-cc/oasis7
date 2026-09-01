@@ -13,7 +13,6 @@ impl World {
         &self,
         action_id: ActionId,
         action: &Action,
-        allow_legacy_module_recipe_world_fallback: bool,
     ) -> Result<WorldEventBody, WorldError> {
         if let Some(event) = self.profile_governance_event(action_id, action) {
             return Ok(WorldEventBody::Domain(event));
@@ -238,209 +237,7 @@ impl World {
                 builder_agent_id,
                 site_id,
                 spec,
-            } => {
-                if !self.state.agents.contains_key(builder_agent_id) {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::AgentNotFound {
-                            agent_id: builder_agent_id.clone(),
-                        },
-                    }));
-                }
-                if spec.factory_id.trim().is_empty() {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec!["factory_id cannot be empty".to_string()],
-                        },
-                    }));
-                }
-                if self.state.retired_factory_ids.contains(&spec.factory_id) {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec![format!(
-                                "factory identity is retired: {}",
-                                spec.factory_id
-                            )],
-                        },
-                    }));
-                }
-                if self.state.factories.contains_key(&spec.factory_id)
-                    || self
-                        .state
-                        .pending_factory_builds
-                        .values()
-                        .any(|job| job.spec.factory_id == spec.factory_id)
-                {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec![format!("factory already exists: {}", spec.factory_id)],
-                        },
-                    }));
-                }
-                if spec.recipe_slots == 0 {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec!["recipe_slots must be > 0".to_string()],
-                        },
-                    }));
-                }
-                let Some(site_authority) = self.state.factory_site_authorities.get(site_id) else {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec![format!("site_unknown: site is not registered: {site_id}")],
-                        },
-                    }));
-                };
-                let Some(location_authority) =
-                    self.state.agent_location_authorities.get(builder_agent_id)
-                else {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec![format!(
-                                "builder location authority is unknown: builder_agent_id={builder_agent_id}"
-                            )],
-                        },
-                    }));
-                };
-                let authorized = site_authority.owner_agent_id == *builder_agent_id
-                    || site_authority
-                        .authorized_agent_ids
-                        .iter()
-                        .any(|agent_id| agent_id == builder_agent_id);
-                if site_authority.site_id != *site_id
-                    || location_authority.agent_id != *builder_agent_id
-                    || !site_authority.active
-                    || !site_authority.chunk_ready
-                    || site_authority.location_id.trim().is_empty()
-                    || !location_authority.active
-                    || location_authority.location_id != site_authority.location_id
-                    || !authorized
-                {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec![format!(
-                                "site_access_or_location_blocked: site={} builder={} site_active={} chunk_ready={} site_location={} builder_location={} builder_location_active={} authorized={}",
-                                site_id,
-                                builder_agent_id,
-                                site_authority.active,
-                                site_authority.chunk_ready,
-                                site_authority.location_id,
-                                location_authority.location_id,
-                                location_authority.active,
-                                authorized
-                            )],
-                        },
-                    }));
-                }
-                let Some(power_profile) = self
-                    .state
-                    .factory_construction_power_profiles
-                    .get(spec.factory_id.as_str())
-                else {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec![format!(
-                                "construction power profile unknown: factory_id={}",
-                                spec.factory_id
-                            )],
-                        },
-                    }));
-                };
-                if power_profile.factory_id != spec.factory_id
-                    || !power_profile.active
-                    || power_profile.authority_revision == 0
-                    || power_profile.electricity_amount < 0
-                {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec![format!(
-                                "construction power profile inactive_or_stale: factory_id={} revision={} active={}",
-                                spec.factory_id,
-                                power_profile.authority_revision,
-                                power_profile.active
-                            )],
-                        },
-                    }));
-                }
-                let construction_power_obligation = FactoryBuildPowerObligationV1 {
-                    payer_agent_id: builder_agent_id.clone(),
-                    profile_key: spec.factory_id.clone(),
-                    profile_revision: power_profile.authority_revision,
-                    electricity_amount: power_profile.electricity_amount,
-                    mode: power_profile.mode,
-                };
-                let available_power = self
-                    .state
-                    .agents
-                    .get(builder_agent_id)
-                    .map(|cell| cell.state.resources.get(ResourceKind::Electricity))
-                    .unwrap_or(0);
-                if available_power < construction_power_obligation.electricity_amount {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::InsufficientResource {
-                            agent_id: builder_agent_id.clone(),
-                            kind: ResourceKind::Electricity,
-                            requested: construction_power_obligation.electricity_amount,
-                            available: available_power,
-                        },
-                    }));
-                }
-                // Direct builds use the builder ledger; module fallback is resolved upstream.
-                let consume_ledger = MaterialLedgerId::agent(builder_agent_id.clone());
-                let required_materials =
-                    match action_to_event_economy_support::aggregate_material_stacks_for_admission(
-                        "factory build_cost",
-                        &spec.build_cost,
-                    ) {
-                        Ok(required_materials) => required_materials,
-                        Err(reason) => {
-                            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                                action_id,
-                                reason: RejectReason::RuleDenied {
-                                    notes: vec![reason],
-                                },
-                            }));
-                        }
-                    };
-                for (material_kind, requested) in required_materials {
-                    let available =
-                        self.ledger_material_balance(&consume_ledger, material_kind.as_str());
-                    if available < requested {
-                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                            action_id,
-                            reason: RejectReason::InsufficientMaterial {
-                                material_kind,
-                                requested,
-                                available,
-                            },
-                        }));
-                    }
-                }
-
-                let build_ticks = spec.build_time_ticks.max(1);
-                let ready_at = self.state.time.saturating_add(build_ticks as u64);
-                Ok(WorldEventBody::Domain(DomainEvent::FactoryBuildStarted {
-                    job_id: action_id,
-                    builder_agent_id: builder_agent_id.clone(),
-                    site_id: site_id.clone(),
-                    spec: spec.clone(),
-                    consume_ledger,
-                    ready_at,
-                    site_authority_revision: Some(site_authority.authority_revision),
-                    site_location_id: Some(site_authority.location_id.clone()),
-                    construction_power_obligation: Some(construction_power_obligation),
-                }))
-            }
+            } => self.build_factory_to_event(action_id, builder_agent_id, site_id, spec),
             Action::BuildFactoryWithModule { .. } => {
                 Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                     action_id,
@@ -781,24 +578,11 @@ impl World {
                 let effective_consume =
                     merge_recipe_consume_with_maintenance_sink(self, &plan.consume, &plan.produce);
                 let preferred_consume_ledger = factory.input_ledger.clone();
-                // Direct recipe actions are site-bound. The explicit module
-                // compatibility lane preserves historical module-resolved
-                // actions whose recipe inputs were staged in world stock.
-                let consume_ledger = if allow_legacy_module_recipe_world_fallback {
-                    self.select_material_consume_ledger_with_world_fallback(
-                        preferred_consume_ledger.clone(),
-                        &effective_consume,
-                    )
-                } else {
-                    preferred_consume_ledger.clone()
-                };
-                let output_ledger = if allow_legacy_module_recipe_world_fallback
-                    && consume_ledger == MaterialLedgerId::world()
-                {
-                    MaterialLedgerId::world()
-                } else {
-                    factory.output_ledger.clone()
-                };
+                // Both direct and module-backed new submissions are
+                // site-bound. Historical RecipeStarted events remain
+                // reducer-compatible through their persisted ledgers.
+                let consume_ledger = preferred_consume_ledger.clone();
+                let output_ledger = factory.output_ledger.clone();
                 let mut resolved_logistics_route_ids = Vec::new();
                 let mut resolved_logistics_path_ids = logistics_path_ids.clone();
                 resolved_logistics_path_ids.sort();
@@ -1173,6 +957,8 @@ impl World {
     }
 }
 
+#[path = "action_to_event_economy_factory.rs"]
+mod action_to_event_economy_factory;
 #[path = "action_to_event_economy_profiles.rs"]
 mod action_to_event_economy_profiles;
 #[path = "action_to_event_economy_support.rs"]

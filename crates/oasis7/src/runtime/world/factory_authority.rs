@@ -1,13 +1,28 @@
 use super::super::{
     AgentLocationAuthorityV1, DomainEvent, FactoryConstructionPowerProfileV1,
-    FactorySiteAuthorityV1, WorldError, WorldEventBody,
+    FactorySiteAuthorityV1, LocationAnchorV1, WorldError, WorldEventBody,
 };
 use super::World;
 
 impl World {
-    /// Apply an authenticated runtime authority input through the journal.
-    /// The resulting event is the replay source; callers cannot mutate the
-    /// authority registries without going through this path.
+    /// Register an exact runtime location identity through the trusted
+    /// bootstrap/authority surface. This is deliberately not a player auth
+    /// protocol; gameplay actions can only consume the resulting registry.
+    pub fn set_location_anchor(&mut self, anchor: LocationAnchorV1) -> Result<(), WorldError> {
+        self.append_event(
+            WorldEventBody::Domain(DomainEvent::LocationAnchorUpdated { anchor }),
+            None,
+        )?;
+        Ok(())
+    }
+
+    pub fn register_location_anchor(&mut self, anchor: LocationAnchorV1) -> Result<(), WorldError> {
+        self.set_location_anchor(anchor)
+    }
+
+    /// Apply a trusted bootstrap/test authority input through the journal.
+    /// The resulting event is the replay source; gameplay callers cannot
+    /// mutate the authority registries without going through this path.
     pub fn set_agent_location_authority(
         &mut self,
         authority: AgentLocationAuthorityV1,

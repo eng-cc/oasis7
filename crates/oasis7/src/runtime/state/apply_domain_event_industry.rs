@@ -510,6 +510,7 @@ impl WorldState {
                 ready_at,
                 site_authority_revision,
                 site_location_id,
+                location_anchor_revision,
                 construction_power_obligation,
             } => {
                 self.apply_factory_build_started(
@@ -522,6 +523,7 @@ impl WorldState {
                     ready_at,
                     site_authority_revision.as_ref(),
                     site_location_id.as_deref(),
+                    location_anchor_revision.as_ref(),
                     construction_power_obligation.as_ref(),
                 )?;
             }

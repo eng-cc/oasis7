@@ -10,6 +10,7 @@ pub(super) fn event_kind_label(body: &WorldEventBody) -> &'static str {
             DomainEvent::AgentLocationAuthorityUpdated { .. } => {
                 "domain.agent_location_authority_updated"
             }
+            DomainEvent::LocationAnchorUpdated { .. } => "domain.location_anchor_updated",
             DomainEvent::FactorySiteAuthorityUpdated { .. } => {
                 "domain.economy.factory_site_authority_updated"
             }

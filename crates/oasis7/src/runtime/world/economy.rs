@@ -261,10 +261,11 @@ impl World {
                     ));
                 }
                 let preferred_ledger = factory.input_ledger.clone();
-                let mut available_inputs = self.ledger_material_stacks(&preferred_ledger);
-                if available_inputs.is_empty() && preferred_ledger != MaterialLedgerId::world() {
-                    available_inputs = self.material_stacks();
-                }
+                // New module-backed submissions are evaluated against the
+                // factory input ledger only. The ledger-aware view remains
+                // informational; admission below still consumes only the
+                // resolved factory ledger.
+                let available_inputs = self.ledger_material_stacks(&preferred_ledger);
 
                 let request = RecipeExecutionRequest {
                     recipe_id: recipe_id.clone(),
@@ -984,10 +985,6 @@ impl World {
         })
     }
 
-    fn material_stacks(&self) -> Vec<MaterialStack> {
-        self.ledger_material_stacks(&MaterialLedgerId::world())
-    }
-
     fn material_stacks_by_ledger(&self) -> BTreeMap<String, Vec<MaterialStack>> {
         self.state
             .material_ledgers
@@ -999,18 +996,6 @@ impl World {
                 )
             })
             .collect()
-    }
-
-    fn select_material_consume_ledger_for_module_request(
-        &self,
-        preferred_ledger: MaterialLedgerId,
-        consume: &[MaterialStack],
-    ) -> MaterialLedgerId {
-        if self.has_materials_in_ledger(&preferred_ledger, consume) {
-            preferred_ledger
-        } else {
-            MaterialLedgerId::world()
-        }
     }
 }
 

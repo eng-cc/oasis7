@@ -111,7 +111,7 @@ const ALLIANCE_MIN_MEMBER_COUNT: usize = 2;
 pub use self::industry_state::{
     AgentLocationAuthorityV1, FactoryBuildPowerObligationV1, FactoryConstructionPowerMode,
     FactoryConstructionPowerProfileV1, FactoryProductionSnapshot, FactoryProductionState,
-    FactoryProductionStatus, FactorySiteAuthorityV1,
+    FactoryProductionStatus, FactorySiteAuthorityV1, LocationAnchorV1,
 };
 
 /// Persisted factory instance state.
@@ -154,6 +154,8 @@ pub struct FactoryBuildJobState {
     pub site_authority_revision: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub site_location_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location_anchor_revision: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub construction_power_obligation: Option<FactoryBuildPowerObligationV1>,
 }
@@ -515,6 +517,10 @@ pub struct WorldState {
     /// an empty registry and cannot thereby grant new site admission.
     #[serde(default)]
     pub agent_location_authorities: BTreeMap<String, AgentLocationAuthorityV1>,
+    /// Runtime-owned exact location identities. Old snapshots decode this as
+    /// an empty registry and cannot thereby grant new authority or admission.
+    #[serde(default)]
+    pub location_anchors: BTreeMap<String, LocationAnchorV1>,
     /// Canonical factory-site admission records.
     #[serde(default)]
     pub factory_site_authorities: BTreeMap<String, FactorySiteAuthorityV1>,
@@ -974,6 +980,7 @@ impl WorldState {
             DomainEvent::AgentRegistered { .. }
             | DomainEvent::AgentMoved { .. }
             | DomainEvent::AgentLocationAuthorityUpdated { .. }
+            | DomainEvent::LocationAnchorUpdated { .. }
             | DomainEvent::FactorySiteAuthorityUpdated { .. }
             | DomainEvent::FactoryConstructionPowerProfileUpdated { .. }
             | DomainEvent::ActionAccepted { .. }

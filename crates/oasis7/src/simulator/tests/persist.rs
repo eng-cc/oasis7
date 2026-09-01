@@ -438,6 +438,7 @@ fn snapshot_runtime_snapshot_accepts_stringified_numeric_map_keys() {
             ready_at: 2,
             site_authority_revision: None,
             site_location_id: None,
+            location_anchor_revision: None,
             construction_power_obligation: None,
         },
     );

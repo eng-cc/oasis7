@@ -742,6 +742,14 @@ fn due_recipe_jobs_prioritize_by_product_role_tag_before_keyword_fallback() {
         "site-1",
         "factory.role_tag",
     );
+    world
+        .upsert_factory_profile(FactoryProfileV1 {
+            factory_id: "factory.role_tag".to_string(),
+            tier: 1,
+            recipe_slots: 2,
+            tags: vec!["assembly".to_string()],
+        })
+        .expect("set two-slot role-tag factory profile");
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),

@@ -1,5 +1,23 @@
 use super::*;
 
+/// Runtime-owned identity for a location used by site and agent authority.
+///
+/// The registry is intentionally keyed by this exact `location_id`; physical
+/// coordinates and caller-provided labels are not substitutes for an active
+/// anchor.  The serde defaults keep older snapshots readable, while admission
+/// still fails closed when a new authority update has no active anchor.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct LocationAnchorV1 {
+    #[serde(default)]
+    pub location_id: String,
+    #[serde(default)]
+    pub active: bool,
+    #[serde(default)]
+    pub authority_revision: u64,
+    #[serde(default)]
+    pub effective_at: WorldTime,
+}
+
 /// Canonical location assignment for an agent that can participate in
 /// location-bound runtime actions. `AgentState::pos` remains a physical
 /// coordinate only and is not a location authority.

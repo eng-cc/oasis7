@@ -37,10 +37,73 @@ fn normalize_allowlist(authority: &mut FactorySiteAuthorityV1) -> Result<(), Wor
     Ok(())
 }
 
+fn require_active_location_anchor(
+    anchors: &BTreeMap<String, LocationAnchorV1>,
+    location_id: &str,
+    now: WorldTime,
+) -> Result<(), WorldError> {
+    let Some(anchor) = anchors.get(location_id) else {
+        return Err(WorldError::ResourceBalanceInvalid {
+            reason: format!("location anchor unknown: {location_id}"),
+        });
+    };
+    if anchor.location_id != location_id || !anchor.active || anchor.authority_revision == 0 {
+        return Err(WorldError::ResourceBalanceInvalid {
+            reason: format!(
+                "location anchor inactive_or_stale: location_id={} revision={} active={}",
+                location_id, anchor.authority_revision, anchor.active
+            ),
+        });
+    }
+    if anchor.effective_at > now {
+        return Err(WorldError::ResourceBalanceInvalid {
+            reason: format!(
+                "location anchor not yet effective: location_id={} effective_at={} now={}",
+                location_id, anchor.effective_at, now
+            ),
+        });
+    }
+    Ok(())
+}
+
 impl WorldState {
+    pub(crate) fn active_location_anchor_revision(
+        &self,
+        location_id: &str,
+        now: WorldTime,
+    ) -> Result<u64, WorldError> {
+        require_active_location_anchor(&self.location_anchors, location_id, now)?;
+        Ok(self
+            .location_anchors
+            .get(location_id)
+            .expect("active location anchor was validated")
+            .authority_revision)
+    }
+
+    pub(super) fn apply_location_anchor_updated(
+        &mut self,
+        anchor: &LocationAnchorV1,
+    ) -> Result<(), WorldError> {
+        require_nonempty(anchor.location_id.as_str(), "location_id")?;
+        let current = self
+            .location_anchors
+            .get(anchor.location_id.as_str())
+            .map(|record| record.authority_revision);
+        if let Some(existing) = self.location_anchors.get(anchor.location_id.as_str()) {
+            if existing == anchor {
+                return Ok(());
+            }
+        }
+        next_revision(current, anchor.authority_revision, "location anchor")?;
+        self.location_anchors
+            .insert(anchor.location_id.clone(), anchor.clone());
+        Ok(())
+    }
+
     pub(super) fn apply_agent_location_authority_updated(
         &mut self,
         authority: &AgentLocationAuthorityV1,
+        now: WorldTime,
     ) -> Result<(), WorldError> {
         require_nonempty(authority.agent_id.as_str(), "agent_id")?;
         require_nonempty(authority.location_id.as_str(), "location_id")?;
@@ -49,6 +112,11 @@ impl WorldState {
                 agent_id: authority.agent_id.clone(),
             });
         }
+        require_active_location_anchor(
+            &self.location_anchors,
+            authority.location_id.as_str(),
+            now,
+        )?;
         let current = self
             .agent_location_authorities
             .get(authority.agent_id.as_str())
@@ -70,9 +138,15 @@ impl WorldState {
     pub(super) fn apply_factory_site_authority_updated(
         &mut self,
         authority: &FactorySiteAuthorityV1,
+        now: WorldTime,
     ) -> Result<(), WorldError> {
         let mut normalized = authority.clone();
         normalize_allowlist(&mut normalized)?;
+        require_active_location_anchor(
+            &self.location_anchors,
+            normalized.location_id.as_str(),
+            now,
+        )?;
         let current = self
             .factory_site_authorities
             .get(normalized.site_id.as_str())

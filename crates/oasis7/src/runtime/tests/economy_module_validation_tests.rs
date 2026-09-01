@@ -1,9 +1,9 @@
+use super::test_support::prepare_module_test_factory_build;
 use super::*;
 use crate::runtime::tests::signed_test_artifact_identity;
 use crate::runtime::{
-    AgentLocationAuthorityV1, FactoryConstructionPowerMode, FactoryConstructionPowerProfileV1,
-    FactoryProductionStatus, FactorySiteAuthorityV1, Manifest, MaterialLedgerId,
-    ModuleSubscription, ModuleSubscriptionStage, WorldError, WorldEvent,
+    FactoryProductionStatus, Manifest, MaterialLedgerId, ModuleSubscription,
+    ModuleSubscriptionStage, WorldError, WorldEvent,
 };
 use oasis7_wasm_abi::{
     ModuleCallFailure, ModuleCallInput, ModuleCallRequest, ModuleOutput, ModuleSandbox,
@@ -67,64 +67,6 @@ fn activate_module_manifest_for_test(world: &mut World, manifest: ModuleManifest
     world.apply_proposal(proposal_id).unwrap();
 }
 
-fn prepare_module_test_factory_build(
-    world: &mut World,
-    builder_agent_id: &str,
-    site_id: &str,
-    spec: &FactoryModuleSpec,
-) {
-    let location_id = format!("location-{site_id}");
-    world
-        .set_agent_location_authority(AgentLocationAuthorityV1 {
-            agent_id: builder_agent_id.to_string(),
-            location_id: location_id.clone(),
-            active: true,
-            authority_revision: 1,
-            effective_at: 0,
-        })
-        .expect("install module-test agent location authority");
-    world
-        .set_factory_site_authority(FactorySiteAuthorityV1 {
-            site_id: site_id.to_string(),
-            location_id,
-            owner_agent_id: builder_agent_id.to_string(),
-            authorized_agent_ids: Vec::new(),
-            chunk_ready: true,
-            active: true,
-            authority_revision: 1,
-            registered_at: 0,
-        })
-        .expect("install module-test factory site authority");
-    const CONSTRUCTION_POWER: i64 = 10;
-    world
-        .set_factory_construction_power_profile(FactoryConstructionPowerProfileV1 {
-            factory_id: spec.factory_id.clone(),
-            factory_kind: "test".to_string(),
-            source_module_id: None,
-            electricity_amount: CONSTRUCTION_POWER,
-            mode: FactoryConstructionPowerMode::StartOnlySink,
-            authority_revision: 1,
-            active: true,
-        })
-        .expect("install module-test construction power profile");
-    let builder_ledger = MaterialLedgerId::agent(builder_agent_id);
-    for stack in &spec.build_cost {
-        world
-            .set_ledger_material_balance(builder_ledger.clone(), stack.kind.as_str(), stack.amount)
-            .expect("seed module-test construction material");
-    }
-    let existing_power = world
-        .agent_resource_balance(builder_agent_id, ResourceKind::Electricity)
-        .expect("read module-test construction power");
-    world
-        .set_agent_resource_balance(
-            builder_agent_id,
-            ResourceKind::Electricity,
-            existing_power.saturating_add(CONSTRUCTION_POWER),
-        )
-        .expect("seed module-test construction power");
-}
-
 fn logistics_drone_module_recipe_world(factory_id: &str) -> World {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
@@ -145,6 +87,9 @@ fn logistics_drone_module_recipe_world(factory_id: &str) -> World {
     world.step().expect("build complete");
     for (kind, amount) in [("motor_mk1", 2), ("control_chip", 1), ("chassis_plate", 1)] {
         world.set_material_balance(kind, amount).unwrap();
+        world
+            .set_ledger_material_balance(MaterialLedgerId::site("site-1"), kind, amount)
+            .unwrap();
     }
     world
         .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 40)
@@ -398,12 +343,12 @@ fn schedule_recipe_with_module_blocks_atomic_commit_when_byproduct_validation_fa
 
     assert_eq!(world.pending_recipe_jobs_len(), 0);
     assert_eq!(
-        world.material_balance("logistics_drone"),
+        world.ledger_material_balance(&MaterialLedgerId::site("site-1"), "logistics_drone"),
         0,
         "a rejected byproduct must prevent main-product credit"
     );
     assert_eq!(
-        world.material_balance("assembly_scrap"),
+        world.ledger_material_balance(&MaterialLedgerId::site("site-1"), "assembly_scrap"),
         0,
         "a rejected byproduct must not be credited"
     );

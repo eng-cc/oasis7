@@ -2,9 +2,9 @@ use super::pos;
 use crate::runtime::{
     Action, AgentLocationAuthorityV1, DomainEvent, FactoryConstructionPowerMode,
     FactoryConstructionPowerProfileV1, FactoryProfileV1, FactorySiteAuthorityV1,
-    GovernanceProposalStatus, IndustryStage, MaterialDefaultPriority, MaterialLedgerId,
-    MaterialProfileV1, MaterialTransitPriority, MaterialTransportLossClass, ProductProfileV1,
-    ProposalDecision, RecipeProfileV1, RejectReason, World, WorldEventBody,
+    GovernanceProposalStatus, IndustryStage, LocationAnchorV1, MaterialDefaultPriority,
+    MaterialLedgerId, MaterialProfileV1, MaterialTransitPriority, MaterialTransportLossClass,
+    ProductProfileV1, ProposalDecision, RecipeProfileV1, RejectReason, World, WorldEventBody,
 };
 use crate::simulator::ResourceKind;
 use oasis7_wasm_abi::{FactoryModuleSpec, MaterialStack, RecipeExecutionPlan};
@@ -38,6 +38,14 @@ fn prepare_factory_build(
 ) {
     let location_id = format!("location-{site_id}");
     world
+        .set_location_anchor(LocationAnchorV1 {
+            location_id: location_id.clone(),
+            active: true,
+            authority_revision: 1,
+            effective_at: 0,
+        })
+        .expect("install location anchor");
+    world
         .set_agent_location_authority(AgentLocationAuthorityV1 {
             agent_id: builder_agent_id.to_string(),
             location_id: location_id.clone(),
@@ -70,6 +78,14 @@ fn prepare_factory_build(
             active: true,
         })
         .expect("install construction power profile");
+    world
+        .upsert_factory_profile(FactoryProfileV1 {
+            factory_id: spec.factory_id.clone(),
+            tier: spec.tier,
+            recipe_slots: spec.recipe_slots,
+            tags: spec.tags.clone(),
+        })
+        .expect("install factory capability profile");
     let builder_ledger = MaterialLedgerId::agent(builder_agent_id);
     for stack in &spec.build_cost {
         world

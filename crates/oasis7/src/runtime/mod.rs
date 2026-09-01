@@ -270,8 +270,8 @@ pub use state::{
     AgentLocationAuthorityV1, FactoryBuildJobState, FactoryBuildPowerObligationV1,
     FactoryConstructionPowerMode, FactoryConstructionPowerProfileV1,
     FactoryProductionFailureDispositionV1, FactoryProductionState, FactoryProductionStatus,
-    FactorySiteAuthorityV1, FactoryState, IndustryProgressState, LogisticsRouteV1,
-    MaterialTransferReceiptV1, MaterialTransitJobState, ModuleInstanceState,
+    FactorySiteAuthorityV1, FactoryState, IndustryProgressState, LocationAnchorV1,
+    LogisticsRouteV1, MaterialTransferReceiptV1, MaterialTransitJobState, ModuleInstanceState,
     ModuleReleaseAttestationState, ModuleReleaseManifestMappingState, RecipeJobState, WorldState,
 };
 

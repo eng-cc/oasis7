@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::runtime::{
     AgentLocationAuthorityV1, FactoryConstructionPowerMode, FactoryConstructionPowerProfileV1,
-    FactorySiteAuthorityV1, MaterialLedgerId,
+    FactoryProfileV1, FactorySiteAuthorityV1, LocationAnchorV1, MaterialLedgerId,
 };
 use crate::simulator::runtime_perf::unsupported_runtime_perf_snapshot;
 use crate::simulator::{
@@ -610,6 +610,19 @@ fn install_starter_factory_authorities(
     let Some((owner_agent_id, starter_location_id)) = agents.first() else {
         return Ok(());
     };
+    let mut anchored_locations = HashSet::new();
+    for (_, location_id) in agents {
+        if anchored_locations.insert(location_id.clone()) {
+            world
+                .set_location_anchor(LocationAnchorV1 {
+                    location_id: location_id.clone(),
+                    active: true,
+                    authority_revision: 1,
+                    effective_at: 0,
+                })
+                .map_err(|err| format!("{label} install location anchor failed: {err:?}"))?;
+        }
+    }
     for (agent_id, location_id) in agents {
         world
             .set_agent_location_authority(AgentLocationAuthorityV1 {
@@ -654,6 +667,27 @@ fn install_starter_factory_authorities(
             .map_err(|err| {
                 format!("{label} install factory construction power profile failed: {err:?}")
             })?;
+    }
+    for (factory_id, tier, tags) in [
+        (
+            FACTORY_SMELTER_MK1,
+            2,
+            vec!["smelter".to_string(), "thermal".to_string()],
+        ),
+        (
+            FACTORY_ASSEMBLER_MK1,
+            3,
+            vec!["assembler".to_string(), "precision".to_string()],
+        ),
+    ] {
+        world
+            .upsert_factory_profile(FactoryProfileV1 {
+                factory_id: factory_id.to_string(),
+                tier,
+                recipe_slots: 2,
+                tags,
+            })
+            .map_err(|err| format!("{label} install factory profile failed: {err:?}"))?;
     }
     let owner_ledger = MaterialLedgerId::agent(owner_agent_id);
     for (material, amount) in [

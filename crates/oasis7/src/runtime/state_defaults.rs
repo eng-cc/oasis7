@@ -76,6 +76,7 @@ impl Default for WorldState {
             recipe_profiles: BTreeMap::new(),
             factory_profiles: BTreeMap::new(),
             agent_location_authorities: BTreeMap::new(),
+            location_anchors: BTreeMap::new(),
             factory_site_authorities: BTreeMap::new(),
             factory_construction_power_profiles: BTreeMap::new(),
             factories: BTreeMap::new(),

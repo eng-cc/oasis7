@@ -12,6 +12,7 @@ impl WorldState {
         ready_at: &WorldTime,
         site_authority_revision: Option<&u64>,
         site_location_id: Option<&str>,
+        location_anchor_revision: Option<&u64>,
         construction_power_obligation: Option<&FactoryBuildPowerObligationV1>,
     ) -> Result<(), WorldError> {
         if self.pending_factory_builds.contains_key(job_id)
@@ -93,6 +94,19 @@ impl WorldState {
                         "factory build builder location authority missing: builder_agent_id={builder_agent_id}"
                     ),
                 })?;
+            // The pin was added after the power-obligation fields. Keep the
+            // field optional so old journal events still replay, but validate
+            // it whenever a newer event carries it.
+            let anchor_matches = location_anchor_revision.map_or(true, |revision| {
+                self.location_anchors
+                    .get(site_location)
+                    .is_some_and(|anchor| {
+                        anchor.location_id == site_location
+                            && anchor.authority_revision == *revision
+                            && anchor.active
+                            && anchor.effective_at <= now
+                    })
+            });
             if site.site_id != site_id
                 || location.agent_id != builder_agent_id
                 || *site_revision != site.authority_revision
@@ -101,6 +115,7 @@ impl WorldState {
                 || !site.chunk_ready
                 || !location.active
                 || location.location_id != site.location_id
+                || !anchor_matches
                 || (site.owner_agent_id != builder_agent_id
                     && !site
                         .authorized_agent_ids
@@ -234,6 +249,7 @@ impl WorldState {
                 ready_at: *ready_at,
                 site_authority_revision: site_authority_revision.copied(),
                 site_location_id: site_location_id.map(ToOwned::to_owned),
+                location_anchor_revision: location_anchor_revision.copied(),
                 construction_power_obligation: construction_power_obligation.cloned(),
             },
         );
