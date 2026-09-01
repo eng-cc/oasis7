@@ -116,6 +116,7 @@ fn sample_render_state(fragment_footprint_cm: f64) -> RenderState {
         }),
         receipt_target: None,
         recommended_target: None,
+        active_intent_target: None,
     }
 }
 fn render_test_app(render_state: RenderState) -> App {
@@ -265,6 +266,13 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
         selected_agent_cue_query
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("selected_agent_cue", sprite, transform)),
+    );
+    let mut active_intent_cue_query =
+        world.query::<(&PixelWorldActiveIntentCue, &Sprite, &Transform)>();
+    layers.extend(
+        active_intent_cue_query
+            .iter(world)
+            .map(|(_, sprite, transform)| pixel_layer("active_intent_cue", sprite, transform)),
     );
     let mut derived_position_cue_query =
         world.query::<(&PixelWorldDerivedPositionCue, &Sprite, &Transform)>();
@@ -435,6 +443,7 @@ fn layer_kind_id(kind: &str) -> u8 {
         "derived_position_cue" => 13,
         "missing_position_cue" => 16,
         "agent_power_cue" => 18,
+        "active_intent_cue" => 19,
         "location_corner_frame" => 14,
         "social_link" => 17,
         _ => 0,

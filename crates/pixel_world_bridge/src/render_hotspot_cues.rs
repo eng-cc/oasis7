@@ -144,7 +144,7 @@ pub(crate) fn reconcile_hotspot_cues(
                 canvas_y + f64::from(size * *offset_y),
                 width,
                 height,
-                1.5 + HOTSPOT_CUE_LAYER_Z_OFFSET,
+                hotspot_layer_z(&hotspot.kind) + HOTSPOT_CUE_LAYER_Z_OFFSET,
             ));
             transform.rotation = Quat::from_rotation_z(*rotation);
             if let Some(entity) = existing.get(&key) {

@@ -59,10 +59,28 @@ function eventKindLabel(event, locale, tr) {
     snapshot_created: ["世界快照", "World snapshot"],
     resource_change: ["资源变化", "Resource change"],
     agent_spoke: ["Agent 动态", "Agent activity"],
+    crisis_spawned: ["危机发生", "Crisis started"],
+    crisis_resolved: ["危机解决", "Crisis resolved"],
+    crisis_timed_out: ["危机超时", "Crisis timed out"],
+    major_world_event: ["重大世界事件", "Major world event"],
   }[String(event?.kind || "").toLowerCase()];
   if (known) return tr(locale, known[0], known[1]);
   if (!normalized) return tr(locale, "世界更新", "World update");
   return normalized.replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function majorEventStatusCopy(event, locale, tr) {
+  const lifecycle = {
+    active: ["进行中", "active"],
+    resolved: ["已解决", "resolved"],
+    timed_out: ["已超时", "timed out"],
+  }[event?.major_event?.lifecycle];
+  if (!lifecycle) return null;
+  return tr(
+    locale,
+    `危机${lifecycle[0]} · 严重度 ${event.major_event.severity}`,
+    `Crisis ${lifecycle[1]} · severity ${event.major_event.severity}`,
+  );
 }
 
 function WorldFeedPanel(props) {
@@ -151,12 +169,24 @@ function WorldFeedPanel(props) {
           <div class="event-list world-feed__events" data-world-feed-events="true">
             <For each={presentationEvents()}>
               {(event) => (
-                <article class="event-card world-feed__event" data-world-feed-event={event.event_seq}>
+                <article
+                  class="event-card world-feed__event"
+                  data-world-feed-event={event.event_seq}
+                  data-world-feed-major-event={event.major_event ? event.event_seq : undefined}
+                  data-major-event-category={event.major_event?.category}
+                  data-major-event-lifecycle={event.major_event?.lifecycle}
+                  data-major-event-severity={event.major_event?.severity}
+                >
                   <div class="event-card__header">
                     <div class="event-card__title">{event.summary}</div>
                     <span class="badge">{`#${event.event_seq}`}</span>
                   </div>
                   <div class="event-card__meta">{eventKindLabel(event, locale(), tr)}</div>
+                  <Show when={event.major_event?.freshness === "current" && status() === "ready"}>
+                    <div class="feedback-detail" role="status" aria-live="polite">
+                      {majorEventStatusCopy(event, locale(), tr)}
+                    </div>
+                  </Show>
                   <Show when={event.receipt_ref != null}>
                     <a
                       data-world-feed-receipt-ref={event.receipt_ref}

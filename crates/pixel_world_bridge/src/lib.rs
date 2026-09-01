@@ -196,6 +196,12 @@ struct ReceiptTarget {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+struct ActiveIntentTarget {
+    agent_id: String,
+    status: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
 struct RecommendedTarget {
     agent_id: String,
 }
@@ -234,6 +240,8 @@ struct RenderState {
     receipt_target: Option<ReceiptTarget>,
     #[serde(default)]
     recommended_target: Option<RecommendedTarget>,
+    #[serde(default)]
+    active_intent_target: Option<ActiveIntentTarget>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -772,6 +780,17 @@ fn render_signature(render_state: Option<&RenderState>, mode: RenderSignatureMod
     render_state.recommended_target.is_some().hash(&mut hasher);
     if let Some(recommended_target) = render_state.recommended_target.as_ref() {
         recommended_target.agent_id.hash(&mut hasher);
+    }
+
+    if matches!(mode, RenderSignatureMode::Content) {
+        render_state
+            .active_intent_target
+            .is_some()
+            .hash(&mut hasher);
+        if let Some(active_intent_target) = render_state.active_intent_target.as_ref() {
+            active_intent_target.agent_id.hash(&mut hasher);
+            active_intent_target.status.hash(&mut hasher);
+        }
     }
 
     hasher.finish()

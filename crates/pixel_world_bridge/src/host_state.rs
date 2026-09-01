@@ -962,13 +962,28 @@ fn build_world_bounds(input: &Value) -> Value {
     let space = obj(obj(input, "snapshot"), "config")
         .get("space")
         .unwrap_or(&Value::Null);
-    if !space.is_object() {
+    let Some(width_cm) = space.get("width_cm").and_then(Value::as_f64) else {
+        return Value::Null;
+    };
+    let Some(depth_cm) = space.get("depth_cm").and_then(Value::as_f64) else {
+        return Value::Null;
+    };
+    let Some(height_cm) = space.get("height_cm").and_then(Value::as_f64) else {
+        return Value::Null;
+    };
+    if !width_cm.is_finite()
+        || !depth_cm.is_finite()
+        || !height_cm.is_finite()
+        || width_cm <= 0.0
+        || depth_cm <= 0.0
+        || height_cm <= 0.0
+    {
         return Value::Null;
     }
     json!({
-        "width_cm": number_key(space, "width_cm", 0.0),
-        "depth_cm": number_key(space, "depth_cm", 0.0),
-        "height_cm": number_key(space, "height_cm", 0.0),
+        "width_cm": width_cm,
+        "depth_cm": depth_cm,
+        "height_cm": height_cm,
     })
 }
 
@@ -1141,6 +1156,32 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
             .map(|agent_id| json!({ "agent_id": agent_id }))
             .unwrap_or(Value::Null)
     };
+    let active_intent_target = {
+        let snapshot_gameplay = obj(obj(input, "snapshot"), "player_gameplay");
+        let intent = obj(snapshot_gameplay, "primary_intent");
+        let agent_id = str_key(intent, "agent_id");
+        let status = str_key(intent, "status");
+        let freshness = str_key(intent, "freshness");
+        let source_class = str_key(intent, "source_class");
+        let control_state = str_key(intent, "control_state");
+        let active_status = matches!(status, Some("submitted" | "accepted" | "blocked"));
+        let allowed_control =
+            control_state.is_some_and(|value| !matches!(value, "unavailable" | "control_lost"));
+        if world_bounds.is_object()
+            && agent_id.is_some()
+            && active_status
+            && freshness == Some("current")
+            && source_class == Some("runtime_projection")
+            && allowed_control
+            && agents
+                .iter()
+                .any(|agent| str_key(agent, "id") == agent_id && obj(agent, "pos").is_object())
+        {
+            json!({ "agent_id": agent_id, "status": status })
+        } else {
+            Value::Null
+        }
+    };
     let presentation = obj(input, "presentation");
 
     json!({
@@ -1160,6 +1201,7 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
         "visual_hotspots": visual_hotspots,
         "receipt_target": receipt_target,
         "recommended_target": recommended_target,
+        "active_intent_target": active_intent_target,
         "commercial_surface": commercial_surface,
         "presentation": {
             "world_bounds_label": obj(presentation, "world_bounds_label").clone(),

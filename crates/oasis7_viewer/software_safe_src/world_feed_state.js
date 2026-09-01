@@ -89,7 +89,89 @@ export function compareUnsignedDecimal(left, right) {
   return leftText < rightText ? -1 : 1;
 }
 
-function normalizeEvent(event) {
+function normalizeCausalReference(value) {
+  if (value == null) return null;
+  if (!value || typeof value !== "object") return undefined;
+  if (value.type === "action" && normalizeUnsignedInteger(value.data) != null) {
+    return { type: "action", data: value.data };
+  }
+  if (value.type === "effect"
+    && value.data && typeof value.data === "object"
+    && String(value.data.intent_id ?? "").trim()) {
+    return { type: "effect", data: { intent_id: String(value.data.intent_id).trim() } };
+  }
+  return undefined;
+}
+
+function normalizeMajorEvent(value, { worldId, reorgEpoch, eventSeq }) {
+  if (!value || typeof value !== "object"
+    || value.schema_version !== "major_world_event/v1"
+    || value.category !== "crisis"
+    || !String(value.subtype ?? "").trim()
+    || !Number.isInteger(value.severity)
+    || value.severity < 1
+    || value.severity > 5
+    || !value.identity
+    || !value.source) {
+    return null;
+  }
+  const identityWorldId = String(value.identity.world_id ?? "").trim();
+  const identityEpoch = normalizeUnsignedInteger(value.identity.reorg_epoch);
+  const identitySeq = normalizeUnsignedInteger(value.identity.event_seq);
+  const logicalTime = normalizeUnsignedInteger(value.logical_time);
+  if (identityWorldId !== worldId
+    || identityEpoch !== reorgEpoch
+    || identitySeq !== eventSeq
+    || logicalTime == null
+    || value.source.authority !== "runtime_journal") {
+    return null;
+  }
+  const lifecycleByKind = {
+    crisis_spawned: "active",
+    crisis_resolved: "resolved",
+    crisis_timed_out: "timed_out",
+  };
+  if (lifecycleByKind[value.source.event_kind] !== value.lifecycle
+    || !new Set(["current", "replay"]).has(value.freshness)
+    || !new Set(["public", "restricted"]).has(value.visibility)) {
+    return null;
+  }
+  const causalReference = normalizeCausalReference(value.causal_reference);
+  if (causalReference === undefined) return null;
+  let worldAnchor = null;
+  if (value.world_anchor != null) {
+    if (!value.world_anchor || typeof value.world_anchor !== "object"
+      || value.world_anchor.scope !== "world"
+      || value.world_anchor.position != null) {
+      return null;
+    }
+    const entityId = value.world_anchor.entity_id == null
+      ? null
+      : String(value.world_anchor.entity_id).trim();
+    if (value.world_anchor.entity_id != null && !entityId) return null;
+    worldAnchor = { scope: "world", ...(entityId ? { entity_id: entityId } : {}) };
+  }
+  return {
+    schema_version: "major_world_event/v1",
+    identity: {
+      world_id: identityWorldId,
+      reorg_epoch: value.identity.reorg_epoch,
+      event_seq: value.identity.event_seq,
+    },
+    category: "crisis",
+    subtype: String(value.subtype).trim(),
+    severity: value.severity,
+    lifecycle: value.lifecycle,
+    source: { authority: "runtime_journal", event_kind: value.source.event_kind },
+    freshness: value.freshness,
+    visibility: value.visibility,
+    logical_time: value.logical_time,
+    causal_reference: causalReference,
+    world_anchor: worldAnchor,
+  };
+}
+
+function normalizeEvent(event, context) {
   if (!event || typeof event !== "object") {
     return null;
   }
@@ -103,12 +185,18 @@ function normalizeEvent(event) {
   if (event.receipt_ref != null && typeof event.receipt_ref !== "string") {
     return null;
   }
+  const normalizedSeq = normalizeUnsignedInteger(event.event_seq);
+  const majorEvent = normalizeMajorEvent(event.major_event, {
+    ...context,
+    eventSeq: normalizedSeq,
+  });
   return {
     event_seq: typeof event.event_seq === "number" ? event.event_seq : eventSeq,
     kind,
     summary,
     detail,
     receipt_ref: event.receipt_ref == null ? null : event.receipt_ref,
+    ...(majorEvent ? { major_event: majorEvent } : {}),
   };
 }
 
@@ -116,6 +204,7 @@ function invalidState(previous, reason, error, { requiresSnapshotReload = true }
   return {
     ...previous,
     status: "unavailable",
+    events: [],
     stale: true,
     unavailableReason: reason,
     gapReason: null,
@@ -149,7 +238,7 @@ function normalizeEnvelope(feed) {
   if (unavailableReason != null && !UNAVAILABLE_REASONS.has(unavailableReason)) {
     return { error: "world feed unavailable reason is invalid" };
   }
-  const events = feed.events.map(normalizeEvent);
+  const events = feed.events.map((event) => normalizeEvent(event, { worldId, reorgEpoch }));
   if (events.some((event) => event == null)) {
     return { error: "world feed contains an invalid event" };
   }
@@ -233,6 +322,7 @@ export function consumeWorldFeed(previous, feed) {
         stale,
         gapReason: null,
         unavailableReason: unavailableReason || "source_unavailable",
+        events: [],
         snapshotReloadRequired: snapshotReloadRequired,
         requestInFlight: false,
         lastError: null,
@@ -242,23 +332,51 @@ export function consumeWorldFeed(previous, feed) {
   }
 
   const sameScope = state.worldId === worldId && String(state.reorgEpoch) === String(reorgEpoch);
+  if (state.status !== "gap" && state.worldId != null && !sameScope) {
+    return {
+      state: {
+        ...state,
+        status: "gap",
+        schemaVersion: WORLD_FEED_SCHEMA_VERSION,
+        worldId,
+        reorgEpoch,
+        cursor,
+        events: [],
+        stale: true,
+        gapReason: state.worldId === worldId ? "reorg_epoch_changed" : "cursor_invalid",
+        unavailableReason: null,
+        snapshotReloadRequired: true,
+        requestInFlight: false,
+        lastError: null,
+      },
+      requiresSnapshotReload: true,
+    };
+  }
   const existing = sameScope ? state.events : [];
-  const seen = new Set(existing.map((event) => worldFeedEventIdentity(worldId, reorgEpoch, event.event_seq)));
-  const appended = [];
+  const byIdentity = new Map(existing.map((event) => [
+    worldFeedEventIdentity(worldId, reorgEpoch, event.event_seq),
+    event,
+  ]));
+  const conflicted = new Set();
   let dedupedCount = 0;
   for (const event of events) {
     const identity = worldFeedEventIdentity(worldId, reorgEpoch, event.event_seq);
-    if (seen.has(identity)) {
+    if (conflicted.has(identity)) continue;
+    const previous = byIdentity.get(identity);
+    if (previous) {
+      if (JSON.stringify(previous) !== JSON.stringify(event)) {
+        byIdentity.delete(identity);
+        conflicted.add(identity);
+        continue;
+      }
       dedupedCount += 1;
       continue;
     }
-    seen.add(identity);
-    appended.push(event);
+    byIdentity.set(identity, event);
   }
-  const combinedEvents = [...existing, ...appended];
   // Store the canonical timeline order for every payload shape. The comparator
   // operates on decimal text so full u64 values never pass through JS Number.
-  const storedEvents = combinedEvents.slice().sort(
+  const storedEvents = [...byIdentity.values()].sort(
     (left, right) => compareUnsignedDecimal(left.event_seq, right.event_seq),
   );
   return {

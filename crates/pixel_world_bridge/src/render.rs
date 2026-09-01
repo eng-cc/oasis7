@@ -84,6 +84,9 @@ use receipt_target_cue::{PixelWorldReceiptTargetCue, reconcile_receipt_target_cu
 #[path = "render_recommended_target_cue.rs"]
 mod recommended_target_cue;
 use recommended_target_cue::{PixelWorldRecommendedTargetCue, reconcile_recommended_target_cues};
+#[path = "render_active_intent_cue.rs"]
+mod active_intent_cue;
+use active_intent_cue::{PixelWorldActiveIntentCue, reconcile_active_intent_cues};
 #[path = "render_canvas_resize.rs"]
 mod canvas_resize;
 #[path = "render_hotspot_core.rs"]
@@ -115,6 +118,15 @@ const MODULE_VISUAL_ENTITY_LAYER_Z: f32 = 2.7;
 const SELECTED_LOCATION_CUE_LAYER_Z: f32 = 2.1;
 const AGENT_LAYER_Z: f32 = 3.0;
 const SELECTED_ENTITY_LAYER_Z_OFFSET: f32 = 1.0;
+const BLOCKER_ATTENTION_LAYER_Z: f32 = AGENT_LAYER_Z + SELECTED_ENTITY_LAYER_Z_OFFSET + 0.04;
+
+pub(crate) fn hotspot_layer_z(kind: &str) -> f32 {
+    if kind == "blocker" {
+        BLOCKER_ATTENTION_LAYER_Z
+    } else {
+        1.5
+    }
+}
 const SELECTED_ENTITY_SIZE_SCALE: f64 = 1.35;
 const SELECTED_LOCATION_CUE_THICKNESS_PX: f32 = 2.0;
 const SELECTED_LOCATION_CUE_PADDING_PX: f32 = 2.0;
@@ -713,8 +725,9 @@ fn reconcile_hotspots(
             "goal" => Color::srgba_u8(250, 204, 21, 196),
             _ => Color::srgba(0.56, 0.84, 1.0, (0.28 + (emphasis * 0.48)) as f32),
         };
+        let layer_z = hotspot_layer_z(&hotspot.kind);
         let mut transform = Transform::from_translation(to_bevy_translation(
-            canvas_x, canvas_y, width, height, 1.5,
+            canvas_x, canvas_y, width, height, layer_z,
         ));
         transform.rotation = Quat::from_rotation_z(std::f32::consts::FRAC_PI_4);
         let sprite = sprite_for_square(color, size as f32);
@@ -792,6 +805,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     selected_agent_cues: Query<'w, 's, (Entity, &'static PixelWorldSelectedAgentCue)>,
     receipt_target_cues: Query<'w, 's, (Entity, &'static PixelWorldReceiptTargetCue)>,
     recommended_target_cues: Query<'w, 's, (Entity, &'static PixelWorldRecommendedTargetCue)>,
+    active_intent_cues: Query<'w, 's, (Entity, &'static PixelWorldActiveIntentCue)>,
     link_visuals: Query<'w, 's, (Entity, &'static PixelWorldLinkVisual)>,
     social_link_visuals: Query<'w, 's, (Entity, &'static PixelWorldSocialLinkVisual)>,
     hotspot_visuals: Query<'w, 's, (Entity, &'static PixelWorldHotspotVisual)>,
@@ -843,6 +857,9 @@ pub(crate) fn render_scene(
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.recommended_target_cues.iter() {
+            commands.entity(entity).despawn();
+        }
+        for (entity, _) in queries.active_intent_cues.iter() {
             commands.entity(entity).despawn();
         }
         despawn_hotspot_core_treatments(&mut commands, &queries.hotspot_cores);
@@ -940,6 +957,9 @@ pub(crate) fn render_scene(
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.recommended_target_cues.iter() {
+            commands.entity(entity).despawn();
+        }
+        for (entity, _) in queries.active_intent_cues.iter() {
             commands.entity(entity).despawn();
         }
         despawn_hotspot_core_treatments(&mut commands, &queries.hotspot_cores);
@@ -1139,6 +1159,13 @@ pub(crate) fn render_scene(
         width,
         height,
         animation_ms,
+    );
+    reconcile_active_intent_cues(
+        &mut commands,
+        &runtime,
+        &queries.active_intent_cues,
+        width,
+        height,
     );
     reconcile_receipt_target_cues(
         &mut commands,

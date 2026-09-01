@@ -3239,6 +3239,7 @@ describe("viewer web ui automation baseline", () => {
       "gameplay_diagnostics_expanded",
       "hosted_login_gate",
       "empty_world_recovery",
+      "major_world_event_crisis",
     ];
 
     for (const fixtureName of states) {
@@ -3289,6 +3290,11 @@ describe("viewer web ui automation baseline", () => {
     expect(within(agentButton).getByText("Selected")).toBeInTheDocument();
     expect(within(targetsPanel).getByText("Assembly Nexus")).toBeInTheDocument();
     expect(within(container.querySelector("#viewer-details-panel")).getByText("Agent Chat")).toBeInTheDocument();
+    const agentContext = within(container.querySelector("#viewer-details-panel"))
+      .getByRole("region", { name: "Agent Context" });
+    expect(agentContext).toHaveAttribute("data-agent-context-kind", "agent");
+    expect(within(agentContext).getByText("Agent 0")).toBeInTheDocument();
+    expect(agentContext.closest(".command-surface")).toHaveAttribute("data-command-agent", "agent-0");
     fireEvent.click(locationButton);
     await waitFor(() => {
       expect(locationButton).toHaveAttribute("data-selected", "true");
@@ -3378,5 +3384,18 @@ describe("viewer web ui automation baseline", () => {
     expect(within(container.querySelector("#viewer-stage-panel")).getAllByText("Request snapshot").length).toBeGreaterThan(0);
     expect(within(container.querySelector("#viewer-details-panel")).getByText("Claim Your First Agent")).toBeInTheDocument();
     expect(container.querySelector("[data-callout-kind='empty_world_recovery']")).toBeTruthy();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("renders the authorized Crisis fixture as ambient World Feed context only", async () => {
+    const { container } = await renderViewerApp({
+      snapshot: null,
+      search: `${viewerUrl()}&viewer_visual_fixture=major_world_event_crisis`,
+    });
+
+    const feed = container.querySelector("#viewer-world-feed");
+    expect(within(feed).getByText("Crisis active · severity 4")).toBeInTheDocument();
+    expect(feed.querySelector("[data-major-event-category='crisis']")).toBeTruthy();
+    expect(container.querySelector("[data-major-world-event-marker]")).toBeNull();
+    expect(container.querySelector("[data-world-feed-receipt-ref]")).toBeNull();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 });

@@ -115,7 +115,7 @@ pub(crate) fn reconcile_hotspot_cores(
             canvas_y,
             width,
             height,
-            1.5 + HOTSPOT_CORE_LAYER_Z_OFFSET,
+            hotspot_layer_z(&hotspot.kind) + HOTSPOT_CORE_LAYER_Z_OFFSET,
         ));
 
         if let Some(entity) = existing_by_id.get(&hotspot.id).copied() {

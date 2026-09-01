@@ -442,6 +442,87 @@ fn rust_host_state_projects_only_targetable_action_receipts_for_pixel_world_disp
 }
 
 #[test]
+fn rust_host_state_projects_only_authoritative_active_intent_targets() {
+    let mut active_input = sample_input();
+    active_input["snapshot"]["player_gameplay"]["primary_intent"] = json!({
+        "schema_version": 2,
+        "intent_id": "intent:agent-0:accepted",
+        "agent_id": "agent-0",
+        "status": "accepted",
+        "world_id": "world-test",
+        "reorg_epoch": 0,
+        "logical_time": 12,
+        "event_seq": 4,
+        "source_class": "runtime_projection",
+        "freshness": "current",
+        "control_state": "controllable"
+    });
+    let active = build_render_state(&active_input);
+    assert_eq!(
+        active["active_intent_target"],
+        json!({ "agent_id": "agent-0", "status": "accepted" }),
+        "an explicitly current, controllable runtime Intent may create one display-only target"
+    );
+
+    let mut production_shape = sample_input();
+    production_shape["snapshot"]["player_gameplay"]["primary_intent"] =
+        active_input["snapshot"]["player_gameplay"]["primary_intent"].clone();
+    let projected_production_shape = build_render_state(&production_shape);
+    assert_eq!(
+        projected_production_shape["active_intent_target"],
+        json!({ "agent_id": "agent-0", "status": "accepted" }),
+        "the canonical snapshot.player_gameplay.primary_intent production shape must drive the cue"
+    );
+
+    for (field, value) in [
+        ("freshness", json!("stale")),
+        ("control_state", json!("unavailable")),
+        ("status", json!("completed")),
+        ("agent_id", json!("agent-not-rendered")),
+    ] {
+        let mut rejected_input = active_input.clone();
+        rejected_input["snapshot"]["player_gameplay"]["primary_intent"][field] = value;
+        let rejected = build_render_state(&rejected_input);
+        assert!(
+            rejected.get("active_intent_target").is_none()
+                || rejected["active_intent_target"].is_null(),
+            "{field} must fail closed rather than infer an active Intent cue"
+        );
+    }
+
+    let mut missing_position = active_input;
+    missing_position["lists"]["agents"][0]["pos"] = Value::Null;
+    missing_position["lists"]["agents"][0]["location_id"] = Value::Null;
+    let missing_position_state = build_render_state(&missing_position);
+    assert!(
+        missing_position_state["active_intent_target"].is_null(),
+        "an active Intent without an authoritative rendered position must fail closed"
+    );
+
+    let mut missing_world_bounds = production_shape.clone();
+    missing_world_bounds["snapshot"]["config"]["space"] = Value::Null;
+    let missing_world_bounds_state = build_render_state(&missing_world_bounds);
+    assert!(
+        missing_world_bounds_state["active_intent_target"].is_null(),
+        "an active Intent without authoritative world bounds must not use a fallback position"
+    );
+
+    for invalid_space in [
+        json!({}),
+        json!({ "width_cm": 0, "depth_cm": 5_000_000, "height_cm": 1_000_000 }),
+        json!({ "width_cm": 10_000_000, "depth_cm": 0, "height_cm": 1_000_000 }),
+        json!({ "width_cm": 10_000_000, "depth_cm": 5_000_000, "height_cm": 0 }),
+    ] {
+        let mut invalid_bounds = production_shape.clone();
+        invalid_bounds["snapshot"]["config"]["space"] = invalid_space;
+        assert!(
+            build_render_state(&invalid_bounds)["active_intent_target"].is_null(),
+            "an active Intent must reject incomplete or non-positive world bounds"
+        );
+    }
+}
+
+#[test]
 fn rust_host_state_projects_only_enabled_rendered_recommended_targets_for_display() {
     let enabled = build_render_state(&sample_input());
     assert_eq!(

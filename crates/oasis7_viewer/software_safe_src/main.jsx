@@ -23,6 +23,8 @@ import {
 import { recoveryOptionVisualFixture } from "./viewer_recovery_option_fixture.js";
 import { AgentActivitySurface } from "./agent_activity_surface.jsx";
 import { AgentIntentSurface } from "./agent_intent_surface.jsx";
+import { AgentContextLite } from "./agent_context_lite.jsx";
+import { buildAgentContextDisplayModel } from "./viewer_agent_context_display_model.js";
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
 const [viewerStateRevision, setViewerStateRevision] = createSignal(0);
 function observeViewerStateRevision() {
@@ -3266,6 +3268,30 @@ function InteractionPanel() {
     }
     return status;
   };
+  const selectedAgentFreshness = () => {
+    revision();
+    const selected = core.state.snapshot?.model?.agents?.[agentId()];
+    const intent = selectedAgentIntent();
+    const intentMatches = normalizedId(intent?.agent_id) === normalizedId(agentId())
+      && (!intent?.target_agent_id || normalizedId(intent.target_agent_id) === normalizedId(agentId()));
+    return selected?.freshness || (intentMatches ? intent?.freshness : null) || null;
+  };
+  const selectedAgentContextModel = () => buildAgentContextDisplayModel({
+    snapshot: core.state.snapshot,
+    selected: { kind: core.state.selectedKind, id: core.state.selectedId },
+    agent: agentId() ? core.state.snapshot?.model?.agents?.[agentId()] : null,
+    agentVisible: Boolean(agentId()),
+    // Player-level gameplay summary remains in the Player HUD. Agent Context
+    // accepts only an explicitly Agent-bound projection, which is not
+    // currently published by this snapshot contract.
+    gameplay: null,
+    intent: selectedAgentIntent(),
+    freshness: selectedAgentFreshness(),
+    connectionStatus: selectedAgentIntentConnectionStatus(),
+    feedback: chatFeedback() || promptFeedback(),
+    receipt: null,
+    locale: locale(),
+  });
   const selectedAgentStatus = () => describeAgentSessionStatus(agentId(), locale());
   const canControlSelectedAgent = () => selectedAgentStatus().isCurrentSessionAgent;
   const selectedAgentControlReason = () => selectedAgentStatus().detail;
@@ -3372,12 +3398,7 @@ function InteractionPanel() {
           {chatControlsEnabled() ? tr(locale(), "聊天可用", "Chat Ready") : tr(locale(), "聊天受限", "Chat Limited")}
         </Badge>
       </div>
-      <AgentActivitySurface activity={selectedAgentActivity()} locale={locale()} />
-      <AgentIntentSurface
-        intent={selectedAgentIntent()}
-        locale={locale()}
-        connectionStatus={selectedAgentIntentConnectionStatus()}
-      />
+      <AgentContextLite model={selectedAgentContextModel()} locale={locale()} />
       <Show
         when={interactionEnabled() && canControlSelectedAgent()}
         fallback={
@@ -4285,6 +4306,46 @@ function installViewerVisualFixture() {
       core.state.selectedKind = null;
       core.state.selectedId = null;
       core.state.selectedObject = null;
+    },
+    major_world_event_crisis() {
+      core.injectSnapshot(viewerFixtureBaseSnapshot(), { returnState: false });
+      const mode = String(new URLSearchParams(window.location.search || "").get("major_event_state") || "current");
+      const historical = mode === "replay";
+      const suppressed = mode === "gap" || mode === "denied";
+      core.state.worldFeed = {
+        status: mode === "gap" ? "gap" : mode === "denied" ? "unavailable" : historical ? "replay" : "ready",
+        schemaVersion: "world_feed/v1",
+        worldId: "fixture-world",
+        reorgEpoch: "0",
+        cursor: "fixture-current",
+        stale: suppressed,
+        gapReason: mode === "gap" ? "reorg_epoch_changed" : null,
+        unavailableReason: mode === "denied" ? "permission_denied" : null,
+        snapshotReloadRequired: mode === "gap",
+        requestInFlight: false,
+        events: suppressed ? [] : [{
+          event_seq: "7",
+          kind: "crisis_spawned",
+          summary: "Crisis event",
+          detail: "",
+          receipt_ref: null,
+          major_event: {
+            schema_version: "major_world_event/v1",
+            identity: { world_id: "fixture-world", reorg_epoch: "0", event_seq: "7" },
+            category: "crisis",
+            subtype: "power_shortage",
+            severity: 4,
+            lifecycle: "active",
+            source: { authority: "runtime_journal", event_kind: "crisis_spawned" },
+            freshness: historical ? "replay" : "current",
+            visibility: "public",
+            logical_time: "42",
+            causal_reference: null,
+            world_anchor: { scope: "world", entity_id: "crisis-fixture" },
+          },
+        }],
+      };
+      core.requestRender();
     },
   };
   installAgentIntentV2VisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });

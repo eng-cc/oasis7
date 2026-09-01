@@ -4,6 +4,21 @@ import { WorldFeedPanel } from "./world_feed_panel.jsx";
 
 const tr = (_locale, zh, en) => en;
 
+const majorEvent = (overrides = {}) => ({
+  schema_version: "major_world_event/v1",
+  identity: { world_id: "world-a", reorg_epoch: 2, event_seq: 7 },
+  category: "crisis",
+  severity: 4,
+  lifecycle: "active",
+  source: { authority: "runtime_journal", event_kind: "crisis_spawned" },
+  freshness: "current",
+  visibility: "public",
+  logical_time: 42,
+  causal_reference: { type: "action", data: 44 },
+  world_anchor: null,
+  ...overrides,
+});
+
 describe("WorldFeedPanel", () => {
   it("keeps an explicit contextual surface for every protocol state", () => {
     const onReloadSnapshot = vi.fn();
@@ -164,5 +179,111 @@ describe("WorldFeedPanel", () => {
       "9007199254740992",
       "9007199254740993",
     ]);
+  });
+
+  it("renders an anchored-less current crisis as ambient context, never as a stage marker or formal receipt", () => {
+    render(() => (
+      <WorldFeedPanel
+        feed={() => ({
+          status: "ready",
+          events: [{
+            event_seq: 7,
+            kind: "major_world_event",
+            summary: "A crisis is active",
+            detail: "Ambient crisis context",
+            receipt_ref: null,
+            major_event: majorEvent(),
+          }],
+          worldId: "world-a",
+          reorgEpoch: 2,
+          stale: false,
+        })}
+        locale={() => "en"}
+        tr={tr}
+      />
+    ));
+
+    const event = document.querySelector('[data-world-feed-major-event="7"]');
+    expect(event).toBeInTheDocument();
+    expect(event).toHaveAttribute("data-major-event-category", "crisis");
+    expect(event).toHaveAttribute("data-major-event-lifecycle", "active");
+    expect(event).toHaveAttribute("data-major-event-severity", "4");
+    expect(event.querySelector("[data-major-event-stage-marker]")).toBeNull();
+    expect(event.querySelector("[data-major-event-highlight]")).toBeNull();
+    expect(event.querySelector("[data-world-feed-receipt-ref]")).toBeNull();
+    expect(document.querySelectorAll("#viewer-action-receipt")).toHaveLength(0);
+  });
+
+  it("keeps replayed historical crisis context in the feed without a toast or attention announcement", () => {
+    render(() => (
+      <WorldFeedPanel
+        feed={() => ({
+          status: "replay",
+          events: [{
+            event_seq: 7,
+            kind: "major_world_event",
+            summary: "Historical crisis",
+            detail: "Replay context",
+            receipt_ref: null,
+            major_event: majorEvent({ freshness: "replay" }),
+          }],
+          worldId: "world-a",
+          reorgEpoch: 2,
+          stale: false,
+        })}
+        locale={() => "en"}
+        tr={tr}
+      />
+    ));
+
+    expect(document.querySelector('[data-world-feed-major-event="7"]')).toBeInTheDocument();
+    expect(document.querySelector('[data-world-feed-major-event-toast="7"]')).toBeNull();
+    expect(document.querySelector('[data-world-feed-major-event="7"] [role="status"]')).toBeNull();
+  });
+
+  it("provides a CJK-readable polite status for current crisis context without leaking raw protocol enums", () => {
+    const chineseTr = (_locale, zh) => zh;
+    render(() => (
+      <WorldFeedPanel
+        feed={() => ({
+          status: "ready",
+          events: [{
+            event_seq: 7,
+            kind: "major_world_event",
+            summary: "发生危机",
+            detail: "环境上下文",
+            receipt_ref: null,
+            major_event: majorEvent(),
+          }],
+        })}
+        locale={() => "zh-CN"}
+        tr={chineseTr}
+      />
+    ));
+
+    const status = screen.getByRole("status");
+    expect(status).toHaveAttribute("aria-live", "polite");
+    expect(status).toHaveTextContent(/危机/);
+    expect(document.body).toHaveTextContent(/重大世界事件/);
+    expect(document.body).not.toHaveTextContent(/crisis_spawned|runtime_journal|public|current/);
+  });
+
+  it("does not surface a major event after permission is lost", () => {
+    render(() => (
+      <WorldFeedPanel
+        feed={() => ({
+          status: "unavailable",
+          unavailableReason: "permission_denied",
+          stale: true,
+          events: [],
+        })}
+        locale={() => "en"}
+        tr={tr}
+      />
+    ));
+
+    expect(screen.getByText("World activity unavailable")).toBeInTheDocument();
+    expect(document.querySelector("[data-world-feed-major-event]")).toBeNull();
+    expect(document.querySelector("[data-world-feed-major-event-toast]")).toBeNull();
   });
 });

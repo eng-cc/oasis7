@@ -46,6 +46,12 @@
 env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --allow-debug-scenario --llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
 ```
 
+Major World Event audience policy is a separate explicit runtime option. The default is
+`--major-world-event-visibility unknown`, which exposes no Crisis event. A trusted deployment may
+set `public` or `restricted` only when its operator/session policy has supplied that authority;
+`denied` explicitly suppresses the event. Login, Agent selection/control, hosted join, and Director
+diagnostics never change this option implicitly.
+
 - `oasis7_viewer_live` 当前默认走 runtime/world 链路。
 - `oasis7_viewer_live` 负责 Viewer live server 与可选 Web bridge，不内嵌 node、consensus、reward runtime、topology 或 execution-world persistence，也不提供 `--tick-ms` 作为外部推进时钟。它仍可通过 `--chain-status-bind` 观察 committed world，并在配置 status bind 时通过 `--chain-submit-bind` 提交 chain-linked action；这些是 client endpoints，不授予 node ownership。Viewer event delivery 不能等同于 node/consensus tick。
 - 正式 gameplay 要求已配置且可连通的 LLM provider。
@@ -118,9 +124,11 @@ Player 不采用永久左/中/右列，也不采用可直接执行世界动作�
 - **世界解释语义**：World Stage 直接表达已发布的实体身份/状态、活动/路线、关系类型/状态
   和重大事件。周边 UI 只负责解释、定位和操作；不能由距离、同屏、靠近、数量或 event text
   猜 owner、resource、trust、relation 或因果。
-- **实体优先**：从选中的 Agent、Facility、Territory 或 Organization 进入 contextual
-  Inspector/Console；Market、War、Governance、Production、Contracts、Relations 是实体能力，
-  不是新的一级 Player 路由。缺少权威 projection 或权限时显示 unavailable/只读恢复路径。
+- **实体优先（P1-A 后续目标）**：P1-A 只从选中的 Agent 进入 Agent Context；Location、
+  Facility、Territory、Organization、Depot、Module 的 generalized Inspector/Console 属于
+  后续 P1 slice，不能覆盖或扩大 Agent-only P1-A。Market、War、Governance、Production、
+  Contracts、Relations 是后续实体能力，不是新的一级 Player 路由；缺少权威 projection 或
+  权限时显示 unavailable/只读恢复路径。
 - **间接控制**：玩家发送 `Ask`、`Suggest`、`Prioritize`、`Negotiate`、`Investigate`、
   `Propose`、`Warn` 或 `Delegate` 等 guidance/template。必须能区分
   `Guidance → Intent → accepted/rejected/blocked → Activity → World Action → Receipt`；
@@ -146,6 +154,59 @@ known/stale、reconnecting、unknown、conflict、unavailable、control lost 要
 3. **Deferred / contract-gated**：全局资产框、完整 capability hotbar、新资源/ownership/
    relationship/经济字段和新的取消/批准/重排动作，待产品、玩法、runtime、agent 的规则、
    source、freshness、permission、idempotency 与 receipt 合同明确后再实现。
+
+### P1-A Agent Context Lite（源码、自动化与 headed 验收已完成）
+
+P1-A 是当前 Viewer 的第一个 Agent-only context slice，不是通用多实体 Inspector。
+
+- 其固定组合是按需 Command/Inspector 中的 selected-Agent context。它把选中 Agent 的
+  可读 identity/location、activity/state、Objective、已发布 Next Move、blocker、Player
+  Leverage 和明确匹配的 Intent 放入上下文；Chat 仍是授权控制入口。本手册不规定源码模块
+  或组件名称，具体实现边界以配对 PRD/design 为准。
+- display model 只格式化已有的权威世界/玩法投影、connection/freshness 和语义反馈；
+  普通 feedback 只能作为非因果状态。它不新增 runtime/protocol 字段，不从 Feed、事件文字、
+  坐标、时间或 raw diagnostics 推断计划、成功、关系、ETA 或资源。
+- `Action Receipt` 仍是唯一玩家因果反馈：只有明确的权威因果身份才算 Receipt；Intent
+  生命周期、普通 feedback 和 World Feed 不能创建或替换它。Player/Cinematic 每个呈现只有
+  一个正式 Receipt；`accepted`、`queued`、`executing` 和 `completed` 按实际权威状态区分。
+- 选中 Location、Facility、Territory、Organization、Depot 或 Module 时，未来实现必须展示
+  可读 identity 和 honest unavailable/待同步恢复说明；不得显示上一 Agent 的上下文，也不
+  得凭 proximity、同屏或名称生成 ownership、resource、relation 或 capability。相应实体
+  projection 和权限合同完成后，才可由后续 slice 注入内容；通用多实体 Inspector 是
+  P1-A 之后的目标，不属于本切片。
+
+该 slice 的验收包括：Agent selected 的 current、last-known/stale、missing、reconnecting、
+unknown、conflict、replay、gap、reorg、unavailable、control/permission-lost 状态可区分；
+非 Agent 选择不泄漏 Agent 状态；Player/Cinematic 每个呈现只有一个正式 Receipt；并通过
+headed `1440x1000`、`1024x768`、`768x1024`、`390x844`、键盘/IME、CJK、长文本和空态验证。
+源码、自动化与真实 WebGL headed 证据已覆盖该边界；发行放行仍服从仓库 terminal gates。
+
+### P1-B/P1-C 当前实现边界
+
+- **P1-B World semantic presentation**：当前把已发布的 Agent、Location、Facility、Territory、
+  Organization、Depot、Module identity/state/activity，以及 route/assignment、power/resource、
+  facility/module cues 和 relation kind/status 组织到稳定的世界舞台语言。注意力优先级为
+  普通 Agent < selected Agent < active Intent < blocker < receipt target；major event 只在
+  P1-C authority gate 通过后作为后置扩展。persistent selection 与 transient attention 必须
+  区分，命中目标、键盘焦点和可读身份不能因高亮消失。
+  不得从距离、同屏、proximity、文字、坐标或动画推断 relation、Trust、ownership、resource、
+  capability 或因果。
+- P1-B 内部 presentation DTO 只允许从既有 authoritative snapshot 派生；例如 active Intent 的
+  舞台目标只能来自 `snapshot.player_gameplay.primary_intent`。来源缺失、陈旧、冲突或未授权时
+  不显示，不得从 summary、feedback、Activity、文本或 renderer 状态回退推断。
+- Renderer Unavailable、探测后异步失败、fallback、retry、safe-area 和恢复属于跨切片的安全
+  验收，不是 P1-B 的语义来源。Renderer 不可用时仍保持可读世界入口和诚实 retry；retry 不承诺
+  为无能力浏览器添加 WebGL2，也不生成 `LIVE`、world progress 或 Receipt。P1-B 不改变
+  runtime/protocol，也不新增玩家可见字段。
+- **P1-C Major World Events**：当前只接受 runtime journal 投影的 CrisisSpawned/Resolved/TimedOut，
+  显示数值 severity `1..=5` 和 active/resolved/timed_out 生命周期。它们只属于 ambient World Feed；
+  runtime 会把 journal 与 canonical `CrisisState` join；缺失或字段冲突时不显示，初始 feed 只有
+  canonical 最新 transition 为 current，较早 transition 与 cursor replay 都是历史。
+  feed 保留 canonical opaque subtype；同 identity 冲突 payload 或未声明的 epoch 切换会清空
+  attention 并进入 snapshot reload，不会任取一条或静默拼接。
+  crisis 没有权威空间位置，所以没有 stage marker/highlight，也不能替代 Receipt。回放只保留历史，
+  gap/reorg/权限丢失会清空事件注意力；生产 session 没有显式 audience policy 时不显示。War、
+  Governance 与其他类别仍不在 allowlist 内。
 
 ### Terminal Player shell playbook
 This section describes the implemented Player-shell, World Feed, and Director

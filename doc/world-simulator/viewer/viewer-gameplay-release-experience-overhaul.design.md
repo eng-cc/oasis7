@@ -79,15 +79,98 @@ The next bounded visual pass uses this reading order:
 #### Agent Context presentation boundary
 
 `Agent Context Lite` may present explicit selected identity/location, Objective, published Next
-Move, blocker, Player Leverage/execution state, and the latest authoritative receipt/feedback.
-Unknown, missing, local-pending, and stale values remain visibly distinct. World Feed, recent event
-text, cursor movement, wall-clock time, coordinates, or raw debug objects cannot create intent,
-progress, success, ETA, relationship, or rationale.
+Move, blocker, Player Leverage/execution state, and the latest explicit causal Action Receipt.
+Non-causal feedback may remain visible as status only; it is never a Receipt. The formal causal
+surface is the existing Viewer `data-viewer-overlay="receipt"` surface, with the existing
+`#viewer-action-receipt` Player anchor where applicable, and there must be exactly one per active
+Player/Cinematic presentation. Unknown, missing, local-pending, and stale values remain visibly
+distinct. World Feed, recent event text, cursor movement, wall-clock time, coordinates, or raw debug
+objects cannot create intent, progress, success, ETA, relationship, rationale, or a second Receipt.
 
 `Agent Console V2` is a later contract-gated design surface. ETA, energy, cargo, module health,
 relationships, plan/memory/rationale, provider or cost data, multi-Agent graphs, and new control
 verbs require producer/runtime/agent definitions for source, freshness, permission, missing-state,
 idempotency, and receipt semantics before visual design is treated as implementable.
+
+#### P1-A Agent Context Lite（源码、自动化与 headed 验收已完成）
+
+P1-A 先实现一个 Agent-only composition，作为后续实体 Inspector 的窄入口；Location、
+Facility、Territory、Organization、Depot、Module 的 generalized Inspector 明确是 post-P1-A。
+它不把当前 Player shell 扩成常驻三栏，也不声称已实现完整的 Agent Console V2。
+
+- **Composition seam**：设计绑定现有
+  `crates/oasis7_viewer/software_safe_src/main.jsx` `InteractionPanel`。该组件继续负责
+  Command/chat 的 route 和 control boundary；Agent Context Lite 作为其中的 selected-Agent
+  display region，而不是新的 dock 或独立 runtime surface。
+- **Display-model seam**：canonical extraction 固定为
+  `crates/oasis7_viewer/software_safe_src/viewer_agent_context_display_model.js`（纯
+  source-level projection）与 `crates/oasis7_viewer/software_safe_src/agent_context_lite.jsx`
+  （只接收 display inputs/callbacks 的组件）；二者已实现。输入只包括
+  当前 selected Agent、`snapshot.model.agents[selectedAgentId]` 的显式 identity/activity、
+  显式绑定同一 Agent 的 gameplay projection、connection/freshness 和既有
+  semantic feedback/explicit receipt。反馈只能输出 non-causal status；它输出可渲染的
+  sections 与 source/freshness/permission 状态，不发送动作、不写 core state、不读取 raw
+  debug object 来补字段。Player-global `core.buildGameplaySummary(locale())` 保留在 Player HUD，
+  不得注入 Agent Context；`InteractionPanel` 只负责组合，不继续 inline expansion。
+- **Existing semantic surfaces**：`crates/oasis7_viewer/software_safe_src/agent_activity_surface.jsx`
+  仍只表达 activity，`crates/oasis7_viewer/software_safe_src/agent_intent_surface.jsx` 仍只
+  表达权威 Intent；它们可被组合但不能合并语义。世界舞台
+  `crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx` 的 `PixelWorldCommercialHud`
+  和现有 `Action Receipt` 保持回执所有权，Context Lite 不创建副本。
+- **Reading order**：Command/chat → Agent Context Lite → gameplay details → collapsed
+  Diagnostics/raw state。Context 内部为 Identity → State/freshness → Objective/Next Move /
+  blocker/Leverage → explicitly matched Intent；Next Move 仍只有一个主 CTA。
+- **Non-Agent selection**：Location、Facility、Territory、Organization、Depot、Module 选择时显示选中实体 identity
+  与 honest unavailable/待同步状态，不保留或借用上一 Agent 的 State、Intent、capability、
+  owner、resource 或 relation。只有未来 projection contract 齐备后才可增加对应 section。
+- **Causal discipline**：Context 只引用当前 Player/Cinematic 的唯一 Receipt anchor。Feed、
+  recent events、chat echo、cursor、coordinates 和 wall-clock 不得产生 Intent、progress、
+  success、ETA、relationship 或 rationale。
+
+P1-A 的视觉验收只针对 selected Agent、缺失/陈旧/不可用态和非 Agent honest-unavailable 态；
+必须覆盖 `1440x1000`、`1024x768`、`768x1024`、`390x844`、键盘/IME/CJK/长文本、Focus 返回
+路径和单一正式 Receipt，并覆盖 current、last-known/stale、reconnecting、unknown、conflict、
+replay、gap、reorg、unavailable 与 control/permission lost。源码、
+focused 自动化和真实 WebGL headed 验收已完成；本节仍不单独构成发行放行证明。
+
+P1-A 的 canonical acceptance crosswalk 为：`P1A-CTX-01 → ENT-01/CTX-01/EMP-01`、
+`P1A-CTX-02 → STA-01/CTX-01/FED-01/FED-02`、`P1A-CTX-03 → INT-01/REC-01/REC-02`、
+`P1A-CTX-04 → CAP-01/CON-01`、`P1A-CTX-05 → IA-01/HUD-01/TXT-01/FOC-01/FOC-02`。
+这些是当前实现与 QA 的证据映射；发行放行仍服从仓库 terminal gates。
+
+#### P1-B World semantic presentation（当前切片源码与 headed 验收已完成）
+
+P1-B 将既有权威 world projection 组织成稳定的 stage visual language。可呈现的内容包括
+Agent、Location、Facility、Territory、Organization、Depot、Module 的 identity/state/activity，
+以及已发布的 route/assignment、power/resource、facility/module cues 和 relation kind/status；
+没有 projection 时保持 unknown/unavailable，不由 Viewer 补造。
+
+- **Attention order**：普通 Agent < selected Agent < active Intent < blocker < receipt target。
+  Major event 只在 P1-C authority gate 通过后作为后置扩展；persistent selection 与 transient
+  attention 必须有不同的视觉/语义状态；
+  hit target、keyboard focus、selected state 和 readable identity 在高注意力状态下仍保持。
+- **Authority boundary**：relation、Trust、ownership、resource、capability 和事件因果只能
+  来自权威 projection；距离、同屏、proximity、文本、坐标或 renderer activity 不能推断
+  这些语义。关系线只有在 projection 提供 relation kind/status 时才可绘制。
+- **Renderer separation**：Renderer Unavailable、probe 后异步失败、fallback、retry、
+  safe-area 和 recovery 属于跨切片安全验收（`REN-01`），不是 P1-B 的语义来源。P1-B 不新增或
+  修改 upstream runtime/world/protocol/WASM ABI 字段；Viewer host/bridge 只可从既有 authoritative
+snapshot 派生 additive、只读、fail-closed 的 presentation DTO，不得新增事实、权限、生命周期、
+控制或因果语义。`active_intent_target` 只能来自 `snapshot.player_gameplay.primary_intent`。
+  即使 Intent/Agent position 存在，只要 authoritative world bounds 缺失，也不得用 Agent ID 或
+  fallback 坐标生成 stage cue。
+  headed evidence 已覆盖 `1440x1000`、`1024x768`、`768x1024`、`390x844`、键盘/CJK/长文本，
+  并以语义层级、焦点与无横向溢出为判据，而非把 canvas readiness 当作语义证明。
+
+#### P1-C Major World Events（当前切片已实现 crisis-only 最小合同）
+
+runtime 已用独立 additive projection 冻结 crisis-only authority：三种 canonical Crisis lifecycle、
+severity `1..=5`、journal identity、显式 freshness/permission、非 Receipt lineage 与 gap/reorg
+清理规则。World Feed wire 保持向后兼容，Viewer 对缺失、未知、冲突或未授权字段 fail closed。
+当前 crisis 没有权威空间 anchor，因此只显示 ambient feed/status，不生成 marker/highlight，也不从
+event text、距离、同屏、时间、cursor、resolver 或 renderer activity 推断空间与因果。War、
+Governance 和其他类别仍明确排除；生产入口只读取独立的 runtime/operator audience policy，
+默认 Unknown，不从登录、选择、控制或 Director diagnostics 推导 Public。
 
 ### World-native interaction composition (target handoff)
 
@@ -100,10 +183,12 @@ Player left/center/right column or an always-on bottom bar is explicitly rejecte
   relationship kind/status, and major events legible at the entity. UI copy may explain or act on the
   mark, but may not turn the stage into background decoration or infer a relation from distance,
   proximity, co-presence, or event text.
-- **Entity-first context**: selecting an Agent, Facility, Territory, or Organization opens one
-  consistent Inspector/Console composition. Market, War, Governance, Production, Contracts, and
-  Relations are contextual capabilities, filtered by published data and player permission, not peer
-  navigation routes. A missing projection is an honest unavailable state.
+- **Entity-first context (post-P1-A)**: P1-A is selected-Agent-only. A later P1 slice may let
+  selecting a Location, Facility, Territory, Organization, Depot, or Module open a consistent
+  Inspector/Console composition, but it cannot override or widen the Agent-only P1-A boundary.
+  Market, War, Governance, Production, Contracts, and Relations are contextual capabilities,
+  filtered by published data and player permission, not peer navigation routes. A missing projection
+  is an honest unavailable state.
 - **Indirect-control rhythm**: the primary action is a high-level guidance/template (`Ask`, `Suggest`,
   `Prioritize`, `Negotiate`, `Investigate`, `Propose`, `Warn`, or `Delegate`). Render the sequence
   `guidance → Intent → accepted/rejected/blocked → Activity → world action → Receipt`; accepted is
@@ -130,8 +215,9 @@ evidence that the current implementation already satisfies them.
 - `390x844`: Player, Targets, Command, Cinematic, long entity names, long receipt copy, fallback.
 - `390x844`: empty world and missing/stale/permission-lost entity data retain a usable stage,
   explicit recovery copy, and non-overlapping Receipt/Feed/fallback slots.
-- Entity-selected desktop/mobile states: Agent, Facility, Territory, and Organization share the
-  contextual composition; stage semantics and relation lines remain readable in sparse worlds.
+- Entity-selected desktop/mobile states (post-P1-A): Agent is covered by P1-A; Location, Facility,
+  Territory, Organization, Depot, and Module require later slices and their own authority. Stage
+  semantics and relation lines remain readable in sparse worlds.
 - Program/Protocol states: ordinary copy contains no raw WASM/ABI/hash/transaction/runtime fields
   until the user explicitly opens Diagnostics.
 - Every viewport: English/Chinese/CJK, long labels, no horizontal overflow, Tab/Shift+Tab,
@@ -174,8 +260,9 @@ source tests, and CSS arithmetic do not prove exact-head headed readiness.
 - Escape 先关闭局部 surface/drawer，再退出 Focus/presentation；IME composition
   期间由 IME 消费 Escape，关闭后焦点回到 invoker。
 - 实施顺序固定为 anchors/tests → shell layout → console/receipt → focus/a11y →
-  World Feed v1 → headed QA；前五项已有源码/协议实现与测试，真实截图、浏览器 smoke、
-  issuer-backed Director allowed path 和 runtime/QA release verdict 仍是后续证据。
+  World Feed v1 → headed QA；当前 P1 切片已有源码/协议实现、自动化与真实 WebGL browser smoke。
+  issuer-backed Director allowed path 和仓库级 runtime/QA release verdict 仍是独立终端证据，
+  不由本切片的 headed 结果替代。
 
 World Feed 现作为 `world_feed/v1` additive ambient projection：identity/dedup 为
 `(world_id,reorg_epoch,event_seq)`，source order ascending；nullable receipt link
