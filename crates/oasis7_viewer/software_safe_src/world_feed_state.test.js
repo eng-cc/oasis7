@@ -159,6 +159,36 @@ describe("World Feed v1 state", () => {
     });
   });
 
+  it("fails the envelope when a present major-event authority payload is invalid", () => {
+    const consumed = consumeWorldFeed(createInitialWorldFeedState(), feed({
+      events: [
+        {
+          event_seq: 7,
+          kind: "major_world_event",
+          summary: "invalid severity",
+          detail: "",
+          receipt_ref: null,
+          major_event: majorEvent({ severity: 0 }),
+        },
+        {
+          event_seq: 7,
+          kind: "major_world_event",
+          summary: "invalid severity",
+          detail: "",
+          receipt_ref: null,
+          major_event: majorEvent({ severity: 6 }),
+        },
+      ],
+    }));
+
+    expect(consumed).toMatchObject({ requiresSnapshotReload: true });
+    expect(consumed.state).toMatchObject({
+      status: "unavailable",
+      unavailableReason: "source_unavailable",
+      events: [],
+    });
+  });
+
   it("treats every consumable envelope that changes epoch as reorg requiring snapshot reload", () => {
     for (const status of ["ready", "empty", "replay"]) {
       const first = consumeWorldFeed(createInitialWorldFeedState(), feed()).state;
@@ -350,7 +380,12 @@ describe("World Feed v1 state", () => {
           major_event: candidate,
         }],
       }));
-      expect(consumed.state.events[0].major_event == null).toBe(true);
+      expect(consumed).toMatchObject({ requiresSnapshotReload: true });
+      expect(consumed.state).toMatchObject({
+        status: "unavailable",
+        unavailableReason: "source_unavailable",
+        events: [],
+      });
     }
   });
 
@@ -380,7 +415,12 @@ describe("World Feed v1 state", () => {
           major_event: candidate,
         }],
       }));
-      expect(consumed.state.events[0].major_event == null, field).toBe(true);
+      expect(consumed.requiresSnapshotReload, field).toBe(true);
+      expect(consumed.state, field).toMatchObject({
+        status: "unavailable",
+        unavailableReason: "source_unavailable",
+        events: [],
+      });
     }
 
     for (const candidate of [
@@ -400,7 +440,12 @@ describe("World Feed v1 state", () => {
           major_event: candidate,
         }],
       }));
-      expect(consumed.state.events[0].major_event == null).toBe(true);
+      expect(consumed).toMatchObject({ requiresSnapshotReload: true });
+      expect(consumed.state).toMatchObject({
+        status: "unavailable",
+        unavailableReason: "source_unavailable",
+        events: [],
+      });
     }
   });
 

@@ -196,6 +196,9 @@ function normalizeEvent(event, context) {
     ...context,
     eventSeq: normalizedSeq,
   });
+  if (event.major_event != null && majorEvent == null) {
+    return null;
+  }
   return {
     event_seq: typeof event.event_seq === "number" ? event.event_seq : eventSeq,
     kind,
