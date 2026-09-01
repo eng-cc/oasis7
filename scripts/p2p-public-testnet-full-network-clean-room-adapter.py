@@ -925,6 +925,111 @@ def reserve_nonce(path: Path, transaction_id: str, nonce: str) -> None:
         _fail("credential nonce ledger cannot be atomically reserved")
 
 
+def _nonce_reservation_state(
+    plan: dict[str, Any], reserved_count: int, *, complete: bool | None = None
+) -> dict[str, Any]:
+    """Return journal-safe reservation state without exposing nonce values."""
+    expected_count = len(plan["nodes"])
+    if not isinstance(reserved_count, int) or reserved_count < 0 or reserved_count > expected_count:
+        _fail("nonce reservation count is outside the plan boundary")
+    return {
+        "ledger_path": plan["credential_nonce_ledger"]["path"],
+        "transaction_id": plan["transaction_id"],
+        "expected_count": expected_count,
+        "reserved_count": reserved_count,
+        "one_shot": True,
+        "complete": reserved_count == expected_count if complete is None else complete,
+    }
+
+
+def _reconcile_nonce_reservations(plan: dict[str, Any], path: Path) -> dict[str, Any]:
+    """Reuse matching reservations and append only missing plan nonces.
+
+    The ledger remains the sole nonce-value authority.  The returned state is
+    deliberately count-only so journals never become a second credential
+    store.
+    """
+    rows = _read_ledger(Path(path))
+    expected = {_node_nonce(plan, node) for node in plan["nodes"]}
+    reserved: set[str] = set()
+    seen: set[str] = set()
+    for row in rows:
+        nonce = row["nonce"]
+        if nonce in seen:
+            _fail("credential nonce ledger contains a replayed nonce")
+        seen.add(nonce)
+        if nonce not in expected:
+            continue
+        if row["transaction_id"] != plan["transaction_id"]:
+            _fail("plan nonce is reserved by a different transaction")
+        reserved.add(nonce)
+    for node in plan["nodes"]:
+        nonce = _node_nonce(plan, node)
+        if nonce not in reserved:
+            reserve_nonce(Path(path), plan["transaction_id"], nonce)
+            reserved.add(nonce)
+    return _nonce_reservation_state(plan, len(reserved), complete=len(reserved) == len(expected))
+
+
+def _validate_committed_nonce_reservations(
+    plan: dict[str, Any], path: Path, state: dict[str, Any]
+) -> dict[str, Any]:
+    """Require a preflight checkpoint's nonce reservations to still exist.
+
+    A preflight-complete journal is allowed to resume only when the external
+    one-shot ledger still contains every plan nonce under this transaction.
+    It must never silently reserve a missing nonce after the checkpoint: that
+    would make the checkpoint's evidence and credential boundary ambiguous.
+    """
+    rows = _read_ledger(Path(path))
+    expected = {_node_nonce(plan, node) for node in plan["nodes"]}
+    reserved: set[str] = set()
+    seen: set[str] = set()
+    for row in rows:
+        nonce = row["nonce"]
+        if nonce in seen:
+            _fail("credential nonce ledger contains a replayed nonce")
+        seen.add(nonce)
+        if nonce not in expected:
+            continue
+        if row["transaction_id"] != plan["transaction_id"]:
+            _fail("plan nonce is reserved by a different transaction")
+        reserved.add(nonce)
+    if reserved != expected:
+        _fail("preflight-complete checkpoint is missing a committed nonce reservation")
+    if state.get("reserved_count") != len(reserved) or state.get("complete") is not True:
+        _fail("preflight-complete checkpoint nonce state does not match the ledger")
+    return _nonce_reservation_state(plan, len(reserved), complete=True)
+
+
+def _validate_nonce_reservation_state(plan: dict[str, Any], raw: Any) -> dict[str, Any]:
+    """Validate count-only journal state without treating it as ledger authority."""
+    state = _object(raw, "transaction journal nonce reservation state")
+    if set(state) != {
+        "ledger_path",
+        "transaction_id",
+        "expected_count",
+        "reserved_count",
+        "one_shot",
+        "complete",
+    }:
+        _fail("transaction journal nonce reservation state is incomplete")
+    expected = _nonce_reservation_state(plan, len(plan["nodes"]))
+    if (
+        state.get("ledger_path") != expected["ledger_path"]
+        or state.get("transaction_id") != expected["transaction_id"]
+        or state.get("expected_count") != expected["expected_count"]
+        or state.get("one_shot") is not True
+    ):
+        _fail("transaction journal nonce reservation state is not plan-bound")
+    reserved_count = state.get("reserved_count")
+    if not isinstance(reserved_count, int) or isinstance(reserved_count, bool) or not 0 <= reserved_count <= expected["expected_count"]:
+        _fail("transaction journal nonce reservation count is malformed")
+    if state.get("complete") is not (reserved_count == expected["expected_count"]):
+        _fail("transaction journal nonce reservation completion flag drifted")
+    return copy.deepcopy(state)
+
+
 def capacity_requirement(plan: dict[str, Any], node: dict[str, Any]) -> tuple[int, int]:
     platform = node["platform"]
     package = plan["truth"]["package"]["platforms"][platform]
@@ -1218,6 +1323,8 @@ def _journal_record(
     failed_operation: str | None = None,
     failed_state_digest: str | None = None,
     preflight_evidence_receipts: list[dict[str, Any]] | None = None,
+    preflight_status: str = "pending",
+    nonce_reservation_state: dict[str, Any] | None = None,
     backup_status: str = "not-needed",
     backup_error: str | None = None,
 ) -> dict[str, Any]:
@@ -1240,6 +1347,10 @@ def _journal_record(
         "node_receipts": copy.deepcopy(node_receipts or {}),
         "provider_receipts": copy.deepcopy(provider_receipts or []),
         "preflight_evidence_receipts": copy.deepcopy(preflight_evidence_receipts or []),
+        "preflight_status": preflight_status,
+        "nonce_reservation_state": copy.deepcopy(
+            nonce_reservation_state or _nonce_reservation_state(plan, 0)
+        ),
         "backup_status": backup_status,
         "rollback_status": rollback_status,
         "rollback_receipt": copy.deepcopy(rollback_receipt),
@@ -1584,13 +1695,17 @@ def _validate_journal_preflight_evidence_receipts(
     """
     if not isinstance(raw, list):
         _fail("transaction journal preflight_evidence_receipts must be a list")
+    if len(raw) > len(plan["node_order"]):
+        _fail("transaction journal contains too many preflight evidence receipts")
     result: list[dict[str, Any]] = []
     seen_nodes: set[str] = set()
-    for value in raw:
+    for index, value in enumerate(raw):
         receipt = _object(value, "transaction journal preflight evidence receipt")
         node_name = receipt.get("node")
         if not isinstance(node_name, str) or node_name not in plan["node_order"]:
             _fail("transaction journal preflight evidence receipt names an unknown node")
+        if node_name != plan["node_order"][index]:
+            _fail("transaction journal preflight evidence receipts are out of canonical node order")
         if node_name in seen_nodes:
             _fail("transaction journal contains duplicate preflight evidence receipts")
         operation = f"preflight:{node_name}"
@@ -1770,6 +1885,7 @@ def _execute_unlocked(
     transport: Any = None,
     dry_run: bool = True,
     provenance_verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None,
+    resume_record: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Plan or execute a transaction through an explicitly injected adapter.
 
@@ -1785,7 +1901,13 @@ def _execute_unlocked(
     if requested_ledger != declared_ledger:
         _fail("requested credential nonce ledger is not the plan-bound canonical path")
     provenance_verified = _verify_provenance(plan, authority, provenance_verifier)
-    ledger_summary = validate_credential_ledger(plan, Path(ledger_path))
+    if resume_record is None:
+        ledger_summary = validate_credential_ledger(plan, Path(ledger_path))
+    else:
+        resume_nonce_state = _object(
+            resume_record.get("nonce_reservation_state"), "resume nonce state"
+        )
+        ledger_summary = {"rows": resume_nonce_state.get("reserved_count", 0)}
     operations = list(plan["global_order"])
     if dry_run:
         receipts = {
@@ -1865,70 +1987,119 @@ def _execute_unlocked(
     validate_live_trust_root_file()
     # One-shot reservations precede every remote observation.  Values stay in
     # the external ledger and never enter a journal, receipt, or log.
+    resumed = resume_record is not None
     provider_receipts: list[dict[str, Any]] = []
     preflight_evidence_receipts: list[dict[str, Any]] = []
     rollback_receipt: dict[str, Any] | None = None
     rollback_reobservation_receipt: dict[str, Any] | None = None
     rollback_status = "not-started"
     backup_status = "pending" if plan["forensic_backup"]["required_before_reset"] is True else "not-needed"
-    try:
-        _write_journal(
-            Path(journal_path),
-            _journal_record(
-                plan,
-                "prepared",
-                0,
-                [],
-                execution_mode="apply",
-                preflight_evidence_receipts=preflight_evidence_receipts,
-                backup_status=backup_status,
-            ),
-        )
-    except Exception as error:
-        _persist_terminal(
-            Path(journal_path),
-            _journal_record(
-                plan,
-                "terminal-failure",
-                0,
-                [],
-                error=error.__class__.__name__,
-                execution_mode="apply",
-                rollback_status="reconciliation-blocked",
-                rollback_error="prepared-journal-write-failed",
-                preflight_evidence_receipts=preflight_evidence_receipts,
-                backup_status=backup_status,
-            ),
-        )
-        _fail("initial transaction journal write failed; reconciliation is blocked")
-    try:
-        for node in (plan["nodes"] if isinstance(plan.get("nodes"), list) else []):
-            reserve_nonce(Path(ledger_path), plan["transaction_id"], _node_nonce(plan, node))
-        for node in plan["nodes"]:
-            evidence = transport.inspect_node(_transport_node(node))
-            validated_evidence = validate_remote_preflight(plan, node, evidence, provenance_verifier)
-            preflight_evidence_receipts.append(validated_evidence["receipt"])
-    except Exception as error:
-        _persist_terminal(
-            Path(journal_path),
-            _journal_record(
-                plan,
-                "terminal-failure",
-                0,
-                [],
-                error=error.__class__.__name__,
-                provider_receipts=provider_receipts,
-                preflight_evidence_receipts=preflight_evidence_receipts,
-                rollback_status="not-needed",
-                execution_mode="apply",
-                backup_status=backup_status,
-            ),
-        )
-        _fail("nonce reservation or remote preflight failed; transaction is terminal")
+    preflight_status = "pending"
+    nonce_state = _nonce_reservation_state(plan, 0)
     completed: list[str] = []
     started: list[str] = []
     rollback_candidates: list[str] = []
     node_receipts: dict[str, dict[str, Any]] = {}
+    if resume_record is None:
+        try:
+            _write_journal(
+                Path(journal_path),
+                _journal_record(
+                    plan,
+                    "prepared",
+                    0,
+                    [],
+                    execution_mode="apply",
+                    preflight_evidence_receipts=preflight_evidence_receipts,
+                    preflight_status=preflight_status,
+                    nonce_reservation_state=nonce_state,
+                    backup_status=backup_status,
+                ),
+            )
+        except Exception as error:
+            _persist_terminal(
+                Path(journal_path),
+                _journal_record(
+                    plan,
+                    "terminal-failure",
+                    0,
+                    [],
+                    error=error.__class__.__name__,
+                    execution_mode="apply",
+                    rollback_status="reconciliation-blocked",
+                    rollback_error="prepared-journal-write-failed",
+                    preflight_evidence_receipts=preflight_evidence_receipts,
+                    preflight_status=preflight_status,
+                    nonce_reservation_state=nonce_state,
+                    backup_status=backup_status,
+                ),
+            )
+            _fail("initial transaction journal write failed; reconciliation is blocked")
+    else:
+        provider_receipts = copy.deepcopy(resume_record.get("provider_receipts", []))
+        preflight_evidence_receipts = copy.deepcopy(resume_record.get("preflight_evidence_receipts", []))
+        completed = list(resume_record.get("completed_operations", []))
+        node_receipts = copy.deepcopy(resume_record.get("node_receipts", {}))
+        backup_status = resume_record.get("backup_status", backup_status)
+        preflight_status = resume_record.get("preflight_status", "pending")
+        nonce_state = copy.deepcopy(resume_record.get("nonce_reservation_state", nonce_state))
+        if resume_record.get("status") == "preflight-complete":
+            nonce_state = _validate_committed_nonce_reservations(
+                plan, Path(ledger_path), nonce_state
+            )
+    if resume_record is None or resume_record.get("status") == "prepared":
+        try:
+            if resume_record is None:
+                reserved_count = 0
+                for node in (plan["nodes"] if isinstance(plan.get("nodes"), list) else []):
+                    reserve_nonce(Path(ledger_path), plan["transaction_id"], _node_nonce(plan, node))
+                    reserved_count += 1
+                nonce_state = _nonce_reservation_state(
+                    plan, reserved_count, complete=reserved_count == len(plan["nodes"])
+                )
+            else:
+                nonce_state = _reconcile_nonce_reservations(plan, Path(ledger_path))
+            for node in plan["nodes"]:
+                evidence = transport.inspect_node(_transport_node(node))
+                validated_evidence = validate_remote_preflight(plan, node, evidence, provenance_verifier)
+                preflight_evidence_receipts.append(validated_evidence["receipt"])
+            _write_journal(
+                Path(journal_path),
+                _journal_record(
+                    plan,
+                    "preflight-complete",
+                    0,
+                    [],
+                    node_receipts=node_receipts,
+                    provider_receipts=provider_receipts,
+                    preflight_evidence_receipts=preflight_evidence_receipts,
+                    preflight_status="complete",
+                    nonce_reservation_state=nonce_state,
+                    rollback_status=rollback_status,
+                    execution_mode="apply",
+                    backup_status=backup_status,
+                ),
+            )
+            preflight_status = "complete"
+        except Exception as error:
+            _persist_terminal(
+                Path(journal_path),
+                _journal_record(
+                    plan,
+                    "terminal-failure",
+                    0,
+                    [],
+                    error=error.__class__.__name__,
+                    provider_receipts=provider_receipts,
+                    preflight_evidence_receipts=preflight_evidence_receipts,
+                    preflight_status=preflight_status,
+                    nonce_reservation_state=nonce_state,
+                    rollback_status="not-needed",
+                    execution_mode="apply",
+                    backup_status=backup_status,
+                ),
+            )
+            _fail("nonce reservation or remote preflight failed; transaction is terminal")
     for index, operation in enumerate(operations):
         node_name: str | None = None
         try:
@@ -1945,6 +2116,8 @@ def _execute_unlocked(
                     node_receipts=node_receipts,
                     provider_receipts=provider_receipts,
                     preflight_evidence_receipts=preflight_evidence_receipts,
+                    preflight_status=preflight_status,
+                    nonce_reservation_state=nonce_state,
                     rollback_status=rollback_status,
                     rollback_receipt=rollback_receipt,
                     execution_mode="apply",
@@ -2027,6 +2200,8 @@ def _execute_unlocked(
                     node_receipts=node_receipts,
                     provider_receipts=provider_receipts,
                     preflight_evidence_receipts=preflight_evidence_receipts,
+                    preflight_status=preflight_status,
+                    nonce_reservation_state=nonce_state,
                     rollback_status=journal_rollback_status,
                     rollback_receipt=rollback_receipt,
                     execution_mode="apply",
@@ -2057,6 +2232,8 @@ def _execute_unlocked(
                         execution_mode="apply",
                         failed_operation=failed_operation,
                         preflight_evidence_receipts=preflight_evidence_receipts,
+                        preflight_status=preflight_status,
+                        nonce_reservation_state=nonce_state,
                         backup_status=backup_status,
                         backup_error=error.__class__.__name__,
                     ),
@@ -2082,6 +2259,8 @@ def _execute_unlocked(
                         execution_mode="apply",
                         failed_operation=failed_operation,
                         preflight_evidence_receipts=preflight_evidence_receipts,
+                        preflight_status=preflight_status,
+                        nonce_reservation_state=nonce_state,
                         backup_status=backup_status,
                     ),
                 )
@@ -2145,6 +2324,8 @@ def _execute_unlocked(
                     failed_operation=failed_operation,
                     failed_state_digest=failed_state_digest,
                     preflight_evidence_receipts=preflight_evidence_receipts,
+                    preflight_status=preflight_status,
+                    nonce_reservation_state=nonce_state,
                     backup_status=backup_status,
                 ),
             )
@@ -2155,7 +2336,7 @@ def _execute_unlocked(
         "schema_version": ADAPTER_SCHEMA,
         "status": "complete",
         "dry_run": False,
-        "resumed": False,
+        "resumed": resumed,
         "plan_digest": plan["plan_digest"],
         "transaction_id": plan["transaction_id"],
         "operations": operations,
@@ -2246,6 +2427,12 @@ def _resume_transaction_unlocked(
         record.get("preflight_evidence_receipts", []),
         provenance_verifier if not dry_run else None,
     )
+    preflight_status = record.get("preflight_status")
+    if preflight_status not in {"pending", "complete"}:
+        _fail("transaction journal preflight status is unsupported")
+    nonce_reservation_state = _validate_nonce_reservation_state(
+        plan, record.get("nonce_reservation_state")
+    )
     backup_status = record.get("backup_status")
     if backup_status not in {"not-needed", "pending", "completed", "backup-failed"}:
         _fail("transaction journal backup status is unsupported")
@@ -2305,6 +2492,20 @@ def _resume_transaction_unlocked(
         _fail("transaction journal progress is not a deterministic operation prefix")
     if status in {"dry-run-complete", "complete"} and next_index != len(plan["global_order"]):
         _fail("completed transaction journal does not cover the full operation order")
+    if status == "preflight-complete":
+        if (
+            expected_mode != "apply"
+            or preflight_status != "complete"
+            or not nonce_reservation_state["complete"]
+            or len(preflight_evidence_receipts) != len(plan["node_order"])
+            or completed
+            or provider_receipts
+            or next_index != 0
+        ):
+            _fail("preflight-complete journal is not a safe mutation-free checkpoint")
+    if status == "prepared" and expected_mode == "apply":
+        if preflight_status != "pending" or completed or provider_receipts or next_index != 0:
+            _fail("prepared journal has crossed an unsafe operation boundary")
     if (
         expected_mode == "apply"
         and status == "complete"
@@ -2357,6 +2558,17 @@ def _resume_transaction_unlocked(
         _fail("transaction journal is ambiguous in-flight; governed reconciliation is required")
     if status == "terminal-failure":
         _fail("transaction journal is terminal-failure; governed reconciliation is required")
+    if status in {"prepared", "preflight-complete"} and not dry_run:
+        return _execute_unlocked(
+            plan,
+            authority,
+            journal_path=Path(journal_path),
+            ledger_path=Path(ledger_path),
+            transport=transport,
+            dry_run=False,
+            provenance_verifier=provenance_verifier,
+            resume_record=record,
+        )
     if status in {"prepared", "running"} and dry_run:
         _write_journal(
             Path(journal_path),

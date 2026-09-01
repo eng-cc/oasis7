@@ -520,6 +520,222 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         self.assertIn("authority", verifier_calls)
         self.assertIn("fresh-root-probe", verifier_calls)
 
+    def test_apply_persists_preflight_complete_checkpoint_before_first_operation(self) -> None:
+        authority = self._authority(apply_authorized=True)
+        statuses: list[str] = []
+        original_write = self.adapter._write_journal
+
+        def observe_write(path: Path, record: dict[str, object]) -> None:
+            statuses.append(record["status"])
+            original_write(path, record)
+
+        def verifier(plan: dict[str, object], receipt: dict[str, object]) -> dict[str, object]:
+            return {
+                "verified": True,
+                "bindings": receipt["bindings"],
+                "verifier_id": self.adapter.CANONICAL_VERIFIER_ID,
+                "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
+                "signer_id": "governance-signer",
+            }
+
+        with tempfile.TemporaryDirectory() as directory:
+            journal = Path(directory) / "journal.json"
+            with mock.patch.object(self.adapter, "_write_journal", side_effect=observe_write):
+                self.adapter.execute(
+                    self.plan,
+                    authority,
+                    journal_path=journal,
+                    ledger_path=self.ledger_path,
+                    transport=ApplyTransport(self.adapter, self.plan),
+                    dry_run=False,
+                    provenance_verifier=verifier,
+                )
+            record = json.loads(journal.read_text(encoding="utf-8"))
+        self.assertIn("preflight-complete", statuses)
+        self.assertLess(statuses.index("preflight-complete"), statuses.index("in-flight"))
+        self.assertEqual(record["preflight_status"], "complete")
+        self.assertEqual(record["nonce_reservation_state"]["reserved_count"], len(self.plan["nodes"]))
+        self.assertTrue(record["nonce_reservation_state"]["complete"])
+
+    def test_resume_from_prepared_or_preflight_checkpoint_reconciles_without_double_use(self) -> None:
+        authority = self._authority(apply_authorized=True)
+
+        def verifier(plan: dict[str, object], receipt: dict[str, object]) -> dict[str, object]:
+            return {
+                "verified": True,
+                "bindings": receipt["bindings"],
+                "verifier_id": self.adapter.CANONICAL_VERIFIER_ID,
+                "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
+                "signer_id": "governance-signer",
+            }
+
+        for interrupted_status in ("prepared", "preflight-complete"):
+            with self.subTest(interrupted_status=interrupted_status), tempfile.TemporaryDirectory() as directory:
+                self._write_ledger(self.ledger_path)
+                journal = Path(directory) / "journal.json"
+                original_write = self.adapter._write_journal
+
+                def interrupt(path: Path, record: dict[str, object]) -> None:
+                    original_write(path, record)
+                    if record["status"] == interrupted_status:
+                        raise KeyboardInterrupt
+
+                with mock.patch.object(self.adapter, "_write_journal", side_effect=interrupt):
+                    with self.assertRaises(KeyboardInterrupt):
+                        self.adapter.execute(
+                            self.plan,
+                            authority,
+                            journal_path=journal,
+                            ledger_path=self.ledger_path,
+                            transport=ApplyTransport(self.adapter, self.plan),
+                            dry_run=False,
+                            provenance_verifier=verifier,
+                        )
+                checkpoint = json.loads(journal.read_text(encoding="utf-8"))
+                self.assertEqual(checkpoint["status"], interrupted_status)
+                rows_before = len(self.ledger_path.read_text(encoding="utf-8").splitlines())
+                transport = ApplyTransport(self.adapter, self.plan)
+                original_inspect = transport.inspect_node
+
+                def inspect(node: dict[str, object]) -> dict[str, object]:
+                    if interrupted_status == "preflight-complete":
+                        raise AssertionError("resume must reuse the durable preflight checkpoint")
+                    return original_inspect(node)
+
+                transport.inspect_node = inspect
+                result = self.adapter.resume_transaction(
+                    self.plan,
+                    authority,
+                    journal,
+                    ledger_path=self.ledger_path,
+                    transport=transport,
+                    dry_run=False,
+                    provenance_verifier=verifier,
+                )
+                rows_after = len(self.ledger_path.read_text(encoding="utf-8").splitlines())
+                self.assertEqual(result["status"], "complete")
+                expected_rows = (
+                    rows_before
+                    if interrupted_status == "preflight-complete"
+                    else rows_before + len(self.plan["nodes"])
+                )
+                self.assertEqual(rows_after, expected_rows)
+
+    def test_resume_after_partial_nonce_reservation_reconciles_missing_once(self) -> None:
+        authority = self._authority(apply_authorized=True)
+
+        def verifier(plan: dict[str, object], receipt: dict[str, object]) -> dict[str, object]:
+            return {
+                "verified": True,
+                "bindings": receipt["bindings"],
+                "verifier_id": self.adapter.CANONICAL_VERIFIER_ID,
+                "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
+                "signer_id": "governance-signer",
+            }
+
+        original_reserve = self.adapter.reserve_nonce
+        reservations = 0
+
+        def reserve_then_interrupt(path: Path, transaction_id: str, nonce: str) -> None:
+            nonlocal reservations
+            if reservations == 1:
+                raise KeyboardInterrupt
+            original_reserve(path, transaction_id, nonce)
+            reservations += 1
+
+        with tempfile.TemporaryDirectory() as directory:
+            journal = Path(directory) / "journal.json"
+            with mock.patch.object(self.adapter, "reserve_nonce", side_effect=reserve_then_interrupt):
+                with self.assertRaises(KeyboardInterrupt):
+                    self.adapter.execute(
+                        self.plan,
+                        authority,
+                        journal_path=journal,
+                        ledger_path=self.ledger_path,
+                        transport=ApplyTransport(self.adapter, self.plan),
+                        dry_run=False,
+                        provenance_verifier=verifier,
+                    )
+            checkpoint = json.loads(journal.read_text(encoding="utf-8"))
+            self.assertEqual(checkpoint["status"], "prepared")
+            self.assertEqual(checkpoint["nonce_reservation_state"]["reserved_count"], 0)
+            self.assertEqual(len(self.ledger_path.read_text(encoding="utf-8").splitlines()), 1)
+            result = self.adapter.resume_transaction(
+                self.plan,
+                authority,
+                journal,
+                ledger_path=self.ledger_path,
+                transport=ApplyTransport(self.adapter, self.plan),
+                dry_run=False,
+                provenance_verifier=verifier,
+            )
+            self.assertEqual(result["status"], "complete")
+            self.assertEqual(
+                len(self.ledger_path.read_text(encoding="utf-8").splitlines()),
+                len(self.plan["nodes"]),
+            )
+
+    def test_preflight_checkpoint_fails_closed_if_ledger_reservation_is_missing(self) -> None:
+        authority = self._authority(apply_authorized=True)
+
+        def verifier(plan: dict[str, object], receipt: dict[str, object]) -> dict[str, object]:
+            return {
+                "verified": True,
+                "bindings": receipt["bindings"],
+                "verifier_id": self.adapter.CANONICAL_VERIFIER_ID,
+                "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
+                "signer_id": "governance-signer",
+            }
+
+        with tempfile.TemporaryDirectory() as directory:
+            journal = Path(directory) / "journal.json"
+            original_write = self.adapter._write_journal
+
+            def interrupt_after_checkpoint(path: Path, record: dict[str, object]) -> None:
+                original_write(path, record)
+                if record["status"] == "preflight-complete":
+                    raise KeyboardInterrupt
+
+            with mock.patch.object(self.adapter, "_write_journal", side_effect=interrupt_after_checkpoint):
+                with self.assertRaises(KeyboardInterrupt):
+                    self.adapter.execute(
+                        self.plan,
+                        authority,
+                        journal_path=journal,
+                        ledger_path=self.ledger_path,
+                        transport=ApplyTransport(self.adapter, self.plan),
+                        dry_run=False,
+                        provenance_verifier=verifier,
+                    )
+            rows = self.ledger_path.read_text(encoding="utf-8").splitlines()
+            self._write_ledger(self.ledger_path, [json.loads(row) for row in rows[:-1]])
+            transport = ApplyTransport(self.adapter, self.plan)
+            with self.assertRaises(self.adapter.AdapterError):
+                self.adapter.resume_transaction(
+                    self.plan,
+                    authority,
+                    journal,
+                    ledger_path=self.ledger_path,
+                    transport=transport,
+                    dry_run=False,
+                    provenance_verifier=verifier,
+                )
+            self.assertEqual(transport.operations, [])
+
+    def test_preflight_evidence_receipts_must_follow_canonical_node_order(self) -> None:
+        transport = ApplyTransport(self.adapter, self.plan)
+        receipts = [
+            transport._receipt(f"preflight:{name}", next(node for node in self.plan["nodes"] if node["name"] == name))
+            for name in self.plan["node_order"]
+        ]
+        for receipt in receipts:
+            receipt["bindings"]["evidence_sha256"] = "a" * 64
+        with self.assertRaises(self.adapter.AdapterError):
+            self.adapter._validate_journal_preflight_evidence_receipts(
+                self.plan,
+                list(reversed(receipts)),
+            )
+
     def test_repository_trust_root_fixture_matches_provenance_helper_without_monkeypatch(self) -> None:
         provenance = load_module("validator_pair_provenance_fixture", PROVENANCE_PATH)
         fixture = ROOT / "scripts" / "fixtures" / "oasis7-governance-root.v1.json"

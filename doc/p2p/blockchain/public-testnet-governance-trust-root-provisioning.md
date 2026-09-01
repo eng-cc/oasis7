@@ -14,11 +14,21 @@ For the governed fixture deployment, provision the exact fixture bytes as the
 code-owned path, then enforce the operator-local ownership contract:
 
 ```sh
+mkdir -p /operator/truth
 install -o "$(id -u)" -g "$(id -g)" -m 0600 \
   scripts/fixtures/oasis7-governance-root.v1.json \
   /operator/truth/governance-root.json
-sha256sum /operator/truth/governance-root.json
+if command -v shasum >/dev/null 2>&1; then
+  shasum -a 256 /operator/truth/governance-root.json
+else
+  sha256sum /operator/truth/governance-root.json
+fi
 ```
+
+The `mkdir` step must create only the governed parent path; do not replace the
+artifact with a symlink or copy it from another node. `shasum -a 256` is the
+portable macOS/Linux spelling when available, with `sha256sum` retained for
+minimal Linux images.
 
 For this fixture the expected file digest is
 `f278bc8f060cd6777d68f086fc3131edc5d6b5a6080bde09208ba69a69e3ef66`; the

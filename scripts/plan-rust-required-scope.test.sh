@@ -430,13 +430,16 @@ clean_room_scope_output="$(plan_for_paths \
   scripts/p2p-public-testnet-full-network-clean-room.py \
   scripts/p2p-public-testnet-full-network-clean-room.test.py \
   scripts/p2p-public-testnet-full-network-clean-room-adapter.py \
-  scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py)"
+  scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py \
+  scripts/fixtures/oasis7-governance-root.v1.json)"
 assert_key_equals "$clean_room_scope_output" scope targeted
 assert_key_equals "$clean_room_scope_output" run_operational_contracts true
 assert_key_equals "$clean_room_scope_output" run_rust_baseline false
 assert_key_equals "$clean_room_scope_output" selected_capabilities operational_contracts
 assert_reason_contains "$clean_room_scope_output" \
   "operational_contracts:scripts/p2p-public-testnet-full-network-clean-room.py"
+assert_reason_contains "$clean_room_scope_output" \
+  "operational_contracts:scripts/fixtures/oasis7-governance-root.v1.json"
 assert_reason_absent "$clean_room_scope_output" "unclassified_or_unresolvable:"
 
 compile_metrics_output="$(plan_for_paths \
