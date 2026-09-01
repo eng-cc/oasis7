@@ -289,7 +289,7 @@ pub use world::{rollback_affected_census_digest, rollback_journal_commitment};
 
 // World event
 #[cfg(test)]
-pub use major_world_event::project_major_world_events;
+pub(crate) use major_world_event::project_major_world_events;
 pub use major_world_event::{
     MAJOR_WORLD_EVENT_PROJECTION_SCHEMA_VERSION, MajorWorldEventAnchor, MajorWorldEventAnchorScope,
     MajorWorldEventCategory, MajorWorldEventCausalReference, MajorWorldEventFreshness,

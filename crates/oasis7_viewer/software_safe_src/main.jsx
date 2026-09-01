@@ -10,6 +10,7 @@ import { RecoveryOptionComparisonPanel } from "./recovery_option_comparison_pane
 import { FragmentRefillPreviewGameplayPanel, GovernanceVoteQuoteGameplayPanel, MarketQuoteDecisionGameplayPanel, PowerSaleQuoteGameplayPanel, PowerSurvivalQuoteGameplayPanel, ProductValidationQuoteGameplayPanel, RefineQuoteGameplayPanel, ScheduleRecipeQuoteGameplayPanel, TransferMaterialQuoteGameplayPanel, WarDeclarationQuoteGameplayPanel } from "./gameplay_quote_panels.jsx"; import { installMarketQuoteDecisionVisualFixture, installPowerSaleQuoteVisualFixture, installPowerSurvivalQuoteVisualFixture, installProductValidationQuoteVisualFixture, installRefineQuotePreflightVisualFixture, installScheduleRecipeQuoteVisualFixture, installTransferMaterialQuoteVisualFixture, installWaitResolutionQuoteVisualFixture, installWarDeclarationQuoteVisualFixture } from "./quote_visual_fixture_installers.js";
 import { installBranchCommitmentVisualFixture } from "./branch_commitment_visual_fixture.js";
 import { installAgentIntentV2VisualFixture } from "./agent_intent_visual_fixture.js";
+import { installMajorWorldEventCrisisVisualFixture } from "./major_world_event_visual_fixture.js";
 import { ReprioritizeActionForm } from "./reprioritize_action_form.jsx";
 import { createViewerAgentClaimDisplayModel } from "./viewer_agent_claim_display_model.js";
 import { AgentClaimChoiceCard } from "./agent_claim_choice_card.jsx";
@@ -4307,48 +4308,9 @@ function installViewerVisualFixture() {
       core.state.selectedId = null;
       core.state.selectedObject = null;
     },
-    major_world_event_crisis() {
-      core.injectSnapshot(viewerFixtureBaseSnapshot(), { returnState: false });
-      const mode = String(new URLSearchParams(window.location.search || "").get("major_event_state") || "current");
-      const historical = mode === "replay";
-      const suppressed = mode === "gap" || mode === "denied";
-      core.state.worldFeed = {
-        status: mode === "gap" ? "gap" : mode === "denied" ? "unavailable" : historical ? "replay" : "ready",
-        schemaVersion: "world_feed/v1",
-        worldId: "fixture-world",
-        reorgEpoch: "0",
-        cursor: "fixture-current",
-        stale: suppressed,
-        gapReason: mode === "gap" ? "reorg_epoch_changed" : null,
-        unavailableReason: mode === "denied" ? "permission_denied" : null,
-        snapshotReloadRequired: mode === "gap",
-        requestInFlight: false,
-        events: suppressed ? [] : [{
-          event_seq: "7",
-          kind: "crisis_spawned",
-          summary: "Crisis event",
-          detail: "",
-          receipt_ref: null,
-          major_event: {
-            schema_version: "major_world_event/v1",
-            identity: { world_id: "fixture-world", reorg_epoch: "0", event_seq: "7" },
-            category: "crisis",
-            subtype: "power_shortage",
-            severity: 4,
-            lifecycle: "active",
-            source: { authority: "runtime_journal", event_kind: "crisis_spawned" },
-            freshness: historical ? "replay" : "current",
-            visibility: "public",
-            logical_time: "42",
-            causal_reference: null,
-            world_anchor: { scope: "world", entity_id: "crisis-fixture" },
-          },
-        }],
-      };
-      core.requestRender();
-    },
   };
   installAgentIntentV2VisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
+  installMajorWorldEventCrisisVisualFixture(fixtures, { core, viewerFixtureBaseSnapshot });
   installRefineQuotePreflightVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot }); installScheduleRecipeQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot }); installTransferMaterialQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   installProductValidationQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   installPowerSaleQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });

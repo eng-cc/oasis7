@@ -279,7 +279,7 @@ pub struct MajorWorldEventProjection {
 /// order.  Equivalent duplicate event ids are deduplicated; a materially
 /// conflicting payload for one identity is rejected rather than selecting an
 /// arbitrary duplicate.
-pub fn project_major_world_events(
+pub(crate) fn project_major_world_events(
     events: &[WorldEvent],
     context: &MajorWorldEventProjectionContext,
 ) -> Vec<MajorWorldEventProjection> {
@@ -467,7 +467,7 @@ fn validate_canonical_crisis(
 
 /// Project one event when its complete crisis authority is present in the
 /// supplied journal history.
-pub fn project_major_world_event(
+fn project_major_world_event(
     event: &WorldEvent,
     history: &[WorldEvent],
     context: &MajorWorldEventProjectionContext,

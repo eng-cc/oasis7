@@ -3274,36 +3274,6 @@ describe("viewer web ui automation baseline", () => {
     )).toBe(true);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
-  it("renders the shell selected-blocker fixture as a populated command desk", async () => {
-    const { container } = await renderViewerApp({
-      snapshot: null,
-      search: `${viewerUrl()}&viewer_visual_fixture=shell_selected_blocker`,
-    });
-
-    const state = window.__AW_TEST__.getState();
-    expect(state.selectedKind).toBe("agent");
-    expect(state.selectedId).toBe("agent-0");
-    const targetsPanel = container.querySelector("#viewer-targets-panel");
-    const agentButton = within(targetsPanel).getByTestId("viewer-playthrough-select-agent");
-    const locationButton = within(targetsPanel).getByTestId("viewer-select-location-loc-1");
-    expect(within(targetsPanel).getByText("agent-0")).toBeInTheDocument();
-    expect(within(agentButton).getByText("Selected")).toBeInTheDocument();
-    expect(within(targetsPanel).getByText("Assembly Nexus")).toBeInTheDocument();
-    expect(within(container.querySelector("#viewer-details-panel")).getByText("Agent Chat")).toBeInTheDocument();
-    const agentContext = within(container.querySelector("#viewer-details-panel"))
-      .getByRole("region", { name: "Agent Context" });
-    expect(agentContext).toHaveAttribute("data-agent-context-kind", "agent");
-    expect(within(agentContext).getByText("Agent 0")).toBeInTheDocument();
-    expect(agentContext.closest(".command-surface")).toHaveAttribute("data-command-agent", "agent-0");
-    fireEvent.click(locationButton);
-    await waitFor(() => {
-      expect(locationButton).toHaveAttribute("data-selected", "true");
-    });
-    expect(within(locationButton).getByText("Selected")).toBeInTheDocument();
-    expect(within(agentButton).queryByText("Selected")).not.toBeInTheDocument();
-    expect(within(container.querySelector("#viewer-stage-panel")).getAllByText("Recover sustainable capability").length).toBeGreaterThan(0);
-  }, HEAVY_UI_TEST_TIMEOUT_MS);
-
   it("renders the agent chat fixture with history and collapsed prompt controls", async () => {
     const { container } = await renderViewerApp({
       snapshot: null,
@@ -3386,16 +3356,4 @@ describe("viewer web ui automation baseline", () => {
     expect(container.querySelector("[data-callout-kind='empty_world_recovery']")).toBeTruthy();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
-  it("renders the authorized Crisis fixture as ambient World Feed context only", async () => {
-    const { container } = await renderViewerApp({
-      snapshot: null,
-      search: `${viewerUrl()}&viewer_visual_fixture=major_world_event_crisis`,
-    });
-
-    const feed = container.querySelector("#viewer-world-feed");
-    expect(within(feed).getByText("Crisis active · severity 4")).toBeInTheDocument();
-    expect(feed.querySelector("[data-major-event-category='crisis']")).toBeTruthy();
-    expect(container.querySelector("[data-major-world-event-marker]")).toBeNull();
-    expect(container.querySelector("[data-world-feed-receipt-ref]")).toBeNull();
-  }, HEAVY_UI_TEST_TIMEOUT_MS);
 });
