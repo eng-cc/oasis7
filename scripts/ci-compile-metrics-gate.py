@@ -17,6 +17,15 @@ IDENTITY_FIELDS = (
     "binary",
     "check_only",
     "no_default_features",
+    "warm_check_enabled",
+)
+LEGACY_IDENTITY_FIELDS = IDENTITY_FIELDS[:-1]
+KNOWN_METRICS = (
+    "package_count",
+    "cargo_check_seconds",
+    "cargo_build_release_seconds",
+    "release_binary_bytes",
+    "cargo_check_warm_seconds",
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
@@ -81,6 +90,12 @@ def parse_args() -> argparse.Namespace:
         type=parse_regression_threshold,
         default=None,
         help="Maximum allowed percentage increase in release binary size.",
+    )
+    parser.add_argument(
+        "--max-cargo-check-warm-regression-pct",
+        type=parse_regression_threshold,
+        default=None,
+        help="Maximum allowed percentage increase in warm/no-op cargo check time.",
     )
     parser.add_argument(
         "--require-wasmtime-absent",
@@ -154,6 +169,92 @@ def main() -> int:
     current = comparison.get("current")
     baseline = comparison.get("baseline")
     failures: list[str] = []
+    missing_schema = object()
+    comparison_schema = comparison.get("schema_version", missing_schema)
+    if comparison_schema is missing_schema:
+        # Unversioned artifacts are the legacy V1 cold-only format.  They are
+        # accepted only when neither side advertises V2 fields.
+        v2 = False
+    elif type(comparison_schema) is int and comparison_schema == 2:
+        v2 = True
+    else:
+        failures.append("comparison schema_version must be 2")
+        v2 = True
+
+    def validate_payload_schema(metrics: object, label: str) -> None:
+        if not isinstance(metrics, dict):
+            return
+        metric_schema = metrics.get("schema_version", missing_schema)
+        if v2:
+            if metric_schema is missing_schema:
+                failures.append(f"{label} metrics is missing schema_version 2")
+            elif type(metric_schema) is not int or metric_schema != 2:
+                failures.append(f"{label} metrics schema_version must be 2")
+            if "warm_check_enabled" not in metrics:
+                failures.append(f"{label} metrics is missing warm_check_enabled")
+            elif type(metrics["warm_check_enabled"]) is not bool:
+                failures.append(f"{label} warm_check_enabled must be a boolean")
+            if "cargo_check_warm_seconds" not in metrics:
+                failures.append(f"{label} metrics is missing cargo_check_warm_seconds")
+            elif type(metrics.get("warm_check_enabled")) is bool:
+                warm_value = metrics["cargo_check_warm_seconds"]
+                if metrics["warm_check_enabled"]:
+                    if not is_finite_non_negative_number(warm_value):
+                        failures.append(
+                            f"{label} cargo_check_warm_seconds must be a finite non-negative number when enabled"
+                        )
+                elif warm_value is not None:
+                    failures.append(
+                        f"{label} cargo_check_warm_seconds must be null when warm_check_enabled is false"
+                    )
+        elif any(
+            field in metrics
+            for field in ("schema_version", "warm_check_enabled", "cargo_check_warm_seconds")
+        ):
+            failures.append(f"legacy {label} metrics must be cold-only")
+
+    def validate_v2_payload_metrics(metrics: object, label: str) -> None:
+        if not v2 or not isinstance(metrics, dict):
+            return
+
+        def require_non_negative(field: str) -> None:
+            if field not in metrics:
+                failures.append(f"{label} metrics is missing {field}")
+            elif not is_finite_non_negative_number(metrics[field]):
+                failures.append(
+                    f"{label} metrics {field} must be a finite non-negative number"
+                )
+
+        for field in ("package_count", "cargo_check_seconds"):
+            require_non_negative(field)
+
+        check_only = metrics.get("check_only")
+        for field in ("cargo_build_release_seconds", "release_binary_bytes"):
+            if field not in metrics:
+                failures.append(f"{label} metrics is missing {field}")
+            elif check_only is True:
+                if metrics[field] is not None:
+                    failures.append(
+                        f"{label} metrics {field} must be null for check-only measurements"
+                    )
+            elif check_only is False:
+                require_non_negative(field)
+
+        for field in ("wasmtime_present", "wasm_executor_present"):
+            if field not in metrics:
+                failures.append(f"{label} metrics is missing {field}")
+            elif type(metrics[field]) is not bool:
+                failures.append(f"{label} metrics {field} must be a boolean")
+
+    validate_payload_schema(current, "current")
+    validate_payload_schema(baseline, "baseline")
+    validate_v2_payload_metrics(current, "current")
+    validate_v2_payload_metrics(baseline, "baseline")
+    if not v2 and isinstance(comparison.get("measurement_identity"), dict):
+        if "warm_check_enabled" in comparison["measurement_identity"]:
+            failures.append("legacy comparison must not include warm identity")
+    if args.max_cargo_check_warm_regression_pct is not None and not v2:
+        failures.append("warm threshold requires V2 metrics")
     try:
         oid_length = repository_oid_length()
         repository_head = repository_head_oid(oid_length)
@@ -165,7 +266,8 @@ def main() -> int:
         if not isinstance(metrics, dict):
             failures.append(f"{label} metrics must be a JSON object")
             return None
-        missing = [field for field in IDENTITY_FIELDS if field not in metrics]
+        identity_fields = IDENTITY_FIELDS if v2 else LEGACY_IDENTITY_FIELDS
+        missing = [field for field in identity_fields if field not in metrics]
         if missing:
             failures.append(
                 f"{label} metrics missing measurement identity fields: {', '.join(missing)}"
@@ -210,7 +312,7 @@ def main() -> int:
 
         if not valid:
             return None
-        return {field: metrics[field] for field in IDENTITY_FIELDS}
+        return {field: metrics[field] for field in identity_fields}
 
     current_identity = identity_for(current, "current")
     comparison_identity = comparison.get("measurement_identity")
@@ -231,12 +333,20 @@ def main() -> int:
     ):
         mismatches = [
             field
-            for field in IDENTITY_FIELDS
+            for field in (IDENTITY_FIELDS if v2 else LEGACY_IDENTITY_FIELDS)
             if current_identity[field] != baseline_identity[field]
         ]
         failures.append(
             "current/baseline measurement identity mismatch: "
             + ", ".join(mismatches)
+        )
+    if (
+        args.max_cargo_check_warm_regression_pct is not None
+        and current_identity is not None
+        and not current_identity.get("warm_check_enabled", False)
+    ):
+        failures.append(
+            "warm threshold requires warm_check_enabled to be true"
         )
 
     # The harness records commit OIDs in both the per-checkout metrics and the
@@ -350,6 +460,17 @@ def main() -> int:
                 "comparison baseline_ref does not match baseline_commit_oid"
             )
 
+    # V2 payloads are dereferenced below for field and row binding.  Stop with
+    # the accumulated deterministic diagnostics before any mapping access when
+    # either side is not a JSON object.
+    if v2 and (
+        not isinstance(current, dict)
+        or (baseline is not None and not isinstance(baseline, dict))
+    ):
+        for failure in failures:
+            print(f"gate: FAIL: {failure}")
+        return 1
+
     if (
         args.require_wasmtime_absent
         and isinstance(current, dict)
@@ -357,16 +478,35 @@ def main() -> int:
     ):
         failures.append("current package closure still includes wasmtime")
 
+    # Current-only runs validate the current payload and provenance but do not
+    # require paired rows.  A selected threshold is explicitly not evaluated;
+    # it must never disappear behind the baseline-conditional gate step.
+    if baseline is None and v2:
+        if failures:
+            for failure in failures:
+                print(f"gate: FAIL: {failure}")
+            return 1
+        if args.max_cargo_check_warm_regression_pct is not None:
+            print(
+                "gate: SKIP: no baseline metrics available; warm cargo check "
+                f"threshold {args.max_cargo_check_warm_regression_pct:+.2f}% not evaluated"
+            )
+        else:
+            print("gate: SKIP: no baseline metrics available for regression thresholds")
+        return 0
+
     thresholds = {
         "package_count": args.max_package_count_regression_pct,
         "cargo_check_seconds": args.max_cargo_check_regression_pct,
         "cargo_build_release_seconds": args.max_cargo_build_release_regression_pct,
         "release_binary_bytes": args.max_release_binary_bytes_regression_pct,
+        "cargo_check_warm_seconds": args.max_cargo_check_warm_regression_pct,
     }
 
     # Treat metric_rows as a schema-bearing list rather than a map projection:
     # duplicate or malformed rows must fail closed instead of silently
-    # replacing evidence before threshold evaluation.
+    # replacing evidence before threshold evaluation.  KNOWN_METRICS is static;
+    # a selected threshold cannot make an unknown row valid.
     metric_rows: dict[str, dict] = {}
     metric_values: dict[str, dict[str, object]] = {}
     missing_metric_rows = object()
@@ -388,10 +528,13 @@ def main() -> int:
                     f"comparison metric_rows entry {index} metric must be a non-empty string"
                 )
                 continue
-            if metric not in thresholds:
+            if metric not in KNOWN_METRICS:
                 failures.append(
                     f"comparison metric_rows entry {index} metric is unsupported: {metric}"
                 )
+                continue
+            if not v2 and metric == "cargo_check_warm_seconds":
+                failures.append("legacy comparison cannot contain warm metric rows")
                 continue
             if metric in metric_rows:
                 failures.append(
@@ -404,6 +547,19 @@ def main() -> int:
             current_value = row.get("current")
             delta_value = row.get("delta")
             percent = row.get("percent")
+
+            if v2:
+                expected_baseline = baseline.get(metric)
+                expected_current = current.get(metric)
+                if expected_baseline is None or baseline_value != expected_baseline:
+                    failures.append(
+                        f"comparison row {metric} baseline does not match baseline metrics {metric}"
+                    )
+                if expected_current is None or current_value != expected_current:
+                    failures.append(
+                        f"comparison row {metric} current does not match current metrics {metric}"
+                    )
+
             baseline_valid = is_finite_non_negative_number(baseline_value)
             current_valid = is_finite_non_negative_number(current_value)
             delta_valid = is_finite_number(delta_value)
@@ -420,12 +576,48 @@ def main() -> int:
                 failures.append(
                     f"comparison row {metric} delta must be a finite number"
                 )
-            if percent is None:
+            if delta_valid and baseline_valid and current_valid and not math.isclose(
+                delta_value,
+                current_value - baseline_value,
+                rel_tol=1e-9,
+                abs_tol=1e-9,
+            ):
+                failures.append(
+                    f"comparison row {metric} delta must equal current - baseline"
+                )
+            warm_zero_baseline_report_only = (
+                metric == "cargo_check_warm_seconds"
+                and args.max_cargo_check_warm_regression_pct is None
+                and baseline_valid
+                and baseline_value == 0
+                and percent is None
+            )
+            if warm_zero_baseline_report_only:
+                pass
+            elif percent is None:
                 failures.append(f"cannot evaluate {metric} regression percentage")
+            elif baseline_valid and baseline_value == 0:
+                failures.append(
+                    f"cannot evaluate {metric} regression percentage with zero baseline"
+                )
             elif not percent_valid:
                 failures.append(
                     f"comparison row {metric} percent must be a finite number"
                 )
+            elif baseline_valid and baseline_value > 0 and current_valid:
+                expected_percent = (
+                    (current_value - baseline_value) / baseline_value
+                ) * 100.0
+                if not math.isclose(
+                    percent,
+                    expected_percent,
+                    rel_tol=1e-9,
+                    abs_tol=1e-9,
+                ):
+                    failures.append(
+                        "comparison row "
+                        f"{metric} percent must equal ((current - baseline) / baseline) * 100"
+                    )
             metric_values[metric] = {
                 "baseline": baseline_value,
                 "current": current_value,
@@ -435,14 +627,33 @@ def main() -> int:
                 "current_valid": current_valid,
                 "delta_valid": delta_valid,
                 "percent_valid": percent_valid,
+                "warm_zero_baseline_report_only": warm_zero_baseline_report_only,
             }
+
+    if (
+        v2
+        and isinstance(current, dict)
+        and isinstance(baseline, dict)
+        and current.get("warm_check_enabled") is True
+        and baseline.get("warm_check_enabled") is True
+        and "cargo_check_warm_seconds" not in metric_rows
+    ):
+        failures.append(
+            "comparison is missing cargo_check_warm_seconds row for warm measurements"
+        )
 
     if baseline is None:
         if failures:
             for failure in failures:
                 print(f"gate: FAIL: {failure}")
             return 1
-        print("gate: SKIP: no baseline metrics available for regression thresholds")
+        if args.max_cargo_check_warm_regression_pct is not None:
+            print(
+                "gate: SKIP: no baseline metrics available; warm cargo check "
+                f"threshold {args.max_cargo_check_warm_regression_pct:+.2f}% not evaluated"
+            )
+        else:
+            print("gate: SKIP: no baseline metrics available for regression thresholds")
         return 0
 
     metric_labels = {
@@ -450,6 +661,7 @@ def main() -> int:
         "cargo_check_seconds": "cold cargo check time",
         "cargo_build_release_seconds": "cold cargo build --release time",
         "release_binary_bytes": "release binary size",
+        "cargo_check_warm_seconds": "warm cargo check time",
     }
 
     for metric, threshold in thresholds.items():
@@ -460,39 +672,10 @@ def main() -> int:
             failures.append(f"missing comparison row for {metric}")
             continue
         values = metric_values[metric]
-        baseline_value = values["baseline"]
-        current_value = values["current"]
-        delta_value = values["delta"]
-        baseline_valid = values["baseline_valid"]
-        current_valid = values["current_valid"]
-        delta_valid = values["delta_valid"]
         percent = values["percent"]
         percent_valid = values["percent_valid"]
-        if delta_valid and baseline_valid and current_valid and not math.isclose(
-            delta_value,
-            current_value - baseline_value,
-            rel_tol=1e-9,
-            abs_tol=1e-9,
-        ):
-            failures.append(
-                f"comparison row {metric} delta must equal current - baseline"
-            )
         if percent is None or not percent_valid:
             continue
-        if baseline_valid and baseline_value > 0 and current_valid:
-            expected_percent = (
-                (current_value - baseline_value) / baseline_value
-            ) * 100.0
-            if not math.isclose(
-                percent,
-                expected_percent,
-                rel_tol=1e-9,
-                abs_tol=1e-9,
-            ):
-                failures.append(
-                    "comparison row "
-                    f"{metric} percent must equal ((current - baseline) / baseline) * 100"
-                )
         if percent > threshold:
             failures.append(
                 f"{metric_labels[metric]} regressed by {percent:+.2f}% (threshold {threshold:+.2f}%)"
