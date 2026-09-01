@@ -225,6 +225,33 @@ describe("World Feed v1 state", () => {
     });
   });
 
+  it.each([
+    { snapshot_reload_required: "false" },
+    { status: "ready", gap_reason: "cursor_gap" },
+    { status: "ready", unavailable_reason: "permission_denied" },
+  ])("fails closed for malformed recovery metadata %#", (overrides) => {
+    const previous = consumeWorldFeed(createInitialWorldFeedState(), feed()).state;
+    const malformed = consumeWorldFeed(previous, feed({
+      events: [{
+        event_seq: 7,
+        kind: "major_world_event",
+        summary: "Must not remain current",
+        detail: "",
+        receipt_ref: null,
+        major_event: majorEvent(),
+      }],
+      ...overrides,
+    }));
+
+    expect(malformed.requiresSnapshotReload).toBe(true);
+    expect(malformed.state).toMatchObject({
+      status: "unavailable",
+      stale: true,
+      events: [],
+      snapshotReloadRequired: true,
+    });
+  });
+
   it("fails the envelope when a present major-event authority payload is invalid", () => {
     const consumed = consumeWorldFeed(createInitialWorldFeedState(), feed({
       events: [

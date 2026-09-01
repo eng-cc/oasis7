@@ -266,6 +266,13 @@ function normalizeEnvelope(feed) {
   if (unavailableReason != null && !UNAVAILABLE_REASONS.has(unavailableReason)) {
     return { error: "world feed unavailable reason is invalid" };
   }
+  if (typeof feed.snapshot_reload_required !== "boolean") {
+    return { error: "world feed snapshot reload flag is invalid" };
+  }
+  if ((gapReason != null && status !== "gap")
+    || (unavailableReason != null && status !== "unavailable")) {
+    return { error: "world feed recovery metadata conflicts with status" };
+  }
   const events = feed.events.map((event) => normalizeEvent(event, { worldId, reorgEpoch }));
   if (events.some((event) => event == null)) {
     return { error: "world feed contains an invalid event" };
@@ -278,7 +285,7 @@ function normalizeEnvelope(feed) {
     events,
     gapReason,
     unavailableReason,
-    snapshotReloadRequired: feed.snapshot_reload_required === true,
+    snapshotReloadRequired: feed.snapshot_reload_required,
   };
 }
 
