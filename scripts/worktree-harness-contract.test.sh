@@ -356,6 +356,19 @@ PY
   fi
 done
 
+ABSENT_RELEASE_ROOT="$TMP_DIR/absent-release"
+ABSENT_RELEASE_COMMON_DIR="$TMP_DIR/absent-release-common"
+mkdir -p "$ABSENT_RELEASE_ROOT"
+wh_release_ports_reservation "$ABSENT_RELEASE_ROOT" "missing-token" "$ABSENT_RELEASE_COMMON_DIR"
+[[ ! -e "$ABSENT_RELEASE_ROOT/.ports.reservation.json" ]] || {
+  echo "port reservation contract: absent release recreated a local reservation" >&2
+  exit 1
+}
+[[ ! -e "$ABSENT_RELEASE_COMMON_DIR/.oasis7-harness-port-registry" ]] || {
+  echo "port reservation contract: absent release recreated the shared registry" >&2
+  exit 1
+}
+
 STALE_PORT_ROOT="$TMP_DIR/stale-port-reservation"
 mkdir -p "$STALE_PORT_ROOT"
 python3 - "$STALE_PORT_ROOT/.ports.reservation.json" <<'PY'

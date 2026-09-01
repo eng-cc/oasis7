@@ -623,6 +623,9 @@ with local_lock_path.open("a+", encoding="utf-8") as local_lock:
     reservation = {}
     if reservation_path.exists():
         reservation = json.loads(reservation_path.read_text(encoding="utf-8"))
+    registry_dir = common_dir / ".oasis7-harness-port-registry" if common_dir is not None else None
+    if not reservation_path.exists() and (registry_dir is None or not registry_dir.exists()):
+        raise SystemExit(0)
     registry_path = pathlib.Path(reservation.get("registry_path", ""))
     if not registry_path.is_absolute():
         if common_dir is None:
