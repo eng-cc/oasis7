@@ -252,6 +252,25 @@ describe("World Feed v1 state", () => {
     });
   });
 
+  it("keeps contradictory unavailable recovery metadata unavailable without a reload loop", () => {
+    const previous = consumeWorldFeed(createInitialWorldFeedState(), feed()).state;
+    const malformed = consumeWorldFeed(previous, feed({
+      status: "unavailable",
+      events: [],
+      unavailable_reason: "source_unavailable",
+      snapshot_reload_required: true,
+    }));
+
+    expect(malformed.requiresSnapshotReload).toBe(false);
+    expect(malformed.state).toMatchObject({
+      status: "unavailable",
+      unavailableReason: "source_unavailable",
+      stale: true,
+      events: [],
+      snapshotReloadRequired: false,
+    });
+  });
+
   it("fails the envelope when a present major-event authority payload is invalid", () => {
     const consumed = consumeWorldFeed(createInitialWorldFeedState(), feed({
       events: [

@@ -4675,6 +4675,12 @@ function normalizeEnvelope(feed) {
   if (gapReason != null && status !== "gap" || unavailableReason != null && status !== "unavailable") {
     return { error: "world feed recovery metadata conflicts with status" };
   }
+  if (status === "unavailable" && feed.snapshot_reload_required) {
+    return {
+      error: "world feed unavailable status cannot request snapshot reload",
+      requiresSnapshotReload: false
+    };
+  }
   const events = feed.events.map((event) => normalizeEvent(event, { worldId, reorgEpoch }));
   if (events.some((event) => event == null)) {
     return { error: "world feed contains an invalid event" };
@@ -4702,9 +4708,12 @@ function consumeWorldFeed(previous, feed) {
     };
   }
   if (envelope.error) {
+    const requiresSnapshotReload2 = envelope.requiresSnapshotReload !== false;
     return {
-      state: invalidState(state2, "source_unavailable", envelope.error),
-      requiresSnapshotReload: true
+      state: invalidState(state2, "source_unavailable", envelope.error, {
+        requiresSnapshotReload: requiresSnapshotReload2
+      }),
+      requiresSnapshotReload: requiresSnapshotReload2
     };
   }
   const {
