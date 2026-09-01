@@ -23,12 +23,13 @@ use std::thread::{self, JoinHandle};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use crate::runtime::{AgentContinuation as RuntimeAgentContinuation, RuntimeReceiptLineageV1};
+
 use super::Observation;
 use super::agent::{ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace};
 use super::cognition_policy::{
     ContinuationHandle, ContinuationProposalV1, MemoryWriteIntentPolicyV1,
-    MemoryWritePolicyContextV1, MemoryWritePolicyOutcome, MemoryWriteStore,
-    RuntimeContinuationStatusV1,
+    MemoryWritePolicyContextV1, MemoryWriteStore, RuntimeContinuationStatusV1,
 };
 use super::continuous_agent_harness::{
     ContinuousAgentTurnContextV1, FeedbackEnvelopeV1, MemoryWriteIntentV1, h_v1,
@@ -444,9 +445,6 @@ impl AsyncAgentRunner {
         if actor.active_turn.load(Ordering::Acquire) {
             return Err(AsyncAgentRunnerError::AgentBusy(agent_id.to_string()));
         }
-        if self.active_turns >= self.mailbox_capacity {
-            return Err(AsyncAgentRunnerError::MailboxFull);
-        }
         if !actor.accepting_commands.load(Ordering::Acquire) {
             return Err(AsyncAgentRunnerError::ActorUnavailable(
                 agent_id.to_string(),
@@ -581,6 +579,19 @@ impl AsyncAgentRunner {
         feedback: FeedbackEnvelopeV1,
         store: &mut MemoryWriteStore,
     ) -> Result<(), AsyncAgentRunnerError> {
+        self.consume_runtime_feedback_with_lineage(agent_id, feedback, None, store)
+    }
+
+    /// Consume feedback accompanied by a Runtime-issued receipt lineage.
+    /// Caller-signed feedback remains useful for diagnostics, but cannot
+    /// promote provider memory intents without this projection.
+    pub fn consume_runtime_feedback_with_lineage(
+        &mut self,
+        agent_id: &str,
+        feedback: FeedbackEnvelopeV1,
+        runtime_receipt: Option<&RuntimeReceiptLineageV1>,
+        store: &mut MemoryWriteStore,
+    ) -> Result<(), AsyncAgentRunnerError> {
         let outcome = self
             .completed
             .iter()
@@ -595,11 +606,12 @@ impl AsyncAgentRunner {
         if feedback.status != "committed" {
             return Ok(());
         }
-        let receipt_id = feedback.runtime_receipt_id.clone().ok_or_else(|| {
+        let runtime_receipt = runtime_receipt.ok_or_else(|| {
             AsyncAgentRunnerError::Cognition(
-                "committed feedback requires a Runtime receipt".to_string(),
+                "committed feedback requires a Runtime-issued receipt lineage".to_string(),
             )
         })?;
+        validate_runtime_receipt_lineage(context, &feedback, runtime_receipt)?;
         let policy_context = MemoryWritePolicyContextV1 {
             agent_id: context.agent_id.clone(),
             agent_session_id: context.agent_session_id.clone(),
@@ -628,14 +640,7 @@ impl AsyncAgentRunner {
         }
         for (intent, digest) in normalized {
             store
-                .apply(
-                    intent,
-                    digest,
-                    MemoryWritePolicyOutcome::Committed {
-                        receipt_id: receipt_id.clone(),
-                        provenance: "runtime_authoritative".to_string(),
-                    },
-                )
+                .apply_runtime_receipt(intent, digest, runtime_receipt)
                 .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
         }
         Ok(())
@@ -666,35 +671,20 @@ impl AsyncAgentRunner {
         {
             return Err(AsyncAgentRunnerError::AgentBusy(agent_id.to_string()));
         }
-        let continuation_digest = proposal
-            .proposal_digest()
-            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?
-            .to_string();
-        let continuation_id =
-            h_v1("oasis7.runtime.continuation-id.v1", &continuation_digest).to_string();
-        let wake_id = h_v1("oasis7.runtime.wake-id.v1", &proposal.wake_conditions).to_string();
         let mut handle = ContinuationHandle {
             proposal,
-            continuation_id: continuation_id.clone(),
-            wake_id: wake_id.clone(),
+            continuation_id: String::new(),
+            wake_id: String::new(),
             wake_seq: 0,
-            continuation_digest: continuation_digest.clone(),
+            continuation_digest: String::new(),
             continuation_status_digest: String::new(),
-            status: "pending".to_string(),
+            status: "scheduled".to_string(),
             terminal_disposition: None,
             active: true,
-            provenance: "runtime_authoritative".to_string(),
+            provenance: "harness_policy".to_string(),
             world_effect: false,
             provider_invocation_count: 0,
         };
-        handle.continuation_status_digest = continuation_status_digest(
-            "pending",
-            None,
-            &continuation_id,
-            &wake_id,
-            0,
-            &continuation_digest,
-        );
         self.continuations
             .insert(agent_id.to_string(), handle.clone());
         Ok(handle)
@@ -705,48 +695,65 @@ impl AsyncAgentRunner {
         agent_id: &str,
         runtime: RuntimeContinuationStatusV1,
     ) -> Result<ContinuationHandle, AsyncAgentRunnerError> {
+        let _ = runtime;
+        Err(AsyncAgentRunnerError::Cognition(
+            "legacy Runtime continuation status lacks an authoritative projection".to_string(),
+        ))
+    }
+
+    /// Apply a complete Runtime-owned continuation projection.  Runtime, not
+    /// this runner, allocates schedule IDs, sequence and status digests.
+    pub fn apply_runtime_continuation_projection(
+        &mut self,
+        agent_id: &str,
+        runtime: RuntimeAgentContinuation,
+    ) -> Result<ContinuationHandle, AsyncAgentRunnerError> {
         let existing =
             self.continuations.get(agent_id).cloned().ok_or_else(|| {
                 AsyncAgentRunnerError::Cognition("unknown continuation".to_string())
             })?;
-        if existing.continuation_id != runtime.continuation_id
-            || existing.wake_id != runtime.wake_id
-            || existing.wake_seq != runtime.wake_seq
-            || existing.continuation_digest != runtime.continuation_digest
+        runtime
+            .validate_authoritative()
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        if runtime.continuation_proposal_id != existing.proposal.continuation_proposal_id
+            || runtime.proposal_digest != existing.proposal.proposal_digest
+            || runtime.agent_id != existing.proposal.agent_id
+            || runtime.agent_session_id != existing.proposal.agent_session_id
+            || runtime.agent_turn_id != existing.proposal.agent_turn_id
+            || runtime.decision_request_id != existing.proposal.decision_request_id
+            || runtime.origin_turn_id != existing.proposal.origin_turn_id
+            || runtime.origin_request_digest != existing.proposal.origin_request_digest
         {
             return Err(AsyncAgentRunnerError::Cognition(
-                "Runtime continuation status correlation mismatch".to_string(),
+                "Runtime continuation projection correlation mismatch".to_string(),
             ));
         }
-        if !matches!(
-            runtime.status.as_str(),
-            "pending" | "committed" | "rejected" | "failed" | "stale" | "expired" | "cancelled"
-        ) {
-            return Err(AsyncAgentRunnerError::Cognition(
-                "unknown Runtime continuation status".to_string(),
-            ));
-        }
-        let active = runtime.status == "pending";
-        let world_effect = !active && handle_world_effect(&runtime.status);
+        let (status, active) = match runtime.status {
+            crate::runtime::ContinuationStatusV1::Scheduled => ("scheduled", true),
+            crate::runtime::ContinuationStatusV1::Pending => ("pending", true),
+            crate::runtime::ContinuationStatusV1::Waking => ("waking", true),
+            crate::runtime::ContinuationStatusV1::Consumed => ("consumed", true),
+            crate::runtime::ContinuationStatusV1::Completed => ("completed", false),
+            crate::runtime::ContinuationStatusV1::Cancelled => ("cancelled", false),
+            crate::runtime::ContinuationStatusV1::Invalidated => ("invalidated", false),
+            crate::runtime::ContinuationStatusV1::Expired => ("expired", false),
+            crate::runtime::ContinuationStatusV1::Rejected => ("rejected", false),
+        };
         let handle = ContinuationHandle {
             proposal: existing.proposal,
             continuation_id: runtime.continuation_id.clone(),
             wake_id: runtime.wake_id.clone(),
             wake_seq: runtime.wake_seq,
-            continuation_digest: runtime.continuation_digest.clone(),
-            continuation_status_digest: continuation_status_digest(
-                &runtime.status,
-                runtime.terminal_disposition.as_deref(),
-                &runtime.continuation_id,
-                &runtime.wake_id,
-                runtime.wake_seq,
-                &runtime.continuation_digest,
-            ),
-            status: runtime.status,
-            terminal_disposition: runtime.terminal_disposition,
+            continuation_digest: runtime.continuation_digest(),
+            continuation_status_digest: runtime
+                .continuation_status_digest
+                .clone()
+                .expect("validated Runtime continuation has a status digest"),
+            status: status.to_string(),
+            terminal_disposition: runtime.terminal_disposition.clone(),
             active,
             provenance: "runtime_authoritative".to_string(),
-            world_effect,
+            world_effect: false,
             provider_invocation_count: 0,
         };
         if active {
@@ -853,7 +860,11 @@ impl AsyncAgentTurnOutcome {
             status: status.to_string(),
             request_digest: context.request_digest.clone(),
             reject_reason: (status != "committed").then(|| status.to_string()),
-            provenance: "runtime_authoritative".to_string(),
+            // This helper is caller-side fixture plumbing.  A real Runtime
+            // feedback projection must be supplied to
+            // `consume_runtime_feedback_with_lineage`; never self-label this
+            // envelope as authoritative.
+            provenance: "harness_unverified".to_string(),
         })
     }
 }
@@ -898,30 +909,66 @@ fn validate_feedback(
     Ok(())
 }
 
-fn continuation_status_digest(
-    status: &str,
-    terminal_disposition: Option<&str>,
-    continuation_id: &str,
-    wake_id: &str,
-    wake_seq: u64,
-    continuation_digest: &str,
-) -> String {
-    h_v1(
-        "oasis7.runtime.continuation-status.v1",
-        &json!({
-            "status": status,
-            "terminal_disposition": terminal_disposition,
-            "continuation_id": continuation_id,
-            "wake_id": wake_id,
-            "wake_seq": wake_seq,
-            "continuation_digest": continuation_digest,
-        }),
-    )
-    .to_string()
+fn validate_runtime_receipt_lineage(
+    context: &ContinuousAgentTurnContextV1,
+    feedback: &FeedbackEnvelopeV1,
+    receipt: &RuntimeReceiptLineageV1,
+) -> Result<(), AsyncAgentRunnerError> {
+    receipt
+        .validate()
+        .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+    if receipt.agent_id != context.agent_id
+        || receipt.agent_session_id != context.agent_session_id
+        || receipt.agent_turn_id != context.agent_turn_id
+        || receipt.decision_request_id != context.decision_request_id
+        || receipt.request_digest != context.request_digest.to_string()
+        || receipt.feedback_id != feedback.feedback_id
+        || feedback.runtime_receipt_id.as_deref() != Some(receipt.receipt_id.as_str())
+    {
+        return Err(AsyncAgentRunnerError::Cognition(
+            "Runtime receipt does not correlate to the actor turn and feedback".to_string(),
+        ));
+    }
+    let Some(candidate_action_id) = feedback.candidate_action_id else {
+        return Err(AsyncAgentRunnerError::Cognition(
+            "committed feedback requires a Runtime action lineage".to_string(),
+        ));
+    };
+    if receipt.action_id != candidate_action_id.to_string() {
+        return Err(AsyncAgentRunnerError::Cognition(
+            "Runtime receipt action lineage does not match feedback".to_string(),
+        ));
+    }
+    Ok(())
 }
 
-fn handle_world_effect(status: &str) -> bool {
-    status == "committed"
+/// Recover the structured provider error emitted by the provider-backed
+/// behavior.  `AgentBehavior::decide` is intentionally a legacy infallible
+/// interface, so provider failures are carried in the decision trace while
+/// crossing the actor boundary.  Keep the machine-readable code from the
+/// trace payload rather than treating the fallback `Wait` sentinel as a
+/// successful turn.
+fn provider_error_code(trace: &AgentDecisionTrace) -> Option<String> {
+    let Some(error) = trace.llm_error.as_deref() else {
+        return None;
+    };
+
+    let structured_code = trace
+        .llm_output
+        .as_deref()
+        .and_then(|payload| serde_json::from_str::<serde_json::Value>(payload).ok())
+        .and_then(|payload| payload.get("provider_error").cloned())
+        .and_then(|provider_error| provider_error.get("code").cloned())
+        .and_then(|code| code.as_str().map(str::to_owned));
+    if structured_code.is_some() {
+        return structured_code;
+    }
+
+    error
+        .split_once(':')
+        .map(|(code, _)| code.trim())
+        .filter(|code| !code.is_empty())
+        .map(str::to_owned)
 }
 
 impl AsyncAgentRunnerError {
@@ -952,6 +999,23 @@ fn outcome_from_completion(completion: ActorCompletion) -> AsyncAgentTurnOutcome
             world_effect: AsyncWorldEffect::NoEffect,
             decision: None,
             decision_trace: None,
+            prepared_context: completion.prepared_context,
+            memory_write_intents: completion.memory_write_intents,
+        };
+    }
+    if let Some(code) = completion
+        .decision_trace
+        .as_ref()
+        .and_then(provider_error_code)
+    {
+        return AsyncAgentTurnOutcome {
+            turn_id: completion.turn_id,
+            agent_id: completion.agent_id,
+            lifecycle: AsyncTurnLifecycle::Failed,
+            feedback: AsyncTurnFeedback::ProviderError { code },
+            world_effect: AsyncWorldEffect::NoEffect,
+            decision: None,
+            decision_trace: completion.decision_trace,
             prepared_context: completion.prepared_context,
             memory_write_intents: completion.memory_write_intents,
         };

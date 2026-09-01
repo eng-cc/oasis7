@@ -89,10 +89,32 @@ fn deadline_due_is_compared_before_tick_priority_and_all_tie_breakers() {
         ids(&selected),
         vec![
             "wake-due".to_string(),
+            "wake-ordinary".to_string(),
             "wake-tick".to_string(),
-            "wake-ordinary".to_string()
         ]
     );
+}
+
+#[test]
+fn capacity_recovery_keeps_the_same_ascending_wake_tick_order() {
+    let mut scheduler = CognitionScheduler::new(policy(), 1);
+    scheduler
+        .try_enqueue(wake("agent-a", "cont-a", "wake-active", 12, 10, 20, 1))
+        .expect("first wake uses the only slot");
+    scheduler
+        .try_enqueue(wake("agent-b", "cont-b", "wake-late", 13, 10, 20, 2))
+        .expect("second wake is durably backpressured");
+    scheduler
+        .try_enqueue(wake("agent-c", "cont-c", "wake-early", 11, 10, 20, 3))
+        .expect("third wake is durably backpressured");
+
+    let selected = scheduler.select_ready(12);
+    assert_eq!(ids(&selected), vec!["wake-active".to_string()]);
+    scheduler.release_capacity();
+
+    let recovered = scheduler.recover_capacity(12);
+    assert_eq!(ids(&recovered), vec!["wake-early".to_string()]);
+    assert_eq!(scheduler.pending_backpressure_count(), 1);
 }
 
 #[test]

@@ -5,15 +5,17 @@ use std::time::Instant;
 
 use oasis7_wasm_abi::{AgentCommandResponse, CapabilityCatalogSnapshot, ModuleCommandCatalogEntry};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::capability_invocation_context::CapabilityInvocationContext;
 
-use super::continuous_agent_harness::ContinuousAgentTurnContextV1;
+use super::continuous_agent_harness::{
+    CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR, CONTINUOUS_AGENT_CONTEXT_VERSION,
+    ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1,
+};
 use super::{
     Action, ActionId, ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, AgentQuery,
-    AgentQueryResult, LlmChatMessageTrace, LlmChatRole, LlmDecisionDiagnostics,
-    LlmPromptSectionTrace, LlmStepTrace, Observation, WorldEvent, WorldTime,
+    AgentQueryResult, Observation, WorldEvent, WorldTime,
 };
 
 #[path = "decision_provider_capability.rs"]
@@ -22,6 +24,8 @@ mod decision_provider_capability;
 mod decision_provider_cognition;
 #[path = "decision_provider_support.rs"]
 mod decision_provider_support;
+#[path = "decision_provider_trace.rs"]
+mod decision_provider_trace;
 
 const DEFAULT_PROVIDER_TIMEOUT_BUDGET_MS: u64 = 3_000;
 const MAX_RECENT_EVENT_SUMMARIES: usize = 8;
@@ -415,6 +419,22 @@ pub trait DecisionProvider {
         request: &DecisionRequest,
     ) -> Result<DecisionResponse, DecisionProviderError>;
 
+    /// Versioned additive adapter for the continuous-agent host projection.
+    ///
+    /// Existing providers implement the legacy `decide` method and therefore
+    /// continue to work unchanged.  Providers that understand the continuous
+    /// cognition lane can override this hook to consume the frozen context and
+    /// return the outer response envelope.  The default implementation keeps
+    /// legacy provider semantics while making the response lineage explicit at
+    /// the host boundary.
+    fn decide_with_continuous_context(
+        &mut self,
+        request: &DecisionRequest,
+        context: &ContinuousAgentTurnContextV1,
+    ) -> Result<ContinuousAgentResponseContextV1, DecisionProviderError> {
+        Ok(wrap_continuous_response(self.decide(request)?, context))
+    }
+
     fn push_feedback(&mut self, _feedback: &FeedbackEnvelope) -> Result<(), DecisionProviderError> {
         Ok(())
     }
@@ -422,6 +442,49 @@ pub trait DecisionProvider {
     fn on_world_event(&mut self, _event: &WorldEvent) -> Result<(), DecisionProviderError> {
         Ok(())
     }
+}
+
+fn wrap_continuous_response(
+    response: DecisionResponse,
+    context: &ContinuousAgentTurnContextV1,
+) -> ContinuousAgentResponseContextV1 {
+    ContinuousAgentResponseContextV1 {
+        base_decision_response: response,
+        context_discriminator: CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR.to_string(),
+        context_version: CONTINUOUS_AGENT_CONTEXT_VERSION,
+        agent_session_id: context.agent_session_id.clone(),
+        agent_turn_id: context.agent_turn_id.clone(),
+        decision_request_id: context.decision_request_id.clone(),
+        retry_seq: 0,
+        transport_attempt: 0,
+        request_digest: context.request_digest.clone(),
+    }
+}
+
+fn validate_continuous_response_lineage(
+    response: &ContinuousAgentResponseContextV1,
+    context: &ContinuousAgentTurnContextV1,
+    agent_id: &str,
+) -> Result<(), DecisionProviderError> {
+    context
+        .validate_for_agent(agent_id)
+        .map_err(|error| DecisionProviderError::new(error.code(), error.message(), false))?;
+    if response.context_discriminator != CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR
+        || response.context_version != CONTINUOUS_AGENT_CONTEXT_VERSION
+        || response.agent_session_id != context.agent_session_id
+        || response.agent_turn_id != context.agent_turn_id
+        || response.decision_request_id != context.decision_request_id
+        || response.retry_seq != 0
+        || response.transport_attempt != 0
+        || response.request_digest != context.request_digest
+    {
+        return Err(DecisionProviderError::new(
+            "response_identity_mismatch",
+            "provider response does not match the host-bound cognition request",
+            false,
+        ));
+    }
+    Ok(())
 }
 
 pub struct ProviderBackedAgentBehavior<P: DecisionProvider> {
@@ -630,38 +693,7 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
     }
 
     fn provider_error_to_trace(error: &DecisionProviderError) -> AgentDecisionTrace {
-        let mut llm_output = json!({
-            "provider_error": {
-                "code": error.code,
-                "message": error.message,
-                "retryable": error.retryable,
-            },
-        });
-        if let Some(upstream_trace) = error.upstream_trace.as_ref() {
-            llm_output["upstream_trace"] = upstream_trace.clone();
-        }
-        AgentDecisionTrace {
-            agent_id: String::new(),
-            time: 0,
-            decision: AgentDecision::Wait,
-            llm_input: None,
-            llm_output: Some(llm_output.to_string()),
-            llm_error: Some(error.as_trace_message()),
-            parse_error: None,
-            llm_diagnostics: Some(LlmDecisionDiagnostics {
-                model: None,
-                latency_ms: None,
-                prompt_tokens: None,
-                completion_tokens: None,
-                total_tokens: None,
-                retry_count: 0,
-            }),
-            llm_effect_intents: vec![],
-            llm_effect_receipts: vec![],
-            llm_step_trace: vec![],
-            llm_prompt_section_trace: vec![],
-            llm_chat_messages: vec![],
-        }
+        decision_provider_trace::provider_error_to_trace(error)
     }
 
     fn response_to_trace(
@@ -669,90 +701,21 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
         observation: &Observation,
         request: &DecisionRequest,
         response: &DecisionResponse,
+        outer_response: Option<&ContinuousAgentResponseContextV1>,
         decision: &AgentDecision,
         parse_error: Option<String>,
         provider_error: Option<String>,
     ) -> AgentDecisionTrace {
-        let input_summary = response
-            .trace_payload
-            .input_summary
-            .clone()
-            .or_else(|| serde_json::to_string(request).ok());
-        let output_summary = response
-            .trace_payload
-            .output_summary
-            .clone()
-            .or_else(|| serde_json::to_string(response).ok());
-        let transcript = response
-            .trace_payload
-            .transcript
-            .iter()
-            .map(|entry| LlmChatMessageTrace {
-                time: observation.time,
-                agent_id: self.agent_id.clone(),
-                role: match entry.role.as_str() {
-                    "player" => LlmChatRole::Player,
-                    "tool" => LlmChatRole::Tool,
-                    "system" => LlmChatRole::System,
-                    _ => LlmChatRole::Agent,
-                },
-                content: entry.content.clone(),
-            })
-            .collect();
-        let step_trace = response
-            .trace_payload
-            .tool_trace
-            .iter()
-            .enumerate()
-            .map(|(index, summary)| LlmStepTrace {
-                step_index: index,
-                step_type: "provider_tool_trace".to_string(),
-                input_summary: summary.clone(),
-                output_summary: summary.clone(),
-                status: "ok".to_string(),
-            })
-            .collect();
-        AgentDecisionTrace {
-            agent_id: self.agent_id.clone(),
-            time: observation.time,
-            decision: decision.clone(),
-            llm_input: input_summary,
-            llm_output: output_summary,
-            llm_error: provider_error,
+        decision_provider_trace::response_to_trace(
+            &self.agent_id,
+            observation,
+            request,
+            response,
+            outer_response,
+            decision,
             parse_error,
-            llm_diagnostics: Some(LlmDecisionDiagnostics {
-                model: response
-                    .diagnostics
-                    .provider_id
-                    .clone()
-                    .or_else(|| response.trace_payload.provider_id.clone()),
-                latency_ms: response
-                    .diagnostics
-                    .latency_ms
-                    .or(response.trace_payload.latency_ms),
-                prompt_tokens: response
-                    .trace_payload
-                    .token_usage
-                    .as_ref()
-                    .and_then(|usage| usage.prompt_tokens),
-                completion_tokens: response
-                    .trace_payload
-                    .token_usage
-                    .as_ref()
-                    .and_then(|usage| usage.completion_tokens),
-                total_tokens: response
-                    .trace_payload
-                    .token_usage
-                    .as_ref()
-                    .and_then(|usage| usage.total_tokens),
-                retry_count: response.diagnostics.retry_count,
-            }),
-            llm_effect_intents: vec![],
-            llm_effect_receipts: vec![],
-            llm_step_trace: step_trace,
-            llm_prompt_section_trace: Vec::<LlmPromptSectionTrace>::new(),
-            llm_chat_messages: transcript,
-        }
+            provider_error,
+        )
     }
 
     fn feedback_from_action_result(result: &ActionResult) -> FeedbackEnvelope {
@@ -1010,14 +973,50 @@ impl<P: DecisionProvider> AgentBehavior for ProviderBackedAgentBehavior<P> {
         self.pending_memory_write_intents.clear();
         let request = self.build_request(observation);
         let started_at = Instant::now();
-        let response = match self.provider.decide(&request) {
-            Ok(response) => response,
-            Err(error) => {
+        let mut outer_response = None;
+        let response = if let Some(context) = self.continuous_turn_context.as_ref() {
+            let response = match context.validate_for_agent(&self.agent_id) {
+                Ok(()) => self
+                    .provider
+                    .decide_with_continuous_context(&request, context),
+                Err(error) => Err(DecisionProviderError::new(
+                    error.code(),
+                    error.message(),
+                    false,
+                )),
+            };
+            let response = match response {
+                Ok(response) => response,
+                Err(error) => {
+                    let mut trace = Self::provider_error_to_trace(&error);
+                    trace.agent_id = self.agent_id.clone();
+                    trace.time = observation.time;
+                    self.pending_trace = Some(trace);
+                    return AgentDecision::Wait;
+                }
+            };
+            if let Err(error) =
+                validate_continuous_response_lineage(&response, context, &self.agent_id)
+            {
                 let mut trace = Self::provider_error_to_trace(&error);
                 trace.agent_id = self.agent_id.clone();
                 trace.time = observation.time;
                 self.pending_trace = Some(trace);
                 return AgentDecision::Wait;
+            }
+            let inner_response = response.base_decision_response.clone();
+            outer_response = Some(response);
+            inner_response
+        } else {
+            match self.provider.decide(&request) {
+                Ok(response) => response,
+                Err(error) => {
+                    let mut trace = Self::provider_error_to_trace(&error);
+                    trace.agent_id = self.agent_id.clone();
+                    trace.time = observation.time;
+                    self.pending_trace = Some(trace);
+                    return AgentDecision::Wait;
+                }
             }
         };
         self.pending_memory_write_intents = response.memory_write_intents.clone();
@@ -1139,6 +1138,7 @@ impl<P: DecisionProvider> AgentBehavior for ProviderBackedAgentBehavior<P> {
             observation,
             &request,
             &response,
+            outer_response.as_ref(),
             &decision,
             parse_error,
             provider_error,

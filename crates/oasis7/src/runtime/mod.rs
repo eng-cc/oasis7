@@ -113,7 +113,8 @@ pub use cognition::{
 pub use cognition_recovery::{
     CognitionCrashPrefix, CognitionReceiptViewV1, CognitionRecovery, CognitionRecoveryError,
     CognitionRecoveryFixture, CognitionRecoveryProbe, CognitionRecoveryReport,
-    CognitionResponseRecordV1, CognitionSnapshotV1, WorldCommitRecordV1, WorldRootViewV1,
+    CognitionResponseRecordV1, CognitionSnapshotV1, RuntimeReceiptLineageV1, WorldCommitRecordV1,
+    WorldRootViewV1,
 };
 
 // Durable cognition scheduler, wake and continuation projections

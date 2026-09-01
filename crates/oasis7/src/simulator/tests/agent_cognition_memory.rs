@@ -5,8 +5,10 @@
 //! billing are not part of this contract.
 
 use crate::simulator::{
-    MemoryContextSnapshotV1, MemoryWriteIntentPolicyV1, MemoryWriteIntentV1,
-    MemoryWritePolicyContextV1, MemoryWritePolicyOutcome, MemoryWriteStore,
+    AgentBehavior, AgentDecision, AsyncAgentRunner, AsyncAgentTurnOutcome,
+    ContinuousAgentTurnContextV1, MemoryContextSnapshotV1, MemoryWriteIntent,
+    MemoryWriteIntentPolicyV1, MemoryWriteIntentV1, MemoryWritePolicyContextV1,
+    MemoryWritePolicyOutcome, MemoryWriteStore, Observation,
 };
 use serde_json::json;
 
@@ -211,4 +213,80 @@ fn memory_digest_context_is_tied_to_agent_turn_and_request_not_provider_provenan
         .expect("second digest");
     assert_ne!(first, second);
     assert_ne!(other.provenance, "runtime_authoritative");
+}
+
+struct MemoryCandidateBehavior;
+
+impl AgentBehavior for MemoryCandidateBehavior {
+    fn agent_id(&self) -> &str {
+        AGENT_ID
+    }
+
+    fn decide(&mut self, _observation: &Observation) -> AgentDecision {
+        AgentDecision::Wait
+    }
+
+    fn take_memory_write_intents(&mut self) -> Vec<MemoryWriteIntent> {
+        vec![MemoryWriteIntent {
+            scope: "turn_private".to_string(),
+            summary: "candidate awaiting a Runtime action receipt".to_string(),
+            tags: vec!["candidate".to_string()],
+        }]
+    }
+}
+
+fn turn_context() -> ContinuousAgentTurnContextV1 {
+    ContinuousAgentTurnContextV1 {
+        agent_id: AGENT_ID.to_string(),
+        agent_session_id: SESSION_ID.to_string(),
+        agent_turn_id: TURN_ID.to_string(),
+        decision_request_id: "request-memory-1".to_string(),
+        request_digest: serde_json::from_value(json!(REQUEST_DIGEST))
+            .expect("decode request digest"),
+        memory_snapshot: MemoryContextSnapshotV1::empty("turn_private"),
+        goal_snapshot: crate::simulator::GoalSnapshotV1::empty(),
+        continuation: None,
+    }
+}
+
+fn completed_turn(runner: &mut AsyncAgentRunner) -> AsyncAgentTurnOutcome {
+    for _ in 0..1024 {
+        if let Some(outcome) = runner
+            .poll_completed()
+            .expect("poll memory candidate actor")
+            .into_iter()
+            .next()
+        {
+            return outcome;
+        }
+        std::thread::yield_now();
+    }
+    panic!("memory candidate actor did not complete within bounded polling budget");
+}
+
+#[test]
+fn memory_write_rejects_caller_signed_receipt_without_runtime_action_feedback_lineage() {
+    let mut runner = AsyncAgentRunner::new(1).expect("create memory candidate runner");
+    runner
+        .register(MemoryCandidateBehavior)
+        .expect("register memory candidate actor");
+    runner
+        .start_turn_with_context(AGENT_ID, turn_context())
+        .expect("open memory candidate turn");
+    let outcome = completed_turn(&mut runner);
+    assert_eq!(outcome.memory_write_intents.len(), 1);
+
+    // This envelope has the right local request/turn identity, but the
+    // receipt and candidate action are caller-selected rather than issued and
+    // linked by Runtime.  The write gate must reject it before persistence.
+    let mut forged = outcome
+        .feedback_for_runtime_status("committed", Some("caller-forged-receipt"))
+        .expect("construct the forged feedback envelope");
+    forged.candidate_action_id = Some(7_777);
+
+    let mut store = MemoryWriteStore::default();
+    runner
+        .consume_runtime_feedback(AGENT_ID, forged, &mut store)
+        .expect_err("caller-signed receipt without Runtime lineage must be rejected");
+    assert!(store.entries().is_empty());
 }

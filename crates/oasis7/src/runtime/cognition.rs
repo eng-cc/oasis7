@@ -29,7 +29,7 @@ struct WorldStateHashInput<'a> {
     world_id: &'a str,
     branch_id: &'a str,
     finality_epoch: u64,
-    finality_block_hash: &'a str,
+    finality_block_hash: Option<&'a str>,
     finality_status: &'a str,
     logical_tick: u64,
     state_root: &'a str,
@@ -57,7 +57,7 @@ struct EnvelopeDigestInput<'a> {
     retry_seq: u64,
     branch_id: &'a str,
     finality_epoch: u64,
-    finality_block_hash: &'a str,
+    finality_block_hash: Option<&'a str>,
     finality_status: &'a str,
     finality_binding_digest: &'a str,
     base_tick: u64,
@@ -138,7 +138,8 @@ pub struct AgentDecisionEnvelopeV1 {
     pub agent_id: String,
     pub branch_id: String,
     pub finality_epoch: u64,
-    pub finality_block_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finality_block_hash: Option<String>,
     pub finality_status: String,
     pub agent_session_id: String,
     pub agent_turn_id: String,
@@ -198,7 +199,7 @@ impl AgentDecisionEnvelopeV1 {
                 schema_version: 1,
                 branch_id: &self.branch_id,
                 finality_epoch: self.finality_epoch,
-                finality_block_hash: Some(&self.finality_block_hash),
+                finality_block_hash: self.finality_block_hash.as_deref(),
                 finality_status: &self.finality_status,
                 reorg_epoch: self.reorg_epoch,
             },
@@ -223,7 +224,7 @@ impl AgentDecisionEnvelopeV1 {
                 retry_seq: self.retry_seq,
                 branch_id: &self.branch_id,
                 finality_epoch: self.finality_epoch,
-                finality_block_hash: &self.finality_block_hash,
+                finality_block_hash: self.finality_block_hash.as_deref(),
                 finality_status: &self.finality_status,
                 finality_binding_digest: &self.derive_finality_binding_digest(),
                 base_tick: self.base_tick,
@@ -404,7 +405,6 @@ impl MvccValidator {
         }
         for value in [
             &envelope.base_world_hash,
-            &envelope.finality_block_hash,
             &envelope.runtime_manifest_hash,
             &envelope.capability_snapshot_hash,
             &envelope.authority_context_hash,
@@ -420,6 +420,10 @@ impl MvccValidator {
                 return Err(CognitionValidationError::new("invalid_digest"));
             }
         }
+        validate_finality_binding(
+            envelope.finality_status.as_str(),
+            envelope.finality_block_hash.as_deref(),
+        )?;
         if envelope.action.is_null() {
             return Err(CognitionValidationError::new("invalid_action"));
         }
@@ -525,7 +529,10 @@ fn validate_runtime_identity(
             return Err(CognitionValidationError::new("reorg_invalidated"));
         }
         if first.finality_epoch != envelope.finality_epoch
-            || first.finality_block_hash != envelope.finality_block_hash
+            || envelope
+                .finality_block_hash
+                .as_deref()
+                .is_some_and(|hash| hash != first.finality_block_hash)
         {
             return Err(CognitionValidationError::new("reorg_invalidated"));
         }
@@ -535,7 +542,10 @@ fn validate_runtime_identity(
         // authority record; accepting a guessed branch here would weaken the
         // reorg boundary.
         if record.block.header.epoch != envelope.finality_epoch
-            || record.certificate.block_hash != envelope.finality_block_hash
+            || envelope
+                .finality_block_hash
+                .as_deref()
+                .is_some_and(|hash| hash != record.certificate.block_hash)
         {
             return Err(CognitionValidationError::new("reorg_invalidated"));
         }
@@ -572,10 +582,23 @@ fn validate_runtime_identity(
     {
         return Err(CognitionValidationError::new("reorg_invalidated"));
     }
-    if !valid_digest(&envelope.finality_block_hash) {
-        return Err(CognitionValidationError::new("reorg_invalidated"));
-    }
     Ok(())
+}
+
+fn validate_finality_binding(
+    status: &str,
+    block_hash: Option<&str>,
+) -> Result<(), CognitionValidationError> {
+    if !matches!(status, "pending" | "verified" | "reorged" | "suspended") {
+        return Err(CognitionValidationError::new("recovery_pending"));
+    }
+    match block_hash {
+        Some(hash) if !valid_blake3_digest(hash) => {
+            Err(CognitionValidationError::new("recovery_pending"))
+        }
+        None if status == "verified" => Err(CognitionValidationError::new("recovery_pending")),
+        _ => Ok(()),
+    }
 }
 
 fn validate_request_binding(
@@ -661,7 +684,7 @@ fn validate_base_head(
             world_id: envelope.world_id.as_str(),
             branch_id: envelope.branch_id.as_str(),
             finality_epoch: envelope.finality_epoch,
-            finality_block_hash: envelope.finality_block_hash.as_str(),
+            finality_block_hash: envelope.finality_block_hash.as_deref(),
             finality_status: envelope.finality_status.as_str(),
             logical_tick: world.state().time,
             state_root: state_root.as_str(),
@@ -963,6 +986,16 @@ fn valid_digest(value: &str) -> bool {
         .strip_prefix("blake3:")
         .or_else(|| value.strip_prefix("sha256:"))
         .unwrap_or(value);
+    hex.len() == DIGEST_HEX_BYTES
+        && hex
+            .bytes()
+            .all(|character| character.is_ascii_digit() || (b'a'..=b'f').contains(&character))
+}
+
+fn valid_blake3_digest(value: &str) -> bool {
+    let Some(hex) = value.strip_prefix("blake3:") else {
+        return false;
+    };
     hex.len() == DIGEST_HEX_BYTES
         && hex
             .bytes()

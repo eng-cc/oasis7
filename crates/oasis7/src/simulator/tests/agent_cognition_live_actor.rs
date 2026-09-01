@@ -10,6 +10,9 @@ use super::*;
 use crate::runtime::{AgentCognitionMailbox, AgentDecisionEnvelopeV1};
 use crate::simulator::AsyncAgentRunner;
 use serde_json::json;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 const AGENT_ID: &str = "agent-live-1";
 
@@ -20,8 +23,8 @@ fn envelope(agent_id: &str, turn: &str) -> AgentDecisionEnvelopeV1 {
         "agent_id": agent_id,
         "branch_id": "main",
         "finality_epoch": 7,
-        "finality_block_hash": "blake3:finality-live-7",
-        "finality_status": "finalized",
+        "finality_block_hash": format!("blake3:{}", "a".repeat(64)),
+        "finality_status": "verified",
         "agent_session_id": format!("session.{agent_id}"),
         "agent_turn_id": turn,
         "decision_request_id": format!("request.{turn}"),
@@ -88,6 +91,107 @@ fn mailbox_is_bounded_and_enforces_one_active_turn_per_agent() {
     mailbox
         .try_enqueue(envelope("agent-live-2", "turn-a"))
         .expect("capacity release admits the next agent");
+}
+
+struct ReleaseOnDrop(Arc<AtomicBool>);
+
+impl Drop for ReleaseOnDrop {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Release);
+    }
+}
+
+struct ParallelWaitBehavior {
+    agent_id: String,
+    started: Arc<AtomicBool>,
+    release: Arc<AtomicBool>,
+}
+
+impl ParallelWaitBehavior {
+    fn new(agent_id: &str, started: Arc<AtomicBool>, release: Arc<AtomicBool>) -> Self {
+        Self {
+            agent_id: agent_id.to_string(),
+            started,
+            release,
+        }
+    }
+}
+
+impl AgentBehavior for ParallelWaitBehavior {
+    fn agent_id(&self) -> &str {
+        &self.agent_id
+    }
+
+    fn decide(&mut self, _observation: &Observation) -> AgentDecision {
+        self.started.store(true, Ordering::Release);
+        while !self.release.load(Ordering::Acquire) {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        AgentDecision::Wait
+    }
+}
+
+#[test]
+fn mailbox_capacity_is_per_actor_and_does_not_cap_parallel_turns() {
+    let release = Arc::new(AtomicBool::new(false));
+    let first_started = Arc::new(AtomicBool::new(false));
+    let second_started = Arc::new(AtomicBool::new(false));
+    let mut runner = AsyncAgentRunner::new(1).expect("create one-slot actor mailboxes");
+    let _release_guard = ReleaseOnDrop(Arc::clone(&release));
+
+    runner
+        .register(ParallelWaitBehavior::new(
+            "agent-live-1",
+            Arc::clone(&first_started),
+            Arc::clone(&release),
+        ))
+        .expect("register first actor");
+    runner
+        .register(ParallelWaitBehavior::new(
+            "agent-live-2",
+            Arc::clone(&second_started),
+            Arc::clone(&release),
+        ))
+        .expect("register second actor");
+
+    runner
+        .start_turn("agent-live-1")
+        .expect("first actor uses its mailbox slot");
+    runner
+        .start_turn("agent-live-2")
+        .expect("second actor uses its own mailbox slot");
+    let reentrant = runner
+        .start_turn("agent-live-1")
+        .expect_err("a single actor still has one active turn");
+    assert_eq!(reentrant.code(), "agent_busy");
+    assert_eq!(runner.active_turn_count(), 2);
+
+    for _ in 0..500 {
+        if first_started.load(Ordering::Acquire) && second_started.load(Ordering::Acquire) {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    assert!(
+        first_started.load(Ordering::Acquire) && second_started.load(Ordering::Acquire),
+        "both actors must enter decide while their turns overlap"
+    );
+    assert!(runner.provider_is_still_in_flight("agent-live-1"));
+    assert!(runner.provider_is_still_in_flight("agent-live-2"));
+
+    release.store(true, Ordering::Release);
+    let mut completed = 0;
+    for _ in 0..500 {
+        completed += runner.poll_completed().expect("poll parallel actors").len();
+        if completed == 2 {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    assert_eq!(
+        completed, 2,
+        "both parallel turns must complete after release"
+    );
 }
 
 #[test]

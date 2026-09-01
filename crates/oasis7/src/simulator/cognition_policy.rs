@@ -449,6 +449,30 @@ impl MemoryWriteStore {
         self.entries.push(entry);
         Ok(())
     }
+
+    /// Commit only from the Runtime receipt projection.  The lower-level
+    /// `apply` method remains for the policy unit fixtures; production async
+    /// runner paths must use this gate so receipt, action, feedback and turn
+    /// lineage are checked before persistence.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn apply_runtime_receipt(
+        &mut self,
+        intent: NormalizedMemoryWriteIntentV1,
+        digest: Digest32,
+        receipt: &crate::runtime::RuntimeReceiptLineageV1,
+    ) -> Result<(), CognitionError> {
+        receipt.validate().map_err(|runtime_error| {
+            error("memory_runtime_receipt_invalid", runtime_error.to_string())
+        })?;
+        self.apply(
+            intent,
+            digest,
+            MemoryWritePolicyOutcome::Committed {
+                receipt_id: receipt.receipt_id.clone(),
+                provenance: "runtime_authoritative".to_string(),
+            },
+        )
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -920,51 +944,74 @@ impl ContinuationHarness {
         handle: ContinuationHandle,
         runtime: RuntimeContinuationStatusV1,
     ) -> Result<ContinuationProjectionV1, CognitionError> {
+        let _ = (handle, runtime);
+        Err(error(
+            "continuation_runtime_status_unverified",
+            "legacy Runtime status lacks an authoritative continuation projection",
+        ))
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn consume_runtime_projection(
+        &mut self,
+        handle: ContinuationHandle,
+        runtime: &crate::runtime::AgentContinuation,
+    ) -> Result<ContinuationProjectionV1, CognitionError> {
         let proposal = self
             .active
             .get(&handle.proposal.continuation_proposal_id)
             .filter(|candidate| candidate.proposal_digest == handle.proposal.proposal_digest)
             .cloned()
             .ok_or_else(|| error("continuation_unknown", "continuation handle is not active"))?;
-        if runtime.continuation_id.trim().is_empty()
-            || runtime.wake_id.trim().is_empty()
-            || runtime.continuation_digest.trim().is_empty()
+        runtime.validate_authoritative().map_err(|runtime_error| {
+            error(
+                "continuation_runtime_projection_invalid",
+                runtime_error.to_string(),
+            )
+        })?;
+        if runtime.continuation_proposal_id != proposal.continuation_proposal_id
+            || runtime.proposal_digest != proposal.proposal_digest
+            || runtime.agent_id != proposal.agent_id
+            || runtime.agent_session_id != proposal.agent_session_id
+            || runtime.agent_turn_id != proposal.agent_turn_id
+            || runtime.decision_request_id != proposal.decision_request_id
+            || runtime.origin_turn_id != proposal.origin_turn_id
+            || runtime.origin_request_digest != proposal.origin_request_digest
         {
             return Err(error(
-                "continuation_runtime_status_invalid",
-                "Runtime status lacks schedule correlation",
+                "continuation_runtime_correlation_mismatch",
+                "Runtime continuation projection does not match the proposal lineage",
             ));
         }
-        let (status, active, provenance, world_effect) = match runtime.status.as_str() {
-            "pending" => ("pending", true, "runtime_authoritative", false),
-            "committed" => ("completed", false, "runtime_authoritative", true),
-            "rejected" => ("rejected", false, "runtime_authoritative", false),
-            "failed" => ("invalidated", false, "runtime_authoritative", false),
-            "stale" => ("invalidated", false, "runtime_authoritative", false),
-            "expired" => ("expired", false, "runtime_authoritative", false),
-            "cancelled" => ("cancelled", false, "runtime_authoritative", false),
-            _ => {
-                return Err(error(
-                    "continuation_runtime_status_invalid",
-                    "unknown Runtime continuation status",
-                ));
-            }
+        let (status, active) = match runtime.status {
+            crate::runtime::ContinuationStatusV1::Scheduled => ("scheduled", true),
+            crate::runtime::ContinuationStatusV1::Pending => ("pending", true),
+            crate::runtime::ContinuationStatusV1::Waking => ("waking", true),
+            crate::runtime::ContinuationStatusV1::Consumed => ("consumed", true),
+            crate::runtime::ContinuationStatusV1::Completed => ("completed", false),
+            crate::runtime::ContinuationStatusV1::Cancelled => ("cancelled", false),
+            crate::runtime::ContinuationStatusV1::Invalidated => ("invalidated", false),
+            crate::runtime::ContinuationStatusV1::Expired => ("expired", false),
+            crate::runtime::ContinuationStatusV1::Rejected => ("rejected", false),
         };
         if !active {
             self.active.remove(&proposal.continuation_proposal_id);
         }
         Ok(ContinuationHandle {
             proposal,
-            continuation_id: runtime.continuation_id,
-            wake_id: runtime.wake_id,
+            continuation_id: runtime.continuation_id.clone(),
+            wake_id: runtime.wake_id.clone(),
             wake_seq: runtime.wake_seq,
-            continuation_digest: runtime.continuation_digest,
-            continuation_status_digest: String::new(),
+            continuation_digest: runtime.continuation_digest(),
+            continuation_status_digest: runtime
+                .continuation_status_digest
+                .clone()
+                .expect("validated Runtime continuation has a status digest"),
             status: status.to_string(),
-            terminal_disposition: runtime.terminal_disposition,
+            terminal_disposition: runtime.terminal_disposition.clone(),
             active,
-            provenance: provenance.to_string(),
-            world_effect,
+            provenance: "runtime_authoritative".to_string(),
+            world_effect: false,
             provider_invocation_count: 0,
         })
     }

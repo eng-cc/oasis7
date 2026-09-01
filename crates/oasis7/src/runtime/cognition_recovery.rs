@@ -68,6 +68,80 @@ pub struct CognitionReceiptViewV1 {
     pub receipt_digest: String,
 }
 
+/// Runtime-issued receipt lineage projected to the simulator cognition
+/// boundary.  The durable `WorldCommitRecordV1` remains the authority; this
+/// projection carries the correlated turn and feedback identity required by
+/// an authoritative memory commit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuntimeReceiptLineageV1 {
+    pub schema_version: String,
+    pub status: String,
+    pub receipt_id: String,
+    pub receipt_digest: String,
+    pub envelope_digest: String,
+    pub action_id: String,
+    pub agent_id: String,
+    pub agent_session_id: String,
+    pub agent_turn_id: String,
+    pub decision_request_id: String,
+    pub request_digest: String,
+    pub feedback_id: String,
+}
+
+impl RuntimeReceiptLineageV1 {
+    pub const SCHEMA_VERSION: &'static str = "runtime-receipt-lineage.v1";
+
+    /// Construct a projection from an already durable committed Runtime
+    /// marker.  Receipt and action IDs are never accepted as caller-only
+    /// inputs at this boundary.
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_commit_record(
+        marker: &WorldCommitRecordV1,
+        agent_id: impl Into<String>,
+        agent_session_id: impl Into<String>,
+        agent_turn_id: impl Into<String>,
+        decision_request_id: impl Into<String>,
+        request_digest: impl Into<String>,
+        feedback_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            schema_version: Self::SCHEMA_VERSION.to_string(),
+            status: marker.status.clone(),
+            receipt_id: marker.receipt_id.clone(),
+            receipt_digest: marker.receipt_digest.clone(),
+            envelope_digest: marker.envelope_digest.clone(),
+            action_id: marker.action_id.clone(),
+            agent_id: agent_id.into(),
+            agent_session_id: agent_session_id.into(),
+            agent_turn_id: agent_turn_id.into(),
+            decision_request_id: decision_request_id.into(),
+            request_digest: request_digest.into(),
+            feedback_id: feedback_id.into(),
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), CognitionRecoveryError> {
+        if self.schema_version != Self::SCHEMA_VERSION
+            || self.status != "committed"
+            || self.receipt_id.trim().is_empty()
+            || self.receipt_digest.trim().is_empty()
+            || self.envelope_digest.trim().is_empty()
+            || self.action_id.trim().is_empty()
+            || self.agent_id.trim().is_empty()
+            || self.agent_session_id.trim().is_empty()
+            || self.agent_turn_id.trim().is_empty()
+            || self.decision_request_id.trim().is_empty()
+            || self.request_digest.trim().is_empty()
+            || self.feedback_id.trim().is_empty()
+        {
+            return Err(CognitionRecoveryError::new(
+                "runtime_receipt_lineage_invalid",
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// A response/artifact projection recorded before a process crash.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CognitionResponseRecordV1 {

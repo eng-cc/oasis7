@@ -5,11 +5,11 @@ use serde::{Deserialize, Serialize};
 
 use super::super::{ObservedAgent, ObservedLocation, ResourceKind, ResourceStock};
 use super::{
-    Action, ActionCatalogEntry, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
-    DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION, DEFAULT_PROVIDER_TIMEOUT_BUDGET_MS,
-    DecisionProvider, DecisionProviderError, DecisionRequest, DecisionResponse, FeedbackEnvelope,
-    Observation, ObservationEnvelope, ProviderDecision, ProviderExecutionMode, WorldEvent,
-    provider_observation_from_runtime_observation,
+    Action, ActionCatalogEntry, ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1,
+    DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION, DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
+    DEFAULT_PROVIDER_TIMEOUT_BUDGET_MS, DecisionProvider, DecisionProviderError, DecisionRequest,
+    DecisionResponse, FeedbackEnvelope, Observation, ObservationEnvelope, ProviderDecision,
+    ProviderExecutionMode, WorldEvent, provider_observation_from_runtime_observation,
 };
 use crate::geometry::GeoPos;
 
@@ -119,6 +119,7 @@ pub fn golden_decision_provider_fixtures() -> Vec<GoldenDecisionFixture> {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct MockDecisionProviderState {
     pub recorded_requests: Vec<DecisionRequest>,
+    pub recorded_turn_contexts: Vec<ContinuousAgentTurnContextV1>,
     pub recorded_feedback: Vec<FeedbackEnvelope>,
     pub recorded_events: Vec<WorldEvent>,
 }
@@ -181,6 +182,22 @@ impl DecisionProvider for MockDecisionProvider {
             Some(result) => result,
             None => Ok(DecisionResponse::wait(self.provider_id.clone())),
         }
+    }
+
+    fn decide_with_continuous_context(
+        &mut self,
+        request: &DecisionRequest,
+        context: &ContinuousAgentTurnContextV1,
+    ) -> Result<ContinuousAgentResponseContextV1, DecisionProviderError> {
+        self.shared_state
+            .lock()
+            .expect("mock state lock")
+            .recorded_turn_contexts
+            .push(context.clone());
+        Ok(super::wrap_continuous_response(
+            self.decide(request)?,
+            context,
+        ))
     }
 
     fn push_feedback(&mut self, feedback: &FeedbackEnvelope) -> Result<(), DecisionProviderError> {

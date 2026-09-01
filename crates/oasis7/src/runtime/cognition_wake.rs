@@ -1,14 +1,15 @@
 //! Runtime-owned wake conditions and continuation lifecycle projections.
 
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use super::PreconditionSubjectV1;
-use super::util::sha256_hex;
-
 const WAKE_SCHEMA: &str = "wake-condition.v1";
 const CONTINUATION_SCHEMA: &str = "agent-continuation.v1";
+const WAKE_CONDITIONS_DIGEST_DOMAIN: &str = "oasis7.cognition.wake-conditions.v1";
+const CONTINUATION_STATUS_DIGEST_DOMAIN: &str = "oasis7.cognition.continuation-status.v1";
 const MAX_ID_BYTES: usize = 128;
 const MAX_PATH_BYTES: usize = 128;
 const MAX_ITEM_BYTES: usize = 768;
@@ -102,15 +103,19 @@ impl WakeConditionValidator {
     }
 
     pub fn canonical_bytes(condition: &WakeConditionV1) -> Vec<u8> {
-        condition.canonical_bytes_unchecked()
+        oasis7_wasm_abi::encode_canonical_cbor(condition)
+            .unwrap_or_else(|_| condition.canonical_bytes_unchecked())
     }
 
     pub fn conditions_digest(conditions: &[WakeConditionV1]) -> String {
-        let mut bytes = Vec::new();
-        for condition in conditions {
-            bytes.extend(Self::canonical_bytes(condition));
-        }
-        format!("sha256:{}", sha256_hex(&bytes))
+        // The list is explicitly set-like in the v1 wake contract.  Always
+        // sort here as well as in `canonicalize`, so callers cannot
+        // accidentally create a different identity by hashing a non-canonical
+        // permutation.
+        let mut canonical = conditions.to_vec();
+        canonical.sort_by_key(Self::canonical_bytes);
+        let bytes = oasis7_wasm_abi::encode_canonical_cbor(&canonical).unwrap_or_default();
+        h_v1(WAKE_CONDITIONS_DIGEST_DOMAIN, &bytes)
     }
 
     pub fn evaluate(
@@ -364,28 +369,133 @@ pub struct AgentContinuation {
     pub valid_until_tick: Option<u64>,
     pub precondition_digest: String,
     pub wake_seq: u64,
+    /// The committed logical tick at which this status projection was
+    /// produced.  It is Runtime-owned and participates in the status digest.
+    #[serde(default)]
+    pub logical_tick: u64,
     pub status: ContinuationStatusV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continuation_status_digest: Option<String>,
     #[serde(default)]
     pub terminal_disposition: Option<String>,
 }
 
 impl AgentContinuation {
-    pub fn status_digest(&self) -> String {
-        let value = serde_json::json!({
-            "continuation_id": self.continuation_id,
-            "wake_id": self.wake_id,
-            "wake_seq": self.wake_seq,
-            "world_id": self.world_id,
-            "branch_id": self.branch_id,
-            "reorg_epoch": self.reorg_epoch,
-            "status": self.status,
-            "terminal_disposition": self.terminal_disposition,
-        });
-        format!(
-            "sha256:{}",
-            sha256_hex(&serde_json::to_vec(&value).unwrap_or_default())
+    /// Validate a complete Runtime-owned continuation projection.  The
+    /// legacy persisted shape may omit `continuation_status_digest`, but a
+    /// projection crossing into the simulator must carry the Runtime-issued
+    /// digest and match the canonical status fields exactly.
+    pub fn validate_authoritative(&self) -> Result<(), WakeConditionError> {
+        if self.schema_version != CONTINUATION_SCHEMA
+            || self.continuation_id.trim().is_empty()
+            || self.wake_id.trim().is_empty()
+            || self.world_id.trim().is_empty()
+            || self.branch_id.trim().is_empty()
+            || self.finality_status.trim().is_empty()
+            || self.runtime_manifest_hash.trim().is_empty()
+            || self.agent_id.trim().is_empty()
+            || self.agent_session_id.trim().is_empty()
+            || self.agent_turn_id.trim().is_empty()
+            || self.decision_request_id.trim().is_empty()
+            || self.origin_turn_id.trim().is_empty()
+            || self.origin_request_digest.trim().is_empty()
+            || self.continuation_proposal_id.trim().is_empty()
+            || self.proposal_digest.trim().is_empty()
+            || self.precondition_digest.trim().is_empty()
+            || self.remaining_budget.value == 0
+            || !matches!(self.remaining_budget.unit.as_str(), "steps" | "ticks")
+        {
+            return Err(WakeConditionError::new("recovery_pending"));
+        }
+        WakeConditionValidator::validate(self.wake_conditions.as_slice())?;
+        let terminal = matches!(
+            self.status,
+            ContinuationStatusV1::Completed
+                | ContinuationStatusV1::Cancelled
+                | ContinuationStatusV1::Invalidated
+                | ContinuationStatusV1::Expired
+                | ContinuationStatusV1::Rejected
+        );
+        if (terminal && self.terminal_disposition.is_none())
+            || (!terminal && self.terminal_disposition.is_some())
+            || self.continuation_status_digest.as_deref() != Some(self.status_digest().as_str())
+        {
+            return Err(WakeConditionError::new("recovery_pending"));
+        }
+        Ok(())
+    }
+
+    /// Derive the Runtime-owned continuation context identity.  Keeping this
+    /// method on the durable projection prevents adapters from introducing a
+    /// competing local digest algorithm.
+    pub fn continuation_digest(&self) -> String {
+        h_v1(
+            "oasis7.cognition.continuation-context.v1",
+            &json!({
+                "continuation_proposal_id": self.continuation_proposal_id,
+                "proposal_digest": self.proposal_digest,
+                "continuation_id": self.continuation_id,
+                "wake_id": self.wake_id,
+                "wake_seq": self.wake_seq,
+                "world_id": self.world_id,
+                "branch_id": self.branch_id,
+                "finality_epoch": self.finality_epoch,
+                "finality_block_hash": self.finality_block_hash,
+                "finality_status": self.finality_status,
+                "reorg_epoch": self.reorg_epoch,
+                "runtime_manifest_hash": self.runtime_manifest_hash,
+                "remaining_budget": self.remaining_budget,
+                "valid_until_tick": self.valid_until_tick,
+                "status": self.status,
+                "continuation_status_digest": self.continuation_status_digest,
+                "terminal_disposition": self.terminal_disposition,
+            }),
         )
     }
+
+    pub fn status_digest(&self) -> String {
+        let payload = ContinuationStatusDigestInput {
+            continuation_id: &self.continuation_id,
+            wake_id: &self.wake_id,
+            wake_seq: self.wake_seq,
+            from_status: None,
+            to_status: self.status,
+            logical_tick: self.logical_tick,
+            world_id: &self.world_id,
+            branch_id: &self.branch_id,
+            finality_epoch: self.finality_epoch,
+            finality_block_hash: self.finality_block_hash.as_deref(),
+            finality_status: &self.finality_status,
+            reorg_epoch: self.reorg_epoch,
+            proposal_digest: &self.proposal_digest,
+            terminal_disposition: self.terminal_disposition.as_deref(),
+        };
+        h_v1(CONTINUATION_STATUS_DIGEST_DOMAIN, &payload)
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct ContinuationStatusDigestInput<'a> {
+    continuation_id: &'a str,
+    wake_id: &'a str,
+    wake_seq: u64,
+    from_status: Option<ContinuationStatusV1>,
+    to_status: ContinuationStatusV1,
+    logical_tick: u64,
+    world_id: &'a str,
+    branch_id: &'a str,
+    finality_epoch: u64,
+    finality_block_hash: Option<&'a str>,
+    finality_status: &'a str,
+    reorg_epoch: u64,
+    proposal_digest: &'a str,
+    terminal_disposition: Option<&'a str>,
+}
+
+fn h_v1<T: Serialize>(domain: &str, payload: &T) -> String {
+    let bytes = oasis7_wasm_abi::encode_canonical_cbor(&(domain, payload))
+        .expect("cognition identity payload must be canonicalizable");
+    format!("blake3:{}", blake3::hash(&bytes))
 }
 
 pub struct ContinuationTransition;

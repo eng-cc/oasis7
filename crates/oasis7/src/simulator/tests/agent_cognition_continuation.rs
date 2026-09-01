@@ -4,8 +4,9 @@
 //! durable schedule/status projection and finality truth.  These fixtures
 //! intentionally do not cover GoalGraph, belief/preference state or billing.
 
+use crate::runtime::{AgentContinuation, ContinuationBudgetV1, ContinuationStatusV1};
 use crate::simulator::{
-    ContinuationHarness, ContinuationInvalidationReason, ContinuationProposalV1,
+    AsyncAgentRunner, ContinuationHarness, ContinuationInvalidationReason, ContinuationProposalV1,
     RuntimeContinuationStatusV1, h_v1,
 };
 use serde_json::{Value, json};
@@ -58,16 +59,57 @@ fn proposal() -> ContinuationProposalV1 {
     serde_json::from_value(value).expect("decode ContinuationProposalV1")
 }
 
-fn runtime_status(status: &str, reason: Option<&str>) -> RuntimeContinuationStatusV1 {
-    serde_json::from_value(json!({
-        "status": status,
-        "terminal_disposition": reason,
-        "continuation_id": "continuation-runtime-1",
-        "wake_id": "wake-runtime-1",
-        "wake_seq": 1,
-        "continuation_digest": "blake3:8888888888888888888888888888888888888888888888888888888888888888"
-    }))
-    .expect("decode Runtime continuation status projection")
+fn runtime_projection(
+    proposal: &ContinuationProposalV1,
+    status: ContinuationStatusV1,
+    terminal_disposition: Option<&str>,
+) -> AgentContinuation {
+    let wake_conditions = serde_json::from_value(
+        serde_json::to_value(&proposal.wake_conditions).expect("encode proposal wake conditions"),
+    )
+    .expect("decode Runtime wake conditions");
+    let mut runtime = AgentContinuation {
+        schema_version: "agent-continuation.v1".to_string(),
+        continuation_id: "continuation-runtime-1".to_string(),
+        wake_id: "wake-runtime-1".to_string(),
+        world_id: proposal.world_id.clone(),
+        branch_id: "branch-continuation-fixture".to_string(),
+        finality_epoch: 7,
+        finality_block_hash: Some(
+            "blake3:7777777777777777777777777777777777777777777777777777777777777777".to_string(),
+        ),
+        finality_status: "verified".to_string(),
+        reorg_epoch: 1,
+        runtime_manifest_hash:
+            "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+        agent_id: proposal.agent_id.clone(),
+        agent_session_id: proposal.agent_session_id.clone(),
+        agent_turn_id: proposal.agent_turn_id.clone(),
+        decision_request_id: proposal.decision_request_id.clone(),
+        origin_turn_id: proposal.origin_turn_id.clone(),
+        origin_request_digest: proposal.origin_request_digest.clone(),
+        continuation_proposal_id: proposal.continuation_proposal_id.clone(),
+        proposal_digest: proposal.proposal_digest.clone(),
+        action_or_envelope_digest: proposal.action_or_envelope_digest.clone(),
+        wake_conditions,
+        next_wake_tick: Some(10),
+        remaining_budget: ContinuationBudgetV1 {
+            unit: proposal.remaining_budget.unit.clone(),
+            value: proposal.remaining_budget.value,
+        },
+        valid_until_tick: proposal.valid_until_tick,
+        precondition_digest: proposal.precondition_digest.clone(),
+        wake_seq: 1,
+        logical_tick: 10,
+        status,
+        continuation_status_digest: None,
+        terminal_disposition: terminal_disposition.map(str::to_string),
+    };
+    runtime.continuation_status_digest = Some(runtime.status_digest());
+    runtime
+        .validate_authoritative()
+        .expect("Runtime continuation projection must be authoritative");
+    runtime
 }
 
 #[test]
@@ -153,25 +195,30 @@ fn runtime_status_projection_is_consumed_and_harness_never_invents_terminal_trut
         .submit(submitted_proposal)
         .expect("submit proposal to Harness");
     let projection = harness
-        .consume_runtime_status(
+        .consume_runtime_projection(
             pending,
-            runtime_status("pending", Some("scheduler_backpressure")),
+            &runtime_projection(&proposal(), ContinuationStatusV1::Pending, None),
         )
         .expect("consume Runtime pending projection");
     let projection = serde_json::to_value(projection).expect("encode pending projection");
     assert_eq!(projection["status"], "pending");
-    assert_eq!(projection["terminal_disposition"], "scheduler_backpressure");
+    assert_eq!(projection["terminal_disposition"], Value::Null);
     assert_eq!(projection["world_effect"], false);
 
     let mut committed = harness.submit(proposal()).expect("submit second proposal");
-    let receipt = runtime_status("committed", None);
+    let receipt = runtime_projection(
+        &committed.proposal,
+        ContinuationStatusV1::Completed,
+        Some("completed"),
+    );
     committed = harness
-        .consume_runtime_status(committed, receipt)
+        .consume_runtime_projection(committed, &receipt)
         .expect("consume committed Runtime projection");
     let committed = serde_json::to_value(committed).expect("encode committed projection");
     assert_eq!(committed["status"], "completed");
     assert_eq!(committed["provenance"], "runtime_authoritative");
-    assert_eq!(committed["world_effect"], true);
+    assert_eq!(committed["terminal_disposition"], "completed");
+    assert_eq!(committed["world_effect"], false);
 }
 
 #[test]
@@ -201,4 +248,43 @@ fn observation_goal_policy_and_terminal_runtime_changes_clear_continuation_deter
         assert_eq!(result["provider_invocation_count"], 0);
         assert_eq!(result["world_effect"], false);
     }
+}
+
+#[test]
+fn continuation_submission_is_proposal_only_and_rejects_uncorrelated_runtime_status() {
+    let submitted_proposal = proposal();
+    let mut runner = AsyncAgentRunner::builtin_fixture(AGENT_ID);
+    let handle = runner
+        .submit_continuation_proposal(AGENT_ID, submitted_proposal)
+        .expect("submit Harness continuation proposal");
+
+    let proposal_only = handle.continuation_id.is_empty()
+        && handle.wake_id.is_empty()
+        && handle.wake_seq == 0
+        && handle.continuation_digest.is_empty()
+        && handle.continuation_status_digest.is_empty()
+        && handle.status == "scheduled"
+        && handle.provenance == "harness_policy"
+        && !handle.world_effect;
+
+    let mut harness = ContinuationHarness::default();
+    let submitted = harness
+        .submit(proposal())
+        .expect("submit proposal to Harness");
+    let unrelated_status = RuntimeContinuationStatusV1 {
+        status: "pending".to_string(),
+        terminal_disposition: None,
+        continuation_id: "runtime-unrelated-continuation".to_string(),
+        wake_id: "runtime-unrelated-wake".to_string(),
+        wake_seq: 99,
+        continuation_digest:
+            "blake3:9999999999999999999999999999999999999999999999999999999999999999".to_string(),
+    };
+    let uncorrelated_status_rejected = harness
+        .consume_runtime_status(submitted, unrelated_status)
+        .is_err();
+    assert!(
+        proposal_only && uncorrelated_status_rejected,
+        "Harness must remain proposal-only and reject uncorrelated Runtime status: proposal_only={proposal_only}, uncorrelated_status_rejected={uncorrelated_status_rejected}, handle={handle:?}"
+    );
 }

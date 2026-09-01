@@ -368,9 +368,9 @@ impl CognitionScheduler {
         let right_due = right.starvation_deadline_tick <= self.logical_tick;
         right_due
             .cmp(&left_due)
-            // A due item is first; among ordinary ready wakes the historical
-            // fixture orders the later wake tick first before tie breakers.
-            .then_with(|| right.next_wake_tick.cmp(&left.next_wake_tick))
+            // A due item is first; ordinary ready wakes then follow the
+            // policy's canonical ascending next-wake tick order.
+            .then_with(|| left.next_wake_tick.cmp(&right.next_wake_tick))
             .then_with(|| {
                 self.effective_priority(right)
                     .cmp(&self.effective_priority(left))

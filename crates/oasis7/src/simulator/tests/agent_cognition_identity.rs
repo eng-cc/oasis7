@@ -5,6 +5,10 @@
 //! this file is the immutable behavior contract for the implementation slice.
 
 use super::*;
+use crate::runtime::{
+    AgentContinuation, AgentDecisionEnvelopeV1, MvccValidator, WakeConditionV1,
+    WakeConditionValidator, World,
+};
 use crate::simulator::{
     AgentCognitionStore, ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1,
     Digest32, FeedbackEnvelopeV1, FinalityBindingV1, MemoryWriteIntentV1, RuntimeBindingV1, h_v1,
@@ -64,9 +68,115 @@ fn request_fixture(transport_attempt: u64, timeout_budget_ms: u64) -> Value {
     })
 }
 
+fn derived_request_digest(fixture: &Value) -> Digest32 {
+    let mut canonical = fixture.clone();
+    let object = canonical
+        .as_object_mut()
+        .expect("request fixture is an object");
+    object.remove("request_digest");
+    object.remove("transport_attempt");
+    let base = object
+        .get_mut("base_decision_request")
+        .and_then(Value::as_object_mut)
+        .expect("base decision request is an object");
+    base.remove("timeout_budget_ms");
+    base.get_mut("observation")
+        .and_then(Value::as_object_mut)
+        .expect("provider observation envelope is an object")
+        .remove("timeout_budget_ms");
+    let bytes = oasis7_wasm_abi::encode_canonical_cbor(&canonical)
+        .expect("request fixture must be canonically encodable");
+    h_v1(REQUEST_DOMAIN, &bytes)
+}
+
+fn request_from_value(mut fixture: Value) -> ContinuousAgentRequestContextV1 {
+    fixture["request_digest"] = json!(derived_request_digest(&fixture));
+    serde_json::from_value(fixture).expect("decode ContinuousAgentRequestContextV1 fixture")
+}
+
 fn request(transport_attempt: u64, timeout_budget_ms: u64) -> ContinuousAgentRequestContextV1 {
-    serde_json::from_value(request_fixture(transport_attempt, timeout_budget_ms))
-        .expect("decode ContinuousAgentRequestContextV1 fixture")
+    request_from_value(request_fixture(transport_attempt, timeout_budget_ms))
+}
+
+fn runtime_condition(value: Value) -> WakeConditionV1 {
+    serde_json::from_value(value).expect("decode runtime WakeConditionV1 fixture")
+}
+
+fn runtime_continuation() -> AgentContinuation {
+    serde_json::from_value(json!({
+        "schema_version": "agent-continuation.v1",
+        "continuation_id": "continuation-identity-1",
+        "wake_id": "wake-identity-1",
+        "world_id": "world-1",
+        "branch_id": "main",
+        "finality_epoch": 7,
+        "finality_block_hash": "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "finality_status": "verified",
+        "reorg_epoch": 3,
+        "runtime_manifest_hash": "blake3:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "agent_id": "agent-1",
+        "agent_session_id": "session.agent-1.v1",
+        "agent_turn_id": "turn.agent-1.7",
+        "decision_request_id": "request.agent-1.7",
+        "origin_turn_id": "turn.agent-1.6",
+        "origin_request_digest": "blake3:1111111111111111111111111111111111111111111111111111111111111111",
+        "continuation_proposal_id": "proposal-identity-1",
+        "proposal_digest": "blake3:2222222222222222222222222222222222222222222222222222222222222222",
+        "action_or_envelope_digest": null,
+        "wake_conditions": [{
+            "schema_version": "wake-condition.v1",
+            "kind": "at_or_after_tick",
+            "logical_tick": 42
+        }],
+        "next_wake_tick": 42,
+        "remaining_budget": {"unit": "steps", "value": 2},
+        "valid_until_tick": 100,
+        "precondition_digest": "blake3:3333333333333333333333333333333333333333333333333333333333333333",
+        "wake_seq": 1,
+        "status": "pending",
+        "terminal_disposition": null
+    }))
+    .expect("decode runtime continuation fixture")
+}
+
+fn runtime_envelope_with_finality(
+    finality_status: &str,
+    finality_block_hash: &str,
+) -> AgentDecisionEnvelopeV1 {
+    serde_json::from_value(json!({
+        "schema_version": "agent-decision-envelope.v1",
+        "world_id": "world-identity-finality",
+        "agent_id": "agent-identity-finality",
+        "branch_id": "main",
+        "finality_epoch": 0,
+        "finality_block_hash": finality_block_hash,
+        "finality_status": finality_status,
+        "agent_session_id": "session.identity-finality",
+        "agent_turn_id": "turn.identity-finality",
+        "decision_request_id": "request.identity-finality",
+        "retry_seq": 0,
+        "base_tick": 0,
+        "base_world_hash": "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "reorg_epoch": 0,
+        "runtime_manifest_hash": "blake3:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "capability_snapshot_hash": "blake3:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "authority_context_hash": "blake3:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "observation_digest": "blake3:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "context_digest": "blake3:1111111111111111111111111111111111111111111111111111111111111111",
+        "issued_at_tick": 0,
+        "valid_until_tick": 10,
+        "preconditions": [],
+        "decision_kind": "wait",
+        "action": {"type": "wait"},
+        "request_digest": "blake3:2222222222222222222222222222222222222222222222222222222222222222",
+        "decision_digest": "blake3:3333333333333333333333333333333333333333333333333333333333333333",
+        "envelope_digest": "blake3:4444444444444444444444444444444444444444444444444444444444444444",
+        "provider_invocation_key": "blake3:5555555555555555555555555555555555555555555555555555555555555555",
+        "envelope_idempotency_key": "blake3:6666666666666666666666666666666666666666666666666666666666666666",
+        "origin_intent_ref": null,
+        "source": "provider"
+    }))
+    .expect("decode runtime finality envelope fixture")
 }
 
 fn response_fixture(decision: Value) -> Value {
@@ -151,6 +261,90 @@ fn provider_key_is_invariant_to_timeout_and_transport_attempt() {
 }
 
 #[test]
+fn provider_key_is_invariant_to_nested_observation_timeout_and_transport_attempt() {
+    let baseline = request(0, 100);
+    let mut nested_timeout = request_fixture(0, 100);
+    nested_timeout["base_decision_request"]["observation"]["timeout_budget_ms"] = json!(5_000);
+    let nested_timeout = request_from_value(nested_timeout);
+
+    assert!(
+        baseline
+            .canonical_request_bytes()
+            .expect("canonical baseline bytes")
+            == nested_timeout
+                .canonical_request_bytes()
+                .expect("canonical retry bytes"),
+        "nested provider observation timeout must be excluded from canonical bytes"
+    );
+    assert_eq!(
+        baseline.request_digest(),
+        nested_timeout.request_digest(),
+        "nested provider observation timeout is transport metadata"
+    );
+    assert_eq!(
+        baseline.provider_invocation_key(),
+        nested_timeout.provider_invocation_key(),
+        "nested provider observation timeout must not split provider dedupe"
+    );
+}
+
+#[test]
+fn runtime_wake_condition_identity_is_shared_and_order_insensitive() {
+    let tick = runtime_condition(json!({
+        "schema_version": "wake-condition.v1",
+        "kind": "at_or_after_tick",
+        "logical_tick": 42
+    }));
+    let receipt = runtime_condition(json!({
+        "schema_version": "wake-condition.v1",
+        "kind": "receipt_linked",
+        "receipt_id": "receipt-42"
+    }));
+    let canonical = WakeConditionValidator::canonicalize(vec![tick, receipt])
+        .expect("canonicalize runtime wake conditions");
+    let mut reversed = canonical.clone();
+    reversed.reverse();
+
+    let digest = WakeConditionValidator::conditions_digest(&canonical);
+    assert!(
+        digest.starts_with("blake3:"),
+        "wake condition identity must use the shared BLAKE3 rendering"
+    );
+    assert_eq!(
+        digest,
+        WakeConditionValidator::conditions_digest(&reversed),
+        "wake condition identity must hash the canonical sorted list"
+    );
+}
+
+#[test]
+fn runtime_continuation_status_identity_covers_binding_fields_and_uses_blake3() {
+    let continuation = runtime_continuation();
+    let digest = continuation.status_digest();
+    assert!(
+        digest.starts_with("blake3:"),
+        "continuation status identity must use the shared BLAKE3 rendering"
+    );
+
+    let mut finality_changed = continuation.clone();
+    finality_changed.finality_epoch += 1;
+    assert_ne!(
+        digest,
+        finality_changed.status_digest(),
+        "status identity must bind the Runtime finality tuple"
+    );
+
+    let mut proposal_changed = continuation;
+    proposal_changed.proposal_digest =
+        "blake3:9999999999999999999999999999999999999999999999999999999999999999".to_string();
+    assert_ne!(
+        digest,
+        proposal_changed.status_digest(),
+        "status identity must bind the continuation proposal digest"
+    );
+}
+
+#[test]
 fn outer_request_roundtrips_and_unknown_version_fails_closed() {
     let fixture = request_fixture(0, 60_000);
     let context: ContinuousAgentRequestContextV1 =
@@ -165,6 +359,59 @@ fn outer_request_roundtrips_and_unknown_version_fails_closed() {
     let error = ContinuousAgentRequestContextV1::validate_value(&unknown_version)
         .expect_err("unknown context version must fail closed");
     assert_eq!(error.code(), "unsupported_context_version");
+}
+
+#[test]
+fn declared_request_digest_mismatch_fails_closed_at_harness_ingress() {
+    let mut context = request_from_value(request_fixture(0, 60_000));
+    context.request_digest =
+        Digest32::from("blake3:9999999999999999999999999999999999999999999999999999999999999999");
+    let mut store = AgentCognitionStore::default();
+    let error = store
+        .begin_request(context)
+        .expect_err("declared digest mismatch must fail closed before acceptance");
+    assert_eq!(error.code(), "request_digest_mismatch");
+}
+
+#[test]
+fn harness_finality_binding_rejects_unknown_status_and_missing_verified_hash() {
+    let mut unknown_status = request_fixture(0, 60_000);
+    unknown_status["runtime_binding"]["finality_status"] = json!("unknown");
+    let unknown_status = request_from_value(unknown_status);
+    assert_eq!(
+        unknown_status
+            .validate()
+            .expect_err("unknown finality status must fail closed")
+            .code(),
+        "recovery_pending"
+    );
+
+    let mut missing_verified_hash = request_fixture(0, 60_000);
+    missing_verified_hash["runtime_binding"]["finality_block_hash"] = Value::Null;
+    let missing_verified_hash = request_from_value(missing_verified_hash);
+    assert_eq!(
+        missing_verified_hash
+            .validate()
+            .expect_err("verified finality requires a block hash")
+            .code(),
+        "recovery_pending"
+    );
+
+    let mut pending_without_hash = request_fixture(0, 60_000);
+    pending_without_hash["runtime_binding"]["finality_status"] = json!("pending");
+    pending_without_hash["runtime_binding"]["finality_block_hash"] = Value::Null;
+    let pending_without_hash = request_from_value(pending_without_hash);
+    pending_without_hash
+        .validate()
+        .expect("pending finality may omit its block hash");
+}
+
+#[test]
+fn runtime_finality_digest_type_rejects_unprefixed_block_hash() {
+    let candidate = runtime_envelope_with_finality("verified", &"a".repeat(64));
+    let error = MvccValidator::validate(&World::new(), &candidate)
+        .expect_err("runtime must reject an untyped finality block hash");
+    assert_eq!(error.code(), "recovery_pending");
 }
 
 #[test]
@@ -242,8 +489,7 @@ fn same_key_with_different_digest_is_a_fail_closed_collision() {
     let mut collision = request_fixture(0, 60_000);
     collision["observation_digest"] =
         json!("blake3:9999999999999999999999999999999999999999999999999999999999999999");
-    let second: ContinuousAgentRequestContextV1 =
-        serde_json::from_value(collision).expect("decode collision fixture");
+    let second = request_from_value(collision);
 
     store.begin_request(first).expect("first request accepted");
     let error = store
@@ -263,8 +509,7 @@ fn one_agent_cannot_hold_two_sessions_but_two_agents_are_partitioned() {
     second_session["agent_session_id"] = json!("session.agent-1.v2");
     second_session["agent_turn_id"] = json!("turn.agent-1.8");
     second_session["decision_request_id"] = json!("request.agent-1.8");
-    let second_session: ContinuousAgentRequestContextV1 =
-        serde_json::from_value(second_session).expect("decode second session");
+    let second_session = request_from_value(second_session);
     assert_eq!(
         store
             .begin_request(second_session)
@@ -279,7 +524,7 @@ fn one_agent_cannot_hold_two_sessions_but_two_agents_are_partitioned() {
     other_agent["agent_turn_id"] = json!("turn.agent-2.1");
     other_agent["decision_request_id"] = json!("request.agent-2.1");
     store
-        .begin_request(serde_json::from_value(other_agent).expect("decode other-agent request"))
+        .begin_request(request_from_value(other_agent))
         .expect("different agents remain independent");
 }
 
@@ -303,6 +548,33 @@ fn feedback_partition_rejects_cross_agent_and_preserves_runtime_lineage() {
         .accept_feedback(feedback)
         .expect_err("cross-agent feedback");
     assert_eq!(diagnostic.code(), "cross_agent_feedback");
+}
+
+#[test]
+fn duplicate_terminal_feedback_id_is_idempotent_after_first_acceptance() {
+    let mut store = AgentCognitionStore::default();
+    let request_context = request(0, 60_000);
+    let request_digest = request_context.request_digest().to_string();
+    store
+        .begin_request(request_context)
+        .expect("request accepted");
+
+    let feedback: FeedbackEnvelopeV1 = serde_json::from_value(json!({
+        "feedback_id": "feedback-idempotent-1", "feedback_seq": 1,
+        "agent_subject": "agent-1", "agent_session_id": "session.agent-1.v1",
+        "agent_turn_id": "turn.agent-1.7", "decision_request_id": "request.agent-1.7",
+        "candidate_action_id": 7, "runtime_receipt_id": null,
+        "status": "rejected", "request_digest": request_digest,
+        "reject_reason": "no_effect", "provenance": "runtime_authoritative"
+    }))
+    .expect("decode feedback fixture");
+
+    store
+        .accept_feedback(feedback.clone())
+        .expect("first terminal feedback accepted");
+    store
+        .accept_feedback(feedback)
+        .expect("duplicate feedback_id must be an idempotent no-op");
 }
 
 #[test]

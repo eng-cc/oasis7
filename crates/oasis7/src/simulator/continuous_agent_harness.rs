@@ -7,7 +7,7 @@
 //! persistence, action receipts, and continuation scheduling consume these
 //! values but remain runtime-owned.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
@@ -20,6 +20,8 @@ pub const CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR: &str = "oasis7.continuous-agen
 pub const CONTINUOUS_AGENT_CONTEXT_VERSION: u16 = 1;
 pub const COGNITION_REQUEST_DIGEST_DOMAIN: &str = "oasis7.cognition.request.v1";
 pub const COGNITION_PROVIDER_INVOCATION_DOMAIN: &str = "oasis7.cognition.provider-invocation.v1";
+const COGNITION_FEEDBACK_DIGEST_DOMAIN: &str = "oasis7.cognition.feedback.v1";
+const MAX_FEEDBACK_REPLAY_ENTRIES: usize = 8;
 
 /// A wire digest.  The newtype keeps the wire representation as the familiar
 /// `blake3:<64 lowercase hex>` string while preventing accidental mixing with
@@ -118,6 +120,44 @@ pub struct FinalityBindingV1 {
     pub reorg_epoch: u64,
 }
 
+impl FinalityBindingV1 {
+    /// Validate the Runtime-owned branch/finality projection.  A block hash
+    /// is optional for non-verified states, but every supplied hash must use
+    /// the shared typed BLAKE3-256 rendering.
+    pub fn validate(&self) -> Result<(), CognitionError> {
+        if self.branch_id.trim().is_empty() || self.branch_id.len() > 128 {
+            return Err(CognitionError::new(
+                "recovery_pending",
+                "finality binding branch identity is invalid",
+            ));
+        }
+        if !matches!(
+            self.finality_status.as_str(),
+            "pending" | "verified" | "reorged" | "suspended"
+        ) {
+            return Err(CognitionError::new(
+                "recovery_pending",
+                "finality binding status is not in the v1 registry",
+            ));
+        }
+        match self.finality_block_hash.as_ref() {
+            Some(hash) if !valid_blake3_digest(hash.as_str()) => Err(CognitionError::new(
+                "recovery_pending",
+                "finality block hash is not a canonical BLAKE3-256 digest",
+            )),
+            None if self.finality_status == "verified" => Err(CognitionError::new(
+                "recovery_pending",
+                "verified finality requires a block hash",
+            )),
+            _ => Ok(()),
+        }
+    }
+
+    pub fn digest(&self) -> Digest32 {
+        h_v1("oasis7.runtime.finality-binding.v1", self)
+    }
+}
+
 /// Runtime snapshot binding consumed by cognition identity.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeBindingV1 {
@@ -131,6 +171,20 @@ pub struct RuntimeBindingV1 {
     pub base_world_hash: Digest32,
     pub reorg_epoch: u64,
     pub runtime_manifest_hash: Digest32,
+}
+
+impl RuntimeBindingV1 {
+    pub fn validate(&self) -> Result<(), CognitionError> {
+        FinalityBindingV1 {
+            schema_version: 1,
+            branch_id: self.branch_id.clone(),
+            finality_epoch: self.finality_epoch,
+            finality_block_hash: self.finality_block_hash.clone(),
+            finality_status: self.finality_status.clone(),
+            reorg_epoch: self.reorg_epoch,
+        }
+        .validate()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -169,6 +223,18 @@ pub struct ContinuousAgentRequestContextV1 {
 
 impl ContinuousAgentRequestContextV1 {
     pub fn validate(&self) -> Result<(), CognitionError> {
+        self.validate_structure()?;
+        let derived_digest = self.request_digest();
+        if self.request_digest != derived_digest {
+            return Err(CognitionError::new(
+                "request_digest_mismatch",
+                "declared request digest does not match canonical request inputs",
+            ));
+        }
+        Ok(())
+    }
+
+    fn validate_structure(&self) -> Result<(), CognitionError> {
         if self.context_discriminator != CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR {
             return Err(CognitionError::new(
                 "unsupported_context_discriminator",
@@ -194,6 +260,7 @@ impl ContinuousAgentRequestContextV1 {
                 "session, turn, request, and subject identities are required",
             ));
         }
+        self.runtime_binding.validate()?;
         Ok(())
     }
 
@@ -231,10 +298,10 @@ impl ContinuousAgentRequestContextV1 {
         Ok(())
     }
 
-    /// Return the canonical request payload bytes, excluding output identity,
-    /// transport attempt, and the legacy timeout-only transport field.
+    /// Return canonical request payload bytes, excluding output identity,
+    /// transport attempt, and both legacy timeout-only transport fields.
     pub fn canonical_request_bytes(&self) -> Result<Vec<u8>, CognitionError> {
-        self.validate()?;
+        self.validate_structure()?;
         let mut value = serde_json::to_value(self)
             .map_err(|error| CognitionError::new("canonical_encoding_failed", error.to_string()))?;
         let object = value.as_object_mut().ok_or_else(|| {
@@ -250,6 +317,20 @@ impl ContinuousAgentRequestContextV1 {
             .and_then(Value::as_object_mut)
         {
             base.remove("timeout_budget_ms");
+            if let Some(observation) = base.get_mut("observation").and_then(Value::as_object_mut) {
+                observation.remove("timeout_budget_ms");
+            }
+        }
+        // Keep the optional finality hash's presence explicit in the identity
+        // payload.  The wire serializer omits `None`, while the canonical
+        // contract hashes optional values with an explicit null/presence tag.
+        if let Some(runtime_binding) = object
+            .get_mut("runtime_binding")
+            .and_then(Value::as_object_mut)
+        {
+            runtime_binding
+                .entry("finality_block_hash")
+                .or_insert(Value::Null);
         }
         oasis7_wasm_abi::encode_canonical_cbor(&value)
             .map_err(|error| CognitionError::new("canonical_encoding_failed", error.to_string()))
@@ -387,6 +468,11 @@ struct ActiveCognitionRequest {
 pub struct AgentCognitionStore {
     active_by_agent: BTreeMap<String, ActiveCognitionRequest>,
     digest_by_request_id: BTreeMap<String, Digest32>,
+    /// Keep a bounded tombstone for accepted feedback so terminal responses
+    /// can be replayed after their active request is removed.  The bridge's
+    /// recent-feedback projection uses the same eight-entry retention bound.
+    feedback_digest_by_id: BTreeMap<String, Digest32>,
+    feedback_replay_order: VecDeque<String>,
 }
 
 impl AgentCognitionStore {
@@ -437,11 +523,17 @@ impl AgentCognitionStore {
                     "feedback does not belong to the active Agent subject",
                 ));
             }
+            if let Some(previous) = self.feedback_digest_by_id.get(&feedback.feedback_id) {
+                return self.replay_or_reject_feedback(previous, feedback_digest(&feedback));
+            }
             return Err(CognitionError::new(
                 "unknown_feedback",
                 "feedback does not match an active cognition request",
             ));
         };
+        if let Some(previous) = self.feedback_digest_by_id.get(&feedback.feedback_id) {
+            return self.replay_or_reject_feedback(previous, feedback_digest(&feedback));
+        }
         if active.session_id != feedback.agent_session_id
             || active.turn_id != feedback.agent_turn_id
             || active.request_id != feedback.decision_request_id
@@ -457,6 +549,7 @@ impl AgentCognitionStore {
                 "feedback request digest does not match the active request",
             ));
         }
+        self.remember_feedback(feedback.feedback_id.clone(), feedback_digest(&feedback));
         if matches!(
             feedback.status.as_str(),
             "committed" | "rejected" | "failed" | "cancelled" | "expired" | "stale"
@@ -466,6 +559,32 @@ impl AgentCognitionStore {
         Ok(())
     }
 
+    fn replay_or_reject_feedback(
+        &self,
+        previous: &Digest32,
+        current: Digest32,
+    ) -> Result<(), CognitionError> {
+        if previous == &current {
+            return Ok(());
+        }
+        Err(CognitionError::new(
+            "feedback_id_conflict",
+            "feedback_id was reused with a different envelope",
+        ))
+    }
+
+    fn remember_feedback(&mut self, feedback_id: String, digest: Digest32) {
+        self.feedback_digest_by_id
+            .insert(feedback_id.clone(), digest);
+        self.feedback_replay_order.push_back(feedback_id);
+        while self.feedback_replay_order.len() > MAX_FEEDBACK_REPLAY_ENTRIES {
+            let Some(expired_id) = self.feedback_replay_order.pop_front() else {
+                break;
+            };
+            self.feedback_digest_by_id.remove(&expired_id);
+        }
+    }
+
     pub fn clear_agent(&mut self, agent_subject: &str) {
         self.active_by_agent.remove(agent_subject);
     }
@@ -473,4 +592,18 @@ impl AgentCognitionStore {
 
 fn default_schema_version() -> u16 {
     1
+}
+
+fn feedback_digest(feedback: &FeedbackEnvelopeV1) -> Digest32 {
+    h_v1(COGNITION_FEEDBACK_DIGEST_DOMAIN, feedback)
+}
+
+fn valid_blake3_digest(value: &str) -> bool {
+    let Some(hex) = value.strip_prefix("blake3:") else {
+        return false;
+    };
+    hex.len() == 64
+        && hex
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
