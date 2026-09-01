@@ -114,7 +114,7 @@ while :; do
   sleep 1
 done
 FAKE
-rtk chmod +x "$FAKE_LAUNCHER"
+chmod +x "$FAKE_LAUNCHER"
 
 SENTINEL_PID=""
 sleep 300 &

@@ -243,6 +243,7 @@ run_hosted_account_local_smoke() {
 }
 
 run_oasis7_client_launcher_web_build() {
+  run ./scripts/worktree-harness-lifecycle.test.sh
   run ./scripts/worktree-harness-contract.test.sh
   run ./scripts/launcher-help-contract.test.sh
   run mkdir -p output/release/web-launcher-dist
