@@ -606,6 +606,90 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             observer["persistent_state_paths"],
         )
 
+    def test_service_account_ownership_requires_independent_deployment_truth(self) -> None:
+        """An observed equal uid/gid pair cannot define its own expectation."""
+        request = self._input()
+        inventory_nodes = {
+            node["name"]: {
+                "expected_key_uid": 1001,
+                "expected_key_gid": 1001,
+            }
+            for node in request["nodes"]
+        }
+        request["deployment_inventory"] = {
+            "schema_version": "oasis7.deployment_inventory.v1",
+            "authenticated": True,
+            "verified": True,
+            "signer_id": "governance-signer",
+            "trust_root_id": "oasis7-public-testnet-governance-root-v1",
+            "nodes": inventory_nodes,
+            "receipt": self._receipt("oasis7.deployment_inventory_receipt.v1"),
+        }
+        for node in request["nodes"]:
+            node["identity_receipt"]["key_uid"] = 4242
+            node["identity_receipt"]["key_gid"] = 4242
+
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)(expected|deployment|uid|gid|owner)")
+
+    def test_macos_observer_uses_authenticated_inventory_root_and_surfaces(self) -> None:
+        """macOS reset targets must come from authenticated deployment inventory."""
+        request = self._input()
+        root = "/Users/operator/oasis7-fourth"
+        declared_paths = [
+            f"{root}/world",
+            f"{root}/world-simulator-mirror",
+            f"{root}/execution-records",
+            f"{root}/store",
+            f"{root}/replication-root",
+            f"{root}/runtime-root",
+            f"{root}/output/chain-runtime/triad-testnet-fourth-local/reward-runtime-execution-bridge-state.json",
+            f"{root}/output/node-distfs/triad-testnet-fourth-local",
+        ]
+        inventory_nodes = {
+            node["name"]: {
+                "node_id": node["node_id"],
+                "node_root": node["node_root"],
+                "persistent_state_paths": list(node["persistent_state_paths"]),
+            }
+            for node in request["nodes"]
+        }
+        inventory_nodes["macos-observer"] = {
+            "node_id": "triad-testnet-fourth-local",
+            "node_root": root,
+            "persistent_state_paths": declared_paths,
+        }
+        request["deployment_inventory"] = {
+            "schema_version": "oasis7.deployment_inventory.v1",
+            "authenticated": True,
+            "verified": True,
+            "signer_id": "governance-signer",
+            "trust_root_id": "oasis7-public-testnet-governance-root-v1",
+            "nodes": inventory_nodes,
+            "receipt": self._receipt("oasis7.deployment_inventory_receipt.v1"),
+        }
+
+        plan = self.module.build_plan(request)
+        macos = next(node for node in plan["nodes"] if node["name"] == "macos-observer")
+        self.assertEqual(macos["node_root"], root)
+        self.assertEqual(macos["persistent_state_paths"], declared_paths)
+
+    def test_observer_surface_summary_matches_governed_node_inventory(self) -> None:
+        """The exported observer summary must include the governed eight paths."""
+        plan = self.module.build_plan(self._input())
+        linux = next(
+            node for node in plan["nodes"] if node["name"] == "linux-lan-observer"
+        )
+        summary = plan["surfaces"]
+        self.assertEqual(summary["observer_count"], len(linux["persistent_state_paths"]))
+        self.assertEqual(summary["observer_count"], 8)
+        self.assertIn("observers_by_node", summary)
+        self.assertEqual(
+            summary["observers_by_node"]["linux-lan-observer"],
+            linux["persistent_state_paths"],
+        )
+
     def test_plan_requires_fresh_bound_consumer_impact_record(self) -> None:
         request = self._input()
         request.pop("consumer_impact_record")

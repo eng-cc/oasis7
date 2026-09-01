@@ -51,6 +51,8 @@ PROVIDER_RECEIPT_SCHEMA = "oasis7.clean_room_provider_receipt.v1"
 NO_BACKUP_AUTHORITY_SCHEMA = "oasis7.no_backup_authority.v1"
 RECOVERY_RECEIPT_SCHEMA = "oasis7.recovery_receipt.v1"
 IDENTITY_RECEIPT_SCHEMA = "oasis7.identity_receipt.v1"
+DEPLOYMENT_INVENTORY_SCHEMA = "oasis7.deployment_inventory.v1"
+DEPLOYMENT_INVENTORY_RECEIPT_SCHEMA = "oasis7.deployment_inventory_receipt.v1"
 JOURNAL_SCHEMA = "oasis7.clean_room_mutation_journal.v2"
 LEGACY_JOURNAL_SCHEMA = "oasis7.clean_room_mutation_journal.v1"
 NODE_RECEIPT_SCHEMA = "oasis7.clean_room_node_receipt.v1"
@@ -118,6 +120,9 @@ SECRET_VALUE_RE = re.compile(
     r"(?:password|secret|token|private[_ -]?key|api[_ -]?key|access[_ -]?key|sshpass)",
     re.I,
 )
+TRANSPORT_AUTH_ALIAS_FIELDS = frozenset(
+    {"authorization", "bearer", "bearer_token", "auth", "auth_header", "headers", "metadata"}
+)
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 MIN_FREE_BYTES = 64 * 1024 * 1024
 MAX_CLOCK_SKEW_SECONDS = 5
@@ -167,6 +172,7 @@ TRANSPORT_PLAN_FIELDS = frozenset(
         "canonical_endpoint_inventory",
         "nodes",
         "surfaces",
+        "deployment_inventory",
         "truth",
         "execution",
         "forensic_backup",
@@ -308,6 +314,107 @@ def _expected_paths(planner: Any, node: dict[str, Any]) -> list[str]:
     return [root.rstrip("/") + "/" + surface.replace("{node_id}", node_id).replace("\\", "/") for surface in surfaces]
 
 
+def _validate_deployment_inventory(
+    plan: dict[str, Any], planner: Any
+) -> dict[str, Any]:
+    inventory = _object(plan.get("deployment_inventory"), "deployment inventory")
+    if set(inventory) != {
+        "schema_version",
+        "authenticated",
+        "verified",
+        "signer_id",
+        "trust_root_id",
+        "nodes",
+        "receipt",
+    }:
+        _fail("deployment inventory fields are not exact")
+    if inventory.get("schema_version") != DEPLOYMENT_INVENTORY_SCHEMA:
+        _fail("deployment inventory schema is unsupported")
+    if inventory.get("authenticated") is not True or inventory.get("verified") is not True:
+        _fail("deployment inventory is not authenticated and independently verified")
+    if inventory.get("signer_id") not in CANONICAL_SIGNER_ALLOWLIST:
+        _fail("deployment inventory signer is not code-owned")
+    if inventory.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID:
+        _fail("deployment inventory trust root is not code-owned")
+    receipt = _object(inventory.get("receipt"), "deployment inventory receipt")
+    if set(receipt) != {
+        "schema_version",
+        "authenticated",
+        "verified",
+        "signer_id",
+        "verifier_id",
+        "trust_root_id",
+        "signed_payload_sha256",
+        "signature_hex",
+        "canonical_digest",
+    }:
+        _fail("deployment inventory receipt contains an unsafe field")
+    if (
+        receipt.get("schema_version") != DEPLOYMENT_INVENTORY_RECEIPT_SCHEMA
+        or receipt.get("authenticated") is not True
+        or receipt.get("verified") is not True
+        or receipt.get("signer_id") != inventory["signer_id"]
+        or receipt.get("verifier_id") != CANONICAL_VERIFIER_ID
+        or receipt.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID
+    ):
+        _fail("deployment inventory receipt is not independently authenticated")
+    _reject_secret_fields(receipt, "deployment inventory receipt")
+    _nonzero_hex(receipt.get("signed_payload_sha256"), HEX64_RE, "deployment inventory payload")
+    _nonzero_hex(receipt.get("signature_hex"), SIGNATURE_RE, "deployment inventory signature")
+    _nonzero_hex(receipt.get("canonical_digest"), HEX64_RE, "deployment inventory digest")
+    raw_nodes = _object(inventory.get("nodes"), "deployment inventory nodes")
+    if set(raw_nodes) != set(planner.NODE_ORDER):
+        _fail("deployment inventory does not cover the managed five-node set")
+    normalized: dict[str, Any] = {}
+    for name in planner.NODE_ORDER:
+        expected = planner.EXPECTED_NODES[name]
+        value = _object(raw_nodes.get(name), f"deployment inventory {name}")
+        if set(value) != {
+            "node_id",
+            "node_root",
+            "persistent_state_paths",
+            "expected_key_uid",
+            "expected_key_gid",
+        }:
+            _fail(f"deployment inventory {name} fields are not exact")
+        if value.get("node_id") != expected["node_id"]:
+            _fail(f"deployment inventory {name} node id drifted")
+        path_style = "windows" if expected["platform"] == "windows-x64" else "posix"
+        root = planner._normalized_path(
+            value.get("node_root"), path_style, f"deployment inventory {name} root"
+        )
+        paths = _safe_relative_paths(
+            root,
+            value.get("persistent_state_paths"),
+            expected["platform"],
+            f"deployment inventory {name} state paths",
+        )
+        if len(set(paths)) != len(paths):
+            _fail(f"deployment inventory {name} state paths contain duplicates")
+        for field in ("expected_key_uid", "expected_key_gid"):
+            owner = value.get(field)
+            if not isinstance(owner, int) or isinstance(owner, bool) or owner < 0:
+                _fail(f"deployment inventory {name} {field} is malformed")
+        if value["expected_key_uid"] != value["expected_key_gid"]:
+            _fail(f"deployment inventory {name} expected uid/gid do not match")
+        normalized[name] = {
+            "node_id": value["node_id"],
+            "node_root": root,
+            "persistent_state_paths": paths,
+            "expected_key_uid": value["expected_key_uid"],
+            "expected_key_gid": value["expected_key_gid"],
+        }
+    return {
+        "schema_version": DEPLOYMENT_INVENTORY_SCHEMA,
+        "authenticated": True,
+        "verified": True,
+        "signer_id": inventory["signer_id"],
+        "trust_root_id": CANONICAL_TRUST_ROOT_ID,
+        "nodes": normalized,
+        "receipt": receipt,
+    }
+
+
 def _under_root(root: str, path: str, platform: str) -> bool:
     if platform == "windows-x64":
         root_norm = ntpath.normcase(ntpath.normpath(root))
@@ -341,6 +448,7 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         _fail("plan host inventory is not code-owned")
     if plan.get("canonical_endpoint_inventory") != planner.CANONICAL_ENDPOINT_INVENTORY:
         _fail("plan endpoint inventory is not code-owned")
+    deployment_inventory = _validate_deployment_inventory(plan, planner)
     execution = _object(plan.get("execution"), "plan execution")
     if execution.get("mode") != "plan-only" or execution.get("provider_mutation_performed") is not False:
         _fail("plan is not an unperformed plan-only artifact")
@@ -354,6 +462,8 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         _fail("validator reset surfaces are not the canonical eight")
     if surfaces.get("observers") != list(planner.OBSERVER_RESET_SURFACES):
         _fail("observer reset surfaces are not the canonical seven")
+    if surfaces.get("observer_count") != 8:
+        _fail("observer surface summary must cover the governed eight surfaces")
     nodes = plan.get("nodes")
     if (
         not isinstance(nodes, list)
@@ -372,13 +482,18 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         expected = planner.EXPECTED_NODES[name]
         for field, expected_value in expected.items():
             if field == "node_root":
-                expected_value = planner._normalized_path(
-                    expected_value,
-                    "windows" if expected["platform"] == "windows-x64" else "posix",
-                    f"{name}.expected_node_root",
-                )
+                continue
             if node.get(field) != expected_value:
                 _fail(f"{name} {field} is not the code-owned value")
+        governed = deployment_inventory["nodes"][name]
+        if node.get("node_id") != governed["node_id"]:
+            _fail(f"{name} node id is not bound to deployment inventory")
+        path_style = "windows" if expected["platform"] == "windows-x64" else "posix"
+        normalized_root = planner._normalized_path(
+            governed["node_root"], path_style, f"{name}.deployment_node_root"
+        )
+        if node.get("node_root") != normalized_root:
+            _fail(f"{name} node root is not bound to deployment inventory")
         binding = _object(node.get("host_binding"), f"{name} host binding")
         if binding != planner.CANONICAL_HOST_INVENTORY[name]:
             _fail(f"{name} known-host target or pin is not code-owned")
@@ -417,14 +532,25 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
                 _fail(f"{name} identity {owner} is malformed")
         if identity["key_gid"] != identity["key_uid"]:
             _fail(f"{name} identity uid/gid do not match the governed service account")
+        if (
+            identity["key_uid"] != governed["expected_key_uid"]
+            or identity["key_gid"] != governed["expected_key_gid"]
+        ):
+            _fail(f"{name} identity uid/gid do not match independently authenticated deployment inventory")
         paths = _safe_relative_paths(
             node["node_root"],
             node.get("persistent_state_paths"),
             node["platform"],
             f"{name} state paths",
         )
-        if paths != _expected_paths(planner, node):
+        if paths != governed["persistent_state_paths"]:
             _fail(f"{name} state paths do not match its exact reset surfaces")
+    expected_observers = {
+        name: by_name[name]["persistent_state_paths"]
+        for name in planner.OBSERVER_NAMES
+    }
+    if surfaces.get("observers_by_node") != expected_observers:
+        _fail("observer surface summary is not bound to governed node inventory")
     forensic = _object(plan.get("forensic_backup"), "forensic backup")
     if (
         forensic.get("restore_old_state") is not False
@@ -1732,6 +1858,14 @@ def _validate_provider_receipt(
                 }
                 if not required_peers.issubset(set(connected_peers)):
                     _fail(f"fleet-health snapshot {name} does not see both validator peers")
+            elif name == "storage-205":
+                required_peer = _provider_peer(plan, "sequencer-204", "stop:sequencer-204")
+                if required_peer not in connected_peers:
+                    _fail("fleet-health storage-205 does not see sequencer-204 validator peer")
+            else:
+                required_peer = _provider_peer(plan, "storage-205", "stop:storage-205")
+                if required_peer not in connected_peers:
+                    _fail("fleet-health sequencer-204 does not see storage-205 validator peer")
             readiness = _object(node_snapshot.get("readiness"), f"fleet-health snapshot {name} readiness")
             if readiness.get("ready") is not True or readiness.get("failed_gates") != []:
                 _fail(f"fleet-health snapshot {name} readiness is not closed")
@@ -1966,14 +2100,226 @@ def _sanitize_receipt(value: Any, label: str) -> dict[str, Any]:
     return cleaned
 
 
+def _project_exact_object(
+    value: Any, allowed: set[str], label: str
+) -> dict[str, Any]:
+    """Copy an object only when every nested schema key is explicitly known."""
+    value = _object(value, label)
+    if set(value) != allowed:
+        _fail(f"{label} contains a field outside the recursive transport allowlist")
+    return {key: copy.deepcopy(value[key]) for key in allowed}
+
+
+_TRANSPORT_RECEIPT_FIELDS = {
+    "schema_version",
+    "authenticated",
+    "verified",
+    "signer_id",
+    "verifier_id",
+    "trust_root_id",
+    "signed_payload_sha256",
+    "signature_hex",
+    "canonical_digest",
+}
+
+
+def _project_transport_receipt(value: Any, label: str) -> dict[str, Any]:
+    return _project_exact_object(value, _TRANSPORT_RECEIPT_FIELDS, label)
+
+
+def _project_transport_truth(value: Any) -> dict[str, Any]:
+    value = _object(value, "transport truth")
+    if set(value) != {"package", "genesis", "world", "execution", "checkpoint"}:
+        _fail("transport truth contains a field outside the recursive allowlist")
+    package = _project_exact_object(
+        value["package"],
+        {
+            "package_id", "package_dir", "provenance_path", "provenance_sha256",
+            "provenance_size_bytes", "commit", "package_version", "runtime_sha256",
+            "runtime_size_bytes", "genesis_sha256", "world_sha256", "platforms", "receipt",
+        },
+        "transport truth package",
+    )
+    platforms = _object(package["platforms"], "transport truth package platforms")
+    if set(platforms) != {"linux-x64", "windows-x64", "macos-arm64"}:
+        _fail("transport truth package platforms are not the managed set")
+    package["platforms"] = {
+        platform: _project_exact_object(
+            platforms[platform],
+            {
+                "package_sha256", "package_size_bytes", "world_sha256", "world_size_bytes",
+                "world_provenance_sha256", "world_provenance_size_bytes", "commit",
+            },
+            f"transport truth package platform {platform}",
+        )
+        for platform in ("linux-x64", "windows-x64", "macos-arm64")
+    }
+    package["receipt"] = _project_transport_receipt(package["receipt"], "transport truth package receipt")
+    genesis = _project_exact_object(
+        value["genesis"],
+        {"network_id", "chain_id", "world_id", "path", "size_bytes", "sha256", "receipt"},
+        "transport truth genesis",
+    )
+    genesis["receipt"] = _project_transport_receipt(genesis["receipt"], "transport truth genesis receipt")
+    world = _project_exact_object(
+        value["world"],
+        {
+            "world_id", "generation", "path", "provenance_path", "size_bytes", "sha256",
+            "provenance_sha256", "provenance_size_bytes", "receipt",
+        },
+        "transport truth world",
+    )
+    world["receipt"] = _project_transport_receipt(world["receipt"], "transport truth world receipt")
+    execution = _project_exact_object(
+        value["execution"],
+        {"execution_records_root", "cas", "world_head", "generated_world_sidecar", "json_index_consistency"},
+        "transport truth execution",
+    )
+    execution["execution_records_root"] = _project_exact_object(
+        execution["execution_records_root"], {"path", "sha256", "size_bytes"},
+        "transport truth execution records",
+    )
+    execution["cas"] = _project_exact_object(
+        execution["cas"], {"root", "blake3", "size_bytes"}, "transport truth execution cas"
+    )
+    execution["world_head"] = _project_exact_object(
+        execution["world_head"],
+        {"path", "sha256", "size_bytes", "height", "block_hash", "state_root"},
+        "transport truth execution world head",
+    )
+    execution["generated_world_sidecar"] = _project_exact_object(
+        execution["generated_world_sidecar"],
+        {
+            "path", "sha256", "size_bytes", "provenance_path", "provenance_sha256",
+            "provenance_size_bytes",
+        },
+        "transport truth execution sidecar",
+    )
+    execution["json_index_consistency"] = _project_exact_object(
+        execution["json_index_consistency"],
+        {
+            "verified", "snapshot_sha256", "snapshot_size_bytes", "journal_sha256",
+            "journal_size_bytes", "index_sha256", "index_size_bytes",
+        },
+        "transport truth execution index consistency",
+    )
+    checkpoint = _project_exact_object(
+        value["checkpoint"],
+        {
+            "checkpoint_id", "manifest_hash", "height", "receipt_path", "size_bytes",
+            "execution_block_hash", "execution_state_root", "sha256", "receipt",
+        },
+        "transport truth checkpoint",
+    )
+    checkpoint["receipt"] = _project_transport_receipt(
+        checkpoint["receipt"], "transport truth checkpoint receipt"
+    )
+    return {
+        "package": package,
+        "genesis": genesis,
+        "world": world,
+        "execution": execution,
+        "checkpoint": checkpoint,
+    }
+
+
+def _project_transport_inventory(value: Any) -> dict[str, Any]:
+    inventory = _project_exact_object(
+        value,
+        {
+            "schema_version", "authenticated", "verified", "signer_id", "trust_root_id",
+            "nodes", "receipt",
+        },
+        "transport deployment inventory",
+    )
+    nodes = _object(inventory["nodes"], "transport deployment inventory nodes")
+    if set(nodes) != set(CANONICAL_PEER_REGISTRY):
+        _fail("transport deployment inventory node set is not canonical")
+    inventory["nodes"] = {
+        name: _project_exact_object(
+            nodes[name],
+            {"node_id", "node_root", "persistent_state_paths", "expected_key_uid", "expected_key_gid"},
+            f"transport deployment inventory {name}",
+        )
+        for name in CANONICAL_PEER_REGISTRY
+    }
+    inventory["receipt"] = _project_transport_receipt(
+        inventory["receipt"], "transport deployment inventory receipt"
+    )
+    return inventory
+
+
+def _project_transport_surfaces(value: Any) -> dict[str, Any]:
+    surfaces = _project_exact_object(
+        value,
+        {"validators", "observers", "validator_count", "observer_count", "observers_by_node"},
+        "transport surfaces",
+    )
+    observers = _object(surfaces["observers_by_node"], "transport observer surfaces by node")
+    if set(observers) != {"linux-lan-observer", "windows-observer", "macos-observer"}:
+        _fail("transport observer surface map is not canonical")
+    surfaces["observers_by_node"] = {
+        name: [
+            _string(path, f"transport observer surfaces {name} entry")
+            for path in _object({"paths": observers[name]}, "transport observer paths")["paths"]
+        ]
+        for name in observers
+    }
+    surfaces["validators"] = [_string(path, "transport validator surface") for path in surfaces["validators"]]
+    surfaces["observers"] = [_string(path, "transport observer surface") for path in surfaces["observers"]]
+    return surfaces
+
+
 def _transport_node(node: dict[str, Any]) -> dict[str, Any]:
-    """Pass inventory only; credential seams never cross the adapter API."""
+    """Project node inventory through a recursive allowlist; seams never cross."""
     node = _object(node, "transport node")
     if set(node) - TRANSPORT_NODE_FIELDS - {"credential_seam"}:
         _fail("transport node contains a field outside the allowlist")
-    result = {key: copy.deepcopy(value) for key, value in node.items() if key != "credential_seam"}
+    result = _project_exact_object(
+        {key: value for key, value in node.items() if key != "credential_seam"},
+        TRANSPORT_NODE_FIELDS,
+        "transport node",
+    )
+    result["host_binding"] = _project_exact_object(
+        result["host_binding"], {"target", "known_hosts_path", "known_host_fingerprint"},
+        "transport node host binding",
+    )
+    result["endpoints"] = _project_exact_object(
+        result["endpoints"], {"healthz", "evidence"}, "transport node endpoints"
+    )
+    result["identity_receipt"] = _project_exact_object(
+        result["identity_receipt"],
+        _TRANSPORT_RECEIPT_FIELDS | {
+            "node_id", "peer_id", "key_sha256", "key_size_bytes", "key_mode", "key_uid", "key_gid",
+        },
+        "transport node identity receipt",
+    )
+    result["persistent_state_paths"] = [
+        _string(path, "transport node persistent state path")
+        for path in result["persistent_state_paths"]
+    ]
+    result["bindings"] = _project_exact_object(
+        result["bindings"],
+        {
+            "package_commit", "package_platform", "genesis_sha256", "world_sha256",
+            "checkpoint_id", "checkpoint_manifest_hash", "checkpoint_height",
+        },
+        "transport node bindings",
+    )
     _reject_secret_fields(result, "transport node")
     return result
+
+
+def _reject_transport_auth_aliases(value: Any, label: str) -> None:
+    """Keep provider DTOs free of auth/header/metadata aliases at any depth."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if str(key).lower() in TRANSPORT_AUTH_ALIAS_FIELDS:
+                _fail(f"{label} contains an authorization-bearing field: {key}")
+            _reject_transport_auth_aliases(child, f"{label}.{key}")
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _reject_transport_auth_aliases(child, f"{label}[{index}]")
 
 
 def _transport_plan(plan: dict[str, Any]) -> dict[str, Any]:
@@ -1983,9 +2329,19 @@ def _transport_plan(plan: dict[str, Any]) -> dict[str, Any]:
     result = {
         key: copy.deepcopy(value)
         for key, value in plan.items()
-        if key not in {"authority", "credential_nonce_ledger"}
+        if key not in {
+            "authority",
+            "credential_nonce_ledger",
+            "forensic_backup",
+            "rollback",
+            "operation_journal",
+        }
     }
     result["nodes"] = [_transport_node(node) for node in result["nodes"]]
+    result["truth"] = _project_transport_truth(result["truth"])
+    result["deployment_inventory"] = _project_transport_inventory(result["deployment_inventory"])
+    result["surfaces"] = _project_transport_surfaces(result["surfaces"])
+    _reject_transport_auth_aliases(result, "transport plan")
     _reject_secret_fields(result, "transport plan")
     return result
 

@@ -1412,6 +1412,18 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
                 self.plan, "fleet-health", None, receipt, None
             )
 
+    def test_fleet_health_requires_reciprocal_validator_peers(self) -> None:
+        """Both validators must observe each other before fleet closure."""
+        receipt = ApplyTransport(self.adapter, self.plan)._receipt("fleet-health", None)
+        for missing_name in ("storage-205", "sequencer-204"):
+            invalid = copy.deepcopy(receipt)
+            invalid["fleet_health_closure"]["snapshot"][missing_name]["connected_peers"] = []
+            with self.assertRaises(self.adapter.AdapterError) as raised:
+                self.adapter._validate_provider_receipt(
+                    self.plan, "fleet-health", None, invalid, None
+                )
+            self.assertRegex(str(raised.exception), r"(?i)(validator|peer|connected)")
+
     def test_rejects_invalid_provider_signature_or_peer_before_advancing(self) -> None:
         authority = self._authority(apply_authorized=True)
 
@@ -1872,6 +1884,30 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         plan["truth"]["package"]["api_key"] = "provider-api-key-must-not-cross"
         with self.assertRaises(self.adapter.AdapterError):
             self.adapter._transport_plan(plan)
+
+    def test_transport_plan_rejects_nested_authorization_and_bearer_fields(self) -> None:
+        """Provider DTOs cannot carry authorization aliases at any nesting depth."""
+        cases = (
+            ("authorization", "opaque-auth-value"),
+            ("bearer", "opaque-bearer-value"),
+            ("headers", {"Authorization": "opaque-header-value"}),
+            ("metadata", {"provider": {"bearer": "opaque-nested-bearer-value"}}),
+        )
+        for field, value in cases:
+            with self.subTest(field=field):
+                plan = copy.deepcopy(self.plan)
+                plan["truth"]["package"][field] = value
+                try:
+                    projected = self.adapter._transport_plan(plan)
+                except self.adapter.AdapterError:
+                    continue
+                serialized = json.dumps(projected["truth"], sort_keys=True).lower()
+                if "authorization" in serialized:
+                    self.fail(f"{field} leaked authorization alias")
+                if "bearer" in serialized:
+                    self.fail(f"{field} leaked bearer alias")
+                if "opaque-" in serialized:
+                    self.fail(f"{field} leaked opaque credential value")
 
     def test_identity_receipt_requires_governed_gid(self) -> None:
         plan = copy.deepcopy(self.plan)
