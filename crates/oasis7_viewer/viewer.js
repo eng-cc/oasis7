@@ -16245,6 +16245,48 @@ function installAgentIntentV2VisualFixture(fixtures, { core: core2, setFixturePl
     core2.requestRender();
   };
 }
+function installMajorWorldEventCrisisVisualFixture(fixtures, { core: core2, viewerFixtureBaseSnapshot: viewerFixtureBaseSnapshot2 }) {
+  fixtures.major_world_event_crisis = () => {
+    core2.injectSnapshot(viewerFixtureBaseSnapshot2(), { returnState: false });
+    const mode = String(new URLSearchParams(window.location.search || "").get("major_event_state") || "current");
+    const historical = mode === "replay";
+    const suppressed = mode === "gap" || mode === "denied";
+    core2.state.worldFeed = {
+      status: mode === "gap" ? "gap" : mode === "denied" ? "unavailable" : historical ? "replay" : "ready",
+      schemaVersion: "world_feed/v1",
+      worldId: "fixture-world",
+      reorgEpoch: "0",
+      cursor: "fixture-current",
+      stale: suppressed,
+      gapReason: mode === "gap" ? "reorg_epoch_changed" : null,
+      unavailableReason: mode === "denied" ? "permission_denied" : null,
+      snapshotReloadRequired: mode === "gap",
+      requestInFlight: false,
+      events: suppressed ? [] : [{
+        event_seq: "7",
+        kind: "crisis_spawned",
+        summary: "Crisis event",
+        detail: "",
+        receipt_ref: null,
+        major_event: {
+          schema_version: "major_world_event/v1",
+          identity: { world_id: "fixture-world", reorg_epoch: "0", event_seq: "7" },
+          category: "crisis",
+          subtype: "power_shortage",
+          severity: 4,
+          lifecycle: "active",
+          source: { authority: "runtime_journal", event_kind: "crisis_spawned" },
+          freshness: historical ? "replay" : "current",
+          visibility: "public",
+          logical_time: "42",
+          causal_reference: null,
+          world_anchor: { scope: "world", entity_id: "crisis-fixture" }
+        }
+      }]
+    };
+    core2.requestRender();
+  };
+}
 var _tmpl$$5 = /* @__PURE__ */ template(`<button data-testid=viewer-available-action-reprioritize>`), _tmpl$2$5 = /* @__PURE__ */ template(`<div class=toolbar data-testid=viewer-reprioritize-action>`), _tmpl$3$4 = /* @__PURE__ */ template(`<div id=viewer-reprioritize-status role=alert tabindex=-1 class=feedback-detail>`), _tmpl$4$3 = /* @__PURE__ */ template(`<div id=viewer-reprioritize-status aria-live=polite class=feedback-detail>`), _tmpl$5$3 = /* @__PURE__ */ template(`<form><label for=viewer-reprioritize-goal></label><textarea id=viewer-reprioritize-goal rows=3 aria-describedby="viewer-reprioritize-help viewer-reprioritize-status"></textarea><div id=viewer-reprioritize-help class=feedback-detail></div><div class=toolbar><button type=button></button><button type=submit>`);
 function ReprioritizeActionForm(props) {
   const [open, setOpen] = createSignal(false);
@@ -17014,17 +17056,29 @@ function copy(locale, zh, en) {
   return localeIsZh$1(locale) ? zh : en;
 }
 function Field(props) {
-  return createComponent(Show, {
-    get when() {
-      return props.value?.value;
-    },
-    get children() {
-      var _el$ = _tmpl$$1(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
-      insert(_el$2, () => props.label);
-      insert(_el$3, () => props.value.value);
-      return _el$;
-    }
-  });
+  const field = () => props.value || {};
+  const state2 = () => field().state === "published" && field().value ? "published" : "unavailable";
+  const unavailableCopy = () => copy(props.locale, "不可用 · 等待权威 Agent 投影", "Unavailable · waiting for authoritative Agent projection");
+  return (() => {
+    var _el$ = _tmpl$$1(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
+    insert(_el$2, () => props.label);
+    insert(_el$3, (() => {
+      var _c$ = memo(() => state2() === "published");
+      return () => _c$() ? field().value : unavailableCopy();
+    })());
+    createRenderEffect((_p$) => {
+      var _v$ = props.name, _v$2 = state2(), _v$3 = `${props.label}: ${state2() === "published" ? field().value : unavailableCopy()}`;
+      _v$ !== _p$.e && setAttribute(_el$, "data-agent-context-field", _p$.e = _v$);
+      _v$2 !== _p$.t && setAttribute(_el$, "data-agent-context-field-state", _p$.t = _v$2);
+      _v$3 !== _p$.a && setAttribute(_el$, "aria-label", _p$.a = _v$3);
+      return _p$;
+    }, {
+      e: void 0,
+      t: void 0,
+      a: void 0
+    });
+    return _el$;
+  })();
 }
 function AgentContextLite(props) {
   const model = () => props.model || {};
@@ -17101,35 +17155,51 @@ function AgentContextLite(props) {
         }), (() => {
           var _el$13 = _tmpl$6$1();
           insert(_el$13, createComponent(Field, {
+            name: "objective",
             get label() {
               return copy(locale(), "目标", "Objective");
             },
             get value() {
               return model().objective;
+            },
+            get locale() {
+              return locale();
             }
           }), null);
           insert(_el$13, createComponent(Field, {
+            name: "next-move",
             get label() {
               return copy(locale(), "下一步", "Next Move");
             },
             get value() {
               return model().nextMove;
+            },
+            get locale() {
+              return locale();
             }
           }), null);
           insert(_el$13, createComponent(Field, {
+            name: "blocker",
             get label() {
               return copy(locale(), "阻塞", "Blocker");
             },
             get value() {
               return model().blocker;
+            },
+            get locale() {
+              return locale();
             }
           }), null);
           insert(_el$13, createComponent(Field, {
+            name: "player-leverage",
             get label() {
               return copy(locale(), "玩家杠杆", "Player Leverage");
             },
             get value() {
               return model().playerLeverage;
+            },
+            get locale() {
+              return locale();
             }
           }), null);
           return _el$13;
@@ -17174,11 +17244,11 @@ function AgentContextLite(props) {
       }
     }), null);
     createRenderEffect((_p$) => {
-      var _v$ = ariaLabel(), _v$2 = model().kind || "unknown", _v$3 = intent().kind || "unavailable", _v$4 = receipt().present ? "present" : receipt().state || "none";
-      _v$ !== _p$.e && setAttribute(_el$4, "aria-label", _p$.e = _v$);
-      _v$2 !== _p$.t && setAttribute(_el$4, "data-agent-context-kind", _p$.t = _v$2);
-      _v$3 !== _p$.a && setAttribute(_el$4, "data-agent-context-intent", _p$.a = _v$3);
-      _v$4 !== _p$.o && setAttribute(_el$4, "data-agent-context-receipt", _p$.o = _v$4);
+      var _v$4 = ariaLabel(), _v$5 = model().kind || "unknown", _v$6 = intent().kind || "unavailable", _v$7 = receipt().present ? "present" : receipt().state || "none";
+      _v$4 !== _p$.e && setAttribute(_el$4, "aria-label", _p$.e = _v$4);
+      _v$5 !== _p$.t && setAttribute(_el$4, "data-agent-context-kind", _p$.t = _v$5);
+      _v$6 !== _p$.a && setAttribute(_el$4, "data-agent-context-intent", _p$.a = _v$6);
+      _v$7 !== _p$.o && setAttribute(_el$4, "data-agent-context-receipt", _p$.o = _v$7);
       return _p$;
     }, {
       e: void 0,
@@ -17318,12 +17388,15 @@ function feedbackModel(feedback, locale) {
     value: value2
   };
 }
-function receiptModel(receipt) {
+function receiptModel(receipt, selectedId = null) {
   if (!isRecord(receipt)) return { present: false, state: "none" };
   const targetAgentId = firstValue(receipt.target_agent_id, receipt.targetAgentId);
+  if (!receipt.present || !targetAgentId || normalized(targetAgentId) !== normalized(selectedId)) {
+    return { present: false, state: "none" };
+  }
   return {
-    present: receipt.present === true,
-    state: firstValue(receipt.state) || (receipt.present === true ? "present" : "none"),
+    present: true,
+    state: firstValue(receipt.state) || "present",
     confidence: firstValue(receipt.confidence),
     targetAgentId
   };
@@ -17426,7 +17499,7 @@ function buildAgentContextDisplayModel(input = {}) {
     )),
     intent: intentModel(candidateIntent, id, locale, connectionStatus),
     feedback: feedbackModel(input.feedback, locale),
-    receipt: receiptModel(input.receipt),
+    receipt: receiptModel(input.receipt, id),
     connectionStatus,
     control: firstValue(input.controlState, candidateIntent?.control_state, candidateIntent?.controlState) || "unknown"
   };
@@ -23067,63 +23140,15 @@ function installViewerVisualFixture() {
       state.selectedKind = null;
       state.selectedId = null;
       state.selectedObject = null;
-    },
-    major_world_event_crisis() {
-      injectSnapshot(viewerFixtureBaseSnapshot(), {
-        returnState: false
-      });
-      const mode = String(new URLSearchParams(window.location.search || "").get("major_event_state") || "current");
-      const historical = mode === "replay";
-      const suppressed = mode === "gap" || mode === "denied";
-      state.worldFeed = {
-        status: mode === "gap" ? "gap" : mode === "denied" ? "unavailable" : historical ? "replay" : "ready",
-        schemaVersion: "world_feed/v1",
-        worldId: "fixture-world",
-        reorgEpoch: "0",
-        cursor: "fixture-current",
-        stale: suppressed,
-        gapReason: mode === "gap" ? "reorg_epoch_changed" : null,
-        unavailableReason: mode === "denied" ? "permission_denied" : null,
-        snapshotReloadRequired: mode === "gap",
-        requestInFlight: false,
-        events: suppressed ? [] : [{
-          event_seq: "7",
-          kind: "crisis_spawned",
-          summary: "Crisis event",
-          detail: "",
-          receipt_ref: null,
-          major_event: {
-            schema_version: "major_world_event/v1",
-            identity: {
-              world_id: "fixture-world",
-              reorg_epoch: "0",
-              event_seq: "7"
-            },
-            category: "crisis",
-            subtype: "power_shortage",
-            severity: 4,
-            lifecycle: "active",
-            source: {
-              authority: "runtime_journal",
-              event_kind: "crisis_spawned"
-            },
-            freshness: historical ? "replay" : "current",
-            visibility: "public",
-            logical_time: "42",
-            causal_reference: null,
-            world_anchor: {
-              scope: "world",
-              entity_id: "crisis-fixture"
-            }
-          }
-        }]
-      };
-      requestRender();
     }
   };
   installAgentIntentV2VisualFixture(fixtures, {
     core,
     setFixturePlayerAuth,
+    viewerFixtureBaseSnapshot
+  });
+  installMajorWorldEventCrisisVisualFixture(fixtures, {
+    core,
     viewerFixtureBaseSnapshot
   });
   installRefineQuotePreflightVisualFixture(fixtures, {

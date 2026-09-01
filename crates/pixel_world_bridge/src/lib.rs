@@ -105,6 +105,12 @@ struct Link {
     from: Position,
     to: Position,
     emphasis: Option<f64>,
+    #[serde(default)]
+    status: Option<String>,
+    #[serde(default)]
+    source_class: Option<String>,
+    #[serde(default)]
+    freshness: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -760,9 +766,13 @@ fn render_signature(render_state: Option<&RenderState>, mode: RenderSignatureMod
     render_state.links.len().hash(&mut hasher);
     for link in &render_state.links {
         link.id.hash(&mut hasher);
+        link.kind.hash(&mut hasher);
         hash_position(&mut hasher, &link.from);
         hash_position(&mut hasher, &link.to);
         hash_f64(&mut hasher, link.emphasis.unwrap_or(0.0));
+        link.status.hash(&mut hasher);
+        link.source_class.hash(&mut hasher);
+        link.freshness.hash(&mut hasher);
     }
 
     if matches!(mode, RenderSignatureMode::Content) {

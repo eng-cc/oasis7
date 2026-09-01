@@ -42,6 +42,7 @@ pub(super) fn build_world_feed(
             Vec::new(),
             protocol::WorldFeedStatus::Gap,
             Some(reason),
+            None,
         );
     }
 
@@ -91,9 +92,22 @@ pub(super) fn build_world_feed(
         })
         .collect();
     let page_events: Vec<_> = source_events.into_iter().take(limit).collect();
-    // Advance the transport cursor across hidden rows without disclosing them.
-    // Otherwise a page containing only denied Crisis rows would replay forever.
-    let last_seq = page_events.last().map_or(after_seq, |event| event.id);
+    let first_hidden_crisis_seq = page_events.iter().find_map(|event| {
+        (is_crisis_event(event) && !major_events_by_seq.contains_key(&event.id)).then_some(event.id)
+    });
+    // Never advance past a crisis row that cannot be projected authoritatively.
+    // In particular, a later permission grant must be able to replay the row.
+    let last_seq = first_hidden_crisis_seq.map_or_else(
+        || page_events.last().map_or(after_seq, |event| event.id),
+        |event_seq| event_seq.saturating_sub(1),
+    );
+    let permission_denied = first_hidden_crisis_seq.is_some_and(|_| {
+        matches!(
+            visibility,
+            crate::runtime::MajorWorldEventVisibilityPermission::Unknown
+                | crate::runtime::MajorWorldEventVisibilityPermission::Denied
+        )
+    });
     let events: Vec<_> = page_events
         .into_iter()
         .filter_map(|event| {
@@ -109,7 +123,9 @@ pub(super) fn build_world_feed(
             }
         })
         .collect();
-    let status = if events.is_empty() {
+    let status = if permission_denied {
+        protocol::WorldFeedStatus::Unavailable
+    } else if events.is_empty() {
         protocol::WorldFeedStatus::Empty
     } else if cursor.is_some() {
         protocol::WorldFeedStatus::Replay
@@ -123,6 +139,7 @@ pub(super) fn build_world_feed(
         events,
         status,
         None,
+        permission_denied.then_some(protocol::WorldFeedUnavailableReason::PermissionDenied),
     )
 }
 
@@ -144,6 +161,7 @@ fn envelope(
     events: Vec<protocol::WorldFeedEvent>,
     status: protocol::WorldFeedStatus,
     gap_reason: Option<protocol::WorldFeedGapReason>,
+    unavailable_reason: Option<protocol::WorldFeedUnavailableReason>,
 ) -> protocol::WorldFeedEnvelope {
     protocol::WorldFeedEnvelope {
         schema_version: protocol::WORLD_FEED_SCHEMA_VERSION.to_string(),
@@ -153,7 +171,7 @@ fn envelope(
         events,
         status,
         gap_reason,
-        unavailable_reason: None,
+        unavailable_reason,
         snapshot_reload_required: status == protocol::WorldFeedStatus::Gap,
     }
 }
@@ -162,15 +180,28 @@ fn cursor_gap_reason(
     journal: &RuntimeJournal,
     last_event_seq: u64,
 ) -> Option<protocol::WorldFeedGapReason> {
-    let first = journal.events.iter().map(|event| event.id).min();
-    let latest = latest_seq(journal);
+    let mut event_ids: Vec<_> = journal.events.iter().map(|event| event.id).collect();
+    event_ids.sort_unstable();
+    event_ids.dedup();
+    let latest = event_ids.last().copied().unwrap_or(0);
     if last_event_seq > latest {
-        Some(protocol::WorldFeedGapReason::CursorInvalid)
-    } else if first.is_some_and(|first| last_event_seq.saturating_add(1) < first) {
-        Some(protocol::WorldFeedGapReason::CursorGap)
-    } else {
-        None
+        return Some(protocol::WorldFeedGapReason::CursorInvalid);
     }
+
+    let mut expected = last_event_seq.saturating_add(1);
+    for event_id in event_ids
+        .into_iter()
+        .filter(|event_id| *event_id > last_event_seq)
+    {
+        if event_id != expected {
+            return Some(protocol::WorldFeedGapReason::CursorGap);
+        }
+        if event_id == u64::MAX {
+            break;
+        }
+        expected = event_id + 1;
+    }
+    None
 }
 
 fn latest_seq(journal: &RuntimeJournal) -> u64 {
@@ -487,6 +518,16 @@ mod tests {
             50,
             MajorWorldEventVisibilityPermission::Unknown,
         );
+        assert_eq!(
+            unknown_permission.status,
+            protocol::WorldFeedStatus::Unavailable
+        );
+        assert_eq!(
+            unknown_permission.unavailable_reason,
+            Some(protocol::WorldFeedUnavailableReason::PermissionDenied)
+        );
+        assert!(!unknown_permission.snapshot_reload_required);
+        assert_eq!(unknown_permission.cursor, encode_cursor("world-a", 4, 0));
         assert_eq!(unknown_permission.events.len(), 1);
         assert_eq!(unknown_permission.events[0].event_seq, 2);
         assert!(unknown_permission.events[0].major_event.is_none());
@@ -496,6 +537,43 @@ mod tests {
                 .iter()
                 .all(|event| !event.detail.contains("Crisis"))
         );
+        let replay_after_permission = build_world_feed(
+            "world-a",
+            4,
+            &journal,
+            &canonical_crises,
+            Some(&unknown_permission.cursor),
+            50,
+            MajorWorldEventVisibilityPermission::Public,
+        );
+        assert_eq!(
+            replay_after_permission.status,
+            protocol::WorldFeedStatus::Replay
+        );
+        assert_eq!(replay_after_permission.events[0].event_seq, 1);
+        assert!(replay_after_permission.events[0].major_event.is_some());
+
+        let denied_cursor = encode_cursor("world-a", 4, 0);
+        let denied_permission = build_world_feed(
+            "world-a",
+            4,
+            &journal,
+            &canonical_crises,
+            Some(&denied_cursor),
+            50,
+            MajorWorldEventVisibilityPermission::Denied,
+        );
+        assert_eq!(
+            denied_permission.status,
+            protocol::WorldFeedStatus::Unavailable
+        );
+        assert_eq!(
+            denied_permission.unavailable_reason,
+            Some(protocol::WorldFeedUnavailableReason::PermissionDenied)
+        );
+        assert_eq!(denied_permission.cursor, denied_cursor);
+        assert_eq!(denied_permission.events.len(), 1);
+        assert_eq!(denied_permission.events[0].event_seq, 2);
 
         let current = build_world_feed(
             "world-a",
@@ -552,5 +630,29 @@ mod tests {
         );
         assert_eq!(gap.status, protocol::WorldFeedStatus::Gap);
         assert!(gap.events.is_empty());
+    }
+
+    #[test]
+    fn internal_cursor_hole_requires_snapshot_reload() {
+        let journal = Journal {
+            events: vec![event(1), event(3), event(4)],
+        };
+        let cursor = encode_cursor("world-a", 4, 1);
+        let feed = build_world_feed(
+            "world-a",
+            4,
+            &journal,
+            &BTreeMap::new(),
+            Some(&cursor),
+            50,
+            MajorWorldEventVisibilityPermission::Public,
+        );
+        assert_eq!(feed.status, protocol::WorldFeedStatus::Gap);
+        assert_eq!(
+            feed.gap_reason,
+            Some(protocol::WorldFeedGapReason::CursorGap)
+        );
+        assert!(feed.events.is_empty());
+        assert!(feed.snapshot_reload_required);
     }
 }

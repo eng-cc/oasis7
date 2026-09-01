@@ -11,13 +11,25 @@ function copy(locale, zh, en) {
 }
 
 function Field(props) {
+  const field = () => props.value || {};
+  const state = () => field().state === "published" && field().value ? "published" : "unavailable";
+  const unavailableCopy = () => copy(
+    props.locale,
+    "不可用 · 等待权威 Agent 投影",
+    "Unavailable · waiting for authoritative Agent projection",
+  );
   return (
-    <Show when={props.value?.value}>
-      <div class="agent-context-lite__field">
-        <div class="metric__label">{props.label}</div>
-        <div class="agent-context-lite__value">{props.value.value}</div>
+    <div
+      class="agent-context-lite__field"
+      data-agent-context-field={props.name}
+      data-agent-context-field-state={state()}
+      aria-label={`${props.label}: ${state() === "published" ? field().value : unavailableCopy()}`}
+    >
+      <div class="metric__label">{props.label}</div>
+      <div class="agent-context-lite__value">
+        {state() === "published" ? field().value : unavailableCopy()}
       </div>
-    </Show>
+    </div>
   );
 }
 
@@ -75,10 +87,10 @@ export function AgentContextLite(props) {
           locale={locale()}
         />
         <div class="agent-context-lite__gameplay">
-          <Field label={copy(locale(), "目标", "Objective")} value={model().objective} />
-          <Field label={copy(locale(), "下一步", "Next Move")} value={model().nextMove} />
-          <Field label={copy(locale(), "阻塞", "Blocker")} value={model().blocker} />
-          <Field label={copy(locale(), "玩家杠杆", "Player Leverage")} value={model().playerLeverage} />
+          <Field name="objective" label={copy(locale(), "目标", "Objective")} value={model().objective} locale={locale()} />
+          <Field name="next-move" label={copy(locale(), "下一步", "Next Move")} value={model().nextMove} locale={locale()} />
+          <Field name="blocker" label={copy(locale(), "阻塞", "Blocker")} value={model().blocker} locale={locale()} />
+          <Field name="player-leverage" label={copy(locale(), "玩家杠杆", "Player Leverage")} value={model().playerLeverage} locale={locale()} />
         </div>
         <Show when={model().feedback?.kind === "status"}>
           <div class="feedback-detail" data-agent-context-feedback="status">

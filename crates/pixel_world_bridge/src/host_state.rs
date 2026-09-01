@@ -1,7 +1,11 @@
 use serde_json::{Map, Value, json};
 
+#[path = "host_intent_projection.rs"]
+mod intent_projection;
 #[path = "host_micro_depot_projection.rs"]
 mod micro_depot_projection;
+#[path = "host_relation_projection.rs"]
+mod relation_projection;
 #[path = "host_resource_summary.rs"]
 mod resource_summary_projection;
 #[path = "host_social_links.rs"]
@@ -432,28 +436,6 @@ fn build_module_visual_entities(
         .collect::<Vec<_>>();
     projected.sort_by(|left, right| str_key(left, "id").cmp(&str_key(right, "id")));
     projected
-}
-
-fn build_pixel_world_links(agents: &[Value], location_by_id: &Map<String, Value>) -> Vec<Value> {
-    agents
-        .iter()
-        .filter_map(|agent| {
-            let location_id = str_key(agent, "location_id")?;
-            let location = location_by_id.get(location_id)?;
-            let agent_pos = obj(agent, "pos");
-            let location_pos = obj(location, "pos");
-            if !agent_pos.is_object() || !location_pos.is_object() {
-                return None;
-            }
-            Some(json!({
-                "id": format!("link:{}:{location_id}", str_key(agent, "id").unwrap_or("")),
-                "kind": "agent_assignment",
-                "from": agent_pos,
-                "to": location_pos,
-                "emphasis": 0.72,
-            }))
-        })
-        .collect()
 }
 
 fn build_recent_event_hotspots(events: &[Value]) -> Vec<Value> {
@@ -1033,6 +1015,11 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
                 "location_id": string_key(agent, "location_id"),
                 "pos": pos,
                 "position_source": position_source,
+                // Preserve only the explicit authority envelopes. The link
+                // projector still validates every semantic field and never
+                // treats location/geometry as assignment authority.
+                "relation": obj(agent, "relation"),
+                "assignment": obj(agent, "assignment"),
                 "resource_summary": resource_summary,
                 "resource_score": resource_score,
                 "status_badges": status_badges,
@@ -1053,7 +1040,7 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
         (Some(kind), Some(id)) => json!({ "kind": kind, "id": id }),
         _ => Value::Null,
     };
-    let links = build_pixel_world_links(&agents, &location_by_id);
+    let links = relation_projection::build_pixel_world_links(&agents, &location_by_id);
     let social_links = social_links::build_pixel_world_social_links(input, &agents, &locations);
     let anchor = resolve_selection_position(&selection, &agents, &locations)
         .or_else(|| {
@@ -1130,32 +1117,8 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
             .map(|agent_id| json!({ "agent_id": agent_id }))
             .unwrap_or(Value::Null)
     };
-    let active_intent_target = {
-        let snapshot_gameplay = obj(obj(input, "snapshot"), "player_gameplay");
-        let intent = obj(snapshot_gameplay, "primary_intent");
-        let agent_id = str_key(intent, "agent_id");
-        let status = str_key(intent, "status");
-        let freshness = str_key(intent, "freshness");
-        let source_class = str_key(intent, "source_class");
-        let control_state = str_key(intent, "control_state");
-        let active_status = matches!(status, Some("submitted" | "accepted" | "blocked"));
-        let allowed_control =
-            control_state.is_some_and(|value| !matches!(value, "unavailable" | "control_lost"));
-        if world_bounds.is_object()
-            && agent_id.is_some()
-            && active_status
-            && freshness == Some("current")
-            && source_class == Some("runtime_projection")
-            && allowed_control
-            && agents
-                .iter()
-                .any(|agent| str_key(agent, "id") == agent_id && obj(agent, "pos").is_object())
-        {
-            json!({ "agent_id": agent_id, "status": status })
-        } else {
-            Value::Null
-        }
-    };
+    let active_intent_target =
+        intent_projection::project_active_intent_target(input, &world_bounds, &agents);
     let presentation = obj(input, "presentation");
 
     json!({

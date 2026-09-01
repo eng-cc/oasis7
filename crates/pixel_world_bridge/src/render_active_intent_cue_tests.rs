@@ -41,6 +41,7 @@ fn selected_and_blocker_z(app: &mut App) -> (f32, f32) {
 #[test]
 fn authoritative_active_intent_is_display_only_reused_and_below_receipt() {
     let mut state = sample_render_state_with_receipt_target(None, None);
+    state.agents[0].position_source = AgentPositionSource::Snapshot;
     state.active_intent_target = Some(ActiveIntentTarget {
         agent_id: "agent-0".to_string(),
         status: "accepted".to_string(),
@@ -128,6 +129,7 @@ fn active_intent_cue_has_a_stable_nonzero_raster_delta() {
     let (baseline_image, baseline_summary) = rasterize_pixel_regression(&mut baseline);
 
     let mut visible_state = baseline_state;
+    visible_state.agents[0].position_source = AgentPositionSource::Snapshot;
     visible_state.active_intent_target = Some(ActiveIntentTarget {
         agent_id: "agent-0".to_string(),
         status: "accepted".to_string(),
@@ -153,4 +155,28 @@ fn active_intent_cue_has_a_stable_nonzero_raster_delta() {
         "the same active Intent cue must reproduce a stable raster hash"
     );
     assert_eq!(visible_image.as_raw(), repeated_image.as_raw());
+}
+
+#[test]
+fn active_intent_cue_requires_snapshot_position_provenance() {
+    let mut derived_state = sample_render_state_with_receipt_target(None, None);
+    derived_state.active_intent_target = Some(ActiveIntentTarget {
+        agent_id: "agent-0".to_string(),
+        status: "accepted".to_string(),
+    });
+    let mut app = render_test_app(derived_state);
+    assert!(
+        active_intent_cues(&mut app).is_empty(),
+        "location-derived position must not receive an active Intent cue"
+    );
+
+    app.world_mut()
+        .resource_mut::<BevyRuntimeState>()
+        .render_state
+        .as_mut()
+        .expect("render state")
+        .agents[0]
+        .position_source = AgentPositionSource::Snapshot;
+    app.update();
+    assert_eq!(active_intent_cues(&mut app).len(), 1);
 }

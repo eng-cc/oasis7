@@ -52,6 +52,12 @@ pub(super) fn reconcile_active_intent_cues(
         }
         return;
     };
+    if agent.position_source != AgentPositionSource::Snapshot {
+        for entity in existing_by_id.into_values() {
+            commands.entity(entity).despawn();
+        }
+        return;
+    }
 
     let Some((canvas_x, canvas_y)) = render_state.world_bounds.as_ref().and_then(|world_bounds| {
         agent
@@ -71,8 +77,14 @@ pub(super) fn reconcile_active_intent_cues(
     let body_half_size = agent_unanimated_size_px(agent, is_selected) as f32 / 2.0;
     let (cue_width, cue_height) = match target.status.as_str() {
         "submitted" => (ACTIVE_INTENT_CUE_THICKNESS_PX, ACTIVE_INTENT_CUE_WIDTH_PX),
+        "accepted" => (ACTIVE_INTENT_CUE_WIDTH_PX, ACTIVE_INTENT_CUE_THICKNESS_PX),
         "blocked" => (8.0, 8.0),
-        _ => (ACTIVE_INTENT_CUE_WIDTH_PX, ACTIVE_INTENT_CUE_THICKNESS_PX),
+        _ => {
+            for entity in existing_by_id.into_values() {
+                commands.entity(entity).despawn();
+            }
+            return;
+        }
     };
     let sprite = sprite_for_rect(ACTIVE_INTENT_CUE_COLOR, cue_width, cue_height);
     let transform = Transform::from_translation(to_bevy_translation(

@@ -147,12 +147,15 @@ function feedbackModel(feedback, locale) {
   };
 }
 
-function receiptModel(receipt) {
+function receiptModel(receipt, selectedId = null) {
   if (!isRecord(receipt)) return { present: false, state: "none" };
   const targetAgentId = firstValue(receipt.target_agent_id, receipt.targetAgentId);
+  if (!receipt.present || !targetAgentId || normalized(targetAgentId) !== normalized(selectedId)) {
+    return { present: false, state: "none" };
+  }
   return {
-    present: receipt.present === true,
-    state: firstValue(receipt.state) || (receipt.present === true ? "present" : "none"),
+    present: true,
+    state: firstValue(receipt.state) || "present",
     confidence: firstValue(receipt.confidence),
     targetAgentId,
   };
@@ -269,7 +272,7 @@ export function buildAgentContextDisplayModel(input = {}) {
     )),
     intent: intentModel(candidateIntent, id, locale, connectionStatus),
     feedback: feedbackModel(input.feedback, locale),
-    receipt: receiptModel(input.receipt),
+    receipt: receiptModel(input.receipt, id),
     connectionStatus,
     control: firstValue(input.controlState, candidateIntent?.control_state, candidateIntent?.controlState) || "unknown",
   };

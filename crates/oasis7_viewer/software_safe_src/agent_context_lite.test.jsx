@@ -95,6 +95,22 @@ describe("AgentContextLite player-facing contract", () => {
     expect(within(surface).getByText("Accepted")).toBeInTheDocument();
   });
 
+  it("renders explicit unavailable and waiting copy for missing Agent-bound gameplay fields", () => {
+    const model = contextModel({ kind: "agent", id: AGENT_ID }, {
+      gameplay: { ...gameplay, agent_id: null, primaryIntent: intent },
+    });
+
+    render(() => <AgentContextLite model={model} locale="en" />);
+
+    const surface = screen.getByRole("region", { name: /Agent Context/i });
+    expect(surface.querySelectorAll('[data-agent-context-field-state="unavailable"]')).toHaveLength(4);
+    expect(within(surface).getByText("Objective")).toBeInTheDocument();
+    expect(within(surface).getByText("Next Move")).toBeInTheDocument();
+    expect(within(surface).getByText("Blocker")).toBeInTheDocument();
+    expect(within(surface).getByText("Player Leverage")).toBeInTheDocument();
+    expect(surface).toHaveTextContent(/Unavailable.*waiting for authoritative Agent projection/i);
+  });
+
   it("keeps mismatched or null Intent visibly unavailable without leaking a private Agent plan", () => {
     const mismatched = {
       ...intent,
@@ -209,6 +225,24 @@ describe("AgentContextLite player-facing contract", () => {
 
     expect(document.querySelectorAll('[data-viewer-overlay="receipt"]')).toHaveLength(1);
     expect(document.querySelectorAll("#viewer-action-receipt")).toHaveLength(1);
+  });
+
+  it("does not expose a Receipt targeting another Agent in the selected context", () => {
+    const model = contextModel({ kind: "agent", id: AGENT_ID }, {
+      receipt: {
+        present: true,
+        state: "confirmed",
+        confidence: "world_delta",
+        target_agent_id: "agent-1",
+      },
+    });
+
+    render(() => <AgentContextLite model={model} locale="en" />);
+
+    const surface = screen.getByRole("region", { name: /Agent Context/i });
+    expect(surface).toHaveAttribute("data-agent-context-receipt", "none");
+    expect(surface).not.toHaveAttribute("data-agent-context-receipt", "present");
+    expect(surface.querySelectorAll('[data-viewer-overlay="receipt"]')).toHaveLength(0);
   });
 
   it("keeps completed Intent lifecycle separate from the single formal Receipt presentation", () => {

@@ -241,6 +241,22 @@ describe("Agent Context Lite display model", () => {
     });
   });
 
+  it.each([
+    ["another Agent", { target_agent_id: "agent-1" }],
+    ["no Agent", {}],
+  ])("rejects an explicit Receipt bound to %s", (_description, target) => {
+    const model = buildAgentContextDisplayModel(buildInput({
+      receipt: {
+        present: true,
+        state: "confirmed",
+        confidence: "world_delta",
+        ...target,
+      },
+    }));
+
+    expect(model.receipt).toEqual({ present: false, state: "none" });
+  });
+
   it("clears Agent context for a selected non-Agent and reports honest unavailable state", () => {
     const model = buildAgentContextDisplayModel(buildInput({
       selected: { kind: "location", id: LOCATION_ID },

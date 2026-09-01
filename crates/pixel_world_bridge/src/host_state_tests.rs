@@ -128,8 +128,7 @@ fn rust_host_state_derives_fragment_agent_link_and_commercial_surface() {
 
     assert_eq!(state["agents"][0]["position_source"], "location_derived");
     assert!(state["agents"][0]["pos"].is_object());
-    assert_eq!(state["links"].as_array().unwrap().len(), 1);
-    assert_eq!(state["links"][0]["kind"], "agent_assignment");
+    assert_eq!(state["links"].as_array().unwrap().len(), 0);
     assert_eq!(state["visual_hotspots"].as_array().unwrap().len(), 4);
 
     let surface = &state["commercial_surface"];
@@ -144,9 +143,41 @@ fn rust_host_state_derives_fragment_agent_link_and_commercial_surface() {
     assert_eq!(surface["action_receipt"]["confidence"], "world_delta");
     assert_eq!(surface["action_receipt"]["title"], "Action blocked");
     assert_eq!(surface["world_read"]["agents"], 1);
-    assert_eq!(surface["world_read"]["routes"], 1);
+    assert_eq!(surface["world_read"]["routes"], 0);
     assert_eq!(surface["world_read"]["fragments"], 2);
     assert_eq!(surface["world_read"]["hotspots"], 4);
+}
+
+#[test]
+fn rust_host_state_projects_assignment_only_from_explicit_current_relation_authority() {
+    let mut input = sample_input();
+    input["lists"]["agents"][0]["relation"] = json!({
+        "kind": "agent_assignment",
+        "status": "active",
+        "source_class": "runtime_projection",
+        "freshness": "current"
+    });
+    let state = build_render_state(&input);
+    assert_eq!(state["links"].as_array().unwrap().len(), 1);
+    assert_eq!(state["links"][0]["status"], "active");
+    assert_eq!(state["links"][0]["source_class"], "runtime_projection");
+    assert_eq!(state["links"][0]["freshness"], "current");
+
+    for (field, value) in [
+        ("status", json!("stale")),
+        ("source_class", json!("local_pending")),
+        ("freshness", json!("stale")),
+    ] {
+        let mut rejected = input.clone();
+        rejected["lists"]["agents"][0]["relation"][field] = value;
+        assert!(
+            build_render_state(&rejected)["links"]
+                .as_array()
+                .unwrap()
+                .is_empty(),
+            "relation {field} must fail closed"
+        );
+    }
 }
 
 #[test]
@@ -453,9 +484,15 @@ fn rust_host_state_projects_only_authoritative_active_intent_targets() {
         "reorg_epoch": 0,
         "logical_time": 12,
         "event_seq": 4,
+        "updated_at": 12,
         "source_class": "runtime_projection",
         "freshness": "current",
         "control_state": "controllable"
+    });
+    active_input["lists"]["agents"][0]["pos"] = json!({
+        "x_cm": 4_900_000.0,
+        "y_cm": 2_400_000.0,
+        "z_cm": 0.0
     });
     let active = build_render_state(&active_input);
     assert_eq!(
@@ -468,13 +505,22 @@ fn rust_host_state_projects_only_authoritative_active_intent_targets() {
     production_shape["snapshot"]["player_gameplay"]["primary_intent"] =
         active_input["snapshot"]["player_gameplay"]["primary_intent"].clone();
     let projected_production_shape = build_render_state(&production_shape);
-    assert_eq!(
-        projected_production_shape["active_intent_target"],
-        json!({ "agent_id": "agent-0", "status": "accepted" }),
-        "the canonical snapshot.player_gameplay.primary_intent production shape must drive the cue"
+    assert!(
+        projected_production_shape
+            .get("active_intent_target")
+            .is_none()
+            || projected_production_shape["active_intent_target"].is_null(),
+        "a canonical Intent without a snapshot-authored Agent position must fail closed"
     );
 
     for (field, value) in [
+        ("schema_version", json!(1)),
+        ("intent_id", Value::Null),
+        ("world_id", Value::Null),
+        ("reorg_epoch", Value::Null),
+        ("logical_time", Value::Null),
+        ("event_seq", Value::Null),
+        ("updated_at", Value::Null),
         ("freshness", json!("stale")),
         ("control_state", json!("unavailable")),
         ("status", json!("completed")),
@@ -492,11 +538,10 @@ fn rust_host_state_projects_only_authoritative_active_intent_targets() {
 
     let mut missing_position = active_input;
     missing_position["lists"]["agents"][0]["pos"] = Value::Null;
-    missing_position["lists"]["agents"][0]["location_id"] = Value::Null;
     let missing_position_state = build_render_state(&missing_position);
     assert!(
         missing_position_state["active_intent_target"].is_null(),
-        "an active Intent without an authoritative rendered position must fail closed"
+        "an active Intent with only a location-derived position must fail closed"
     );
 
     let mut missing_world_bounds = production_shape.clone();

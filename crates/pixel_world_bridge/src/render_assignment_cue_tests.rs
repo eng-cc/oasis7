@@ -22,6 +22,9 @@ fn assignment_link_state() -> RenderState {
             from: sample_position(1_250_000.0, 750_000.0),
             to: sample_position(1_750_000.0, 1_250_000.0),
             emphasis: Some(0.72),
+            status: Some("active".to_string()),
+            source_class: Some("runtime_projection".to_string()),
+            freshness: Some("current".to_string()),
         },
         Link {
             id: "unknown:agent-0".to_string(),
@@ -29,6 +32,9 @@ fn assignment_link_state() -> RenderState {
             from: sample_position(1_250_000.0, 1_250_000.0),
             to: sample_position(1_750_000.0, 750_000.0),
             emphasis: Some(0.72),
+            status: None,
+            source_class: None,
+            freshness: None,
         },
     ];
     state
@@ -171,6 +177,33 @@ fn assignment_chevrons_reverse_and_clean_up_for_short_or_non_assignment_links() 
         assignment_cue_entities(&mut app).is_empty(),
         "missing bounds/state leaves no stale assignment cue"
     );
+}
+
+#[test]
+fn assignment_chevrons_fail_closed_without_current_relation_authority() {
+    for (field, value) in [
+        ("status", None),
+        ("source_class", Some("local_pending")),
+        ("freshness", Some("stale")),
+    ] {
+        let mut app = render_test_app(assignment_link_state());
+        {
+            let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+            let state = runtime.render_state.as_mut().expect("render state");
+            match field {
+                "status" => state.links[0].status = value.map(ToString::to_string),
+                "source_class" => state.links[0].source_class = value.map(ToString::to_string),
+                "freshness" => state.links[0].freshness = value.map(ToString::to_string),
+                _ => unreachable!("test field"),
+            }
+            runtime.render_version += 1;
+        }
+        app.update();
+        assert!(
+            assignment_cue_entities(&mut app).is_empty(),
+            "assignment cue must be absent when relation {field} is not authoritative/current"
+        );
+    }
 }
 
 #[test]
