@@ -566,6 +566,48 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         self.assertEqual(record["nonce_reservation_state"]["reserved_count"], len(self.plan["nodes"]))
         self.assertTrue(record["nonce_reservation_state"]["complete"])
 
+    def test_consumer_impact_drift_after_in_flight_write_blocks_destructive_callback(self) -> None:
+        authority = self._authority(apply_authorized=True)
+
+        def verifier(plan: dict[str, object], receipt: dict[str, object]) -> dict[str, object]:
+            return {
+                "verified": True,
+                "bindings": receipt["bindings"],
+                "verifier_id": self.adapter.CANONICAL_VERIFIER_ID,
+                "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
+                "signer_id": "governance-signer",
+            }
+
+        transport = ApplyTransport(self.adapter, self.plan)
+        original_write = self.adapter._write_journal
+        stop_index = self.plan["global_order"].index("stop:storage-205")
+
+        def mutate_after_in_flight_write(path: Path, record: dict[str, object]) -> None:
+            original_write(path, record)
+            if record["status"] == "in-flight" and record["next_operation_index"] == stop_index:
+                self.plan["consumer_impact_record"]["record"]["impact"] = "active"
+
+        with tempfile.TemporaryDirectory() as directory:
+            journal = Path(directory) / "journal.json"
+            with mock.patch.object(self.adapter, "_write_journal", side_effect=mutate_after_in_flight_write):
+                with self.assertRaises(self.adapter.AdapterError):
+                    self.adapter.execute(
+                        self.plan,
+                        authority,
+                        journal_path=journal,
+                        ledger_path=self.ledger_path,
+                        transport=transport,
+                        dry_run=False,
+                        provenance_verifier=verifier,
+                    )
+
+            record = json.loads(journal.read_text(encoding="utf-8"))
+
+        self.assertEqual(transport.operations, self.plan["global_order"][:stop_index])
+        self.assertEqual(transport.rollback_reobservations, [])
+        self.assertEqual(transport.rollback_operations, [])
+        self.assertEqual(record["status"], "in-flight")
+
     def test_resume_from_prepared_or_preflight_checkpoint_reconciles_without_double_use(self) -> None:
         authority = self._authority(apply_authorized=True)
 

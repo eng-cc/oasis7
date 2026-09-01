@@ -1476,11 +1476,16 @@ def _verify_receipt_with_verifier(
 ) -> None:
     if verifier is None:
         return
+    # Revalidate the live consumer-impact record at the exact boundary where
+    # an externally supplied verifier is about to run.  A receipt cannot
+    # authorize work after the plan-bound impact record has drifted.
+    transport_plan = _transport_plan(plan)
+    _consumer_impact_locator(plan)
     try:
         # A provider verifier never needs nonce seams or other adapter-only
         # authority material.  Keep that boundary identical to the transport
         # DTO boundary.
-        result = verifier(_transport_plan(plan), receipt)
+        result = verifier(transport_plan, receipt)
     except Exception as error:
         _fail(f"provider receipt verifier failed: {error.__class__.__name__}")
     result = _object(result, "provider receipt verifier result")
@@ -1492,6 +1497,7 @@ def _verify_receipt_with_verifier(
         or result.get("signer_id") not in CANONICAL_SIGNER_ALLOWLIST
     ):
         _fail("provider receipt verifier did not verify the exact receipt binding")
+    _consumer_impact_locator(plan)
 
 
 def _validate_provider_receipt(
@@ -1504,6 +1510,9 @@ def _validate_provider_receipt(
     evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Validate and sanitize every provider receipt before phase advance."""
+    # A provider callback may return a receipt only after the exact impact
+    # source remains unchanged for the callback/receipt boundary.
+    _consumer_impact_locator(plan)
     receipt = _object(raw, f"{operation} provider receipt")
     allowed = {
         "schema_version",
@@ -1822,17 +1831,23 @@ def _verify_provenance(
     if verifier is None:
         if "provenance_helper" not in authority:
             return False
-        result = verify_repository_provenance_helper(plan, authority)
+        provenance_plan = copy.deepcopy(plan)
+        _consumer_impact_locator(plan)
+        result = verify_repository_provenance_helper(provenance_plan, authority)
         if len(receipts) != 1:
             _fail("no-backup authority requires the independent receipt verifier callback")
         validate_result(receipts[0], result)
+        _consumer_impact_locator(plan)
     else:
         for receipt in receipts:
+            transport_plan = _transport_plan(plan)
+            _consumer_impact_locator(plan)
             try:
-                result = verifier(_transport_plan(plan), receipt)
+                result = verifier(transport_plan, receipt)
             except Exception as error:
                 _fail(f"external provenance verifier failed: {error.__class__.__name__}")
             validate_result(receipt, result)
+            _consumer_impact_locator(plan)
     return True
 
 
@@ -2120,7 +2135,13 @@ def _execute_unlocked(
             else:
                 nonce_state = _reconcile_nonce_reservations(plan, Path(ledger_path))
             for node in plan["nodes"]:
-                evidence = transport.inspect_node(_transport_node(node))
+                # Inspect is an externally supplied provider callback.  Keep
+                # the consumer-impact binding at the exact callback edge so
+                # an in-flight record mutation cannot be observed only after
+                # remote evidence has already been collected.
+                transport_node = _transport_node(node)
+                _consumer_impact_locator(plan)
+                evidence = transport.inspect_node(transport_node)
                 validated_evidence = validate_remote_preflight(plan, node, evidence, provenance_verifier)
                 preflight_evidence_receipts.append(validated_evidence["receipt"])
             _write_journal(
@@ -2189,6 +2210,7 @@ def _execute_unlocked(
             _fail("nonce reservation or remote preflight failed; transaction is terminal")
     for index, operation in enumerate(operations):
         node_name: str | None = None
+        in_flight_journal_written = False
         try:
             # The in-flight journal write is itself protected by the rollback
             # handler.  A failure here must not strand an earlier successful
@@ -2211,13 +2233,11 @@ def _execute_unlocked(
                     backup_status=backup_status,
                 ),
             )
-            # Every provider callback is an attempted operation boundary. If
-            # it performs a side effect and then throws, clean-redeploy must
-            # still receive the current operation in its rollback set.
-            if _rollback_candidate(operation) and operation not in rollback_candidates:
-                rollback_candidates.append(operation)
+            in_flight_journal_written = True
             if operation == "fresh-root-probe":
-                raw_receipt = transport.verify_fresh_root_probe(_transport_plan(plan))
+                transport_plan = _transport_plan(plan)
+                _consumer_impact_locator(plan)
+                raw_receipt = transport.verify_fresh_root_probe(transport_plan)
                 receipt = _validate_provider_receipt(
                     plan,
                     operation,
@@ -2232,12 +2252,21 @@ def _execute_unlocked(
                 phase = operation.partition(":")[0]
                 transport_node = _transport_node(node) if node is not None else None
                 if phase == "preflight":
+                    _consumer_impact_locator(plan)
                     raw_receipt = transport.preflight(operation, transport_node)
                 elif phase == "verify":
+                    _consumer_impact_locator(plan)
                     raw_receipt = transport.verify(operation, transport_node)
                 elif operation == "fleet-health":
+                    _consumer_impact_locator(plan)
                     raw_receipt = transport.health(operation)
                 else:
+                    # Append only after the exact pre-callback binding check:
+                    # if it fails, no provider mutation has begun and the
+                    # rollback path must not invoke another callback.
+                    _consumer_impact_locator(plan)
+                    if _rollback_candidate(operation) and operation not in rollback_candidates:
+                        rollback_candidates.append(operation)
                     raw_receipt = transport.mutate(operation, transport_node)
                 # A successful start/rebuild callback may have changed the
                 # provider even if its receipt is malformed or the following
@@ -2352,16 +2381,29 @@ def _execute_unlocked(
                     ),
                 )
                 _fail("read-only provider operation failed; no rollback is required")
-            try:
-                if _rollback_candidate(operation) and operation not in rollback_candidates:
+            if not rollback_candidates and not _read_only_operation(operation):
+                # A consumer-impact mismatch at the pre-callback boundary is
+                # fail-closed.  Preserve the durable in-flight journal and do
+                # not make any further externally supplied callback, including
+                # re-observation or clean-redeploy rollback.
+                if in_flight_journal_written:
+                    _fail("provider mutation was blocked before callback; governed reconciliation is required")
+                # If the in-flight journal itself could not be written, retain
+                # the pre-existing rollback contract: reconcile a possible
+                # earlier provider transition before reporting the failure.
+                if _rollback_candidate(operation):
                     rollback_candidates.append(operation)
+            try:
                 validate_authority(plan, authority)
                 if provenance_verifier is None:
                     _fail("rollback requires the independent provider receipt verifier callback")
                 if _verify_provenance(plan, authority, provenance_verifier) is not True:
                     _fail("rollback requires a fresh independent provenance verification")
+                rollback_plan = _transport_plan(plan)
+                rollback_candidates_snapshot = list(rollback_candidates)
+                _consumer_impact_locator(plan)
                 rollback_reobservation_receipt = transport.reobserve_failed_state(
-                    _transport_plan(plan), list(rollback_candidates), failed_operation
+                    rollback_plan, rollback_candidates_snapshot, failed_operation
                 )
                 rollback_reobservation_receipt = _validate_provider_receipt(
                     plan,
@@ -2373,8 +2415,11 @@ def _execute_unlocked(
                 failed_state_digest = rollback_reobservation_receipt["failed_state_digest"]
                 if rollback_reobservation_receipt["failed_operation"] != failed_operation:
                     _fail("rollback re-observation failed-operation binding drifted")
+                rollback_plan = _transport_plan(plan)
+                rollback_candidates_snapshot = list(rollback_candidates)
+                _consumer_impact_locator(plan)
                 rollback_receipt = transport.rollback_clean_redeploy(
-                    _transport_plan(plan), list(rollback_candidates), rollback_reobservation_receipt
+                    rollback_plan, rollback_candidates_snapshot, rollback_reobservation_receipt
                 )
                 rollback_receipt = _validate_provider_receipt(
                     plan,
