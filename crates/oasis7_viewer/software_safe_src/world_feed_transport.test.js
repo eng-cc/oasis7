@@ -165,6 +165,41 @@ describe("World Feed transport", () => {
     expect(core.state.recentEvents[0].id).toBe(9);
   });
 
+  it("observes crisis identity and time without completing an accepted player control", async () => {
+    const { sockets } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+    core.initializeSoftwareSafeCore();
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+    core.state.lastControlFeedback = {
+      accepted: true,
+      stage: "queued",
+      baselineLogicalTime: 0,
+      baselineEventSeq: 0,
+      deltaLogicalTime: 0,
+      deltaEventSeq: 0,
+    };
+
+    sockets[0].receive({
+      type: "event",
+      event: {
+        id: 8,
+        time: 10,
+        kind: {
+          type: "RuntimeEvent",
+          data: { kind: "runtime.gameplay.crisis_spawned", domain_kind: "crisis_id=crisis-1" },
+        },
+      },
+    });
+
+    expect(core.state).toMatchObject({ logicalTime: 10, eventSeq: 8, recentEvents: [] });
+    expect(core.state.lastControlFeedback).toMatchObject({
+      stage: "queued",
+      deltaLogicalTime: 0,
+      deltaEventSeq: 0,
+    });
+  });
+
   it("requests and consumes only the world_feed/v1 response through the existing socket path", async () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");

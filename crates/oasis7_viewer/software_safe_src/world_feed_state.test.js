@@ -201,6 +201,30 @@ describe("World Feed v1 state", () => {
     });
   });
 
+  it("clears attention whenever snapshot reload is required even if status says ready", () => {
+    const previous = consumeWorldFeed(createInitialWorldFeedState(), feed()).state;
+    const recovering = consumeWorldFeed(previous, feed({
+      status: "ready",
+      snapshot_reload_required: true,
+      events: [{
+        event_seq: 7,
+        kind: "major_world_event",
+        summary: "Must not remain current",
+        detail: "",
+        receipt_ref: null,
+        major_event: majorEvent(),
+      }],
+    }));
+
+    expect(recovering.requiresSnapshotReload).toBe(true);
+    expect(recovering.state).toMatchObject({
+      status: "gap",
+      stale: true,
+      events: [],
+      snapshotReloadRequired: true,
+    });
+  });
+
   it("fails the envelope when a present major-event authority payload is invalid", () => {
     const consumed = consumeWorldFeed(createInitialWorldFeedState(), feed({
       events: [

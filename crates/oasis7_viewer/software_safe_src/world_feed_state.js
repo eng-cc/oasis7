@@ -315,6 +315,26 @@ export function consumeWorldFeed(previous, feed) {
   // cannot repair it and must not start a recovery loop.
   const requiresSnapshotReload = snapshotReloadRequired || status === "gap";
   const stale = requiresSnapshotReload || status === "gap" || status === "unavailable";
+  if (snapshotReloadRequired) {
+    return {
+      state: {
+        ...state,
+        status: "gap",
+        schemaVersion: WORLD_FEED_SCHEMA_VERSION,
+        worldId,
+        reorgEpoch,
+        cursor,
+        events: [],
+        stale: true,
+        gapReason: gapReason || "cursor_invalid",
+        unavailableReason: null,
+        snapshotReloadRequired: true,
+        requestInFlight: false,
+        lastError: null,
+      },
+      requiresSnapshotReload: true,
+    };
+  }
   if (status === "gap") {
     return {
       state: {

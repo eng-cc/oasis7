@@ -4713,6 +4713,26 @@ function consumeWorldFeed(previous, feed) {
   } = envelope;
   const requiresSnapshotReload = snapshotReloadRequired || status === "gap";
   const stale = requiresSnapshotReload || status === "gap" || status === "unavailable";
+  if (snapshotReloadRequired) {
+    return {
+      state: {
+        ...state2,
+        status: "gap",
+        schemaVersion: WORLD_FEED_SCHEMA_VERSION,
+        worldId,
+        reorgEpoch,
+        cursor,
+        events: [],
+        stale: true,
+        gapReason: gapReason || "cursor_invalid",
+        unavailableReason: null,
+        snapshotReloadRequired: true,
+        requestInFlight: false,
+        lastError: null
+      },
+      requiresSnapshotReload: true
+    };
+  }
   if (status === "gap") {
     return {
       state: {
@@ -6450,30 +6470,18 @@ function setMode() {
     reason: "viewer does not expose 2d/3d camera modes"
   };
 }
-function updateControlFeedbackFromProgress() {
-  const feedback = state.lastControlFeedback;
-  if (!feedback || !feedback.accepted) return;
-  const deltaLogicalTime = Math.max(0, state.logicalTime - feedback.baselineLogicalTime);
-  const deltaEventSeq = Math.max(0, state.eventSeq - feedback.baselineEventSeq);
-  feedback.deltaLogicalTime = deltaLogicalTime;
-  feedback.deltaEventSeq = deltaEventSeq;
-  if (deltaLogicalTime > 0 || deltaEventSeq > 0) {
-    feedback.stage = "completed_advanced";
-    feedback.effect = `world advanced: logicalTime +${deltaLogicalTime}, eventSeq +${deltaEventSeq}`;
-  }
-}
 function summarizeEventTitle(event) {
   const kind = event?.kind?.type || "unknown";
   return kind.replace(/_/g, " ");
 }
 function addRecentEvent(event) {
+  state.eventSeq = Math.max(state.eventSeq, Number(event?.id || 0));
   if (isWorldScopedCrisisRuntimeEvent(event)) {
     return;
   }
   state.recentEvents.unshift(event);
   state.recentEvents = state.recentEvents.slice(0, MAX_EVENTS);
   state.eventCount = state.recentEvents.length;
-  state.eventSeq = Math.max(state.eventSeq, Number(event?.id || 0));
 }
 function handleSnapshot(snapshot) {
   clearInitialSnapshotRetryTimer();
@@ -8470,7 +8478,6 @@ function handleViewerMessage(message) {
       reportFatalError(message.message, "viewer");
       break;
   }
-  updateControlFeedbackFromProgress();
   render();
 }
 function attachSocket(ws) {
