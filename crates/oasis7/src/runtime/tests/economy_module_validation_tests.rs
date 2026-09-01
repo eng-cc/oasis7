@@ -2,8 +2,8 @@ use super::*;
 use crate::runtime::tests::signed_test_artifact_identity;
 use crate::runtime::{
     AgentLocationAuthorityV1, FactoryConstructionPowerMode, FactoryConstructionPowerProfileV1,
-    FactorySiteAuthorityV1, Manifest, MaterialLedgerId, ModuleSubscription,
-    ModuleSubscriptionStage, WorldError, WorldEvent,
+    FactoryProductionStatus, FactorySiteAuthorityV1, Manifest, MaterialLedgerId,
+    ModuleSubscription, ModuleSubscriptionStage, WorldError, WorldEvent,
 };
 use oasis7_wasm_abi::{
     ModuleCallFailure, ModuleCallInput, ModuleCallRequest, ModuleOutput, ModuleSandbox,
@@ -235,6 +235,73 @@ fn product_validation_blocker_event(world: &World) -> DomainEvent {
             _ => None,
         })
         .expect("product-validation blocker event")
+}
+
+#[test]
+fn schedule_recipe_with_module_rejection_emits_production_blocker_and_resets_candidate() {
+    let factory_id = "factory.recipe.module-rejection-blocker";
+    let mut world = logistics_drone_module_recipe_world(factory_id);
+    world.submit_action(Action::ScheduleRecipeWithModule {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: factory_id.to_string(),
+        recipe_id: "recipe.assembler.module-rejection-blocker".to_string(),
+        module_id: "m4.recipe.logistics_drone".to_string(),
+        desired_batches: 1,
+        deterministic_seed: 20260902,
+    });
+    let journal_start = world.journal().events.len();
+    let output = ModuleOutput {
+        new_state: None,
+        effects: Vec::new(),
+        emits: vec![ModuleEmit {
+            kind: "economy.recipe_execution_plan".to_string(),
+            payload: serde_json::to_value(RecipeExecutionPlan::rejected(
+                "module intentionally denied this recipe",
+            ))
+            .expect("serialize rejected recipe plan"),
+        }],
+        tick_lifecycle: None,
+        output_bytes: 256,
+    };
+    let mut sandbox = FixedSandbox::succeed(output);
+
+    world
+        .step_with_modules(&mut sandbox)
+        .expect("module recipe rejection should remain a structured action result");
+
+    assert_eq!(world.pending_recipe_jobs_len(), 0);
+    assert!(world.journal().events[journal_start..].iter().any(|event| {
+        matches!(
+            &event.body,
+            WorldEventBody::Domain(DomainEvent::ActionRejected {
+                reason: RejectReason::RuleDenied { notes },
+                ..
+            }) if notes.iter().any(|note| note.contains("recipe module denied"))
+        )
+    }));
+    assert!(world.journal().events[journal_start..].iter().any(|event| {
+        matches!(
+            &event.body,
+            WorldEventBody::Domain(DomainEvent::FactoryProductionBlocked {
+                factory_id: blocked_factory,
+                recipe_id: blocked_recipe,
+                blocker_kind,
+                blocker_detail,
+                ..
+            }) if blocked_factory == factory_id
+                && blocked_recipe == "recipe.assembler.module-rejection-blocker"
+                && blocker_kind == "governance_gate"
+                && blocker_detail.contains("recipe module denied")
+        )
+    }));
+    let factory = world
+        .state()
+        .factories
+        .get(factory_id)
+        .expect("factory after module rejection blocker");
+    assert_eq!(factory.production.status, FactoryProductionStatus::Blocked);
+    assert_eq!(factory.production.same_recipe_repeat_count, 0);
+    assert_eq!(factory.production.last_completed_canonical_snapshot, None);
 }
 
 #[path = "economy_module_validation/identity_guard.rs"]

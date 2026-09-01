@@ -1073,11 +1073,9 @@ impl WorldState {
                     factory.production.current_blocker_detail = Some(blocker_detail.clone());
                     factory.production.current_job_id = None;
                     factory.production.current_recipe_id = None;
-                    if !product_validation_failure {
-                        factory.production.last_completed_recipe_id = None;
-                        factory.production.same_recipe_repeat_count = 0;
-                        factory.production.last_completed_canonical_snapshot = None;
-                    }
+                    factory.production.last_completed_recipe_id = None;
+                    factory.production.same_recipe_repeat_count = 0;
+                    factory.production.last_completed_canonical_snapshot = None;
                 }
                 if !product_validation_failure {
                     self.refresh_industry_progress_stage(now);

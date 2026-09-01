@@ -176,8 +176,10 @@ impl World {
         &self,
         envelope: &ActionEnvelope,
     ) -> Option<FactoryProductionFollowupContext> {
-        let Action::ScheduleRecipe { factory_id, .. } = &envelope.action else {
-            return None;
+        let factory_id = match &envelope.action {
+            Action::ScheduleRecipe { factory_id, .. }
+            | Action::ScheduleRecipeWithModule { factory_id, .. } => factory_id,
+            _ => return None,
         };
         self.state
             .factories
@@ -243,6 +245,12 @@ impl World {
                     factory_id,
                     recipe_id,
                     ..
+                }
+                | Action::ScheduleRecipeWithModule {
+                    requester_agent_id,
+                    factory_id,
+                    recipe_id,
+                    ..
                 },
                 WorldEventBody::Domain(DomainEvent::ActionRejected { action_id, reason }),
             ) => {
@@ -263,6 +271,9 @@ impl World {
             }
             (
                 Action::ScheduleRecipe {
+                    requester_agent_id, ..
+                }
+                | Action::ScheduleRecipeWithModule {
                     requester_agent_id, ..
                 },
                 WorldEventBody::Domain(DomainEvent::RecipeStarted {

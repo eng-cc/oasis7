@@ -52,6 +52,26 @@ impl World {
     }
 }
 
+pub(super) fn aggregate_material_stacks_for_admission(
+    label: &str,
+    stacks: &[MaterialStack],
+) -> Result<BTreeMap<String, i64>, String> {
+    let mut aggregated = BTreeMap::<String, i64>::new();
+    for stack in stacks {
+        if stack.kind.trim().is_empty() || stack.amount <= 0 {
+            return Err(format!(
+                "{label} must be positive and named: {}={}",
+                stack.kind, stack.amount
+            ));
+        }
+        let total = aggregated.entry(stack.kind.clone()).or_insert(0);
+        *total = (*total)
+            .checked_add(stack.amount)
+            .ok_or_else(|| format!("{label} amount overflow for material kind {}", stack.kind))?;
+    }
+    Ok(aggregated)
+}
+
 pub(super) fn authenticated_collect_data_to_event(
     world: &World,
     action_id: ActionId,

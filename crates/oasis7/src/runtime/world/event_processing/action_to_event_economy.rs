@@ -395,32 +395,32 @@ impl World {
                         },
                     }));
                 }
-                // Direct BuildFactory submissions are owned by the builder's
-                // material ledger.  Do not silently source construction inputs
-                // from the global world ledger; the module-backed compatibility
-                // lane resolves its own historical source before reaching this
-                // direct action.
+                // Direct builds use the builder ledger; module fallback is resolved upstream.
                 let consume_ledger = MaterialLedgerId::agent(builder_agent_id.clone());
-                for stack in &spec.build_cost {
-                    if stack.amount <= 0 {
-                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                            action_id,
-                            reason: RejectReason::RuleDenied {
-                                notes: vec![format!(
-                                    "factory build_cost must be > 0: {}={}",
-                                    stack.kind, stack.amount
-                                )],
-                            },
-                        }));
-                    }
+                let required_materials =
+                    match action_to_event_economy_support::aggregate_material_stacks_for_admission(
+                        "factory build_cost",
+                        &spec.build_cost,
+                    ) {
+                        Ok(required_materials) => required_materials,
+                        Err(reason) => {
+                            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                                action_id,
+                                reason: RejectReason::RuleDenied {
+                                    notes: vec![reason],
+                                },
+                            }));
+                        }
+                    };
+                for (material_kind, requested) in required_materials {
                     let available =
-                        self.ledger_material_balance(&consume_ledger, stack.kind.as_str());
-                    if available < stack.amount {
+                        self.ledger_material_balance(&consume_ledger, material_kind.as_str());
+                    if available < requested {
                         return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                             action_id,
                             reason: RejectReason::InsufficientMaterial {
-                                material_kind: stack.kind.clone(),
-                                requested: stack.amount,
+                                material_kind,
+                                requested,
                                 available,
                             },
                         }));
@@ -912,26 +912,30 @@ impl World {
                         }));
                     }
                 }
-                for stack in &effective_consume {
-                    if stack.amount <= 0 {
-                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                            action_id,
-                            reason: RejectReason::RuleDenied {
-                                notes: vec![format!(
-                                    "recipe consume must be > 0: {}={}",
-                                    stack.kind, stack.amount
-                                )],
-                            },
-                        }));
-                    }
+                let required_materials =
+                    match action_to_event_economy_support::aggregate_material_stacks_for_admission(
+                        "recipe consume",
+                        &effective_consume,
+                    ) {
+                        Ok(required_materials) => required_materials,
+                        Err(reason) => {
+                            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                                action_id,
+                                reason: RejectReason::RuleDenied {
+                                    notes: vec![reason],
+                                },
+                            }));
+                        }
+                    };
+                for (material_kind, requested) in required_materials {
                     let available =
-                        self.ledger_material_balance(&consume_ledger, stack.kind.as_str());
-                    if available < stack.amount {
+                        self.ledger_material_balance(&consume_ledger, material_kind.as_str());
+                    if available < requested {
                         return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                             action_id,
                             reason: RejectReason::InsufficientMaterial {
-                                material_kind: stack.kind.clone(),
-                                requested: stack.amount,
+                                material_kind,
+                                requested,
                                 available,
                             },
                         }));

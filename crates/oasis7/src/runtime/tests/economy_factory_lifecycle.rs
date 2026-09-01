@@ -130,6 +130,63 @@ fn build_factory_ready(
     world.step().expect("complete build");
 }
 
+#[test]
+fn build_factory_duplicate_material_stacks_reject_aggregate_cost_atomically() {
+    const CONSTRUCTION_POWER: i64 = 10;
+    let mut world = World::new();
+    register_builder(&mut world, "builder-a");
+    let mut spec = factory_spec("factory.duplicate-build-cost", 1, 1, 1);
+    spec.build_cost = vec![
+        MaterialStack::new("steel_plate", 6),
+        MaterialStack::new("steel_plate", 6),
+    ];
+    let builder_ledger = MaterialLedgerId::agent("builder-a");
+    world
+        .set_ledger_material_balance(builder_ledger.clone(), "steel_plate", 10)
+        .expect("seed aggregate construction material");
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, CONSTRUCTION_POWER)
+        .expect("seed construction power");
+    install_factory_authority(
+        &mut world,
+        "builder-a",
+        "site-duplicate-build-cost",
+        spec.factory_id.as_str(),
+        CONSTRUCTION_POWER,
+    );
+    let journal_start = world.journal().events.len();
+
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-duplicate-build-cost".to_string(),
+        spec,
+    });
+    world
+        .step()
+        .expect("duplicate construction stacks should become a structured rejection");
+
+    assert_eq!(world.pending_factory_builds_len(), 0);
+    assert!(!world.has_factory("factory.duplicate-build-cost"));
+    assert_eq!(
+        world.ledger_material_balance(&builder_ledger, "steel_plate"),
+        10,
+        "aggregate rejection must not consume construction material"
+    );
+    assert!(world.journal().events[journal_start..].iter().any(|event| {
+        matches!(
+            &event.body,
+            WorldEventBody::Domain(DomainEvent::ActionRejected {
+                reason: RejectReason::InsufficientMaterial {
+                    material_kind,
+                    requested,
+                    available,
+                },
+                ..
+            }) if material_kind == "steel_plate" && *requested == 12 && *available == 10
+        )
+    }));
+}
+
 #[path = "economy_factory_lifecycle/depreciation_and_maintenance.rs"]
 mod depreciation_and_maintenance;
 

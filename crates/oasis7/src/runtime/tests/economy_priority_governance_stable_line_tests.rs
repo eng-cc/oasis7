@@ -1,7 +1,9 @@
 use crate::runtime::WorldError;
 use crate::models::AgentState;
 use crate::runtime::state::FactoryProductionSnapshot;
-use crate::runtime::{AgentCell, FactoryProductionState, FactoryState, WorldState};
+use crate::runtime::{
+    AgentCell, FactoryProductionState, FactoryState, MaterialLedgerId, WorldState,
+};
 
 fn stable_line_minimal_state(factory_id: &str) -> WorldState {
     let agent_id = "stable-line-test-agent";
