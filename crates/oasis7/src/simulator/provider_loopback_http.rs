@@ -10,7 +10,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use super::{DecisionRequest, DecisionResponse, FeedbackEnvelope};
+use super::{
+    ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1, DecisionRequest,
+    DecisionResponse, FeedbackEnvelope, FeedbackEnvelopeV1,
+};
 
 const DEFAULT_PROVIDER_LOOPBACK_HTTP_PROVIDER_ID: &str = "provider_loopback_http";
 pub const LOOPBACK_HTTP_PROVIDER_TRANSPORT: &str = "loopback_http";
@@ -421,11 +424,25 @@ impl ProviderLoopbackHttpClient {
         self.post_json("/v1/world-simulator/decision", request)
     }
 
+    pub fn request_decision_with_context(
+        &self,
+        request: &ContinuousAgentRequestContextV1,
+    ) -> Result<ContinuousAgentResponseContextV1, ProviderLoopbackHttpError> {
+        self.post_json("/v1/world-simulator/decision-context", request)
+    }
+
     pub fn submit_feedback(
         &self,
         feedback: &FeedbackEnvelope,
     ) -> Result<ProviderFeedbackAck, ProviderLoopbackHttpError> {
         self.post_json("/v1/world-simulator/feedback", feedback)
+    }
+
+    pub fn submit_feedback_context(
+        &self,
+        feedback: &FeedbackEnvelopeV1,
+    ) -> Result<ProviderFeedbackAck, ProviderLoopbackHttpError> {
+        self.post_json("/v1/world-simulator/feedback-context", feedback)
     }
 
     pub fn request_agent_chat(

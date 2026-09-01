@@ -198,3 +198,48 @@ fn cursor_crash_before_commit_keeps_old_cursor_and_after_commit_resumes_once() {
         "cursor recovery must not redeliver the same wake"
     );
 }
+
+#[test]
+fn configured_per_agent_budget_allows_exactly_that_many_ready_wakes() {
+    let mut configured = policy();
+    configured.max_wakes_per_agent_per_tick = 2;
+    let mut scheduler = CognitionScheduler::new(configured, 16);
+    for index in 0..3 {
+        scheduler.enqueue_for_test(wake(
+            "agent-a",
+            format!("cont-a-{index}").as_str(),
+            format!("wake-a-{index}").as_str(),
+            1,
+            0,
+            100,
+            index,
+        ));
+    }
+    let selected = scheduler.select_ready(1);
+    assert_eq!(
+        selected.len(),
+        2,
+        "runtime must honor configured per-agent budget"
+    );
+}
+
+#[test]
+fn scheduler_runtime_owns_priority_and_rejects_invalid_restore_state() {
+    let mut scheduler = CognitionScheduler::new(policy(), 4);
+    let mut caller_owned = wake("agent-a", "cont-a", "wake-a", 1, 0, 100, 1);
+    caller_owned.initial_priority = 7;
+    scheduler
+        .try_enqueue(caller_owned)
+        .expect("caller wake should be accepted after runtime normalization");
+    let selected = scheduler.select_ready(1);
+    assert_eq!(selected[0].initial_priority, 0);
+
+    let mut snapshot = scheduler.snapshot_json();
+    snapshot["cursor"]["policy_config_digest"] = json!("blake3:caller-forged");
+    assert_eq!(
+        CognitionScheduler::from_snapshot_json(snapshot)
+            .expect_err("forged cursor policy binding must fail closed")
+            .code(),
+        "scheduler_policy_digest_mismatch"
+    );
+}

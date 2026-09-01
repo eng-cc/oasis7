@@ -5,11 +5,12 @@ use serde::{Deserialize, Serialize};
 
 use super::super::{ObservedAgent, ObservedLocation, ResourceKind, ResourceStock};
 use super::{
-    Action, ActionCatalogEntry, ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1,
-    DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION, DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
-    DEFAULT_PROVIDER_TIMEOUT_BUDGET_MS, DecisionProvider, DecisionProviderError, DecisionRequest,
-    DecisionResponse, FeedbackEnvelope, Observation, ObservationEnvelope, ProviderDecision,
-    ProviderExecutionMode, WorldEvent, provider_observation_from_runtime_observation,
+    Action, ActionCatalogEntry, ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1,
+    ContinuousAgentTurnContextV1, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
+    DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION, DEFAULT_PROVIDER_TIMEOUT_BUDGET_MS,
+    DecisionProvider, DecisionProviderError, DecisionRequest, DecisionResponse, FeedbackEnvelope,
+    Observation, ObservationEnvelope, ProviderDecision, ProviderExecutionMode, WorldEvent,
+    provider_observation_from_runtime_observation,
 };
 use crate::geometry::GeoPos;
 
@@ -120,6 +121,8 @@ pub fn golden_decision_provider_fixtures() -> Vec<GoldenDecisionFixture> {
 pub struct MockDecisionProviderState {
     pub recorded_requests: Vec<DecisionRequest>,
     pub recorded_turn_contexts: Vec<ContinuousAgentTurnContextV1>,
+    #[serde(default)]
+    pub recorded_request_contexts: Vec<ContinuousAgentRequestContextV1>,
     pub recorded_feedback: Vec<FeedbackEnvelope>,
     pub recorded_events: Vec<WorldEvent>,
 }
@@ -198,6 +201,24 @@ impl DecisionProvider for MockDecisionProvider {
             self.decide(request)?,
             context,
         ))
+    }
+
+    fn decide_with_continuous_request_context(
+        &mut self,
+        request: &DecisionRequest,
+        turn_context: &ContinuousAgentTurnContextV1,
+        request_context: &ContinuousAgentRequestContextV1,
+    ) -> Result<ContinuousAgentResponseContextV1, DecisionProviderError> {
+        self.shared_state
+            .lock()
+            .expect("mock state lock")
+            .recorded_request_contexts
+            .push(request_context.clone());
+        let mut response = self.decide_with_continuous_context(request, turn_context)?;
+        response.retry_seq = request_context.retry_seq;
+        response.transport_attempt = request_context.transport_attempt;
+        response.request_digest = request_context.request_digest.clone();
+        Ok(response)
     }
 
     fn push_feedback(&mut self, feedback: &FeedbackEnvelope) -> Result<(), DecisionProviderError> {

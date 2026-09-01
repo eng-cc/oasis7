@@ -28,7 +28,6 @@ mod persistence_tail;
 use self::persistence_support::{
     distfs_world_id, now_unix_ms, persist_sidecar_generation_index, write_distfs_recovery_audit,
 };
-
 const JOURNAL_FILE: &str = "journal.json";
 const SNAPSHOT_FILE: &str = "snapshot.json";
 const DISTFS_STATE_DIR: &str = ".distfs-state";
@@ -52,7 +51,6 @@ const SIDECAR_GENERATION_KEEP_LATEST: usize = 2;
 const SIDECAR_GENERATION_SNAPSHOT_MANIFEST_FILE: &str = "snapshot.manifest.json";
 const SIDECAR_GENERATION_JOURNAL_SEGMENTS_FILE: &str = "journal.segments.json";
 const SIDECAR_GENERATION_RECOVERY_METADATA_FILE: &str = "viewer-recovery.bin";
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct SidecarGcResult {
     status: String,
@@ -62,7 +60,6 @@ struct SidecarGcResult {
     error: Option<String>,
     updated_at_ms: i64,
 }
-
 impl SidecarGcResult {
     fn not_run() -> Self {
         Self {
@@ -896,6 +893,7 @@ impl World {
                 let journal = Journal::load_json(dir.join(JOURNAL_FILE))?;
                 hydrate_tick_consensus_snapshot_from_archive(dir, &mut json_snapshot)?;
                 let mut world = Self::from_snapshot(json_snapshot, journal)?;
+                world.recover_cognition()?;
                 world.load_module_store_from_dir(dir)?;
                 return Ok(world);
             }
@@ -903,6 +901,7 @@ impl World {
                 hydrate_tick_consensus_snapshot_from_archive(dir, &mut snapshot)?;
             }
             let mut world = Self::from_snapshot(snapshot, journal)?;
+            world.recover_cognition()?;
             if has_indexed_generation {
                 world.load_selected_generation_module_artifacts_from_dir(dir)?;
             } else {
@@ -916,6 +915,7 @@ impl World {
         let mut snapshot = Snapshot::load_json(snapshot_path)?;
         hydrate_tick_consensus_snapshot_from_archive(dir, &mut snapshot)?;
         let mut world = Self::from_snapshot(snapshot, journal)?;
+        world.recover_cognition()?;
         world.load_module_store_from_dir(dir)?;
         Ok(world)
     }

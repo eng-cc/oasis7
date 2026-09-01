@@ -14,6 +14,7 @@ const MAX_PROVIDER_TRANSCRIPT_ENTRY_BYTES: usize = 2 * 1024;
 const MAX_PROVIDER_TOOL_TRACE_ENTRY_BYTES: usize = 1024;
 const MAX_PROVIDER_SUMMARY_BYTES: usize = 1024;
 const MAX_PROVIDER_TRACE_BYTES: usize = 32 * 1024;
+const MAX_PROVIDER_UPSTREAM_TRACE_BYTES: usize = 4 * 1024;
 const TRACE_REDACTED_VALUE: &str = "<redacted>";
 const TRACE_OVERFLOW_DIAGNOSTIC: &str = "trace_payload_too_large";
 
@@ -52,6 +53,13 @@ fn trace_text_is_sensitive(text: &str) -> bool {
         "secret",
         "api_key",
         "apikey",
+        "accesskey",
+        "access_key",
+        "refreshkey",
+        "refresh_key",
+        "sessionkey",
+        "session_key",
+        "cookie",
         "/private/",
     ]
     .iter()
@@ -59,6 +67,9 @@ fn trace_text_is_sensitive(text: &str) -> bool {
         || normalized.contains("token-secret")
         || normalized.contains("token=")
         || normalized.contains("token:")
+        || normalized.contains("bearer ")
+        || normalized.contains("set-cookie")
+        || normalized.contains("-----begin")
 }
 
 fn redact_trace_json(value: &Value) -> Value {
@@ -117,9 +128,8 @@ fn normalize_trace_text(text: &str, max_bytes: usize, overflow: &mut bool) -> St
     truncate_trace_text(&redacted, max_bytes)
 }
 
-fn normalize_trace_fallback_text(text: &str, max_bytes: usize) -> String {
-    let mut ignored_overflow = false;
-    normalize_trace_text(text, max_bytes, &mut ignored_overflow)
+fn normalize_trace_fallback_text(text: &str, max_bytes: usize, overflow: &mut bool) -> String {
+    normalize_trace_text(text, max_bytes, overflow)
 }
 
 fn normalize_trace_json(value: &Value, max_bytes: usize, overflow: &mut bool) -> String {
@@ -155,7 +165,7 @@ fn provider_trace_payload_exceeds_bounds(payload: &ProviderTraceEnvelope) -> boo
         .upstream_trace
         .as_ref()
         .and_then(|trace| serde_json::to_vec(trace).ok())
-        .is_some_and(|trace| trace.len() > MAX_PROVIDER_TRACE_BYTES);
+        .is_some_and(|trace| trace.len() > MAX_PROVIDER_UPSTREAM_TRACE_BYTES);
     summary_exceeds || transcript_exceeds || tool_trace_exceeds || upstream_exceeds
 }
 
@@ -287,13 +297,15 @@ pub(super) fn response_to_trace(
         .as_deref()
         .map(|summary| normalize_trace_text(summary, MAX_PROVIDER_SUMMARY_BYTES, &mut overflow))
         .or_else(|| {
-            serde_json::to_string(request)
-                .ok()
-                .map(|summary| normalize_trace_fallback_text(&summary, MAX_PROVIDER_SUMMARY_BYTES))
+            serde_json::to_string(request).ok().map(|summary| {
+                normalize_trace_fallback_text(&summary, MAX_PROVIDER_SUMMARY_BYTES, &mut overflow)
+            })
         });
     let output_summary = outer_response
         .and_then(|outer| serde_json::to_string(outer).ok())
-        .map(|summary| normalize_trace_fallback_text(&summary, MAX_PROVIDER_SUMMARY_BYTES))
+        .map(|summary| {
+            normalize_trace_fallback_text(&summary, MAX_PROVIDER_SUMMARY_BYTES, &mut overflow)
+        })
         .or_else(|| {
             response
                 .trace_payload
@@ -304,9 +316,9 @@ pub(super) fn response_to_trace(
                 })
         })
         .or_else(|| {
-            serde_json::to_string(response)
-                .ok()
-                .map(|summary| normalize_trace_fallback_text(&summary, MAX_PROVIDER_SUMMARY_BYTES))
+            serde_json::to_string(response).ok().map(|summary| {
+                normalize_trace_fallback_text(&summary, MAX_PROVIDER_SUMMARY_BYTES, &mut overflow)
+            })
         });
     let transcript = response
         .trace_payload

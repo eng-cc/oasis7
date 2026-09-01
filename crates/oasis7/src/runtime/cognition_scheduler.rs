@@ -10,8 +10,6 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use super::util::sha256_hex;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SchedulerError {
     code: &'static str,
@@ -48,10 +46,55 @@ pub struct SchedulerPolicyV1 {
 }
 
 impl SchedulerPolicyV1 {
-    pub fn policy_config_digest(&self) -> String {
-        let bytes = serde_json::to_vec(self).unwrap_or_default();
-        format!("sha256:{}", sha256_hex(&bytes))
+    pub const SCHEMA_VERSION: &'static str = "scheduler-policy.v1";
+    pub const COMPARATOR: &'static str = "deadline_due_desc,next_wake_tick_asc,effective_priority_desc,starvation_deadline_tick_asc,cursor_distance_asc,agent_id_asc,continuation_id_asc,wake_seq_asc";
+    pub const SERVICE_ORDER: &'static str = "stable_round_robin";
+
+    pub fn validate(&self) -> Result<(), SchedulerError> {
+        if self.schema_version != Self::SCHEMA_VERSION
+            || self.max_total_wakes_per_tick == 0
+            || self.max_total_wakes_per_tick > 4096
+            || self.max_wakes_per_agent_per_tick == 0
+            || self.max_wakes_per_agent_per_tick > self.max_total_wakes_per_tick
+            || self.aging_after_ticks == 0
+            || self.max_starvation_ticks == 0
+            || self.initial_priority != 0
+            || self.comparator != Self::COMPARATOR
+            || self.service_order != Self::SERVICE_ORDER
+        {
+            return Err(SchedulerError::new("invalid_scheduler_policy"));
+        }
+        Ok(())
     }
+
+    pub fn policy_config_digest(&self) -> String {
+        let payload = SchedulerPolicyDigestInput {
+            max_total_wakes_per_tick: self.max_total_wakes_per_tick,
+            max_wakes_per_agent_per_tick: self.max_wakes_per_agent_per_tick,
+            aging_after_ticks: self.aging_after_ticks,
+            max_starvation_ticks: self.max_starvation_ticks,
+            initial_priority: self.initial_priority,
+            comparator: &self.comparator,
+            service_order: &self.service_order,
+        };
+        let bytes = oasis7_wasm_abi::encode_canonical_cbor(&(
+            "oasis7.runtime.scheduler-policy.v1",
+            &payload,
+        ))
+        .expect("scheduler policy must be canonically encodable");
+        format!("blake3:{}", blake3::hash(&bytes))
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct SchedulerPolicyDigestInput<'a> {
+    max_total_wakes_per_tick: usize,
+    max_wakes_per_agent_per_tick: usize,
+    aging_after_ticks: u64,
+    max_starvation_ticks: u64,
+    initial_priority: i64,
+    comparator: &'a str,
+    service_order: &'a str,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -79,6 +122,33 @@ pub struct SchedulerWakeV1 {
     pub retry_seq: u64,
     pub status: String,
     pub pending_reason: String,
+}
+
+impl SchedulerWakeV1 {
+    pub const SCHEMA_VERSION: &'static str = "scheduler-wake.v1";
+
+    pub fn validate(&self) -> Result<(), SchedulerError> {
+        let bounded = |value: &str| !value.trim().is_empty() && value.len() <= 128;
+        if self.schema_version != Self::SCHEMA_VERSION
+            || !bounded(&self.wake_id)
+            || !bounded(&self.continuation_id)
+            || !bounded(&self.world_id)
+            || !bounded(&self.branch_id)
+            || !bounded(&self.finality_block_hash)
+            || !bounded(&self.finality_status)
+            || !bounded(&self.runtime_manifest_hash)
+            || !bounded(&self.agent_id)
+            || !bounded(&self.agent_session_id)
+            || !bounded(&self.agent_turn_id)
+            || !bounded(&self.decision_request_id)
+            || !bounded(&self.status)
+            || !bounded(&self.pending_reason)
+            || self.status != "pending"
+        {
+            return Err(SchedulerError::new("invalid_scheduler_wake"));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -139,6 +209,14 @@ pub struct CognitionScheduler {
 }
 
 impl CognitionScheduler {
+    pub fn try_new(policy: SchedulerPolicyV1, capacity: usize) -> Result<Self, SchedulerError> {
+        policy.validate()?;
+        if capacity == 0 {
+            return Err(SchedulerError::new("invalid_scheduler_capacity"));
+        }
+        Ok(Self::new(policy, capacity))
+    }
+
     pub fn new(policy: SchedulerPolicyV1, capacity: usize) -> Self {
         Self {
             cursor: SchedulerCursorV1::new(&policy),
@@ -156,17 +234,31 @@ impl CognitionScheduler {
 
     pub fn try_enqueue(
         &mut self,
-        wake: SchedulerWakeV1,
+        mut wake: SchedulerWakeV1,
     ) -> Result<SchedulerEnqueueOutcome, SchedulerError> {
+        self.policy.validate()?;
+        wake.validate()?;
         if self.active.iter().any(|item| item.wake_id == wake.wake_id)
             || self.backpressure.contains_key(&wake.wake_id)
         {
             return Err(SchedulerError::new("wake_id_conflict"));
         }
+        // Eligibility is runtime-owned at the current logical tick; preserve
+        // a pre-captured eligibility tick from the same Runtime transaction
+        // when it is ahead of this scheduler cursor.  Caller priority and
+        // starvation deadline are always normalized below.
+        wake.eligible_since_tick = wake.eligible_since_tick.max(self.logical_tick);
+        wake.initial_priority = self.policy.initial_priority;
+        wake.starvation_deadline_tick = wake
+            .eligible_since_tick
+            .saturating_add(self.policy.max_starvation_ticks);
+        wake.status = "pending".to_string();
         if self.available_slots() > 0 {
+            wake.pending_reason = "capacity_available".to_string();
             self.active.push(wake);
             Ok(Self::accepted_outcome())
         } else {
+            wake.pending_reason = "scheduler_backpressure".to_string();
             let wake_id = wake.wake_id.clone();
             self.backpressure_priority
                 .insert(wake_id.clone(), self.effective_priority(&wake));
@@ -268,7 +360,60 @@ impl CognitionScheduler {
     }
 
     pub fn from_snapshot_json(value: Value) -> Result<Self, SchedulerError> {
-        serde_json::from_value(value).map_err(|_| SchedulerError::new("invalid_scheduler_state"))
+        let scheduler: Self = serde_json::from_value(value.clone())
+            .map_err(|_| SchedulerError::new("invalid_scheduler_state"))?;
+        if value
+            .get("backpressure_count")
+            .and_then(Value::as_u64)
+            .is_some_and(|count| count != scheduler.backpressure.len() as u64)
+        {
+            return Err(SchedulerError::new("scheduler_backpressure_mismatch"));
+        }
+        scheduler.policy.validate()?;
+        if scheduler.capacity == 0
+            || scheduler.in_flight > scheduler.capacity
+            || scheduler.logical_tick != scheduler.cursor.logical_tick
+            || scheduler.cursor.schema_version != "scheduler-cursor.v1"
+            || scheduler.cursor.policy_config_digest != scheduler.policy.policy_config_digest()
+            || scheduler
+                .cursor
+                .last_served_agent_id
+                .as_deref()
+                .is_some_and(|agent_id| agent_id.trim().is_empty() || agent_id.len() > 128)
+        {
+            return Err(SchedulerError::new("scheduler_policy_digest_mismatch"));
+        }
+        let mut wake_ids = BTreeSet::new();
+        for wake in scheduler
+            .active
+            .iter()
+            .chain(scheduler.backpressure.values())
+        {
+            wake.validate()?;
+            if !wake_ids.insert(wake.wake_id.as_str()) {
+                return Err(SchedulerError::new("scheduler_wake_conflict"));
+            }
+            if wake.starvation_deadline_tick
+                != wake
+                    .eligible_since_tick
+                    .saturating_add(scheduler.policy.max_starvation_ticks)
+                || wake.initial_priority != scheduler.policy.initial_priority
+            {
+                return Err(SchedulerError::new("scheduler_wake_binding_mismatch"));
+            }
+        }
+        for (wake_id, priority) in &scheduler.backpressure_priority {
+            let Some(wake) = scheduler.backpressure.get(wake_id) else {
+                return Err(SchedulerError::new("scheduler_backpressure_mismatch"));
+            };
+            if !(0..=7).contains(priority) || wake.wake_id != *wake_id {
+                return Err(SchedulerError::new("scheduler_backpressure_mismatch"));
+            }
+        }
+        if scheduler.backpressure_priority.len() != scheduler.backpressure.len() {
+            return Err(SchedulerError::new("scheduler_backpressure_mismatch"));
+        }
+        Ok(scheduler)
     }
 
     pub fn select_ready(&mut self, tick: u64) -> Vec<SchedulerWakeV1> {
@@ -282,17 +427,18 @@ impl CognitionScheduler {
             .collect();
         indexed.sort_by(|(_, left), (_, right)| self.compare(left, right));
 
-        let mut served_agents = BTreeSet::new();
+        let mut served_agents: BTreeMap<String, usize> = BTreeMap::new();
         let mut selected_ids = BTreeSet::new();
         let mut selected = Vec::new();
         for (_, wake) in indexed {
             if selected.len() >= self.policy.max_total_wakes_per_tick {
                 break;
             }
-            if served_agents.contains(&wake.agent_id) {
+            let served = served_agents.get(&wake.agent_id).copied().unwrap_or(0);
+            if served >= self.policy.max_wakes_per_agent_per_tick {
                 continue;
             }
-            served_agents.insert(wake.agent_id.clone());
+            served_agents.insert(wake.agent_id.clone(), served.saturating_add(1));
             selected_ids.insert(wake.wake_id.clone());
             self.cursor.last_served_agent_id = Some(wake.agent_id.clone());
             self.cursor.cursor_seq = self.cursor.cursor_seq.saturating_add(1);

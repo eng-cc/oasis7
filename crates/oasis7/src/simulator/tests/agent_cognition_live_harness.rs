@@ -277,7 +277,11 @@ fn provider_trace_is_bounded_redacted_and_non_authoritative() {
         "token": "token-secret",
         "authorization": "authorization-secret",
         "private_key": "private-key-secret",
-        "path": "/private/path/secret"
+        "path": "/private/path/secret",
+        "cookie": "cookie-secret",
+        "access_key": "access-key-secret",
+        "refreshKey": "refresh-key-secret",
+        "session_key": "session-key-secret"
     })
     .to_string();
     let mut redaction_response = wait_response_with_memory_intent();
@@ -296,7 +300,11 @@ fn provider_trace_is_bounded_redacted_and_non_authoritative() {
             "token": "token-secret",
             "authorization": "authorization-secret",
             "private_key": "private-key-secret",
-            "path": "/private/path/secret"
+            "path": "/private/path/secret",
+            "cookie": "cookie-secret",
+            "access_key": "access-key-secret",
+            "refreshKey": "refresh-key-secret",
+            "session_key": "session-key-secret"
         })),
         ..ProviderTraceEnvelope::default()
     };
@@ -325,6 +333,10 @@ fn provider_trace_is_bounded_redacted_and_non_authoritative() {
         "authorization-secret",
         "private-key-secret",
         "/private/path/secret",
+        "cookie-secret",
+        "access-key-secret",
+        "refresh-key-secret",
+        "session-key-secret",
     ] {
         assert!(
             !redacted_wire.contains(secret),
@@ -404,6 +416,28 @@ fn provider_trace_is_bounded_redacted_and_non_authoritative() {
             .unwrap_or_default()
             .contains("trace_payload_too_large"),
         "overflow must retain the stable trace_payload_too_large diagnostic"
+    );
+}
+
+#[test]
+fn upstream_trace_over_four_kib_retains_overflow_diagnostic() {
+    let mut response = wait_response_with_memory_intent();
+    response.trace_payload.upstream_trace = Some(json!({
+        "provider_payload": "x".repeat(8 * 1024)
+    }));
+    let mut runner = provider_backed_runner_with_response(response);
+    runner
+        .start_turn_with_context(AGENT_ID, host_context())
+        .expect("open upstream overflow fixture turn");
+    let outcome = completed_turn(&mut runner);
+    let trace = outcome
+        .decision_trace
+        .expect("overflow fixture retains trace");
+    assert!(
+        trace
+            .llm_error
+            .as_deref()
+            .is_some_and(|error| error.contains("trace_payload_too_large"))
     );
 }
 

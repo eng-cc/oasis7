@@ -107,6 +107,8 @@ fn cognition_projection(prefix: &str) -> Value {
     } else {
         Value::Null
     };
+    let receipt_projection_present = committed && prefix != "committed_missing_projection";
+    let idempotency_projection_present = committed && prefix != "committed_missing_projection";
     let effect_count = u64::from(committed && prefix == "committed");
     let debit_count = effect_count;
     let receipt_count = u64::from(committed);
@@ -159,8 +161,8 @@ fn cognition_projection(prefix: &str) -> Value {
             "status": if committed {"committed"} else {"prepared"},
             "abort_reason": Value::Null
         }],
-        "receipt_registry": if committed {json!([receipt])} else {json!([])},
-        "idempotency_index": if committed {
+        "receipt_registry": if receipt_projection_present {json!([receipt])} else {json!([])},
+        "idempotency_index": if idempotency_projection_present {
             json!({ENVELOPE_KEY: {"envelope_digest": ENVELOPE_DIGEST, "disposition": "committed", "receipt_id": RECEIPT_ID}})
         } else {
             json!({})
@@ -287,10 +289,46 @@ fn real_world_load_recovers_every_crash_prefix_without_provider_or_duplicate_eff
             .save_to_dir(&round_trip)
             .unwrap_or_else(|error| panic!("save {prefix} recovery: {error:?}"));
         let actual = read_snapshot(&round_trip);
-        assert_eq!(
-            actual["cognition"]["recovery"], expected_cognition["recovery"],
-            "recovery changed durable crash-prefix oracle for {prefix}"
-        );
+        if prefix == "committed_missing_projection" {
+            assert_eq!(actual["cognition"]["recovery"]["disposition"], "committed");
+            assert_eq!(
+                actual["cognition"]["recovery"]["repaired_projection_ids"]
+                    .as_array()
+                    .map(Vec::len),
+                Some(2),
+                "restore must durably record the repaired receipt projections"
+            );
+        } else if matches!(prefix, "before_prepared" | "prepared_only") {
+            assert_eq!(
+                actual["cognition"]["recovery"]["disposition"],
+                "recovery_pending"
+            );
+            assert_eq!(
+                actual["cognition"]["recovery"]["reject_reason"],
+                Value::Null
+            );
+            assert_eq!(
+                actual["cognition"]["recovery"]["provider_invocation_count"],
+                0
+            );
+            assert_eq!(actual["cognition"]["recovery"]["effect_count"], 0);
+            assert_eq!(actual["cognition"]["recovery"]["debit_count"], 0);
+        } else if prefix == "conflict" {
+            assert_eq!(
+                actual["cognition"]["recovery"]["disposition"],
+                "recovery_pending"
+            );
+            assert_eq!(
+                actual["cognition"]["recovery"]["reject_reason"],
+                "commit_conflict"
+            );
+            assert!(actual["cognition"]["recovery"]["quarantine_id"].is_string());
+        } else {
+            assert_eq!(
+                actual["cognition"]["recovery"], expected_cognition["recovery"],
+                "recovery changed durable crash-prefix oracle for {prefix}"
+            );
+        }
         assert_eq!(
             actual["cognition"]["cognition_journal"], expected_cognition["cognition_journal"],
             "recovery changed cognition journal for {prefix}"
@@ -374,4 +412,39 @@ fn legacy_world_snapshot_gets_explicit_read_only_cognition_defaults() {
 
     let _ = fs::remove_dir_all(&dir);
     let _ = fs::remove_dir_all(&round_trip);
+}
+
+#[test]
+fn world_owns_durable_receipt_lineage_projection_and_readback() {
+    let (dir, _) = seed_world_snapshot("committed");
+    let mut restored = World::load_from_dir(&dir).expect("load committed world");
+    let marker: WorldCommitRecordV1 =
+        serde_json::from_value(read_snapshot(&dir)["cognition"]["commit_records"][0].clone())
+            .expect("decode committed marker");
+    let lineage = RuntimeReceiptLineageV1::from_commit_record(
+        &marker,
+        "agent-live-persistence",
+        "session-live-1",
+        "turn-live-1",
+        "request-live-1",
+        "blake3:request-live-1",
+        "feedback-live-1",
+    );
+    restored
+        .project_runtime_receipt_lineage(lineage.clone())
+        .expect("World should durably project the marker-bound lineage");
+    assert_eq!(
+        restored
+            .read_runtime_receipt_lineage(RECEIPT_ID)
+            .expect("read durable lineage"),
+        lineage
+    );
+
+    let mut forged = lineage;
+    forged.receipt_digest = "blake3:forged-receipt".to_string();
+    assert!(
+        restored.project_runtime_receipt_lineage(forged).is_err(),
+        "caller-only receipt mutations must fail closed"
+    );
+    let _ = fs::remove_dir_all(&dir);
 }

@@ -6,8 +6,8 @@
 
 use super::super::*;
 use crate::runtime::{
-    AgentContinuation, ContinuationStatusV1, ContinuationTransition, WakeConditionV1,
-    WakeConditionValidator, WakeEvaluationContext,
+    AgentContinuation, CognitionContinuationProposalV1, ContinuationBudgetV1, ContinuationStatusV1,
+    ContinuationTransition, WakeConditionV1, WakeConditionValidator, WakeEvaluationContext,
 };
 use serde_json::{Value, json};
 
@@ -41,7 +41,7 @@ fn valid(kind: &str) -> Value {
             "subject": {"kind": "world", "id": WORLD_ID},
             "path_or_rule": "world.logical_tick",
             "operator": "gte",
-            "expected_value_bytes": [42]
+            "expected_value_bytes": [24, 42]
         }),
         other => panic!("unknown test kind: {other}"),
     }
@@ -213,4 +213,93 @@ fn trusted_reorg_invalidates_uncommitted_continuation_without_provider_or_effect
     assert_eq!(report["provider_invocation_count"], 0);
     assert_eq!(report["effect_count"], 0);
     assert_eq!(report["receipt_count"], 0);
+}
+
+#[test]
+fn transition_and_reorg_refresh_the_authoritative_status_digest() {
+    let mut pending = continuation("pending");
+    ContinuationTransition::apply(&mut pending, ContinuationStatusV1::Waking)
+        .expect("pending wakes");
+    assert_eq!(
+        pending.continuation_status_digest.as_deref(),
+        Some(pending.status_digest().as_str()),
+        "transition must publish the digest crossing the runtime boundary"
+    );
+
+    let mut terminal = continuation("completed");
+    terminal.refresh_status_digest();
+    ContinuationTransition::invalidate_for_reorg(&mut terminal, 9)
+        .expect_err("terminal transition must remain closed");
+
+    let mut scheduled = continuation("scheduled");
+    let before = scheduled.status_digest();
+    ContinuationTransition::invalidate_for_reorg(&mut scheduled, 9)
+        .expect("scheduled continuation invalidates");
+    assert_ne!(before, scheduled.status_digest());
+    assert_eq!(
+        scheduled.continuation_status_digest.as_deref(),
+        Some(scheduled.status_digest().as_str()),
+        "reorg invalidation must publish the new digest"
+    );
+    scheduled
+        .validate_authoritative()
+        .expect("reorg projection remains authoritative");
+}
+
+#[test]
+fn typed_predicates_compare_canonical_values_instead_of_raw_encoding_bytes() {
+    let condition = condition(json!({
+        "schema_version": "wake-condition.v1",
+        "kind": "state_predicate",
+        "subject": {"kind": "world", "id": WORLD_ID},
+        "path_or_rule": "world.logical_tick",
+        "operator": "gte",
+        "expected_value_bytes": serde_cbor::to_vec(&42u64).expect("encode expected tick")
+    }));
+    let context = WakeEvaluationContext::at(42).with_predicate_u64("world.logical_tick", 42);
+    let evaluation = WakeConditionValidator::evaluate(&[condition], &context)
+        .expect("typed predicate evaluation");
+    assert_eq!(evaluation.status, "ready");
+    assert!(!evaluation.conditions_digest.is_empty());
+    assert!(!evaluation.evaluation_digest.is_empty());
+}
+
+#[test]
+fn runtime_admits_proposals_and_allocates_continuation_identity() {
+    let mut world = World::new();
+    let proposal = CognitionContinuationProposalV1 {
+        world_id: WORLD_ID.to_string(),
+        branch_id: "main".to_string(),
+        finality_epoch: 7,
+        finality_block_hash: Some("hash:finality-7".to_string()),
+        finality_status: "verified".to_string(),
+        reorg_epoch: 3,
+        runtime_manifest_hash: "hash:runtime-manifest-7".to_string(),
+        agent_id: AGENT_ID.to_string(),
+        agent_session_id: "session.agent-wake-1".to_string(),
+        agent_turn_id: "turn.agent-wake-1".to_string(),
+        decision_request_id: "request.agent-wake-1".to_string(),
+        origin_turn_id: "turn.agent-wake-1".to_string(),
+        origin_request_digest: "digest:request-42".to_string(),
+        continuation_proposal_id: "proposal-42".to_string(),
+        proposal_digest: "digest:proposal-42".to_string(),
+        action_or_envelope_digest: None,
+        wake_conditions: vec![condition(valid("at_or_after_tick"))],
+        next_wake_tick: Some(42),
+        remaining_budget: ContinuationBudgetV1 {
+            unit: "steps".to_string(),
+            value: 2,
+        },
+        valid_until_tick: Some(100),
+        precondition_digest: "digest:precondition-42".to_string(),
+    };
+    let admitted = world
+        .admit_cognition_continuation(proposal)
+        .expect("runtime should allocate and validate continuation");
+    assert!(!admitted.continuation_id.is_empty());
+    assert!(!admitted.wake_id.is_empty());
+    assert_eq!(admitted.wake_seq, 1);
+    admitted
+        .validate_authoritative()
+        .expect("admitted continuation is authoritative");
 }

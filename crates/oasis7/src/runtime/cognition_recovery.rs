@@ -300,6 +300,7 @@ pub(crate) fn default_cognition_persistence_projection() -> JsonValue {
         "responses": [],
         "commit_records": [],
         "receipt_registry": [],
+        "receipt_lineage_registry": [],
         "idempotency_index": {},
         "scheduler_state": null,
         "continuations": [],

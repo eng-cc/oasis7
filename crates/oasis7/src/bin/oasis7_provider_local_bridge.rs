@@ -3,16 +3,14 @@ use std::collections::VecDeque;
 use std::env;
 use std::fs;
 use std::net::TcpListener;
-use std::process::Command;
-
-use sha2::{Digest, Sha256};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use oasis7::observability::{emit_stderr_or_event, init_tracing, resolve_trace_session_id};
 use oasis7::simulator::{
-    DecisionRequest, DecisionResponse, FeedbackEnvelope, ProviderAgentChatRequest,
+    ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1, DecisionRequest,
+    DecisionResponse, Digest32, FeedbackEnvelope, FeedbackEnvelopeV1, ProviderAgentChatRequest,
     ProviderAgentChatResponse, ProviderDecision, ProviderDiagnostics, ProviderErrorEnvelope,
     ProviderHealth, ProviderInfo, ProviderTokenUsage, ProviderTraceEnvelope,
     ProviderTranscriptEntry, h_v1, provider_agent_chat_log_key,
@@ -20,7 +18,7 @@ use oasis7::simulator::{
 use reqwest::blocking::Client;
 use serde::Deserialize;
 use serde_json::Value;
-use serde_json::json;
+use sha2::{Digest, Sha256};
 use tracing::{Level, error, info, warn};
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:5841";
@@ -52,6 +50,8 @@ mod auth_support;
 mod credit_adapter;
 #[path = "oasis7_provider_local_bridge/http_bridge_support.rs"]
 mod http_bridge_support;
+#[path = "oasis7_provider_local_bridge/invocation.rs"]
+mod invocation;
 #[path = "oasis7_provider_local_bridge/letai_direct.rs"]
 mod letai_direct;
 #[path = "oasis7_provider_local_bridge/support.rs"]
@@ -73,6 +73,11 @@ use self::agent_decision::{
     timeout_seconds_from_budget,
 };
 use self::http_bridge_support::handle_connection;
+pub(crate) use self::invocation::{
+    AgentInvocation, AgentInvocationOutput, AgentInvoker, ProviderCliInvoker,
+    RustDirectLetaiInvoker, agent_chat_idempotency_key, build_agent_chat_prompt,
+    provider_error_upstream_trace, short_sha256,
+};
 #[cfg(test)]
 use self::letai_direct::{
     LetaiChatConfig, decode_letai_completion_payload, decode_letai_sse_reader,
@@ -136,8 +141,16 @@ struct ProviderState {
     http: Client,
     active_requests: Arc<AtomicU64>,
     last_error: Arc<Mutex<Option<String>>>,
-    recent_feedback: Arc<Mutex<VecDeque<String>>>,
+    recent_feedback: Arc<Mutex<BTreeMap<(String, String), FeedbackPartition>>>,
     newapi_bridge_state_cache: Arc<Mutex<NewapiBridgeStateCache>>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct FeedbackPartition {
+    next_seq: u64,
+    digest_by_id: BTreeMap<String, Digest32>,
+    digest_by_seq: BTreeMap<u64, (String, Digest32)>,
+    recent: VecDeque<String>,
 }
 
 impl ProviderState {
@@ -152,7 +165,7 @@ impl ProviderState {
             http,
             active_requests: Arc::new(AtomicU64::new(0)),
             last_error: Arc::new(Mutex::new(None)),
-            recent_feedback: Arc::new(Mutex::new(VecDeque::new())),
+            recent_feedback: Arc::new(Mutex::new(BTreeMap::new())),
             newapi_bridge_state_cache: Arc::new(Mutex::new(NewapiBridgeStateCache::default())),
         })
     }
@@ -203,6 +216,8 @@ impl ProviderState {
             "loopback_only".to_string(),
             "typed_module_command_v2".to_string(),
             "subject_bound_capability_catalog".to_string(),
+            "continuous_agent_context_v1".to_string(),
+            "feedback_sequence_v1".to_string(),
         ];
         match self.options.mode {
             ProviderMode::Real => {
@@ -268,19 +283,94 @@ impl ProviderState {
     }
 
     fn record_feedback(&self, feedback: FeedbackEnvelope) {
-        let mut recent_feedback = self.recent_feedback.lock().expect("recent_feedback lock");
-        let summary = feedback.world_delta_summary.unwrap_or_else(|| {
-            format!(
-                "action_id={}; success={}; reject_reason={}",
-                feedback.action_id,
-                feedback.success,
-                feedback.reject_reason.unwrap_or_else(|| "none".to_string())
+        // The legacy route is deliberately fenced: it has no subject/session
+        // lineage and must never contaminate another Agent's prompt.
+        let _ = feedback;
+    }
+
+    fn record_continuous_feedback(&self, feedback: FeedbackEnvelopeV1) -> Result<(), String> {
+        if feedback.feedback_id.trim().is_empty()
+            || feedback.feedback_seq == 0
+            || feedback.agent_subject.trim().is_empty()
+            || feedback.agent_session_id.trim().is_empty()
+            || feedback.agent_turn_id.trim().is_empty()
+            || feedback.decision_request_id.trim().is_empty()
+            || !feedback.request_digest.is_canonical_blake3()
+            || feedback.provenance != "runtime_authoritative"
+            || !matches!(
+                feedback.status.as_str(),
+                "pending" | "committed" | "rejected" | "failed"
             )
-        });
-        if recent_feedback.len() >= MAX_RECENT_FEEDBACK {
-            recent_feedback.pop_front();
+        {
+            return Err("feedback_contract_invalid".to_string());
         }
-        recent_feedback.push_back(summary);
+        if feedback.status == "committed"
+            && (feedback.candidate_action_id.is_none()
+                || feedback
+                    .runtime_receipt_id
+                    .as_deref()
+                    .is_none_or(|value| value.trim().is_empty()))
+        {
+            return Err("feedback_contract_invalid".to_string());
+        }
+        let key = (
+            feedback.agent_subject.clone(),
+            feedback.agent_session_id.clone(),
+        );
+        let mut partitions = self.recent_feedback.lock().expect("recent_feedback lock");
+        let partition = partitions.entry(key).or_default();
+        let expected = partition.next_seq.saturating_add(1);
+        let digest = h_v1("oasis7.cognition.feedback.v1", &feedback);
+        if let Some(previous) = partition.digest_by_id.get(&feedback.feedback_id) {
+            if previous != &digest {
+                return Err("feedback_id_conflict".to_string());
+            }
+            return Ok(());
+        }
+        if let Some((_, previous)) = partition.digest_by_seq.get(&feedback.feedback_seq) {
+            if previous != &digest {
+                return Err("feedback_identity_collision".to_string());
+            }
+            return Ok(());
+        }
+        if feedback.feedback_seq != expected {
+            return Err("feedback_sequence_gap".to_string());
+        }
+        partition.next_seq = feedback.feedback_seq;
+        partition.digest_by_seq.insert(
+            feedback.feedback_seq,
+            (feedback.feedback_id.clone(), digest.clone()),
+        );
+        while partition.digest_by_seq.len() > MAX_RECENT_FEEDBACK {
+            let Some(oldest_seq) = partition.digest_by_seq.keys().next().copied() else {
+                break;
+            };
+            if let Some((oldest_id, _)) = partition.digest_by_seq.remove(&oldest_seq) {
+                partition.digest_by_id.remove(&oldest_id);
+            }
+        }
+        partition
+            .digest_by_id
+            .insert(feedback.feedback_id.clone(), digest);
+        let summary = format!(
+            "feedback_id={}; status={}; feedback_seq={}; action_id={}; receipt_id={}; reason={}",
+            summarize_text(feedback.feedback_id.as_str(), 128),
+            summarize_text(feedback.status.as_str(), 32),
+            feedback.feedback_seq,
+            feedback
+                .candidate_action_id
+                .map_or_else(|| "none".to_string(), |id| id.to_string()),
+            summarize_text(
+                feedback.runtime_receipt_id.as_deref().unwrap_or("none"),
+                128,
+            ),
+            summarize_text(feedback.reject_reason.as_deref().unwrap_or("none"), 256),
+        );
+        if partition.recent.len() >= MAX_RECENT_FEEDBACK {
+            partition.recent.pop_front();
+        }
+        partition.recent.push_back(summary);
+        Ok(())
     }
 
     fn handle_agent_chat(
@@ -435,6 +525,64 @@ impl ProviderState {
         route_label: Option<&str>,
         invoker: &dyn AgentInvoker,
     ) -> DecisionResponse {
+        self.handle_decision_with_feedback(request, route_label, invoker, Vec::new())
+    }
+
+    fn handle_continuous_decision(
+        &self,
+        context: ContinuousAgentRequestContextV1,
+        route_label: Option<&str>,
+        invoker: &dyn AgentInvoker,
+    ) -> Result<ContinuousAgentResponseContextV1, String> {
+        context
+            .validate_production_lane()
+            .map_err(|error| error.to_string())?;
+        context
+            .base_decision_request
+            .validate_contract()
+            .map_err(|error| error.to_string())?;
+        if context.base_decision_request.observation.agent_id != context.agent_subject {
+            return Err("request_context_identity_mismatch".to_string());
+        }
+        let key = (
+            context.agent_subject.clone(),
+            context.agent_session_id.clone(),
+        );
+        let recent = self
+            .recent_feedback
+            .lock()
+            .expect("recent_feedback lock")
+            .get(&key)
+            .map(|partition| partition.recent.iter().cloned().collect::<Vec<_>>())
+            .unwrap_or_default();
+        let base = self.handle_decision_with_feedback(
+            context.base_decision_request.clone(),
+            route_label,
+            invoker,
+            recent,
+        );
+        let response_digest = h_v1("oasis7.cognition.response.v1", &base);
+        Ok(ContinuousAgentResponseContextV1 {
+            base_decision_response: base,
+            context_discriminator: context.context_discriminator,
+            context_version: context.context_version,
+            agent_session_id: context.agent_session_id,
+            agent_turn_id: context.agent_turn_id,
+            decision_request_id: context.decision_request_id,
+            retry_seq: context.retry_seq,
+            transport_attempt: context.transport_attempt,
+            request_digest: context.request_digest,
+            response_digest,
+        })
+    }
+
+    fn handle_decision_with_feedback(
+        &self,
+        request: DecisionRequest,
+        route_label: Option<&str>,
+        invoker: &dyn AgentInvoker,
+        recent_feedback: Vec<String>,
+    ) -> DecisionResponse {
         if let Err(err) = request.validate_contract() {
             self.set_last_error(Some(err.to_string()));
             return self.provider_error_response(err.code, err.message, false, None, None, None);
@@ -456,13 +604,6 @@ impl ProviderState {
 
         self.active_requests.fetch_add(1, Ordering::SeqCst);
         let started_at = Instant::now();
-        let recent_feedback = self
-            .recent_feedback
-            .lock()
-            .expect("recent_feedback lock")
-            .iter()
-            .cloned()
-            .collect::<Vec<_>>();
         let prompt = build_decision_prompt(&request, recent_feedback.as_slice());
         let session_key = build_session_key(&request, self.options.provider_agent_id.as_str());
         let timeout_seconds = timeout_seconds_from_budget(request.timeout_budget_ms);
@@ -724,261 +865,6 @@ impl ProviderState {
     fn set_last_error(&self, detail: Option<String>) {
         *self.last_error.lock().expect("last_error lock") = detail;
     }
-}
-
-fn build_agent_chat_prompt(request: &ProviderAgentChatRequest) -> String {
-    let context = json!({
-        "agent_id": request.agent_id,
-        "player_id": request.player_id,
-        "world_time": request.world_time,
-        "location_id": request.location_id,
-        "resources": request.resources,
-        "recent_feedback": request.recent_feedback,
-        "player_message": request.message,
-    });
-    format!(
-        concat!(
-            "You are the selected oasis7 agent. Reply directly to the player in the same language as their message. ",
-            "Do not return JSON. Do not claim unavailable facts. ",
-            "If asked where you are, use location_id exactly. If asked about nearby resources, use resources exactly. ",
-            "Keep the reply under 80 Chinese characters or 60 English words. Context follows:\n{}"
-        ),
-        context
-    )
-}
-
-fn provider_error_upstream_trace(error: &str) -> Value {
-    let diagnostics = error_diagnostics_json(error);
-    json!({
-        "stage": "decision_invocation",
-        "error_summary": summarize_text(error, 500),
-        "diagnostics": diagnostics,
-        "diagnostics_present": !diagnostics.is_null(),
-    })
-}
-
-#[derive(Debug, Clone)]
-struct AgentInvocation {
-    provider_cli_bin: String,
-    agent_id: String,
-    thinking: String,
-    session_key: String,
-    timeout_seconds: u64,
-    prompt: String,
-    idempotency_key: String,
-    chat_request_key: Option<String>,
-    route_label: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-struct AgentInvocationOutput {
-    prompt: String,
-    text: String,
-    provider_version: Option<String>,
-    duration_ms: Option<u64>,
-    prompt_tokens: Option<u64>,
-    completion_tokens: Option<u64>,
-    total_tokens: Option<u64>,
-    route_note: Option<String>,
-    upstream_trace: Option<Value>,
-}
-
-trait AgentInvoker: Send + Sync {
-    fn invoke(&self, invocation: AgentInvocation) -> Result<AgentInvocationOutput, String>;
-}
-
-#[derive(Debug, Clone, Default)]
-struct ProviderCliInvoker;
-
-#[derive(Debug, Clone, Default)]
-struct RustDirectLetaiInvoker;
-
-impl AgentInvoker for ProviderCliInvoker {
-    fn invoke(&self, invocation: AgentInvocation) -> Result<AgentInvocationOutput, String> {
-        match invoke_gateway_agent(invocation.clone()) {
-            Ok(output) => Ok(output),
-            Err(err) if should_fallback_to_local_agent(err.as_str()) => {
-                invoke_local_agent(invocation, err.as_str())
-            }
-            Err(err) => Err(err),
-        }
-    }
-}
-
-impl AgentInvoker for RustDirectLetaiInvoker {
-    fn invoke(&self, invocation: AgentInvocation) -> Result<AgentInvocationOutput, String> {
-        invoke_rust_direct_letai(invocation)
-    }
-}
-
-fn invoke_gateway_agent(invocation: AgentInvocation) -> Result<AgentInvocationOutput, String> {
-    let params = build_gateway_agent_params(&invocation)
-        .map_err(|err| format!("serialize gateway call params failed: {err}"))?;
-    let rpc_timeout_ms = invocation
-        .timeout_seconds
-        .saturating_mul(1000)
-        .saturating_add(2000);
-    let started = Instant::now();
-    let output = Command::new(invocation.provider_cli_bin.as_str())
-        .arg("gateway")
-        .arg("call")
-        .arg("agent")
-        .arg("--expect-final")
-        .arg("--json")
-        .arg("--timeout")
-        .arg(rpc_timeout_ms.to_string())
-        .arg("--params")
-        .arg(params)
-        .envs(route_label_env(invocation.route_label.as_deref()))
-        .env(
-            oasis7::observability::TRACE_SESSION_ID_ENV,
-            resolve_trace_session_id(TRACE_SESSION_PROCESS_LABEL),
-        )
-        .output()
-        .map_err(|err| format!("spawn provider gateway call agent failed: {err}"))?;
-    if !output.status.success() {
-        let summary = provider_cli_failure_summary(
-            "gateway_call_agent",
-            &output,
-            started.elapsed(),
-            invocation.route_label.as_deref().is_some(),
-            rpc_timeout_ms,
-        );
-        error!(target: "oasis7_provider_local_bridge", %summary, "provider cli invocation failed");
-        return Err(format!("provider gateway call agent failed: {summary}"));
-    }
-    let payload = String::from_utf8(output.stdout)
-        .map_err(|err| format!("provider gateway call agent stdout was not utf8: {err}"))?;
-    agent_output_from_json(invocation.prompt, payload.as_str(), None)
-}
-
-fn invoke_local_agent(
-    invocation: AgentInvocation,
-    gateway_error: &str,
-) -> Result<AgentInvocationOutput, String> {
-    let session_id = local_session_id_from_session_key(invocation.session_key.as_str());
-    let timeout_ms = invocation.timeout_seconds.saturating_mul(1000);
-    let started = Instant::now();
-    let output = Command::new(invocation.provider_cli_bin.as_str())
-        .arg("agent")
-        .arg("--agent")
-        .arg(invocation.agent_id.as_str())
-        .arg("--message")
-        .arg(invocation.prompt.as_str())
-        .arg("--local")
-        .arg("--session-id")
-        .arg(session_id.as_str())
-        .arg("--thinking")
-        .arg(invocation.thinking.as_str())
-        .arg("--timeout")
-        .arg(timeout_ms.to_string())
-        .arg("--json")
-        .envs(route_label_env(invocation.route_label.as_deref()))
-        .env(
-            oasis7::observability::TRACE_SESSION_ID_ENV,
-            resolve_trace_session_id(TRACE_SESSION_PROCESS_LABEL),
-        )
-        .output()
-        .map_err(|err| format!("spawn provider local agent failed: {err}"))?;
-    if !output.status.success() {
-        let summary = provider_cli_failure_summary(
-            "local_agent_fallback",
-            &output,
-            started.elapsed(),
-            invocation.route_label.as_deref().is_some(),
-            timeout_ms,
-        );
-        error!(target: "oasis7_provider_local_bridge", %summary, "provider cli fallback failed");
-        return Err(format!(
-            "provider gateway fallback failed after `{}`; local agent failed: {}",
-            summarize_text(gateway_error, 240),
-            summary,
-        ));
-    }
-    let payload = String::from_utf8(output.stdout)
-        .map_err(|err| format!("provider local agent stdout was not utf8: {err}"))?;
-    agent_output_from_json(
-        invocation.prompt,
-        payload.as_str(),
-        Some(format!(
-            "invocation_fallback=local_embedded; reason={}",
-            summarize_text(gateway_error, 240)
-        )),
-    )
-}
-
-fn provider_cli_failure_summary(
-    mode: &str,
-    output: &std::process::Output,
-    elapsed: Duration,
-    route_label_present: bool,
-    timeout_ms: u64,
-) -> String {
-    let stderr = String::from_utf8_lossy(output.stderr.as_slice());
-    let stdout = String::from_utf8_lossy(output.stdout.as_slice());
-    json!({
-        "mode": mode,
-        "status": output.status.to_string(),
-        "elapsed_ms": elapsed.as_millis(),
-        "timeout_ms": timeout_ms,
-        "route_label_present": route_label_present,
-        "stderr": text_diagnostic_summary(stderr.as_ref(), true),
-        "stdout": text_diagnostic_summary(stdout.as_ref(), false),
-        "stderr_events": stderr_json_events(stderr.as_ref(), 8),
-    })
-    .to_string()
-}
-
-fn text_diagnostic_summary(text: &str, include_tail: bool) -> Value {
-    let trimmed = text.trim();
-    let mut summary = json!({
-        "len": trimmed.len(),
-        "sha256_16": short_sha256(trimmed),
-        "truncated": trimmed.len() > 320,
-    });
-    if include_tail {
-        summary["tail"] = Value::String(summarize_text(trimmed, 320));
-    }
-    summary
-}
-
-fn stderr_json_events(text: &str, max_events: usize) -> Vec<Value> {
-    let mut events = Vec::new();
-    for line in text.lines() {
-        let trimmed = line.trim();
-        if !trimmed.starts_with('{') || !trimmed.ends_with('}') {
-            continue;
-        }
-        let Ok(value) = serde_json::from_str::<Value>(trimmed) else {
-            continue;
-        };
-        if value.get("event").is_some() {
-            events.push(value);
-        }
-    }
-    if events.len() > max_events {
-        events.split_off(events.len() - max_events)
-    } else {
-        events
-    }
-}
-
-fn short_sha256(text: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(text.as_bytes());
-    let digest = hasher.finalize();
-    hex::encode(&digest[..8])
-}
-
-fn agent_chat_idempotency_key(session_key: &str, request: &ProviderAgentChatRequest) -> String {
-    let stable_chat_key = short_sha256(
-        format!(
-            "{}\0{}\0{}\0{}",
-            request.world_time, request.agent_id, request.player_id, request.message
-        )
-        .as_str(),
-    );
-    format!("{session_key}-{}-{stable_chat_key}", request.world_time)
 }
 
 fn main() {

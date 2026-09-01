@@ -9,6 +9,9 @@
 use super::*;
 use crate::runtime::{AgentCognitionMailbox, AgentDecisionEnvelopeV1};
 use crate::simulator::AsyncAgentRunner;
+use crate::simulator::{
+    ContinuousAgentTurnContextV1, Digest32, GoalSnapshotV1, MemoryContextSnapshotV1,
+};
 use serde_json::json;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -206,4 +209,34 @@ fn builtin_and_provider_backed_wait_use_the_same_lifecycle_outcome() {
     assert_eq!(builtin_outcome.lifecycle, provider_outcome.lifecycle);
     assert_eq!(builtin_outcome.feedback, provider_outcome.feedback);
     assert_eq!(builtin_outcome.world_effect, provider_outcome.world_effect);
+}
+
+#[test]
+fn completed_provider_turn_remains_single_flight_until_runtime_terminal_feedback() {
+    let mut runner = AsyncAgentRunner::builtin_fixture(AGENT_ID);
+    let context = ContinuousAgentTurnContextV1 {
+        agent_id: AGENT_ID.to_string(),
+        agent_session_id: "session.agent-live-1".to_string(),
+        agent_turn_id: "turn.agent-live-1".to_string(),
+        decision_request_id: "request.agent-live-1".to_string(),
+        request_digest: Digest32::from(
+            "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ),
+        memory_snapshot: MemoryContextSnapshotV1::empty("session_private"),
+        goal_snapshot: GoalSnapshotV1::empty(),
+        continuation: None,
+    };
+    runner
+        .start_turn_with_context(AGENT_ID, context.clone())
+        .expect("open turn");
+    for _ in 0..1024 {
+        if !runner.poll_completed().expect("poll turn").is_empty() {
+            break;
+        }
+        std::thread::yield_now();
+    }
+    let error = runner
+        .start_turn_with_context(AGENT_ID, context)
+        .expect_err("provider completion is not Runtime terminal feedback");
+    assert_eq!(error.code(), "agent_busy");
 }

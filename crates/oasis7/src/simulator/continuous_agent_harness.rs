@@ -20,6 +20,7 @@ pub const CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR: &str = "oasis7.continuous-agen
 pub const CONTINUOUS_AGENT_CONTEXT_VERSION: u16 = 1;
 pub const COGNITION_REQUEST_DIGEST_DOMAIN: &str = "oasis7.cognition.request.v1";
 pub const COGNITION_PROVIDER_INVOCATION_DOMAIN: &str = "oasis7.cognition.provider-invocation.v1";
+pub const COGNITION_RESPONSE_DIGEST_DOMAIN: &str = "oasis7.cognition.response.v1";
 const COGNITION_FEEDBACK_DIGEST_DOMAIN: &str = "oasis7.cognition.feedback.v1";
 const MAX_FEEDBACK_REPLAY_ENTRIES: usize = 8;
 
@@ -41,6 +42,13 @@ impl Digest32 {
     pub fn expect(self, _message: &str) -> Self {
         self
     }
+
+    /// Return whether this value is the canonical wire rendering of a
+    /// BLAKE3-256 digest.  Callers at replay and receipt seams must validate
+    /// the shape instead of treating an arbitrary provider string as proof.
+    pub fn is_canonical_blake3(&self) -> bool {
+        valid_blake3_digest(self.as_str())
+    }
 }
 
 impl fmt::Display for Digest32 {
@@ -58,6 +66,12 @@ impl From<String> for Digest32 {
 impl From<&str> for Digest32 {
     fn from(value: &str) -> Self {
         Self(value.to_string())
+    }
+}
+
+impl Default for Digest32 {
+    fn default() -> Self {
+        Self(String::new())
     }
 }
 
@@ -184,6 +198,18 @@ impl RuntimeBindingV1 {
             reorg_epoch: self.reorg_epoch,
         }
         .validate()
+        .and_then(|_| {
+            if self.base_world_hash.is_canonical_blake3()
+                && self.runtime_manifest_hash.is_canonical_blake3()
+            {
+                Ok(())
+            } else {
+                Err(CognitionError::new(
+                    "invalid_runtime_binding_digest",
+                    "Runtime binding hashes must be canonical BLAKE3-256 values",
+                ))
+            }
+        })
     }
 }
 
@@ -224,11 +250,28 @@ pub struct ContinuousAgentRequestContextV1 {
 impl ContinuousAgentRequestContextV1 {
     pub fn validate(&self) -> Result<(), CognitionError> {
         self.validate_structure()?;
+        self.base_decision_request
+            .validate_contract()
+            .map_err(|error| CognitionError::new(error.code, error.message))?;
         let derived_digest = self.request_digest();
         if self.request_digest != derived_digest {
             return Err(CognitionError::new(
                 "request_digest_mismatch",
                 "declared request digest does not match canonical request inputs",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Validate the production-target provider lane. Legacy fixtures may use
+    /// zero transport fields, but an actual async provider invocation must
+    /// carry both retry and transport attempt lineage explicitly.
+    pub fn validate_production_lane(&self) -> Result<(), CognitionError> {
+        self.validate()?;
+        if self.retry_seq == 0 || self.transport_attempt == 0 {
+            return Err(CognitionError::new(
+                "missing_retry_lineage",
+                "production provider requests require nonzero retry_seq and transport_attempt",
             ));
         }
         Ok(())
@@ -259,6 +302,30 @@ impl ContinuousAgentRequestContextV1 {
                 "missing_cognition_identity",
                 "session, turn, request, and subject identities are required",
             ));
+        }
+        if self.base_decision_request.observation.agent_id != self.agent_subject {
+            return Err(CognitionError::new(
+                "cognition_context_identity_mismatch",
+                "outer request subject does not match the inner observation subject",
+            ));
+        }
+        for (name, digest) in [
+            ("observation_digest", &self.observation_digest),
+            ("capability_catalog_digest", &self.capability_catalog_digest),
+            (
+                "capability_invocation_context_digest",
+                &self.capability_invocation_context_digest,
+            ),
+            ("memory_snapshot_digest", &self.memory_snapshot_digest),
+            ("goal_snapshot_digest", &self.goal_snapshot_digest),
+            ("continuation_digest", &self.continuation_digest),
+        ] {
+            if !digest.is_canonical_blake3() {
+                return Err(CognitionError::new(
+                    "invalid_context_digest",
+                    format!("{name} must be a canonical BLAKE3-256 digest"),
+                ));
+            }
         }
         self.runtime_binding.validate()?;
         Ok(())
@@ -361,6 +428,10 @@ pub struct ContinuousAgentResponseContextV1 {
     pub retry_seq: u64,
     pub transport_attempt: u64,
     pub request_digest: Digest32,
+    /// Content identity for the provider response/artifact retained at the
+    /// replay seam. Runtime may bind this digest to its durable envelope.
+    #[serde(default)]
+    pub response_digest: Digest32,
 }
 
 /// Host projection shared by Builtin and ProviderBacked simulator actors for
@@ -468,14 +539,80 @@ struct ActiveCognitionRequest {
 pub struct AgentCognitionStore {
     active_by_agent: BTreeMap<String, ActiveCognitionRequest>,
     digest_by_request_id: BTreeMap<String, Digest32>,
-    /// Keep a bounded tombstone for accepted feedback so terminal responses
-    /// can be replayed after their active request is removed.  The bridge's
-    /// recent-feedback projection uses the same eight-entry retention bound.
-    feedback_digest_by_id: BTreeMap<String, Digest32>,
-    feedback_replay_order: VecDeque<String>,
+    subject_by_request_id: BTreeMap<String, String>,
+    /// Feedback replay state is partitioned by `(agent_subject, session)`;
+    /// no Agent can observe another Agent's feedback history.
+    feedback_partitions: BTreeMap<(String, String), FeedbackPartition>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct FeedbackPartition {
+    next_seq: u64,
+    digest_by_id: BTreeMap<String, Digest32>,
+    digest_by_seq: BTreeMap<u64, (String, Digest32)>,
+    replay_order: VecDeque<String>,
+    held: BTreeMap<u64, FeedbackEnvelopeV1>,
 }
 
 impl AgentCognitionStore {
+    /// Admit the reduced compatibility lane with the same per-Agent
+    /// single-flight semantics. Production-target callers should prefer
+    /// `begin_request`, which also verifies the trusted outer context.
+    pub fn begin_turn(
+        &mut self,
+        turn: &ContinuousAgentTurnContextV1,
+    ) -> Result<(), CognitionError> {
+        turn.validate_for_agent(turn.agent_id.as_str())?;
+        if let Some(active) = self.active_by_agent.get(&turn.agent_id) {
+            if active.session_id == turn.agent_session_id
+                && active.turn_id == turn.agent_turn_id
+                && active.request_id == turn.decision_request_id
+                && active.request_digest == turn.request_digest
+            {
+                return Ok(());
+            }
+            return Err(CognitionError::new(
+                "agent_busy",
+                "an Agent already has an in-flight cognition request",
+            ));
+        }
+        if self
+            .digest_by_request_id
+            .contains_key(&turn.decision_request_id)
+        {
+            if self
+                .subject_by_request_id
+                .get(&turn.decision_request_id)
+                .is_some_and(|subject| subject != &turn.agent_id)
+            {
+                return Err(CognitionError::new(
+                    "request_identity_collision",
+                    "decision_request_id was reused by another Agent subject",
+                ));
+            }
+            return Err(CognitionError::new(
+                "request_replay",
+                "decision_request_id was already admitted and is no longer active",
+            ));
+        }
+        self.digest_by_request_id.insert(
+            turn.decision_request_id.clone(),
+            turn.request_digest.clone(),
+        );
+        self.subject_by_request_id
+            .insert(turn.decision_request_id.clone(), turn.agent_id.clone());
+        self.active_by_agent.insert(
+            turn.agent_id.clone(),
+            ActiveCognitionRequest {
+                session_id: turn.agent_session_id.clone(),
+                turn_id: turn.agent_turn_id.clone(),
+                request_id: turn.decision_request_id.clone(),
+                request_digest: turn.request_digest.clone(),
+            },
+        );
+        Ok(())
+    }
+
     pub fn begin_request(
         &mut self,
         request: ContinuousAgentRequestContextV1,
@@ -489,7 +626,25 @@ impl AgentCognitionStore {
                     "decision_request_id was reused with different canonical inputs",
                 ));
             }
-            return Ok(());
+            if self
+                .subject_by_request_id
+                .get(&request.decision_request_id)
+                .is_some_and(|subject| subject != &request.agent_subject)
+            {
+                return Err(CognitionError::new(
+                    "request_identity_collision",
+                    "decision_request_id was reused by another Agent subject",
+                ));
+            }
+            if self.active_by_agent.values().any(|active| {
+                active.request_id == request.decision_request_id && active.request_digest == digest
+            }) {
+                return Ok(());
+            }
+            return Err(CognitionError::new(
+                "request_replay",
+                "decision_request_id was already admitted and is no longer active",
+            ));
         }
         if self.active_by_agent.contains_key(&request.agent_subject) {
             return Err(CognitionError::new(
@@ -499,6 +654,10 @@ impl AgentCognitionStore {
         }
         self.digest_by_request_id
             .insert(request.decision_request_id.clone(), digest.clone());
+        self.subject_by_request_id.insert(
+            request.decision_request_id.clone(),
+            request.agent_subject.clone(),
+        );
         self.active_by_agent.insert(
             request.agent_subject,
             ActiveCognitionRequest {
@@ -512,27 +671,49 @@ impl AgentCognitionStore {
     }
 
     pub fn accept_feedback(&mut self, feedback: FeedbackEnvelopeV1) -> Result<(), CognitionError> {
-        let Some(active) = self.active_by_agent.get(&feedback.agent_subject) else {
-            if self
+        if !self.active_by_agent.contains_key(&feedback.agent_subject)
+            && self
                 .active_by_agent
                 .keys()
                 .any(|agent| agent != &feedback.agent_subject)
-            {
-                return Err(CognitionError::new(
-                    "cross_agent_feedback",
-                    "feedback does not belong to the active Agent subject",
-                ));
-            }
-            if let Some(previous) = self.feedback_digest_by_id.get(&feedback.feedback_id) {
-                return self.replay_or_reject_feedback(previous, feedback_digest(&feedback));
+        {
+            return Err(CognitionError::new(
+                "cross_agent_feedback",
+                "feedback does not belong to the active Agent subject",
+            ));
+        }
+        validate_feedback_contract(&feedback)?;
+        let partition_key = (
+            feedback.agent_subject.clone(),
+            feedback.agent_session_id.clone(),
+        );
+        let feedback_digest_value = feedback_digest(&feedback);
+        let Some(active) = self.active_by_agent.get(&feedback.agent_subject) else {
+            if let Some(partition) = self.feedback_partitions.get(&partition_key) {
+                if let Some(previous) = partition.digest_by_id.get(&feedback.feedback_id) {
+                    return Self::replay_or_reject_feedback(previous, feedback_digest_value);
+                }
+                if let Some((previous_id, previous_digest)) =
+                    partition.digest_by_seq.get(&feedback.feedback_seq)
+                {
+                    if previous_id != &feedback.feedback_id
+                        || previous_digest != &feedback_digest_value
+                    {
+                        return Err(CognitionError::new(
+                            "feedback_identity_collision",
+                            "feedback_seq was reused with a different envelope",
+                        ));
+                    }
+                }
             }
             return Err(CognitionError::new(
                 "unknown_feedback",
                 "feedback does not match an active cognition request",
             ));
         };
-        if let Some(previous) = self.feedback_digest_by_id.get(&feedback.feedback_id) {
-            return self.replay_or_reject_feedback(previous, feedback_digest(&feedback));
+        let partition = self.feedback_partitions.entry(partition_key).or_default();
+        if let Some(previous) = partition.digest_by_id.get(&feedback.feedback_id) {
+            return Self::replay_or_reject_feedback(previous, feedback_digest_value);
         }
         if active.session_id != feedback.agent_session_id
             || active.turn_id != feedback.agent_turn_id
@@ -549,18 +730,68 @@ impl AgentCognitionStore {
                 "feedback request digest does not match the active request",
             ));
         }
-        self.remember_feedback(feedback.feedback_id.clone(), feedback_digest(&feedback));
+        let expected = partition.next_seq.saturating_add(1);
+        if feedback.feedback_seq > expected {
+            if partition.held.len() >= MAX_FEEDBACK_REPLAY_ENTRIES {
+                return Err(CognitionError::new(
+                    "feedback_sequence_overflow",
+                    "feedback sequence gap exceeds the bounded replay window",
+                ));
+            }
+            partition.held.insert(feedback.feedback_seq, feedback);
+            return Err(CognitionError::new(
+                "feedback_sequence_gap",
+                format!("expected feedback sequence {expected}"),
+            ));
+        }
+        if feedback.feedback_seq < expected {
+            if let Some((previous_id, previous)) =
+                partition.digest_by_seq.get(&feedback.feedback_seq)
+            {
+                if previous_id == &feedback.feedback_id {
+                    return Self::replay_or_reject_feedback(previous, feedback_digest_value);
+                }
+                return Err(CognitionError::new(
+                    "feedback_identity_collision",
+                    "feedback_seq was reused with a different envelope",
+                ));
+            }
+            return Err(CognitionError::new(
+                "feedback_sequence_gap",
+                format!(
+                    "feedback sequence {} is behind {expected}",
+                    feedback.feedback_seq
+                ),
+            ));
+        }
+        Self::remember_feedback(
+            partition,
+            feedback.feedback_id.clone(),
+            feedback_digest_value,
+        );
+        partition.next_seq = feedback.feedback_seq;
         if matches!(
             feedback.status.as_str(),
-            "committed" | "rejected" | "failed" | "cancelled" | "expired" | "stale"
+            "committed" | "rejected" | "failed"
         ) {
             self.active_by_agent.remove(&feedback.agent_subject);
+        }
+        while let Some(next_feedback) = partition.held.remove(&partition.next_seq.saturating_add(1))
+        {
+            let next_digest = feedback_digest(&next_feedback);
+            Self::remember_feedback(partition, next_feedback.feedback_id.clone(), next_digest);
+            partition.next_seq = next_feedback.feedback_seq;
+            if matches!(
+                next_feedback.status.as_str(),
+                "committed" | "rejected" | "failed"
+            ) {
+                self.active_by_agent.remove(&next_feedback.agent_subject);
+            }
         }
         Ok(())
     }
 
     fn replay_or_reject_feedback(
-        &self,
         previous: &Digest32,
         current: Digest32,
     ) -> Result<(), CognitionError> {
@@ -573,20 +804,45 @@ impl AgentCognitionStore {
         ))
     }
 
-    fn remember_feedback(&mut self, feedback_id: String, digest: Digest32) {
-        self.feedback_digest_by_id
-            .insert(feedback_id.clone(), digest);
-        self.feedback_replay_order.push_back(feedback_id);
-        while self.feedback_replay_order.len() > MAX_FEEDBACK_REPLAY_ENTRIES {
-            let Some(expired_id) = self.feedback_replay_order.pop_front() else {
+    fn remember_feedback(partition: &mut FeedbackPartition, feedback_id: String, digest: Digest32) {
+        let sequence = partition.next_seq.saturating_add(1);
+        partition
+            .digest_by_seq
+            .insert(sequence, (feedback_id.clone(), digest.clone()));
+        partition.digest_by_id.insert(feedback_id.clone(), digest);
+        partition.replay_order.push_back(feedback_id);
+        while partition.replay_order.len() > MAX_FEEDBACK_REPLAY_ENTRIES {
+            let Some(expired_id) = partition.replay_order.pop_front() else {
                 break;
             };
-            self.feedback_digest_by_id.remove(&expired_id);
+            partition.digest_by_id.remove(&expired_id);
+            if let Some(sequence) = partition
+                .digest_by_seq
+                .iter()
+                .find_map(|(sequence, (id, _))| (id == &expired_id).then_some(*sequence))
+            {
+                partition.digest_by_seq.remove(&sequence);
+            }
         }
     }
 
     pub fn clear_agent(&mut self, agent_subject: &str) {
         self.active_by_agent.remove(agent_subject);
+    }
+
+    pub fn contains_feedback(
+        &self,
+        agent_subject: &str,
+        agent_session_id: &str,
+        feedback_id: &str,
+    ) -> bool {
+        self.feedback_partitions
+            .iter()
+            .any(|((subject, session), partition)| {
+                subject == agent_subject
+                    && session == agent_session_id
+                    && partition.digest_by_id.contains_key(feedback_id)
+            })
     }
 }
 
@@ -596,6 +852,40 @@ fn default_schema_version() -> u16 {
 
 fn feedback_digest(feedback: &FeedbackEnvelopeV1) -> Digest32 {
     h_v1(COGNITION_FEEDBACK_DIGEST_DOMAIN, feedback)
+}
+
+fn validate_feedback_contract(feedback: &FeedbackEnvelopeV1) -> Result<(), CognitionError> {
+    if feedback.feedback_id.trim().is_empty()
+        || feedback.feedback_seq == 0
+        || feedback.agent_subject.trim().is_empty()
+        || feedback.agent_session_id.trim().is_empty()
+        || feedback.agent_turn_id.trim().is_empty()
+        || feedback.decision_request_id.trim().is_empty()
+        || !feedback.request_digest.is_canonical_blake3()
+        || feedback.provenance != "runtime_authoritative"
+        || !matches!(
+            feedback.status.as_str(),
+            "pending" | "committed" | "rejected" | "failed"
+        )
+    {
+        return Err(CognitionError::new(
+            "feedback_contract_invalid",
+            "feedback requires canonical identity, Runtime provenance, sequence, and status",
+        ));
+    }
+    if feedback.status == "committed"
+        && (feedback.candidate_action_id.is_none()
+            || feedback
+                .runtime_receipt_id
+                .as_deref()
+                .is_none_or(|value| value.trim().is_empty()))
+    {
+        return Err(CognitionError::new(
+            "feedback_contract_invalid",
+            "committed feedback requires action and Runtime receipt identity",
+        ));
+    }
+    Ok(())
 }
 
 fn valid_blake3_digest(value: &str) -> bool {

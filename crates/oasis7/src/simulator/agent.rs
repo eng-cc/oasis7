@@ -6,7 +6,9 @@ use std::collections::BTreeMap;
 
 use oasis7_wasm_abi::AgentCommandResponse;
 
-use super::continuous_agent_harness::ContinuousAgentTurnContextV1;
+use super::continuous_agent_harness::{
+    ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1,
+};
 use super::decision_provider::MemoryWriteIntent;
 use super::kernel::{
     MicroDepotActionKind, MicroDepotInstallQuote, MicroDepotPressureClass, MicroDepotQuotePreview,
@@ -66,6 +68,21 @@ pub trait AgentBehavior {
     /// Legacy behaviors ignore it; continuous Builtin/ProviderBacked
     /// behaviors consume the same typed context.
     fn set_continuous_turn_context(&mut self, _context: Option<&ContinuousAgentTurnContextV1>) {}
+
+    /// Install the complete trusted outer V1 request for a production
+    /// provider lane. Legacy behaviors ignore this additive hook and remain
+    /// explicitly fenced to the reduced compatibility lane.
+    fn set_continuous_request_context(
+        &mut self,
+        _context: Option<&ContinuousAgentRequestContextV1>,
+    ) {
+    }
+
+    /// Take the provider's response envelope, including its content digest,
+    /// for Runtime replay/artifact binding.
+    fn take_continuous_response_context(&mut self) -> Option<ContinuousAgentResponseContextV1> {
+        None
+    }
 
     /// Return provider memory candidates produced by the latest decision.
     /// Candidates remain non-authoritative until Runtime feedback commits the

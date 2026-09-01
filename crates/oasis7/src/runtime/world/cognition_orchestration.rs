@@ -13,10 +13,12 @@ use crate::runtime::cognition_scheduler::{
     CognitionScheduler, SchedulerEnqueueOutcome, SchedulerPolicyV1, SchedulerWakeV1,
 };
 use crate::runtime::cognition_wake::{
-    AgentContinuation, ContinuationReorgReport, ContinuationStatusV1, ContinuationTransition,
-    WakeConditionV1, WakeConditionValidator, WakeEvaluation, WakeEvaluationContext,
+    AgentContinuation, CognitionContinuationProposalV1, ContinuationReorgReport,
+    ContinuationStatusV1, ContinuationTransition, WakeConditionV1, WakeConditionValidator,
+    WakeEvaluation, WakeEvaluationContext,
 };
 use crate::runtime::error::WorldError;
+use crate::simulator::ResourceKind;
 use serde_json::{Value as JsonValue, json};
 
 const CONTINUATION_SCHEMA: &str = "agent-continuation.v1";
@@ -36,6 +38,7 @@ impl World {
         wake: SchedulerWakeV1,
     ) -> Result<SchedulerEnqueueOutcome, WorldError> {
         let mut scheduler = self.cognition_scheduler()?;
+        scheduler.advance_logical_tick(self.state.time);
         let outcome = scheduler
             .try_enqueue(wake)
             .map_err(|error| scheduler_error(error.code()))?;
@@ -93,9 +96,12 @@ impl World {
         &self,
         conditions: &[WakeConditionV1],
     ) -> Result<WakeEvaluation, WorldError> {
+        let head_digest = self.current_state_root_hash()?;
         self.evaluate_cognition_wake_with_context(
             conditions,
-            WakeEvaluationContext::at(self.state.time),
+            WakeEvaluationContext::at(self.state.time)
+                .with_evaluation_head(&head_digest)
+                .with_reorg_epoch(self.cognition_reorg_epoch()),
         )
     }
 
@@ -105,21 +111,132 @@ impl World {
         event_digest: &str,
         receipt_id: &str,
     ) -> Result<WakeEvaluation, WorldError> {
+        let head_digest = self.current_state_root_hash()?;
         let context = WakeEvaluationContext::at(self.state.time)
             .with_event(event_digest)
             .with_receipt(receipt_id)
-            .with_predicate_value("world.logical_tick", &[self.state.time.min(255) as u8]);
+            .with_predicate_u64("world.logical_tick", self.state.time)
+            .with_reorg_epoch(self.cognition_reorg_epoch())
+            .with_evaluation_head(&head_digest);
         self.evaluate_cognition_wake_with_context(conditions, context)
+    }
+
+    /// Admit an agent-owned continuation proposal at the Runtime boundary.
+    /// Identity, sequence, status and digest fields are allocated here; none
+    /// are accepted from a caller-owned wire projection.
+    pub fn admit_cognition_continuation(
+        &mut self,
+        proposal: CognitionContinuationProposalV1,
+    ) -> Result<AgentContinuation, WorldError> {
+        let wake_conditions = WakeConditionValidator::canonicalize(proposal.wake_conditions)
+            .map_err(|error| cognition_validation_error(error.code()))?;
+        let derived_next_wake_tick =
+            WakeConditionValidator::next_wake_tick_at(&wake_conditions, self.state.time)
+                .map_err(|error| cognition_validation_error(error.code()))?;
+        if proposal.world_id.trim().is_empty()
+            || proposal.branch_id.trim().is_empty()
+            || proposal.finality_status.trim().is_empty()
+            || proposal.runtime_manifest_hash.trim().is_empty()
+            || proposal.agent_id.trim().is_empty()
+            || proposal.agent_session_id.trim().is_empty()
+            || proposal.agent_turn_id.trim().is_empty()
+            || proposal.decision_request_id.trim().is_empty()
+            || proposal.origin_turn_id.trim().is_empty()
+            || proposal.origin_request_digest.trim().is_empty()
+            || proposal.continuation_proposal_id.trim().is_empty()
+            || proposal.proposal_digest.trim().is_empty()
+            || proposal.precondition_digest.trim().is_empty()
+            || proposal.remaining_budget.value == 0
+            || !matches!(proposal.remaining_budget.unit.as_str(), "steps" | "ticks")
+            || proposal.next_wake_tick != derived_next_wake_tick
+            || proposal
+                .valid_until_tick
+                .is_some_and(|valid_until| valid_until < self.state.time)
+        {
+            return Err(cognition_validation_error("continuation_proposal_invalid"));
+        }
+        let mut continuations = self.cognition_continuations_typed()?;
+        if continuations
+            .iter()
+            .any(|existing| existing.continuation_proposal_id == proposal.continuation_proposal_id)
+        {
+            return Err(cognition_validation_error("continuation_proposal_conflict"));
+        }
+        let allocation = self.allocate_next_proposal_id();
+        let continuation_id = format!("continuation:{allocation}");
+        let wake_id = format!("wake:{allocation}");
+        let wake_seq = continuations
+            .iter()
+            .filter(|existing| existing.agent_id == proposal.agent_id)
+            .map(|existing| existing.wake_seq)
+            .max()
+            .unwrap_or(0)
+            .saturating_add(1);
+        let mut continuation = AgentContinuation {
+            schema_version: CONTINUATION_SCHEMA.to_string(),
+            continuation_id,
+            wake_id,
+            world_id: proposal.world_id,
+            branch_id: proposal.branch_id,
+            finality_epoch: proposal.finality_epoch,
+            finality_block_hash: proposal.finality_block_hash,
+            finality_status: proposal.finality_status,
+            reorg_epoch: proposal.reorg_epoch,
+            runtime_manifest_hash: proposal.runtime_manifest_hash,
+            agent_id: proposal.agent_id,
+            agent_session_id: proposal.agent_session_id,
+            agent_turn_id: proposal.agent_turn_id,
+            decision_request_id: proposal.decision_request_id,
+            origin_turn_id: proposal.origin_turn_id,
+            origin_request_digest: proposal.origin_request_digest,
+            continuation_proposal_id: proposal.continuation_proposal_id,
+            proposal_digest: proposal.proposal_digest,
+            action_or_envelope_digest: proposal.action_or_envelope_digest,
+            wake_conditions,
+            next_wake_tick: proposal.next_wake_tick,
+            remaining_budget: proposal.remaining_budget,
+            valid_until_tick: proposal.valid_until_tick,
+            precondition_digest: proposal.precondition_digest,
+            wake_seq,
+            logical_tick: self.state.time,
+            status: ContinuationStatusV1::Scheduled,
+            continuation_status_digest: None,
+            terminal_disposition: None,
+        };
+        continuation.refresh_status_digest();
+        continuation
+            .validate_authoritative()
+            .map_err(|error| cognition_validation_error(error.code()))?;
+        continuations.push(continuation.clone());
+        self.cognition_set_continuations(&continuations)?;
+        Ok(continuation)
     }
 
     pub fn schedule_cognition_continuation(
         &mut self,
-        continuation: AgentContinuation,
+        mut continuation: AgentContinuation,
     ) -> Result<(), WorldError> {
         if continuation.schema_version != CONTINUATION_SCHEMA {
             return Err(cognition_validation_error("continuation_schema_mismatch"));
         }
         WakeConditionValidator::validate(continuation.wake_conditions.as_slice())
+            .map_err(|error| cognition_validation_error(error.code()))?;
+        let derived_next_wake_tick = WakeConditionValidator::next_wake_tick_at(
+            &continuation.wake_conditions,
+            self.state.time,
+        )
+        .map_err(|error| cognition_validation_error(error.code()))?;
+        if continuation.next_wake_tick != derived_next_wake_tick {
+            return Err(cognition_validation_error(
+                "continuation_wake_tick_mismatch",
+            ));
+        }
+        // Legacy adapters may omit the Runtime digest.  Recompute it from
+        // the full projection before persistence so the stored record is
+        // authoritative rather than caller-signed.
+        continuation.refresh_status_digest();
+        continuation
+            .validate_authoritative()
             .map_err(|error| cognition_validation_error(error.code()))?;
         let mut continuations = self.cognition_continuations_typed()?;
         if continuations
@@ -131,6 +248,29 @@ impl World {
         continuations.push(continuation);
         self.cognition_set_continuations(&continuations)?;
         Ok(())
+    }
+
+    /// Apply one Runtime-owned continuation transition and persist its
+    /// refreshed status digest in the same World projection update.
+    pub fn transition_cognition_continuation(
+        &mut self,
+        continuation_id: &str,
+        to: ContinuationStatusV1,
+        logical_tick: u64,
+    ) -> Result<AgentContinuation, WorldError> {
+        let mut continuations = self.cognition_continuations_typed()?;
+        let continuation = continuations
+            .iter_mut()
+            .find(|continuation| continuation.continuation_id == continuation_id)
+            .ok_or_else(|| cognition_validation_error("continuation_missing"))?;
+        ContinuationTransition::apply_at_tick(continuation, to, logical_tick)
+            .map_err(|error| cognition_validation_error(error.code()))?;
+        continuation
+            .validate_authoritative()
+            .map_err(|error| cognition_validation_error(error.code()))?;
+        let transitioned = continuation.clone();
+        self.cognition_set_continuations(&continuations)?;
+        Ok(transitioned)
     }
 
     pub fn invalidate_cognition_for_reorg(
@@ -150,8 +290,12 @@ impl World {
             ) {
                 continue;
             }
-            ContinuationTransition::invalidate_for_reorg(continuation, reorg_epoch)
-                .map_err(|error| cognition_validation_error(error.code()))?;
+            ContinuationTransition::invalidate_for_reorg_at_tick(
+                continuation,
+                reorg_epoch,
+                self.state.time,
+            )
+            .map_err(|error| cognition_validation_error(error.code()))?;
             invalidated = invalidated.saturating_add(1);
         }
         self.cognition_set_continuations(&continuations)?;
@@ -223,8 +367,100 @@ impl World {
         conditions: &[WakeConditionV1],
         context: WakeEvaluationContext,
     ) -> Result<WakeEvaluation, WorldError> {
+        let context = self.enrich_cognition_wake_context(conditions, context)?;
         WakeConditionValidator::evaluate(conditions, &context)
             .map_err(|error| cognition_validation_error(error.code()))
+    }
+
+    fn enrich_cognition_wake_context(
+        &self,
+        conditions: &[WakeConditionV1],
+        mut context: WakeEvaluationContext,
+    ) -> Result<WakeEvaluationContext, WorldError> {
+        context = context
+            .with_predicate_u64("world.logical_tick", self.state.time)
+            .with_predicate_u64("world.reorg_epoch", self.cognition_reorg_epoch());
+        let state_root = self.current_state_root_hash()?;
+        context = context.with_predicate_value(
+            "world.state_root",
+            &serde_cbor::to_vec(&state_root).map_err(WorldError::from)?,
+        );
+        let manifest_hash = self.current_manifest_hash()?;
+        context = context.with_predicate_value(
+            "world.runtime_manifest_hash",
+            &serde_cbor::to_vec(&manifest_hash).map_err(WorldError::from)?,
+        );
+        for condition in conditions {
+            if condition.kind != "state_predicate" {
+                continue;
+            }
+            let Some(subject) = condition.subject.as_ref() else {
+                continue;
+            };
+            let Some(path) = condition.path_or_rule.as_deref() else {
+                continue;
+            };
+            match (subject.kind.as_str(), path) {
+                ("agent", "agent.status")
+                | ("agent", "agent.position")
+                | ("agent", "agent.inventory_digest")
+                | ("agent", "agent.capability_snapshot_hash")
+                | ("agent", "agent.resource.electricity")
+                | ("agent", "agent.resource.data") => {
+                    let Some(cell) = self.state.agents.get(&subject.id) else {
+                        continue;
+                    };
+                    let value = match path {
+                        "agent.status" => serde_cbor::to_vec(
+                            &cell
+                                .activity
+                                .as_ref()
+                                .map(|activity| activity.status)
+                                .unwrap_or(crate::runtime::AgentActivityStatus::Idle),
+                        ),
+                        "agent.position" => {
+                            serde_cbor::to_vec(&(cell.state.pos.x_cm, cell.state.pos.y_cm))
+                        }
+                        "agent.inventory_digest" => serde_cbor::to_vec(
+                            &oasis7_wasm_abi::canonical_hash(&cell.state.body_state.cargo_entries)
+                                .map_err(|_| {
+                                    cognition_validation_error("predicate_value_invalid")
+                                })?,
+                        ),
+                        "agent.capability_snapshot_hash" => {
+                            serde_cbor::to_vec(&self.capability_authorization_root())
+                        }
+                        "agent.resource.electricity" => {
+                            serde_cbor::to_vec(&cell.state.resources.get(ResourceKind::Electricity))
+                        }
+                        "agent.resource.data" => {
+                            serde_cbor::to_vec(&cell.state.resources.get(ResourceKind::Data))
+                        }
+                        _ => unreachable!(),
+                    }
+                    .map_err(WorldError::from)?;
+                    context = context.with_predicate_value(path, &value);
+                }
+                ("intent", "intent.status") => {
+                    let Some(intent) = self.state.agent_intent_ledger.get(&subject.id) else {
+                        continue;
+                    };
+                    let value = serde_cbor::to_vec(&intent.status).map_err(WorldError::from)?;
+                    context = context.with_predicate_value(path, &value);
+                }
+                _ => {}
+            }
+        }
+        Ok(context)
+    }
+
+    fn cognition_reorg_epoch(&self) -> u64 {
+        self.state
+            .agent_intent_ledger
+            .values()
+            .filter_map(|intent| intent.reorg_epoch)
+            .max()
+            .unwrap_or(0)
     }
 
     fn cognition_scheduler(&self) -> Result<CognitionScheduler, WorldError> {

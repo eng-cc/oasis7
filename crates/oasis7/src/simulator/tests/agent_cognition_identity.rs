@@ -10,8 +10,10 @@ use crate::runtime::{
     WakeConditionValidator, World,
 };
 use crate::simulator::{
-    AgentCognitionStore, ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1,
-    Digest32, FeedbackEnvelopeV1, FinalityBindingV1, MemoryWriteIntentV1, RuntimeBindingV1, h_v1,
+    AgentCognitionStore, AsyncAgentRunner, ContinuousAgentRequestContextV1,
+    ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1, Digest32, FeedbackEnvelopeV1,
+    FinalityBindingV1, GoalSnapshotV1, MemoryContextSnapshotV1, MemoryWriteIntentV1,
+    RuntimeBindingV1, h_v1,
 };
 use oasis7_wasm_abi::AgentCommandResponse;
 use serde_json::{Value, json};
@@ -520,6 +522,7 @@ fn one_agent_cannot_hold_two_sessions_but_two_agents_are_partitioned() {
 
     let mut other_agent = request_fixture(0, 60_000);
     other_agent["agent_subject"] = json!("agent-2");
+    other_agent["base_decision_request"]["observation"]["agent_id"] = json!("agent-2");
     other_agent["agent_session_id"] = json!("session.agent-2.v1");
     other_agent["agent_turn_id"] = json!("turn.agent-2.1");
     other_agent["decision_request_id"] = json!("request.agent-2.1");
@@ -575,6 +578,155 @@ fn duplicate_terminal_feedback_id_is_idempotent_after_first_acceptance() {
     store
         .accept_feedback(feedback)
         .expect("duplicate feedback_id must be an idempotent no-op");
+}
+
+#[test]
+fn feedback_requires_runtime_provenance_canonical_status_and_nonzero_sequence() {
+    let mut store = AgentCognitionStore::default();
+    let request_context = request(0, 60_000);
+    let request_digest = request_context.request_digest().to_string();
+    store
+        .begin_request(request_context)
+        .expect("request accepted");
+
+    let mut feedback: Value = json!({
+        "feedback_id": "feedback-invalid-contract",
+        "feedback_seq": 0,
+        "agent_subject": "agent-1",
+        "agent_session_id": "session.agent-1.v1",
+        "agent_turn_id": "turn.agent-1.7",
+        "decision_request_id": "request.agent-1.7",
+        "candidate_action_id": null,
+        "runtime_receipt_id": null,
+        "status": "bogus",
+        "request_digest": request_digest,
+        "reject_reason": null,
+        "provenance": "provider_unverified"
+    });
+    let error = store
+        .accept_feedback(serde_json::from_value(feedback.clone()).expect("decode feedback"))
+        .expect_err("untrusted status/provenance/sequence must fail closed");
+    assert_eq!(error.code(), "feedback_contract_invalid");
+
+    feedback["feedback_seq"] = json!(1);
+    feedback["status"] = json!("rejected");
+    feedback["provenance"] = json!("runtime_authoritative");
+    store
+        .accept_feedback(serde_json::from_value(feedback).expect("decode valid feedback"))
+        .expect("canonical Runtime feedback accepted");
+}
+
+#[test]
+fn feedback_sequence_gap_and_same_sequence_collision_fail_closed() {
+    let mut store = AgentCognitionStore::default();
+    let request_context = request(0, 60_000);
+    let request_digest = request_context.request_digest().to_string();
+    store
+        .begin_request(request_context)
+        .expect("request accepted");
+
+    let feedback = |id: &str, seq: u64, reason: &str| {
+        serde_json::from_value(json!({
+            "feedback_id": id,
+            "feedback_seq": seq,
+            "agent_subject": "agent-1",
+            "agent_session_id": "session.agent-1.v1",
+            "agent_turn_id": "turn.agent-1.7",
+            "decision_request_id": "request.agent-1.7",
+            "candidate_action_id": 7,
+            "runtime_receipt_id": null,
+            "status": "pending",
+            "request_digest": request_digest,
+            "reject_reason": reason,
+            "provenance": "runtime_authoritative"
+        }))
+        .expect("decode feedback")
+    };
+
+    let gap = store
+        .accept_feedback(feedback("feedback-seq-3", 3, "gap"))
+        .expect_err("a sequence gap must be held/reported");
+    assert_eq!(gap.code(), "feedback_sequence_gap");
+
+    store
+        .accept_feedback(feedback("feedback-seq-1", 1, "first"))
+        .expect("first sequence accepted");
+    let collision = store
+        .accept_feedback(feedback("feedback-seq-1b", 1, "different"))
+        .expect_err("same sequence with a different digest must collide");
+    assert_eq!(collision.code(), "feedback_identity_collision");
+}
+
+#[test]
+fn production_outer_context_preserves_retry_transport_and_runtime_binding() {
+    let mut fixture = request_fixture(2, 60_000);
+    fixture["retry_seq"] = json!(2);
+    let request_context = request_from_value(fixture);
+    let turn_context = ContinuousAgentTurnContextV1 {
+        agent_id: request_context.agent_subject.clone(),
+        agent_session_id: request_context.agent_session_id.clone(),
+        agent_turn_id: request_context.agent_turn_id.clone(),
+        decision_request_id: request_context.decision_request_id.clone(),
+        request_digest: request_context.request_digest.clone(),
+        memory_snapshot: MemoryContextSnapshotV1::empty("session_private"),
+        goal_snapshot: GoalSnapshotV1::empty(),
+        continuation: None,
+    };
+    let mut runner = AsyncAgentRunner::provider_backed_fixture("agent-1");
+    let turn_id = runner
+        .start_turn_with_request_context("agent-1", turn_context, request_context.clone())
+        .expect("production outer request accepted");
+    let outcome = loop {
+        if let Some(outcome) = runner
+            .poll_completed()
+            .expect("poll provider completion")
+            .into_iter()
+            .find(|outcome| outcome.turn_id == turn_id)
+        {
+            break outcome;
+        }
+        std::thread::yield_now();
+    };
+    let prepared = outcome
+        .prepared_request_context
+        .expect("outer context retained through completion");
+    assert_eq!(prepared.retry_seq, 2);
+    assert_eq!(prepared.transport_attempt, 2);
+    assert_eq!(prepared.runtime_binding, request_context.runtime_binding);
+    let response = outcome
+        .prepared_response_context
+        .expect("response identity retained for replay/artifact binding");
+    assert_eq!(response.retry_seq, prepared.retry_seq);
+    assert_eq!(response.transport_attempt, prepared.transport_attempt);
+    assert_eq!(
+        response.response_digest,
+        h_v1(
+            "oasis7.cognition.response.v1",
+            &response.base_decision_response
+        )
+    );
+}
+
+#[test]
+fn production_provider_behavior_fences_contextless_legacy_entry() {
+    let behavior = ProviderBackedAgentBehavior::new(
+        "agent-1",
+        MockDecisionProvider::new("fenced-provider"),
+        vec![ActionCatalogEntry::new("wait", "wait")],
+    )
+    .require_continuous_request_context();
+    let mut runner = AsyncAgentRunner::new(1).expect("create runner");
+    runner.register(behavior).expect("register fenced provider");
+    let outcome = runner
+        .run_one_turn()
+        .expect("fenced turn completes diagnostically");
+    assert_eq!(outcome.lifecycle, AsyncTurnLifecycle::Failed);
+    assert_eq!(
+        outcome.feedback,
+        AsyncTurnFeedback::ProviderError {
+            code: "continuous_context_required".to_string()
+        }
+    );
 }
 
 #[test]

@@ -81,10 +81,11 @@ pub use cognition_policy::{
 };
 pub use continuous_agent_harness::{
     AgentCognitionStore, BudgetContractV1, COGNITION_PROVIDER_INVOCATION_DOMAIN,
-    COGNITION_REQUEST_DIGEST_DOMAIN, CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR,
-    CONTINUOUS_AGENT_CONTEXT_VERSION, CognitionError, ContinuousAgentRequestContextV1,
-    ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1, Digest32, FeedbackEnvelopeV1,
-    FinalityBindingV1, MemoryWriteIntentV1, RuntimeBindingV1, h_v1,
+    COGNITION_REQUEST_DIGEST_DOMAIN, COGNITION_RESPONSE_DIGEST_DOMAIN,
+    CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR, CONTINUOUS_AGENT_CONTEXT_VERSION, CognitionError,
+    ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1,
+    ContinuousAgentTurnContextV1, Digest32, FeedbackEnvelopeV1, FinalityBindingV1,
+    MemoryWriteIntentV1, RuntimeBindingV1, h_v1,
 };
 pub use decision_provider::{
     ActionCatalogEntry, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,

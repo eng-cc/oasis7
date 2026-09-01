@@ -32,7 +32,8 @@ use super::cognition_policy::{
     MemoryWritePolicyContextV1, MemoryWriteStore, RuntimeContinuationStatusV1,
 };
 use super::continuous_agent_harness::{
-    ContinuousAgentTurnContextV1, FeedbackEnvelopeV1, MemoryWriteIntentV1, h_v1,
+    AgentCognitionStore, ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1,
+    ContinuousAgentTurnContextV1, Digest32, FeedbackEnvelopeV1, MemoryWriteIntentV1, h_v1,
 };
 use super::decision_provider::{
     ActionCatalogEntry, MemoryWriteIntent, MockDecisionProvider, ProviderBackedAgentBehavior,
@@ -40,8 +41,14 @@ use super::decision_provider::{
 use super::kernel::{WorldEvent, WorldKernel};
 use super::types::WorldTime;
 
-const DEFAULT_MAILBOX_CAPACITY: usize = 16;
+#[path = "async_agent_runner_feedback.rs"]
+mod feedback;
+use self::feedback::{validate_feedback, validate_runtime_receipt_lineage};
+#[path = "async_agent_runner_test_support.rs"]
+mod test_support;
+use self::test_support::{BlockingProviderBehavior, BuiltinWaitBehavior};
 
+const DEFAULT_MAILBOX_CAPACITY: usize = 16;
 /// Stable identifier for an actor turn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct AsyncTurnId(u64);
@@ -95,6 +102,12 @@ pub struct AsyncAgentTurnOutcome {
     pub decision: Option<AgentDecision>,
     pub decision_trace: Option<AgentDecisionTrace>,
     pub prepared_context: Option<ContinuousAgentTurnContextV1>,
+    /// The full trusted outer V1 request when this turn used the production
+    /// provider lane. It is retained through completion for Runtime lineage.
+    #[serde(default)]
+    pub prepared_request_context: Option<ContinuousAgentRequestContextV1>,
+    #[serde(default)]
+    pub prepared_response_context: Option<ContinuousAgentResponseContextV1>,
     pub memory_write_intents: Vec<MemoryWriteIntent>,
 }
 
@@ -166,6 +179,7 @@ enum ActorCommand {
         turn_id: AsyncTurnId,
         observation: Observation,
         context: Option<ContinuousAgentTurnContextV1>,
+        request_context: Option<ContinuousAgentRequestContextV1>,
     },
     ActionResult(ActionResult),
     Event(WorldEvent),
@@ -178,6 +192,8 @@ struct ActorCompletion {
     decision: Option<AgentDecision>,
     decision_trace: Option<AgentDecisionTrace>,
     prepared_context: Option<ContinuousAgentTurnContextV1>,
+    prepared_request_context: Option<ContinuousAgentRequestContextV1>,
+    prepared_response_context: Option<ContinuousAgentResponseContextV1>,
     memory_write_intents: Vec<MemoryWriteIntent>,
     panicked: bool,
 }
@@ -215,27 +231,41 @@ impl AgentActor {
                             turn_id,
                             observation,
                             context,
+                            request_context,
                         } => {
                             let result = panic::catch_unwind(AssertUnwindSafe(|| {
                                 behavior.set_continuous_turn_context(context.as_ref());
+                                behavior.set_continuous_request_context(request_context.as_ref());
                                 let decision = behavior.decide(&observation);
                                 let trace = behavior.take_decision_trace();
                                 let memory_write_intents = behavior.take_memory_write_intents();
-                                (decision, trace, memory_write_intents)
+                                let response_context = behavior.take_continuous_response_context();
+                                (decision, trace, memory_write_intents, response_context)
                             }));
-                            let (decision, decision_trace, memory_write_intents, panicked) =
-                                match result {
-                                    Ok((decision, trace, memory_write_intents)) => {
-                                        (Some(decision), trace, memory_write_intents, false)
-                                    }
-                                    Err(_) => (None, None, Vec::new(), true),
-                                };
+                            let (
+                                decision,
+                                decision_trace,
+                                memory_write_intents,
+                                response_context,
+                                panicked,
+                            ) = match result {
+                                Ok((decision, trace, memory_write_intents, response_context)) => (
+                                    Some(decision),
+                                    trace,
+                                    memory_write_intents,
+                                    response_context,
+                                    false,
+                                ),
+                                Err(_) => (None, None, Vec::new(), None, true),
+                            };
                             let completion = ActorCompletion {
                                 turn_id,
                                 agent_id: worker_agent_id.clone(),
                                 decision,
                                 decision_trace,
                                 prepared_context: context,
+                                prepared_request_context: request_context,
+                                prepared_response_context: response_context,
                                 memory_write_intents,
                                 panicked,
                             };
@@ -314,6 +344,11 @@ pub struct AsyncAgentRunner {
     next_turn_id: u64,
     logical_tick: WorldTime,
     completed: VecDeque<AsyncAgentTurnOutcome>,
+    /// Outcomes remain here until Runtime terminal feedback; draining the
+    /// world-facing completion queue must not release cognition single-flight.
+    awaiting_runtime: BTreeMap<String, AsyncTurnId>,
+    awaiting_outcomes: BTreeMap<AsyncTurnId, AsyncAgentTurnOutcome>,
+    feedback_store: AgentCognitionStore,
     continuations: BTreeMap<String, ContinuationHandle>,
 }
 
@@ -329,6 +364,9 @@ impl AsyncAgentRunner {
             next_turn_id: 0,
             logical_tick: 0,
             completed: VecDeque::new(),
+            awaiting_runtime: BTreeMap::new(),
+            awaiting_outcomes: BTreeMap::new(),
+            feedback_store: AgentCognitionStore::default(),
             continuations: BTreeMap::new(),
         })
     }
@@ -394,11 +432,15 @@ impl AsyncAgentRunner {
             .is_some_and(|actor| actor.active_turn.load(Ordering::Acquire))
     }
 
+    /// Legacy compatibility lane. Production cognition must use
+    /// `start_turn_with_request_context`; this method intentionally has no
+    /// Runtime binding or retry lineage.
     pub fn start_turn(&mut self, agent_id: &str) -> Result<AsyncTurnId, AsyncAgentRunnerError> {
         let observation = default_observation(agent_id, self.logical_tick);
         self.start_turn_with_context_and_observation(agent_id, observation, None)
     }
 
+    /// Legacy compatibility lane without the trusted outer V1 context.
     pub fn start_turn_with_observation(
         &mut self,
         agent_id: &str,
@@ -407,6 +449,8 @@ impl AsyncAgentRunner {
         self.start_turn_with_context_and_observation(agent_id, observation, None)
     }
 
+    /// Reduced V1 compatibility lane. Production target callers must provide
+    /// the complete outer context with `start_turn_with_request_context`.
     pub fn start_turn_with_context(
         &mut self,
         agent_id: &str,
@@ -419,17 +463,100 @@ impl AsyncAgentRunner {
         self.start_turn_with_context_and_observation(agent_id, observation, Some(context))
     }
 
+    /// Start a production-target provider turn with the complete trusted
+    /// outer request. The reduced context remains present for behavior APIs,
+    /// while the outer request carries retry, transport, and Runtime binding.
+    pub fn start_turn_with_request_context(
+        &mut self,
+        agent_id: &str,
+        context: ContinuousAgentTurnContextV1,
+        request_context: ContinuousAgentRequestContextV1,
+    ) -> Result<AsyncTurnId, AsyncAgentRunnerError> {
+        context
+            .validate_for_agent(agent_id)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        request_context
+            .validate_production_lane()
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        if request_context.agent_subject != agent_id
+            || request_context.agent_session_id != context.agent_session_id
+            || request_context.agent_turn_id != context.agent_turn_id
+            || request_context.decision_request_id != context.decision_request_id
+            || request_context.request_digest != context.request_digest
+        {
+            return Err(AsyncAgentRunnerError::Cognition(
+                "outer and reduced cognition contexts do not correlate".to_string(),
+            ));
+        }
+        let observation = default_observation(agent_id, self.logical_tick);
+        self.start_turn_with_context_and_observation_and_request(
+            agent_id,
+            observation,
+            Some(context),
+            Some(request_context),
+        )
+    }
+
+    pub fn start_turn_with_request_context_and_observation(
+        &mut self,
+        agent_id: &str,
+        observation: Observation,
+        context: ContinuousAgentTurnContextV1,
+        request_context: ContinuousAgentRequestContextV1,
+    ) -> Result<AsyncTurnId, AsyncAgentRunnerError> {
+        context
+            .validate_for_agent(agent_id)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        request_context
+            .validate_production_lane()
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        if request_context.agent_subject != agent_id
+            || request_context.agent_session_id != context.agent_session_id
+            || request_context.agent_turn_id != context.agent_turn_id
+            || request_context.decision_request_id != context.decision_request_id
+            || request_context.request_digest != context.request_digest
+        {
+            return Err(AsyncAgentRunnerError::Cognition(
+                "outer and reduced cognition contexts do not correlate".to_string(),
+            ));
+        }
+        self.start_turn_with_context_and_observation_and_request(
+            agent_id,
+            observation,
+            Some(context),
+            Some(request_context),
+        )
+    }
+
     fn start_turn_with_context_and_observation(
         &mut self,
         agent_id: &str,
         observation: Observation,
         context: Option<ContinuousAgentTurnContextV1>,
     ) -> Result<AsyncTurnId, AsyncAgentRunnerError> {
+        self.start_turn_with_context_and_observation_and_request(
+            agent_id,
+            observation,
+            context,
+            None,
+        )
+    }
+
+    fn start_turn_with_context_and_observation_and_request(
+        &mut self,
+        agent_id: &str,
+        observation: Observation,
+        context: Option<ContinuousAgentTurnContextV1>,
+        request_context: Option<ContinuousAgentRequestContextV1>,
+    ) -> Result<AsyncTurnId, AsyncAgentRunnerError> {
         if self
             .continuations
             .get(agent_id)
             .is_some_and(|continuation| continuation.active)
         {
+            return Err(AsyncAgentRunnerError::AgentBusy(agent_id.to_string()));
+        }
+        if self.awaiting_runtime.contains_key(agent_id) {
             return Err(AsyncAgentRunnerError::AgentBusy(agent_id.to_string()));
         }
         let actor = self
@@ -452,13 +579,24 @@ impl AsyncAgentRunner {
         }
         let turn_id = AsyncTurnId(self.next_turn_id);
         self.next_turn_id = self.next_turn_id.saturating_add(1);
+        if let Some(request_context) = request_context.as_ref() {
+            self.feedback_store
+                .begin_request(request_context.clone())
+                .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        } else if let Some(context) = context.as_ref() {
+            self.feedback_store
+                .begin_turn(context)
+                .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        }
         actor.active_turn.store(true, Ordering::Release);
         if let Err(error) = actor.try_send(ActorCommand::Decide {
             turn_id,
             observation,
             context,
+            request_context,
         }) {
             actor.active_turn.store(false, Ordering::Release);
+            self.feedback_store.clear_agent(agent_id);
             return Err(error.with_agent(agent_id));
         }
         self.active_turns = self.active_turns.saturating_add(1);
@@ -478,6 +616,12 @@ impl AsyncAgentRunner {
             actor.active_turn.store(false, Ordering::Release);
             self.active_turns = self.active_turns.saturating_sub(1);
             let outcome = outcome_from_completion(completion);
+            if outcome.prepared_context.is_some() {
+                self.awaiting_runtime
+                    .insert(outcome.agent_id.clone(), outcome.turn_id);
+                self.awaiting_outcomes
+                    .insert(outcome.turn_id, outcome.clone());
+            }
             self.completed.push_back(outcome.clone());
             outcomes.push(outcome);
         }
@@ -593,17 +737,54 @@ impl AsyncAgentRunner {
         store: &mut MemoryWriteStore,
     ) -> Result<(), AsyncAgentRunnerError> {
         let outcome = self
-            .completed
-            .iter()
-            .rev()
-            .find(|outcome| outcome.agent_id == agent_id)
+            .awaiting_outcomes
+            .values()
+            .find(|outcome| {
+                outcome.agent_id == agent_id
+                    && outcome.prepared_context.as_ref().is_some_and(|context| {
+                        context.agent_session_id == feedback.agent_session_id
+                            && context.agent_turn_id == feedback.agent_turn_id
+                            && context.decision_request_id == feedback.decision_request_id
+                    })
+            })
             .cloned()
-            .ok_or_else(|| AsyncAgentRunnerError::Cognition("unknown actor outcome".to_string()))?;
+            .or_else(|| {
+                self.completed
+                    .iter()
+                    .rev()
+                    .find(|outcome| {
+                        outcome.agent_id == agent_id
+                            && outcome.prepared_context.as_ref().is_some_and(|context| {
+                                context.agent_session_id == feedback.agent_session_id
+                                    && context.agent_turn_id == feedback.agent_turn_id
+                                    && context.decision_request_id == feedback.decision_request_id
+                            })
+                    })
+                    .cloned()
+            });
+        let Some(outcome) = outcome else {
+            // A terminal feedback replay is intentionally idempotent even
+            // after the world-facing outcome queue has been drained.
+            if self.feedback_store.contains_feedback(
+                agent_id,
+                feedback.agent_session_id.as_str(),
+                feedback.feedback_id.as_str(),
+            ) {
+                return Ok(());
+            }
+            return Err(AsyncAgentRunnerError::Cognition(
+                "unknown actor outcome".to_string(),
+            ));
+        };
         let context = outcome.prepared_context.as_ref().ok_or_else(|| {
             AsyncAgentRunnerError::Cognition("runtime feedback requires a host context".to_string())
         })?;
         validate_feedback(context, agent_id, &feedback)?;
         if feedback.status != "committed" {
+            self.feedback_store
+                .accept_feedback(feedback.clone())
+                .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+            self.release_runtime_turn(agent_id, outcome.turn_id);
             return Ok(());
         }
         let runtime_receipt = runtime_receipt.ok_or_else(|| {
@@ -643,7 +824,16 @@ impl AsyncAgentRunner {
                 .apply_runtime_receipt(intent, digest, runtime_receipt)
                 .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
         }
+        self.feedback_store
+            .accept_feedback(feedback)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        self.release_runtime_turn(agent_id, outcome.turn_id);
         Ok(())
+    }
+
+    fn release_runtime_turn(&mut self, agent_id: &str, turn_id: AsyncTurnId) {
+        self.awaiting_runtime.remove(agent_id);
+        self.awaiting_outcomes.remove(&turn_id);
     }
 
     pub fn submit_continuation_proposal(
@@ -819,10 +1009,7 @@ impl AsyncAgentTurnOutcome {
         let context = self.prepared_context.as_ref().ok_or_else(|| {
             AsyncAgentRunnerError::Cognition("runtime feedback requires a host context".to_string())
         })?;
-        if !matches!(
-            status,
-            "pending" | "committed" | "rejected" | "failed" | "cancelled" | "expired" | "stale"
-        ) {
+        if !matches!(status, "pending" | "committed" | "rejected" | "failed") {
             return Err(AsyncAgentRunnerError::Cognition(
                 "unknown Runtime feedback status".to_string(),
             ));
@@ -850,7 +1037,7 @@ impl AsyncAgentTurnOutcome {
         .to_string();
         Ok(FeedbackEnvelopeV1 {
             feedback_id,
-            feedback_seq: 0,
+            feedback_seq: 1,
             agent_subject: context.agent_id.clone(),
             agent_session_id: context.agent_session_id.clone(),
             agent_turn_id: context.agent_turn_id.clone(),
@@ -867,79 +1054,6 @@ impl AsyncAgentTurnOutcome {
             provenance: "harness_unverified".to_string(),
         })
     }
-}
-
-fn validate_feedback(
-    context: &ContinuousAgentTurnContextV1,
-    agent_id: &str,
-    feedback: &FeedbackEnvelopeV1,
-) -> Result<(), AsyncAgentRunnerError> {
-    if feedback.agent_subject != agent_id
-        || feedback.agent_subject != context.agent_id
-        || feedback.agent_session_id != context.agent_session_id
-        || feedback.agent_turn_id != context.agent_turn_id
-        || feedback.decision_request_id != context.decision_request_id
-        || feedback.request_digest != context.request_digest
-        || feedback.provenance != "runtime_authoritative"
-    {
-        return Err(AsyncAgentRunnerError::Cognition(
-            "Runtime feedback does not correlate to the actor turn".to_string(),
-        ));
-    }
-    if feedback.feedback_id.trim().is_empty()
-        || !matches!(
-            feedback.status.as_str(),
-            "pending" | "committed" | "rejected" | "failed" | "cancelled" | "expired" | "stale"
-        )
-    {
-        return Err(AsyncAgentRunnerError::Cognition(
-            "Runtime feedback identity or status is invalid".to_string(),
-        ));
-    }
-    if feedback.status == "committed"
-        && feedback
-            .runtime_receipt_id
-            .as_deref()
-            .is_none_or(|value| value.trim().is_empty())
-    {
-        return Err(AsyncAgentRunnerError::Cognition(
-            "committed feedback requires a Runtime receipt".to_string(),
-        ));
-    }
-    Ok(())
-}
-
-fn validate_runtime_receipt_lineage(
-    context: &ContinuousAgentTurnContextV1,
-    feedback: &FeedbackEnvelopeV1,
-    receipt: &RuntimeReceiptLineageV1,
-) -> Result<(), AsyncAgentRunnerError> {
-    receipt
-        .validate()
-        .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
-    if receipt.agent_id != context.agent_id
-        || receipt.agent_session_id != context.agent_session_id
-        || receipt.agent_turn_id != context.agent_turn_id
-        || receipt.decision_request_id != context.decision_request_id
-        || receipt.request_digest != context.request_digest.to_string()
-        || receipt.feedback_id != feedback.feedback_id
-        || feedback.runtime_receipt_id.as_deref() != Some(receipt.receipt_id.as_str())
-    {
-        return Err(AsyncAgentRunnerError::Cognition(
-            "Runtime receipt does not correlate to the actor turn and feedback".to_string(),
-        ));
-    }
-    let Some(candidate_action_id) = feedback.candidate_action_id else {
-        return Err(AsyncAgentRunnerError::Cognition(
-            "committed feedback requires a Runtime action lineage".to_string(),
-        ));
-    };
-    if receipt.action_id != candidate_action_id.to_string() {
-        return Err(AsyncAgentRunnerError::Cognition(
-            "Runtime receipt action lineage does not match feedback".to_string(),
-        ));
-    }
-    Ok(())
 }
 
 /// Recover the structured provider error emitted by the provider-backed
@@ -1000,6 +1114,8 @@ fn outcome_from_completion(completion: ActorCompletion) -> AsyncAgentTurnOutcome
             decision: None,
             decision_trace: None,
             prepared_context: completion.prepared_context,
+            prepared_request_context: completion.prepared_request_context,
+            prepared_response_context: completion.prepared_response_context,
             memory_write_intents: completion.memory_write_intents,
         };
     }
@@ -1017,6 +1133,8 @@ fn outcome_from_completion(completion: ActorCompletion) -> AsyncAgentTurnOutcome
             decision: None,
             decision_trace: completion.decision_trace,
             prepared_context: completion.prepared_context,
+            prepared_request_context: completion.prepared_request_context,
+            prepared_response_context: completion.prepared_response_context,
             memory_write_intents: completion.memory_write_intents,
         };
     }
@@ -1055,6 +1173,8 @@ fn outcome_from_completion(completion: ActorCompletion) -> AsyncAgentTurnOutcome
         decision,
         decision_trace: completion.decision_trace,
         prepared_context: completion.prepared_context,
+        prepared_request_context: completion.prepared_request_context,
+        prepared_response_context: completion.prepared_response_context,
         memory_write_intents: completion.memory_write_intents,
     }
 }
@@ -1072,58 +1192,5 @@ fn default_observation(agent_id: &str, time: WorldTime) -> Observation {
         module_market: Default::default(),
         power_market: Default::default(),
         social_state: Default::default(),
-    }
-}
-
-struct BuiltinWaitBehavior {
-    agent_id: String,
-}
-
-impl BuiltinWaitBehavior {
-    fn new(agent_id: String) -> Self {
-        Self { agent_id }
-    }
-}
-
-impl AgentBehavior for BuiltinWaitBehavior {
-    fn agent_id(&self) -> &str {
-        &self.agent_id
-    }
-
-    fn decide(&mut self, _observation: &Observation) -> AgentDecision {
-        AgentDecision::Wait
-    }
-}
-
-struct BlockingProviderBehavior {
-    agent_id: String,
-    cancelled: Arc<AtomicBool>,
-}
-
-impl BlockingProviderBehavior {
-    fn new(agent_id: String, cancelled: Arc<AtomicBool>) -> Self {
-        Self {
-            agent_id,
-            cancelled,
-        }
-    }
-}
-
-impl AgentBehavior for BlockingProviderBehavior {
-    fn agent_id(&self) -> &str {
-        &self.agent_id
-    }
-
-    fn decide(&mut self, _observation: &Observation) -> AgentDecision {
-        while !self.cancelled.load(Ordering::Acquire) {
-            thread::sleep(std::time::Duration::from_millis(1));
-        }
-        AgentDecision::Wait
-    }
-}
-
-impl Drop for BlockingProviderBehavior {
-    fn drop(&mut self) {
-        self.cancelled.store(true, Ordering::Release);
     }
 }

@@ -14,7 +14,7 @@ const MAX_ID_BYTES: usize = 128;
 const MAX_PATH_BYTES: usize = 128;
 const MAX_ITEM_BYTES: usize = 768;
 const MAX_LIST_BYTES: usize = 4096;
-const MAX_CONDITIONS: usize = 16;
+const MAX_CONDITIONS: usize = 32;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WakeConditionError {
@@ -130,34 +130,52 @@ impl WakeConditionValidator {
             expired |= reference_expired;
             all_met &= met;
         }
-        if expired {
-            Ok(WakeEvaluation {
-                status: "expired".to_string(),
-                reason: "wake_condition_expired".to_string(),
-                evaluation_tick: context.logical_tick,
-            })
+        let conditions_digest = Self::conditions_digest(canonical.as_slice());
+        let (status, reason) = if expired {
+            ("expired", "wake_condition_expired")
         } else if all_met {
-            Ok(WakeEvaluation {
-                status: "ready".to_string(),
-                reason: "condition_met".to_string(),
-                evaluation_tick: context.logical_tick,
-            })
+            ("ready", "condition_met")
         } else {
-            Ok(WakeEvaluation {
-                status: "pending".to_string(),
-                reason: "condition_not_met".to_string(),
-                evaluation_tick: context.logical_tick,
-            })
-        }
+            ("pending", "condition_not_met")
+        };
+        let evaluation_digest = h_v1(
+            "oasis7.cognition.wake-evaluation.v1",
+            &(
+                conditions_digest.as_str(),
+                status,
+                reason,
+                context.logical_tick,
+                context.reorg_epoch,
+                context.evaluation_head_digest.as_deref(),
+            ),
+        );
+        Ok(WakeEvaluation {
+            status: status.to_string(),
+            reason: reason.to_string(),
+            evaluation_tick: context.logical_tick,
+            conditions_digest,
+            evaluation_digest,
+        })
     }
 
     pub fn next_wake_tick(
         conditions: &[WakeConditionV1],
     ) -> Result<Option<u64>, WakeConditionError> {
+        Self::next_wake_tick_at(conditions, 0)
+    }
+
+    /// Derive the schedule tick from the current committed Runtime tick.
+    /// Event-, receipt- and state-head-driven conditions remain untimed; a
+    /// tick condition cannot schedule work in the past.
+    pub fn next_wake_tick_at(
+        conditions: &[WakeConditionV1],
+        current_tick: u64,
+    ) -> Result<Option<u64>, WakeConditionError> {
         Self::validate(conditions)?;
         Ok(conditions
             .iter()
             .filter_map(|condition| condition.logical_tick)
+            .map(|tick| tick.max(current_tick))
             .max())
     }
 
@@ -185,27 +203,50 @@ impl WakeConditionValidator {
             }
             "state_predicate" if exact([false, false, false, true, true, true, true]) => {
                 let subject = condition.subject.as_ref().expect("presence checked");
-                if subject.kind != "world"
-                    || subject.id.is_empty()
-                    || subject.id.len() > MAX_ID_BYTES
-                {
-                    return Err(WakeConditionError::new("wake_condition_invalid"));
-                }
                 let path = condition.path_or_rule.as_deref().expect("presence checked");
-                if path.len() > MAX_PATH_BYTES || path != "world.logical_tick" {
+                if subject.id.is_empty() || subject.id.len() > MAX_ID_BYTES {
                     return Err(WakeConditionError::new("wake_condition_invalid"));
                 }
-                if !matches!(
-                    condition.operator.as_deref(),
-                    Some("eq" | "neq" | "lt" | "lte" | "gt" | "gte")
-                ) {
+                let (expected_subject, numeric) = match path {
+                    "world.logical_tick" | "world.reorg_epoch" => ("world", true),
+                    "world.state_root" | "world.runtime_manifest_hash" => ("world", false),
+                    "agent.status"
+                    | "agent.position"
+                    | "agent.inventory_digest"
+                    | "agent.capability_snapshot_hash" => ("agent", false),
+                    path if path.starts_with("agent.resource.")
+                        && matches!(path, "agent.resource.electricity" | "agent.resource.data") =>
+                    {
+                        ("agent", true)
+                    }
+                    "intent.status" => ("intent", false),
+                    _ => return Err(WakeConditionError::new("wake_condition_invalid")),
+                };
+                if subject.kind != expected_subject
+                    || path.len() > MAX_PATH_BYTES
+                    || !matches!(
+                        condition.operator.as_deref(),
+                        Some("eq" | "neq" | "lt" | "lte" | "gt" | "gte")
+                    )
+                    || (!numeric && !matches!(condition.operator.as_deref(), Some("eq" | "neq")))
+                {
                     return Err(WakeConditionError::new("wake_condition_invalid"));
                 }
                 let expected = condition
                     .expected_value_bytes
                     .as_ref()
                     .expect("presence checked");
-                if expected.is_empty() || expected.len() > 512 {
+                let Ok(value) = serde_cbor::from_slice::<serde_cbor::Value>(expected) else {
+                    return Err(WakeConditionError::new("wake_condition_invalid"));
+                };
+                let Ok(canonical) = oasis7_wasm_abi::encode_canonical_cbor(&value) else {
+                    return Err(WakeConditionError::new("wake_condition_invalid"));
+                };
+                if expected.is_empty()
+                    || expected.len() > 512
+                    || canonical.as_slice() != expected.as_slice()
+                    || !valid_predicate_value(path, &value)
+                {
                     return Err(WakeConditionError::new("wake_condition_invalid"));
                 }
                 Ok(())
@@ -226,16 +267,61 @@ impl WakeConditionValidator {
     }
 }
 
+fn valid_predicate_value(path: &str, value: &serde_cbor::Value) -> bool {
+    match path {
+        "world.logical_tick" | "world.reorg_epoch" => matches!(
+            value,
+            serde_cbor::Value::Integer(value) if *value >= 0 && *value <= u64::MAX as i128
+        ),
+        "agent.resource.electricity" | "agent.resource.data" => matches!(
+            value,
+            serde_cbor::Value::Integer(value)
+                if *value >= i64::MIN as i128 && *value <= i64::MAX as i128
+        ),
+        "agent.position" => match value {
+            serde_cbor::Value::Array(values) if values.len() == 2 => values.iter().all(|value| {
+                matches!(
+                    value,
+                    serde_cbor::Value::Integer(value)
+                        if *value >= i64::MIN as i128 && *value <= i64::MAX as i128
+                )
+            }),
+            _ => false,
+        },
+        "world.state_root"
+        | "world.runtime_manifest_hash"
+        | "agent.inventory_digest"
+        | "agent.capability_snapshot_hash" => {
+            matches!(value, serde_cbor::Value::Text(value) if !value.is_empty() && value.len() <= MAX_ID_BYTES)
+        }
+        "agent.status" => matches!(
+            value,
+            serde_cbor::Value::Text(value)
+                if matches!(value.as_str(), "idle" | "executing" | "blocked" | "waiting" | "unavailable")
+        ),
+        "intent.status" => matches!(
+            value,
+            serde_cbor::Value::Text(value)
+                if matches!(value.as_str(), "proposed" | "submitted" | "accepted" | "blocked" | "completed" | "rejected" | "expired" | "cancelled" | "superseded")
+        ),
+        _ => false,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct WakeEvaluation {
     pub status: String,
     pub reason: String,
     pub evaluation_tick: u64,
+    pub conditions_digest: String,
+    pub evaluation_digest: String,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct WakeEvaluationContext {
     logical_tick: u64,
+    reorg_epoch: u64,
+    evaluation_head_digest: Option<String>,
     event_digests: BTreeSet<String>,
     receipt_ids: BTreeSet<String>,
     gc_references: BTreeSet<String>,
@@ -248,6 +334,16 @@ impl WakeEvaluationContext {
             logical_tick,
             ..Self::default()
         }
+    }
+
+    pub fn with_reorg_epoch(mut self, reorg_epoch: u64) -> Self {
+        self.reorg_epoch = reorg_epoch;
+        self
+    }
+
+    pub fn with_evaluation_head(mut self, digest: &str) -> Self {
+        self.evaluation_head_digest = Some(digest.to_string());
+        self
     }
 
     pub fn with_event(mut self, digest: &str) -> Self {
@@ -263,6 +359,30 @@ impl WakeEvaluationContext {
     pub fn with_predicate_value(mut self, path: &str, value: &[u8]) -> Self {
         self.predicate_values
             .insert(path.to_string(), value.to_vec());
+        self
+    }
+
+    pub fn with_predicate_u64(mut self, path: &str, value: u64) -> Self {
+        self.predicate_values.insert(
+            path.to_string(),
+            serde_cbor::to_vec(&value).expect("u64 must be CBOR encodable"),
+        );
+        self
+    }
+
+    pub fn with_predicate_i64(mut self, path: &str, value: i64) -> Self {
+        self.predicate_values.insert(
+            path.to_string(),
+            serde_cbor::to_vec(&value).expect("i64 must be CBOR encodable"),
+        );
+        self
+    }
+
+    pub fn with_predicate_text(mut self, path: &str, value: &str) -> Self {
+        self.predicate_values.insert(
+            path.to_string(),
+            serde_cbor::to_vec(&value).expect("text must be CBOR encodable"),
+        );
         self
     }
 
@@ -301,7 +421,9 @@ impl WakeEvaluationContext {
                     .expected_value_bytes
                     .as_deref()
                     .unwrap_or_default();
-                let ordering = actual.as_slice().cmp(expected);
+                let Some(ordering) = canonical_value_ordering(actual, expected) else {
+                    return (false, false);
+                };
                 let met = match condition.operator.as_deref() {
                     Some("eq") => ordering == std::cmp::Ordering::Equal,
                     Some("neq") => ordering != std::cmp::Ordering::Equal,
@@ -318,10 +440,54 @@ impl WakeEvaluationContext {
     }
 }
 
+fn canonical_value_ordering(left: &[u8], right: &[u8]) -> Option<std::cmp::Ordering> {
+    let left = serde_cbor::from_slice::<serde_cbor::Value>(left).ok()?;
+    let right = serde_cbor::from_slice::<serde_cbor::Value>(right).ok()?;
+    Some(match (&left, &right) {
+        (serde_cbor::Value::Integer(left), serde_cbor::Value::Integer(right)) => left.cmp(right),
+        (serde_cbor::Value::Float(left), serde_cbor::Value::Float(right)) => {
+            left.partial_cmp(right)?
+        }
+        _ => left.cmp(&right),
+    })
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ContinuationBudgetV1 {
     pub unit: String,
     pub value: u64,
+}
+
+/// Runtime admission input for a continuation.  Deliberately excludes the
+/// continuation identity, wake identity, wake sequence, status and status
+/// digest: those fields are allocated and bound by `World`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CognitionContinuationProposalV1 {
+    pub world_id: String,
+    pub branch_id: String,
+    pub finality_epoch: u64,
+    #[serde(default)]
+    pub finality_block_hash: Option<String>,
+    pub finality_status: String,
+    pub reorg_epoch: u64,
+    pub runtime_manifest_hash: String,
+    pub agent_id: String,
+    pub agent_session_id: String,
+    pub agent_turn_id: String,
+    pub decision_request_id: String,
+    pub origin_turn_id: String,
+    pub origin_request_digest: String,
+    pub continuation_proposal_id: String,
+    pub proposal_digest: String,
+    #[serde(default)]
+    pub action_or_envelope_digest: Option<String>,
+    pub wake_conditions: Vec<WakeConditionV1>,
+    #[serde(default)]
+    pub next_wake_tick: Option<u64>,
+    pub remaining_budget: ContinuationBudgetV1,
+    #[serde(default)]
+    pub valid_until_tick: Option<u64>,
+    pub precondition_digest: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -381,27 +547,44 @@ pub struct AgentContinuation {
 }
 
 impl AgentContinuation {
+    pub fn refresh_status_digest(&mut self) {
+        self.continuation_status_digest = Some(self.status_digest());
+    }
+
     /// Validate a complete Runtime-owned continuation projection.  The
     /// legacy persisted shape may omit `continuation_status_digest`, but a
     /// projection crossing into the simulator must carry the Runtime-issued
     /// digest and match the canonical status fields exactly.
     pub fn validate_authoritative(&self) -> Result<(), WakeConditionError> {
+        let bounded = |value: &str| !value.trim().is_empty() && value.len() <= MAX_ID_BYTES;
         if self.schema_version != CONTINUATION_SCHEMA
-            || self.continuation_id.trim().is_empty()
-            || self.wake_id.trim().is_empty()
-            || self.world_id.trim().is_empty()
-            || self.branch_id.trim().is_empty()
-            || self.finality_status.trim().is_empty()
-            || self.runtime_manifest_hash.trim().is_empty()
-            || self.agent_id.trim().is_empty()
-            || self.agent_session_id.trim().is_empty()
-            || self.agent_turn_id.trim().is_empty()
-            || self.decision_request_id.trim().is_empty()
-            || self.origin_turn_id.trim().is_empty()
-            || self.origin_request_digest.trim().is_empty()
-            || self.continuation_proposal_id.trim().is_empty()
-            || self.proposal_digest.trim().is_empty()
-            || self.precondition_digest.trim().is_empty()
+            || !bounded(&self.continuation_id)
+            || !bounded(&self.wake_id)
+            || !bounded(&self.world_id)
+            || !bounded(&self.branch_id)
+            || !bounded(&self.finality_status)
+            || !bounded(&self.runtime_manifest_hash)
+            || !bounded(&self.agent_id)
+            || !bounded(&self.agent_session_id)
+            || !bounded(&self.agent_turn_id)
+            || !bounded(&self.decision_request_id)
+            || !bounded(&self.origin_turn_id)
+            || !bounded(&self.origin_request_digest)
+            || !bounded(&self.continuation_proposal_id)
+            || !bounded(&self.proposal_digest)
+            || !bounded(&self.precondition_digest)
+            || self
+                .finality_block_hash
+                .as_deref()
+                .is_some_and(|value| !bounded(value))
+            || self
+                .action_or_envelope_digest
+                .as_deref()
+                .is_some_and(|value| !bounded(value))
+            || self
+                .terminal_disposition
+                .as_deref()
+                .is_some_and(|value| !bounded(value))
             || self.remaining_budget.value == 0
             || !matches!(self.remaining_budget.unit.as_str(), "steps" | "ticks")
         {
@@ -578,6 +761,38 @@ impl ContinuationTransition {
                 .to_string(),
             );
         }
+        continuation.refresh_status_digest();
+        Ok(())
+    }
+
+    pub fn apply_at_tick(
+        continuation: &mut AgentContinuation,
+        to: ContinuationStatusV1,
+        logical_tick: u64,
+    ) -> Result<(), WakeConditionError> {
+        Self::validate(continuation.status, to)?;
+        continuation.logical_tick = logical_tick;
+        continuation.status = to;
+        if !matches!(
+            to,
+            ContinuationStatusV1::Scheduled
+                | ContinuationStatusV1::Pending
+                | ContinuationStatusV1::Waking
+                | ContinuationStatusV1::Consumed
+        ) {
+            continuation.terminal_disposition = Some(
+                match to {
+                    ContinuationStatusV1::Cancelled => "cancelled",
+                    ContinuationStatusV1::Invalidated => "reorg_invalidated",
+                    ContinuationStatusV1::Expired => "expired",
+                    ContinuationStatusV1::Rejected => "rejected",
+                    ContinuationStatusV1::Completed => "completed",
+                    _ => "",
+                }
+                .to_string(),
+            );
+        }
+        continuation.refresh_status_digest();
         Ok(())
     }
 
@@ -589,6 +804,26 @@ impl ContinuationTransition {
         continuation.reorg_epoch = reorg_epoch;
         continuation.status = ContinuationStatusV1::Invalidated;
         continuation.terminal_disposition = Some("reorg_invalidated".to_string());
+        continuation.refresh_status_digest();
+        Ok(ContinuationReorgReport {
+            terminal_disposition: "reorg_invalidated".to_string(),
+            provider_invocation_count: 0,
+            effect_count: 0,
+            receipt_count: 0,
+        })
+    }
+
+    pub fn invalidate_for_reorg_at_tick(
+        continuation: &mut AgentContinuation,
+        reorg_epoch: u64,
+        logical_tick: u64,
+    ) -> Result<ContinuationReorgReport, WakeConditionError> {
+        Self::validate(continuation.status, ContinuationStatusV1::Invalidated)?;
+        continuation.reorg_epoch = reorg_epoch;
+        continuation.logical_tick = logical_tick;
+        continuation.status = ContinuationStatusV1::Invalidated;
+        continuation.terminal_disposition = Some("reorg_invalidated".to_string());
+        continuation.refresh_status_digest();
         Ok(ContinuationReorgReport {
             terminal_disposition: "reorg_invalidated".to_string(),
             provider_invocation_count: 0,

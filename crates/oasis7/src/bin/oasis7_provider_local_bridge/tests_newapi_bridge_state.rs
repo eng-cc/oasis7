@@ -1,6 +1,92 @@
 use super::*;
 
 #[test]
+fn resolve_newapi_bridge_route_label_requires_active_binding() {
+    let _guard = newapi_bridge_state_env_guard();
+    let state_path = std::env::temp_dir().join(format!(
+        "oasis7-provider-bridge-state-{}.json",
+        std::process::id()
+    ));
+    fs::write(
+        state_path.as_path(),
+        serde_json::to_vec(&serde_json::json!({
+            "bindings": [
+                {
+                    "bridge_user_id": "bridge-user-000001",
+                    "newapi_user_ref": "user-1",
+                    "status": "disabled"
+                }
+            ]
+        }))
+        .expect("encode bridge state"),
+    )
+    .expect("write bridge state");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(
+            "OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH",
+            state_path.as_os_str(),
+        );
+    }
+    let state = ProviderState::new(CliOptions::default()).expect("provider state");
+    assert_eq!(state.resolve_newapi_bridge_route_label("user-1"), None);
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::remove_var("OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH");
+    }
+    let _ = fs::remove_file(state_path);
+}
+
+#[test]
+fn resolve_newapi_bridge_route_label_accepts_active_binding_with_token_key() {
+    let _guard = newapi_bridge_state_env_guard();
+    let state_path = std::env::temp_dir().join(format!(
+        "oasis7-provider-bridge-active-state-{}.json",
+        std::process::id()
+    ));
+    fs::write(
+        state_path.as_path(),
+        serde_json::to_vec(&serde_json::json!({
+            "bindings": [
+                {
+                    "bridge_user_id": "bridge-user-000001",
+                    "newapi_user_ref": "user-1",
+                    "status": "active"
+                }
+            ],
+            "project_bindings": [
+                {
+                    "bridge_user_id": "bridge-user-000001",
+                    "token_key": "token-key-000001"
+                }
+            ]
+        }))
+        .expect("encode bridge state"),
+    )
+    .expect("write bridge state");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(
+            "OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH",
+            state_path.as_os_str(),
+        );
+    }
+    let state = ProviderState::new(CliOptions::default()).expect("provider state");
+    assert_eq!(
+        state.resolve_newapi_bridge_route_label("newapi_user_ref:user-1"),
+        Some("newapi_user_ref:user-1".to_string())
+    );
+    assert_eq!(
+        state.resolve_newapi_bridge_route_label("bridge_user_id:bridge-user-000001"),
+        Some("bridge_user_id:bridge-user-000001".to_string())
+    );
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::remove_var("OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH");
+    }
+    let _ = fs::remove_file(state_path);
+}
+#[test]
 fn cached_newapi_bridge_state_reuses_arc_for_unchanged_file() {
     let _guard = newapi_bridge_state_env_guard();
     let state_path = std::env::temp_dir().join(format!(
