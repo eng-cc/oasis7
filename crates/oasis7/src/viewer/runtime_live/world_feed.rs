@@ -108,6 +108,7 @@ pub(super) fn build_world_feed(
                 | crate::runtime::MajorWorldEventVisibilityPermission::Denied
         )
     });
+    let authority_unavailable = first_hidden_crisis_seq.is_some() && !permission_denied;
     let events: Vec<_> = page_events
         .into_iter()
         .filter_map(|event| {
@@ -123,7 +124,7 @@ pub(super) fn build_world_feed(
             }
         })
         .collect();
-    let status = if permission_denied {
+    let status = if permission_denied || authority_unavailable {
         protocol::WorldFeedStatus::Unavailable
     } else if events.is_empty() {
         protocol::WorldFeedStatus::Empty
@@ -139,7 +140,13 @@ pub(super) fn build_world_feed(
         events,
         status,
         None,
-        permission_denied.then_some(protocol::WorldFeedUnavailableReason::PermissionDenied),
+        if permission_denied {
+            Some(protocol::WorldFeedUnavailableReason::PermissionDenied)
+        } else if authority_unavailable {
+            Some(protocol::WorldFeedUnavailableReason::SourceUnavailable)
+        } else {
+            None
+        },
     )
 }
 
@@ -654,5 +661,115 @@ mod tests {
         );
         assert!(feed.events.is_empty());
         assert!(feed.snapshot_reload_required);
+    }
+
+    #[test]
+    fn public_crisis_without_canonical_authority_is_explicitly_unavailable() {
+        let cases = [
+            Journal {
+                events: vec![
+                    crisis_event(
+                        1,
+                        crate::runtime::DomainEvent::CrisisSpawned {
+                            crisis_id: "invalid".to_string(),
+                            kind: "power_shortage".to_string(),
+                            severity: 0,
+                            expires_at: 10,
+                        },
+                    ),
+                    event(2),
+                ],
+            },
+            Journal {
+                events: vec![
+                    crisis_event(
+                        1,
+                        crate::runtime::DomainEvent::CrisisResolved {
+                            crisis_id: "missing".to_string(),
+                            resolver_agent_id: "agent-1".to_string(),
+                            strategy: "repair".to_string(),
+                            success: true,
+                            impact: 1,
+                        },
+                    ),
+                    event(2),
+                ],
+            },
+            Journal {
+                events: vec![
+                    crisis_event(
+                        1,
+                        crate::runtime::DomainEvent::CrisisSpawned {
+                            crisis_id: "conflict-a".to_string(),
+                            kind: "power_shortage".to_string(),
+                            severity: 2,
+                            expires_at: 10,
+                        },
+                    ),
+                    crisis_event(
+                        1,
+                        crate::runtime::DomainEvent::CrisisSpawned {
+                            crisis_id: "conflict-b".to_string(),
+                            kind: "power_shortage".to_string(),
+                            severity: 3,
+                            expires_at: 10,
+                        },
+                    ),
+                    event(2),
+                ],
+            },
+        ];
+
+        for journal in cases {
+            let feed = build_world_feed(
+                "world-a",
+                4,
+                &journal,
+                &BTreeMap::new(),
+                None,
+                50,
+                MajorWorldEventVisibilityPermission::Public,
+            );
+            assert_eq!(feed.status, protocol::WorldFeedStatus::Unavailable);
+            assert_eq!(
+                feed.unavailable_reason,
+                Some(protocol::WorldFeedUnavailableReason::SourceUnavailable)
+            );
+            assert_eq!(feed.cursor, encode_cursor("world-a", 4, 0));
+            assert_eq!(
+                feed.events.len(),
+                1,
+                "ordinary ambient rows remain compatible"
+            );
+            assert_eq!(feed.events[0].event_seq, 2);
+            assert!(feed.events[0].major_event.is_none());
+            assert!(!feed.snapshot_reload_required);
+        }
+
+        let restricted = build_world_feed(
+            "world-a",
+            4,
+            &Journal {
+                events: vec![crisis_event(
+                    1,
+                    crate::runtime::DomainEvent::CrisisSpawned {
+                        crisis_id: "restricted-invalid".to_string(),
+                        kind: "power_shortage".to_string(),
+                        severity: 0,
+                        expires_at: 10,
+                    },
+                )],
+            },
+            &BTreeMap::new(),
+            None,
+            50,
+            MajorWorldEventVisibilityPermission::Restricted,
+        );
+        assert_eq!(restricted.status, protocol::WorldFeedStatus::Unavailable);
+        assert_eq!(
+            restricted.unavailable_reason,
+            Some(protocol::WorldFeedUnavailableReason::SourceUnavailable)
+        );
+        assert_eq!(restricted.cursor, encode_cursor("world-a", 4, 0));
     }
 }
