@@ -19,6 +19,7 @@ pub enum WorldFeedGapReason {
     CursorGap,
     ReorgEpochChanged,
     CursorInvalid,
+    EventIdentityConflict,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -167,4 +168,19 @@ pub struct WorldFeedEnvelope {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unavailable_reason: Option<WorldFeedUnavailableReason>,
     pub snapshot_reload_required: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::WorldFeedGapReason;
+
+    #[test]
+    fn event_identity_conflict_uses_stable_wire_name() {
+        let encoded = serde_json::to_value(WorldFeedGapReason::EventIdentityConflict)
+            .expect("encode identity conflict gap reason");
+        assert_eq!(encoded, serde_json::json!("event_identity_conflict"));
+        let decoded: WorldFeedGapReason =
+            serde_json::from_value(encoded).expect("decode identity conflict gap reason");
+        assert_eq!(decoded, WorldFeedGapReason::EventIdentityConflict);
+    }
 }

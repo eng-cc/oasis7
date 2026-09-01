@@ -22,6 +22,18 @@ pub(super) fn build_world_feed(
     requested_limit: usize,
     visibility: crate::runtime::MajorWorldEventVisibilityPermission,
 ) -> protocol::WorldFeedEnvelope {
+    if has_conflicting_event_identity(journal) {
+        return envelope(
+            world_id,
+            reorg_epoch,
+            encode_cursor(world_id, reorg_epoch, latest_seq(journal)),
+            Vec::new(),
+            protocol::WorldFeedStatus::Gap,
+            Some(protocol::WorldFeedGapReason::EventIdentityConflict),
+            None,
+        );
+    }
+
     let decoded = cursor.map(decode_cursor);
     let gap_reason = match decoded.as_ref() {
         Some(Err(())) => Some(protocol::WorldFeedGapReason::CursorInvalid),
@@ -148,6 +160,18 @@ pub(super) fn build_world_feed(
             None
         },
     )
+}
+
+fn has_conflicting_event_identity(journal: &RuntimeJournal) -> bool {
+    let mut events_by_id = BTreeMap::new();
+    for event in &journal.events {
+        if let Some(previous) = events_by_id.insert(event.id, event)
+            && previous != event
+        {
+            return true;
+        }
+    }
+    false
 }
 
 fn is_crisis_event(event: &crate::runtime::WorldEvent) -> bool {
@@ -391,6 +415,60 @@ mod tests {
         );
         assert!(feed.events.iter().all(|event| event.receipt_ref.is_none()));
         assert!(!feed.snapshot_reload_required);
+    }
+
+    #[test]
+    fn conflicting_duplicate_event_identity_requires_snapshot_reload() {
+        let mut conflicting = event(2);
+        conflicting.time = 99;
+        let journals = [
+            Journal {
+                events: vec![event(1), event(2), conflicting, event(3)],
+            },
+            Journal {
+                events: vec![
+                    crisis_event(
+                        1,
+                        crate::runtime::DomainEvent::CrisisSpawned {
+                            crisis_id: "conflict-a".to_string(),
+                            kind: "power_shortage".to_string(),
+                            severity: 2,
+                            expires_at: 10,
+                        },
+                    ),
+                    crisis_event(
+                        1,
+                        crate::runtime::DomainEvent::CrisisSpawned {
+                            crisis_id: "conflict-b".to_string(),
+                            kind: "power_shortage".to_string(),
+                            severity: 3,
+                            expires_at: 10,
+                        },
+                    ),
+                    event(2),
+                ],
+            },
+        ];
+
+        for journal in journals {
+            let feed = build_world_feed(
+                "world-a",
+                4,
+                &journal,
+                &BTreeMap::new(),
+                None,
+                50,
+                MajorWorldEventVisibilityPermission::Public,
+            );
+
+            assert_eq!(feed.status, protocol::WorldFeedStatus::Gap);
+            assert_eq!(
+                feed.gap_reason,
+                Some(protocol::WorldFeedGapReason::EventIdentityConflict)
+            );
+            assert!(feed.events.is_empty());
+            assert!(feed.snapshot_reload_required);
+        }
     }
 
     #[test]
@@ -690,29 +768,6 @@ mod tests {
                             strategy: "repair".to_string(),
                             success: true,
                             impact: 1,
-                        },
-                    ),
-                    event(2),
-                ],
-            },
-            Journal {
-                events: vec![
-                    crisis_event(
-                        1,
-                        crate::runtime::DomainEvent::CrisisSpawned {
-                            crisis_id: "conflict-a".to_string(),
-                            kind: "power_shortage".to_string(),
-                            severity: 2,
-                            expires_at: 10,
-                        },
-                    ),
-                    crisis_event(
-                        1,
-                        crate::runtime::DomainEvent::CrisisSpawned {
-                            crisis_id: "conflict-b".to_string(),
-                            kind: "power_shortage".to_string(),
-                            severity: 3,
-                            expires_at: 10,
                         },
                     ),
                     event(2),
