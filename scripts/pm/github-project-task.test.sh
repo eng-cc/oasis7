@@ -38,14 +38,26 @@ def read_state(name, fallback):
 pm_status=read_state("GH_PROJECT_STATE_FILE", pm_status)
 status=read_state("GH_PROJECT_STATUS_STATE_FILE", {"committed":"In Progress","ready":"Ready / PR","pr_watch":"PR Watch","done":"In Progress"}.get(pm_status,"Todo"))
 phase=read_state("GH_PROJECT_PHASE_STATE_FILE", next_record.get("workflow_phase") or {"committed":"execution","ready":"pre_pr_ready","pr_watch":"pr_watch","done":"done"}.get(pm_status,"execution"))
-nodes=[{"name":status,"field":{"name":"Status"}},{"text":uid,"field":{"name":"Task UID"}},{"name":next_record["owner_role"],"field":{"name":"Owner Role"}},{"name":next_record["module"],"field":{"name":"Module"}},{"name":pm_status,"field":{"name":"PM Status"}},{"name":phase,"field":{"name":"Workflow Phase"}},{"name":next_record["priority"],"field":{"name":"Priority"}},{"text":next_record["worktree_hint"],"field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]
-if next_record.get("pr_url"): nodes.append({"text":next_record["pr_url"],"field":{"name":"PR"}})
-node={"id":next_record.get("project_item_id") or "ITEM_ID","project":{"id":"PROJECT_ID","number":1,"owner":{"login":"eng-cc"}},"content":{"body":f"task_uid: {uid}","number":next_record["issue_number"],"title":"[PM] "+next_record["title"],"url":next_record["issue_url"]},"fieldValues":{"pageInfo":{"hasNextPage":False},"nodes":nodes}}
-print(json.dumps({"data":{"nodes":[node]}}))
+field_nodes=[{"name":status,"field":{"name":"Status"}},{"text":uid,"field":{"name":"Task UID"}},{"name":next_record["owner_role"],"field":{"name":"Owner Role"}},{"name":next_record["module"],"field":{"name":"Module"}},{"name":pm_status,"field":{"name":"PM Status"}},{"name":phase,"field":{"name":"Workflow Phase"}},{"name":next_record["priority"],"field":{"name":"Priority"}},{"text":next_record["worktree_hint"],"field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]
+if next_record.get("pr_url"): field_nodes.append({"text":next_record["pr_url"],"field":{"name":"PR"}})
+project_item={"id":next_record.get("project_item_id") or "ITEM_ID","project":{"id":"PROJECT_ID","number":1,"owner":{"login":"eng-cc"}},"fieldValues":{"pageInfo":{"hasNextPage":False},"nodes":field_nodes}}
+issue={"number":next_record["issue_number"],"url":next_record["issue_url"],"body":f"task_uid: {uid}","projectItems":{"nodes":[project_item]}}
+# Keep both GraphQL response shapes used by the bounded workflow commands:
+# classify/refresh search uses the aliased s0 search result, while the selected
+# audit fetches the bound Project item through the top-level nodes result.
+project_item["content"]={"body":f"task_uid: {uid}","number":next_record["issue_number"],"title":"[PM] "+next_record["title"],"url":next_record["issue_url"]}
+print(json.dumps({"data":{"nodes":[project_item],"s0":{"nodes":[issue]}}}))
 PY
     ;;
   "issue create -R eng-cc/oasis7 --title "*)
     printf 'https://github.com/eng-cc/oasis7/issues/2001\n'
+    ;;
+  issue\ list\ -R\ eng-cc/oasis7\ --state\ all\ --search\ task_*\ in:body\ --json\ number,url,title,state\ --limit\ 5)
+    if [[ "$*" == *"task_99999999999999999999999999999999"* ]]; then
+      printf '[{"number":2003,"state":"OPEN","title":"[PM] No-cache task","url":"https://github.com/eng-cc/oasis7/issues/2003"}]\n'
+    else
+      printf '[{"number":2001,"state":"OPEN","title":"[PM] GitHub-backed lifecycle smoke","url":"https://github.com/eng-cc/oasis7/issues/2001"}]\n'
+    fi
     ;;
   issue\ list\ -R\ eng-cc/oasis7\ --search\ task_*\ in:body\ --json\ number,url,title,state\ --limit\ 5)
     if [[ "$*" == *"task_99999999999999999999999999999999"* ]]; then
@@ -54,14 +66,24 @@ PY
       printf '[{"number":2001,"state":"OPEN","title":"[PM] GitHub-backed lifecycle smoke","url":"https://github.com/eng-cc/oasis7/issues/2001"}]\n'
     fi
     ;;
-  "issue view 2001 -R eng-cc/oasis7 --json body,number,title,url")
+  "issue view 2001 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason")
     uid="$(python3 -c 'import json,os; print(next(iter(json.load(open(os.environ["GH_MAPPING_PATH"]))["tasks"])))')"
-    printf '{"body":"task_uid: %s\\nTask metadata:\\n- owner_role: `tpm`\\n- module: `engineering`\\n- status: `committed`\\n- priority: `P2`\\n- worktree_hint: `%s/worktree`\\nAcceptance:\\n","number":2001,"title":"[PM] GitHub-backed lifecycle smoke","url":"https://github.com/eng-cc/oasis7/issues/2001"}\n' "$uid" "$(dirname "$(dirname "$(dirname "$GH_MAPPING_PATH")")")"
+    printf '{"body":"task_uid: %s\\nTask metadata:\\n- owner_role: `tpm`\\n- module: `engineering`\\n- status: `candidate`\\n- workflow_phase: `bootstrap`\\n- priority: `P2`\\n- worktree_hint: `%s/worktree`\\nAcceptance:\\n","number":2001,"title":"[PM] GitHub-backed lifecycle smoke","url":"https://github.com/eng-cc/oasis7/issues/2001","state":"OPEN","stateReason":null}\n' "$uid" "$(dirname "$(dirname "$(dirname "$GH_MAPPING_PATH")")")"
     ;;
   "issue comment 2001 -R eng-cc/oasis7 --body-file "*)
     n=$(( $(wc -l < "$GH_COMMENT_LOG") + 1 ))
+    mkdir -p "$GH_COMMENT_DIR"
+    cat "${@: -1}" > "$GH_COMMENT_DIR/$n"
     printf 'comment-%s\n' "$n" >> "$GH_COMMENT_LOG"
     printf 'https://github.com/eng-cc/oasis7/issues/2001#issuecomment-%s\n' "$n"
+    ;;
+  api\ repos/eng-cc/oasis7/issues/comments/*)
+    comment_id="${*: -1}"
+    comment_id="${comment_id##*/}"
+    python3 - "$GH_COMMENT_DIR/$comment_id" <<'PY'
+import json, pathlib, sys
+print(json.dumps({"body": pathlib.Path(sys.argv[1]).read_text()}))
+PY
     ;;
   "issue close 2001 -R eng-cc/oasis7 --reason completed")
     printf 'closed\n'
@@ -84,9 +106,9 @@ PY
   "issue list -R eng-cc/oasis7 --search task_99999999999999999999999999999999 in:body --json number,url,title,state --limit 5")
     printf '[{"number":2003,"state":"OPEN","title":"[PM] No-cache task","url":"https://github.com/eng-cc/oasis7/issues/2003"}]\n'
     ;;
-  "issue view 2003 -R eng-cc/oasis7 --json body,number,title,url")
+  "issue view 2003 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason")
     cat <<'JSON'
-{"body":"<!-- oasis7-pm-task -->\ntask_uid: task_99999999999999999999999999999999\n\nGitHub-backed oasis7 PM task.\n\nTask metadata:\n- owner_role: `tpm`\n- module: `engineering`\n- status: `ready`\n- priority: `P2`\n- worktree_hint: `/tmp/no-cache-worktree`\n","number":2003,"title":"[PM] No-cache task","url":"https://github.com/eng-cc/oasis7/issues/2003"}
+{"body":"<!-- oasis7-pm-task -->\ntask_uid: task_99999999999999999999999999999999\n\nGitHub-backed oasis7 PM task.\n\nTask metadata:\n- owner_role: `tpm`\n- module: `engineering`\n- status: `ready`\n- workflow_phase: `pre_pr_ready`\n- priority: `P2`\n- worktree_hint: `/tmp/no-cache-worktree`\n","number":2003,"title":"[PM] No-cache task","url":"https://github.com/eng-cc/oasis7/issues/2003","state":"OPEN","stateReason":null}
 JSON
     ;;
   "issue edit 2003 -R eng-cc/oasis7 --body-file "*)
@@ -134,8 +156,8 @@ JSON
 {"id":"FIELD_TASK_UID","name":"Task UID","type":"ProjectV2Field"},
 {"id":"FIELD_OWNER_ROLE","name":"Owner Role","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_TPM","name":"tpm"}]},
 {"id":"FIELD_MODULE","name":"Module","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_ENGINEERING","name":"engineering"}]},
-{"id":"FIELD_PM_STATUS","name":"PM Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_CANDIDATE","name":"candidate"},{"id":"OPT_COMMITTED","name":"committed"},{"id":"OPT_READY_PM","name":"ready"},{"id":"OPT_PR_WATCH_PM","name":"pr_watch"},{"id":"OPT_DONE","name":"done"}]},
-{"id":"FIELD_WORKFLOW_PHASE","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_EXECUTION","name":"execution"},{"id":"OPT_VERIFICATION","name":"verification"},{"id":"OPT_PRE_PR_READY","name":"pre_pr_ready"},{"id":"OPT_PR_WATCH_PHASE","name":"pr_watch"},{"id":"OPT_DONE_PHASE","name":"done"}]},
+{"id":"FIELD_PM_STATUS","name":"PM Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_CANDIDATE","name":"candidate"},{"id":"OPT_COMMITTED","name":"committed"},{"id":"OPT_READY_PM","name":"ready"},{"id":"OPT_PR_WATCH_PM","name":"pr_watch"},{"id":"OPT_DONE","name":"done"},{"id":"OPT_DEFERRED_PM","name":"deferred"}]},
+{"id":"FIELD_WORKFLOW_PHASE","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_EXECUTION","name":"execution"},{"id":"OPT_VERIFICATION","name":"verification"},{"id":"OPT_PRE_PR_READY","name":"pre_pr_ready"},{"id":"OPT_PR_WATCH_PHASE","name":"pr_watch"},{"id":"OPT_BLOCKED_PHASE","name":"blocked"},{"id":"OPT_DONE_PHASE","name":"done"}]},
 {"id":"FIELD_PRIORITY","name":"Priority","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_P2","name":"P2"}]},
 {"id":"FIELD_BLOCKED","name":"Blocked Reason","type":"ProjectV2Field"},
 {"id":"FIELD_WORKTREE","name":"Canonical Worktree","type":"ProjectV2Field"},
@@ -183,6 +205,8 @@ JSON
         printf 'pr_watch\n' >"$GH_PROJECT_STATE_FILE"
       elif [[ "$*" == *"OPT_DONE"* ]]; then
         printf 'done\n' >"$GH_PROJECT_STATE_FILE"
+      elif [[ "$*" == *"OPT_DEFERRED_PM"* ]]; then
+        printf 'deferred\n' >"$GH_PROJECT_STATE_FILE"
       fi
     elif [[ "$*" == *"--field-id FIELD_WORKFLOW_PHASE"* ]]; then
       case "$*" in
@@ -190,6 +214,7 @@ JSON
         *OPT_VERIFICATION*) printf 'verification\n' >"$GH_PROJECT_PHASE_STATE_FILE" ;;
         *OPT_PRE_PR_READY*) printf 'pre_pr_ready\n' >"$GH_PROJECT_PHASE_STATE_FILE" ;;
         *OPT_PR_WATCH_PHASE*) printf 'pr_watch\n' >"$GH_PROJECT_PHASE_STATE_FILE" ;;
+        *OPT_BLOCKED_PHASE*) printf 'blocked\n' >"$GH_PROJECT_PHASE_STATE_FILE" ;;
         *OPT_DONE_PHASE*) printf 'done\n' >"$GH_PROJECT_PHASE_STATE_FILE" ;;
       esac
     fi
@@ -206,7 +231,7 @@ rm -f "$TMPDIR/xcrun_db"
 # The fixture's closeout interruption path can leave mktemp's Darwin `tmp*`
 # scratch file in the fixture repository.  This is confined to the disposable
 # fixture; the production freeze check still reports every other untracked path.
-printf '*.json\n*.log\n*.md\n*.err\n.pm/\nworktree/\nproject-live-state\nproject-live-status\nproject-live-phase\nxcrun_db\ntmp*\n' > "$TMPDIR/.gitignore"
+printf '*.json\n*.log\n*.md\n*.err\n.pm/\nworktree/\ngh-comments/\nproject-live-state\nproject-live-status\nproject-live-phase\nxcrun_db\ntmp*\n' > "$TMPDIR/.gitignore"
 git -C "$TMPDIR" init -q
 git -C "$TMPDIR" config user.email test@example.com
 git -C "$TMPDIR" config user.name Test
@@ -222,11 +247,13 @@ printf 'Todo\n' >"$GH_PROJECT_STATUS_STATE_FILE"
 export GH_PROJECT_PHASE_STATE_FILE="$TMPDIR/project-live-phase"
 printf 'execution\n' >"$GH_PROJECT_PHASE_STATE_FILE"
 export GH_COMMENT_LOG="$TMPDIR/gh-comments.log"
+export GH_COMMENT_DIR="$TMPDIR/gh-comments"
 export GH_EDIT_BODY_LOG="$TMPDIR/issue-body-edited.md"
 export OASIS7_ALLOW_FIXTURE_VERIFICATION_PROFILE=1
 : > "$GH_CALL_LOG"
 : > "$GH_COMMENT_LOG"
 : > "$GH_EDIT_BODY_LOG"
+mkdir -p "$GH_COMMENT_DIR"
 
 NEW_JSON="$TMPDIR/new.json"
 python3 "$TMPDIR/github-project-task.py" new-task "$TMPDIR" \
@@ -242,6 +269,128 @@ python3 "$TMPDIR/github-project-task.py" new-task "$TMPDIR" \
   --json > "$NEW_JSON"
 
 TASK_UID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["task_uid"])' "$NEW_JSON")"
+
+# RED: public move-task must derive Workflow Phase from the new PM Status. A
+# stale execution phase would otherwise publish the invalid Done/deferred/
+# execution combination instead of the canonical Done/deferred/blocked pair.
+MOVE_PHASE_ROOT="$TMPDIR/move-phase"
+MOVE_PHASE_UID="task_77777777777777777777777777777777"
+mkdir -p "$MOVE_PHASE_ROOT/.pm/github-project-sync"
+python3 - "$MOVE_PHASE_ROOT/.pm/github-project-sync/tasks.json" "$MOVE_PHASE_UID" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+uid = sys.argv[2]
+payload = {
+    "version": 1,
+    "tasks": {
+        uid: {
+            "task_uid": uid,
+            "title": "Move-task phase mapping",
+            "owner_role": "tpm",
+            "module": "engineering",
+            "status": "committed",
+            "workflow_phase": "execution",
+            "priority": "P2",
+            "worktree_hint": "/tmp/move-phase-worktree",
+            "issue_url": "https://github.com/eng-cc/oasis7/issues/2001",
+            "issue_number": 2001,
+            "project_item_id": "ITEM_ID",
+        },
+    },
+}
+path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+printf 'committed\n' >"$GH_PROJECT_STATE_FILE"
+printf 'In Progress\n' >"$GH_PROJECT_STATUS_STATE_FILE"
+printf 'execution\n' >"$GH_PROJECT_PHASE_STATE_FILE"
+set +e
+python3 "$TMPDIR/github-project-task.py" move-task "$MOVE_PHASE_ROOT" \
+  --repo eng-cc/oasis7 \
+  --project-owner eng-cc \
+  --project-number 1 \
+  --task-uid "$MOVE_PHASE_UID" \
+  --to-status deferred \
+  --json >"$TMPDIR/move-phase.json" 2>"$TMPDIR/move-phase.err"
+MOVE_PHASE_STATUS=$?
+set -e
+if [[ "$MOVE_PHASE_STATUS" != "0" ]]; then
+  echo "github-project-task.test: move-task phase mapping fixture unexpectedly failed" >&2
+  cat "$TMPDIR/move-phase.err" >&2
+  exit 1
+fi
+python3 - "$MOVE_PHASE_ROOT/.pm/github-project-sync/tasks.json" "$MOVE_PHASE_UID" <<'PY'
+import json
+import sys
+
+record = json.load(open(sys.argv[1], encoding="utf-8"))["tasks"][sys.argv[2]]
+assert record["status"] == "deferred", record
+assert record["workflow_phase"] == "blocked", record
+PY
+[[ "$(cat "$GH_PROJECT_STATUS_STATE_FILE")" == "Done" ]]
+[[ "$(cat "$GH_PROJECT_STATE_FILE")" == "deferred" ]]
+[[ "$(cat "$GH_PROJECT_PHASE_STATE_FILE")" == "blocked" ]]
+printf 'candidate\n' >"$GH_PROJECT_STATE_FILE"
+printf 'Todo\n' >"$GH_PROJECT_STATUS_STATE_FILE"
+printf 'execution\n' >"$GH_PROJECT_PHASE_STATE_FILE"
+
+# RED: non-PR classification must reject a live Project lifecycle that drifts
+# from the authoritative Issue before editing the Issue or local cache.
+CLASSIFY_MAPPING_BEFORE="$(shasum -a 256 "$TMPDIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
+CLASSIFY_CALLS_BEFORE="$(wc -l < "$GH_CALL_LOG")"
+printf 'pr_watch\n' >"$GH_PROJECT_STATE_FILE"
+printf 'PR Watch\n' >"$GH_PROJECT_STATUS_STATE_FILE"
+printf 'pr_watch\n' >"$GH_PROJECT_PHASE_STATE_FILE"
+set +e
+python3 "$TMPDIR/github-project-task.py" classify-non-pr-task "$TMPDIR" \
+  --repo eng-cc/oasis7 \
+  --project-owner eng-cc \
+  --project-number 1 \
+  --task-uid "$TASK_UID" \
+  --evidence "Read-only workflow audit completed without a PR." \
+  --json > "$TMPDIR/classify-non-pr-drift.json" 2> "$TMPDIR/classify-non-pr-drift.err"
+CLASSIFY_DRIFT_STATUS=$?
+set -e
+if [[ "$CLASSIFY_DRIFT_STATUS" == "0" ]]; then
+  echo "github-project-task.test: expected Issue/Project lifecycle drift to fail closed" >&2
+  exit 1
+fi
+grep -Eqi 'Project|drift' "$TMPDIR/classify-non-pr-drift.err"
+CLASSIFY_MAPPING_AFTER="$(shasum -a 256 "$TMPDIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
+[[ "$CLASSIFY_MAPPING_BEFORE" == "$CLASSIFY_MAPPING_AFTER" ]]
+CLASSIFY_NEW_CALLS="$TMPDIR/classify-non-pr-new-calls.log"
+tail -n +$((CLASSIFY_CALLS_BEFORE + 1)) "$GH_CALL_LOG" >"$CLASSIFY_NEW_CALLS"
+if grep -Eq 'issue (edit|comment)' "$CLASSIFY_NEW_CALLS"; then
+  echo "github-project-task.test: Project drift must fail before Issue mutation" >&2
+  cat "$CLASSIFY_NEW_CALLS" >&2
+  exit 1
+fi
+printf 'candidate\n' >"$GH_PROJECT_STATE_FILE"
+printf 'Todo\n' >"$GH_PROJECT_STATUS_STATE_FILE"
+printf 'execution\n' >"$GH_PROJECT_PHASE_STATE_FILE"
+
+# RED: the public non-PR classification command must exist and persist a
+# runtime-verified issue-comment receipt plus refreshed task fields.
+python3 "$TMPDIR/github-project-task.py" classify-non-pr-task "$TMPDIR" \
+  --repo eng-cc/oasis7 \
+  --project-owner eng-cc \
+  --project-number 1 \
+  --task-uid "$TASK_UID" \
+  --evidence "Read-only workflow audit completed without a PR." \
+  --json > "$TMPDIR/classify-non-pr.json"
+python3 - "$TMPDIR/.pm/github-project-sync/tasks.json" "$TASK_UID" "$TMPDIR/classify-non-pr.json" <<'PY'
+import json, pathlib, sys
+mapping = json.loads(pathlib.Path(sys.argv[1]).read_text())
+payload = json.loads(pathlib.Path(sys.argv[3]).read_text())
+record = mapping["tasks"][sys.argv[2]]
+assert record["completion_mode"] == "non_pr_task", record
+assert record["non_pr_completion_evidence"] == "Read-only workflow audit completed without a PR.", record
+assert pathlib.Path(record["non_pr_completion_evidence_file"]).read_text().strip() == record["non_pr_completion_evidence"], record
+assert payload["status"] == "ok" and payload["comment_url"], payload
+assert payload["comment_readback_verified"] is True, payload
+PY
 REVIEW_PACKET="$TMPDIR/review-packet.md"
 HEAD_SHA="$(git -C "$TMPDIR" rev-parse HEAD)"
 LEDGER_DIR="$TMPDIR/.pm/scratch/$TASK_UID"
@@ -426,6 +575,10 @@ assert record["reconciled_from_project"] is True, record
 PY
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/github-project-workflow.sh" \
   --json audit --task-uid "$TASK_UID" >"$TMPDIR/audit-after-refresh.json"
+# Refresh intentionally reconciles the partial remote Project state and rewrites
+# the local mapping. Bind the SIGTERM immutability check to that new baseline,
+# not to the pre-refresh cache captured for the failed closeout.
+CACHE_BEFORE_INTERRUPT="$(shasum -a 256 "$TMPDIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
 
 set +e
 GH_INTERRUPT_ISSUE_EDIT=1 PM_ROOT_DIR="$TMPDIR" /bin/bash -c \
@@ -436,7 +589,10 @@ INTERRUPTED_CLOSEOUT_STATUS=$?
 set -e
 [[ "$INTERRUPTED_CLOSEOUT_STATUS" != "0" ]]
 CACHE_AFTER_INTERRUPT="$(shasum -a 256 "$TMPDIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
-[[ "$CACHE_BEFORE_FAILURE" == "$CACHE_AFTER_INTERRUPT" ]]
+if [[ "$CACHE_BEFORE_INTERRUPT" != "$CACHE_AFTER_INTERRUPT" ]]; then
+  echo "github-project-task.test: interrupted closeout changed mapping" >&2
+  exit 1
+fi
 
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-closeout.sh" \
   --role tpm \
@@ -511,13 +667,18 @@ PY
 NO_CACHE_ROOT="$TMPDIR/no-cache"
 mkdir -p "$NO_CACHE_ROOT"
 NO_CACHE_UID="task_99999999999999999999999999999999"
+set +e
 python3 "$TMPDIR/github-project-task.py" move-task "$NO_CACHE_ROOT" \
   --repo eng-cc/oasis7 \
   --project-owner eng-cc \
   --project-number 1 \
   --task-uid "$NO_CACHE_UID" \
   --to-status ready \
-  --json > "$TMPDIR/no-cache-move.json"
+  --json > "$TMPDIR/no-cache-move.json" 2> "$TMPDIR/no-cache-move.err"
+NO_CACHE_MOVE_STATUS=$?
+set -e
+[[ "$NO_CACHE_MOVE_STATUS" != "0" ]]
+grep -Fq "canonical task-closeout.sh" "$TMPDIR/no-cache-move.err"
 
 python3 "$TMPDIR/github-project-task.py" record-pr "$NO_CACHE_ROOT" \
   --repo eng-cc/oasis7 \

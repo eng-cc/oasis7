@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import importlib.util
 import json
@@ -18,6 +19,8 @@ from typing import Any
 
 
 ALL_STATUSES = ("candidate", "committed", "blocked", "ready", "pr_watch", "done", "deferred")
+GATE_OWNED_STATUSES = {"ready", "pr_watch"}
+TERMINAL_WORKFLOW_PHASES = {"task_done", "main_sync", "post_merge_done", "closed_without_merge"}
 DEFAULT_REPO = "eng-cc/oasis7"
 DEFAULT_PROJECT_OWNER = "eng-cc"
 DEFAULT_PROJECT_NUMBER = 1
@@ -130,6 +133,21 @@ def atomic_json(path: pathlib.Path, payload: dict[str, Any]) -> None:
     try:
         with os.fdopen(fd, "wb") as handle:
             handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def atomic_text(path: pathlib.Path, value: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=path.name + ".", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(value)
+            handle.write("\n")
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)
@@ -323,6 +341,21 @@ def issue_number_from_url(issue_url: str) -> int:
         raise RuntimeError(f"cannot parse issue number from {issue_url}") from exc
 
 
+def validate_issue_identity(repo: str, issue_number: Any, issue_url: Any, *, source: str) -> tuple[int, str]:
+    """Require a complete Issue handle bound to the requested repository."""
+    number_text = str(issue_number or "").strip()
+    url_text = str(issue_url or "").strip()
+    if not re.fullmatch(r"[1-9]\d*", number_text) or not url_text:
+        die(f"classify-non-pr-task: {source} Issue identity is incomplete")
+    match = re.fullmatch(
+        r"https://github\.com/([^/\s]+/[^/\s]+)/issues/(\d+)/?",
+        url_text,
+    )
+    if not match or match.group(1) != repo or int(match.group(2)) != int(number_text):
+        die(f"classify-non-pr-task: {source} Issue identity is invalid or repository-bound incorrectly")
+    return int(number_text), url_text
+
+
 def pr_number_from_url(pr_url: str) -> int | None:
     match = re.search(r"/pull/(\d+)(?:$|[?#])", pr_url)
     return int(match.group(1)) if match else None
@@ -331,10 +364,18 @@ def pr_number_from_url(pr_url: str) -> int | None:
 def issue_task_fields(body: str) -> dict[str, Any]:
     body = body.replace("\r\n", "\n")
     fields: dict[str, Any] = {}
-    for key in ("owner_role", "module", "status", "priority", "worktree_hint", "source_signal", "source_type", "severity"):
+    for key in ("owner_role", "module", "status", "workflow_phase", "priority", "worktree_hint", "source_signal", "source_type", "severity", "completion_mode"):
         match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
         if match:
             fields[key] = match.group(1)
+    evidence_match = re.search(r"^- non_pr_completion_evidence_b64: `([^`]+)`$", body, re.MULTILINE)
+    if evidence_match:
+        encoded = evidence_match.group(1)
+        try:
+            padding = "=" * (-len(encoded) % 4)
+            fields["non_pr_completion_evidence"] = base64.urlsafe_b64decode(encoded + padding).decode("utf-8")
+        except (ValueError, UnicodeDecodeError):
+            fields["non_pr_completion_evidence"] = ""
     hold_values: dict[str, Any] = {}
     for key in ("kind", "requester", "reason", "resume_authority", "active"):
         match = re.search(rf"^- merge_hold_{key}: `([^`]+)`$", body, re.MULTILINE)
@@ -389,7 +430,18 @@ def github_issue_record(repo: str, task_uid: str) -> dict[str, Any] | None:
     issue_number = int(hits[0].get("number") or 0)
     if not issue_number:
         return None
-    issue_payload = run_text(["gh", "issue", "view", str(issue_number), "-R", repo, "--json", "body,number,title,url"])
+    issue_payload = run_text(
+        [
+            "gh",
+            "issue",
+            "view",
+            str(issue_number),
+            "-R",
+            repo,
+            "--json",
+            "body,number,title,url,state,stateReason",
+        ]
+    )
     issue = json.loads(issue_payload)
     body = str(issue.get("body") or "").replace("\r\n", "\n")
     if not re.search(rf"^task_uid:\s*{re.escape(task_uid)}$", body, re.MULTILINE):
@@ -404,6 +456,8 @@ def github_issue_record(repo: str, task_uid: str) -> dict[str, Any] | None:
             "title": title,
             "issue_number": int(issue.get("number") or issue_number),
             "issue_url": str(issue.get("url") or hits[0].get("url") or ""),
+            "issue_state": str(issue.get("state") or hits[0].get("state") or ""),
+            "issue_state_reason": str(issue.get("stateReason") or ""),
             "_github_source": "issue_search",
         }
     )
@@ -427,6 +481,8 @@ def task_from_record(uid: str, record: dict[str, Any]) -> OrderedDict[str, Any]:
             ("pr_url", record.get("pr_url") or record.get("pull_request_url") or ""),
             ("pr_number", record.get("pr_number") or ""),
             ("merge_hold", record.get("merge_hold") or {}),
+            ("completion_mode", record.get("completion_mode") or ""),
+            ("non_pr_completion_evidence", record.get("non_pr_completion_evidence") or ""),
             ("source_refs", record.get("source_refs") or []),
             ("acceptance", record.get("acceptance") or []),
             ("updated_at", record.get("updated_at") or now()),
@@ -445,6 +501,7 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
         f"- owner_role: `{task.get('owner_role')}`",
         f"- module: `{task.get('module') or ''}`",
         f"- status: `{task.get('status')}`",
+        f"- workflow_phase: `{task.get('workflow_phase') or ''}`",
         f"- priority: `{task.get('priority')}`",
         f"- worktree_hint: `{task.get('worktree_hint') or ''}`",
     ]
@@ -460,6 +517,11 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
         lines.append(f"- pr_url: `{task.get('pr_url')}`")
     if task.get("pr_number"):
         lines.append(f"- pr_number: `{task.get('pr_number')}`")
+    if task.get("completion_mode"):
+        lines.append(f"- completion_mode: `{task.get('completion_mode')}`")
+        evidence = str(task.get("non_pr_completion_evidence") or "").encode("utf-8")
+        encoded = base64.urlsafe_b64encode(evidence).decode("ascii").rstrip("=")
+        lines.append(f"- non_pr_completion_evidence_b64: `{encoded}`")
     if task.get("merge_hold"):
         hold = task["merge_hold"]
         for key in ("kind", "requester", "reason", "resume_authority", "active"):
@@ -508,6 +570,21 @@ def issue_comment(repo: str, issue_number: int, body: str) -> str:
         return run_text(["gh", "issue", "comment", str(issue_number), "-R", repo, "--body-file", body_path])
     finally:
         pathlib.Path(body_path).unlink(missing_ok=True)
+
+
+def verified_issue_comment(repo: str, issue_number: int, body: str) -> str:
+    """Write an Issue comment and prove GitHub returned the exact body."""
+    comment_url = issue_comment(repo, issue_number, body)
+    match = re.search(r"issuecomment-(\d+)(?:$|[?#])", comment_url)
+    if not match:
+        die("classify-non-pr-task: issue comment URL has no comment identity")
+    try:
+        readback = json.loads(run_text(["gh", "api", f"repos/{repo}/issues/comments/{match.group(1)}"]))
+    except (subprocess.SubprocessError, json.JSONDecodeError) as exc:
+        die(f"classify-non-pr-task: issue comment readback failed: {exc}")
+    if str(readback.get("body") or "") != body:
+        die("classify-non-pr-task: issue comment readback mismatch")
+    return comment_url
 
 
 def evidence_body(task_uid: str, role: str, phase: str, fields: dict[str, Any]) -> str:
@@ -708,6 +785,7 @@ def command_new_task(args: argparse.Namespace) -> int:
             ("module", args.module or ""),
             ("worktree_hint", args.worktree_hint or ""),
             ("status", "candidate"),
+            ("workflow_phase", "bootstrap"),
             ("priority", args.priority),
             ("source_signal", args.source_signal or ""),
             ("source_type", args.source_type or ""),
@@ -826,6 +904,68 @@ def has_verified_task_complete(record: dict[str, Any]) -> bool:
     )
 
 
+def validate_authoritative_project_fields(
+    args: argparse.Namespace,
+    mapping: dict[str, Any],
+    record: dict[str, Any],
+    live_issue: dict[str, Any],
+) -> None:
+    """Read the live Project item and reject Issue/Project lifecycle drift."""
+    sync = load_sync_module()
+    try:
+        project_id, _project_fields = sync.project_context(args.project_owner, args.project_number)
+        cached_project_id = str((mapping.get("project") or {}).get("id") or "")
+        if cached_project_id and cached_project_id != project_id:
+            die("classify-non-pr-task: cached/live Project identity drift")
+        recovered = sync.recover_project_mapping_for_task_uids(
+            args.project_owner,
+            args.project_number,
+            args.repo,
+            [args.task_uid],
+            project_id,
+        )
+    except Exception as exc:
+        die(f"classify-non-pr-task: live GitHub Project fields unavailable: {exc}")
+    project_record = recovered.get(args.task_uid)
+    if not isinstance(project_record, dict):
+        die(f"classify-non-pr-task: live GitHub Project item not found for {args.task_uid}")
+    cached_item_id = str(record.get("project_item_id") or "")
+    live_item_id = str(project_record.get("project_item_id") or "")
+    if not cached_item_id or not live_item_id or cached_item_id != live_item_id:
+        die("classify-non-pr-task: cached/live Project item identity drift")
+    values = project_record.get("project_field_values")
+    if not isinstance(values, dict):
+        die("classify-non-pr-task: live GitHub Project field values are missing")
+    status = str(live_issue.get("status") or "")
+    issue_phase = str(live_issue.get("workflow_phase") or "")
+    project_phase = issue_phase
+    if issue_phase in {"", "bootstrap"}:
+        project_phase = sync.workflow_phase_for(status)
+    elif issue_phase in {"task_done", "main_sync", "closed_without_merge", "post_" + "merge_done"}:
+        project_phase = "done"
+    expected = {
+        "Task UID": args.task_uid,
+        "Status": sync.project_status_for(status),
+        "PM Status": status,
+        "Workflow Phase": project_phase,
+        "Owner Role": str(live_issue.get("owner_role") or ""),
+        "Module": str(live_issue.get("module") or ""),
+        "Priority": str(live_issue.get("priority") or ""),
+        "Canonical Worktree": str(live_issue.get("worktree_hint") or ""),
+    }
+    for field_name, expected_value in expected.items():
+        if not expected_value:
+            die(f"classify-non-pr-task: live Issue field {field_name} is missing")
+        actual_value = str(values.get(field_name) or "")
+        if not actual_value:
+            die(f"classify-non-pr-task: live GitHub Project field {field_name} is missing")
+        if expected_value and actual_value != expected_value:
+            die(
+                "classify-non-pr-task: Issue/Project lifecycle authority drift "
+                f"({field_name}: Issue={expected_value!r} Project={actual_value!r})"
+            )
+
+
 def command_append_evidence(args: argparse.Namespace) -> int:
     mapping_path, mapping, record = require_record(args)
     issue_number = int(record["issue_number"])
@@ -851,6 +991,128 @@ def command_append_evidence(args: argparse.Namespace) -> int:
         "status": "ok",
     }
     print(json.dumps(payload, indent=2, sort_keys=True) if args.json else f"append-execution-log: appended evidence to {comment_url}")
+    return 0
+
+
+def command_classify_non_pr_task(args: argparse.Namespace) -> int:
+    mapping_path, mapping, record = require_record(args)
+    if str(record.get("task_uid") or "") != args.task_uid:
+        die("classify-non-pr-task: canonical mapping embedded Task UID does not match its key")
+    required_identity = (
+        "repository",
+        "canonical_worktree",
+        "task_branch",
+        "default_branch",
+        "issue_number",
+        "issue_url",
+    )
+    if any(record.get(key) in (None, "") for key in required_identity):
+        die("classify-non-pr-task: canonical repository/worktree/Issue identity is incomplete")
+    if str(record["repository"]) != args.repo:
+        die("classify-non-pr-task: canonical repository is not bound to --repo")
+    cached_issue_number, cached_issue_url = validate_issue_identity(
+        args.repo, record["issue_number"], record["issue_url"], source="cached"
+    )
+    repository_identity = authoritative_repository_identity(
+        args.root.resolve(), str(record["repository"]), str(record["canonical_worktree"]),
+    )
+    for key in ("repository", "canonical_worktree", "task_branch", "default_branch"):
+        if key == "canonical_worktree":
+            matches = pathlib.Path(str(record.get(key) or "")).expanduser().resolve() == pathlib.Path(repository_identity[key]).resolve()
+        else:
+            matches = str(record.get(key) or "") == repository_identity[key]
+        if not matches:
+            die(f"classify-non-pr-task: canonical {key} identity drift")
+    evidence = str(args.evidence or "").strip()
+    if not evidence:
+        die("classify-non-pr-task: --evidence must be non-empty")
+    live = github_issue_record(args.repo, args.task_uid)
+    if not live:
+        die(f"classify-non-pr-task: live GitHub issue not found for {args.task_uid}")
+    if str(live.get("task_uid") or "") != args.task_uid:
+        die("classify-non-pr-task: live Issue Task UID mismatch")
+    live_issue_number, live_issue_url = validate_issue_identity(
+        args.repo, live.get("issue_number"), live.get("issue_url"), source="live"
+    )
+    if cached_issue_number != live_issue_number:
+        die("classify-non-pr-task: cached/live Issue identity drift (issue_number)")
+    if cached_issue_url != live_issue_url:
+        die("classify-non-pr-task: cached/live Issue identity drift (issue_url)")
+    live_state = str(live.get("issue_state") or "").upper()
+    live_state_reason = str(live.get("issue_state_reason") or "")
+    if live_state == "CLOSED":
+        die(
+            "classify-non-pr-task: CLOSED Issue is immutable; "
+            f"stateReason={live_state_reason or 'missing'}"
+        )
+    if live_state != "OPEN":
+        die("classify-non-pr-task: authoritative live Issue state is missing or unsupported")
+    validate_authoritative_project_fields(args, mapping, record, live)
+    status = str(live.get("status") or "")
+    phase = str(live.get("workflow_phase") or "")
+    if not status or not phase:
+        die("classify-non-pr-task: live Issue status and workflow phase are required")
+    for key, current in (("status", status), ("workflow_phase", phase)):
+        cached = str(record.get(key) or "")
+        if cached and cached != current:
+            die(f"classify-non-pr-task: cached/live lifecycle authority drift ({key})")
+    if status in {"done", "deferred"} or phase in {"task_done", "closed_without_merge", "post_" + "merge_done"}:
+        die("classify-non-pr-task: terminal tasks cannot be classified")
+    if any(record.get(key) not in (None, "", 0, False, {}) for key in
+           ("pr_number", "pr_url", "pull_request_url", "merge_receipt")):
+        die("classify-non-pr-task: PR-bound tasks cannot be classified")
+    if any(live.get(key) not in (None, "", 0, False, {}) for key in
+           ("pr_number", "pr_url", "pull_request_url", "merge_receipt")):
+        die("classify-non-pr-task: live Issue is PR-bound")
+
+    updated = json.loads(json.dumps(record))
+    updated["status"] = status
+    updated["workflow_phase"] = phase
+    for key in ("pr_number", "pr_url", "pull_request_url"):
+        if live.get(key) not in (None, "", 0, False, {}):
+            updated[key] = live[key]
+    updated["completion_mode"] = "non_pr_task"
+    updated["non_pr_completion_evidence"] = evidence
+    evidence_file = args.root.resolve() / ".pm" / "scratch" / args.task_uid / "non-pr-completion-evidence.txt"
+    atomic_text(evidence_file, evidence)
+    updated["non_pr_completion_evidence_file"] = str(evidence_file)
+    updated["non_pr_completion_evidence_sha256"] = hashlib.sha256(
+        evidence_file.read_bytes()
+    ).hexdigest()
+    updated["updated_at"] = now()
+    task = task_from_record(args.task_uid, updated)
+    update_issue_body(args.repo, int(live["issue_number"]), task)
+    comment_url = verified_issue_comment(
+        args.repo,
+        int(live["issue_number"]),
+        evidence_body(
+            args.task_uid,
+            args.role,
+            "non_pr_classification",
+            {
+                "Classification": "non_pr_task",
+                "Evidence": evidence,
+                "Validation Command": args.validation_command,
+                "Expected Result": "Task is explicitly classified for non-PR completion.",
+                "Actual Result": "Issue body updated and exact comment readback verified.",
+            },
+        ),
+    )
+    updated["last_evidence_at"] = now()
+    updated.setdefault("evidence_comments", []).append(comment_url)
+    merge_task_mapping(mapping_path, args.task_uid, updated)
+    payload = {
+        "status": "ok",
+        "task_uid": args.task_uid,
+        "completion_mode": "non_pr_task",
+        "non_pr_completion_evidence": evidence,
+        "non_pr_completion_evidence_file": str(evidence_file),
+        "non_pr_completion_evidence_sha256": updated["non_pr_completion_evidence_sha256"],
+        "issue_url": live.get("issue_url"),
+        "comment_url": comment_url,
+        "comment_readback_verified": True,
+    }
+    print(json.dumps(payload, indent=2, sort_keys=True) if args.json else f"classify-non-pr-task: classified {args.task_uid}")
     return 0
 
 
@@ -897,6 +1159,37 @@ def command_workflow_report(args: argparse.Namespace) -> int:
 def command_move_task(args: argparse.Namespace) -> int:
     mapping_path, mapping, record = require_record(args)
     previous = str(record.get("status") or "")
+    previous_phase = str(record.get("workflow_phase") or "")
+    if args.to_status in GATE_OWNED_STATUSES:
+        canonical_writer = (
+            "task-closeout.sh with canonical review/CI evidence"
+            if args.to_status == "ready"
+            else "prepare-task-pr.sh --promote-draft with canonical CI/promotion evidence"
+        )
+        die(
+            f"move-task: {args.to_status} is owned by the canonical {canonical_writer}; "
+            "generic move-task cannot publish a readiness-gated status"
+        )
+    if previous == "done":
+        if args.to_status == "done":
+            # Terminal finalizers own the fine-grained phase.  A repeated
+            # generic move is a read-only idempotent acknowledgment, never a
+            # projection back to the intermediate task_done phase.
+            payload = {
+                "task_uid": args.task_uid,
+                "previous_status": previous,
+                "status": "done",
+                "workflow_phase": previous_phase,
+                "issue_url": record.get("issue_url"),
+                "project_item_id": record.get("project_item_id"),
+                "updated_field_values": 0,
+                "idempotent": True,
+            }
+            print(json.dumps(payload, indent=2, sort_keys=True) if args.json else f"move-task: {args.task_uid} already done")
+            return 0
+        die("move-task: terminal task cannot be reclassified; use its canonical finalizer or terminal runbook")
+    if previous_phase in TERMINAL_WORKFLOW_PHASES:
+        die("move-task: terminal workflow phase cannot be reclassified by generic move-task")
     if args.to_status == "done" and not (record.get("last_closed_at") and has_verified_task_complete(record)):
         die(
             "move-task: refusing done without closeout and verified task_complete evidence; "
@@ -910,7 +1203,12 @@ def command_move_task(args: argparse.Namespace) -> int:
             "move-task: refusing done because GitHub Project item mapping could not be recovered; "
             f"task_uid={args.task_uid}"
         )
+    # Status and Workflow Phase are one canonical Project projection.  Derive
+    # both from the requested status before producing any Issue/Project write,
+    # so a stale cached phase cannot publish an invalid combination such as
+    # Done/deferred/execution.
     record["status"] = args.to_status
+    record["workflow_phase"] = load_sync_module().workflow_phase_for(args.to_status)
     record["updated_at"] = now()
     task = task_from_record(args.task_uid, record)
     updated_fields = 0
@@ -953,11 +1251,15 @@ def command_closeout_task(args: argparse.Namespace) -> int:
         if not record.get("project_item_id"):
             die("closeout-task: done requires a recoverable GitHub Project item")
     task = task_from_record(args.task_uid, record)
-    terminal_phase = "task_done" if args.to_status == "done" else "pre_pr_ready"
+    terminal_phase = (
+        "task_done" if args.to_status == "done"
+        else "blocked" if args.to_status == "deferred"
+        else "pre_pr_ready"
+    )
     record["workflow_phase"] = terminal_phase
     task = task_from_record(args.task_uid, record)
     evidence_fields = {
-        "Workflow Phase": "task_done" if args.to_status == "done" else "pre_pr_ready",
+        "Workflow Phase": terminal_phase,
         "Task Status": args.to_status,
         "Immutable Verification Head": claim.get("frozen_source_head") or "n/a",
         "Immutable Verification Tree": claim.get("frozen_source_tree") or "n/a",
@@ -1339,11 +1641,21 @@ def command_refresh_task(args: argparse.Namespace) -> int:
 def command_record_pr(args: argparse.Namespace) -> int:
     mapping_path, mapping, record = require_record(args)
     previous = str(record.get("status") or "")
+    previous_phase = str(record.get("workflow_phase") or "")
+    is_draft_candidate = bool(getattr(args, "draft_candidate", False))
+    if previous == "done" or previous_phase in TERMINAL_WORKFLOW_PHASES:
+        die(
+            "record-pr: terminal task cannot be reclassified; use its canonical finalizer or terminal runbook"
+        )
+    if not is_draft_candidate and (previous, previous_phase) != ("ready", "pre_pr_ready"):
+        die(
+            "record-pr: non-draft pr_watch transition requires task truth at ready/pre_pr_ready; "
+            "use prepare-task-pr.sh --promote-draft with canonical CI/review evidence"
+        )
     record["pr_url"] = args.pr_url
     number = pr_number_from_url(args.pr_url)
     if number is not None:
         record["pr_number"] = number
-    is_draft_candidate = bool(getattr(args, "draft_candidate", False))
     target_status = "committed" if is_draft_candidate else "pr_watch"
     target_phase = "verification" if is_draft_candidate else "pr_watch"
     record["status"] = target_status
@@ -1491,6 +1803,15 @@ def build_parser() -> argparse.ArgumentParser:
     append.add_argument("--blocker-next-action", required=True)
     append.add_argument("--json", action="store_true")
     append.set_defaults(func=command_append_evidence)
+
+    classify = subparsers.add_parser("classify-non-pr-task")
+    add_common(classify)
+    classify.add_argument("--task-uid", required=True)
+    classify.add_argument("--role", default="repository_health_engineer")
+    classify.add_argument("--evidence", required=True)
+    classify.add_argument("--validation-command", default="classify-non-pr-task")
+    classify.add_argument("--json", action="store_true")
+    classify.set_defaults(func=command_classify_non_pr_task)
 
     report = subparsers.add_parser("workflow-report")
     add_common(report)

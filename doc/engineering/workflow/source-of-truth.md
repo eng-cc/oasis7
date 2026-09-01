@@ -12,7 +12,7 @@ Mandatory rule:
 
 ### GitHub query budget and terminal defaults
 
-- The canonical source remains concise through one 780-line budget, enforced by `scripts/pm/tpm-workflow-doc-contract.test.py`; do not add a second line-limit contract elsewhere.
+- The canonical source remains concise through one 790-line budget, enforced by `scripts/pm/tpm-workflow-doc-contract.test.py`; do not add a second line-limit contract elsewhere.
 - Terminal refresh, sync, PR-watch audit, and closeout require the selected `task_uid`; broad Project or repository issue traversal requires explicit `--global-maintenance`.
 - Selected terminal audit is `./scripts/pm/audit-pr-watch-issues.sh --task-uid <task_uid> --json`; repository-wide repair is the separate operator action `./scripts/pm/audit-pr-watch-issues.sh --global-maintenance --json`, guarded by the live GraphQL budget before issue listing.
 - Broad GraphQL reads live `rateLimit.remaining/resetAt` first and returns resumable `capability_blocked` when unknown or insufficient; stale cache is never authority to continue.
@@ -639,7 +639,17 @@ helpers.
 <a id="terminal-runbook"></a>
 ### Terminal runbook
 
-After merge, use `<canonical-task-worktree>` for task evidence and
+<a id="terminal-readiness-preflight"></a>
+#### Terminal readiness preflight
+
+Before merge, the canonical default worktree must pass the mutation-free
+`finalize-task.sh --preflight --json` gate with `status: ready`, no blockers, and
+an exact executable `next_command`; identity drift fails closed. If the default
+worktree still has the pre-change helper, invoke the reviewed helper with
+`<canonical-task-worktree>/scripts/pm/finalize-task.sh --repo-root <canonical-default-worktree> --task-uid <task-uid> --pr <pr-number> --preflight --json`.
+Repair identity and rerun preflight; this gate creates no receipt or lifecycle state.
+
+After preflight and merge, use `<canonical-task-worktree>` for task evidence and
 `<canonical-default-worktree>` for sync, receipts, and finalization. Helpers
 fail closed on repository/task/PR/head/worktree/branch/default-branch drift.
 Receipt/common-dir relocation requires a trusted new epoch; never edit receipts.
@@ -651,7 +661,7 @@ RECEIPT_ROOT="$(python3 scripts/pm/canonical-receipt-root.py \
   --task-uid <TASK-UID> --create)"
 ```
 
-Normal operation is `./scripts/pm/finalize-task.sh --repo-root <canonical-default-worktree> --task-uid <TASK-UID> --pr <PR-NUMBER> --resume --json`. A classified non-merge outcome uses `python3 ./scripts/pm/non-merge-finalize.py --repo-root <canonical-default-worktree> --task-uid <TASK-UID> --reason <reason> --evidence-file <path> --json`; a pending intent is refreshable only when its receipt matches exactly, and mismatches fail closed.
+Normal operation is `./scripts/pm/finalize-task.sh --repo-root <canonical-default-worktree> --task-uid <TASK-UID> --pr <PR-NUMBER> --resume --json`. A classified non-merge outcome uses `python3 ./scripts/pm/non-merge-finalize.py --repo-root <canonical-default-worktree> --task-uid <TASK-UID> --reason <reason> --evidence-file <path> --json`; classify read-only work first with `python3 ./scripts/pm/github-project-task.py classify-non-pr-task <canonical-task-worktree> --task-uid <TASK-UID> --evidence "<evidence>" --json`, then use `non_pr_completed`. Resume state comes only from `python3 ./scripts/pm/workflow-next.py --repo-root <canonical-worktree> --task-uid <TASK-UID> --json`.
 It derives identity and squash proof while preserving the six fail-closed
 authorities below as the recovery/debug contract:
 

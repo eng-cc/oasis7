@@ -11,11 +11,14 @@ TPM is the coordinator/integrator for this sequence. Gate meanings, retry/dispos
 
 ## When to Use
 
-Use after implementation and its required verification are complete, or when a
-bound task has a classified non-merge outcome. In particular, `not_planned`
-may enter from bootstrap, planning, or execution without implementation
-verification and must proceed directly to the canonical non-merge terminal
-route below.
+Use after verified implementation or a classified non-merge outcome; `not_planned` may enter this route from bootstrap, planning, or execution without implementation
+verification.
+
+Read the bound task's compact resume state from the canonical worktree; follow only `next_command`, and stop on unbound identity or any blocker:
+
+```bash
+python3 ./scripts/pm/workflow-next.py --repo-root <canonical-worktree> --task-uid <TASK-UID> --json
+```
 
 ## Freeze-Commit Gates
 
@@ -32,17 +35,13 @@ python3 ./scripts/pm/ci-ready-receipt.py \
 ```
 
 Resolve `<required-check-app-id>` from the active repository rules returned by `pr-lifecycle-gate.py`; do not infer it from whichever same-name check finished most recently. The producer validates the live PR, exact HEAD, ruleset-bound required check, base, and planner artifact before emitting the receipt. `prepare-task-pr.sh --draft-candidate --create` does not create this artifact.
-4. Use `requesting-repo-owned-review` with `<ci_ready_receipt.json>`; resolve findings against that same head.
+4. Use `requesting-repo-owned-review`; resolve findings against that same head.
 
 ## Optional Evidence-Only Commit / PR-Prep Gates
 
-5. If review/evidence helpers produce metadata after the frozen head, allow only an evidence-only commit; any implementation change invalidates the freeze and review.
-   If that evidence-only commit changes HEAD, follow the canonical [PR creation
-   gate](../../../doc/engineering/workflow/source-of-truth.md#pr-creation-gate):
-   re-run final-head verification and review, then issue a new packet
-   for the final PR head;
-   otherwise do not create the PR. The resulting packet binds the reviewed PR
-   head.
+5. Allow only evidence-only commits after freeze; implementation changes invalidate freeze/review.
+   If one changes HEAD, follow the canonical [PR creation gate](../../../doc/engineering/workflow/source-of-truth.md#pr-creation-gate),
+   repeat final-head verification/review, issue a new packet; otherwise do not create the PR. The packet binds the reviewed PR head.
 6. Record Pre-PR Ready with the adapter:
 
 ```bash
@@ -58,7 +57,7 @@ Partial remote state recovers via refresh -> audit -> retry; do not edit cache J
 ./scripts/prepare-task-pr.sh --promote-draft <ci_ready_receipt.json>
 ```
 
-Pre-PR local role review packet recorded after frozen-head draft-candidate creation and trusted exact-head CI, and before draft promotion; its schema is only at the canonical review-packet link.
+Pre-PR local role review packet recorded after immutable verification, after frozen-head draft-candidate creation and trusted exact-head CI, before draft promotion; its schema is only at the canonical review-packet link.
 
 ## Post-PR / Pre-Merge Gates
 
@@ -79,7 +78,13 @@ On a non-Codex surface, use the finite fallback:
 ./scripts/pm/pr-watch-loop.sh <pr-number> --task-uid <task_uid>
 ```
 
-Post-PR checks/comments/mergeability remain separate gates. All interpretations, retry loops, dispositions and merge authorization come from the canonical gate definitions, not this skill.
+Post-PR checks/comments/mergeability remain separate gates. All interpretations, retry loops, dispositions and merge authorization come from canonical gate definitions, not this skill.
+9. Before merge, follow the canonical [terminal-readiness preflight](../../../doc/engineering/workflow/source-of-truth.md#terminal-readiness-preflight) from the canonical default worktree. It must return `status: ready`, an empty `blockers` array, and the exact executable `next_command`; any identity mismatch must be repaired and reverified before merge:
+
+```bash
+./scripts/pm/finalize-task.sh --repo-root <canonical-default-worktree> --task-uid <TASK-UID> --pr <PR-NUMBER> --preflight --json
+```
+
 10. Merge only with trusted gate evidence and the gate-selected repository path.
    A live `MERGEABLE` result with `REVIEW_REQUIRED` and approval-only `BLOCKED`
    or informational `BEHIND` defaults to admin merge
@@ -89,17 +94,14 @@ Post-PR checks/comments/mergeability remain separate gates. All interpretations,
 
 ## Post-Merge Cleanup
 
-11. From the canonical default worktree, use the terminal runbook's resumable
-operator entry:
+11. From the canonical default worktree, use the terminal runbook's resumable operator entry:
 
 ```bash
 ./scripts/pm/finalize-task.sh --repo-root <canonical-default-worktree> \
   --task-uid <TASK-UID> --pr <PR-NUMBER> --resume --json
 ```
 
-The linked canonical terminal runbook remains authoritative for order,
-receipts, recovery, and fail-closed behavior; this skill does not maintain a
-second copy.
+The canonical terminal runbook controls order, receipts, recovery and fail-closed behavior.
 
 For a classified non-merge outcome, follow the [canonical terminal runbook](../../../doc/engineering/workflow/source-of-truth.md#terminal-runbook):
 
@@ -116,9 +118,8 @@ python3 ./scripts/pm/non-merge-finalize.py \
 - PR URL and merged receipt, or canonical blocker with resume instruction
 - main-sync and cleanup result
 
-Missing trusted runtime attestation is `capability_blocked` for unattended
-automation, not for the current human-operated PR path. Never manufacture a
-passed packet or downgrade a real blocker to waiting.
+Missing trusted runtime attestation is `capability_blocked` for unattended automation,
+not human-operated PRs. Never manufacture passed evidence or downgrade a blocker.
 
 ## Guardrails
 

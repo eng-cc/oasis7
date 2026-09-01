@@ -2,6 +2,7 @@
 """RED contract for crash-safe, single-authority terminal transitions."""
 from __future__ import annotations
 
+import ast
 import re
 import os
 import importlib.util
@@ -31,10 +32,100 @@ def function(text: str, name: str) -> str:
     return match.group(0)
 
 
+def has_effectful_terminal_writer(path: Path, text: str) -> bool:
+    """Detect terminal writes, not references used for reads or validation."""
+    if path.suffix == ".sh":
+        return bool(re.search(r"(?m)^\s*gh\s+issue\s+close(?:\s|$)", text))
+    if path.suffix != ".py":
+        return False
+    try:
+        tree = ast.parse(text, filename=str(path))
+    except SyntaxError:
+        return False
+
+    terminal_names = {
+        target.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assign)
+        and isinstance(node.value, ast.Constant)
+        and node.value.value == "post_merge_done"
+        for target in node.targets
+        if isinstance(target, ast.Name)
+    }
+
+    def is_workflow_phase_target(target: ast.AST) -> bool:
+        return (
+            isinstance(target, ast.Subscript)
+            and isinstance(target.slice, ast.Constant)
+            and target.slice.value == "workflow_phase"
+        )
+
+    def is_terminal_value(value: ast.AST) -> bool:
+        return (
+            isinstance(value, ast.Constant)
+            and value.value == "post_merge_done"
+        ) or (isinstance(value, ast.Name) and value.id in terminal_names)
+
+    def terminal_dict(node: ast.AST) -> bool:
+        if not isinstance(node, ast.Dict):
+            return False
+        return any(
+            isinstance(key, ast.Constant)
+            and key.value == "workflow_phase"
+            and is_terminal_value(value)
+            for key, value in zip(node.keys, node.values)
+            if key is not None
+        )
+
+    def call_name(node: ast.Call) -> str:
+        function = node.func
+        if isinstance(function, ast.Name):
+            return function.id
+        if isinstance(function, ast.Attribute):
+            return function.attr
+        return ""
+
+    writer_arg_names = {
+        argument.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and re.search(r"(?i)(?:write|update|replace|persist|commit|transact|save|close)", call_name(node))
+        for argument in node.args
+        if isinstance(argument, ast.Name)
+    }
+
+    def literal_command(node: ast.AST) -> tuple[str, ...] | None:
+        if not isinstance(node, (ast.List, ast.Tuple)):
+            return None
+        values = []
+        for item in node.elts:
+            if not isinstance(item, ast.Constant) or not isinstance(item.value, str):
+                return None
+            values.append(item.value)
+        return tuple(values)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            if any(is_workflow_phase_target(target) for target in node.targets):
+                if is_terminal_value(node.value):
+                    return True
+            if terminal_dict(node.value) and any(
+                isinstance(target, ast.Name) and target.id in writer_arg_names
+                for target in node.targets
+            ):
+                return True
+        if isinstance(node, ast.Call):
+            if any(literal_command(argument)[:3] == ("gh", "issue", "close")
+                   for argument in node.args
+                   if literal_command(argument) is not None):
+                return True
+    return False
+
+
 class TerminalTransitionOrder(unittest.TestCase):
     def test_done_closeout_is_intermediate_and_does_not_close_issue(self) -> None:
         closeout = function(TASK.read_text(encoding="utf-8"), "command_closeout_task")
-        self.assertIn('"Workflow Phase": "task_done"', closeout)
+        self.assertIn('"Workflow Phase": terminal_phase', closeout)
         self.assertNotIn('"Workflow Phase": "post_merge_done"', closeout)
         self.assertNotRegex(closeout, r"gh[\"'],\s*[\"']issue[\"'],\s*[\"']close")
         self.assertNotIn('run_text(["gh", "issue", "close"', closeout)
@@ -51,11 +142,28 @@ class TerminalTransitionOrder(unittest.TestCase):
         self.assertIn("oasis7_terminal_cleanup", cleanup)
         self.assertIn("post-merge-finalize.py", cleanup)
         self.assertLess(cleanup.index("oasis7_terminal_cleanup"), cleanup.index("post-merge-finalize.py"))
+        self.assertFalse(
+            has_effectful_terminal_writer(
+                Path("validation.py"),
+                'expected = {"workflow_phase": "post_merge_done"}\n',
+            ),
+            "validation-only expected values are not terminal writes",
+        )
+        for field_write in (
+            'state["workflow_phase"] = "post_merge_done"\n',
+            'result["workflow_phase"] = "post_merge_done"\n',
+            'task["workflow_phase"] = "post_merge_done"\n',
+        ):
+            with self.subTest(field_write=field_write):
+                self.assertTrue(
+                    has_effectful_terminal_writer(Path("writer.py"), field_write),
+                    "state/result/task terminal field writes must remain detectable",
+                )
         all_writers = []
         for path in (TASK, MAIN_SYNC, CLEANUP, PR_WATCH_AUDIT, FINALIZE):
             if path.exists():
                 text = path.read_text(encoding="utf-8")
-                if "post_merge_done" in text or '"issue", "close"' in text:
+                if has_effectful_terminal_writer(path, text):
                     all_writers.append(path.name)
         self.assertEqual(["post-merge-finalize.py"], all_writers)
 

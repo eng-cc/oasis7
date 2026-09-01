@@ -162,6 +162,16 @@ def _write_terminal_locked(root: pathlib.Path, task_uid: str, terminal_receipt_p
     if terminal.get("receipt_type")!="oasis7_terminal_cleanup" or terminal.get("issuer")!="post-merge-cleanup": fail("invalid terminal receipt")
     for key,value in expected.items():
         if str(terminal.get(key))!=str(value): fail(f"terminal receipt {key} mismatch")
+    recorded_worktree = pathlib.Path(str(record.get("canonical_worktree") or "")).expanduser().resolve()
+    receipt_worktree = terminal.get("worktree")
+    if not receipt_worktree:
+        fail("terminal receipt worktree identity missing")
+    if pathlib.Path(str(receipt_worktree)).expanduser().resolve() != recorded_worktree:
+        fail("terminal receipt worktree identity mismatch")
+    if not terminal.get("branch"):
+        fail("terminal receipt branch identity missing")
+    if str(terminal.get("branch")) != str(record.get("task_branch") or ""):
+        fail("terminal receipt branch identity mismatch")
     if not record.get("merge_receipt") or not (record.get("phase_receipts") or {}).get("main_sync"): fail("terminal receipt disagrees with incomplete task receipt chain")
     fixture_legacy=str(record.get("repository") or "").startswith("fixture/") and not record.get("merge_receipt_sha256")
     if not fixture_legacy and terminal.get("merge_receipt_sha256") != record.get("merge_receipt_sha256"): fail("merge_receipt_sha256 mismatch against stored merge receipt")

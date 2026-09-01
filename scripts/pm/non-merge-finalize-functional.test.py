@@ -9,6 +9,7 @@ reached by this test.
 from __future__ import annotations
 
 import hashlib
+import base64
 import json
 import os
 import re
@@ -125,9 +126,12 @@ elif args[:2] == ["project", "view"]:
     print(json.dumps({"id": "P1", "number": 1, "title": "fixture"}))
 elif args[:2] == ["project", "field-list"]:
     options = {
-        "Status": [("Done", "STATUS_DONE"), ("In Progress", "STATUS_PROGRESS")],
-        "PM Status": [("done", "PM_DONE"), ("committed", "PM_COMMITTED")],
-        "Workflow Phase": [("done", "PHASE_DONE"), ("execution", "PHASE_EXECUTION")],
+        "Status": [("Done", "STATUS_DONE"), ("Blocked", "STATUS_BLOCKED"),
+                   ("In Progress", "STATUS_PROGRESS")],
+        "PM Status": [("done", "PM_DONE"), ("deferred", "PM_DEFERRED"),
+                      ("committed", "PM_COMMITTED")],
+        "Workflow Phase": [("done", "PHASE_DONE"), ("blocked", "PHASE_BLOCKED"),
+                            ("execution", "PHASE_EXECUTION")],
     }
     fields = []
     for name, values in options.items():
@@ -142,7 +146,10 @@ elif args[:2] == ["project", "item-edit"]:
                                          "PM Status": "committed",
                                          "Workflow Phase": "execution"})
     values.update({"STATUS_DONE": {"Status": "Done"},
+                   "STATUS_BLOCKED": {"Status": "Blocked"},
                    "PM_DONE": {"PM Status": "done"},
+                   "PM_DEFERRED": {"PM Status": "deferred"},
+                   "PHASE_BLOCKED": {"Workflow Phase": "blocked"},
                    "PHASE_DONE": {"Workflow Phase": "done"}}.get(option_id, {}))
     write("GH_PROJECT_FIELDS", values)
     if (os.environ.get("GH_FAIL_AFTER_PROJECT_UPDATE_ON_ITEM_EDIT") == "1"
@@ -188,7 +195,12 @@ elif args and args[0] == "api" and len(args) > 1 and args[1].startswith("repos/"
             "migrated_receipt_sha256"
         ] = "0" * 64
         mapping_path.write_text(json.dumps(mapping, sort_keys=True) + "\n")
-    print(json.dumps([read("GH_COMMENTS", [])]))
+    comments = read("GH_COMMENTS", [])
+    if len(args) == 2 and "/issues/comments/" in args[1]:
+        comment_id = int(args[1].rsplit("/", 1)[-1])
+        print(json.dumps(comments[comment_id - 1]))
+    else:
+        print(json.dumps([comments]))
 elif args[:2] == ["api", "graphql"]:
     if os.environ.get("GH_PROJECT_ITEM_MISSING") == "1":
         print(json.dumps({"data": {"nodes": []}}))
@@ -202,17 +214,43 @@ elif args[:2] == ["api", "graphql"]:
     values = read("GH_PROJECT_FIELDS", {"Status": "In Progress",
                                          "PM Status": "committed",
                                          "Workflow Phase": "execution"})
-    if os.environ.get("GH_PROJECT_DRIFT") == "1":
-        content = {"body": "task_uid: task_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n",
-                   "number": 99, "url": f"https://github.com/{repo}/issues/99"}
+    if "search(query:" in " ".join(args):
+        # github-project-task.py recovers the authoritative Project item by
+        # searching the Issue and reading its nested projectItems fields.
+        body = path("GH_ISSUE_BODY").read_text()
+        def issue_field(name, fallback=""):
+            match = next((line for line in body.splitlines()
+                          if line.startswith(f"- {name}: `") and line.endswith("`")), "")
+            return match[len(f"- {name}: `"):-1] if match else fallback
+
+        field_nodes = [
+            {"name": values.get("Status", ""), "field": {"name": "Status"}},
+            {"text": uid, "field": {"name": "Task UID"}},
+            {"name": issue_field("owner_role"), "field": {"name": "Owner Role"}},
+            {"name": issue_field("module"), "field": {"name": "Module"}},
+            {"name": values.get("PM Status", ""), "field": {"name": "PM Status"}},
+            {"name": values.get("Workflow Phase", ""), "field": {"name": "Workflow Phase"}},
+            {"name": issue_field("priority"), "field": {"name": "Priority"}},
+            {"text": issue_field("worktree_hint"), "field": {"name": "Canonical Worktree"}},
+        ]
+        project_item = {"id": "ITEM1", "project": {"id": "P1", "number": 1},
+                        "fieldValues": {"pageInfo": {"hasNextPage": False},
+                                         "nodes": field_nodes}}
+        issue_node = {"number": issue, "url": issue_url, "body": body,
+                      "projectItems": {"nodes": [project_item]}}
+        print(json.dumps({"data": {"s0": {"nodes": [issue_node]}}}))
     else:
-        content = {"body": f"task_uid: {uid}\n", "number": issue, "url": issue_url}
-    nodes = [{"name": values.get(name, ""), "field": {"name": name}}
-             for name in ("Status", "PM Status", "Workflow Phase")]
-    node = {"id": "ITEM1", "project": {"id": "P1", "number": 1,
-            "owner": {"login": "fixture"}}, "content": content,
-            "fieldValues": {"pageInfo": {"hasNextPage": False}, "nodes": nodes}}
-    print(json.dumps({"data": {"nodes": [node]}}))
+        if os.environ.get("GH_PROJECT_DRIFT") == "1":
+            content = {"body": "task_uid: task_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n",
+                       "number": 99, "url": f"https://github.com/{repo}/issues/99"}
+        else:
+            content = {"body": f"task_uid: {uid}\n", "number": issue, "url": issue_url}
+        nodes = [{"name": values.get(name, ""), "field": {"name": name}}
+                 for name in ("Status", "PM Status", "Workflow Phase")]
+        node = {"id": "ITEM1", "project": {"id": "P1", "number": 1,
+                "owner": {"login": "fixture"}}, "content": content,
+                "fieldValues": {"pageInfo": {"hasNextPage": False}, "nodes": nodes}}
+        print(json.dumps({"data": {"nodes": [node]}}))
 else:
     print("unexpected gh invocation: " + " ".join(args), file=sys.stderr)
     raise SystemExit(90)
@@ -244,7 +282,13 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.write_state(self.closes, [])
         self.write_state(self.issue_state, {"state": "OPEN"})
         self.issue_body.write_text(
-            f"<!-- oasis7-pm-task -->\ntask_uid: {UID}\n- status: `committed`\n"
+            f"<!-- oasis7-pm-task -->\ntask_uid: {UID}\n"
+            "Task metadata:\n"
+            "- owner_role: `repository_health_engineer`\n"
+            "- module: `engineering`\n"
+            "- status: `committed`\n- workflow_phase: `execution`\n"
+            "- priority: `P2`\n"
+            f"- worktree_hint: `{self.root}`\n"
         )
         self.write_state(self.project_fields, {
             "Status": "In Progress", "PM Status": "committed", "Workflow Phase": "execution"
@@ -272,6 +316,8 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
             "issue_url": ISSUE_URL, "project_item_id": "ITEM1", "status": status,
             "workflow_phase": phase, "owner_role": "repository_health_engineer",
             "module": "engineering", "priority": "P2",
+            "canonical_worktree": str(self.root), "task_branch": "main",
+            "default_branch": "main",
         }
         if pr:
             record.update({"pr_number": 22, "pr_url": PR_URL})
@@ -283,6 +329,26 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         path.write_text(json.dumps({"version": 1, "project": {
             "owner": "fixture", "number": 1, "id": "P1"
         }, "tasks": {UID: record}}, sort_keys=True) + "\n")
+        if record.get("completion_mode") == "non_pr_task":
+            evidence = str(record.get("non_pr_completion_evidence") or "")
+            evidence_path = self.root / ".pm" / "scratch" / UID / "non-pr-completion-evidence.txt"
+            evidence_path.parent.mkdir(parents=True, exist_ok=True)
+            evidence_path.write_text(evidence + "\n")
+            record["non_pr_completion_evidence_file"] = str(evidence_path)
+            record["non_pr_completion_evidence_sha256"] = hashlib.sha256(
+                evidence_path.read_bytes()
+            ).hexdigest()
+            path.write_text(json.dumps({"version": 1, "project": {
+                "owner": "fixture", "number": 1, "id": "P1"
+            }, "tasks": {UID: record}}, sort_keys=True) + "\n")
+            encoded = base64.urlsafe_b64encode(evidence.encode()).decode().rstrip("=")
+            self.issue_body.write_text(
+                f"<!-- oasis7-pm-task -->\ntask_uid: {UID}\n"
+                f"- status: `{record.get('status')}`\n"
+                f"- workflow_phase: `{record.get('workflow_phase')}`\n"
+                "- completion_mode: `non_pr_task`\n"
+                f"- non_pr_completion_evidence_b64: `{encoded}`\n"
+            )
         return path
 
     def reset_runtime(self) -> None:
@@ -295,7 +361,13 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         ):
             self.write_state(path, value)
         self.issue_body.write_text(
-            f"<!-- oasis7-pm-task -->\ntask_uid: {UID}\n- status: `committed`\n"
+            f"<!-- oasis7-pm-task -->\ntask_uid: {UID}\n"
+            "Task metadata:\n"
+            "- owner_role: `repository_health_engineer`\n"
+            "- module: `engineering`\n"
+            "- status: `committed`\n- workflow_phase: `execution`\n"
+            "- priority: `P2`\n"
+            f"- worktree_hint: `{self.root}`\n"
         )
         receipt_root = self.root / ".git/oasis7-workflow-receipts" / UID
         if receipt_root.exists():
@@ -306,12 +378,30 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         path.write_text("owner decision: terminal non-merge closure\n")
         return path
 
-    def invoke(self, reason: str, evidence: Path | None = None) -> subprocess.CompletedProcess[str]:
+    def invoke(self, reason: str, evidence: Path | None = None,
+               repo_root: Path | None = None) -> subprocess.CompletedProcess[str]:
+        finalizer_root = repo_root or self.root
+        if evidence is None and reason == "non_pr_completed":
+            try:
+                mapping = self.read_json(self.root / ".pm/github-project-sync/tasks.json")
+                evidence = Path(mapping["tasks"][UID]["non_pr_completion_evidence_file"])
+            except (OSError, KeyError, TypeError):
+                evidence = self.evidence()
         evidence = evidence or self.evidence()
         return subprocess.run([
-            sys.executable, str(HELPER), "--repo-root", str(self.root),
+            sys.executable, str(HELPER), "--repo-root", str(finalizer_root),
             "--task-uid", UID, "--reason", reason,
             "--evidence-file", str(evidence), "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+
+    def classify_non_pr(self, evidence: str,
+                        repo_root: Path | None = None) -> subprocess.CompletedProcess[str]:
+        classification_root = repo_root or self.root
+        self.env["GH_REFRESH_TASK"] = "1"
+        return subprocess.run([
+            sys.executable, str(PROJECT_TASK), "classify-non-pr-task", str(classification_root),
+            "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
+            "--evidence", evidence, "--validation-command", "fixture classification", "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
 
     def legacy_receipt(self, evidence_digest: str, *, reason: str = "duplicate",
@@ -351,6 +441,115 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertRegex(result.stderr.lower(), r"reason|invalid choice|allowed")
         self.assertEqual(self.calls(), [])
+
+    def test_classification_rejects_cached_lifecycle_drift_before_remote_mutation(self) -> None:
+        mapping_path = self.mapping()
+        before = mapping_path.read_bytes()
+        self.issue_body.write_text(
+            f"<!-- oasis7-pm-task -->\ntask_uid: {UID}\n"
+            "Task metadata:\n"
+            "- owner_role: `repository_health_engineer`\n"
+            "- module: `engineering`\n"
+            "- status: `done`\n- workflow_phase: `task_done`\n"
+            "- priority: `P2`\n"
+            f"- worktree_hint: `{self.root}`\n"
+        )
+        result = self.classify_non_pr("live terminal truth")
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertRegex(result.stderr.lower(), r"status|phase|drift|terminal")
+        self.assertEqual(mapping_path.read_bytes(), before)
+        self.assertEqual(self.read_json(self.comments), [])
+        self.assertEqual(self.read_json(self.closes), [])
+        self.assertFalse(any(call[:2] == ["issue", "edit"] for call in self.calls()))
+        self.assertFalse(any(call[:2] == ["issue", "comment"] for call in self.calls()))
+
+    def test_classification_rejects_embedded_mapping_uid_before_remote_mutation(self) -> None:
+        mapping_path = self.mapping(extra={"task_uid": "task_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"})
+        before = mapping_path.read_bytes()
+        result = self.classify_non_pr("embedded UID drift")
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertRegex(result.stderr.lower(), r"uid|identity|mapping")
+        self.assertEqual(mapping_path.read_bytes(), before)
+        self.assertEqual(self.calls(), [])
+
+    def test_classification_rejects_foreign_canonical_worktree_before_remote_mutation(self) -> None:
+        foreign = Path(self.tmp.name) / "foreign"
+        subprocess.run(["git", "init", "-q", "-b", "main", str(foreign)], check=True)
+        mapping_path = self.mapping(extra={"canonical_worktree": str(foreign)})
+        before = mapping_path.read_bytes()
+        result = self.classify_non_pr("foreign worktree")
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertRegex(result.stderr.lower(), r"worktree|repository|common")
+        self.assertEqual(mapping_path.read_bytes(), before)
+        self.assertFalse(any(call[:2] == ["issue", "edit"] for call in self.calls()))
+        self.assertFalse(any(call[:2] == ["issue", "comment"] for call in self.calls()))
+
+    def test_classification_rejects_closed_issue_before_any_remote_mutation(self) -> None:
+        mapping_path = self.mapping()
+        before = mapping_path.read_bytes()
+        self.write_state(self.issue_state, {"state": "CLOSED", "stateReason": "NOT_PLANNED"})
+
+        result = self.classify_non_pr("closed issue must remain immutable")
+
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertRegex(result.stderr.lower(), r"closed|statereason")
+        self.assertEqual(mapping_path.read_bytes(), before)
+        self.assertEqual(self.read_json(self.comments), [])
+        self.assertEqual(self.read_json(self.closes), [])
+        self.assertFalse(any(call[:2] == ["issue", "edit"] for call in self.calls()))
+        self.assertFalse(any(call[:2] == ["issue", "comment"] for call in self.calls()))
+
+    def test_classification_requires_complete_issue_identity_before_remote_mutation(self) -> None:
+        for missing in ("issue_number", "issue_url"):
+            with self.subTest(missing=missing):
+                self.reset_runtime()
+                mapping_path = self.mapping(extra={missing: ""})
+                before = mapping_path.read_bytes()
+
+                result = self.classify_non_pr(f"missing {missing}")
+
+                self.assertNotEqual(result.returncode, 0, result.stderr)
+                self.assertRegex(result.stderr.lower(), r"issue|identity|incomplete")
+                self.assertEqual(mapping_path.read_bytes(), before)
+                self.assertEqual(self.read_json(self.comments), [])
+                self.assertFalse(any(call[:2] == ["issue", "edit"] for call in self.calls()))
+                self.assertFalse(any(call[:2] == ["issue", "comment"] for call in self.calls()))
+
+    def test_classification_rejects_repository_binding_drift_before_remote_mutation(self) -> None:
+        mapping_path = self.mapping(extra={"repository": "foreign/repo"})
+        before = mapping_path.read_bytes()
+
+        result = self.classify_non_pr("foreign repository binding")
+
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertRegex(result.stderr.lower(), r"repository|identity|bound")
+        self.assertEqual(mapping_path.read_bytes(), before)
+        self.assertEqual(self.read_json(self.comments), [])
+        self.assertFalse(any(call[:2] == ["issue", "edit"] for call in self.calls()))
+        self.assertFalse(any(call[:2] == ["issue", "comment"] for call in self.calls()))
+
+    def test_deferred_closeout_publishes_blocked_phase_to_issue_project_and_cache(self) -> None:
+        mapping_path = self.mapping()
+        result = subprocess.run([
+            sys.executable, str(PROJECT_TASK), "closeout-task", str(self.root),
+            "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
+            "--to-status", "deferred", "--claim-json", "{}", "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        comments = self.read_json(self.comments)
+        self.assertEqual(len(comments), 1)
+        self.assertIn("Evidence Phase: blocked", comments[0]["body"])
+        self.assertIn("Workflow Phase: blocked", comments[0]["body"])
+        self.assertIn("Task Status: deferred", comments[0]["body"])
+        self.assertIn("- status: `deferred`", self.issue_body.read_text())
+        self.assertIn("- workflow_phase: `blocked`", self.issue_body.read_text())
+        self.assertEqual(self.read_json(self.project_fields), {
+            "Status": "Done", "PM Status": "deferred", "Workflow Phase": "blocked"
+        })
+        record = self.read_json(mapping_path)["tasks"][UID]
+        self.assertEqual(record["status"], "deferred")
+        self.assertEqual(record["workflow_phase"], "blocked")
 
     def test_superseded_without_bound_pr_fails(self) -> None:
         self.mapping()
@@ -828,6 +1027,47 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(finalized["last_closed_at"], original_closed_at)
         self.assertIn("non_merge_finalized_at", finalized)
 
+    def test_non_pr_completed_reads_classification_evidence_from_task_worktree_when_finalized_from_default(self) -> None:
+        subprocess.run(["git", "-C", str(self.root), "config", "user.email", "test@example.invalid"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "config", "user.name", "Test"], check=True)
+        (self.root / "tracked").write_text("base\n")
+        subprocess.run(["git", "-C", str(self.root), "add", "tracked"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "commit", "-qm", "base"], check=True)
+        task_worktree = Path(self.tmp.name) / "canonical-task-worktree"
+        subprocess.run([
+            "git", "-C", str(self.root), "worktree", "add", "-qb", "task/fixture", str(task_worktree),
+        ], check=True)
+
+        self.mapping(extra={
+            "canonical_worktree": str(task_worktree), "task_branch": "task/fixture",
+        })
+        task_mapping_path = task_worktree / ".pm/github-project-sync/tasks.json"
+        task_mapping_path.parent.mkdir(parents=True, exist_ok=True)
+        task_mapping_path.write_bytes((self.root / ".pm/github-project-sync/tasks.json").read_bytes())
+        classified = self.classify_non_pr("classified in the task worktree", repo_root=task_worktree)
+        self.assertEqual(classified.returncode, 0, classified.stderr)
+
+        claim = json.dumps({
+            "claim_type": "task_complete", "status": "verified",
+            "allowed_to_claim": True, "verification_exit_code": 0,
+            "verified_at": "2026-08-30T00:00:00+08:00",
+        })
+        closeout = subprocess.run([
+            sys.executable, str(PROJECT_TASK), "closeout-task", str(task_worktree),
+            "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
+            "--to-status", "done", "--claim-json", claim, "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+        self.assertEqual(closeout.returncode, 0, closeout.stderr)
+
+        task_mapping = self.read_json(task_mapping_path)
+        evidence_path = Path(task_mapping["tasks"][UID]["non_pr_completion_evidence_file"])
+        self.assertEqual(evidence_path.parent.parent.parent.resolve(), (task_worktree / ".pm").resolve())
+        default_mapping_path = self.root / ".pm/github-project-sync/tasks.json"
+        default_mapping_path.write_text(json.dumps(task_mapping, sort_keys=True) + "\n")
+        result = self.invoke("non_pr_completed", evidence_path, repo_root=self.root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.read_json(self.closes), ["completed"])
+
     def test_retry_recovers_after_project_done_then_selected_refresh_without_manual_edits(self) -> None:
         canonical_worktree = Path(self.tmp.name) / "canonical-task-worktree"
         subprocess.run(["git", "-C", str(self.root), "config", "user.email", "test@example.invalid"], check=True)
@@ -1294,6 +1534,87 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
             "non_pr_completion_evidence": "persisted fixture truth",
         })
         result = self.invoke("non_pr_completed")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.read_json(self.closes), ["completed"])
+
+    def test_public_non_pr_classification_feeds_task_complete_and_finalizer(self) -> None:
+        mapping_path = self.mapping()
+        evidence = "public classification fixture: no PR is required"
+
+        classified = self.classify_non_pr(evidence)
+        self.assertEqual(classified.returncode, 0, classified.stderr)
+        payload = json.loads(classified.stdout)
+        self.assertEqual(payload["completion_mode"], "non_pr_task")
+        self.assertEqual(payload["non_pr_completion_evidence"], evidence)
+        self.assertTrue(Path(payload["non_pr_completion_evidence_file"]).is_file())
+        record = self.read_json(mapping_path)["tasks"][UID]
+        self.assertEqual(record["completion_mode"], "non_pr_task")
+        self.assertEqual(record["non_pr_completion_evidence"], evidence)
+        self.assertEqual(
+            record["non_pr_completion_evidence_sha256"],
+            hashlib.sha256(Path(record["non_pr_completion_evidence_file"]).read_bytes()).hexdigest(),
+        )
+        self.assertIn("completion_mode: `non_pr_task`", self.issue_body.read_text())
+        self.assertEqual(len(self.read_json(self.comments)), 1)
+
+        claim = json.dumps({
+            "claim_type": "task_complete", "status": "verified",
+            "allowed_to_claim": True, "verification_exit_code": 0,
+            "verified_at": "2026-08-30T00:00:00+08:00",
+        })
+        closeout = subprocess.run([
+            sys.executable, str(PROJECT_TASK), "closeout-task", str(self.root),
+            "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
+            "--to-status", "done", "--claim-json", claim, "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+        self.assertEqual(closeout.returncode, 0, closeout.stderr)
+        record = self.read_json(mapping_path)["tasks"][UID]
+        self.assertEqual(record["status"], "done")
+        self.assertEqual(record["workflow_phase"], "task_done")
+        self.assertEqual(record["completion_mode"], "non_pr_task")
+
+        finalized = self.invoke("non_pr_completed", Path(record["non_pr_completion_evidence_file"]))
+        self.assertEqual(finalized.returncode, 0, finalized.stderr)
+        self.assertEqual(self.read_json(self.closes), ["completed"])
+        self.assertEqual(len(self.read_json(self.comments)), 3)
+
+    def test_non_pr_finalization_rejects_alternate_and_tampered_classification_evidence(self) -> None:
+        self.mapping()
+        evidence = "bound classification evidence"
+        classified = self.classify_non_pr(evidence)
+        self.assertEqual(classified.returncode, 0, classified.stderr)
+        record = self.read_json(self.root / ".pm/github-project-sync/tasks.json")["tasks"][UID]
+        canonical = Path(record["non_pr_completion_evidence_file"])
+        claim = json.dumps({
+            "claim_type": "task_complete", "status": "verified",
+            "allowed_to_claim": True, "verification_exit_code": 0,
+            "verified_at": "2026-08-30T00:00:00+08:00",
+        })
+        closeout = subprocess.run([
+            sys.executable, str(PROJECT_TASK), "closeout-task", str(self.root),
+            "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
+            "--to-status", "done", "--claim-json", claim, "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+        self.assertEqual(closeout.returncode, 0, closeout.stderr)
+        alternate = Path(self.tmp.name) / "alternate-evidence.md"
+        alternate.write_bytes(canonical.read_bytes())
+        before_comments = self.read_json(self.comments)
+        result = self.invoke("non_pr_completed", alternate)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr.lower(), r"canonical|evidence")
+        self.assertEqual(self.read_json(self.comments), before_comments)
+        self.assertEqual(self.read_json(self.closes), [])
+
+        original = canonical.read_bytes()
+        canonical.write_text("tampered classification evidence\n")
+        result = self.invoke("non_pr_completed", canonical)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr.lower(), r"digest|content|evidence")
+        self.assertEqual(self.read_json(self.comments), before_comments)
+        self.assertEqual(self.read_json(self.closes), [])
+
+        canonical.write_bytes(original)
+        result = self.invoke("non_pr_completed", canonical)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.read_json(self.closes), ["completed"])
 

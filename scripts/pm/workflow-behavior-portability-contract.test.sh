@@ -6,10 +6,70 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 test "$(git -C "$ROOT_DIR" ls-files -s -- scripts/pm/post-merge-main-sync-default-cache-recovery.test.sh | awk '{print $1}')" = "100755"
 python3 - "$SCRIPT_DIR/workflow-behavior-eval.sh" <<'PY'
-import pathlib,sys
+import pathlib
+import subprocess
+import sys
+import tempfile
 
 source=pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
 execution,results=source.split('RESULT_JSON=',1)
+closeout=pathlib.Path(sys.argv[1]).with_name('closeout-tmpdir-portability.test.sh').read_text(encoding='utf-8')
+assert 'OASIS7_WORKFLOW_EVAL_SCRATCH="$TMP_DIR/pm-scratch"' in execution, \
+    'workflow behavior eval must allocate its scratch outside the repository projection'
+assert 'export OASIS7_WORKFLOW_EVAL_SCRATCH' in execution, \
+    'workflow behavior eval must export its isolated scratch root to child fixtures'
+assert 'OASIS7_WORKFLOW_EVAL_SCRATCH:-$ROOT_DIR/.pm/scratch' in closeout, \
+    'closeout portability fixture must consume the eval-owned scratch root'
+guard = pathlib.Path(sys.argv[1]).with_name('guard-tracked-files.py')
+with tempfile.TemporaryDirectory(prefix='oasis7-workflow-projection-') as tmp:
+    repo = pathlib.Path(tmp) / 'repo'
+    state = pathlib.Path(tmp) / 'state'
+    eval_scratch = pathlib.Path(tmp) / 'eval-scratch'
+    repo.mkdir()
+    subprocess.run(['git', 'init', '-q', str(repo)], check=True)
+    subprocess.run([
+        sys.executable, str(guard), 'snapshot', '--root', str(repo),
+        '--state', str(state), '--pathspec', '.pm',
+    ], check=True)
+    eval_scratch.mkdir()
+    isolated = subprocess.run([
+        sys.executable, str(guard), 'check', '--root', str(repo),
+        '--state', str(state), '--pathspec', '.pm',
+    ], text=True, capture_output=True, check=False)
+    assert isolated.returncode == 0, isolated.stderr
+    (repo / '.pm' / 'scratch').mkdir(parents=True)
+    leaked = subprocess.run([
+        sys.executable, str(guard), 'check', '--root', str(repo),
+        '--state', str(state), '--pathspec', '.pm',
+    ], text=True, capture_output=True, check=False)
+    assert leaked.returncode != 0, leaked.stdout
+    assert 'new filesystem projection path: .pm/scratch' in leaked.stderr, leaked.stderr
+    root = pathlib.Path(sys.argv[1]).parents[2]
+    pr_review = root / 'scripts' / 'pr-review-thread-closeout.test.sh'
+    detached = pathlib.Path(tmp) / 'pr-review-pristine-worktree'
+    detached_state = pathlib.Path(tmp) / 'pr-review-pristine-state'
+    subprocess.run([
+        'git', '-C', str(root), 'worktree', 'add', '--detach', str(detached), 'HEAD'
+    ], check=True, capture_output=True, text=True)
+    try:
+        subprocess.run([
+            sys.executable, str(guard), 'snapshot', '--root', str(detached),
+            '--state', str(detached_state), '--pathspec', '.pm',
+        ], check=True)
+        review = subprocess.run(
+            ['bash', str(detached / 'scripts' / 'pr-review-thread-closeout.test.sh')],
+            cwd=detached, text=True, capture_output=True, check=False,
+        )
+        assert review.returncode == 0, review.stderr
+        clean = subprocess.run([
+            sys.executable, str(guard), 'check', '--root', str(detached),
+            '--state', str(detached_state), '--pathspec', '.pm',
+        ], text=True, capture_output=True, check=False)
+        assert clean.returncode == 0, clean.stderr
+    finally:
+        subprocess.run([
+            'git', '-C', str(root), 'worktree', 'remove', '--force', str(detached)
+        ], check=True, capture_output=True, text=True)
 required_commands=(
     './scripts/pm/closeout-tmpdir-portability.test.sh',
     './scripts/pm/claim-ready-ready-pr.test.sh',

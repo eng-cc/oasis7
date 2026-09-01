@@ -7,7 +7,7 @@ trap 'rm -rf "$TMP"' EXIT
 REPO="$TMP/repo"
 TASK="$TMP/task"
 UID_VALUE="task_11111111111111111111111111111111"
-mkdir -p "$REPO/scripts/pm" "$REPO/.pm/github-project-sync" "$TASK" "$REPO/.git/receipts"
+mkdir -p "$REPO/scripts/pm" "$REPO/.pm/github-project-sync" "$TASK"
 cp "$SOURCE_ROOT/scripts/pm/finalize-task.sh" "$REPO/scripts/pm/finalize-task.sh"
 chmod +x "$REPO/scripts/pm/finalize-task.sh"
 
@@ -20,8 +20,16 @@ git -C "$REPO" commit -qm fixture
 INITIAL_MAIN_OID="$(git -C "$REPO" rev-parse HEAD)"
 ORIGIN="$TMP/origin.git"
 git init --bare -q "$ORIGIN"
-git -C "$REPO" remote add origin "$ORIGIN"
+git -C "$REPO" remote add origin https://github.com/fixture/repo.git
+git -C "$REPO" config url."$ORIGIN".insteadOf https://github.com/fixture/repo.git
 git -C "$REPO" push -q origin main
+
+# The canonical task checkout is a registered worktree so preflight can prove
+# repository/common-dir and branch identity before terminal effects.
+git -C "$REPO" worktree add -q -b task/finalize "$TASK" HEAD
+mkdir -p "$TASK/scripts/pm"
+cp "$SOURCE_ROOT/scripts/pm/finalize-task.sh" "$TASK/scripts/pm/finalize-task.sh"
+chmod +x "$TASK/scripts/pm/finalize-task.sh"
 
 # The remote-tracking ref is deliberately stale while the real origin/main
 # already contains the ordinary fast-forward integration.  The orchestrator
@@ -35,7 +43,7 @@ git -C "$REPO" push -q origin main
 git -C "$REPO" update-ref refs/remotes/origin/main "$INITIAL_MAIN_OID"
 
 cat >"$REPO/.pm/github-project-sync/tasks.json" <<EOF
-{"version":1,"tasks":{"$UID_VALUE":{"task_uid":"$UID_VALUE","repository":"fixture/repo","issue_number":3379,"pr_url":"https://example.invalid/pull/7","canonical_worktree":"$TASK","task_branch":"task/finalize","default_branch":"main","owner_role":"repository_health_engineer","pr_number":7}}}
+{"version":1,"tasks":{"$UID_VALUE":{"task_uid":"$UID_VALUE","repository":"fixture/repo","issue_number":3379,"issue_url":"https://github.com/fixture/repo/issues/3379","pr_url":"https://github.com/fixture/repo/pull/7","canonical_worktree":"$TASK","task_branch":"task/finalize","default_branch":"main","owner_role":"repository_health_engineer","pr_number":7}}}
 EOF
 
 make_mock() {
@@ -50,8 +58,11 @@ EOF
 make_mock refresh-task-cache.sh "echo refresh >>\"\$TEST_SEQUENCE\"; printf \"{}\\n\""
 cat >"$REPO/scripts/pm/canonical-receipt-root.py" <<'PY'
 #!/usr/bin/env python3
-import os
-print(os.environ["TEST_REPO"] + "/.git/receipts")
+import os, pathlib, sys
+root = pathlib.Path(os.environ["TEST_REPO"]) / ".git/receipts"
+if "--create" in sys.argv[1:]:
+    root.mkdir(parents=True, exist_ok=True)
+print(root)
 PY
 chmod +x "$REPO/scripts/pm/canonical-receipt-root.py"
 cat >"$REPO/scripts/pm/pr-merge-receipt.py" <<'PY'
@@ -77,6 +88,124 @@ chmod +x "$REPO/scripts/pm/post-merge-finalize.py"
 make_mock patch-equivalence-receipt.sh 'echo unexpected-patch >&2; exit 91'
 
 SEQUENCE="$TMP/sequence"
+PREFLIGHT_SEQUENCE="$TMP/preflight-sequence"
+: >"$PREFLIGHT_SEQUENCE"
+# Before merge, the default worktree may still carry a helper that predates
+# --preflight.  The reviewed task-worktree helper must remain usable while
+# retaining the default worktree as --repo-root.
+cp "$REPO/scripts/pm/finalize-task.sh" "$TMP/current-finalize-task.sh"
+cat >"$REPO/scripts/pm/finalize-task.sh" <<'EOF'
+#!/usr/bin/env bash
+echo 'legacy default helper does not support --preflight' >&2
+exit 2
+EOF
+chmod +x "$REPO/scripts/pm/finalize-task.sh"
+TEST_SEQUENCE="$PREFLIGHT_SEQUENCE" TEST_REPO="$REPO" TEST_HEAD="$HEAD_OID" \
+  "$TASK/scripts/pm/finalize-task.sh" --repo-root "$REPO" --task-uid "$UID_VALUE" --pr 7 --preflight --json >"$TMP/compat-preflight.json" 2>"$TMP/compat-preflight.err" || {
+    cat "$TMP/compat-preflight.err" >&2
+    cat "$TMP/compat-preflight.json" >&2
+    exit 1
+  }
+python3 - "$TMP/compat-preflight.json" <<'PY'
+import json, sys
+result = json.load(open(sys.argv[1], encoding="utf-8"))
+assert result["status"] == "ready", result
+assert result["repo_root"].endswith("/repo"), result
+PY
+cp "$TMP/current-finalize-task.sh" "$REPO/scripts/pm/finalize-task.sh"
+
+TEST_SEQUENCE="$PREFLIGHT_SEQUENCE" TEST_REPO="$REPO" TEST_HEAD="$HEAD_OID" \
+  "$REPO/scripts/pm/finalize-task.sh" --repo-root "$REPO" --task-uid "$UID_VALUE" --pr 7 --preflight --json >"$TMP/preflight.json" 2>"$TMP/preflight.err" || {
+    cat "$TMP/preflight.err" >&2
+    cat "$TMP/preflight.json" >&2
+    exit 1
+  }
+test ! -s "$PREFLIGHT_SEQUENCE"
+test ! -e "$REPO/.git/receipts"
+mkdir -p "$REPO/.git/receipts"
+python3 - "$TMP/preflight.json" <<'PY'
+import json, sys
+result = json.load(open(sys.argv[1], encoding="utf-8"))
+assert result["status"] == "ready", result
+assert result["blockers"] == [], result
+assert result["task_uid"] == "task_11111111111111111111111111111111", result
+assert result["pr_number"] == 7, result
+assert result["canonical_worktree"].endswith("/task"), result
+assert result["task_branch"] == "task/finalize", result
+assert result["next_command"] == [
+    "./scripts/pm/finalize-task.sh", "--repo-root", result["repo_root"],
+    "--task-uid", result["task_uid"], "--pr", "7", "--resume", "--json"
+], result
+PY
+
+preflight_blocker() {
+  local label="$1"
+  local pr="${2:-7}"
+  local expected="${3:-$label}"
+  set +e
+  TEST_SEQUENCE="$PREFLIGHT_SEQUENCE" TEST_REPO="$REPO" TEST_HEAD="$HEAD_OID" \
+    "$REPO/scripts/pm/finalize-task.sh" --repo-root "$REPO" --task-uid "$UID_VALUE" --pr "$pr" --preflight --json \
+    >"$TMP/preflight-$label.json" 2>"$TMP/preflight-$label.err"
+  local status=$?
+  set -e
+  [[ "$status" != 0 ]]
+  python3 - "$TMP/preflight-$label.json" "$expected" <<'PY'
+import json, sys
+result = json.load(open(sys.argv[1], encoding="utf-8"))
+assert result["status"] == "blocked", result
+assert result["next_command"] == [], result
+assert any(sys.argv[2] in blocker for blocker in result["blockers"]), result
+PY
+}
+
+set_task_field() {
+  python3 - "$REPO/.pm/github-project-sync/tasks.json" "$UID_VALUE" "$1" "$2" <<'PY'
+import json, sys
+path, uid, key, value = sys.argv[1:]
+data = json.load(open(path, encoding="utf-8"))
+data["tasks"][uid][key] = value
+json.dump(data, open(path, "w", encoding="utf-8"))
+PY
+}
+
+git -C "$REPO" config --unset remote.origin.url
+preflight_blocker missing-origin 7 origin
+git -C "$REPO" config remote.origin.url https://github.com/fixture/repo.git
+
+set_task_field issue_url https://example.invalid/issues/3379
+preflight_blocker malformed-issue-url 7 "Issue URL"
+set_task_field issue_url https://github.com/fixture/repo/issues/3379
+
+set_task_field pr_url https://example.invalid/pull/7
+preflight_blocker unsupported-pr-url 7 "PR URL"
+set_task_field pr_url https://github.com/fixture/repo/pull/7
+
+git -C "$REPO" checkout --detach -q HEAD
+preflight_blocker detached-default 7 detached
+git -C "$REPO" switch -q main
+
+preflight_blocker task-pr 8 "task/PR"
+set_task_field task_uid task_22222222222222222222222222222222
+preflight_blocker task-uid 7 "task UID"
+set_task_field task_uid "$UID_VALUE"
+set_task_field canonical_worktree /tmp/not-the-task-worktree
+preflight_blocker worktree
+set_task_field canonical_worktree "$TASK"
+set_task_field task_branch task/wrong-branch
+preflight_blocker branch
+set_task_field task_branch task/finalize
+set_task_field repository invalid-repository
+preflight_blocker repository
+set_task_field repository fixture/repo
+set_task_field pr_url https://github.com/other/repo/pull/7
+preflight_blocker foreign-pr 7 repository
+set_task_field pr_url https://github.com/fixture/repo/pull/7
+set_task_field repository other/repo
+set_task_field pr_url https://github.com/other/repo/pull/7
+preflight_blocker foreign-repo 7 repository
+set_task_field repository fixture/repo
+set_task_field pr_url https://github.com/fixture/repo/pull/7
+
 TEST_SEQUENCE="$SEQUENCE" TEST_REPO="$REPO" TEST_HEAD="$HEAD_OID" \
   "$REPO/scripts/pm/finalize-task.sh" --repo-root "$REPO" --task-uid "$UID_VALUE" --pr 7 --resume --json >"$TMP/result.json"
 printf '%s\n' merge-receipt task-closeout refresh main-sync cleanup finalize >"$TMP/expected"
@@ -128,6 +257,10 @@ cmp "$TMP/retry-expected" "$SEQUENCE"
 # bound finalizer; the now-absent checkout is not required.
 rm -f "$REPO/.git/receipts/finalizer-ledger.json"
 rm -rf "$TASK"
+# The fixture models a fully cleaned terminal checkout; remove the worktree
+# registration and local branch so the retry need not re-run cleanup.
+git -C "$REPO" worktree prune
+git -C "$REPO" update-ref -d refs/heads/task/finalize
 : >"$SEQUENCE"
 TEST_SEQUENCE="$SEQUENCE" TEST_REPO="$REPO" TEST_HEAD="$HEAD_OID" \
   "$REPO/scripts/pm/finalize-task.sh" --repo-root "$REPO" --task-uid "$UID_VALUE" --pr 7 --resume --json >"$TMP/no-ledger-retry.json"
@@ -164,12 +297,13 @@ git -C "$REPO" add squash.txt
 git -C "$REPO" commit -qm squash-integration
 SQUASH_MAIN_COMMIT="$(git -C "$REPO" rev-parse HEAD)"
 git -C "$REPO" push -q origin main
+git -C "$REPO" worktree add -q "$TASK" task/finalize-squash
 python3 - "$REPO/.pm/github-project-sync/tasks.json" "$UID_VALUE" <<'PY'
 import json,sys
 path,uid=sys.argv[1:]
 data=json.load(open(path,encoding='utf-8'))
 r=data['tasks'][uid]
-r.update(task_branch='task/finalize-squash',pr_number=9,pr_url='https://example.invalid/pull/9')
+r.update(task_branch='task/finalize-squash',pr_number=9,pr_url='https://github.com/fixture/repo/pull/9')
 json.dump(data,open(path,'w',encoding='utf-8'))
 PY
 rm -f "$REPO/.git/receipts/terminal-cleanup-receipt.json" \

@@ -46,7 +46,9 @@ done
 
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-workflow-eval.XXXXXX")"
 PM_ROLE_SNAPSHOT_DIR="$TMP_DIR/pm-role-snapshot"
-OASIS7_WORKFLOW_EVAL_SCRATCH="$TMP_DIR"
+OASIS7_WORKFLOW_EVAL_SCRATCH="$TMP_DIR/pm-scratch"
+mkdir -p "$OASIS7_WORKFLOW_EVAL_SCRATCH"
+export OASIS7_WORKFLOW_EVAL_SCRATCH
 cleanup() {
   local status=$?
   rm -rf "$TMP_DIR"

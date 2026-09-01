@@ -532,6 +532,7 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
         f"- owner_role: `{task.get('owner_role')}`",
         f"- module: `{task.get('module') or ''}`",
         f"- status: `{task.get('status')}`",
+        f"- workflow_phase: `{task.get('workflow_phase') or workflow_phase_for(str(task.get('status') or ''))}`",
         f"- priority: `{task.get('priority')}`",
         f"- worktree_hint: `{task.get('worktree_hint') or ''}`",
     ]

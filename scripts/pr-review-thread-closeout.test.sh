@@ -5,10 +5,20 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-mkdir -p "$ROOT_DIR/.pm/scratch"
-TMPDIR="$(mktemp -d "$ROOT_DIR/.pm/scratch/pr-review-thread-closeout-test.XXXXXX")"
+SCRATCH_ROOT="$ROOT_DIR/.pm/scratch"
+SCRATCH_ROOT_PREEXISTED=0
+if [[ -e "$SCRATCH_ROOT" ]]; then
+  SCRATCH_ROOT_PREEXISTED=1
+fi
+mkdir -p "$SCRATCH_ROOT"
+TMPDIR="$(mktemp -d "$SCRATCH_ROOT/pr-review-thread-closeout-test.XXXXXX")"
 cleanup() {
+  local status=$?
   rm -rf "$TMPDIR"
+  if [[ "$SCRATCH_ROOT_PREEXISTED" == "0" ]]; then
+    rmdir "$SCRATCH_ROOT" 2>/dev/null || true
+  fi
+  exit "$status"
 }
 trap cleanup EXIT
 

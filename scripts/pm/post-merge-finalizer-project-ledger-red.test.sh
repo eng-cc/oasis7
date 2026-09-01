@@ -4,10 +4,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"; TMP="$(mktemp -d
 REPO="$TMP/repo"; UID_VALUE="task_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"; mkdir -p "$REPO/.pm/github-project-sync" "$TMP/task" "$TMP/bin"
 git init -q -b main "$REPO"; RECEIPT_ROOT="$(python3 "$ROOT_DIR/scripts/pm/canonical-receipt-root.py" --default-worktree "$REPO" --task-uid "$UID_VALUE" --create)"
 cat >"$REPO/.pm/github-project-sync/tasks.json" <<EOF
-{"project":{"owner":"fixture","number":1,"id":"P1"},"tasks":{"$UID_VALUE":{"task_uid":"$UID_VALUE","status":"done","owner_role":"qa_engineer","module":"engineering","repository":"fixture/repo","canonical_worktree":"$TMP/task","issue_number":11,"pr_number":22,"project_item_id":"ITEM1","workflow_phase":"main_sync","merge_receipt":{"state":"MERGED"},"phase_receipts":{"main_sync":{"receipt_type":"oasis7_main_sync"}}}}}
+{"project":{"owner":"fixture","number":1,"id":"P1"},"tasks":{"$UID_VALUE":{"task_uid":"$UID_VALUE","status":"done","owner_role":"qa_engineer","module":"engineering","repository":"fixture/repo","canonical_worktree":"$TMP/task","task_branch":"task/finalize","issue_number":11,"pr_number":22,"project_item_id":"ITEM1","workflow_phase":"main_sync","merge_receipt":{"state":"MERGED"},"phase_receipts":{"main_sync":{"receipt_type":"oasis7_main_sync"}}}}}
 EOF
 cat >"$RECEIPT_ROOT/terminal-cleanup-receipt.json" <<EOF
-{"receipt_type":"oasis7_terminal_cleanup","issuer":"post-merge-cleanup","task_uid":"$UID_VALUE","repository":"fixture/repo","issue_number":11,"pr_number":22}
+{"receipt_type":"oasis7_terminal_cleanup","issuer":"post-merge-cleanup","task_uid":"$UID_VALUE","repository":"fixture/repo","issue_number":11,"pr_number":22,"worktree":"$TMP/task","branch":"task/finalize"}
 EOF
 cat >"$TMP/bin/gh" <<'SH'
 #!/usr/bin/env bash
