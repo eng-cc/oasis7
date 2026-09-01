@@ -38,6 +38,7 @@ Options:
   --binary <name>           Release binary name to size-check. Defaults to package.
   --check-only              Measure package closure and cargo check only (for libraries).
   --no-default-features     Measure the package with Cargo default features disabled.
+  --measure-warm-check      Measure an identical no-op cargo check in the cold check target.
   --baseline-ref <ref>      Optional git ref/SHA to compare against.
   -h, --help                Show this help.
 
@@ -61,6 +62,7 @@ baseline_ref=""
 out_dir=""
 check_only=false
 no_default_features=false
+measure_warm_check=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -78,6 +80,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-default-features)
       no_default_features=true
+      shift
+      ;;
+    --measure-warm-check)
+      measure_warm_check=true
       shift
       ;;
     --baseline-ref)
@@ -117,9 +123,84 @@ print(Path(sys.argv[1]).resolve())
 PY
 )
 
+# Measurement output is allowed beside the checkout (or under an untracked
+# workflow output directory), but never at or below a tracked source path.
+# Resolve symlinks before checking so an apparently external alias cannot
+# redirect artifacts into source files.
+python3 - "$repo_root" "$out_dir" <<'PY'
+from pathlib import Path
+import os
+import subprocess
+import sys
+import shutil
+
+repo_root = Path(sys.argv[1]).resolve()
+out_dir = Path(sys.argv[2]).resolve()
+if out_dir == repo_root:
+    raise SystemExit("error: output path must not be the checkout root")
+
+git_candidates = []
+for path_entry in os.environ.get("PATH", "").split(os.pathsep):
+    candidate = Path(path_entry) / ("git.exe" if os.name == "nt" else "git")
+    if candidate.is_file() and os.access(candidate, os.X_OK):
+        git_candidates.append(str(candidate))
+if shutil.which("git"):
+    git_candidates.insert(0, shutil.which("git"))
+git_candidates = list(dict.fromkeys(git_candidates))
+result = None
+for git in git_candidates:
+    attempt = subprocess.run(
+        [git, "-C", str(repo_root), "ls-files", "-z", "--full-name"],
+        capture_output=True,
+        check=False,
+    )
+    if attempt.returncode == 0:
+        result = attempt
+        break
+if result is None:
+    raise SystemExit("error: unable to enumerate tracked source paths")
+
+for raw_path in result.stdout.split(b"\0"):
+    if not raw_path:
+        continue
+    tracked = (repo_root / raw_path.decode("utf-8", "surrogateescape")).resolve()
+    ancestors = (tracked, *tracked.parents)
+    for ancestor in ancestors:
+        if ancestor == repo_root:
+            break
+        try:
+            out_dir.relative_to(ancestor)
+        except ValueError:
+            continue
+        raise SystemExit(
+            "error: output path aliases a tracked source path: "
+            f"{out_dir} (source {tracked})"
+        )
+PY
+
 mkdir -p "$out_dir/logs"
 
-tmp_root=$(mktemp -d "${TMPDIR:-/tmp}/oasis7-compile-metrics-XXXXXX")
+# All Cargo target directories are created below this run-owned temporary
+# root.  Refuse a TMPDIR inside the checkout so measured artifacts cannot be
+# placed under source control by environment configuration.
+tmp_parent=$(python3 - "$repo_root" "${TMPDIR:-/tmp}" <<'PY'
+from pathlib import Path
+import sys
+
+repo_root = Path(sys.argv[1]).resolve()
+tmp_parent = Path(sys.argv[2]).expanduser().resolve()
+try:
+    tmp_parent.relative_to(repo_root)
+except ValueError:
+    pass
+else:
+    raise SystemExit(
+        f"error: TMPDIR must be outside the checkout: {tmp_parent}"
+    )
+print(tmp_parent)
+PY
+)
+tmp_root=$(mktemp -d "$tmp_parent/oasis7-compile-metrics-XXXXXX")
 cleanup_paths=("$tmp_root")
 linked_worktrees=()
 cleanup() {
@@ -180,6 +261,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import shutil
 import time
 
 checkout_path, target_dir, cargo_home, log_path, *command = sys.argv[1:]
@@ -200,6 +282,186 @@ end_ns = time.monotonic_ns()
 if completed.returncode != 0:
     raise SystemExit(completed.returncode)
 print(f"{(end_ns - start_ns) / 1_000_000_000:.3f}")
+PY
+}
+
+source_fingerprint() {
+  local checkout_path="$1"
+  local output_path="$2"
+  local manifest_path="$3"
+  python3 - "$checkout_path" "$output_path" "$repo_root" "$manifest_path" <<'PY'
+from __future__ import annotations
+
+import hashlib
+import os
+from pathlib import Path
+import subprocess
+import sys
+import shutil
+
+checkout = Path(sys.argv[1]).resolve()
+output = Path(sys.argv[2]).resolve()
+canonical = Path(sys.argv[3]).resolve()
+manifest = Path(sys.argv[4])
+
+def under(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+git_candidates = []
+for path_entry in os.environ.get("PATH", "").split(os.pathsep):
+    candidate = Path(path_entry) / ("git.exe" if os.name == "nt" else "git")
+    if candidate.is_file() and os.access(candidate, os.X_OK):
+        git_candidates.append(str(candidate))
+if shutil.which("git"):
+    git_candidates.insert(0, shutil.which("git"))
+git_candidates = list(dict.fromkeys(git_candidates))
+
+def git_ls_files(root: Path, arguments: list[str]) -> subprocess.CompletedProcess[bytes] | None:
+    git_errors = []
+    for git in git_candidates:
+        result = subprocess.run(
+            [git, "-C", str(root), *arguments],
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            return result
+        git_errors.append(f"{git}: status {result.returncode}: {result.stderr.decode(errors='replace').strip()}")
+    return None
+
+tracked_result = git_ls_files(checkout, ["ls-files", "-z", "--full-name"])
+if tracked_result is None:
+    tracked_result = git_ls_files(canonical, ["ls-files", "-z", "--full-name"])
+if tracked_result is None:
+    raise SystemExit("error: unable to fingerprint tracked source paths")
+tracked = [
+    Path(raw.decode("utf-8", "surrogateescape"))
+    for raw in tracked_result.stdout.split(b"\0")
+    if raw
+]
+
+entries: list[str] = []
+
+def append_nested_tree(relative: Path, path: Path) -> None:
+    for git in git_candidates:
+        head = subprocess.run(
+            [git, "-C", str(path), "rev-parse", "--verify", "HEAD^{commit}"],
+            capture_output=True,
+            check=False,
+        )
+        if head.returncode == 0 and head.stdout.strip():
+            entries.append(
+                f"gitlink-head:{relative}:"
+                f"{head.stdout.decode('ascii', 'replace').strip()}"
+            )
+            break
+    for current_root, directory_names, file_names in os.walk(path, followlinks=False):
+        current = Path(current_root)
+        directory_names[:] = sorted(name for name in directory_names if name != ".git")
+        for name in list(directory_names):
+            nested = current / name
+            nested_relative = relative / nested.relative_to(path)
+            stat = nested.lstat()
+            mode = stat.st_mode & 0o7777
+            if nested.is_symlink():
+                entries.append(
+                    f"gitlink-symlink:{nested_relative}:{mode:o}:{os.readlink(nested)}"
+                )
+                directory_names.remove(name)
+            else:
+                entries.append(f"gitlink-dir:{nested_relative}:{mode:o}")
+        for name in sorted(file_names):
+            if name == ".git":
+                continue
+            nested = current / name
+            nested_relative = relative / nested.relative_to(path)
+            stat = nested.lstat()
+            mode = stat.st_mode & 0o7777
+            if nested.is_symlink():
+                entries.append(
+                    f"gitlink-symlink:{nested_relative}:{mode:o}:{os.readlink(nested)}"
+                )
+            elif nested.is_file():
+                digest = hashlib.sha256()
+                with nested.open("rb") as handle:
+                    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                        digest.update(chunk)
+                entries.append(
+                    f"gitlink-file:{nested_relative}:{mode:o}:{digest.hexdigest()}"
+                )
+            else:
+                entries.append(
+                    f"gitlink-other:{nested_relative}:{mode:o}:{stat.st_mode:o}"
+                )
+
+for relative in tracked:
+    path = checkout / relative
+    if under(path, output):
+        continue
+    try:
+        stat = path.lstat()
+    except FileNotFoundError:
+        entries.append(f"tracked-missing:{relative}")
+        continue
+    mode = stat.st_mode & 0o7777
+    if path.is_symlink():
+        entries.append(f"tracked-symlink:{relative}:{mode:o}:{os.readlink(path)}")
+    elif path.is_file():
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        entries.append(f"tracked-file:{relative}:{mode:o}:{digest.hexdigest()}")
+    else:
+        entries.append(f"tracked-other:{relative}:{mode:o}:{stat.st_mode:o}")
+        if path.is_dir():
+            append_nested_tree(relative, path)
+
+def add_untracked_entry(relative: Path, category: str) -> None:
+    path = checkout / relative
+    if under(path, output):
+        return
+    try:
+        stat = path.lstat()
+    except FileNotFoundError:
+        entries.append(f"{category}-missing:{relative}")
+        return
+    mode = stat.st_mode & 0o7777
+    if path.is_symlink():
+        entries.append(f"{category}-symlink:{relative}:{mode:o}:{os.readlink(path)}")
+    elif path.is_file():
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        entries.append(f"{category}-file:{relative}:{mode:o}:{digest.hexdigest()}")
+    else:
+        entries.append(f"{category}-other:{relative}:{mode:o}:{stat.st_mode:o}")
+
+untracked_queries = (
+    ("untracked", ["ls-files", "--others", "--exclude-standard", "-z", "--full-name"]),
+    ("ignored", ["ls-files", "--others", "--ignored", "--exclude-standard", "-z", "--full-name"]),
+)
+for category, arguments in untracked_queries:
+    result = git_ls_files(checkout, arguments)
+    if result is None:
+        result = git_ls_files(canonical, arguments)
+    if result is None:
+        raise SystemExit(f"error: unable to fingerprint {category} source paths")
+    for raw in result.stdout.split(b"\0"):
+        if not raw:
+            continue
+        add_untracked_entry(
+            Path(raw.decode("utf-8", "surrogateescape")), category
+        )
+
+entries.sort()
+manifest.write_text("\n".join(entries) + "\n", encoding="utf-8", errors="surrogateescape")
+print(hashlib.sha256("\0".join(entries).encode("utf-8", "surrogateescape")).hexdigest())
 PY
 }
 
@@ -241,7 +503,7 @@ raise SystemExit(
 PY
 }
 
-measure_checkout() {
+measure_checkout_impl() {
   local label="$1"
   local checkout_path="$2"
   local result_path="$3"
@@ -309,6 +571,18 @@ measure_checkout() {
       "${cargo_check_args[@]}"
   )
 
+  local warm_seconds=""
+  if [[ "$measure_warm_check" == true ]]; then
+    warm_seconds=$(
+      measure_command_seconds \
+        "$checkout_path" \
+        "$check_target" \
+        "$cargo_home" \
+        "$out_dir/logs/${label}-cargo-check-warm.log" \
+        "${cargo_check_args[@]}"
+    )
+  fi
+
   local release_seconds=""
   local binary_bytes=""
   if [[ "$check_only" != true ]]; then
@@ -348,10 +622,12 @@ PY
     "$wasmtime_present" \
     "$wasm_executor_present" \
     "$check_seconds" \
+    "$warm_seconds" \
     "$release_seconds" \
     "$binary_bytes" \
     "$check_only" \
-    "$no_default_features"
+    "$no_default_features" \
+    "$measure_warm_check"
 import json
 import sys
 
@@ -366,15 +642,58 @@ payload = {
     "wasmtime_present": sys.argv[8] == "true",
     "wasm_executor_present": sys.argv[9] == "true",
     "cargo_check_seconds": float(sys.argv[10]),
-    "cargo_build_release_seconds": float(sys.argv[11]) if sys.argv[11] else None,
-    "release_binary_bytes": int(sys.argv[12]) if sys.argv[12] else None,
-    "check_only": sys.argv[13] == "true",
-    "no_default_features": sys.argv[14] == "true",
+    "cargo_check_warm_seconds": float(sys.argv[11]) if sys.argv[11] else None,
+    "cargo_build_release_seconds": float(sys.argv[12]) if sys.argv[12] else None,
+    "release_binary_bytes": int(sys.argv[13]) if sys.argv[13] else None,
+    "check_only": sys.argv[14] == "true",
+    "no_default_features": sys.argv[15] == "true",
+    "schema_version": 2,
+    "warm_check_enabled": sys.argv[16] == "true",
 }
+
 with open(out_path, "w", encoding="utf-8") as handle:
     json.dump(payload, handle, indent=2, sort_keys=True)
     handle.write("\n")
 PY
+}
+
+measure_checkout() {
+  local label="$1"
+  local checkout_path="$2"
+  local result_path="$3"
+  local before_fingerprint
+  local fingerprint_label="${label//[^A-Za-z0-9_.-]/_}"
+  local before_manifest="$tmp_root/fingerprint-${fingerprint_label}-before.txt"
+  local after_manifest="$tmp_root/fingerprint-${fingerprint_label}-after.txt"
+  before_fingerprint=$(source_fingerprint "$checkout_path" "$out_dir" "$before_manifest")
+
+  local status=0
+  # Run the fail-fast measurement body in a child so failures still allow the
+  # parent to fingerprint source state and preserve the output logs.
+  (
+    trap - EXIT
+    measure_checkout_impl "$label" "$checkout_path" "$result_path"
+  ) &
+  local measure_pid=$!
+  if wait "$measure_pid"; then
+    status=0
+  else
+    status=$?
+  fi
+
+  local after_fingerprint
+  after_fingerprint=$(source_fingerprint "$checkout_path" "$out_dir" "$after_manifest")
+  if [[ "$before_fingerprint" != "$after_fingerprint" ]] || ! cmp -s "$before_manifest" "$after_manifest"; then
+      local changed_state
+      changed_state=$(
+        { diff -u "$before_manifest" "$after_manifest" || true; } |
+          sed -n '/^[+-][^+-]/ { s/^[+-]//; p; q; }'
+      )
+      echo "error: source/worktree state changed during ${label} measurement: ${changed_state:-unknown path state}" >&2
+      rm -f "$result_path"
+      status=1
+  fi
+  return "$status"
 }
 
 current_metrics_json="$out_dir/current.metrics.json"
@@ -446,6 +765,7 @@ IDENTITY_FIELDS = (
     "binary",
     "check_only",
     "no_default_features",
+    "warm_check_enabled",
 )
 
 
@@ -510,6 +830,7 @@ if baseline_identity is not None and current_identity != baseline_identity:
     )
 
 comparison = {
+    "schema_version": 2,
     "package": current["package"],
     "binary": current["binary"],
     "measurement_identity": current_identity,
@@ -527,6 +848,7 @@ if baseline is not None:
         "cargo_check_seconds",
         "cargo_build_release_seconds",
         "release_binary_bytes",
+        "cargo_check_warm_seconds",
     ):
         current_value = current[key]
         baseline_value = baseline[key]
@@ -559,6 +881,10 @@ lines.append(f"- Current package closure count: `{current['package_count']}`")
 lines.append(f"- Current `wasmtime` present: `{str(current['wasmtime_present']).lower()}`")
 lines.append(f"- Current `oasis7_wasm_executor` present: `{str(current['wasm_executor_present']).lower()}`")
 lines.append(f"- Current cold `cargo check` seconds: `{fmt_num(current['cargo_check_seconds'])}`")
+if current["warm_check_enabled"]:
+    lines.append(f"- Warm/no-op `cargo check` enabled: `true` ({fmt_num(current['cargo_check_warm_seconds'])} seconds)")
+else:
+    lines.append("- Warm/no-op `cargo check` enabled: `false` (not measured)")
 if current["cargo_build_release_seconds"] is not None:
     lines.append(f"- Current cold `cargo build --release` seconds: `{fmt_num(current['cargo_build_release_seconds'])}`")
 if current["release_binary_bytes"] is not None:
@@ -594,6 +920,8 @@ else:
     lines.append(
         "Timing numbers are cold-build wall-clock measurements from this workflow run and are most meaningful when compared against the baseline in the same report, not across unrelated runs."
     )
+    if current["warm_check_enabled"]:
+        lines.append("Warm timing is an immediate no-op check reusing the current checkout's external run-owned check target; it is not a touched-source incremental measurement.")
 
 with summary_path.open("w", encoding="utf-8") as handle:
     handle.write("\n".join(lines))

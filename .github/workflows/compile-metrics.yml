@@ -38,6 +38,16 @@ on:
         required: false
         default: "3"
         type: string
+      measure_warm_check:
+        description: "Measure an identical no-op cargo check after the cold check"
+        required: false
+        default: false
+        type: boolean
+      max_cargo_check_warm_regression_pct:
+        description: "Optional allowed warm cargo check regression percentage"
+        required: false
+        default: ""
+        type: string
 
 env:
   CARGO_TERM_COLOR: always
@@ -71,6 +81,47 @@ jobs:
           # baseline explicitly below when one is requested instead of paying
           # the full-history transfer cost on every run.
           fetch-depth: 1
+
+      - name: Validate compile metrics inputs
+        shell: bash
+        env:
+          MEASURE_WARM_CHECK: ${{ inputs.measure_warm_check }}
+          MAX_PACKAGE_COUNT_REGRESSION_PCT: ${{ inputs.max_package_count_regression_pct }}
+          MAX_CARGO_CHECK_REGRESSION_PCT: ${{ inputs.max_cargo_check_regression_pct }}
+          MAX_CARGO_BUILD_RELEASE_REGRESSION_PCT: ${{ inputs.max_cargo_build_release_regression_pct }}
+          MAX_RELEASE_BINARY_BYTES_REGRESSION_PCT: ${{ inputs.max_release_binary_bytes_regression_pct }}
+          MAX_CARGO_CHECK_WARM_REGRESSION_PCT: ${{ inputs.max_cargo_check_warm_regression_pct }}
+        run: |
+          set -euo pipefail
+          if [[ "${MEASURE_WARM_CHECK}" != "true" && "${MEASURE_WARM_CHECK}" != "false" ]]; then
+            echo "error: measure_warm_check must be a boolean" >&2
+            exit 2
+          fi
+          if [[ "${MEASURE_WARM_CHECK}" != "true" && -n "${MAX_CARGO_CHECK_WARM_REGRESSION_PCT}" ]]; then
+            echo "error: max_cargo_check_warm_regression_pct requires measure_warm_check=true" >&2
+            exit 2
+          fi
+          validate_threshold() {
+            local name="$1" value="$2"
+            [[ -z "${value}" ]] && return 0
+            python3 - "${name}" "${value}" <<'PY'
+          import math
+          import sys
+
+          name, raw = sys.argv[1:]
+          try:
+              value = float(raw)
+          except ValueError as exc:
+              raise SystemExit(f"error: {name} must be a finite and non-negative number") from exc
+          if not math.isfinite(value) or value < 0:
+              raise SystemExit(f"error: {name} must be a finite and non-negative number")
+          PY
+          }
+          validate_threshold max_package_count_regression_pct "${MAX_PACKAGE_COUNT_REGRESSION_PCT}"
+          validate_threshold max_cargo_check_regression_pct "${MAX_CARGO_CHECK_REGRESSION_PCT}"
+          validate_threshold max_cargo_build_release_regression_pct "${MAX_CARGO_BUILD_RELEASE_REGRESSION_PCT}"
+          validate_threshold max_release_binary_bytes_regression_pct "${MAX_RELEASE_BINARY_BYTES_REGRESSION_PCT}"
+          validate_threshold max_cargo_check_warm_regression_pct "${MAX_CARGO_CHECK_WARM_REGRESSION_PCT}"
 
       - name: Fetch baseline ref
         if: ${{ inputs.baseline_ref != '' }}
@@ -163,6 +214,9 @@ jobs:
           if [[ -n "${binary}" ]]; then
             cmd+=(--binary "${binary}")
           fi
+          if [[ "${{ inputs.measure_warm_check }}" == "true" ]]; then
+            cmd+=(--measure-warm-check)
+          fi
           cmd+=("${extra_args[@]}")
           if [[ -n "${{ steps.baseline.outputs.baseline_ref }}" ]]; then
             cmd+=(--baseline-ref "${{ steps.baseline.outputs.baseline_ref }}")
@@ -179,34 +233,29 @@ jobs:
             echo
           } >> "${GITHUB_STEP_SUMMARY}"
 
-      - name: Upload compile metrics artifact
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: compile-metrics-${{ matrix.platform }}
-          path: output/compile-metrics/${{ matrix.platform }}
-          if-no-files-found: error
-
       - name: Enforce compile metrics gate
-        if: ${{ always() && steps.baseline.outputs.baseline_ref != '' }}
+        if: always()
         shell: bash
         env:
           MAX_PACKAGE_COUNT_REGRESSION_PCT: ${{ inputs.max_package_count_regression_pct }}
           MAX_CARGO_CHECK_REGRESSION_PCT: ${{ inputs.max_cargo_check_regression_pct }}
           MAX_CARGO_BUILD_RELEASE_REGRESSION_PCT: ${{ inputs.max_cargo_build_release_regression_pct }}
           MAX_RELEASE_BINARY_BYTES_REGRESSION_PCT: ${{ inputs.max_release_binary_bytes_regression_pct }}
+          MAX_CARGO_CHECK_WARM_REGRESSION_PCT: ${{ inputs.max_cargo_check_warm_regression_pct }}
         run: |
           set -euo pipefail
           cmd=(
             python3 ./scripts/ci-compile-metrics-gate.py
-            --comparison "output/compile-metrics/${{ matrix.platform }}/comparison.json" \
-            --max-package-count-regression-pct "${MAX_PACKAGE_COUNT_REGRESSION_PCT}"
+            --comparison "output/compile-metrics/${{ matrix.platform }}/comparison.json"
           )
+          if [[ -n "${MAX_PACKAGE_COUNT_REGRESSION_PCT}" ]]; then
+            cmd+=(--max-package-count-regression-pct "${MAX_PACKAGE_COUNT_REGRESSION_PCT}")
+          fi
           if [[ "${{ inputs.metric_target }}" == "launcher" ]]; then
-            cmd+=(
-              --max-release-binary-bytes-regression-pct "${MAX_RELEASE_BINARY_BYTES_REGRESSION_PCT}"
-              --require-wasmtime-absent
-            )
+            cmd+=(--require-wasmtime-absent)
+            if [[ -n "${MAX_RELEASE_BINARY_BYTES_REGRESSION_PCT}" ]]; then
+              cmd+=(--max-release-binary-bytes-regression-pct "${MAX_RELEASE_BINARY_BYTES_REGRESSION_PCT}")
+            fi
             if [[ -n "${MAX_CARGO_BUILD_RELEASE_REGRESSION_PCT}" ]]; then
               cmd+=(--max-cargo-build-release-regression-pct "${MAX_CARGO_BUILD_RELEASE_REGRESSION_PCT}")
             fi
@@ -214,7 +263,24 @@ jobs:
           if [[ -n "${MAX_CARGO_CHECK_REGRESSION_PCT}" ]]; then
             cmd+=(--max-cargo-check-regression-pct "${MAX_CARGO_CHECK_REGRESSION_PCT}")
           fi
-          "${cmd[@]}"
+          if [[ "${{ inputs.measure_warm_check }}" == "true" && -n "${MAX_CARGO_CHECK_WARM_REGRESSION_PCT}" ]]; then
+            cmd+=(--max-cargo-check-warm-regression-pct "${MAX_CARGO_CHECK_WARM_REGRESSION_PCT}")
+          fi
+          gate_output=""
+          gate_status=0
+          gate_output=$("${cmd[@]}" 2>&1) || gate_status=$?
+          printf '%s\n' "${gate_output}" | tee -a "output/compile-metrics/${{ matrix.platform }}/summary.md" >> "${GITHUB_STEP_SUMMARY}"
+          if [[ "${gate_status}" -ne 0 ]]; then
+            exit "${gate_status}"
+          fi
+
+      - name: Upload compile metrics artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: compile-metrics-${{ matrix.platform }}
+          path: output/compile-metrics/${{ matrix.platform }}
+          if-no-files-found: error
 
   summarize:
     name: summarize-compile-metrics
