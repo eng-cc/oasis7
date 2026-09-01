@@ -133,6 +133,7 @@ fn mixed_recipe_completions_on_one_factory_do_not_unlock_scale_out() {
     world
         .set_material_balance("circuit_board", 4)
         .expect("seed build circuits");
+    prepare_factory_build_id(&mut world, "builder-a", "site-1", "factory.stage.mixed");
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
@@ -379,6 +380,7 @@ fn industry_stage_downgrades_when_last_completed_factory_is_recycled() {
     world
         .set_material_balance("circuit_board", 4)
         .expect("seed build circuits");
+    prepare_factory_build_id(&mut world, "builder-a", "site-1", "factory.stage");
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),

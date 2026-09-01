@@ -15,23 +15,9 @@ use serde_json::json;
 #[path = "economy_module_validation_tests.rs"]
 mod module_validation_tests;
 
-fn factory_spec(factory_id: &str, build_time_ticks: u32, recipe_slots: u16) -> FactoryModuleSpec {
-    FactoryModuleSpec {
-        factory_id: factory_id.to_string(),
-        display_name: "Test Factory".to_string(),
-        tier: 1,
-        tags: vec!["assembly".to_string()],
-        build_cost: vec![
-            MaterialStack::new("steel_plate", 10),
-            MaterialStack::new("circuit_board", 2),
-        ],
-        build_time_ticks,
-        base_power_draw: 5,
-        recipe_slots,
-        throughput_bps: 10_000,
-        maintenance_per_tick: 1,
-    }
-}
+#[path = "economy_test_support.rs"]
+mod test_support;
+use test_support::{authorize_factory_build, bind_factory_build_module, factory_spec};
 
 fn activate_pure_module(world: &mut World, module_id: &str, wasm_seed: &[u8]) {
     world.set_policy(PolicySet::allow_all());
@@ -109,11 +95,12 @@ fn build_factory_consumes_materials_and_completes_after_delay() {
     world.step().expect("register agent");
 
     world
-        .set_material_balance("steel_plate", 20)
-        .expect("seed steel");
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "steel_plate", 20)
+        .expect("seed builder steel");
     world
-        .set_material_balance("circuit_board", 4)
-        .expect("seed circuits");
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "circuit_board", 4)
+        .expect("seed builder circuits");
+    authorize_factory_build(&mut world, "builder-a", "site-1", "factory.alpha");
 
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
@@ -124,8 +111,14 @@ fn build_factory_consumes_materials_and_completes_after_delay() {
     world.step().expect("start factory build");
     assert_eq!(world.pending_factory_builds_len(), 1);
     assert!(!world.has_factory("factory.alpha"));
-    assert_eq!(world.material_balance("steel_plate"), 10);
-    assert_eq!(world.material_balance("circuit_board"), 2);
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::agent("builder-a"), "steel_plate"),
+        10
+    );
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::agent("builder-a"), "circuit_board"),
+        2
+    );
 
     let started = world
         .journal()
@@ -177,6 +170,7 @@ fn build_factory_prefers_builder_material_ledger_when_available() {
     world
         .set_material_balance("circuit_board", 100)
         .expect("seed world circuits");
+    authorize_factory_build(&mut world, "builder-a", "site-1", "factory.ledger");
 
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
@@ -219,6 +213,12 @@ fn build_factory_does_not_fallback_to_world_material_ledger_when_builder_ledger_
     world
         .set_material_balance("circuit_board", 100)
         .expect("seed world circuits fallback");
+    authorize_factory_build(
+        &mut world,
+        "builder-a",
+        "site-1",
+        "factory.no-world-fallback",
+    );
 
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
@@ -274,11 +274,12 @@ fn schedule_recipe_consumes_inputs_and_power_then_produces_outputs() {
     world.step().expect("register agent");
 
     world
-        .set_material_balance("steel_plate", 11)
-        .expect("seed build steel");
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "steel_plate", 11)
+        .expect("seed builder build steel");
     world
-        .set_material_balance("circuit_board", 2)
-        .expect("seed build circuits");
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "circuit_board", 2)
+        .expect("seed builder build circuits");
+    authorize_factory_build(&mut world, "builder-a", "site-1", "factory.recipe");
 
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
@@ -376,11 +377,12 @@ fn schedule_recipe_rejects_invalid_byproduct_before_any_resource_sink() {
     world.step().expect("register agent");
 
     world
-        .set_material_balance("steel_plate", 11)
-        .expect("seed build steel");
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "steel_plate", 11)
+        .expect("seed builder build steel");
     world
-        .set_material_balance("circuit_board", 2)
-        .expect("seed build circuits");
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "circuit_board", 2)
+        .expect("seed builder build circuits");
+    authorize_factory_build(&mut world, "builder-a", "site-1", "factory.invalid.bundle");
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
@@ -390,9 +392,11 @@ fn schedule_recipe_rejects_invalid_byproduct_before_any_resource_sink() {
     world.step().expect("factory ready");
 
     world
-        .set_material_balance("iron_ingot", 1)
-        .expect("seed recipe input");
-    world.set_resource_balance(ResourceKind::Electricity, 5);
+        .set_ledger_material_balance(MaterialLedgerId::site("site-1"), "iron_ingot", 1)
+        .expect("seed site recipe input");
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, 5)
+        .expect("seed builder recipe power");
     let journal_before = world.journal().events.len();
 
     world.submit_action(Action::ScheduleRecipe {
@@ -426,10 +430,24 @@ fn schedule_recipe_rejects_invalid_byproduct_before_any_resource_sink() {
             })
     );
     assert_eq!(world.pending_recipe_jobs_len(), 0);
-    assert_eq!(world.material_balance("iron_ingot"), 1);
-    assert_eq!(world.resource_balance(ResourceKind::Electricity), 5);
-    assert_eq!(world.material_balance("motor_mk1"), 0);
-    assert_eq!(world.material_balance("metal_scrap"), 0);
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::site("site-1"), "iron_ingot"),
+        1
+    );
+    assert_eq!(
+        world
+            .agent_resource_balance("builder-a", ResourceKind::Electricity)
+            .expect("builder recipe power"),
+        5
+    );
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::site("site-1"), "motor_mk1"),
+        0
+    );
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::site("site-1"), "metal_scrap"),
+        0
+    );
 }
 
 #[test]
@@ -442,11 +460,17 @@ fn schedule_recipe_reads_and_writes_site_material_ledger() {
     world.step().expect("register agent");
 
     world
-        .set_material_balance("steel_plate", 20)
-        .expect("seed world steel");
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "steel_plate", 20)
+        .expect("seed builder steel");
     world
-        .set_material_balance("circuit_board", 4)
-        .expect("seed world circuits");
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "circuit_board", 4)
+        .expect("seed builder circuits");
+    authorize_factory_build(
+        &mut world,
+        "builder-a",
+        "site-ledger",
+        "factory.site.ledger",
+    );
 
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
@@ -787,11 +811,12 @@ fn schedule_recipe_rejects_when_factory_slots_are_full() {
     world.step().expect("register agent");
 
     world
-        .set_material_balance("steel_plate", 10)
-        .expect("seed build steel");
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "steel_plate", 10)
+        .expect("seed builder steel");
     world
-        .set_material_balance("circuit_board", 2)
-        .expect("seed build circuits");
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "circuit_board", 2)
+        .expect("seed builder circuits");
+    authorize_factory_build(&mut world, "builder-a", "site-1", "factory.slot");
 
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
@@ -879,6 +904,13 @@ fn build_factory_rejects_when_materials_insufficient() {
     world
         .set_material_balance("circuit_board", 2)
         .expect("seed circuits");
+    world
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "steel_plate", 3)
+        .expect("seed limited builder steel");
+    world
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "circuit_board", 2)
+        .expect("seed builder circuits");
+    authorize_factory_build(&mut world, "builder-a", "site-1", "factory.fail");
 
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
@@ -922,6 +954,14 @@ fn build_factory_with_module_uses_module_decision() {
         .expect("seed circuits");
 
     activate_pure_module(&mut world, "m4.factory.basic", b"factory-module");
+    world
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "steel_plate", 9)
+        .expect("seed builder steel");
+    world
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "circuit_board", 2)
+        .expect("seed builder circuits");
+    authorize_factory_build(&mut world, "builder-a", "site-1", "factory.module");
+    bind_factory_build_module(&mut world, "factory.module", "m4.factory.basic");
 
     world.submit_action(Action::BuildFactoryWithModule {
         builder_agent_id: "builder-a".to_string(),
@@ -952,8 +992,14 @@ fn build_factory_with_module_uses_module_decision() {
         .step_with_modules(&mut sandbox)
         .expect("start factory build with module");
 
-    assert_eq!(world.material_balance("steel_plate"), 1);
-    assert_eq!(world.material_balance("circuit_board"), 0);
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::agent("builder-a"), "steel_plate"),
+        1
+    );
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::agent("builder-a"), "circuit_board"),
+        0
+    );
     assert_eq!(world.pending_factory_builds_len(), 1);
 
     let started = world
@@ -990,6 +1036,13 @@ fn schedule_recipe_with_module_uses_module_plan() {
     world
         .set_material_balance("circuit_board", 2)
         .expect("seed circuits");
+    world
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "steel_plate", 10)
+        .expect("seed builder steel");
+    world
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "circuit_board", 2)
+        .expect("seed builder circuits");
+    authorize_factory_build(&mut world, "builder-a", "site-1", "factory.recipe.module");
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
@@ -1077,6 +1130,13 @@ fn schedule_recipe_with_module_rejects_when_module_denies() {
     world
         .set_material_balance("circuit_board", 2)
         .expect("seed circuits");
+    world
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "steel_plate", 10)
+        .expect("seed builder steel");
+    world
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "circuit_board", 2)
+        .expect("seed builder circuits");
+    authorize_factory_build(&mut world, "builder-a", "site-1", "factory.recipe.reject");
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),

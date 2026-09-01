@@ -85,6 +85,20 @@ fn prepare_factory_build(
         .expect("seed builder construction power");
 }
 
+fn prepare_factory_build_id(
+    world: &mut World,
+    builder_agent_id: &str,
+    site_id: &str,
+    factory_id: &str,
+) {
+    prepare_factory_build(
+        world,
+        builder_agent_id,
+        site_id,
+        &factory_spec(factory_id, 1, 1),
+    );
+}
+
 fn authorize_policy_update(world: &mut World, operator_agent_id: &str, proposal_key: &str) {
     world.submit_action(Action::OpenGovernanceProposal {
         proposer_agent_id: operator_agent_id.to_string(),

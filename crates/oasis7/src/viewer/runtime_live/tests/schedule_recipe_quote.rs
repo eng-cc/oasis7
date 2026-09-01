@@ -73,11 +73,11 @@ fn runtime_schedule_recipe_quote_is_authenticated_read_only_and_exposes_player_p
     server
         .world
         .set_resource_balance(crate::simulator::ResourceKind::Electricity, 32);
-    let site_ledger = crate::runtime::MaterialLedgerId::site("runtime:smelter-affordability");
+    let site_ledger = crate::runtime::MaterialLedgerId::site("site-smelter");
     server
         .world
-        .set_ledger_material_balance(site_ledger.clone(), "iron_ore", 4)
-        .expect("seed partial local iron ore");
+        .set_ledger_material_balance(site_ledger.clone(), "iron_ore", 8)
+        .expect("seed local iron ore");
     server
         .world
         .set_ledger_material_balance(site_ledger, "carbon_fuel", 2)
@@ -124,8 +124,8 @@ fn runtime_schedule_recipe_quote_is_authenticated_read_only_and_exposes_player_p
     assert_eq!(quote.data_output, 0);
     assert_eq!(quote.finished_product_id, "iron_ingot");
     assert_eq!(quote.finished_product_units, 6);
-    assert_eq!(quote.local_shortage_delay_ticks, 1);
-    assert_eq!(quote.shortage_reason, "local_bottleneck_deficit_moderate");
+    assert_eq!(quote.local_shortage_delay_ticks, 0);
+    assert_eq!(quote.shortage_reason, "none");
     assert_eq!(quote.continue_production_risk, "low");
     assert_eq!(quote.recommended_pre_step, "schedule_now");
     assert_eq!(quote.recommended_maintenance_action, "continue_production");
@@ -182,11 +182,11 @@ fn runtime_schedule_recipe_quote_matches_recipe_started_duration_for_same_snapsh
     server
         .world
         .set_resource_balance(crate::simulator::ResourceKind::Electricity, 32);
-    let site_ledger = crate::runtime::MaterialLedgerId::site("runtime:smelter-affordability");
+    let site_ledger = crate::runtime::MaterialLedgerId::site("site-smelter");
     server
         .world
-        .set_ledger_material_balance(site_ledger.clone(), "iron_ore", 4)
-        .expect("seed partial local iron ore");
+        .set_ledger_material_balance(site_ledger.clone(), "iron_ore", 8)
+        .expect("seed local iron ore");
     server
         .world
         .set_ledger_material_balance(site_ledger, "carbon_fuel", 2)
@@ -300,7 +300,7 @@ fn runtime_schedule_recipe_quote_matches_recipe_started_duration_for_same_snapsh
 }
 
 #[test]
-fn runtime_schedule_recipe_quote_uses_global_material_ledgers_when_site_stocks_are_low() {
+fn runtime_schedule_recipe_quote_uses_factory_site_materials_not_global_stock() {
     let _guard = lock_test_llm_env();
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
@@ -343,11 +343,11 @@ fn runtime_schedule_recipe_quote_uses_global_material_ledgers_when_site_stocks_a
     server
         .world
         .set_resource_balance(crate::simulator::ResourceKind::Electricity, 0);
-    let site_ledger = crate::runtime::MaterialLedgerId::site("runtime:smelter-affordability");
+    let site_ledger = crate::runtime::MaterialLedgerId::site("site-smelter");
     server
         .world
-        .set_ledger_material_balance(site_ledger.clone(), "iron_ore", 4)
-        .expect("seed partial local iron ore");
+        .set_ledger_material_balance(site_ledger.clone(), "iron_ore", 8)
+        .expect("seed local iron ore");
     server
         .world
         .set_ledger_material_balance(site_ledger, "carbon_fuel", 2)
@@ -372,7 +372,7 @@ fn runtime_schedule_recipe_quote_uses_global_material_ledgers_when_site_stocks_a
     );
     let quote = server
         .handle_schedule_recipe_quote(request)
-        .expect("global runtime ledgers should authorize quote");
+        .expect("factory site materials should authorize quote");
     assert_eq!(quote.electricity_cost, 16);
     assert_eq!(quote.electricity_after, 16);
     assert_eq!(quote.hardware_cost, 0);
@@ -651,7 +651,7 @@ fn runtime_schedule_recipe_quote_rejects_when_factory_builder_electricity_is_ins
         .world
         .set_material_balance("carbon_fuel", 0)
         .expect("clear world carbon fuel");
-    let site_ledger = crate::runtime::MaterialLedgerId::site("runtime:smelter-affordability");
+    let site_ledger = crate::runtime::MaterialLedgerId::site("site-smelter");
     server
         .world
         .set_ledger_material_balance(site_ledger.clone(), "iron_ore", 0)

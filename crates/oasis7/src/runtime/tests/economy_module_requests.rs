@@ -1,8 +1,9 @@
 use super::pos;
 use crate::runtime::{
-    Action, CapabilityGrant, MaterialLedgerId, ModuleAbiContract, ModuleActivation,
-    ModuleChangeSet, ModuleKind, ModuleLimits, ModuleManifest, ModuleRegistry, ModuleRole,
-    PolicySet, ProposalDecision, World, util,
+    Action, AgentLocationAuthorityV1, CapabilityGrant, FactoryConstructionPowerMode,
+    FactoryConstructionPowerProfileV1, FactorySiteAuthorityV1, MaterialLedgerId, ModuleAbiContract,
+    ModuleActivation, ModuleChangeSet, ModuleKind, ModuleLimits, ModuleManifest, ModuleRegistry,
+    ModuleRole, PolicySet, ProposalDecision, World, util,
 };
 use crate::simulator::ResourceKind;
 use oasis7_wasm_abi::{
@@ -28,6 +29,51 @@ fn factory_spec(factory_id: &str, build_time_ticks: u32, recipe_slots: u16) -> F
         throughput_bps: 10_000,
         maintenance_per_tick: 1,
     }
+}
+
+fn prepare_factory_build(
+    world: &mut World,
+    builder_agent_id: &str,
+    site_id: &str,
+    factory_id: &str,
+    source_module_id: Option<&str>,
+) {
+    let location_id = format!("location-{site_id}");
+    world
+        .set_agent_location_authority(AgentLocationAuthorityV1 {
+            agent_id: builder_agent_id.to_string(),
+            location_id: location_id.clone(),
+            active: true,
+            authority_revision: 1,
+            effective_at: 0,
+        })
+        .expect("install builder location authority");
+    world
+        .set_factory_site_authority(FactorySiteAuthorityV1 {
+            site_id: site_id.to_string(),
+            location_id,
+            owner_agent_id: builder_agent_id.to_string(),
+            authorized_agent_ids: Vec::new(),
+            chunk_ready: true,
+            active: true,
+            authority_revision: 1,
+            registered_at: 0,
+        })
+        .expect("install factory site authority");
+    world
+        .set_factory_construction_power_profile(FactoryConstructionPowerProfileV1 {
+            factory_id: factory_id.to_string(),
+            factory_kind: "test".to_string(),
+            source_module_id: source_module_id.map(str::to_string),
+            electricity_amount: 10,
+            mode: FactoryConstructionPowerMode::StartOnlySink,
+            authority_revision: 1,
+            active: true,
+        })
+        .expect("install construction power profile");
+    world
+        .set_agent_resource_balance(builder_agent_id, ResourceKind::Electricity, 10)
+        .expect("seed construction power");
 }
 
 fn activate_pure_module(world: &mut World, module_id: &str, wasm_seed: &[u8]) {
@@ -166,6 +212,13 @@ fn build_factory_with_module_request_exposes_available_inputs_by_ledger() {
         .expect("seed world circuits");
 
     activate_pure_module(&mut world, "m4.factory.capture", b"factory-capture-module");
+    prepare_factory_build(
+        &mut world,
+        "builder-a",
+        "site-1",
+        "factory.capture",
+        Some("m4.factory.capture"),
+    );
     world.submit_action(Action::BuildFactoryWithModule {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
@@ -246,6 +299,19 @@ fn schedule_recipe_with_module_request_exposes_available_inputs_by_ledger() {
     world
         .set_material_balance("circuit_board", 2)
         .expect("seed circuits");
+    world
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "steel_plate", 10)
+        .expect("seed builder steel");
+    world
+        .set_ledger_material_balance(MaterialLedgerId::agent("builder-a"), "circuit_board", 2)
+        .expect("seed builder circuits");
+    prepare_factory_build(
+        &mut world,
+        "builder-a",
+        "site-1",
+        "factory.recipe.capture",
+        None,
+    );
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
