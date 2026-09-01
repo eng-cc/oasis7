@@ -321,7 +321,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 },
                 "persistent_state_paths": [
                     f"/opt/oasis7/p2p-testnet-local/{surface.replace('{node_id}', 'triad-testnet-local')}"
-                    for surface in self.module.OBSERVER_RESET_SURFACES
+                    for surface in self.module.LINUX_OBSERVER_PERSISTENT_STATE_SURFACES
                 ],
                 "identity_receipt": self._identity_receipt("triad-testnet-local"),
             },
@@ -558,6 +558,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
         )
         self.assertFalse(plan["rollback"]["restore_old_state"])
         self.assertFalse(plan["rollback"]["cross_node_state_copy"])
+
         self.assertEqual(plan["observer_gate"]["required_before"], ["windows-observer", "macos-observer"])
         self.assertLess(
             plan["global_order"].index("fresh-root-probe"),
@@ -582,6 +583,27 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 "starts_at": plan["credential_nonce_ledger"]["issued_at"],
                 "ends_at": plan["credential_nonce_ledger"]["expires_at"],
             },
+        )
+
+    def test_linux_observer_surfaces_match_managed_reset_layout(self) -> None:
+        plan = self.module.build_plan(self._input())
+        observer = next(
+            node for node in plan["nodes"] if node["name"] == "linux-lan-observer"
+        )
+        root = "/opt/oasis7/p2p-testnet-local"
+        required_paths = {
+            f"{root}/world",
+            f"{root}/world-simulator-mirror",
+            f"{root}/execution-records",
+            f"{root}/store",
+            f"{root}/replication-root",
+            f"{root}/runtime-root",
+            f"{root}/output/chain-runtime/triad-testnet-local/reward-runtime-execution-bridge-state.json",
+            f"{root}/output/node-distfs/triad-testnet-local",
+        }
+        self.assertTrue(
+            required_paths.issubset(set(observer["persistent_state_paths"])),
+            observer["persistent_state_paths"],
         )
 
     def test_plan_requires_fresh_bound_consumer_impact_record(self) -> None:
@@ -901,6 +923,23 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as raised:
             self.module.build_plan(request)
         self.assertRegex(str(raised.exception), r"(?i)authority|receipt|binding")
+
+    def test_credential_lease_rejects_future_issued_at(self) -> None:
+        request = self._input()
+        issued_at = "2099-01-01T00:00:00Z"
+        expires_at = "2100-01-01T00:00:00Z"
+        ledger = request["credential_nonce_ledger"]
+        ledger["issued_at"] = issued_at
+        ledger["expires_at"] = expires_at
+        ledger["receipt"]["bindings"]["issued_at"] = issued_at
+        ledger["receipt"]["bindings"]["expires_at"] = expires_at
+        for node in request["nodes"]:
+            node["credential_seam"]["issued_at"] = issued_at
+            node["credential_seam"]["expires_at"] = expires_at
+
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)future|issued|credential|lease")
 
     def test_credential_nonce_ledger_is_unique_live_and_one_shot(self) -> None:
         request = self._input()

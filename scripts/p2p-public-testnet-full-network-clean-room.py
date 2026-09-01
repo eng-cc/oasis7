@@ -11,7 +11,7 @@ never restores old chain state.
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import re
@@ -26,7 +26,10 @@ OID_RE = re.compile(r"^[0-9a-fA-F]{40,64}$")
 HEX64_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 SIGNATURE_RE = re.compile(r"^[0-9a-fA-F]{128}$")
 SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{1,127}$")
-SECRET_KEY_RE = re.compile(r"(?:password|secret|token|private[_-]?key|sshpass)")
+SECRET_KEY_RE = re.compile(
+    r"(?:password|secret|token|private[_-]?key|api[_-]?key|access[_-]?key|sshpass)",
+    re.I,
+)
 
 NODE_ORDER = (
     "storage-205",
@@ -58,6 +61,20 @@ OBSERVER_RESET_SURFACES = (
     "data/replication-root",
     "data/runtime-root",
     "output/chain-runtime/{node_id}/reward-runtime-execution-bridge-state.json",
+)
+# The Linux LAN observer is installed at a root-level stack layout.  Its
+# replication root may fall back to output/node-distfs/<node_id> when the
+# optional REPLICATION_ROOT env binding is absent, so both governed locations
+# are retained in the emitted state inventory.
+LINUX_OBSERVER_PERSISTENT_STATE_SURFACES = (
+    "world",
+    "world-simulator-mirror",
+    "execution-records",
+    "store",
+    "replication-root",
+    "runtime-root",
+    "output/chain-runtime/{node_id}/reward-runtime-execution-bridge-state.json",
+    "output/node-distfs/{node_id}",
 )
 
 EXPECTED_NODES: dict[str, dict[str, str]] = {
@@ -176,6 +193,7 @@ CONSUMER_IMPACT_FIELDS = frozenset(
 )
 CONSUMER_IMPACT_REFERENCE_FIELDS = frozenset({"path", "sha256"})
 CONSUMER_IMPACT_MAX_AGE_SECONDS = 24 * 60 * 60
+MAX_CLOCK_SKEW_SECONDS = 5
 
 
 def die(message: str) -> NoReturn:
@@ -251,7 +269,7 @@ def _validate_consumer_impact_record(value: Any, label: str = "consumer_impact_r
     require_string(record.get("evidence_source"), f"{label}.record.evidence_source")
     timestamp = _parse_utc(record.get("timestamp"), f"{label}.record.timestamp")
     age = (datetime.now(timezone.utc) - timestamp).total_seconds()
-    if age < -5:
+    if age < -MAX_CLOCK_SKEW_SECONDS:
         die(f"{label}.record.timestamp is in the future")
     if age > CONSUMER_IMPACT_MAX_AGE_SECONDS:
         die(f"{label}.record.timestamp is stale")
@@ -343,6 +361,11 @@ def _expected_surfaces(name: str) -> tuple[str, ...]:
     if name in VALIDATOR_NAMES:
         return VALIDATOR_RESET_SURFACES
     node_id = EXPECTED_NODES[name]["node_id"]
+    if name == "linux-lan-observer":
+        return tuple(
+            item.replace("{node_id}", node_id)
+            for item in LINUX_OBSERVER_PERSISTENT_STATE_SURFACES
+        )
     return tuple(item.replace("{node_id}", node_id) for item in OBSERVER_RESET_SURFACES)
 
 
@@ -352,7 +375,10 @@ def _validate_state_paths(node: dict[str, Any], expected: dict[str, str]) -> lis
     path_style = "windows" if platform == "windows-x64" else "posix"
     root = _normalized_path(node.get("node_root"), path_style, f"{name}.node_root")
     raw_paths = node.get("persistent_state_paths")
-    if not isinstance(raw_paths, list) or len(raw_paths) != (8 if expected["role"] == "validator" else 7):
+    allowed_lengths = {8 if expected["role"] == "validator" else 7}
+    if name == "linux-lan-observer":
+        allowed_lengths.add(8)
+    if not isinstance(raw_paths, list) or len(raw_paths) not in allowed_lengths:
         die(f"{name}.persistent_state_paths must enumerate the exact governed surface set")
     actual = [
         _normalized_path(path, path_style, f"{name}.persistent_state_paths[{index}]")
@@ -777,7 +803,11 @@ def _validate_host_and_endpoints(
         die(f"{name}.credential_seam.nonce must be an unpredictable bound nonce")
     issued_at = _parse_utc(seam.get("issued_at"), f"{name}.credential_seam.issued_at")
     expires_at = _parse_utc(seam.get("expires_at"), f"{name}.credential_seam.expires_at")
-    if expires_at <= issued_at or expires_at <= datetime.now(timezone.utc):
+    if (
+        issued_at > datetime.now(timezone.utc) + timedelta(seconds=MAX_CLOCK_SKEW_SECONDS)
+        or expires_at <= issued_at
+        or expires_at <= datetime.now(timezone.utc)
+    ):
         die(f"{name}.credential_seam nonce lease is expired or inverted")
     ledger_path = require_string(seam.get("ledger_path"), f"{name}.credential_seam.ledger_path")
     if not ledger_path.startswith("/") or ".." in PurePosixPath(ledger_path).parts:
@@ -830,6 +860,8 @@ def _validate_nodes(nodes: Any, truth: dict[str, Any], allowed_signers: set[str]
             owner_value = identity_receipt.get(owner)
             if isinstance(owner_value, bool) or not isinstance(owner_value, int) or owner_value < 0:
                 die(f"{name}.identity_receipt.{owner} must be a non-negative integer")
+        if identity_receipt["key_gid"] != identity_receipt["key_uid"]:
+            die(f"{name}.identity_receipt uid/gid do not match the governed service account")
         if "node_root" in expected:
             path_style = "windows" if expected["platform"] == "windows-x64" else "posix"
             expected_root = _normalized_path(
@@ -899,7 +931,11 @@ def _validate_credential_nonce_ledger(
         die("credential_nonce_ledger must be a non-replayed one-shot ledger")
     issued_at = _parse_utc(ledger.get("issued_at"), "credential_nonce_ledger.issued_at")
     expires_at = _parse_utc(ledger.get("expires_at"), "credential_nonce_ledger.expires_at")
-    if expires_at <= issued_at or expires_at <= datetime.now(timezone.utc):
+    if (
+        issued_at > datetime.now(timezone.utc) + timedelta(seconds=MAX_CLOCK_SKEW_SECONDS)
+        or expires_at <= issued_at
+        or expires_at <= datetime.now(timezone.utc)
+    ):
         die("credential_nonce_ledger is expired or inverted")
     raw_reserved = ledger.get("reserved_nonces")
     if not isinstance(raw_reserved, list) or len(raw_reserved) != len(NODE_ORDER):
@@ -1064,7 +1100,11 @@ def _validate_backup_policy(
         die("backup_policy.actor is not a safe operator identifier")
     issued_at = _parse_utc(policy.get("issued_at"), "backup_policy.issued_at")
     expires_at = _parse_utc(policy.get("expires_at"), "backup_policy.expires_at")
-    if issued_at > datetime.now(timezone.utc) or expires_at <= issued_at or expires_at <= datetime.now(timezone.utc):
+    if (
+        issued_at > datetime.now(timezone.utc) + timedelta(seconds=MAX_CLOCK_SKEW_SECONDS)
+        or expires_at <= issued_at
+        or expires_at <= datetime.now(timezone.utc)
+    ):
         die("backup_policy authorization is expired or inverted")
     if (
         policy.get("task_uid") != authority["task_uid"]

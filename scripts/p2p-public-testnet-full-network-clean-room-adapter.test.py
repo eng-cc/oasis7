@@ -218,10 +218,31 @@ class ApplyTransport:
             receipt["rollback_steps"] = list(self.plan["rollback"]["steps"])
             receipt["reobserved"] = True
         if operation == "fleet-health":
+            validator_peers = [
+                next(
+                    item["identity_receipt"]["peer_id"]
+                    for item in self.plan["nodes"]
+                    if item["name"] == name
+                )
+                for name in ("storage-205", "sequencer-204")
+            ]
             receipt["fleet_health_closure"] = {
                 "verified": True,
                 "nodes": list(self.plan["node_order"]),
                 "healthy": True,
+                "snapshot": {
+                    name: {
+                        "running": True,
+                        "last_error": None,
+                        "committed_height": 100,
+                        "network_committed_height": 100,
+                        "last_execution_height": 100,
+                        "connected_peers": validator_peers,
+                        "readiness": {"ready": True, "failed_gates": []},
+                        "consensus": {"network_head": {"decision": "ready"}},
+                    }
+                    for name in self.plan["node_order"]
+                },
             }
         return receipt
 
@@ -429,10 +450,14 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
             self.adapter.validate_authority(self.plan, authority)
 
         plan = copy.deepcopy(self.plan)
-        plan["nodes"][0]["identity_receipt"]["peer_id"] = "12D3KooWattacker"
-        plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+        node = next(item for item in plan["nodes"] if item["name"] == "storage-205")
+        receipt = ApplyTransport(self.adapter, plan)._receipt("stop:storage-205", node)
+        receipt["peer_id"] = "12D3KooWattacker"
+        receipt["bindings"]["peer_id"] = "12D3KooWattacker"
         with self.assertRaises(self.adapter.AdapterError):
-            self.adapter.validate_plan(plan)
+            self.adapter._validate_provider_receipt(
+                plan, "stop:storage-205", "storage-205", receipt, None
+            )
 
         for field, bad_value in (
             ("schema_version", "oasis7.attacker_identity.v1"),
@@ -447,6 +472,33 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
             plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
             with self.assertRaises(self.adapter.AdapterError):
                 self.adapter.validate_plan(plan)
+
+    def test_provider_receipt_uses_authenticated_deployment_peer_identity(self) -> None:
+        """A rotated deployment peer must be accepted only from node truth."""
+        plan = copy.deepcopy(self.plan)
+        node = next(item for item in plan["nodes"] if item["name"] == "storage-205")
+        live_peer = "12D3KooWrotatedstorage"
+        node["identity_receipt"]["peer_id"] = live_peer
+        receipt = ApplyTransport(self.adapter, plan)._receipt("stop:storage-205", node)
+        receipt["peer_id"] = live_peer
+        receipt["bindings"]["peer_id"] = live_peer
+
+        try:
+            validated = self.adapter._validate_provider_receipt(
+                plan, "stop:storage-205", "storage-205", receipt, None
+            )
+        except self.adapter.AdapterError as error:
+            self.fail(f"rotated deployment peer was rejected: {error}")
+        self.assertEqual(validated["peer_id"], live_peer)
+
+    def test_rejects_reordered_node_plan_before_apply(self) -> None:
+        """Accepted node sets must retain the planner's canonical iteration order."""
+        plan = copy.deepcopy(self.plan)
+        plan["nodes"] = list(reversed(plan["nodes"]))
+        plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+
+        with self.assertRaises(self.adapter.AdapterError):
+            self.adapter.validate_plan(plan)
 
     def test_external_verifier_is_required_for_apply_and_binds_execution_truth(self) -> None:
         authority = self._authority()
@@ -1176,6 +1228,19 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
                 dry_run=True,
             )
 
+    def test_no_backup_receipt_rejects_seed_claim_without_manifest(self) -> None:
+        """No-backup apply receipts cannot retain seed eligibility without evidence."""
+        plan = self._no_backup_plan()
+        node = next(item for item in plan["nodes"] if item["name"] == "storage-205")
+        receipt = ApplyTransport(self.adapter, plan)._receipt("stop:storage-205", node)
+        receipt.pop("backup_manifest", None)
+        receipt["seed_eligible"] = True
+
+        with self.assertRaises(self.adapter.AdapterError):
+            self.adapter._validate_provider_receipt(
+                plan, "stop:storage-205", "storage-205", receipt, None
+            )
+
     def test_fresh_root_probe_requires_signed_full_closure(self) -> None:
         transport = ApplyTransport(self.adapter, self.plan)
         receipt = transport._receipt("fresh-root-probe", None)
@@ -1200,6 +1265,13 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
 
         receipt = transport._receipt("stop:storage-205", self.plan["nodes"][0])
         receipt["captured_at"] = "2020-01-01T00:00:00Z"
+        with self.assertRaises(self.adapter.AdapterError):
+            self.adapter._validate_provider_receipt(
+                self.plan, "stop:storage-205", "storage-205", receipt, None
+            )
+
+        receipt = transport._receipt("stop:storage-205", self.plan["nodes"][0])
+        receipt["captured_at"] = "2099-01-01T00:00:00Z"
         with self.assertRaises(self.adapter.AdapterError):
             self.adapter._validate_provider_receipt(
                 self.plan, "stop:storage-205", "storage-205", receipt, None
@@ -1330,6 +1402,15 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         health["fleet_health_closure"]["nodes"] = ["storage-205"]
         with self.assertRaises(self.adapter.AdapterError):
             self.adapter._validate_provider_receipt(self.plan, "fleet-health", None, health, None)
+
+    def test_fleet_health_marker_without_final_snapshot_is_rejected(self) -> None:
+        """A three-field marker cannot close same-window fleet health."""
+        receipt = ApplyTransport(self.adapter, self.plan)._receipt("fleet-health", None)
+        receipt["fleet_health_closure"].pop("snapshot")
+        with self.assertRaises(self.adapter.AdapterError):
+            self.adapter._validate_provider_receipt(
+                self.plan, "fleet-health", None, receipt, None
+            )
 
     def test_rejects_invalid_provider_signature_or_peer_before_advancing(self) -> None:
         authority = self._authority(apply_authorized=True)
@@ -1785,6 +1866,19 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         captured_text = json.dumps(captured, sort_keys=True)
         self.assertNotIn("storage-nonce-", captured_text)
         self.assertNotIn("PUBLIC_TESTNET_", captured_text)
+
+    def test_transport_plan_rejects_nested_credential_fields(self) -> None:
+        plan = copy.deepcopy(self.plan)
+        plan["truth"]["package"]["api_key"] = "provider-api-key-must-not-cross"
+        with self.assertRaises(self.adapter.AdapterError):
+            self.adapter._transport_plan(plan)
+
+    def test_identity_receipt_requires_governed_gid(self) -> None:
+        plan = copy.deepcopy(self.plan)
+        plan["nodes"][0]["identity_receipt"]["key_gid"] = 4242
+        plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+        with self.assertRaises(self.adapter.AdapterError):
+            self.adapter.validate_plan(plan)
 
     def test_trust_root_path_and_digest_are_code_owned(self) -> None:
         authority = self._authority()

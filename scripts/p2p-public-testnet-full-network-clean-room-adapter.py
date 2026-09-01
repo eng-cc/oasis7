@@ -97,13 +97,30 @@ OID_RE = re.compile(r"^[0-9a-fA-F]{40,64}$")
 HEX64_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 SIGNATURE_RE = re.compile(r"^[0-9a-fA-F]{128}$")
 SAFE_NONCE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{7,255}$")
-SECRET_KEY_RE = re.compile(r"(?:password|secret|token|private[_-]?key|sshpass)", re.I)
-SECRET_FIELD_NAMES = frozenset(
-    {"nonce", "credential", "credentials", "environment_name", "argv", "command", "command_line"}
+SECRET_KEY_RE = re.compile(
+    r"(?:password|secret|token|private[_-]?key|api[_-]?key|access[_-]?key|sshpass)",
+    re.I,
 )
-SECRET_VALUE_RE = re.compile(r"(?:password|secret|token|private[_ -]?key|sshpass)", re.I)
+SECRET_FIELD_NAMES = frozenset(
+    {
+        "nonce",
+        "credential",
+        "credentials",
+        "environment_name",
+        "argv",
+        "command",
+        "command_line",
+        "api_key",
+        "access_key",
+    }
+)
+SECRET_VALUE_RE = re.compile(
+    r"(?:password|secret|token|private[_ -]?key|api[_ -]?key|access[_ -]?key|sshpass)",
+    re.I,
+)
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 MIN_FREE_BYTES = 64 * 1024 * 1024
+MAX_CLOCK_SKEW_SECONDS = 5
 _PLANNER_MODULE: Any | None = None
 
 # This registry is code-owned.  It is not derived from plan input, a host
@@ -283,7 +300,10 @@ def _expected_paths(planner: Any, node: dict[str, Any]) -> list[str]:
     root = planner._normalized_path(
         planner.EXPECTED_NODES[name]["node_root"], path_style, f"{name}.expected_node_root"
     )
-    surfaces = planner.VALIDATOR_RESET_SURFACES if name in planner.VALIDATOR_NAMES else planner.OBSERVER_RESET_SURFACES
+    if name in planner.VALIDATOR_NAMES:
+        surfaces = planner.VALIDATOR_RESET_SURFACES
+    else:
+        surfaces = planner._expected_surfaces(name)
     node_id = planner.EXPECTED_NODES[name]["node_id"]
     return [root.rstrip("/") + "/" + surface.replace("{node_id}", node_id).replace("\\", "/") for surface in surfaces]
 
@@ -340,6 +360,8 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         or {node.get("name") for node in nodes if isinstance(node, dict)} != set(planner.NODE_ORDER)
     ):
         _fail("plan does not contain exactly the canonical five nodes")
+    if [node.get("name") for node in nodes] != list(planner.NODE_ORDER):
+        _fail("plan nodes are not in the code-owned five-node order")
     by_name: dict[str, dict[str, Any]] = {}
     for node_value in nodes:
         node = _object(node_value, "plan node")
@@ -383,10 +405,6 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         _nonzero_hex(identity.get("signed_payload_sha256"), HEX64_RE, f"{name} identity payload")
         _nonzero_hex(identity.get("signature_hex"), SIGNATURE_RE, f"{name} identity signature")
         _nonzero_hex(identity.get("canonical_digest"), HEX64_RE, f"{name} identity digest")
-        if identity.get("peer_id") != CANONICAL_PEER_REGISTRY[name]:
-            _fail(f"{name} peer is not in the code-owned peer registry")
-        if identity.get("key_uid") != CANONICAL_PROVIDER_UID[name]:
-            _fail(f"{name} provider identity uid is not code-owned")
         key_size = identity.get("key_size_bytes")
         if not isinstance(key_size, int) or isinstance(key_size, bool) or key_size <= 0:
             _fail(f"{name} identity key size is malformed")
@@ -397,6 +415,8 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
             value = identity.get(owner)
             if not isinstance(value, int) or isinstance(value, bool) or value < 0:
                 _fail(f"{name} identity {owner} is malformed")
+        if identity["key_gid"] != identity["key_uid"]:
+            _fail(f"{name} identity uid/gid do not match the governed service account")
         paths = _safe_relative_paths(
             node["node_root"],
             node.get("persistent_state_paths"),
@@ -571,7 +591,11 @@ def _validate_no_backup_authority(plan: dict[str, Any]) -> None:
         _fail("no-backup authority actor is malformed")
     issued_at = _parse_utc(forensic["issued_at"], "no-backup authority issued_at")
     expires_at = _parse_utc(forensic["expires_at"], "no-backup authority expires_at")
-    if issued_at > dt.datetime.now(dt.timezone.utc) or expires_at <= issued_at or expires_at <= dt.datetime.now(dt.timezone.utc):
+    if (
+        issued_at > dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=MAX_CLOCK_SKEW_SECONDS)
+        or expires_at <= issued_at
+        or expires_at <= dt.datetime.now(dt.timezone.utc)
+    ):
         _fail("no-backup authority is expired or inverted")
     receipt = _object(authority, "no-backup authority receipt")
     if receipt.get("schema_version") != NO_BACKUP_AUTHORITY_SCHEMA:
@@ -1127,7 +1151,8 @@ def validate_remote_preflight(
         _fail(f"{name} preflight evidence node binding drifted")
     if evidence.get("node_id") != node["node_id"]:
         _fail(f"{name} preflight identity binding drifted")
-    if evidence.get("provider_uid") != CANONICAL_PROVIDER_UID[name]:
+    expected_uid = _provider_uid(plan, name)
+    if evidence.get("provider_uid") != expected_uid:
         _fail(f"{name} provider uid is not the governed uid")
     if evidence.get("node_root") != node["node_root"]:
         _fail(f"{name} remote root is not canonical")
@@ -1463,10 +1488,22 @@ def _provider_peer(plan: dict[str, Any], node_name: str | None, operation: str) 
         node = next((item for item in plan["nodes"] if item["name"] == node_name), None)
         if node is None:
             _fail("provider receipt names an unknown node")
-        return CANONICAL_PEER_REGISTRY[node_name]
+        identity = _object(node.get("identity_receipt"), f"{node_name} identity receipt")
+        return _string(identity.get("peer_id"), f"{node_name} deployment peer")
     if operation == "fresh-root-probe":
         return CANONICAL_PROBE_PEER_ID
     return CANONICAL_FLEET_PEER_ID
+
+
+def _provider_uid(plan: dict[str, Any], node_name: str) -> int:
+    node = next((item for item in plan["nodes"] if item["name"] == node_name), None)
+    if node is None:
+        _fail("provider evidence names an unknown node")
+    identity = _object(node.get("identity_receipt"), f"{node_name} identity receipt")
+    value = identity.get("key_uid")
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        _fail(f"{node_name} deployment uid is malformed")
+    return value
 
 
 def _verify_receipt_with_verifier(
@@ -1580,6 +1617,8 @@ def _validate_provider_receipt(
     ):
         _fail(f"{operation} provider receipt phase, capture, observer, or status binding drifted")
     captured_at = _parse_utc(receipt.get("captured_at"), f"{operation} captured_at")
+    if captured_at > dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=MAX_CLOCK_SKEW_SECONDS):
+        _fail(f"{operation} captured_at is beyond the allowed future clock skew")
     capture_start, capture_end = _capture_window_bounds(plan)
     if not capture_start <= captured_at <= capture_end:
         _fail(f"{operation} captured_at is outside the transaction capture window")
@@ -1651,19 +1690,62 @@ def _validate_provider_receipt(
                 _fail(f"{operation} backup manifest size is malformed")
             if manifest.get("seed_eligible") is not False or receipt.get("seed_eligible") is not False:
                 _fail(f"{operation} backup is incorrectly seed eligible")
+        elif receipt.get("seed_eligible") is not False:
+            _fail(f"{operation} no-backup receipt is seed eligible")
         elif receipt.get("backup_manifest") is not None:
             manifest = _object(receipt["backup_manifest"], f"{operation} backup manifest")
-            if manifest.get("seed_eligible") is not False or receipt.get("seed_eligible") is not False:
+            if manifest.get("seed_eligible") is not False:
                 _fail(f"{operation} no-backup receipt contains a seed-eligible manifest")
     if operation == "fleet-health":
         closure = _object(receipt.get("fleet_health_closure"), "fleet-health closure")
         if (
-            set(closure) != {"verified", "nodes", "healthy"}
+            set(closure) != {"verified", "nodes", "healthy", "snapshot"}
             or closure.get("verified") is not True
             or closure.get("healthy") is not True
             or closure.get("nodes") != list(plan["node_order"])
         ):
             _fail("fleet-health receipt does not close the governed fleet")
+        snapshot = _object(closure.get("snapshot"), "fleet-health final snapshot")
+        if set(snapshot) != set(plan["node_order"]):
+            _fail("fleet-health final snapshot does not cover the governed fleet")
+        heights: dict[str, dict[str, int]] = {}
+        for name in plan["node_order"]:
+            node_snapshot = _object(snapshot.get(name), f"fleet-health snapshot {name}")
+            if node_snapshot.get("running") is not True or node_snapshot.get("last_error") is not None:
+                _fail(f"fleet-health snapshot {name} is not running and error-free")
+            node_heights: dict[str, int] = {}
+            for field in ("committed_height", "network_committed_height", "last_execution_height"):
+                value = node_snapshot.get(field)
+                if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                    _fail(f"fleet-health snapshot {name} has malformed {field}")
+                node_heights[field] = value
+            heights[name] = node_heights
+            connected_peers = node_snapshot.get("connected_peers")
+            if not isinstance(connected_peers, list) or not all(
+                isinstance(peer, str) and peer for peer in connected_peers
+            ):
+                _fail(f"fleet-health snapshot {name} connected_peers is malformed")
+            if name not in {"storage-205", "sequencer-204"}:
+                required_peers = {
+                    _provider_peer(plan, "storage-205", "stop:storage-205"),
+                    _provider_peer(plan, "sequencer-204", "stop:sequencer-204"),
+                }
+                if not required_peers.issubset(set(connected_peers)):
+                    _fail(f"fleet-health snapshot {name} does not see both validator peers")
+            readiness = _object(node_snapshot.get("readiness"), f"fleet-health snapshot {name} readiness")
+            if readiness.get("ready") is not True or readiness.get("failed_gates") != []:
+                _fail(f"fleet-health snapshot {name} readiness is not closed")
+            consensus = _object(node_snapshot.get("consensus"), f"fleet-health snapshot {name} consensus")
+            network_head = _object(
+                consensus.get("network_head"),
+                f"fleet-health snapshot {name} network head",
+            )
+            if network_head.get("decision") != "ready":
+                _fail(f"fleet-health snapshot {name} network head is not ready")
+        validator_head = heights["sequencer-204"]["committed_height"]
+        for name, node_heights in heights.items():
+            if any(value != validator_head for value in node_heights.values()):
+                _fail(f"fleet-health snapshot {name} heights do not equal the sequencer head")
     _verify_receipt_with_verifier(plan, receipt, verifier)
     return _sanitize_receipt(receipt, f"{operation} provider receipt")
 
@@ -1685,12 +1767,13 @@ def _validate_fresh_probe_closure(plan: dict[str, Any], receipt: dict[str, Any])
     expected_providers = []
     for name in ("storage-205", "sequencer-204"):
         node = next(item for item in plan["nodes"] if item["name"] == name)
+        identity = _object(node.get("identity_receipt"), f"{name} identity receipt")
         expected_providers.append(
             {
                 "node": name,
                 "node_id": node["node_id"],
-                "peer_id": CANONICAL_PEER_REGISTRY[name],
-                "provider_uid": CANONICAL_PROVIDER_UID[name],
+                "peer_id": _string(identity.get("peer_id"), f"{name} deployment peer"),
+                "provider_uid": _provider_uid(plan, name),
             }
         )
     if connected.get("providers") != expected_providers or set(connected) != {"verified", "providers"}:
