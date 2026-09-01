@@ -2049,6 +2049,78 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
             self.adapter.validate_plan(plan)
         self.assertRegex(str(raised.exception), r"(?i)peer|identity|duplicate|unique")
 
+    def test_adapter_rejects_unique_peer_ids_outside_authenticated_registry(self) -> None:
+        """Peer uniqueness alone cannot authorize an arbitrary deployment identity."""
+        for node in self.plan["nodes"]:
+            with self.subTest(node=node["name"]):
+                plan = copy.deepcopy(self.plan)
+                target = next(item for item in plan["nodes"] if item["name"] == node["name"])
+                target["identity_receipt"]["peer_id"] = (
+                    f"12D3KooWcaller-supplied-{node['name']}"
+                )
+                plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+                with self.assertRaises(self.adapter.AdapterError) as raised:
+                    self.adapter.validate_plan(plan)
+                self.assertRegex(str(raised.exception), r"(?i)peer|identity|registry|canonical|binding")
+
+    def test_adapter_recomputes_nonce_ledger_and_seam_one_shot_bindings(self) -> None:
+        """Ledger and per-node seams must remain independently bound after digest recomputation."""
+        mutations = (
+            (
+                "ledger-reserved-nonce",
+                lambda plan: plan["credential_nonce_ledger"]["reserved_nonces"].__setitem__(
+                    0, "caller-supplied-nonce-000000000000000000000000"
+                ),
+            ),
+            (
+                "seam-nonce",
+                lambda plan: plan["nodes"][0]["credential_seam"].__setitem__(
+                    "nonce", "caller-supplied-seam-nonce-000000000000000000"
+                ),
+            ),
+            (
+                "seam-one-shot",
+                lambda plan: plan["nodes"][0]["credential_seam"].__setitem__("one_shot", False),
+            ),
+        )
+        for label, mutate in mutations:
+            with self.subTest(binding=label):
+                plan = copy.deepcopy(self.plan)
+                mutate(plan)
+                plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+                with self.assertRaises(self.adapter.AdapterError) as raised:
+                    self.adapter.validate_plan(plan)
+                self.assertRegex(str(raised.exception), r"(?i)nonce|ledger|seam|one.?shot|binding")
+
+    def test_adapter_recomputes_authenticated_semantic_bindings(self) -> None:
+        """Digest recomputation cannot rebind truth, node, probe, or observer gate semantics."""
+        mutations = (
+            (
+                "truth",
+                lambda plan: plan["truth"]["package"].__setitem__("commit", "f" * 40),
+            ),
+            (
+                "node-binding",
+                lambda plan: plan["nodes"][0]["bindings"].__setitem__("package_commit", "f" * 40),
+            ),
+            (
+                "fresh-root-probe",
+                lambda plan: plan["fresh_root_probe"].__setitem__("package_commit", "f" * 40),
+            ),
+            (
+                "observer-gate",
+                lambda plan: plan["observer_gate"].__setitem__("checkpoint_receipt_required", False),
+            ),
+        )
+        for section, mutate in mutations:
+            with self.subTest(section=section):
+                plan = copy.deepcopy(self.plan)
+                mutate(plan)
+                plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+                with self.assertRaises(self.adapter.AdapterError) as raised:
+                    self.adapter.validate_plan(plan)
+                self.assertRegex(str(raised.exception), r"(?i)truth|binding|probe|observer|gate|semantic|canonical")
+
     def test_identity_receipt_requires_governed_gid(self) -> None:
         plan = copy.deepcopy(self.plan)
         plan["nodes"][0]["identity_receipt"]["key_gid"] = 4242

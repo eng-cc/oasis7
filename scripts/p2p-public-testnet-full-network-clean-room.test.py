@@ -820,6 +820,19 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             self.module.build_plan(request)
         self.assertRegex(str(raised.exception), r"(?i)peer|identity|duplicate|unique")
 
+    def test_plan_rejects_unique_peer_ids_outside_authenticated_registry(self) -> None:
+        """Peer uniqueness alone cannot authorize a caller-supplied identity."""
+        for node in self._input()["nodes"]:
+            with self.subTest(node=node["name"]):
+                request = self._input()
+                target = next(item for item in request["nodes"] if item["name"] == node["name"])
+                target["identity_receipt"]["peer_id"] = (
+                    f"12D3KooWcaller-supplied-{node['name']}"
+                )
+                with self.assertRaises(SystemExit) as raised:
+                    self.module.build_plan(request)
+                self.assertRegex(str(raised.exception), r"(?i)peer|identity|registry|canonical|binding")
+
     def test_plan_requires_fresh_bound_consumer_impact_record(self) -> None:
         request = self._input()
         request.pop("consumer_impact_record")

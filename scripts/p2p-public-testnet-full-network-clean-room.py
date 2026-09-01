@@ -134,6 +134,16 @@ EXPECTED_NODES: dict[str, dict[str, str]] = {
     },
 }
 
+# This registry is code-owned.  Identity receipts may attest a deployment
+# peer, but caller-supplied unique values cannot redefine the managed fleet.
+CANONICAL_PEER_REGISTRY = {
+    "storage-205": "12D3KooWtriadtestnetstorage",
+    "sequencer-204": "12D3KooWtriadtestnetsequencer",
+    "linux-lan-observer": "12D3KooWtriadtestnetlocal",
+    "windows-observer": "12D3KooWtriadtestnetwindowsobserver",
+    "macos-observer": "12D3KooWtriadtestnetfourthlocal",
+}
+
 # Connection inventory is code-owned.  Callers may provide evidence for these
 # exact bindings, but cannot select a different host, known_hosts file, or pin.
 # Observer targets are operator aliases; no credential material is represented.
@@ -1007,6 +1017,8 @@ def _validate_nodes(
             die(f"{name}.identity_receipt node_id binding mismatch")
         validate_authenticated_receipt(identity_receipt, f"{name}.identity_receipt", allowed_signers)
         peer_id = require_string(identity_receipt.get("peer_id"), f"{name}.identity_receipt.peer_id")
+        if peer_id != CANONICAL_PEER_REGISTRY[name]:
+            die(f"{name}.identity_receipt.peer_id does not match the code-owned peer registry")
         if peer_id in seen_peer_ids:
             die(f"{name}.identity_receipt.peer_id duplicates another managed node")
         seen_peer_ids.add(peer_id)

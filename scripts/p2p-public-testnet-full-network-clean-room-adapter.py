@@ -436,6 +436,155 @@ def _under_root(root: str, path: str, platform: str) -> bool:
     return path_norm != root_norm and path_norm.startswith(root_norm.rstrip("/") + "/")
 
 
+def _validate_nonce_contract(
+    plan: dict[str, Any], nodes: list[dict[str, Any]], ledger: dict[str, Any], capture_window: dict[str, Any]
+) -> None:
+    """Recompute the one-shot ledger/seam contract from the managed node list."""
+    expected_fields = {
+        "schema_version",
+        "path",
+        "transaction_id",
+        "capture_window_id",
+        "one_shot",
+        "replay",
+        "issued_at",
+        "expires_at",
+        "reserved_nonces",
+        "receipt",
+    }
+    if set(ledger) != expected_fields:
+        _fail("credential nonce ledger contract contains an unsafe or missing field")
+    if (
+        ledger.get("schema_version") != "oasis7.credential_nonce_ledger.v1"
+        or ledger.get("transaction_id") != plan["transaction_id"]
+        or ledger.get("capture_window_id") != plan["capture_window_id"]
+        or ledger.get("one_shot") is not True
+        or ledger.get("replay") is not False
+    ):
+        _fail("credential nonce ledger one-shot or transaction binding drifted")
+    ledger_path = _string(ledger.get("path"), "credential nonce ledger path")
+    if not Path(ledger_path).is_absolute():
+        _fail("credential nonce ledger path must be absolute")
+    issued_at = _parse_utc(ledger.get("issued_at"), "credential nonce ledger issued_at")
+    expires_at = _parse_utc(ledger.get("expires_at"), "credential nonce ledger expires_at")
+    if expires_at <= issued_at:
+        _fail("credential nonce ledger lease is inverted")
+    if (
+        ledger.get("issued_at") != capture_window.get("starts_at")
+        or ledger.get("expires_at") != capture_window.get("ends_at")
+    ):
+        _fail("credential nonce ledger lease is not bound to the capture window")
+    raw_reserved = ledger.get("reserved_nonces")
+    if not isinstance(raw_reserved, list) or len(raw_reserved) != len(nodes):
+        _fail("credential nonce ledger must reserve one nonce per managed node")
+    reserved = [_string(item, "credential nonce ledger reserved nonce") for item in raw_reserved]
+    if any(SAFE_NONCE_RE.fullmatch(item) is None for item in reserved):
+        _fail("credential nonce ledger contains a malformed nonce")
+    if len(set(reserved)) != len(reserved):
+        _fail("credential nonce ledger contains duplicate nonces")
+    for index, node in enumerate(nodes):
+        seam = _object(node.get("credential_seam"), f"{node['name']} credential seam")
+        if set(seam) != {
+            "kind",
+            "environment_name",
+            "nonce",
+            "issued_at",
+            "expires_at",
+            "ledger_path",
+            "one_shot",
+        }:
+            _fail(f"{node['name']} credential seam fields are not exact")
+        if (
+            seam.get("nonce") != reserved[index]
+            or seam.get("ledger_path") != ledger_path
+            or seam.get("issued_at") != ledger["issued_at"]
+            or seam.get("expires_at") != ledger["expires_at"]
+            or seam.get("one_shot") is not True
+        ):
+            _fail(f"{node['name']} credential seam is not bound to the one-shot ledger")
+    receipt = _object(ledger.get("receipt"), "credential nonce ledger receipt")
+    if set(receipt) != _TRANSPORT_RECEIPT_FIELDS | {"bindings"}:
+        _fail("credential nonce ledger receipt fields are not exact")
+    if (
+        receipt.get("schema_version") != "oasis7.credential_nonce_ledger_receipt.v1"
+        or receipt.get("authenticated") is not True
+        or receipt.get("verified") is not True
+        or receipt.get("signer_id") not in CANONICAL_SIGNER_ALLOWLIST
+        or receipt.get("verifier_id") != CANONICAL_VERIFIER_ID
+        or receipt.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID
+    ):
+        _fail("credential nonce ledger receipt is not independently authenticated")
+    _nonzero_hex(receipt.get("signed_payload_sha256"), HEX64_RE, "credential nonce ledger payload")
+    _nonzero_hex(receipt.get("signature_hex"), SIGNATURE_RE, "credential nonce ledger signature")
+    _nonzero_hex(receipt.get("canonical_digest"), HEX64_RE, "credential nonce ledger digest")
+    expected_bindings = {
+        "path": ledger_path,
+        "transaction_id": plan["transaction_id"],
+        "capture_window_id": plan["capture_window_id"],
+        "one_shot": True,
+        "replay": False,
+        "issued_at": ledger["issued_at"],
+        "expires_at": ledger["expires_at"],
+        "reserved_nonces": reserved,
+    }
+    if receipt.get("bindings") != expected_bindings:
+        _fail("credential nonce ledger receipt bindings are not exact")
+
+
+def _validate_plan_semantic_bindings(
+    plan: dict[str, Any], planner: Any, nodes: list[dict[str, Any]]
+) -> None:
+    """Recompute cross-section bindings instead of trusting plan_digest alone."""
+    try:
+        truth = _object(plan.get("truth"), "plan truth")
+        normalized_truth = planner._validate_truth(
+            truth, set(CANONICAL_SIGNER_ALLOWLIST)
+        )
+    except (SystemExit, KeyError, TypeError) as error:
+        _fail(f"plan truth semantic validation failed: {error}")
+    if normalized_truth != truth:
+        _fail("plan truth is not the authenticated canonical projection")
+    package = normalized_truth["package"]
+    genesis = normalized_truth["genesis"]
+    world = normalized_truth["world"]
+    checkpoint = normalized_truth["checkpoint"]
+    for node in nodes:
+        expected_binding = {
+            "package_commit": package["commit"],
+            "package_platform": package["platforms"][node["platform"]],
+            "genesis_sha256": genesis["sha256"],
+            "world_sha256": world["sha256"],
+            "checkpoint_id": checkpoint["checkpoint_id"],
+            "checkpoint_manifest_hash": checkpoint["manifest_hash"],
+            "checkpoint_height": checkpoint["height"],
+        }
+        if node.get("bindings") != expected_binding:
+            _fail(f"{node['name']} semantic binding is not derived from authenticated truth")
+    try:
+        probe = _object(plan.get("fresh_root_probe"), "plan fresh-root probe")
+        normalized_probe = planner._validate_probe(
+            probe,
+            normalized_truth,
+            set(CANONICAL_SIGNER_ALLOWLIST),
+            {
+                "transaction_id": plan["transaction_id"],
+                "capture_window_id": plan["capture_window_id"],
+            },
+        )
+    except (SystemExit, KeyError, TypeError) as error:
+        _fail(f"plan fresh-root probe semantic validation failed: {error}")
+    if normalized_probe != plan["fresh_root_probe"]:
+        _fail("plan fresh-root probe is not the authenticated canonical projection")
+    expected_gate = {
+        "required_before": ["windows-observer", "macos-observer"],
+        "fresh_root_probe_required": True,
+        "checkpoint_receipt_required": True,
+        "fail_closed": True,
+    }
+    if plan.get("observer_gate") != expected_gate:
+        _fail("plan observer gate is not the code-owned fail-closed contract")
+
+
 def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     """Validate immutable planner output and all code-owned inventories."""
     plan = _object(plan, "plan")
@@ -455,6 +604,8 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         _fail("plan host inventory is not code-owned")
     if plan.get("canonical_endpoint_inventory") != planner.CANONICAL_ENDPOINT_INVENTORY:
         _fail("plan endpoint inventory is not code-owned")
+    if getattr(planner, "CANONICAL_PEER_REGISTRY", None) != CANONICAL_PEER_REGISTRY:
+        _fail("planner and adapter peer registries are not the same code-owned registry")
     deployment_inventory = _validate_deployment_inventory(plan, planner)
     execution = _object(plan.get("execution"), "plan execution")
     if execution.get("mode") != "plan-only" or execution.get("provider_mutation_performed") is not False:
@@ -544,6 +695,8 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         ):
             _fail(f"{name} identity uid/gid do not match independently authenticated deployment inventory")
         peer_id = _string(identity.get("peer_id"), f"{name} identity peer id")
+        if peer_id != CANONICAL_PEER_REGISTRY[name]:
+            _fail(f"{name} identity peer id does not match the code-owned peer registry")
         if peer_id in seen_peer_ids:
             _fail(f"{name} identity peer id duplicates another managed node")
         seen_peer_ids.add(peer_id)
@@ -561,6 +714,7 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     }
     if surfaces.get("observers_by_node") != expected_observers:
         _fail("observer surface summary is not bound to governed node inventory")
+    _validate_plan_semantic_bindings(plan, planner, nodes)
     forensic = _object(plan.get("forensic_backup"), "forensic backup")
     if (
         forensic.get("restore_old_state") is not False
@@ -602,13 +756,6 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         or rollback.get("cross_node_state_copy") is not False
     ):
         _fail("rollback is not clean-redeploy-only")
-    ledger_contract = _object(plan.get("credential_nonce_ledger"), "credential nonce ledger contract")
-    ledger_path = _string(ledger_contract.get("path"), "credential nonce ledger path")
-    if not Path(ledger_path).is_absolute():
-        _fail("credential nonce ledger path must be absolute")
-    ledger_receipt = _object(ledger_contract.get("receipt"), "credential nonce ledger receipt")
-    if _object(ledger_receipt.get("bindings"), "credential nonce ledger receipt bindings").get("path") != ledger_path:
-        _fail("credential nonce ledger receipt path binding drifted")
     capture_window = _object(plan.get("capture_window"), "transaction capture window")
     if set(capture_window) != {"id", "starts_at", "ends_at"}:
         _fail("transaction capture window contains an unsafe field")
@@ -618,15 +765,8 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     window_end = _parse_utc(capture_window.get("ends_at"), "transaction capture window ends_at")
     if window_end <= window_start:
         _fail("transaction capture window is inverted")
-    if (
-        capture_window.get("starts_at") != ledger_contract.get("issued_at")
-        or capture_window.get("ends_at") != ledger_contract.get("expires_at")
-    ):
-        _fail("transaction capture window is not bound to the nonce ledger lease")
-    for node in nodes:
-        seam = _object(node.get("credential_seam"), f"{node['name']} credential seam")
-        if seam.get("ledger_path") != ledger_path:
-            _fail(f"{node['name']} credential ledger path is not the canonical path")
+    ledger_contract = _object(plan.get("credential_nonce_ledger"), "credential nonce ledger contract")
+    _validate_nonce_contract(plan, nodes, ledger_contract, capture_window)
     journal_contract = _object(
         plan.get("operation_journal_contract"), "operation journal contract"
     )
