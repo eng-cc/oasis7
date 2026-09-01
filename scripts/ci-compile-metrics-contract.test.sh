@@ -1356,6 +1356,9 @@ case "${1:-}" in
         untracked)
           printf 'untracked mutation\n' >"$PWD/.v2-untracked-mutation"
           ;;
+        ignored)
+          printf 'ignored mutation\n' >"$PWD/config.toml"
+          ;;
         *)
           echo "unknown fake V2 mutation mode: $FAKE_MUTATION_MODE" >&2
           exit 1
@@ -2064,7 +2067,7 @@ mutation_fake_bin="$tmp_dir/mutation-bin"
 mkdir -p "$mutation_fake_bin"
 cp "$v2_fake_bin/cargo" "$mutation_fake_bin/cargo"
 chmod +x "$mutation_fake_bin/cargo"
-for mutation_mode in content mode type symlink untracked; do
+for mutation_mode in content mode type symlink untracked ignored; do
   mutation_worktree="$tmp_dir/mutation-$mutation_mode"
   git worktree add --detach "$mutation_worktree" "$expected_commit_oid" >/dev/null
   cp "$repo_root/scripts/ci-compile-metrics.sh" "$mutation_worktree/scripts/ci-compile-metrics.sh"
@@ -2102,6 +2105,8 @@ for mutation_mode in content mode type symlink untracked; do
     expected_mutation_path=".v2-tracked-symlink"
   elif [[ "$mutation_mode" == "untracked" ]]; then
     expected_mutation_path=".v2-untracked-mutation"
+  elif [[ "$mutation_mode" == "ignored" ]]; then
+    expected_mutation_path="config.toml"
   fi
   if ! grep -Fq "$expected_mutation_path" "$mutation_error"; then
     echo "source mutation $mutation_mode diagnostic did not identify $expected_mutation_path: $(cat "$mutation_error")" >&2
@@ -2193,6 +2198,13 @@ if not isinstance(jobs, dict) or not isinstance(jobs.get("compile-metrics"), dic
 steps = jobs["compile-metrics"].get("steps")
 if not isinstance(steps, list):
     raise SystemExit("compile-metrics job must define a YAML steps list")
+step_names = [step.get("name") for step in steps if isinstance(step, dict)]
+gate_index = step_names.index("Enforce compile metrics gate")
+upload_index = step_names.index("Upload compile metrics artifact")
+if upload_index <= gate_index:
+    raise SystemExit(
+        "compile metrics artifact upload must occur after the gate appends its verdict"
+    )
 validation_steps = [
     step
     for step in steps

@@ -366,25 +366,43 @@ for relative in tracked:
     else:
         entries.append(f"tracked-other:{relative}:{mode:o}:{stat.st_mode:o}")
 
-untracked_result = git_ls_files(
-    checkout,
-    ["ls-files", "--others", "--exclude-standard", "-z", "--full-name"],
-)
-if untracked_result is None:
-    untracked_result = git_ls_files(
-        canonical,
-        ["ls-files", "--others", "--exclude-standard", "-z", "--full-name"],
-    )
-if untracked_result is None:
-    raise SystemExit("error: unable to fingerprint untracked source paths")
-for raw in untracked_result.stdout.split(b"\0"):
-    if not raw:
-        continue
-    relative = Path(raw.decode("utf-8", "surrogateescape"))
+def add_untracked_entry(relative: Path, category: str) -> None:
     path = checkout / relative
     if under(path, output):
-        continue
-    entries.append(f"untracked:{relative}")
+        return
+    try:
+        stat = path.lstat()
+    except FileNotFoundError:
+        entries.append(f"{category}-missing:{relative}")
+        return
+    mode = stat.st_mode & 0o7777
+    if path.is_symlink():
+        entries.append(f"{category}-symlink:{relative}:{mode:o}:{os.readlink(path)}")
+    elif path.is_file():
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        entries.append(f"{category}-file:{relative}:{mode:o}:{digest.hexdigest()}")
+    else:
+        entries.append(f"{category}-other:{relative}:{mode:o}:{stat.st_mode:o}")
+
+untracked_queries = (
+    ("untracked", ["ls-files", "--others", "--exclude-standard", "-z", "--full-name"]),
+    ("ignored", ["ls-files", "--others", "--ignored", "--exclude-standard", "-z", "--full-name"]),
+)
+for category, arguments in untracked_queries:
+    result = git_ls_files(checkout, arguments)
+    if result is None:
+        result = git_ls_files(canonical, arguments)
+    if result is None:
+        raise SystemExit(f"error: unable to fingerprint {category} source paths")
+    for raw in result.stdout.split(b"\0"):
+        if not raw:
+            continue
+        add_untracked_entry(
+            Path(raw.decode("utf-8", "surrogateescape")), category
+        )
 
 entries.sort()
 manifest.write_text("\n".join(entries) + "\n", encoding="utf-8", errors="surrogateescape")
