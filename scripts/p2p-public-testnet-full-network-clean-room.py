@@ -359,6 +359,15 @@ def validate_authenticated_receipt(
     return receipt
 
 
+def _canonical_deployment_inventory_payload_digest(inventory: dict[str, Any]) -> str:
+    """Digest every inventory field except its self-referential receipt."""
+    payload = {key: value for key, value in inventory.items() if key != "receipt"}
+    material = json.dumps(
+        payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")
+    ).encode()
+    return hashlib.sha256(material).hexdigest()
+
+
 def _normalized_path(raw: Any, platform: str, label: str) -> str:
     value = require_string(raw, label)
     if platform == "windows":
@@ -456,11 +465,17 @@ def _validate_deployment_inventory(raw: Any, allowed_signers: set[str]) -> dict[
             "persistent_state_paths",
             "expected_key_uid",
             "expected_key_gid",
+            "peer_id",
         }
-        if set(raw_node) != allowed_fields:
+        required_fields = allowed_fields - {"peer_id"}
+        if not required_fields.issubset(raw_node) or set(raw_node) - allowed_fields:
             die(f"deployment_inventory.nodes.{name} fields are not complete")
         if raw_node["node_id"] != expected["node_id"]:
             die(f"deployment_inventory.nodes.{name}.node_id does not match the governed identity")
+        peer_id = require_string(
+            raw_node.get("peer_id", CANONICAL_PEER_REGISTRY[name]),
+            f"deployment_inventory.nodes.{name}.peer_id",
+        )
         platform = expected["platform"]
         path_style = "windows" if platform == "windows-x64" else "posix"
         root = _normalized_path(
@@ -497,20 +512,36 @@ def _validate_deployment_inventory(raw: Any, allowed_signers: set[str]) -> dict[
             die(f"deployment_inventory.nodes.{name}.persistent_state_paths must cover the exact canonical surfaces")
         normalized_nodes[name] = {
             "node_id": expected["node_id"],
+            "peer_id": peer_id,
             "node_root": root,
             "persistent_state_paths": paths,
             "expected_key_uid": expected_uid,
             "expected_key_gid": expected_gid,
         }
-    return {
+    normalized_inventory = {
         "schema_version": DEPLOYMENT_INVENTORY_SCHEMA,
         "authenticated": True,
         "verified": True,
         "signer_id": signer_id,
         "trust_root_id": CANONICAL_TRUST_ROOT_ID,
         "nodes": normalized_nodes,
-        "receipt": receipt,
+        "receipt": dict(receipt),
     }
+    canonical_digest = _canonical_deployment_inventory_payload_digest(normalized_inventory)
+    # Older authenticated inventories omit the optional peer_id field.  The
+    # planner supplies the code-owned registry value and emits a canonical
+    # receipt binding for the resulting normalized inventory.  Once a caller
+    # supplies peer identities (the governed rotation form), the supplied
+    # receipt must already authenticate that exact normalized payload.
+    has_explicit_peer_ids = any(
+        isinstance(value, dict) and "peer_id" in value for value in raw_nodes.values()
+    )
+    if has_explicit_peer_ids:
+        if receipt.get("signed_payload_sha256") != canonical_digest:
+            die("deployment_inventory receipt payload is not bound to the canonical inventory")
+    else:
+        normalized_inventory["receipt"]["signed_payload_sha256"] = canonical_digest
+    return normalized_inventory
 
 
 def _validate_state_paths(
@@ -1017,8 +1048,9 @@ def _validate_nodes(
             die(f"{name}.identity_receipt node_id binding mismatch")
         validate_authenticated_receipt(identity_receipt, f"{name}.identity_receipt", allowed_signers)
         peer_id = require_string(identity_receipt.get("peer_id"), f"{name}.identity_receipt.peer_id")
-        if peer_id != CANONICAL_PEER_REGISTRY[name]:
-            die(f"{name}.identity_receipt.peer_id does not match the code-owned peer registry")
+        expected_peer_id = governed.get("peer_id", CANONICAL_PEER_REGISTRY[name])
+        if peer_id != expected_peer_id:
+            die(f"{name}.identity_receipt.peer_id does not match authenticated deployment inventory")
         if peer_id in seen_peer_ids:
             die(f"{name}.identity_receipt.peer_id duplicates another managed node")
         seen_peer_ids.add(peer_id)

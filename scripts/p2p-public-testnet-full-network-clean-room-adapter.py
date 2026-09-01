@@ -98,7 +98,11 @@ CANONICAL_PROVIDER_UID = {
 OID_RE = re.compile(r"^[0-9a-fA-F]{40,64}$")
 HEX64_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 SIGNATURE_RE = re.compile(r"^[0-9a-fA-F]{128}$")
+# Plan-bound nonces must have enough entropy-bearing length.  The lower-level
+# ledger reservation helper retains its historical format check for legacy
+# journal rows; admission uses PLAN_NONCE_RE below and never that weaker path.
 SAFE_NONCE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{7,255}$")
+PLAN_NONCE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{31,255}$")
 SECRET_KEY_RE = re.compile(
     r"(?:password|secret|token|private[_-]?key|api[_-]?key|access[_-]?key|sshpass)",
     re.I,
@@ -312,6 +316,15 @@ def _expected_paths(planner: Any, node: dict[str, Any]) -> list[str]:
     return [root.rstrip("/") + "/" + surface.replace("{node_id}", node_id).replace("\\", "/") for surface in surfaces]
 
 
+def _canonical_deployment_inventory_payload_digest(inventory: dict[str, Any]) -> str:
+    """Digest every inventory field except its self-referential receipt."""
+    payload = {key: value for key, value in inventory.items() if key != "receipt"}
+    material = json.dumps(
+        payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")
+    ).encode()
+    return hashlib.sha256(material).hexdigest()
+
+
 def _validate_deployment_inventory(
     plan: dict[str, Any], planner: Any
 ) -> dict[str, Any]:
@@ -367,16 +380,23 @@ def _validate_deployment_inventory(
     for name in planner.NODE_ORDER:
         expected = planner.EXPECTED_NODES[name]
         value = _object(raw_nodes.get(name), f"deployment inventory {name}")
-        if set(value) != {
+        allowed_fields = {
             "node_id",
             "node_root",
             "persistent_state_paths",
             "expected_key_uid",
             "expected_key_gid",
-        }:
+            "peer_id",
+        }
+        required_fields = allowed_fields - {"peer_id"}
+        if not required_fields.issubset(value) or set(value) - allowed_fields:
             _fail(f"deployment inventory {name} fields are not exact")
         if value.get("node_id") != expected["node_id"]:
             _fail(f"deployment inventory {name} node id drifted")
+        peer_id = _string(
+            value.get("peer_id", CANONICAL_PEER_REGISTRY[name]),
+            f"deployment inventory {name} peer id",
+        )
         path_style = "windows" if expected["platform"] == "windows-x64" else "posix"
         root = planner._normalized_path(
             value.get("node_root"), path_style, f"deployment inventory {name} root"
@@ -406,12 +426,13 @@ def _validate_deployment_inventory(
                 _fail(f"deployment inventory {name} {field} is malformed")
         normalized[name] = {
             "node_id": value["node_id"],
+            "peer_id": peer_id,
             "node_root": root,
             "persistent_state_paths": paths,
             "expected_key_uid": value["expected_key_uid"],
             "expected_key_gid": value["expected_key_gid"],
         }
-    return {
+    normalized_inventory = {
         "schema_version": DEPLOYMENT_INVENTORY_SCHEMA,
         "authenticated": True,
         "verified": True,
@@ -420,6 +441,10 @@ def _validate_deployment_inventory(
         "nodes": normalized,
         "receipt": receipt,
     }
+    canonical_digest = _canonical_deployment_inventory_payload_digest(normalized_inventory)
+    if receipt.get("signed_payload_sha256") != canonical_digest:
+        _fail("deployment inventory receipt payload is not bound to the canonical inventory")
+    return normalized_inventory
 
 
 def _under_root(root: str, path: str, platform: str) -> bool:
@@ -469,6 +494,9 @@ def _validate_nonce_contract(
     expires_at = _parse_utc(ledger.get("expires_at"), "credential nonce ledger expires_at")
     if expires_at <= issued_at:
         _fail("credential nonce ledger lease is inverted")
+    now = dt.datetime.now(dt.timezone.utc)
+    if issued_at > now + dt.timedelta(seconds=MAX_CLOCK_SKEW_SECONDS) or expires_at <= now:
+        _fail("credential nonce ledger lease is expired or outside allowed clock skew")
     if (
         ledger.get("issued_at") != capture_window.get("starts_at")
         or ledger.get("expires_at") != capture_window.get("ends_at")
@@ -478,7 +506,7 @@ def _validate_nonce_contract(
     if not isinstance(raw_reserved, list) or len(raw_reserved) != len(nodes):
         _fail("credential nonce ledger must reserve one nonce per managed node")
     reserved = [_string(item, "credential nonce ledger reserved nonce") for item in raw_reserved]
-    if any(SAFE_NONCE_RE.fullmatch(item) is None for item in reserved):
+    if any(PLAN_NONCE_RE.fullmatch(item) is None for item in reserved):
         _fail("credential nonce ledger contains a malformed nonce")
     if len(set(reserved)) != len(reserved):
         _fail("credential nonce ledger contains duplicate nonces")
@@ -531,6 +559,15 @@ def _validate_nonce_contract(
         _fail("credential nonce ledger receipt bindings are not exact")
 
 
+def _validate_trusted_receipt_identity(value: Any, label: str) -> None:
+    """Require nested receipts to name the code-owned verifier and trust root."""
+    receipt = _object(value, label)
+    if receipt.get("verifier_id") != CANONICAL_VERIFIER_ID:
+        _fail(f"{label} verifier is not code-owned")
+    if receipt.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID:
+        _fail(f"{label} trust root is not code-owned")
+
+
 def _validate_plan_semantic_bindings(
     plan: dict[str, Any], planner: Any, nodes: list[dict[str, Any]]
 ) -> None:
@@ -548,6 +585,13 @@ def _validate_plan_semantic_bindings(
     genesis = normalized_truth["genesis"]
     world = normalized_truth["world"]
     checkpoint = normalized_truth["checkpoint"]
+    for label, value in (
+        ("truth.package.receipt", package.get("receipt")),
+        ("truth.genesis.receipt", genesis.get("receipt")),
+        ("truth.world.receipt", world.get("receipt")),
+        ("truth.checkpoint.receipt", checkpoint.get("receipt")),
+    ):
+        _validate_trusted_receipt_identity(value, label)
     for node in nodes:
         expected_binding = {
             "package_commit": package["commit"],
@@ -575,6 +619,13 @@ def _validate_plan_semantic_bindings(
         _fail(f"plan fresh-root probe semantic validation failed: {error}")
     if normalized_probe != plan["fresh_root_probe"]:
         _fail("plan fresh-root probe is not the authenticated canonical projection")
+    _validate_trusted_receipt_identity(
+        normalized_probe.get("receipt"), "fresh_root_probe.receipt"
+    )
+    _validate_trusted_receipt_identity(
+        _object(plan.get("adapter_verification"), "planner adapter verification").get("receipt"),
+        "adapter_verification.receipt",
+    )
     expected_gate = {
         "required_before": ["windows-observer", "macos-observer"],
         "fresh_root_probe_required": True,
@@ -695,8 +746,9 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         ):
             _fail(f"{name} identity uid/gid do not match independently authenticated deployment inventory")
         peer_id = _string(identity.get("peer_id"), f"{name} identity peer id")
-        if peer_id != CANONICAL_PEER_REGISTRY[name]:
-            _fail(f"{name} identity peer id does not match the code-owned peer registry")
+        expected_peer_id = governed.get("peer_id", CANONICAL_PEER_REGISTRY[name])
+        if peer_id != expected_peer_id:
+            _fail(f"{name} identity peer id does not match authenticated deployment inventory")
         if peer_id in seen_peer_ids:
             _fail(f"{name} identity peer id duplicates another managed node")
         seen_peer_ids.add(peer_id)
@@ -2400,7 +2452,10 @@ def _project_transport_inventory(value: Any) -> dict[str, Any]:
     inventory["nodes"] = {
         name: _project_exact_object(
             nodes[name],
-            {"node_id", "node_root", "persistent_state_paths", "expected_key_uid", "expected_key_gid"},
+            {
+                "node_id", "peer_id", "node_root", "persistent_state_paths",
+                "expected_key_uid", "expected_key_gid",
+            },
             f"transport deployment inventory {name}",
         )
         for name in CANONICAL_PEER_REGISTRY

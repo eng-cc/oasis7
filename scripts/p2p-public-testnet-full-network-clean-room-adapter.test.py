@@ -2092,6 +2092,143 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
                     self.adapter.validate_plan(plan)
                 self.assertRegex(str(raised.exception), r"(?i)nonce|ledger|seam|one.?shot|binding")
 
+    def test_adapter_rejects_rebound_nonce_leases_outside_time_window(self) -> None:
+        """A rebound lease must still obey the planner's current-time contract."""
+        mutations = (
+            (
+                "expired",
+                "2020-01-01T00:00:00Z",
+                "2020-01-02T00:00:00Z",
+            ),
+            (
+                "future-issued",
+                "2099-01-01T00:00:00Z",
+                "2100-01-01T00:00:00Z",
+            ),
+        )
+        for label, issued_at, expires_at in mutations:
+            with self.subTest(lease=label):
+                plan = copy.deepcopy(self.plan)
+                ledger = plan["credential_nonce_ledger"]
+                ledger["issued_at"] = issued_at
+                ledger["expires_at"] = expires_at
+                ledger["receipt"]["bindings"]["issued_at"] = issued_at
+                ledger["receipt"]["bindings"]["expires_at"] = expires_at
+                plan["capture_window"]["starts_at"] = issued_at
+                plan["capture_window"]["ends_at"] = expires_at
+                for node in plan["nodes"]:
+                    seam = node["credential_seam"]
+                    seam["issued_at"] = issued_at
+                    seam["expires_at"] = expires_at
+                plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+                with self.assertRaises(self.adapter.AdapterError) as raised:
+                    self.adapter.validate_plan(plan)
+                self.assertRegex(str(raised.exception), r"(?i)nonce|ledger|lease|future|expir|capture")
+
+    def test_adapter_rejects_planner_invalid_short_nonce_after_rebinding(self) -> None:
+        """The adapter must preserve the planner's minimum unpredictable nonce length."""
+        plan = copy.deepcopy(self.plan)
+        short_nonce = "short123"
+        plan["credential_nonce_ledger"]["reserved_nonces"][0] = short_nonce
+        plan["credential_nonce_ledger"]["receipt"]["bindings"]["reserved_nonces"][0] = short_nonce
+        plan["nodes"][0]["credential_seam"]["nonce"] = short_nonce
+        plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+        with self.assertRaises(self.adapter.AdapterError) as raised:
+            self.adapter.validate_plan(plan)
+        self.assertRegex(str(raised.exception), r"(?i)nonce|ledger|seam|unpredictable|length|binding")
+
+    def test_adapter_rejects_rebound_nested_receipt_trust_labels(self) -> None:
+        """Digest recomputation cannot authorize caller-controlled receipt identities."""
+        mutations = (
+            (
+                "truth-package-verifier",
+                lambda plan: plan["truth"]["package"]["receipt"].__setitem__(
+                    "verifier_id", "caller-verifier"
+                ),
+            ),
+            (
+                "truth-genesis-trust-root",
+                lambda plan: plan["truth"]["genesis"]["receipt"].__setitem__(
+                    "trust_root_id", "caller-trust-root"
+                ),
+            ),
+            (
+                "fresh-root-probe-trust-root",
+                lambda plan: plan["fresh_root_probe"]["receipt"].__setitem__(
+                    "trust_root_id", "caller-trust-root"
+                ),
+            ),
+            (
+                "adapter-verification-verifier",
+                lambda plan: plan["adapter_verification"]["receipt"].__setitem__(
+                    "verifier_id", "caller-verifier"
+                ),
+            ),
+        )
+        for label, mutate in mutations:
+            with self.subTest(receipt=label):
+                plan = copy.deepcopy(self.plan)
+                mutate(plan)
+                plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+                with self.assertRaises(self.adapter.AdapterError) as raised:
+                    self.adapter.validate_plan(plan)
+                self.assertRegex(
+                    str(raised.exception),
+                    r"(?i)receipt|verifier|trust.?root|authenticated|canonical|binding",
+                )
+
+    def test_adapter_uses_authenticated_inventory_for_peer_rotation(self) -> None:
+        """Peer rotation must follow authenticated inventory, while unbound caller IDs fail."""
+        def inventory_payload_digest(inventory: dict[str, object]) -> str:
+            payload = {
+                key: copy.deepcopy(value)
+                for key, value in inventory.items()
+                if key != "receipt"
+            }
+            return hashlib.sha256(
+                json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+
+        rotated = copy.deepcopy(self.plan)
+        for index, name in enumerate(self.planner.NODE_ORDER, start=1):
+            rotated_peer = f"12D3KooWrotated{index:02d}{'x' * 20}"
+            rotated["deployment_inventory"]["nodes"][name]["peer_id"] = rotated_peer
+            node = next(item for item in rotated["nodes"] if item["name"] == name)
+            node["identity_receipt"]["peer_id"] = rotated_peer
+        rotated["deployment_inventory"]["receipt"]["signed_payload_sha256"] = (
+            inventory_payload_digest(rotated["deployment_inventory"])
+        )
+        rotated["plan_digest"] = self.adapter.canonical_plan_digest(rotated)
+        try:
+            self.adapter.validate_plan(rotated)
+        except self.adapter.AdapterError as error:
+            self.fail(f"authenticated deployment peer rotation was rejected: {error}")
+
+        stale_receipt = copy.deepcopy(rotated)
+        stale_inventory_peer = "12D3KooWrotated-stale-receipt"
+        stale_receipt["deployment_inventory"]["nodes"]["storage-205"]["peer_id"] = (
+            stale_inventory_peer
+        )
+        stale_node = next(item for item in stale_receipt["nodes"] if item["name"] == "storage-205")
+        stale_node["identity_receipt"]["peer_id"] = stale_inventory_peer
+        # The plan digest and node identity are rebound, but the authenticated
+        # inventory receipt still signs the previous inventory payload.
+        stale_receipt["plan_digest"] = self.adapter.canonical_plan_digest(stale_receipt)
+        with self.assertRaises(self.adapter.AdapterError) as stale_raised:
+            self.adapter.validate_plan(stale_receipt)
+        self.assertRegex(
+            str(stale_raised.exception),
+            r"(?i)inventory|receipt|digest|peer|binding",
+        )
+
+        forged = copy.deepcopy(self.plan)
+        target = next(item for item in forged["nodes"] if item["name"] == "storage-205")
+        target["identity_receipt"]["peer_id"] = "12D3KooWcaller-supplied-rotation"
+        forged["plan_digest"] = self.adapter.canonical_plan_digest(forged)
+        with self.assertRaises(self.adapter.AdapterError) as raised:
+            self.adapter.validate_plan(forged)
+        self.assertRegex(str(raised.exception), r"(?i)peer|identity|inventory|registry|binding")
+
     def test_adapter_recomputes_authenticated_semantic_bindings(self) -> None:
         """Digest recomputation cannot rebind truth, node, probe, or observer gate semantics."""
         mutations = (
