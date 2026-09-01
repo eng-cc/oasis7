@@ -42,7 +42,7 @@ import {
   VIEWER_RENDER_MODE,
   isHostedPublicJoinDeploymentMode,
 } from "./software_safe_constants.js";
-import { createSoftwareSafeState } from "./software_safe_state.js"; import { createWorldFeedTransport } from "./world_feed_transport.js";
+import { createSoftwareSafeState } from "./software_safe_state.js"; import { createWorldFeedTransport } from "./world_feed_transport.js"; import { isWorldScopedCrisisRuntimeEvent } from "./world_event_attention_policy.js";
 import {
   buildAuthEnvelope,
   generateEphemeralEd25519Keypair,
@@ -78,11 +78,6 @@ const HELLO_ACK_TIMEOUT_MS = 2000;
 const INITIAL_SNAPSHOT_RETRY_DELAY_MS = 1000;
 const INITIAL_SNAPSHOT_SLOW_RETRY_AFTER = 5;
 const INITIAL_SNAPSHOT_SLOW_RETRY_DELAY_MS = 5000;
-const WORLD_SCOPED_CRISIS_RUNTIME_KINDS = new Set([
-  "runtime.gameplay.crisis_spawned",
-  "runtime.gameplay.crisis_resolved",
-  "runtime.gameplay.crisis_timed_out",
-]);
 const EMPTY_ENTITY_SNAPSHOT_REFRESH_DELAY_MS = 2500;
 const FIRST_AGENT_CLAIM_AUTO_ADVANCE_DELAY_MS = 450;
 const FIRST_AGENT_CLAIM_AUTO_REFRESH_DELAY_MS = 1200;
@@ -1364,12 +1359,7 @@ function summarizeEventTitle(event) {
 }
 
 function addRecentEvent(event) {
-  const runtimeKind = event?.kind?.type === "RuntimeEvent"
-    ? event?.kind?.data?.kind
-    : null;
-  if (WORLD_SCOPED_CRISIS_RUNTIME_KINDS.has(runtimeKind)) {
-    return;
-  }
+  if (isWorldScopedCrisisRuntimeEvent(event)) { return; }
   state.recentEvents.unshift(event);
   state.recentEvents = state.recentEvents.slice(0, MAX_EVENTS);
   state.eventCount = state.recentEvents.length;

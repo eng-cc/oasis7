@@ -5069,6 +5069,15 @@ function createWorldFeedTransport({ getSocket, getState: getState2, render: rend
     resetGeneration
   };
 }
+const WORLD_SCOPED_CRISIS_RUNTIME_KINDS = /* @__PURE__ */ new Set([
+  "runtime.gameplay.crisis_spawned",
+  "runtime.gameplay.crisis_resolved",
+  "runtime.gameplay.crisis_timed_out"
+]);
+function isWorldScopedCrisisRuntimeEvent(event) {
+  const runtimeKind = event?.kind?.type === "RuntimeEvent" ? event?.kind?.data?.kind : null;
+  return WORLD_SCOPED_CRISIS_RUNTIME_KINDS.has(runtimeKind);
+}
 const ED25519_PKCS8_PREFIX = new Uint8Array([
   48,
   46,
@@ -5287,11 +5296,6 @@ const HELLO_ACK_TIMEOUT_MS = 2e3;
 const INITIAL_SNAPSHOT_RETRY_DELAY_MS = 1e3;
 const INITIAL_SNAPSHOT_SLOW_RETRY_AFTER = 5;
 const INITIAL_SNAPSHOT_SLOW_RETRY_DELAY_MS = 5e3;
-const WORLD_SCOPED_CRISIS_RUNTIME_KINDS = /* @__PURE__ */ new Set([
-  "runtime.gameplay.crisis_spawned",
-  "runtime.gameplay.crisis_resolved",
-  "runtime.gameplay.crisis_timed_out"
-]);
 const EMPTY_ENTITY_SNAPSHOT_REFRESH_DELAY_MS = 2500;
 const FIRST_AGENT_CLAIM_AUTO_ADVANCE_DELAY_MS = 450;
 const FIRST_AGENT_CLAIM_AUTO_REFRESH_DELAY_MS = 1200;
@@ -6445,8 +6449,7 @@ function summarizeEventTitle(event) {
   return kind.replace(/_/g, " ");
 }
 function addRecentEvent(event) {
-  const runtimeKind = event?.kind?.type === "RuntimeEvent" ? event?.kind?.data?.kind : null;
-  if (WORLD_SCOPED_CRISIS_RUNTIME_KINDS.has(runtimeKind)) {
+  if (isWorldScopedCrisisRuntimeEvent(event)) {
     return;
   }
   state.recentEvents.unshift(event);
