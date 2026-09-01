@@ -200,7 +200,7 @@ for _ in $(seq 1 20); do
 done
 process_tree_child_pid="$(cat "$PROCESS_TREE_CHILD_PID_FILE")"
 wh_terminate_process_group "$process_tree_pid" "$process_tree_pgid" 100 "$process_tree_identity"
-if kill -0 "$process_tree_pid" >/dev/null 2>&1 || kill -0 "$process_tree_child_pid" >/dev/null 2>&1; then
+if wh_pid_alive "$process_tree_pid" || wh_pid_alive "$process_tree_child_pid"; then
   echo "process-tree shutdown left a managed process alive" >&2
   exit 1
 fi
@@ -299,7 +299,7 @@ wh_terminate_process_group \
   "unrelated-reused-process-identity"
 reused_identity_status=$?
 set -e
-if [[ "$reused_identity_status" -eq 0 ]] || ! kill -0 "$reused_identity_pid" >/dev/null 2>&1; then
+if [[ "$reused_identity_status" -eq 0 ]] || ! wh_pid_alive "$reused_identity_pid"; then
   echo "process-group identity contract: mismatched leader identity was allowed to terminate a live group" >&2
   exit 1
 fi
@@ -701,12 +701,12 @@ set -e
 }
 descendant_pid="$(cat "$DESCENDANT_PID_FILE")"
 for _ in $(seq 1 20); do
-  if ! kill -0 "$descendant_pid" >/dev/null 2>&1; then
+  if ! wh_pid_alive "$descendant_pid"; then
     break
   fi
   sleep 0.05
 done
-if kill -0 "$descendant_pid" >/dev/null 2>&1; then
+if wh_pid_alive "$descendant_pid"; then
   echo "deadline watchdog left descendant process alive: $descendant_pid" >&2
   exit 1
 fi

@@ -184,7 +184,7 @@ assert state["harness_pid"], state
 assert state["launcher_pid"], state
 assert state["port_reservation_token"] == sys.argv[2], state
 PY
-if ! kill -0 "$LEGACY_DOWN_PID" >/dev/null 2>&1; then
+if ! wh_pid_alive "$LEGACY_DOWN_PID"; then
   echo "lifecycle acceptance: down signalled a live identity-less legacy process" >&2
   exit 1
 fi
@@ -228,7 +228,7 @@ assert state["harness_pid"], state
 assert state["launcher_pid"], state
 assert state["port_reservation_token"] == sys.argv[2], state
 PY
-if ! kill -0 "$LEGACY_UP_PID" >/dev/null 2>&1; then
+if ! wh_pid_alive "$LEGACY_UP_PID"; then
   echo "lifecycle acceptance: up signalled a live identity-less legacy process" >&2
   exit 1
 fi
@@ -500,16 +500,16 @@ assert state["phase"] == "stopped", state
 PY
 
 for _ in $(seq 1 40); do
-  if ! kill -0 "$ready_child_pid" >/dev/null 2>&1 && ! kill -0 "$ready_launcher_pid" >/dev/null 2>&1; then
+  if ! wh_pid_alive "$ready_child_pid" && ! wh_pid_alive "$ready_launcher_pid"; then
     break
   fi
   sleep 0.05
 done
-if kill -0 "$ready_child_pid" >/dev/null 2>&1 || kill -0 "$ready_launcher_pid" >/dev/null 2>&1; then
+if wh_pid_alive "$ready_child_pid" || wh_pid_alive "$ready_launcher_pid"; then
   echo "lifecycle acceptance: ready launcher process tree survived down" >&2
   exit 1
 fi
-if ! kill -0 "$SENTINEL_PID" >/dev/null 2>&1; then
+if ! wh_pid_alive "$SENTINEL_PID"; then
   echo "lifecycle acceptance: unrelated sentinel process was killed" >&2
   exit 1
 fi
@@ -582,10 +582,10 @@ OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" ./scripts/worktree-harness
 if [[ -e "$READINESS_CHILD_PID_FILE" ]]; then
   readiness_child_pid="$(cat "$READINESS_CHILD_PID_FILE")"
   for _ in $(seq 1 40); do
-    kill -0 "$readiness_child_pid" >/dev/null 2>&1 || break
+    wh_pid_alive "$readiness_child_pid" || break
     sleep 0.05
   done
-  if kill -0 "$readiness_child_pid" >/dev/null 2>&1; then
+  if wh_pid_alive "$readiness_child_pid"; then
     echo "lifecycle acceptance: readiness launcher child survived cleanup" >&2
     exit 1
   fi
@@ -660,10 +660,10 @@ PY
 if [[ -e "$HANDOFF_CHILD_PID_FILE" ]]; then
   handoff_child_pid="$(cat "$HANDOFF_CHILD_PID_FILE")"
   for _ in $(seq 1 40); do
-    kill -0 "$handoff_child_pid" >/dev/null 2>&1 || break
+    wh_pid_alive "$handoff_child_pid" || break
     sleep 0.05
   done
-  if kill -0 "$handoff_child_pid" >/dev/null 2>&1; then
+  if wh_pid_alive "$handoff_child_pid"; then
     echo "lifecycle acceptance: stale launcher handoff child survived cleanup" >&2
     exit 1
   fi
@@ -706,12 +706,12 @@ if state["status"] != "stopped" or state["phase"] != "stopped":
 PY
 concurrent_child_pid="$(cat "$CONCURRENT_CHILD_PID_FILE")"
 for _ in $(seq 1 40); do
-  if ! kill -0 "$concurrent_child_pid" >/dev/null 2>&1; then
+  if ! wh_pid_alive "$concurrent_child_pid"; then
     break
   fi
   sleep 0.05
 done
-if kill -0 "$concurrent_child_pid" >/dev/null 2>&1; then
+if wh_pid_alive "$concurrent_child_pid"; then
   echo "lifecycle acceptance: concurrent up/down left an orphan launcher child" >&2
   exit 1
 fi
@@ -735,12 +735,12 @@ assert state["status"] == "failed", state
 assert "deadline" in state["failure_reason"], state
 PY
 for _ in $(seq 1 40); do
-  if ! kill -0 "$timeout_child_pid" >/dev/null 2>&1; then
+  if ! wh_pid_alive "$timeout_child_pid"; then
     break
   fi
   sleep 0.05
 done
-if kill -0 "$timeout_child_pid" >/dev/null 2>&1; then
+if wh_pid_alive "$timeout_child_pid"; then
   echo "lifecycle acceptance: timeout launcher child survived cleanup" >&2
   exit 1
 fi
@@ -796,7 +796,7 @@ assert state["phase"] == "cleanup_failed", state
 assert state["port_reservation_token"], state
 assert pathlib.Path(sys.argv[2]).exists(), "cleanup failure released the reservation"
 PY
-if ! kill -0 "$failure_pid" >/dev/null 2>&1; then
+if ! wh_pid_alive "$failure_pid"; then
   echo "lifecycle acceptance: failed cleanup killed a group without proving identity" >&2
   exit 1
 fi
