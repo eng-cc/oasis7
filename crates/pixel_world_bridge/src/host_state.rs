@@ -6,8 +6,11 @@ mod micro_depot_projection;
 mod resource_summary_projection;
 #[path = "host_social_links.rs"]
 mod social_links;
+#[path = "host_world_bounds.rs"]
+mod world_bounds;
 
 use resource_summary_projection::{count_resource_entries, resource_summary};
+use world_bounds::build_world_bounds;
 
 const FRAGMENT_TERRAIN_PALETTE: &[(&str, [u8; 3])] = &[
     ("silicate_matrix", [126, 144, 99]),
@@ -955,35 +958,6 @@ fn build_commercial_surface(
             "fragments": fragment_terrain.len(),
             "hotspots": visual_hotspots.len(),
         },
-    })
-}
-
-fn build_world_bounds(input: &Value) -> Value {
-    let space = obj(obj(input, "snapshot"), "config")
-        .get("space")
-        .unwrap_or(&Value::Null);
-    let Some(width_cm) = space.get("width_cm").and_then(Value::as_f64) else {
-        return Value::Null;
-    };
-    let Some(depth_cm) = space.get("depth_cm").and_then(Value::as_f64) else {
-        return Value::Null;
-    };
-    let Some(height_cm) = space.get("height_cm").and_then(Value::as_f64) else {
-        return Value::Null;
-    };
-    if !width_cm.is_finite()
-        || !depth_cm.is_finite()
-        || !height_cm.is_finite()
-        || width_cm <= 0.0
-        || depth_cm <= 0.0
-        || height_cm <= 0.0
-    {
-        return Value::Null;
-    }
-    json!({
-        "width_cm": width_cm,
-        "depth_cm": depth_cm,
-        "height_cm": height_cm,
     })
 }
 

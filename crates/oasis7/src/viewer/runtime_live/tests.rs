@@ -1,5 +1,4 @@
 use super::*;
-use crate::runtime::MajorWorldEventVisibilityPermission;
 use crate::simulator::{AgentDecision, ResourceOwner};
 use crate::simulator::{
     DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION, DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
@@ -36,6 +35,7 @@ mod power_projection;
 mod power_sale_quote;
 mod prompt_control;
 mod provider_settings;
+mod runtime_live_server_config;
 mod schedule_recipe_quote;
 mod smelter_affordability_debug;
 mod snapshot_fallback;
@@ -826,36 +826,6 @@ fn runtime_simulator_action_mapping_equivalence_covers_core_gameplay_and_economy
             expires_at: 99,
             description: "trade".to_string(),
         },
-    );
-}
-
-#[test]
-fn runtime_live_server_config_play_interval_defaults_and_clamps() {
-    let config = ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal);
-    assert_eq!(config.play_step_interval, Duration::from_millis(800));
-    assert_eq!(
-        config.major_world_event_visibility,
-        MajorWorldEventVisibilityPermission::Unknown
-    );
-
-    let clamped = config.with_play_step_interval(Duration::from_millis(10));
-    assert_eq!(clamped.play_step_interval, Duration::from_millis(50));
-}
-
-#[test]
-fn runtime_live_server_config_requires_explicit_major_event_audience_policy() {
-    let config = ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
-        .with_major_world_event_visibility(MajorWorldEventVisibilityPermission::Public);
-    assert_eq!(
-        config.major_world_event_visibility,
-        MajorWorldEventVisibilityPermission::Public
-    );
-
-    let restricted = ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
-        .with_major_world_event_visibility(MajorWorldEventVisibilityPermission::Restricted);
-    assert_eq!(
-        restricted.major_world_event_visibility,
-        MajorWorldEventVisibilityPermission::Restricted
     );
 }
 
