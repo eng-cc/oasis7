@@ -115,8 +115,9 @@ class WorkflowNextTest(unittest.TestCase):
                 terminal, terminal_digest = write("terminal-cleanup-receipt.json", {
                     "receipt_type": "oasis7_terminal_cleanup",
                     "issuer": "post-merge-cleanup", "task_uid": UID,
-                    "repository": "fixture/repo", "worktree": str(self.root),
-                    "branch": "task/fixture",
+                    "repository": "fixture/repo",
+                    "worktree": str(task.get("canonical_worktree") or self.root),
+                    "branch": task.get("task_branch") or "task/fixture",
                 })
                 ledger_name = "finalizer-ledger.json"
             write(ledger_name, {"schema": "oasis7_finalizer_ledger_v1",
@@ -132,9 +133,10 @@ class WorkflowNextTest(unittest.TestCase):
             task.setdefault("phase_receipt_sha256", {})[phase] = terminal_digest
         self.mapping.write_text(json.dumps(mapping))
 
-    def run_query(self, *extra: str) -> tuple[int, dict]:
+    def run_query(self, *extra: str, repo_root: Path | None = None) -> tuple[int, dict]:
+        query_root = repo_root or self.root
         result = subprocess.run(
-            [sys.executable, str(SCRIPT), "--repo-root", str(self.root), "--task-uid", UID, "--json", *extra],
+            [sys.executable, str(SCRIPT), "--repo-root", str(query_root), "--task-uid", UID, "--json", *extra],
             text=True,
             capture_output=True,
         )
@@ -476,6 +478,29 @@ class WorkflowNextTest(unittest.TestCase):
         self.assertTrue(any("terminal receipt" in item.lower() and
                             ("worktree" in item.lower() or "branch" in item.lower())
                             for item in payload["blockers"]), payload)
+
+    def test_post_merge_terminal_query_uses_default_worktree_after_task_checkout_removal(self) -> None:
+        task_worktree = Path(self.tmp.name) / "retired-task-worktree"
+        subprocess.run([
+            "git", "-C", str(self.root), "worktree", "add", "-qb", "task/retired", str(task_worktree),
+        ], check=True)
+        self.write_mapping(
+            status="done", workflow_phase="post_merge_done",
+            canonical_worktree=str(task_worktree), task_branch="task/retired",
+            pr_url="https://github.com/fixture/repo/pull/7", pr_number=7,
+        )
+        self.install_terminal_proof("post_merge_done")
+        default_mapping = self.default_root / ".pm/github-project-sync/tasks.json"
+        default_mapping.parent.mkdir(parents=True, exist_ok=True)
+        default_mapping.write_bytes(self.mapping.read_bytes())
+        subprocess.run(["git", "-C", str(self.root), "worktree", "remove", "--force", str(task_worktree)], check=True)
+        code, payload = self.run_query(repo_root=self.default_root)
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload["identity_status"], "bound", payload)
+        self.assertEqual(payload["workflow_phase"], "post_merge_done", payload)
+        self.assertEqual(payload["next_action"], "completed", payload)
+        self.assertEqual(payload["next_command"], [], payload)
+        self.assertEqual(payload["blockers"], [], payload)
 
 
 if __name__ == "__main__":

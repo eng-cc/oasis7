@@ -135,6 +135,8 @@ def verify_mapping_identity(
     task_uid: str,
     task: dict[str, Any],
     blockers: list[str],
+    *,
+    allow_retired_terminal: bool = False,
 ) -> None:
     mapped_uid = str(task.get("task_uid") or "")
     if mapped_uid != task_uid:
@@ -150,25 +152,35 @@ def verify_mapping_identity(
     if not canonical_text:
         return
     canonical = pathlib.Path(canonical_text).expanduser().resolve()
-    if canonical != root:
+    default_branch = str(task.get("default_branch") or "")
+    retired_terminal = (
+        allow_retired_terminal
+        and canonical != root
+        and any(path == root and branch == default_branch
+                for path, branch in registered_worktrees(root))
+    )
+    if canonical != root and not retired_terminal:
         add_blocker(blockers, "stale identity: canonical mapping worktree differs from query root")
     if not canonical.exists():
-        add_blocker(blockers, "stale identity: canonical mapping worktree is unavailable")
-        return
-    live_root = git_value(canonical, "rev-parse", "--show-toplevel")
-    if not live_root:
-        add_blocker(blockers, "stale identity: canonical mapping worktree is not a Git worktree")
-    elif pathlib.Path(live_root).resolve() != canonical:
-        add_blocker(blockers, "stale identity: canonical mapping worktree resolves to a different repository")
+        if not retired_terminal:
+            add_blocker(blockers, "stale identity: canonical mapping worktree is unavailable")
+            return
+    elif not retired_terminal:
+        live_root = git_value(canonical, "rev-parse", "--show-toplevel")
+        if not live_root:
+            add_blocker(blockers, "stale identity: canonical mapping worktree is not a Git worktree")
+        elif pathlib.Path(live_root).resolve() != canonical:
+            add_blocker(blockers, "stale identity: canonical mapping worktree resolves to a different repository")
 
-    task_branch = str(task.get("task_branch") or "")
-    live_branch = git_value(canonical, "symbolic-ref", "--quiet", "--short", "HEAD")
-    if task_branch and live_branch != task_branch:
-        add_blocker(
-            blockers,
-            f"stale identity: canonical mapping branch is {live_branch or 'detached'}, expected {task_branch}",
-        )
-    origin = git_value(canonical, "config", "--get", "remote.origin.url")
+        task_branch = str(task.get("task_branch") or "")
+        live_branch = git_value(canonical, "symbolic-ref", "--quiet", "--short", "HEAD")
+        if task_branch and live_branch != task_branch:
+            add_blocker(
+                blockers,
+                f"stale identity: canonical mapping branch is {live_branch or 'detached'}, expected {task_branch}",
+            )
+    origin_root = root if retired_terminal else canonical
+    origin = git_value(origin_root, "config", "--get", "remote.origin.url")
     origin_identity = github_repository_identity(origin)
     if not origin:
         add_blocker(blockers, "stale identity: canonical mapping local origin is missing")
@@ -624,7 +636,13 @@ def main() -> int:
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 1
     task = dict(task)
-    verify_mapping_identity(root, args.task_uid, task, blockers)
+    allow_retired_terminal = str(task.get("workflow_phase") or "") in {
+        "closed_without_merge", "post_merge_done",
+    }
+    verify_mapping_identity(
+        root, args.task_uid, task, blockers,
+        allow_retired_terminal=allow_retired_terminal,
+    )
     payload["task_uid"] = args.task_uid
     payload.update({
         "status": str(task.get("status") or ""),
@@ -674,12 +692,14 @@ def main() -> int:
     ledger_path = pathlib.Path(args.slice_ledger).resolve() if args.slice_ledger else root / ".pm/scratch" / args.task_uid / "slice-ledger.jsonl"
     checkpoint_path = pathlib.Path(args.checkpoint).resolve() if args.checkpoint else root / ".pm/tasks" / f"{args.task_uid}.workflow.json"
     sources = payload["evidence_sources"]
-    verify_snapshot(snapshot_path, root, mapping_path, task, blockers, sources,
-                    required=phase not in {"intake", "bootstrap"})
-    verify_ledger(ledger_path, args.task_uid, blockers, sources)
-    checkpoint = verify_checkpoint(checkpoint_path, root, task, blockers, sources)
-    if checkpoint and checkpoint.get("phase") not in (None, "", phase):
-        add_blocker(blockers, "ambiguous state: durable workflow checkpoint phase disagrees with task mapping")
+    terminal_phase = phase in {"closed_without_merge", "post_merge_done"}
+    if not terminal_phase:
+        verify_snapshot(snapshot_path, root, mapping_path, task, blockers, sources,
+                        required=phase not in {"intake", "bootstrap"})
+        verify_ledger(ledger_path, args.task_uid, blockers, sources)
+        checkpoint = verify_checkpoint(checkpoint_path, root, task, blockers, sources)
+        if checkpoint and checkpoint.get("phase") not in (None, "", phase):
+            add_blocker(blockers, "ambiguous state: durable workflow checkpoint phase disagrees with task mapping")
     verify_terminal_proof(root, phase, task, blockers, sources)
     payload["evidence_sources"] = list(dict.fromkeys(sources))
     default_root = None

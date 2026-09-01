@@ -108,12 +108,51 @@ def _has_non_pr_task_classification(record: dict) -> bool:
     )
 
 
+def _recorded_task_worktree(root: pathlib.Path, record: dict) -> pathlib.Path:
+    """Validate the task checkout recorded by classification.
+
+    Non-PR classification runs in the task worktree, while the terminal
+    finalizer is deliberately invoked from the registered default worktree.
+    Keep that split explicit and require both paths to belong to the same Git
+    repository before consuming task-worktree evidence.
+    """
+    canonical = pathlib.Path(str(record.get("canonical_worktree") or "")).expanduser().resolve()
+    if not canonical.is_dir():
+        fail("non_pr_completed requires the recorded task worktree")
+    live_root = subprocess.run(
+        ["git", "-C", str(canonical), "rev-parse", "--show-toplevel"],
+        text=True, capture_output=True,
+    )
+    if live_root.returncode or pathlib.Path(live_root.stdout.strip()).resolve() != canonical:
+        fail("non_pr_completed recorded task worktree is not a Git worktree")
+    task_branch = str(record.get("task_branch") or "")
+    live_branch = subprocess.run(
+        ["git", "-C", str(canonical), "symbolic-ref", "--quiet", "--short", "HEAD"],
+        text=True, capture_output=True,
+    )
+    if not task_branch or live_branch.returncode or live_branch.stdout.strip() != task_branch:
+        fail("non_pr_completed recorded task worktree branch identity drift")
+    def common_dir(path: pathlib.Path) -> pathlib.Path:
+        result = subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "--git-common-dir"],
+            text=True, capture_output=True,
+        )
+        if result.returncode:
+            fail("non_pr_completed cannot resolve Git common directory")
+        value = pathlib.Path(result.stdout.strip())
+        return (path / value).resolve() if not value.is_absolute() else value.resolve()
+    if common_dir(root) != common_dir(canonical):
+        fail("non_pr_completed task worktree belongs to a different repository")
+    return canonical
+
+
 def _verify_non_pr_evidence_binding(
     root: pathlib.Path, record: dict, supplied_path: pathlib.Path,
     supplied_digest: str,
 ) -> None:
     """Require finalization to consume the exact classification artifact."""
-    expected_path = (root / ".pm" / "scratch" / str(record.get("task_uid") or "") /
+    task_root = _recorded_task_worktree(root, record)
+    expected_path = (task_root / ".pm" / "scratch" / str(record.get("task_uid") or "") /
                      "non-pr-completion-evidence.txt").resolve()
     recorded_path = pathlib.Path(str(record.get("non_pr_completion_evidence_file") or "")).resolve()
     if recorded_path != expected_path or supplied_path.resolve() != expected_path:

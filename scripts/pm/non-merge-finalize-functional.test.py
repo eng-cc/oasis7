@@ -378,7 +378,9 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         path.write_text("owner decision: terminal non-merge closure\n")
         return path
 
-    def invoke(self, reason: str, evidence: Path | None = None) -> subprocess.CompletedProcess[str]:
+    def invoke(self, reason: str, evidence: Path | None = None,
+               repo_root: Path | None = None) -> subprocess.CompletedProcess[str]:
+        finalizer_root = repo_root or self.root
         if evidence is None and reason == "non_pr_completed":
             try:
                 mapping = self.read_json(self.root / ".pm/github-project-sync/tasks.json")
@@ -387,15 +389,17 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
                 evidence = self.evidence()
         evidence = evidence or self.evidence()
         return subprocess.run([
-            sys.executable, str(HELPER), "--repo-root", str(self.root),
+            sys.executable, str(HELPER), "--repo-root", str(finalizer_root),
             "--task-uid", UID, "--reason", reason,
             "--evidence-file", str(evidence), "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
 
-    def classify_non_pr(self, evidence: str) -> subprocess.CompletedProcess[str]:
+    def classify_non_pr(self, evidence: str,
+                        repo_root: Path | None = None) -> subprocess.CompletedProcess[str]:
+        classification_root = repo_root or self.root
         self.env["GH_REFRESH_TASK"] = "1"
         return subprocess.run([
-            sys.executable, str(PROJECT_TASK), "classify-non-pr-task", str(self.root),
+            sys.executable, str(PROJECT_TASK), "classify-non-pr-task", str(classification_root),
             "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
             "--evidence", evidence, "--validation-command", "fixture classification", "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
@@ -1022,6 +1026,47 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         finalized = self.read_json(self.root / ".pm/github-project-sync/tasks.json")["tasks"][UID]
         self.assertEqual(finalized["last_closed_at"], original_closed_at)
         self.assertIn("non_merge_finalized_at", finalized)
+
+    def test_non_pr_completed_reads_classification_evidence_from_task_worktree_when_finalized_from_default(self) -> None:
+        subprocess.run(["git", "-C", str(self.root), "config", "user.email", "test@example.invalid"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "config", "user.name", "Test"], check=True)
+        (self.root / "tracked").write_text("base\n")
+        subprocess.run(["git", "-C", str(self.root), "add", "tracked"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "commit", "-qm", "base"], check=True)
+        task_worktree = Path(self.tmp.name) / "canonical-task-worktree"
+        subprocess.run([
+            "git", "-C", str(self.root), "worktree", "add", "-qb", "task/fixture", str(task_worktree),
+        ], check=True)
+
+        self.mapping(extra={
+            "canonical_worktree": str(task_worktree), "task_branch": "task/fixture",
+        })
+        task_mapping_path = task_worktree / ".pm/github-project-sync/tasks.json"
+        task_mapping_path.parent.mkdir(parents=True, exist_ok=True)
+        task_mapping_path.write_bytes((self.root / ".pm/github-project-sync/tasks.json").read_bytes())
+        classified = self.classify_non_pr("classified in the task worktree", repo_root=task_worktree)
+        self.assertEqual(classified.returncode, 0, classified.stderr)
+
+        claim = json.dumps({
+            "claim_type": "task_complete", "status": "verified",
+            "allowed_to_claim": True, "verification_exit_code": 0,
+            "verified_at": "2026-08-30T00:00:00+08:00",
+        })
+        closeout = subprocess.run([
+            sys.executable, str(PROJECT_TASK), "closeout-task", str(task_worktree),
+            "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
+            "--to-status", "done", "--claim-json", claim, "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+        self.assertEqual(closeout.returncode, 0, closeout.stderr)
+
+        task_mapping = self.read_json(task_mapping_path)
+        evidence_path = Path(task_mapping["tasks"][UID]["non_pr_completion_evidence_file"])
+        self.assertEqual(evidence_path.parent.parent.parent.resolve(), (task_worktree / ".pm").resolve())
+        default_mapping_path = self.root / ".pm/github-project-sync/tasks.json"
+        default_mapping_path.write_text(json.dumps(task_mapping, sort_keys=True) + "\n")
+        result = self.invoke("non_pr_completed", evidence_path, repo_root=self.root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.read_json(self.closes), ["completed"])
 
     def test_retry_recovers_after_project_done_then_selected_refresh_without_manual_edits(self) -> None:
         canonical_worktree = Path(self.tmp.name) / "canonical-task-worktree"
