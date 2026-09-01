@@ -60,12 +60,16 @@ CANONICAL_NETWORK_ID = "oasis7-public-testnet-governed-20260606"
 CANONICAL_VERIFIER_ID = "governed-receipt-verifier"
 CANONICAL_TRUST_ROOT_ID = "oasis7-public-testnet-governance-root-v1"
 CANONICAL_TRUST_ROOT_PATH = "/operator/truth/governance-root.json"
-CANONICAL_TRUST_ROOT_DIGEST = hashlib.sha256(
-    f"{CANONICAL_TRUST_ROOT_ID}:{CANONICAL_TRUST_ROOT_PATH}".encode()
-).hexdigest()
-# Deployment supplies this code-owned digest for the pinned regular file;
-# tests validate the path/content/owner/mode contract without reading a live
-# operator filesystem.
+CANONICAL_TRUST_ROOT_FIXTURE_PATH = Path(__file__).with_name("fixtures") / "oasis7-governance-root.v1.json"
+# These are code-owned values recorded from the repository fixture.  The first
+# is the provenance helper's canonical semantic digest; the second pins the
+# deployable artifact bytes.  Neither is derived from a caller's id:path pair
+# or re-derived from mutable deployment input at import time.
+CANONICAL_TRUST_ROOT_DIGEST = "5abd00f3e90a3e894f110f5a32ecab772e23e97ad7ec2cc9d675ae65282ae8ab"
+CANONICAL_TRUST_ROOT_FILE_SHA256 = "f278bc8f060cd6777d68f086fc3131edc5d6b5a6080bde09208ba69a69e3ef66"
+# The owner is deliberately deployment-bound: the operator account executing
+# this process must own the pinned regular file.  It is not a portable UID.
+CANONICAL_TRUST_ROOT_OWNER_SCOPE = "operator-local"
 CANONICAL_TRUST_ROOT_OWNER_UID = os.getuid()
 CANONICAL_TRUST_ROOT_MODE = "0600"
 CANONICAL_SIGNER_ALLOWLIST = frozenset({"governance-signer"})
@@ -605,11 +609,21 @@ def validate_authority(plan: dict[str, Any], authority: dict[str, Any]) -> dict[
         if authority.get(field) != expected_value:
             _fail(f"adapter authority {field} is not bound to the frozen plan")
     trust_root_file = _object(authority.get("trust_root_file"), "pinned trust-root file contract")
-    if set(trust_root_file) != {"path", "sha256", "owner_uid", "mode", "regular_file"}:
+    if set(trust_root_file) != {
+        "path",
+        "sha256",
+        "root_digest",
+        "owner_scope",
+        "owner_uid",
+        "mode",
+        "regular_file",
+    }:
         _fail("pinned trust-root file contract contains an unsafe field")
     if (
         trust_root_file.get("path") != CANONICAL_TRUST_ROOT_PATH
-        or trust_root_file.get("sha256") != CANONICAL_TRUST_ROOT_DIGEST
+        or trust_root_file.get("sha256") != CANONICAL_TRUST_ROOT_FILE_SHA256
+        or trust_root_file.get("root_digest") != CANONICAL_TRUST_ROOT_DIGEST
+        or trust_root_file.get("owner_scope") != CANONICAL_TRUST_ROOT_OWNER_SCOPE
         or trust_root_file.get("owner_uid") != CANONICAL_TRUST_ROOT_OWNER_UID
         or trust_root_file.get("mode") != CANONICAL_TRUST_ROOT_MODE
         or trust_root_file.get("regular_file") is not True
@@ -672,6 +686,7 @@ def validate_live_trust_root_file() -> dict[str, Any]:
     owner, and mode are deployment-pinned constants, never caller inputs.
     """
     path = Path(CANONICAL_TRUST_ROOT_PATH)
+    _reject_symlink_ancestors(path, "trust-root")
     try:
         link_metadata = path.lstat()
     except OSError:
@@ -691,10 +706,12 @@ def validate_live_trust_root_file() -> dict[str, Any]:
         if stat.S_IMODE(metadata.st_mode) != int(CANONICAL_TRUST_ROOT_MODE, 8):
             _fail("code-owned trust-root file mode drifted")
         digest_builder = hashlib.sha256()
+        chunks: list[bytes] = []
         while True:
             chunk = os.read(descriptor, 1024 * 1024)
             if not chunk:
                 break
+            chunks.append(chunk)
             digest_builder.update(chunk)
         digest = digest_builder.hexdigest()
     except OSError:
@@ -702,11 +719,47 @@ def validate_live_trust_root_file() -> dict[str, Any]:
     finally:
         if descriptor is not None:
             os.close(descriptor)
-    if digest != CANONICAL_TRUST_ROOT_DIGEST:
+    if digest != CANONICAL_TRUST_ROOT_FILE_SHA256:
         _fail("code-owned trust-root file content digest drifted")
+    try:
+        root = json.loads(b"".join(chunks).decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        _fail("code-owned trust-root file is not valid JSON")
+    if not isinstance(root, dict) or root.get("schema_version") != "oasis7.validator_pair_provenance_trust_root.v1":
+        _fail("code-owned trust-root file schema is unsupported")
+    root_digest = root.get("root_digest")
+    if not isinstance(root_digest, str) or HEX64_RE.fullmatch(root_digest) is None:
+        _fail("code-owned trust-root file root_digest is malformed")
+    canonical_body = {key: value for key, value in root.items() if key != "root_digest"}
+    canonical_digest = hashlib.sha256(
+        json.dumps(canonical_body, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    if root_digest.lower() != canonical_digest or root_digest.lower() != CANONICAL_TRUST_ROOT_DIGEST:
+        _fail("code-owned trust-root file canonical root_digest drifted")
+    allowlist = root.get("allowlist")
+    if not isinstance(allowlist, list) or not allowlist:
+        _fail("code-owned trust-root file allowlist is missing")
+    for entry in allowlist:
+        if (
+            not isinstance(entry, dict)
+            or not isinstance(entry.get("signer_id"), str)
+            or not entry["signer_id"].strip()
+            or not isinstance(entry.get("algorithm"), str)
+            or not entry["algorithm"].strip()
+            or not isinstance(entry.get("public_key_sha256"), str)
+            or HEX64_RE.fullmatch(entry["public_key_sha256"]) is None
+        ):
+            _fail("code-owned trust-root file allowlist entry is malformed")
+        public_key_hex = entry.get("public_key_hex")
+        if public_key_hex is not None and (
+            not isinstance(public_key_hex, str) or re.fullmatch(r"[0-9a-fA-F]{64}", public_key_hex) is None
+        ):
+            _fail("code-owned trust-root file public key is malformed")
     return {
         "path": CANONICAL_TRUST_ROOT_PATH,
         "sha256": digest,
+        "root_digest": root_digest.lower(),
+        "owner_scope": CANONICAL_TRUST_ROOT_OWNER_SCOPE,
         "owner_uid": metadata.st_uid,
         "mode": CANONICAL_TRUST_ROOT_MODE,
         "regular_file": True,
@@ -997,11 +1050,11 @@ def _fsync_parent(path: Path) -> None:
         _fail("durable fsync failed")
 
 
-def _reject_symlink_ancestors(path: Path) -> None:
-    """Reject symlinked path components before creating or opening a journal."""
+def _reject_symlink_ancestors(path: Path, label: str = "transaction journal") -> None:
+    """Reject symlinked path components before creating/opening governed files."""
     raw_parts = Path(os.fspath(path)).parts
     if ".." in raw_parts:
-        _fail("transaction journal path must not contain parent traversal")
+        _fail(f"{label} path must not contain parent traversal")
     absolute = Path(os.path.abspath(os.fspath(path)))
     # macOS exposes /var as a system alias for /private/var.  Normalize that
     # host-owned alias without resolving any caller-controlled descendant.
@@ -1020,11 +1073,11 @@ def _reject_symlink_ancestors(path: Path) -> None:
             # No later component can exist below a missing ancestor.
             break
         except OSError:
-            _fail("transaction journal path metadata is unavailable")
+            _fail(f"{label} path metadata is unavailable")
         if stat.S_ISLNK(metadata.st_mode):
-            _fail("transaction journal path must not contain a symlink ancestor")
+            _fail(f"{label} path must not contain a symlink ancestor")
         if current != absolute and not stat.S_ISDIR(metadata.st_mode):
-            _fail("transaction journal path ancestor is not a directory")
+            _fail(f"{label} path ancestor is not a directory")
 
 
 def _write_journal(path: Path, record: dict[str, Any]) -> None:
@@ -1164,6 +1217,9 @@ def _journal_record(
     rollback_reobservation_receipt: dict[str, Any] | None = None,
     failed_operation: str | None = None,
     failed_state_digest: str | None = None,
+    preflight_evidence_receipts: list[dict[str, Any]] | None = None,
+    backup_status: str = "not-needed",
+    backup_error: str | None = None,
 ) -> dict[str, Any]:
     record: dict[str, Any] = {
         "schema_version": JOURNAL_SCHEMA,
@@ -1183,6 +1239,8 @@ def _journal_record(
         "cross_node_state_copy": False,
         "node_receipts": copy.deepcopy(node_receipts or {}),
         "provider_receipts": copy.deepcopy(provider_receipts or []),
+        "preflight_evidence_receipts": copy.deepcopy(preflight_evidence_receipts or []),
+        "backup_status": backup_status,
         "rollback_status": rollback_status,
         "rollback_receipt": copy.deepcopy(rollback_receipt),
         "rollback_reobservation_receipt": copy.deepcopy(rollback_reobservation_receipt),
@@ -1195,6 +1253,8 @@ def _journal_record(
         record["failed_operation"] = failed_operation
     if failed_state_digest is not None:
         record["failed_state_digest"] = failed_state_digest
+    if backup_error is not None:
+        record["backup_error"] = backup_error
     return record
 
 
@@ -1510,6 +1570,40 @@ def _validate_journal_provider_receipts(
     return result
 
 
+def _validate_journal_preflight_evidence_receipts(
+    plan: dict[str, Any],
+    raw: Any,
+    verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Revalidate the signed evidence receipts captured by remote preflight.
+
+    The evidence object is intentionally not replayed through a provider.  Its
+    signed ``evidence_sha256`` binding is the durable read-only observation;
+    resume must validate that exact preflight receipt rather than accepting a
+    generic provider receipt for the same phase.
+    """
+    if not isinstance(raw, list):
+        _fail("transaction journal preflight_evidence_receipts must be a list")
+    result: list[dict[str, Any]] = []
+    seen_nodes: set[str] = set()
+    for value in raw:
+        receipt = _object(value, "transaction journal preflight evidence receipt")
+        node_name = receipt.get("node")
+        if not isinstance(node_name, str) or node_name not in plan["node_order"]:
+            _fail("transaction journal preflight evidence receipt names an unknown node")
+        if node_name in seen_nodes:
+            _fail("transaction journal contains duplicate preflight evidence receipts")
+        operation = f"preflight:{node_name}"
+        if receipt.get("operation") != operation:
+            _fail("transaction journal preflight evidence receipt operation drifted")
+        bindings = _object(receipt.get("bindings"), "transaction journal preflight evidence bindings")
+        if "evidence_sha256" not in bindings:
+            _fail("transaction journal preflight evidence receipt is not evidence-bound")
+        result.append(_validate_provider_receipt(plan, operation, node_name, receipt, verifier))
+        seen_nodes.add(node_name)
+    return result
+
+
 def _validate_live_probe(plan: dict[str, Any], receipt: dict[str, Any]) -> None:
     receipt = _object(receipt, "live fresh-root probe receipt")
     if (
@@ -1772,13 +1866,23 @@ def _execute_unlocked(
     # One-shot reservations precede every remote observation.  Values stay in
     # the external ledger and never enter a journal, receipt, or log.
     provider_receipts: list[dict[str, Any]] = []
+    preflight_evidence_receipts: list[dict[str, Any]] = []
     rollback_receipt: dict[str, Any] | None = None
     rollback_reobservation_receipt: dict[str, Any] | None = None
     rollback_status = "not-started"
+    backup_status = "pending" if plan["forensic_backup"]["required_before_reset"] is True else "not-needed"
     try:
         _write_journal(
             Path(journal_path),
-            _journal_record(plan, "prepared", 0, [], execution_mode="apply"),
+            _journal_record(
+                plan,
+                "prepared",
+                0,
+                [],
+                execution_mode="apply",
+                preflight_evidence_receipts=preflight_evidence_receipts,
+                backup_status=backup_status,
+            ),
         )
     except Exception as error:
         _persist_terminal(
@@ -1792,6 +1896,8 @@ def _execute_unlocked(
                 execution_mode="apply",
                 rollback_status="reconciliation-blocked",
                 rollback_error="prepared-journal-write-failed",
+                preflight_evidence_receipts=preflight_evidence_receipts,
+                backup_status=backup_status,
             ),
         )
         _fail("initial transaction journal write failed; reconciliation is blocked")
@@ -1800,7 +1906,8 @@ def _execute_unlocked(
             reserve_nonce(Path(ledger_path), plan["transaction_id"], _node_nonce(plan, node))
         for node in plan["nodes"]:
             evidence = transport.inspect_node(_transport_node(node))
-            validate_remote_preflight(plan, node, evidence, provenance_verifier)
+            validated_evidence = validate_remote_preflight(plan, node, evidence, provenance_verifier)
+            preflight_evidence_receipts.append(validated_evidence["receipt"])
     except Exception as error:
         _persist_terminal(
             Path(journal_path),
@@ -1811,8 +1918,10 @@ def _execute_unlocked(
                 [],
                 error=error.__class__.__name__,
                 provider_receipts=provider_receipts,
+                preflight_evidence_receipts=preflight_evidence_receipts,
                 rollback_status="not-needed",
                 execution_mode="apply",
+                backup_status=backup_status,
             ),
         )
         _fail("nonce reservation or remote preflight failed; transaction is terminal")
@@ -1835,9 +1944,11 @@ def _execute_unlocked(
                     completed,
                     node_receipts=node_receipts,
                     provider_receipts=provider_receipts,
+                    preflight_evidence_receipts=preflight_evidence_receipts,
                     rollback_status=rollback_status,
                     rollback_receipt=rollback_receipt,
                     execution_mode="apply",
+                    backup_status=backup_status,
                 ),
             )
             # Every provider callback is an attempted operation boundary. If
@@ -1882,6 +1993,13 @@ def _execute_unlocked(
                     provenance_verifier,
                 )
             provider_receipts.append(receipt)
+            if operation.startswith("forensic-backup:"):
+                completed_backup_operations = sum(
+                    1 for completed_operation in completed + [operation]
+                    if completed_operation.startswith("forensic-backup:")
+                )
+                if completed_backup_operations == len(plan["nodes"]):
+                    backup_status = "completed"
             if node_name is not None:
                 node_receipts[node_name] = {
                     "schema_version": NODE_RECEIPT_SCHEMA,
@@ -1908,15 +2026,42 @@ def _execute_unlocked(
                     completed,
                     node_receipts=node_receipts,
                     provider_receipts=provider_receipts,
+                    preflight_evidence_receipts=preflight_evidence_receipts,
                     rollback_status=journal_rollback_status,
                     rollback_receipt=rollback_receipt,
                     execution_mode="apply",
+                    backup_status=backup_status,
                 ),
             )
         except Exception as error:
             rollback_error: str | None = None
             failed_operation = operation
             failed_state_digest: str | None = None
+            if operation.startswith("forensic-backup:") and not rollback_candidates:
+                # Backup is read-only evidence capture.  A failed backup has
+                # no provider mutation to reconcile, so clean-redeploy must
+                # not be invoked with an empty candidate set.
+                backup_status = "backup-failed"
+                _persist_terminal(
+                    Path(journal_path),
+                    _journal_record(
+                        plan,
+                        "terminal-failure",
+                        index,
+                        completed,
+                        error.__class__.__name__,
+                        node_receipts,
+                        provider_receipts,
+                        "not-needed",
+                        rollback_receipt,
+                        execution_mode="apply",
+                        failed_operation=failed_operation,
+                        preflight_evidence_receipts=preflight_evidence_receipts,
+                        backup_status=backup_status,
+                        backup_error=error.__class__.__name__,
+                    ),
+                )
+                _fail("forensic backup failed; no clean-redeploy rollback is required")
             if not rollback_candidates and _read_only_operation(operation):
                 # A failed preflight/verify/probe/health has no provider
                 # mutation to reconcile.  Never call re-observe or rollback
@@ -1936,6 +2081,8 @@ def _execute_unlocked(
                         rollback_receipt,
                         execution_mode="apply",
                         failed_operation=failed_operation,
+                        preflight_evidence_receipts=preflight_evidence_receipts,
+                        backup_status=backup_status,
                     ),
                 )
                 _fail("read-only provider operation failed; no rollback is required")
@@ -1997,6 +2144,8 @@ def _execute_unlocked(
                     rollback_reobservation_receipt=rollback_reobservation_receipt,
                     failed_operation=failed_operation,
                     failed_state_digest=failed_state_digest,
+                    preflight_evidence_receipts=preflight_evidence_receipts,
+                    backup_status=backup_status,
                 ),
             )
             if rollback_status == "reconciliation-blocked":
@@ -2092,6 +2241,14 @@ def _resume_transaction_unlocked(
         record.get("provider_receipts", []),
         provenance_verifier if not dry_run else None,
     )
+    preflight_evidence_receipts = _validate_journal_preflight_evidence_receipts(
+        plan,
+        record.get("preflight_evidence_receipts", []),
+        provenance_verifier if not dry_run else None,
+    )
+    backup_status = record.get("backup_status")
+    if backup_status not in {"not-needed", "pending", "completed", "backup-failed"}:
+        _fail("transaction journal backup status is unsupported")
     rollback_status = record.get("rollback_status")
     if rollback_status not in {"not-started", "not-needed", "completed", "reconciliation-blocked"}:
         _fail("transaction journal rollback status is unsupported")
@@ -2148,6 +2305,16 @@ def _resume_transaction_unlocked(
         _fail("transaction journal progress is not a deterministic operation prefix")
     if status in {"dry-run-complete", "complete"} and next_index != len(plan["global_order"]):
         _fail("completed transaction journal does not cover the full operation order")
+    if (
+        expected_mode == "apply"
+        and status == "complete"
+        and plan["forensic_backup"]["required_before_reset"] is True
+        and backup_status != "completed"
+    ):
+        _fail("completed apply journal lacks completed forensic-backup evidence")
+    if expected_mode == "apply" and status == "complete":
+        if {receipt["node"] for receipt in preflight_evidence_receipts} != set(plan["node_order"]):
+            _fail("completed apply journal lacks the exact remote preflight evidence closure")
     provider_operations = [receipt["operation"] for receipt in provider_receipts]
     if expected_mode == "dry-run":
         if provider_operations:
@@ -2203,6 +2370,8 @@ def _resume_transaction_unlocked(
                 rollback_status="not-needed",
                 rollback_receipt=None,
                 execution_mode="dry-run",
+                preflight_evidence_receipts=preflight_evidence_receipts,
+                backup_status=backup_status,
             ),
         )
         return {

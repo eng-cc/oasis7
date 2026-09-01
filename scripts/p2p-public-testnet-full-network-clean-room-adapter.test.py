@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PLANNER_PATH = ROOT / "scripts" / "p2p-public-testnet-full-network-clean-room.py"
 PLANNER_TEST_PATH = ROOT / "scripts" / "p2p-public-testnet-full-network-clean-room.test.py"
 ADAPTER_PATH = ROOT / "scripts" / "p2p-public-testnet-full-network-clean-room-adapter.py"
+PROVENANCE_PATH = ROOT / "scripts" / "p2p-public-testnet-validator-pair-provenance.py"
 
 
 def load_module(name: str, path: Path):
@@ -291,7 +292,9 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
             "validate_live_trust_root_file",
             return_value={
                 "path": self.adapter.CANONICAL_TRUST_ROOT_PATH,
-                "sha256": self.adapter.CANONICAL_TRUST_ROOT_DIGEST,
+                "sha256": self.adapter.CANONICAL_TRUST_ROOT_FILE_SHA256,
+                "root_digest": self.adapter.CANONICAL_TRUST_ROOT_DIGEST,
+                "owner_scope": self.adapter.CANONICAL_TRUST_ROOT_OWNER_SCOPE,
                 "owner_uid": os.getuid(),
                 "mode": "0600",
                 "regular_file": True,
@@ -330,7 +333,9 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
             "trust_root_digest": self.adapter.CANONICAL_TRUST_ROOT_DIGEST,
             "trust_root_file": {
                 "path": self.adapter.CANONICAL_TRUST_ROOT_PATH,
-                "sha256": self.adapter.CANONICAL_TRUST_ROOT_DIGEST,
+                "sha256": self.adapter.CANONICAL_TRUST_ROOT_FILE_SHA256,
+                "root_digest": self.adapter.CANONICAL_TRUST_ROOT_DIGEST,
+                "owner_scope": self.adapter.CANONICAL_TRUST_ROOT_OWNER_SCOPE,
                 "owner_uid": os.getuid(),
                 "mode": "0600",
                 "regular_file": True,
@@ -361,7 +366,9 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
                     "trust_root_digest": self.adapter.CANONICAL_TRUST_ROOT_DIGEST,
                     "trust_root_file": {
                         "path": self.adapter.CANONICAL_TRUST_ROOT_PATH,
-                        "sha256": self.adapter.CANONICAL_TRUST_ROOT_DIGEST,
+                        "sha256": self.adapter.CANONICAL_TRUST_ROOT_FILE_SHA256,
+                        "root_digest": self.adapter.CANONICAL_TRUST_ROOT_DIGEST,
+                        "owner_scope": self.adapter.CANONICAL_TRUST_ROOT_OWNER_SCOPE,
                         "owner_uid": os.getuid(),
                         "mode": "0600",
                         "regular_file": True,
@@ -502,8 +509,63 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         self.assertIsNone(record["rollback_receipt"])
         self.assertEqual(record["execution_mode"], "apply")
         self.assertEqual(record["rollback_status"], "not-needed")
+        preflight_receipts = record["preflight_evidence_receipts"]
+        self.assertEqual(len(preflight_receipts), len(self.plan["nodes"]))
+        self.assertEqual(
+            [receipt["operation"] for receipt in preflight_receipts],
+            [f"preflight:{name}" for name in self.plan["node_order"]],
+        )
+        for receipt in preflight_receipts:
+            self.assertRegex(receipt["bindings"]["evidence_sha256"], r"^[0-9a-f]{64}$")
         self.assertIn("authority", verifier_calls)
         self.assertIn("fresh-root-probe", verifier_calls)
+
+    def test_repository_trust_root_fixture_matches_provenance_helper_without_monkeypatch(self) -> None:
+        provenance = load_module("validator_pair_provenance_fixture", PROVENANCE_PATH)
+        fixture = ROOT / "scripts" / "fixtures" / "oasis7-governance-root.v1.json"
+        self.assertTrue(fixture.is_file())
+        loaded = provenance.load_trust_root(fixture)
+        self.assertEqual(loaded["root_digest"], self.adapter.CANONICAL_TRUST_ROOT_DIGEST)
+        self.assertEqual(
+            hashlib.sha256(fixture.read_bytes()).hexdigest(),
+            self.adapter.CANONICAL_TRUST_ROOT_FILE_SHA256,
+        )
+
+    def test_backup_failure_with_no_mutation_candidates_does_not_call_clean_redeploy(self) -> None:
+        authority = self._authority(apply_authorized=True)
+
+        def verifier(plan: dict[str, object], receipt: dict[str, object]) -> dict[str, object]:
+            return {
+                "verified": True,
+                "bindings": receipt["bindings"],
+                "verifier_id": self.adapter.CANONICAL_VERIFIER_ID,
+                "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
+                "signer_id": "governance-signer",
+            }
+
+        transport = ApplyTransport(
+            self.adapter,
+            self.plan,
+            invalid_operation="forensic-backup:storage-205",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            journal = Path(directory) / "journal.json"
+            with self.assertRaises(self.adapter.AdapterError):
+                self.adapter.execute(
+                    self.plan,
+                    authority,
+                    journal_path=journal,
+                    ledger_path=self.ledger_path,
+                    transport=transport,
+                    dry_run=False,
+                    provenance_verifier=verifier,
+                )
+            record = json.loads(journal.read_text(encoding="utf-8"))
+        self.assertEqual(transport.rollback_operations, [])
+        self.assertEqual(transport.rollback_reobservations, [])
+        self.assertEqual(record["rollback_status"], "not-needed")
+        self.assertEqual(record["backup_status"], "backup-failed")
+        self.assertEqual(record["backup_error"], "AdapterError")
 
     def test_apply_executes_code_owned_live_trust_root_check_before_remote_observation(self) -> None:
         authority = self._authority(apply_authorized=True)
@@ -591,16 +653,22 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as directory:
                 root = Path(directory) / "trust-root.json"
-                content = b"canonical trust root"
+                content = (ROOT / "scripts" / "fixtures" / "oasis7-governance-root.v1.json").read_bytes()
+                semantic_digest = json.loads(content.decode("utf-8"))["root_digest"]
+                file_digest = hashlib.sha256(content).hexdigest()
                 root.write_bytes(content)
                 root.chmod(0o600)
                 with mock.patch.object(self.adapter, "CANONICAL_TRUST_ROOT_PATH", str(root)), mock.patch.object(
                     self.adapter,
                     "CANONICAL_TRUST_ROOT_DIGEST",
-                    hashlib.sha256(content).hexdigest(),
+                    semantic_digest,
+                ), mock.patch.object(
+                    self.adapter,
+                    "CANONICAL_TRUST_ROOT_FILE_SHA256",
+                    file_digest,
                 ):
                     result = self.adapter.validate_live_trust_root_file()
-                    self.assertEqual(result["sha256"], hashlib.sha256(content).hexdigest())
+                    self.assertEqual(result["sha256"], file_digest)
                     root.chmod(0o644)
                     with self.assertRaises(self.adapter.AdapterError):
                         self.adapter.validate_live_trust_root_file()
@@ -614,6 +682,28 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
                     root.symlink_to(Path(directory) / "missing-root.json")
                     with self.assertRaises(self.adapter.AdapterError):
                         self.adapter.validate_live_trust_root_file()
+                    real_parent = Path(directory) / "real-parent"
+                    real_parent.mkdir()
+                    nested_root = real_parent / "trust-root.json"
+                    nested_root.write_bytes(content)
+                    nested_root.chmod(0o600)
+                    symlink_parent = Path(directory) / "symlink-parent"
+                    symlink_parent.symlink_to(real_parent, target_is_directory=True)
+                    with mock.patch.object(
+                        self.adapter,
+                        "CANONICAL_TRUST_ROOT_PATH",
+                        str(symlink_parent / "trust-root.json"),
+                    ), mock.patch.object(
+                        self.adapter,
+                        "CANONICAL_TRUST_ROOT_DIGEST",
+                        semantic_digest,
+                    ), mock.patch.object(
+                        self.adapter,
+                        "CANONICAL_TRUST_ROOT_FILE_SHA256",
+                        file_digest,
+                    ):
+                        with self.assertRaises(self.adapter.AdapterError):
+                            self.adapter.validate_live_trust_root_file()
         finally:
             self.live_trust_root_patcher.start()
 
@@ -673,6 +763,43 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
                     provenance_verifier=verifier,
                 )
             self.assertIn("authority", verifier_calls)
+
+    def test_completed_apply_resume_revalidates_evidence_bound_preflight_receipt(self) -> None:
+        authority = self._authority(apply_authorized=True)
+
+        def verifier(plan: dict[str, object], receipt: dict[str, object]) -> dict[str, object]:
+            return {
+                "verified": True,
+                "bindings": receipt["bindings"],
+                "verifier_id": self.adapter.CANONICAL_VERIFIER_ID,
+                "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
+                "signer_id": "governance-signer",
+            }
+
+        with tempfile.TemporaryDirectory() as directory:
+            journal = Path(directory) / "journal.json"
+            self.adapter.execute(
+                self.plan,
+                authority,
+                journal_path=journal,
+                ledger_path=self.ledger_path,
+                transport=ApplyTransport(self.adapter, self.plan),
+                dry_run=False,
+                provenance_verifier=verifier,
+            )
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            record["preflight_evidence_receipts"][0]["signature_hex"] = "0" * 128
+            record["journal_digest"] = self.adapter.journal_digest(record)
+            journal.write_text(json.dumps(record) + "\n", encoding="utf-8")
+            with self.assertRaises(self.adapter.AdapterError):
+                self.adapter.resume_transaction(
+                    self.plan,
+                    authority,
+                    journal,
+                    ledger_path=self.ledger_path,
+                    dry_run=False,
+                    provenance_verifier=verifier,
+                )
 
     def test_operator_no_backup_apply_requires_signed_current_authority(self) -> None:
         plan = self._no_backup_plan()
@@ -1313,6 +1440,16 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
 
         authority = self._authority()
         authority["trust_root_file"]["mode"] = "0644"
+        with self.assertRaises(self.adapter.AdapterError):
+            self.adapter.validate_authority(self.plan, authority)
+
+        authority = self._authority()
+        authority["trust_root_file"]["root_digest"] = "a" * 64
+        with self.assertRaises(self.adapter.AdapterError):
+            self.adapter.validate_authority(self.plan, authority)
+
+        authority = self._authority()
+        authority["trust_root_file"]["owner_scope"] = "caller-selected"
         with self.assertRaises(self.adapter.AdapterError):
             self.adapter.validate_authority(self.plan, authority)
 
