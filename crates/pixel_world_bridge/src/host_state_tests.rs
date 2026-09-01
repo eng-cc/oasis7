@@ -149,6 +149,34 @@ fn rust_host_state_derives_fragment_agent_link_and_commercial_surface() {
 }
 
 #[test]
+fn world_scoped_crisis_events_never_become_spatial_hotspots() {
+    let mut input = sample_input();
+    input["recentEvents"] = json!([
+        {
+            "eventId": "crisis-1",
+            "title": "Crisis spawned",
+            "kind": {
+                "type": "RuntimeEvent",
+                "data": { "kind": "runtime.gameplay.crisis_spawned" }
+            }
+        },
+        { "eventId": "evt-ordinary", "title": "Queue update", "kind": "build_queue" }
+    ]);
+
+    let state = build_render_state(&input);
+    let recent = state["recent_event_hotspots"].as_array().unwrap();
+    assert_eq!(recent.len(), 1);
+    assert_eq!(recent[0]["id"], "evt-ordinary");
+    assert!(
+        state["visual_hotspots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|hotspot| hotspot["id"] != "recent:crisis-1")
+    );
+}
+
+#[test]
 fn rust_host_state_projects_assignment_only_from_explicit_current_relation_authority() {
     let mut input = sample_input();
     input["lists"]["agents"][0]["relation"] = json!({

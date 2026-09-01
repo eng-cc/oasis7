@@ -76,6 +76,30 @@ function readyFeed(overrides = {}) {
   };
 }
 
+function currentCrisisEvent() {
+  return {
+    event_seq: 7,
+    kind: "major_world_event",
+    summary: "Current crisis",
+    detail: "ambient only",
+    receipt_ref: null,
+    major_event: {
+      schema_version: "major_world_event/v1",
+      identity: { world_id: "test-world", reorg_epoch: 0, event_seq: 7 },
+      category: "crisis",
+      subtype: "power_shortage",
+      severity: 4,
+      lifecycle: "active",
+      source: { authority: "runtime_journal", event_kind: "crisis_spawned" },
+      freshness: "current",
+      visibility: "public",
+      logical_time: 42,
+      causal_reference: null,
+      world_anchor: { scope: "world", entity_id: "crisis-1" },
+    },
+  };
+}
+
 beforeEach(() => {
   vi.resetModules();
   vi.useFakeTimers();
@@ -93,6 +117,54 @@ afterEach(() => {
 });
 
 describe("World Feed transport", () => {
+  it("clears retained current crisis attention when the socket disconnects", async () => {
+    const { sockets } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+    core.initializeSoftwareSafeCore();
+    core.state.auth.available = false;
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+    sockets[0].receive(readyFeed({ events: [currentCrisisEvent()] }));
+    expect(core.state.worldFeed.status).toBe("ready");
+
+    sockets[0].close();
+
+    expect(core.state.worldFeed).toMatchObject({
+      status: "unavailable",
+      unavailableReason: "source_unavailable",
+      stale: true,
+      events: [],
+    });
+    vi.clearAllTimers();
+  });
+
+  it("keeps world-scoped crisis live events out of spatial recent-event inputs", async () => {
+    const { sockets } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+    core.initializeSoftwareSafeCore();
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+
+    sockets[0].receive({
+      type: "event",
+      event: {
+        id: 8,
+        time: 1,
+        kind: {
+          type: "RuntimeEvent",
+          data: { kind: "runtime.gameplay.crisis_spawned", domain_kind: "crisis_id=crisis-1" },
+        },
+      },
+    });
+    sockets[0].receive({
+      type: "event",
+      event: { id: 9, time: 2, kind: { type: "AgentMoved", data: { agent_id: "agent-1" } } },
+    });
+
+    expect(core.state.recentEvents).toHaveLength(1);
+    expect(core.state.recentEvents[0].id).toBe(9);
+  });
+
   it("requests and consumes only the world_feed/v1 response through the existing socket path", async () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");

@@ -441,6 +441,7 @@ fn build_module_visual_entities(
 fn build_recent_event_hotspots(events: &[Value]) -> Vec<Value> {
     events
         .iter()
+        .filter(|event| !is_world_scoped_crisis_recent_event(event))
         .take(4)
         .enumerate()
         .map(|(index, event)| {
@@ -458,6 +459,23 @@ fn build_recent_event_hotspots(events: &[Value]) -> Vec<Value> {
             })
         })
         .collect()
+}
+
+fn is_world_scoped_crisis_recent_event(event: &Value) -> bool {
+    if str_key(event.get("major_event").unwrap_or(&Value::Null), "category") == Some("crisis") {
+        return true;
+    }
+    let kind = event.get("kind").unwrap_or(&Value::Null);
+    let structured_kind = kind.get("data").and_then(|data| str_key(data, "kind"));
+    let kind = kind.as_str().or(structured_kind);
+    matches!(
+        kind,
+        Some(
+            "runtime.gameplay.crisis_spawned"
+                | "runtime.gameplay.crisis_resolved"
+                | "runtime.gameplay.crisis_timed_out"
+        )
+    )
 }
 
 fn offset_world_position(
