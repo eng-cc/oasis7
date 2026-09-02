@@ -77,6 +77,75 @@ fn assert_smelter_schedule_enabled(server: &mut ViewerRuntimeLiveServer, label: 
 }
 
 #[test]
+fn runtime_live_formal_bootstrap_keeps_smelter_and_assembler_builds_ready() {
+    let (mut world, _) = crate::viewer::viewer_bootstrap_formal_release_runtime_world()
+        .expect("formal release bootstrap");
+    let agent_id = crate::viewer::runtime_live::support::FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID;
+
+    let initial = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
+        world.state(),
+        Some(agent_id),
+        true,
+        None,
+        None,
+        None,
+        true,
+        None,
+        false,
+        true,
+        None,
+    );
+    let smelter = initial
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == crate::viewer::ACTION_BUILD_SMELTER_MK1)
+        .expect("formal bootstrap must publish the smelter build");
+    assert_eq!(smelter.disabled_reason, None);
+
+    for action_id in [
+        crate::viewer::ACTION_BUILD_SMELTER_MK1,
+        crate::viewer::ACTION_SCHEDULE_SMELTER_IRON_INGOT,
+    ] {
+        let action = crate::viewer::gameplay_actions::build_runtime_action_from_gameplay_request(
+            &crate::viewer::GameplayActionRequest {
+                action_id: action_id.to_string(),
+                target_agent_id: agent_id.to_string(),
+                actor_agent_id: None,
+                player_id: "bootstrap-readiness-test".to_string(),
+                public_key: None,
+                auth: None,
+            },
+        )
+        .expect("formal bootstrap industrial action");
+        world.submit_action(action);
+        world.step().expect("settle formal bootstrap action");
+        if action_id == crate::viewer::ACTION_BUILD_SMELTER_MK1 {
+            world.step().expect("complete formal smelter construction");
+        }
+    }
+
+    let after_first_run = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
+        world.state(),
+        Some(agent_id),
+        true,
+        None,
+        None,
+        None,
+        true,
+        None,
+        false,
+        true,
+        None,
+    );
+    let assembler = after_first_run
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == crate::viewer::ACTION_BUILD_ASSEMBLER_MK1)
+        .expect("first smelter run must publish the assembler build");
+    assert_eq!(assembler.disabled_reason, None);
+}
+
+#[test]
 fn runtime_gameplay_schedule_readiness_matches_governed_recipe_and_output_unlocks() {
     let _guard = lock_test_llm_env();
     let (mut server, _agent_id) = ready_smelter_for_schedule_site_parity(78);

@@ -1,8 +1,8 @@
 use super::economy_factory_lifecycle::{factory_spec, install_factory_authority, register_builder};
 use crate::runtime::{
-    Action, AgentLocationAuthorityV1, DomainEvent, FactoryProfileV1, FactorySiteAuthorityV1,
-    LocationAnchorV1, MaterialLedgerId, RejectReason, World, WorldError, WorldEventBody,
-    WorldState,
+    Action, AgentLocationAuthorityV1, DomainEvent, FactoryConstructionPowerMode,
+    FactoryConstructionPowerProfileV1, FactoryProfileV1, FactorySiteAuthorityV1, LocationAnchorV1,
+    MaterialLedgerId, RejectReason, World, WorldError, WorldEventBody, WorldState,
 };
 use crate::simulator::ResourceKind;
 
@@ -743,4 +743,190 @@ fn modern_factory_build_replay_rejects_forged_profile_capabilities() {
         WorldError::ResourceBalanceInvalid { reason }
             if reason.contains("canonical profile tier mismatch")
     ));
+}
+
+#[test]
+fn location_anchor_revision_exhaustion_rejects_without_mutation() {
+    let mut state = WorldState::default();
+    state.location_anchors.insert(
+        "location-exhausted".to_string(),
+        LocationAnchorV1 {
+            location_id: "location-exhausted".to_string(),
+            active: true,
+            authority_revision: u64::MAX,
+            effective_at: 0,
+        },
+    );
+    let mut world = World::new_with_state(state);
+    let before_state = serde_json::to_vec(world.state()).expect("serialize exhausted anchor");
+    let before_journal_len = world.journal().len();
+
+    let error = world
+        .set_location_anchor(LocationAnchorV1 {
+            location_id: "location-exhausted".to_string(),
+            active: false,
+            authority_revision: u64::MAX,
+            effective_at: 0,
+        })
+        .expect_err("exhausted location anchor must fail closed");
+
+    assert!(matches!(
+        error,
+        WorldError::ResourceBalanceInvalid { reason }
+            if reason.contains("location anchor authority revision exhausted at")
+    ));
+    assert_eq!(
+        serde_json::to_vec(world.state()).expect("serialize anchor after rejection"),
+        before_state
+    );
+    assert_eq!(world.journal().len(), before_journal_len);
+}
+
+#[test]
+fn agent_location_revision_exhaustion_rejects_without_mutation() {
+    let mut state = WorldState::default();
+    state
+        .apply_domain_event(
+            &DomainEvent::AgentRegistered {
+                agent_id: "agent-exhausted".to_string(),
+                pos: crate::geometry::GeoPos {
+                    x_cm: 0,
+                    y_cm: 0,
+                    z_cm: 0,
+                },
+            },
+            0,
+        )
+        .expect("register exhausted agent");
+    state.agent_location_authorities.insert(
+        "agent-exhausted".to_string(),
+        AgentLocationAuthorityV1 {
+            agent_id: "agent-exhausted".to_string(),
+            location_id: "location-exhausted".to_string(),
+            active: true,
+            authority_revision: u64::MAX,
+            effective_at: 0,
+        },
+    );
+    let mut world = World::new_with_state(state);
+    let before_state = serde_json::to_vec(world.state()).expect("serialize exhausted assignment");
+    let before_journal_len = world.journal().len();
+
+    let error = world
+        .set_agent_location_authority(AgentLocationAuthorityV1 {
+            agent_id: "agent-exhausted".to_string(),
+            location_id: "location-exhausted".to_string(),
+            active: false,
+            authority_revision: u64::MAX,
+            effective_at: 0,
+        })
+        .expect_err("exhausted agent location authority must fail closed");
+
+    assert!(matches!(
+        error,
+        WorldError::ResourceBalanceInvalid { reason }
+            if reason.contains("agent location authority revision exhausted at")
+    ));
+    assert_eq!(
+        serde_json::to_vec(world.state()).expect("serialize assignment after rejection"),
+        before_state
+    );
+    assert_eq!(world.journal().len(), before_journal_len);
+}
+
+#[test]
+fn factory_site_revision_exhaustion_rejects_without_mutation() {
+    let mut state = WorldState::default();
+    state.location_anchors.insert(
+        "location-exhausted".to_string(),
+        LocationAnchorV1 {
+            location_id: "location-exhausted".to_string(),
+            active: true,
+            authority_revision: 1,
+            effective_at: 0,
+        },
+    );
+    state.factory_site_authorities.insert(
+        "site-exhausted".to_string(),
+        FactorySiteAuthorityV1 {
+            site_id: "site-exhausted".to_string(),
+            location_id: "location-exhausted".to_string(),
+            owner_agent_id: "owner-exhausted".to_string(),
+            authorized_agent_ids: Vec::new(),
+            chunk_ready: true,
+            active: true,
+            authority_revision: u64::MAX,
+            registered_at: 0,
+        },
+    );
+    let mut world = World::new_with_state(state);
+    let before_state = serde_json::to_vec(world.state()).expect("serialize exhausted site");
+    let before_journal_len = world.journal().len();
+
+    let error = world
+        .set_factory_site_authority(FactorySiteAuthorityV1 {
+            site_id: "site-exhausted".to_string(),
+            location_id: "location-exhausted".to_string(),
+            owner_agent_id: "owner-exhausted".to_string(),
+            authorized_agent_ids: Vec::new(),
+            chunk_ready: false,
+            active: true,
+            authority_revision: u64::MAX,
+            registered_at: 0,
+        })
+        .expect_err("exhausted factory site authority must fail closed");
+
+    assert!(matches!(
+        error,
+        WorldError::ResourceBalanceInvalid { reason }
+            if reason.contains("factory site authority revision exhausted at")
+    ));
+    assert_eq!(
+        serde_json::to_vec(world.state()).expect("serialize site after rejection"),
+        before_state
+    );
+    assert_eq!(world.journal().len(), before_journal_len);
+}
+
+#[test]
+fn construction_power_profile_revision_exhaustion_rejects_without_mutation() {
+    let mut state = WorldState::default();
+    state.factory_construction_power_profiles.insert(
+        "factory-exhausted".to_string(),
+        FactoryConstructionPowerProfileV1 {
+            factory_id: "factory-exhausted".to_string(),
+            factory_kind: "test".to_string(),
+            source_module_id: None,
+            electricity_amount: 10,
+            mode: FactoryConstructionPowerMode::StartOnlySink,
+            authority_revision: u64::MAX,
+            active: true,
+        },
+    );
+    let mut world = World::new_with_state(state);
+    let before_state = serde_json::to_vec(world.state()).expect("serialize exhausted profile");
+    let before_journal_len = world.journal().len();
+
+    let error = world
+        .set_factory_construction_power_profile(FactoryConstructionPowerProfileV1 {
+            factory_id: "factory-exhausted".to_string(),
+            factory_kind: "test".to_string(),
+            source_module_id: Some("module-next".to_string()),
+            electricity_amount: 10,
+            mode: FactoryConstructionPowerMode::StartOnlySink,
+            authority_revision: u64::MAX,
+            active: true,
+        })
+        .expect_err("exhausted construction profile must fail closed");
+
+    assert!(matches!(
+        error,
+        WorldError::ResourceBalanceInvalid { reason }
+            if reason.contains("construction power profile authority revision exhausted at")
+    ));
+    assert_eq!(
+        serde_json::to_vec(world.state()).expect("serialize profile after rejection"),
+        before_state
+    );
+    assert_eq!(world.journal().len(), before_journal_len);
 }

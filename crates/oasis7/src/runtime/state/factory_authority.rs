@@ -10,7 +10,16 @@ fn require_nonempty(value: &str, field: &str) -> Result<(), WorldError> {
 }
 
 fn next_revision(current: Option<u64>, incoming: u64, subject: &str) -> Result<(), WorldError> {
-    let expected = current.map_or(1, |revision| revision.saturating_add(1));
+    let expected = match current {
+        None => 1,
+        Some(revision) => {
+            revision
+                .checked_add(1)
+                .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                    reason: format!("{subject} authority revision exhausted at {revision}"),
+                })?
+        }
+    };
     if incoming != expected {
         return Err(WorldError::ResourceBalanceInvalid {
             reason: format!("{subject} authority revision must be {expected}, got {incoming}"),

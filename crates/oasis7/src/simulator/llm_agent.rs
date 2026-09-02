@@ -41,6 +41,8 @@ mod execution_controls;
 mod memory_selector;
 mod openai_payload;
 mod prompt_assembly;
+mod recipe_coverage;
+use recipe_coverage::RecipeCoverageProgress;
 
 pub use memory_selector::{MemorySelector, MemorySelectorConfig};
 pub use prompt_assembly::{
@@ -221,6 +223,7 @@ const PROMPT_CONVERSATION_MAX_ITEMS: usize = 12;
 const PROMPT_OBSERVATION_VISIBLE_AGENTS_MAX: usize = 5;
 const PROMPT_OBSERVATION_VISIBLE_LOCATIONS_MAX: usize = 5;
 const CONVERSATION_HISTORY_MAX_ITEMS: usize = 64;
+const RECIPE_COMPLETION_REPLAY_WINDOW: usize = 64;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PromptLastActionSummary {
@@ -228,12 +231,6 @@ struct PromptLastActionSummary {
     success: bool,
     reject_reason: Option<String>,
     decision_rewrite: Option<DecisionRewriteReceipt>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-struct RecipeCoverageProgress {
-    completed: BTreeSet<String>,
-    completion_receipt_ids: BTreeSet<u64>,
 }
 
 impl RecipeCoverageProgress {

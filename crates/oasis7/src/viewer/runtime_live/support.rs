@@ -11,7 +11,8 @@ use crate::simulator::{
     ChunkRuntimeConfig, Location, RuntimePerfHealth, RuntimePerfSnapshot, WorldKernel, WorldModel,
 };
 use crate::viewer::gameplay_actions::{
-    FACTORY_ASSEMBLER_MK1, FACTORY_SMELTER_MK1, formal_release_default_seed_model,
+    FACTORY_ASSEMBLER_MK1, FACTORY_SMELTER_MK1, STARTER_INDUSTRIAL_ELECTRICITY,
+    formal_release_default_seed_model,
 };
 
 use super::*;
@@ -568,7 +569,7 @@ pub fn bootstrap_formal_release_runtime_world() -> Result<(RuntimeWorld, WorldCo
             starter_agent
                 .resources
                 .get(ResourceKind::Electricity)
-                .max(32),
+                .max(STARTER_INDUSTRIAL_ELECTRICITY),
         )
         .map_err(|err| {
             format!(
@@ -610,6 +611,18 @@ fn install_starter_factory_authorities(
     let Some((owner_agent_id, starter_location_id)) = agents.first() else {
         return Ok(());
     };
+    let owner_power = world
+        .agent_resource_balance(owner_agent_id.as_str(), ResourceKind::Electricity)
+        .map_err(|err| format!("{label} read starter electricity failed: {err:?}"))?;
+    if owner_power < STARTER_INDUSTRIAL_ELECTRICITY {
+        world
+            .set_agent_resource_balance(
+                owner_agent_id.as_str(),
+                ResourceKind::Electricity,
+                STARTER_INDUSTRIAL_ELECTRICITY,
+            )
+            .map_err(|err| format!("{label} seed starter electricity failed: {err:?}"))?;
+    }
     let mut anchored_locations = HashSet::new();
     for (_, location_id) in agents {
         if anchored_locations.insert(location_id.clone()) {
@@ -691,9 +704,15 @@ fn install_starter_factory_authorities(
     }
     let owner_ledger = MaterialLedgerId::agent(owner_agent_id);
     for (material, amount) in [
-        ("structural_frame", 12),
+        // BuildFactory consumes from the owner ledger, and no executable
+        // material-transfer action currently connects the smelter site ledger
+        // back to that builder ledger. Keep both starter construction beats
+        // attainable by seeding the exact authoritative obligations here.
+        ("structural_frame", 20),
         ("heat_coil", 4),
         ("refractory_brick", 6),
+        ("iron_ingot", 10),
+        ("copper_wire", 8),
     ] {
         world
             .set_ledger_material_balance(owner_ledger.clone(), material, amount)
@@ -881,7 +900,10 @@ mod tests {
         assert_eq!(agent.state.pos, seed_agent.pos);
         assert!(seed_agent.location_id.starts_with("frag-"));
         assert!(seed_location.fragment_budget.is_some());
-        assert_eq!(agent.state.resources.get(ResourceKind::Electricity), 32);
+        assert_eq!(
+            agent.state.resources.get(ResourceKind::Electricity),
+            STARTER_INDUSTRIAL_ELECTRICITY
+        );
         assert_eq!(agent.state.resources.get(ResourceKind::Data), 8);
         let smelter_ledger = crate::runtime::MaterialLedgerId::site("site-smelter");
         assert_eq!(
@@ -892,5 +914,149 @@ mod tests {
             world.ledger_material_balance(&smelter_ledger, "carbon_fuel"),
             20
         );
+    }
+
+    #[test]
+    fn bootstrap_formal_release_owner_can_fund_first_twelve_batch_smelter_run() {
+        let (mut world, _) =
+            bootstrap_formal_release_runtime_world().expect("formal release bootstrap");
+        let starter_agent = FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID;
+
+        let build = crate::viewer::gameplay_actions::build_runtime_action_from_gameplay_request(
+            &crate::viewer::GameplayActionRequest {
+                action_id: crate::viewer::ACTION_BUILD_SMELTER_MK1.to_string(),
+                target_agent_id: starter_agent.to_string(),
+                actor_agent_id: None,
+                player_id: "bootstrap-test".to_string(),
+                public_key: None,
+                auth: None,
+            },
+        )
+        .expect("formal bootstrap smelter action");
+        world.submit_action(build);
+        world.step().expect("settle formal smelter construction");
+        world.step().expect("complete formal smelter construction");
+        assert!(world.has_factory(crate::viewer::FACTORY_SMELTER_MK1));
+
+        assert_eq!(
+            world
+                .agent_resource_balance(starter_agent, ResourceKind::Electricity)
+                .expect("starter agent power after construction"),
+            106,
+            "construction must leave the first recipe plus assembler-build budget"
+        );
+
+        let schedule = crate::viewer::gameplay_actions::build_runtime_action_from_gameplay_request(
+            &crate::viewer::GameplayActionRequest {
+                action_id: crate::viewer::ACTION_SCHEDULE_SMELTER_IRON_INGOT.to_string(),
+                target_agent_id: starter_agent.to_string(),
+                actor_agent_id: None,
+                player_id: "bootstrap-test".to_string(),
+                public_key: None,
+                auth: None,
+            },
+        )
+        .expect("formal bootstrap first smelter recipe action");
+        world.submit_action(schedule);
+        world.step().expect("settle formal first smelter recipe");
+
+        assert_eq!(
+            world
+                .agent_resource_balance(starter_agent, ResourceKind::Electricity)
+                .expect("starter agent power after first recipe admission"),
+            10,
+            "the canonical first run must retain the assembler construction obligation"
+        );
+
+        let build_assembler =
+            crate::viewer::gameplay_actions::build_runtime_action_from_gameplay_request(
+                &crate::viewer::GameplayActionRequest {
+                    action_id: crate::viewer::ACTION_BUILD_ASSEMBLER_MK1.to_string(),
+                    target_agent_id: starter_agent.to_string(),
+                    actor_agent_id: None,
+                    player_id: "bootstrap-test".to_string(),
+                    public_key: None,
+                    auth: None,
+                },
+            )
+            .expect("formal bootstrap assembler action");
+        world.submit_action(build_assembler);
+        world.step().expect("settle formal assembler construction");
+        world
+            .step()
+            .expect("complete formal assembler construction");
+        assert!(world.has_factory(crate::viewer::FACTORY_ASSEMBLER_MK1));
+    }
+
+    #[test]
+    fn generated_bootstrap_owner_can_build_assembler_from_builder_ledger() {
+        let (mut world, _) =
+            bootstrap_runtime_world(WorldScenario::Minimal).expect("generated bootstrap");
+        let starter_agent = world
+            .state()
+            .agents
+            .keys()
+            .next()
+            .cloned()
+            .expect("generated bootstrap agent");
+        let builder_ledger = MaterialLedgerId::agent(starter_agent.as_str());
+        for (material, expected) in [
+            ("structural_frame", 20),
+            ("iron_ingot", 10),
+            ("copper_wire", 8),
+        ] {
+            assert_eq!(
+                world.ledger_material_balance(&builder_ledger, material),
+                expected,
+                "generated bootstrap must seed {material} on the authoritative builder ledger"
+            );
+        }
+        assert_eq!(
+            world
+                .agent_resource_balance(starter_agent.as_str(), ResourceKind::Electricity)
+                .expect("generated bootstrap starter power"),
+            STARTER_INDUSTRIAL_ELECTRICITY
+        );
+
+        let build_smelter =
+            crate::viewer::gameplay_actions::build_runtime_action_from_gameplay_request(
+                &crate::viewer::GameplayActionRequest {
+                    action_id: crate::viewer::ACTION_BUILD_SMELTER_MK1.to_string(),
+                    target_agent_id: starter_agent.clone(),
+                    actor_agent_id: None,
+                    player_id: "bootstrap-test".to_string(),
+                    public_key: None,
+                    auth: None,
+                },
+            )
+            .expect("generated bootstrap smelter action");
+        world.submit_action(build_smelter);
+        world.step().expect("settle generated smelter construction");
+        world
+            .step()
+            .expect("complete generated smelter construction");
+        assert!(world.has_factory(crate::viewer::FACTORY_SMELTER_MK1));
+
+        let build_assembler =
+            crate::viewer::gameplay_actions::build_runtime_action_from_gameplay_request(
+                &crate::viewer::GameplayActionRequest {
+                    action_id: crate::viewer::ACTION_BUILD_ASSEMBLER_MK1.to_string(),
+                    target_agent_id: starter_agent.clone(),
+                    actor_agent_id: None,
+                    player_id: "bootstrap-test".to_string(),
+                    public_key: None,
+                    auth: None,
+                },
+            )
+            .expect("generated bootstrap assembler action");
+        world.submit_action(build_assembler);
+        world
+            .step()
+            .expect("settle generated assembler construction");
+        world
+            .step()
+            .expect("complete generated assembler construction");
+
+        assert!(world.has_factory(crate::viewer::FACTORY_ASSEMBLER_MK1));
     }
 }

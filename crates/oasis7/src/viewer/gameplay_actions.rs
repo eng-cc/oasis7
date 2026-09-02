@@ -32,6 +32,11 @@ pub const ACTION_SCHEDULE_ASSEMBLER_FACTORY_CORE: &str = "schedule_recipe_assemb
 pub const FACTORY_SMELTER_MK1: &str = "factory.smelter.mk1";
 pub const FACTORY_ASSEMBLER_MK1: &str = "factory.assembler.mk1";
 
+// The formal/generated starter world must be able to pay the first canonical
+// industrial bootstrap from one owner-held balance: 10 electricity for each
+// starter factory plus 12 iron-ingot batches at 8 electricity each.
+pub(crate) const STARTER_INDUSTRIAL_ELECTRICITY: i64 = 10 + (12 * 8) + 10;
+
 #[cfg(not(target_arch = "wasm32"))]
 const RECIPE_SMELTER_IRON_INGOT: &str = "recipe.smelter.iron_ingot";
 #[cfg(not(target_arch = "wasm32"))]
@@ -273,7 +278,7 @@ pub(crate) fn formal_release_default_seed_model() -> Result<(WorldConfig, WorldM
     let config = WorldConfig::default();
     let mut starter_resources = ResourceStock::new();
     starter_resources
-        .set(ResourceKind::Electricity, 32)
+        .set(ResourceKind::Electricity, STARTER_INDUSTRIAL_ELECTRICITY)
         .map_err(|err| format!("formal release starter electricity stock failed: {err:?}"))?;
     starter_resources
         .set(ResourceKind::Data, 8)

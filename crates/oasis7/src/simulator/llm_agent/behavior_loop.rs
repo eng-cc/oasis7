@@ -1,8 +1,6 @@
 use super::*;
 use std::time::Instant;
 
-const RECIPE_COMPLETION_REPLAY_WINDOW: usize = 64;
-
 impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
     fn collapse_multi_turn_payloads(
         parsed_turns: Vec<ParsedLlmTurn>,
@@ -62,43 +60,27 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
 }
 
 impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
-    fn oldest_recipe_completion_receipt_id(&self) -> Option<u64> {
-        let mut receipt_ids = self.recipe_coverage.completion_receipt_ids.iter();
-        let first = *receipt_ids.next()?;
-        let mut previous = first;
-        let mut largest_gap = 0;
-        let mut oldest = first;
-
-        for current in receipt_ids {
-            let current = *current;
-            let gap = current.wrapping_sub(previous);
-            if gap > largest_gap {
-                largest_gap = gap;
-                oldest = current;
-            }
-            previous = current;
-        }
-
-        if first.wrapping_sub(previous) > largest_gap {
-            oldest = first;
-        }
-        Some(oldest)
-    }
-
     /// Keep a deterministic, bounded identity window for completion replays.
-    /// The largest circular gap in the ordered IDs identifies the oldest
-    /// receipt in the monotonically allocated sequence, including rollover.
+    /// ActionIds are allocated globally, so numeric or circular ordering is
+    /// not a reliable age signal when unrelated actions make the IDs sparse.
+    /// The serialized insertion order is the sole eviction authority.
     fn remember_recipe_completion_receipt(&mut self, job_id: u64) -> bool {
-        if !self.recipe_coverage.completion_receipt_ids.insert(job_id) {
+        if self
+            .recipe_coverage
+            .completion_receipt_ids
+            .contains(&job_id)
+        {
             return false;
         }
-        while self.recipe_coverage.completion_receipt_ids.len() > RECIPE_COMPLETION_REPLAY_WINDOW {
-            let Some(oldest_job_id) = self.oldest_recipe_completion_receipt_id() else {
-                break;
-            };
-            self.recipe_coverage
-                .completion_receipt_ids
-                .remove(&oldest_job_id);
+        self.recipe_coverage.completion_receipt_ids.insert(job_id);
+        self.recipe_coverage
+            .completion_receipt_order
+            .push_back(job_id);
+        while self.recipe_coverage.completion_receipt_order.len() > RECIPE_COMPLETION_REPLAY_WINDOW
+        {
+            if let Some(job_id) = self.recipe_coverage.completion_receipt_order.pop_front() {
+                self.recipe_coverage.completion_receipt_ids.remove(&job_id);
+            }
         }
         true
     }
