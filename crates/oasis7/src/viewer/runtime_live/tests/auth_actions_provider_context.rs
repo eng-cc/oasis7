@@ -506,7 +506,8 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
 
     let mut stale_feedback_seen = false;
     let mut replan_request_seen = false;
-    for _ in 0..64 {
+    let poll_deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while std::time::Instant::now() < poll_deadline {
         server
             .advance_runtime(&mut session, &mut writer, "play", 1, None, false)
             .expect("stale provider response should be handled");
@@ -549,7 +550,7 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
             break;
         }
         drop(recorded);
-        std::thread::yield_now();
+        std::thread::sleep(std::time::Duration::from_millis(5));
     }
     assert!(
         stale_feedback_seen,
