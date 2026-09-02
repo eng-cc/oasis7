@@ -252,7 +252,7 @@ describe("WorldFeedPanel", () => {
             summary: "Historical crisis",
             detail: "Replay context",
             receipt_ref: null,
-            major_event: majorEvent({ freshness: "replay" }),
+            major_event: majorEvent({ freshness: "last_known" }),
           }],
           worldId: "world-a",
           reorgEpoch: 2,

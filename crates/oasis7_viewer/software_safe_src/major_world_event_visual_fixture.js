@@ -29,7 +29,7 @@ export function installMajorWorldEventCrisisVisualFixture(fixtures, { core, view
           severity: 4,
           lifecycle: "active",
           source: { authority: "runtime_journal", event_kind: "crisis_spawned" },
-          freshness: historical ? "replay" : "current",
+          freshness: historical ? "last_known" : "current",
           visibility: "public",
           logical_time: "42",
           causal_reference: null,

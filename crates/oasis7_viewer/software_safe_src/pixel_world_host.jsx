@@ -860,16 +860,6 @@ function PixelWorldFocusHud(props) {
           <span>{tr(props.locale(), "阻塞", "Blocker")}</span>
           <strong>{surface().blocker.label || tr(props.locale(), "暂无阻塞", "No blocker")}</strong>
         </div>
-        <div
-          class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--receipt"
-          data-receipt-confidence={surface().action_receipt.confidence}
-          data-hud-priority={surface().action_receipt.present ? "receipt" : "waiting"}
-          hidden
-        >
-          <span>{tr(props.locale(), "回执", "Receipt")}</span>
-          <strong>{surface().action_receipt.title}</strong>
-          <em>{receiptConfidenceLabel(surface().action_receipt.confidence, props.locale(), surface().action_receipt.state)}</em>
-        </div>
         <div class="pixel-world-focus-controls" aria-label={tr(props.locale(), "电影视图控制", "Cinematic controls")}>
           <button type="button" class="pixel-world-focus-control pixel-world-focus-control--primary" onClick={props.onOpenCommand}>
             {tr(props.locale(), "命令与目标", "Command & Target")}

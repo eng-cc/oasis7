@@ -138,7 +138,7 @@ function normalizeMajorEvent(value, { worldId, reorgEpoch, eventSeq }) {
     crisis_timed_out: "timed_out",
   };
   if (lifecycleByKind[value.source.event_kind] !== value.lifecycle
-    || !new Set(["current", "replay"]).has(value.freshness)
+    || !new Set(["current", "last_known"]).has(value.freshness)
     || !new Set(["public", "restricted"]).has(value.visibility)) {
     return null;
   }

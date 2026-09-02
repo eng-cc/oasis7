@@ -1230,8 +1230,8 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Mission Progress");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("World Tick");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("tick=12");
-    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Receipt");
-    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Action blocked");
+    expect(document.querySelector(".pixel-world-focus-hud")).not.toHaveTextContent("Receipt");
+    expect(document.querySelector(".pixel-world-focus-hud")).not.toHaveTextContent("Action blocked");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("68%");
     expect(document.querySelector(".pixel-world-focus-hud")).not.toHaveTextContent("Next Move");
     expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("Agent 0");
@@ -1272,8 +1272,7 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-hud__cell--tick")).toHaveAttribute("data-hud-priority", "telemetry");
     expect(document.querySelector(".pixel-world-focus-hud__cell--blocker")).toHaveAttribute("data-blocker-present", "true");
     expect(document.querySelector(".pixel-world-focus-hud__cell--blocker")).toHaveAttribute("data-hud-priority", "critical");
-    expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toHaveAttribute("data-receipt-confidence", "world_delta");
-    expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toHaveAttribute("data-hud-priority", "receipt");
+    expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toBeNull();
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveClass("pixel-world-focus-minimap");
 
     const commandDrawer = document.querySelector(".pixel-world-focus-drawer--command");
@@ -1317,7 +1316,8 @@ describe("pixel world host", () => {
     expect(document.querySelectorAll('[data-viewer-overlay="receipt"]')).toHaveLength(1);
     expect(document.querySelector(".pixel-world-render-diagnostics")).toBeNull();
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Restore Layout");
-    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Action blocked");
+    expect(document.querySelector(".pixel-world-focus-hud")).not.toHaveTextContent("Action blocked");
+    expect(document.querySelector(".pixel-world-focus-receipt")).toHaveTextContent("Action blocked");
     expect(document.querySelector(".pixel-world-focus-drawer--command")?.open).toBe(true);
 
     screen.getByRole("button", { name: "Restore Layout" }).click();
@@ -1356,7 +1356,7 @@ describe("pixel world host", () => {
     screen.getByRole("button", { name: "Cinematic View" }).click();
     await waitFor(() => { expect(document.querySelector(".pixel-world-host")).toHaveAttribute("data-world-focus", "true"); });
     expect(document.querySelectorAll('[data-viewer-overlay="receipt"]')).toHaveLength(1);
-    expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toHaveAttribute("hidden", "");
+    expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toBeNull();
     expect(document.querySelector(".pixel-world-focus-receipt .pixel-world-action-receipt")).toHaveAttribute("data-receipt-state", state);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
@@ -1390,7 +1390,7 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("Agent 0");
     expect(document.querySelector(".pixel-world-focus-rail")).not.toHaveTextContent("agent-0");
     expect(document.querySelector(".pixel-world-focus-hud__cell--blocker")).toHaveAttribute("data-hud-priority", "critical");
-    expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toHaveAttribute("data-hud-priority", "receipt");
+    expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toBeNull();
     expect(document.querySelector(".pixel-world-focus-receipt")).toHaveTextContent("Action blocked");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("agents=2");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("routes=2");

@@ -292,9 +292,9 @@ fn project_major_event(
         },
         freshness: match projection.freshness {
             crate::runtime::MajorWorldEventFreshness::Current => "current",
-            // The wire contract names replay history explicitly.  The
-            // runtime retains LastKnown to distinguish it from current data.
-            crate::runtime::MajorWorldEventFreshness::LastKnown => "replay",
+            // Freshness is event authority, while Replay is the independent
+            // feed transport state. Preserve both dimensions on the wire.
+            crate::runtime::MajorWorldEventFreshness::LastKnown => "last_known",
             crate::runtime::MajorWorldEventFreshness::Stale => "stale",
             crate::runtime::MajorWorldEventFreshness::Unknown => "unknown",
             crate::runtime::MajorWorldEventFreshness::Conflict => "conflict",
@@ -703,7 +703,7 @@ mod tests {
         assert_eq!(replay.status, protocol::WorldFeedStatus::Replay);
         assert_eq!(
             replay.events[0].major_event.as_ref().unwrap().freshness,
-            "replay"
+            "last_known"
         );
 
         let gap = build_world_feed(

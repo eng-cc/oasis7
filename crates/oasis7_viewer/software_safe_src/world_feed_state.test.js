@@ -690,10 +690,10 @@ describe("World Feed v1 state", () => {
         summary: "Historical crisis",
         detail: "",
         receipt_ref: null,
-        major_event: majorEvent({ freshness: "replay" }),
+        major_event: majorEvent({ freshness: "last_known" }),
       }],
     })).state;
-    expect(replay.events[0].major_event.freshness).toBe("replay");
+    expect(replay.events[0].major_event.freshness).toBe("last_known");
 
     const gap = consumeWorldFeed(replay, feed({
       status: "gap",
