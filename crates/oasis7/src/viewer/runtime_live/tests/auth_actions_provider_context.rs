@@ -388,7 +388,12 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
     clear_runtime_provider_env();
     let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
     let decision_count = Arc::new(Mutex::new(0_usize));
-    let base_url = spawn_runtime_live_mock_http_server(5, {
+    // A completed stale replan can overlap with the next async request: the
+    // control pass may start decision #3 while it drains the Wait turn's
+    // terminal `no_effect` feedback. Keep capacity for that in-flight
+    // request and its feedback instead of making correctness depend on
+    // listener scheduling.
+    let base_url = spawn_runtime_live_mock_http_server(8, {
         let recorded = Arc::clone(&recorded);
         let decision_count = Arc::clone(&decision_count);
         move |request| {
@@ -552,6 +557,11 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
         drop(recorded);
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
+    // No provider work remains after the bounded poll. Release the process
+    // environment lock before inspecting the recorded evidence so a later
+    // assertion failure cannot poison the shared test lock and cascade.
+    clear_runtime_provider_env();
+    drop(_guard);
     assert!(
         stale_feedback_seen,
         "stale response must produce typed feedback"
@@ -614,5 +624,4 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
             | crate::runtime::WorldEventBody::EffectQueued(_)
             | crate::runtime::WorldEventBody::ReceiptAppended(_)
     )));
-    clear_runtime_provider_env();
 }
