@@ -65,6 +65,143 @@ Player shell、World Feed v1 DTO/anchor，以及 Director 的服务端核验与 
 文档决定不是运行时或发行放行证明；每阶段只在对应 owner 的实现、自动化和 headed QA 证据
 齐备后才可宣称完成。
 
+### P1-A Agent Context Lite（源码与聚焦自动化已完成；headed 证据部分完成）
+
+P1 的第一个实现 slice 只收敛 **selected Agent** 的 entity-first context；通用的多实体
+Inspector（Agent 之外的 Location、Facility、Territory、Organization、Depot、Module）明确
+排在 P1-A 之后。它是当前 `P1 Context + semantics` 的实现边界；实现完成不单独等同于发行放行。
+
+#### 现有 Viewer 接缝与 display-model 边界
+
+- 组合接缝固定在 `crates/oasis7_viewer/software_safe_src/main.jsx` 的 `InteractionPanel`。它已经拥有当前选中
+  Agent 的 identity、`agent.activity`、`AgentActivitySurface`、`AgentIntentSurface`、Chat
+  以及匹配同一 Agent 的 Intent。
+- 展示模型只允许从既有权威 projection 读取：`snapshot.model.agents[selectedAgentId]`、
+  其显式 activity、显式绑定同一 Agent 的 gameplay projection、当前 connection/freshness 以及既有
+  semantic feedback/receipt。复杂字段解释应下沉为可单测的纯 display model；不得在 JSX 中
+  猜测关系、计划、进度或结果，也不得通过 `legacy_core.js`、Rust bridge 或新 DTO 扩大来源。
+  Player-global `buildGameplaySummary()` 只属于 Player HUD，不得因选中 Agent 而成为 Agent 私有上下文。
+- `crates/oasis7_viewer/software_safe_src/agent_activity_surface.jsx` 与
+  `crates/oasis7_viewer/software_safe_src/agent_intent_surface.jsx` 保持独立语义边界：Activity
+  表示 Agent 正在做什么，Intent 表示权威运行时接受/阻断/结束了什么，Receipt 才表示世界
+  实际发生了什么。它们不能互相代签。
+- `crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx` 的 `PixelWorldCommercialHud`
+  继续拥有世界舞台上的 Objective、Next Move、Player Leverage 和唯一 `Action Receipt`。
+  Agent Context 不得复制第二个 causal receipt；最多引用该现有回执锚点。
+- 为避免继续扩大 `main.jsx`，P1-A 的 canonical extraction 固定为两个尚不存在的目标源码
+  边界：`crates/oasis7_viewer/software_safe_src/viewer_agent_context_display_model.js`
+  负责纯 display-model，`crates/oasis7_viewer/software_safe_src/agent_context_lite.jsx`
+  负责只接收 display inputs/callbacks 的组件；`InteractionPanel` 只做组合和既有 control
+  boundary 委托，不在组件体内继续堆叠 derivation。它们是实现目标命名，不是当前文件存在声明。
+
+#### P1-A 可见内容与验收边界
+
+选中 Agent 后，按需打开的 Command/Inspector 组合按以下顺序呈现：可读 Identity（`name →
+label → id`）、显式 State/activity 与 freshness、Objective/已发布 Next Move、blocker、
+Player Leverage/execution state，以及在 target 明确匹配时的 published Intent。字段缺失、
+stale、reconnecting、conflict、control lost 或 permission denied 必须保持可区分；不以默认
+值、旧事件、wall clock 或动画填补。
+
+- Agent Context Lite 只显示选中 Agent 的权威字段及有来源的所在/父级上下文；`primary_intent`
+  没有明确匹配的 Agent
+  target 时不得被包装成该 Agent 的私有 Intent。
+- `Action Receipt` 仍是 Player/Cinematic 的唯一因果面。只有带明确 runtime causal identity
+  的结果才可作为 Receipt；普通 semantic feedback、Intent 生命周期标签或 World Feed 只能
+  作为非因果状态，不能创建、替换或冒充 Receipt。正式 Receipt 只使用现有
+  `data-viewer-overlay="receipt"` surface（Player 的现有 `#viewer-action-receipt` anchor
+  在适用 presentation 中继续稳定）；每个 active presentation 只能有一个。`accepted`/`queued`
+  不能被压平为 executing 或 completed；没有权威回执时继续显示无回执状态。
+- 选中 Location、Facility、Territory、Organization、Depot 或 Module 时，不复用上一个 Agent 的上下文，不合成
+  ownership、resource、relation 或 capability；仅保留选中实体的可读 identity，并显示
+  明确的 unavailable/待同步恢复说明。后续 slice 只有在既有 projection 同时提供 source、
+  freshness、permission、缺失态和 recovery contract 时才可注入对应 capability。
+- P1-A 不新增 runtime/protocol 字段，不改仿真、replay、renderer、WASM ABI、权限或控制
+  verbs；不把 Market、War、Governance、Production、Contracts、Relations 变成一级 Player
+  route，也不实现 ETA、energy、cargo、health、relationship、plan、memory 或 rationale。
+
+首 slice 的完整验收条件是：选中 Agent 的显示模型和组件有窄单测/稳定 DOM 合同；Location、
+Facility、Territory、Organization、Depot、Module 选择不会泄漏 Agent 状态；普通 feedback
+不会被计作 Receipt；正常与 Cinematic presentation 各只有一个正式可见 Receipt；并补齐
+headed desktop/mobile、`1024x768`、`768x1024` tablet、键盘、CJK、长文本、空/不可用态的
+S6 证据。状态覆盖 current、last-known/stale、reconnecting、unknown、conflict、replay、
+gap、reorg、unavailable 和 control/permission lost。当前源码与聚焦自动化已覆盖这些语义边界；
+headed 证据只覆盖外部 Chrome 的 GPU-unavailable fallback（`1440x1000`、`390x844`）。
+`ready=true` WebGL2/Cinematic 正常路径、probe 后异步 GPU 失败和 tablet `641–1240` 宽度仍待验证，
+因此本切片保持 technical preview，不构成完整 headed 验收或发行放行结论。
+
+#### P1-A → canonical acceptance crosswalk
+
+P1-A 使用既有 terminal acceptance IDs，不另造一套验收真值：
+
+| Product P1-A | Viewer terminal proof | Required boundary |
+| --- | --- | --- |
+| `P1A-CTX-01` identity/context | `ENT-01`, `CTX-01`, `EMP-01` | readable selected Agent identity/location; missing/unknown remains honest |
+| `P1A-CTX-02` source/freshness | `STA-01`, `CTX-01`, `FED-01`, `FED-02` | current/last-known/stale/reconnecting/unknown/conflict plus replay/gap/reorg/unavailable are distinct |
+| `P1A-CTX-03` Activity/Intent/Receipt | `INT-01`, `REC-01`, `REC-02` | feedback and lifecycle labels never create a second or inferred causal Receipt |
+| `P1A-CTX-04` capability/control boundary | `CAP-01`, `CON-01` | capability follows authoritative projection and permission; selection never grants control |
+| `P1A-CTX-05` world-first/a11y | `IA-01`, `HUD-01`, `TXT-01`, `FOC-01`, `FOC-02` | desktop, `1024x768`/`768x1024` tablet, mobile, keyboard, IME, CJK and long text preserve hierarchy and focus return |
+
+This crosswalk records the implemented P1-A boundary; release readiness still follows repository terminal gates.
+
+#### Generalized entity Inspector（post-P1-A；目标，尚未实现）
+
+Agent 之外的统一 Inspector 不是 P1-A 的隐含交付物。Location、Facility、Territory、
+Organization、Depot、Module 的各自 context/capability 只能在独立 slice 中加入；每个 slice
+必须先取得对应 projection 的 source、freshness、permission、missing-state、recovery 和
+causal contracts，并补充自己的 headed/a11y evidence。P1-A 的 unavailable copy 不预留或
+模拟这些未来能力。
+
+### P1-B World semantic presentation（当前切片已实现）
+
+P1-B 负责把已经由权威 world projection 发布的实体语义组织成稳定的 stage visual language，
+不把渲染器状态或视觉推断当作 world truth：
+
+- 只格式化既有 Agent、Location、Facility、Territory、Organization、Depot、Module 的
+  identity/state/activity，以及已发布的 route/assignment、power/resource、facility/module
+  cues 和 relation kind/status。缺失 projection 时保持 unknown/unavailable，不创造新实体语义。
+- stage 的注意力优先级固定到 receipt target：普通 Agent < selected Agent < active Intent <
+  blocker < receipt target。Major event 只在 P1-C authority gate 通过后作为后置扩展；persistent
+  selection 必须与 transient attention 区分；
+  hit target、keyboard focus、selection state 和可读 identity 不能因视觉强调而消失或获得
+  新控制权。
+- relation、Trust、ownership、resource、capability 或 event causality 绝不从距离、同屏、
+  proximity、文字、坐标或 renderer activity 推断；关系线只有在权威 projection 提供 kind/
+  status 时才可呈现。
+- P1-B 不新增或修改 upstream runtime/world/protocol/WASM ABI 字段。Viewer host/bridge 可以从
+  既有 authoritative snapshot 派生 additive、只读的 presentation DTO，用于裁剪、重组或布局；
+  派生不得新增事实、权限、生命周期、控制或因果语义，来源缺失、陈旧、冲突或未授权时必须
+  fail closed。`active_intent_target` 只能来自 `snapshot.player_gameplay.primary_intent`，不得回退到
+  gameplay summary、feedback、Activity、文本或 renderer 状态。Renderer Unavailable、probe 后异步失败、fallback、retry、safe-area 和
+  recovery 是所有 Viewer slice 共用的跨切片安全验收（见 `REN-01`），不是 P1-B 的语义来源。
+  P1-B headed evidence 已覆盖 `1440x1000`、`1024x768`、`768x1024`、`390x844`、键盘/CJK
+  与长文本，并以 stage semantics、焦点与无横向溢出为判据，而不是把 canvas ready 当作语义证明。
+
+### P1-C Major World Events（当前切片已实现 crisis-only 最小合同）
+
+P1-C 当前以 additive `major_world_event/v1` 实现严格的 crisis-only 最小合同：runtime 只从
+`CrisisSpawned/Resolved/TimedOut` 投影 `active/resolved/timed_out`，保留数值 severity `1..=5`、
+journal identity/source、opaque canonical crisis subtype、显式 freshness/permission、非 Receipt causal lineage 与 replay/reorg
+边界。Viewer 只格式化通过完整校验的权威 projection：
+
+- runtime 将 journal lifecycle 与 canonical `CrisisState` 按 `crisis_id` join，并校验 kind、severity、
+  status、opened/expires/resolved time；缺失或冲突时整条 crisis lifecycle fail closed。初始 current
+  feed 只有与 canonical state 一致的最新 transition 为 current，较早 transition 与 cursor replay
+  都是历史，不触发 live attention。
+- Viewer 对同一 `(world_id,reorg_epoch,event_seq)` 的 materially conflicting payload 整条
+  identity fail closed；非 gap 状态下收到跨 epoch `ready` 先转为 gap、清空 attention 并要求
+  authoritative snapshot reload，不静默切换 timeline。
+
+- event marker/highlight/toast 是环境或世界语义，不是玩家因果 Receipt；没有明确 Receipt
+  identity 时不得制造成功、进度或 action result。
+- 不从 event text、距离、同屏、时间、cursor 或 renderer activity 推断 major event、关系、
+  ownership、资源或 capability。
+- 当前 crisis 只有 world scope、没有权威空间坐标，因此只进入 ambient World Feed 与当前事件的
+  polite status；不创建 stage marker/highlight。生产入口通过独立的 runtime/operator policy
+  显式传 `Unknown/Public/Restricted/Denied`；默认 Unknown 不披露，不能从登录、选择、控制或
+  Director diagnostics 默认 Public。
+- War、Governance 及其他事件仍在 allowlist 外；它们不能用 intensity、结果、文本或数值变化
+  冒充 severity。新增类别必须重新提供 runtime/producer、viewer、visual 与 QA 合同和证据。
+
 ### Current implementation boundary
 - 当前 Web 保留 focus/right-panel 兼容 hooks，Targets 过滤仍以 `#entity-search`
   为实现入口；它们是实现基线/债务，不是另一个产品模式。
@@ -119,10 +256,12 @@ Player shell、World Feed v1 DTO/anchor，以及 Director 的服务端核验与 
 - **Stable, non-permanent frame**：`Objective`、selected Agent context、`Next Move`、
   Receipt 和 edge navigation 具有稳定的阅读顺序/锚点；Inspector、Command、World Feed
   和 Diagnostics 仍按需打开，可随实体或任务变化，不形成永久 Player 左/中/右栏。
-- **Entity-first capabilities**：能力从当前选中的 Agent、Facility、Territory 或
-  Organization 上下文进入。Market、War、Governance、Production、Contracts、Relations
-  等不是新的一级 Player 菜单；只有当实体的权威 projection 与玩家权限同时存在时，才显示相应
-  capability，缺失时显示 unavailable/待同步，而非补一个看似完整的卡片。
+- **Entity-first capabilities（post-P1-A）**：P1-A 只允许当前选中的 Agent 进入 Agent
+  Context；Location、Facility、Territory、Organization、Depot、Module 的 generalized
+  Inspector/capability 属于后续 P1 slice，不得覆盖或反向扩大 Agent-only P1-A。Market、War、
+  Governance、Production、Contracts、Relations 等不是新的一级 Player 菜单；后续只有当
+  实体的权威 projection 与玩家权限同时存在时，才显示相应 capability，缺失时显示
+  unavailable/待同步，而非补一个看似完整的卡片。
 - **Indirect-control feedback**：玩家发出的是 `Ask / Suggest / Prioritize / Negotiate /
   Investigate / Propose / Warn / Delegate` 等高层 guidance/template，不是移动、攻击、采集等
   直接动作。画面持续区分 `Player Guidance → Intent → accepted/rejected/blocked →
@@ -131,7 +270,9 @@ Player shell、World Feed v1 DTO/anchor，以及 Director 的服务端核验与 
 - **World events and relationships**：Agent、Facility、Territory、Organization 与 route/
   relationship/event marker 只有在 authoritative world projection 发布时才可绘制。事件可用
   stage marker、短暂 toast 或 world highlight 分层呈现，但 ambient event 不能签署玩家因果；
-  关系线必须携带可读的 relation kind/status，不能由距离、同屏、文字或靠近目标推断。
+  本阶段以 active-only 状态门槛和 directional/neutral 非颜色几何呈现权威 kind/status 分类；
+  未知 kind 保持 neutral，不能冒充 ally 等具体关系。若未来要求逐一精确读取任意 kind，须另加
+  accessible text/legend 与明确 allowlist。关系不能由距离、同屏、文字或靠近目标推断。
 - **Receipt/feed presentation**：Receipt 是当前 Player/Cinematic presentation 的唯一、紧凑且
   可持续复查的因果锚点；新 transient feedback 不得覆盖或制造第二个 causal receipt，只有新
   的权威 receipt 才能替换它。World Feed 是右上等边缘位置的 collapsed ambient chip，默认不
@@ -350,7 +491,8 @@ the visual treatment. GitHub task evidence owns mutable execution status.
   plus visible keyboard focus. Existing `data-selected` hooks remain available for automation.
 - **Agent Context Lite (P1/P2).** The default Agent context may format only the selected Agent's
   explicit identity/location plus already-published Objective, recommended Next Move, blocker,
-  Player Leverage/execution state, and most recent Action Receipt/feedback. It must not infer
+  Player Leverage/execution state, and the latest explicit Player/Cinematic causal Action Receipt.
+  Non-causal feedback may appear only as status and cannot create, replace, or count as a Receipt. It must not infer
   internal intent, plan, progress, rationale, or success from World Feed or event text.
 - **Player-readable receipt state (P2).** Internal confidence/state values such as
   `world_delta` or `none` remain in stable data attributes and Diagnostics, while visible copy
@@ -569,7 +711,7 @@ required after the corresponding implementation slice.
 | HUD-02 | Flattened Next Move | headed 1440x1000 + 390x844 | one dominant action/route, inline blocker, no duplicate or ambient success claim | viewer + visual + QA |
 | CON-01 | Agent Console disclosure | desktop/mobile + keyboard | command/chat and selected context are default; raw/auth/operator details are collapsed Diagnostics | viewer + QA |
 | SEM-01 | World semantic rendering | headed desktop/mobile, sparse and active world | published entity state, route/activity marker, relationship kind/status, and major event are readable on the stage; no inferred relation or event causality | runtime + viewer + visual + QA |
-| CAP-01 | Entity-first contextual capability | Agent/Facility/Territory/Organization selected | capability follows selection and permission; Market/War/Governance are not peer Player routes; missing projection is unavailable, not a synthetic card | producer + runtime + viewer + QA |
+| CAP-01 | Entity-first contextual capability (post-P1-A) | Agent selected in P1-A; non-Agent entities only in later P1 slices | P1-A remains Agent-only; later Location/Facility/Territory/Organization/Depot/Module capability follows selection and permission; Market/War/Governance are not peer Player routes; missing projection is unavailable, not a synthetic card | producer + runtime + viewer + QA |
 | PRO-01 | Programs/Protocols disclosure | selected entity + Diagnostics | player copy uses Program/Protocol/Module/Contract; WASM/ABI/hash/tx/runtime fields stay hidden until explicit disclosure | viewer + visual + QA |
 | CIN-01 | Cinematic / Minimal HUD | headed 1440x1000 + 390x844 + Escape/IME | explicit entry/exit, minimal objective/blocker/receipt and selected marker, focus return preserved | viewer + visual + QA |
 | DIR-01 | Director allowed | fresh Player -> explicit Diagnostics action | capability-gated, ephemeral, visibility/density only, world/selection preserved | producer + viewer |

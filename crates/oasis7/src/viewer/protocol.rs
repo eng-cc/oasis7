@@ -71,7 +71,9 @@ pub use proto::{
     TransferMaterialQuotePreflight, TransferMaterialQuoteRequest, VIEWER_PROTOCOL_VERSION,
     ViewerControl, ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerStream,
     WORLD_FEED_SCHEMA_VERSION, WarDeclarationQuotePreflight, WarDeclarationQuoteRequest,
-    WorldFeedEnvelope, WorldFeedEvent, WorldFeedGapReason, WorldFeedStatus,
+    WorldFeedEnvelope, WorldFeedEvent, WorldFeedGapReason, WorldFeedMajorEvent,
+    WorldFeedMajorEventAnchor, WorldFeedMajorEventCausalReference, WorldFeedMajorEventIdentity,
+    WorldFeedMajorEventPosition, WorldFeedMajorEventSource, WorldFeedStatus,
     WorldFeedUnavailableReason,
 };
 

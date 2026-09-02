@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use super::{RuntimeWorldError, ViewerLiveDecisionMode, WorldScenario};
+use crate::runtime::MajorWorldEventVisibilityPermission;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChainLinkPolicy {
@@ -45,6 +46,10 @@ pub struct ViewerRuntimeLiveServerConfig {
     pub chain_submit_bind: Option<String>,
     pub chain_link_policy: ChainLinkPolicy,
     pub agent_chat_echo_enabled: bool,
+    /// Explicit operator/session audience decision for Major World Events.
+    /// Defaults to Unknown; authentication, control, and Director access do
+    /// not implicitly grant event visibility.
+    pub major_world_event_visibility: MajorWorldEventVisibilityPermission,
     pub generated_world_dir: Option<PathBuf>,
 }
 

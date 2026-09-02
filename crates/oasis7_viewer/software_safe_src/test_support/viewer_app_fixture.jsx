@@ -113,8 +113,13 @@ export function slot1CandidateRationaleSnapshot() {
   };
 }
 
-export async function renderViewerApp(snapshot, authOverrides = {}, locale = "en") {
-  window.history.replaceState({}, "", `/software_safe.html?test_api=1&connect=0&hosted_bootstrap=0&locale=${locale}`);
+export async function renderViewerApp(
+  snapshot,
+  authOverrides = {},
+  locale = "en",
+  search = `/software_safe.html?test_api=1&connect=0&hosted_bootstrap=0&locale=${locale}`,
+) {
+  window.history.replaceState({}, "", search);
   window.localStorage.clear();
   document.body.innerHTML = "";
   const core = await import("../legacy_core.js");

@@ -1062,6 +1062,50 @@ mod tests {
             serde_json::json!("7")
         );
         assert!(encoded["feed"]["events"][0]["receipt_ref"].is_null());
+        assert!(encoded["feed"]["events"][0].get("major_event").is_none());
+    }
+
+    #[test]
+    fn world_feed_v1_major_event_round_trip_preserves_opaque_subtype() {
+        let response_json = serde_json::json!({
+            "type": "world_feed",
+            "feed": {
+                "schema_version": "world_feed/v1",
+                "world_id": "world-1",
+                "reorg_epoch": "3",
+                "cursor": "cursor-7",
+                "events": [{
+                    "event_seq": "7",
+                    "kind": "domain",
+                    "summary": "Crisis active",
+                    "detail": "{}",
+                    "receipt_ref": null,
+                    "major_event": {
+                        "schema_version": "major_world_event/v1",
+                        "identity": { "world_id": "world-1", "reorg_epoch": "3", "event_seq": "7" },
+                        "category": "crisis",
+                        "subtype": "power_shortage",
+                        "severity": 4,
+                        "lifecycle": "active",
+                        "source": { "authority": "runtime_journal", "event_kind": "crisis_spawned" },
+                        "freshness": "current",
+                        "visibility": "public",
+                        "logical_time": 10,
+                        "world_anchor": { "scope": "world", "entity_id": "crisis-1" }
+                    }
+                }],
+                "status": "ready",
+                "snapshot_reload_required": false
+            }
+        });
+        let response: ViewerResponse<(), (), (), (), u64> =
+            serde_json::from_value(response_json).expect("decode major world event");
+        let encoded = serde_json::to_value(response).expect("encode major world event");
+        assert_eq!(
+            encoded["feed"]["events"][0]["major_event"]["subtype"],
+            serde_json::json!("power_shortage")
+        );
+        assert!(encoded["feed"]["events"][0]["receipt_ref"].is_null());
     }
 
     #[test]
@@ -1078,6 +1122,7 @@ mod tests {
                     summary: "Max event sequence".to_string(),
                     detail: "{}".to_string(),
                     receipt_ref: None,
+                    major_event: None,
                 }],
                 status: WorldFeedStatus::Ready,
                 gap_reason: None,

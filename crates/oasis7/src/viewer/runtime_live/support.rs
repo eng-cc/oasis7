@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+use crate::runtime::MajorWorldEventVisibilityPermission;
 use crate::simulator::runtime_perf::unsupported_runtime_perf_snapshot;
 use crate::simulator::{
     ChunkRuntimeConfig, Location, RuntimePerfHealth, RuntimePerfSnapshot, WorldKernel, WorldModel,
@@ -28,6 +29,7 @@ impl ViewerRuntimeLiveServerConfig {
             chain_submit_bind: None,
             chain_link_policy: ChainLinkPolicy::Enforcing,
             agent_chat_echo_enabled: control_plane::runtime_agent_chat_echo_enabled_from_env(),
+            major_world_event_visibility: MajorWorldEventVisibilityPermission::Unknown,
             generated_world_dir: None,
         }
     }
@@ -46,6 +48,7 @@ impl ViewerRuntimeLiveServerConfig {
             chain_submit_bind: None,
             chain_link_policy: ChainLinkPolicy::Enforcing,
             agent_chat_echo_enabled: control_plane::runtime_agent_chat_echo_enabled_from_env(),
+            major_world_event_visibility: MajorWorldEventVisibilityPermission::Unknown,
             generated_world_dir: None,
         }
     }
@@ -121,6 +124,14 @@ impl ViewerRuntimeLiveServerConfig {
 
     pub fn with_agent_chat_echo_enabled(mut self, enabled: bool) -> Self {
         self.agent_chat_echo_enabled = enabled;
+        self
+    }
+
+    pub fn with_major_world_event_visibility(
+        mut self,
+        visibility: MajorWorldEventVisibilityPermission,
+    ) -> Self {
+        self.major_world_event_visibility = visibility;
         self
     }
 

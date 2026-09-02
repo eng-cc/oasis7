@@ -1,7 +1,6 @@
 import { render, screen, waitFor } from "@solidjs/testing-library";
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
 const runtimeMock = vi.hoisted(() => ({
   deriveRenderState: null,
   mountError: null,
@@ -10,7 +9,6 @@ const runtimeMock = vi.hoisted(() => ({
   mountCalls: 0,
   onEvent: null,
 }));
-
 vi.mock("./pixel_world_runtime_loader.js", async () => ({
   ...(await vi.importActual("./pixel_world_runtime_loader.js")),
   createPixelWorldRuntimeBridge: async ({ onEvent, onFatal }) => {
@@ -65,15 +63,12 @@ vi.mock("./pixel_world_runtime_loader.js", async () => ({
     };
   },
 }));
-
 let activeCleanup = null;
 let canvasContextSpy = null;
 const HEAVY_UI_TEST_TIMEOUT_MS = 60000;
-
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
-
 function fieldValue(source, snake, camel, fallback = null) {
   if (!source || typeof source !== "object") {
     return fallback;
@@ -86,7 +81,6 @@ function fieldValue(source, snake, camel, fallback = null) {
   }
   return fallback;
 }
-
 function dominantCompound(block) {
   const ppm = block?.compounds?.ppm || {};
   const entries = Object.entries(ppm);
@@ -95,11 +89,9 @@ function dominantCompound(block) {
   }
   return entries.sort((left, right) => Number(right[1] || 0) - Number(left[1] || 0))[0][0];
 }
-
 function locationPos(location) {
   return location?.pos || { x_cm: 0, y_cm: 0, z_cm: 0 };
 }
-
 function buildTestRustRenderState(input) {
   const snapshot = input.snapshot || {};
   const model = snapshot.model || {};
@@ -124,7 +116,6 @@ function buildTestRustRenderState(input) {
   const activeAgentId = gameplay.intent_target || agents[0]?.id || null;
   const receiptPresent = Boolean(gameplay.recent_feedback || gameplay.last_world_change);
   const blockerLabel = gameplay.blocker_kind === "material_shortage" ? "Missing Material" : gameplay.blocker_kind || null;
-
   const renderState = {
     locale: input.locale || "en",
     worldBounds: snapshot.config?.space || { width_cm: 10_000_000, depth_cm: 5_000_000, height_cm: 1_000_000 },
@@ -223,11 +214,9 @@ function buildTestRustRenderState(input) {
   };
   return renderState;
 }
-
 function useTestRustRenderState() {
   runtimeMock.deriveRenderState = vi.fn((input) => buildTestRustRenderState(input));
 }
-
 function sampleSnapshot() {
   return {
     time: 12,
@@ -337,7 +326,6 @@ function sampleSnapshot() {
     },
   };
 }
-
 function acceptedOnlySnapshot() {
   const snapshot = clone(sampleSnapshot());
   const gameplay = snapshot.player_gameplay;
@@ -359,7 +347,6 @@ function acceptedOnlySnapshot() {
   };
   return snapshot;
 }
-
 function noReceiptSnapshot() {
   const snapshot = clone(sampleSnapshot());
   const gameplay = snapshot.player_gameplay;
@@ -378,7 +365,6 @@ function noReceiptSnapshot() {
   gameplay.recent_feedback = null;
   return snapshot;
 }
-
 function emptyWorldSnapshot() {
   const snapshot = clone(noReceiptSnapshot());
   snapshot.model.agents = {};
@@ -389,7 +375,6 @@ function emptyWorldSnapshot() {
   snapshot.model.agent_player_public_key_bindings = {};
   return snapshot;
 }
-
 function bindFirstSnapshotAgentForTest(core, snapshot) {
   const agentId = Object.keys(snapshot?.model?.agents || {})[0];
   const playerId = snapshot?.model?.agent_player_bindings?.[agentId];
@@ -408,7 +393,6 @@ function bindFirstSnapshotAgentForTest(core, snapshot) {
     boundAgentId: agentId,
   };
 }
-
 async function renderPixelWorldHost(snapshot = sampleSnapshot(), search = "?test_api=1&connect=0&locale=en") {
   activeCleanup?.();
   activeCleanup = null;
@@ -416,14 +400,11 @@ async function renderPixelWorldHost(snapshot = sampleSnapshot(), search = "?test
   window.history.replaceState({}, "", `/software_safe.html${search}`);
   window.localStorage.clear();
   document.body.innerHTML = "";
-
   const core = await import("./legacy_core.js");
   const { PixelWorldHost } = await import("./pixel_world_host.jsx");
-
   core.setViewerLocale("en");
   core.injectSnapshot(snapshot);
   bindFirstSnapshotAgentForTest(core, snapshot);
-
   const view = render(() => <PixelWorldHost locale="en" />);
   activeCleanup = view.unmount;
   return {
@@ -431,7 +412,6 @@ async function renderPixelWorldHost(snapshot = sampleSnapshot(), search = "?test
     ...view,
   };
 }
-
 beforeEach(() => {
   runtimeMock.deriveRenderState = null;
   runtimeMock.mountError = null;
@@ -444,7 +424,6 @@ beforeEach(() => {
   window.localStorage.clear();
   document.body.innerHTML = "";
 });
-
 afterEach(() => {
   activeCleanup?.();
   activeCleanup = null;
@@ -452,7 +431,6 @@ afterEach(() => {
   canvasContextSpy = null;
   document.body.innerHTML = "";
 });
-
 describe("pixel world host", () => {
   it("keeps world focus stage resets scoped away from nested command panels", () => {
     const html = readFileSync("software_safe.html", "utf8");
@@ -691,6 +669,28 @@ describe("pixel world host", () => {
     expect(receipt).toHaveTextContent("Agent 0");
     expect(receipt).not.toHaveTextContent("agent=agent-0");
     expect(receipt).toHaveTextContent(/blocked|confirmed|waiting|queued|accepted/i);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("keeps rejected receipts truthful on normal and compact surfaces", async () => {
+    runtimeMock.deriveRenderState = vi.fn((input) => {
+      const state = buildTestRustRenderState(input);
+      state.commercial_surface.action_receipt = { present: true, state: "rejected", confidence: "none", title: "Request outcome", summary: "No world change was applied.", detail: "Runtime policy declined the request.", target_agent_id: null };
+      return state;
+    });
+    await renderPixelWorldHost(sampleSnapshot());
+
+    await waitFor(() => {
+      const receipt = document.querySelector("#viewer-action-receipt");
+      expect(receipt).toHaveTextContent("Action rejected");
+      expect(receipt).not.toHaveTextContent("Waiting for confirmation");
+    });
+
+    screen.getByRole("button", { name: "Cinematic View" }).click();
+    await waitFor(() => {
+      const receipt = document.querySelector(".pixel-world-focus-receipt .pixel-world-action-receipt");
+      expect(receipt).toHaveTextContent("Action rejected");
+      expect(receipt).not.toHaveTextContent("Waiting for confirmation");
+    });
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("does not bind raw receipt confidence enums directly into player-visible markup", () => {
@@ -1230,8 +1230,8 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Mission Progress");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("World Tick");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("tick=12");
-    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Receipt");
-    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Action blocked");
+    expect(document.querySelector(".pixel-world-focus-hud")).not.toHaveTextContent("Receipt");
+    expect(document.querySelector(".pixel-world-focus-hud")).not.toHaveTextContent("Action blocked");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("68%");
     expect(document.querySelector(".pixel-world-focus-hud")).not.toHaveTextContent("Next Move");
     expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("Agent 0");
@@ -1272,8 +1272,7 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-hud__cell--tick")).toHaveAttribute("data-hud-priority", "telemetry");
     expect(document.querySelector(".pixel-world-focus-hud__cell--blocker")).toHaveAttribute("data-blocker-present", "true");
     expect(document.querySelector(".pixel-world-focus-hud__cell--blocker")).toHaveAttribute("data-hud-priority", "critical");
-    expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toHaveAttribute("data-receipt-confidence", "world_delta");
-    expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toHaveAttribute("data-hud-priority", "receipt");
+    expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toBeNull();
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveClass("pixel-world-focus-minimap");
 
     const commandDrawer = document.querySelector(".pixel-world-focus-drawer--command");
@@ -1317,7 +1316,8 @@ describe("pixel world host", () => {
     expect(document.querySelectorAll('[data-viewer-overlay="receipt"]')).toHaveLength(1);
     expect(document.querySelector(".pixel-world-render-diagnostics")).toBeNull();
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Restore Layout");
-    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Action blocked");
+    expect(document.querySelector(".pixel-world-focus-hud")).not.toHaveTextContent("Action blocked");
+    expect(document.querySelector(".pixel-world-focus-receipt")).toHaveTextContent("Action blocked");
     expect(document.querySelector(".pixel-world-focus-drawer--command")?.open).toBe(true);
 
     screen.getByRole("button", { name: "Restore Layout" }).click();
@@ -1345,22 +1345,19 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-drawer--diagnostics")).toBeNull();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
-  it("renders exactly one Action Receipt surface while Cinematic View is active", async () => {
-    useTestRustRenderState();
-    await renderPixelWorldHost(
-      sampleSnapshot(),
-      "?test_api=1&connect=0&locale=en",
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
+  it.each([["blocked", "world_delta", true], ["rejected", "none", true], ["accepted", "accepted_intent", true], ["waiting_for_intent", "none", false]])("renders exactly one Action Receipt surface in Cinematic View for %s", async (state, confidence, present) => {
+    runtimeMock.deriveRenderState = vi.fn((input) => {
+      const renderState = buildTestRustRenderState(input);
+      renderState.commercial_surface.action_receipt = { ...renderState.commercial_surface.action_receipt, state, confidence, present };
+      return renderState;
     });
+    await renderPixelWorldHost(sampleSnapshot(), "?test_api=1&connect=0&locale=en");
+    await waitFor(() => { expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument(); });
     screen.getByRole("button", { name: "Cinematic View" }).click();
-    await waitFor(() => {
-      expect(document.querySelector(".pixel-world-host")).toHaveAttribute("data-world-focus", "true");
-    });
-
+    await waitFor(() => { expect(document.querySelector(".pixel-world-host")).toHaveAttribute("data-world-focus", "true"); });
     expect(document.querySelectorAll('[data-viewer-overlay="receipt"]')).toHaveLength(1);
+    expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toBeNull();
+    expect(document.querySelector(".pixel-world-focus-receipt .pixel-world-action-receipt")).toHaveAttribute("data-receipt-state", state);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("provides a test-only selected blocker visual fixture for comparable focus screenshots", async () => {
@@ -1393,7 +1390,7 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("Agent 0");
     expect(document.querySelector(".pixel-world-focus-rail")).not.toHaveTextContent("agent-0");
     expect(document.querySelector(".pixel-world-focus-hud__cell--blocker")).toHaveAttribute("data-hud-priority", "critical");
-    expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toHaveAttribute("data-hud-priority", "receipt");
+    expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toBeNull();
     expect(document.querySelector(".pixel-world-focus-receipt")).toHaveTextContent("Action blocked");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("agents=2");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("routes=2");

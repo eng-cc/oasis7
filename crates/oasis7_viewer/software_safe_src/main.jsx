@@ -10,6 +10,8 @@ import { RecoveryOptionComparisonPanel } from "./recovery_option_comparison_pane
 import { FragmentRefillPreviewGameplayPanel, GovernanceVoteQuoteGameplayPanel, MarketQuoteDecisionGameplayPanel, PowerSaleQuoteGameplayPanel, PowerSurvivalQuoteGameplayPanel, ProductValidationQuoteGameplayPanel, RefineQuoteGameplayPanel, ScheduleRecipeQuoteGameplayPanel, TransferMaterialQuoteGameplayPanel, WarDeclarationQuoteGameplayPanel } from "./gameplay_quote_panels.jsx"; import { installMarketQuoteDecisionVisualFixture, installPowerSaleQuoteVisualFixture, installPowerSurvivalQuoteVisualFixture, installProductValidationQuoteVisualFixture, installRefineQuotePreflightVisualFixture, installScheduleRecipeQuoteVisualFixture, installTransferMaterialQuoteVisualFixture, installWaitResolutionQuoteVisualFixture, installWarDeclarationQuoteVisualFixture } from "./quote_visual_fixture_installers.js";
 import { installBranchCommitmentVisualFixture } from "./branch_commitment_visual_fixture.js";
 import { installAgentIntentV2VisualFixture } from "./agent_intent_visual_fixture.js";
+import { installAgentContextVisualFixture, readAgentContextFixtureGameplay, readAgentContextFixtureMetadata } from "./agent_context_visual_fixture.js";
+import { installMajorWorldEventCrisisVisualFixture } from "./major_world_event_visual_fixture.js";
 import { ReprioritizeActionForm } from "./reprioritize_action_form.jsx";
 import { createViewerAgentClaimDisplayModel } from "./viewer_agent_claim_display_model.js";
 import { AgentClaimChoiceCard } from "./agent_claim_choice_card.jsx";
@@ -23,6 +25,8 @@ import {
 import { recoveryOptionVisualFixture } from "./viewer_recovery_option_fixture.js";
 import { AgentActivitySurface } from "./agent_activity_surface.jsx";
 import { AgentIntentSurface } from "./agent_intent_surface.jsx";
+import { AgentContextLite } from "./agent_context_lite.jsx";
+import { buildAgentContextDisplayModel } from "./viewer_agent_context_display_model.js";
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
 const [viewerStateRevision, setViewerStateRevision] = createSignal(0);
 function observeViewerStateRevision() {
@@ -46,11 +50,9 @@ function buildViewerEntryUrls(locale) {
 function Badge(props) {
   return <span class={props.class ?? "badge"}>{props.children}</span>;
 }
-
 function EmptyState(props) {
   return <div class={`empty ${props.class ?? ""}`} style={props.style}>{props.children}</div>;
 }
-
 function targetSyncProgressLines(progress, locale) {
   if (!progress) {
     return [];
@@ -105,7 +107,6 @@ function targetSyncProgressLines(progress, locale) {
   }
   return lines;
 }
-
 function EntityListPendingState(props) {
   const locale = () => props.locale ?? uiLocale();
   const label = () => props.label ?? tr(locale(), "目标", "targets");
@@ -138,11 +139,9 @@ function EntityListPendingState(props) {
     </div>
   );
 }
-
 function JsonBlock(props) {
   return <pre class="json">{JSON.stringify(props.value, null, 2)}</pre>;
 }
-
 function DiagnosticDetails(props) {
   const locale = () => props.locale ?? uiLocale();
   const [isOpen, setIsOpen] = createSignal(false);
@@ -161,7 +160,6 @@ function DiagnosticDetails(props) {
     </details>
   );
 }
-
 function claimField(value, ...names) {
   if (!value || typeof value !== "object") return null;
   for (const name of names) {
@@ -171,14 +169,12 @@ function claimField(value, ...names) {
   }
   return null;
 }
-
 function compactValue(value) {
   if (value === null || value === undefined || value === "") return "-";
   if (typeof value === "number") return Number.isFinite(value) ? String(value) : "-";
   if (typeof value === "boolean") return value ? "true" : "false";
   return String(value);
 }
-
 function claimMoney(value) {
   const amount = claimField(value, "amount", "tokens", "balance", "value");
   const symbol = claimField(value, "symbol", "denom", "currency");
@@ -187,7 +183,6 @@ function claimMoney(value) {
   }
   return compactValue(value);
 }
-
 function claimQuoteRows(quote) {
   if (!quote || typeof quote !== "object") return [];
   return [
@@ -213,9 +208,7 @@ function claimQuoteRows(quote) {
     ["Reclaim terms", claimField(quote, "reclaim_terms", "reclaimTerms", "reclaim")],
   ].filter(([, value]) => value !== null && value !== undefined && value !== "");
 }
-
 const PRIMARY_CLAIM_QUOTE_LABELS = new Set(["Total upfront", "Eligible balance", "Owned / cap"]);
-
 function claimQuoteMetricClass(label) {
   return [
     "metric",
@@ -223,11 +216,9 @@ function claimQuoteMetricClass(label) {
     label === "Total upfront" ? "metric--claim-total" : null,
   ].filter(Boolean).join(" ");
 }
-
 function claimTarget(claim) {
   return claimField(claim, "target_agent_id", "targetAgentId", "agent_id", "agentId", "target") || "agent";
 }
-
 function claimStatusText(claim) {
   const status = claimField(claim, "status", "claim_status", "claimStatus") || "active";
   const paidThrough = claimField(claim, "upkeep_paid_through_epoch", "upkeepPaidThroughEpoch");
@@ -246,7 +237,6 @@ function claimStatusText(claim) {
     reclaim !== null ? `forced reclaim in ${reclaim}` : null,
   ].filter(Boolean).join(" · ");
 }
-
 function claimOwnedDetail(claim) {
   const restrictedBond = claimField(claim, "claim_bond_locked_restricted_amount", "lockedBondRestricted");
   const liquidBond = claimField(claim, "claim_bond_locked_liquid_amount", "lockedBondLiquid");
@@ -263,7 +253,6 @@ function claimOwnedDetail(claim) {
       : null,
   ].filter(Boolean).join(" · ");
 }
-
 function releaseClaimActionState(actions) {
   let published = false;
   let disabledReason = null;
@@ -279,7 +268,6 @@ function releaseClaimActionState(actions) {
   });
   return { available, published, disabledReason };
 }
-
 function expansionBranchCards(gameplay, locale) {
   const goal = String(gameplay?.goalKind || "").toLowerCase();
   if (goal !== "choosefirstexpansiontradeoff" && goal !== "choosemidlooppath") {
@@ -305,7 +293,6 @@ function expansionBranchCards(gameplay, locale) {
     };
   });
 }
-
 function ClaimAgentChoiceCard(props) {
   const locale = () => props.locale ?? uiLocale();
   const claim = () => props.claim || {};
@@ -1554,13 +1541,11 @@ function StarterOcRequiredGate() {
   let scheduledAutoConfirmAttempt = -1;
   let autoConfirmTimer = null;
   let autoCompleteTimer = null;
-
   createEffect(() => {
     if (gateOpen()) {
       window.setTimeout(() => primaryButtonRef?.focus(), 0);
     }
   });
-
   createEffect(() => {
     if (creditConfirmed()) {
       if (autoCompleteTimer == null) {
@@ -3220,7 +3205,6 @@ function WorldSummaryPanel(props = {}) {
     </div>
   );
 }
-
 function InteractionPanel() {
   const revision = () => observeViewerStateRevision();
   const locale = () => uiLocale();
@@ -3235,6 +3219,13 @@ function InteractionPanel() {
     }
     return id;
   };
+  const selectedTarget = () => {
+    revision();
+    return core.state.selectedKind && core.state.selectedId
+      ? { kind: core.state.selectedKind, id: core.state.selectedId }
+      : null;
+  };
+  const selectedTargetLabel = () => core.state.selectedObject?.name || core.state.selectedObject?.label || core.state.selectedId;
   const gameplaySummary = () => {
     revision();
     return core.buildGameplaySummary(locale());
@@ -3266,6 +3257,29 @@ function InteractionPanel() {
     }
     return status;
   };
+  const selectedAgentFreshness = () => {
+    revision();
+    const selected = core.state.snapshot?.model?.agents?.[agentId()];
+    const intent = selectedAgentIntent();
+    const intentMatches = normalizedId(intent?.agent_id) === normalizedId(agentId())
+      && (!intent?.target_agent_id || normalizedId(intent.target_agent_id) === normalizedId(agentId()));
+    return selected?.freshness || (intentMatches ? intent?.freshness : null) || null;
+  };
+  const selectedAgentContextFixtureMetadata = () => readAgentContextFixtureMetadata(core.state.snapshot, viewerVisualFixtureNameFromQuery(), viewerTestApiEnabled());
+  const selectedAgentContextFixtureGameplay = () => readAgentContextFixtureGameplay(core.state.snapshot, agentId(), selectedAgentContextFixtureMetadata());
+  const selectedAgentContextModel = () => buildAgentContextDisplayModel({
+    snapshot: core.state.snapshot,
+    selected: { kind: core.state.selectedKind, id: core.state.selectedId },
+    agent: agentId() ? core.state.snapshot?.model?.agents?.[agentId()] : null,
+    agentVisible: Boolean(agentId()),
+    gameplay: selectedAgentContextFixtureGameplay(),
+    intent: selectedAgentIntent(),
+    freshness: selectedAgentFreshness(),
+    connectionStatus: selectedAgentIntentConnectionStatus(),
+    feedback: selectedAgentFeedback(),
+    receipt: null,
+    locale: locale(),
+  });
   const selectedAgentStatus = () => describeAgentSessionStatus(agentId(), locale());
   const canControlSelectedAgent = () => selectedAgentStatus().isCurrentSessionAgent;
   const selectedAgentControlReason = () => selectedAgentStatus().detail;
@@ -3279,6 +3293,14 @@ function InteractionPanel() {
   };
   const promptFeedbackDisplay = () => core.describeSemanticFeedback(promptFeedback(), locale());
   const chatFeedbackDisplay = () => core.describeSemanticFeedback(chatFeedback(), locale());
+  const selectedAgentFeedback = () => {
+    const selectedId = normalizedId(agentId());
+    if (!selectedId) {
+      return null;
+    }
+    return [chatFeedback(), promptFeedback()]
+      .find((feedback) => normalizedId(feedback?.agentId || feedback?.agent_id) === selectedId) || null;
+  };
   const promptVersionState = () => core.describePromptVersionState(promptFeedback(), locale());
   const chatHistory = () => {
     revision();
@@ -3336,48 +3358,60 @@ function InteractionPanel() {
     canControlSelectedAgent()
       ? playerSessionReadyCopy()
       : selectedAgentControlReason();
-
   return (
     <Show
       when={agentId()}
       fallback={
-        <Show
-          when={selectedAgentId()}
-          fallback={
+        selectedTarget()?.kind === "location"
+          ? (
+            <div class="stack command-surface command-surface--non-agent" data-command-target-kind="location">
+              <div class="badge-row command-surface__target-row" data-command-continuity="target">
+                <Badge class="badge badge--accent">{tr(locale(), "当前核查目标", "Current Inspect Target")}</Badge>
+                <Badge>{selectedTargetLabel()}</Badge>
+                <Badge>{`location=${selectedTarget()?.id}`}</Badge>
+              </div>
+              <AgentContextLite model={selectedAgentContextModel()} locale={locale()} fixtureMetadata={selectedAgentContextFixtureMetadata()} />
+            </div>
+          )
+          : (
             <Show
-              when={gameplaySummary()?.blockerKind === "runtime_snapshot_empty_entities"}
-              fallback={<EmptyState>{tr(locale(), "先选中一个行动体，才能解锁提示词和聊天控制。", "Select an agent to unlock prompt/chat controls.")}</EmptyState>}
+              when={selectedAgentId()}
+              fallback={
+                <Show
+                  when={gameplaySummary()?.blockerKind === "runtime_snapshot_empty_entities"}
+                  fallback={<EmptyState>{tr(locale(), "先选中一个行动体，才能解锁提示词和聊天控制。", "Select an agent to unlock prompt/chat controls.")}</EmptyState>}
+                >
+                  <EmptyEntityRecoveryCard locale={locale()} gameplay={gameplaySummary} />
+                </Show>
+              }
             >
-              <EmptyEntityRecoveryCard locale={locale()} gameplay={gameplaySummary} />
+              <EmptyState>
+                {tr(
+                  locale(),
+                  "当前账号还没有可操作的 Agent。请先认领你的第一个 Agent，或等待绑定同步完成。",
+                  "This account has no controllable Agent yet. Claim your first Agent, or wait for binding sync to complete.",
+                )}
+              </EmptyState>
             </Show>
-          }
-        >
-          <EmptyState>
-            {tr(
-              locale(),
-              "当前账号还没有可操作的 Agent。请先认领你的第一个 Agent，或等待绑定同步完成。",
-              "This account has no controllable Agent yet. Claim your first Agent, or wait for binding sync to complete.",
-            )}
-          </EmptyState>
-        </Show>
+          )
       }
     >
       <div class="stack command-surface" data-command-agent={agentId()} data-command-chat-history={String(chatHistory().length)}>
-      <div class="badge-row command-surface__target-row">
-        <Badge class="badge badge--accent">{tr(locale(), "当前交互目标", "Current Target")}</Badge>
+      <div class="badge-row command-surface__target-row" data-command-continuity="target">
+        <Badge class="badge badge--accent command-surface__target-secondary">{tr(locale(), "当前交互目标", "Current Target")}</Badge>
         <Badge>{selectedAgentLabel()}</Badge>
-        <Badge>{`agent=${agentId()}`}</Badge>
-        <Badge class={selectedAgentStatus().badgeClass}>{selectedAgentStatus().badge}</Badge>
-        <Badge class={chatControlsEnabled() ? "badge badge--good" : "badge badge--warn"}>
+        <Badge class="command-surface__target-secondary">{`agent=${agentId()}`}</Badge>
+        <Badge class={`${selectedAgentStatus().badgeClass} command-surface__target-secondary`}>{selectedAgentStatus().badge}</Badge>
+        <Badge class={`${chatControlsEnabled() ? "badge badge--good" : "badge badge--warn"} command-surface__target-secondary`}>
           {chatControlsEnabled() ? tr(locale(), "聊天可用", "Chat Ready") : tr(locale(), "聊天受限", "Chat Limited")}
         </Badge>
+        <div class="command-surface__continuity-summary" data-command-continuity="summary" role="group" aria-label={tr(locale(), "指挥连续性摘要", "Command continuity summary")}>
+          <span><span class="metric__label">{tr(locale(), "状态", "Status")}</span> {selectedAgentContextModel().state?.label || tr(locale(), "不可用", "Unavailable")}</span>
+          <span><span class="metric__label">{tr(locale(), "新鲜度", "Freshness")}</span> {selectedAgentContextModel().freshness?.label || tr(locale(), "不可用", "Unavailable")}</span>
+          <span class="command-surface__continuity-objective"><span class="metric__label">{tr(locale(), "目标", "Objective")}</span> {selectedAgentContextModel().objective?.state === "published" && selectedAgentContextModel().objective.value ? selectedAgentContextModel().objective.value : tr(locale(), "目标不可用", "Objective unavailable")}</span>
+        </div>
       </div>
-      <AgentActivitySurface activity={selectedAgentActivity()} locale={locale()} />
-      <AgentIntentSurface
-        intent={selectedAgentIntent()}
-        locale={locale()}
-        connectionStatus={selectedAgentIntentConnectionStatus()}
-      />
+      <AgentContextLite model={selectedAgentContextModel()} locale={locale()} fixtureMetadata={selectedAgentContextFixtureMetadata()} />
       <Show
         when={interactionEnabled() && canControlSelectedAgent()}
         fallback={
@@ -3650,7 +3684,6 @@ function InteractionPanel() {
     </Show>
   );
 }
-
 function DetailsPanel() {
   observeViewerStateRevision();
   const locale = () => uiLocale();
@@ -3700,7 +3733,6 @@ function DetailsPanel() {
   });
   const hasSnapshotDiagnostics = () =>
     !!core.state.snapshot || !!core.state.metrics || !!core.state.hostedAccess;
-
   return (
     <div class="stack">
       <div class="badge-row">
@@ -3780,7 +3812,6 @@ function DetailsPanel() {
     </div>
   );
 }
-
 function AppShell() {
   observeViewerStateRevision();
   const locale = () => uiLocale();
@@ -3847,7 +3878,7 @@ function AppShell() {
         aria-hidden={starterOcGateOpen() ? "true" : undefined}
         inert={starterOcGateOpen() ? true : undefined}
       >
-        <div class="panel__header panel__header--stack">
+        <div class="panel__header panel__header--stack command-route-chrome">
           <div class="panel__eyebrow">{tr(locale(), "指挥与核查", "Command and Inspect")}</div>
           <div class="panel__title">{tr(locale(), "交互与明细", "Interact and Inspect")}</div>
           <div class="panel__meta-copy">
@@ -3865,7 +3896,6 @@ function AppShell() {
     </div>
   );
 }
-
 export { AppShell };
 
 function viewerVisualFixtureNameFromQuery() {
@@ -4287,7 +4317,9 @@ function installViewerVisualFixture() {
       core.state.selectedObject = null;
     },
   };
+  installAgentContextVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   installAgentIntentV2VisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
+  installMajorWorldEventCrisisVisualFixture(fixtures, { core, viewerFixtureBaseSnapshot });
   installRefineQuotePreflightVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot }); installScheduleRecipeQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot }); installTransferMaterialQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   installProductValidationQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   installPowerSaleQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });

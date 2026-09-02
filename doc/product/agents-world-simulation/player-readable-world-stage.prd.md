@@ -31,6 +31,104 @@
 - 玩家能够辨认当前相关对象及其选中或聚焦状态；没有相关 Agent、地点或路线时，surface 必须诚实表达为空或不可用，不能通过默认选中制造虚假目标。
 - 世界背景可以为降低噪声而简化，但相关对象、其关系或父级上下文、选中或聚焦状态与可用性仍须可辨认；视觉强调不会产生新的交互资格。
 
+### 2.1 P0 冻结与 P1-A Agent Context Lite 边界
+
+本节把 World-native Player 的下一阶段收敛为产品层语义边界。它定义玩家应能理解的
+上下文，不声明任何 Viewer、runtime、renderer 或发行能力已经实现。
+
+#### P0 Shell Lite：冻结产品方向
+
+P0 Shell Lite 已足以作为世界优先的稳定阅读框架：世界舞台保持首读，目标、下一步、
+玩家可施加的影响与因果反馈具有稳定顺序，技术和诊断信息保持次级。自本节生效后，
+不再以永久 Player 左/中/右栏、底部动作栏或大范围 HUD 重排作为 P1 的前置工作。
+
+“冻结”只表示保持产品方向和语义锚点，不是实现完成或公开发行结论。仍可针对玩家信任、
+因果唯一性、来源时效、权限披露和窄屏可读性做不改变该方向的 focused 修正；这些修正
+不能借机引入新的 Player IA 或直接世界动作。
+
+#### P1 有序 rollout 与阶段依赖
+
+P1 只按以下顺序推进；后一个阶段不能用未完成的前一个阶段语义替代验收：
+
+1. **P1-A Agent Context Lite**：先固定“当前选中的一个 Agent”的身份、状态、来源/时效、
+   Objective、Next Move、blocker、Player Leverage、Activity、Intent、单一因果回执及权限
+   边界。它依赖既有的 Agent 身份/绑定与可读投影；不扩展到其他实体，也不引入新的世界
+   动作或控制权。
+2. **P1-B World semantic presentation**：在 P1-A 的选中对象、来源/时效和 primary read
+   语义通过后，再扩展已具备权威身份、关系/路线或位置来源的世界语义呈现。它依赖明确的
+   关系种类、状态、来源和时效；不得用邻近、同屏、文本或视觉强调补齐关系。它不重定义
+   P1-A 的 Agent 控制、因果或权限边界，也不承诺所有实体都有相同语义。
+3. **P1-C Major World Event**：最后才处理重大世界事件的玩家注意力语义，且依赖事件的
+   身份、种类/严重度、权威来源、因果锚点、时效、生命周期与重放/重组边界已经明确。
+   事件可以提示玩家重新观察或决策，但永远不能冒充 P1-A 的 Action Receipt 或新增玩家
+   因果；本阶段不以事件呈现替代事件 authority 或建立第二条因果链。
+
+P1-B、P1-C 的进入条件是对应专业 authority 能提供上述语义和端到端证据；产品分册不以
+里程碑名称、局部表面或技术信号声称任一阶段已实现或可发行。当前实现收据以 Viewer 专业
+PRD/design 为准：P1-B 已交付权威 snapshot 派生的 stage cues；P1-C 已交付 crisis-only additive
+projection 与 ambient feed，但没有空间 anchor，因此没有 stage marker/highlight。生产入口只
+接受显式 runtime/operator audience policy；默认 `Unknown` fail closed，只有策略明确给出
+`Public` 或 `Restricted` 时才披露 Major Event。
+
+#### P1-A：Agent-only Context Lite
+
+首个 P1 切片只处理一个当前选中的 Agent。玩家从世界或目标上下文选中 Agent 后，应能
+在不离开世界决策语境的情况下读到该 Agent 的最小可用上下文。选中或可见只建立解释
+上下文，不等于账号绑定、认领或当前可控制；控制/授权语义沿用[`Agent 对话与 Prompt 控制`](agent-conversation-and-prompt-control.prd.md)
+和[`Agent 权限、资产与责任连续性`](agent-authority-ownership-and-accountability.prd.md)，
+不由本分册重新定义。Facility、Territory、Organization、Depot、Module 和 Location 不得
+继承 Agent 的语义，等待各自的权威合同。
+
+Agent Context Lite 只允许组合以下已经发布且适用于该 Agent 的语义：
+
+- 可读身份，以及公开且有来源的所在/父级上下文与状态；
+- 仅当投影明确绑定并适用于该选中 Agent 时，才显示 Objective、推荐的 Next Move、blocker、
+  Player Leverage 或执行状态；玩家层的 global summary/primary intent 仍是玩家上下文，
+  不得重命名成该 Agent 的私有目标或已接受 Intent；
+- Agent Activity 与权威 Intent 的独立状态。Intent 必须有明确的 Agent/目标匹配和权威接受或
+  阻断语义；玩家的 `local_pending` 草稿仍是未提交草稿，不是 Agent 当前 Intent；
+- 只引用现有 Player/Cinematic 因果锚点中的最近一条明确 Action Receipt。非因果反馈（例如
+  环境活动、状态提示或通信反馈）可以作为单独的反馈语义存在，但不能填充回执、效果或
+  成功字段；没有该唯一锚点时保持无回执语义；
+- 只有在能力来源、权限、时效和恢复路径都明确时，才显示可施加的 capability 或下一
+  个受支持入口，否则显示不可用/待同步或省略。
+
+该上下文不得从 World Feed、距离、同屏、文本、默认选择、客户端时间或 raw object 推导
+计划、关系、ownership、资源、成功、可控性或新的能力。选中、可见或共享只改变解释上下文，
+不授予控制权；玩家意图仍需通过受支持的间接 guidance 路径提交，并由同一权威系统产生
+接受、阻断或结果。global summary 可以帮助玩家理解世界，但不能被当作选中 Agent 的私有
+状态、目标、Intent 或回执。
+
+#### P1-A 验收映射
+
+| ID | 产品承诺 | 对应组合验收 |
+| --- | --- | --- |
+| P1A-CTX-01 | 从世界或目标上下文选中 Agent 后，玩家能在 0–1 次情境转换内辨认身份、相关状态、当前目的和下一决策；不存在相关权威字段时明确为空/不可用。 | RW-1、RW-6 |
+| P1A-CTX-02 | 当前确认、最近已知、冲突、未知或失效的来源/时效语义不被抹平；影响行动的不确定信息提供刷新、等待、改道或停止路径。 | RW-8、RW-9 |
+| P1A-CTX-03 | Activity、明确匹配选中 Agent 的 Intent、现有 Player/Cinematic 单一因果锚点中的 Action Receipt 与非因果反馈保持独立；没有该绑定回执时不表达玩家世界成功。 | RW-3、RW-4 |
+| P1A-CTX-04 | capability 只来自明确绑定且适用于选中 Agent 的权威投影和权限；global summary/primary intent 保持全局玩家语义；选中、可见、邻近、关系文本或 raw object 不会创造控制权或行动资格。控制边界遵循[`Agent 对话与 Prompt 控制`](agent-conversation-and-prompt-control.prd.md)。 | RW-2、RW-6 |
+| P1A-CTX-05 | 上下文保持世界舞台的 primary read，诊断次级；玩家目的、阻塞、回执和恢复路径在窄屏、CJK 和辅助技术语境下仍可理解。 | RW-1、RW-4、RW-5 |
+
+这些验收项是后续专业实现与 QA 的产品输入，不把单一截图、mock、fallback 或局部
+表面通过当作完整产品结论。具体 surface、控件、来源字段和验证方式由对应专业 authority
+继续定义。
+
+#### P1-A 明确非目标
+
+- 不重做 P0 Shell、稳定阅读顺序或 Player 导航框架。
+- 不一次建立所有实体类型的通用 Inspector，也不迁移 Market、War、Governance、Depot
+  或完整 Programs/Protocols 能力集合。
+- 不增加 global inventory、capability hotbar、直接移动/攻击/采集等世界动作。
+- 不新增 runtime/protocol/DTO 字段，不改变仿真、经济、治理、ownership、权限或数值规则。
+- 不把 global summary、global primary intent 或 `local_pending` 草稿改名为选中 Agent 的私有状态、
+  已接受 Intent 或因果回执；不以选中/可见替代[`Agent 对话与 Prompt 控制`](agent-conversation-and-prompt-control.prd.md)
+  所要求的绑定、认领和当前控制资格。
+- 不从 Agent ID、邻近、同屏或环境事件推断关系、Trust、资源、可控性、计划、ETA、
+  rationale、memory 或成功。
+- 不把 Major World Event 的 stage marker、highlight 或 toast 纳入本切片；它需要独立的
+  事件来源、时效、生命周期与因果合同。
+- 不把技术诊断、原始 prompt/provider/auth、WASM/ABI/hash/runtime 信息提升到默认玩家语义。
+
 ## 3. 空间关系与事实来源
 
 - 玩家需要读懂当前相关 Agent、地点、路线、目标或 blocker 之间的关系，但产品不承诺所有对象都有精确坐标。

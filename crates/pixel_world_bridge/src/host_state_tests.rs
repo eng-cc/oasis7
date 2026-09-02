@@ -128,8 +128,7 @@ fn rust_host_state_derives_fragment_agent_link_and_commercial_surface() {
 
     assert_eq!(state["agents"][0]["position_source"], "location_derived");
     assert!(state["agents"][0]["pos"].is_object());
-    assert_eq!(state["links"].as_array().unwrap().len(), 1);
-    assert_eq!(state["links"][0]["kind"], "agent_assignment");
+    assert_eq!(state["links"].as_array().unwrap().len(), 0);
     assert_eq!(state["visual_hotspots"].as_array().unwrap().len(), 4);
 
     let surface = &state["commercial_surface"];
@@ -141,12 +140,72 @@ fn rust_host_state_derives_fragment_agent_link_and_commercial_surface() {
     assert_eq!(surface["next_action"]["label"], "Build smelter mk1");
     assert_eq!(surface["player_leverage"]["state"], "blocked");
     assert_eq!(surface["action_receipt"]["present"], true);
-    assert_eq!(surface["action_receipt"]["confidence"], "world_delta");
+    assert_eq!(surface["action_receipt"]["confidence"], "accepted_intent");
     assert_eq!(surface["action_receipt"]["title"], "Action blocked");
     assert_eq!(surface["world_read"]["agents"], 1);
-    assert_eq!(surface["world_read"]["routes"], 1);
+    assert_eq!(surface["world_read"]["routes"], 0);
     assert_eq!(surface["world_read"]["fragments"], 2);
     assert_eq!(surface["world_read"]["hotspots"], 4);
+}
+
+#[test]
+fn world_scoped_crisis_events_never_become_spatial_hotspots() {
+    let mut input = sample_input();
+    input["recentEvents"] = json!([
+        {
+            "eventId": "crisis-1",
+            "title": "Crisis spawned",
+            "kind": {
+                "type": "RuntimeEvent",
+                "data": { "kind": "runtime.gameplay.crisis_spawned" }
+            }
+        },
+        { "eventId": "evt-ordinary", "title": "Queue update", "kind": "build_queue" }
+    ]);
+
+    let state = build_render_state(&input);
+    let recent = state["recent_event_hotspots"].as_array().unwrap();
+    assert_eq!(recent.len(), 1);
+    assert_eq!(recent[0]["id"], "evt-ordinary");
+    assert!(
+        state["visual_hotspots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|hotspot| hotspot["id"] != "recent:crisis-1")
+    );
+}
+
+#[test]
+fn rust_host_state_projects_assignment_only_from_explicit_current_relation_authority() {
+    let mut input = sample_input();
+    input["lists"]["agents"][0]["relation"] = json!({
+        "kind": "agent_assignment",
+        "status": "active",
+        "source_class": "runtime_projection",
+        "freshness": "current"
+    });
+    let state = build_render_state(&input);
+    assert_eq!(state["links"].as_array().unwrap().len(), 1);
+    assert_eq!(state["links"][0]["status"], "active");
+    assert_eq!(state["links"][0]["source_class"], "runtime_projection");
+    assert_eq!(state["links"][0]["freshness"], "current");
+
+    for (field, value) in [
+        ("status", json!("stale")),
+        ("source_class", json!("local_pending")),
+        ("freshness", json!("stale")),
+    ] {
+        let mut rejected = input.clone();
+        rejected["lists"]["agents"][0]["relation"][field] = value;
+        assert!(
+            build_render_state(&rejected)["links"]
+                .as_array()
+                .unwrap()
+                .is_empty(),
+            "relation {field} must fail closed"
+        );
+    }
 }
 
 #[test]
@@ -442,6 +501,101 @@ fn rust_host_state_projects_only_targetable_action_receipts_for_pixel_world_disp
 }
 
 #[test]
+fn rust_host_state_projects_only_authoritative_active_intent_targets() {
+    let mut active_input = sample_input();
+    active_input["snapshot"]["player_gameplay"]["primary_intent"] = json!({
+        "schema_version": 2,
+        "intent_id": "intent:agent-0:accepted",
+        "agent_id": "agent-0",
+        "status": "accepted",
+        "world_id": "world-test",
+        "reorg_epoch": 0,
+        "logical_time": 12,
+        "event_seq": 4,
+        "updated_at": 12,
+        "source_class": "runtime_projection",
+        "freshness": "current",
+        "control_state": "controllable"
+    });
+    active_input["lists"]["agents"][0]["pos"] = json!({
+        "x_cm": 4_900_000.0,
+        "y_cm": 2_400_000.0,
+        "z_cm": 0.0
+    });
+    let active = build_render_state(&active_input);
+    assert_eq!(
+        active["active_intent_target"],
+        json!({ "agent_id": "agent-0", "status": "accepted" }),
+        "an explicitly current, controllable runtime Intent may create one display-only target"
+    );
+
+    let mut production_shape = sample_input();
+    production_shape["snapshot"]["player_gameplay"]["primary_intent"] =
+        active_input["snapshot"]["player_gameplay"]["primary_intent"].clone();
+    let projected_production_shape = build_render_state(&production_shape);
+    assert!(
+        projected_production_shape
+            .get("active_intent_target")
+            .is_none()
+            || projected_production_shape["active_intent_target"].is_null(),
+        "a canonical Intent without a snapshot-authored Agent position must fail closed"
+    );
+
+    for (field, value) in [
+        ("schema_version", json!(1)),
+        ("intent_id", Value::Null),
+        ("world_id", Value::Null),
+        ("reorg_epoch", Value::Null),
+        ("logical_time", Value::Null),
+        ("event_seq", Value::Null),
+        ("updated_at", Value::Null),
+        ("freshness", json!("stale")),
+        ("control_state", json!("unavailable")),
+        ("status", json!("completed")),
+        ("agent_id", json!("agent-not-rendered")),
+    ] {
+        let mut rejected_input = active_input.clone();
+        rejected_input["snapshot"]["player_gameplay"]["primary_intent"][field] = value;
+        let rejected = build_render_state(&rejected_input);
+        assert!(
+            rejected.get("active_intent_target").is_none()
+                || rejected["active_intent_target"].is_null(),
+            "{field} must fail closed rather than infer an active Intent cue"
+        );
+    }
+
+    let mut missing_position = active_input;
+    missing_position["lists"]["agents"][0]["pos"] = Value::Null;
+    let missing_position_state = build_render_state(&missing_position);
+    assert!(
+        missing_position_state["active_intent_target"].is_null(),
+        "an active Intent with only a location-derived position must fail closed"
+    );
+
+    let mut missing_world_bounds = production_shape.clone();
+    missing_world_bounds["snapshot"]["config"]["space"] = Value::Null;
+    let missing_world_bounds_state = build_render_state(&missing_world_bounds);
+    assert!(
+        missing_world_bounds_state["active_intent_target"].is_null(),
+        "an active Intent without authoritative world bounds must not use a fallback position"
+    );
+
+    for invalid_space in [
+        json!({}),
+        json!({ "width_cm": 0, "depth_cm": 5_000_000, "height_cm": 1_000_000 }),
+        json!({ "width_cm": 10_000_000, "depth_cm": 0, "height_cm": 1_000_000 }),
+        json!({ "width_cm": 10_000_000, "depth_cm": 5_000_000, "height_cm": 0 }),
+    ] {
+        let mut invalid_bounds = production_shape.clone();
+        invalid_bounds["snapshot"]["config"]["space"] = invalid_space;
+        assert!(
+            build_render_state(&invalid_bounds)["active_intent_target"].is_null(),
+            "an active Intent must reject incomplete or non-positive world bounds"
+        );
+    }
+}
+
+#[test]
 fn rust_host_state_projects_only_enabled_rendered_recommended_targets_for_display() {
     let enabled = build_render_state(&sample_input());
     assert_eq!(
@@ -728,10 +882,118 @@ fn rust_host_state_keeps_acknowledgement_receipts_pending_until_committed_world_
         build_render_state(&stale_pending_delta)["commercial_surface"]["action_receipt"].clone();
     assert_eq!(stale_receipt["confidence"], "accepted_intent");
 
-    let committed =
+    let non_committed =
         build_render_state(&sample_input())["commercial_surface"]["action_receipt"].clone();
-    assert_eq!(committed["state"], "blocked");
+    assert_eq!(non_committed["state"], "blocked");
+    assert_eq!(non_committed["confidence"], "accepted_intent");
+    assert_eq!(non_committed["delta_logical_time"], Value::Null);
+    assert_eq!(non_committed["delta_event_seq"], Value::Null);
+}
+
+#[test]
+fn rust_host_state_only_marks_explicit_committed_receipts_as_world_delta() {
+    for stage in ["completed_no_progress", "blocked"] {
+        let mut input = sample_input();
+        input["gameplay"]["executionState"] = json!(stage);
+        input["gameplay"]["recentFeedback"] = json!({
+            "action": "build_factory_smelter_mk1",
+            "stage": stage,
+            "effect": "the request did not complete",
+            "reason": "the request made no committed progress",
+            "hint": "repair the blocker before retrying",
+            "deltaLogicalTime": 7,
+            "deltaEventSeq": 11
+        });
+
+        let receipt = build_render_state(&input)["commercial_surface"]["action_receipt"].clone();
+        assert_eq!(receipt["present"], true);
+        assert_eq!(receipt["state"], stage);
+        assert_eq!(
+            receipt["confidence"], "accepted_intent",
+            "{stage} is not committed"
+        );
+        assert_eq!(receipt["delta_logical_time"], Value::Null);
+        assert_eq!(receipt["delta_event_seq"], Value::Null);
+    }
+
+    let mut committed_input = sample_input();
+    committed_input["gameplay"]["executionState"] = json!("completed");
+    committed_input["gameplay"]["lastWorldChange"] =
+        json!("Smelter committed a world-level production change.");
+    committed_input["gameplay"]["recentFeedback"] = json!({
+        "action": "build_factory_smelter_mk1",
+        "stage": "completed_advanced",
+        "effect": "the smelter advanced the committed world",
+        "reason": Value::Null,
+        "hint": "continue the production plan",
+        "deltaLogicalTime": 7,
+        "deltaEventSeq": 11
+    });
+
+    let committed =
+        build_render_state(&committed_input)["commercial_surface"]["action_receipt"].clone();
+    assert_eq!(committed["state"], "completed");
     assert_eq!(committed["confidence"], "world_delta");
-    assert_eq!(committed["delta_logical_time"], 1);
-    assert_eq!(committed["delta_event_seq"], 2);
+    assert_eq!(committed["delta_logical_time"], 7);
+    assert_eq!(committed["delta_event_seq"], 11);
+
+    for stage in ["completed_advanced", "committed"] {
+        let mut direct_committed_input = committed_input.clone();
+        direct_committed_input["gameplay"]["executionState"] = json!(stage);
+        direct_committed_input["gameplay"]["recentFeedback"]["stage"] = json!(stage);
+        let direct_committed =
+            build_render_state(&direct_committed_input)["commercial_surface"]["action_receipt"]
+                .clone();
+        assert_eq!(direct_committed["state"], stage);
+        assert_eq!(direct_committed["confidence"], "world_delta");
+        assert_eq!(direct_committed["title"], "World changed");
+        assert_eq!(direct_committed["delta_logical_time"], 7);
+        assert_eq!(direct_committed["delta_event_seq"], 11);
+    }
+}
+
+#[test]
+fn rust_host_state_keeps_rejected_unsupported_gameplay_receipt_non_successful() {
+    let mut input = sample_input();
+    input["gameplay"] = json!({
+        "acceptedIntentId": "gameplay_action:unsupported",
+        "acceptedIntentSummary": "Queue unsupported gameplay action for agent-0",
+        "acceptedIntentScope": "gameplay_action",
+        "acceptedIntentTarget": "agent-0",
+        "executionState": "rejected",
+        "executionStateLabel": "Rejected",
+        "executionCauseKind": "unsupported_action",
+        "executionCauseDetail": "raw cause must not be exposed to the player",
+        "lastWorldChange": "raw stale world-change text must not be exposed",
+        "recentFeedback": {
+            "action": "raw attacker action payload",
+            "stage": "rejected",
+            "effect": "raw attacker effect payload",
+            "reason": "unknown_gameplay_action: raw attacker reason payload",
+            "hint": "raw attacker recovery payload",
+            "deltaLogicalTime": 7,
+            "deltaEventSeq": 11
+        }
+    });
+
+    let receipt = build_render_state(&input)["commercial_surface"]["action_receipt"].clone();
+
+    assert_eq!(receipt["present"], true);
+    assert_eq!(receipt["state"], "rejected");
+    assert_eq!(receipt["confidence"], "none");
+    assert_eq!(receipt["title"], "Action rejected");
+    assert_eq!(receipt["delta_logical_time"], Value::Null);
+    assert_eq!(receipt["delta_event_seq"], Value::Null);
+    assert_eq!(
+        receipt["summary"],
+        "The requested gameplay action was rejected before execution."
+    );
+    assert_eq!(
+        receipt["detail"],
+        "Choose a published gameplay action before retrying."
+    );
+    assert_ne!(receipt["confidence"], "accepted_intent");
+    assert_ne!(receipt["title"], "Action accepted");
+    assert!(!receipt["summary"].as_str().unwrap().contains("raw"));
+    assert!(!receipt["detail"].as_str().unwrap().contains("raw"));
 }
