@@ -63,16 +63,53 @@ if [[ -z "$action" ]]; then
 fi
 shift || true
 
-if [[ "$action" == "up" || "$action" == "down" ]]; then
-  wh_lifecycle_lock_acquire "$HARNESS_ROOT" || exit 1
-  trap 'wh_lifecycle_lock_release' EXIT
-fi
+case "$action" in
+  up|down|status|url|logs|smoke)
+    wh_lifecycle_lock_acquire "$HARNESS_ROOT" || exit 1
+    trap 'wh_lifecycle_lock_release' EXIT
+    ;;
+esac
+
+persist_launcher_record_from_meta() {
+  local metadata_status launcher_pid launcher_pgid launcher_identity
+  local recorded_pid recorded_pgid recorded_identity
+  [[ -f "$META_FILE" ]] || return 1
+  metadata_status=$(wh_env_file_get "$META_FILE" STACK_READY 2>/dev/null || true)
+  [[ "$metadata_status" == "0" || "$metadata_status" == "1" ]] || return 1
+  launcher_pid=$(wh_env_file_get "$META_FILE" LAUNCHER_PID 2>/dev/null || true)
+  launcher_pgid=$(wh_env_file_get "$META_FILE" LAUNCHER_PGID 2>/dev/null || true)
+  launcher_identity=$(wh_env_file_get "$META_FILE" LAUNCHER_IDENTITY 2>/dev/null || true)
+  [[ -n "$launcher_pid" && -n "$launcher_pgid" && -n "$launcher_identity" ]] || return 1
+  wh_process_record_alive "$launcher_pid" "$launcher_pgid" "$launcher_identity" || return 1
+
+  recorded_pid=$(wh_state_get "$STATE_FILE" launcher_pid 2>/dev/null || true)
+  recorded_pgid=$(wh_state_get "$STATE_FILE" launcher_pgid 2>/dev/null || true)
+  recorded_identity=$(wh_state_get "$STATE_FILE" launcher_identity 2>/dev/null || true)
+  if [[ -n "$recorded_pid" || -n "$recorded_pgid" || -n "$recorded_identity" ]]; then
+    [[ "$recorded_pid" == "$launcher_pid" && "$recorded_pgid" == "$launcher_pgid" && \
+      "$recorded_identity" == "$launcher_identity" ]] || return 2
+    return 0
+  fi
+  wh_state_write "$STATE_FILE" "$(python3 - "$launcher_pid" "$launcher_pgid" "$launcher_identity" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "launcher_pid": int(sys.argv[1]),
+    "launcher_pgid": int(sys.argv[2]),
+    "launcher_identity": sys.argv[3],
+}))
+PY
+)"
+}
 
 kill_recorded_processes() {
   local harness_pid harness_pgid launcher_pid launcher_pgid reservation_token
   local harness_identity launcher_identity cleanup_status=0
+  local current_status metadata_status metadata_launcher_pid metadata_launcher_pgid metadata_launcher_identity
   local -a legacy_identityless_records=()
   CLEANUP_PENDING_REASON=""
+  current_status=$(wh_state_get "$STATE_FILE" status 2>/dev/null || true)
   harness_pid=$(wh_state_get "$STATE_FILE" harness_pid 2>/dev/null || true)
   harness_pgid=$(wh_state_get "$STATE_FILE" harness_pgid 2>/dev/null || true)
   harness_identity=$(wh_state_get "$STATE_FILE" harness_identity 2>/dev/null || true)
@@ -80,6 +117,45 @@ kill_recorded_processes() {
   launcher_pgid=$(wh_state_get "$STATE_FILE" launcher_pgid 2>/dev/null || true)
   launcher_identity=$(wh_state_get "$STATE_FILE" launcher_identity 2>/dev/null || true)
   reservation_token=$(wh_state_get "$STATE_FILE" port_reservation_token 2>/dev/null || true)
+
+  # An outer harness can be SIGKILLed after run-launcher-stack has published a
+  # complete STACK_READY=0 record but before this process copies the inner
+  # launcher identity into state.json. Adopt only a non-stopped generation and
+  # only when the state has no conflicting launcher record; termination below
+  # performs the final identity/PGID authentication before signaling.
+  if [[ "$current_status" =~ ^(booting|failed|ready)$ && -f "$META_FILE" ]]; then
+    metadata_status=$(wh_env_file_get "$META_FILE" STACK_READY 2>/dev/null || true)
+    metadata_launcher_pid=$(wh_env_file_get "$META_FILE" LAUNCHER_PID 2>/dev/null || true)
+    metadata_launcher_pgid=$(wh_env_file_get "$META_FILE" LAUNCHER_PGID 2>/dev/null || true)
+    metadata_launcher_identity=$(wh_env_file_get "$META_FILE" LAUNCHER_IDENTITY 2>/dev/null || true)
+    if [[ "$metadata_status" == "0" || "$metadata_status" == "1" ]] && \
+      [[ "$metadata_launcher_pid" =~ ^[1-9][0-9]*$ ]] && \
+      [[ "$metadata_launcher_pgid" =~ ^[1-9][0-9]*$ ]] && \
+      [[ -n "$metadata_launcher_identity" ]]; then
+      if [[ -n "$launcher_pid" || -n "$launcher_pgid" || -n "$launcher_identity" ]]; then
+        if [[ "$launcher_pid" != "$metadata_launcher_pid" || "$launcher_pgid" != "$metadata_launcher_pgid" || \
+          "$launcher_identity" != "$metadata_launcher_identity" ]]; then
+          echo "error: launcher metadata identity conflicts with persisted state" >&2
+          cleanup_status=1
+        fi
+      else
+        launcher_pid="$metadata_launcher_pid"
+        launcher_pgid="$metadata_launcher_pgid"
+        launcher_identity="$metadata_launcher_identity"
+        wh_state_write "$STATE_FILE" "$(python3 - "$launcher_pid" "$launcher_pgid" "$launcher_identity" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "launcher_pid": int(sys.argv[1]),
+    "launcher_pgid": int(sys.argv[2]),
+    "launcher_identity": sys.argv[3],
+}))
+PY
+)"
+      fi
+    fi
+  fi
 
   # Legacy records may contain only a PID/PGID.  A live process or process
   # group without a captured identity is intentionally not actionable: the
@@ -559,6 +635,7 @@ PY
         exit 1
       fi
       if [[ -f "$META_FILE" ]]; then
+        persist_launcher_record_from_meta || true
         stack_ready=$(wh_env_file_get "$META_FILE" STACK_READY 2>/dev/null || true)
         if [[ "$stack_ready" == "1" ]]; then
           break
