@@ -516,6 +516,60 @@ fn runtime_gameplay_actions_allow_assembler_build_from_authoritative_builder_led
 }
 
 #[test]
+fn runtime_gameplay_actions_allow_build_when_profile_kind_differs_from_factory_id() {
+    let _guard = lock_test_llm_env();
+    let (mut server, agent_id, public_key, private_key) =
+        setup_runtime_industrial_gameplay_session(42);
+    build_first_smelter_via_gameplay_action(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        42,
+    );
+
+    let mut profile = server
+        .world
+        .state()
+        .factory_construction_power_profiles
+        .get(crate::viewer::FACTORY_ASSEMBLER_MK1)
+        .cloned()
+        .expect("assembler construction power profile");
+    profile.factory_kind = "assembler_mk1_profile_kind".to_string();
+    profile.authority_revision = profile.authority_revision.saturating_add(1);
+    server
+        .world
+        .set_factory_construction_power_profile(profile)
+        .expect("update assembler construction power profile kind");
+
+    let agent_ledger = crate::runtime::MaterialLedgerId::agent(agent_id.as_str());
+    for (kind, amount) in [
+        ("structural_frame", 8),
+        ("iron_ingot", 10),
+        ("copper_wire", 8),
+    ] {
+        server
+            .world
+            .set_ledger_material_balance(agent_ledger.clone(), kind, amount)
+            .expect("seed assembler build material");
+    }
+
+    let gameplay = expect_player_gameplay(
+        &mut server,
+        "player gameplay with valid exact-id profile and distinct profile kind",
+    );
+    let assembler_action = gameplay
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == "build_factory_assembler_mk1")
+        .expect("assembler build action");
+    assert_eq!(
+        assembler_action.disabled_reason, None,
+        "runtime-valid profile kind metadata must not disable exact factory-id build"
+    );
+}
+
+#[test]
 fn runtime_gameplay_actions_do_not_enable_assembler_build_from_world_ledger() {
     let _guard = lock_test_llm_env();
     let (mut server, agent_id, public_key, private_key) =

@@ -22,7 +22,10 @@ fn product_validation_recovery_replays_existing_delivery_before_next_output_inte
             abi_contract: ModuleAbiContract::default(),
             exports: vec!["call".to_string()],
             subscriptions: vec![ModuleSubscription {
-                event_kinds: vec!["domain.economy.product_validated".to_string()],
+                event_kinds: vec![
+                    "domain.economy.product_validation_recorded".to_string(),
+                    "domain.economy.product_validated".to_string(),
+                ],
                 action_kinds: Vec::new(),
                 stage: Some(ModuleSubscriptionStage::PostEvent),
                 filters: None,
@@ -87,6 +90,7 @@ fn product_validation_recovery_replays_existing_delivery_before_next_output_inte
     };
     let mut journal = world.journal().clone();
     let mut next_id = journal.events.last().map_or(1, |event| event.id + 1);
+    let first_recorded_id = next_id;
     journal.append(WorldEvent {
         id: next_id,
         time: world.state().time,
@@ -96,6 +100,7 @@ fn product_validation_recovery_replays_existing_delivery_before_next_output_inte
         }),
     });
     next_id += 1;
+    let first_validated_id = next_id;
     journal.append(WorldEvent {
         id: next_id,
         time: world.state().time,
@@ -147,14 +152,39 @@ fn product_validation_recovery_replays_existing_delivery_before_next_output_inte
         .step_with_modules(&mut sandbox)
         .expect("recover and route first output before second intent");
 
+    let observed_ids: Vec<_> = sandbox
+        .requests
+        .iter()
+        .filter(|request| request.module_id == "m4.product.validation.observer")
+        .map(|request| {
+            let input: ModuleCallInput =
+                serde_cbor::from_slice(&request.input).expect("decode observer input");
+            serde_cbor::from_slice::<WorldEvent>(
+                input.event.as_deref().expect("observer event payload"),
+            )
+            .expect("decode observer event")
+            .id
+        })
+        .collect();
+    assert!(
+        observed_ids.starts_with(&[first_recorded_id, first_validated_id]),
+        "recovery must replay the original journal event IDs in order before routing newly produced events: {observed_ids:?}"
+    );
     assert_eq!(
-        sandbox
-            .requests
+        observed_ids
             .iter()
-            .filter(|request| request.module_id == "m4.product.validation.observer")
+            .filter(|event_id| **event_id == first_recorded_id)
             .count(),
         1,
-        "an existing journaled delivery must be replayed to subscribers"
+        "the journaled receipt must be replayed exactly once"
+    );
+    assert_eq!(
+        observed_ids
+            .iter()
+            .filter(|event_id| **event_id == first_validated_id)
+            .count(),
+        1,
+        "the journaled validation delivery must be replayed exactly once"
     );
     assert_eq!(
         sandbox
@@ -180,6 +210,104 @@ fn product_validation_recovery_replays_existing_delivery_before_next_output_inte
         product_validated_before,
         "replaying a journaled delivery must not append a duplicate"
     );
+}
+
+#[test]
+fn product_validation_attempt_is_emitted_to_subscribers_before_decision() {
+    let mut world = logistics_drone_module_recipe_world("factory.recipe.attempt-delivery");
+    let observer_wasm = b"product-validation-attempt-observer";
+    let observer_hash = crate::runtime::util::sha256_hex(observer_wasm);
+    world
+        .register_module_artifact(observer_hash.clone(), observer_wasm)
+        .expect("register observer artifact");
+    activate_module_manifest_for_test(
+        &mut world,
+        ModuleManifest {
+            module_id: "m4.product.validation.attempt-observer".to_string(),
+            name: "ProductValidationAttemptObserver".to_string(),
+            version: "0.1.0".to_string(),
+            kind: ModuleKind::Pure,
+            role: ModuleRole::Domain,
+            wasm_hash: observer_hash.clone(),
+            interface_version: "wasm-1".to_string(),
+            abi_contract: ModuleAbiContract::default(),
+            exports: vec!["call".to_string()],
+            subscriptions: vec![ModuleSubscription {
+                event_kinds: vec!["domain.economy.product_validation_attempt_started".to_string()],
+                action_kinds: Vec::new(),
+                stage: Some(ModuleSubscriptionStage::PostEvent),
+                filters: None,
+            }],
+            required_caps: Vec::new(),
+            artifact_identity: Some(signed_test_artifact_identity(observer_hash.as_str())),
+            limits: ModuleLimits {
+                max_mem_bytes: 1024 * 1024,
+                max_gas: 1_000_000,
+                max_call_rate: 1024,
+                max_output_bytes: 1024 * 1024,
+                max_effects: 0,
+                max_emits: 0,
+            },
+        },
+    );
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: "factory.recipe.attempt-delivery".to_string(),
+        recipe_id: "recipe.assembler.logistics_drone".to_string(),
+        plan: RecipeExecutionPlan::accepted(
+            1,
+            vec![
+                MaterialStack::new("motor_mk1", 2),
+                MaterialStack::new("control_chip", 1),
+                MaterialStack::new("chassis_plate", 1),
+            ],
+            vec![MaterialStack::new("logistics_drone", 1)],
+            Vec::new(),
+            10,
+            1,
+        ),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
+    });
+    world.step().expect("start recipe");
+    let mut sandbox = CaptureContextSandbox::with_outputs(vec![ModuleOutput {
+        new_state: None,
+        effects: Vec::new(),
+        emits: vec![ModuleEmit {
+            kind: "economy.product_validation".to_string(),
+            payload: serde_json::to_value(ProductValidationDecision::accepted(
+                "logistics_drone",
+                32,
+                true,
+                vec!["fleet_grade".to_string()],
+            ))
+            .expect("serialize product decision"),
+        }],
+        tick_lifecycle: None,
+        output_bytes: 256,
+    }]);
+    for _ in 0..4 {
+        world
+            .step_with_modules(&mut sandbox)
+            .expect("advance recipe validation");
+        if world.pending_recipe_jobs_len() == 0 {
+            break;
+        }
+    }
+    let observer_request = sandbox
+        .requests
+        .iter()
+        .find(|request| request.module_id == "m4.product.validation.attempt-observer")
+        .expect("attempt event must be delivered to subscriber");
+    let input: ModuleCallInput =
+        serde_cbor::from_slice(&observer_request.input).expect("decode observer input");
+    let event: WorldEvent =
+        serde_cbor::from_slice(input.event.as_deref().expect("observer event payload"))
+            .expect("decode observer event");
+    assert!(matches!(
+        event.body,
+        WorldEventBody::Domain(DomainEvent::ProductValidationAttemptStarted { .. })
+    ));
 }
 
 #[test]

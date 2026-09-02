@@ -150,7 +150,6 @@ pub(super) fn factory_build_disabled_reason(
         ));
     };
     if power_profile.factory_id != spec.factory_id
-        || power_profile.factory_kind != spec.factory_id
         || !power_profile.active
         || power_profile.authority_revision == 0
         || power_profile.electricity_amount < 0

@@ -117,15 +117,21 @@ impl World {
         receipt: &ProductValidationReceiptV1,
         emitted: &mut Vec<WorldEvent>,
     ) -> Result<(), WorldError> {
-        if let Some(event) = self.product_validation_delivery_event(receipt) {
-            // A journaled delivery may have been persisted by the next
-            // output's pre-call checkpoint before the event loop routed it to
-            // subscribers. Requeue that exact event without appending another
-            // journal entry or invoking the validator again.
-            if !emitted.iter().any(|queued| queued.id == event.id) {
-                emitted.push(event);
+        let existing_events = self.product_validation_recovery_events(receipt);
+        if !existing_events.is_empty() {
+            let has_delivery = existing_events
+                .iter()
+                .any(|event| Self::product_validation_delivery_matches(event, receipt));
+            for event in &existing_events {
+                // A journaled event may have been persisted by the next
+                // output's pre-call checkpoint before the event loop routed it
+                // to subscribers. Requeue that exact event without appending
+                // another journal entry or invoking the validator again.
+                Self::queue_product_validation_event(emitted, event);
             }
-            return Ok(());
+            if has_delivery {
+                return Ok(());
+            }
         }
         self.append_event(
             WorldEventBody::Domain(DomainEvent::ProductValidated {
@@ -140,15 +146,15 @@ impl World {
             None,
         )?;
         if let Some(event) = self.journal.events.last() {
-            emitted.push(event.clone());
+            Self::queue_product_validation_event(emitted, event);
         }
         Ok(())
     }
 
-    fn product_validation_delivery_event(
+    fn product_validation_recovery_events(
         &self,
         receipt: &ProductValidationReceiptV1,
-    ) -> Option<WorldEvent> {
+    ) -> Vec<WorldEvent> {
         let Some(receipt_position) = self.journal.events.iter().rposition(|event| {
             matches!(
                 &event.body,
@@ -157,9 +163,11 @@ impl World {
                 }) if recorded == receipt
             )
         }) else {
-            return None;
+            return Vec::new();
         };
-        self.journal
+        let mut events = vec![self.journal.events[receipt_position].clone()];
+        if let Some(event) = self
+            .journal
             .events
             .iter()
             .skip(receipt_position.saturating_add(1))
@@ -173,7 +181,16 @@ impl World {
                 )
             })
             .find(|event| Self::product_validation_delivery_matches(event, receipt))
-            .cloned()
+        {
+            events.push(event.clone());
+        }
+        events
+    }
+
+    fn queue_product_validation_event(emitted: &mut Vec<WorldEvent>, event: &WorldEvent) {
+        if !emitted.iter().any(|queued| queued.id == event.id) {
+            emitted.push(event.clone());
+        }
     }
 
     fn product_validation_delivery_matches(
@@ -250,6 +267,7 @@ impl World {
         requester_agent_id: &str,
         module_id: &str,
         stack: &MaterialStack,
+        emitted: &mut Vec<WorldEvent>,
     ) -> Result<(), WorldError> {
         self.append_event(
             WorldEventBody::Domain(DomainEvent::ProductValidationAttemptStarted {
@@ -263,6 +281,9 @@ impl World {
             }),
             None,
         )?;
+        if let Some(event) = self.journal.events.last() {
+            Self::queue_product_validation_event(emitted, event);
+        }
         Ok(())
     }
 

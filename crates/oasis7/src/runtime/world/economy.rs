@@ -386,7 +386,6 @@ impl World {
     pub(super) fn process_due_economy_jobs(&mut self) -> Result<Vec<WorldEvent>, WorldError> {
         let now = self.state.time;
         let mut emitted = Vec::new();
-
         let mut due_builds: Vec<_> = self
             .state
             .pending_factory_builds
@@ -587,6 +586,7 @@ impl World {
                         job.requester_agent_id.as_str(),
                         module_id.as_str(),
                         stack,
+                        &mut emitted,
                     )?;
                     product_validation_checkpoint(self)?;
                     match self.evaluate_product_with_module(

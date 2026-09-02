@@ -291,8 +291,10 @@ fn is_fresh_factory_production_failure_disposition(
     // product-validation loss and transition the aggregate status to Idle
     // without clearing the still-current consumed/lost inputs. Do not hide
     // that recovery card merely because the aggregate status changed.
-    production.active_jobs == 0
-        && production.current_job_id.is_none()
+    // `active_jobs` is an aggregate across recipe slots and may include an
+    // unrelated sibling that is still running. The failed job's own identity
+    // and absence from pending jobs remain the freshness checks below.
+    production.current_job_id.is_none()
         && production.current_recipe_id.is_none()
         && production.current_blocker_kind.as_deref() == Some(disposition.blocker_kind.as_str())
         && production.current_blocker_detail.as_deref() == Some(disposition.blocker_detail.as_str())

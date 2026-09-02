@@ -372,6 +372,32 @@ fn runtime_gameplay_snapshot_keeps_failure_after_sibling_completion_returns_fact
 }
 
 #[test]
+fn runtime_gameplay_snapshot_keeps_failure_while_sibling_slot_remains_active() {
+    let mut state = failure_disposition_world_state();
+    let target = state
+        .factories
+        .get_mut("factory.target")
+        .expect("target factory");
+
+    // The failed slot is settled, but a second recipe slot is still running.
+    // The aggregate active-job count must not erase the durable disposition.
+    target.production.status = FactoryProductionStatus::Blocked;
+    target.production.active_jobs = 1;
+    target.production.current_job_id = None;
+    target.production.current_recipe_id = None;
+
+    let gameplay = gameplay_snapshot_for_failure_state(&state);
+    assert_eq!(
+        gameplay
+            .factory_production_failure_disposition
+            .as_ref()
+            .map(|receipt| receipt.action_id.as_str()),
+        Some("19"),
+        "an active sibling slot must not hide the failed slot's recovery card"
+    );
+}
+
+#[test]
 fn runtime_gameplay_snapshot_keeps_target_failure_when_only_unrelated_factory_is_running() {
     let mut state = failure_disposition_world_state();
     let decoy = state
