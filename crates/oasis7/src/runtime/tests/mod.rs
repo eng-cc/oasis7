@@ -99,6 +99,7 @@ mod governance_vote_quote;
 mod logistics_transfer_quote;
 mod main_token;
 mod main_token_economy_audit;
+mod major_world_event_projection;
 mod market_quote_decision_preview;
 mod module_action_loop;
 mod module_command_provenance;

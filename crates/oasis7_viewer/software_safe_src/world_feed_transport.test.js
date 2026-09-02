@@ -76,6 +76,30 @@ function readyFeed(overrides = {}) {
   };
 }
 
+function currentCrisisEvent() {
+  return {
+    event_seq: 7,
+    kind: "major_world_event",
+    summary: "Current crisis",
+    detail: "ambient only",
+    receipt_ref: null,
+    major_event: {
+      schema_version: "major_world_event/v1",
+      identity: { world_id: "test-world", reorg_epoch: 0, event_seq: 7 },
+      category: "crisis",
+      subtype: "power_shortage",
+      severity: 4,
+      lifecycle: "active",
+      source: { authority: "runtime_journal", event_kind: "crisis_spawned" },
+      freshness: "current",
+      visibility: "public",
+      logical_time: 42,
+      causal_reference: null,
+      world_anchor: { scope: "world", entity_id: "crisis-1" },
+    },
+  };
+}
+
 beforeEach(() => {
   vi.resetModules();
   vi.useFakeTimers();
@@ -93,6 +117,89 @@ afterEach(() => {
 });
 
 describe("World Feed transport", () => {
+  it("clears retained current crisis attention when the socket disconnects", async () => {
+    const { sockets } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+    core.initializeSoftwareSafeCore();
+    core.state.auth.available = false;
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+    sockets[0].receive(readyFeed({ events: [currentCrisisEvent()] }));
+    expect(core.state.worldFeed.status).toBe("ready");
+
+    sockets[0].close();
+
+    expect(core.state.worldFeed).toMatchObject({
+      status: "unavailable",
+      unavailableReason: "source_unavailable",
+      stale: true,
+      events: [],
+    });
+    vi.clearAllTimers();
+  });
+
+  it("keeps world-scoped crisis live events out of spatial recent-event inputs", async () => {
+    const { sockets } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+    core.initializeSoftwareSafeCore();
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+
+    sockets[0].receive({
+      type: "event",
+      event: {
+        id: 8,
+        time: 1,
+        kind: {
+          type: "RuntimeEvent",
+          data: { kind: "runtime.gameplay.crisis_spawned", domain_kind: "crisis_id=crisis-1" },
+        },
+      },
+    });
+    sockets[0].receive({
+      type: "event",
+      event: { id: 9, time: 2, kind: { type: "AgentMoved", data: { agent_id: "agent-1" } } },
+    });
+
+    expect(core.state.recentEvents).toHaveLength(1);
+    expect(core.state.recentEvents[0].id).toBe(9);
+  });
+
+  it("observes crisis identity and time without completing an accepted player control", async () => {
+    const { sockets } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+    core.initializeSoftwareSafeCore();
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+    core.state.lastControlFeedback = {
+      accepted: true,
+      stage: "queued",
+      baselineLogicalTime: 0,
+      baselineEventSeq: 0,
+      deltaLogicalTime: 0,
+      deltaEventSeq: 0,
+    };
+
+    sockets[0].receive({
+      type: "event",
+      event: {
+        id: 8,
+        time: 10,
+        kind: {
+          type: "RuntimeEvent",
+          data: { kind: "runtime.gameplay.crisis_spawned", domain_kind: "crisis_id=crisis-1" },
+        },
+      },
+    });
+
+    expect(core.state).toMatchObject({ logicalTime: 10, eventSeq: 8, recentEvents: [] });
+    expect(core.state.lastControlFeedback).toMatchObject({
+      stage: "queued",
+      deltaLogicalTime: 0,
+      deltaEventSeq: 0,
+    });
+  });
+
   it("requests and consumes only the world_feed/v1 response through the existing socket path", async () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
@@ -217,6 +324,56 @@ describe("World Feed transport", () => {
     vi.clearAllTimers();
   });
 
+  it("ignores late feed and event messages from a superseded socket", async () => {
+    const { sockets, sentMessages } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+    core.initializeSoftwareSafeCore();
+    core.state.auth.available = false;
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+    sockets[0].receive(readyFeed({
+      cursor: "wf1.cursor-old",
+      events: [{ event_seq: 7, kind: "resource_change", summary: "Old page", detail: "old", receipt_ref: null }],
+    }));
+    sockets[0].close();
+    await vi.advanceTimersByTimeAsync(1200);
+    expect(sockets).toHaveLength(2);
+    sockets[1].open();
+    sockets[1].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+    sockets[1].receive(readyFeed({
+      cursor: "wf1.cursor-current",
+      events: [{ event_seq: 8, kind: "resource_change", summary: "Current page", detail: "current", receipt_ref: null }],
+    }));
+    await vi.advanceTimersByTimeAsync(0);
+    sockets[1].receive(readyFeed({
+      cursor: "wf1.cursor-current",
+      events: [{ event_seq: 8, kind: "resource_change", summary: "Current page", detail: "current", receipt_ref: null }],
+    }));
+    sockets[1].receive({ type: "event", event: { id: 9, time: 20, kind: { type: "AgentMoved", data: { agent_id: "agent-current" } } } });
+    sockets[1].receive(readyFeed({
+      cursor: "wf1.cursor-current",
+      events: [{ event_seq: 8, kind: "resource_change", summary: "Current page", detail: "current", receipt_ref: null }],
+    }));
+    const currentRequestCount = sentMessages.filter((message) => message.type === "request_world_feed").length;
+
+    sockets[0].receive(readyFeed({
+      cursor: "wf1.cursor-late",
+      events: [{ event_seq: 10, kind: "resource_change", summary: "Late old page", detail: "late", receipt_ref: null }],
+    }));
+    sockets[0].receive({ type: "event", event: { id: 999, time: 999, kind: { type: "AgentMoved", data: { agent_id: "agent-old" } } } });
+    sockets[0].emit("error", {});
+    sockets[0].emit("close", {});
+
+    expect(core.state.worldFeed).toMatchObject({ status: "ready", cursor: "wf1.cursor-current" });
+    expect(core.state.worldFeed.events.map((event) => event.summary)).toEqual(["Current page"]);
+    expect(core.state.logicalTime).toBe(20);
+    expect(core.state.recentEvents.map((event) => event.id)).toEqual([9]);
+    expect(core.state.connectionStatus).toBe("connected");
+    expect(core.state.lastError).toBeNull();
+    expect(sentMessages.filter((message) => message.type === "request_world_feed").length).toBe(currentRequestCount);
+    vi.clearAllTimers();
+  });
+
   it("continues after reconnect when the first page returns the same cursor as the stale local state", async () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
@@ -300,6 +457,64 @@ describe("World Feed transport", () => {
     expect(core.state.worldFeed.events).toEqual([]);
     expect(sentMessages.filter((message) => message.type === "request_snapshot").length)
       .toBeGreaterThan(snapshotRequestsBeforeGap);
+  });
+
+  it("requests authoritative snapshot recovery when an event identity conflicts", async () => {
+    const { sockets, sentMessages } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+    core.initializeSoftwareSafeCore();
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+    sockets[0].receive(readyFeed());
+    const snapshotRequestsBeforeConflict = sentMessages.filter((message) => message.type === "request_snapshot").length;
+
+    sockets[0].receive(readyFeed({
+      cursor: "wf1.cursor-conflict",
+      events: [{
+        event_seq: 7,
+        kind: "resource_change",
+        summary: "Conflicting payload",
+        detail: "ore +2",
+        receipt_ref: null,
+      }],
+    }));
+
+    expect(core.state.worldFeed).toMatchObject({
+      status: "gap",
+      gapReason: "event_identity_conflict",
+      stale: true,
+      snapshotReloadRequired: true,
+      events: [],
+    });
+    expect(sentMessages.filter((message) => message.type === "request_snapshot").length)
+      .toBeGreaterThan(snapshotRequestsBeforeConflict);
+  });
+
+  it("preserves a runtime identity-conflict gap and requests snapshot recovery", async () => {
+    const { sockets, sentMessages } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+    core.initializeSoftwareSafeCore();
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+    sockets[0].receive(readyFeed());
+    const snapshotRequestsBeforeConflict = sentMessages.filter((message) => message.type === "request_snapshot").length;
+
+    sockets[0].receive(readyFeed({
+      status: "gap",
+      gap_reason: "event_identity_conflict",
+      snapshot_reload_required: true,
+      events: [],
+    }));
+
+    expect(core.state.worldFeed).toMatchObject({
+      status: "gap",
+      gapReason: "event_identity_conflict",
+      stale: true,
+      snapshotReloadRequired: true,
+      events: [],
+    });
+    expect(sentMessages.filter((message) => message.type === "request_snapshot").length)
+      .toBeGreaterThan(snapshotRequestsBeforeConflict);
   });
 
   it("does not request a snapshot loop for source unavailable", async () => {

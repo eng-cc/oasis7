@@ -695,8 +695,10 @@ impl ViewerRuntimeLiveServer {
                     &self.config.world_id,
                     self.reorg_epoch,
                     self.world.journal(),
+                    &self.world.state().crises,
                     cursor.as_deref(),
                     limit,
+                    self.config.major_world_event_visibility,
                 );
                 send_response(writer, &ViewerResponse::WorldFeed { feed })?;
             }

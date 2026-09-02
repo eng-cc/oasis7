@@ -132,7 +132,7 @@ describe("Agent Console V2 authoritative intent", () => {
     }
   }, 60000);
 
-  it("requires a matching world receipt before exposing completion", async () => {
+  it("requires a matching world receipt for completion without duplicating the formal receipt label", async () => {
     const validReceipt = {
       intent_id: "agent-intent-v2:test",
       world_id: "live-runtime-test",
@@ -147,7 +147,8 @@ describe("Agent Console V2 authoritative intent", () => {
       receipt_ref: validReceipt,
     })));
     expect(valid.intentSurface).toHaveAttribute("data-agent-intent-receipt-state", "confirmed");
-    expect(valid.intentSurface).toHaveTextContent("World receipt confirmed");
+    expect(valid.intentSurface).toHaveTextContent("Completed");
+    expect(valid.intentSurface).not.toHaveTextContent("World receipt confirmed");
     dispose?.();
     dispose = null;
 

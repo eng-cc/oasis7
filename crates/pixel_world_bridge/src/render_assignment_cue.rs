@@ -62,7 +62,11 @@ pub(super) fn reconcile_assignment_cues(
 
     let mut active_keys = HashSet::new();
     for link in &render_state.links {
-        if link.kind != "agent_assignment" {
+        if link.kind != "agent_assignment"
+            || link.status.as_deref() != Some("active")
+            || link.source_class.as_deref() != Some("runtime_projection")
+            || link.freshness.as_deref() != Some("current")
+        {
             continue;
         }
         let Some((from_x, from_y)) =

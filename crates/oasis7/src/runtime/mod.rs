@@ -26,6 +26,7 @@ mod m1_builtin_wasm_artifact;
 mod m4_builtin_wasm_artifact;
 mod m5_builtin_wasm_artifact;
 mod main_token;
+mod major_world_event;
 mod manifest;
 mod module_source_compiler;
 mod module_store;
@@ -291,6 +292,16 @@ pub use world::{
 pub use world::{rollback_affected_census_digest, rollback_journal_commitment};
 
 // World event
+#[cfg(test)]
+pub(crate) use major_world_event::project_major_world_events;
+pub use major_world_event::{
+    MAJOR_WORLD_EVENT_PROJECTION_SCHEMA_VERSION, MajorWorldEventAnchor, MajorWorldEventAnchorScope,
+    MajorWorldEventCategory, MajorWorldEventCausalReference, MajorWorldEventFreshness,
+    MajorWorldEventIdentity, MajorWorldEventLifecycle, MajorWorldEventProjection,
+    MajorWorldEventProjectionContext, MajorWorldEventSource, MajorWorldEventSourceAuthority,
+    MajorWorldEventStreamState, MajorWorldEventVisibilityPermission,
+    project_major_world_events_with_canonical_state,
+};
 pub use world_event::{
     CapabilityAuthorizationEvent, ModuleRuntimeChargeEvent, WorldEvent, WorldEventBody,
 };

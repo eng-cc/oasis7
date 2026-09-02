@@ -157,4 +157,4 @@ export function installAgentIntentV2VisualFixture(
     core.requestRender();
   };
 }
-import { AGENT_INTENT_SUMMARIES } from "./agent_intent_surface.jsx";
+import { AGENT_INTENT_SUMMARIES } from "./agent_intent_display_model.js";
