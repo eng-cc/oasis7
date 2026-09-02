@@ -503,6 +503,93 @@ body {
   background: rgba(22, 25, 20, 0.62);
 }
 
+.agent-context-lite {
+  gap: 10px;
+  min-width: 0;
+}
+
+.agent-context-lite__group {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid rgba(152, 177, 150, 0.18);
+  border-radius: 9px;
+  background: rgba(15, 21, 17, 0.34);
+}
+
+.agent-context-lite__section-label {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.agent-context-lite__identity {
+  background: rgba(22, 25, 20, 0.48);
+}
+
+.agent-context-lite__truth {
+  border-color: rgba(141, 199, 170, 0.2);
+}
+
+.agent-context-lite__state-row {
+  gap: 6px;
+}
+
+.agent-context-lite__truth .agent-activity {
+  gap: 5px;
+  padding: 7px 9px;
+}
+
+.agent-context-lite__decision {
+  border-color: rgba(208, 168, 91, 0.28);
+}
+
+.agent-context-lite__decision .agent-context-lite__gameplay {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.agent-context-lite__field {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid rgba(152, 177, 150, 0.16);
+  border-radius: 7px;
+  background: rgba(22, 25, 20, 0.48);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.agent-context-lite__field .metric__label {
+  margin: 0;
+}
+
+.agent-context-lite__value {
+  min-width: 0;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.agent-context-lite__unavailable {
+  margin: 0;
+  padding: 7px 9px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.agent-context-lite__intent {
+  border-color: rgba(208, 168, 91, 0.2);
+}
+
 .agent-activity__status,
 .agent-activity__state,
 .agent-intent__state {
@@ -716,6 +803,10 @@ body {
     overflow-y: auto;
   }
 
+  #viewer-details-panel {
+    max-height: min(80dvh, 640px);
+  }
+
   #viewer-details-panel .command-surface__target-row {
     position: sticky;
     top: 0;
@@ -737,6 +828,25 @@ body {
 }
 
 @media (max-width: 640px) {
+  #viewer-details-panel > .panel__header {
+    gap: 6px;
+    padding: 8px 14px;
+  }
+
+  #viewer-details-panel > .panel__header .panel__meta-copy {
+    line-height: 1.3;
+  }
+
+  #viewer-details-panel .command-surface__target-row {
+    gap: 4px;
+    padding-block: 4px;
+  }
+
+  #viewer-details-panel .command-surface__target-row .badge {
+    padding: 3px 7px;
+    font-size: 11px;
+  }
+
   [data-viewer-overlay="navigation"] {
     right: 10px;
   }
@@ -824,5 +934,114 @@ body {
 
   .world-feed__event {
     padding: 10px;
+  }
+
+  .agent-context-lite {
+    gap: 5px;
+  }
+
+  .agent-context-lite__group {
+    gap: 3px;
+    padding: 4px 7px;
+  }
+
+  .agent-context-lite__identity {
+    grid-template-columns: max-content minmax(0, 1fr);
+    column-gap: 7px;
+    row-gap: 2px;
+    align-items: baseline;
+  }
+
+  .agent-context-lite__identity .agent-context-lite__section-label {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .agent-context-lite__identity > .agent-context-lite__value {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .agent-context-lite__identity > .feedback-detail {
+    grid-column: 2;
+  }
+
+  .agent-context-lite__truth {
+    grid-template-columns: max-content minmax(0, 1fr);
+    column-gap: 7px;
+    row-gap: 2px;
+    align-items: center;
+  }
+
+  .agent-context-lite__truth .agent-context-lite__section-label {
+    grid-column: 1 / -1;
+  }
+
+  .agent-context-lite__truth .agent-context-lite__state-row {
+    grid-column: 1;
+    align-self: start;
+  }
+
+  .agent-context-lite__truth .agent-activity {
+    grid-column: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+  }
+
+  .agent-context-lite__decision .agent-context-lite__gameplay {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 5px;
+  }
+
+  .agent-context-lite__field {
+    gap: 2px;
+    padding: 3px 7px;
+  }
+
+  .agent-context-lite__field .metric__label {
+    font-size: 11px;
+    line-height: 1.2;
+  }
+
+  .agent-context-lite__field .agent-context-lite__value {
+    font-size: 13px;
+    line-height: 1.2;
+  }
+
+  .agent-context-lite__truth .agent-context-lite__state-row .badge {
+    padding: 3px 7px;
+    font-size: 11px;
+  }
+
+  .agent-context-lite__truth .agent-activity {
+    gap: 3px;
+    padding: 4px 7px;
+  }
+
+  .agent-context-lite__truth .agent-activity__heading {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.2;
+  }
+
+  .agent-context-lite__truth .agent-activity__state {
+    font-size: 13px;
+    line-height: 1.2;
+  }
+
+  .agent-context-lite__truth .agent-activity__field {
+    display: flex;
+    gap: 3px;
+  }
+
+  .agent-context-lite__truth .agent-activity__field .metric__label {
+    margin: 0;
+  }
+
+  /* Keep the authoritative Activity status readable in the first mobile
+   * Command viewport; rationale/target details remain secondary to Decision. */
+  .agent-context-lite__truth .agent-activity__field {
+    display: none;
   }
 }

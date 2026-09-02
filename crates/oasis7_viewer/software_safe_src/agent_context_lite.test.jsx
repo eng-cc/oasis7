@@ -95,7 +95,61 @@ describe("AgentContextLite player-facing contract", () => {
     expect(within(surface).getByText("Accepted")).toBeInTheDocument();
   });
 
-  it("renders explicit unavailable and waiting copy for missing Agent-bound gameplay fields", () => {
+  it("keeps a text-readable Activity status summary ahead of secondary details", () => {
+    const model = contextModel({ kind: "agent", id: AGENT_ID }, {
+      snapshot: {
+        model: {
+          agents: {
+            [AGENT_ID]: {
+              ...agent,
+              activity: {
+                status: "blocked",
+                operation: "resource_recovery",
+                target: "Factory Anchor",
+                reason: "upstream material recovery is awaiting confirmation",
+              },
+            },
+          },
+          locations: { [LOCATION_ID]: location },
+        },
+      },
+    });
+
+    render(() => <AgentContextLite model={model} locale="en" />);
+
+    const surface = screen.getByRole("region", { name: /Agent Context/i });
+    const truth = surface.querySelector('[data-agent-context-group="truth"]');
+    expect(truth).toHaveAttribute("data-agent-context-activity", "status-summary");
+    expect(within(truth).getByText("Blocked")).toBeInTheDocument();
+    expect(within(truth).getByText(/Resource Recovery/i)).toBeInTheDocument();
+    expect(within(surface).getByText(gameplay.blockerDetail)).toBeInTheDocument();
+  });
+
+  it("groups Truth, Decision, and Intent in player-priority DOM order without adding controls", () => {
+    render(() => <AgentContextLite model={contextModel()} locale="en" />);
+
+    const surface = screen.getByRole("region", { name: /Agent Context/i });
+    const groups = [...surface.querySelectorAll("[data-agent-context-group]")];
+    expect(groups.map((group) => group.getAttribute("data-agent-context-group"))).toEqual([
+      "identity",
+      "truth",
+      "decision",
+      "intent",
+    ]);
+
+    const decision = groups.find((group) => group.getAttribute("data-agent-context-group") === "decision");
+    expect(decision).not.toBeUndefined();
+    expect(within(decision).getByText("Decision")).toBeInTheDocument();
+    expect([...decision.querySelectorAll("[data-agent-context-field]")].map((field) => field.dataset.agentContextField)).toEqual([
+      "objective",
+      "next-move",
+      "blocker",
+      "player-leverage",
+    ]);
+    expect(surface.querySelectorAll("button, input, textarea, select")).toHaveLength(0);
+  });
+
+  it("renders field labels with one group-level recovery explanation for missing Agent-bound gameplay", () => {
     const model = contextModel({ kind: "agent", id: AGENT_ID }, {
       gameplay: { ...gameplay, agent_id: null, primaryIntent: intent },
     });
@@ -108,7 +162,10 @@ describe("AgentContextLite player-facing contract", () => {
     expect(within(surface).getByText("Next Move")).toBeInTheDocument();
     expect(within(surface).getByText("Blocker")).toBeInTheDocument();
     expect(within(surface).getByText("Player Leverage")).toBeInTheDocument();
-    expect(surface).toHaveTextContent(/Unavailable.*waiting for authoritative Agent projection/i);
+    expect(surface.querySelectorAll('[data-agent-context-unavailable="true"]')).toHaveLength(1);
+    expect(surface).toHaveTextContent(/Some decision details are unavailable while waiting for the authoritative Agent projection/i);
+    expect(within(surface).getAllByText("Unavailable")).toHaveLength(4);
+    expect(surface).not.toHaveTextContent(/Unavailable · waiting for authoritative Agent projection/i);
   });
 
   it("keeps mismatched or null Intent visibly unavailable without leaking a private Agent plan", () => {

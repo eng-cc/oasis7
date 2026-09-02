@@ -10,6 +10,7 @@ import { RecoveryOptionComparisonPanel } from "./recovery_option_comparison_pane
 import { FragmentRefillPreviewGameplayPanel, GovernanceVoteQuoteGameplayPanel, MarketQuoteDecisionGameplayPanel, PowerSaleQuoteGameplayPanel, PowerSurvivalQuoteGameplayPanel, ProductValidationQuoteGameplayPanel, RefineQuoteGameplayPanel, ScheduleRecipeQuoteGameplayPanel, TransferMaterialQuoteGameplayPanel, WarDeclarationQuoteGameplayPanel } from "./gameplay_quote_panels.jsx"; import { installMarketQuoteDecisionVisualFixture, installPowerSaleQuoteVisualFixture, installPowerSurvivalQuoteVisualFixture, installProductValidationQuoteVisualFixture, installRefineQuotePreflightVisualFixture, installScheduleRecipeQuoteVisualFixture, installTransferMaterialQuoteVisualFixture, installWaitResolutionQuoteVisualFixture, installWarDeclarationQuoteVisualFixture } from "./quote_visual_fixture_installers.js";
 import { installBranchCommitmentVisualFixture } from "./branch_commitment_visual_fixture.js";
 import { installAgentIntentV2VisualFixture } from "./agent_intent_visual_fixture.js";
+import { installAgentContextVisualFixture, readAgentContextFixtureGameplay, readAgentContextFixtureMetadata } from "./agent_context_visual_fixture.js";
 import { installMajorWorldEventCrisisVisualFixture } from "./major_world_event_visual_fixture.js";
 import { ReprioritizeActionForm } from "./reprioritize_action_form.jsx";
 import { createViewerAgentClaimDisplayModel } from "./viewer_agent_claim_display_model.js";
@@ -3277,15 +3278,14 @@ function InteractionPanel() {
       && (!intent?.target_agent_id || normalizedId(intent.target_agent_id) === normalizedId(agentId()));
     return selected?.freshness || (intentMatches ? intent?.freshness : null) || null;
   };
+  const selectedAgentContextFixtureMetadata = () => readAgentContextFixtureMetadata(core.state.snapshot, viewerVisualFixtureNameFromQuery(), viewerTestApiEnabled());
+  const selectedAgentContextFixtureGameplay = () => readAgentContextFixtureGameplay(core.state.snapshot, agentId(), selectedAgentContextFixtureMetadata());
   const selectedAgentContextModel = () => buildAgentContextDisplayModel({
     snapshot: core.state.snapshot,
     selected: { kind: core.state.selectedKind, id: core.state.selectedId },
     agent: agentId() ? core.state.snapshot?.model?.agents?.[agentId()] : null,
     agentVisible: Boolean(agentId()),
-    // Player-level gameplay summary remains in the Player HUD. Agent Context
-    // accepts only an explicitly Agent-bound projection, which is not
-    // currently published by this snapshot contract.
-    gameplay: null,
+    gameplay: selectedAgentContextFixtureGameplay(),
     intent: selectedAgentIntent(),
     freshness: selectedAgentFreshness(),
     connectionStatus: selectedAgentIntentConnectionStatus(),
@@ -3407,7 +3407,7 @@ function InteractionPanel() {
           {chatControlsEnabled() ? tr(locale(), "聊天可用", "Chat Ready") : tr(locale(), "聊天受限", "Chat Limited")}
         </Badge>
       </div>
-      <AgentContextLite model={selectedAgentContextModel()} locale={locale()} />
+      <AgentContextLite model={selectedAgentContextModel()} locale={locale()} fixtureMetadata={selectedAgentContextFixtureMetadata()} />
       <Show
         when={interactionEnabled() && canControlSelectedAgent()}
         fallback={
@@ -4317,6 +4317,7 @@ function installViewerVisualFixture() {
       core.state.selectedObject = null;
     },
   };
+  installAgentContextVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   installAgentIntentV2VisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   installMajorWorldEventCrisisVisualFixture(fixtures, { core, viewerFixtureBaseSnapshot });
   installRefineQuotePreflightVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot }); installScheduleRecipeQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot }); installTransferMaterialQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });

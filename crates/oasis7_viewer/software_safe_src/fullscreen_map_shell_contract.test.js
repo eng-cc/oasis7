@@ -160,6 +160,41 @@ describe("fullscreen map shell contract", () => {
     }
   });
 
+  it("keeps Agent Context decision fields compact, readable, and non-disclosed on narrow screens", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    const decisionRule = findRule(
+      terminalShellCss,
+      /\.agent-context-lite__decision\s+\.agent-context-lite__gameplay/,
+    );
+    expect(decisionRule).not.toBeNull();
+    expect(hasDeclaration(decisionRule, "grid-template-columns", /repeat\(2\s*,\s*minmax\(0\s*,\s*1fr\)/i)).toBe(true);
+
+    const fieldRule = findRule(terminalShellCss, /\.agent-context-lite__field/);
+    expect(fieldRule).not.toBeNull();
+    expect(hasDeclaration(fieldRule, "min-width", /0/)).toBe(true);
+    expect(hasDeclaration(fieldRule, "overflow-wrap", /anywhere/)).toBe(true);
+
+    const mobileBlock = terminalShellCss.match(/@media\s*\(max-width:\s*640px\)[\s\S]*$/i)?.[0] || "";
+    expect(mobileBlock).toMatch(
+      /\.agent-context-lite__decision\s+\.agent-context-lite__gameplay\s*\{[^}]*grid-template-columns\s*:\s*minmax\(0\s*,\s*1fr\)/i,
+    );
+    expect(mobileBlock).toMatch(
+      /\.agent-context-lite__truth\s+\.agent-activity__field\s*\{[^}]*display\s*:\s*none/i,
+    );
+    expect(mobileBlock).not.toMatch(
+      /\.agent-context-lite__truth\s+\.agent-activity__state\s*\{[^}]*display\s*:\s*none/i,
+    );
+    expect(mobileBlock).toMatch(
+      /\.agent-context-lite__decision\s+\.agent-context-lite__gameplay\s*\{[^}]*gap\s*:\s*5px/i,
+    );
+    expect(mobileBlock).not.toMatch(
+      /\.agent-context-lite__field(?:[^{}]*)\{[^}]*display\s*:\s*none/i,
+    );
+    expect(mobileBlock).not.toMatch(
+      /\.agent-context-lite__decision(?:[^{}]*)\{[^}]*display\s*:\s*none/i,
+    );
+  });
+
   it("keeps the compact authoritative world readout visible outside Cinematic View", async () => {
     const { viewerHtml, terminalShellCss } = await readViewerHtml();
     expect(viewerHtml).toMatch(/data-viewer-shell="player-fullscreen"/);
@@ -270,6 +305,9 @@ describe("fullscreen map shell contract", () => {
     );
     expect(mobileBlock).toMatch(
       /#viewer-details-panel\s+\.command-surface__target-row\s*\{[^}]*top:\s*0/i,
+    );
+    expect(mobileBlock).toMatch(
+      /#viewer-details-panel\s*\{[^}]*max-height:\s*min\(80dvh,\s*640px\)/i,
     );
   });
 

@@ -111,20 +111,23 @@ function readSignal() {
     }
   }
   if (Listener) {
-    const sSlot = this.observers ? this.observers.length : 0;
-    if (!Listener.sources) {
-      Listener.sources = [this];
-      Listener.sourceSlots = [sSlot];
-    } else {
-      Listener.sources.push(this);
-      Listener.sourceSlots.push(sSlot);
-    }
-    if (!this.observers) {
-      this.observers = [Listener];
-      this.observerSlots = [Listener.sources.length - 1];
-    } else {
-      this.observers.push(Listener);
-      this.observerSlots.push(Listener.sources.length - 1);
+    const observers = this.observers;
+    if (!observers || observers[observers.length - 1] !== Listener) {
+      const sSlot = observers ? observers.length : 0;
+      if (!Listener.sources) {
+        Listener.sources = [this];
+        Listener.sourceSlots = [sSlot];
+      } else {
+        Listener.sources.push(this);
+        Listener.sourceSlots.push(sSlot);
+      }
+      if (!observers) {
+        this.observers = [Listener];
+        this.observerSlots = [Listener.sources.length - 1];
+      } else {
+        observers.push(Listener);
+        this.observerSlots.push(Listener.sources.length - 1);
+      }
     }
   }
   return this.value;
@@ -4330,6 +4333,9 @@ function ownKeys(target) {
   return Reflect.ownKeys(target);
 }
 function setProperty(state2, property, value2, deleting = false) {
+  if (property === "__proto__") {
+    return;
+  }
   if (!deleting && state2[property] === value2) return;
   const prev = state2[property], len = state2.length;
   if (value2 === void 0) {
@@ -4371,7 +4377,7 @@ const proxyTraps = {
     if (!tracked) {
       const desc = Object.getOwnPropertyDescriptor(target, property);
       const isFunction = typeof value2 === "function";
-      if (getListener() && (!isFunction || target.hasOwnProperty(property)) && !(desc && desc.get)) value2 = getNode(nodes, property, value2)();
+      if (getListener() && (!isFunction || Object.prototype.hasOwnProperty.call(target, property)) && !(desc && desc.get)) value2 = getNode(nodes, property, value2)();
       else if (value2 != null && isFunction && value2 === Array.prototype[property]) {
         return (...args) => batch(() => Array.prototype[property].apply(receiver, args));
       }
@@ -16248,18 +16254,18 @@ const AGENT_INTENT_FRESHNESS = ["current", "stale", "conflict", "reconnecting"];
 const AGENT_INTENT_CONTROL_STATES = ["controllable", "control_lost", "read_only", "unauthorized"];
 const AGENT_INTENT_RECEIPT_STATES = ["valid", "missing"];
 const AGENT_INTENT_VARIANTS = ["normal", "duplicate", "replacement"];
-function oneOf(value2, choices, fallback) {
+function oneOf$1(value2, choices, fallback) {
   return choices.includes(value2) ? value2 : fallback;
 }
 function buildAgentIntentFixtureState(search = window.location.search || "") {
   const params = new URLSearchParams(search);
   const value2 = (name, fallback) => String(params.get(name) || fallback).trim().toLowerCase();
-  const status = oneOf(value2("intent_status", "accepted"), [...AGENT_INTENT_STATUSES, "missing"], "accepted");
-  const freshness = oneOf(value2("intent_freshness", "current"), AGENT_INTENT_FRESHNESS, "current");
-  const controlState = oneOf(value2("intent_control", "controllable"), AGENT_INTENT_CONTROL_STATES, "controllable");
-  const activityStatus = oneOf(value2("activity_status", "executing"), AGENT_ACTIVITY_STATUSES, "executing");
-  const receiptState = oneOf(value2("intent_receipt", value2("receipt", status === "completed" ? "valid" : "missing")), AGENT_INTENT_RECEIPT_STATES, status === "completed" ? "valid" : "missing");
-  const variant = oneOf(value2("intent_variant", "normal"), AGENT_INTENT_VARIANTS, "normal");
+  const status = oneOf$1(value2("intent_status", "accepted"), [...AGENT_INTENT_STATUSES, "missing"], "accepted");
+  const freshness = oneOf$1(value2("intent_freshness", "current"), AGENT_INTENT_FRESHNESS, "current");
+  const controlState = oneOf$1(value2("intent_control", "controllable"), AGENT_INTENT_CONTROL_STATES, "controllable");
+  const activityStatus = oneOf$1(value2("activity_status", "executing"), AGENT_ACTIVITY_STATUSES, "executing");
+  const receiptState = oneOf$1(value2("intent_receipt", value2("receipt", status === "completed" ? "valid" : "missing")), AGENT_INTENT_RECEIPT_STATES, status === "completed" ? "valid" : "missing");
+  const variant = oneOf$1(value2("intent_variant", "normal"), AGENT_INTENT_VARIANTS, "normal");
   return { status, freshness, controlState, activityStatus, receiptState, variant, connectionStatus: "connected" };
 }
 function activityFor(status) {
@@ -16351,6 +16357,167 @@ function installAgentIntentV2VisualFixture(fixtures, { core: core2, setFixturePl
     document.body.setAttribute("data-agent-intent-fixture-control", state2.controlState);
     document.body.setAttribute("data-agent-intent-fixture-receipt", state2.receiptState);
     document.body.setAttribute("data-agent-intent-fixture-variant", state2.variant);
+    core2.requestRender();
+  };
+}
+const AGENT_CONTEXT_FIXTURE_MODES = Object.freeze(["rich", "unavailable"]);
+const AGENT_CONTEXT_FIXTURE_STATES = Object.freeze(["current", "stale", "reconnecting"]);
+const AGENT_CONTEXT_FIXTURE_COPIES = Object.freeze(["short", "long"]);
+const FIXTURE_SCHEMA = "agent-context-fixture/v1";
+const MEASUREMENT_HOOK = "groups-fields";
+const COPY = Object.freeze({
+  en: Object.freeze({
+    short: Object.freeze({
+      objective: "Stabilize the first production line before expanding.",
+      nextStepHint: "Replenish upstream materials, then advance again to confirm the line resumes.",
+      blockerDetail: "iron input exhausted at factory-0",
+      leverageVerdict: "Watch: recovery can restore the first capability."
+    }),
+    long: Object.freeze({
+      objective: "Stabilize the first production line before expanding while keeping reserve for the next material interruption.",
+      nextStepHint: "Replenish upstream materials at Factory Anchor, advance one beat, and confirm the line resumes before expanding again.",
+      blockerDetail: "iron input remains exhausted at factory-0; production waits for a confirmed upstream refill before resuming.",
+      leverageVerdict: "Restore the upstream material path first; this preserves the current line, makes the next move observable, and keeps the expansion option open without inventing a new control."
+    })
+  }),
+  zh: Object.freeze({
+    short: Object.freeze({
+      objective: "先稳定第一条生产线，再考虑扩张。",
+      nextStepHint: "补充上游材料，然后推进一个节拍确认生产线恢复。",
+      blockerDetail: "factory-0 的铁输入已耗尽",
+      leverageVerdict: "先恢复上游材料路径，当前能力即可继续运转。"
+    }),
+    long: Object.freeze({
+      objective: "先稳定第一条生产线，再扩张，同时保留储备应对下一次材料中断。",
+      nextStepHint: "在 Factory Anchor 补充材料，推进一个节拍确认生产线恢复，再决定是否扩张。",
+      blockerDetail: "最近检查后，factory-0 的铁输入仍然耗尽；确认上游补充前，生产无法恢复。",
+      leverageVerdict: "先恢复上游材料路径；这样可以保住当前生产线，让下一步可观察，并在不凭空增加控制项的情况下保留扩张选项。"
+    })
+  })
+});
+function oneOf(value2, choices, fallback) {
+  return choices.includes(value2) ? value2 : fallback;
+}
+function queryValue(params, name, fallback) {
+  return String(params.get(name) || fallback).trim().toLowerCase();
+}
+function localeKey(locale) {
+  return String(locale || "").toLowerCase().startsWith("zh") ? "zh" : "en";
+}
+function fixtureIntent(state2) {
+  return {
+    schema_version: 2,
+    intent_id: "agent-context-fixture:intent",
+    status: "accepted",
+    summary: AGENT_INTENT_SUMMARIES.accepted,
+    source_class: "runtime_projection",
+    freshness: state2.state,
+    control_state: "controllable",
+    agent_id: "agent-0",
+    target_agent_id: "agent-0",
+    world_id: "agent-context-fixture-world",
+    reorg_epoch: 0,
+    logical_time: "9007199254740993",
+    updated_at: "9007199254740993",
+    event_seq: "9007199254740994",
+    reason_code: null,
+    reason_summary: null,
+    next_step: null
+  };
+}
+function buildAgentContextFixtureState(search = window.location.search || "") {
+  const params = new URLSearchParams(search);
+  return {
+    mode: oneOf(queryValue(params, "agent_context_mode", "unavailable"), AGENT_CONTEXT_FIXTURE_MODES, "unavailable"),
+    state: oneOf(queryValue(params, "agent_context_state", "current"), AGENT_CONTEXT_FIXTURE_STATES, "current"),
+    copy: oneOf(queryValue(params, "agent_context_copy", "short"), AGENT_CONTEXT_FIXTURE_COPIES, "short")
+  };
+}
+function buildAgentContextRichFixtureSnapshot(viewerFixtureBaseSnapshot2, state2, locale = "en") {
+  const base = viewerFixtureBaseSnapshot2();
+  const selectedState = AGENT_CONTEXT_FIXTURE_STATES.includes(state2?.state) ? state2.state : "current";
+  const selectedCopy = AGENT_CONTEXT_FIXTURE_COPIES.includes(state2?.copy) ? state2.copy : "short";
+  const selectedMode = AGENT_CONTEXT_FIXTURE_MODES.includes(state2?.mode) ? state2.mode : "unavailable";
+  const fixtureState = { state: selectedState };
+  const copy2 = COPY[localeKey(locale)][selectedCopy];
+  const intent = fixtureIntent(fixtureState);
+  const gameplay = {
+    agent_id: "agent-0",
+    objective: copy2.objective,
+    nextStepHint: copy2.nextStepHint,
+    blockerDetail: copy2.blockerDetail,
+    progressionProof: {
+      leverageVerdict: copy2.leverageVerdict,
+      leverageClass: "repair_elasticity"
+    },
+    primary_intent: intent
+  };
+  const playerGameplay = { ...base.player_gameplay };
+  if (selectedMode === "unavailable") {
+    delete playerGameplay.objective;
+  }
+  return {
+    ...base,
+    model: {
+      ...base.model,
+      agents: {
+        ...base.model.agents,
+        "agent-0": {
+          ...base.model.agents["agent-0"],
+          state: "executing",
+          freshness: selectedState,
+          activity: { status: "executing" }
+        }
+      }
+    },
+    player_gameplay: {
+      ...playerGameplay,
+      primary_intent: selectedMode === "rich" ? intent : null
+    },
+    viewer_test_agent_context: {
+      schema_version: 1,
+      schema: FIXTURE_SCHEMA,
+      mode: selectedMode,
+      state: selectedState,
+      copy: selectedCopy,
+      measurement: MEASUREMENT_HOOK,
+      gameplay: selectedMode === "rich" ? gameplay : null
+    }
+  };
+}
+function readAgentContextFixtureMetadata(snapshot, fixtureName, testApiEnabled) {
+  if (!testApiEnabled || fixtureName !== "agent_context") return null;
+  const fixture = snapshot?.viewer_test_agent_context;
+  if (!fixture || !AGENT_CONTEXT_FIXTURE_MODES.includes(fixture.mode)) return null;
+  return {
+    mode: fixture.mode,
+    state: fixture.state,
+    copy: fixture.copy,
+    measurement: fixture.measurement,
+    schema: fixture.schema
+  };
+}
+function readAgentContextFixtureGameplay(snapshot, selectedAgentId2, metadata) {
+  if (metadata?.mode !== "rich") return null;
+  const gameplay = snapshot?.viewer_test_agent_context?.gameplay;
+  return gameplay?.agent_id === selectedAgentId2 ? gameplay : null;
+}
+function installAgentContextVisualFixture(fixtures, { core: core2, setFixturePlayerAuth: setFixturePlayerAuth2, viewerFixtureBaseSnapshot: viewerFixtureBaseSnapshot2 }) {
+  fixtures.agent_context = () => {
+    const state2 = buildAgentContextFixtureState();
+    const params = new URLSearchParams(window.location.search || "");
+    const locale = params.get("locale") || "en";
+    const snapshot = buildAgentContextRichFixtureSnapshot(viewerFixtureBaseSnapshot2, state2, locale);
+    core2.injectSnapshot(snapshot, { returnState: false });
+    core2.state.connectionStatus = "connected";
+    core2.state.lastError = null;
+    core2.applySelection({ kind: "agent", id: "agent-0" });
+    setFixturePlayerAuth2();
+    document.body.setAttribute("data-agent-context-fixture", state2.mode);
+    document.body.setAttribute("data-agent-context-fixture-state", state2.state);
+    document.body.setAttribute("data-agent-context-fixture-copy", state2.copy);
+    document.body.setAttribute("data-agent-context-measurement", MEASUREMENT_HOOK);
+    document.body.setAttribute("data-agent-context-fixture-schema", FIXTURE_SCHEMA);
     core2.requestRender();
   };
 }
@@ -17157,7 +17324,7 @@ function AgentActivitySurface(props) {
     return _el$;
   })();
 }
-var _tmpl$$1 = /* @__PURE__ */ template(`<div class=agent-context-lite__field><div class=metric__label></div><div class=agent-context-lite__value>`), _tmpl$2$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$3$1 = /* @__PURE__ */ template(`<div class=feedback-detail>: `), _tmpl$4$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$5$1 = /* @__PURE__ */ template(`<div class="badge-row agent-context-lite__state-row"><span class=badge>`), _tmpl$6$1 = /* @__PURE__ */ template(`<div class=agent-context-lite__gameplay>`), _tmpl$7$1 = /* @__PURE__ */ template(`<div class=feedback-detail data-agent-context-feedback=status><span class=metric__label>`), _tmpl$8$1 = /* @__PURE__ */ template(`<div class="empty agent-context-lite__unavailable">`), _tmpl$9$1 = /* @__PURE__ */ template(`<section class="stack agent-context-lite"role=region><div class="agent-context-lite__heading panel__title"></div><div class=agent-context-lite__identity><div class=metric__label></div><div class=agent-context-lite__value>`), _tmpl$0$1 = /* @__PURE__ */ template(`<div class="empty agent-context-lite__unavailable"data-agent-context-unavailable=true>`);
+var _tmpl$$1 = /* @__PURE__ */ template(`<div class=agent-context-lite__field><div class=metric__label></div><div class=agent-context-lite__value>`), _tmpl$2$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$3$1 = /* @__PURE__ */ template(`<div class=feedback-detail>: `), _tmpl$4$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$5$1 = /* @__PURE__ */ template(`<div class="agent-context-lite__group agent-context-lite__truth"role=group aria-labelledby=agent-context-lite-truth-label data-agent-context-group=truth data-agent-context-activity=status-summary><div id=agent-context-lite-truth-label class="agent-context-lite__section-label metric__label"></div><div class="badge-row agent-context-lite__state-row"><span class=badge>`), _tmpl$6$1 = /* @__PURE__ */ template(`<div class="empty agent-context-lite__unavailable"data-agent-context-unavailable=true>`), _tmpl$7$1 = /* @__PURE__ */ template(`<div class=feedback-detail data-agent-context-feedback=status><span class=metric__label>`), _tmpl$8$1 = /* @__PURE__ */ template(`<div class="agent-context-lite__group agent-context-lite__decision"role=group aria-labelledby=agent-context-lite-decision-label data-agent-context-group=decision><div id=agent-context-lite-decision-label class="agent-context-lite__section-label metric__label"></div><div class=agent-context-lite__gameplay>`), _tmpl$9$1 = /* @__PURE__ */ template(`<div class="agent-context-lite__group agent-context-lite__intent"role=group aria-labelledby=agent-context-lite-intent-label data-agent-context-group=intent><div id=agent-context-lite-intent-label class="agent-context-lite__section-label metric__label">`), _tmpl$0$1 = /* @__PURE__ */ template(`<section class="stack agent-context-lite"role=region><div class="agent-context-lite__heading panel__title"></div><div class="agent-context-lite__identity agent-context-lite__group"role=group aria-labelledby=agent-context-lite-identity-label data-agent-context-group=identity><div id=agent-context-lite-identity-label class="agent-context-lite__section-label metric__label"></div><div class=agent-context-lite__value>`);
 function localeIsZh$1(locale) {
   return String(locale || "").toLowerCase().startsWith("zh");
 }
@@ -17167,7 +17334,7 @@ function copy(locale, zh, en) {
 function Field(props) {
   const field = () => props.value || {};
   const state2 = () => field().state === "published" && field().value ? "published" : "unavailable";
-  const unavailableCopy = () => copy(props.locale, "不可用 · 等待权威 Agent 投影", "Unavailable · waiting for authoritative Agent projection");
+  const unavailableCopy = () => copy(props.locale, "不可用", "Unavailable");
   return (() => {
     var _el$ = _tmpl$$1(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
     insert(_el$2, () => props.label);
@@ -17201,9 +17368,11 @@ function AgentContextLite(props) {
     state: "none"
   };
   const identity = () => model().identity || {};
+  const decisionFields = () => [model().objective, model().nextMove, model().blocker, model().playerLeverage];
+  const decisionUnavailable = () => decisionFields().some((field) => field?.state !== "published" || !field?.value);
   const ariaLabel = () => isAgent() ? copy(locale(), "Agent 上下文", "Agent Context") : copy(locale(), "实体上下文", "Entity Context");
   return (() => {
-    var _el$4 = _tmpl$9$1(), _el$5 = _el$4.firstChild, _el$6 = _el$5.nextSibling, _el$7 = _el$6.firstChild, _el$8 = _el$7.nextSibling;
+    var _el$4 = _tmpl$0$1(), _el$5 = _el$4.firstChild, _el$6 = _el$5.nextSibling, _el$7 = _el$6.firstChild, _el$8 = _el$7.nextSibling;
     insert(_el$5, ariaLabel);
     insert(_el$7, () => copy(locale(), "身份", "Identity"));
     insert(_el$8, () => identity().name || identity().id || copy(locale(), "未知", "Unknown"));
@@ -17234,36 +17403,39 @@ function AgentContextLite(props) {
       },
       get fallback() {
         return (() => {
-          var _el$17 = _tmpl$0$1();
-          insert(_el$17, () => model().unavailableReason || copy(locale(), "上下文不可用。", "Context unavailable."));
-          return _el$17;
+          var _el$23 = _tmpl$6$1();
+          insert(_el$23, () => model().unavailableReason || copy(locale(), "上下文不可用。", "Context unavailable."));
+          return _el$23;
         })();
       },
       get children() {
         return [(() => {
-          var _el$10 = _tmpl$5$1(), _el$11 = _el$10.firstChild;
-          insert(_el$11, () => model().state?.label);
-          insert(_el$10, createComponent(Show, {
+          var _el$10 = _tmpl$5$1(), _el$11 = _el$10.firstChild, _el$12 = _el$11.nextSibling, _el$13 = _el$12.firstChild;
+          insert(_el$11, () => copy(locale(), "事实", "Truth"));
+          insert(_el$13, () => model().state?.label);
+          insert(_el$12, createComponent(Show, {
             get when() {
               return !(intent().kind === "matched" && intent().state === model().freshness?.kind);
             },
             get children() {
-              var _el$12 = _tmpl$4$1();
-              insert(_el$12, () => model().freshness?.label);
-              return _el$12;
+              var _el$14 = _tmpl$4$1();
+              insert(_el$14, () => model().freshness?.label);
+              return _el$14;
+            }
+          }), null);
+          insert(_el$10, createComponent(AgentActivitySurface, {
+            get activity() {
+              return model().activity?.surface || null;
+            },
+            get locale() {
+              return locale();
             }
           }), null);
           return _el$10;
-        })(), createComponent(AgentActivitySurface, {
-          get activity() {
-            return model().activity?.surface || null;
-          },
-          get locale() {
-            return locale();
-          }
-        }), (() => {
-          var _el$13 = _tmpl$6$1();
-          insert(_el$13, createComponent(Field, {
+        })(), (() => {
+          var _el$15 = _tmpl$8$1(), _el$16 = _el$15.firstChild, _el$17 = _el$16.nextSibling;
+          insert(_el$16, () => copy(locale(), "决策", "Decision"));
+          insert(_el$17, createComponent(Field, {
             name: "objective",
             get label() {
               return copy(locale(), "目标", "Objective");
@@ -17275,7 +17447,7 @@ function AgentContextLite(props) {
               return locale();
             }
           }), null);
-          insert(_el$13, createComponent(Field, {
+          insert(_el$17, createComponent(Field, {
             name: "next-move",
             get label() {
               return copy(locale(), "下一步", "Next Move");
@@ -17287,7 +17459,7 @@ function AgentContextLite(props) {
               return locale();
             }
           }), null);
-          insert(_el$13, createComponent(Field, {
+          insert(_el$17, createComponent(Field, {
             name: "blocker",
             get label() {
               return copy(locale(), "阻塞", "Blocker");
@@ -17299,7 +17471,7 @@ function AgentContextLite(props) {
               return locale();
             }
           }), null);
-          insert(_el$13, createComponent(Field, {
+          insert(_el$17, createComponent(Field, {
             name: "player-leverage",
             get label() {
               return copy(locale(), "玩家杠杆", "Player Leverage");
@@ -17311,59 +17483,76 @@ function AgentContextLite(props) {
               return locale();
             }
           }), null);
-          return _el$13;
-        })(), createComponent(Show, {
-          get when() {
-            return model().feedback?.kind === "status";
-          },
-          get children() {
-            var _el$14 = _tmpl$7$1(), _el$15 = _el$14.firstChild;
-            insert(_el$15, () => model().feedback.label);
-            insert(_el$14, createComponent(Show, {
-              get when() {
-                return model().feedback.value;
-              },
-              get children() {
-                return [" ", memo(() => model().feedback.value)];
-              }
-            }), null);
-            return _el$14;
-          }
-        }), createComponent(AgentIntentSurface, {
-          get intent() {
-            return memo(() => intent().kind === "matched")() ? intent().source : null;
-          },
-          get locale() {
-            return locale();
-          },
-          get connectionStatus() {
-            return model().connectionStatus || "connected";
-          },
-          showReceiptConfirmation: false
-        }), createComponent(Show, {
-          get when() {
-            return model().unavailableReason;
-          },
-          get children() {
-            var _el$16 = _tmpl$8$1();
-            insert(_el$16, () => model().unavailableReason);
-            return _el$16;
-          }
-        })];
+          insert(_el$15, createComponent(Show, {
+            get when() {
+              return decisionUnavailable() || model().unavailableReason;
+            },
+            get children() {
+              var _el$18 = _tmpl$6$1();
+              insert(_el$18, () => model().unavailableReason || copy(locale(), "部分决策信息不可用，等待权威 Agent 投影。", "Some decision details are unavailable while waiting for the authoritative Agent projection."));
+              return _el$18;
+            }
+          }), null);
+          insert(_el$15, createComponent(Show, {
+            get when() {
+              return model().feedback?.kind === "status";
+            },
+            get children() {
+              var _el$19 = _tmpl$7$1(), _el$20 = _el$19.firstChild;
+              insert(_el$20, () => model().feedback.label);
+              insert(_el$19, createComponent(Show, {
+                get when() {
+                  return model().feedback.value;
+                },
+                get children() {
+                  return [" ", memo(() => model().feedback.value)];
+                }
+              }), null);
+              return _el$19;
+            }
+          }), null);
+          return _el$15;
+        })(), (() => {
+          var _el$21 = _tmpl$9$1(), _el$22 = _el$21.firstChild;
+          insert(_el$22, () => copy(locale(), "意图", "Intent"));
+          insert(_el$21, createComponent(AgentIntentSurface, {
+            get intent() {
+              return memo(() => intent().kind === "matched")() ? intent().source : null;
+            },
+            get locale() {
+              return locale();
+            },
+            get connectionStatus() {
+              return model().connectionStatus || "connected";
+            },
+            showReceiptConfirmation: false
+          }), null);
+          return _el$21;
+        })()];
       }
     }), null);
     createRenderEffect((_p$) => {
-      var _v$4 = ariaLabel(), _v$5 = model().kind || "unknown", _v$6 = intent().kind || "unavailable", _v$7 = receipt().present ? "present" : receipt().state || "none";
+      var _v$4 = ariaLabel(), _v$5 = model().kind || "unknown", _v$6 = intent().kind || "unavailable", _v$7 = receipt().present ? "present" : receipt().state || "none", _v$8 = props.fixtureMetadata?.mode, _v$9 = props.fixtureMetadata?.state, _v$0 = props.fixtureMetadata?.copy, _v$1 = props.fixtureMetadata?.measurement, _v$10 = props.fixtureMetadata?.schema;
       _v$4 !== _p$.e && setAttribute(_el$4, "aria-label", _p$.e = _v$4);
       _v$5 !== _p$.t && setAttribute(_el$4, "data-agent-context-kind", _p$.t = _v$5);
       _v$6 !== _p$.a && setAttribute(_el$4, "data-agent-context-intent", _p$.a = _v$6);
       _v$7 !== _p$.o && setAttribute(_el$4, "data-agent-context-receipt", _p$.o = _v$7);
+      _v$8 !== _p$.i && setAttribute(_el$4, "data-agent-context-fixture", _p$.i = _v$8);
+      _v$9 !== _p$.n && setAttribute(_el$4, "data-agent-context-fixture-state", _p$.n = _v$9);
+      _v$0 !== _p$.s && setAttribute(_el$4, "data-agent-context-fixture-copy", _p$.s = _v$0);
+      _v$1 !== _p$.h && setAttribute(_el$4, "data-agent-context-measurement", _p$.h = _v$1);
+      _v$10 !== _p$.r && setAttribute(_el$4, "data-agent-context-fixture-schema", _p$.r = _v$10);
       return _p$;
     }, {
       e: void 0,
       t: void 0,
       a: void 0,
-      o: void 0
+      o: void 0,
+      i: void 0,
+      n: void 0,
+      s: void 0,
+      h: void 0,
+      r: void 0
     });
     return _el$4;
   })();
@@ -21884,6 +22073,8 @@ function InteractionPanel() {
     const intentMatches = normalizedId(intent?.agent_id) === normalizedId(agentId()) && (!intent?.target_agent_id || normalizedId(intent.target_agent_id) === normalizedId(agentId()));
     return selected?.freshness || (intentMatches ? intent?.freshness : null) || null;
   };
+  const selectedAgentContextFixtureMetadata = () => readAgentContextFixtureMetadata(state.snapshot, viewerVisualFixtureNameFromQuery(), viewerTestApiEnabled());
+  const selectedAgentContextFixtureGameplay = () => readAgentContextFixtureGameplay(state.snapshot, agentId(), selectedAgentContextFixtureMetadata());
   const selectedAgentContextModel = () => buildAgentContextDisplayModel({
     snapshot: state.snapshot,
     selected: {
@@ -21892,10 +22083,7 @@ function InteractionPanel() {
     },
     agent: agentId() ? state.snapshot?.model?.agents?.[agentId()] : null,
     agentVisible: Boolean(agentId()),
-    // Player-level gameplay summary remains in the Player HUD. Agent Context
-    // accepts only an explicitly Agent-bound projection, which is not
-    // currently published by this snapshot contract.
-    gameplay: null,
+    gameplay: selectedAgentContextFixtureGameplay(),
     intent: selectedAgentIntent(),
     freshness: selectedAgentFreshness(),
     connectionStatus: selectedAgentIntentConnectionStatus(),
@@ -22026,6 +22214,9 @@ function InteractionPanel() {
         },
         get locale() {
           return locale();
+        },
+        get fixtureMetadata() {
+          return selectedAgentContextFixtureMetadata();
         }
       }), _el$304);
       insert(_el$301, createComponent(Show, {
@@ -23274,6 +23465,11 @@ function installViewerVisualFixture() {
       state.selectedObject = null;
     }
   };
+  installAgentContextVisualFixture(fixtures, {
+    core,
+    setFixturePlayerAuth,
+    viewerFixtureBaseSnapshot
+  });
   installAgentIntentV2VisualFixture(fixtures, {
     core,
     setFixturePlayerAuth,
