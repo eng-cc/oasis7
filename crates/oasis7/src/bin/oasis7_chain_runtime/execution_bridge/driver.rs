@@ -44,6 +44,7 @@ use super::external_effect::{
     build_execution_external_effect_materialization_with_pre_step_root,
     execution_world_snapshot_root, load_execution_external_effect_materialization,
     persist_execution_external_effect_materialization,
+    validate_execution_external_effect_for_context,
 };
 use super::product_validation_intent::{
     ProductValidationIntentMarkerV1, clear_product_validation_intent,
@@ -102,6 +103,43 @@ pub(crate) struct NodeRuntimeExecutionDriver {
 }
 
 impl NodeRuntimeExecutionDriver {
+    /// Classify the durable intent marker against the world currently on disk.
+    /// A marker is written before the staged world, so a crash in that small
+    /// window leaves the predecessor world and can be safely discarded. Any
+    /// other mismatch is fail-closed rather than guessing which generation is
+    /// authoritative.
+    fn product_validation_intent_world_is_staged(
+        &self,
+        execution_world: &RuntimeWorld,
+        marker: &ProductValidationIntentMarkerV1,
+    ) -> Result<bool, String> {
+        if marker.height != self.state.last_applied_committed_height.saturating_add(1) {
+            return Err(format!(
+                "product validation intent marker does not match committed head: marker_height={} last_applied={}",
+                marker.height, self.state.last_applied_committed_height
+            ));
+        }
+        if execution_world.state().time == marker.height
+            && execution_world.journal().len() == marker.journal_len
+        {
+            return Ok(true);
+        }
+        if !marker.pre_step_execution_state_root.trim().is_empty()
+            && execution_world.state().time == marker.height.saturating_sub(1)
+            && execution_world_snapshot_root(execution_world)?
+                == marker.pre_step_execution_state_root
+        {
+            return Ok(false);
+        }
+        Err(format!(
+            "product validation intent staged world is inconsistent: height={} world_time={} journal_len={} marker_journal_len={}",
+            marker.height,
+            execution_world.state().time,
+            execution_world.journal().len(),
+            marker.journal_len
+        ))
+    }
+
     fn validate_equal_height_replay_identity(
         &self,
         record: &ExecutionBridgeRecord,
@@ -293,7 +331,7 @@ impl NodeRuntimeExecutionDriver {
             storage_profile.execution_checkpoint_keep as usize,
         );
         driver.pending_product_validation_intent = durable_product_validation_intent;
-        if let Some(marker) = driver.pending_product_validation_intent.as_ref() {
+        if let Some(marker) = driver.pending_product_validation_intent.clone() {
             let authoritative_record_exists =
                 execution_bridge_record_path(driver.records_dir.as_path(), marker.height).exists();
             if marker.height <= driver.state.last_applied_committed_height
@@ -301,17 +339,15 @@ impl NodeRuntimeExecutionDriver {
             {
                 clear_product_validation_intent(driver.records_dir.as_path())?;
                 driver.pending_product_validation_intent = None;
-            } else if marker.height != driver.state.last_applied_committed_height.saturating_add(1)
-                || driver.execution_world.state().time != marker.height
-                || driver.execution_world.journal().len() != marker.journal_len
+            } else if !driver
+                .product_validation_intent_world_is_staged(&driver.execution_world, &marker)?
             {
-                return Err(format!(
-                    "product validation intent marker does not match staged execution world: height={} world_time={} journal_len={} marker_journal_len={}",
-                    marker.height,
-                    driver.execution_world.state().time,
-                    driver.execution_world.journal().len(),
-                    marker.journal_len
-                ));
+                // The marker exists but the world is still the exact
+                // predecessor. This is the crash window between marker-first
+                // publication and staged-world publication; clear it and let
+                // the next committed call execute from the predecessor.
+                clear_product_validation_intent(driver.records_dir.as_path())?;
+                driver.pending_product_validation_intent = None;
             }
         }
         super::driver_checkpoint_install::recover_checkpoint_install_transaction(
@@ -608,11 +644,14 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             ));
         }
 
-        // A marker is written only after the staged runtime world containing
-        // ProductValidationAttemptStarted has been persisted. On retry, load
-        // that continuation and run the reducer's fail-closed path without
-        // resubmitting the committed actions or invoking the validator.
+        // The marker contains the pre-step evidence and is published before
+        // the staged runtime world. On retry, load that continuation and run
+        // the reducer's fail-closed path without resubmitting committed
+        // actions or invoking the validator. If the marker is present but the
+        // durable world is still the exact predecessor, it is the crash
+        // window between those two publications and can be discarded.
         let mut pre_step_execution_state_root = None;
+        let mut pre_step_external_effect = None;
         let resume_after_product_validation_intent = if let Some(marker) =
             load_product_validation_intent(self.records_dir.as_path())?
         {
@@ -638,10 +677,6 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                     execution_state_root: record.execution_state_root,
                 });
             } else {
-                if !marker.pre_step_execution_state_root.trim().is_empty() {
-                    pre_step_execution_state_root =
-                        Some(marker.pre_step_execution_state_root.clone());
-                }
                 if marker.height != context.height
                     || marker.world_id != context.world_id
                     || (!marker.action_root.is_empty() && marker.action_root != context.action_root)
@@ -651,23 +686,39 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                         marker.height, context.height, marker.world_id, context.world_id
                     ));
                 }
-                self.execution_world = load_execution_world_with_policy(
+                if let Some(effect) = marker.pre_step_external_effect.as_ref() {
+                    validate_execution_external_effect_for_context(effect, &context)?;
+                    pre_step_external_effect = Some(effect.clone());
+                }
+                if !marker.pre_step_execution_state_root.trim().is_empty() {
+                    pre_step_execution_state_root =
+                        Some(marker.pre_step_execution_state_root.clone());
+                } else if let Some(effect) = pre_step_external_effect.as_ref() {
+                    pre_step_execution_state_root =
+                        Some(effect.pre_step_execution_state_root.clone());
+                }
+                let durable_execution_world = load_execution_world_with_policy(
                     self.world_dir.as_path(),
                     self.execution_world.release_security_policy().clone(),
                 )?;
-                if self.execution_world.state().time != marker.height
-                    || self.execution_world.journal().len() != marker.journal_len
+                if self
+                    .product_validation_intent_world_is_staged(&durable_execution_world, &marker)?
                 {
-                    return Err(format!(
-                        "product validation intent staged world is inconsistent: height={} world_time={} journal_len={} marker_journal_len={}",
-                        marker.height,
-                        self.execution_world.state().time,
-                        self.execution_world.journal().len(),
-                        marker.journal_len
-                    ));
+                    self.execution_world = durable_execution_world;
+                    self.pending_product_validation_intent = Some(marker);
+                    true
+                } else {
+                    // Marker-first publication completed, but world
+                    // publication did not. Reconcile to the durable
+                    // predecessor before retrying the tick.
+                    self.execution_world = durable_execution_world;
+                    clear_product_validation_intent(self.records_dir.as_path())?;
+                    if pre_step_execution_state_root.is_none() {
+                        pre_step_execution_state_root =
+                            Some(execution_world_snapshot_root(&self.execution_world)?);
+                    }
+                    false
                 }
-                self.pending_product_validation_intent = Some(marker);
-                true
             }
         } else {
             pre_step_execution_state_root =
@@ -675,11 +726,14 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             false
         };
 
-        let external_effect = build_execution_external_effect_materialization_with_pre_step_root(
-            &self.execution_world,
-            &context,
-            pre_step_execution_state_root.as_deref(),
-        )?;
+        let external_effect = match pre_step_external_effect {
+            Some(materialization) => materialization,
+            None => build_execution_external_effect_materialization_with_pre_step_root(
+                &self.execution_world,
+                &context,
+                pre_step_execution_state_root.as_deref(),
+            )?,
+        };
 
         let decode_started_at = Instant::now();
         let mut decoded_runtime_actions = Vec::with_capacity(context.committed_actions.len());
@@ -765,15 +819,12 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             let intent_pre_step_execution_state_root = pre_step_execution_state_root
                 .clone()
                 .ok_or_else(|| "missing pre-step execution state root for intent".to_string())?;
+            let intent_pre_step_external_effect = external_effect.clone();
             let mut publish_product_validation_intent = move |staged: &RuntimeWorld| {
-                persist_execution_world(intent_world_dir.as_path(), staged).map_err(|err| {
-                    WorldError::DistributedValidationFailed {
-                        reason: format!(
-                            "publish product validation intent world failed at height {}: {}",
-                            intent_height, err
-                        ),
-                    }
-                })?;
+                // Publish the complete intent before the staged world. A
+                // crash after this write is recognizable as an exact
+                // predecessor marker; a crash after the world write leaves
+                // both artifacts available for continuation.
                 persist_product_validation_intent(
                     intent_records_dir.as_path(),
                     &ProductValidationIntentMarkerV1 {
@@ -784,6 +835,7 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                         action_root: intent_action_root.clone(),
                         journal_len: staged.journal().len(),
                         pre_step_execution_state_root: intent_pre_step_execution_state_root.clone(),
+                        pre_step_external_effect: Some(intent_pre_step_external_effect.clone()),
                     },
                 )
                 .map_err(|err| WorldError::DistributedValidationFailed {
@@ -791,6 +843,14 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                         "publish product validation intent marker failed at height {}: {}",
                         intent_height, err
                     ),
+                })?;
+                persist_execution_world(intent_world_dir.as_path(), staged).map_err(|err| {
+                    WorldError::DistributedValidationFailed {
+                        reason: format!(
+                            "publish product validation intent world failed at height {}: {}",
+                            intent_height, err
+                        ),
+                    }
                 })
             };
             rollback_on_error!(

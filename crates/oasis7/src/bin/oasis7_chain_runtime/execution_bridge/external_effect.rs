@@ -22,7 +22,7 @@ use super::{
 };
 
 impl ExecutionExternalEffectMaterialization {
-    fn validate(&self) -> Result<(), String> {
+    pub(super) fn validate(&self) -> Result<(), String> {
         if self.schema_version < EXECUTION_EXTERNAL_EFFECT_SCHEMA_V1 {
             return Err(format!(
                 "execution external effect has invalid schema_version={} at height={}",
@@ -70,6 +70,69 @@ impl ExecutionExternalEffectMaterialization {
         }
         Ok(())
     }
+}
+
+pub(super) fn validate_execution_external_effect_for_context(
+    materialization: &ExecutionExternalEffectMaterialization,
+    context: &NodeExecutionCommitContext,
+) -> Result<(), String> {
+    materialization.validate()?;
+    let mismatches = [
+        (
+            "world_id",
+            materialization.world_id.as_str(),
+            context.world_id.as_str(),
+        ),
+        (
+            "node_id",
+            materialization.node_id.as_str(),
+            context.node_id.as_str(),
+        ),
+        (
+            "node_block_hash",
+            materialization.node_block_hash.as_str(),
+            context.node_block_hash.as_str(),
+        ),
+        (
+            "action_root",
+            materialization.action_root.as_str(),
+            context.action_root.as_str(),
+        ),
+    ];
+    for (field, actual, expected) in mismatches {
+        if actual != expected {
+            return Err(format!(
+                "execution external effect {field} mismatch at height={}: expected={} actual={}",
+                context.height, expected, actual
+            ));
+        }
+    }
+    if materialization.height != context.height
+        || materialization.slot != context.slot
+        || materialization.epoch != context.epoch
+        || materialization.committed_at_unix_ms != context.committed_at_unix_ms
+    {
+        return Err(format!(
+            "execution external effect context metadata mismatch at height={}: effect=({}, {}, {}, {}) context=({}, {}, {}, {})",
+            context.height,
+            materialization.height,
+            materialization.slot,
+            materialization.epoch,
+            materialization.committed_at_unix_ms,
+            context.height,
+            context.slot,
+            context.epoch,
+            context.committed_at_unix_ms,
+        ));
+    }
+    let expected_actions = collect_execution_committed_action_anchors(context);
+    if materialization.committed_actions != expected_actions {
+        return Err(format!(
+            "execution external effect committed action anchors mismatch at height={}",
+            context.height
+        ));
+    }
+    Ok(())
 }
 
 pub(super) fn execution_module_anchor_hash(

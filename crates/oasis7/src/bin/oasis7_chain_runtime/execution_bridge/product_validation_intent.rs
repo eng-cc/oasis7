@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use super::ExecutionExternalEffectMaterialization;
 use super::write_bytes_atomic;
 
 pub(super) const PRODUCT_VALIDATION_INTENT_SCHEMA_V1: u8 = 1;
@@ -22,6 +23,11 @@ pub(super) struct ProductValidationIntentMarkerV1 {
     /// retry cannot mistake the mid-tick continuation for its predecessor.
     #[serde(default)]
     pub pre_step_execution_state_root: String,
+    /// Complete pre-step external-effect evidence captured before the staged
+    /// world is published. Older markers only carry the root and are rebuilt
+    /// from the staged world for replay compatibility.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pre_step_external_effect: Option<ExecutionExternalEffectMaterialization>,
 }
 
 fn default_schema_version() -> u8 {
@@ -63,6 +69,26 @@ pub(super) fn load_product_validation_intent(
             "invalid product validation intent marker {}",
             path.display()
         ));
+    }
+    if let Some(effect) = marker.pre_step_external_effect.as_ref() {
+        effect.validate().map_err(|err| {
+            format!(
+                "invalid product validation intent pre-step external effect {}: {}",
+                path.display(),
+                err
+            )
+        })?;
+        if effect.height != marker.height
+            || effect.world_id != marker.world_id
+            || (!marker.action_root.is_empty() && effect.action_root != marker.action_root)
+            || (!marker.pre_step_execution_state_root.is_empty()
+                && effect.pre_step_execution_state_root != marker.pre_step_execution_state_root)
+        {
+            return Err(format!(
+                "product validation intent marker pre-step external effect identity mismatch {}",
+                path.display()
+            ));
+        }
     }
     Ok(Some(marker))
 }
