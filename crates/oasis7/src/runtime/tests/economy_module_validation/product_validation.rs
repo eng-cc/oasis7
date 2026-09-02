@@ -689,6 +689,17 @@ fn product_validation_intent_recovery_preserves_predecessor_prologue() {
     world
         .step()
         .expect("start recipe before prologue checkpoint");
+    let baseline_durability = world
+        .journal()
+        .events
+        .iter()
+        .filter(|event| {
+            matches!(
+                &event.body,
+                WorldEventBody::Domain(DomainEvent::FactoryDurabilityChanged { .. })
+            )
+        })
+        .count();
 
     let context = RuntimeCommittedTickContext {
         height: world.state().time.saturating_add(1),
@@ -723,7 +734,11 @@ fn product_validation_intent_recovery_preserves_predecessor_prologue() {
             )
         })
         .count();
-    assert_eq!(checkpoint_durability, 1, "prologue must depreciate once");
+    assert_eq!(
+        checkpoint_durability.saturating_sub(baseline_durability),
+        1,
+        "the committed tick prologue must depreciate exactly once"
+    );
     let checkpoint_durability_ppm = checkpoint
         .state()
         .factories
