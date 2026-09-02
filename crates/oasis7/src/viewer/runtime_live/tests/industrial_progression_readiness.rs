@@ -949,6 +949,10 @@ fn runtime_gameplay_actions_keep_assembler_build_disabled_when_cost_is_split_acr
     let agent_ledger = crate::runtime::MaterialLedgerId::agent(agent_id.as_str());
     server
         .world
+        .set_ledger_material_balance(agent_ledger.clone(), "structural_frame", 0)
+        .expect("keep structural frames outside the authoritative builder ledger");
+    server
+        .world
         .set_ledger_material_balance(agent_ledger.clone(), "iron_ingot", 10)
         .expect("seed agent iron ingot");
     server
