@@ -2,6 +2,13 @@ use serde_json::Value;
 
 use super::AgentDecisionTrace;
 
+pub(super) fn is_trace_only_overflow(trace: &AgentDecisionTrace) -> bool {
+    trace
+        .llm_error
+        .as_deref()
+        .is_some_and(|error| error.trim() == "trace_payload_too_large")
+}
+
 pub(super) fn append_decision_upstream_trace(reason: String, trace: &AgentDecisionTrace) -> String {
     if reason.contains("upstream_trace=") {
         return reason;

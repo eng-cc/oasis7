@@ -11,6 +11,7 @@ use super::super::protocol::{
     AgentChatAck, AgentChatError, AgentChatRequest, PromptControlAck, PromptControlApplyRequest,
     PromptControlCommand, PromptControlError, PromptControlOperation, PromptControlRollbackRequest,
 };
+use super::decision_trace::is_trace_only_overflow;
 use crate::runtime::{
     AgentIntentAuthorityContext, AgentIntentProviderFailureDisposition, AgentIntentV2,
     World as RuntimeWorld,
@@ -862,7 +863,7 @@ impl ViewerRuntimeLiveServer {
         };
         let decision_trace = decision.decision_trace.clone();
         if let Some(trace) = decision_trace.as_ref() {
-            if trace.llm_error.is_some() {
+            if trace.llm_error.is_some() && !is_trace_only_overflow(trace) {
                 return Err(trace.clone());
             }
             if let Some(message) = trace.parse_error.as_ref() {
