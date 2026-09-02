@@ -194,13 +194,15 @@ impl World {
                     resolved_spec.build_time_ticks = decision.duration_ticks;
                 }
 
-                if let Some(reason) = self.validate_module_backed_factory_admission(
-                    envelope.id,
-                    builder_agent_id,
-                    site_id,
-                    module_id,
-                    &resolved_spec,
-                )? {
+                if let WorldEventBody::Domain(DomainEvent::ActionRejected { reason, .. }) = self
+                    .build_factory_to_event(
+                        envelope.id,
+                        builder_agent_id,
+                        site_id,
+                        &resolved_spec,
+                        true,
+                    )?
+                {
                     return Ok(EconomyActionResolution::Rejected(reason));
                 }
 

@@ -237,7 +237,7 @@ impl World {
                 builder_agent_id,
                 site_id,
                 spec,
-            } => self.build_factory_to_event(action_id, builder_agent_id, site_id, spec),
+            } => self.build_factory_to_event(action_id, builder_agent_id, site_id, spec, true),
             Action::BuildFactoryWithModule { .. } => {
                 Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                     action_id,

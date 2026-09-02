@@ -17,7 +17,7 @@ impl World {
             }));
         }
         if let WorldEventBody::Domain(DomainEvent::ActionRejected { reason, .. }) =
-            self.build_factory_to_event(action_id, builder_agent_id, site_id, spec)?
+            self.build_factory_to_event(action_id, builder_agent_id, site_id, spec, false)?
         {
             return Ok(Some(reason));
         }
@@ -44,6 +44,7 @@ impl World {
         builder_agent_id: &String,
         site_id: &String,
         spec: &FactoryModuleSpec,
+        validate_materials: bool,
     ) -> Result<WorldEventBody, WorldError> {
         if !self.state.agents.contains_key(builder_agent_id) {
             return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
@@ -228,39 +229,45 @@ impl World {
         }
         // Direct builds use the builder ledger; module fallback is resolved upstream.
         let consume_ledger = MaterialLedgerId::agent(builder_agent_id.clone());
-        let required_materials =
-            match super::action_to_event_economy_support::aggregate_material_stacks_for_admission(
-                "factory build_cost",
-                &spec.build_cost,
-            ) {
-                Ok(required_materials) => required_materials,
-                Err(reason) => {
+        let (material_balances_before, material_balances_after) = if validate_materials {
+            let required_materials =
+                match super::action_to_event_economy_support::aggregate_material_stacks_for_admission(
+                    "factory build_cost",
+                    &spec.build_cost,
+                ) {
+                    Ok(required_materials) => required_materials,
+                    Err(reason) => {
+                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                            action_id,
+                            reason: RejectReason::RuleDenied {
+                                notes: vec![reason],
+                            },
+                        }));
+                    }
+                };
+            let mut material_balances_before = BTreeMap::new();
+            let mut material_balances_after = BTreeMap::new();
+            for (material_kind, requested) in &required_materials {
+                let available =
+                    self.ledger_material_balance(&consume_ledger, material_kind.as_str());
+                if available < *requested {
                     return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                         action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec![reason],
+                        reason: RejectReason::InsufficientMaterial {
+                            material_kind: material_kind.clone(),
+                            requested: *requested,
+                            available,
                         },
                     }));
                 }
-            };
-        let mut material_balances_before = BTreeMap::new();
-        let mut material_balances_after = BTreeMap::new();
-        for (material_kind, requested) in &required_materials {
-            let available = self.ledger_material_balance(&consume_ledger, material_kind.as_str());
-            if available < *requested {
-                return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                    action_id,
-                    reason: RejectReason::InsufficientMaterial {
-                        material_kind: material_kind.clone(),
-                        requested: *requested,
-                        available,
-                    },
-                }));
+                material_balances_before.insert(material_kind.clone(), available);
+                material_balances_after
+                    .insert(material_kind.clone(), available.saturating_sub(*requested));
             }
-            material_balances_before.insert(material_kind.clone(), available);
-            material_balances_after
-                .insert(material_kind.clone(), available.saturating_sub(*requested));
-        }
+            (material_balances_before, material_balances_after)
+        } else {
+            (BTreeMap::new(), BTreeMap::new())
+        };
 
         let construction_power_obligation = FactoryBuildPowerObligationV1 {
             payer_agent_id: builder_agent_id.clone(),
