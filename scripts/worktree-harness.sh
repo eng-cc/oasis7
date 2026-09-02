@@ -168,7 +168,7 @@ viewer_http_ready() {
 }
 
 refresh_state() {
-  local current_status harness_pid harness_pgid harness_identity launcher_pid launcher_pgid launcher_identity
+  local current_status harness_pid harness_pgid harness_identity launcher_pid launcher_pgid launcher_identity reservation_token
   local harness_live=0 launcher_live=0 stale_record=0
   local -a legacy_identityless_records=()
 
@@ -180,6 +180,7 @@ refresh_state() {
   launcher_pid=$(wh_state_get "$STATE_FILE" launcher_pid 2>/dev/null || true)
   launcher_pgid=$(wh_state_get "$STATE_FILE" launcher_pgid 2>/dev/null || true)
   launcher_identity=$(wh_state_get "$STATE_FILE" launcher_identity 2>/dev/null || true)
+  reservation_token=$(wh_state_get "$STATE_FILE" port_reservation_token 2>/dev/null || true)
 
   if [[ "$current_status" == "ready" ]]; then
     if [[ -z "$harness_identity" ]] && {
@@ -219,6 +220,12 @@ refresh_state() {
     fi
     if [[ "$harness_live" -ne 1 || "$launcher_live" -ne 1 ]]; then
       if [[ "$harness_live" -eq 0 && "$launcher_live" -eq 0 ]]; then
+        if [[ -n "$reservation_token" ]]; then
+          if ! wh_release_ports_reservation "$HARNESS_ROOT" "$reservation_token" "$PORT_REGISTRY_COMMON_DIR"; then
+            wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "cleanup_pending", "failure_reason": "stale ready state could not release its port reservation; reservation retained"}'
+            return 1
+          fi
+        fi
         wh_state_write "$STATE_FILE" '{"status": "stopped", "phase": "stopped", "harness_pid": null, "harness_pgid": null, "harness_identity": null, "launcher_pid": null, "launcher_pgid": null, "launcher_identity": null, "port_reservation_token": null}'
         return 0
       fi

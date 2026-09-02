@@ -74,6 +74,56 @@ run_fake_harness_at() {
     "$ROOT_DIR/scripts/worktree-harness.sh" "$@"
 }
 
+assert_recorded_group_quiescent() {
+  local label=$1
+  local pid=${2:-}
+  local pgid=${3:-}
+  if [[ -n "$pid" ]] && wh_pid_alive "$pid"; then
+    echo "lifecycle acceptance: ${label} PID remained live during cleanup" >&2
+    return 1
+  fi
+  if [[ -n "$pgid" ]] && wh_process_group_alive "$pgid"; then
+    echo "lifecycle acceptance: ${label} process group remained live during cleanup" >&2
+    return 1
+  fi
+}
+
+assert_test_root_quiescent() {
+  local root=$1
+  local state_file="$root/state.json"
+  local registry_file
+  local pid pgid
+  registry_file="$(wh_git_common_dir)/.oasis7-harness-port-registry/reservations.json"
+  if [[ -f "$state_file" ]]; then
+    pid="$(wh_state_get "$state_file" harness_pid 2>/dev/null || true)"
+    pgid="$(wh_state_get "$state_file" harness_pgid 2>/dev/null || true)"
+    assert_recorded_group_quiescent "${root} harness" "$pid" "$pgid" || return 1
+    pid="$(wh_state_get "$state_file" launcher_pid 2>/dev/null || true)"
+    pgid="$(wh_state_get "$state_file" launcher_pgid 2>/dev/null || true)"
+    assert_recorded_group_quiescent "${root} launcher" "$pid" "$pgid" || return 1
+  fi
+  if [[ -e "$root/.ports.reservation.json" ]]; then
+    echo "lifecycle acceptance: ${root} retained a local port reservation during cleanup" >&2
+    return 1
+  fi
+  if [[ -f "$registry_file" ]]; then
+    python3 - "$registry_file" "$root" <<'PY'
+import json
+import pathlib
+import sys
+
+registry = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+root = str(pathlib.Path(sys.argv[2]).resolve())
+reservations = registry.get("reservations", {})
+for token, record in reservations.items():
+    if isinstance(record, dict) and record.get("harness_root") == root:
+        raise SystemExit(
+            f"lifecycle acceptance: {root} retained shared reservation {token} during cleanup"
+        )
+PY
+  fi
+}
+
 test_root_owned() {
   [[ "$TEST_ROOT" == "$TMP_DIR/harness-test."* ]] || return 1
   [[ "$(dirname "$TEST_ROOT")" == "$TMP_DIR" ]] || return 1
@@ -156,6 +206,7 @@ cleanup_recorded_group() {
 
 cleanup() {
   set +e
+  local cleanup_status=0
   if [[ -n "$REAL_STACK_PID" ]]; then
     kill "$REAL_STACK_PID" >/dev/null 2>&1 || true
     wait "$REAL_STACK_PID" >/dev/null 2>&1 || true
@@ -176,19 +227,36 @@ cleanup() {
   cleanup_recorded_group "$READY_HARNESS_PID" "$READY_HARNESS_PGID" "$READY_HARNESS_IDENTITY"
   run_fake_harness down >/dev/null 2>&1 || true
   if [[ -n "$CONCURRENT_PARENT_A" ]]; then
-    OASIS7_HARNESS_TEST_ROOT="$CONCURRENT_PARENT_A/harness" run_fake_harness_at down >/dev/null 2>&1 || true
+    run_fake_harness_at "$CONCURRENT_PARENT_A/harness" down >/dev/null 2>&1 || true
   fi
   if [[ -n "$CONCURRENT_PARENT_B" ]]; then
-    OASIS7_HARNESS_TEST_ROOT="$CONCURRENT_PARENT_B/harness" run_fake_harness_at down >/dev/null 2>&1 || true
+    run_fake_harness_at "$CONCURRENT_PARENT_B/harness" down >/dev/null 2>&1 || true
   fi
-  cleanup_owned_test_root
-  if [[ -n "$CONCURRENT_PARENT_A" && -f "$CONCURRENT_PARENT_A/.oasis7-harness-test-root" ]]; then
-    rm -rf -- "$CONCURRENT_PARENT_A"
+  assert_test_root_quiescent "$HARNESS_ROOT" || cleanup_status=1
+  if [[ -n "$CONCURRENT_PARENT_A" ]]; then
+    assert_test_root_quiescent "$CONCURRENT_PARENT_A/harness" || cleanup_status=1
   fi
-  if [[ -n "$CONCURRENT_PARENT_B" && -f "$CONCURRENT_PARENT_B/.oasis7-harness-test-root" ]]; then
-    rm -rf -- "$CONCURRENT_PARENT_B"
+  if [[ -n "$CONCURRENT_PARENT_B" ]]; then
+    assert_test_root_quiescent "$CONCURRENT_PARENT_B/harness" || cleanup_status=1
   fi
-  rm -rf -- "$TMP_DIR"
+  if [[ -n "$CONCURRENT_CHILD_A" && -f "$CONCURRENT_CHILD_A" ]]; then
+    assert_recorded_group_quiescent "concurrent A launcher child" "$(cat "$CONCURRENT_CHILD_A")" "" || cleanup_status=1
+  fi
+  if [[ -n "$CONCURRENT_CHILD_B" && -f "$CONCURRENT_CHILD_B" ]]; then
+    assert_recorded_group_quiescent "concurrent B launcher child" "$(cat "$CONCURRENT_CHILD_B")" "" || cleanup_status=1
+  fi
+  if [[ "$cleanup_status" -eq 0 ]]; then
+    cleanup_owned_test_root
+    if [[ -n "$CONCURRENT_PARENT_A" && -f "$CONCURRENT_PARENT_A/.oasis7-harness-test-root" ]]; then
+      rm -rf -- "$CONCURRENT_PARENT_A"
+    fi
+    if [[ -n "$CONCURRENT_PARENT_B" && -f "$CONCURRENT_PARENT_B/.oasis7-harness-test-root" ]]; then
+      rm -rf -- "$CONCURRENT_PARENT_B"
+    fi
+    rm -rf -- "$TMP_DIR"
+  else
+    echo "lifecycle acceptance: cleanup retained test roots for quiescence diagnostics" >&2
+  fi
 }
 trap cleanup EXIT
 
@@ -237,6 +305,39 @@ child_pid=$!
 echo "$child_pid" >"$child_pid_file"
 source "$(pwd)/scripts/worktree-harness-lib.sh"
 
+if [[ -n "${FAKE_LAUNCHER_MUTATE_STATE_FILE:-}" ]]; then
+  mutation_state_file="$FAKE_LAUNCHER_MUTATE_STATE_FILE"
+  for _ in $(seq 1 200); do
+    if [[ -f "$mutation_state_file" ]] && [[ -n "$(wh_state_get "$mutation_state_file" harness_identity 2>/dev/null || true)" ]]; then
+      break
+    fi
+    sleep 0.01
+  done
+  if [[ ! -f "$mutation_state_file" ]] || [[ -z "$(wh_state_get "$mutation_state_file" harness_identity 2>/dev/null || true)" ]]; then
+    echo "fake launcher: timed out waiting for harness state before mutation" >&2
+    exit 1
+  fi
+  if [[ -n "${FAKE_LAUNCHER_MUTATE_ORIGINAL_FILE:-}" ]]; then
+    python3 - "$mutation_state_file" "$FAKE_LAUNCHER_MUTATE_ORIGINAL_FILE" <<'PY'
+import json
+import pathlib
+import sys
+
+state = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+pathlib.Path(sys.argv[2]).write_text(
+    json.dumps({
+        "harness_pid": state.get("harness_pid"),
+        "harness_pgid": state.get("harness_pgid"),
+        "harness_identity": state.get("harness_identity"),
+    })
+    + "\n",
+    encoding="utf-8",
+)
+PY
+  fi
+  wh_state_write "$mutation_state_file" '{"harness_identity": "stale-readiness-incarnation"}'
+fi
+
 python3 - "$viewer_port" <<'PY' &
 import http.server
 import sys
@@ -256,6 +357,29 @@ if [[ "${FAKE_LAUNCHER_MODE:-ready}" == "ready" ]]; then
     printf 'STACK_READY=1\n'
     printf 'GAME_URL=http://127.0.0.1:%s/\n' "$viewer_port"
   } >"$meta_file"
+  if [[ -n "${FAKE_LAUNCHER_MUTATE_META_FILE:-}" ]]; then
+    if [[ -n "${FAKE_LAUNCHER_MUTATE_META_ORIGINAL_FILE:-}" ]]; then
+      cp "$meta_file" "$FAKE_LAUNCHER_MUTATE_META_ORIGINAL_FILE"
+    fi
+    python3 - "$FAKE_LAUNCHER_MUTATE_META_FILE" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+lines = path.read_text(encoding="utf-8").splitlines()
+updated = []
+found = False
+for line in lines:
+    if line.startswith("LAUNCHER_IDENTITY="):
+        updated.append("LAUNCHER_IDENTITY=stale-final-handoff-incarnation")
+        found = True
+    else:
+        updated.append(line)
+if not found:
+    raise SystemExit(f"fake launcher: metadata missing LAUNCHER_IDENTITY: {path}")
+path.write_text("\n".join(updated) + "\n", encoding="utf-8")
+PY
+  fi
 fi
 
 while :; do
@@ -983,37 +1107,91 @@ else:
     raise SystemExit("lifecycle acceptance: viewer port was not released after down")
 PY
 
+lifecycle_step "stale ready reservation release"
+stale_ready_ports_json="$TMP_DIR/stale-ready-ports.json"
+wh_resolve_ports_json "$HARNESS_ROOT" "$$" "$(wh_worktree_path)" "$(wh_git_common_dir)" >"$stale_ready_ports_json"
+stale_ready_token="$(python3 - "$stale_ready_ports_json" <<'PY'
+import json
+import pathlib
+import sys
+
+print(json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))["reservation_token"])
+PY
+)"
+wh_state_write "$HARNESS_ROOT/state.json" "$(python3 - "$stale_ready_token" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "status": "ready",
+    "phase": "ready",
+    "harness_pid": 999999998,
+    "harness_pgid": 999999998,
+    "harness_identity": "dead-stale-ready-harness",
+    "launcher_pid": 999999997,
+    "launcher_pgid": 999999997,
+    "launcher_identity": "dead-stale-ready-launcher",
+    "port_reservation_token": sys.argv[1],
+}))
+PY
+)"
+stale_ready_status_json="$TMP_DIR/stale-ready-status.json"
+run_harness status --json >"$stale_ready_status_json"
+python3 - "$stale_ready_status_json" "$stale_ready_token" <<'PY'
+import json
+import pathlib
+import sys
+
+state = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert state["status"] == "stopped", state
+assert state["phase"] == "stopped", state
+assert state["port_reservation_token"] is None, state
+PY
+[[ ! -e "$HARNESS_ROOT/.ports.reservation.json" ]] || {
+  echo "lifecycle acceptance: stale ready status left local reservation behind" >&2
+  exit 1
+}
+python3 - "$stale_ready_token" "$(wh_git_common_dir)/.oasis7-harness-port-registry/reservations.json" <<'PY'
+import json
+import pathlib
+import sys
+
+registry_path = pathlib.Path(sys.argv[2])
+registry = json.loads(registry_path.read_text(encoding="utf-8"))
+assert sys.argv[1] not in registry.get("reservations", {}), registry
+PY
+subsequent_ports_json="$TMP_DIR/stale-ready-subsequent-ports.json"
+wh_resolve_ports_json "$HARNESS_ROOT" "$$" "$(wh_worktree_path)" "$(wh_git_common_dir)" >"$subsequent_ports_json"
+subsequent_token="$(python3 - "$subsequent_ports_json" <<'PY'
+import json
+import pathlib
+import sys
+
+print(json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))["reservation_token"])
+PY
+)"
+[[ "$subsequent_token" != "$stale_ready_token" ]] || {
+  echo "lifecycle acceptance: subsequent allocation reused stale reservation token" >&2
+  exit 1
+}
+wh_release_ports_reservation "$HARNESS_ROOT" "$subsequent_token" "$(wh_git_common_dir)"
+
 STARTUP_TIMEOUT_SECS=5
 lifecycle_step "stale readiness identity rejection"
-# Launch synchronization begins before the harness establishes its own
-# startup deadline. Allow one bounded startup budget for setup and one for
-# the post-launch handoff without changing the harness deadline itself.
-LAUNCH_SYNC_TIMEOUT_SECS=$((STARTUP_TIMEOUT_SECS * 4))
-READINESS_DELAY_FILE="$TMP_DIR/readiness-delay.marker"
-READINESS_ACK_FILE="$TMP_DIR/readiness-delay.ack"
-READINESS_ACKED_FILE="$TMP_DIR/readiness-delay.acked"
+# The fake launcher performs the mutation as soon as the production harness
+# publishes its PID/identity state, so the handoff does not spend the
+# production startup budget waiting on a second test process to notice a
+# marker. The harness still runs with the real five-second timeout; the test
+# waits for that production command to complete rather than adding a second
+# out-of-band synchronization deadline.
+READINESS_ORIGINAL_FILE="$TMP_DIR/readiness-delay.original.json"
 READINESS_CHILD_PID_FILE="$TMP_DIR/readiness-child.pid"
-rm -f "$READINESS_DELAY_FILE" "$READINESS_ACK_FILE" "$READINESS_ACKED_FILE" "$READINESS_CHILD_PID_FILE"
+rm -f "$READINESS_ORIGINAL_FILE" "$READINESS_CHILD_PID_FILE"
 FAKE_LAUNCHER_CHILD_PID_FILE="$READINESS_CHILD_PID_FILE" \
-OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_FILE="$READINESS_DELAY_FILE" \
-OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_ACK_FILE="$READINESS_ACK_FILE" \
-OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_ACKED_FILE="$READINESS_ACKED_FILE" \
-OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_SECS=2 \
+FAKE_LAUNCHER_MUTATE_STATE_FILE="$HARNESS_ROOT/state.json" \
+FAKE_LAUNCHER_MUTATE_ORIGINAL_FILE="$READINESS_ORIGINAL_FILE" \
 run_fake_harness up --startup-timeout "$STARTUP_TIMEOUT_SECS" >"$TMP_DIR/readiness-up.log" 2>&1 &
 readiness_up_pid=$!
-wait_for_marker "$READINESS_DELAY_FILE" "$LAUNCH_SYNC_TIMEOUT_SECS" "readiness launch synchronization" || {
-  cat "$TMP_DIR/readiness-up.log" >&2 || true
-  exit 1
-}
-READINESS_HARNESS_PID="$(wh_state_get "$HARNESS_ROOT/state.json" harness_pid)"
-READINESS_HARNESS_PGID="$(wh_state_get "$HARNESS_ROOT/state.json" harness_pgid)"
-READINESS_HARNESS_IDENTITY="$(wh_state_get "$HARNESS_ROOT/state.json" harness_identity)"
-wh_state_write "$HARNESS_ROOT/state.json" '{"harness_identity": "stale-readiness-incarnation"}'
-: >"$READINESS_ACK_FILE"
-wait_for_marker "$READINESS_ACKED_FILE" "$STARTUP_TIMEOUT_SECS" "stale identity mutation acknowledgement" || {
-  cat "$TMP_DIR/readiness-up.log" >&2 || true
-  exit 1
-}
 set +e
 wait "$readiness_up_pid"
 readiness_up_rc=$?
@@ -1022,10 +1200,53 @@ set -e
   echo "lifecycle acceptance: launcher readiness accepted stale harness identity" >&2
   exit 1
 }
-wh_state_write "$HARNESS_ROOT/state.json" "$(python3 - "$READINESS_HARNESS_IDENTITY" <<'PY'
+[[ -s "$READINESS_ORIGINAL_FILE" ]] || {
+  cat "$TMP_DIR/readiness-up.log" >&2 || true
+  echo "lifecycle acceptance: stale identity mutation did not observe the production state" >&2
+  exit 1
+}
+READINESS_HARNESS_PID="$(python3 - "$READINESS_ORIGINAL_FILE" <<'PY'
+import json
+import pathlib
+import sys
+
+print(json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))["harness_pid"])
+PY
+)"
+READINESS_HARNESS_PGID="$(python3 - "$READINESS_ORIGINAL_FILE" <<'PY'
+import json
+import pathlib
+import sys
+
+print(json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))["harness_pgid"])
+PY
+)"
+READINESS_HARNESS_IDENTITY="$(python3 - "$READINESS_ORIGINAL_FILE" <<'PY'
+import json
+import pathlib
+import sys
+
+print(json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))["harness_identity"])
+PY
+)"
+READINESS_META_FILE="$(wh_runtime_meta_file "$HARNESS_ROOT")"
+READINESS_LAUNCHER_PID="$(wh_env_file_get "$READINESS_META_FILE" LAUNCHER_PID)"
+READINESS_LAUNCHER_PGID="$(wh_env_file_get "$READINESS_META_FILE" LAUNCHER_PGID)"
+READINESS_LAUNCHER_IDENTITY="$(wh_env_file_get "$READINESS_META_FILE" LAUNCHER_IDENTITY)"
+wh_state_write "$HARNESS_ROOT/state.json" "$(python3 - \
+  "$READINESS_HARNESS_PID" "$READINESS_HARNESS_PGID" "$READINESS_HARNESS_IDENTITY" \
+  "$READINESS_LAUNCHER_PID" "$READINESS_LAUNCHER_PGID" "$READINESS_LAUNCHER_IDENTITY" <<'PY'
 import json
 import sys
-print(json.dumps({"harness_identity": sys.argv[1]}))
+
+print(json.dumps({
+    "harness_pid": int(sys.argv[1]),
+    "harness_pgid": int(sys.argv[2]),
+    "harness_identity": sys.argv[3],
+    "launcher_pid": int(sys.argv[4]),
+    "launcher_pgid": int(sys.argv[5]),
+    "launcher_identity": sys.argv[6],
+}))
 PY
 )"
 run_fake_harness down >/dev/null 2>&1 || {
@@ -1045,55 +1266,20 @@ if [[ -e "$READINESS_CHILD_PID_FILE" ]]; then
 fi
 echo "unrelated live PID identity rejection: status_rc=$stale_status_rc url_rc=$stale_url_rc up_rc=$stale_up_rc readiness_rc=$readiness_up_rc"
 
+# The later handoff/concurrency fixtures intentionally retain their existing
+# bounded synchronization allowance; the stale-readiness case above uses the
+# production timeout directly and never waits on this allowance.
+LAUNCH_SYNC_TIMEOUT_SECS=$((STARTUP_TIMEOUT_SECS * 4))
 lifecycle_step "stale launcher handoff rejection"
-HANDOFF_DELAY_FILE="$TMP_DIR/launcher-handoff-delay.marker"
-HANDOFF_ACK_FILE="$TMP_DIR/launcher-handoff.ack"
-HANDOFF_ACKED_FILE="$TMP_DIR/launcher-handoff.acked"
 HANDOFF_CHILD_PID_FILE="$TMP_DIR/launcher-handoff-child.pid"
 HANDOFF_META_FILE="$(wh_runtime_meta_file "$HARNESS_ROOT")"
-rm -f "$HANDOFF_DELAY_FILE" "$HANDOFF_ACK_FILE" "$HANDOFF_ACKED_FILE" "$HANDOFF_CHILD_PID_FILE"
+HANDOFF_ORIGINAL_META_FILE="$TMP_DIR/launcher-handoff-original.meta"
+rm -f "$HANDOFF_CHILD_PID_FILE" "$HANDOFF_ORIGINAL_META_FILE"
 FAKE_LAUNCHER_CHILD_PID_FILE="$HANDOFF_CHILD_PID_FILE" \
-OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_FILE="$HANDOFF_DELAY_FILE" \
-OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_ACK_FILE="$HANDOFF_ACK_FILE" \
-OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_ACKED_FILE="$HANDOFF_ACKED_FILE" \
-OASIS7_HARNESS_TEST_DELAY_AFTER_LAUNCH_SECS=2 \
+FAKE_LAUNCHER_MUTATE_META_FILE="$HANDOFF_META_FILE" \
+FAKE_LAUNCHER_MUTATE_META_ORIGINAL_FILE="$HANDOFF_ORIGINAL_META_FILE" \
 run_fake_harness up --startup-timeout "$STARTUP_TIMEOUT_SECS" >"$TMP_DIR/launcher-handoff-up.log" 2>&1 &
 handoff_up_pid=$!
-wait_for_marker "$HANDOFF_DELAY_FILE" "$LAUNCH_SYNC_TIMEOUT_SECS" "launcher readiness handoff synchronization" || {
-  cat "$TMP_DIR/launcher-handoff-up.log" >&2 || true
-  exit 1
-}
-for _ in $(seq 1 40); do
-  [[ "$(wh_env_file_get "$HANDOFF_META_FILE" STACK_READY 2>/dev/null || true)" == "1" ]] && break
-  sleep 0.05
-done
-[[ "$(wh_env_file_get "$HANDOFF_META_FILE" STACK_READY 2>/dev/null || true)" == "1" ]] || {
-  cat "$TMP_DIR/launcher-handoff-up.log" >&2 || true
-  echo "lifecycle acceptance: launcher handoff did not publish STACK_READY" >&2
-  exit 1
-}
-python3 - "$HANDOFF_META_FILE" <<'PY'
-import pathlib
-import sys
-
-path = pathlib.Path(sys.argv[1])
-lines = path.read_text(encoding="utf-8").splitlines()
-updated = []
-found = False
-for line in lines:
-    if line.startswith("LAUNCHER_IDENTITY="):
-        updated.append("LAUNCHER_IDENTITY=stale-final-handoff-incarnation")
-        found = True
-    else:
-        updated.append(line)
-assert found, lines
-path.write_text("\n".join(updated) + "\n", encoding="utf-8")
-PY
-: >"$HANDOFF_ACK_FILE"
-wait_for_marker "$HANDOFF_ACKED_FILE" "$STARTUP_TIMEOUT_SECS" "launcher handoff mutation acknowledgement" || {
-  cat "$TMP_DIR/launcher-handoff-up.log" >&2 || true
-  exit 1
-}
 set +e
 wait "$handoff_up_pid"
 handoff_up_rc=$?
@@ -1110,6 +1296,28 @@ import sys
 state = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 assert state["status"] != "ready", state
 PY
+if [[ -s "$HANDOFF_ORIGINAL_META_FILE" ]]; then
+  cp "$HANDOFF_ORIGINAL_META_FILE" "$HANDOFF_META_FILE"
+  handoff_launcher_pid="$(wh_env_file_get "$HANDOFF_META_FILE" LAUNCHER_PID)"
+  handoff_launcher_pgid="$(wh_env_file_get "$HANDOFF_META_FILE" LAUNCHER_PGID)"
+  handoff_launcher_identity="$(wh_env_file_get "$HANDOFF_META_FILE" LAUNCHER_IDENTITY)"
+  wh_state_write "$HARNESS_ROOT/state.json" "$(python3 - \
+    "$handoff_launcher_pid" "$handoff_launcher_pgid" "$handoff_launcher_identity" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "launcher_pid": int(sys.argv[1]),
+    "launcher_pgid": int(sys.argv[2]),
+    "launcher_identity": sys.argv[3],
+}))
+PY
+  )"
+  run_fake_harness down >/dev/null 2>&1 || {
+    echo "lifecycle acceptance: launcher handoff fixture cleanup failed" >&2
+    exit 1
+  }
+fi
 if [[ -e "$HANDOFF_CHILD_PID_FILE" ]]; then
   handoff_child_pid="$(cat "$HANDOFF_CHILD_PID_FILE")"
   for _ in $(seq 1 40); do
