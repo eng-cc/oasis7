@@ -244,6 +244,7 @@ impl CognitionScheduler {
         wake.validate()?;
         if self.active.iter().any(|item| item.wake_id == wake.wake_id)
             || self.backpressure.contains_key(&wake.wake_id)
+            || self.in_flight.contains_key(&wake.wake_id)
         {
             return Err(SchedulerError::new("wake_id_conflict"));
         }

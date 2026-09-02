@@ -954,6 +954,22 @@ impl AgentCognitionStore {
                     format!("expected feedback sequence {expected}"),
                 ));
             }
+            if let Some(previous) = partition
+                .held
+                .values()
+                .find(|previous| previous.feedback_id == feedback.feedback_id)
+            {
+                if feedback_digest(previous) != feedback_digest_value {
+                    return Err(CognitionError::new(
+                        "feedback_id_conflict",
+                        "feedback_id was reused with a different held envelope",
+                    ));
+                }
+                return Err(CognitionError::new(
+                    "feedback_sequence_gap",
+                    format!("expected feedback sequence {expected}"),
+                ));
+            }
             if partition.held.len() >= MAX_FEEDBACK_REPLAY_ENTRIES {
                 return Err(CognitionError::new(
                     "feedback_sequence_overflow",

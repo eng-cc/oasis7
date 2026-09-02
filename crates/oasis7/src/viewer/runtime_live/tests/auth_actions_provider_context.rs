@@ -11,7 +11,7 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
     clear_runtime_provider_env();
     let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
     let decision_count = Arc::new(Mutex::new(0_usize));
-    let base_url = spawn_runtime_live_mock_http_server(5, {
+    let base_url = spawn_runtime_live_mock_http_server(7, {
         let recorded = Arc::clone(&recorded);
         let decision_count = Arc::clone(&decision_count);
         move |request| {
@@ -65,8 +65,10 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
                             .to_string(),
                         };
                     }
-                    let response = crate::simulator::DecisionResponse {
-                        decision: crate::simulator::ProviderDecision::Act {
+                    let decision = if request_number > 3 {
+                        crate::simulator::ProviderDecision::Wait
+                    } else {
+                        crate::simulator::ProviderDecision::Act {
                             action_ref: "move_agent".to_string(),
                             action: crate::simulator::Action::MoveAgent {
                                 agent_id: decoded
@@ -76,7 +78,10 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
                                     .clone(),
                                 to: format!("runtime:{request_number}:0:0"),
                             },
-                        },
+                        }
+                    };
+                    let response = crate::simulator::DecisionResponse {
+                        decision,
                         module_command: None,
                         provider_error: None,
                         diagnostics: crate::simulator::ProviderDiagnostics::default(),
@@ -93,8 +98,14 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
                     let feedback: crate::simulator::FeedbackEnvelopeV1 =
                         serde_json::from_slice(request.body.as_slice())
                             .expect("decode Runtime feedback");
-                    assert_eq!(feedback.status, "committed");
-                    assert!(feedback.runtime_receipt_id.is_some());
+                    if feedback.status == "committed" {
+                        assert!(feedback.runtime_receipt_id.is_some());
+                    } else {
+                        assert!(matches!(
+                            (feedback.status.as_str(), feedback.reject_reason.as_deref()),
+                            ("pending", Some(_)) | ("rejected", Some("no_effect"))
+                        ));
+                    }
                     MockHttpResponse {
                         status_code: 200,
                         body: serde_json::json!({"ok": true}).to_string(),
@@ -356,6 +367,18 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
         assert!(feedback.candidate_action_id.is_some());
         assert!(feedback.runtime_receipt_id.is_some());
     }
+    drop(recorded);
+    let baseline_time = server.world.state().time;
+    let (mut writer, _client) = test_writer_pair();
+    let mut session = RuntimeLiveSession::new();
+    server
+        .advance_runtime(&mut session, &mut writer, "step", 2, None, true)
+        .expect("multi-step control should advance each requested iteration");
+    assert_eq!(
+        server.world.state().time,
+        baseline_time + 2,
+        "Step {{ count: 2 }} must not lose the second tick after the first iteration"
+    );
     clear_runtime_provider_env();
 }
 
@@ -365,7 +388,7 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
     clear_runtime_provider_env();
     let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
     let decision_count = Arc::new(Mutex::new(0_usize));
-    let base_url = spawn_runtime_live_mock_http_server(3, {
+    let base_url = spawn_runtime_live_mock_http_server(5, {
         let recorded = Arc::clone(&recorded);
         let decision_count = Arc::clone(&decision_count);
         move |request| {
@@ -425,9 +448,15 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
                     let feedback: crate::simulator::FeedbackEnvelopeV1 =
                         serde_json::from_slice(request.body.as_slice())
                             .expect("decode stale Runtime feedback");
-                    assert_eq!(feedback.status, "rejected");
-                    assert_eq!(feedback.reject_reason.as_deref(), Some("stale_base"));
-                    assert!(feedback.runtime_receipt_id.is_none());
+                    assert!(matches!(
+                        (feedback.status.as_str(), feedback.reject_reason.as_deref()),
+                        ("rejected", Some("stale_base"))
+                            | ("pending", Some(_))
+                            | ("rejected", Some("no_effect"))
+                    ));
+                    if feedback.status != "pending" {
+                        assert!(feedback.runtime_receipt_id.is_none());
+                    }
                     MockHttpResponse {
                         status_code: 200,
                         body: serde_json::json!({"ok": true}).to_string(),
@@ -502,8 +531,21 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
                 feedback.status == "rejected"
                     && feedback.reject_reason.as_deref() == Some("stale_base")
             });
+        let wait_feedback_seen = recorded
+            .iter()
+            .filter(|request| request.path == "/v1/world-simulator/feedback-context")
+            .map(|request| {
+                serde_json::from_slice::<crate::simulator::FeedbackEnvelopeV1>(
+                    request.body.as_slice(),
+                )
+                .expect("decode wait feedback")
+            })
+            .any(|feedback| {
+                feedback.status == "rejected"
+                    && feedback.reject_reason.as_deref() == Some("no_effect")
+            });
         replan_request_seen = decisions.len() >= 2;
-        if stale_feedback_seen && replan_request_seen {
+        if stale_feedback_seen && replan_request_seen && wait_feedback_seen {
             break;
         }
         drop(recorded);
@@ -546,6 +588,24 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
                 && summary.contains(decisions[0].decision_request_id.as_str())
                 && summary.contains("replan_count=1")),
         "replan request must retain a bounded causal reference: {recent_events:?}"
+    );
+    let feedbacks: Vec<crate::simulator::FeedbackEnvelopeV1> = recorded
+        .iter()
+        .filter(|request| request.path == "/v1/world-simulator/feedback-context")
+        .map(|request| serde_json::from_slice(request.body.as_slice()).expect("decode feedback"))
+        .collect();
+    assert!(
+        feedbacks.iter().any(|feedback| {
+            feedback.status == "rejected" && feedback.reject_reason.as_deref() == Some("no_effect")
+        }),
+        "a completed provider Wait turn must close as canonical no_effect: {feedbacks:?}"
+    );
+    assert!(
+        feedbacks.iter().all(|feedback| {
+            feedback.reject_reason.as_deref()
+                != Some("provider wait elapsed without a Runtime action")
+        }),
+        "provider Wait must not emit the legacy ad-hoc expiry reason: {feedbacks:?}"
     );
     assert!(!server.world.journal().events.iter().any(|event| matches!(
         event.body,

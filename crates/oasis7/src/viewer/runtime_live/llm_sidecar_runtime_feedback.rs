@@ -333,10 +333,10 @@ impl RuntimeLlmSidecar {
                 let feedback = self.provider_feedback_for_request(
                     &context.request_context,
                     None,
-                    "failed",
+                    "rejected",
                     None,
                     None,
-                    Some("provider wait elapsed without a Runtime action".to_string()),
+                    Some("no_effect".to_string()),
                 );
                 world.enqueue_runtime_feedback(feedback).map_err(|error| {
                     format!("Runtime feedback outbox enqueue failed after provider wait: {error:?}")

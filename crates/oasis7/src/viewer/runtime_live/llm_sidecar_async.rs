@@ -261,7 +261,15 @@ impl RuntimeLlmSidecar {
                             error,
                             "async provider transport retry could not be dispatched"
                         );
+                        self.mark_provider_transport_exhausted(agent_id.clone());
                     }
+                } else {
+                    // Keep the last response correlated long enough for the
+                    // Viewer control plane to emit one typed terminal
+                    // `failed_provider` disposition. Without this marker the
+                    // context remains reusable and every later world tick can
+                    // redispatch the same exhausted transport attempt.
+                    self.mark_provider_transport_exhausted(agent_id.clone());
                 }
             }
         }

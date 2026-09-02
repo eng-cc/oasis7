@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
+use super::super::{location_id_for_pos, mapping::runtime_state_to_simulator_model};
 use crate::geometry::GeoPos;
 use crate::runtime::{
     Action as RuntimeAction, AgentIntentV2, ModuleSourcePackage, World as RuntimeWorld,
@@ -20,8 +21,6 @@ use crate::viewer::live::ViewerLiveDecisionMode;
 use crate::viewer::protocol::{AgentChatAck, AgentChatError};
 use sha2::{Digest, Sha256};
 
-use super::super::{location_id_for_pos, mapping::runtime_state_to_simulator_model};
-
 #[derive(Clone, Debug)]
 pub(super) struct RuntimePendingAction {
     pub(super) agent_id: String,
@@ -32,13 +31,11 @@ pub(super) struct RuntimePendingAction {
     /// delivered at most once.
     pub(super) feedback_emitted: bool,
 }
-
 #[derive(Clone, Debug)]
 pub(in crate::viewer::runtime_live) struct RuntimeProviderActionContext {
     pub(in crate::viewer::runtime_live) request: cognition_context::ProviderContextState,
     pub(in crate::viewer::runtime_live) response: ContinuousAgentResponseContextV1,
 }
-
 const BUILTIN_LLM_DECISION_SOURCE: &str = "builtin_llm";
 const PROVIDER_BACKED_DECISION_SOURCE: &str = "provider_backed";
 const PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION: &str = "provider_loopback_http";
@@ -76,6 +73,8 @@ mod agent_chat_support;
 mod async_support;
 #[path = "llm_sidecar_cognition.rs"]
 mod cognition_context;
+#[path = "llm_sidecar_lineage.rs"]
+mod lineage;
 #[path = "llm_sidecar_provider.rs"]
 mod provider_support;
 #[path = "llm_sidecar_runtime_feedback.rs"]
@@ -212,6 +211,8 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     provider_feedback_seq: BTreeMap<String, u64>,
     provider_completed_decisions: VecDeque<RuntimeLlmDecision>,
     provider_stale_replans: BTreeMap<String, ProviderStaleReplanState>,
+    provider_transport_exhausted: BTreeSet<String>,
+    provider_lineage_hydrated: bool,
 }
 
 pub(in crate::viewer::runtime_live) struct RuntimePlayerBindingPlan {
@@ -252,6 +253,8 @@ impl RuntimeLlmSidecar {
             provider_feedback_seq: BTreeMap::new(),
             provider_completed_decisions: VecDeque::new(),
             provider_stale_replans: BTreeMap::new(),
+            provider_transport_exhausted: BTreeSet::new(),
+            provider_lineage_hydrated: false,
         }
     }
 
@@ -1038,6 +1041,8 @@ impl RuntimeLlmSidecar {
                 if context.request_context.transport_attempt < MAX_PROVIDER_TRANSPORT_ATTEMPTS {
                     self.provider_retry_contexts
                         .insert(tick.agent_id.clone(), context);
+                } else {
+                    self.mark_provider_transport_exhausted(tick.agent_id.clone());
                 }
             }
         }

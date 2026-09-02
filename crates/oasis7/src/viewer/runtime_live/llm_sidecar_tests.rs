@@ -117,3 +117,40 @@ fn stale_provider_replans_stop_at_the_bounded_budget() {
         Some("agent-0")
     );
 }
+
+#[test]
+fn provider_lineage_hydrates_sequences_and_session_from_runtime_projection() {
+    let mut world = RuntimeWorld::default();
+    world
+        .enqueue_runtime_feedback(crate::simulator::FeedbackEnvelopeV1 {
+            feedback_id: "runtime-feedback:agent-0:7".to_string(),
+            feedback_seq: 7,
+            agent_subject: "agent-0".to_string(),
+            agent_session_id: "persisted-session".to_string(),
+            agent_turn_id: "persisted-session-turn-12".to_string(),
+            decision_request_id: "persisted-session-request-12".to_string(),
+            candidate_action_id: None,
+            runtime_receipt_id: None,
+            status: "rejected".to_string(),
+            request_digest: crate::simulator::h_v1(
+                "oasis7.cognition.request.v1",
+                &"persisted-session-request-12",
+            ),
+            reject_reason: Some("no_effect".to_string()),
+            provenance: "runtime_authoritative".to_string(),
+        })
+        .expect("persist feedback lineage");
+
+    let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    sidecar.hydrate_provider_lineage(&world);
+
+    assert_eq!(
+        sidecar
+            .provider_session_ids
+            .get("agent-0")
+            .map(String::as_str),
+        Some("persisted-session")
+    );
+    assert_eq!(sidecar.provider_context_seq.get("agent-0"), Some(&2));
+    assert_eq!(sidecar.provider_feedback_seq.get("agent-0"), Some(&8));
+}

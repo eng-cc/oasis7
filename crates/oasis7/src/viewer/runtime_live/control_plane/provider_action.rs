@@ -15,14 +15,27 @@ impl ViewerRuntimeLiveServer {
         if let Some(agent_id) = self.llm_sidecar.provider_stale_replan_exhausted_agent() {
             return Err(stale_replan_exhausted_trace(&self.world, agent_id.as_str()));
         }
-        let Some(decision) = self.llm_sidecar.next_llm_decision(
+        if let Some(agent_id) = self.llm_sidecar.take_provider_transport_exhausted_agent() {
+            return Err(self.finish_provider_transport_exhaustion(agent_id, None));
+        }
+        let decision = self.llm_sidecar.next_llm_decision(
             &mut self.world,
             &self.snapshot_config,
             self.config.world_id.as_str(),
-        ) else {
+        );
+        // `next_llm_decision` may close a due provider Wait in the Runtime
+        // outbox before returning a new decision. Drain that newly queued
+        // terminal feedback in the same control pass so the provider sees
+        // canonical `rejected/no_effect` rather than only the earlier
+        // `pending` disposition.
+        self.drain_provider_feedback_outbox();
+        let Some(decision) = decision else {
             return Ok(None);
         };
         let decision_trace = decision.decision_trace.clone();
+        if let Some(agent_id) = self.llm_sidecar.take_provider_transport_exhausted_agent() {
+            return Err(self.finish_provider_transport_exhaustion(agent_id, decision_trace));
+        }
         if let Some(trace) = decision_trace.as_ref() {
             if trace.llm_error.is_some() && !is_trace_only_overflow(trace) {
                 if !decision_trace_provider_error_retryable(trace).unwrap_or(false) {
@@ -190,6 +203,49 @@ impl ViewerRuntimeLiveServer {
             }
         }
         Ok(decision_trace)
+    }
+
+    fn finish_provider_transport_exhaustion(
+        &mut self,
+        agent_id: String,
+        prior_trace: Option<AgentDecisionTrace>,
+    ) -> AgentDecisionTrace {
+        let reason = "failed_provider: provider transport retry budget exhausted";
+        if let Some(feedback) = self.llm_sidecar.fail_provider_turn_with_feedback(
+            agent_id.as_str(),
+            "failed",
+            "failed_provider",
+        ) {
+            self.deliver_provider_feedback_best_effort(feedback);
+        }
+        let mut trace = prior_trace.unwrap_or_else(|| AgentDecisionTrace {
+            agent_id: agent_id.clone(),
+            time: self.world.state().time,
+            decision: AgentDecision::Wait,
+            llm_input: None,
+            llm_output: None,
+            llm_error: None,
+            parse_error: None,
+            llm_diagnostics: None,
+            llm_effect_intents: Vec::new(),
+            llm_effect_receipts: Vec::new(),
+            llm_step_trace: Vec::new(),
+            llm_prompt_section_trace: Vec::new(),
+            llm_chat_messages: Vec::new(),
+        });
+        trace.agent_id = agent_id;
+        trace.decision = AgentDecision::Wait;
+        trace.llm_error = Some(reason.to_string());
+        trace.llm_output = Some(
+            serde_json::json!({
+                "provider_error": {
+                    "code": "failed_provider",
+                    "retryable": false,
+                }
+            })
+            .to_string(),
+        );
+        trace
     }
 
     fn deliver_provider_feedback_best_effort(

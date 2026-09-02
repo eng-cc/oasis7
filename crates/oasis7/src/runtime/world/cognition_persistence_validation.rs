@@ -102,6 +102,91 @@ pub(super) fn validate_marker_current_world(
     Ok(())
 }
 
+/// Validate the durable event prefix before recovery exposes a committed
+/// projection. Recovery may repair a crash-truncated lifecycle suffix, but it
+/// must never accept an event with a missing or forged canonical digest.
+pub(super) fn validate_cognition_journal_integrity(journal: &JsonValue) -> Result<(), WorldError> {
+    let schema = journal
+        .get("schema_version")
+        .and_then(JsonValue::as_str)
+        .unwrap_or_default();
+    if !schema.is_empty() && schema != "cognition-journal.v1" {
+        return Err(validation("cognition_journal_schema_mismatch"));
+    }
+    let events = journal
+        .get("events")
+        .and_then(JsonValue::as_array)
+        .ok_or_else(|| validation("cognition_events_missing"))?;
+    let mut previous_seq = 0u64;
+    for event in events {
+        let object = event
+            .as_object()
+            .ok_or_else(|| validation("cognition_event_not_object"))?;
+        let sequence = object
+            .get("journal_seq")
+            .and_then(JsonValue::as_u64)
+            .ok_or_else(|| validation("cognition_journal_sequence_missing"))?;
+        // The journal is an append-only prefix. A gap is not a recoverable
+        // crash suffix: it would make an unverified middle event appear
+        // committed and must fail closed before any projection is exposed.
+        if sequence != previous_seq.saturating_add(1) {
+            return Err(validation("cognition_journal_sequence_mismatch"));
+        }
+        let event_digest = object
+            .get("event_digest")
+            .and_then(JsonValue::as_str)
+            .ok_or_else(|| validation("cognition_event_digest_missing"))?;
+        let mut unsigned = event.clone();
+        unsigned
+            .as_object_mut()
+            .ok_or_else(|| validation("cognition_event_not_object"))?
+            .remove("event_digest");
+        let expected = cognition_digest_v1("oasis7.cognition.event.v1", &unsigned);
+        if expected != event_digest {
+            return Err(validation("cognition_event_digest_mismatch"));
+        }
+        previous_seq = sequence;
+    }
+    let head_seq = journal
+        .get("head_seq")
+        .and_then(JsonValue::as_u64)
+        .unwrap_or_default();
+    // A head one sequence past the durable prefix represents the single
+    // terminal event that recovery may reconstruct from a committed marker.
+    // Larger divergence would conceal an unverified suffix and is rejected.
+    if head_seq < previous_seq || head_seq > previous_seq.saturating_add(1) {
+        return Err(validation("cognition_journal_head_sequence_mismatch"));
+    }
+    Ok(())
+}
+
+pub(super) fn validate_cognition_journal_head(journal: &JsonValue) -> Result<(), WorldError> {
+    let events = journal
+        .get("events")
+        .and_then(JsonValue::as_array)
+        .ok_or_else(|| validation("cognition_events_missing"))?;
+    let head_seq = journal
+        .get("head_seq")
+        .and_then(JsonValue::as_u64)
+        .unwrap_or_default();
+    let max_seq = events
+        .iter()
+        .filter_map(|event| event.get("journal_seq").and_then(JsonValue::as_u64))
+        .max()
+        .unwrap_or_default();
+    if head_seq != max_seq {
+        return Err(validation("cognition_journal_head_sequence_mismatch"));
+    }
+    let expected_head = cognition_digest_v1(
+        "oasis7.cognition.journal-head.v1",
+        &json!({"head_seq": head_seq, "events": events}),
+    );
+    if journal.get("head_digest").and_then(JsonValue::as_str) != Some(expected_head.as_str()) {
+        return Err(validation("cognition_journal_head_digest_mismatch"));
+    }
+    Ok(())
+}
+
 pub(super) fn validate_response_record(
     projection: &JsonValue,
     response: &CognitionResponseRecordV1,
@@ -155,7 +240,11 @@ pub(super) fn validate_response_lineage_binding(
         return Err(validation("response_artifact_missing"));
     };
     let Some(_) = artifact.get("context_discriminator") else {
-        return Ok(());
+        return if marker.agent_id.is_empty() {
+            Ok(())
+        } else {
+            Err(validation("response_artifact_identity_required"))
+        };
     };
     let identity: RuntimeCognitionResponseArtifactV1 = serde_json::from_value(artifact.clone())
         .map_err(|_| validation("response_artifact_identity_invalid"))?;
@@ -164,6 +253,36 @@ pub(super) fn validate_response_lineage_binding(
         .map_err(|_| validation("response_artifact_identity_invalid"))?;
     if marker.response_artifact_digest.is_empty() {
         return Err(validation("response_artifact_marker_missing"));
+    }
+    let outer = artifact
+        .get("outer_lineage")
+        .and_then(JsonValue::as_object)
+        .ok_or_else(|| validation("response_outer_lineage_missing"))?;
+    let outer_block_hash = outer
+        .get("finality_block_hash")
+        .and_then(JsonValue::as_str)
+        .unwrap_or("genesis");
+    let expected_base_world_hash =
+        cognition_digest_v1("oasis7.runtime.manifest.v1", &marker.parent_world_hash);
+    let expected_manifest_hash =
+        cognition_digest_v1("oasis7.runtime.manifest.v1", &marker.runtime_manifest_hash);
+    if outer.get("agent_id").and_then(JsonValue::as_str) != Some(marker.agent_id.as_str())
+        || outer.get("world_id").and_then(JsonValue::as_str) != Some(marker.world_id.as_str())
+        || outer.get("branch_id").and_then(JsonValue::as_str) != Some(marker.branch_id.as_str())
+        || outer.get("finality_epoch").and_then(JsonValue::as_u64) != Some(marker.finality_epoch)
+        || outer_block_hash != marker.finality_block_hash
+        || outer.get("finality_status").and_then(JsonValue::as_str)
+            != Some(marker.finality_status.as_str())
+        || outer.get("base_tick").and_then(JsonValue::as_u64) != Some(marker.parent_tick)
+        || outer.get("base_world_hash").and_then(JsonValue::as_str)
+            != Some(expected_base_world_hash.as_str())
+        || outer.get("reorg_epoch").and_then(JsonValue::as_u64) != Some(marker.reorg_epoch)
+        || outer
+            .get("runtime_manifest_hash")
+            .and_then(JsonValue::as_str)
+            != Some(expected_manifest_hash.as_str())
+    {
+        return Err(validation("response_outer_lineage_mismatch"));
     }
     if identity.agent_session_id != marker.agent_session_id
         || identity.agent_turn_id != marker.agent_turn_id

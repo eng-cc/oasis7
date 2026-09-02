@@ -60,6 +60,7 @@ impl RuntimeLlmSidecar {
         kernel: &mut WorldKernel,
         world_id: &str,
     ) -> Result<(), String> {
+        self.hydrate_provider_lineage(world);
         let settings = provider_settings_from_env()?.ok_or_else(|| {
             "provider settings disappeared before context preparation".to_string()
         })?;

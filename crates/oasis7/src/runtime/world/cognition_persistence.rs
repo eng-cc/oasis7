@@ -12,15 +12,15 @@ mod cognition_persistence_support;
 use super::World;
 use super::cognition_persistence_validation::{
     append_cognition_event, cognition_error, cognition_validation, legacy_recovery_report,
-    parent_root, persist_recovery_report, validate_marker_current_world,
+    parent_root, persist_recovery_report, validate_cognition_journal_head,
+    validate_cognition_journal_integrity, validate_marker_current_world,
     validate_response_lineage_binding, validate_response_record,
 };
 use crate::runtime::cognition::{AgentDecisionEnvelopeV1, MvccValidator};
 use crate::runtime::cognition_recovery::{
     CognitionReceiptViewV1, CognitionRecoveryReport, CognitionResponseRecordV1,
-    RuntimeCognitionBaseBindingV1, RuntimeCognitionResponseArtifactV1, RuntimeReceiptLineageV1,
-    WorldCommitRecordV1, WorldRootViewV1, cognition_digest_v1,
-    default_cognition_persistence_projection, response_artifact_digest,
+    RuntimeCognitionBaseBindingV1, RuntimeReceiptLineageV1, WorldCommitRecordV1, WorldRootViewV1,
+    cognition_digest_v1, default_cognition_persistence_projection, response_artifact_digest,
 };
 use crate::runtime::cognition_scheduler::CognitionScheduler;
 use crate::runtime::cognition_wake::AgentContinuation;
@@ -177,59 +177,6 @@ impl World {
         &self.cognition
     }
 
-    fn bind_cognition_response_artifact(
-        &mut self,
-        commit_id: &str,
-        response_artifact: &RuntimeCognitionResponseArtifactV1,
-    ) -> Result<(), WorldError> {
-        let mut projection = self.cognition.clone();
-        let record = projection
-            .get_mut("commit_records")
-            .and_then(JsonValue::as_array_mut)
-            .and_then(|records| {
-                records.iter_mut().find(|record| {
-                    record.get("commit_id").and_then(JsonValue::as_str) == Some(commit_id)
-                })
-            })
-            .ok_or_else(|| cognition_validation("commit_record_missing"))?;
-        let response_digest = response_artifact_digest(
-            &serde_json::to_value(response_artifact).map_err(WorldError::from)?,
-        );
-        record["response_context_discriminator"] = json!(response_artifact.context_discriminator);
-        record["response_context_version"] = json!(response_artifact.context_version);
-        record["response_retry_seq"] = json!(response_artifact.retry_seq);
-        record["transport_attempt"] = json!(response_artifact.transport_attempt);
-        record["response_artifact_digest"] = json!(response_digest);
-        let receipt_id = record["receipt_id"]
-            .as_str()
-            .ok_or_else(|| cognition_validation("receipt_id_missing"))?
-            .to_string();
-        let envelope_digest = record["envelope_digest"]
-            .as_str()
-            .ok_or_else(|| cognition_validation("envelope_digest_missing"))?
-            .to_string();
-        let action_id = record["action_id"]
-            .as_str()
-            .ok_or_else(|| cognition_validation("action_id_missing"))?
-            .to_string();
-        let world_root = record["parent_world_hash"]
-            .as_str()
-            .ok_or_else(|| cognition_validation("parent_world_hash_missing"))?
-            .to_string();
-        record["receipt_digest"] = json!(cognition_digest_v1(
-            "oasis7.cognition.receipt.v1",
-            &json!({
-                "receipt_id": receipt_id,
-                "envelope_digest": envelope_digest,
-                "action_id": action_id,
-                "world_root": world_root,
-                "response_artifact_digest": response_digest,
-            })
-        ));
-        self.cognition = projection;
-        Ok(())
-    }
-
     fn current_cognition_runtime_authority(&self) -> Result<CognitionRuntimeAuthority, WorldError> {
         let binding = self
             .cognition
@@ -342,6 +289,43 @@ impl World {
         envelope: AgentDecisionEnvelopeV1,
         response_artifact: Option<JsonValue>,
     ) -> Result<WorldCommitRecordV1, WorldError> {
+        let response_identity = response_artifact
+            .as_ref()
+            .map(|artifact| {
+                cognition_persistence_support::validate_prepare_response_artifact(
+                    &envelope, artifact,
+                )
+            })
+            .transpose()?;
+        // Resolve an exact durable marker before checking the current head.
+        // A retry of a committed envelope is allowed to read its original
+        // receipt even after that commit advanced the World state.
+        let existing_projection = if self.cognition.is_null() {
+            default_cognition_persistence_projection()
+        } else {
+            self.cognition.clone()
+        };
+        let existing_parsed: CognitionProjection = serde_json::from_value(existing_projection)
+            .map_err(|error| cognition_error("invalid_cognition_projection", error))?;
+        if let Some(existing) = existing_parsed
+            .commit_records
+            .iter()
+            .find(|record| record.envelope_idempotency_key == envelope.envelope_idempotency_key)
+        {
+            if existing.envelope_digest != envelope.envelope_digest {
+                return Err(cognition_validation("envelope_idempotency_conflict"));
+            }
+            if let Some(artifact) = response_artifact.as_ref() {
+                let response_matches = existing_parsed.responses.iter().any(|response| {
+                    response.envelope_digest == existing.envelope_digest
+                        && response.response_artifact.as_ref() == Some(&artifact)
+                });
+                if !response_matches {
+                    return Err(cognition_validation("response_artifact_lineage_mismatch"));
+                }
+            }
+            return Ok(existing.clone());
+        }
         if self.has_recorded_stale_cognition_rejection(&envelope)? {
             return Err(stale_base_error());
         }
@@ -475,13 +459,27 @@ impl World {
                 "oasis7.cognition.feedback-id.v1",
                 &envelope.envelope_digest,
             ),
-            response_context_discriminator: String::new(),
-            response_context_version: 0,
-            response_retry_seq: envelope.retry_seq,
-            transport_attempt: 0,
-            response_artifact_digest: String::new(),
+            response_context_discriminator: response_identity
+                .as_ref()
+                .map_or_else(String::new, |identity| {
+                    identity.context_discriminator.clone()
+                }),
+            response_context_version: response_identity
+                .as_ref()
+                .map_or(0, |identity| identity.context_version),
+            response_retry_seq: response_identity
+                .as_ref()
+                .map_or(envelope.retry_seq, |identity| identity.retry_seq),
+            transport_attempt: response_identity
+                .as_ref()
+                .map_or(0, |identity| identity.transport_attempt),
+            response_artifact_digest: response_artifact
+                .as_ref()
+                .map_or_else(String::new, response_artifact_digest),
             abort_reason: None,
         };
+        let mut marker = marker;
+        marker.receipt_digest = cognition_persistence_support::receipt_digest_for_marker(&marker);
         validate_marker(&marker)?;
         let mut next = projection;
         let object = next
@@ -577,6 +575,14 @@ impl World {
         if !self.pending_actions.is_empty() {
             return Err(cognition_validation("cognition_pending_actions"));
         }
+        if !marker.agent_id.is_empty() {
+            let response = parsed
+                .responses
+                .iter()
+                .find(|response| response.envelope_digest == marker.envelope_digest)
+                .ok_or_else(|| cognition_validation("response_missing"))?;
+            validate_response_lineage_binding(response, marker)?;
+        }
         let action_value = parsed
             .staged_actions
             .get(commit_id)
@@ -630,6 +636,21 @@ impl World {
             &mut next,
             "WorldReceiptLinked",
             json!({
+                "envelope_idempotency_key": committed.envelope_idempotency_key,
+                "receipt_id": committed.receipt_id,
+                "agent_id": committed.agent_id,
+                "agent_session_id": committed.agent_session_id,
+                "agent_turn_id": committed.agent_turn_id,
+                "decision_request_id": committed.decision_request_id,
+                "request_digest": committed.request_digest,
+                "feedback_id": committed.feedback_id,
+            }),
+        )?;
+        append_cognition_event(
+            &mut next,
+            "CognitionTurnCompleted",
+            json!({
+                "status": "committed",
                 "envelope_idempotency_key": committed.envelope_idempotency_key,
                 "receipt_id": committed.receipt_id,
                 "agent_id": committed.agent_id,
@@ -732,11 +753,16 @@ impl World {
             .iter()
             .find(|marker| marker.status == "committed" && marker.receipt_id == lineage.receipt_id)
             .ok_or_else(|| cognition_validation("receipt_commit_marker_missing"))?;
+        if RuntimeReceiptLineageV1::from_durable_commit_record(marker).is_none() {
+            return Err(cognition_validation(
+                "receipt_lineage_dense_marker_required",
+            ));
+        }
         validate_lineage_binding(&parsed, marker, &lineage)?;
-        if let Some(derived) = RuntimeReceiptLineageV1::from_durable_commit_record(marker) {
-            if derived != lineage {
-                return Err(cognition_validation("receipt_lineage_caller_override"));
-            }
+        let derived = RuntimeReceiptLineageV1::from_durable_commit_record(marker)
+            .expect("dense marker checked above");
+        if derived != lineage {
+            return Err(cognition_validation("receipt_lineage_caller_override"));
         }
         if let Some(existing) = parsed
             .receipt_lineage_registry
@@ -794,10 +820,10 @@ impl World {
             validate_response_lineage_binding(response, marker)?;
         }
         validate_lineage_binding(&parsed, marker, lineage)?;
-        if let Some(derived) = RuntimeReceiptLineageV1::from_durable_commit_record(marker) {
-            if derived != *lineage {
-                return Err(cognition_validation("receipt_lineage_binding_mismatch"));
-            }
+        let derived = RuntimeReceiptLineageV1::from_durable_commit_record(marker)
+            .ok_or_else(|| cognition_validation("receipt_lineage_dense_marker_required"))?;
+        if derived != *lineage {
+            return Err(cognition_validation("receipt_lineage_binding_mismatch"));
         }
         Ok(lineage.clone())
     }
@@ -925,9 +951,22 @@ impl World {
                 }
             }
         }
+        if let Some(scheduler_state) = projection
+            .get("scheduler_state")
+            .filter(|state| !state.is_null())
+        {
+            self.validate_persisted_cognition_wakes(scheduler_state)?;
+        }
 
         for marker in &parsed.commit_records {
             validate_marker(marker)?;
+        }
+        if parsed
+            .commit_records
+            .iter()
+            .any(|marker| marker.status == "committed" && !marker.agent_id.is_empty())
+        {
+            validate_cognition_journal_integrity(&projection["cognition_journal"])?;
         }
         let Some(marker) = select_commit_record(&parsed.commit_records).cloned() else {
             if feedback_projection_changed {
@@ -1006,9 +1045,17 @@ impl World {
         // repair that projection in the same in-memory transaction.
         let (new_repaired_ids, mut projection_repairs) =
             reconcile_committed_projection(&mut projection)?;
-        let journal_repaired = new_repaired_ids.iter().any(|id| id == "world_receipt_link");
+        let journal_repaired = new_repaired_ids.iter().any(|id| {
+            matches!(
+                id.as_str(),
+                "world_receipt_link" | "cognition_turn_completed"
+            )
+        });
         parsed = serde_json::from_value(projection.clone())
             .map_err(|error| cognition_error("invalid_cognition_projection", error))?;
+        if dense_marker {
+            validate_cognition_journal_head(&projection["cognition_journal"])?;
+        }
         if journal_repaired {
             // Repairing a missing committed journal prefix necessarily changes
             // the durable head. Rebind each response's journal cursor to the

@@ -751,6 +751,63 @@ fn feedback_sequence_gap_and_same_sequence_collision_fail_closed() {
 }
 
 #[test]
+fn held_feedback_id_collision_across_future_sequences_does_not_corrupt_replay_state() {
+    let mut store = AgentCognitionStore::default();
+    let request_context = request(0, 60_000);
+    let request_digest = request_context.request_digest().to_string();
+    store
+        .begin_request(request_context)
+        .expect("request accepted");
+
+    let feedback = |id: &str, seq: u64, reason: &str| {
+        serde_json::from_value(json!({
+            "feedback_id": id,
+            "feedback_seq": seq,
+            "agent_subject": "agent-1",
+            "agent_session_id": "session.agent-1.v1",
+            "agent_turn_id": "turn.agent-1.7",
+            "decision_request_id": "request.agent-1.7",
+            "candidate_action_id": 7,
+            "runtime_receipt_id": null,
+            "status": "pending",
+            "request_digest": request_digest,
+            "reject_reason": reason,
+            "provenance": "runtime_authoritative"
+        }))
+        .expect("decode feedback")
+    };
+
+    let first_gap = store
+        .accept_feedback(feedback("feedback-held-id", 4, "first"))
+        .expect_err("the first future envelope must be held");
+    assert_eq!(first_gap.code(), "feedback_sequence_gap");
+
+    let exact_hold_replay = store
+        .accept_feedback(feedback("feedback-held-id", 4, "first"))
+        .expect_err("an exact held replay must remain pending behind the gap");
+    assert_eq!(exact_hold_replay.code(), "feedback_sequence_gap");
+
+    let duplicate_id = store
+        .accept_feedback(feedback("feedback-held-id", 5, "same ID, new sequence"))
+        .expect_err("a held feedback_id reused at another sequence must collide");
+    assert_eq!(duplicate_id.code(), "feedback_id_conflict");
+
+    for sequence in 1..=3 {
+        store
+            .accept_feedback(feedback(
+                &format!("feedback-seq-{sequence}"),
+                sequence,
+                "drain",
+            ))
+            .expect("contiguous feedback must advance the hold window");
+    }
+
+    store
+        .accept_feedback(feedback("feedback-seq-5", 5, "after collision"))
+        .expect("rejected duplicate must not occupy the later sequence slot");
+}
+
+#[test]
 fn production_outer_context_preserves_retry_transport_and_runtime_binding() {
     let mut fixture = production_request_fixture(2, 60_000);
     fixture["retry_seq"] = json!(2);

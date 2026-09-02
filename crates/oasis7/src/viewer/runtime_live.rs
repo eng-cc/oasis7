@@ -919,6 +919,11 @@ impl ViewerRuntimeLiveServer {
         let mut runtime_events_for_feedback = Vec::new();
 
         for _ in 0..step_count.max(1) {
+            // A provider commit may advance the world during this iteration.
+            // Keep a per-iteration baseline so a later item in Step { count }
+            // still advances instead of comparing against the method-wide
+            // starting time.
+            let iteration_logical_time = self.world.state().time;
             if let Err(reason) = self
                 .llm_sidecar
                 .ensure_gameplay_ready(&self.world, &self.snapshot_config)
@@ -1013,7 +1018,7 @@ impl ViewerRuntimeLiveServer {
             }
             // Runtime cognition finalization already advances the World once;
             // avoid a second logical tick for the same provider action.
-            if self.world.state().time == baseline_logical_time {
+            if self.world.state().time == iteration_logical_time {
                 if let Err(error) = self.world.step() {
                     let (delta_logical_time, delta_event_seq) =
                         self.control_completion_delta(baseline_logical_time, baseline_event_seq);

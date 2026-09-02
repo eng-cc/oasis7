@@ -14,13 +14,177 @@ use crate::runtime::cognition::{AgentDecisionEnvelopeV1, finality_binding_digest
 use crate::runtime::cognition_recovery::{
     CognitionRecoveryReport, RuntimeCognitionCommitRequestV1, RuntimeCognitionResponseArtifactV1,
     RuntimeReceiptLineageV1, WorldCommitRecordV1, WorldRootViewV1, cognition_digest_v1,
-    default_cognition_persistence_projection,
+    default_cognition_persistence_projection, response_artifact_digest,
 };
 use crate::runtime::cognition_scheduler::{CognitionScheduler, SchedulerWakeV1};
 use crate::runtime::cognition_wake::AgentContinuation;
 use crate::runtime::error::WorldError;
 use serde_json::{Value as JsonValue, json};
 use std::collections::BTreeMap;
+
+pub(super) fn receipt_digest_for_marker(marker: &WorldCommitRecordV1) -> String {
+    let mut receipt = json!({
+        "receipt_id": marker.receipt_id,
+        "envelope_digest": marker.envelope_digest,
+        "action_id": marker.action_id,
+        "world_root": marker.parent_world_hash,
+    });
+    if !marker.response_artifact_digest.is_empty() {
+        receipt["response_artifact_digest"] = json!(marker.response_artifact_digest);
+    }
+    cognition_digest_v1("oasis7.cognition.receipt.v1", &receipt)
+}
+
+pub(super) fn validate_prepare_response_artifact(
+    envelope: &AgentDecisionEnvelopeV1,
+    artifact: &JsonValue,
+) -> Result<RuntimeCognitionResponseArtifactV1, WorldError> {
+    let identity: RuntimeCognitionResponseArtifactV1 = serde_json::from_value(artifact.clone())
+        .map_err(|_| cognition_validation("response_artifact_identity_invalid"))?;
+    identity
+        .validate()
+        .map_err(|_| cognition_validation("response_artifact_identity_invalid"))?;
+    let outer = artifact
+        .get("outer_lineage")
+        .and_then(JsonValue::as_object)
+        .ok_or_else(|| cognition_validation("response_outer_lineage_missing"))?;
+    let expected_base_world_hash =
+        cognition_digest_v1("oasis7.runtime.manifest.v1", &envelope.base_world_hash);
+    let expected_manifest_hash = cognition_digest_v1(
+        "oasis7.runtime.manifest.v1",
+        &envelope.runtime_manifest_hash,
+    );
+    let outer_block_hash = outer
+        .get("finality_block_hash")
+        .and_then(JsonValue::as_str)
+        .unwrap_or("genesis");
+    if outer.get("agent_id").and_then(JsonValue::as_str) != Some(envelope.agent_id.as_str())
+        || outer.get("world_id").and_then(JsonValue::as_str) != Some(envelope.world_id.as_str())
+        || outer.get("branch_id").and_then(JsonValue::as_str) != Some(envelope.branch_id.as_str())
+        || outer.get("finality_epoch").and_then(JsonValue::as_u64) != Some(envelope.finality_epoch)
+        || outer_block_hash != envelope.finality_block_hash.as_deref().unwrap_or("genesis")
+        || outer.get("finality_status").and_then(JsonValue::as_str)
+            != Some(envelope.finality_status.as_str())
+        || outer.get("base_tick").and_then(JsonValue::as_u64) != Some(envelope.base_tick)
+        || outer.get("base_world_hash").and_then(JsonValue::as_str)
+            != Some(expected_base_world_hash.as_str())
+        || outer.get("reorg_epoch").and_then(JsonValue::as_u64) != Some(envelope.reorg_epoch)
+        || outer
+            .get("runtime_manifest_hash")
+            .and_then(JsonValue::as_str)
+            != Some(expected_manifest_hash.as_str())
+    {
+        return Err(cognition_validation("response_outer_lineage_mismatch"));
+    }
+    if identity.agent_session_id != envelope.agent_session_id
+        || identity.agent_turn_id != envelope.agent_turn_id
+        || identity.decision_request_id != envelope.decision_request_id
+        || identity.request_digest != envelope.request_digest
+    {
+        return Err(cognition_validation("response_artifact_lineage_mismatch"));
+    }
+    Ok(identity)
+}
+
+fn response_artifact_with_outer_lineage(
+    artifact: &RuntimeCognitionResponseArtifactV1,
+    request: &RuntimeCognitionCommitRequestV1,
+) -> Result<JsonValue, WorldError> {
+    let mut value = serde_json::to_value(artifact).map_err(WorldError::from)?;
+    value["outer_lineage"] = json!({
+        "agent_id": request.agent_id,
+        "world_id": request.captured_base_binding.world_id,
+        "branch_id": request.captured_base_binding.branch_id,
+        "finality_epoch": request.captured_base_binding.finality_epoch,
+        "finality_block_hash": request.captured_base_binding.finality_block_hash,
+        "finality_status": request.captured_base_binding.finality_status,
+        "base_tick": request.captured_base_binding.base_tick,
+        "base_world_hash": request.captured_base_binding.base_world_hash,
+        "reorg_epoch": request.captured_base_binding.reorg_epoch,
+        "runtime_manifest_hash": request.captured_base_binding.runtime_manifest_hash,
+    });
+    Ok(value)
+}
+
+impl World {
+    fn bind_cognition_response_artifact(
+        &mut self,
+        commit_id: &str,
+        response_artifact: &RuntimeCognitionResponseArtifactV1,
+    ) -> Result<(), WorldError> {
+        let mut projection = self.cognition.clone();
+        let envelope_digest = projection
+            .get("commit_records")
+            .and_then(JsonValue::as_array)
+            .and_then(|records| {
+                records.iter().find(|record| {
+                    record.get("commit_id").and_then(JsonValue::as_str) == Some(commit_id)
+                })
+            })
+            .and_then(|record| record.get("envelope_digest"))
+            .and_then(JsonValue::as_str)
+            .ok_or_else(|| cognition_validation("envelope_digest_missing"))?
+            .to_string();
+        let response_digest = projection
+            .get("responses")
+            .and_then(JsonValue::as_array)
+            .and_then(|responses| {
+                responses.iter().find(|response| {
+                    response.get("envelope_digest").and_then(JsonValue::as_str)
+                        == Some(envelope_digest.as_str())
+                })
+            })
+            .and_then(|response| response.get("response_artifact"))
+            .map(response_artifact_digest)
+            .unwrap_or_else(|| {
+                response_artifact_digest(
+                    &serde_json::to_value(response_artifact).unwrap_or(JsonValue::Null),
+                )
+            });
+        let record = projection
+            .get_mut("commit_records")
+            .and_then(JsonValue::as_array_mut)
+            .and_then(|records| {
+                records.iter_mut().find(|record| {
+                    record.get("commit_id").and_then(JsonValue::as_str) == Some(commit_id)
+                })
+            })
+            .ok_or_else(|| cognition_validation("commit_record_missing"))?;
+        record["response_context_discriminator"] = json!(response_artifact.context_discriminator);
+        record["response_context_version"] = json!(response_artifact.context_version);
+        record["response_retry_seq"] = json!(response_artifact.retry_seq);
+        record["transport_attempt"] = json!(response_artifact.transport_attempt);
+        record["response_artifact_digest"] = json!(response_digest);
+        let receipt_id = record["receipt_id"]
+            .as_str()
+            .ok_or_else(|| cognition_validation("receipt_id_missing"))?
+            .to_string();
+        let envelope_digest = record["envelope_digest"]
+            .as_str()
+            .ok_or_else(|| cognition_validation("envelope_digest_missing"))?
+            .to_string();
+        let action_id = record["action_id"]
+            .as_str()
+            .ok_or_else(|| cognition_validation("action_id_missing"))?
+            .to_string();
+        let world_root = record["parent_world_hash"]
+            .as_str()
+            .ok_or_else(|| cognition_validation("parent_world_hash_missing"))?
+            .to_string();
+        record["receipt_digest"] = json!(cognition_digest_v1(
+            "oasis7.cognition.receipt.v1",
+            &json!({
+                "receipt_id": receipt_id,
+                "envelope_digest": envelope_digest,
+                "action_id": action_id,
+                "world_root": world_root,
+                "response_artifact_digest": response_digest,
+            })
+        ));
+        self.cognition = projection;
+        Ok(())
+    }
+}
 
 impl World {
     pub(in crate::runtime::world) fn has_recorded_stale_cognition_rejection(
@@ -71,8 +235,45 @@ impl World {
         response_artifact
             .validate_for_request(&request)
             .map_err(|error| cognition_validation(error.code()))?;
-        let authority = self.current_cognition_runtime_authority()?;
         let action_value = serde_json::to_value(&action).map_err(WorldError::from)?;
+        let response_artifact_value =
+            response_artifact_with_outer_lineage(&response_artifact, &request)?;
+
+        // Idempotency is keyed by the complete outer request identity, not by
+        // the current World head. A retry can arrive after the committed
+        // action advanced that head; look up the durable marker before doing
+        // the optimistic-concurrency check so an exact replay returns the
+        // original receipt without creating another terminal event/effect.
+        if let Ok(parsed) =
+            serde_json::from_value::<CognitionProjection>(if self.cognition.is_null() {
+                default_cognition_persistence_projection()
+            } else {
+                self.cognition.clone()
+            })
+        {
+            if let Some(existing) = parsed.commit_records.iter().find(|record| {
+                record.agent_id == request.agent_id
+                    && record.agent_session_id == request.agent_session_id
+                    && record.agent_turn_id == request.agent_turn_id
+                    && record.decision_request_id == request.decision_request_id
+                    && record.request_digest == request.request_digest
+            }) {
+                let response_matches = parsed.responses.iter().any(|response| {
+                    response.envelope_digest == existing.envelope_digest
+                        && response.response_artifact.as_ref() == Some(&response_artifact_value)
+                });
+                if !response_matches {
+                    return Err(cognition_validation("response_artifact_lineage_mismatch"));
+                }
+                if existing.status == "committed" {
+                    let lineage = self.read_runtime_receipt_lineage(&existing.receipt_id)?;
+                    self.verify_runtime_receipt_lineage(&lineage)?;
+                    return Ok((existing.clone(), lineage));
+                }
+            }
+        }
+
+        let authority = self.current_cognition_runtime_authority()?;
         if request.captured_base_binding != self.cognition_runtime_base_binding(&authority) {
             let stale_digest = cognition_digest_v1(
                 "oasis7.cognition.stale-envelope.v1",
@@ -102,8 +303,6 @@ impl World {
         if action.actor_id() != Some(request.agent_id.as_str()) {
             return Err(cognition_validation("cognition_action_identity_mismatch"));
         }
-        let response_artifact_value =
-            serde_json::to_value(&response_artifact).map_err(WorldError::from)?;
         let mut transaction = self.clone();
         let envelope = AgentDecisionEnvelopeV1 {
             schema_version: crate::runtime::cognition::AGENT_DECISION_ENVELOPE_V1_SCHEMA
@@ -172,6 +371,27 @@ impl World {
         transaction.verify_runtime_receipt_lineage(&lineage)?;
         *self = transaction;
         Ok((committed, lineage))
+    }
+
+    pub(in crate::runtime::world) fn validate_persisted_cognition_wakes(
+        &self,
+        scheduler_state: &JsonValue,
+    ) -> Result<(), WorldError> {
+        let mut values = Vec::new();
+        if let Some(active) = scheduler_state.get("active").and_then(JsonValue::as_array) {
+            values.extend(active.iter().cloned());
+        }
+        for bucket in ["backpressure", "in_flight"] {
+            if let Some(entries) = scheduler_state.get(bucket).and_then(JsonValue::as_object) {
+                values.extend(entries.values().cloned());
+            }
+        }
+        for value in values {
+            let wake: SchedulerWakeV1 = serde_json::from_value(value)
+                .map_err(|error| cognition_error("invalid_scheduler_wake", error))?;
+            self.validate_cognition_wake_binding(&wake)?;
+        }
+        Ok(())
     }
 
     pub(in crate::runtime::world) fn record_stale_cognition_rejection(
@@ -439,16 +659,11 @@ pub(super) fn reconcile_committed_projection(
         if !linked_present {
             let next_seq = parsed
                 .cognition_journal
-                .head_seq
-                .max(
-                    parsed
-                        .cognition_journal
-                        .events
-                        .iter()
-                        .map(|event| event.journal_seq)
-                        .max()
-                        .unwrap_or_default(),
-                )
+                .events
+                .iter()
+                .map(|event| event.journal_seq)
+                .max()
+                .unwrap_or_default()
                 .saturating_add(1);
             parsed.cognition_journal.events.push(CognitionJournalEvent {
                 journal_seq: next_seq,
@@ -469,6 +684,46 @@ pub(super) fn reconcile_committed_projection(
             });
             parsed.cognition_journal.head_seq = next_seq;
             record_repair(&mut repaired_ids, "world_receipt_link");
+            repairs = repairs.saturating_add(1);
+            journal_repaired = true;
+        }
+
+        let completed_present = parsed.cognition_journal.events.iter().any(|event| {
+            event.kind == "CognitionTurnCompleted"
+                && event.envelope_idempotency_key == marker.envelope_idempotency_key
+                && (event.receipt_id.as_deref() == Some(marker.receipt_id.as_str())
+                    || (event.receipt_id.is_none() && marker.agent_id.is_empty()))
+                && event.extra.get("status").and_then(JsonValue::as_str) == Some("committed")
+        });
+        if !completed_present {
+            let next_seq = parsed
+                .cognition_journal
+                .events
+                .iter()
+                .map(|event| event.journal_seq)
+                .max()
+                .unwrap_or_default()
+                .saturating_add(1);
+            parsed.cognition_journal.events.push(CognitionJournalEvent {
+                journal_seq: next_seq,
+                kind: "CognitionTurnCompleted".to_string(),
+                envelope_idempotency_key: marker.envelope_idempotency_key.clone(),
+                receipt_id: Some(marker.receipt_id.clone()),
+                agent_id: (!marker.agent_id.is_empty()).then(|| marker.agent_id.clone()),
+                agent_session_id: (!marker.agent_session_id.is_empty())
+                    .then(|| marker.agent_session_id.clone()),
+                agent_turn_id: (!marker.agent_turn_id.is_empty())
+                    .then(|| marker.agent_turn_id.clone()),
+                decision_request_id: (!marker.decision_request_id.is_empty())
+                    .then(|| marker.decision_request_id.clone()),
+                request_digest: (!marker.request_digest.is_empty())
+                    .then(|| marker.request_digest.clone()),
+                feedback_id: (!marker.feedback_id.is_empty()).then(|| marker.feedback_id.clone()),
+                extra: BTreeMap::from([("status".to_string(), json!("committed"))]),
+                ..CognitionJournalEvent::default()
+            });
+            parsed.cognition_journal.head_seq = next_seq;
+            record_repair(&mut repaired_ids, "cognition_turn_completed");
             repairs = repairs.saturating_add(1);
             journal_repaired = true;
         }

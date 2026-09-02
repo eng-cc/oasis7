@@ -428,7 +428,7 @@ fn legacy_world_snapshot_gets_explicit_read_only_cognition_defaults() {
 }
 
 #[test]
-fn world_owns_durable_receipt_lineage_projection_and_readback() {
+fn world_rejects_caller_lineage_projection_for_sparse_legacy_marker() {
     let (dir, _) = seed_world_snapshot("committed");
     let mut restored = World::load_from_dir(&dir).expect("load committed world");
     let marker: WorldCommitRecordV1 =
@@ -443,17 +443,17 @@ fn world_owns_durable_receipt_lineage_projection_and_readback() {
         "blake3:request-live-1",
         "feedback-live-1",
     );
-    restored
-        .project_runtime_receipt_lineage(lineage.clone())
-        .expect("World should durably project the marker-bound lineage");
-    assert_eq!(
-        restored
-            .read_runtime_receipt_lineage(RECEIPT_ID)
-            .expect("read durable lineage"),
-        lineage
-    );
+    assert!(restored.project_runtime_receipt_lineage(lineage).is_err());
 
-    let mut forged = lineage;
+    let mut forged = RuntimeReceiptLineageV1::from_commit_record(
+        &marker,
+        "agent-live-persistence",
+        "session-live-1",
+        "turn-live-1",
+        "request-live-1",
+        "blake3:request-live-1",
+        "feedback-live-1",
+    );
     forged.receipt_digest = "blake3:forged-receipt".to_string();
     assert!(
         restored.project_runtime_receipt_lineage(forged).is_err(),
