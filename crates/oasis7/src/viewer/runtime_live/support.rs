@@ -987,6 +987,14 @@ mod tests {
             26,
             "the canonical first run must retain the assembler construction obligation"
         );
+        let completed_before = world.state().industry_progress.completed_recipe_jobs;
+        for _ in 0..12 {
+            world.step().expect("complete formal first smelter recipe");
+            if world.state().industry_progress.completed_recipe_jobs > completed_before {
+                break;
+            }
+        }
+        assert!(world.state().industry_progress.completed_recipe_jobs > completed_before);
 
         let build_assembler =
             crate::viewer::gameplay_actions::build_runtime_action_from_gameplay_request(
@@ -1056,6 +1064,31 @@ mod tests {
             .step()
             .expect("complete generated smelter construction");
         assert!(world.has_factory(crate::viewer::FACTORY_SMELTER_MK1));
+
+        let smelter_run =
+            crate::viewer::gameplay_actions::build_runtime_action_from_gameplay_request(
+                &crate::viewer::GameplayActionRequest {
+                    action_id: crate::viewer::ACTION_SCHEDULE_SMELTER_IRON_INGOT.to_string(),
+                    target_agent_id: starter_agent.clone(),
+                    actor_agent_id: None,
+                    player_id: "bootstrap-test".to_string(),
+                    public_key: None,
+                    auth: None,
+                },
+            )
+            .expect("generated bootstrap first smelter recipe action");
+        world.submit_action(smelter_run);
+        world.step().expect("settle generated first smelter recipe");
+        let completed_before = world.state().industry_progress.completed_recipe_jobs;
+        for _ in 0..12 {
+            world
+                .step()
+                .expect("complete generated first smelter recipe");
+            if world.state().industry_progress.completed_recipe_jobs > completed_before {
+                break;
+            }
+        }
+        assert!(world.state().industry_progress.completed_recipe_jobs > completed_before);
 
         let build_assembler =
             crate::viewer::gameplay_actions::build_runtime_action_from_gameplay_request(
