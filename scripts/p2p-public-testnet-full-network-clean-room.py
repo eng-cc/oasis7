@@ -201,6 +201,7 @@ CANONICAL_ENDPOINT_INVENTORY: dict[str, dict[str, str]] = {
 CANONICAL_SIGNER_ALLOWLIST = frozenset({"governance-signer"})
 CANONICAL_VERIFIER_ID = "governed-receipt-verifier"
 CANONICAL_TRUST_ROOT_ID = "oasis7-public-testnet-governance-root-v1"
+CANONICAL_ROTATION_EPOCH = "rotation-epoch-20260901-001"
 CANONICAL_ADAPTER_ID = "external-clean-room-adapter"
 CANONICAL_NETWORK_ID = "oasis7-public-testnet-governed-20260606"
 CONSUMER_IMPACT_FIELDS = frozenset(
@@ -351,17 +352,45 @@ def validate_authenticated_receipt(
     signer_id = require_string(receipt.get("signer_id"), f"{label}.signer_id")
     if allowed_signers is not None and signer_id not in allowed_signers:
         die(f"{label}.signer_id is not in the governed signer allowlist")
-    require_hex(receipt.get("signed_payload_sha256"), f"{label}.signed_payload_sha256")
+    signed_payload = require_hex(receipt.get("signed_payload_sha256"), f"{label}.signed_payload_sha256")
+    if not any(character != "0" for character in signed_payload):
+        die(f"{label}.signed_payload_sha256 must not be empty")
     signature = receipt.get("signature_hex")
-    if not isinstance(signature, str) or SIGNATURE_RE.fullmatch(signature) is None:
+    if (
+        not isinstance(signature, str)
+        or SIGNATURE_RE.fullmatch(signature) is None
+        or not any(character != "0" for character in signature)
+    ):
         die(f"{label}.signature_hex must be a complete Ed25519 signature")
-    require_hex(receipt.get("canonical_digest"), f"{label}.canonical_digest")
+    canonical_digest = require_hex(receipt.get("canonical_digest"), f"{label}.canonical_digest")
+    if not any(character != "0" for character in canonical_digest):
+        die(f"{label}.canonical_digest must not be empty")
     return receipt
 
 
 def _canonical_deployment_inventory_payload_digest(inventory: dict[str, Any]) -> str:
     """Digest every inventory field except its self-referential receipt."""
     payload = {key: value for key, value in inventory.items() if key != "receipt"}
+    material = json.dumps(
+        payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")
+    ).encode()
+    return hashlib.sha256(material).hexdigest()
+
+
+def _canonical_receipt_digest(
+    receipt: dict[str, Any], *, excluded_fields: frozenset[str] = frozenset()
+) -> str:
+    """Return the code-owned integrity digest for a receipt envelope.
+
+    The self-referential canonical digest and any explicitly rotatable identity
+    fields are excluded.  The signed payload digest remains independent and is
+    validated against the incoming inventory before normalization.
+    """
+    payload = {
+        key: value
+        for key, value in receipt.items()
+        if key != "canonical_digest" and key not in excluded_fields
+    }
     material = json.dumps(
         payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")
     ).encode()
@@ -452,6 +481,12 @@ def _validate_deployment_inventory(raw: Any, allowed_signers: set[str]) -> dict[
         or receipt.get("verifier_id") != CANONICAL_VERIFIER_ID
     ):
         die("deployment_inventory receipt signer, verifier, or trust root drifted")
+    # Authenticate the exact caller-supplied payload before any path or field
+    # normalization. Normalization must never repair or rewrite an incoming
+    # signed payload digest.
+    incoming_payload_digest = _canonical_deployment_inventory_payload_digest(inventory)
+    if receipt.get("signed_payload_sha256") != incoming_payload_digest:
+        die("deployment_inventory receipt payload is not bound to the incoming canonical surface inventory")
     raw_nodes = require_object(inventory.get("nodes"), "deployment_inventory.nodes")
     if set(raw_nodes) != set(NODE_ORDER):
         die("deployment_inventory must cover the exact managed five-node set")
@@ -467,15 +502,12 @@ def _validate_deployment_inventory(raw: Any, allowed_signers: set[str]) -> dict[
             "expected_key_gid",
             "peer_id",
         }
-        required_fields = allowed_fields - {"peer_id"}
+        required_fields = allowed_fields
         if not required_fields.issubset(raw_node) or set(raw_node) - allowed_fields:
             die(f"deployment_inventory.nodes.{name} fields are not complete")
         if raw_node["node_id"] != expected["node_id"]:
             die(f"deployment_inventory.nodes.{name}.node_id does not match the governed identity")
-        peer_id = require_string(
-            raw_node.get("peer_id", CANONICAL_PEER_REGISTRY[name]),
-            f"deployment_inventory.nodes.{name}.peer_id",
-        )
+        peer_id = require_string(raw_node.get("peer_id"), f"deployment_inventory.nodes.{name}.peer_id")
         platform = expected["platform"]
         path_style = "windows" if platform == "windows-x64" else "posix"
         root = _normalized_path(
@@ -518,6 +550,10 @@ def _validate_deployment_inventory(raw: Any, allowed_signers: set[str]) -> dict[
             "expected_key_uid": expected_uid,
             "expected_key_gid": expected_gid,
         }
+    normalized_receipt = dict(receipt)
+    normalized_receipt["canonical_digest"] = _canonical_receipt_digest(
+        receipt, excluded_fields=frozenset({"signed_payload_sha256"})
+    )
     normalized_inventory = {
         "schema_version": DEPLOYMENT_INVENTORY_SCHEMA,
         "authenticated": True,
@@ -525,22 +561,11 @@ def _validate_deployment_inventory(raw: Any, allowed_signers: set[str]) -> dict[
         "signer_id": signer_id,
         "trust_root_id": CANONICAL_TRUST_ROOT_ID,
         "nodes": normalized_nodes,
-        "receipt": dict(receipt),
+        "receipt": normalized_receipt,
     }
     canonical_digest = _canonical_deployment_inventory_payload_digest(normalized_inventory)
-    # Older authenticated inventories omit the optional peer_id field.  The
-    # planner supplies the code-owned registry value and emits a canonical
-    # receipt binding for the resulting normalized inventory.  Once a caller
-    # supplies peer identities (the governed rotation form), the supplied
-    # receipt must already authenticate that exact normalized payload.
-    has_explicit_peer_ids = any(
-        isinstance(value, dict) and "peer_id" in value for value in raw_nodes.values()
-    )
-    if has_explicit_peer_ids:
-        if receipt.get("signed_payload_sha256") != canonical_digest:
-            die("deployment_inventory receipt payload is not bound to the canonical inventory")
-    else:
-        normalized_inventory["receipt"]["signed_payload_sha256"] = canonical_digest
+    if receipt.get("signed_payload_sha256") != canonical_digest:
+        die("deployment_inventory receipt payload is not bound to the canonical inventory")
     return normalized_inventory
 
 
@@ -635,6 +660,32 @@ def _validate_authority(
         != _impact_locator(consumer_impact_record)
     ):
         die("authority receipt task/head/trust-root/consumer-impact binding mismatch")
+    if (
+        "frozen_head_oid" in receipt_bindings
+        and str(receipt_bindings.get("frozen_head_oid", "")).lower() != head_oid
+    ):
+        die("authority receipt frozen-head binding mismatch")
+    authority_context_fields = {
+        "capture_window_id",
+        "rotation_epoch",
+        "issued_at",
+        "expires_at",
+    }
+    present_context = authority_context_fields.intersection(receipt_bindings)
+    if present_context:
+        if present_context != authority_context_fields:
+            die("authority receipt freshness binding is incomplete")
+        if receipt_bindings.get("capture_window_id") != request.get("capture_window_id"):
+            die("authority receipt capture-window binding mismatch")
+        if receipt_bindings.get("rotation_epoch") != CANONICAL_ROTATION_EPOCH:
+            die("authority receipt rotation epoch is not code-owned")
+        issued_at = _parse_utc(receipt_bindings.get("issued_at"), "authority.receipt.bindings.issued_at")
+        expires_at = _parse_utc(receipt_bindings.get("expires_at"), "authority.receipt.bindings.expires_at")
+        now = datetime.now(timezone.utc)
+        if expires_at <= issued_at or expires_at <= now:
+            die("authority receipt is stale or has an inverted freshness window")
+        if issued_at > now + timedelta(seconds=MAX_CLOCK_SKEW_SECONDS):
+            die("authority receipt is issued in the future")
     trust_root = require_object(authority.get("trust_root"), "authority.trust_root")
     validate_authenticated_receipt(trust_root, "authority.trust_root", signer_allowlist)
     if (
@@ -1043,7 +1094,9 @@ def _validate_nodes(
         for field in ("node_id", "role", "platform", "service_manager", "service"):
             if node.get(field) != expected[field]:
                 die(f"{name}.{field} does not match the governed identity/service contract")
-        identity_receipt = require_object(node.get("identity_receipt"), f"{name}.identity_receipt")
+        identity_receipt = dict(
+            require_object(node.get("identity_receipt"), f"{name}.identity_receipt")
+        )
         if identity_receipt.get("node_id") != expected["node_id"]:
             die(f"{name}.identity_receipt node_id binding mismatch")
         validate_authenticated_receipt(identity_receipt, f"{name}.identity_receipt", allowed_signers)
@@ -1068,6 +1121,9 @@ def _validate_nodes(
         expected_gid = governed["expected_key_gid"]
         if identity_receipt["key_uid"] != expected_uid or identity_receipt["key_gid"] != expected_gid:
             die(f"{name}.identity_receipt uid/gid do not match independently authenticated deployment inventory")
+        identity_receipt["canonical_digest"] = _canonical_receipt_digest(
+            identity_receipt, excluded_fields=frozenset({"peer_id"})
+        )
         path_style = "windows" if expected["platform"] == "windows-x64" else "posix"
         if inventory_overrides_observed_layout:
             expected_root = _normalized_path(

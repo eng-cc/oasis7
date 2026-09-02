@@ -76,6 +76,7 @@ CANONICAL_TRUST_ROOT_OWNER_SCOPE = "operator-local"
 CANONICAL_TRUST_ROOT_OWNER_UID = os.getuid()
 CANONICAL_TRUST_ROOT_MODE = "0600"
 CANONICAL_SIGNER_ALLOWLIST = frozenset({"governance-signer"})
+CANONICAL_ROTATION_EPOCH = "rotation-epoch-20260901-001"
 CANONICAL_PROBE_PEER_ID = "validator-pair"
 CANONICAL_FLEET_PEER_ID = "fleet"
 PHASE_RECEIPT_SCHEMAS = {
@@ -325,6 +326,21 @@ def _canonical_deployment_inventory_payload_digest(inventory: dict[str, Any]) ->
     return hashlib.sha256(material).hexdigest()
 
 
+def _canonical_receipt_digest(
+    receipt: dict[str, Any], *, excluded_fields: frozenset[str] = frozenset()
+) -> str:
+    """Return the deterministic integrity digest for a receipt envelope."""
+    payload = {
+        key: value
+        for key, value in receipt.items()
+        if key != "canonical_digest" and key not in excluded_fields
+    }
+    material = json.dumps(
+        payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")
+    ).encode()
+    return hashlib.sha256(material).hexdigest()
+
+
 def _validate_deployment_inventory(
     plan: dict[str, Any], planner: Any
 ) -> dict[str, Any]:
@@ -373,6 +389,16 @@ def _validate_deployment_inventory(
     _nonzero_hex(receipt.get("signed_payload_sha256"), HEX64_RE, "deployment inventory payload")
     _nonzero_hex(receipt.get("signature_hex"), SIGNATURE_RE, "deployment inventory signature")
     _nonzero_hex(receipt.get("canonical_digest"), HEX64_RE, "deployment inventory digest")
+    if receipt.get("canonical_digest") != _canonical_receipt_digest(
+        receipt, excluded_fields=frozenset({"signed_payload_sha256"})
+    ):
+        _fail("deployment inventory receipt canonical digest is not independently bound")
+    # Authenticate the exact caller-supplied payload before any path or field
+    # normalization. Normalization must never repair or rewrite an incoming
+    # signed payload digest.
+    incoming_payload_digest = _canonical_deployment_inventory_payload_digest(inventory)
+    if receipt.get("signed_payload_sha256") != incoming_payload_digest:
+        _fail("deployment inventory receipt payload is not bound to the incoming canonical surface inventory")
     raw_nodes = _object(inventory.get("nodes"), "deployment inventory nodes")
     if set(raw_nodes) != set(planner.NODE_ORDER):
         _fail("deployment inventory does not cover the managed five-node set")
@@ -388,15 +414,12 @@ def _validate_deployment_inventory(
             "expected_key_gid",
             "peer_id",
         }
-        required_fields = allowed_fields - {"peer_id"}
+        required_fields = allowed_fields
         if not required_fields.issubset(value) or set(value) - allowed_fields:
             _fail(f"deployment inventory {name} fields are not exact")
         if value.get("node_id") != expected["node_id"]:
             _fail(f"deployment inventory {name} node id drifted")
-        peer_id = _string(
-            value.get("peer_id", CANONICAL_PEER_REGISTRY[name]),
-            f"deployment inventory {name} peer id",
-        )
+        peer_id = _string(value.get("peer_id"), f"deployment inventory {name} peer id")
         path_style = "windows" if expected["platform"] == "windows-x64" else "posix"
         root = planner._normalized_path(
             value.get("node_root"), path_style, f"deployment inventory {name} root"
@@ -568,6 +591,63 @@ def _validate_trusted_receipt_identity(value: Any, label: str) -> None:
         _fail(f"{label} trust root is not code-owned")
 
 
+def _validate_planner_authority(plan: dict[str, Any]) -> None:
+    """Recompute the planner authority bindings at the adapter boundary."""
+    authority = _object(plan.get("authority"), "plan authority")
+    receipt = _object(authority.get("receipt"), "plan authority receipt")
+    if receipt.get("schema_version") != "oasis7.clean_room_authority.v1":
+        _fail("plan authority receipt schema is unsupported")
+    if (
+        receipt.get("authenticated") is not True
+        or receipt.get("verified") is not True
+        or receipt.get("signer_id") not in CANONICAL_SIGNER_ALLOWLIST
+        or receipt.get("verifier_id") != CANONICAL_VERIFIER_ID
+        or receipt.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID
+    ):
+        _fail("plan authority receipt is not independently authenticated")
+    _reject_secret_fields(receipt, "plan authority receipt")
+    _nonzero_hex(receipt.get("signed_payload_sha256"), HEX64_RE, "plan authority payload")
+    _nonzero_hex(receipt.get("signature_hex"), SIGNATURE_RE, "plan authority signature")
+    _nonzero_hex(receipt.get("canonical_digest"), HEX64_RE, "plan authority digest")
+    bindings = _object(receipt.get("bindings"), "plan authority receipt bindings")
+    expected = {
+        "task_uid": plan["task_uid"],
+        "head_oid": plan["head_oid"],
+        "signer_allowlist": sorted(CANONICAL_SIGNER_ALLOWLIST),
+        "trust_root_id": CANONICAL_TRUST_ROOT_ID,
+        "verifier_id": CANONICAL_VERIFIER_ID,
+        "consumer_impact_record": _consumer_impact_locator(plan),
+    }
+    for field, expected_value in expected.items():
+        if bindings.get(field) != expected_value:
+            _fail(f"plan authority receipt {field} binding drifted")
+    if (
+        "frozen_head_oid" in bindings
+        and bindings.get("frozen_head_oid") != plan["head_oid"]
+    ):
+        _fail("plan authority receipt frozen-head binding drifted")
+    context_fields = {"capture_window_id", "rotation_epoch", "issued_at", "expires_at"}
+    present = context_fields.intersection(bindings)
+    if present:
+        if present != context_fields:
+            _fail("plan authority receipt freshness binding is incomplete")
+        if bindings.get("capture_window_id") != plan["capture_window_id"]:
+            _fail("plan authority receipt capture-window binding drifted")
+        if bindings.get("rotation_epoch") != CANONICAL_ROTATION_EPOCH:
+            _fail("plan authority receipt rotation epoch is not code-owned")
+        issued_at = _parse_utc(bindings.get("issued_at"), "plan authority receipt issued_at")
+        expires_at = _parse_utc(bindings.get("expires_at"), "plan authority receipt expires_at")
+        now = dt.datetime.now(dt.timezone.utc)
+        if expires_at <= issued_at or expires_at <= now:
+            _fail("plan authority receipt is stale or has an inverted freshness window")
+        if issued_at > now + dt.timedelta(seconds=MAX_CLOCK_SKEW_SECONDS):
+            _fail("plan authority receipt is issued in the future")
+    trust_root = _object(authority.get("trust_root"), "plan authority trust root")
+    trust_bindings = _object(trust_root.get("bindings"), "plan authority trust-root bindings")
+    if trust_bindings != bindings:
+        _fail("plan authority receipt and trust-root bindings disagree")
+
+
 def _validate_plan_semantic_bindings(
     plan: dict[str, Any], planner: Any, nodes: list[dict[str, Any]]
 ) -> None:
@@ -649,6 +729,7 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     authority_plan = _object(plan.get("authority"), "plan authority")
     if authority_plan.get("consumer_impact_record") != plan["consumer_impact_record"]:
         _fail("plan authority is not bound to the consumer impact record")
+    _validate_planner_authority(plan)
     if plan.get("node_order") != list(planner.NODE_ORDER):
         _fail("plan node order is not the code-owned five-node order")
     if plan.get("canonical_host_inventory") != planner.CANONICAL_HOST_INVENTORY:
@@ -730,6 +811,10 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         _nonzero_hex(identity.get("signed_payload_sha256"), HEX64_RE, f"{name} identity payload")
         _nonzero_hex(identity.get("signature_hex"), SIGNATURE_RE, f"{name} identity signature")
         _nonzero_hex(identity.get("canonical_digest"), HEX64_RE, f"{name} identity digest")
+        if identity.get("canonical_digest") != _canonical_receipt_digest(
+            identity, excluded_fields=frozenset({"peer_id"})
+        ):
+            _fail(f"{name} identity receipt canonical digest is not independently bound")
         key_size = identity.get("key_size_bytes")
         if not isinstance(key_size, int) or isinstance(key_size, bool) or key_size <= 0:
             _fail(f"{name} identity key size is malformed")
@@ -1865,6 +1950,64 @@ def _verify_receipt_with_verifier(
     _consumer_impact_locator(plan)
 
 
+def _verify_plan_receipts_with_verifier(
+    plan: dict[str, Any],
+    verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None,
+) -> None:
+    """Verify inventory and identity evidence through the existing seam.
+
+    Planner receipts predate the transport receipt envelope and therefore do
+    not carry provider-operation bindings.  The adapter projects each receipt
+    into a verifier-only envelope with exact plan/node bindings; the original
+    plan is never rewritten or sent as an apply proof.  Run every nested
+    callback before surfacing the first failure so an operator receives a
+    complete verification attempt for the governed inventory.
+    """
+    if verifier is None:
+        _fail("deployment inventory and identity receipts require an independent verifier")
+    inventory = _object(plan.get("deployment_inventory"), "deployment inventory")
+    inventory_receipt = _object(inventory.get("receipt"), "deployment inventory receipt")
+    evidence: list[dict[str, Any]] = [
+        {
+            "receipt": inventory_receipt,
+            "bindings": {
+                "kind": "deployment-inventory",
+                "task_uid": plan["task_uid"],
+                "frozen_head_oid": plan["head_oid"],
+                "plan_digest": plan["plan_digest"],
+                "consumer_impact_record": _consumer_impact_locator(plan),
+            },
+        }
+    ]
+    for node in plan["nodes"]:
+        identity = _object(node.get("identity_receipt"), f"{node['name']} identity receipt")
+        evidence.append(
+            {
+                "receipt": identity,
+                "bindings": {
+                    "kind": "identity",
+                    "task_uid": plan["task_uid"],
+                    "frozen_head_oid": plan["head_oid"],
+                    "plan_digest": plan["plan_digest"],
+                    "node": node["name"],
+                    "node_id": node["node_id"],
+                    "peer_id": identity["peer_id"],
+                    "consumer_impact_record": _consumer_impact_locator(plan),
+                },
+            }
+        )
+    failures: list[str] = []
+    for item in evidence:
+        verifier_receipt = copy.deepcopy(item["receipt"])
+        verifier_receipt["bindings"] = item["bindings"]
+        try:
+            _verify_receipt_with_verifier(plan, verifier_receipt, verifier)
+        except AdapterError as error:
+            failures.append(str(error))
+    if failures:
+        _fail(failures[0])
+
+
 def _validate_provider_receipt(
     plan: dict[str, Any],
     operation: str,
@@ -2925,6 +3068,10 @@ def _execute_unlocked(
         _fail("apply requires the independent provider receipt verifier callback")
     if not provenance_verified:
         _fail("apply requires an independently executed provenance verifier")
+    # Nested deployment/identity evidence is an apply-only trust boundary.
+    # Place it after the existing authorization gate so an unauthorized caller
+    # still fails before any newly introduced verifier callbacks run.
+    _verify_plan_receipts_with_verifier(plan, provenance_verifier)
     # Re-check the code-owned trust root against the live filesystem after
     # authority/provenance validation and before journal/nonce/provider work.
     _consumer_impact_locator(plan)

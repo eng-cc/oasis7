@@ -129,6 +129,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 "node_id": node["node_id"],
                 "expected_key_uid": expected_uid,
                 "expected_key_gid": expected_gid,
+                "peer_id": self.module.CANONICAL_PEER_REGISTRY[str(node["name"])],
             }
             if include_layout:
                 entry.update(
@@ -137,8 +138,25 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                         "persistent_state_paths": list(node["persistent_state_paths"]),
                     }
                 )
+                node_name = str(node["name"])
+                path_style = (
+                    "windows"
+                    if self.module.EXPECTED_NODES[node_name]["platform"] == "windows-x64"
+                    else "posix"
+                )
+                entry["node_root"] = self.module._normalized_path(
+                    entry["node_root"], path_style, f"{node['name']}.node_root"
+                )
+                entry["persistent_state_paths"] = [
+                    self.module._normalized_path(
+                        path,
+                        path_style,
+                        f"{node['name']}.persistent_state_paths[{index}]",
+                    )
+                    for index, path in enumerate(entry["persistent_state_paths"])
+                ]
             inventory_nodes[str(node["name"])] = entry
-        return {
+        inventory = {
             "schema_version": "oasis7.deployment_inventory.v1",
             "authenticated": True,
             "verified": True,
@@ -147,6 +165,10 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             "nodes": inventory_nodes,
             "receipt": self._receipt("oasis7.deployment_inventory_receipt.v1"),
         }
+        inventory["receipt"]["signed_payload_sha256"] = (
+            self.module._canonical_deployment_inventory_payload_digest(inventory)
+        )
+        return inventory
 
     def _input(self) -> dict[str, object]:
         transaction_id = "txn-clean-room-001"
@@ -682,32 +704,15 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             f"{root}/output/chain-runtime/triad-testnet-fourth-local/reward-runtime-execution-bridge-state.json",
             f"{root}/output/node-distfs/triad-testnet-fourth-local",
         ]
-        inventory_nodes = {
-            node["name"]: {
-                "node_id": node["node_id"],
-                "node_root": node["node_root"],
-                "persistent_state_paths": list(node["persistent_state_paths"]),
-                "expected_key_uid": 0,
-                "expected_key_gid": 0,
-            }
-            for node in request["nodes"]
-        }
-        inventory_nodes["macos-observer"] = {
-            "node_id": "triad-testnet-fourth-local",
-            "node_root": root,
-            "persistent_state_paths": declared_paths,
-            "expected_key_uid": 0,
-            "expected_key_gid": 0,
-        }
-        request["deployment_inventory"] = {
-            "schema_version": "oasis7.deployment_inventory.v1",
-            "authenticated": True,
-            "verified": True,
-            "signer_id": "governance-signer",
-            "trust_root_id": "oasis7-public-testnet-governance-root-v1",
-            "nodes": inventory_nodes,
-            "receipt": self._receipt("oasis7.deployment_inventory_receipt.v1"),
-        }
+        request["deployment_inventory"] = self._explicit_inventory(request)
+        request["deployment_inventory"]["nodes"]["macos-observer"].update(
+            {"node_root": root, "persistent_state_paths": declared_paths}
+        )
+        request["deployment_inventory"]["receipt"]["signed_payload_sha256"] = (
+            self.module._canonical_deployment_inventory_payload_digest(
+                request["deployment_inventory"]
+            )
+        )
 
         plan = self.module.build_plan(request)
         macos = next(node for node in plan["nodes"] if node["name"] == "macos-observer")
@@ -928,6 +933,98 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as raised:
             self.module.build_plan(request)
         self.assertRegex(str(raised.exception), r"(?i)fresh[_-]?root.*probe")
+
+    def test_plan_rejects_shaped_but_unverified_inventory_identity_and_authority_receipts(self) -> None:
+        """Receipt-shaped fields are not independent verification evidence."""
+        mutations = (
+            (
+                "deployment-inventory-signature",
+                lambda request: request["deployment_inventory"]["receipt"].__setitem__(
+                    "signature_hex", "0" * 128
+                ),
+            ),
+            (
+                "deployment-inventory-digest",
+                lambda request: request["deployment_inventory"]["receipt"].__setitem__(
+                    "canonical_digest", "0" * 64
+                ),
+            ),
+            (
+                "identity-signature",
+                lambda request: request["nodes"][0]["identity_receipt"].__setitem__(
+                    "signature_hex", "0" * 128
+                ),
+            ),
+            (
+                "identity-digest",
+                lambda request: request["nodes"][0]["identity_receipt"].__setitem__(
+                    "canonical_digest", "0" * 64
+                ),
+            ),
+            (
+                "authority-verifier-signature",
+                lambda request: request["authority"]["crypto_verifier_receipt"].__setitem__(
+                    "signature_hex", "0" * 128
+                ),
+            ),
+        )
+        for label, mutate in mutations:
+            with self.subTest(receipt=label):
+                request = self._input()
+                mutate(request)
+                with self.assertRaises(SystemExit) as raised:
+                    self.module.build_plan(request)
+                self.assertRegex(
+                    str(raised.exception),
+                    r"(?i)receipt|signature|digest|verified|authenticated|verifier",
+                )
+
+    def test_plan_rejects_authority_binding_context_drift_and_stale_or_future_receipts(self) -> None:
+        """Authority receipts bind task/head/window/rotation and a bounded issue window."""
+        valid = self._input()
+        valid_context = {
+            "capture_window_id": valid["capture_window_id"],
+            "rotation_epoch": "rotation-epoch-20260901-001",
+            "issued_at": "2026-08-30T00:00:00Z",
+            "expires_at": "2099-01-01T00:00:00Z",
+        }
+        for container in (
+            valid["authority"]["receipt"]["bindings"],
+            valid["authority"]["trust_root"]["bindings"],
+        ):
+            container.update(valid_context)
+        self.module.build_plan(valid)
+
+        mutations = (
+            ("task-mismatch", {"task_uid": "task-attacker"}),
+            ("head-mismatch", {"head_oid": "f" * 40}),
+            ("frozen-head-mismatch", {"frozen_head_oid": "f" * 40}),
+            ("capture-window-mismatch", {"capture_window_id": "other-window"}),
+            ("rotation-epoch-mismatch", {"rotation_epoch": "rotation-attacker"}),
+            (
+                "stale-authority",
+                {"issued_at": "2020-01-01T00:00:00Z", "expires_at": "2020-01-02T00:00:00Z"},
+            ),
+            (
+                "future-authority",
+                {"issued_at": "2099-01-01T00:00:00Z", "expires_at": "2100-01-01T00:00:00Z"},
+            ),
+        )
+        for label, updates in mutations:
+            with self.subTest(binding=label):
+                request = self._input()
+                for container in (
+                    request["authority"]["receipt"]["bindings"],
+                    request["authority"]["trust_root"]["bindings"],
+                ):
+                    container.update(valid_context)
+                    container.update(updates)
+                with self.assertRaises(SystemExit) as raised:
+                    self.module.build_plan(request)
+                self.assertRegex(
+                    str(raised.exception),
+                    r"(?i)authority|binding|capture|rotation|task|head|stale|future|expir",
+                )
 
     def test_plan_rejects_old_state_restore_or_cross_node_copy(self) -> None:
         request = self._input()
@@ -1245,6 +1342,81 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             self.assertEqual(plan["execution"]["mode"], "plan-only")
             self.assertFalse(plan["execution"]["plan_is_apply_proof"])
             self.assertFalse(plan["execution"]["provider_mutation_performed"])
+
+    def _explicit_inventory(self, request: dict[str, object]) -> dict[str, object]:
+        inventory = self._deployment_inventory(request["nodes"])
+        for node in request["nodes"]:
+            name = str(node["name"])
+            inventory["nodes"][name]["peer_id"] = self.module.CANONICAL_PEER_REGISTRY[name]
+        inventory["receipt"]["signed_payload_sha256"] = (
+            self.module._canonical_deployment_inventory_payload_digest(inventory)
+        )
+        return inventory
+
+    def test_plan_requires_explicit_peer_id_on_every_inventory_node(self) -> None:
+        """Legacy omitted/partial peer identities must not enter authenticated plans."""
+        for omission in ("all", "storage-205"):
+            with self.subTest(omission=omission):
+                request = self._input()
+                inventory = self._explicit_inventory(request)
+                if omission == "all":
+                    for node in inventory["nodes"].values():
+                        node.pop("peer_id")
+                else:
+                    inventory["nodes"][omission].pop("peer_id")
+                request["deployment_inventory"] = inventory
+                with self.assertRaises(SystemExit) as raised:
+                    self.module.build_plan(request)
+                self.assertRegex(str(raised.exception), r"(?i)peer|inventory|explicit|complete")
+
+    def test_plan_validates_inventory_digest_before_normalization(self) -> None:
+        """Inventory field mutations must fail against the incoming stale receipt."""
+        mutations = ("node_root", "persistent_state_paths", "expected_key_uid", "expected_key_gid", "peer_id")
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                request = self._input()
+                inventory = self._explicit_inventory(request)
+                request["deployment_inventory"] = inventory
+                name = "storage-205"
+                inventory_node = inventory["nodes"][name]
+                node = next(item for item in request["nodes"] if item["name"] == name)
+                if mutation in {"node_root", "persistent_state_paths"}:
+                    old_root = node["node_root"]
+                    new_root = "/opt/oasis7/attacker-root"
+                    node["node_root"] = new_root
+                    node["persistent_state_paths"] = [
+                        path.replace(old_root, new_root, 1)
+                        for path in node["persistent_state_paths"]
+                    ]
+                    inventory_node["node_root"] = new_root
+                    inventory_node["persistent_state_paths"] = list(node["persistent_state_paths"])
+                elif mutation == "expected_key_uid":
+                    inventory_node["expected_key_uid"] = 1001
+                    node["identity_receipt"]["key_uid"] = 1001
+                elif mutation == "expected_key_gid":
+                    inventory_node["expected_key_gid"] = 1002
+                    node["identity_receipt"]["key_gid"] = 1002
+                else:
+                    rotated_peer = "12D3KooWstale-inventory-peer"
+                    inventory_node["peer_id"] = rotated_peer
+                    node["identity_receipt"]["peer_id"] = rotated_peer
+                with self.assertRaises(SystemExit) as raised:
+                    self.module.build_plan(request)
+                self.assertRegex(str(raised.exception), r"(?i)inventory|receipt|digest|binding|peer|canonical")
+
+    def test_plan_accepts_fully_explicit_digest_bound_inventory(self) -> None:
+        """The governed explicit inventory schema remains a valid admission path."""
+        request = self._input()
+        request["deployment_inventory"] = self._explicit_inventory(request)
+        plan = self.module.build_plan(request)
+        for name in self.module.NODE_ORDER:
+            self.assertIn("peer_id", plan["deployment_inventory"]["nodes"][name])
+        self.assertEqual(
+            plan["deployment_inventory"]["receipt"]["signed_payload_sha256"],
+            self.module._canonical_deployment_inventory_payload_digest(
+                plan["deployment_inventory"]
+            ),
+        )
 
 
 if __name__ == "__main__":

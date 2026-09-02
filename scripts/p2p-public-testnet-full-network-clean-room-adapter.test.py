@@ -438,6 +438,17 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         )
         path.chmod(0o600)
 
+    def _explicit_inventory_plan(self) -> dict[str, object]:
+        request = self.fixture._input()
+        inventory = request["deployment_inventory"]
+        for name in self.planner.NODE_ORDER:
+            inventory["nodes"][name]["peer_id"] = self.planner.CANONICAL_PEER_REGISTRY[name]
+        inventory["receipt"]["signed_payload_sha256"] = (
+            self.planner._canonical_deployment_inventory_payload_digest(inventory)
+        )
+        request["deployment_inventory"] = inventory
+        return self._bind_test_ledger(self.planner.build_plan(request))
+
     def test_rejects_fake_head_signature_and_peer(self) -> None:
         authority = self._authority()
         authority["frozen_head_oid"] = "f" * 40
@@ -536,6 +547,48 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
                     provenance_verifier=verifier,
                 )
         self.assertEqual(calls, [self.plan["plan_digest"]])
+
+    def test_apply_verifies_inventory_and_identity_with_existing_provenance_seam(self) -> None:
+        """Destructive admission must send nested plan receipts through the existing verifier seam."""
+        authority = self._authority(apply_authorized=True)
+        calls: list[str] = []
+
+        def verifier(plan_dto: dict[str, object], receipt: dict[str, object]) -> dict[str, object]:
+            schema = receipt["schema_version"]
+            calls.append(schema)
+            bindings = receipt.get("bindings", {})
+            if schema in {
+                self.adapter.DEPLOYMENT_INVENTORY_RECEIPT_SCHEMA,
+                self.adapter.IDENTITY_RECEIPT_SCHEMA,
+            }:
+                return {
+                    "verified": False,
+                    "bindings": bindings,
+                    "verifier_id": self.adapter.CANONICAL_VERIFIER_ID,
+                    "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
+                    "signer_id": "governance-signer",
+                }
+            return {
+                "verified": True,
+                "bindings": bindings,
+                "verifier_id": self.adapter.CANONICAL_VERIFIER_ID,
+                "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
+                "signer_id": "governance-signer",
+            }
+
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(self.adapter.AdapterError):
+                self.adapter.execute(
+                    self.plan,
+                    authority,
+                    journal_path=Path(directory) / "journal.json",
+                    ledger_path=self.ledger_path,
+                    transport=ApplyTransport(self.adapter, self.plan),
+                    dry_run=False,
+                    provenance_verifier=verifier,
+                )
+        self.assertIn(self.adapter.DEPLOYMENT_INVENTORY_RECEIPT_SCHEMA, calls)
+        self.assertIn(self.adapter.IDENTITY_RECEIPT_SCHEMA, calls)
 
     def test_apply_validates_every_provider_receipt_and_persists_sanitized_receipts(self) -> None:
         authority = self._authority(apply_authorized=True)
@@ -2039,6 +2092,134 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
             node["identity_receipt"]["key_gid"] = 1002
         plan = self._bind_test_ledger(self.planner.build_plan(request))
         self.adapter.validate_plan(plan)
+
+    def test_adapter_requires_explicit_peer_id_on_every_inventory_node(self) -> None:
+        """The adapter must not normalize omitted or partial authenticated peer identities."""
+        for omission in ("all", "storage-205"):
+            with self.subTest(omission=omission):
+                plan = copy.deepcopy(self.plan)
+                if omission == "all":
+                    for node in plan["deployment_inventory"]["nodes"].values():
+                        node.pop("peer_id")
+                else:
+                    plan["deployment_inventory"]["nodes"][omission].pop("peer_id")
+                plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+                with self.assertRaises(self.adapter.AdapterError) as raised:
+                    self.adapter.validate_plan(plan)
+                self.assertRegex(str(raised.exception), r"(?i)peer|inventory|explicit|complete|digest")
+
+    def test_adapter_rejects_inventory_mutations_with_stale_receipt(self) -> None:
+        """Rebinding plan and identity fields cannot bypass the inventory receipt digest."""
+        mutations = ("node_root", "persistent_state_paths", "expected_key_uid", "expected_key_gid", "peer_id")
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                plan = self._explicit_inventory_plan()
+                name = "storage-205"
+                inventory_node = plan["deployment_inventory"]["nodes"][name]
+                node = next(item for item in plan["nodes"] if item["name"] == name)
+                if mutation in {"node_root", "persistent_state_paths"}:
+                    old_root = node["node_root"]
+                    new_root = "/opt/oasis7/attacker-root"
+                    node["node_root"] = new_root
+                    node["persistent_state_paths"] = [
+                        path.replace(old_root, new_root, 1)
+                        for path in node["persistent_state_paths"]
+                    ]
+                    inventory_node["node_root"] = new_root
+                    inventory_node["persistent_state_paths"] = list(node["persistent_state_paths"])
+                elif mutation == "expected_key_uid":
+                    inventory_node["expected_key_uid"] = 1001
+                    node["identity_receipt"]["key_uid"] = 1001
+                elif mutation == "expected_key_gid":
+                    inventory_node["expected_key_gid"] = 1002
+                    node["identity_receipt"]["key_gid"] = 1002
+                else:
+                    rotated_peer = "12D3KooWstale-inventory-peer"
+                    inventory_node["peer_id"] = rotated_peer
+                    node["identity_receipt"]["peer_id"] = rotated_peer
+                plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+                with self.assertRaises(self.adapter.AdapterError) as raised:
+                    self.adapter.validate_plan(plan)
+                self.assertRegex(str(raised.exception), r"(?i)inventory|receipt|digest|binding|peer|canonical")
+
+    def test_adapter_accepts_fully_explicit_digest_bound_inventory(self) -> None:
+        """A complete inventory whose receipt signs the canonical payload remains valid."""
+        plan = self._explicit_inventory_plan()
+        self.adapter.validate_plan(plan)
+        for name in self.planner.NODE_ORDER:
+            self.assertIn("peer_id", plan["deployment_inventory"]["nodes"][name])
+
+    def test_adapter_rejects_shaped_but_unverified_inventory_and_identity_receipts(self) -> None:
+        """Syntactically valid signature/digest strings are not verifier evidence."""
+        mutations = (
+            (
+                "deployment-inventory-signature",
+                lambda plan: plan["deployment_inventory"]["receipt"].__setitem__(
+                    "signature_hex", "d" * 128
+                ),
+            ),
+            (
+                "deployment-inventory-canonical-digest",
+                lambda plan: plan["deployment_inventory"]["receipt"].__setitem__(
+                    "canonical_digest", "e" * 64
+                ),
+            ),
+            (
+                "identity-signature",
+                lambda plan: plan["nodes"][0]["identity_receipt"].__setitem__(
+                    "signature_hex", "d" * 128
+                ),
+            ),
+            (
+                "identity-canonical-digest",
+                lambda plan: plan["nodes"][0]["identity_receipt"].__setitem__(
+                    "canonical_digest", "e" * 64
+                ),
+            ),
+        )
+        for label, mutate in mutations:
+            with self.subTest(receipt=label):
+                plan = copy.deepcopy(self.plan)
+                mutate(plan)
+                plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+                with self.assertRaises(self.adapter.AdapterError) as raised:
+                    self.adapter.validate_plan(plan)
+                self.assertRegex(
+                    str(raised.exception),
+                    r"(?i)receipt|signature|digest|verified|authenticated|verifier",
+                )
+
+    def test_adapter_rejects_authority_binding_context_drift_and_stale_or_future_receipts(self) -> None:
+        """The planner authority receipt must bind the live task context and freshness."""
+        mutations = (
+            ("task-mismatch", {"task_uid": "task-attacker"}),
+            ("head-mismatch", {"head_oid": "f" * 40}),
+            ("frozen-head-mismatch", {"frozen_head_oid": "f" * 40}),
+            ("capture-window-mismatch", {"capture_window_id": "other-window"}),
+            ("rotation-epoch-mismatch", {"rotation_epoch": "rotation-attacker"}),
+            (
+                "stale-authority",
+                {"issued_at": "2020-01-01T00:00:00Z", "expires_at": "2020-01-02T00:00:00Z"},
+            ),
+            (
+                "future-authority",
+                {"issued_at": "2099-01-01T00:00:00Z", "expires_at": "2100-01-01T00:00:00Z"},
+            ),
+        )
+        for label, updates in mutations:
+            with self.subTest(binding=label):
+                plan = copy.deepcopy(self.plan)
+                bindings = copy.deepcopy(plan["authority"]["receipt"]["bindings"])
+                bindings.update(updates)
+                plan["authority"]["receipt"]["bindings"] = bindings
+                plan["authority"]["trust_root"]["bindings"] = copy.deepcopy(bindings)
+                plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+                with self.assertRaises(self.adapter.AdapterError) as raised:
+                    self.adapter.validate_plan(plan)
+                self.assertRegex(
+                    str(raised.exception),
+                    r"(?i)authority|binding|capture|rotation|task|head|stale|future|expir",
+                )
 
     def test_adapter_rejects_duplicate_authenticated_peer_ids(self) -> None:
         """Provider admission must preserve one authenticated peer identity per node."""
