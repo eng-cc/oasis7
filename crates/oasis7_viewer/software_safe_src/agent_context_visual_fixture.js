@@ -1,4 +1,4 @@
-import { AGENT_INTENT_SUMMARIES } from "./agent_intent_surface.jsx";
+import { AGENT_INTENT_SUMMARIES } from "./agent_intent_display_model.js";
 
 export const AGENT_CONTEXT_FIXTURE_MODES = Object.freeze(["rich", "unavailable"]);
 export const AGENT_CONTEXT_FIXTURE_STATES = Object.freeze(["current", "stale", "reconnecting"]);

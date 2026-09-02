@@ -1,5 +1,5 @@
-import { describeAgentActivity } from "./agent_activity_surface.jsx";
-import { describeAgentIntent } from "./agent_intent_surface.jsx";
+import { describeAgentActivity } from "./agent_activity_display_model.js";
+import { describeAgentIntent } from "./agent_intent_display_model.js";
 
 const FRESHNESS_LABELS = Object.freeze({
   current: ["当前", "Current"],
