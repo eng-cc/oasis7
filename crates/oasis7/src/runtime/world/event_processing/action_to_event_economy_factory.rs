@@ -158,7 +158,9 @@ impl World {
             || !site_authority.active
             || !site_authority.chunk_ready
             || site_authority.location_id.trim().is_empty()
+            || site_authority.authority_revision == 0
             || !location_authority.active
+            || location_authority.authority_revision == 0
             || location_authority.location_id != site_authority.location_id
             || location_authority.effective_at > self.state.time
             || !authorized

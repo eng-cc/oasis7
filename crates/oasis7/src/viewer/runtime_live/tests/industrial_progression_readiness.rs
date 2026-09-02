@@ -7,6 +7,8 @@ use super::*;
 use crate::runtime::{Action, ProductProfileV1, RecipeProfileV1};
 use crate::simulator::{PlayerGameplayGoalKind, PlayerGameplayStageStatus, ResourceKind};
 
+mod assembler_power_boundaries;
+
 fn submit_iron_ingot_schedule(
     server: &mut ViewerRuntimeLiveServer,
     agent_id: &str,
@@ -143,6 +145,85 @@ fn runtime_live_formal_bootstrap_keeps_smelter_and_assembler_builds_ready() {
         .find(|action| action.action_id == crate::viewer::ACTION_BUILD_ASSEMBLER_MK1)
         .expect("first smelter run must publish the assembler build");
     assert_eq!(assembler.disabled_reason, None);
+
+    let build_assembler =
+        crate::viewer::gameplay_actions::build_runtime_action_from_gameplay_request(
+            &crate::viewer::GameplayActionRequest {
+                action_id: crate::viewer::ACTION_BUILD_ASSEMBLER_MK1.to_string(),
+                target_agent_id: agent_id.to_string(),
+                actor_agent_id: None,
+                player_id: "bootstrap-readiness-test".to_string(),
+                public_key: None,
+                auth: None,
+            },
+        )
+        .expect("formal bootstrap assembler build action");
+    world.submit_action(build_assembler);
+    world.step().expect("settle formal assembler construction");
+    world
+        .step()
+        .expect("complete formal assembler construction");
+    assert!(world.has_factory(crate::viewer::FACTORY_ASSEMBLER_MK1));
+    assert_eq!(
+        world
+            .agent_resource_balance(agent_id, ResourceKind::Electricity)
+            .expect("starter agent power before first assembler recipe"),
+        16,
+        "bootstrap must reserve four gear batches at four electricity each"
+    );
+
+    let after_assembler = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
+        world.state(),
+        Some(agent_id),
+        true,
+        None,
+        None,
+        None,
+        true,
+        None,
+        false,
+        true,
+        None,
+    );
+    let gear = after_assembler
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == crate::viewer::ACTION_SCHEDULE_ASSEMBLER_GEAR)
+        .expect("new assembler must publish the canonical first gear recipe");
+    assert_eq!(gear.disabled_reason, None);
+
+    let gear_action = crate::viewer::gameplay_actions::build_runtime_action_from_gameplay_request(
+        &crate::viewer::GameplayActionRequest {
+            action_id: crate::viewer::ACTION_SCHEDULE_ASSEMBLER_GEAR.to_string(),
+            target_agent_id: agent_id.to_string(),
+            actor_agent_id: None,
+            player_id: "bootstrap-readiness-test".to_string(),
+            public_key: None,
+            auth: None,
+        },
+    )
+    .expect("formal bootstrap first assembler recipe action");
+    world.submit_action(gear_action);
+    world
+        .step()
+        .expect("settle formal bootstrap first assembler recipe");
+    assert_eq!(world.pending_recipe_jobs_len(), 1);
+    assert_eq!(
+        world
+            .agent_resource_balance(agent_id, ResourceKind::Electricity)
+            .expect("starter agent power after first assembler recipe admission"),
+        0
+    );
+
+    world
+        .step()
+        .expect("complete formal bootstrap first assembler recipe");
+    let gear_ledger = crate::runtime::MaterialLedgerId::site("site-assembler");
+    assert_eq!(
+        world.ledger_material_balance(&gear_ledger, "gear"),
+        4,
+        "the canonical first assembler recipe must settle its output"
+    );
 }
 
 #[test]
@@ -1032,119 +1113,4 @@ fn runtime_gameplay_actions_do_not_enable_assembler_schedule_from_world_ledger()
     assert!(disabled_reason.contains("insufficient iron_ingot"));
     assert!(disabled_reason.contains(site_ledger.to_string().as_str()));
     assert!(disabled_reason.contains("replenish"));
-}
-
-#[test]
-fn runtime_gameplay_actions_enable_assembler_motor_at_runtime_power_boundary() {
-    let _guard = lock_test_llm_env();
-    let (mut server, agent_id, public_key, private_key) =
-        setup_runtime_industrial_gameplay_session(52);
-    build_first_smelter_via_gameplay_action(
-        &mut server,
-        agent_id.as_str(),
-        public_key.as_str(),
-        private_key.as_str(),
-        52,
-    );
-    build_first_assembler_via_gameplay_action(
-        &mut server,
-        agent_id.as_str(),
-        public_key.as_str(),
-        private_key.as_str(),
-        62,
-    );
-    seed_assembler_site_materials(
-        &mut server,
-        &[("gear", 4), ("copper_wire", 6), ("hardware_part", 1)],
-    );
-
-    server
-        .world
-        .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Electricity, 14)
-        .expect("seed exact motor runtime power");
-    let gameplay = expect_player_gameplay(&mut server, "motor runtime power boundary");
-    let action = smelter_schedule_action(
-        &gameplay,
-        crate::viewer::ACTION_SCHEDULE_ASSEMBLER_MOTOR_MK1,
-    );
-    assert_eq!(
-        action.disabled_reason, None,
-        "runtime-valid motor power must keep the published action enabled"
-    );
-
-    server
-        .world
-        .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Electricity, 13)
-        .expect("drain one unit below motor runtime power");
-    let gameplay = expect_player_gameplay(&mut server, "motor below power boundary");
-    let action = smelter_schedule_action(
-        &gameplay,
-        crate::viewer::ACTION_SCHEDULE_ASSEMBLER_MOTOR_MK1,
-    );
-    let disabled_reason = action
-        .disabled_reason
-        .as_deref()
-        .expect("one below runtime motor power must disable scheduling");
-    assert!(disabled_reason.contains("need 14"));
-    assert!(disabled_reason.contains("replenish electricity"));
-}
-
-#[test]
-fn runtime_gameplay_actions_enable_assembler_drone_at_runtime_power_boundary() {
-    let _guard = lock_test_llm_env();
-    let (mut server, agent_id, public_key, private_key) =
-        setup_runtime_industrial_gameplay_session(53);
-    build_first_smelter_via_gameplay_action(
-        &mut server,
-        agent_id.as_str(),
-        public_key.as_str(),
-        private_key.as_str(),
-        53,
-    );
-    build_first_assembler_via_gameplay_action(
-        &mut server,
-        agent_id.as_str(),
-        public_key.as_str(),
-        private_key.as_str(),
-        63,
-    );
-    seed_assembler_site_materials(
-        &mut server,
-        &[
-            ("motor_mk1", 2),
-            ("control_chip", 1),
-            ("iron_ingot", 2),
-            ("hardware_part", 2),
-        ],
-    );
-
-    server
-        .world
-        .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Electricity, 12)
-        .expect("seed exact drone runtime power");
-    let gameplay = expect_player_gameplay(&mut server, "drone runtime power boundary");
-    let action = smelter_schedule_action(
-        &gameplay,
-        crate::viewer::ACTION_SCHEDULE_ASSEMBLER_LOGISTICS_DRONE,
-    );
-    assert_eq!(
-        action.disabled_reason, None,
-        "runtime-valid drone power must keep the published action enabled"
-    );
-
-    server
-        .world
-        .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Electricity, 11)
-        .expect("drain one unit below drone runtime power");
-    let gameplay = expect_player_gameplay(&mut server, "drone below power boundary");
-    let action = smelter_schedule_action(
-        &gameplay,
-        crate::viewer::ACTION_SCHEDULE_ASSEMBLER_LOGISTICS_DRONE,
-    );
-    let disabled_reason = action
-        .disabled_reason
-        .as_deref()
-        .expect("one below runtime drone power must disable scheduling");
-    assert!(disabled_reason.contains("need 12"));
-    assert!(disabled_reason.contains("replenish electricity"));
 }

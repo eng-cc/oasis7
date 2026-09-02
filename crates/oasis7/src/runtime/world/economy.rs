@@ -19,7 +19,6 @@ use super::super::{
 };
 use super::World;
 use crate::simulator::ResourceKind;
-
 const FACTORY_BUILD_DECISION_EMIT_KIND: &str = "economy.factory_build_decision";
 const RECIPE_EXECUTION_PLAN_EMIT_KIND: &str = "economy.recipe_execution_plan";
 const PRODUCT_VALIDATION_EMIT_KIND: &str = "economy.product_validation";
@@ -57,7 +56,6 @@ const BOTTLENECK_LOW_STOCK_THRESHOLDS: &[(&str, i64)] = &[
     ("control_chip", 4),
     ("motor_mk1", 4),
 ];
-
 pub(super) fn invalid_recipe_plan_stack_note(
     label: &str,
     stacks: &[MaterialStack],
@@ -91,10 +89,6 @@ pub(super) enum EconomyActionResolution {
 }
 
 impl World {
-    // ---------------------------------------------------------------------
-    // Economy runtime helpers
-    // ---------------------------------------------------------------------
-
     pub fn pending_factory_builds_len(&self) -> usize {
         self.state.pending_factory_builds.len()
     }
@@ -314,6 +308,13 @@ impl World {
                 stack,
                 deterministic_seed,
             } => {
+                if !self.state.agents.contains_key(requester_agent_id) {
+                    return Ok(EconomyActionResolution::Rejected(
+                        RejectReason::AgentNotFound {
+                            agent_id: requester_agent_id.clone(),
+                        },
+                    ));
+                }
                 if module_id.trim().is_empty() {
                     return Ok(EconomyActionResolution::Rejected(
                         RejectReason::RuleDenied {

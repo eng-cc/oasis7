@@ -626,14 +626,17 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             } else if authoritative_record_exists && marker.height == context.height {
                 // A record can win the race with marker cleanup. Reconcile to
                 // that authoritative result instead of resuming the stale
-                // pre-call world.
-                clear_product_validation_intent(self.records_dir.as_path())?;
+                // pre-call world. Keep the continuation marker durable until
+                // the record and its replay identity have both been restored
+                // successfully so a transient CAS/read failure remains
+                // retryable in-process.
                 self.restore_execution_head_from_record(context.world_id.as_str(), context.height)?;
                 let record = load_execution_bridge_record(
                     execution_bridge_record_path(self.records_dir.as_path(), context.height)
                         .as_path(),
                 )?;
                 self.validate_equal_height_replay_identity(&record, &context)?;
+                clear_product_validation_intent(self.records_dir.as_path())?;
                 return Ok(NodeExecutionCommitResult {
                     execution_height: context.height,
                     execution_block_hash: record.execution_block_hash,

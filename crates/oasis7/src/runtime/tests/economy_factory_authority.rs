@@ -266,6 +266,246 @@ fn location_anchor_is_required_for_authority_and_build_admission() {
 }
 
 #[test]
+fn zero_revision_site_authority_is_rejected_at_build_admission() {
+    const CONSTRUCTION_POWER: i64 = 10;
+    let mut state = WorldState::default();
+    state
+        .apply_domain_event(
+            &DomainEvent::AgentRegistered {
+                agent_id: "builder-zero-revision".to_string(),
+                pos: crate::geometry::GeoPos {
+                    x_cm: 0,
+                    y_cm: 0,
+                    z_cm: 0,
+                },
+            },
+            0,
+        )
+        .expect("register builder");
+    state.location_anchors.insert(
+        "location-zero-revision".to_string(),
+        LocationAnchorV1 {
+            location_id: "location-zero-revision".to_string(),
+            active: true,
+            authority_revision: 1,
+            effective_at: 0,
+        },
+    );
+    state.agent_location_authorities.insert(
+        "builder-zero-revision".to_string(),
+        AgentLocationAuthorityV1 {
+            agent_id: "builder-zero-revision".to_string(),
+            location_id: "location-zero-revision".to_string(),
+            active: true,
+            authority_revision: 1,
+            effective_at: 0,
+        },
+    );
+    state.factory_site_authorities.insert(
+        "site-zero-revision".to_string(),
+        FactorySiteAuthorityV1 {
+            site_id: "site-zero-revision".to_string(),
+            location_id: "location-zero-revision".to_string(),
+            owner_agent_id: "builder-zero-revision".to_string(),
+            authorized_agent_ids: Vec::new(),
+            chunk_ready: true,
+            active: true,
+            authority_revision: 0,
+            registered_at: 0,
+        },
+    );
+    state.factory_construction_power_profiles.insert(
+        "factory.zero-site-revision".to_string(),
+        FactoryConstructionPowerProfileV1 {
+            factory_id: "factory.zero-site-revision".to_string(),
+            factory_kind: "test".to_string(),
+            source_module_id: None,
+            electricity_amount: CONSTRUCTION_POWER,
+            mode: FactoryConstructionPowerMode::StartOnlySink,
+            authority_revision: 1,
+            active: true,
+        },
+    );
+    state.factory_profiles.insert(
+        "factory.zero-site-revision".to_string(),
+        FactoryProfileV1 {
+            factory_id: "factory.zero-site-revision".to_string(),
+            tier: 1,
+            recipe_slots: 1,
+            tags: vec!["lifecycle".to_string()],
+        },
+    );
+    state
+        .resources
+        .insert(ResourceKind::Electricity, CONSTRUCTION_POWER);
+    state.material_ledgers.insert(
+        MaterialLedgerId::agent("builder-zero-revision"),
+        [
+            ("steel_plate".to_string(), 10),
+            ("circuit_board".to_string(), 2),
+        ]
+        .into_iter()
+        .collect(),
+    );
+    let mut world = World::new_with_state(state);
+    world
+        .set_agent_resource_balance(
+            "builder-zero-revision",
+            ResourceKind::Electricity,
+            CONSTRUCTION_POWER,
+        )
+        .expect("seed builder electricity");
+    let spec = factory_spec("factory.zero-site-revision", 1, 1, 1);
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-zero-revision".to_string(),
+        site_id: "site-zero-revision".to_string(),
+        spec,
+    });
+
+    world
+        .step()
+        .expect("zero-revision site authority should be a structured rejection");
+
+    assert_eq!(world.pending_factory_builds_len(), 0);
+    assert_eq!(
+        world
+            .agent_resource_balance("builder-zero-revision", ResourceKind::Electricity)
+            .expect("read builder electricity"),
+        CONSTRUCTION_POWER,
+        "zero-revision site authority must not sink construction power"
+    );
+    assert!(world.journal().events.iter().any(|event| {
+        matches!(
+            &event.body,
+            WorldEventBody::Domain(DomainEvent::ActionRejected {
+                reason: RejectReason::RuleDenied { notes },
+                ..
+            }) if notes.iter().any(|note| note.contains("site_access_or_location_blocked"))
+        )
+    }));
+}
+
+#[test]
+fn zero_revision_agent_location_authority_is_rejected_at_build_admission() {
+    const CONSTRUCTION_POWER: i64 = 10;
+    let mut state = WorldState::default();
+    state
+        .apply_domain_event(
+            &DomainEvent::AgentRegistered {
+                agent_id: "builder-zero-location-revision".to_string(),
+                pos: crate::geometry::GeoPos {
+                    x_cm: 0,
+                    y_cm: 0,
+                    z_cm: 0,
+                },
+            },
+            0,
+        )
+        .expect("register builder");
+    state.location_anchors.insert(
+        "location-zero-location-revision".to_string(),
+        LocationAnchorV1 {
+            location_id: "location-zero-location-revision".to_string(),
+            active: true,
+            authority_revision: 1,
+            effective_at: 0,
+        },
+    );
+    state.agent_location_authorities.insert(
+        "builder-zero-location-revision".to_string(),
+        AgentLocationAuthorityV1 {
+            agent_id: "builder-zero-location-revision".to_string(),
+            location_id: "location-zero-location-revision".to_string(),
+            active: true,
+            authority_revision: 0,
+            effective_at: 0,
+        },
+    );
+    state.factory_site_authorities.insert(
+        "site-zero-location-revision".to_string(),
+        FactorySiteAuthorityV1 {
+            site_id: "site-zero-location-revision".to_string(),
+            location_id: "location-zero-location-revision".to_string(),
+            owner_agent_id: "builder-zero-location-revision".to_string(),
+            authorized_agent_ids: Vec::new(),
+            chunk_ready: true,
+            active: true,
+            authority_revision: 1,
+            registered_at: 0,
+        },
+    );
+    state.factory_construction_power_profiles.insert(
+        "factory.zero-location-revision".to_string(),
+        FactoryConstructionPowerProfileV1 {
+            factory_id: "factory.zero-location-revision".to_string(),
+            factory_kind: "test".to_string(),
+            source_module_id: None,
+            electricity_amount: CONSTRUCTION_POWER,
+            mode: FactoryConstructionPowerMode::StartOnlySink,
+            authority_revision: 1,
+            active: true,
+        },
+    );
+    state.factory_profiles.insert(
+        "factory.zero-location-revision".to_string(),
+        FactoryProfileV1 {
+            factory_id: "factory.zero-location-revision".to_string(),
+            tier: 1,
+            recipe_slots: 1,
+            tags: vec!["lifecycle".to_string()],
+        },
+    );
+    state
+        .resources
+        .insert(ResourceKind::Electricity, CONSTRUCTION_POWER);
+    state.material_ledgers.insert(
+        MaterialLedgerId::agent("builder-zero-location-revision"),
+        [
+            ("steel_plate".to_string(), 10),
+            ("circuit_board".to_string(), 2),
+        ]
+        .into_iter()
+        .collect(),
+    );
+    let mut world = World::new_with_state(state);
+    world
+        .set_agent_resource_balance(
+            "builder-zero-location-revision",
+            ResourceKind::Electricity,
+            CONSTRUCTION_POWER,
+        )
+        .expect("seed builder electricity");
+    let spec = factory_spec("factory.zero-location-revision", 1, 1, 1);
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-zero-location-revision".to_string(),
+        site_id: "site-zero-location-revision".to_string(),
+        spec,
+    });
+
+    world
+        .step()
+        .expect("zero-revision agent location authority should be a structured rejection");
+
+    assert_eq!(world.pending_factory_builds_len(), 0);
+    assert_eq!(
+        world
+            .agent_resource_balance("builder-zero-location-revision", ResourceKind::Electricity)
+            .expect("read builder electricity"),
+        CONSTRUCTION_POWER,
+        "zero-revision agent location authority must not sink construction power"
+    );
+    assert!(world.journal().events.iter().any(|event| {
+        matches!(
+            &event.body,
+            WorldEventBody::Domain(DomainEvent::ActionRejected {
+                reason: RejectReason::RuleDenied { notes },
+                ..
+            }) if notes.iter().any(|note| note.contains("site_access_or_location_blocked"))
+        )
+    }));
+}
+
+#[test]
 fn inactive_exact_anchor_blocks_build_without_resource_sink() {
     const CONSTRUCTION_POWER: i64 = 10;
     let mut world = World::new();

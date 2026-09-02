@@ -253,6 +253,40 @@ fn schedule_recipe_with_module_rejection_emits_production_blocker_and_resets_can
 mod identity_guard;
 #[path = "economy_module_validation/product_validation.rs"]
 mod product_validation;
+#[test]
+fn validate_product_with_module_rejects_unknown_requester_before_module_call() {
+    let mut world = World::new();
+    activate_pure_module(
+        &mut world,
+        "m4.product.unknown-requester",
+        b"unknown-requester-product-module",
+    );
+    world.submit_action(Action::ValidateProductWithModule {
+        requester_agent_id: "missing-requester".to_string(),
+        module_id: "m4.product.unknown-requester".to_string(),
+        stack: MaterialStack::new("logistics_drone", 1),
+        deterministic_seed: 20260903,
+    });
+    let mut sandbox = CaptureContextSandbox::with_outputs(Vec::new());
+
+    world
+        .step_with_modules(&mut sandbox)
+        .expect("unknown requester should be a structured rejection");
+
+    assert!(
+        sandbox.requests.is_empty(),
+        "product module must not run for an unknown requester"
+    );
+    assert!(world.journal().events.iter().any(|event| {
+        matches!(
+            &event.body,
+            WorldEventBody::Domain(DomainEvent::ActionRejected {
+                reason: RejectReason::AgentNotFound { agent_id },
+                ..
+            }) if agent_id == "missing-requester"
+        )
+    }));
+}
 
 #[test]
 fn schedule_recipe_with_module_blocks_atomic_commit_when_byproduct_validation_fails() {

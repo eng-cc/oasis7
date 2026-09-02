@@ -735,6 +735,15 @@ fn install_starter_factory_authorities(
             .set_ledger_material_balance(smelter_ledger.clone(), material, amount)
             .map_err(|err| format!("{label} seed starter recipe material failed: {err:?}"))?;
     }
+    // The first canonical assembler recipe consumes two iron ingots per batch
+    // and the gameplay action schedules four batches. Keep its inputs on the
+    // assembler's authoritative site ledger; recipe admission no longer
+    // falls back to the world ledger and the Viewer exposes no transfer
+    // action that could bridge this bootstrap gap.
+    let assembler_ledger = MaterialLedgerId::site("site-assembler");
+    world
+        .set_ledger_material_balance(assembler_ledger, "iron_ingot", 8)
+        .map_err(|err| format!("{label} seed starter assembler recipe material failed: {err:?}"))?;
     Ok(())
 }
 
@@ -953,7 +962,7 @@ mod tests {
             world
                 .agent_resource_balance(starter_agent, ResourceKind::Electricity)
                 .expect("starter agent power after construction"),
-            106,
+            122,
             "construction must leave the first recipe plus assembler-build budget"
         );
 
@@ -975,7 +984,7 @@ mod tests {
             world
                 .agent_resource_balance(starter_agent, ResourceKind::Electricity)
                 .expect("starter agent power after first recipe admission"),
-            10,
+            26,
             "the canonical first run must retain the assembler construction obligation"
         );
 
@@ -1069,5 +1078,29 @@ mod tests {
             .expect("complete generated assembler construction");
 
         assert!(world.has_factory(crate::viewer::FACTORY_ASSEMBLER_MK1));
+
+        let gear = crate::viewer::gameplay_actions::build_runtime_action_from_gameplay_request(
+            &crate::viewer::GameplayActionRequest {
+                action_id: crate::viewer::ACTION_SCHEDULE_ASSEMBLER_GEAR.to_string(),
+                target_agent_id: starter_agent,
+                actor_agent_id: None,
+                player_id: "bootstrap-test".to_string(),
+                public_key: None,
+                auth: None,
+            },
+        )
+        .expect("generated bootstrap first assembler recipe action");
+        world.submit_action(gear);
+        world
+            .step()
+            .expect("settle generated first assembler recipe");
+        assert_eq!(world.pending_recipe_jobs_len(), 1);
+        world
+            .step()
+            .expect("complete generated first assembler recipe");
+        assert_eq!(
+            world.ledger_material_balance(&MaterialLedgerId::site("site-assembler"), "gear"),
+            4
+        );
     }
 }

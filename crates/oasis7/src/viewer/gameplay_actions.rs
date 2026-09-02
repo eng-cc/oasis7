@@ -34,8 +34,9 @@ pub const FACTORY_ASSEMBLER_MK1: &str = "factory.assembler.mk1";
 
 // The formal/generated starter world must be able to pay the first canonical
 // industrial bootstrap from one owner-held balance: 10 electricity for each
-// starter factory plus 12 iron-ingot batches at 8 electricity each.
-pub(crate) const STARTER_INDUSTRIAL_ELECTRICITY: i64 = 10 + (12 * 8) + 10;
+// starter factory, 12 iron-ingot batches at 8 electricity each, and 4 gear
+// batches at 4 electricity each.
+pub(crate) const STARTER_INDUSTRIAL_ELECTRICITY: i64 = 10 + (12 * 8) + 10 + (4 * 4);
 
 #[cfg(not(target_arch = "wasm32"))]
 const RECIPE_SMELTER_IRON_INGOT: &str = "recipe.smelter.iron_ingot";
