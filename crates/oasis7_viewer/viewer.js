@@ -17818,7 +17818,7 @@ function buildAgentContextDisplayModel(input = {}) {
     control: firstValue(input.controlState, candidateIntent?.control_state, candidateIntent?.controlState) || "unknown"
   };
 }
-var _tmpl$ = /* @__PURE__ */ template(`<span>`), _tmpl$2 = /* @__PURE__ */ template(`<div>`), _tmpl$3 = /* @__PURE__ */ template(`<div class=entity-list-pending__progress>`), _tmpl$4 = /* @__PURE__ */ template(`<div class=entity-list-pending aria-live=polite aria-busy=true><div class=entity-list-pending__row><span class=entity-list-pending__spinner aria-hidden=true></span><span></span></div><div class=entity-list-pending__skeleton aria-hidden=true><span></span><span></span><span>`), _tmpl$5 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$6 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$7 = /* @__PURE__ */ template(`<details class=diagnostic><summary></summary><div class="stack flow-top">`), _tmpl$8 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$9 = /* @__PURE__ */ template(`<div class=feedback-summary>`), _tmpl$0 = /* @__PURE__ */ template(`<div class=summary-grid>`), _tmpl$1 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$10 = /* @__PURE__ */ template(`<div class=action-grid>`), _tmpl$11 = /* @__PURE__ */ template(`<div class=feedback-detail><div class=metric__label>`), _tmpl$12 = /* @__PURE__ */ template(`<div class=inline-help-tip><button type=button class=inline-help-tip__button>?</button><div class=inline-help-tip__panel><div class=inline-help-tip__title></div><div class=inline-help-tip__body>`), _tmpl$13 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row></div><div class=feedback-summary>`), _tmpl$14 = /* @__PURE__ */ template(`<div class="feedback-detail flow-top--tight">`), _tmpl$15 = /* @__PURE__ */ template(`<div class="badge-row badge-row--tight">`), _tmpl$16 = /* @__PURE__ */ template(`<div><div class=metric__label></div><div class=metric__value>`), _tmpl$17 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$18 = /* @__PURE__ */ template(`<div><div class=event-card__title><span>`), _tmpl$19 = /* @__PURE__ */ template(`<div class=panel__eyebrow>`), _tmpl$20 = /* @__PURE__ */ template(`<div class=panel__meta-copy>`), _tmpl$21 = /* @__PURE__ */ template(`<div><div class=panel__header><div class="stack stack--compact"><div class=panel__title></div></div></div><div class="panel__body stack">`), _tmpl$22 = /* @__PURE__ */ template(`<div><div class=callout__header><div class=callout__title></div></div><div class=callout__body>`), _tmpl$23 = /* @__PURE__ */ template(`<div class=field><label></label><input type=text autocomplete=off>`), _tmpl$24 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=complete-login>`), _tmpl$25 = /* @__PURE__ */ template(`<div class=stack>`), _tmpl$26 = /* @__PURE__ */ template(`<div class=stack><div class=control-grid><div class=field><label></label><input type=email autocomplete=email></div></div><div class=toolbar><button data-auth-action=start-login>`), _tmpl$27 = /* @__PURE__ */ template(`<div class=auth-gate data-viewer-fixture-state=hosted_login_gate role=dialog aria-modal=true aria-labelledby=hosted-login-gate-title tabindex=-1><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=hosted-login-gate-title class=auth-gate__title></h1></div></div><div class=feedback-summary>`), _tmpl$28 = /* @__PURE__ */ template(`<details class=entry-menu><summary class=entry-menu__toggle></summary><div class="entry-menu__panel stack"><div><div class="panel__title panel__title--spaced"></div><div class=feedback-detail></div></div><div class=toolbar><button data-locale=zh>中文</button><button data-locale=en>English</button></div><div class=badge-row></div><div class=feedback-detail>`), _tmpl$29 = /* @__PURE__ */ template(`<div class="stack stack--compact"><div class=feedback-summary></div><div class=summary-grid><div class=metric><div class=metric__label></div><div class=metric__value></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div></div><div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$30 = /* @__PURE__ */ template(`<div class="stack stack--compact">`), _tmpl$31 = /* @__PURE__ */ template(`<div class=toolbar><button>`), _tmpl$32 = /* @__PURE__ */ template(`<button>`), _tmpl$33 = /* @__PURE__ */ template(`<div class=auth-gate role=dialog aria-modal=true aria-labelledby=starter-oc-gate-title data-viewer-fixture-state=starter_oc_required_gate><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=starter-oc-gate-title class=auth-gate__title></h1></div></div><div class=toolbar>`), _tmpl$34 = /* @__PURE__ */ template(`<button data-testid=viewer-playthrough-action-claim-starter-oc>`), _tmpl$35 = /* @__PURE__ */ template(`<div class=control-grid><div class=field><label for=agent-claim-target></label><select id=agent-claim-target>`), _tmpl$36 = /* @__PURE__ */ template(`<option>`), _tmpl$37 = /* @__PURE__ */ template(`<div class="stage-hero stage-hero--compact"><div class=stage-hero__topline><div class="stack stack--hero"><div class=stage-hero__eyebrow-row><div class=stage-hero__eyebrow></div></div><div class=stage-hero__title></div><div class=stage-hero__lede></div></div></div><div class="hero-focus-grid hero-focus-grid--compact"><div class=hero-focus-card><div class=hero-focus-card__label></div><div></div><div class=hero-focus-card__detail></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div></div><div class="hero-focus-card hero-focus-card--next-step"data-testid=viewer-next-step-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div></div><div class=hero-focus-card data-testid=viewer-identity-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div><div class=hero-focus-card__detail></div></div></div><div class=stage-hero__mobile-shortcuts><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel>`), _tmpl$38 = /* @__PURE__ */ template(`<div class="badge-row stage-hero__selection">`), _tmpl$39 = /* @__PURE__ */ template(`<div class=toolbar><button type=button>`), _tmpl$40 = /* @__PURE__ */ template(`<div class=stack><div class=field><label for=entity-search></label><input id=entity-search type=search></div><div><div class="panel__title panel__title--spaced"></div><div class=list></div></div><div><div class="panel__title panel__title--spaced"></div><div class=list>`), _tmpl$41 = /* @__PURE__ */ template(`<span class=list-item__selected-label>`), _tmpl$42 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=agent><div class=list-item__header><div class=list-item__title></div></div><div class=list-item__meta><span class=entity-id></span></div><div class=badge-row></div><div class=list-item__meta></div><div class=list-item__meta>`), _tmpl$43 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=location><div class=list-item__header><div class=list-item__title></div></div><div class=list-item__meta>`), _tmpl$44 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=logout>`), _tmpl$45 = /* @__PURE__ */ template(`<button data-auth-action=logout>`), _tmpl$46 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$47 = /* @__PURE__ */ template(`<div data-viewer-overlay=world-summary><details class=gameplay-details-surface id=viewer-gameplay-details><summary class=gameplay-details-surface__summary><div class=diagnostic-surface__title><span></span><span class=diagnostic-surface__meta></span></div></summary><div class="stack flow-top"><details id=viewer-diagnostics-panel class="panel diagnostic-surface"data-viewer-surface=diagnostics><summary class="panel__header diagnostic-surface__summary"><div class=diagnostic-surface__title><div class=panel__title></div><div class=diagnostic-surface__meta></div></div><div class=badge-row></div></summary><div class="panel__body stack"><div class=badge-row></div><div class=badge-row></div><div class=toolbar></div><div class=summary-grid></div><div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$48 = /* @__PURE__ */ template(`<div class="badge-row badge-row--spaced">`), _tmpl$49 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced"></div><div class=action-grid>`), _tmpl$50 = /* @__PURE__ */ template(`<div class=feedback-summary data-testid=validation-unlock-preview>`), _tmpl$51 = /* @__PURE__ */ template(`<div class=feedback-summary><a href=#viewer-details-panel>`), _tmpl$52 = /* @__PURE__ */ template(`<div class="badge-row command-surface__auth-boundary">`), _tmpl$53 = /* @__PURE__ */ template(`<div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=4>`), _tmpl$54 = /* @__PURE__ */ template(`<div class=toolbar><button data-chat-send=1>`), _tmpl$55 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-visibility-toggle=1>`), _tmpl$56 = /* @__PURE__ */ template(`<div class=field><label for=strong-auth-approval-code></label><input id=strong-auth-approval-code type=password autocomplete=off>`), _tmpl$57 = /* @__PURE__ */ template(`<div class=field><label for=prompt-system></label><textarea id=prompt-system rows=4>`), _tmpl$58 = /* @__PURE__ */ template(`<div class=field><label for=prompt-short></label><textarea id=prompt-short rows=3>`), _tmpl$59 = /* @__PURE__ */ template(`<div class=field><label for=prompt-long></label><textarea id=prompt-long rows=3>`), _tmpl$60 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-action=preview></button><button data-prompt-action=apply>`), _tmpl$61 = /* @__PURE__ */ template(`<div class=toolbar><div class="field field--inline-flex"><label for=prompt-rollback-version></label><input id=prompt-rollback-version type=number min=0 step=1></div><button data-prompt-action=rollback>`), _tmpl$62 = /* @__PURE__ */ template(`<div class=toolbar><button disabled>`), _tmpl$63 = /* @__PURE__ */ template(`<div class="stack command-surface"><div class="badge-row command-surface__target-row"></div><details class="diagnostic command-surface__capability-details"><summary></summary><div class="badge-row command-surface__capability-row command-surface__diagnostic-strip"></div></details><details class="diagnostic command-surface__advanced-details"><summary></summary></details><details class="diagnostic command-surface__asset-details"><summary>`), _tmpl$64 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced panel__title--danger"></div><pre class=json>`), _tmpl$65 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div><div class="panel__title panel__title--spaced"></div><div class=badge-row></div><div class="feedback-detail flow-top">`), _tmpl$66 = /* @__PURE__ */ template(`<div class=viewer-shell data-viewer-shell=player-fullscreen><section class="panel panel--targets"id=viewer-targets-panel data-viewer-route-panel=targets data-viewer-overlay=targets tabindex=-1 data-viewer-surface=targets><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div><a class=panel__route-close href=#viewer-stage-panel></a></div><div class=panel__body></div></section><section class="panel panel--stage"id=viewer-stage-panel tabindex=-1 data-viewer-map-layer=base data-viewer-surface=stage><div class="panel__body panel__body--stage"><div class=stack></div></div></section><section class="panel panel--details"id=viewer-details-panel data-viewer-route-panel=command data-viewer-overlay=command tabindex=-1 data-viewer-surface=command><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div><a class=panel__route-close href=#viewer-stage-panel></a></div><div class=panel__body>`);
+var _tmpl$ = /* @__PURE__ */ template(`<span>`), _tmpl$2 = /* @__PURE__ */ template(`<div>`), _tmpl$3 = /* @__PURE__ */ template(`<div class=entity-list-pending__progress>`), _tmpl$4 = /* @__PURE__ */ template(`<div class=entity-list-pending aria-live=polite aria-busy=true><div class=entity-list-pending__row><span class=entity-list-pending__spinner aria-hidden=true></span><span></span></div><div class=entity-list-pending__skeleton aria-hidden=true><span></span><span></span><span>`), _tmpl$5 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$6 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$7 = /* @__PURE__ */ template(`<details class=diagnostic><summary></summary><div class="stack flow-top">`), _tmpl$8 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$9 = /* @__PURE__ */ template(`<div class=feedback-summary>`), _tmpl$0 = /* @__PURE__ */ template(`<div class=summary-grid>`), _tmpl$1 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$10 = /* @__PURE__ */ template(`<div class=action-grid>`), _tmpl$11 = /* @__PURE__ */ template(`<div class=feedback-detail><div class=metric__label>`), _tmpl$12 = /* @__PURE__ */ template(`<div class=inline-help-tip><button type=button class=inline-help-tip__button>?</button><div class=inline-help-tip__panel><div class=inline-help-tip__title></div><div class=inline-help-tip__body>`), _tmpl$13 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row></div><div class=feedback-summary>`), _tmpl$14 = /* @__PURE__ */ template(`<div class="feedback-detail flow-top--tight">`), _tmpl$15 = /* @__PURE__ */ template(`<div class="badge-row badge-row--tight">`), _tmpl$16 = /* @__PURE__ */ template(`<div><div class=metric__label></div><div class=metric__value>`), _tmpl$17 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$18 = /* @__PURE__ */ template(`<div><div class=event-card__title><span>`), _tmpl$19 = /* @__PURE__ */ template(`<div class=panel__eyebrow>`), _tmpl$20 = /* @__PURE__ */ template(`<div class=panel__meta-copy>`), _tmpl$21 = /* @__PURE__ */ template(`<div><div class=panel__header><div class="stack stack--compact"><div class=panel__title></div></div></div><div class="panel__body stack">`), _tmpl$22 = /* @__PURE__ */ template(`<div><div class=callout__header><div class=callout__title></div></div><div class=callout__body>`), _tmpl$23 = /* @__PURE__ */ template(`<div class=field><label></label><input type=text autocomplete=off>`), _tmpl$24 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=complete-login>`), _tmpl$25 = /* @__PURE__ */ template(`<div class=stack>`), _tmpl$26 = /* @__PURE__ */ template(`<div class=stack><div class=control-grid><div class=field><label></label><input type=email autocomplete=email></div></div><div class=toolbar><button data-auth-action=start-login>`), _tmpl$27 = /* @__PURE__ */ template(`<div class=auth-gate data-viewer-fixture-state=hosted_login_gate role=dialog aria-modal=true aria-labelledby=hosted-login-gate-title tabindex=-1><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=hosted-login-gate-title class=auth-gate__title></h1></div></div><div class=feedback-summary>`), _tmpl$28 = /* @__PURE__ */ template(`<details class=entry-menu><summary class=entry-menu__toggle></summary><div class="entry-menu__panel stack"><div><div class="panel__title panel__title--spaced"></div><div class=feedback-detail></div></div><div class=toolbar><button data-locale=zh>中文</button><button data-locale=en>English</button></div><div class=badge-row></div><div class=feedback-detail>`), _tmpl$29 = /* @__PURE__ */ template(`<div class="stack stack--compact"><div class=feedback-summary></div><div class=summary-grid><div class=metric><div class=metric__label></div><div class=metric__value></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div></div><div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$30 = /* @__PURE__ */ template(`<div class="stack stack--compact">`), _tmpl$31 = /* @__PURE__ */ template(`<div class=toolbar><button>`), _tmpl$32 = /* @__PURE__ */ template(`<button>`), _tmpl$33 = /* @__PURE__ */ template(`<div class=auth-gate role=dialog aria-modal=true aria-labelledby=starter-oc-gate-title data-viewer-fixture-state=starter_oc_required_gate><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=starter-oc-gate-title class=auth-gate__title></h1></div></div><div class=toolbar>`), _tmpl$34 = /* @__PURE__ */ template(`<button data-testid=viewer-playthrough-action-claim-starter-oc>`), _tmpl$35 = /* @__PURE__ */ template(`<div class=control-grid><div class=field><label for=agent-claim-target></label><select id=agent-claim-target>`), _tmpl$36 = /* @__PURE__ */ template(`<option>`), _tmpl$37 = /* @__PURE__ */ template(`<div class="stage-hero stage-hero--compact"><div class=stage-hero__topline><div class="stack stack--hero"><div class=stage-hero__eyebrow-row><div class=stage-hero__eyebrow></div></div><div class=stage-hero__title></div><div class=stage-hero__lede></div></div></div><div class="hero-focus-grid hero-focus-grid--compact"><div class=hero-focus-card><div class=hero-focus-card__label></div><div></div><div class=hero-focus-card__detail></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div></div><div class="hero-focus-card hero-focus-card--next-step"data-testid=viewer-next-step-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div></div><div class=hero-focus-card data-testid=viewer-identity-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div><div class=hero-focus-card__detail></div></div></div><div class=stage-hero__mobile-shortcuts><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel>`), _tmpl$38 = /* @__PURE__ */ template(`<div class="badge-row stage-hero__selection">`), _tmpl$39 = /* @__PURE__ */ template(`<div class=toolbar><button type=button>`), _tmpl$40 = /* @__PURE__ */ template(`<div class=stack><div class=field><label for=entity-search></label><input id=entity-search type=search></div><div><div class="panel__title panel__title--spaced"></div><div class=list></div></div><div><div class="panel__title panel__title--spaced"></div><div class=list>`), _tmpl$41 = /* @__PURE__ */ template(`<span class=list-item__selected-label>`), _tmpl$42 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=agent><div class=list-item__header><div class=list-item__title></div></div><div class=list-item__meta><span class=entity-id></span></div><div class=badge-row></div><div class=list-item__meta></div><div class=list-item__meta>`), _tmpl$43 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=location><div class=list-item__header><div class=list-item__title></div></div><div class=list-item__meta>`), _tmpl$44 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=logout>`), _tmpl$45 = /* @__PURE__ */ template(`<button data-auth-action=logout>`), _tmpl$46 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$47 = /* @__PURE__ */ template(`<div data-viewer-overlay=world-summary><details class=gameplay-details-surface id=viewer-gameplay-details><summary class=gameplay-details-surface__summary><div class=diagnostic-surface__title><span></span><span class=diagnostic-surface__meta></span></div></summary><div class="stack flow-top"><details id=viewer-diagnostics-panel class="panel diagnostic-surface"data-viewer-surface=diagnostics><summary class="panel__header diagnostic-surface__summary"><div class=diagnostic-surface__title><div class=panel__title></div><div class=diagnostic-surface__meta></div></div><div class=badge-row></div></summary><div class="panel__body stack"><div class=badge-row></div><div class=badge-row></div><div class=toolbar></div><div class=summary-grid></div><div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$48 = /* @__PURE__ */ template(`<div class="badge-row badge-row--spaced">`), _tmpl$49 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced"></div><div class=action-grid>`), _tmpl$50 = /* @__PURE__ */ template(`<div class=feedback-summary data-testid=validation-unlock-preview>`), _tmpl$51 = /* @__PURE__ */ template(`<div class=feedback-summary><a href=#viewer-details-panel>`), _tmpl$52 = /* @__PURE__ */ template(`<div class="badge-row command-surface__auth-boundary">`), _tmpl$53 = /* @__PURE__ */ template(`<div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=4>`), _tmpl$54 = /* @__PURE__ */ template(`<div class=toolbar><button data-chat-send=1>`), _tmpl$55 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-visibility-toggle=1>`), _tmpl$56 = /* @__PURE__ */ template(`<div class=field><label for=strong-auth-approval-code></label><input id=strong-auth-approval-code type=password autocomplete=off>`), _tmpl$57 = /* @__PURE__ */ template(`<div class=field><label for=prompt-system></label><textarea id=prompt-system rows=4>`), _tmpl$58 = /* @__PURE__ */ template(`<div class=field><label for=prompt-short></label><textarea id=prompt-short rows=3>`), _tmpl$59 = /* @__PURE__ */ template(`<div class=field><label for=prompt-long></label><textarea id=prompt-long rows=3>`), _tmpl$60 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-action=preview></button><button data-prompt-action=apply>`), _tmpl$61 = /* @__PURE__ */ template(`<div class=toolbar><div class="field field--inline-flex"><label for=prompt-rollback-version></label><input id=prompt-rollback-version type=number min=0 step=1></div><button data-prompt-action=rollback>`), _tmpl$62 = /* @__PURE__ */ template(`<div class=toolbar><button disabled>`), _tmpl$63 = /* @__PURE__ */ template(`<div class="stack command-surface"><div class="badge-row command-surface__target-row"data-command-continuity=target><div class=command-surface__continuity-summary data-command-continuity=summary role=group><span><span class=metric__label></span> </span><span><span class=metric__label></span> </span><span class=command-surface__continuity-objective><span class=metric__label></span> </span></div></div><details class="diagnostic command-surface__capability-details"><summary></summary><div class="badge-row command-surface__capability-row command-surface__diagnostic-strip"></div></details><details class="diagnostic command-surface__advanced-details"><summary></summary></details><details class="diagnostic command-surface__asset-details"><summary>`), _tmpl$64 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced panel__title--danger"></div><pre class=json>`), _tmpl$65 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div><div class="panel__title panel__title--spaced"></div><div class=badge-row></div><div class="feedback-detail flow-top">`), _tmpl$66 = /* @__PURE__ */ template(`<div class=viewer-shell data-viewer-shell=player-fullscreen><section class="panel panel--targets"id=viewer-targets-panel data-viewer-route-panel=targets data-viewer-overlay=targets tabindex=-1 data-viewer-surface=targets><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div><a class=panel__route-close href=#viewer-stage-panel></a></div><div class=panel__body></div></section><section class="panel panel--stage"id=viewer-stage-panel tabindex=-1 data-viewer-map-layer=base data-viewer-surface=stage><div class="panel__body panel__body--stage"><div class=stack></div></div></section><section class="panel panel--details"id=viewer-details-panel data-viewer-route-panel=command data-viewer-overlay=command tabindex=-1 data-viewer-surface=command><div class="panel__header panel__header--stack command-route-chrome"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div><a class=panel__route-close href=#viewer-stage-panel></a></div><div class=panel__body>`);
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
 const [viewerStateRevision, setViewerStateRevision] = createSignal(0);
 function observeViewerStateRevision() {
@@ -22175,39 +22175,55 @@ function InteractionPanel() {
       });
     },
     get children() {
-      var _el$301 = _tmpl$63(), _el$302 = _el$301.firstChild, _el$304 = _el$302.nextSibling, _el$305 = _el$304.firstChild, _el$306 = _el$305.nextSibling, _el$315 = _el$304.nextSibling, _el$316 = _el$315.firstChild, _el$342 = _el$315.nextSibling, _el$343 = _el$342.firstChild;
+      var _el$301 = _tmpl$63(), _el$302 = _el$301.firstChild, _el$303 = _el$302.firstChild, _el$304 = _el$303.firstChild, _el$305 = _el$304.firstChild;
+      _el$305.nextSibling;
+      var _el$307 = _el$304.nextSibling, _el$308 = _el$307.firstChild;
+      _el$308.nextSibling;
+      var _el$310 = _el$307.nextSibling, _el$311 = _el$310.firstChild;
+      _el$311.nextSibling;
+      var _el$314 = _el$302.nextSibling, _el$315 = _el$314.firstChild, _el$316 = _el$315.nextSibling, _el$325 = _el$314.nextSibling, _el$326 = _el$325.firstChild, _el$352 = _el$325.nextSibling, _el$353 = _el$352.firstChild;
       insert(_el$302, createComponent(Badge, {
-        "class": "badge badge--accent",
+        "class": "badge badge--accent command-surface__target-secondary",
         get children() {
           return tr(locale(), "当前交互目标", "Current Target");
         }
-      }), null);
+      }), _el$303);
       insert(_el$302, createComponent(Badge, {
         get children() {
           return selectedAgentLabel();
         }
-      }), null);
+      }), _el$303);
       insert(_el$302, createComponent(Badge, {
+        "class": "command-surface__target-secondary",
         get children() {
           return `agent=${agentId()}`;
         }
-      }), null);
+      }), _el$303);
       insert(_el$302, createComponent(Badge, {
         get ["class"]() {
-          return selectedAgentStatus().badgeClass;
+          return `${selectedAgentStatus().badgeClass} command-surface__target-secondary`;
         },
         get children() {
           return selectedAgentStatus().badge;
         }
-      }), null);
+      }), _el$303);
       insert(_el$302, createComponent(Badge, {
         get ["class"]() {
-          return chatControlsEnabled() ? "badge badge--good" : "badge badge--warn";
+          return `${chatControlsEnabled() ? "badge badge--good" : "badge badge--warn"} command-surface__target-secondary`;
         },
         get children() {
           return memo(() => !!chatControlsEnabled())() ? tr(locale(), "聊天可用", "Chat Ready") : tr(locale(), "聊天受限", "Chat Limited");
         }
-      }), null);
+      }), _el$303);
+      insert(_el$305, () => tr(locale(), "状态", "Status"));
+      insert(_el$304, () => selectedAgentContextModel().state?.label || tr(locale(), "不可用", "Unavailable"), null);
+      insert(_el$308, () => tr(locale(), "新鲜度", "Freshness"));
+      insert(_el$307, () => selectedAgentContextModel().freshness?.label || tr(locale(), "不可用", "Unavailable"), null);
+      insert(_el$311, () => tr(locale(), "目标", "Objective"));
+      insert(_el$310, (() => {
+        var _c$11 = memo(() => !!(selectedAgentContextModel().objective?.state === "published" && selectedAgentContextModel().objective.value));
+        return () => _c$11() ? selectedAgentContextModel().objective.value : tr(locale(), "目标不可用", "Objective unavailable");
+      })(), null);
       insert(_el$301, createComponent(AgentContextLite, {
         get model() {
           return selectedAgentContextModel();
@@ -22218,7 +22234,7 @@ function InteractionPanel() {
         get fixtureMetadata() {
           return selectedAgentContextFixtureMetadata();
         }
-      }), _el$304);
+      }), _el$314);
       insert(_el$301, createComponent(Show, {
         get when() {
           return memo(() => !!interactionEnabled())() && canControlSelectedAgent();
@@ -22233,24 +22249,24 @@ function InteractionPanel() {
         },
         get children() {
           return [(() => {
-            var _el$303 = _tmpl$52();
-            insert(_el$303, createComponent(Badge, {
+            var _el$313 = _tmpl$52();
+            insert(_el$313, createComponent(Badge, {
               "class": "badge badge--good",
               get children() {
                 return authSurface().currentTier;
               }
             }), null);
-            insert(_el$303, createComponent(Badge, {
+            insert(_el$313, createComponent(Badge, {
               get children() {
                 return `player=${state.auth.playerId}`;
               }
             }), null);
-            insert(_el$303, createComponent(Badge, {
+            insert(_el$313, createComponent(Badge, {
               get children() {
                 return `source=${authSurface().source}`;
               }
             }), null);
-            return _el$303;
+            return _el$313;
           })(), createComponent(EmptyState, {
             "class": "command-surface__auth-boundary",
             get children() {
@@ -22258,21 +22274,21 @@ function InteractionPanel() {
             }
           })];
         }
-      }), _el$304);
-      insert(_el$305, () => tr(locale(), "能力诊断", "Capability Diagnostics"));
-      insert(_el$306, createComponent(Badge, {
+      }), _el$314);
+      insert(_el$315, () => tr(locale(), "能力诊断", "Capability Diagnostics"));
+      insert(_el$316, createComponent(Badge, {
         "class": "badge badge--diagnostic",
         get children() {
           return `boundPlayer=${binding()?.playerId || "-"}`;
         }
       }), null);
-      insert(_el$306, createComponent(Badge, {
+      insert(_el$316, createComponent(Badge, {
         "class": "badge badge--diagnostic",
         get children() {
           return `boundKey=${binding()?.publicKey ? `${binding().publicKey.slice(0, 10)}…` : "-"}`;
         }
       }), null);
-      insert(_el$306, createComponent(Badge, {
+      insert(_el$316, createComponent(Badge, {
         get ["class"]() {
           return promptControlsEnabled() ? "badge badge--good" : "badge badge--warn";
         },
@@ -22280,7 +22296,7 @@ function InteractionPanel() {
           return `prompt=${promptControlsEnabled() ? "enabled" : promptCapability().code || "agent_not_bound"}`;
         }
       }), null);
-      insert(_el$306, createComponent(Badge, {
+      insert(_el$316, createComponent(Badge, {
         get ["class"]() {
           return chatControlsEnabled() ? "badge badge--good" : "badge badge--warn";
         },
@@ -22288,7 +22304,7 @@ function InteractionPanel() {
           return `chat=${chatControlsEnabled() ? "enabled" : chatCapability().code || "agent_not_bound"}`;
         }
       }), null);
-      insert(_el$306, createComponent(Badge, {
+      insert(_el$316, createComponent(Badge, {
         get ["class"]() {
           return mainTokenTransferCapability().enabled ? "badge badge--good" : "badge badge--warn";
         },
@@ -22301,23 +22317,23 @@ function InteractionPanel() {
           return memo(() => !!(!starterOcGateOpen() && canControlSelectedAgent()))() && commandStarterOcAction();
         },
         children: (action2) => (() => {
-          var _el$347 = _tmpl$31(), _el$348 = _el$347.firstChild;
-          _el$348.$$click = () => renderGameplayAction(action2());
-          insert(_el$348, () => gameplayActionDisplayLabel(action2(), locale()));
+          var _el$357 = _tmpl$31(), _el$358 = _el$357.firstChild;
+          _el$358.$$click = () => renderGameplayAction(action2());
+          insert(_el$358, () => gameplayActionDisplayLabel(action2(), locale()));
           createRenderEffect((_p$) => {
-            var _v$72 = gameplayActionButtonClass(action2()), _v$73 = gameplayActionButtonBusyAttrs(action2()), _v$74 = gameplayActionButtonDisabled(action2(), gameplaySummary(), locale());
-            _v$72 !== _p$.e && className(_el$348, _p$.e = _v$72);
-            _v$73 !== _p$.t && setAttribute(_el$348, "aria-busy", _p$.t = _v$73);
-            _v$74 !== _p$.a && (_el$348.disabled = _p$.a = _v$74);
+            var _v$73 = gameplayActionButtonClass(action2()), _v$74 = gameplayActionButtonBusyAttrs(action2()), _v$75 = gameplayActionButtonDisabled(action2(), gameplaySummary(), locale());
+            _v$73 !== _p$.e && className(_el$358, _p$.e = _v$73);
+            _v$74 !== _p$.t && setAttribute(_el$358, "aria-busy", _p$.t = _v$74);
+            _v$75 !== _p$.a && (_el$358.disabled = _p$.a = _v$75);
             return _p$;
           }, {
             e: void 0,
             t: void 0,
             a: void 0
           });
-          return _el$347;
+          return _el$357;
         })()
-      }), _el$315);
+      }), _el$325);
       insert(_el$301, createComponent(PanelSection, {
         "class": "command-surface__chat-panel",
         get title() {
@@ -22331,29 +22347,29 @@ function InteractionPanel() {
         },
         get children() {
           return [(() => {
-            var _el$307 = _tmpl$53(), _el$308 = _el$307.firstChild, _el$309 = _el$308.nextSibling;
-            insert(_el$308, () => tr(locale(), "消息", "Message"));
-            _el$309.$$input = (event) => {
+            var _el$317 = _tmpl$53(), _el$318 = _el$317.firstChild, _el$319 = _el$318.nextSibling;
+            insert(_el$318, () => tr(locale(), "消息", "Message"));
+            _el$319.$$input = (event) => {
               state.chatDraft.message = String(event.currentTarget.value || "");
               state.chatDraft.dirty = true;
             };
             createRenderEffect((_p$) => {
               var _v$64 = tr(locale(), "给当前选中的行动体发一条消息", "Send a message to the selected agent"), _v$65 = !chatControlsEnabled();
-              _v$64 !== _p$.e && setAttribute(_el$309, "placeholder", _p$.e = _v$64);
-              _v$65 !== _p$.t && (_el$309.disabled = _p$.t = _v$65);
+              _v$64 !== _p$.e && setAttribute(_el$319, "placeholder", _p$.e = _v$64);
+              _v$65 !== _p$.t && (_el$319.disabled = _p$.t = _v$65);
               return _p$;
             }, {
               e: void 0,
               t: void 0
             });
-            createRenderEffect(() => _el$309.value = state.chatDraft.message);
-            return _el$307;
+            createRenderEffect(() => _el$319.value = state.chatDraft.message);
+            return _el$317;
           })(), (() => {
-            var _el$310 = _tmpl$54(), _el$311 = _el$310.firstChild;
-            _el$311.$$click = () => sendAgentChat(agentId(), state.chatDraft.message);
-            insert(_el$311, () => tr(locale(), "发送聊天", "Send Chat"));
-            createRenderEffect(() => _el$311.disabled = !chatControlsEnabled());
-            return _el$310;
+            var _el$320 = _tmpl$54(), _el$321 = _el$320.firstChild;
+            _el$321.$$click = () => sendAgentChat(agentId(), state.chatDraft.message);
+            insert(_el$321, () => tr(locale(), "发送聊天", "Send Chat"));
+            createRenderEffect(() => _el$321.disabled = !chatControlsEnabled());
+            return _el$320;
           })(), createComponent(Show, {
             get when() {
               return chatFeedback();
@@ -22374,9 +22390,9 @@ function InteractionPanel() {
               }
             })
           }), (() => {
-            var _el$312 = _tmpl$1(), _el$313 = _el$312.firstChild, _el$314 = _el$313.nextSibling;
-            insert(_el$313, () => tr(locale(), "消息流", "Message Flow"));
-            insert(_el$314, createComponent(Show, {
+            var _el$322 = _tmpl$1(), _el$323 = _el$322.firstChild, _el$324 = _el$323.nextSibling;
+            insert(_el$323, () => tr(locale(), "消息流", "Message Flow"));
+            insert(_el$324, createComponent(Show, {
               get when() {
                 return chatHistory().length > 0;
               },
@@ -22407,9 +22423,9 @@ function InteractionPanel() {
                     },
                     get children() {
                       return [(() => {
-                        var _el$349 = _tmpl$9();
-                        insert(_el$349, () => chatEntryMessage(entry, locale()));
-                        return _el$349;
+                        var _el$359 = _tmpl$9();
+                        insert(_el$359, () => chatEntryMessage(entry, locale()));
+                        return _el$359;
                       })(), createComponent(DiagnosticDetails, {
                         value: entry
                       })];
@@ -22418,30 +22434,30 @@ function InteractionPanel() {
                 });
               }
             }));
-            return _el$312;
+            return _el$322;
           })()];
         }
-      }), _el$315);
-      insert(_el$316, () => tr(locale(), "高级提示词设置", "Advanced Prompt Settings"));
-      insert(_el$315, createComponent(PanelSection, {
+      }), _el$325);
+      insert(_el$326, () => tr(locale(), "高级提示词设置", "Advanced Prompt Settings"));
+      insert(_el$325, createComponent(PanelSection, {
         "class": "command-surface__advanced-panel",
         get title() {
           return tr(locale(), "高级控制", "Advanced Controls");
         },
         get children() {
           return [(() => {
-            var _el$317 = _tmpl$8();
-            insert(_el$317, createComponent(Badge, {
+            var _el$327 = _tmpl$8();
+            insert(_el$327, createComponent(Badge, {
               get children() {
                 return `activePrompt=v${promptVersionState().currentVersion}`;
               }
             }), null);
-            insert(_el$317, createComponent(Badge, {
+            insert(_el$327, createComponent(Badge, {
               get children() {
                 return `nextRollback=v${promptVersionState().nextRollbackTargetVersion}`;
               }
             }), null);
-            insert(_el$317, createComponent(Show, {
+            insert(_el$327, createComponent(Show, {
               get when() {
                 return promptVersionState().restoredFromVersion != null;
               },
@@ -22453,7 +22469,7 @@ function InteractionPanel() {
                 });
               }
             }), null);
-            insert(_el$317, createComponent(Badge, {
+            insert(_el$327, createComponent(Badge, {
               get ["class"]() {
                 return promptOverridesVisible() ? "badge badge--good" : "badge";
               },
@@ -22461,26 +22477,26 @@ function InteractionPanel() {
                 return memo(() => !!promptOverridesVisible())() ? tr(locale(), "状态=已展开", "state=expanded") : tr(locale(), "状态=默认收起", "state=hidden_by_default");
               }
             }), null);
-            insert(_el$317, createComponent(Badge, {
+            insert(_el$327, createComponent(Badge, {
               get children() {
                 return tr(locale(), "本地设置持久化", "locally persisted");
               }
             }), null);
-            return _el$317;
+            return _el$327;
           })(), createComponent(EmptyState, {
             get children() {
               return promptSettingsSummary();
             }
           }), (() => {
-            var _el$318 = _tmpl$55(), _el$319 = _el$318.firstChild;
-            _el$319.$$click = () => togglePromptOverridesVisible();
-            insert(_el$319, promptSettingsButtonLabel);
-            createRenderEffect(() => _el$319.disabled = !canControlSelectedAgent());
-            return _el$318;
+            var _el$328 = _tmpl$55(), _el$329 = _el$328.firstChild;
+            _el$329.$$click = () => togglePromptOverridesVisible();
+            insert(_el$329, promptSettingsButtonLabel);
+            createRenderEffect(() => _el$329.disabled = !canControlSelectedAgent());
+            return _el$328;
           })()];
         }
       }), null);
-      insert(_el$315, createComponent(Show, {
+      insert(_el$325, createComponent(Show, {
         get when() {
           return promptOverridesVisible();
         },
@@ -22491,97 +22507,97 @@ function InteractionPanel() {
             },
             get children() {
               return [(() => {
-                var _el$320 = _tmpl$6();
-                insert(_el$320, () => promptVersionState().summary);
-                return _el$320;
+                var _el$330 = _tmpl$6();
+                insert(_el$330, () => promptVersionState().summary);
+                return _el$330;
               })(), (() => {
-                var _el$321 = _tmpl$6();
-                insert(_el$321, () => promptVersionState().detail);
-                return _el$321;
+                var _el$331 = _tmpl$6();
+                insert(_el$331, () => promptVersionState().detail);
+                return _el$331;
               })(), createComponent(Show, {
                 get when() {
                   return memo(() => !!authSurface().capabilities.prompt_control.enabled)() && isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode);
                 },
                 get children() {
-                  var _el$322 = _tmpl$56(), _el$323 = _el$322.firstChild, _el$324 = _el$323.nextSibling;
-                  insert(_el$323, () => tr(locale(), "后端审批码", "Backend Approval Code"));
-                  _el$324.$$input = (event) => {
+                  var _el$332 = _tmpl$56(), _el$333 = _el$332.firstChild, _el$334 = _el$333.nextSibling;
+                  insert(_el$333, () => tr(locale(), "后端审批码", "Backend Approval Code"));
+                  _el$334.$$input = (event) => {
                     state.strongAuth.approvalCode = String(event.currentTarget.value || "");
                   };
-                  createRenderEffect(() => _el$324.value = state.strongAuth.approvalCode || "");
-                  return _el$322;
+                  createRenderEffect(() => _el$334.value = state.strongAuth.approvalCode || "");
+                  return _el$332;
                 }
               }), (() => {
-                var _el$325 = _tmpl$57(), _el$326 = _el$325.firstChild, _el$327 = _el$326.nextSibling;
-                insert(_el$326, () => tr(locale(), "系统提示词覆盖", "System Prompt Override"));
-                _el$327.$$input = (event) => {
+                var _el$335 = _tmpl$57(), _el$336 = _el$335.firstChild, _el$337 = _el$336.nextSibling;
+                insert(_el$336, () => tr(locale(), "系统提示词覆盖", "System Prompt Override"));
+                _el$337.$$input = (event) => {
                   state.promptDraft.systemPrompt = String(event.currentTarget.value || "");
                   state.promptDraft.dirty = true;
                 };
-                createRenderEffect(() => _el$327.disabled = !promptControlsEnabled());
-                createRenderEffect(() => _el$327.value = state.promptDraft.systemPrompt);
-                return _el$325;
+                createRenderEffect(() => _el$337.disabled = !promptControlsEnabled());
+                createRenderEffect(() => _el$337.value = state.promptDraft.systemPrompt);
+                return _el$335;
               })(), (() => {
-                var _el$328 = _tmpl$58(), _el$329 = _el$328.firstChild, _el$330 = _el$329.nextSibling;
-                insert(_el$329, () => tr(locale(), "短期目标覆盖", "Short-Term Goal Override"));
-                _el$330.$$input = (event) => {
+                var _el$338 = _tmpl$58(), _el$339 = _el$338.firstChild, _el$340 = _el$339.nextSibling;
+                insert(_el$339, () => tr(locale(), "短期目标覆盖", "Short-Term Goal Override"));
+                _el$340.$$input = (event) => {
                   state.promptDraft.shortTermGoal = String(event.currentTarget.value || "");
                   state.promptDraft.dirty = true;
                 };
-                createRenderEffect(() => _el$330.disabled = !promptControlsEnabled());
-                createRenderEffect(() => _el$330.value = state.promptDraft.shortTermGoal);
-                return _el$328;
+                createRenderEffect(() => _el$340.disabled = !promptControlsEnabled());
+                createRenderEffect(() => _el$340.value = state.promptDraft.shortTermGoal);
+                return _el$338;
               })(), (() => {
-                var _el$331 = _tmpl$59(), _el$332 = _el$331.firstChild, _el$333 = _el$332.nextSibling;
-                insert(_el$332, () => tr(locale(), "长期目标覆盖", "Long-Term Goal Override"));
-                _el$333.$$input = (event) => {
+                var _el$341 = _tmpl$59(), _el$342 = _el$341.firstChild, _el$343 = _el$342.nextSibling;
+                insert(_el$342, () => tr(locale(), "长期目标覆盖", "Long-Term Goal Override"));
+                _el$343.$$input = (event) => {
                   state.promptDraft.longTermGoal = String(event.currentTarget.value || "");
                   state.promptDraft.dirty = true;
                 };
-                createRenderEffect(() => _el$333.disabled = !promptControlsEnabled());
-                createRenderEffect(() => _el$333.value = state.promptDraft.longTermGoal);
-                return _el$331;
+                createRenderEffect(() => _el$343.disabled = !promptControlsEnabled());
+                createRenderEffect(() => _el$343.value = state.promptDraft.longTermGoal);
+                return _el$341;
               })(), (() => {
-                var _el$334 = _tmpl$60(), _el$335 = _el$334.firstChild, _el$336 = _el$335.nextSibling;
-                _el$335.$$click = () => sendPromptControl("preview", null);
-                insert(_el$335, () => tr(locale(), "预览提示词", "Preview Prompt"));
-                _el$336.$$click = () => sendPromptControl("apply", null);
-                insert(_el$336, () => tr(locale(), "应用提示词", "Apply Prompt"));
+                var _el$344 = _tmpl$60(), _el$345 = _el$344.firstChild, _el$346 = _el$345.nextSibling;
+                _el$345.$$click = () => sendPromptControl("preview", null);
+                insert(_el$345, () => tr(locale(), "预览提示词", "Preview Prompt"));
+                _el$346.$$click = () => sendPromptControl("apply", null);
+                insert(_el$346, () => tr(locale(), "应用提示词", "Apply Prompt"));
                 createRenderEffect((_p$) => {
                   var _v$66 = !promptControlsEnabled(), _v$67 = !promptControlsEnabled();
-                  _v$66 !== _p$.e && (_el$335.disabled = _p$.e = _v$66);
-                  _v$67 !== _p$.t && (_el$336.disabled = _p$.t = _v$67);
+                  _v$66 !== _p$.e && (_el$345.disabled = _p$.e = _v$66);
+                  _v$67 !== _p$.t && (_el$346.disabled = _p$.t = _v$67);
                   return _p$;
                 }, {
                   e: void 0,
                   t: void 0
                 });
-                return _el$334;
+                return _el$344;
               })(), (() => {
-                var _el$337 = _tmpl$61(), _el$338 = _el$337.firstChild, _el$339 = _el$338.firstChild, _el$340 = _el$339.nextSibling, _el$341 = _el$338.nextSibling;
-                insert(_el$339, () => tr(locale(), "下一次回滚目标版本", "Next Rollback Target Version"));
-                _el$340.$$input = (event) => {
+                var _el$347 = _tmpl$61(), _el$348 = _el$347.firstChild, _el$349 = _el$348.firstChild, _el$350 = _el$349.nextSibling, _el$351 = _el$348.nextSibling;
+                insert(_el$349, () => tr(locale(), "下一次回滚目标版本", "Next Rollback Target Version"));
+                _el$350.$$input = (event) => {
                   const nextValue = Number(event.currentTarget.value || 0);
                   state.promptDraft.rollbackTargetVersion = Math.max(0, Math.floor(nextValue || 0));
                   requestRender();
                 };
-                _el$341.$$click = () => {
+                _el$351.$$click = () => {
                   sendPromptControl("rollback", {
                     toVersion: Number(state.promptDraft.rollbackTargetVersion || 0)
                   });
                 };
-                insert(_el$341, () => tr(locale(), "回滚提示词", "Rollback Prompt"));
+                insert(_el$351, () => tr(locale(), "回滚提示词", "Rollback Prompt"));
                 createRenderEffect((_p$) => {
                   var _v$68 = !promptControlsEnabled(), _v$69 = !promptControlsEnabled();
-                  _v$68 !== _p$.e && (_el$340.disabled = _p$.e = _v$68);
-                  _v$69 !== _p$.t && (_el$341.disabled = _p$.t = _v$69);
+                  _v$68 !== _p$.e && (_el$350.disabled = _p$.e = _v$68);
+                  _v$69 !== _p$.t && (_el$351.disabled = _p$.t = _v$69);
                   return _p$;
                 }, {
                   e: void 0,
                   t: void 0
                 });
-                createRenderEffect(() => _el$340.value = Number(state.promptDraft.rollbackTargetVersion || 0));
-                return _el$337;
+                createRenderEffect(() => _el$350.value = Number(state.promptDraft.rollbackTargetVersion || 0));
+                return _el$347;
               })(), createComponent(Show, {
                 get when() {
                   return promptFeedback();
@@ -22629,16 +22645,16 @@ function InteractionPanel() {
           });
         }
       }), null);
-      insert(_el$343, () => tr(locale(), "资产 / 治理通道", "Asset / Governance Lane"));
-      insert(_el$342, createComponent(PanelSection, {
+      insert(_el$353, () => tr(locale(), "资产 / 治理通道", "Asset / Governance Lane"));
+      insert(_el$352, createComponent(PanelSection, {
         "class": "command-surface__asset-panel",
         get title() {
           return tr(locale(), "后置能力", "Deferred Surface");
         },
         get children() {
           return [(() => {
-            var _el$344 = _tmpl$8();
-            insert(_el$344, createComponent(Badge, {
+            var _el$354 = _tmpl$8();
+            insert(_el$354, createComponent(Badge, {
               get ["class"]() {
                 return mainTokenTransferCapability().enabled ? "badge badge--good" : "badge badge--warn";
               },
@@ -22646,17 +22662,17 @@ function InteractionPanel() {
                 return `main_token_transfer=${assetLaneStatusText()}`;
               }
             }), null);
-            insert(_el$344, createComponent(Badge, {
+            insert(_el$354, createComponent(Badge, {
               get children() {
                 return `required_auth=${mainTokenTransferPolicy()?.required_auth || "-"}`;
               }
             }), null);
-            insert(_el$344, createComponent(Badge, {
+            insert(_el$354, createComponent(Badge, {
               get children() {
                 return `availability=${mainTokenTransferPolicy()?.availability || "-"}`;
               }
             }), null);
-            return _el$344;
+            return _el$354;
           })(), createComponent(EmptyState, {
             get children() {
               return assetLaneDetail();
@@ -22666,20 +22682,22 @@ function InteractionPanel() {
               return mainTokenTransferPolicy()?.reason || tr(locale(), "当前通道没有 main_token_transfer 的托管动作策略。", "No hosted action policy is available for main_token_transfer on this lane.");
             }
           }), (() => {
-            var _el$345 = _tmpl$62(), _el$346 = _el$345.firstChild;
-            insert(_el$346, () => tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)"));
-            return _el$345;
+            var _el$355 = _tmpl$62(), _el$356 = _el$355.firstChild;
+            insert(_el$356, () => tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)"));
+            return _el$355;
           })()];
         }
       }), null);
       createRenderEffect((_p$) => {
-        var _v$70 = agentId(), _v$71 = String(chatHistory().length);
+        var _v$70 = agentId(), _v$71 = String(chatHistory().length), _v$72 = tr(locale(), "指挥连续性摘要", "Command continuity summary");
         _v$70 !== _p$.e && setAttribute(_el$301, "data-command-agent", _p$.e = _v$70);
         _v$71 !== _p$.t && setAttribute(_el$301, "data-command-chat-history", _p$.t = _v$71);
+        _v$72 !== _p$.a && setAttribute(_el$303, "aria-label", _p$.a = _v$72);
         return _p$;
       }, {
         e: void 0,
-        t: void 0
+        t: void 0,
+        a: void 0
       });
       return _el$301;
     }
@@ -22724,19 +22742,19 @@ function DetailsPanel() {
   });
   const hasSnapshotDiagnostics = () => !!state.snapshot || !!state.metrics || !!state.hostedAccess;
   return (() => {
-    var _el$350 = _tmpl$65(), _el$351 = _el$350.firstChild, _el$352 = _el$351.nextSibling, _el$353 = _el$352.firstChild, _el$354 = _el$353.nextSibling, _el$355 = _el$354.nextSibling;
-    insert(_el$351, createComponent(Badge, {
+    var _el$360 = _tmpl$65(), _el$361 = _el$360.firstChild, _el$362 = _el$361.nextSibling, _el$363 = _el$362.firstChild, _el$364 = _el$363.nextSibling, _el$365 = _el$364.nextSibling;
+    insert(_el$361, createComponent(Badge, {
       "class": "badge badge--accent",
       get children() {
         return tr(locale(), "当前命令目标", "Current Command Target");
       }
     }), null);
-    insert(_el$351, createComponent(Badge, {
+    insert(_el$361, createComponent(Badge, {
       get children() {
         return selectedLabel();
       }
     }), null);
-    insert(_el$350, createComponent(Show, {
+    insert(_el$360, createComponent(Show, {
       get when() {
         return !hiddenSelectedAgent();
       },
@@ -22750,8 +22768,8 @@ function DetailsPanel() {
       get children() {
         return createComponent(InteractionPanel, {});
       }
-    }), _el$352);
-    insert(_el$350, createComponent(Show, {
+    }), _el$362);
+    insert(_el$360, createComponent(Show, {
       get when() {
         return hasVisibleSelectedObject();
       },
@@ -22782,35 +22800,35 @@ function DetailsPanel() {
         },
         value: () => clone(selected())
       })
-    }), _el$352);
-    insert(_el$353, () => tr(locale(), "世界规模", "World Scale"));
-    insert(_el$354, createComponent(Badge, {
+    }), _el$362);
+    insert(_el$363, () => tr(locale(), "世界规模", "World Scale"));
+    insert(_el$364, createComponent(Badge, {
       get children() {
         return `agents=${snapshotCounts().agents}`;
       }
     }), null);
-    insert(_el$354, createComponent(Badge, {
+    insert(_el$364, createComponent(Badge, {
       get children() {
         return `locations=${snapshotCounts().locations}`;
       }
     }), null);
-    insert(_el$354, createComponent(Badge, {
+    insert(_el$364, createComponent(Badge, {
       get children() {
         return `promptProfiles=${snapshotCounts().promptProfiles}`;
       }
     }), null);
-    insert(_el$354, createComponent(Badge, {
+    insert(_el$364, createComponent(Badge, {
       get children() {
         return `debugContexts=${snapshotCounts().executionDebugContexts}`;
       }
     }), null);
-    insert(_el$354, createComponent(Badge, {
+    insert(_el$364, createComponent(Badge, {
       get children() {
         return tr(locale(), "snapshot.config.space", "snapshot.config.space");
       }
     }), null);
-    insert(_el$355, worldMetaSummary);
-    insert(_el$352, createComponent(Show, {
+    insert(_el$365, worldMetaSummary);
+    insert(_el$362, createComponent(Show, {
       get when() {
         return hasSnapshotDiagnostics();
       },
@@ -22829,18 +22847,18 @@ function DetailsPanel() {
         });
       }
     }), null);
-    insert(_el$350, createComponent(Show, {
+    insert(_el$360, createComponent(Show, {
       get when() {
         return state.lastError;
       },
       get children() {
-        var _el$356 = _tmpl$64(), _el$357 = _el$356.firstChild, _el$358 = _el$357.nextSibling;
-        insert(_el$357, () => tr(locale(), "最近错误", "Last Error"));
-        insert(_el$358, () => state.lastError);
-        return _el$356;
+        var _el$366 = _tmpl$64(), _el$367 = _el$366.firstChild, _el$368 = _el$367.nextSibling;
+        insert(_el$367, () => tr(locale(), "最近错误", "Last Error"));
+        insert(_el$368, () => state.lastError);
+        return _el$366;
       }
     }), null);
-    return _el$350;
+    return _el$360;
   })();
 }
 function AppShell() {
@@ -22858,25 +22876,25 @@ function AppShell() {
   const starterOcGateOpen = () => shouldShowStarterOcRequiredGate(buildGameplaySummary(locale()));
   onMount(() => onCleanup(installViewerRouteController()));
   return (() => {
-    var _el$359 = _tmpl$66(), _el$360 = _el$359.firstChild, _el$361 = _el$360.firstChild, _el$362 = _el$361.firstChild, _el$363 = _el$362.nextSibling, _el$364 = _el$363.nextSibling, _el$365 = _el$364.nextSibling, _el$366 = _el$361.nextSibling, _el$367 = _el$360.nextSibling, _el$368 = _el$367.firstChild, _el$369 = _el$368.firstChild, _el$370 = _el$367.nextSibling, _el$371 = _el$370.firstChild, _el$372 = _el$371.firstChild, _el$373 = _el$372.nextSibling, _el$374 = _el$373.nextSibling, _el$375 = _el$374.nextSibling, _el$376 = _el$371.nextSibling;
-    insert(_el$359, createComponent(MobileJumpRail, {
+    var _el$369 = _tmpl$66(), _el$370 = _el$369.firstChild, _el$371 = _el$370.firstChild, _el$372 = _el$371.firstChild, _el$373 = _el$372.nextSibling, _el$374 = _el$373.nextSibling, _el$375 = _el$374.nextSibling, _el$376 = _el$371.nextSibling, _el$377 = _el$370.nextSibling, _el$378 = _el$377.firstChild, _el$379 = _el$378.firstChild, _el$380 = _el$377.nextSibling, _el$381 = _el$380.firstChild, _el$382 = _el$381.firstChild, _el$383 = _el$382.nextSibling, _el$384 = _el$383.nextSibling, _el$385 = _el$384.nextSibling, _el$386 = _el$381.nextSibling;
+    insert(_el$369, createComponent(MobileJumpRail, {
       locale,
       tr,
       "data-viewer-overlay": "navigation"
-    }), _el$360);
-    insert(_el$359, createComponent(SecondaryViewerNavigation, {
+    }), _el$370);
+    insert(_el$369, createComponent(SecondaryViewerNavigation, {
       locale,
       tr
-    }), _el$360);
-    insert(_el$359, createComponent(HostedLoginGate, {}), _el$360);
-    insert(_el$359, createComponent(StarterOcRequiredGate, {}), _el$360);
-    insert(_el$362, () => tr(locale(), "导航", "Navigate"));
-    insert(_el$363, () => tr(locale(), "目标", "Targets"));
-    insert(_el$364, () => tr(locale(), "先在 Targets 中锁定对象，再进入世界舞台或指挥面板。", "Lock onto a target in Targets first, then move into the stage or command surface."));
-    addEventListener(_el$365, "click", focusViewerAnchor);
-    insert(_el$365, () => tr(locale(), "返回世界", "Back to World"));
-    insert(_el$366, createComponent(TargetsPanel, {}));
-    insert(_el$369, createComponent(Show, {
+    }), _el$370);
+    insert(_el$369, createComponent(HostedLoginGate, {}), _el$370);
+    insert(_el$369, createComponent(StarterOcRequiredGate, {}), _el$370);
+    insert(_el$372, () => tr(locale(), "导航", "Navigate"));
+    insert(_el$373, () => tr(locale(), "目标", "Targets"));
+    insert(_el$374, () => tr(locale(), "先在 Targets 中锁定对象，再进入世界舞台或指挥面板。", "Lock onto a target in Targets first, then move into the stage or command surface."));
+    addEventListener(_el$375, "click", focusViewerAnchor);
+    insert(_el$375, () => tr(locale(), "返回世界", "Back to World"));
+    insert(_el$376, createComponent(TargetsPanel, {}));
+    insert(_el$379, createComponent(Show, {
       get when() {
         return diagnosticsVisualFixture();
       },
@@ -22891,13 +22909,13 @@ function AppShell() {
         });
       }
     }), null);
-    insert(_el$369, createComponent(WorldStageHero, {}), null);
-    insert(_el$369, createComponent(PixelWorldHost, {
+    insert(_el$379, createComponent(WorldStageHero, {}), null);
+    insert(_el$379, createComponent(PixelWorldHost, {
       get locale() {
         return locale();
       }
     }), null);
-    insert(_el$369, createComponent(Show, {
+    insert(_el$379, createComponent(Show, {
       get when() {
         return !diagnosticsVisualFixture();
       },
@@ -22912,19 +22930,19 @@ function AppShell() {
         });
       }
     }), null);
-    insert(_el$369, createComponent(WorldFeedSurface, {
+    insert(_el$379, createComponent(WorldFeedSurface, {
       core,
       locale,
       tr,
       onReloadSnapshot: () => reloadWorldFeedFromAuthoritativeSnapshot()
     }), null);
-    insert(_el$372, () => tr(locale(), "指挥与核查", "Command and Inspect"));
-    insert(_el$373, () => tr(locale(), "交互与明细", "Interact and Inspect"));
-    insert(_el$374, () => tr(locale(), "只有锁定目标后才进入 Command。聊天优先，提示词与对象核查继续后置。", "Enter Command only after locking a target. Chat comes first; prompt controls and raw inspection stay behind it."));
-    addEventListener(_el$375, "click", focusViewerAnchor);
-    insert(_el$375, () => tr(locale(), "返回世界", "Back to World"));
-    insert(_el$376, createComponent(DetailsPanel, {}));
-    insert(_el$359, createComponent(DirectorSurface, {
+    insert(_el$382, () => tr(locale(), "指挥与核查", "Command and Inspect"));
+    insert(_el$383, () => tr(locale(), "交互与明细", "Interact and Inspect"));
+    insert(_el$384, () => tr(locale(), "只有锁定目标后才进入 Command。聊天优先，提示词与对象核查继续后置。", "Enter Command only after locking a target. Chat comes first; prompt controls and raw inspection stay behind it."));
+    addEventListener(_el$385, "click", focusViewerAnchor);
+    insert(_el$385, () => tr(locale(), "返回世界", "Back to World"));
+    insert(_el$386, createComponent(DetailsPanel, {}));
+    insert(_el$369, createComponent(DirectorSurface, {
       get controller() {
         return directorSession.controller;
       },
@@ -22932,13 +22950,13 @@ function AppShell() {
       locale
     }), null);
     createRenderEffect((_p$) => {
-      var _v$75 = starterOcGateOpen() ? "true" : void 0, _v$76 = starterOcGateOpen() ? true : void 0, _v$77 = starterOcGateOpen() ? "true" : void 0, _v$78 = starterOcGateOpen() ? true : void 0, _v$79 = starterOcGateOpen() ? "true" : void 0, _v$80 = starterOcGateOpen() ? true : void 0;
-      _v$75 !== _p$.e && setAttribute(_el$360, "aria-hidden", _p$.e = _v$75);
-      _v$76 !== _p$.t && (_el$360.inert = _p$.t = _v$76);
-      _v$77 !== _p$.a && setAttribute(_el$367, "aria-hidden", _p$.a = _v$77);
-      _v$78 !== _p$.o && (_el$367.inert = _p$.o = _v$78);
-      _v$79 !== _p$.i && setAttribute(_el$370, "aria-hidden", _p$.i = _v$79);
-      _v$80 !== _p$.n && (_el$370.inert = _p$.n = _v$80);
+      var _v$76 = starterOcGateOpen() ? "true" : void 0, _v$77 = starterOcGateOpen() ? true : void 0, _v$78 = starterOcGateOpen() ? "true" : void 0, _v$79 = starterOcGateOpen() ? true : void 0, _v$80 = starterOcGateOpen() ? "true" : void 0, _v$81 = starterOcGateOpen() ? true : void 0;
+      _v$76 !== _p$.e && setAttribute(_el$370, "aria-hidden", _p$.e = _v$76);
+      _v$77 !== _p$.t && (_el$370.inert = _p$.t = _v$77);
+      _v$78 !== _p$.a && setAttribute(_el$377, "aria-hidden", _p$.a = _v$78);
+      _v$79 !== _p$.o && (_el$377.inert = _p$.o = _v$79);
+      _v$80 !== _p$.i && setAttribute(_el$380, "aria-hidden", _p$.i = _v$80);
+      _v$81 !== _p$.n && (_el$380.inert = _p$.n = _v$81);
       return _p$;
     }, {
       e: void 0,
@@ -22948,7 +22966,7 @@ function AppShell() {
       i: void 0,
       n: void 0
     });
-    return _el$359;
+    return _el$369;
   })();
 }
 function viewerVisualFixtureNameFromQuery() {

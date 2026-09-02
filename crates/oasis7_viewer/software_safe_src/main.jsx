@@ -50,7 +50,6 @@ function buildViewerEntryUrls(locale) {
 function Badge(props) {
   return <span class={props.class ?? "badge"}>{props.children}</span>;
 }
-
 function EmptyState(props) {
   return <div class={`empty ${props.class ?? ""}`} style={props.style}>{props.children}</div>;
 }
@@ -1558,13 +1557,11 @@ function StarterOcRequiredGate() {
   let scheduledAutoConfirmAttempt = -1;
   let autoConfirmTimer = null;
   let autoCompleteTimer = null;
-
   createEffect(() => {
     if (gateOpen()) {
       window.setTimeout(() => primaryButtonRef?.focus(), 0);
     }
   });
-
   createEffect(() => {
     if (creditConfirmed()) {
       if (autoCompleteTimer == null) {
@@ -3224,7 +3221,6 @@ function WorldSummaryPanel(props = {}) {
     </div>
   );
 }
-
 function InteractionPanel() {
   const revision = () => observeViewerStateRevision();
   const locale = () => uiLocale();
@@ -3371,7 +3367,6 @@ function InteractionPanel() {
     canControlSelectedAgent()
       ? playerSessionReadyCopy()
       : selectedAgentControlReason();
-
   return (
     <Show
       when={agentId()}
@@ -3398,14 +3393,19 @@ function InteractionPanel() {
       }
     >
       <div class="stack command-surface" data-command-agent={agentId()} data-command-chat-history={String(chatHistory().length)}>
-      <div class="badge-row command-surface__target-row">
-        <Badge class="badge badge--accent">{tr(locale(), "当前交互目标", "Current Target")}</Badge>
+      <div class="badge-row command-surface__target-row" data-command-continuity="target">
+        <Badge class="badge badge--accent command-surface__target-secondary">{tr(locale(), "当前交互目标", "Current Target")}</Badge>
         <Badge>{selectedAgentLabel()}</Badge>
-        <Badge>{`agent=${agentId()}`}</Badge>
-        <Badge class={selectedAgentStatus().badgeClass}>{selectedAgentStatus().badge}</Badge>
-        <Badge class={chatControlsEnabled() ? "badge badge--good" : "badge badge--warn"}>
+        <Badge class="command-surface__target-secondary">{`agent=${agentId()}`}</Badge>
+        <Badge class={`${selectedAgentStatus().badgeClass} command-surface__target-secondary`}>{selectedAgentStatus().badge}</Badge>
+        <Badge class={`${chatControlsEnabled() ? "badge badge--good" : "badge badge--warn"} command-surface__target-secondary`}>
           {chatControlsEnabled() ? tr(locale(), "聊天可用", "Chat Ready") : tr(locale(), "聊天受限", "Chat Limited")}
         </Badge>
+        <div class="command-surface__continuity-summary" data-command-continuity="summary" role="group" aria-label={tr(locale(), "指挥连续性摘要", "Command continuity summary")}>
+          <span><span class="metric__label">{tr(locale(), "状态", "Status")}</span> {selectedAgentContextModel().state?.label || tr(locale(), "不可用", "Unavailable")}</span>
+          <span><span class="metric__label">{tr(locale(), "新鲜度", "Freshness")}</span> {selectedAgentContextModel().freshness?.label || tr(locale(), "不可用", "Unavailable")}</span>
+          <span class="command-surface__continuity-objective"><span class="metric__label">{tr(locale(), "目标", "Objective")}</span> {selectedAgentContextModel().objective?.state === "published" && selectedAgentContextModel().objective.value ? selectedAgentContextModel().objective.value : tr(locale(), "目标不可用", "Objective unavailable")}</span>
+        </div>
       </div>
       <AgentContextLite model={selectedAgentContextModel()} locale={locale()} fixtureMetadata={selectedAgentContextFixtureMetadata()} />
       <Show
@@ -3680,7 +3680,6 @@ function InteractionPanel() {
     </Show>
   );
 }
-
 function DetailsPanel() {
   observeViewerStateRevision();
   const locale = () => uiLocale();
@@ -3730,7 +3729,6 @@ function DetailsPanel() {
   });
   const hasSnapshotDiagnostics = () =>
     !!core.state.snapshot || !!core.state.metrics || !!core.state.hostedAccess;
-
   return (
     <div class="stack">
       <div class="badge-row">
@@ -3810,7 +3808,6 @@ function DetailsPanel() {
     </div>
   );
 }
-
 function AppShell() {
   observeViewerStateRevision();
   const locale = () => uiLocale();
@@ -3877,7 +3874,7 @@ function AppShell() {
         aria-hidden={starterOcGateOpen() ? "true" : undefined}
         inert={starterOcGateOpen() ? true : undefined}
       >
-        <div class="panel__header panel__header--stack">
+        <div class="panel__header panel__header--stack command-route-chrome">
           <div class="panel__eyebrow">{tr(locale(), "指挥与核查", "Command and Inspect")}</div>
           <div class="panel__title">{tr(locale(), "交互与明细", "Interact and Inspect")}</div>
           <div class="panel__meta-copy">
@@ -3895,7 +3892,6 @@ function AppShell() {
     </div>
   );
 }
-
 export { AppShell };
 
 function viewerVisualFixtureNameFromQuery() {
