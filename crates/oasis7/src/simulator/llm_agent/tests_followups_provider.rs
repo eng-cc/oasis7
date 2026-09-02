@@ -400,6 +400,48 @@ fn llm_agent_keeps_distinct_recipe_completion_jobs_in_feedback_memory() {
 }
 
 #[test]
+fn llm_agent_bounds_recipe_completion_replay_window_and_preserves_recent_replays() {
+    const REPLAY_WINDOW: usize = 64;
+    let recipe_id = "recipe.assembler.control_chip";
+    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), MockClient::default());
+
+    for offset in 0..=REPLAY_WINDOW {
+        let job_id = 13_000 + offset as u64;
+        behavior.on_event(&runtime_recipe_completed_event_with_identity(
+            "agent-1",
+            recipe_id,
+            job_id + 1_000,
+            job_id,
+        ));
+    }
+
+    assert_eq!(
+        behavior.recipe_coverage.completion_receipt_ids.len(),
+        REPLAY_WINDOW,
+        "completion receipt dedupe must stay bounded after long-running production"
+    );
+    let memory_before_replays = behavior.memory.short_term.len();
+
+    behavior.on_event(&runtime_recipe_completed_event_with_identity(
+        "agent-1", recipe_id, 14_100, 13_064,
+    ));
+    assert_eq!(
+        behavior.memory.short_term.len(),
+        memory_before_replays,
+        "recent receipt replay must not add feedback memory"
+    );
+
+    behavior.on_event(&runtime_recipe_completed_event_with_identity(
+        "agent-1", recipe_id, 14_101, 13_000,
+    ));
+    assert_eq!(
+        behavior.memory.short_term.len(),
+        memory_before_replays + 1,
+        "a receipt outside the bounded window may be observed again"
+    );
+}
+
+#[test]
 fn llm_agent_keeps_hard_switch_within_current_factory_kind() {
     let client = MockClient {
         output: Some(

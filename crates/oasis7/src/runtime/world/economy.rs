@@ -620,18 +620,26 @@ impl World {
                     validation_event,
                     WorldEventBody::Domain(DomainEvent::ActionRejected { .. })
                 );
-                self.append_event(
+                let recorded_event_id = self.append_event(
                     WorldEventBody::Domain(DomainEvent::ProductValidationRecorded {
                         receipt: validation_receipt,
                     }),
                     None,
                 )?;
+                let recorded_event_id_era =
+                    self.product_validation_event_id_era_after_append(recorded_event_id);
                 if let Some(event) = self.journal.events.last().cloned() {
-                    self.route_product_validation_event(&event, sandbox)?;
+                    self.route_product_validation_event_at(&event, recorded_event_id_era, sandbox)?;
                 }
-                self.append_event(validation_event, None)?;
+                let validation_event_id = self.append_event(validation_event, None)?;
+                let validation_event_id_era =
+                    self.product_validation_event_id_era_after_append(validation_event_id);
                 if let Some(event) = self.journal.events.last().cloned() {
-                    self.route_product_validation_event(&event, sandbox)?;
+                    self.route_product_validation_event_at(
+                        &event,
+                        validation_event_id_era,
+                        sandbox,
+                    )?;
                 }
                 if rejected {
                     let blocker_detail = failure_detail.unwrap_or_else(|| {

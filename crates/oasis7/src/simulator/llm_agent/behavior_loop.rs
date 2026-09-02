@@ -1,6 +1,8 @@
 use super::*;
 use std::time::Instant;
 
+const RECIPE_COMPLETION_REPLAY_WINDOW: usize = 64;
+
 impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
     fn collapse_multi_turn_payloads(
         parsed_turns: Vec<ParsedLlmTurn>,
@@ -60,6 +62,30 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
 }
 
 impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
+    /// Keep a deterministic, bounded identity window for completion replays.
+    /// `BTreeSet` eviction removes the smallest job ID, retaining the newest
+    /// runtime identities without allowing this dedupe state to grow forever.
+    fn remember_recipe_completion_receipt(&mut self, job_id: u64) -> bool {
+        if !self.recipe_coverage.completion_receipt_ids.insert(job_id) {
+            return false;
+        }
+        while self.recipe_coverage.completion_receipt_ids.len() > RECIPE_COMPLETION_REPLAY_WINDOW {
+            let Some(oldest_job_id) = self
+                .recipe_coverage
+                .completion_receipt_ids
+                .iter()
+                .next()
+                .copied()
+            else {
+                break;
+            };
+            self.recipe_coverage
+                .completion_receipt_ids
+                .remove(&oldest_job_id);
+        }
+        true
+    }
+
     /// Consume only the authoritative runtime completion receipt for this
     /// agent. A schedule event is intentionally not enough to close recipe
     /// coverage: production must reach the runtime's RecipeCompleted state.
@@ -80,7 +106,7 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
         {
             return None;
         }
-        if !self.recipe_coverage.completion_receipt_ids.insert(*job_id) {
+        if !self.remember_recipe_completion_receipt(*job_id) {
             return Some(false);
         }
         self.recipe_coverage.mark_completed(recipe_id.as_str());

@@ -442,6 +442,21 @@ pub struct LastProductValidationState {
 pub struct ProductValidationDeliveryCursor {
     #[serde(default)]
     pub routed_through_event_id: WorldEventId,
+    /// Era-aware bounded high-water mark; old snapshots default this era to 0.
+    #[serde(default)]
+    pub event_id_era: u64,
+}
+
+impl ProductValidationDeliveryCursor {
+    pub fn has_routed(&self, event_id_era: u64, event_id: WorldEventId) -> bool {
+        (self.event_id_era, self.routed_through_event_id) >= (event_id_era, event_id)
+    }
+    pub fn advance_to(&mut self, event_id_era: u64, event_id: WorldEventId) {
+        if (event_id_era, event_id) > (self.event_id_era, self.routed_through_event_id) {
+            self.event_id_era = event_id_era;
+            self.routed_through_event_id = event_id;
+        }
+    }
 }
 
 /// Persistent mapping from module release request lifecycle to release manifest lifecycle.

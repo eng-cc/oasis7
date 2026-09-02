@@ -43,6 +43,7 @@ fn product_validation_delivery_cursor_does_not_shadow_same_name_reducer_state() 
         body: WorldEventBody::ProductValidationDeliveryCursorUpdated(
             ProductValidationDeliveryCursor {
                 routed_through_event_id: 1,
+                event_id_era: 0,
             },
         ),
     });
@@ -71,11 +72,85 @@ fn product_validation_delivery_cursor_stays_bounded_over_long_run() {
     }
     let encoded = serde_cbor::to_vec(&cursor).expect("encode bounded cursor");
     assert!(
-        encoded.len() <= 32,
+        encoded.len() <= 48,
         "cursor grew to {} bytes",
         encoded.len()
     );
     assert_eq!(cursor.routed_through_event_id, 1_000_000);
+}
+
+#[test]
+fn product_validation_delivery_cursor_routes_after_event_id_rollover() {
+    let mut cursor = ProductValidationDeliveryCursor {
+        routed_through_event_id: u64::MAX,
+        event_id_era: 3,
+    };
+    assert!(cursor.has_routed(3, u64::MAX));
+    assert!(!cursor.has_routed(4, 1));
+
+    cursor.advance_to(4, 1);
+    assert_eq!(cursor.event_id_era, 4);
+    assert_eq!(cursor.routed_through_event_id, 1);
+    assert!(cursor.has_routed(4, 1));
+}
+
+#[test]
+fn product_validation_delivery_cursor_decodes_legacy_id_only_snapshot() {
+    let cursor: ProductValidationDeliveryCursor =
+        serde_json::from_value(serde_json::json!({ "routed_through_event_id": 7 }))
+            .expect("legacy cursor should decode");
+    assert_eq!(cursor.event_id_era, 0);
+    assert_eq!(cursor.routed_through_event_id, 7);
+}
+
+#[test]
+fn product_validation_delivery_cursor_replays_event_id_rollover_era() {
+    let world = World::new();
+    let mut snapshot = world.snapshot();
+    snapshot.last_event_id = u64::MAX - 1;
+    snapshot.event_id_era = 3;
+    let mut journal = Journal::new();
+    journal.append(WorldEvent {
+        id: u64::MAX,
+        time: 0,
+        caused_by: None,
+        body: WorldEventBody::ProductValidationDeliveryCursorUpdated(
+            ProductValidationDeliveryCursor {
+                routed_through_event_id: u64::MAX,
+                event_id_era: 3,
+            },
+        ),
+    });
+    journal.append(WorldEvent {
+        id: 1,
+        time: 0,
+        caused_by: None,
+        body: WorldEventBody::ProductValidationDeliveryCursorUpdated(
+            ProductValidationDeliveryCursor {
+                routed_through_event_id: 1,
+                event_id_era: 4,
+            },
+        ),
+    });
+
+    let recovered = World::from_snapshot(snapshot, journal).expect("replay rollover cursor");
+    assert_eq!(
+        recovered
+            .state()
+            .product_validation_delivery_cursor
+            .event_id_era,
+        4
+    );
+    assert_eq!(
+        recovered
+            .state()
+            .product_validation_delivery_cursor
+            .routed_through_event_id,
+        1
+    );
+    let recovered_snapshot = recovered.snapshot();
+    assert_eq!(recovered_snapshot.event_id_era, 4);
+    assert_eq!(recovered_snapshot.last_event_id, 1);
 }
 
 #[test]

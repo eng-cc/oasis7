@@ -313,7 +313,12 @@ impl World {
             }
             self.apply_event_body_at(&event.body, event.time, Some(event.id))?;
             self.state.time = event.time;
-            self.next_event_id = self.next_event_id.max(event.id.saturating_add(1));
+            if self.next_event_id == u64::MAX && event.id == u64::MAX {
+                self.next_event_id = 1;
+                self.next_event_id_era = self.next_event_id_era.saturating_add(1);
+            } else {
+                self.next_event_id = self.next_event_id.max(event.id.saturating_add(1));
+            }
             replaying_tick = Some(event.time);
             previous_event_time = event.time;
         }
@@ -859,11 +864,7 @@ impl World {
             WorldEventBody::ProductValidationDeliveryCursorUpdated(cursor) => {
                 self.state
                     .product_validation_delivery_cursor
-                    .routed_through_event_id = self
-                    .state
-                    .product_validation_delivery_cursor
-                    .routed_through_event_id
-                    .max(cursor.routed_through_event_id);
+                    .advance_to(cursor.event_id_era, cursor.routed_through_event_id);
             }
             WorldEventBody::SnapshotCreated(_) => {}
             WorldEventBody::ManifestUpdated(update) => {
