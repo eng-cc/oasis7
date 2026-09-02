@@ -647,7 +647,7 @@ function PixelWorldActionReceipt(props) {
       </div>
       <Show when={receipt().present}>
         <div class="pixel-world-action-receipt__meta">
-          <span>{receiptConfidenceLabel(receipt().confidence, props.locale())}</span>
+          <span>{receiptConfidenceLabel(receipt().confidence, props.locale(), receipt().state)}</span>
           <Show when={receipt().target_agent_id}>
             <span>{`${tr(props.locale(), "行动体", "Agent")} ${String(receipt().target_agent_id).replace(/^agent[-_]/i, "")}`}</span>
           </Show>
@@ -656,8 +656,9 @@ function PixelWorldActionReceipt(props) {
     </div>
   );
 }
-function receiptConfidenceLabel(confidence, locale) {
-  const value = String(confidence || "").trim().toLowerCase();
+function receiptConfidenceLabel(confidence, locale, state) {
+  const value = String(confidence || "").trim().toLowerCase(); const receiptState = String(state || "").trim().toLowerCase();
+  if (receiptState === "rejected") return tr(locale, "行动已拒绝", "Action rejected");
   return value === "world_delta" ? tr(locale, "世界变化已确认", "World change confirmed") : value === "accepted_intent" ? tr(locale, "行动已接受", "Action accepted") : value === "none" ? tr(locale, "等待确认", "Waiting for confirmation") : tr(locale, "状态已记录", "Status recorded");
 }
 function worldReadoutStatus(locale, renderState) {
@@ -867,7 +868,7 @@ function PixelWorldFocusHud(props) {
         >
           <span>{tr(props.locale(), "回执", "Receipt")}</span>
           <strong>{surface().action_receipt.title}</strong>
-          <em>{receiptConfidenceLabel(surface().action_receipt.confidence, props.locale())}</em>
+          <em>{receiptConfidenceLabel(surface().action_receipt.confidence, props.locale(), surface().action_receipt.state)}</em>
         </div>
         <div class="pixel-world-focus-controls" aria-label={tr(props.locale(), "电影视图控制", "Cinematic controls")}>
           <button type="button" class="pixel-world-focus-control pixel-world-focus-control--primary" onClick={props.onOpenCommand}>

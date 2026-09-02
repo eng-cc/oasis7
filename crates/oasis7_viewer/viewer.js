@@ -10934,7 +10934,7 @@ function PixelWorldActionReceipt(props) {
       },
       get children() {
         var _el$28 = _tmpl$17$1(), _el$29 = _el$28.firstChild;
-        insert(_el$29, () => receiptConfidenceLabel(receipt().confidence, props.locale()));
+        insert(_el$29, () => receiptConfidenceLabel(receipt().confidence, props.locale(), receipt().state));
         insert(_el$28, createComponent(Show, {
           get when() {
             return receipt().target_agent_id;
@@ -10966,8 +10966,10 @@ function PixelWorldActionReceipt(props) {
     return _el$22;
   })();
 }
-function receiptConfidenceLabel(confidence, locale) {
+function receiptConfidenceLabel(confidence, locale, state2) {
   const value2 = String(confidence || "").trim().toLowerCase();
+  const receiptState = String(state2 || "").trim().toLowerCase();
+  if (receiptState === "rejected") return tr$1(locale, "行动已拒绝", "Action rejected");
   return value2 === "world_delta" ? tr$1(locale, "世界变化已确认", "World change confirmed") : value2 === "accepted_intent" ? tr$1(locale, "行动已接受", "Action accepted") : value2 === "none" ? tr$1(locale, "等待确认", "Waiting for confirmation") : tr$1(locale, "状态已记录", "Status recorded");
 }
 function worldReadoutStatus(locale, renderState) {
@@ -11211,7 +11213,7 @@ function PixelWorldFocusHud(props) {
       insert(_el$73, () => surface().blocker.label || tr$1(props.locale(), "暂无阻塞", "No blocker"));
       insert(_el$75, () => tr$1(props.locale(), "回执", "Receipt"));
       insert(_el$76, () => surface().action_receipt.title);
-      insert(_el$77, () => receiptConfidenceLabel(surface().action_receipt.confidence, props.locale()));
+      insert(_el$77, () => receiptConfidenceLabel(surface().action_receipt.confidence, props.locale(), surface().action_receipt.state));
       addEventListener(_el$79, "click", props.onOpenCommand);
       insert(_el$79, () => tr$1(props.locale(), "命令与目标", "Command & Target"));
       addEventListener(_el$80, "click", props.onExit);
