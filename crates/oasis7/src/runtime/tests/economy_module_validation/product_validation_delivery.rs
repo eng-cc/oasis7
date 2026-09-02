@@ -357,7 +357,7 @@ fn rejected_resolved_factory_spec_discards_all_module_side_effects() {
     assert_eq!(sandbox.requests.len(), 1);
     assert_eq!(world.pending_factory_builds_len(), 0);
     assert!(!world.has_factory(factory_id));
-    assert!(world.state().module_states.get(module_id).is_none());
+    assert!(!world.state().module_states.contains_key(module_id));
     assert!(
         !world.journal().events[journal_start..].iter().any(|event| {
             matches!(
