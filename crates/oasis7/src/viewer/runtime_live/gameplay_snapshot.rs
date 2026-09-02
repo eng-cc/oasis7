@@ -298,10 +298,9 @@ fn is_fresh_factory_production_failure_disposition(
         && production.current_recipe_id.is_none()
         && production.current_blocker_kind.as_deref() == Some(disposition.blocker_kind.as_str())
         && production.current_blocker_detail.as_deref() == Some(disposition.blocker_detail.as_str())
-        && state
+        && !state
             .pending_recipe_jobs
-            .values()
-            .all(|job| job.factory_id != factory.factory_id)
+            .contains_key(&disposition.action_id)
 }
 
 fn latest_fresh_requester_failure_disposition<'a>(

@@ -38,9 +38,6 @@ pub(super) fn schedule_recipe_disabled_reason(
             factory_id, factory.builder_agent_id
         ));
     }
-    if let Some(reason) = factory_site_operational_disabled_reason(state, agent_id, factory) {
-        return Some(reason);
-    }
     let expected_input_ledger = MaterialLedgerId::site(factory.site_id.clone());
     if factory.input_ledger != expected_input_ledger
         || factory.output_ledger != expected_input_ledger
@@ -204,40 +201,6 @@ pub(super) fn factory_build_disabled_reason(
 
 fn material_balance(materials: &BTreeMap<String, i64>, kind: &str) -> i64 {
     materials.get(kind).copied().unwrap_or_default()
-}
-
-fn factory_site_operational_disabled_reason(
-    state: &WorldState,
-    agent_id: &str,
-    factory: &crate::runtime::FactoryState,
-) -> Option<String> {
-    if let Some(reason) =
-        site_location_authority_disabled_reason(state, agent_id, factory.site_id.as_str())
-    {
-        return Some(reason);
-    }
-    let Some(site_location_id) = factory.site_location_id.as_deref() else {
-        return Some(format!(
-            "factory {} site location authority commitment unavailable; refresh the committed factory snapshot",
-            factory.factory_id
-        ));
-    };
-    let Some(site) = state.factory_site_authorities.get(factory.site_id.as_str()) else {
-        return Some(format!(
-            "site authority unavailable: site={} is not registered",
-            factory.site_id
-        ));
-    };
-    if site.location_id != site_location_id {
-        return Some(format!(
-            "factory {} site location authority is stale: expected {}, got {}",
-            factory.factory_id, site.location_id, site_location_id
-        ));
-    }
-    // The factory field records the authority receipt captured at construction.
-    // Recipe admission is governed by the current site authority above; an
-    // otherwise valid site revision update must not strand the factory.
-    None
 }
 
 fn site_location_authority_disabled_reason(

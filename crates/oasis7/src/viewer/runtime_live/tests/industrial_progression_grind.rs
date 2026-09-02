@@ -1,7 +1,7 @@
 use crate::runtime::{
     FactoryModuleSpec, FactoryProductionFailureDispositionV1, FactoryProductionState,
     FactoryProductionStatus, FactoryState, IndustryStage, MaterialLedgerId, MaterialStack,
-    WorldState,
+    RecipeJobState, WorldState,
 };
 use crate::viewer::FACTORY_SMELTER_MK1;
 use serde_json::{Value, json};
@@ -394,6 +394,55 @@ fn runtime_gameplay_snapshot_keeps_failure_while_sibling_slot_remains_active() {
             .map(|receipt| receipt.action_id.as_str()),
         Some("19"),
         "an active sibling slot must not hide the failed slot's recovery card"
+    );
+}
+
+#[test]
+fn runtime_gameplay_snapshot_ignores_pending_sibling_when_matching_failed_job_is_settled() {
+    let mut state = failure_disposition_world_state();
+    let target = state
+        .factories
+        .get_mut("factory.target")
+        .expect("target factory");
+
+    // The failed slot is settled while a sibling slot remains pending in the
+    // same factory. Freshness must inspect the disposition's failed job ID,
+    // not reject every pending job belonging to the factory.
+    target.production.status = FactoryProductionStatus::Blocked;
+    target.production.active_jobs = 1;
+    target.production.current_job_id = None;
+    target.production.current_recipe_id = None;
+    state.pending_recipe_jobs.insert(
+        20,
+        RecipeJobState {
+            job_id: 20,
+            requester_agent_id: "agent-a".to_string(),
+            factory_id: "factory.target".to_string(),
+            recipe_id: "recipe.sibling".to_string(),
+            accepted_batches: 1,
+            consume: vec![MaterialStack::new("iron_ore", 3)],
+            produce: vec![MaterialStack::new("iron_ingot", 1)],
+            byproducts: Vec::new(),
+            power_required: 7,
+            power_owner_agent_id: Some("agent-a".to_string()),
+            duration_ticks: 1,
+            consume_ledger: MaterialLedgerId::site("site-target"),
+            output_ledger: MaterialLedgerId::site("site-target"),
+            bottleneck_tags: Vec::new(),
+            logistics_route_ids: Vec::new(),
+            logistics_path_ids: Vec::new(),
+            ready_at: 22,
+        },
+    );
+
+    let gameplay = gameplay_snapshot_for_failure_state(&state);
+    assert_eq!(
+        gameplay
+            .factory_production_failure_disposition
+            .as_ref()
+            .map(|receipt| receipt.action_id.as_str()),
+        Some("19"),
+        "a sibling pending job must not hide the settled failed-job recovery card"
     );
 }
 

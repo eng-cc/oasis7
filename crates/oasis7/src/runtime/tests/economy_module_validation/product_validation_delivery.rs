@@ -1,5 +1,24 @@
 use super::*;
-use crate::runtime::ProductValidationAttemptV1;
+use crate::runtime::{
+    Journal, ProductValidationAttemptV1, RuntimeCommittedTickContext, WorldError, WorldTime,
+};
+
+fn append_product_validation_event(
+    journal: &mut Journal,
+    time: WorldTime,
+    id: &mut u64,
+    body: DomainEvent,
+) -> u64 {
+    let event_id = *id;
+    journal.append(WorldEvent {
+        id: event_id,
+        time,
+        caused_by: None,
+        body: WorldEventBody::Domain(body),
+    });
+    *id = (*id).saturating_add(1);
+    event_id
+}
 
 #[test]
 fn product_validation_recovery_replays_existing_delivery_before_next_output_intent() {
@@ -270,22 +289,31 @@ fn product_validation_attempt_is_emitted_to_subscribers_before_decision() {
         logistics_path_ids: Vec::new(),
     });
     world.step().expect("start recipe");
-    let mut sandbox = CaptureContextSandbox::with_outputs(vec![ModuleOutput {
-        new_state: None,
-        effects: Vec::new(),
-        emits: vec![ModuleEmit {
-            kind: "economy.product_validation".to_string(),
-            payload: serde_json::to_value(ProductValidationDecision::accepted(
-                "logistics_drone",
-                32,
-                true,
-                vec!["fleet_grade".to_string()],
-            ))
-            .expect("serialize product decision"),
-        }],
-        tick_lifecycle: None,
-        output_bytes: 256,
-    }]);
+    let mut sandbox = CaptureContextSandbox::with_outputs(vec![
+        ModuleOutput {
+            new_state: None,
+            effects: Vec::new(),
+            emits: Vec::new(),
+            tick_lifecycle: None,
+            output_bytes: 0,
+        },
+        ModuleOutput {
+            new_state: None,
+            effects: Vec::new(),
+            emits: vec![ModuleEmit {
+                kind: "economy.product_validation".to_string(),
+                payload: serde_json::to_value(ProductValidationDecision::accepted(
+                    "logistics_drone",
+                    32,
+                    true,
+                    vec!["fleet_grade".to_string()],
+                ))
+                .expect("serialize product decision"),
+            }],
+            tick_lifecycle: None,
+            output_bytes: 256,
+        },
+    ]);
     for _ in 0..4 {
         world
             .step_with_modules(&mut sandbox)
@@ -308,6 +336,210 @@ fn product_validation_attempt_is_emitted_to_subscribers_before_decision() {
         event.body,
         WorldEventBody::Domain(DomainEvent::ProductValidationAttemptStarted { .. })
     ));
+}
+
+#[test]
+fn product_validation_checkpoint_routes_batch_before_persist_and_recovery_dedupes() {
+    let mut world = logistics_drone_module_recipe_world("factory.recipe.delivery-atomicity");
+    let observer_wasm = b"product-validation-checkpoint-observer";
+    let observer_hash = crate::runtime::util::sha256_hex(observer_wasm);
+    world
+        .register_module_artifact(observer_hash.clone(), observer_wasm)
+        .expect("register observer artifact");
+    activate_module_manifest_for_test(
+        &mut world,
+        ModuleManifest {
+            module_id: "m4.product.validation.checkpoint-observer".to_string(),
+            name: "ProductValidationCheckpointObserver".to_string(),
+            version: "0.1.0".to_string(),
+            kind: ModuleKind::Pure,
+            role: ModuleRole::Domain,
+            wasm_hash: observer_hash.clone(),
+            interface_version: "wasm-1".to_string(),
+            abi_contract: ModuleAbiContract::default(),
+            exports: vec!["call".to_string()],
+            subscriptions: vec![ModuleSubscription {
+                event_kinds: vec![
+                    "domain.economy.product_validation_attempt_started".to_string(),
+                    "domain.economy.product_validation_recorded".to_string(),
+                    "domain.economy.product_validated".to_string(),
+                ],
+                action_kinds: Vec::new(),
+                stage: Some(ModuleSubscriptionStage::PostEvent),
+                filters: None,
+            }],
+            required_caps: Vec::new(),
+            artifact_identity: Some(signed_test_artifact_identity(observer_hash.as_str())),
+            limits: ModuleLimits {
+                max_mem_bytes: 1024 * 1024,
+                max_gas: 1_000_000,
+                max_call_rate: 1024,
+                max_output_bytes: 1024 * 1024,
+                max_effects: 0,
+                max_emits: 0,
+            },
+        },
+    );
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: "factory.recipe.delivery-atomicity".to_string(),
+        recipe_id: "recipe.assembler.logistics_drone".to_string(),
+        plan: RecipeExecutionPlan::accepted(
+            1,
+            vec![
+                MaterialStack::new("motor_mk1", 2),
+                MaterialStack::new("control_chip", 1),
+                MaterialStack::new("chassis_plate", 1),
+            ],
+            vec![
+                MaterialStack::new("logistics_drone", 1),
+                MaterialStack::new("logistics_drone", 1),
+            ],
+            Vec::new(),
+            10,
+            1,
+        ),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
+    });
+    world.step().expect("start multi-output recipe");
+    let pending = world
+        .state()
+        .pending_recipe_jobs
+        .values()
+        .next()
+        .expect("pending multi-output recipe")
+        .clone();
+    let first_receipt = ProductValidationReceiptV1 {
+        job_id: pending.job_id,
+        validation_index: Some(0),
+        requester_agent_id: pending.requester_agent_id.clone(),
+        module_id: "m4.product.logistics_drone".to_string(),
+        stack: pending.produce[0].clone(),
+        decision: ProductValidationDecision::accepted(
+            "logistics_drone",
+            32,
+            true,
+            vec!["fleet_grade".to_string()],
+        ),
+        failure_detail: None,
+    };
+    let mut journal = world.journal().clone();
+    let mut next_id = journal.events.last().map_or(1, |event| event.id + 1);
+    let first_recorded_id = append_product_validation_event(
+        &mut journal,
+        world.state().time,
+        &mut next_id,
+        DomainEvent::ProductValidationRecorded {
+            receipt: first_receipt.clone(),
+        },
+    );
+    let first_validated_id = append_product_validation_event(
+        &mut journal,
+        world.state().time,
+        &mut next_id,
+        DomainEvent::ProductValidated {
+            requester_agent_id: first_receipt.requester_agent_id.clone(),
+            module_id: first_receipt.module_id.clone(),
+            stack: first_receipt.stack.clone(),
+            stack_limit: first_receipt.decision.stack_limit,
+            tradable: first_receipt.decision.tradable,
+            quality_levels: first_receipt.decision.quality_levels.clone(),
+            notes: first_receipt.decision.notes.clone(),
+        },
+    );
+    world = World::from_snapshot(world.snapshot(), journal).expect("recover first output");
+    world
+        .register_module_artifact(observer_hash.clone(), observer_wasm)
+        .expect("restore observer artifact");
+
+    let context = RuntimeCommittedTickContext {
+        height: world.state().time.saturating_add(1),
+        slot: world.state().time,
+        epoch: 0,
+        node_block_hash: String::new(),
+        action_root: String::new(),
+        authority_node_id: "test-authority".to_string(),
+        committed_at_unix_ms: 0,
+    };
+    let mut checkpoint = None;
+    let mut sandbox = CaptureContextSandbox::with_outputs(Vec::new());
+    let error = world
+        .step_with_modules_for_committed_context_with_product_validation_checkpoint(
+            &mut sandbox,
+            &context,
+            &mut |staged| {
+                checkpoint = Some(staged.clone());
+                Err(WorldError::DistributedValidationFailed {
+                    reason: "simulated crash immediately after next-output intent checkpoint"
+                        .to_string(),
+                })
+            },
+        )
+        .expect_err("simulated checkpoint crash");
+    assert!(matches!(
+        error,
+        WorldError::DistributedValidationFailed { .. }
+    ));
+    let checkpoint = checkpoint.expect("checkpoint must capture staged batch");
+    let delivered_ids: Vec<_> = sandbox
+        .requests
+        .iter()
+        .filter(|request| request.module_id == "m4.product.validation.checkpoint-observer")
+        .map(|request| {
+            let input: ModuleCallInput =
+                serde_cbor::from_slice(&request.input).expect("decode observer input");
+            serde_cbor::from_slice::<WorldEvent>(
+                input.event.as_deref().expect("observer event payload"),
+            )
+            .expect("decode observer event")
+            .id
+        })
+        .collect();
+    let second_attempt_id = checkpoint
+        .journal()
+        .events
+        .iter()
+        .find_map(|event| {
+            matches!(
+                &event.body,
+                WorldEventBody::Domain(DomainEvent::ProductValidationAttemptStarted {
+                    attempt,
+                }) if attempt.validation_index == Some(1)
+            )
+            .then_some(event.id)
+        })
+        .expect("checkpoint must contain next-output attempt");
+    assert_eq!(
+        delivered_ids,
+        vec![first_recorded_id, first_validated_id, second_attempt_id],
+        "all earlier batch events and the new attempt must route before persistence"
+    );
+
+    let mut recovered = World::from_snapshot(checkpoint.snapshot(), checkpoint.journal().clone())
+        .expect("recover immediately after checkpoint");
+    recovered
+        .register_module_artifact(observer_hash, observer_wasm)
+        .expect("restore observer artifact for retry");
+    let mut retry_sandbox = CaptureContextSandbox::with_outputs(Vec::new());
+    recovered
+        .step_with_modules(&mut retry_sandbox)
+        .expect("prior attempt must fail closed after recovery");
+    let duplicate_ids: Vec<_> = retry_sandbox
+        .requests
+        .iter()
+        .filter(|request| request.module_id == "m4.product.validation.checkpoint-observer")
+        .filter_map(|request| {
+            let input: ModuleCallInput = serde_cbor::from_slice(&request.input).ok()?;
+            let event: WorldEvent = serde_cbor::from_slice(input.event.as_deref()?).ok()?;
+            Some(event.id)
+        })
+        .filter(|id| *id == first_recorded_id || *id == first_validated_id)
+        .collect();
+    assert!(
+        duplicate_ids.is_empty(),
+        "events delivered before checkpoint must not be replayed after recovery"
+    );
 }
 
 #[test]

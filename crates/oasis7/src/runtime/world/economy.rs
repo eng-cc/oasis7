@@ -400,7 +400,6 @@ impl World {
                 job.job_id,
             )
         });
-
         for job in due_builds {
             self.append_event(
                 WorldEventBody::Domain(DomainEvent::FactoryBuilt {
@@ -462,7 +461,6 @@ impl World {
     ) -> Result<Vec<WorldEvent>, WorldError> {
         let now = self.state.time;
         let mut emitted = Vec::new();
-
         let mut due_builds: Vec<_> = self
             .state
             .pending_factory_builds
@@ -520,6 +518,7 @@ impl World {
                     job.factory_id.as_str(),
                     job.recipe_id.as_str(),
                     stack,
+                    sandbox,
                     &mut emitted,
                 )? {
                     validation_rejected = rejected;
@@ -586,6 +585,7 @@ impl World {
                         job.requester_agent_id.as_str(),
                         module_id.as_str(),
                         stack,
+                        sandbox,
                         &mut emitted,
                     )?;
                     product_validation_checkpoint(self)?;
@@ -636,12 +636,12 @@ impl World {
                     }),
                     None,
                 )?;
-                if let Some(event) = self.journal.events.last() {
-                    emitted.push(event.clone());
+                if let Some(event) = self.journal.events.last().cloned() {
+                    self.route_product_validation_event(&event, sandbox)?;
                 }
                 self.append_event(validation_event, None)?;
-                if let Some(event) = self.journal.events.last() {
-                    emitted.push(event.clone());
+                if let Some(event) = self.journal.events.last().cloned() {
+                    self.route_product_validation_event(&event, sandbox)?;
                 }
                 if rejected {
                     let blocker_detail = failure_detail.unwrap_or_else(|| {

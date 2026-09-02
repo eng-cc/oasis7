@@ -3,6 +3,9 @@ use super::super::{
     ProductValidationReceiptV1, WorldError, WorldEvent, WorldEventBody,
 };
 use super::World;
+use oasis7_wasm_abi::{ModuleSandbox, ModuleStateUpdate};
+
+const PRODUCT_VALIDATION_DELIVERY_CURSOR: &str = "__oasis7.product_validation_delivery.v1";
 
 impl World {
     pub(super) fn product_validation_receipt_for_output(
@@ -79,6 +82,7 @@ impl World {
         factory_id: &str,
         recipe_id: &str,
         stack: &MaterialStack,
+        sandbox: &mut dyn ModuleSandbox,
         emitted: &mut Vec<WorldEvent>,
     ) -> Result<Option<bool>, WorldError> {
         let Some(receipt) = self.product_validation_receipt_for_output(
@@ -98,7 +102,7 @@ impl World {
             Some(receipt.module_id.as_str()),
         )?;
         if Self::product_validation_decision_matches_stack(&receipt.decision, stack) {
-            self.ensure_product_validation_delivery(&receipt, emitted)?;
+            self.ensure_product_validation_delivery(&receipt, sandbox)?;
             return Ok(Some(false));
         }
         self.append_missing_product_validation_blocker(
@@ -115,19 +119,16 @@ impl World {
     fn ensure_product_validation_delivery(
         &mut self,
         receipt: &ProductValidationReceiptV1,
-        emitted: &mut Vec<WorldEvent>,
+        sandbox: &mut dyn ModuleSandbox,
     ) -> Result<(), WorldError> {
-        let existing_events = self.product_validation_recovery_events(receipt);
-        if !existing_events.is_empty() {
-            let has_delivery = existing_events
-                .iter()
-                .any(|event| Self::product_validation_delivery_matches(event, receipt));
+        let (existing_events, has_delivery) = self.product_validation_recovery_events(receipt);
+        if has_delivery || !existing_events.is_empty() {
             for event in &existing_events {
                 // A journaled event may have been persisted by the next
                 // output's pre-call checkpoint before the event loop routed it
-                // to subscribers. Requeue that exact event without appending
-                // another journal entry or invoking the validator again.
-                Self::queue_product_validation_event(emitted, event);
+                // to subscribers. Route that exact event without appending
+                // another domain event or invoking the validator again.
+                self.route_product_validation_event(event, sandbox)?;
             }
             if has_delivery {
                 return Ok(());
@@ -146,7 +147,8 @@ impl World {
             None,
         )?;
         if let Some(event) = self.journal.events.last() {
-            Self::queue_product_validation_event(emitted, event);
+            let event = event.clone();
+            self.route_product_validation_event(&event, sandbox)?;
         }
         Ok(())
     }
@@ -154,7 +156,7 @@ impl World {
     fn product_validation_recovery_events(
         &self,
         receipt: &ProductValidationReceiptV1,
-    ) -> Vec<WorldEvent> {
+    ) -> (Vec<WorldEvent>, bool) {
         let Some(receipt_position) = self.journal.events.iter().rposition(|event| {
             matches!(
                 &event.body,
@@ -163,10 +165,14 @@ impl World {
                 }) if recorded == receipt
             )
         }) else {
-            return Vec::new();
+            return (Vec::new(), false);
         };
-        let mut events = vec![self.journal.events[receipt_position].clone()];
-        if let Some(event) = self
+        let recorded_event = &self.journal.events[receipt_position];
+        let mut events = Vec::new();
+        if !self.product_validation_event_was_routed(recorded_event) {
+            events.push(recorded_event.clone());
+        }
+        let delivery_event = self
             .journal
             .events
             .iter()
@@ -180,11 +186,83 @@ impl World {
                         && next.validation_index == receipt.validation_index
                 )
             })
-            .find(|event| Self::product_validation_delivery_matches(event, receipt))
+            .find(|event| Self::product_validation_delivery_matches(event, receipt));
+        let has_delivery = delivery_event.is_some();
+        if let Some(event) = delivery_event
+            && !self.product_validation_event_was_routed(event)
         {
             events.push(event.clone());
         }
-        events
+        (events, has_delivery)
+    }
+
+    fn product_validation_event_was_routed(&self, event: &WorldEvent) -> bool {
+        let delivered_ids = self
+            .state
+            .module_states
+            .get(PRODUCT_VALIDATION_DELIVERY_CURSOR)
+            .and_then(|state| serde_cbor::from_slice::<Vec<u64>>(state).ok());
+        if delivered_ids.is_some_and(|ids| ids.contains(&event.id)) {
+            return true;
+        }
+        let trace_prefix = format!("event-{}-", event.id);
+        self.journal.events.iter().any(|journal_event| {
+            matches!(
+                &journal_event.body,
+                WorldEventBody::ModuleRuntimeCharged(charge)
+                    if charge.trace_id.starts_with(trace_prefix.as_str())
+            )
+        })
+    }
+
+    pub(super) fn route_product_validation_event(
+        &mut self,
+        event: &WorldEvent,
+        sandbox: &mut dyn ModuleSandbox,
+    ) -> Result<(), WorldError> {
+        if Self::is_product_validation_event(event)
+            && self.product_validation_event_was_routed(event)
+        {
+            return Ok(());
+        }
+        let invoked = self.route_event_to_modules(event, sandbox)?;
+        if invoked == 0 || !Self::is_product_validation_event(event) {
+            return Ok(());
+        }
+        if self.product_validation_event_was_routed(event) {
+            return Ok(());
+        }
+        let mut delivered_ids = self
+            .state
+            .module_states
+            .get(PRODUCT_VALIDATION_DELIVERY_CURSOR)
+            .and_then(|state| serde_cbor::from_slice::<Vec<u64>>(state).ok())
+            .unwrap_or_default();
+        if delivered_ids.contains(&event.id) {
+            return Ok(());
+        }
+        delivered_ids.push(event.id);
+        delivered_ids.sort_unstable();
+        self.append_event(
+            WorldEventBody::ModuleStateUpdated(ModuleStateUpdate {
+                module_id: PRODUCT_VALIDATION_DELIVERY_CURSOR.to_string(),
+                trace_id: format!("product-validation-delivery-{}", event.id),
+                state: serde_cbor::to_vec(&delivered_ids)?,
+            }),
+            None,
+        )?;
+        Ok(())
+    }
+
+    fn is_product_validation_event(event: &WorldEvent) -> bool {
+        matches!(
+            event.body,
+            WorldEventBody::Domain(
+                DomainEvent::ProductValidationAttemptStarted { .. }
+                    | DomainEvent::ProductValidationRecorded { .. }
+                    | DomainEvent::ProductValidated { .. }
+            )
+        )
     }
 
     fn queue_product_validation_event(emitted: &mut Vec<WorldEvent>, event: &WorldEvent) {
@@ -267,6 +345,7 @@ impl World {
         requester_agent_id: &str,
         module_id: &str,
         stack: &MaterialStack,
+        sandbox: &mut dyn ModuleSandbox,
         emitted: &mut Vec<WorldEvent>,
     ) -> Result<(), WorldError> {
         self.append_event(
@@ -283,6 +362,10 @@ impl World {
         )?;
         if let Some(event) = self.journal.events.last() {
             Self::queue_product_validation_event(emitted, event);
+        }
+        let pending = std::mem::take(emitted);
+        for event in pending {
+            self.route_product_validation_event(&event, sandbox)?;
         }
         Ok(())
     }

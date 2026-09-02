@@ -53,6 +53,29 @@ fn seed_assembler_site_materials(server: &mut ViewerRuntimeLiveServer, materials
     }
 }
 
+fn ready_smelter_for_schedule_site_parity(seed: u8) -> (ViewerRuntimeLiveServer, String) {
+    let (mut server, agent_id, public_key, private_key) =
+        setup_runtime_industrial_gameplay_session(seed);
+    build_first_smelter_via_gameplay_action(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        u64::from(seed),
+    );
+    (server, agent_id)
+}
+
+fn assert_smelter_schedule_enabled(server: &mut ViewerRuntimeLiveServer, label: &'static str) {
+    let gameplay = expect_player_gameplay(server, label);
+    let action =
+        smelter_schedule_action(&gameplay, crate::viewer::ACTION_SCHEDULE_SMELTER_IRON_INGOT);
+    assert_eq!(
+        action.disabled_reason, None,
+        "runtime ScheduleRecipe admission does not gate on current site status: {label}"
+    );
+}
+
 #[test]
 fn runtime_gameplay_smelter_readiness_matches_submit_material_and_owner_power_checks() {
     let _guard = lock_test_llm_env();
@@ -267,6 +290,80 @@ fn runtime_gameplay_allows_recipe_when_current_site_authority_revision_changes()
         action.disabled_reason, None,
         "current authority should govern recipe readiness even when its revision advanced"
     );
+}
+
+#[test]
+fn runtime_gameplay_keeps_recipe_schedule_enabled_when_site_is_deactivated() {
+    let _guard = lock_test_llm_env();
+    let (mut server, _agent_id) = ready_smelter_for_schedule_site_parity(75);
+    let mut site_authority = server
+        .world
+        .state()
+        .factory_site_authorities
+        .get("site-smelter")
+        .expect("smelter site authority")
+        .clone();
+    site_authority.authority_revision = site_authority.authority_revision.saturating_add(1);
+    site_authority.active = false;
+    server
+        .world
+        .set_factory_site_authority(site_authority)
+        .expect("deactivate smelter site authority");
+
+    assert_smelter_schedule_enabled(&mut server, "recipe schedule after site deactivation");
+}
+
+#[test]
+fn runtime_gameplay_keeps_recipe_schedule_enabled_when_site_access_is_revoked() {
+    let _guard = lock_test_llm_env();
+    let (mut server, _agent_id) = ready_smelter_for_schedule_site_parity(76);
+    let mut site_authority = server
+        .world
+        .state()
+        .factory_site_authorities
+        .get("site-smelter")
+        .expect("smelter site authority")
+        .clone();
+    site_authority.authority_revision = site_authority.authority_revision.saturating_add(1);
+    site_authority.owner_agent_id = "revoked-site-owner".to_string();
+    site_authority.authorized_agent_ids.clear();
+    server
+        .world
+        .set_factory_site_authority(site_authority)
+        .expect("revoke smelter site access");
+
+    assert_smelter_schedule_enabled(&mut server, "recipe schedule after site access revocation");
+}
+
+#[test]
+fn runtime_gameplay_keeps_recipe_schedule_enabled_when_site_moves() {
+    let _guard = lock_test_llm_env();
+    let (mut server, _agent_id) = ready_smelter_for_schedule_site_parity(77);
+    let moved_location_id = "location-moved-for-recipe-schedule";
+    server
+        .world
+        .set_location_anchor(crate::runtime::LocationAnchorV1 {
+            location_id: moved_location_id.to_string(),
+            active: true,
+            authority_revision: 1,
+            effective_at: server.world.state().time,
+        })
+        .expect("register moved site location anchor");
+    let mut site_authority = server
+        .world
+        .state()
+        .factory_site_authorities
+        .get("site-smelter")
+        .expect("smelter site authority")
+        .clone();
+    site_authority.authority_revision = site_authority.authority_revision.saturating_add(1);
+    site_authority.location_id = moved_location_id.to_string();
+    server
+        .world
+        .set_factory_site_authority(site_authority)
+        .expect("move smelter site authority");
+
+    assert_smelter_schedule_enabled(&mut server, "recipe schedule after site move");
 }
 
 #[test]
