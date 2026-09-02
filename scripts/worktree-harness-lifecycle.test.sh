@@ -765,6 +765,7 @@ REAL_STACK_JSON="$TMP_DIR/real-stack-ready.jsonl"
 REAL_STACK_LOG="$TMP_DIR/real-stack.log"
 REAL_STACK_READER_ERROR="$TMP_DIR/real-stack-reader.error"
 REAL_STACK_META_ZERO="$TMP_DIR/real-stack-meta-zero"
+REAL_STACK_META_ZERO_ACK="$TMP_DIR/real-stack-meta-zero-ack"
 REAL_STACK_META_READY="$TMP_DIR/real-stack-meta-ready"
 REAL_STACK_JSON_READY="$TMP_DIR/real-stack-json-ready"
 REAL_STACK_READER_STOP="$TMP_DIR/real-stack-reader.stop"
@@ -772,6 +773,8 @@ mkdir -p "$REAL_STACK_BUNDLE" "$REAL_STACK_OUTPUT"
 cat >"$REAL_STACK_BUNDLE/run-game.sh" <<'REAL_RUN_GAME'
 #!/usr/bin/env python3
 import http.server
+import os
+import pathlib
 import socketserver
 import sys
 import threading
@@ -788,12 +791,12 @@ def option_value(name: str, default: str) -> str:
 viewer_port = int(option_value("--viewer-port", "4173"))
 web_bind = option_value("--web-bind", "127.0.0.1:5011")
 web_port = int(web_bind.rsplit(":", 1)[-1])
-ready_at = time.monotonic() + 0.4
+ready_ack = pathlib.Path(os.environ["OASIS7_HARNESS_TEST_METADATA_ZERO_ACK"])
 
 
 class ViewerHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
-        if time.monotonic() < ready_at:
+        if not ready_ack.exists():
             self.send_error(503, "fixture warming")
             return
         body = b"<!doctype html><title>harness fixture</title>"
@@ -850,13 +853,13 @@ REAL_STACK_RUN_ARGS=(
   --json-ready
   --with-llm
 )
-python3 - "$REAL_STACK_META" "$REAL_STACK_META_ZERO" "$REAL_STACK_META_READY" "$REAL_STACK_JSON" "$REAL_STACK_JSON_READY" "$REAL_STACK_READER_ERROR" "$REAL_STACK_READER_STOP" <<'PY' >"$TMP_DIR/real-stack-reader.log" 2>&1 &
+python3 - "$REAL_STACK_META" "$REAL_STACK_META_ZERO" "$REAL_STACK_META_ZERO_ACK" "$REAL_STACK_META_READY" "$REAL_STACK_JSON" "$REAL_STACK_JSON_READY" "$REAL_STACK_READER_ERROR" "$REAL_STACK_READER_STOP" <<'PY' >"$TMP_DIR/real-stack-reader.log" 2>&1 &
 import json
 import pathlib
 import sys
 import time
 
-meta_path, meta_zero, meta_ready, json_path, json_ready, error_path, stop_path = map(pathlib.Path, sys.argv[1:])
+meta_path, meta_zero, meta_zero_ack, meta_ready, json_path, json_ready, error_path, stop_path = map(pathlib.Path, sys.argv[1:])
 while True:
     if stop_path.exists():
         break
@@ -879,6 +882,7 @@ while True:
                 raise AssertionError(f"session.meta missing keys: {sorted(missing)}")
             if values["STACK_READY"] == "0":
                 meta_zero.touch()
+                meta_zero_ack.touch()
             if values["STACK_READY"] == "1":
                 if not values["GAME_URL"].startswith("http://127.0.0.1:"):
                     raise AssertionError(values)
@@ -914,7 +918,8 @@ while True:
     time.sleep(0.01)
 PY
 REAL_STACK_READER_PID=$!
-./scripts/run-launcher-stack.sh "${REAL_STACK_RUN_ARGS[@]}" >"$REAL_STACK_JSON" 2>"$REAL_STACK_LOG" &
+OASIS7_HARNESS_TEST_METADATA_ZERO_ACK="$REAL_STACK_META_ZERO_ACK" \
+  ./scripts/run-launcher-stack.sh "${REAL_STACK_RUN_ARGS[@]}" >"$REAL_STACK_JSON" 2>"$REAL_STACK_LOG" &
 REAL_STACK_PID=$!
 for _ in $(seq 1 120); do
   [[ -e "$REAL_STACK_META_READY" && -e "$REAL_STACK_JSON_READY" ]] && break
