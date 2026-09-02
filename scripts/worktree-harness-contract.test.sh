@@ -205,6 +205,106 @@ if wh_pid_alive "$process_tree_pid" || wh_pid_alive "$process_tree_child_pid"; t
   exit 1
 fi
 
+GROUP_REAP_CHILD_PID_FILE="$TMP_DIR/group-reap-child.pid"
+group_reap_fixture() {
+  sleep 30 &
+  echo "$!" >"$GROUP_REAP_CHILD_PID_FILE"
+  # Give wh_start_managed time to capture the launch identity and group
+  # membership before the recorded leader exits.
+  sleep 0.5
+  exit 0
+}
+
+wh_start_managed group_reap_fixture >"$TMP_DIR/group-reap.log" 2>&1
+group_reap_pid="$WH_MANAGED_PID"
+group_reap_pgid="$WH_MANAGED_PGID"
+group_reap_identity="$WH_MANAGED_IDENTITY"
+for _ in $(seq 1 40); do
+  [[ -s "$GROUP_REAP_CHILD_PID_FILE" ]] && break
+  sleep 0.05
+done
+group_reap_child_pid="$(cat "$GROUP_REAP_CHILD_PID_FILE")"
+for _ in $(seq 1 40); do
+  if ! wh_pid_alive "$group_reap_pid"; then
+    break
+  fi
+  sleep 0.05
+done
+if wh_pid_alive "$group_reap_pid"; then
+  echo "process-group shutdown fixture leader did not exit before reaping check" >&2
+  exit 1
+fi
+set +e
+wh_terminate_process_group "$group_reap_pid" "$group_reap_pgid" 100 "$group_reap_identity"
+group_reap_status=$?
+set -e
+if [[ "$group_reap_status" -ne 0 ]] || wh_pid_alive "$group_reap_child_pid" || wh_process_group_alive "$group_reap_pgid"; then
+  echo "process-group shutdown did not safely reap a recorded group after leader exit" >&2
+  exit 1
+fi
+
+wh_start_managed sleep 30 >"$TMP_DIR/foreign-group.log" 2>&1
+foreign_group_pid="$WH_MANAGED_PID"
+foreign_group_pgid="$WH_MANAGED_PGID"
+set +e
+wh_terminate_process_group "$group_reap_pid" "$foreign_group_pgid" 100 "$group_reap_identity"
+foreign_group_status=$?
+set -e
+if [[ "$foreign_group_status" -eq 0 ]] || ! wh_pid_alive "$foreign_group_pid"; then
+  echo "process-group shutdown signaled a foreign group without an authenticated member" >&2
+  exit 1
+fi
+wh_terminate_process_group "$foreign_group_pid" "$foreign_group_pgid" 100 "$WH_MANAGED_IDENTITY"
+
+if [[ -r /proc/self/stat ]]; then
+  [[ -r /proc/sys/kernel/random/boot_id ]] || {
+    echo "process identity contract: Linux boot ID is unavailable" >&2
+    exit 1
+  }
+  linux_boot_id="$(tr -d '[:space:]' </proc/sys/kernel/random/boot_id)"
+  linux_identity="$(wh_process_identity $$)"
+  [[ "$linux_identity" == "proc-starttime:${linux_boot_id}:"* ]] || {
+    echo "process identity contract: Linux identity is not bound to boot ID" >&2
+    exit 1
+  }
+  linux_start_ticks="$(python3 - $$ <<'PY'
+import pathlib
+import sys
+
+contents = pathlib.Path(f"/proc/{sys.argv[1]}/stat").read_text(encoding="utf-8")
+right_paren = contents.rfind(") ")
+print(contents[right_paren + 2 :].split()[19])
+PY
+)"
+  set +e
+  wh_process_record_alive "$$" "$(wh_process_group_id $$)" "proc-starttime:${linux_start_ticks}"
+  legacy_identity_status=$?
+  set -e
+  [[ "$legacy_identity_status" -ne 0 ]] || {
+    echo "process identity contract: legacy Linux identity was accepted as current" >&2
+    exit 1
+  }
+
+  legacy_lock_root="$TMP_DIR/legacy-live-lock"
+  mkdir -p "$legacy_lock_root"
+  ln -s "$$:proc-starttime:${linux_start_ticks}" "$legacy_lock_root/.lifecycle.lock"
+  set +e
+  OASIS7_HARNESS_LIFECYCLE_LOCK_TIMEOUT_MS=100 \
+    wh_lifecycle_lock_acquire "$legacy_lock_root" \
+    >"$TMP_DIR/legacy-live-lock.log" 2>&1
+  legacy_lock_status="$?"
+  set -e
+  [[ "$legacy_lock_status" -ne 0 ]] || {
+    echo "lifecycle lock contract: live legacy Linux owner was reclaimed" >&2
+    exit 1
+  }
+  [[ "$(readlink "$legacy_lock_root/.lifecycle.lock")" == "$$:proc-starttime:${linux_start_ticks}" ]] || {
+    echo "lifecycle lock contract: live legacy Linux record was changed" >&2
+    exit 1
+  }
+  rm -f "$legacy_lock_root/.lifecycle.lock"
+fi
+
 ZOMBIE_FIXTURE_PID_FILE="$TMP_DIR/zombie-fixture.pid"
 zombie_fixture() {
   python3 - "$ZOMBIE_FIXTURE_PID_FILE" <<'PY'
@@ -423,6 +523,9 @@ registry = json.loads(pathlib.Path(sys.argv[3]).read_text())
 token = payload["reservation_token"]
 assert local_reservation["owner_identity"], local_reservation
 assert registry["reservations"][token]["owner_identity"] == local_reservation["owner_identity"], registry
+if pathlib.Path("/proc/self/stat").exists():
+    boot_id = pathlib.Path("/proc/sys/kernel/random/boot_id").read_text(encoding="utf-8").strip()
+    assert local_reservation["owner_identity"].startswith(f"proc-starttime:{boot_id}:"), local_reservation
 PY
 identity_fresh_token="$(python3 - "$identity_fresh_ports_json" <<'PY'
 import json
@@ -442,6 +545,18 @@ wh_start_managed sleep 30 >"$TMP_DIR/identity-reclaim-owner.log" 2>&1
 identity_reclaim_owner_pid="$WH_MANAGED_PID"
 identity_reclaim_owner_pgid="$WH_MANAGED_PGID"
 identity_reclaim_owner_identity="$WH_MANAGED_IDENTITY"
+identity_reclaim_legacy_identity="old-process-incarnation"
+if [[ -r "/proc/$identity_reclaim_owner_pid/stat" ]]; then
+  identity_reclaim_legacy_identity="$(python3 - "$identity_reclaim_owner_pid" <<'PY'
+import pathlib
+import sys
+
+contents = pathlib.Path(f"/proc/{sys.argv[1]}/stat").read_text(encoding="utf-8")
+right_paren = contents.rfind(") ")
+print(f"proc-starttime:{contents[right_paren + 2 :].split()[19]}")
+PY
+)"
+fi
 identity_reclaim_seed="$(python3 - "$IDENTITY_RECLAIM_WORKTREE" <<'PY'
 import hashlib
 import pathlib
@@ -451,7 +566,7 @@ seed = int(hashlib.sha256(str(pathlib.Path(sys.argv[1]).resolve()).encode()).hex
 print(43000 + (seed % 1500) * 10)
 PY
 )"
-python3 - "$IDENTITY_RECLAIM_COMMON_DIR" "$IDENTITY_RECLAIM_ROOT" "$IDENTITY_RECLAIM_WORKTREE" "$identity_reclaim_owner_pid" "$identity_reclaim_seed" <<'PY'
+python3 - "$IDENTITY_RECLAIM_COMMON_DIR" "$IDENTITY_RECLAIM_ROOT" "$IDENTITY_RECLAIM_WORKTREE" "$identity_reclaim_owner_pid" "$identity_reclaim_seed" "$identity_reclaim_legacy_identity" <<'PY'
 import json
 import pathlib
 import sys
@@ -461,6 +576,7 @@ harness_root = pathlib.Path(sys.argv[2])
 worktree = sys.argv[3]
 owner_pid = int(sys.argv[4])
 base = int(sys.argv[5])
+legacy_identity = sys.argv[6]
 registry_dir = common_dir / ".oasis7-harness-port-registry"
 registry_dir.mkdir(parents=True, exist_ok=True)
 registry = {
@@ -470,7 +586,7 @@ registry = {
             "schema": 1,
             "reservation_token": "identity-reclaim-token",
             "owner_pid": owner_pid,
-            "owner_identity": "old-process-incarnation",
+            "owner_identity": legacy_identity,
             "worktree_path": worktree,
             "harness_root": str(common_dir / "old-harness"),
             "common_dir": str(common_dir),
@@ -491,8 +607,51 @@ registry = {
 (registry_dir / "reservations.json").write_text(json.dumps(registry) + "\n", encoding="utf-8")
 PY
 identity_reclaim_ports_json="$TMP_DIR/identity-reclaim-ports.json"
-wh_resolve_ports_json "$IDENTITY_RECLAIM_ROOT" "$$" "$IDENTITY_RECLAIM_WORKTREE" "$IDENTITY_RECLAIM_COMMON_DIR" >"$identity_reclaim_ports_json"
-python3 - "$identity_reclaim_ports_json" "$IDENTITY_RECLAIM_COMMON_DIR/.oasis7-harness-port-registry/reservations.json" "$identity_reclaim_seed" <<'PY'
+set +e
+wh_resolve_ports_json "$IDENTITY_RECLAIM_ROOT" "$$" "$IDENTITY_RECLAIM_WORKTREE" "$IDENTITY_RECLAIM_COMMON_DIR" \
+  >"$identity_reclaim_ports_json" 2>"$TMP_DIR/identity-reclaim.err"
+identity_reclaim_status="$?"
+set -e
+if [[ "$identity_reclaim_legacy_identity" == proc-starttime:* ]]; then
+  [[ "$identity_reclaim_status" -ne 0 ]] || {
+    echo "port reservation contract: live legacy Linux owner was reclaimed" >&2
+    exit 1
+  }
+  python3 "$IDENTITY_RECLAIM_ROOT/.ports.reservation.json" "$IDENTITY_RECLAIM_COMMON_DIR/.oasis7-harness-port-registry/reservations.json" <<'PY'
+import json
+import pathlib
+import sys
+
+local_reservation = json.loads(pathlib.Path(sys.argv[1]).read_text())
+registry = json.loads(pathlib.Path(sys.argv[2]).read_text())
+assert local_reservation["reservation_token"] == "identity-reclaim-token", local_reservation
+assert "identity-reclaim-token" in registry["reservations"], registry
+PY
+  rm -f "$IDENTITY_RECLAIM_ROOT/.ports.reservation.json"
+  set +e
+  wh_resolve_ports_json "$IDENTITY_RECLAIM_ROOT" "$$" "$IDENTITY_RECLAIM_WORKTREE" "$IDENTITY_RECLAIM_COMMON_DIR" \
+    >"$TMP_DIR/identity-reclaim-registry-only.json" 2>"$TMP_DIR/identity-reclaim-registry-only.err"
+  identity_reclaim_registry_status="$?"
+  set -e
+  [[ "$identity_reclaim_registry_status" -ne 0 ]] || {
+    echo "port reservation contract: live legacy Linux registry owner was reclaimed" >&2
+    exit 1
+  }
+  python3 "$IDENTITY_RECLAIM_COMMON_DIR/.oasis7-harness-port-registry/reservations.json" <<'PY'
+import json
+import pathlib
+import sys
+
+registry = json.loads(pathlib.Path(sys.argv[1]).read_text())
+assert "identity-reclaim-token" in registry["reservations"], registry
+PY
+  identity_reclaim_token="identity-reclaim-token"
+else
+  [[ "$identity_reclaim_status" -eq 0 ]] || {
+    cat "$TMP_DIR/identity-reclaim.err" >&2
+    exit 1
+  }
+  python3 - "$identity_reclaim_ports_json" "$IDENTITY_RECLAIM_COMMON_DIR/.oasis7-harness-port-registry/reservations.json" "$identity_reclaim_seed" <<'PY'
 import json
 import pathlib
 import sys
@@ -502,14 +661,15 @@ registry = json.loads(pathlib.Path(sys.argv[2]).read_text())
 assert payload["viewer_port"] == int(sys.argv[3]), payload
 assert "identity-reclaim-token" not in registry["reservations"], registry
 PY
-identity_reclaim_token="$(python3 - "$identity_reclaim_ports_json" <<'PY'
+  identity_reclaim_token="$(python3 - "$identity_reclaim_ports_json" <<'PY'
 import json
 import pathlib
 import sys
 
 print(json.loads(pathlib.Path(sys.argv[1]).read_text())["reservation_token"])
 PY
-)"
+  )"
+fi
 wh_release_ports_reservation "$IDENTITY_RECLAIM_ROOT" "$identity_reclaim_token" "$IDENTITY_RECLAIM_COMMON_DIR"
 wh_terminate_process_group "$identity_reclaim_owner_pid" "$identity_reclaim_owner_pgid" 100 "$identity_reclaim_owner_identity"
 

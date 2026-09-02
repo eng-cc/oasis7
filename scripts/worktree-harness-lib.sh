@@ -275,7 +275,14 @@ def process_identity(pid: int) -> str | None:
         if right_paren >= 0:
             fields = contents[right_paren + 2 :].split()
             if len(fields) > 19:
-                return f"proc-starttime:{fields[19]}"
+                boot_id_path = Path("/proc/sys/kernel/random/boot_id")
+                try:
+                    boot_id = boot_id_path.read_text(encoding="utf-8").strip()
+                except OSError:
+                    boot_id = ""
+                if boot_id:
+                    return f"proc-starttime:{boot_id}:{fields[19]}"
+                return None
     try:
         result = subprocess.run(
             ["ps", "-o", "pid=,lstart=", "-p", str(pid)],
@@ -302,6 +309,13 @@ def reservation_owner_status(record: dict) -> str:
         return "stale"
     expected_identity = record.get("owner_identity")
     if not isinstance(expected_identity, str) or not expected_identity:
+        return "unknown"
+    # Linux records written before boot_id was added contain only the
+    # monotonic start-time tick.  That value is not comparable across boots,
+    # so a live legacy owner must remain reserved rather than being treated
+    # as a different incarnation and reclaimed.  A dead legacy owner is
+    # already safely classified as stale above.
+    if expected_identity.startswith("proc-starttime:") and expected_identity.count(":") == 1:
         return "unknown"
     current_identity = process_identity(pid)
     if not current_identity:
@@ -528,7 +542,15 @@ def process_identity(pid: int) -> str | None:
         if right_paren >= 0:
             fields = contents[right_paren + 2 :].split()
             if len(fields) > 19:
-                return f"proc-starttime:{fields[19]}"
+                try:
+                    boot_id = pathlib.Path(
+                        "/proc/sys/kernel/random/boot_id"
+                    ).read_text(encoding="utf-8").strip()
+                except OSError:
+                    boot_id = ""
+                if boot_id:
+                    return f"proc-starttime:{boot_id}:{fields[19]}"
+                return None
     try:
         result = subprocess.run(
             ["ps", "-o", "pid=,lstart=", "-p", str(pid)],
@@ -904,6 +926,90 @@ wh_process_group_alive() {
     awk -v target="$pgid" '$2 == target && $3 !~ /^Z/ { found = 1 } END { exit found ? 0 : 1 }'
 }
 
+# Capture stable identities for the members visible in a managed process
+# group. The launch leader can exit while a descendant remains in the group;
+# retaining the member PID/incarnation pair lets termination prove that the
+# surviving group is the one originally launched. An unavailable member
+# identity is omitted, which deliberately makes leader-less cleanup fail
+# closed when no recorded survivor can be authenticated.
+wh_process_group_member_identities() {
+  local pgid=${1:-}
+  [[ "$pgid" =~ ^[1-9][0-9]*$ && "$pgid" -gt 1 ]] || return 1
+  local member_pid member_identity member_records=""
+  while read -r member_pid; do
+    [[ "$member_pid" =~ ^[1-9][0-9]*$ ]] || continue
+    member_identity=$(wh_process_identity "$member_pid" 2>/dev/null || true)
+    [[ -n "$member_identity" ]] || continue
+    if [[ -n "$member_records" ]]; then
+      member_records+=","
+    fi
+    member_records+="${member_pid}=${member_identity}"
+  done < <(
+    ps -axo pid=,pgid=,stat= |
+      awk -v target="$pgid" '$2 == target && $3 !~ /^Z/ { print $1 }'
+  )
+  [[ -n "$member_records" ]] || return 1
+  printf '%s\n' "$member_records"
+}
+
+wh_process_identity_leader_part() {
+  local identity=${1:-}
+  if [[ "$identity" == *"|group="* ]]; then
+    printf '%s\n' "${identity%%|group=*}"
+  else
+    printf '%s\n' "$identity"
+  fi
+}
+
+wh_process_identity_group_part() {
+  local identity=${1:-}
+  [[ "$identity" == *"|group="* ]] || return 1
+  local group_records=${identity#*|group=}
+  [[ -n "$group_records" ]] || return 1
+  printf '%s\n' "$group_records"
+}
+
+# A legacy Linux identity has only the monotonic /proc start-time tick and no
+# boot ID.  It cannot be compared safely with a current identity: the same
+# tick can recur after a reboot.  Keep live owners carrying this format
+# uncertain so callers retain/reject them instead of reclaiming them.
+wh_process_identity_is_legacy() {
+  local identity=${1:-}
+  [[ "$identity" =~ ^proc-starttime:[^:]+$ ]]
+}
+
+# Prove that a process group whose recorded leader has exited still contains
+# an authenticated member captured at launch. A PGID alone is insufficient:
+# it can be reused by an unrelated process group, so no signal is sent unless
+# a recorded PID/incarnation pair is still in the recorded PGID.
+wh_process_group_has_recorded_member() {
+  local pgid=${1:-}
+  local leader_pid=${2:-}
+  local expected_identity=${3:-}
+  local group_records member_record member_pid member_identity current_pgid current_identity
+  [[ "$pgid" =~ ^[1-9][0-9]*$ && "$pgid" -gt 1 ]] || return 1
+  [[ "$leader_pid" =~ ^[1-9][0-9]*$ ]] || return 1
+  group_records=$(wh_process_identity_group_part "$expected_identity" 2>/dev/null || true)
+  [[ -n "$group_records" ]] || return 1
+  while [[ -n "$group_records" ]]; do
+    if [[ "$group_records" == *,* ]]; then
+      member_record=${group_records%%,*}
+      group_records=${group_records#*,}
+    else
+      member_record=$group_records
+      group_records=""
+    fi
+    member_pid=${member_record%%=*}
+    member_identity=${member_record#*=}
+    [[ "$member_pid" =~ ^[1-9][0-9]*$ && "$member_pid" != "$leader_pid" ]] || continue
+    current_pgid=$(wh_process_group_id "$member_pid" 2>/dev/null || true)
+    [[ "$current_pgid" == "$pgid" ]] || continue
+    current_identity=$(wh_process_identity "$member_pid" 2>/dev/null || true)
+    [[ -n "$current_identity" && "$current_identity" == "$member_identity" ]] && return 0
+  done
+  return 1
+}
+
 # Validate a recorded process incarnation before treating it as live.  A PID
 # and PGID are only reusable numbers; the identity binds them to the process
 # that was actually launched by this harness.  Callers that make lifecycle or
@@ -912,14 +1018,15 @@ wh_process_record_alive() {
   local pid=${1:-}
   local pgid=${2:-}
   local expected_identity=${3:-}
-  local current_identity current_pgid
+  local current_identity current_pgid expected_leader_identity
 
   [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
   [[ "$pgid" =~ ^[1-9][0-9]*$ && "$pgid" -gt 1 ]] || return 1
   [[ -n "$expected_identity" ]] || return 1
   wh_pid_alive "$pid" || return 1
+  expected_leader_identity=$(wh_process_identity_leader_part "$expected_identity")
   current_identity=$(wh_process_identity "$pid" 2>/dev/null || true)
-  [[ -n "$current_identity" && "$current_identity" == "$expected_identity" ]] || return 1
+  [[ -n "$current_identity" && "$current_identity" == "$expected_leader_identity" ]] || return 1
   current_pgid=$(wh_process_group_id "$pid" 2>/dev/null || true)
   [[ "$current_pgid" == "$pgid" ]] || return 1
   # The recorded leader itself proves that the group has a member.  Full
@@ -931,10 +1038,13 @@ wh_process_record_alive() {
 
 # Return a stable identity for a process incarnation.  PID and PGID values can
 # be reused after a crash, so cleanup records this value at launch and refuses
-# to signal a replacement process.  Linux exposes a monotonic start-time tick
-# in /proc; macOS falls back to a digest of the PID plus ps launch time.  The
-# fallback deliberately omits command/parent/group fields because exec and
-# launcher handoff are expected to change those while the process lives.
+# to signal a replacement process. Linux binds the monotonic start-time tick
+# in /proc to the current boot ID. Persisted legacy records without that boot
+# binding are retained as unknown while their owner is live, preventing an
+# unsafe cross-boot reclaim; dead legacy owners remain safely stale. macOS
+# falls back to a digest of the PID plus ps launch time. The fallback
+# deliberately omits command/parent/group fields because exec and launcher
+# handoff are expected to change those while the process lives.
 wh_process_identity() {
   local pid=${1:-}
   [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
@@ -947,13 +1057,14 @@ import sys
 
 pid = sys.argv[1]
 contents = pathlib.Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+boot_id = pathlib.Path("/proc/sys/kernel/random/boot_id").read_text(encoding="utf-8").strip()
 right_paren = contents.rfind(") ")
-if right_paren < 0:
+if right_paren < 0 or not boot_id:
     raise SystemExit(1)
 fields = contents[right_paren + 2 :].split()
 if len(fields) <= 19:
     raise SystemExit(1)
-print(f"proc-starttime:{fields[19]}")
+print(f"proc-starttime:{boot_id}:{fields[19]}")
 PY
     return
   fi
@@ -1028,6 +1139,10 @@ wh_lifecycle_lock_acquire() {
       current_identity="${BASH_REMATCH[2]}"
       if ! wh_pid_alive "$current_pid"; then
         observed_identity="stopped"
+      elif wh_process_identity_is_legacy "$current_identity"; then
+        # The owner is live, but a pre-boot_id record cannot be compared
+        # across boots.  Treat it as unknown and retain the lock.
+        observed_identity="legacy-uncertain"
       else
         # A live PID with an unavailable identity is an uncertainty, not a
         # stale owner.  Waiting is the only safe choice because removing the
@@ -1085,16 +1200,17 @@ wh_lifecycle_lock_release() {
   WH_LIFECYCLE_LOCK_RECORD=""
 }
 
-# Terminate only the process group that was recorded at launch.  The caller
+# Terminate only the process group that was recorded at launch. The caller
 # must provide the launcher's PID, the PGID captured from that PID, and the
-# stable leader identity captured at launch; a reused PID or changed group is
-# rejected before any signal is sent.
+# stable identity captured at launch; a reused PID or changed group is
+# rejected before any signal is sent. When the leader has exited, a surviving
+# member identity captured at launch must still prove group ownership.
 wh_terminate_process_group() {
   local pid=${1:-}
   local pgid=${2:-}
   local timeout_ms=${3:-2000}
   local expected_identity=${4:-}
-  local current_pgid current_identity deadline_ms
+  local current_pgid current_identity expected_leader_identity deadline_ms
 
   [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 2
   [[ "$pgid" =~ ^[1-9][0-9]*$ ]] || return 2
@@ -1113,11 +1229,18 @@ wh_terminate_process_group() {
     return 0
   fi
   [[ -n "$expected_identity" ]] || return 2
-  wh_pid_alive "$pid" || return 2
-  current_identity=$(wh_process_identity "$pid" 2>/dev/null || true)
-  [[ -n "$current_identity" && "$current_identity" == "$expected_identity" ]] || return 2
-  current_pgid=$(wh_process_group_id "$pid" 2>/dev/null || true)
-  [[ "$current_pgid" == "$pgid" ]] || return 2
+  expected_leader_identity=$(wh_process_identity_leader_part "$expected_identity")
+  if wh_pid_alive "$pid"; then
+    current_identity=$(wh_process_identity "$pid" 2>/dev/null || true)
+    [[ -n "$current_identity" && "$current_identity" == "$expected_leader_identity" ]] || return 2
+    current_pgid=$(wh_process_group_id "$pid" 2>/dev/null || true)
+    [[ "$current_pgid" == "$pgid" ]] || return 2
+  else
+    # The leader is gone, so its identity cannot be checked directly. A
+    # launch-captured member incarnation is the only safe proof that this
+    # still-live PGID is the original group rather than a reused foreign one.
+    wh_process_group_has_recorded_member "$pgid" "$pid" "$expected_identity" || return 2
+  fi
 
   kill -TERM "-$pgid" >/dev/null 2>&1 || return 1
   deadline_ms=$(( $(wh_clock_ms) + timeout_ms ))
@@ -1147,6 +1270,7 @@ wh_terminate_process_group() {
 # this function call so the child inherits the caller's chosen logs.
 wh_start_managed() {
   local monitor_was_enabled=0
+  local managed_identity group_member_identities
   case "$-" in
     *m*) monitor_was_enabled=1 ;;
   esac
@@ -1161,13 +1285,15 @@ wh_start_managed() {
     set +m
   fi
   WH_MANAGED_PGID="$(wh_process_group_id "$WH_MANAGED_PID" 2>/dev/null || true)"
-  WH_MANAGED_IDENTITY="$(wh_process_identity "$WH_MANAGED_PID" 2>/dev/null || true)"
-  if [[ -z "$WH_MANAGED_PGID" || -z "$WH_MANAGED_IDENTITY" ]]; then
+  managed_identity="$(wh_process_identity "$WH_MANAGED_PID" 2>/dev/null || true)"
+  group_member_identities="$(wh_process_group_member_identities "$WH_MANAGED_PGID" 2>/dev/null || true)"
+  if [[ -z "$WH_MANAGED_PGID" || -z "$managed_identity" || -z "$group_member_identities" ]]; then
     kill "$WH_MANAGED_PID" >/dev/null 2>&1 || true
     wait "$WH_MANAGED_PID" >/dev/null 2>&1 || true
     echo "error: unable to record managed process identity for PID $WH_MANAGED_PID" >&2
     return 1
   fi
+  WH_MANAGED_IDENTITY="${managed_identity}|group=${group_member_identities}"
 }
 
 wh_env_file_get() {

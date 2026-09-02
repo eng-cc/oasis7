@@ -977,7 +977,7 @@ PY
 REAL_STACK_LAUNCHER_PID="$(wh_env_file_get "$REAL_STACK_META" LAUNCHER_PID)"
 REAL_STACK_LAUNCHER_PGID="$(wh_env_file_get "$REAL_STACK_META" LAUNCHER_PGID)"
 REAL_STACK_LAUNCHER_IDENTITY="$(wh_env_file_get "$REAL_STACK_META" LAUNCHER_IDENTITY)"
-[[ "$(wh_process_identity "$REAL_STACK_LAUNCHER_PID")" == "$REAL_STACK_LAUNCHER_IDENTITY" ]] || {
+[[ "$(wh_process_identity "$REAL_STACK_LAUNCHER_PID")" == "$(wh_process_identity_leader_part "$REAL_STACK_LAUNCHER_IDENTITY")" ]] || {
   echo "lifecycle acceptance: real session metadata identity does not match launcher" >&2
   exit 1
 }
@@ -1136,7 +1136,7 @@ assert state["port_reservation_token"], state
 assert state["harness_identity"], state
 assert state["launcher_identity"], state
 assert reservation["owner_pid"] == state["harness_pid"], reservation
-assert reservation["owner_identity"] == state["harness_identity"], reservation
+assert reservation["owner_identity"] == state["harness_identity"].split("|group=", 1)[0], reservation
 PY
 
 status_json="$TMP_DIR/status.json"
