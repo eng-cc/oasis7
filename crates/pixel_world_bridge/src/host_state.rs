@@ -601,12 +601,18 @@ fn is_pending_receipt_stage(stage: Option<&str>) -> bool {
     )
 }
 
+fn is_rejected_receipt_stage(stage: Option<&str>) -> bool {
+    stage == Some("rejected")
+}
+
 fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<&str>) -> Value {
     let recent_feedback = obj(gameplay, "recentFeedback");
     let recent_feedback_action = str_key(recent_feedback, "action");
     let receipt_stage =
         str_key(gameplay, "executionState").or_else(|| str_key(recent_feedback, "stage"));
-    let has_world_delta = !is_pending_receipt_stage(receipt_stage)
+    let rejected = is_rejected_receipt_stage(receipt_stage);
+    let has_world_delta = !rejected
+        && !is_pending_receipt_stage(receipt_stage)
         && (str_key(gameplay, "lastWorldChange").is_some()
             || has_positive_world_delta(recent_feedback));
     let has_player_intent = str_key(gameplay, "acceptedIntentId").is_some()
@@ -648,19 +654,29 @@ fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<
     };
     let confidence = if has_world_delta {
         "world_delta"
-    } else if has_player_intent {
+    } else if has_player_intent && !rejected {
         "accepted_intent"
     } else {
         "none"
     };
     let summary = if present {
-        str_key(gameplay, "lastWorldChange")
-            .or_else(|| str_key(recent_feedback, "effect"))
-            .or_else(|| str_key(gameplay, "acceptedIntentSummary"))
-            .or_else(|| str_key(recent_feedback, "action"))
-            .or_else(|| str_key(gameplay, "executionSummary"))
-            .unwrap_or("")
-            .to_string()
+        if rejected {
+            str_key(recent_feedback, "effect")
+                .or_else(|| str_key(recent_feedback, "reason"))
+                .or_else(|| str_key(recent_feedback, "hint"))
+                .or_else(|| str_key(gameplay, "executionCauseDetail"))
+                .or_else(|| str_key(recent_feedback, "action"))
+                .unwrap_or("")
+                .to_string()
+        } else {
+            str_key(gameplay, "lastWorldChange")
+                .or_else(|| str_key(recent_feedback, "effect"))
+                .or_else(|| str_key(gameplay, "acceptedIntentSummary"))
+                .or_else(|| str_key(recent_feedback, "action"))
+                .or_else(|| str_key(gameplay, "executionSummary"))
+                .unwrap_or("")
+                .to_string()
+        }
     } else {
         tr(
             locale,
@@ -669,12 +685,21 @@ fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<
         )
     };
     let detail = if present {
-        str_key(gameplay, "executionCauseDetail")
-            .or_else(|| str_key(recent_feedback, "reason"))
-            .or_else(|| str_key(recent_feedback, "hint"))
-            .or_else(|| str_key(gameplay, "acceptedIntentDetail"))
-            .or_else(|| str_key(gameplay, "progressDetail"))
-            .map(ToString::to_string)
+        if rejected {
+            str_key(recent_feedback, "reason")
+                .or_else(|| str_key(recent_feedback, "hint"))
+                .or_else(|| str_key(gameplay, "executionCauseDetail"))
+                .or_else(|| str_key(gameplay, "acceptedIntentDetail"))
+                .or_else(|| str_key(gameplay, "progressDetail"))
+                .map(ToString::to_string)
+        } else {
+            str_key(gameplay, "executionCauseDetail")
+                .or_else(|| str_key(recent_feedback, "reason"))
+                .or_else(|| str_key(recent_feedback, "hint"))
+                .or_else(|| str_key(gameplay, "acceptedIntentDetail"))
+                .or_else(|| str_key(gameplay, "progressDetail"))
+                .map(ToString::to_string)
+        }
     } else {
         Some(tr(
             locale,
@@ -712,8 +737,8 @@ fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<
         } else {
             Value::Null
         },
-        "delta_logical_time": if present { obj(recent_feedback, "deltaLogicalTime").clone() } else { Value::Null },
-        "delta_event_seq": if present { obj(recent_feedback, "deltaEventSeq").clone() } else { Value::Null },
+        "delta_logical_time": if present && !rejected { obj(recent_feedback, "deltaLogicalTime").clone() } else { Value::Null },
+        "delta_event_seq": if present && !rejected { obj(recent_feedback, "deltaEventSeq").clone() } else { Value::Null },
     })
 }
 

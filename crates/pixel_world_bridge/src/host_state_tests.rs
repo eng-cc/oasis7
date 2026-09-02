@@ -889,3 +889,50 @@ fn rust_host_state_keeps_acknowledgement_receipts_pending_until_committed_world_
     assert_eq!(committed["delta_logical_time"], 1);
     assert_eq!(committed["delta_event_seq"], 2);
 }
+
+#[test]
+fn rust_host_state_keeps_rejected_unsupported_gameplay_receipt_non_successful() {
+    let mut input = sample_input();
+    input["gameplay"] = json!({
+        "acceptedIntentId": "gameplay_action:unsupported",
+        "acceptedIntentSummary": "Queue unsupported gameplay action for agent-0",
+        "acceptedIntentScope": "gameplay_action",
+        "acceptedIntentTarget": "agent-0",
+        "executionState": "rejected",
+        "executionStateLabel": "Rejected",
+        "executionCauseKind": "unsupported_action",
+        "executionCauseDetail": "unsupported gameplay action protocol",
+        "lastWorldChange": "stale world-change text must not become committed evidence",
+        "recentFeedback": {
+            "action": "gameplay_action:unsupported",
+            "stage": "rejected",
+            "effect": "unsupported gameplay action was rejected before execution",
+            "reason": "unsupported gameplay action",
+            "hint": "Choose a supported gameplay action.",
+            "deltaLogicalTime": 7,
+            "deltaEventSeq": 11
+        }
+    });
+
+    let receipt = build_render_state(&input)["commercial_surface"]["action_receipt"].clone();
+
+    assert_eq!(receipt["present"], true);
+    assert_eq!(receipt["state"], "rejected");
+    assert_eq!(receipt["confidence"], "none");
+    assert_eq!(receipt["title"], "Action rejected");
+    assert_eq!(receipt["delta_logical_time"], Value::Null);
+    assert_eq!(receipt["delta_event_seq"], Value::Null);
+    assert_eq!(
+        receipt["summary"],
+        "unsupported gameplay action was rejected before execution"
+    );
+    assert_eq!(receipt["detail"], "unsupported gameplay action");
+    assert_ne!(receipt["confidence"], "accepted_intent");
+    assert_ne!(receipt["title"], "Action accepted");
+    assert!(
+        !receipt["summary"]
+            .as_str()
+            .unwrap()
+            .contains("stale world-change text")
+    );
+}
