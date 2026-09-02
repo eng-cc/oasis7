@@ -119,6 +119,12 @@ pub(super) fn factory_build_disabled_reason(
     else {
         return None;
     };
+    if state.retired_factory_ids.contains(spec.factory_id.as_str()) {
+        return Some(format!(
+            "factory {} identity is retired; choose a new factory identity instead of rebuilding",
+            spec.factory_id
+        ));
+    }
     if state.factories.contains_key(spec.factory_id.as_str())
         || state
             .pending_factory_builds
@@ -217,12 +223,6 @@ fn factory_site_operational_disabled_reason(
             factory.factory_id
         ));
     };
-    let Some(site_authority_revision) = factory.site_authority_revision else {
-        return Some(format!(
-            "factory {} site authority revision unavailable; refresh the committed factory snapshot",
-            factory.factory_id
-        ));
-    };
     let Some(site) = state.factory_site_authorities.get(factory.site_id.as_str()) else {
         return Some(format!(
             "site authority unavailable: site={} is not registered",
@@ -235,12 +235,9 @@ fn factory_site_operational_disabled_reason(
             factory.factory_id, site.location_id, site_location_id
         ));
     }
-    if site.authority_revision != site_authority_revision {
-        return Some(format!(
-            "factory {} site authority revision is stale: expected {}, got {}",
-            factory.factory_id, site.authority_revision, site_authority_revision
-        ));
-    }
+    // The factory field records the authority receipt captured at construction.
+    // Recipe admission is governed by the current site authority above; an
+    // otherwise valid site revision update must not strand the factory.
     None
 }
 

@@ -98,6 +98,7 @@ impl World {
             Some(receipt.module_id.as_str()),
         )?;
         if Self::product_validation_decision_matches_stack(&receipt.decision, stack) {
+            self.ensure_product_validation_delivery(&receipt, emitted)?;
             return Ok(Some(false));
         }
         self.append_missing_product_validation_blocker(
@@ -109,6 +110,83 @@ impl World {
             emitted,
         )?;
         Ok(Some(true))
+    }
+
+    fn ensure_product_validation_delivery(
+        &mut self,
+        receipt: &ProductValidationReceiptV1,
+        emitted: &mut Vec<WorldEvent>,
+    ) -> Result<(), WorldError> {
+        if self.product_validation_delivery_exists(receipt) {
+            return Ok(());
+        }
+        self.append_event(
+            WorldEventBody::Domain(DomainEvent::ProductValidated {
+                requester_agent_id: receipt.requester_agent_id.clone(),
+                module_id: receipt.module_id.clone(),
+                stack: receipt.stack.clone(),
+                stack_limit: receipt.decision.stack_limit,
+                tradable: receipt.decision.tradable,
+                quality_levels: receipt.decision.quality_levels.clone(),
+                notes: receipt.decision.notes.clone(),
+            }),
+            None,
+        )?;
+        if let Some(event) = self.journal.events.last() {
+            emitted.push(event.clone());
+        }
+        Ok(())
+    }
+
+    fn product_validation_delivery_exists(&self, receipt: &ProductValidationReceiptV1) -> bool {
+        let Some(receipt_position) = self.journal.events.iter().rposition(|event| {
+            matches!(
+                &event.body,
+                WorldEventBody::Domain(DomainEvent::ProductValidationRecorded {
+                    receipt: recorded,
+                }) if recorded == receipt
+            )
+        }) else {
+            return false;
+        };
+        self.journal
+            .events
+            .iter()
+            .skip(receipt_position.saturating_add(1))
+            .take_while(|event| {
+                !matches!(
+                    &event.body,
+                    WorldEventBody::Domain(DomainEvent::ProductValidationRecorded {
+                        receipt: next,
+                    }) if next.job_id == receipt.job_id
+                        && next.validation_index == receipt.validation_index
+                )
+            })
+            .any(|event| Self::product_validation_delivery_matches(event, receipt))
+    }
+
+    fn product_validation_delivery_matches(
+        event: &WorldEvent,
+        receipt: &ProductValidationReceiptV1,
+    ) -> bool {
+        matches!(
+            &event.body,
+            WorldEventBody::Domain(DomainEvent::ProductValidated {
+                requester_agent_id,
+                module_id,
+                stack,
+                stack_limit,
+                tradable,
+                quality_levels,
+                notes,
+            }) if requester_agent_id == &receipt.requester_agent_id
+                && module_id == &receipt.module_id
+                && stack == &receipt.stack
+                && *stack_limit == receipt.decision.stack_limit
+                && *tradable == receipt.decision.tradable
+                && quality_levels == &receipt.decision.quality_levels
+                && notes == &receipt.decision.notes
+        )
     }
 
     pub(super) fn product_validation_decision_matches_stack(

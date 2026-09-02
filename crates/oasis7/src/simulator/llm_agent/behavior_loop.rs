@@ -67,6 +67,7 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
     fn consume_recipe_completion_feedback(&mut self, event: &WorldEvent) -> Option<bool> {
         let runtime_event = event.runtime_event.as_ref()?;
         let RuntimeWorldEventBody::Domain(RuntimeDomainEvent::RecipeCompleted {
+            job_id,
             requester_agent_id,
             recipe_id,
             ..
@@ -79,7 +80,11 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
         {
             return None;
         }
-        Some(self.recipe_coverage.mark_completed(recipe_id.as_str()))
+        if !self.recipe_coverage.completion_receipt_ids.insert(*job_id) {
+            return Some(false);
+        }
+        self.recipe_coverage.mark_completed(recipe_id.as_str());
+        Some(true)
     }
 }
 

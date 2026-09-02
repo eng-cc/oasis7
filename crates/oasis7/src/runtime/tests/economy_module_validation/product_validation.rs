@@ -1,6 +1,9 @@
 use super::*;
 use crate::runtime::{CausedBy, ProductValidationReceiptV1, RuntimeCommittedTickContext};
 
+#[path = "product_validation_delivery.rs"]
+mod delivery;
+
 #[test]
 fn schedule_recipe_with_module_auto_validates_outputs_before_commit() {
     let mut world = logistics_drone_module_recipe_world("factory.recipe.auto_validate");
@@ -200,8 +203,14 @@ fn product_validation_receipt_reuses_decision_after_crash_window_without_module_
                 )
             })
             .count(),
-        0,
-        "recovery must not append a second validation action"
+        1,
+        "recovery must append the missing accepted validation delivery once"
+    );
+    assert!(
+        world.state().agents["builder-a"].mailbox.iter().any(
+            |event| matches!(event, DomainEvent::ProductValidated { stack, .. } if stack.kind == "logistics_drone")
+        ),
+        "accepted validation must be delivered after receipt-only recovery"
     );
 }
 

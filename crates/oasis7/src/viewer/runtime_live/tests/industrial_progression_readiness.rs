@@ -4,6 +4,7 @@ use super::industrial_progression::{
     setup_runtime_industrial_gameplay_session, smelter_schedule_action,
 };
 use super::*;
+use crate::runtime::Action;
 use crate::simulator::{PlayerGameplayGoalKind, PlayerGameplayStageStatus, ResourceKind};
 
 fn submit_iron_ingot_schedule(
@@ -159,6 +160,112 @@ fn runtime_gameplay_smelter_readiness_matches_submit_material_and_owner_power_ch
             .and_then(|factory| factory.production.current_blocker_kind.as_deref()),
         Some("power_shortage"),
         "submit must reject the owner power shortage surfaced by readiness"
+    );
+}
+
+#[test]
+fn runtime_gameplay_actions_keep_retired_starter_factory_rebuild_disabled() {
+    let _guard = lock_test_llm_env();
+    let mut server = setup_industrial_gameplay_with_completed_jobs(73, 6);
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+
+    server.world.submit_action(Action::RecycleFactory {
+        operator_agent_id: agent_id,
+        factory_id: "factory.smelter.mk1".to_string(),
+    });
+    server.world.step().expect("settle starter smelter recycle");
+    assert!(
+        server
+            .world
+            .state()
+            .retired_factory_ids
+            .contains("factory.smelter.mk1")
+    );
+
+    let gameplay = expect_player_gameplay(&mut server, "retired factory rebuild readiness");
+    let action = gameplay
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == "build_factory_smelter_mk1")
+        .expect("retired smelter rebuild action");
+    let disabled_reason = action
+        .disabled_reason
+        .as_deref()
+        .expect("retired factory identity must disable rebuild");
+    assert!(
+        disabled_reason.contains("retired"),
+        "reason={disabled_reason}"
+    );
+    assert!(
+        disabled_reason.contains("factory.smelter.mk1"),
+        "reason={disabled_reason}"
+    );
+}
+
+#[test]
+fn runtime_gameplay_allows_recipe_when_current_site_authority_revision_changes() {
+    let _guard = lock_test_llm_env();
+    let (mut server, agent_id, public_key, private_key) =
+        setup_runtime_industrial_gameplay_session(74);
+    build_first_smelter_via_gameplay_action(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        74,
+    );
+    server
+        .world
+        .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Electricity, i64::MAX)
+        .expect("fund factory owner electricity");
+
+    let factory = server
+        .world
+        .state()
+        .factories
+        .get("factory.smelter.mk1")
+        .expect("smelter factory");
+    let site_id = factory.site_id.clone();
+    let construction_revision = factory
+        .site_authority_revision
+        .expect("construction site authority revision");
+    let mut site_authority = server
+        .world
+        .state()
+        .factory_site_authorities
+        .get(site_id.as_str())
+        .expect("smelter site authority")
+        .clone();
+    site_authority.authority_revision = site_authority.authority_revision.saturating_add(1);
+    assert_ne!(site_authority.authority_revision, construction_revision);
+    server
+        .world
+        .set_factory_site_authority(site_authority)
+        .expect("advance current site authority revision");
+    assert_eq!(
+        server
+            .world
+            .state()
+            .factories
+            .get("factory.smelter.mk1")
+            .and_then(|factory| factory.site_authority_revision),
+        Some(construction_revision),
+        "construction-time revision should remain historical"
+    );
+
+    let gameplay = expect_player_gameplay(&mut server, "current site revision recipe readiness");
+    let action =
+        smelter_schedule_action(&gameplay, crate::viewer::ACTION_SCHEDULE_SMELTER_IRON_INGOT);
+    assert_eq!(
+        action.disabled_reason, None,
+        "current authority should govern recipe readiness even when its revision advanced"
     );
 }
 

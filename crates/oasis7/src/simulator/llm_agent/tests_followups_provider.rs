@@ -10,13 +10,18 @@ fn establish_completed_recipe_for_test<C: LlmCompletionClient>(
     behavior.recipe_coverage.mark_completed(recipe_id);
 }
 
-fn runtime_recipe_completed_event(requester_agent_id: &str, recipe_id: &str) -> WorldEvent {
+fn runtime_recipe_completed_event_with_identity(
+    requester_agent_id: &str,
+    recipe_id: &str,
+    event_id: u64,
+    job_id: u64,
+) -> WorldEvent {
     let runtime_event = RuntimeWorldEvent {
-        id: 12_200,
-        time: 12_201,
+        id: event_id,
+        time: event_id.saturating_add(1),
         caused_by: None,
         body: RuntimeWorldEventBody::Domain(RuntimeDomainEvent::RecipeCompleted {
-            job_id: 12_199,
+            job_id,
             requester_agent_id: requester_agent_id.to_string(),
             factory_id: "factory.alpha".to_string(),
             recipe_id: recipe_id.to_string(),
@@ -39,6 +44,10 @@ fn runtime_recipe_completed_event(requester_agent_id: &str, recipe_id: &str) -> 
         },
         runtime_event: Some(runtime_event),
     }
+}
+
+fn runtime_recipe_completed_event(requester_agent_id: &str, recipe_id: &str) -> WorldEvent {
+    runtime_recipe_completed_event_with_identity(requester_agent_id, recipe_id, 12_200, 12_199)
 }
 
 #[test]
@@ -362,6 +371,31 @@ fn llm_agent_marks_recipe_coverage_from_authoritative_completion_once() {
         behavior.recipe_coverage.completed.len(),
         1,
         "replaying one authoritative receipt must not duplicate coverage state"
+    );
+}
+
+#[test]
+fn llm_agent_keeps_distinct_recipe_completion_jobs_in_feedback_memory() {
+    let recipe_id = "recipe.assembler.control_chip";
+    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), MockClient::default());
+
+    behavior.on_event(&runtime_recipe_completed_event_with_identity(
+        "agent-1", recipe_id, 12_220, 12_219,
+    ));
+    behavior.on_event(&runtime_recipe_completed_event_with_identity(
+        "agent-1", recipe_id, 12_222, 12_221,
+    ));
+    // A replayed receipt may be wrapped in a fresh journal event, but its
+    // durable job identity must still suppress duplicate feedback.
+    behavior.on_event(&runtime_recipe_completed_event_with_identity(
+        "agent-1", recipe_id, 12_224, 12_221,
+    ));
+
+    assert!(behavior.recipe_coverage.is_completed(recipe_id));
+    assert_eq!(
+        behavior.memory.short_term.len(),
+        2,
+        "two distinct completion jobs must remain observable even when they use one recipe"
     );
 }
 

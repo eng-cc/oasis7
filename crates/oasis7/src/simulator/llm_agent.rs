@@ -233,6 +233,7 @@ struct PromptLastActionSummary {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 struct RecipeCoverageProgress {
     completed: BTreeSet<String>,
+    completion_receipt_ids: BTreeSet<u64>,
 }
 
 impl RecipeCoverageProgress {
