@@ -122,7 +122,9 @@ mod tests {
         fs::write(
             &script_path,
             r##"#!/bin/sh
-printf '{"payloads":[{"text":"{\\\"provider_invocation_key\\\":\\\"%s\\\",\\\"agent_session_id\\\":\\\"%s\\\",\\\"idempotency_key\\\":\\\"%s\\\",\\\"session_key\\\":\\\"%s\\\"}"}]}' "$OASIS7_PROVIDER_INVOCATION_KEY" "$OASIS7_AGENT_SESSION_ID" "$OASIS7_PROVIDER_IDEMPOTENCY_KEY" "$OASIS7_PROVIDER_SESSION_KEY"
+cat <<EOF
+{"payloads":[{"text":"{\"provider_invocation_key\":\"$OASIS7_PROVIDER_INVOCATION_KEY\",\"agent_session_id\":\"$OASIS7_AGENT_SESSION_ID\",\"idempotency_key\":\"$OASIS7_PROVIDER_IDEMPOTENCY_KEY\",\"session_key\":\"$OASIS7_PROVIDER_SESSION_KEY\"}"}]}
+EOF
 "##,
         )
         .expect("write provider fallback fixture");
