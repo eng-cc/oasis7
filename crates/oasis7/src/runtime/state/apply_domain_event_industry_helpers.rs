@@ -7,8 +7,48 @@ use super::*;
 const SETTLED_INDUSTRY_HISTORY_LIMIT: usize = 64;
 
 impl WorldState {
+    fn oldest_action_id(ids: &BTreeSet<ActionId>) -> Option<ActionId> {
+        let mut ids = ids.iter();
+        let first = *ids.next()?;
+        let mut previous = first;
+        let mut largest_gap = 0;
+        let mut oldest = first;
+        for current in ids {
+            let gap = current.wrapping_sub(previous);
+            if gap > largest_gap {
+                largest_gap = gap;
+                oldest = *current;
+            }
+            previous = *current;
+        }
+        if first.wrapping_sub(previous) > largest_gap {
+            oldest = first;
+        }
+        Some(oldest)
+    }
+
+    fn is_current_factory_failure_disposition(&self, job_id: ActionId) -> bool {
+        let Some(disposition) = self.factory_production_failure_dispositions.get(&job_id) else {
+            return false;
+        };
+        let Some(factory) = self.factories.get(&disposition.factory_id) else {
+            return false;
+        };
+        let production = &factory.production;
+        production.current_job_id.is_none()
+            && production.current_recipe_id.is_none()
+            && production
+                .current_blocker_action_id
+                .is_none_or(|action_id| action_id == job_id)
+            && production.current_blocker_kind.as_deref() == Some(disposition.blocker_kind.as_str())
+            && production.current_blocker_detail.as_deref()
+                == Some(disposition.blocker_detail.as_str())
+            && !self.pending_recipe_jobs.contains_key(&job_id)
+    }
+
     pub(super) fn compact_settled_industry_history(&mut self) {
         let mut settled_industry_job_ids = BTreeSet::new();
+        let mut protected_failure_job_ids = BTreeSet::new();
         for job_id in self
             .product_validation_attempts
             .keys()
@@ -19,17 +59,24 @@ impl WorldState {
             if self.settled_recipe_job_ids.contains(job_id)
                 && !self.pending_recipe_jobs.contains_key(job_id)
             {
-                settled_industry_job_ids.insert(*job_id);
+                if self.is_current_factory_failure_disposition(*job_id) {
+                    protected_failure_job_ids.insert(*job_id);
+                } else {
+                    settled_industry_job_ids.insert(*job_id);
+                }
             }
         }
 
-        // Action IDs are the only durable ordering available in this state;
-        // retaining the highest IDs gives a deterministic recent window while
-        // avoiding another unbounded recency index.
-        let remove_count = settled_industry_job_ids
-            .len()
-            .saturating_sub(SETTLED_INDUSTRY_HISTORY_LIMIT);
-        for job_id in settled_industry_job_ids.into_iter().take(remove_count) {
+        // Action IDs are monotonically allocated with wrapping rollover. The
+        // largest circular gap identifies the oldest retained identity without
+        // adding another unbounded recency index.
+        let unprotected_limit =
+            SETTLED_INDUSTRY_HISTORY_LIMIT.saturating_sub(protected_failure_job_ids.len());
+        while settled_industry_job_ids.len() > unprotected_limit {
+            let Some(job_id) = Self::oldest_action_id(&settled_industry_job_ids) else {
+                break;
+            };
+            settled_industry_job_ids.remove(&job_id);
             self.product_validation_attempts.remove(&job_id);
             self.product_validation_receipts.remove(&job_id);
             self.recipe_completion_receipts.remove(&job_id);

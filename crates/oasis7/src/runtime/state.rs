@@ -47,6 +47,8 @@ mod apply_domain_event_gameplay;
 mod apply_domain_event_governance_meta;
 mod apply_domain_event_industry;
 mod apply_domain_event_industry_helpers;
+#[cfg(test)]
+mod apply_domain_event_industry_history_tests;
 mod apply_domain_event_intent;
 mod apply_domain_event_main_token;
 mod factory_authority;

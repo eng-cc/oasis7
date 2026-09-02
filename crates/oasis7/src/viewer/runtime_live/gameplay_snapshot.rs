@@ -296,6 +296,9 @@ fn is_fresh_factory_production_failure_disposition(
     // and absence from pending jobs remain the freshness checks below.
     production.current_job_id.is_none()
         && production.current_recipe_id.is_none()
+        && production
+            .current_blocker_action_id
+            .is_none_or(|action_id| action_id == disposition.action_id)
         && production.current_blocker_kind.as_deref() == Some(disposition.blocker_kind.as_str())
         && production.current_blocker_detail.as_deref() == Some(disposition.blocker_detail.as_str())
         && !state

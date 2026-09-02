@@ -1049,7 +1049,6 @@ impl WorldState {
                 }
                 if product_validation_failure {
                     self.settled_recipe_job_ids.insert(*action_id);
-                    self.compact_settled_industry_history();
                 }
                 if let Some(factory) = self.factories.get_mut(factory_id) {
                     if terminated_job.is_some() {
@@ -1064,11 +1063,15 @@ impl WorldState {
                     factory.production.last_blocked_at = Some(now);
                     factory.production.current_blocker_kind = Some(blocker_kind.clone());
                     factory.production.current_blocker_detail = Some(blocker_detail.clone());
+                    factory.production.current_blocker_action_id = Some(*action_id);
                     factory.production.current_job_id = None;
                     factory.production.current_recipe_id = None;
                     factory.production.last_completed_recipe_id = None;
                     factory.production.same_recipe_repeat_count = 0;
                     factory.production.last_completed_canonical_snapshot = None;
+                }
+                if product_validation_failure {
+                    self.compact_settled_industry_history();
                 }
                 if !product_validation_failure {
                     self.refresh_industry_progress_stage(now);
@@ -1099,6 +1102,7 @@ impl WorldState {
                     factory.production.last_resumed_at = Some(now);
                     factory.production.current_blocker_kind = None;
                     factory.production.current_blocker_detail = None;
+                    factory.production.current_blocker_action_id = None;
                 }
                 if let Some(cell) = self.agents.get_mut(requester_agent_id) {
                     cell.last_active = now;
@@ -1115,6 +1119,7 @@ impl WorldState {
                     factory.production.current_recipe_id = None;
                     factory.production.current_blocker_kind = None;
                     factory.production.current_blocker_detail = None;
+                    factory.production.current_blocker_action_id = None;
                     factory.production.last_completed_recipe_id = None;
                     factory.production.same_recipe_repeat_count = 0;
                     factory.production.last_completed_canonical_snapshot = None;

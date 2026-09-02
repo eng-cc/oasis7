@@ -70,6 +70,7 @@ fn failure_disposition_world_state() -> WorldState {
                 current_blocker_detail: Some(
                     "product profile rejected the committed output".to_string(),
                 ),
+                current_blocker_action_id: Some(19),
                 ..FactoryProductionState::default()
             },
             site_authority_revision: None,
