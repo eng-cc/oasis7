@@ -59,6 +59,30 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
     }
 }
 
+impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
+    /// Consume only the authoritative runtime completion receipt for this
+    /// agent. A schedule event is intentionally not enough to close recipe
+    /// coverage: production must reach the runtime's RecipeCompleted state.
+    /// The coverage set makes replay/duplicate delivery idempotent.
+    fn consume_recipe_completion_feedback(&mut self, event: &WorldEvent) -> Option<bool> {
+        let runtime_event = event.runtime_event.as_ref()?;
+        let RuntimeWorldEventBody::Domain(RuntimeDomainEvent::RecipeCompleted {
+            requester_agent_id,
+            recipe_id,
+            ..
+        }) = &runtime_event.body
+        else {
+            return None;
+        };
+        if requester_agent_id != &self.agent_id
+            || !RecipeCoverageProgress::is_tracked(recipe_id.as_str())
+        {
+            return None;
+        }
+        Some(self.recipe_coverage.mark_completed(recipe_id.as_str()))
+    }
+}
+
 impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
     fn agent_id(&self) -> &str {
         self.agent_id.as_str()
@@ -1048,6 +1072,7 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
     }
 
     fn on_event(&mut self, event: &WorldEvent) {
+        let recipe_completion = self.consume_recipe_completion_feedback(event);
         if let WorldEventKind::FactoryBuilt {
             factory_id,
             location_id,
@@ -1066,8 +1091,13 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
             self.depleted_mine_location_cooldowns.clear();
             self.mine_failure_streaks_by_location.clear();
         }
-        self.memory
-            .record_event(event.time, format!("event: {:?}", event.kind));
+        // Replaying the same completion receipt should not add another
+        // feedback entry; the first delivery remains the single coverage
+        // transition and the generic event memory remains bounded in meaning.
+        if recipe_completion != Some(false) {
+            self.memory
+                .record_event(event.time, format!("event: {:?}", event.kind));
+        }
     }
 
     fn take_decision_trace(&mut self) -> Option<AgentDecisionTrace> {

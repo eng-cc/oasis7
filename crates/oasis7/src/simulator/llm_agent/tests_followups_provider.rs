@@ -1,8 +1,44 @@
+use crate::runtime::{
+    DomainEvent as RuntimeDomainEvent, MaterialLedgerId, MaterialStack,
+    WorldEvent as RuntimeWorldEvent, WorldEventBody as RuntimeWorldEventBody,
+};
+
 fn establish_completed_recipe_for_test<C: LlmCompletionClient>(
     behavior: &mut LlmAgentBehavior<C>,
     recipe_id: &str,
 ) {
     behavior.recipe_coverage.mark_completed(recipe_id);
+}
+
+fn runtime_recipe_completed_event(requester_agent_id: &str, recipe_id: &str) -> WorldEvent {
+    let runtime_event = RuntimeWorldEvent {
+        id: 12_200,
+        time: 12_201,
+        caused_by: None,
+        body: RuntimeWorldEventBody::Domain(RuntimeDomainEvent::RecipeCompleted {
+            job_id: 12_199,
+            requester_agent_id: requester_agent_id.to_string(),
+            factory_id: "factory.alpha".to_string(),
+            recipe_id: recipe_id.to_string(),
+            accepted_batches: 1,
+            produce: vec![MaterialStack::new("control_chip", 1)],
+            byproducts: Vec::new(),
+            output_ledger: MaterialLedgerId::world(),
+            bottleneck_tags: Vec::new(),
+            logistics_route_ids: Vec::new(),
+            logistics_path_ids: Vec::new(),
+        }),
+    };
+
+    WorldEvent {
+        id: runtime_event.id,
+        time: runtime_event.time,
+        kind: WorldEventKind::RuntimeEvent {
+            kind: "runtime.economy.recipe_completed".to_string(),
+            domain_kind: Some(format!("recipe={recipe_id}")),
+        },
+        runtime_event: Some(runtime_event),
+    }
 }
 
 #[test]
@@ -271,6 +307,61 @@ fn llm_agent_does_not_count_successful_schedule_result_as_completed_coverage() {
             .recipe_coverage
             .is_completed("recipe.assembler.control_chip"),
         "a successful schedule only starts production and must not close recipe coverage"
+    );
+}
+
+#[test]
+fn llm_agent_marks_recipe_coverage_from_authoritative_completion_once() {
+    let recipe_id = "recipe.assembler.control_chip";
+    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), MockClient::default());
+    let scheduled_event = WorldEvent {
+        id: 12_101,
+        time: 12_102,
+        kind: WorldEventKind::RecipeScheduled {
+            owner: ResourceOwner::Agent {
+                agent_id: "agent-1".to_string(),
+            },
+            factory_id: "factory.alpha".to_string(),
+            recipe_id: recipe_id.to_string(),
+            batches: 1,
+            electricity_cost: 6,
+            hardware_cost: 2,
+            data_output: 1,
+            finished_product_id: "product.component.control_chip".to_string(),
+            finished_product_units: 1,
+        },
+        runtime_event: None,
+    };
+    let action = Action::ScheduleRecipe {
+        owner: ResourceOwner::Agent {
+            agent_id: "agent-1".to_string(),
+        },
+        factory_id: "factory.alpha".to_string(),
+        recipe_id: recipe_id.to_string(),
+        batches: 1,
+    };
+
+    behavior.on_action_result(&ActionResult {
+        action,
+        action_id: 12_100,
+        success: true,
+        event: scheduled_event,
+    });
+    assert!(!behavior.recipe_coverage.is_completed(recipe_id));
+
+    // A completion for another requester is not feedback for this Agent.
+    behavior.on_event(&runtime_recipe_completed_event("agent-2", recipe_id));
+    assert!(!behavior.recipe_coverage.is_completed(recipe_id));
+
+    let completion = runtime_recipe_completed_event("agent-1", recipe_id);
+    behavior.on_event(&completion);
+    behavior.on_event(&completion);
+
+    assert!(behavior.recipe_coverage.is_completed(recipe_id));
+    assert_eq!(
+        behavior.recipe_coverage.completed.len(),
+        1,
+        "replaying one authoritative receipt must not duplicate coverage state"
     );
 }
 

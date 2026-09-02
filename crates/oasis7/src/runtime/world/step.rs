@@ -218,6 +218,9 @@ impl World {
             RejectReason::RuleDenied { notes } => {
                 let joined = notes.join(" | ");
                 let lowercase = joined.to_ascii_lowercase();
+                if lowercase.contains("economy module evaluation failed") {
+                    return Some(("module_failure".to_string(), joined));
+                }
                 if lowercase.contains("stage gate denied")
                     || lowercase.contains("unlock_stage denied")
                     || lowercase.contains("preferred_factory_tags mismatch")

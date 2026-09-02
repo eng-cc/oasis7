@@ -15,6 +15,8 @@ use std::fmt;
 use std::fs;
 use std::path::Path;
 
+use crate::runtime::{DomainEvent as RuntimeDomainEvent, WorldEventBody as RuntimeWorldEventBody};
+
 use super::agent::{
     ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, AgentQuery, AgentQueryResult,
     LlmChatMessageTrace, LlmChatRole, LlmDecisionDiagnostics, LlmEffectIntentTrace,
@@ -250,11 +252,12 @@ impl RecipeCoverageProgress {
             .any(|candidate| candidate == &recipe_id.trim())
     }
 
-    fn mark_completed(&mut self, recipe_id: &str) {
+    fn mark_completed(&mut self, recipe_id: &str) -> bool {
         let normalized = recipe_id.trim();
         if Self::is_tracked(normalized) {
-            self.completed.insert(normalized.to_string());
+            return self.completed.insert(normalized.to_string());
         }
+        false
     }
 
     fn is_completed(&self, recipe_id: &str) -> bool {

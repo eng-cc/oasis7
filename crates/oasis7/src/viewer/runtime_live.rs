@@ -1041,6 +1041,8 @@ impl ViewerRuntimeLiveServer {
                     self.llm_sidecar
                         .notify_action_result_if_needed(runtime_event, event.clone());
                 }
+                self.llm_sidecar
+                    .notify_recipe_completion_if_needed(runtime_event, event.clone());
                 mapped_events.push(event);
             }
             mapped_events.extend(self.pending_virtual_events.drain(..));

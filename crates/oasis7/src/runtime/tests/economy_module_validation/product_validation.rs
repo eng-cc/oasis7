@@ -1,5 +1,5 @@
 use super::*;
-use crate::runtime::{ProductValidationReceiptV1, RuntimeCommittedTickContext};
+use crate::runtime::{CausedBy, ProductValidationReceiptV1, RuntimeCommittedTickContext};
 
 #[test]
 fn schedule_recipe_with_module_auto_validates_outputs_before_commit() {
@@ -692,6 +692,191 @@ fn schedule_recipe_module_failure_is_correlated_action_rejection() {
                 && notes.iter().any(|note| note.contains("economy module evaluation failed"))
         )
     }));
+}
+
+#[test]
+fn schedule_recipe_module_failure_blocks_resets_stable_line_and_recovers() {
+    let factory_id = "factory.recipe.schedule-failure-recovery";
+    let recipe_id = "recipe.assembler.logistics_drone";
+    let plan = RecipeExecutionPlan::accepted(
+        1,
+        vec![
+            MaterialStack::new("motor_mk1", 2),
+            MaterialStack::new("control_chip", 1),
+            MaterialStack::new("chassis_plate", 1),
+        ],
+        vec![MaterialStack::new("logistics_drone", 1)],
+        Vec::new(),
+        10,
+        1,
+    );
+    let mut world = logistics_drone_module_recipe_world(factory_id);
+
+    // Establish a non-zero stable-line candidate through the normal reducer
+    // before exercising the module failure path.
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: factory_id.to_string(),
+        recipe_id: recipe_id.to_string(),
+        plan: plan.clone(),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
+    });
+    world.step().expect("seed stable-line recipe");
+    world.step().expect("complete stable-line recipe");
+    let stable_factory = world
+        .state()
+        .factories
+        .get(factory_id)
+        .expect("factory after stable-line recipe");
+    assert_eq!(stable_factory.production.same_recipe_repeat_count, 1);
+    assert!(
+        stable_factory
+            .production
+            .last_completed_canonical_snapshot
+            .is_some()
+    );
+
+    world.submit_action(Action::ScheduleRecipeWithModule {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: factory_id.to_string(),
+        recipe_id: recipe_id.to_string(),
+        module_id: "m4.recipe.logistics_drone".to_string(),
+        desired_batches: 1,
+        deterministic_seed: 20260902,
+    });
+    let journal_start = world.journal().events.len();
+    let mut sandbox = CaptureContextSandbox::with_outputs(Vec::new());
+    world
+        .step_with_modules(&mut sandbox)
+        .expect("module failure becomes durable blocker");
+    assert_eq!(sandbox.requests.len(), 1);
+    assert_eq!(world.pending_recipe_jobs_len(), 0);
+
+    let action_id = world.journal().events[journal_start..]
+        .iter()
+        .find_map(|event| match &event.body {
+            WorldEventBody::Domain(DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied { notes },
+            }) if notes
+                .iter()
+                .any(|note| note.contains("economy module evaluation failed")) =>
+            {
+                Some(*action_id)
+            }
+            _ => None,
+        })
+        .expect("module failure action rejection");
+    let blocker_event = world.journal().events[journal_start..]
+        .iter()
+        .find(|event| {
+            matches!(
+                &event.body,
+                WorldEventBody::Domain(DomainEvent::FactoryProductionBlocked {
+                    action_id: blocked_action_id,
+                    factory_id: blocked_factory,
+                    recipe_id: blocked_recipe,
+                    blocker_kind,
+                    blocker_detail,
+                    ..
+                }) if *blocked_action_id == action_id
+                    && blocked_factory == factory_id
+                    && blocked_recipe == recipe_id
+                    && blocker_kind == "module_failure"
+                    && blocker_detail.contains("economy module evaluation failed")
+            )
+        })
+        .expect("correlated module-failure blocker");
+    assert_eq!(
+        blocker_event.caused_by,
+        Some(CausedBy::Action(action_id)),
+        "blocker is causally correlated to the rejected action"
+    );
+
+    let blocked_factory = world
+        .state()
+        .factories
+        .get(factory_id)
+        .expect("factory after module failure blocker");
+    assert_eq!(
+        blocked_factory.production.status,
+        FactoryProductionStatus::Blocked
+    );
+    assert_eq!(blocked_factory.production.active_jobs, 0);
+    assert_eq!(blocked_factory.production.same_recipe_repeat_count, 0);
+    assert!(
+        blocked_factory
+            .production
+            .last_completed_recipe_id
+            .is_none()
+    );
+    assert!(
+        blocked_factory
+            .production
+            .last_completed_canonical_snapshot
+            .is_none()
+    );
+    assert_eq!(
+        blocked_factory.production.current_blocker_kind.as_deref(),
+        Some("module_failure")
+    );
+    assert!(
+        blocked_factory
+            .production
+            .current_blocker_detail
+            .as_deref()
+            .is_some_and(|detail| detail.contains("economy module evaluation failed"))
+    );
+
+    // Restore the input ledger and use the direct scheduler as the executable
+    // recovery/recheck path. It must resume the blocked factory and create a
+    // fresh pending job after the reset.
+    for (kind, amount) in [("motor_mk1", 2), ("control_chip", 1), ("chassis_plate", 1)] {
+        world
+            .set_ledger_material_balance(MaterialLedgerId::site("site-1"), kind, amount)
+            .expect("seed recovery input");
+    }
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: factory_id.to_string(),
+        recipe_id: recipe_id.to_string(),
+        plan,
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
+    });
+    let recovery_journal_start = world.journal().events.len();
+    world
+        .step()
+        .expect("direct schedule recovers blocked factory");
+    assert!(
+        world.journal().events[recovery_journal_start..]
+            .iter()
+            .any(|event| {
+                matches!(
+                    &event.body,
+                    WorldEventBody::Domain(DomainEvent::FactoryProductionResumed {
+                        factory_id: resumed_factory,
+                        recipe_id: resumed_recipe,
+                        previous_blocker_kind,
+                        ..
+                    }) if resumed_factory == factory_id
+                        && resumed_recipe == recipe_id
+                        && previous_blocker_kind.as_deref() == Some("module_failure")
+                )
+            })
+    );
+    let recovered_factory = world
+        .state()
+        .factories
+        .get(factory_id)
+        .expect("factory after recovery schedule");
+    assert_eq!(
+        recovered_factory.production.status,
+        FactoryProductionStatus::Running
+    );
+    assert_eq!(recovered_factory.production.active_jobs, 1);
+    assert!(recovered_factory.production.current_blocker_kind.is_none());
 }
 
 #[test]
