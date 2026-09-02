@@ -286,6 +286,98 @@ fn module_factory_revalidates_resolved_spec_before_commit() {
 }
 
 #[test]
+fn rejected_resolved_factory_spec_discards_all_module_side_effects() {
+    let mut world = World::new();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "builder-a".to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("register builder");
+    let factory_id = "factory.module.staged-side-effects";
+    let module_id = "m4.factory.staged-side-effects";
+    let wasm = b"factory-staged-side-effects-module";
+    let wasm_hash = crate::runtime::util::sha256_hex(wasm);
+    let spec = factory_spec(factory_id, 1, 1);
+    prepare_module_test_factory_build(&mut world, "builder-a", "site-1", &spec);
+    world
+        .register_module_artifact(wasm_hash.clone(), wasm)
+        .expect("register reducer artifact");
+    activate_module_manifest_for_test(
+        &mut world,
+        ModuleManifest {
+            module_id: module_id.to_string(),
+            name: "FactoryStagedSideEffects".to_string(),
+            version: "0.1.0".to_string(),
+            kind: ModuleKind::Reducer,
+            role: ModuleRole::Domain,
+            wasm_hash: wasm_hash.clone(),
+            interface_version: "wasm-1".to_string(),
+            abi_contract: ModuleAbiContract::default(),
+            exports: vec!["call".to_string()],
+            subscriptions: Vec::new(),
+            required_caps: Vec::new(),
+            artifact_identity: Some(signed_test_artifact_identity(wasm_hash.as_str())),
+            limits: ModuleLimits {
+                max_mem_bytes: 1024 * 1024,
+                max_gas: 1_000_000,
+                max_call_rate: 1024,
+                max_output_bytes: 1024 * 1024,
+                max_effects: 0,
+                max_emits: 8,
+            },
+        },
+    );
+    bind_factory_build_module(&mut world, factory_id, module_id);
+    world.submit_action(Action::BuildFactoryWithModule {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-1".to_string(),
+        module_id: module_id.to_string(),
+        spec,
+    });
+    let journal_start = world.journal().events.len();
+    let output = ModuleOutput {
+        new_state: Some(vec![0xCA, 0xFE]),
+        effects: Vec::new(),
+        emits: vec![ModuleEmit {
+            kind: "economy.factory_build_decision".to_string(),
+            payload: serde_json::to_value(FactoryBuildDecision::accepted(
+                vec![MaterialStack::new("", 1)],
+                1,
+            ))
+            .expect("serialize invalid resolved factory decision"),
+        }],
+        tick_lifecycle: None,
+        output_bytes: 256,
+    };
+    let mut sandbox = CaptureContextSandbox::with_outputs(vec![output]);
+    world
+        .step_with_modules(&mut sandbox)
+        .expect("invalid resolved spec should be a structured rejection");
+
+    assert_eq!(sandbox.requests.len(), 1);
+    assert_eq!(world.pending_factory_builds_len(), 0);
+    assert!(!world.has_factory(factory_id));
+    assert!(world.state().module_states.get(module_id).is_none());
+    assert!(
+        !world.journal().events[journal_start..].iter().any(|event| {
+            matches!(
+                &event.body,
+                WorldEventBody::ModuleRuntimeCharged(_)
+                    | WorldEventBody::ModuleStateUpdated(_)
+                    | WorldEventBody::ModuleEmitted(_)
+                    | WorldEventBody::EffectQueued(_)
+            )
+        })
+    );
+    assert!(world.journal().events[journal_start..].iter().any(|event| {
+        matches!(
+            &event.body,
+            WorldEventBody::Domain(DomainEvent::ActionRejected { .. })
+        )
+    }));
+}
+
+#[test]
 fn product_validation_recovery_replays_existing_delivery_before_next_output_intent() {
     let mut world = logistics_drone_module_recipe_world("factory.recipe.delivery-checkpoint");
     let observer_wasm = b"product-validation-delivery-observer";

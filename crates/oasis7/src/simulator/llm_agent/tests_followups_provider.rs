@@ -3,6 +3,9 @@ use crate::runtime::{
     WorldEvent as RuntimeWorldEvent, WorldEventBody as RuntimeWorldEventBody,
 };
 
+#[path = "tests_recipe_replay_window.rs"]
+mod tests_recipe_replay_window;
+
 fn establish_completed_recipe_for_test<C: LlmCompletionClient>(
     behavior: &mut LlmAgentBehavior<C>,
     recipe_id: &str,

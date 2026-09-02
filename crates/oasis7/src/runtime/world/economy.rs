@@ -166,7 +166,8 @@ impl World {
                         .agent_resource_balance(builder_agent_id, ResourceKind::Electricity)
                         .unwrap_or(0),
                 };
-                let decision = self.evaluate_factory_build_with_module(
+                let mut module_staged = self.clone();
+                let decision = module_staged.evaluate_factory_build_with_module(
                     module_id.as_str(),
                     envelope.id,
                     &request,
@@ -194,8 +195,8 @@ impl World {
                     resolved_spec.build_time_ticks = decision.duration_ticks;
                 }
 
-                if let WorldEventBody::Domain(DomainEvent::ActionRejected { reason, .. }) = self
-                    .build_factory_to_event(
+                if let WorldEventBody::Domain(DomainEvent::ActionRejected { reason, .. }) =
+                    module_staged.build_factory_to_event(
                         envelope.id,
                         builder_agent_id,
                         site_id,
@@ -205,6 +206,7 @@ impl World {
                 {
                     return Ok(EconomyActionResolution::Rejected(reason));
                 }
+                *self = module_staged;
 
                 Ok(EconomyActionResolution::Resolved(Action::BuildFactory {
                     builder_agent_id: builder_agent_id.clone(),

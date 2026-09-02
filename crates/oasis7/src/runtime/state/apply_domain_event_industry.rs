@@ -968,7 +968,7 @@ impl WorldState {
                 self.settled_recipe_job_ids.insert(*job_id);
                 self.recipe_completion_receipts
                     .insert(*job_id, completion_receipt);
-                self.compact_settled_product_validation_history();
+                self.compact_settled_industry_history();
                 self.industry_progress.completed_recipe_jobs = self
                     .industry_progress
                     .completed_recipe_jobs
@@ -1049,7 +1049,7 @@ impl WorldState {
                 }
                 if product_validation_failure {
                     self.settled_recipe_job_ids.insert(*action_id);
-                    self.compact_settled_product_validation_history();
+                    self.compact_settled_industry_history();
                 }
                 if let Some(factory) = self.factories.get_mut(factory_id) {
                     if terminated_job.is_some() {

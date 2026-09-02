@@ -1,35 +1,39 @@
 use super::*;
 
-// Settled validation payloads are only needed for a bounded replay/audit
-// window.  Unsettled jobs retain their attempt and receipt payloads so a
+// Settled industry payloads are only needed for a bounded replay/audit
+// window. Unsettled jobs retain their attempt and receipt payloads so a
 // checkpoint can still recover the in-flight decision without re-running a
 // module.
-const PRODUCT_VALIDATION_SETTLED_HISTORY_LIMIT: usize = 64;
+const SETTLED_INDUSTRY_HISTORY_LIMIT: usize = 64;
 
 impl WorldState {
-    pub(super) fn compact_settled_product_validation_history(&mut self) {
-        let mut settled_validation_job_ids = BTreeSet::new();
+    pub(super) fn compact_settled_industry_history(&mut self) {
+        let mut settled_industry_job_ids = BTreeSet::new();
         for job_id in self
             .product_validation_attempts
             .keys()
             .chain(self.product_validation_receipts.keys())
+            .chain(self.recipe_completion_receipts.keys())
+            .chain(self.factory_production_failure_dispositions.keys())
         {
             if self.settled_recipe_job_ids.contains(job_id)
                 && !self.pending_recipe_jobs.contains_key(job_id)
             {
-                settled_validation_job_ids.insert(*job_id);
+                settled_industry_job_ids.insert(*job_id);
             }
         }
 
         // Action IDs are the only durable ordering available in this state;
         // retaining the highest IDs gives a deterministic recent window while
         // avoiding another unbounded recency index.
-        let remove_count = settled_validation_job_ids
+        let remove_count = settled_industry_job_ids
             .len()
-            .saturating_sub(PRODUCT_VALIDATION_SETTLED_HISTORY_LIMIT);
-        for job_id in settled_validation_job_ids.into_iter().take(remove_count) {
+            .saturating_sub(SETTLED_INDUSTRY_HISTORY_LIMIT);
+        for job_id in settled_industry_job_ids.into_iter().take(remove_count) {
             self.product_validation_attempts.remove(&job_id);
             self.product_validation_receipts.remove(&job_id);
+            self.recipe_completion_receipts.remove(&job_id);
+            self.factory_production_failure_dispositions.remove(&job_id);
         }
     }
 
@@ -925,8 +929,33 @@ mod tests {
         }
     }
 
+    fn completion_receipt(job_id: ActionId) -> RecipeCompletionReceiptV1 {
+        RecipeCompletionReceiptV1 {
+            job_id,
+            ..RecipeCompletionReceiptV1::default()
+        }
+    }
+
+    fn failure_disposition(job_id: ActionId) -> FactoryProductionFailureDispositionV1 {
+        FactoryProductionFailureDispositionV1 {
+            action_id: job_id,
+            requester_agent_id: "builder-a".to_string(),
+            factory_id: "factory.test".to_string(),
+            recipe_id: "recipe.test".to_string(),
+            blocker_kind: "product_validation".to_string(),
+            blocker_detail: "test rejection".to_string(),
+            disposition_kind: "consumed_lost".to_string(),
+            consumed_inputs: Vec::new(),
+            lost_inputs: Vec::new(),
+            consumed_power: 0,
+            lost_power: 0,
+            next_action: "retry".to_string(),
+            next_recheck: None,
+        }
+    }
+
     #[test]
-    fn settled_product_validation_history_is_bounded_and_restart_stable() {
+    fn settled_industry_history_is_bounded_and_restart_stable() {
         let mut state = WorldState::default();
         for job_id in 1..=96 {
             state.settled_recipe_job_ids.insert(job_id);
@@ -936,6 +965,12 @@ mod tests {
             state
                 .product_validation_receipts
                 .insert(job_id, vec![receipt(job_id)]);
+            state
+                .recipe_completion_receipts
+                .insert(job_id, completion_receipt(job_id));
+            state
+                .factory_production_failure_dispositions
+                .insert(job_id, failure_disposition(job_id));
         }
         let active_job_id = 10_000;
         state
@@ -945,13 +980,19 @@ mod tests {
             .product_validation_receipts
             .insert(active_job_id, vec![receipt(active_job_id)]);
 
-        state.compact_settled_product_validation_history();
+        state.compact_settled_industry_history();
 
         assert_eq!(state.product_validation_attempts.len(), 65);
         assert_eq!(state.product_validation_receipts.len(), 65);
+        assert_eq!(state.recipe_completion_receipts.len(), 65);
+        assert_eq!(state.factory_production_failure_dispositions.len(), 65);
         assert!((1..=32).all(|job_id| {
             !state.product_validation_attempts.contains_key(&job_id)
                 && !state.product_validation_receipts.contains_key(&job_id)
+                && !state.recipe_completion_receipts.contains_key(&job_id)
+                && !state
+                    .factory_production_failure_dispositions
+                    .contains_key(&job_id)
         }));
         assert!(
             state
@@ -978,7 +1019,7 @@ mod tests {
         let job_id = 77;
         let mut state = WorldState::default();
         state.settled_recipe_job_ids.insert(job_id);
-        state.compact_settled_product_validation_history();
+        state.compact_settled_industry_history();
 
         state
             .apply_domain_event(
@@ -996,8 +1037,45 @@ mod tests {
                 0,
             )
             .expect("settled receipt replay is a no-op");
+        state
+            .apply_domain_event(
+                &DomainEvent::RecipeCompleted {
+                    job_id,
+                    requester_agent_id: "builder-a".to_string(),
+                    factory_id: "factory.test".to_string(),
+                    recipe_id: "recipe.test".to_string(),
+                    accepted_batches: 1,
+                    produce: Vec::new(),
+                    byproducts: Vec::new(),
+                    output_ledger: MaterialLedgerId::world(),
+                    bottleneck_tags: Vec::new(),
+                    logistics_route_ids: Vec::new(),
+                    logistics_path_ids: Vec::new(),
+                },
+                0,
+            )
+            .expect("settled completion replay is a no-op");
+        state
+            .apply_domain_event(
+                &DomainEvent::FactoryProductionBlocked {
+                    action_id: job_id,
+                    requester_agent_id: "builder-a".to_string(),
+                    factory_id: "factory.test".to_string(),
+                    recipe_id: "recipe.test".to_string(),
+                    blocker_kind: "product_validation".to_string(),
+                    blocker_detail: "test rejection".to_string(),
+                },
+                0,
+            )
+            .expect("settled failure replay is a no-op");
 
         assert!(!state.product_validation_attempts.contains_key(&job_id));
         assert!(!state.product_validation_receipts.contains_key(&job_id));
+        assert!(!state.recipe_completion_receipts.contains_key(&job_id));
+        assert!(
+            !state
+                .factory_production_failure_dispositions
+                .contains_key(&job_id)
+        );
     }
 }

@@ -2,7 +2,7 @@ use super::{GameplayActionRequest, build_runtime_action_from_gameplay_request};
 use crate::runtime::{Action as RuntimeAction, MaterialLedgerId, WorldState};
 use crate::simulator::{ResourceKind, default_schedule_recipe_readiness};
 use oasis7_wasm_abi::MaterialStack;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) fn schedule_recipe_disabled_reason(
     state: &WorldState,
@@ -133,6 +133,15 @@ pub(super) fn factory_build_disabled_reason(
             spec.factory_id
         ));
     }
+    let Some(factory_profile) = state.factory_profiles.get(spec.factory_id.as_str()) else {
+        return Some(format!(
+            "factory profile unknown: factory_id={}",
+            spec.factory_id
+        ));
+    };
+    if let Some(reason) = factory_profile_mismatch_reason(factory_profile, &spec) {
+        return Some(reason);
+    }
     if let Some(reason) = site_location_authority_disabled_reason(state, agent_id, site_id.as_str())
     {
         return Some(reason);
@@ -201,6 +210,48 @@ pub(super) fn factory_build_disabled_reason(
 
 fn material_balance(materials: &BTreeMap<String, i64>, kind: &str) -> i64 {
     materials.get(kind).copied().unwrap_or_default()
+}
+
+fn factory_profile_mismatch_reason(
+    profile: &crate::runtime::FactoryProfileV1,
+    spec: &oasis7_wasm_abi::FactoryModuleSpec,
+) -> Option<String> {
+    if profile.factory_id != spec.factory_id {
+        return Some(format!(
+            "factory profile identity mismatch: profile={} spec={}",
+            profile.factory_id, spec.factory_id
+        ));
+    }
+    if profile.tier != spec.tier {
+        return Some(format!(
+            "factory profile tier mismatch: factory_id={} profile={} spec={}",
+            spec.factory_id, profile.tier, spec.tier
+        ));
+    }
+    if profile.recipe_slots != spec.recipe_slots {
+        return Some(format!(
+            "factory profile recipe_slots mismatch: factory_id={} profile={} spec={}",
+            spec.factory_id, profile.recipe_slots, spec.recipe_slots
+        ));
+    }
+    let normalized_profile_tags = normalized_factory_tags(&profile.tags);
+    let normalized_spec_tags = normalized_factory_tags(&spec.tags);
+    if normalized_profile_tags != normalized_spec_tags {
+        return Some(format!(
+            "factory profile tags mismatch: factory_id={} profile={:?} spec={:?}",
+            spec.factory_id, normalized_profile_tags, normalized_spec_tags
+        ));
+    }
+    None
+}
+
+fn normalized_factory_tags(tags: &[String]) -> Vec<String> {
+    let normalized: BTreeSet<String> = tags
+        .iter()
+        .map(|tag| tag.trim().to_ascii_lowercase())
+        .filter(|tag| !tag.is_empty())
+        .collect();
+    normalized.into_iter().collect()
 }
 
 fn site_location_authority_disabled_reason(
@@ -346,4 +397,52 @@ fn ledger_material_balance(state: &WorldState, ledger_id: &MaterialLedgerId, kin
         .and_then(|materials| materials.get(kind))
         .copied()
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::FactoryProfileV1;
+
+    fn assembler_profile() -> FactoryProfileV1 {
+        FactoryProfileV1 {
+            factory_id: "factory.assembler.mk1".to_string(),
+            tier: 3,
+            recipe_slots: 2,
+            tags: vec!["assembler".to_string(), "precision".to_string()],
+        }
+    }
+
+    #[test]
+    fn factory_build_readiness_matches_runtime_profile_admission() {
+        let action_id = "build_factory_assembler_mk1";
+        let factory_id = "factory.assembler.mk1";
+
+        let missing_reason =
+            factory_build_disabled_reason(&WorldState::default(), "starter-agent-0", action_id)
+                .expect("missing factory profile must disable the build action");
+        assert!(missing_reason.contains("factory profile unknown"));
+        assert!(missing_reason.contains(factory_id));
+
+        for (label, expected_reason) in [
+            ("tier", "factory profile tier mismatch"),
+            ("recipe slots", "factory profile recipe_slots mismatch"),
+            ("tags", "factory profile tags mismatch"),
+        ] {
+            let mut profile = assembler_profile();
+            match label {
+                "tier" => profile.tier += 1,
+                "recipe slots" => profile.recipe_slots += 1,
+                "tags" => profile.tags = vec!["wrong".to_string()],
+                _ => unreachable!("known factory profile mismatch case"),
+            }
+            let mut state = WorldState::default();
+            state
+                .factory_profiles
+                .insert(factory_id.to_string(), profile);
+            let reason = factory_build_disabled_reason(&state, "starter-agent-0", action_id)
+                .unwrap_or_else(|| panic!("{label} profile mismatch must disable build"));
+            assert!(reason.contains(expected_reason), "{label} reason={reason}");
+        }
+    }
 }

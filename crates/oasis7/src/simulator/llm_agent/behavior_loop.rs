@@ -62,21 +62,38 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
 }
 
 impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
+    fn oldest_recipe_completion_receipt_id(&self) -> Option<u64> {
+        let mut receipt_ids = self.recipe_coverage.completion_receipt_ids.iter();
+        let first = *receipt_ids.next()?;
+        let mut previous = first;
+        let mut largest_gap = 0;
+        let mut oldest = first;
+
+        for current in receipt_ids {
+            let current = *current;
+            let gap = current.wrapping_sub(previous);
+            if gap > largest_gap {
+                largest_gap = gap;
+                oldest = current;
+            }
+            previous = current;
+        }
+
+        if first.wrapping_sub(previous) > largest_gap {
+            oldest = first;
+        }
+        Some(oldest)
+    }
+
     /// Keep a deterministic, bounded identity window for completion replays.
-    /// `BTreeSet` eviction removes the smallest job ID, retaining the newest
-    /// runtime identities without allowing this dedupe state to grow forever.
+    /// The largest circular gap in the ordered IDs identifies the oldest
+    /// receipt in the monotonically allocated sequence, including rollover.
     fn remember_recipe_completion_receipt(&mut self, job_id: u64) -> bool {
         if !self.recipe_coverage.completion_receipt_ids.insert(job_id) {
             return false;
         }
         while self.recipe_coverage.completion_receipt_ids.len() > RECIPE_COMPLETION_REPLAY_WINDOW {
-            let Some(oldest_job_id) = self
-                .recipe_coverage
-                .completion_receipt_ids
-                .iter()
-                .next()
-                .copied()
-            else {
+            let Some(oldest_job_id) = self.oldest_recipe_completion_receipt_id() else {
                 break;
             };
             self.recipe_coverage
