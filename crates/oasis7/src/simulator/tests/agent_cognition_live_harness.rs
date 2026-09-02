@@ -20,6 +20,7 @@ use crate::simulator::{
     ProviderTraceEnvelope, ProviderTranscriptEntry, h_v1,
 };
 use serde_json::{Value, json};
+use std::time::{Duration, Instant};
 
 const AGENT_ID: &str = "agent-live-harness";
 const SESSION_ID: &str = "session-live-harness";
@@ -33,6 +34,7 @@ const MAX_PROVIDER_TRANSCRIPT_ENTRY_BYTES: usize = 2 * 1024;
 const MAX_PROVIDER_TOOL_TRACE_ENTRY_BYTES: usize = 1024;
 const MAX_PROVIDER_SUMMARY_BYTES: usize = 1024;
 const MAX_PROVIDER_TRACE_BYTES: usize = 32 * 1024;
+const ACTOR_COMPLETION_TIMEOUT: Duration = Duration::from_secs(10);
 
 fn host_memory() -> MemoryContextSnapshotV1 {
     let mut snapshot = MemoryContextSnapshotV1 {
@@ -164,7 +166,8 @@ fn provider_failure_runner() -> AsyncAgentRunner {
 }
 
 fn completed_turn(runner: &mut AsyncAgentRunner) -> crate::simulator::AsyncAgentTurnOutcome {
-    for _ in 0..1024 {
+    let deadline = Instant::now() + ACTOR_COMPLETION_TIMEOUT;
+    loop {
         if let Some(outcome) = runner
             .poll_completed()
             .expect("poll target actor")
@@ -173,9 +176,11 @@ fn completed_turn(runner: &mut AsyncAgentRunner) -> crate::simulator::AsyncAgent
         {
             return outcome;
         }
+        if Instant::now() >= deadline {
+            panic!("target actor did not complete before {ACTOR_COMPLETION_TIMEOUT:?} deadline");
+        }
         std::thread::sleep(std::time::Duration::from_millis(1));
     }
-    panic!("target actor did not complete within bounded polling budget");
 }
 
 fn assert_provider_record_has<T: serde::Serialize>(recorded_wire: &str, field: &str, expected: &T) {
