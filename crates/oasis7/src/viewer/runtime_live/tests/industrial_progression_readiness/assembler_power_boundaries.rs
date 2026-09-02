@@ -12,6 +12,13 @@ fn runtime_gameplay_actions_enable_assembler_motor_at_runtime_power_boundary() {
         private_key.as_str(),
         52,
     );
+    settle_one_smelter_iron_ingot_job(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        53,
+    );
     build_first_assembler_via_gameplay_action(
         &mut server,
         agent_id.as_str(),
@@ -66,6 +73,13 @@ fn runtime_gameplay_actions_enable_assembler_drone_at_runtime_power_boundary() {
         public_key.as_str(),
         private_key.as_str(),
         53,
+    );
+    settle_one_smelter_iron_ingot_job(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        54,
     );
     build_first_assembler_via_gameplay_action(
         &mut server,

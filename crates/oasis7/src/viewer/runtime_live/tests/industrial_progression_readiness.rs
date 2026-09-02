@@ -8,6 +8,7 @@ use crate::runtime::{Action, ProductProfileV1, RecipeProfileV1};
 use crate::simulator::{PlayerGameplayGoalKind, PlayerGameplayStageStatus, ResourceKind};
 
 mod assembler_power_boundaries;
+mod starter_chain_prerequisite;
 
 fn submit_iron_ingot_schedule(
     server: &mut ViewerRuntimeLiveServer,
@@ -35,6 +36,24 @@ fn submit_iron_ingot_schedule(
         .world
         .step()
         .expect("settle rejected iron ingot schedule");
+}
+
+fn settle_one_smelter_iron_ingot_job(
+    server: &mut ViewerRuntimeLiveServer,
+    agent_id: &str,
+    public_key: &str,
+    private_key: &str,
+    nonce: u64,
+) {
+    let completed_before = server.world.state().industry_progress.completed_recipe_jobs;
+    submit_iron_ingot_schedule(server, agent_id, public_key, private_key, nonce);
+    for _ in 0..12 {
+        server.world.step().expect("settle starter smelter recipe");
+        if server.world.state().industry_progress.completed_recipe_jobs > completed_before {
+            return;
+        }
+    }
+    panic!("expected starter smelter recipe to settle");
 }
 
 fn seed_assembler_site_materials(server: &mut ViewerRuntimeLiveServer, materials: &[(&str, i64)]) {
@@ -125,6 +144,19 @@ fn runtime_live_formal_bootstrap_keeps_smelter_and_assembler_builds_ready() {
             world.step().expect("complete formal smelter construction");
         }
     }
+    let completed_smelter_jobs_before = world.state().industry_progress.completed_recipe_jobs;
+    for _ in 0..12 {
+        world
+            .step()
+            .expect("complete formal starter smelter recipe");
+        if world.state().industry_progress.completed_recipe_jobs > completed_smelter_jobs_before {
+            break;
+        }
+    }
+    assert!(
+        world.state().industry_progress.completed_recipe_jobs > completed_smelter_jobs_before,
+        "formal bootstrap must settle the starter smelter recipe before assembler build"
+    );
 
     let after_first_run = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
         world.state(),
@@ -830,6 +862,13 @@ fn runtime_gameplay_actions_allow_assembler_build_from_authoritative_builder_led
         private_key.as_str(),
         35,
     );
+    settle_one_smelter_iron_ingot_job(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        36,
+    );
     let agent_ledger = crate::runtime::MaterialLedgerId::agent(agent_id.as_str());
     server
         .world
@@ -867,6 +906,13 @@ fn runtime_gameplay_actions_allow_build_when_profile_kind_differs_from_factory_i
         public_key.as_str(),
         private_key.as_str(),
         42,
+    );
+    settle_one_smelter_iron_ingot_job(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        43,
     );
 
     let mut profile = server
@@ -921,6 +967,13 @@ fn runtime_gameplay_actions_do_not_enable_assembler_build_from_world_ledger() {
         public_key.as_str(),
         private_key.as_str(),
         37,
+    );
+    settle_one_smelter_iron_ingot_job(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        38,
     );
     let builder_ledger = crate::runtime::MaterialLedgerId::agent(agent_id.as_str());
     let world_ledger = crate::runtime::MaterialLedgerId::world();
@@ -1027,6 +1080,13 @@ fn runtime_gameplay_actions_keep_assembler_build_disabled_when_cost_is_split_acr
         private_key.as_str(),
         36,
     );
+    settle_one_smelter_iron_ingot_job(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        37,
+    );
     let agent_ledger = crate::runtime::MaterialLedgerId::agent(agent_id.as_str());
     server
         .world
@@ -1070,6 +1130,13 @@ fn runtime_gameplay_actions_do_not_enable_assembler_schedule_from_world_ledger()
         public_key.as_str(),
         private_key.as_str(),
         40,
+    );
+    settle_one_smelter_iron_ingot_job(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        41,
     );
     build_first_assembler_via_gameplay_action(
         &mut server,

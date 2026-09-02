@@ -1,8 +1,64 @@
 use super::*;
-use crate::runtime::FACTORY_BUILD_STARTED_MODERN_VERSION;
+use crate::runtime::{FACTORY_BUILD_STARTED_MODERN_VERSION, RecipeCompletionReceiptV1};
 use oasis7_wasm_abi::FactoryModuleSpec;
 
+const STARTER_SMELTER_FACTORY_ID: &str = "factory.smelter.mk1";
+const STARTER_SMELTER_RECIPE_ID: &str = "recipe.smelter.iron_ingot";
+const STARTER_ASSEMBLER_FACTORY_ID: &str = "factory.assembler.mk1";
+
+fn receipt_produces_starter_iron(receipt: &RecipeCompletionReceiptV1) -> bool {
+    receipt
+        .produce
+        .iter()
+        .any(|stack| stack.kind == "iron_ingot" && stack.amount > 0)
+}
+
 impl World {
+    fn starter_assembler_build_blocker(&self, factory_id: &str) -> Option<String> {
+        if factory_id != STARTER_ASSEMBLER_FACTORY_ID {
+            return None;
+        }
+
+        let Some(smelter) = self.state.factories.get(STARTER_SMELTER_FACTORY_ID) else {
+            return Some(format!(
+                "starter assembler requires a completed starter Smelter production receipt: complete {STARTER_SMELTER_RECIPE_ID} on {STARTER_SMELTER_FACTORY_ID} before building {STARTER_ASSEMBLER_FACTORY_ID}"
+            ));
+        };
+        let matching_receipt = self
+            .state
+            .recipe_completion_receipts
+            .values()
+            .any(|receipt| {
+                receipt.factory_id == STARTER_SMELTER_FACTORY_ID
+                    && receipt.recipe_id == STARTER_SMELTER_RECIPE_ID
+                    && receipt.output_ledger == smelter.output_ledger
+                    && receipt.accepted_batches > 0
+                    && receipt_produces_starter_iron(receipt)
+            });
+        let matching_legacy_snapshot = smelter.production.last_completed_recipe_id.as_deref()
+            == Some(STARTER_SMELTER_RECIPE_ID)
+            && smelter.production.completed_jobs > 0
+            && smelter
+                .production
+                .last_completed_canonical_snapshot
+                .as_ref()
+                .is_some_and(|snapshot| {
+                    snapshot.recipe_id == STARTER_SMELTER_RECIPE_ID
+                        && snapshot.output_ledger == smelter.output_ledger
+                        && snapshot
+                            .produce
+                            .iter()
+                            .any(|stack| stack.kind == "iron_ingot" && stack.amount > 0)
+                });
+        if matching_receipt || matching_legacy_snapshot {
+            None
+        } else {
+            Some(format!(
+                "starter assembler requires a completed starter Smelter production receipt: complete {STARTER_SMELTER_RECIPE_ID} on {STARTER_SMELTER_FACTORY_ID} before building {STARTER_ASSEMBLER_FACTORY_ID}"
+            ))
+        }
+    }
+
     pub(in crate::runtime::world) fn validate_module_backed_factory_admission(
         &self,
         action_id: ActionId,
@@ -81,6 +137,14 @@ impl World {
                 action_id,
                 reason: RejectReason::RuleDenied {
                     notes: vec![format!("factory already exists: {}", spec.factory_id)],
+                },
+            }));
+        }
+        if let Some(reason) = self.starter_assembler_build_blocker(spec.factory_id.as_str()) {
+            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![reason],
                 },
             }));
         }
