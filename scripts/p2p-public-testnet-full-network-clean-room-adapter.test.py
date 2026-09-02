@@ -17,6 +17,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from unittest import mock
 
 
@@ -448,6 +449,122 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         )
         request["deployment_inventory"] = inventory
         return self._bind_test_ledger(self.planner.build_plan(request))
+
+    def _bind_current_receipt_freshness(
+        self,
+        plan: dict[str, object],
+        *,
+        capture_window_id: str | None = None,
+        rotation_epoch: str | None = None,
+        issued_at: str = "2026-09-01T00:00:00Z",
+        expires_at: str = "2099-01-01T00:00:00Z",
+    ) -> None:
+        """Build v2 inventory/identity receipt envelopes for adapter admission."""
+        freshness = {
+            "capture_window_id": capture_window_id or plan["capture_window_id"],
+            "rotation_epoch": rotation_epoch or self.adapter.CANONICAL_ROTATION_EPOCH,
+            "issued_at": issued_at,
+            "expires_at": expires_at,
+        }
+        inventory_receipt = plan["deployment_inventory"]["receipt"]
+        inventory_receipt.update(
+            {"schema_version": "oasis7.deployment_inventory_receipt.v2", **freshness}
+        )
+        inventory_receipt["canonical_digest"] = self.adapter._canonical_receipt_digest(
+            inventory_receipt, excluded_fields=frozenset({"signed_payload_sha256"})
+        )
+        for node in plan["nodes"]:
+            identity_receipt = node["identity_receipt"]
+            identity_receipt.update(
+                {"schema_version": "oasis7.identity_receipt.v2", **freshness}
+            )
+            identity_receipt["canonical_digest"] = self.adapter._canonical_receipt_digest(
+                identity_receipt, excluded_fields=frozenset({"peer_id"})
+            )
+        # The inventory payload digest excludes its self-referential receipt,
+        # so receipt freshness can be changed without rewriting the payload.
+        inventory_receipt["signed_payload_sha256"] = (
+            self.adapter._canonical_deployment_inventory_payload_digest(
+                plan["deployment_inventory"]
+            )
+        )
+
+    def test_adapter_accepts_current_v2_inventory_and_identity_receipt_freshness(self) -> None:
+        """Current capture/rotation/time bindings are valid for every receipt."""
+        plan = copy.deepcopy(self.plan)
+        self._bind_current_receipt_freshness(plan)
+        plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+        validated = self.adapter.validate_plan(plan)
+        inventory_receipt = validated["deployment_inventory"]["receipt"]
+        self.assertEqual(
+            inventory_receipt["capture_window_id"], validated["capture_window_id"]
+        )
+        self.assertEqual(
+            inventory_receipt["rotation_epoch"], self.adapter.CANONICAL_ROTATION_EPOCH
+        )
+        for node in validated["nodes"]:
+            receipt = node["identity_receipt"]
+            self.assertEqual(receipt["capture_window_id"], validated["capture_window_id"])
+            self.assertEqual(receipt["rotation_epoch"], self.adapter.CANONICAL_ROTATION_EPOCH)
+
+    def test_adapter_rejects_inventory_and_identity_receipt_freshness_drift(self) -> None:
+        """Shape-valid v2 receipts cannot rebind current capture authority."""
+        mutations = (
+            ("missing-capture-window", "capture_window_id", None, r"capture_window_id"),
+            ("capture-window-mismatch", "capture_window_id", "other-window", r"capture_window_id"),
+            ("missing-rotation-epoch", "rotation_epoch", None, r"rotation_epoch"),
+            ("rotation-epoch-mismatch", "rotation_epoch", "rotation-attacker", r"rotation_epoch"),
+            ("missing-issued-at", "issued_at", None, r"issued_at"),
+            ("missing-expires-at", "expires_at", None, r"expires_at"),
+            (
+                "stale-window",
+                "issued_at",
+                "2020-01-01T00:00:00Z",
+                r"issued_at|expires_at|stale|fresh",
+            ),
+            (
+                "future-window",
+                "issued_at",
+                "2099-01-01T00:00:00Z",
+                r"issued_at|future|fresh",
+            ),
+        )
+        scopes = [("inventory", None)] + [
+            ("identity", name) for name in self.planner.NODE_ORDER
+        ]
+        for scope, node_name in scopes:
+            for label, field, value, expected_error in mutations:
+                with self.subTest(scope=scope, node=node_name, mutation=label):
+                    plan = copy.deepcopy(self.plan)
+                    self._bind_current_receipt_freshness(plan)
+                    if scope == "inventory":
+                        receipt = plan["deployment_inventory"]["receipt"]
+                    else:
+                        receipt = next(
+                            node["identity_receipt"]
+                            for node in plan["nodes"]
+                            if node["name"] == node_name
+                        )
+                    if value is None:
+                        receipt.pop(field)
+                    else:
+                        receipt[field] = value
+                        if label == "stale-window":
+                            receipt["expires_at"] = "2020-01-02T00:00:00Z"
+                        elif label == "future-window":
+                            receipt["expires_at"] = "2100-01-01T00:00:00Z"
+                    receipt["canonical_digest"] = self.adapter._canonical_receipt_digest(
+                        receipt,
+                        excluded_fields=frozenset(
+                            {"signed_payload_sha256"}
+                            if scope == "inventory"
+                            else {"peer_id"}
+                        ),
+                    )
+                    plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+                    with self.assertRaises(self.adapter.AdapterError) as raised:
+                        self.adapter.validate_plan(plan)
+                    self.assertRegex(str(raised.exception), expected_error)
 
     def test_rejects_fake_head_signature_and_peer(self) -> None:
         authority = self._authority()
@@ -2058,7 +2175,14 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
             "deployment_epoch": "deployment-epoch-001",
             "inventory_digest": "d" * 64,
         }
-        request = self.fixture._input()
+        # Freeze one current authority instant and derive both the planner
+        # negative request and adapter plan from that same authenticated input.
+        # The planner rebuilds inventory/identity/capture-dependent material;
+        # the adapter plan then receives only the intentional extension plus a
+        # fresh plan digest, so the assertion cannot race the impact file clock.
+        authority_instant = datetime.now(timezone.utc).replace(microsecond=0)
+        base_request = self.fixture._input(authority_instant=authority_instant)
+        request = copy.deepcopy(base_request)
         request["deployment_inventory"]["receipt"]["extensions"] = extension
         planner_error = None
         try:
@@ -2069,7 +2193,7 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         if planner_error is not None:
             self.assertRegex(str(planner_error), r"(?i)receipt|extension|unsafe|schema")
 
-        plan = copy.deepcopy(self.plan)
+        plan = self._bind_test_ledger(self.planner.build_plan(base_request))
         plan["deployment_inventory"]["receipt"]["extensions"] = extension
         plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
         adapter_error = None

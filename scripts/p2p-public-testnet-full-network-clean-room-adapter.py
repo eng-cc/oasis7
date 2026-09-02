@@ -50,9 +50,50 @@ CRYPTO_RECEIPT_SCHEMA = "oasis7.crypto_verifier_receipt.v1"
 PROVIDER_RECEIPT_SCHEMA = "oasis7.clean_room_provider_receipt.v1"
 NO_BACKUP_AUTHORITY_SCHEMA = "oasis7.no_backup_authority.v1"
 RECOVERY_RECEIPT_SCHEMA = "oasis7.recovery_receipt.v1"
-IDENTITY_RECEIPT_SCHEMA = "oasis7.identity_receipt.v1"
-DEPLOYMENT_INVENTORY_SCHEMA = "oasis7.deployment_inventory.v1"
-DEPLOYMENT_INVENTORY_RECEIPT_SCHEMA = "oasis7.deployment_inventory_receipt.v1"
+IDENTITY_RECEIPT_SCHEMA = "oasis7.identity_receipt.v2"
+IDENTITY_RECEIPT_FIELDS = frozenset(
+    {
+        "schema_version",
+        "authenticated",
+        "verified",
+        "signer_id",
+        "verifier_id",
+        "trust_root_id",
+        "signed_payload_sha256",
+        "signature_hex",
+        "canonical_digest",
+        "node_id",
+        "peer_id",
+        "key_sha256",
+        "key_size_bytes",
+        "key_mode",
+        "key_uid",
+        "key_gid",
+        "capture_window_id",
+        "rotation_epoch",
+        "issued_at",
+        "expires_at",
+    }
+)
+DEPLOYMENT_INVENTORY_SCHEMA = "oasis7.deployment_inventory.v2"
+DEPLOYMENT_INVENTORY_RECEIPT_SCHEMA = "oasis7.deployment_inventory_receipt.v2"
+DEPLOYMENT_INVENTORY_RECEIPT_FIELDS = frozenset(
+    {
+        "schema_version",
+        "authenticated",
+        "verified",
+        "signer_id",
+        "verifier_id",
+        "trust_root_id",
+        "signed_payload_sha256",
+        "signature_hex",
+        "canonical_digest",
+        "capture_window_id",
+        "rotation_epoch",
+        "issued_at",
+        "expires_at",
+    }
+)
 JOURNAL_SCHEMA = "oasis7.clean_room_mutation_journal.v2"
 LEGACY_JOURNAL_SCHEMA = "oasis7.clean_room_mutation_journal.v1"
 NODE_RECEIPT_SCHEMA = "oasis7.clean_room_node_receipt.v1"
@@ -341,6 +382,31 @@ def _canonical_receipt_digest(
     return hashlib.sha256(material).hexdigest()
 
 
+def _validate_receipt_freshness(
+    receipt: dict[str, Any], label: str, capture_window_id: str
+) -> None:
+    """Require a current, plan-bound v2 receipt freshness tuple."""
+    missing = {
+        "capture_window_id",
+        "rotation_epoch",
+        "issued_at",
+        "expires_at",
+    } - set(receipt)
+    if missing:
+        _fail(f"{label} freshness fields are incomplete: {', '.join(sorted(missing))}")
+    if receipt.get("capture_window_id") != capture_window_id:
+        _fail(f"{label}.capture_window_id does not match the transaction capture window")
+    if receipt.get("rotation_epoch") != CANONICAL_ROTATION_EPOCH:
+        _fail(f"{label}.rotation_epoch is not the governed rotation epoch")
+    issued_at = _parse_utc(receipt.get("issued_at"), f"{label}.issued_at")
+    expires_at = _parse_utc(receipt.get("expires_at"), f"{label}.expires_at")
+    now = dt.datetime.now(dt.timezone.utc)
+    if expires_at <= issued_at or expires_at <= now:
+        _fail(f"{label} freshness window is stale or inverted")
+    if issued_at > now + dt.timedelta(seconds=MAX_CLOCK_SKEW_SECONDS):
+        _fail(f"{label}.issued_at is in the future")
+
+
 def _validate_deployment_inventory(
     plan: dict[str, Any], planner: Any
 ) -> dict[str, Any]:
@@ -364,18 +430,20 @@ def _validate_deployment_inventory(
     if inventory.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID:
         _fail("deployment inventory trust root is not code-owned")
     receipt = _object(inventory.get("receipt"), "deployment inventory receipt")
-    if set(receipt) != {
-        "schema_version",
-        "authenticated",
-        "verified",
-        "signer_id",
-        "verifier_id",
-        "trust_root_id",
-        "signed_payload_sha256",
-        "signature_hex",
-        "canonical_digest",
-    }:
-        _fail("deployment inventory receipt contains an unsafe field")
+    if receipt.get("schema_version") != DEPLOYMENT_INVENTORY_RECEIPT_SCHEMA:
+        _fail("deployment inventory receipt schema is unsupported")
+    if set(receipt) != DEPLOYMENT_INVENTORY_RECEIPT_FIELDS:
+        missing = DEPLOYMENT_INVENTORY_RECEIPT_FIELDS - set(receipt)
+        extra = set(receipt) - DEPLOYMENT_INVENTORY_RECEIPT_FIELDS
+        if missing:
+            _fail(
+                "deployment inventory receipt freshness fields are incomplete: "
+                + ", ".join(sorted(missing))
+            )
+        _fail(
+            "deployment inventory receipt fields are not exact: "
+            + ", ".join(sorted(extra))
+        )
     if (
         receipt.get("schema_version") != DEPLOYMENT_INVENTORY_RECEIPT_SCHEMA
         or receipt.get("authenticated") is not True
@@ -385,6 +453,9 @@ def _validate_deployment_inventory(
         or receipt.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID
     ):
         _fail("deployment inventory receipt is not independently authenticated")
+    _validate_receipt_freshness(
+        receipt, "deployment inventory receipt", plan["capture_window_id"]
+    )
     _reject_secret_fields(receipt, "deployment inventory receipt")
     _nonzero_hex(receipt.get("signed_payload_sha256"), HEX64_RE, "deployment inventory payload")
     _nonzero_hex(receipt.get("signature_hex"), SIGNATURE_RE, "deployment inventory signature")
@@ -791,12 +862,20 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         if _object(node.get("endpoints"), f"{name} endpoints") != planner.CANONICAL_ENDPOINT_INVENTORY[name]:
             _fail(f"{name} endpoint binding is not code-owned")
         identity = _object(node.get("identity_receipt"), f"{name} identity receipt")
-        if set(identity) - {
-            "schema_version", "authenticated", "verified", "signer_id", "verifier_id",
-            "trust_root_id", "signed_payload_sha256", "signature_hex", "canonical_digest",
-            "node_id", "peer_id", "key_sha256", "key_size_bytes", "key_mode", "key_uid", "key_gid",
-        }:
-            _fail(f"{name} identity receipt contains an unsafe field")
+        if identity.get("schema_version") != IDENTITY_RECEIPT_SCHEMA:
+            _fail(f"{name} identity receipt schema is unsupported")
+        if set(identity) != IDENTITY_RECEIPT_FIELDS:
+            missing = IDENTITY_RECEIPT_FIELDS - set(identity)
+            extra = set(identity) - IDENTITY_RECEIPT_FIELDS
+            if missing:
+                _fail(
+                    f"{name} identity receipt freshness fields are incomplete: "
+                    + ", ".join(sorted(missing))
+                )
+            _fail(
+                f"{name} identity receipt fields are not exact: "
+                + ", ".join(sorted(extra))
+            )
         if (
             identity.get("schema_version") != IDENTITY_RECEIPT_SCHEMA
             or identity.get("authenticated") is not True
@@ -807,6 +886,9 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
             or identity.get("node_id") != node["node_id"]
         ):
             _fail(f"{name} identity receipt is not independently authenticated")
+        _validate_receipt_freshness(
+            identity, f"{name} identity receipt", plan["capture_window_id"]
+        )
         _reject_secret_fields(identity, f"{name} identity receipt")
         _nonzero_hex(identity.get("signed_payload_sha256"), HEX64_RE, f"{name} identity payload")
         _nonzero_hex(identity.get("signature_hex"), SIGNATURE_RE, f"{name} identity signature")
@@ -950,7 +1032,13 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     if probe.get("replayed") is not False or probe.get("post_validator_verify") is not True:
         _fail("fresh-root probe is replayed or lacks post-validator verification")
     _validate_no_backup_authority(plan)
-    return {"nodes": by_name, "planner": planner, "plan_digest": actual_digest}
+    return {
+        "nodes": list(by_name.values()),
+        "planner": planner,
+        "plan_digest": actual_digest,
+        "deployment_inventory": deployment_inventory,
+        "capture_window_id": plan["capture_window_id"],
+    }
 
 
 def _parse_utc(value: Any, label: str) -> dt.datetime:
@@ -2478,6 +2566,12 @@ _TRANSPORT_RECEIPT_FIELDS = {
     "signature_hex",
     "canonical_digest",
 }
+_TRANSPORT_INVENTORY_RECEIPT_FIELDS = _TRANSPORT_RECEIPT_FIELDS | {
+    "capture_window_id",
+    "rotation_epoch",
+    "issued_at",
+    "expires_at",
+}
 
 
 def _project_transport_receipt(value: Any, label: str) -> dict[str, Any]:
@@ -2603,8 +2697,10 @@ def _project_transport_inventory(value: Any) -> dict[str, Any]:
         )
         for name in CANONICAL_PEER_REGISTRY
     }
-    inventory["receipt"] = _project_transport_receipt(
-        inventory["receipt"], "transport deployment inventory receipt"
+    inventory["receipt"] = _project_exact_object(
+        inventory["receipt"],
+        _TRANSPORT_INVENTORY_RECEIPT_FIELDS,
+        "transport deployment inventory receipt",
     )
     return inventory
 
@@ -2839,6 +2935,7 @@ def _transport_node(node: dict[str, Any]) -> dict[str, Any]:
         result["identity_receipt"],
         _TRANSPORT_RECEIPT_FIELDS | {
             "node_id", "peer_id", "key_sha256", "key_size_bytes", "key_mode", "key_uid", "key_gid",
+            "capture_window_id", "rotation_epoch", "issued_at", "expires_at",
         },
         "transport node identity receipt",
     )

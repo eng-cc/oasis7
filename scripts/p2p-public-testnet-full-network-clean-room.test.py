@@ -36,11 +36,14 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
     def tearDown(self) -> None:
         self._impact_directory.cleanup()
 
-    def _consumer_impact_reference(self) -> dict[str, str]:
+    def _consumer_impact_reference(
+        self, authority_instant: datetime | None = None
+    ) -> dict[str, str]:
+        authority_instant = authority_instant or datetime.now(timezone.utc)
         record = {
             "impact": "none",
             "evidence_source": "test-fixture-direct-observation",
-            "timestamp": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+            "timestamp": authority_instant.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
             "validators_already_stopped": False,
             "outage_update_channel": "n/a",
             "recovery_update_checkpoint": "n/a",
@@ -74,8 +77,16 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             "canonical_digest": "c" * 64,
         }
 
-    def _identity_receipt(self, node_id: str) -> dict[str, object]:
-        receipt = self._receipt("oasis7.identity_receipt.v1")
+    def _identity_receipt(
+        self,
+        node_id: str,
+        *,
+        capture_window_id: str = "capture-window-20260901-001",
+        rotation_epoch: str | None = None,
+        issued_at: str = "2026-09-01T00:00:00Z",
+        expires_at: str = "2099-01-01T00:00:00Z",
+    ) -> dict[str, object]:
+        receipt = self._receipt("oasis7.identity_receipt.v2")
         receipt.update(
             {
                 "node_id": node_id,
@@ -85,7 +96,14 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 "key_mode": "0600",
                 "key_uid": 0,
                 "key_gid": 0,
+                "capture_window_id": capture_window_id,
+                "rotation_epoch": rotation_epoch or self.module.CANONICAL_ROTATION_EPOCH,
+                "issued_at": issued_at,
+                "expires_at": expires_at,
             }
+        )
+        receipt["canonical_digest"] = self.module._canonical_receipt_digest(
+            receipt, excluded_fields=frozenset({"peer_id"})
         )
         return receipt
 
@@ -122,6 +140,10 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
         expected_uid: int = 0,
         expected_gid: int = 0,
         include_layout: bool = True,
+        capture_window_id: str = "capture-window-20260901-001",
+        rotation_epoch: str | None = None,
+        issued_at: str = "2026-09-01T00:00:00Z",
+        expires_at: str = "2099-01-01T00:00:00Z",
     ) -> dict[str, object]:
         inventory_nodes: dict[str, dict[str, object]] = {}
         for node in nodes:
@@ -157,20 +179,70 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 ]
             inventory_nodes[str(node["name"])] = entry
         inventory = {
-            "schema_version": "oasis7.deployment_inventory.v1",
+            "schema_version": "oasis7.deployment_inventory.v2",
             "authenticated": True,
             "verified": True,
             "signer_id": "governance-signer",
             "trust_root_id": "oasis7-public-testnet-governance-root-v1",
             "nodes": inventory_nodes,
-            "receipt": self._receipt("oasis7.deployment_inventory_receipt.v1"),
+            "receipt": self._receipt("oasis7.deployment_inventory_receipt.v2"),
         }
+        inventory["receipt"].update(
+            {
+                "capture_window_id": capture_window_id,
+                "rotation_epoch": rotation_epoch or self.module.CANONICAL_ROTATION_EPOCH,
+                "issued_at": issued_at,
+                "expires_at": expires_at,
+            }
+        )
+        inventory["receipt"]["canonical_digest"] = self.module._canonical_receipt_digest(
+            inventory["receipt"], excluded_fields=frozenset({"signed_payload_sha256"})
+        )
         inventory["receipt"]["signed_payload_sha256"] = (
             self.module._canonical_deployment_inventory_payload_digest(inventory)
         )
         return inventory
 
-    def _input(self) -> dict[str, object]:
+    def _bind_current_receipt_freshness(
+        self,
+        request: dict[str, object],
+        *,
+        capture_window_id: str | None = None,
+        rotation_epoch: str | None = None,
+        issued_at: str = "2026-09-01T00:00:00Z",
+        expires_at: str = "2099-01-01T00:00:00Z",
+    ) -> None:
+        """Build the v2 receipt envelope used by the freshness contract."""
+        freshness = {
+            "capture_window_id": capture_window_id or request["capture_window_id"],
+            "rotation_epoch": rotation_epoch or self.module.CANONICAL_ROTATION_EPOCH,
+            "issued_at": issued_at,
+            "expires_at": expires_at,
+        }
+        inventory_receipt = request["deployment_inventory"]["receipt"]
+        inventory_receipt.update(
+            {"schema_version": "oasis7.deployment_inventory_receipt.v2", **freshness}
+        )
+        inventory_receipt["canonical_digest"] = self.module._canonical_receipt_digest(
+            inventory_receipt, excluded_fields=frozenset({"signed_payload_sha256"})
+        )
+        for node in request["nodes"]:
+            identity_receipt = node["identity_receipt"]
+            identity_receipt.update(
+                {"schema_version": "oasis7.identity_receipt.v2", **freshness}
+            )
+            identity_receipt["canonical_digest"] = self.module._canonical_receipt_digest(
+                identity_receipt, excluded_fields=frozenset({"peer_id"})
+            )
+        # Receipt freshness is independent metadata; the inventory payload
+        # digest still covers the complete caller-supplied node inventory.
+        inventory_receipt["signed_payload_sha256"] = (
+            self.module._canonical_deployment_inventory_payload_digest(
+                request["deployment_inventory"]
+            )
+        )
+
+    def _input(self, *, authority_instant: datetime | None = None) -> dict[str, object]:
         transaction_id = "txn-clean-room-001"
         capture_window_id = "capture-window-20260901-001"
         task_uid = "task_174f0a5a87394012b071171cc4a52372"
@@ -184,7 +256,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             "trust_root_id": "oasis7-public-testnet-governance-root-v1",
             "verifier_id": "governed-receipt-verifier",
         }
-        consumer_impact_record = self._consumer_impact_reference()
+        consumer_impact_record = self._consumer_impact_reference(authority_instant)
         authority_bindings["consumer_impact_record"] = dict(consumer_impact_record)
         execution_bindings = {
             "execution_records_root": {
@@ -1342,6 +1414,78 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             self.assertEqual(plan["execution"]["mode"], "plan-only")
             self.assertFalse(plan["execution"]["plan_is_apply_proof"])
             self.assertFalse(plan["execution"]["provider_mutation_performed"])
+
+    def test_plan_accepts_current_v2_inventory_and_identity_receipt_freshness(self) -> None:
+        """Current capture/rotation/time bindings are valid for every receipt."""
+        request = self._input()
+        self._bind_current_receipt_freshness(request)
+        plan = self.module.build_plan(request)
+        inventory_receipt = plan["deployment_inventory"]["receipt"]
+        self.assertEqual(
+            inventory_receipt["capture_window_id"], plan["capture_window_id"]
+        )
+        self.assertEqual(
+            inventory_receipt["rotation_epoch"], self.module.CANONICAL_ROTATION_EPOCH
+        )
+        for node in plan["nodes"]:
+            receipt = node["identity_receipt"]
+            self.assertEqual(receipt["capture_window_id"], plan["capture_window_id"])
+            self.assertEqual(receipt["rotation_epoch"], self.module.CANONICAL_ROTATION_EPOCH)
+
+    def test_plan_rejects_inventory_and_identity_receipt_freshness_drift(self) -> None:
+        """Shape-valid v2 receipts cannot rebind current capture authority."""
+        mutations = (
+            ("missing-capture-window", "capture_window_id", None, r"capture_window_id"),
+            ("capture-window-mismatch", "capture_window_id", "other-window", r"capture_window_id"),
+            ("missing-rotation-epoch", "rotation_epoch", None, r"rotation_epoch"),
+            ("rotation-epoch-mismatch", "rotation_epoch", "rotation-attacker", r"rotation_epoch"),
+            ("missing-issued-at", "issued_at", None, r"issued_at"),
+            ("missing-expires-at", "expires_at", None, r"expires_at"),
+            (
+                "stale-window",
+                "issued_at",
+                "2020-01-01T00:00:00Z",
+                r"issued_at|expires_at|stale|fresh",
+            ),
+            (
+                "future-window",
+                "issued_at",
+                "2099-01-01T00:00:00Z",
+                r"issued_at|future|fresh",
+            ),
+        )
+        for scope, node_name in (("inventory", None), *(('identity', name) for name in self.module.NODE_ORDER)):
+            for label, field, value, expected_error in mutations:
+                with self.subTest(scope=scope, node=node_name, mutation=label):
+                    request = self._input()
+                    self._bind_current_receipt_freshness(request)
+                    if scope == "inventory":
+                        receipt = request["deployment_inventory"]["receipt"]
+                    else:
+                        receipt = next(
+                            node["identity_receipt"]
+                            for node in request["nodes"]
+                            if node["name"] == node_name
+                        )
+                    if value is None:
+                        receipt.pop(field)
+                    else:
+                        receipt[field] = value
+                        if label == "stale-window":
+                            receipt["expires_at"] = "2020-01-02T00:00:00Z"
+                        elif label == "future-window":
+                            receipt["expires_at"] = "2100-01-01T00:00:00Z"
+                    receipt["canonical_digest"] = self.module._canonical_receipt_digest(
+                        receipt,
+                        excluded_fields=frozenset(
+                            {"signed_payload_sha256"}
+                            if scope == "inventory"
+                            else {"peer_id"}
+                        ),
+                    )
+                    with self.assertRaises(SystemExit) as raised:
+                        self.module.build_plan(request)
+                    self.assertRegex(str(raised.exception), expected_error)
 
     def _explicit_inventory(self, request: dict[str, object]) -> dict[str, object]:
         inventory = self._deployment_inventory(request["nodes"])

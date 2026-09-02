@@ -22,7 +22,8 @@ from typing import Any, NoReturn
 
 INPUT_SCHEMA = "oasis7.public_testnet_full_network_clean_room_input.v1"
 PLAN_SCHEMA = "oasis7.public_testnet_full_network_clean_room_plan.v1"
-DEPLOYMENT_INVENTORY_SCHEMA = "oasis7.deployment_inventory.v1"
+DEPLOYMENT_INVENTORY_SCHEMA = "oasis7.deployment_inventory.v2"
+IDENTITY_RECEIPT_SCHEMA = "oasis7.identity_receipt.v2"
 DEPLOYMENT_INVENTORY_RECEIPT_FIELDS = frozenset(
     {
         "schema_version",
@@ -34,6 +35,34 @@ DEPLOYMENT_INVENTORY_RECEIPT_FIELDS = frozenset(
         "signed_payload_sha256",
         "signature_hex",
         "canonical_digest",
+        "capture_window_id",
+        "rotation_epoch",
+        "issued_at",
+        "expires_at",
+    }
+)
+IDENTITY_RECEIPT_FIELDS = frozenset(
+    {
+        "schema_version",
+        "authenticated",
+        "verified",
+        "signer_id",
+        "verifier_id",
+        "trust_root_id",
+        "signed_payload_sha256",
+        "signature_hex",
+        "canonical_digest",
+        "node_id",
+        "peer_id",
+        "key_sha256",
+        "key_size_bytes",
+        "key_mode",
+        "key_uid",
+        "key_gid",
+        "capture_window_id",
+        "rotation_epoch",
+        "issued_at",
+        "expires_at",
     }
 )
 OID_RE = re.compile(r"^[0-9a-fA-F]{40,64}$")
@@ -397,6 +426,31 @@ def _canonical_receipt_digest(
     return hashlib.sha256(material).hexdigest()
 
 
+def _validate_receipt_freshness(
+    receipt: dict[str, Any], label: str, capture_window_id: str
+) -> None:
+    """Require a current, plan-bound v2 receipt freshness tuple."""
+    missing = {
+        "capture_window_id",
+        "rotation_epoch",
+        "issued_at",
+        "expires_at",
+    } - set(receipt)
+    if missing:
+        die(f"{label} freshness fields are incomplete: {', '.join(sorted(missing))}")
+    if receipt.get("capture_window_id") != capture_window_id:
+        die(f"{label}.capture_window_id does not match the transaction capture window")
+    if receipt.get("rotation_epoch") != CANONICAL_ROTATION_EPOCH:
+        die(f"{label}.rotation_epoch is not the governed rotation epoch")
+    issued_at = _parse_utc(receipt.get("issued_at"), f"{label}.issued_at")
+    expires_at = _parse_utc(receipt.get("expires_at"), f"{label}.expires_at")
+    now = datetime.now(timezone.utc)
+    if expires_at <= issued_at or expires_at <= now:
+        die(f"{label} freshness window is stale or inverted")
+    if issued_at > now + timedelta(seconds=MAX_CLOCK_SKEW_SECONDS):
+        die(f"{label}.issued_at is in the future")
+
+
 def _normalized_path(raw: Any, platform: str, label: str) -> str:
     value = require_string(raw, label)
     if platform == "windows":
@@ -447,7 +501,9 @@ def _canonical_state_surface_variants(name: str) -> tuple[tuple[str, ...], ...]:
     return (canonical,)
 
 
-def _validate_deployment_inventory(raw: Any, allowed_signers: set[str]) -> dict[str, Any]:
+def _validate_deployment_inventory(
+    raw: Any, allowed_signers: set[str], capture_window_id: str
+) -> dict[str, Any]:
     if raw is None:
         die("deployment_inventory is required and must be independently authenticated")
     inventory = require_object(raw, "deployment_inventory")
@@ -473,14 +529,29 @@ def _validate_deployment_inventory(raw: Any, allowed_signers: set[str]) -> dict[
     receipt = validate_authenticated_receipt(
         inventory.get("receipt"), "deployment_inventory.receipt", allowed_signers
     )
+    if receipt.get("schema_version") != "oasis7.deployment_inventory_receipt.v2":
+        die("deployment_inventory receipt schema is unsupported")
     if set(receipt) != DEPLOYMENT_INVENTORY_RECEIPT_FIELDS:
-        die("deployment_inventory receipt fields are not exact")
+        missing = DEPLOYMENT_INVENTORY_RECEIPT_FIELDS - set(receipt)
+        extra = set(receipt) - DEPLOYMENT_INVENTORY_RECEIPT_FIELDS
+        if missing:
+            die(
+                "deployment_inventory receipt freshness fields are incomplete: "
+                + ", ".join(sorted(missing))
+            )
+        die(
+            "deployment_inventory receipt fields are not exact: "
+            + ", ".join(sorted(extra))
+        )
     if (
         receipt.get("signer_id") != signer_id
         or receipt.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID
         or receipt.get("verifier_id") != CANONICAL_VERIFIER_ID
     ):
         die("deployment_inventory receipt signer, verifier, or trust root drifted")
+    _validate_receipt_freshness(
+        receipt, "deployment_inventory.receipt", capture_window_id
+    )
     # Authenticate the exact caller-supplied payload before any path or field
     # normalization. Normalization must never repair or rewrite an incoming
     # signed payload digest.
@@ -1079,6 +1150,7 @@ def _validate_nodes(
     allowed_signers: set[str],
     deployment_inventory: dict[str, Any],
     inventory_overrides_observed_layout: bool,
+    capture_window_id: str,
 ) -> dict[str, dict[str, Any]]:
     if not isinstance(nodes, list) or len(nodes) != len(NODE_ORDER):
         die("nodes must contain exactly the five managed nodes")
@@ -1097,9 +1169,26 @@ def _validate_nodes(
         identity_receipt = dict(
             require_object(node.get("identity_receipt"), f"{name}.identity_receipt")
         )
+        if identity_receipt.get("schema_version") != IDENTITY_RECEIPT_SCHEMA:
+            die(f"{name}.identity_receipt schema is unsupported")
+        if set(identity_receipt) != IDENTITY_RECEIPT_FIELDS:
+            missing = IDENTITY_RECEIPT_FIELDS - set(identity_receipt)
+            extra = set(identity_receipt) - IDENTITY_RECEIPT_FIELDS
+            if missing:
+                die(
+                    f"{name}.identity_receipt freshness fields are incomplete: "
+                    + ", ".join(sorted(missing))
+                )
+            die(
+                f"{name}.identity_receipt fields are not exact: "
+                + ", ".join(sorted(extra))
+            )
         if identity_receipt.get("node_id") != expected["node_id"]:
             die(f"{name}.identity_receipt node_id binding mismatch")
         validate_authenticated_receipt(identity_receipt, f"{name}.identity_receipt", allowed_signers)
+        _validate_receipt_freshness(
+            identity_receipt, f"{name}.identity_receipt", capture_window_id
+        )
         peer_id = require_string(identity_receipt.get("peer_id"), f"{name}.identity_receipt.peer_id")
         expected_peer_id = governed.get("peer_id", CANONICAL_PEER_REGISTRY[name])
         if peer_id != expected_peer_id:
@@ -1121,6 +1210,11 @@ def _validate_nodes(
         expected_gid = governed["expected_key_gid"]
         if identity_receipt["key_uid"] != expected_uid or identity_receipt["key_gid"] != expected_gid:
             die(f"{name}.identity_receipt uid/gid do not match independently authenticated deployment inventory")
+        # The deployment inventory is the independently authenticated source
+        # for mutable identity fields (including service UID/GID). Recompute
+        # the derived identity canonical digest after those fields are checked;
+        # the inventory receipt's signed payload remains immutable and is
+        # validated before normalization above.
         identity_receipt["canonical_digest"] = _canonical_receipt_digest(
             identity_receipt, excluded_fields=frozenset({"peer_id"})
         )
@@ -1529,10 +1623,17 @@ def build_plan(request: dict[str, Any]) -> dict[str, Any]:
     probe = _validate_probe(request.get("fresh_root_probe"), truth, allowed_signers, context)
     has_explicit_inventory = request.get("deployment_inventory") is not None
     deployment_inventory = _validate_deployment_inventory(
-        request.get("deployment_inventory"), allowed_signers
+        request.get("deployment_inventory"),
+        allowed_signers,
+        context["capture_window_id"],
     )
     nodes = _validate_nodes(
-        request.get("nodes"), truth, allowed_signers, deployment_inventory, has_explicit_inventory
+        request.get("nodes"),
+        truth,
+        allowed_signers,
+        deployment_inventory,
+        has_explicit_inventory,
+        context["capture_window_id"],
     )
     credential_nonce_ledger = _validate_credential_nonce_ledger(
         request.get("credential_nonce_ledger"), nodes, context, allowed_signers
