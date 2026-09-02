@@ -800,9 +800,9 @@ fn product_validation_intent_recovery_preserves_predecessor_prologue() {
         "crash and uninterrupted continuation event roots must match"
     );
     assert_eq!(
-        serde_json::to_vec(&crash_recovered.snapshot()).expect("serialize recovered snapshot"),
-        serde_json::to_vec(&uninterrupted.snapshot()).expect("serialize control snapshot"),
-        "crash and uninterrupted continuation durability roots must match"
+        serde_json::to_vec(crash_recovered.state()).expect("serialize recovered state"),
+        serde_json::to_vec(uninterrupted.state()).expect("serialize control state"),
+        "crash and uninterrupted continuation execution states must match"
     );
 }
 
