@@ -77,6 +77,7 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Stable wire projection for one committed world-feed event.
 pub struct WorldFeedEvent {
     #[serde(
         serialize_with = "serialize_u64_as_decimal_string",
