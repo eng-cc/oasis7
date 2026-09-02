@@ -3,8 +3,12 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use super::ExecutionExternalEffectMaterialization;
+use oasis7::runtime::World as RuntimeWorld;
+
 use super::write_bytes_atomic;
+use super::{
+    ExecutionExternalEffectMaterialization, external_effect::execution_world_snapshot_root,
+};
 
 pub(super) const PRODUCT_VALIDATION_INTENT_SCHEMA_V1: u8 = 1;
 const PRODUCT_VALIDATION_INTENT_FILE: &str = "product-validation-intent.json";
@@ -32,6 +36,42 @@ pub(super) struct ProductValidationIntentMarkerV1 {
 
 fn default_schema_version() -> u8 {
     PRODUCT_VALIDATION_INTENT_SCHEMA_V1
+}
+
+/// Classify the durable intent marker against the world currently on disk.
+/// A marker is written before the staged world, so a crash in that small
+/// window leaves the predecessor world and can be safely discarded. Any
+/// other mismatch is fail-closed rather than guessing which generation is
+/// authoritative.
+pub(super) fn world_is_staged_for_product_validation_intent(
+    execution_world: &RuntimeWorld,
+    marker: &ProductValidationIntentMarkerV1,
+    last_applied_committed_height: u64,
+) -> Result<bool, String> {
+    if marker.height != last_applied_committed_height.saturating_add(1) {
+        return Err(format!(
+            "product validation intent marker does not match committed head: marker_height={} last_applied={}",
+            marker.height, last_applied_committed_height
+        ));
+    }
+    if execution_world.state().time == marker.height
+        && execution_world.journal().len() == marker.journal_len
+    {
+        return Ok(true);
+    }
+    if !marker.pre_step_execution_state_root.trim().is_empty()
+        && execution_world.state().time == marker.height.saturating_sub(1)
+        && execution_world_snapshot_root(execution_world)? == marker.pre_step_execution_state_root
+    {
+        return Ok(false);
+    }
+    Err(format!(
+        "product validation intent staged world is inconsistent: height={} world_time={} journal_len={} marker_journal_len={}",
+        marker.height,
+        execution_world.state().time,
+        execution_world.journal().len(),
+        marker.journal_len
+    ))
 }
 
 pub(super) fn product_validation_intent_path(records_dir: &Path) -> PathBuf {

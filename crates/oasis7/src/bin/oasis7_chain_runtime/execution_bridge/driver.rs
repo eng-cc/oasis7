@@ -49,6 +49,7 @@ use super::external_effect::{
 use super::product_validation_intent::{
     ProductValidationIntentMarkerV1, clear_product_validation_intent,
     load_product_validation_intent, persist_product_validation_intent,
+    world_is_staged_for_product_validation_intent,
 };
 pub(crate) use super::simulator_mirror::simulator_world_dir_from_execution_world_dir;
 use super::simulator_mirror::{load_simulator_execution_world, persist_simulator_execution_world};
@@ -103,43 +104,6 @@ pub(crate) struct NodeRuntimeExecutionDriver {
 }
 
 impl NodeRuntimeExecutionDriver {
-    /// Classify the durable intent marker against the world currently on disk.
-    /// A marker is written before the staged world, so a crash in that small
-    /// window leaves the predecessor world and can be safely discarded. Any
-    /// other mismatch is fail-closed rather than guessing which generation is
-    /// authoritative.
-    fn product_validation_intent_world_is_staged(
-        &self,
-        execution_world: &RuntimeWorld,
-        marker: &ProductValidationIntentMarkerV1,
-    ) -> Result<bool, String> {
-        if marker.height != self.state.last_applied_committed_height.saturating_add(1) {
-            return Err(format!(
-                "product validation intent marker does not match committed head: marker_height={} last_applied={}",
-                marker.height, self.state.last_applied_committed_height
-            ));
-        }
-        if execution_world.state().time == marker.height
-            && execution_world.journal().len() == marker.journal_len
-        {
-            return Ok(true);
-        }
-        if !marker.pre_step_execution_state_root.trim().is_empty()
-            && execution_world.state().time == marker.height.saturating_sub(1)
-            && execution_world_snapshot_root(execution_world)?
-                == marker.pre_step_execution_state_root
-        {
-            return Ok(false);
-        }
-        Err(format!(
-            "product validation intent staged world is inconsistent: height={} world_time={} journal_len={} marker_journal_len={}",
-            marker.height,
-            execution_world.state().time,
-            execution_world.journal().len(),
-            marker.journal_len
-        ))
-    }
-
     fn validate_equal_height_replay_identity(
         &self,
         record: &ExecutionBridgeRecord,
@@ -339,9 +303,11 @@ impl NodeRuntimeExecutionDriver {
             {
                 clear_product_validation_intent(driver.records_dir.as_path())?;
                 driver.pending_product_validation_intent = None;
-            } else if !driver
-                .product_validation_intent_world_is_staged(&driver.execution_world, &marker)?
-            {
+            } else if !world_is_staged_for_product_validation_intent(
+                &driver.execution_world,
+                &marker,
+                driver.state.last_applied_committed_height,
+            )? {
                 // The marker exists but the world is still the exact
                 // predecessor. This is the crash window between marker-first
                 // publication and staged-world publication; clear it and let
@@ -643,13 +609,9 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                 computed_action_root, context.action_root
             ));
         }
-
-        // The marker contains the pre-step evidence and is published before
-        // the staged runtime world. On retry, load that continuation and run
-        // the reducer's fail-closed path without resubmitting committed
-        // actions or invoking the validator. If the marker is present but the
-        // durable world is still the exact predecessor, it is the crash
-        // window between those two publications and can be discarded.
+        // The marker carries pre-step evidence and is published before the
+        // staged world; an exact predecessor plus marker is a safe crash
+        // window, while a matching staged world resumes without re-invocation.
         let mut pre_step_execution_state_root = None;
         let mut pre_step_external_effect = None;
         let resume_after_product_validation_intent = if let Some(marker) =
@@ -701,9 +663,11 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                     self.world_dir.as_path(),
                     self.execution_world.release_security_policy().clone(),
                 )?;
-                if self
-                    .product_validation_intent_world_is_staged(&durable_execution_world, &marker)?
-                {
+                if world_is_staged_for_product_validation_intent(
+                    &durable_execution_world,
+                    &marker,
+                    self.state.last_applied_committed_height,
+                )? {
                     self.execution_world = durable_execution_world;
                     self.pending_product_validation_intent = Some(marker);
                     true
