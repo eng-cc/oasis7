@@ -178,7 +178,7 @@ pub struct WorldFeedEnvelope {
 mod tests {
     use super::{
         WorldFeedGapReason, WorldFeedMajorEvent, WorldFeedMajorEventIdentity,
-        WorldFeedMajorEventSource,
+        WorldFeedMajorEventSource, WorldFeedUnavailableReason,
     };
 
     #[test]
@@ -189,6 +189,18 @@ mod tests {
         let decoded: WorldFeedGapReason =
             serde_json::from_value(encoded).expect("decode identity conflict gap reason");
         assert_eq!(decoded, WorldFeedGapReason::EventIdentityConflict);
+    }
+
+    #[test]
+    fn unavailable_reasons_keep_unknown_source_distinct_from_explicit_denial() {
+        let source_unavailable =
+            serde_json::to_value(WorldFeedUnavailableReason::SourceUnavailable)
+                .expect("encode unavailable source reason");
+        let permission_denied = serde_json::to_value(WorldFeedUnavailableReason::PermissionDenied)
+            .expect("encode permission denial reason");
+        assert_eq!(source_unavailable, serde_json::json!("source_unavailable"));
+        assert_eq!(permission_denied, serde_json::json!("permission_denied"));
+        assert_ne!(source_unavailable, permission_denied);
     }
 
     #[test]

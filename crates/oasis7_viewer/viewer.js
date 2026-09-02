@@ -5075,7 +5075,10 @@ function createWorldFeedTransport({ getSocket, getState: getState2, render: rend
     render2();
     return true;
   }
-  function handleWorldFeed(feed) {
+  function handleWorldFeed(feed, sourceSocket = null) {
+    if (sourceSocket && getSocket() !== sourceSocket) {
+      return false;
+    }
     const state2 = getState2();
     const previous = state2.worldFeed;
     const responseGeneration = generation;
@@ -8429,7 +8432,8 @@ function handleAuthoritativeRecoveryError(error) {
   syncHostedSessionRefreshLoop();
   void recoverHostedSessionFromError(error);
 }
-function handleViewerMessage(message) {
+function handleViewerMessage(message, sourceSocket = null) {
+  if (sourceSocket && socket !== sourceSocket) return;
   if (quoteProtocolFacade.handleQuoteViewerMessage(message)) return;
   switch (message?.type) {
     case "hello_ack":
@@ -8453,7 +8457,7 @@ function handleViewerMessage(message) {
       handleSnapshot(message.snapshot);
       break;
     case "world_feed":
-      worldFeedTransport.handleWorldFeed(message.feed);
+      worldFeedTransport.handleWorldFeed(message.feed, sourceSocket);
       break;
     case "event": {
       addRecentEvent(message.event);
@@ -8507,6 +8511,7 @@ function handleViewerMessage(message) {
 }
 function attachSocket(ws) {
   ws.addEventListener("open", () => {
+    if (socket !== ws) return;
     worldFeedTransport.resetGeneration(ws);
     state.connectionStatus = "connected";
     state.lastError = null;
@@ -8522,17 +8527,20 @@ function attachSocket(ws) {
     render();
   });
   ws.addEventListener("message", (event) => {
+    if (socket !== ws) return;
     try {
       const message = JSON.parse(String(event.data || "null"));
-      handleViewerMessage(message);
+      handleViewerMessage(message, ws);
     } catch (error) {
       reportFatalError(String(error), "viewer.parse");
     }
   });
   ws.addEventListener("error", () => {
+    if (socket !== ws) return;
     reportFatalError("websocket error", "viewer.ws");
   });
   ws.addEventListener("close", () => {
+    if (socket !== ws) return;
     worldFeedTransport.markDisconnected(ws);
     state.connectionStatus = "connecting";
     clearHostedRuntimeSyncTimer();

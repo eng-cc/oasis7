@@ -1345,22 +1345,19 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-drawer--diagnostics")).toBeNull();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
-  it("renders exactly one Action Receipt surface while Cinematic View is active", async () => {
-    useTestRustRenderState();
-    await renderPixelWorldHost(
-      sampleSnapshot(),
-      "?test_api=1&connect=0&locale=en",
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
+  it.each([["blocked", "world_delta", true], ["rejected", "none", true], ["accepted", "accepted_intent", true], ["waiting_for_intent", "none", false]])("renders exactly one Action Receipt surface in Cinematic View for %s", async (state, confidence, present) => {
+    runtimeMock.deriveRenderState = vi.fn((input) => {
+      const renderState = buildTestRustRenderState(input);
+      renderState.commercial_surface.action_receipt = { ...renderState.commercial_surface.action_receipt, state, confidence, present };
+      return renderState;
     });
+    await renderPixelWorldHost(sampleSnapshot(), "?test_api=1&connect=0&locale=en");
+    await waitFor(() => { expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument(); });
     screen.getByRole("button", { name: "Cinematic View" }).click();
-    await waitFor(() => {
-      expect(document.querySelector(".pixel-world-host")).toHaveAttribute("data-world-focus", "true");
-    });
-
+    await waitFor(() => { expect(document.querySelector(".pixel-world-host")).toHaveAttribute("data-world-focus", "true"); });
     expect(document.querySelectorAll('[data-viewer-overlay="receipt"]')).toHaveLength(1);
+    expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toHaveAttribute("hidden", "");
+    expect(document.querySelector(".pixel-world-focus-receipt .pixel-world-action-receipt")).toHaveAttribute("data-receipt-state", state);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("provides a test-only selected blocker visual fixture for comparable focus screenshots", async () => {

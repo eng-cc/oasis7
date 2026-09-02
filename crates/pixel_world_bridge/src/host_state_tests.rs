@@ -140,7 +140,7 @@ fn rust_host_state_derives_fragment_agent_link_and_commercial_surface() {
     assert_eq!(surface["next_action"]["label"], "Build smelter mk1");
     assert_eq!(surface["player_leverage"]["state"], "blocked");
     assert_eq!(surface["action_receipt"]["present"], true);
-    assert_eq!(surface["action_receipt"]["confidence"], "world_delta");
+    assert_eq!(surface["action_receipt"]["confidence"], "accepted_intent");
     assert_eq!(surface["action_receipt"]["title"], "Action blocked");
     assert_eq!(surface["world_read"]["agents"], 1);
     assert_eq!(surface["world_read"]["routes"], 0);
@@ -882,12 +882,74 @@ fn rust_host_state_keeps_acknowledgement_receipts_pending_until_committed_world_
         build_render_state(&stale_pending_delta)["commercial_surface"]["action_receipt"].clone();
     assert_eq!(stale_receipt["confidence"], "accepted_intent");
 
-    let committed =
+    let non_committed =
         build_render_state(&sample_input())["commercial_surface"]["action_receipt"].clone();
-    assert_eq!(committed["state"], "blocked");
+    assert_eq!(non_committed["state"], "blocked");
+    assert_eq!(non_committed["confidence"], "accepted_intent");
+    assert_eq!(non_committed["delta_logical_time"], Value::Null);
+    assert_eq!(non_committed["delta_event_seq"], Value::Null);
+}
+
+#[test]
+fn rust_host_state_only_marks_explicit_committed_receipts_as_world_delta() {
+    for stage in ["completed_no_progress", "blocked"] {
+        let mut input = sample_input();
+        input["gameplay"]["executionState"] = json!(stage);
+        input["gameplay"]["recentFeedback"] = json!({
+            "action": "build_factory_smelter_mk1",
+            "stage": stage,
+            "effect": "the request did not complete",
+            "reason": "the request made no committed progress",
+            "hint": "repair the blocker before retrying",
+            "deltaLogicalTime": 7,
+            "deltaEventSeq": 11
+        });
+
+        let receipt = build_render_state(&input)["commercial_surface"]["action_receipt"].clone();
+        assert_eq!(receipt["present"], true);
+        assert_eq!(receipt["state"], stage);
+        assert_eq!(
+            receipt["confidence"], "accepted_intent",
+            "{stage} is not committed"
+        );
+        assert_eq!(receipt["delta_logical_time"], Value::Null);
+        assert_eq!(receipt["delta_event_seq"], Value::Null);
+    }
+
+    let mut committed_input = sample_input();
+    committed_input["gameplay"]["executionState"] = json!("completed");
+    committed_input["gameplay"]["lastWorldChange"] =
+        json!("Smelter committed a world-level production change.");
+    committed_input["gameplay"]["recentFeedback"] = json!({
+        "action": "build_factory_smelter_mk1",
+        "stage": "completed_advanced",
+        "effect": "the smelter advanced the committed world",
+        "reason": Value::Null,
+        "hint": "continue the production plan",
+        "deltaLogicalTime": 7,
+        "deltaEventSeq": 11
+    });
+
+    let committed =
+        build_render_state(&committed_input)["commercial_surface"]["action_receipt"].clone();
+    assert_eq!(committed["state"], "completed");
     assert_eq!(committed["confidence"], "world_delta");
-    assert_eq!(committed["delta_logical_time"], 1);
-    assert_eq!(committed["delta_event_seq"], 2);
+    assert_eq!(committed["delta_logical_time"], 7);
+    assert_eq!(committed["delta_event_seq"], 11);
+
+    for stage in ["completed_advanced", "committed"] {
+        let mut direct_committed_input = committed_input.clone();
+        direct_committed_input["gameplay"]["executionState"] = json!(stage);
+        direct_committed_input["gameplay"]["recentFeedback"]["stage"] = json!(stage);
+        let direct_committed =
+            build_render_state(&direct_committed_input)["commercial_surface"]["action_receipt"]
+                .clone();
+        assert_eq!(direct_committed["state"], stage);
+        assert_eq!(direct_committed["confidence"], "world_delta");
+        assert_eq!(direct_committed["title"], "World changed");
+        assert_eq!(direct_committed["delta_logical_time"], 7);
+        assert_eq!(direct_committed["delta_event_seq"], 11);
+    }
 }
 
 #[test]
@@ -901,14 +963,14 @@ fn rust_host_state_keeps_rejected_unsupported_gameplay_receipt_non_successful() 
         "executionState": "rejected",
         "executionStateLabel": "Rejected",
         "executionCauseKind": "unsupported_action",
-        "executionCauseDetail": "unsupported gameplay action protocol",
-        "lastWorldChange": "stale world-change text must not become committed evidence",
+        "executionCauseDetail": "raw cause must not be exposed to the player",
+        "lastWorldChange": "raw stale world-change text must not be exposed",
         "recentFeedback": {
-            "action": "gameplay_action:unsupported",
+            "action": "raw attacker action payload",
             "stage": "rejected",
-            "effect": "unsupported gameplay action was rejected before execution",
-            "reason": "unsupported gameplay action",
-            "hint": "Choose a supported gameplay action.",
+            "effect": "raw attacker effect payload",
+            "reason": "unknown_gameplay_action: raw attacker reason payload",
+            "hint": "raw attacker recovery payload",
             "deltaLogicalTime": 7,
             "deltaEventSeq": 11
         }
@@ -924,15 +986,14 @@ fn rust_host_state_keeps_rejected_unsupported_gameplay_receipt_non_successful() 
     assert_eq!(receipt["delta_event_seq"], Value::Null);
     assert_eq!(
         receipt["summary"],
-        "unsupported gameplay action was rejected before execution"
+        "The requested gameplay action was rejected before execution."
     );
-    assert_eq!(receipt["detail"], "unsupported gameplay action");
+    assert_eq!(
+        receipt["detail"],
+        "Choose a published gameplay action before retrying."
+    );
     assert_ne!(receipt["confidence"], "accepted_intent");
     assert_ne!(receipt["title"], "Action accepted");
-    assert!(
-        !receipt["summary"]
-            .as_str()
-            .unwrap()
-            .contains("stale world-change text")
-    );
+    assert!(!receipt["summary"].as_str().unwrap().contains("raw"));
+    assert!(!receipt["detail"].as_str().unwrap().contains("raw"));
 }

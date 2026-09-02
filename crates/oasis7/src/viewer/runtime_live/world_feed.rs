@@ -113,11 +113,13 @@ pub(super) fn build_world_feed(
         || page_events.last().map_or(after_seq, |event| event.id),
         |event_seq| event_seq.saturating_sub(1),
     );
+    // Unknown audience authority remains fail-closed, but is not proof of an
+    // explicit denial. Keep that distinction in the wire reason so callers
+    // can distinguish unavailable source metadata from permission rejection.
     let permission_denied = first_hidden_crisis_seq.is_some_and(|_| {
         matches!(
             visibility,
-            crate::runtime::MajorWorldEventVisibilityPermission::Unknown
-                | crate::runtime::MajorWorldEventVisibilityPermission::Denied
+            crate::runtime::MajorWorldEventVisibilityPermission::Denied
         )
     });
     let authority_unavailable = first_hidden_crisis_seq.is_some() && !permission_denied;
@@ -609,7 +611,7 @@ mod tests {
         );
         assert_eq!(
             unknown_permission.unavailable_reason,
-            Some(protocol::WorldFeedUnavailableReason::PermissionDenied)
+            Some(protocol::WorldFeedUnavailableReason::SourceUnavailable)
         );
         assert!(!unknown_permission.snapshot_reload_required);
         assert_eq!(unknown_permission.cursor, encode_cursor("world-a", 4, 0));

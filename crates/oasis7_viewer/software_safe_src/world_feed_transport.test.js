@@ -324,6 +324,56 @@ describe("World Feed transport", () => {
     vi.clearAllTimers();
   });
 
+  it("ignores late feed and event messages from a superseded socket", async () => {
+    const { sockets, sentMessages } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+    core.initializeSoftwareSafeCore();
+    core.state.auth.available = false;
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+    sockets[0].receive(readyFeed({
+      cursor: "wf1.cursor-old",
+      events: [{ event_seq: 7, kind: "resource_change", summary: "Old page", detail: "old", receipt_ref: null }],
+    }));
+    sockets[0].close();
+    await vi.advanceTimersByTimeAsync(1200);
+    expect(sockets).toHaveLength(2);
+    sockets[1].open();
+    sockets[1].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+    sockets[1].receive(readyFeed({
+      cursor: "wf1.cursor-current",
+      events: [{ event_seq: 8, kind: "resource_change", summary: "Current page", detail: "current", receipt_ref: null }],
+    }));
+    await vi.advanceTimersByTimeAsync(0);
+    sockets[1].receive(readyFeed({
+      cursor: "wf1.cursor-current",
+      events: [{ event_seq: 8, kind: "resource_change", summary: "Current page", detail: "current", receipt_ref: null }],
+    }));
+    sockets[1].receive({ type: "event", event: { id: 9, time: 20, kind: { type: "AgentMoved", data: { agent_id: "agent-current" } } } });
+    sockets[1].receive(readyFeed({
+      cursor: "wf1.cursor-current",
+      events: [{ event_seq: 8, kind: "resource_change", summary: "Current page", detail: "current", receipt_ref: null }],
+    }));
+    const currentRequestCount = sentMessages.filter((message) => message.type === "request_world_feed").length;
+
+    sockets[0].receive(readyFeed({
+      cursor: "wf1.cursor-late",
+      events: [{ event_seq: 10, kind: "resource_change", summary: "Late old page", detail: "late", receipt_ref: null }],
+    }));
+    sockets[0].receive({ type: "event", event: { id: 999, time: 999, kind: { type: "AgentMoved", data: { agent_id: "agent-old" } } } });
+    sockets[0].emit("error", {});
+    sockets[0].emit("close", {});
+
+    expect(core.state.worldFeed).toMatchObject({ status: "ready", cursor: "wf1.cursor-current" });
+    expect(core.state.worldFeed.events.map((event) => event.summary)).toEqual(["Current page"]);
+    expect(core.state.logicalTime).toBe(20);
+    expect(core.state.recentEvents.map((event) => event.id)).toEqual([9]);
+    expect(core.state.connectionStatus).toBe("connected");
+    expect(core.state.lastError).toBeNull();
+    expect(sentMessages.filter((message) => message.type === "request_world_feed").length).toBe(currentRequestCount);
+    vi.clearAllTimers();
+  });
+
   it("continues after reconnect when the first page returns the same cursor as the stale local state", async () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");

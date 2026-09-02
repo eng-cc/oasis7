@@ -68,7 +68,10 @@ export function createWorldFeedTransport({ getSocket, getState, render, requestS
     return true;
   }
 
-  function handleWorldFeed(feed) {
+  function handleWorldFeed(feed, sourceSocket = null) {
+    if (sourceSocket && getSocket() !== sourceSocket) {
+      return false;
+    }
     const state = getState();
     const previous = state.worldFeed;
     const responseGeneration = generation;

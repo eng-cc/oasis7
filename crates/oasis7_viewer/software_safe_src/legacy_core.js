@@ -3441,7 +3441,7 @@ function handleAuthoritativeRecoveryError(error) {
   void recoverHostedSessionFromError(error);
 }
 
-function handleViewerMessage(message) {
+function handleViewerMessage(message, sourceSocket = null) { if (sourceSocket && socket !== sourceSocket) return;
   if (quoteProtocolFacade.handleQuoteViewerMessage(message)) return;
   switch (message?.type) {
     case "hello_ack":
@@ -3464,7 +3464,7 @@ function handleViewerMessage(message) {
     case "snapshot":
       handleSnapshot(message.snapshot);
       break;
-    case "world_feed": worldFeedTransport.handleWorldFeed(message.feed); break;
+    case "world_feed": worldFeedTransport.handleWorldFeed(message.feed, sourceSocket); break;
     case "event": {
       addRecentEvent(message.event);
       const chatEntry = extractAgentSpokeEntry(message.event);
@@ -3518,7 +3518,7 @@ function handleViewerMessage(message) {
 }
 
 function attachSocket(ws) {
-  ws.addEventListener("open", () => { worldFeedTransport.resetGeneration(ws);
+  ws.addEventListener("open", () => { if (socket !== ws) return; worldFeedTransport.resetGeneration(ws);
     state.connectionStatus = "connected";
     state.lastError = null;
     state.server = null;
@@ -3533,20 +3533,20 @@ function attachSocket(ws) {
     render();
   });
 
-  ws.addEventListener("message", (event) => {
+  ws.addEventListener("message", (event) => { if (socket !== ws) return;
     try {
       const message = JSON.parse(String(event.data || "null"));
-      handleViewerMessage(message);
+      handleViewerMessage(message, ws);
     } catch (error) {
       reportFatalError(String(error), "viewer.parse");
     }
   });
 
-  ws.addEventListener("error", () => {
+  ws.addEventListener("error", () => { if (socket !== ws) return;
     reportFatalError("websocket error", "viewer.ws");
   });
 
-  ws.addEventListener("close", () => { worldFeedTransport.markDisconnected(ws);
+  ws.addEventListener("close", () => { if (socket !== ws) return; worldFeedTransport.markDisconnected(ws);
     state.connectionStatus = "connecting";
     clearHostedRuntimeSyncTimer();
     if (state.auth.available && state.auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {

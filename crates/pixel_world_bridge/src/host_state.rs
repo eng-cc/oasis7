@@ -571,7 +571,9 @@ fn action_receipt_title(locale: &str, state: &str, present: bool) -> String {
     match state {
         "accepted" | "submitted" | "queued" | "ack" => tr(locale, "行动已接受", "Action accepted"),
         "blocked" => tr(locale, "行动被阻塞", "Action blocked"),
-        "completed" => tr(locale, "世界已改变", "World changed"),
+        "completed" | "completed_advanced" | "committed" => {
+            tr(locale, "世界已改变", "World changed")
+        }
         "rejected" => tr(locale, "行动被拒绝", "Action rejected"),
         _ => tr(locale, "行动进行中", "Action in progress"),
     }
@@ -588,12 +590,6 @@ fn has_enabled_first_agent_claim(gameplay: &Value) -> bool {
         })
 }
 
-fn has_positive_world_delta(recent_feedback: &Value) -> bool {
-    ["deltaLogicalTime", "deltaEventSeq"]
-        .into_iter()
-        .any(|key| number(obj(recent_feedback, key), 0.0) > 0.0)
-}
-
 fn is_pending_receipt_stage(stage: Option<&str>) -> bool {
     matches!(
         stage,
@@ -601,20 +597,96 @@ fn is_pending_receipt_stage(stage: Option<&str>) -> bool {
     )
 }
 
+fn is_non_advancing_receipt_stage(stage: Option<&str>) -> bool {
+    matches!(stage, Some("completed_no_progress" | "blocked"))
+}
+
 fn is_rejected_receipt_stage(stage: Option<&str>) -> bool {
     stage == Some("rejected")
+}
+
+fn is_authoritative_world_delta_stage(stage: Option<&str>) -> bool {
+    matches!(stage, Some("completed_advanced" | "committed"))
+}
+
+fn has_rejected_reason(value: Option<&str>, tokens: &[&str]) -> bool {
+    let normalized = normalize_gameplay_token(value);
+    tokens.iter().any(|token| {
+        let token = normalize_gameplay_token(Some(token));
+        normalized == token || normalized.starts_with(&token)
+    })
+}
+
+fn rejected_receipt_detail(locale: &str, gameplay: &Value, recent_feedback: &Value) -> String {
+    let reason =
+        str_key(recent_feedback, "reason").or_else(|| str_key(gameplay, "executionCauseKind"));
+    if has_rejected_reason(
+        reason,
+        &[
+            "unsupported_gameplay_action",
+            "unknown_gameplay_action",
+            "unsupported_action",
+        ],
+    ) {
+        return tr(
+            locale,
+            "请选择已发布的玩法动作后重试。",
+            "Choose a published gameplay action before retrying.",
+        );
+    }
+    if has_rejected_reason(
+        reason,
+        &[
+            "permission_denied",
+            "unauthorized",
+            "forbidden",
+            "agent_permission_denied",
+        ],
+    ) {
+        return tr(
+            locale,
+            "请检查当前 Agent 绑定和所需权限后重试。",
+            "Check the current Agent binding and required permissions before retrying.",
+        );
+    }
+    if has_rejected_reason(reason, &["unsupported_mode", "mode_denied", "invalid_mode"]) {
+        return tr(
+            locale,
+            "请切换到支持的模式，并重试已发布的动作。",
+            "Switch to a supported mode and retry the published action.",
+        );
+    }
+    tr(
+        locale,
+        "请查看已发布动作和当前前提后重试。",
+        "Review the published actions and current prerequisites before retrying.",
+    )
 }
 
 fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<&str>) -> Value {
     let recent_feedback = obj(gameplay, "recentFeedback");
     let recent_feedback_action = str_key(recent_feedback, "action");
-    let receipt_stage =
-        str_key(gameplay, "executionState").or_else(|| str_key(recent_feedback, "stage"));
-    let rejected = is_rejected_receipt_stage(receipt_stage);
+    let execution_stage = str_key(gameplay, "executionState");
+    let feedback_stage = str_key(recent_feedback, "stage");
+    let rejected =
+        is_rejected_receipt_stage(execution_stage) || is_rejected_receipt_stage(feedback_stage);
+    // Either canonical field may be omitted at compatibility boundaries, but an
+    // explicit rejection must win over a stale accepted/executing state.
+    let receipt_stage = rejected
+        .then_some("rejected")
+        .or(execution_stage)
+        .or(feedback_stage);
+    let has_non_advancing_stage = is_non_advancing_receipt_stage(execution_stage)
+        || is_non_advancing_receipt_stage(feedback_stage);
     let has_world_delta = !rejected
+        && !has_non_advancing_stage
         && !is_pending_receipt_stage(receipt_stage)
-        && (str_key(gameplay, "lastWorldChange").is_some()
-            || has_positive_world_delta(recent_feedback));
+        && (is_authoritative_world_delta_stage(execution_stage)
+            || is_authoritative_world_delta_stage(feedback_stage));
+    // Keep the established zero-delta shape for an in-flight receipt, while
+    // withholding deltas from rejected/non-advancing outcomes altogether.
+    let exposes_receipt_delta =
+        !rejected && (has_world_delta || is_pending_receipt_stage(receipt_stage));
     let has_player_intent = str_key(gameplay, "acceptedIntentId").is_some()
         || str_key(gameplay, "acceptedIntentScope").is_some()
         || str_key(gameplay, "acceptedIntentTarget").is_some()
@@ -644,8 +716,10 @@ fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<
             "delta_event_seq": Value::Null,
         });
     }
-    let present =
-        has_world_delta || has_player_intent || str_key(recent_feedback, "reason").is_some();
+    let present = rejected
+        || has_world_delta
+        || has_player_intent
+        || str_key(recent_feedback, "reason").is_some();
     let raw_state = receipt_stage.unwrap_or("waiting_for_intent");
     let state = if present {
         raw_state
@@ -661,16 +735,21 @@ fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<
     };
     let summary = if present {
         if rejected {
-            str_key(recent_feedback, "effect")
-                .or_else(|| str_key(recent_feedback, "reason"))
-                .or_else(|| str_key(recent_feedback, "hint"))
-                .or_else(|| str_key(gameplay, "executionCauseDetail"))
+            tr(
+                locale,
+                "请求的玩法动作在执行前被拒绝。",
+                "The requested gameplay action was rejected before execution.",
+            )
+        } else if has_world_delta {
+            str_key(gameplay, "lastWorldChange")
+                .or_else(|| str_key(recent_feedback, "effect"))
+                .or_else(|| str_key(gameplay, "acceptedIntentSummary"))
                 .or_else(|| str_key(recent_feedback, "action"))
+                .or_else(|| str_key(gameplay, "executionSummary"))
                 .unwrap_or("")
                 .to_string()
         } else {
-            str_key(gameplay, "lastWorldChange")
-                .or_else(|| str_key(recent_feedback, "effect"))
+            str_key(recent_feedback, "effect")
                 .or_else(|| str_key(gameplay, "acceptedIntentSummary"))
                 .or_else(|| str_key(recent_feedback, "action"))
                 .or_else(|| str_key(gameplay, "executionSummary"))
@@ -686,12 +765,7 @@ fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<
     };
     let detail = if present {
         if rejected {
-            str_key(recent_feedback, "reason")
-                .or_else(|| str_key(recent_feedback, "hint"))
-                .or_else(|| str_key(gameplay, "executionCauseDetail"))
-                .or_else(|| str_key(gameplay, "acceptedIntentDetail"))
-                .or_else(|| str_key(gameplay, "progressDetail"))
-                .map(ToString::to_string)
+            Some(rejected_receipt_detail(locale, gameplay, recent_feedback))
         } else {
             str_key(gameplay, "executionCauseDetail")
                 .or_else(|| str_key(recent_feedback, "reason"))
@@ -737,8 +811,8 @@ fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<
         } else {
             Value::Null
         },
-        "delta_logical_time": if present && !rejected { obj(recent_feedback, "deltaLogicalTime").clone() } else { Value::Null },
-        "delta_event_seq": if present && !rejected { obj(recent_feedback, "deltaEventSeq").clone() } else { Value::Null },
+        "delta_logical_time": if present && exposes_receipt_delta { obj(recent_feedback, "deltaLogicalTime").clone() } else { Value::Null },
+        "delta_event_seq": if present && exposes_receipt_delta { obj(recent_feedback, "deltaEventSeq").clone() } else { Value::Null },
     })
 }
 
