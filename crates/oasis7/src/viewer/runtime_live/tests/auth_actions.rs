@@ -379,27 +379,44 @@ fn runtime_background_play_tolerates_transient_llm_failure_after_confirmed_progr
     let mut session = RuntimeLiveSession::new();
     session.playing = true;
 
+    let progress_deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     server
         .advance_runtime(&mut session, &mut writer, "play", 1, None, false)
         .expect("first background play tick advances");
+    while server.confirmed_player_gameplay_progress_time.is_none()
+        && std::time::Instant::now() < progress_deadline
+    {
+        server
+            .advance_runtime(&mut session, &mut writer, "play", 1, None, false)
+            .expect("background play progress polling should be tolerated");
+        if server.confirmed_player_gameplay_progress_time.is_none() {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    }
+    let progress_confirmed = server.confirmed_player_gameplay_progress_time.is_some();
     let advanced_time = server.world.state().time;
     let baseline_journal_len = server.world.journal().events.len();
-    assert!(
-        server.confirmed_player_gameplay_progress_time.is_some(),
-        "successful background play should confirm gameplay progress"
-    );
 
     let mut failure_observed = false;
-    for _ in 0..8 {
+    let failure_deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while !failure_observed && std::time::Instant::now() < failure_deadline {
         server
             .advance_runtime(&mut session, &mut writer, "play", 1, None, false)
             .expect("transient provider failure should be tolerated");
         if session.transient_play_failures == 1 {
             failure_observed = true;
-            break;
+        } else {
+            std::thread::sleep(std::time::Duration::from_millis(5));
         }
     }
 
+    clear_runtime_provider_env();
+    drop(_guard);
+
+    assert!(
+        progress_confirmed,
+        "successful background play should confirm gameplay progress"
+    );
     assert!(
         failure_observed,
         "async provider failure should be observed"
@@ -437,7 +454,6 @@ fn runtime_background_play_tolerates_transient_llm_failure_after_confirmed_progr
             .as_deref()
             .is_some_and(|reason| reason.contains("provider temporarily unavailable"))
     );
-    clear_runtime_provider_env();
 }
 
 #[test]
@@ -574,15 +590,20 @@ fn runtime_background_play_stops_on_non_retryable_provider_error_after_progress(
     let baseline_journal_len = server.world.journal().events.len();
 
     let mut failure_observed = false;
-    for _ in 0..8 {
+    let failure_deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while !failure_observed && std::time::Instant::now() < failure_deadline {
         server
             .advance_runtime(&mut session, &mut writer, "play", 1, None, false)
             .expect("non-retryable provider failure should be handled");
         if !session.playing {
             failure_observed = true;
-            break;
+        } else {
+            std::thread::sleep(std::time::Duration::from_millis(5));
         }
     }
+
+    clear_runtime_provider_env();
+    drop(_guard);
 
     assert!(
         failure_observed,
@@ -618,7 +639,6 @@ fn runtime_background_play_stops_on_non_retryable_provider_error_after_progress(
             .as_deref()
             .is_some_and(|reason| reason.contains("provider_unauthorized"))
     );
-    clear_runtime_provider_env();
 }
 
 #[test]
