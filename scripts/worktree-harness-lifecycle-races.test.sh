@@ -58,7 +58,7 @@ source "$(pwd)/scripts/worktree-harness-lib.sh"
 # process group. Keep this fake outer wrapper alive while a detached inner
 # process group publishes the complete non-ready metadata.
 python3 - "$meta_file" "${FAKE_CRASH_METADATA_MARKER:?FAKE_CRASH_METADATA_MARKER is required}" "${FAKE_CRASH_CHILD_PID_FILE:?FAKE_CRASH_CHILD_PID_FILE is required}" <<'PY' &
-import hashlib
+import ctypes
 import os
 import pathlib
 import subprocess
@@ -79,10 +79,55 @@ if proc_stat.exists():
     right_paren = contents.rfind(") ")
     fields = contents[right_paren + 2 :].split()
     identity = f"proc-starttime:{boot_id}:{fields[19]}"
+elif sys.platform == "darwin":
+    class ProcBsdInfo(ctypes.Structure):
+        _fields_ = [
+            ("pbi_flags", ctypes.c_uint32),
+            ("pbi_status", ctypes.c_uint32),
+            ("pbi_xstatus", ctypes.c_uint32),
+            ("pbi_pid", ctypes.c_uint32),
+            ("pbi_ppid", ctypes.c_uint32),
+            ("pbi_uid", ctypes.c_uint32),
+            ("pbi_gid", ctypes.c_uint32),
+            ("pbi_ruid", ctypes.c_uint32),
+            ("pbi_rgid", ctypes.c_uint32),
+            ("pbi_svuid", ctypes.c_uint32),
+            ("pbi_svgid", ctypes.c_uint32),
+            ("rfu_1", ctypes.c_uint32),
+            ("pbi_comm", ctypes.c_char * 16),
+            ("pbi_name", ctypes.c_char * 32),
+            ("pbi_nfiles", ctypes.c_uint32),
+            ("pbi_pgid", ctypes.c_uint32),
+            ("pbi_pjobc", ctypes.c_uint32),
+            ("e_tdev", ctypes.c_uint32),
+            ("e_tpgid", ctypes.c_uint32),
+            ("pbi_nice", ctypes.c_int32),
+            ("pbi_start_tvsec", ctypes.c_uint64),
+            ("pbi_start_tvusec", ctypes.c_uint64),
+        ]
+
+    try:
+        libproc = ctypes.CDLL("/usr/lib/libproc.dylib")
+        proc_pidinfo = libproc.proc_pidinfo
+        proc_pidinfo.argtypes = [
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_uint64,
+            ctypes.c_void_p,
+            ctypes.c_int,
+        ]
+        proc_pidinfo.restype = ctypes.c_int
+        info = ProcBsdInfo()
+        size = ctypes.sizeof(info)
+        if proc_pidinfo(os.getpid(), 3, 0, ctypes.byref(info), size) != size:
+            raise SystemExit(1)
+        if info.pbi_pid != os.getpid():
+            raise SystemExit(1)
+        identity = f"mac-proc-start:{info.pbi_start_tvsec}:{info.pbi_start_tvusec}"
+    except (AttributeError, OSError, TypeError, ValueError):
+        raise SystemExit(1)
 else:
-    import subprocess as sp
-    launch_time = sp.check_output(["ps", "-o", "pid=,lstart=", "-p", str(os.getpid())], text=True).strip()
-    identity = f"ps-start:{hashlib.sha256(launch_time.encode()).hexdigest()}"
+    raise SystemExit(1)
 
 meta_path.parent.mkdir(parents=True, exist_ok=True)
 meta_path.write_text(
@@ -122,9 +167,21 @@ run_harness() {
     "$ROOT_DIR/scripts/worktree-harness.sh" "$@"
 }
 
+# The crash target must be the actual harness process.  Keep the generic
+# helper synchronous-safe for cleanup and use exec only for the backgrounded
+# crash lane, so $! names worktree-harness.sh rather than a function subshell.
+run_harness_exec() {
+  exec env \
+    OASIS7_HARNESS_TEST_ROOT="$HARNESS_ROOT" \
+    OASIS7_HARNESS_TEST_LAUNCHER_COMMAND="$FAKE_LAUNCHER" \
+    FAKE_CRASH_CHILD_PID_FILE="$CRASH_CHILD_PID_FILE" \
+    FAKE_CRASH_METADATA_MARKER="$CRASH_METADATA_MARKER" \
+    "$ROOT_DIR/scripts/worktree-harness.sh" "$@"
+}
+
 echo 'lifecycle race: outer crash after complete STACK_READY=0 metadata' >&2
 set +e
-run_harness up --startup-timeout 10 >"$TMP_DIR/crash-up.log" 2>&1 &
+run_harness_exec up --startup-timeout 10 >"$TMP_DIR/crash-up.log" 2>&1 &
 UP_PID=$!
 set -e
 for _ in $(seq 1 200); do
@@ -143,6 +200,16 @@ CRASH_LAUNCHER_PID="$crash_launcher_pid"
 CRASH_LAUNCHER_PGID="$crash_launcher_pgid"
 CRASH_LAUNCHER_IDENTITY="$crash_launcher_identity"
 [[ "$crash_launcher_pid" =~ ^[1-9][0-9]*$ && "$crash_launcher_pgid" =~ ^[1-9][0-9]*$ ]] || exit 1
+crash_harness_command=""
+for _ in $(seq 1 50); do
+  crash_harness_command="$(ps -o command= -p "$UP_PID" 2>/dev/null || true)"
+  [[ "$crash_harness_command" == *"worktree-harness.sh up"* ]] && break
+  sleep 0.01
+done
+[[ "$crash_harness_command" == *"worktree-harness.sh up"* ]] || {
+  echo "lifecycle race: signaled PID $UP_PID is not worktree-harness.sh: $crash_harness_command" >&2
+  exit 1
+}
 kill -KILL "$UP_PID"
 set +e
 wait "$UP_PID"

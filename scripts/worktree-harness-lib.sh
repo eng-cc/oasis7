@@ -203,6 +203,7 @@ wh_resolve_ports_json() {
 from __future__ import annotations
 
 import fcntl
+import ctypes
 import hashlib
 import json
 import os
@@ -262,6 +263,58 @@ def pid_alive(pid: int) -> bool:
     return True
 
 
+def darwin_process_identity(pid: int) -> str | None:
+    if sys.platform != "darwin":
+        return None
+
+    class ProcBsdInfo(ctypes.Structure):
+        _fields_ = [
+            ("pbi_flags", ctypes.c_uint32),
+            ("pbi_status", ctypes.c_uint32),
+            ("pbi_xstatus", ctypes.c_uint32),
+            ("pbi_pid", ctypes.c_uint32),
+            ("pbi_ppid", ctypes.c_uint32),
+            ("pbi_uid", ctypes.c_uint32),
+            ("pbi_gid", ctypes.c_uint32),
+            ("pbi_ruid", ctypes.c_uint32),
+            ("pbi_rgid", ctypes.c_uint32),
+            ("pbi_svuid", ctypes.c_uint32),
+            ("pbi_svgid", ctypes.c_uint32),
+            ("rfu_1", ctypes.c_uint32),
+            ("pbi_comm", ctypes.c_char * 16),
+            ("pbi_name", ctypes.c_char * 32),
+            ("pbi_nfiles", ctypes.c_uint32),
+            ("pbi_pgid", ctypes.c_uint32),
+            ("pbi_pjobc", ctypes.c_uint32),
+            ("e_tdev", ctypes.c_uint32),
+            ("e_tpgid", ctypes.c_uint32),
+            ("pbi_nice", ctypes.c_int32),
+            ("pbi_start_tvsec", ctypes.c_uint64),
+            ("pbi_start_tvusec", ctypes.c_uint64),
+        ]
+
+    try:
+        libproc = ctypes.CDLL("/usr/lib/libproc.dylib")
+        proc_pidinfo = libproc.proc_pidinfo
+        proc_pidinfo.argtypes = [
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_uint64,
+            ctypes.c_void_p,
+            ctypes.c_int,
+        ]
+        proc_pidinfo.restype = ctypes.c_int
+        info = ProcBsdInfo()
+        size = ctypes.sizeof(info)
+        if proc_pidinfo(pid, 3, 0, ctypes.byref(info), size) != size:
+            return None
+        if info.pbi_pid != pid:
+            return None
+        return f"mac-proc-start:{info.pbi_start_tvsec}:{info.pbi_start_tvusec}"
+    except (AttributeError, OSError, TypeError, ValueError):
+        return None
+
+
 def process_identity(pid: int) -> str | None:
     if pid <= 1:
         return None
@@ -283,19 +336,9 @@ def process_identity(pid: int) -> str | None:
                 if boot_id:
                     return f"proc-starttime:{boot_id}:{fields[19]}"
                 return None
-    try:
-        result = subprocess.run(
-            ["ps", "-o", "pid=,lstart=", "-p", str(pid)],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    except OSError:
-        return None
-    snapshot = result.stdout.strip()
-    if not snapshot:
-        return None
-    return f"ps-start:{hashlib.sha256(snapshot.encode('utf-8')).hexdigest()}"
+    if sys.platform == "darwin":
+        return darwin_process_identity(pid)
+    return None
 
 
 def reservation_owner_status(record: dict) -> str:
@@ -315,7 +358,13 @@ def reservation_owner_status(record: dict) -> str:
     # so a live legacy owner must remain reserved rather than being treated
     # as a different incarnation and reclaimed.  A dead legacy owner is
     # already safely classified as stale above.
-    if expected_identity.startswith("proc-starttime:") and expected_identity.count(":") == 1:
+    if (
+        expected_identity.startswith("ps-start:")
+        or (
+            expected_identity.startswith("proc-starttime:")
+            and expected_identity.count(":") == 1
+        )
+    ):
         return "unknown"
     current_identity = process_identity(pid)
     if not current_identity:
@@ -478,7 +527,7 @@ wh_bind_ports_owner() {
 from __future__ import annotations
 
 import fcntl
-import hashlib
+import ctypes
 import json
 import os
 import pathlib
@@ -529,6 +578,58 @@ def pid_alive(pid: int) -> bool:
     return True
 
 
+def darwin_process_identity(pid: int) -> str | None:
+    if sys.platform != "darwin":
+        return None
+
+    class ProcBsdInfo(ctypes.Structure):
+        _fields_ = [
+            ("pbi_flags", ctypes.c_uint32),
+            ("pbi_status", ctypes.c_uint32),
+            ("pbi_xstatus", ctypes.c_uint32),
+            ("pbi_pid", ctypes.c_uint32),
+            ("pbi_ppid", ctypes.c_uint32),
+            ("pbi_uid", ctypes.c_uint32),
+            ("pbi_gid", ctypes.c_uint32),
+            ("pbi_ruid", ctypes.c_uint32),
+            ("pbi_rgid", ctypes.c_uint32),
+            ("pbi_svuid", ctypes.c_uint32),
+            ("pbi_svgid", ctypes.c_uint32),
+            ("rfu_1", ctypes.c_uint32),
+            ("pbi_comm", ctypes.c_char * 16),
+            ("pbi_name", ctypes.c_char * 32),
+            ("pbi_nfiles", ctypes.c_uint32),
+            ("pbi_pgid", ctypes.c_uint32),
+            ("pbi_pjobc", ctypes.c_uint32),
+            ("e_tdev", ctypes.c_uint32),
+            ("e_tpgid", ctypes.c_uint32),
+            ("pbi_nice", ctypes.c_int32),
+            ("pbi_start_tvsec", ctypes.c_uint64),
+            ("pbi_start_tvusec", ctypes.c_uint64),
+        ]
+
+    try:
+        libproc = ctypes.CDLL("/usr/lib/libproc.dylib")
+        proc_pidinfo = libproc.proc_pidinfo
+        proc_pidinfo.argtypes = [
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_uint64,
+            ctypes.c_void_p,
+            ctypes.c_int,
+        ]
+        proc_pidinfo.restype = ctypes.c_int
+        info = ProcBsdInfo()
+        size = ctypes.sizeof(info)
+        if proc_pidinfo(pid, 3, 0, ctypes.byref(info), size) != size:
+            return None
+        if info.pbi_pid != pid:
+            return None
+        return f"mac-proc-start:{info.pbi_start_tvsec}:{info.pbi_start_tvusec}"
+    except (AttributeError, OSError, TypeError, ValueError):
+        return None
+
+
 def process_identity(pid: int) -> str | None:
     if pid <= 1:
         return None
@@ -551,19 +652,9 @@ def process_identity(pid: int) -> str | None:
                 if boot_id:
                     return f"proc-starttime:{boot_id}:{fields[19]}"
                 return None
-    try:
-        result = subprocess.run(
-            ["ps", "-o", "pid=,lstart=", "-p", str(pid)],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    except OSError:
-        return None
-    snapshot = result.stdout.strip()
-    if not snapshot:
-        return None
-    return f"ps-start:{hashlib.sha256(snapshot.encode('utf-8')).hexdigest()}"
+    if sys.platform == "darwin":
+        return darwin_process_identity(pid)
+    return None
 
 
 def atomic_write(path: pathlib.Path, contents: str) -> None:
@@ -962,8 +1053,7 @@ wh_process_group_refresh_identity() {
   local pid=${1:-}
   local pgid=${2:-}
   local expected_identity=${3:-}
-  local leader_identity member_records existing_records merged_records
-  local member_record member_pid member_identity existing_record member_seen
+  local leader_identity member_records refreshed_identity
 
   [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 2
   [[ "$pgid" =~ ^[1-9][0-9]*$ && "$pgid" -gt 1 ]] || return 2
@@ -972,32 +1062,8 @@ wh_process_group_refresh_identity() {
   leader_identity=$(wh_process_identity_leader_part "$expected_identity")
   member_records=$(wh_process_group_member_identities "$pgid" 2>/dev/null || true)
   [[ -n "$member_records" ]] || return 1
-  existing_records=$(wh_process_identity_group_part "$expected_identity" 2>/dev/null || true)
-  merged_records="$existing_records"
-
-  while IFS= read -r member_record; do
-    [[ "$member_record" == *=* ]] || continue
-    member_pid=${member_record%%=*}
-    member_identity=${member_record#*=}
-    [[ "$member_pid" =~ ^[1-9][0-9]*$ && -n "$member_identity" ]] || continue
-    member_seen=0
-    while IFS= read -r existing_record; do
-      [[ "$existing_record" == *=* ]] || continue
-      if [[ "${existing_record%%=*}" == "$member_pid" ]]; then
-        member_seen=1
-        break
-      fi
-    done < <(printf '%s\n' "$merged_records" | tr ',' '\n')
-    if [[ "$member_seen" -eq 0 ]]; then
-      if [[ -n "$merged_records" ]]; then
-        merged_records+=","
-      fi
-      merged_records+="${member_pid}=${member_identity}"
-    fi
-  done < <(printf '%s\n' "$member_records" | tr ',' '\n')
-
-  [[ -n "$merged_records" ]] || return 1
-  printf '%s|group=%s\n' "$leader_identity" "$merged_records"
+  refreshed_identity="$leader_identity|group=$member_records"
+  wh_process_identity_merge_compatible "$expected_identity" "$refreshed_identity"
 }
 
 wh_process_identity_leader_part() {
@@ -1017,13 +1083,90 @@ wh_process_identity_group_part() {
   printf '%s\n' "$group_records"
 }
 
-# A legacy Linux identity has only the monotonic /proc start-time tick and no
-# boot ID.  It cannot be compared safely with a current identity: the same
-# tick can recur after a reboot.  Keep live owners carrying this format
-# uncertain so callers retain/reject them instead of reclaiming them.
+# Legacy identities either have only the monotonic /proc start-time tick and
+# no boot ID, or were derived from ps's whole-second launch time. Neither can
+# be compared safely with a current identity. Keep live owners carrying these
+# formats uncertain so callers retain/reject them instead of reclaiming them.
 wh_process_identity_is_legacy() {
   local identity=${1:-}
-  [[ "$identity" =~ ^proc-starttime:[^:]+$ ]]
+  [[ "$identity" =~ ^proc-starttime:[^:]+$ || "$identity" =~ ^ps-start:.+$ ]]
+}
+
+# Merge process-group identity snapshots without ever weakening the
+# authenticated leader. A later launcher snapshot may add descendants after
+# the initial record; preserve the union of compatible PID/incarnation pairs.
+# Reusing a member PID with a different identity is a conflict and must fail
+# closed rather than grant authority to either incarnation.
+wh_process_identity_merge_compatible() {
+  local first_identity=${1:-}
+  local second_identity=${2:-}
+  local first_leader second_leader first_records second_records merged_records
+  local member_record member_pid member_identity existing_record scan_records
+  local found_member
+
+  [[ -n "$first_identity" && -n "$second_identity" ]] || return 2
+  first_leader=$(wh_process_identity_leader_part "$first_identity")
+  second_leader=$(wh_process_identity_leader_part "$second_identity")
+  [[ -n "$first_leader" && "$first_leader" == "$second_leader" ]] || return 2
+  first_records=$(wh_process_identity_group_part "$first_identity" 2>/dev/null || true)
+  second_records=$(wh_process_identity_group_part "$second_identity" 2>/dev/null || true)
+  merged_records="$first_records"
+
+  scan_records="$merged_records"
+  while [[ -n "$scan_records" ]]; do
+    if [[ "$scan_records" == *,* ]]; then
+      member_record=${scan_records%%,*}
+      scan_records=${scan_records#*,}
+    else
+      member_record=$scan_records
+      scan_records=""
+    fi
+    [[ "$member_record" == *=* ]] || return 2
+    member_pid=${member_record%%=*}
+    member_identity=${member_record#*=}
+    [[ "$member_pid" =~ ^[1-9][0-9]*$ && -n "$member_identity" ]] || return 2
+  done
+
+  while [[ -n "$second_records" ]]; do
+    if [[ "$second_records" == *,* ]]; then
+      member_record=${second_records%%,*}
+      second_records=${second_records#*,}
+    else
+      member_record=$second_records
+      second_records=""
+    fi
+    [[ "$member_record" == *=* ]] || return 2
+    member_pid=${member_record%%=*}
+    member_identity=${member_record#*=}
+    [[ "$member_pid" =~ ^[1-9][0-9]*$ && -n "$member_identity" ]] || return 2
+    found_member=0
+    scan_records="$merged_records"
+    while [[ -n "$scan_records" ]]; do
+      if [[ "$scan_records" == *,* ]]; then
+        existing_record=${scan_records%%,*}
+        scan_records=${scan_records#*,}
+      else
+        existing_record=$scan_records
+        scan_records=""
+      fi
+      if [[ "${existing_record%%=*}" == "$member_pid" ]]; then
+        [[ "${existing_record#*=}" == "$member_identity" ]] || return 2
+        found_member=1
+        break
+      fi
+    done
+    if [[ "$found_member" -eq 0 ]]; then
+      if [[ -n "$merged_records" ]]; then
+        merged_records+=","
+      fi
+      merged_records+="${member_pid}=${member_identity}"
+    fi
+  done
+  if [[ -n "$merged_records" ]]; then
+    printf '%s|group=%s\n' "$first_leader" "$merged_records"
+  else
+    printf '%s\n' "$first_leader"
+  fi
 }
 
 # Prove that a process group whose recorded leader has exited still contains
@@ -1071,6 +1214,7 @@ wh_process_record_alive() {
   [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
   [[ "$pgid" =~ ^[1-9][0-9]*$ && "$pgid" -gt 1 ]] || return 1
   [[ -n "$expected_identity" ]] || return 1
+  wh_process_identity_is_legacy "$expected_identity" && return 1
   wh_pid_alive "$pid" || return 1
   expected_leader_identity=$(wh_process_identity_leader_part "$expected_identity")
   current_identity=$(wh_process_identity "$pid" 2>/dev/null || true)
@@ -1090,9 +1234,9 @@ wh_process_record_alive() {
 # in /proc to the current boot ID. Persisted legacy records without that boot
 # binding are retained as unknown while their owner is live, preventing an
 # unsafe cross-boot reclaim; dead legacy owners remain safely stale. macOS
-# falls back to a digest of the PID plus ps launch time. The fallback
-# deliberately omits command/parent/group fields because exec and launcher
-# handoff are expected to change those while the process lives.
+# reads the kernel-backed proc_pidinfo start seconds/useconds pair. If that
+# API is unavailable, identity resolution fails closed rather than falling
+# back to ps's whole-second launch time.
 wh_process_identity() {
   local pid=${1:-}
   [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
@@ -1117,17 +1261,68 @@ PY
     return
   fi
 
-  local ps_snapshot
-  ps_snapshot=$(ps -o pid=,lstart= -p "$pid" 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-  [[ -n "$ps_snapshot" ]] || return 1
-  python3 - "$ps_snapshot" <<'PY'
+  if [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]]; then
+    python3 - "$pid" <<'PY'
 from __future__ import annotations
 
-import hashlib
+import ctypes
 import sys
 
-print(f"ps-start:{hashlib.sha256(sys.argv[1].encode('utf-8')).hexdigest()}")
+pid = int(sys.argv[1])
+
+
+class ProcBsdInfo(ctypes.Structure):
+    _fields_ = [
+        ("pbi_flags", ctypes.c_uint32),
+        ("pbi_status", ctypes.c_uint32),
+        ("pbi_xstatus", ctypes.c_uint32),
+        ("pbi_pid", ctypes.c_uint32),
+        ("pbi_ppid", ctypes.c_uint32),
+        ("pbi_uid", ctypes.c_uint32),
+        ("pbi_gid", ctypes.c_uint32),
+        ("pbi_ruid", ctypes.c_uint32),
+        ("pbi_rgid", ctypes.c_uint32),
+        ("pbi_svuid", ctypes.c_uint32),
+        ("pbi_svgid", ctypes.c_uint32),
+        ("rfu_1", ctypes.c_uint32),
+        ("pbi_comm", ctypes.c_char * 16),
+        ("pbi_name", ctypes.c_char * 32),
+        ("pbi_nfiles", ctypes.c_uint32),
+        ("pbi_pgid", ctypes.c_uint32),
+        ("pbi_pjobc", ctypes.c_uint32),
+        ("e_tdev", ctypes.c_uint32),
+        ("e_tpgid", ctypes.c_uint32),
+        ("pbi_nice", ctypes.c_int32),
+        ("pbi_start_tvsec", ctypes.c_uint64),
+        ("pbi_start_tvusec", ctypes.c_uint64),
+    ]
+
+
+try:
+    libproc = ctypes.CDLL("/usr/lib/libproc.dylib")
+    proc_pidinfo = libproc.proc_pidinfo
+    proc_pidinfo.argtypes = [
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_uint64,
+        ctypes.c_void_p,
+        ctypes.c_int,
+    ]
+    proc_pidinfo.restype = ctypes.c_int
+    info = ProcBsdInfo()
+    size = ctypes.sizeof(info)
+    if proc_pidinfo(pid, 3, 0, ctypes.byref(info), size) != size:
+        raise SystemExit(1)
+    if info.pbi_pid != pid:
+        raise SystemExit(1)
+    print(f"mac-proc-start:{info.pbi_start_tvsec}:{info.pbi_start_tvusec}")
+except (AttributeError, OSError, TypeError, ValueError):
+    raise SystemExit(1)
 PY
+    return
+  fi
+
+  return 1
 }
 
 # Return the ownership state of a recovery marker target: 0 means live and
@@ -1321,6 +1516,7 @@ wh_terminate_process_group() {
     return 0
   fi
   [[ -n "$expected_identity" ]] || return 2
+  wh_process_identity_is_legacy "$expected_identity" && return 2
   expected_leader_identity=$(wh_process_identity_leader_part "$expected_identity")
   if wh_pid_alive "$pid"; then
     current_identity=$(wh_process_identity "$pid" 2>/dev/null || true)

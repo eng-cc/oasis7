@@ -72,7 +72,7 @@ esac
 
 persist_launcher_record_from_meta() {
   local metadata_status launcher_pid launcher_pgid launcher_identity
-  local recorded_pid recorded_pgid recorded_identity
+  local recorded_pid recorded_pgid recorded_identity merged_identity
   [[ -f "$META_FILE" ]] || return 1
   metadata_status=$(wh_env_file_get "$META_FILE" STACK_READY 2>/dev/null || true)
   [[ "$metadata_status" == "0" || "$metadata_status" == "1" ]] || return 1
@@ -86,8 +86,21 @@ persist_launcher_record_from_meta() {
   recorded_pgid=$(wh_state_get "$STATE_FILE" launcher_pgid 2>/dev/null || true)
   recorded_identity=$(wh_state_get "$STATE_FILE" launcher_identity 2>/dev/null || true)
   if [[ -n "$recorded_pid" || -n "$recorded_pgid" || -n "$recorded_identity" ]]; then
-    [[ "$recorded_pid" == "$launcher_pid" && "$recorded_pgid" == "$launcher_pgid" && \
-      "$recorded_identity" == "$launcher_identity" ]] || return 2
+    [[ "$recorded_pid" == "$launcher_pid" && "$recorded_pgid" == "$launcher_pgid" ]] || return 2
+    merged_identity=$(wh_process_identity_merge_compatible "$recorded_identity" "$launcher_identity") || return 2
+    if [[ "$merged_identity" != "$recorded_identity" ]]; then
+      wh_state_write "$STATE_FILE" "$(python3 - "$launcher_pid" "$launcher_pgid" "$merged_identity" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "launcher_pid": int(sys.argv[1]),
+    "launcher_pgid": int(sys.argv[2]),
+    "launcher_identity": sys.argv[3],
+}))
+PY
+)"
+    fi
     return 0
   fi
   wh_state_write "$STATE_FILE" "$(python3 - "$launcher_pid" "$launcher_pgid" "$launcher_identity" <<'PY'
@@ -107,6 +120,7 @@ kill_recorded_processes() {
   local harness_pid harness_pgid launcher_pid launcher_pgid reservation_token
   local harness_identity launcher_identity cleanup_status=0
   local current_status metadata_status metadata_launcher_pid metadata_launcher_pgid metadata_launcher_identity
+  local merged_launcher_identity
   local -a legacy_identityless_records=()
   CLEANUP_PENDING_REASON=""
   current_status=$(wh_state_get "$STATE_FILE" status 2>/dev/null || true)
@@ -133,10 +147,28 @@ kill_recorded_processes() {
       [[ "$metadata_launcher_pgid" =~ ^[1-9][0-9]*$ ]] && \
       [[ -n "$metadata_launcher_identity" ]]; then
       if [[ -n "$launcher_pid" || -n "$launcher_pgid" || -n "$launcher_identity" ]]; then
-        if [[ "$launcher_pid" != "$metadata_launcher_pid" || "$launcher_pgid" != "$metadata_launcher_pgid" || \
-          "$launcher_identity" != "$metadata_launcher_identity" ]]; then
+        if [[ "$launcher_pid" != "$metadata_launcher_pid" || "$launcher_pgid" != "$metadata_launcher_pgid" ]]; then
           echo "error: launcher metadata identity conflicts with persisted state" >&2
           cleanup_status=1
+        elif ! merged_launcher_identity=$(wh_process_identity_merge_compatible \
+          "$launcher_identity" "$metadata_launcher_identity"); then
+          echo "error: launcher metadata identity conflicts with persisted state" >&2
+          cleanup_status=1
+        else
+          if [[ "$merged_launcher_identity" != "$launcher_identity" ]]; then
+            wh_state_write "$STATE_FILE" "$(python3 - "$launcher_pid" "$launcher_pgid" "$merged_launcher_identity" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "launcher_pid": int(sys.argv[1]),
+    "launcher_pgid": int(sys.argv[2]),
+    "launcher_identity": sys.argv[3],
+}))
+PY
+)"
+          fi
+          launcher_identity="$merged_launcher_identity"
         fi
       else
         launcher_pid="$metadata_launcher_pid"
@@ -161,13 +193,13 @@ PY
   # group without a captured identity is intentionally not actionable: the
   # PID may have been reused by a foreign process.  Keep the complete record
   # and reservation for operator-owned recovery rather than guessing.
-  if [[ -z "$launcher_identity" ]] && {
+  if { [[ -z "$launcher_identity" ]] || wh_process_identity_is_legacy "$launcher_identity"; } && {
     { [[ -n "$launcher_pid" ]] && wh_pid_alive "$launcher_pid"; } ||
     { [[ -n "$launcher_pgid" ]] && wh_process_group_alive "$launcher_pgid"; }
   }; then
     legacy_identityless_records+=("launcher")
   fi
-  if [[ -z "$harness_identity" ]] && {
+  if { [[ -z "$harness_identity" ]] || wh_process_identity_is_legacy "$harness_identity"; } && {
     { [[ -n "$harness_pid" ]] && wh_pid_alive "$harness_pid"; } ||
     { [[ -n "$harness_pgid" ]] && wh_process_group_alive "$harness_pgid"; }
   }; then
@@ -259,13 +291,13 @@ refresh_state() {
   reservation_token=$(wh_state_get "$STATE_FILE" port_reservation_token 2>/dev/null || true)
 
   if [[ "$current_status" == "ready" ]]; then
-    if [[ -z "$harness_identity" ]] && {
+    if { [[ -z "$harness_identity" ]] || wh_process_identity_is_legacy "$harness_identity"; } && {
       { [[ -n "$harness_pid" ]] && wh_pid_alive "$harness_pid"; } ||
       { [[ -n "$harness_pgid" ]] && wh_process_group_alive "$harness_pgid"; }
     }; then
       legacy_identityless_records+=("harness")
     fi
-    if [[ -z "$launcher_identity" ]] && {
+    if { [[ -z "$launcher_identity" ]] || wh_process_identity_is_legacy "$launcher_identity"; } && {
       { [[ -n "$launcher_pid" ]] && wh_pid_alive "$launcher_pid"; } ||
       { [[ -n "$launcher_pgid" ]] && wh_process_group_alive "$launcher_pgid"; }
     }; then
@@ -635,7 +667,17 @@ PY
         exit 1
       fi
       if [[ -f "$META_FILE" ]]; then
-        persist_launcher_record_from_meta || true
+        persist_status=0
+        persist_launcher_record_from_meta || persist_status=$?
+        if [[ "$persist_status" -eq 2 ]]; then
+          wh_state_write "$STATE_FILE" '{"status": "failed", "phase": "failed", "failure_reason": "launcher metadata identity conflicts with persisted state"}'
+          if ! kill_recorded_processes; then
+            write_cleanup_failure_state "launcher metadata identity conflict; cleanup failed"
+          fi
+          echo "error: launcher metadata identity conflicts with persisted state" >&2
+          tail -n 120 "$STARTUP_LOG" >&2 || true
+          exit 1
+        fi
         stack_ready=$(wh_env_file_get "$META_FILE" STACK_READY 2>/dev/null || true)
         if [[ "$stack_ready" == "1" ]]; then
           break
