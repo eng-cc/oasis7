@@ -53,7 +53,6 @@ function Badge(props) {
 function EmptyState(props) {
   return <div class={`empty ${props.class ?? ""}`} style={props.style}>{props.children}</div>;
 }
-
 function targetSyncProgressLines(progress, locale) {
   if (!progress) {
     return [];
@@ -108,7 +107,6 @@ function targetSyncProgressLines(progress, locale) {
   }
   return lines;
 }
-
 function EntityListPendingState(props) {
   const locale = () => props.locale ?? uiLocale();
   const label = () => props.label ?? tr(locale(), "目标", "targets");
@@ -141,11 +139,9 @@ function EntityListPendingState(props) {
     </div>
   );
 }
-
 function JsonBlock(props) {
   return <pre class="json">{JSON.stringify(props.value, null, 2)}</pre>;
 }
-
 function DiagnosticDetails(props) {
   const locale = () => props.locale ?? uiLocale();
   const [isOpen, setIsOpen] = createSignal(false);
@@ -164,7 +160,6 @@ function DiagnosticDetails(props) {
     </details>
   );
 }
-
 function claimField(value, ...names) {
   if (!value || typeof value !== "object") return null;
   for (const name of names) {
@@ -174,14 +169,12 @@ function claimField(value, ...names) {
   }
   return null;
 }
-
 function compactValue(value) {
   if (value === null || value === undefined || value === "") return "-";
   if (typeof value === "number") return Number.isFinite(value) ? String(value) : "-";
   if (typeof value === "boolean") return value ? "true" : "false";
   return String(value);
 }
-
 function claimMoney(value) {
   const amount = claimField(value, "amount", "tokens", "balance", "value");
   const symbol = claimField(value, "symbol", "denom", "currency");
@@ -190,7 +183,6 @@ function claimMoney(value) {
   }
   return compactValue(value);
 }
-
 function claimQuoteRows(quote) {
   if (!quote || typeof quote !== "object") return [];
   return [
@@ -216,9 +208,7 @@ function claimQuoteRows(quote) {
     ["Reclaim terms", claimField(quote, "reclaim_terms", "reclaimTerms", "reclaim")],
   ].filter(([, value]) => value !== null && value !== undefined && value !== "");
 }
-
 const PRIMARY_CLAIM_QUOTE_LABELS = new Set(["Total upfront", "Eligible balance", "Owned / cap"]);
-
 function claimQuoteMetricClass(label) {
   return [
     "metric",
@@ -226,11 +216,9 @@ function claimQuoteMetricClass(label) {
     label === "Total upfront" ? "metric--claim-total" : null,
   ].filter(Boolean).join(" ");
 }
-
 function claimTarget(claim) {
   return claimField(claim, "target_agent_id", "targetAgentId", "agent_id", "agentId", "target") || "agent";
 }
-
 function claimStatusText(claim) {
   const status = claimField(claim, "status", "claim_status", "claimStatus") || "active";
   const paidThrough = claimField(claim, "upkeep_paid_through_epoch", "upkeepPaidThroughEpoch");
@@ -249,7 +237,6 @@ function claimStatusText(claim) {
     reclaim !== null ? `forced reclaim in ${reclaim}` : null,
   ].filter(Boolean).join(" · ");
 }
-
 function claimOwnedDetail(claim) {
   const restrictedBond = claimField(claim, "claim_bond_locked_restricted_amount", "lockedBondRestricted");
   const liquidBond = claimField(claim, "claim_bond_locked_liquid_amount", "lockedBondLiquid");
@@ -266,7 +253,6 @@ function claimOwnedDetail(claim) {
       : null,
   ].filter(Boolean).join(" · ");
 }
-
 function releaseClaimActionState(actions) {
   let published = false;
   let disabledReason = null;
@@ -282,7 +268,6 @@ function releaseClaimActionState(actions) {
   });
   return { available, published, disabledReason };
 }
-
 function expansionBranchCards(gameplay, locale) {
   const goal = String(gameplay?.goalKind || "").toLowerCase();
   if (goal !== "choosefirstexpansiontradeoff" && goal !== "choosemidlooppath") {
@@ -308,7 +293,6 @@ function expansionBranchCards(gameplay, locale) {
     };
   });
 }
-
 function ClaimAgentChoiceCard(props) {
   const locale = () => props.locale ?? uiLocale();
   const claim = () => props.claim || {};
@@ -3235,6 +3219,13 @@ function InteractionPanel() {
     }
     return id;
   };
+  const selectedTarget = () => {
+    revision();
+    return core.state.selectedKind && core.state.selectedId
+      ? { kind: core.state.selectedKind, id: core.state.selectedId }
+      : null;
+  };
+  const selectedTargetLabel = () => core.state.selectedObject?.name || core.state.selectedObject?.label || core.state.selectedId;
   const gameplaySummary = () => {
     revision();
     return core.buildGameplaySummary(locale());
@@ -3371,25 +3362,38 @@ function InteractionPanel() {
     <Show
       when={agentId()}
       fallback={
-        <Show
-          when={selectedAgentId()}
-          fallback={
+        selectedTarget()?.kind === "location"
+          ? (
+            <div class="stack command-surface command-surface--non-agent" data-command-target-kind="location">
+              <div class="badge-row command-surface__target-row" data-command-continuity="target">
+                <Badge class="badge badge--accent">{tr(locale(), "当前核查目标", "Current Inspect Target")}</Badge>
+                <Badge>{selectedTargetLabel()}</Badge>
+                <Badge>{`location=${selectedTarget()?.id}`}</Badge>
+              </div>
+              <AgentContextLite model={selectedAgentContextModel()} locale={locale()} fixtureMetadata={selectedAgentContextFixtureMetadata()} />
+            </div>
+          )
+          : (
             <Show
-              when={gameplaySummary()?.blockerKind === "runtime_snapshot_empty_entities"}
-              fallback={<EmptyState>{tr(locale(), "先选中一个行动体，才能解锁提示词和聊天控制。", "Select an agent to unlock prompt/chat controls.")}</EmptyState>}
+              when={selectedAgentId()}
+              fallback={
+                <Show
+                  when={gameplaySummary()?.blockerKind === "runtime_snapshot_empty_entities"}
+                  fallback={<EmptyState>{tr(locale(), "先选中一个行动体，才能解锁提示词和聊天控制。", "Select an agent to unlock prompt/chat controls.")}</EmptyState>}
+                >
+                  <EmptyEntityRecoveryCard locale={locale()} gameplay={gameplaySummary} />
+                </Show>
+              }
             >
-              <EmptyEntityRecoveryCard locale={locale()} gameplay={gameplaySummary} />
+              <EmptyState>
+                {tr(
+                  locale(),
+                  "当前账号还没有可操作的 Agent。请先认领你的第一个 Agent，或等待绑定同步完成。",
+                  "This account has no controllable Agent yet. Claim your first Agent, or wait for binding sync to complete.",
+                )}
+              </EmptyState>
             </Show>
-          }
-        >
-          <EmptyState>
-            {tr(
-              locale(),
-              "当前账号还没有可操作的 Agent。请先认领你的第一个 Agent，或等待绑定同步完成。",
-              "This account has no controllable Agent yet. Claim your first Agent, or wait for binding sync to complete.",
-            )}
-          </EmptyState>
-        </Show>
+          )
       }
     >
       <div class="stack command-surface" data-command-agent={agentId()} data-command-chat-history={String(chatHistory().length)}>
