@@ -1,5 +1,5 @@
 use super::{GameplayActionRequest, build_runtime_action_from_gameplay_request};
-use crate::runtime::{Action as RuntimeAction, MaterialLedgerId, WorldState};
+use crate::runtime::{Action as RuntimeAction, IndustryStage, MaterialLedgerId, WorldState};
 use crate::simulator::{ResourceKind, default_schedule_recipe_readiness};
 use oasis7_wasm_abi::MaterialStack;
 use std::collections::{BTreeMap, BTreeSet};
@@ -11,7 +11,7 @@ pub(super) fn schedule_recipe_disabled_reason(
 ) -> Option<String> {
     let RuntimeAction::ScheduleRecipe {
         factory_id,
-        recipe_id: _,
+        recipe_id,
         plan,
         ..
     } = build_runtime_action_from_gameplay_request(&GameplayActionRequest {
@@ -62,6 +62,38 @@ pub(super) fn schedule_recipe_disabled_reason(
     }
     if !state.agents.contains_key(agent_id) {
         return Some(format!("builder agent unavailable: agent_id={agent_id}"));
+    }
+    if let Some(profile) = state.recipe_profiles.get(recipe_id.as_str()) {
+        if !recipe_stage_gate_allowed(state.industry_progress.stage, profile.stage_gate.as_str()) {
+            return Some(format!(
+                "recipe stage gate denied: recipe={} required_stage={} current_stage={}",
+                recipe_id,
+                profile.stage_gate,
+                industry_stage_label(state.industry_progress.stage),
+            ));
+        }
+        if !recipe_preferred_tags_compatible(&profile.preferred_factory_tags, &factory.spec.tags) {
+            return Some(format!(
+                "recipe preferred_factory_tags mismatch: recipe={} preferred={:?} factory_tags={:?}",
+                recipe_id, profile.preferred_factory_tags, factory.spec.tags
+            ));
+        }
+    }
+    for stack in &plan.produce {
+        let Some(profile) = state.product_profiles.get(stack.kind.as_str()) else {
+            continue;
+        };
+        if !product_unlock_stage_allowed(
+            state.industry_progress.stage,
+            profile.unlock_stage.as_str(),
+        ) {
+            return Some(format!(
+                "product unlock_stage denied: product={} required_stage={} current_stage={}",
+                profile.product_id,
+                profile.unlock_stage,
+                industry_stage_label(state.industry_progress.stage),
+            ));
+        }
     }
     let consume = recipe_consume_with_maintenance_sinks(state, &plan.consume, &plan.produce);
     let consume_ledger = expected_input_ledger;
@@ -397,6 +429,55 @@ fn ledger_material_balance(state: &WorldState, ledger_id: &MaterialLedgerId, kin
         .and_then(|materials| materials.get(kind))
         .copied()
         .unwrap_or(0)
+}
+
+fn recipe_stage_gate_allowed(current_stage: IndustryStage, stage_gate: &str) -> bool {
+    let normalized = stage_gate.trim();
+    if normalized.is_empty() {
+        return true;
+    }
+    let Some(required_stage) = parse_industry_stage(normalized) else {
+        // Runtime preserves forward compatibility for unknown stage labels by
+        // treating them as advisory rather than inventing a new ordering.
+        return true;
+    };
+    current_stage >= required_stage
+}
+
+fn product_unlock_stage_allowed(current_stage: IndustryStage, unlock_stage: &str) -> bool {
+    recipe_stage_gate_allowed(current_stage, unlock_stage)
+}
+
+fn parse_industry_stage(raw: &str) -> Option<IndustryStage> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "bootstrap" => Some(IndustryStage::Bootstrap),
+        "scale_out" | "scaleout" | "scale-out" => Some(IndustryStage::ScaleOut),
+        "governance" => Some(IndustryStage::Governance),
+        _ => None,
+    }
+}
+
+fn industry_stage_label(stage: IndustryStage) -> &'static str {
+    match stage {
+        IndustryStage::Bootstrap => "bootstrap",
+        IndustryStage::ScaleOut => "scale_out",
+        IndustryStage::Governance => "governance",
+    }
+}
+
+fn recipe_preferred_tags_compatible(preferred_tags: &[String], factory_tags: &[String]) -> bool {
+    if preferred_tags.is_empty() {
+        return true;
+    }
+    let normalized_factory: BTreeSet<String> = factory_tags
+        .iter()
+        .map(|tag| tag.trim().to_ascii_lowercase())
+        .filter(|tag| !tag.is_empty())
+        .collect();
+    preferred_tags.iter().any(|tag| {
+        let normalized = tag.trim().to_ascii_lowercase();
+        !normalized.is_empty() && normalized_factory.contains(normalized.as_str())
+    })
 }
 
 #[cfg(test)]

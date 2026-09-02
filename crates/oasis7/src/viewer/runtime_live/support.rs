@@ -699,6 +699,12 @@ fn install_starter_factory_authorities(
             .set_ledger_material_balance(owner_ledger.clone(), material, amount)
             .map_err(|err| format!("{label} seed starter build material failed: {err:?}"))?;
     }
+    let smelter_ledger = MaterialLedgerId::site("site-smelter");
+    for (material, amount) in [("iron_ore", 60), ("carbon_fuel", 20)] {
+        world
+            .set_ledger_material_balance(smelter_ledger.clone(), material, amount)
+            .map_err(|err| format!("{label} seed starter recipe material failed: {err:?}"))?;
+    }
     Ok(())
 }
 
@@ -877,5 +883,14 @@ mod tests {
         assert!(seed_location.fragment_budget.is_some());
         assert_eq!(agent.state.resources.get(ResourceKind::Electricity), 32);
         assert_eq!(agent.state.resources.get(ResourceKind::Data), 8);
+        let smelter_ledger = crate::runtime::MaterialLedgerId::site("site-smelter");
+        assert_eq!(
+            world.ledger_material_balance(&smelter_ledger, "iron_ore"),
+            60
+        );
+        assert_eq!(
+            world.ledger_material_balance(&smelter_ledger, "carbon_fuel"),
+            20
+        );
     }
 }

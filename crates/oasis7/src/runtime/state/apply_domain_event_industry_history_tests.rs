@@ -18,6 +18,43 @@ fn failure_disposition(job_id: ActionId) -> FactoryProductionFailureDispositionV
     }
 }
 
+fn seed_settled_history(state: &mut WorldState, job_id: ActionId, order: u64) {
+    state.settled_recipe_job_ids.insert(job_id);
+    state.industry_settlement_orders.insert(job_id, order);
+    state.product_validation_attempts.insert(
+        job_id,
+        vec![ProductValidationAttemptV1 {
+            job_id,
+            validation_index: Some(0),
+            requester_agent_id: "builder-a".to_string(),
+            module_id: "m4.product.test".to_string(),
+            stack: MaterialStack::new("test_product", 1),
+        }],
+    );
+    state.product_validation_receipts.insert(
+        job_id,
+        vec![ProductValidationReceiptV1 {
+            job_id,
+            validation_index: Some(0),
+            requester_agent_id: "builder-a".to_string(),
+            module_id: "m4.product.test".to_string(),
+            stack: MaterialStack::new("test_product", 1),
+            decision: ProductValidationDecision::accepted("test_product", 1, true, Vec::new()),
+            failure_detail: None,
+        }],
+    );
+    state.recipe_completion_receipts.insert(
+        job_id,
+        RecipeCompletionReceiptV1 {
+            job_id,
+            ..Default::default()
+        },
+    );
+    state
+        .factory_production_failure_dispositions
+        .insert(job_id, failure_disposition(job_id));
+}
+
 fn blocked_factory(action_id: ActionId) -> FactoryState {
     let mut production = FactoryProductionState::default();
     production.current_blocker_kind = Some("product_validation".to_string());
@@ -45,6 +82,7 @@ fn blocked_factory(action_id: ActionId) -> FactoryState {
         production,
         site_authority_revision: None,
         site_location_id: None,
+        location_anchor_revision: None,
         construction_power_profile_key: None,
         construction_power_profile_revision: None,
         built_at: 0,
@@ -66,6 +104,7 @@ fn current_factory_blocker_protects_unresolved_failure_disposition() {
         .insert("factory.test".to_string(), blocked_factory(1));
     for job_id in 1..=65 {
         state.settled_recipe_job_ids.insert(job_id);
+        state.industry_settlement_orders.insert(job_id, job_id);
         let mut disposition = failure_disposition(job_id);
         if job_id > 1 {
             disposition.factory_id = format!("factory.other-{job_id}");
@@ -87,6 +126,7 @@ fn current_factory_blocker_protects_unresolved_failure_disposition() {
     production.current_blocker_detail = None;
     production.current_blocker_action_id = None;
     state.settled_recipe_job_ids.insert(66);
+    state.industry_settlement_orders.insert(66, 66);
     let mut disposition = failure_disposition(66);
     disposition.factory_id = "factory.other-66".to_string();
     state
@@ -105,13 +145,18 @@ fn current_factory_blocker_protects_unresolved_failure_disposition() {
         .insert("factory.test".to_string(), blocked_factory(1));
     state.factory_production_failure_dispositions.clear();
     state.settled_recipe_job_ids.clear();
+    state.industry_settlement_orders.clear();
     for job_id in (u64::MAX - 63)..=u64::MAX {
         state.settled_recipe_job_ids.insert(job_id);
+        state
+            .industry_settlement_orders
+            .insert(job_id, job_id - (u64::MAX - 64));
         state
             .factory_production_failure_dispositions
             .insert(job_id, failure_disposition(job_id));
     }
     state.settled_recipe_job_ids.insert(1);
+    state.industry_settlement_orders.insert(1, 65);
     state
         .factory_production_failure_dispositions
         .insert(1, failure_disposition(1));
@@ -122,4 +167,148 @@ fn current_factory_blocker_protects_unresolved_failure_disposition() {
             .contains_key(&1)
     );
     assert_eq!(state.factory_production_failure_dispositions.len(), 64);
+}
+
+#[test]
+fn settled_history_rollover_retains_newest_low_action_id() {
+    let mut state = WorldState::default();
+    for (order, job_id) in (1..=64).zip(100..=163) {
+        seed_settled_history(&mut state, job_id, order);
+    }
+    seed_settled_history(&mut state, 1, 65);
+
+    state.compact_settled_industry_history();
+
+    assert!(
+        state
+            .factory_production_failure_dispositions
+            .contains_key(&1),
+        "the post-rollover settlement must remain the newest history entry"
+    );
+    assert!(
+        !state
+            .factory_production_failure_dispositions
+            .contains_key(&100),
+        "the true oldest pre-rollover settlement must be evicted"
+    );
+    assert_eq!(state.product_validation_attempts.len(), 64);
+    assert_eq!(state.product_validation_receipts.len(), 64);
+    assert_eq!(state.recipe_completion_receipts.len(), 64);
+    assert_eq!(state.factory_production_failure_dispositions.len(), 64);
+    assert_eq!(state.industry_settlement_orders.len(), 64);
+    assert_eq!(state.industry_settlement_orders.get(&1), Some(&65));
+    assert!(!state.industry_settlement_orders.contains_key(&100));
+}
+
+fn pending_recipe_job(job_id: ActionId) -> RecipeJobState {
+    RecipeJobState {
+        job_id,
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: "factory.test".to_string(),
+        recipe_id: "recipe.test".to_string(),
+        accepted_batches: 1,
+        consume: Vec::new(),
+        produce: Vec::new(),
+        byproducts: Vec::new(),
+        power_required: 0,
+        power_owner_agent_id: Some("builder-a".to_string()),
+        duration_ticks: 1,
+        consume_ledger: MaterialLedgerId::world(),
+        output_ledger: MaterialLedgerId::world(),
+        bottleneck_tags: Vec::new(),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
+        ready_at: 0,
+    }
+}
+
+#[test]
+fn first_terminal_industry_events_allocate_order_once_and_replay_is_stable() {
+    let mut state = WorldState::default();
+    state.pending_recipe_jobs.insert(10, pending_recipe_job(10));
+    state
+        .apply_domain_event(
+            &DomainEvent::RecipeCompleted {
+                job_id: 10,
+                requester_agent_id: "builder-a".to_string(),
+                factory_id: "factory.test".to_string(),
+                recipe_id: "recipe.test".to_string(),
+                accepted_batches: 1,
+                produce: Vec::new(),
+                byproducts: Vec::new(),
+                output_ledger: MaterialLedgerId::world(),
+                bottleneck_tags: Vec::new(),
+                logistics_route_ids: Vec::new(),
+                logistics_path_ids: Vec::new(),
+            },
+            0,
+        )
+        .expect("first completion");
+    assert_eq!(state.industry_settlement_orders.get(&10), Some(&1));
+    assert_eq!(state.next_industry_settlement_order, 2);
+    state
+        .apply_domain_event(
+            &DomainEvent::RecipeCompleted {
+                job_id: 10,
+                requester_agent_id: "builder-a".to_string(),
+                factory_id: "factory.test".to_string(),
+                recipe_id: "recipe.test".to_string(),
+                accepted_batches: 1,
+                produce: Vec::new(),
+                byproducts: Vec::new(),
+                output_ledger: MaterialLedgerId::world(),
+                bottleneck_tags: Vec::new(),
+                logistics_route_ids: Vec::new(),
+                logistics_path_ids: Vec::new(),
+            },
+            0,
+        )
+        .expect("completion replay");
+    assert_eq!(state.next_industry_settlement_order, 2);
+
+    state.pending_recipe_jobs.insert(11, pending_recipe_job(11));
+    let blocked = DomainEvent::FactoryProductionBlocked {
+        action_id: 11,
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: "factory.test".to_string(),
+        recipe_id: "recipe.test".to_string(),
+        blocker_kind: "product_validation".to_string(),
+        blocker_detail: "test rejection".to_string(),
+    };
+    state
+        .apply_domain_event(&blocked, 0)
+        .expect("first validation failure");
+    assert_eq!(state.industry_settlement_orders.get(&11), Some(&2));
+    assert_eq!(state.next_industry_settlement_order, 3);
+    state
+        .apply_domain_event(&blocked, 0)
+        .expect("validation failure replay");
+    assert_eq!(state.next_industry_settlement_order, 3);
+}
+
+#[test]
+fn legacy_industry_history_without_settlement_order_is_decodable_and_retained() {
+    let mut state = WorldState::default();
+    state
+        .factory_production_failure_dispositions
+        .insert(7, failure_disposition(7));
+    state.settled_recipe_job_ids.insert(7);
+    let mut value = serde_json::to_value(&state).expect("serialize legacy fixture");
+    value
+        .as_object_mut()
+        .expect("world state object")
+        .remove("next_industry_settlement_order");
+    value
+        .as_object_mut()
+        .expect("world state object")
+        .remove("industry_settlement_orders");
+    let mut restored: WorldState = serde_json::from_value(value).expect("decode legacy state");
+    assert_eq!(restored.next_industry_settlement_order, 1);
+    assert!(restored.industry_settlement_orders.is_empty());
+    restored.compact_settled_industry_history();
+    assert!(
+        restored
+            .factory_production_failure_dispositions
+            .contains_key(&7)
+    );
 }

@@ -4,7 +4,7 @@ use super::industrial_progression::{
     setup_runtime_industrial_gameplay_session, smelter_schedule_action,
 };
 use super::*;
-use crate::runtime::Action;
+use crate::runtime::{Action, ProductProfileV1, RecipeProfileV1};
 use crate::simulator::{PlayerGameplayGoalKind, PlayerGameplayStageStatus, ResourceKind};
 
 fn submit_iron_ingot_schedule(
@@ -73,6 +73,100 @@ fn assert_smelter_schedule_enabled(server: &mut ViewerRuntimeLiveServer, label: 
     assert_eq!(
         action.disabled_reason, None,
         "runtime ScheduleRecipe admission does not gate on current site status: {label}"
+    );
+}
+
+#[test]
+fn runtime_gameplay_schedule_readiness_matches_governed_recipe_and_output_unlocks() {
+    let _guard = lock_test_llm_env();
+    let (mut server, _agent_id) = ready_smelter_for_schedule_site_parity(78);
+
+    server
+        .world
+        .upsert_recipe_profile(RecipeProfileV1 {
+            recipe_id: "recipe.smelter.iron_ingot".to_string(),
+            bottleneck_tags: vec!["iron_ore".to_string()],
+            stage_gate: "scale-out".to_string(),
+            preferred_factory_tags: vec!["smelter".to_string()],
+        })
+        .expect("govern iron ingot recipe stage");
+    let gameplay = expect_player_gameplay(&mut server, "governed recipe stage readiness");
+    let stage_reason =
+        smelter_schedule_action(&gameplay, crate::viewer::ACTION_SCHEDULE_SMELTER_IRON_INGOT)
+            .disabled_reason
+            .as_deref()
+            .expect("governed recipe stage must disable scheduling");
+    assert_eq!(
+        stage_reason,
+        "recipe stage gate denied: recipe=recipe.smelter.iron_ingot required_stage=scale-out current_stage=bootstrap"
+    );
+
+    server
+        .world
+        .upsert_recipe_profile(RecipeProfileV1 {
+            recipe_id: "recipe.smelter.iron_ingot".to_string(),
+            bottleneck_tags: vec!["iron_ore".to_string()],
+            stage_gate: "bootstrap".to_string(),
+            preferred_factory_tags: vec!["assembler".to_string()],
+        })
+        .expect("govern iron ingot recipe factory tags");
+    let gameplay = expect_player_gameplay(&mut server, "governed recipe tag readiness");
+    let tag_reason =
+        smelter_schedule_action(&gameplay, crate::viewer::ACTION_SCHEDULE_SMELTER_IRON_INGOT)
+            .disabled_reason
+            .as_deref()
+            .expect("incompatible governed factory tags must disable scheduling");
+    assert_eq!(
+        tag_reason,
+        "recipe preferred_factory_tags mismatch: recipe=recipe.smelter.iron_ingot preferred=[\"assembler\"] factory_tags=[\"smelter\", \"thermal\"]"
+    );
+
+    server
+        .world
+        .upsert_recipe_profile(RecipeProfileV1 {
+            recipe_id: "recipe.smelter.iron_ingot".to_string(),
+            bottleneck_tags: vec!["iron_ore".to_string()],
+            stage_gate: "bootstrap".to_string(),
+            preferred_factory_tags: vec!["smelter".to_string()],
+        })
+        .expect("allow governed iron ingot recipe");
+    server
+        .world
+        .upsert_product_profile(ProductProfileV1 {
+            product_id: "iron_ingot".to_string(),
+            role_tag: "scale".to_string(),
+            maintenance_sink: Vec::new(),
+            tradable: true,
+            unlock_stage: "governance".to_string(),
+        })
+        .expect("govern iron ingot output unlock");
+    let gameplay = expect_player_gameplay(&mut server, "governed output unlock readiness");
+    let output_reason =
+        smelter_schedule_action(&gameplay, crate::viewer::ACTION_SCHEDULE_SMELTER_IRON_INGOT)
+            .disabled_reason
+            .as_deref()
+            .expect("governed product unlock must disable scheduling");
+    assert_eq!(
+        output_reason,
+        "product unlock_stage denied: product=iron_ingot required_stage=governance current_stage=bootstrap"
+    );
+
+    server
+        .world
+        .upsert_product_profile(ProductProfileV1 {
+            product_id: "iron_ingot".to_string(),
+            role_tag: "scale".to_string(),
+            maintenance_sink: Vec::new(),
+            tradable: true,
+            unlock_stage: "bootstrap".to_string(),
+        })
+        .expect("allow governed iron ingot output");
+    let gameplay = expect_player_gameplay(&mut server, "governed schedule readiness parity");
+    assert_eq!(
+        smelter_schedule_action(&gameplay, crate::viewer::ACTION_SCHEDULE_SMELTER_IRON_INGOT,)
+            .disabled_reason,
+        None,
+        "ready governed recipe must match runtime admission"
     );
 }
 

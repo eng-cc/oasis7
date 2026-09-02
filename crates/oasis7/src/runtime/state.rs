@@ -64,31 +64,24 @@ pub(super) use logistics_path_authority::LogisticsPathAuthorityV1;
 fn default_world_material_ledger() -> MaterialLedgerId {
     state_defaults::default_world_material_ledger()
 }
-
 fn default_logistics_route_available() -> bool {
     state_defaults::default_logistics_route_available()
 }
-
 fn default_logistics_capacity_units() -> i64 {
     state_defaults::default_logistics_capacity_units()
 }
-
 fn default_material_ledgers() -> BTreeMap<MaterialLedgerId, BTreeMap<String, i64>> {
     state_defaults::default_material_ledgers()
 }
-
 fn default_material_transit_priority() -> MaterialTransitPriority {
     state_defaults::default_material_transit_priority()
 }
-
 fn default_module_market_order_id() -> u64 {
     state_defaults::default_module_market_order_id()
 }
-
 fn default_module_market_sale_id() -> u64 {
     state_defaults::default_module_market_sale_id()
 }
-
 fn default_next_module_instance_id() -> u64 {
     state_defaults::default_next_module_instance_id()
 }
@@ -109,7 +102,6 @@ fn default_module_release_required_roles() -> Vec<String> {
     state_defaults::default_module_release_required_roles()
 }
 const ALLIANCE_MIN_MEMBER_COUNT: usize = 2;
-
 pub use self::industry_state::{
     AgentLocationAuthorityV1, FACTORY_BUILD_STARTED_MODERN_VERSION, FactoryBuildPowerObligationV1,
     FactoryConstructionPowerMode, FactoryConstructionPowerProfileV1, FactoryProductionSnapshot,
@@ -137,6 +129,8 @@ pub struct FactoryState {
     pub site_authority_revision: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub site_location_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location_anchor_revision: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub construction_power_profile_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -604,6 +598,12 @@ pub struct WorldState {
     /// the same completion/start identity must not sink or credit it again.
     #[serde(default)]
     pub settled_recipe_job_ids: BTreeSet<ActionId>,
+    /// Monotonic settlement position for new industry terminal outcomes.
+    #[serde(default = "state_defaults::default_next_industry_settlement_order")]
+    pub next_industry_settlement_order: u64,
+    /// Durable insertion order for bounded industry history compaction.
+    #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
+    pub industry_settlement_orders: BTreeMap<ActionId, u64>,
     /// Full completion payloads for new recipe settlements.  The ID set above
     /// remains a compatibility projection for pre-receipt snapshots.
     #[serde(

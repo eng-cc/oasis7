@@ -474,6 +474,15 @@ fn factory_build_pins_location_anchor_revision_and_replays_after_anchor_mutation
         .expect("rotate location anchor after acceptance");
     world.step().expect("complete pinned-anchor build");
     assert!(world.has_factory("factory.pinned-anchor"));
+    assert_eq!(
+        world
+            .state()
+            .factories
+            .get("factory.pinned-anchor")
+            .and_then(|factory| factory.location_anchor_revision),
+        Some(1),
+        "completed factory must retain the accepted location anchor revision"
+    );
 
     let restored = World::from_snapshot(snapshot_before_build.clone(), world.journal().clone())
         .expect("replay must preserve accepted anchor pin");

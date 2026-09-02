@@ -73,6 +73,7 @@ fn failure_disposition_world_state() -> WorldState {
                 current_blocker_action_id: Some(19),
                 ..FactoryProductionState::default()
             },
+            location_anchor_revision: None,
             site_authority_revision: None,
             site_location_id: None,
             construction_power_profile_key: None,
@@ -96,6 +97,7 @@ fn failure_disposition_world_state() -> WorldState {
                 last_completed_recipe_id: Some("recipe.decoy".to_string()),
                 ..FactoryProductionState::default()
             },
+            location_anchor_revision: None,
             site_authority_revision: None,
             site_location_id: None,
             construction_power_profile_key: None,
@@ -176,6 +178,7 @@ fn runtime_gameplay_snapshot_flags_grind_only_after_repeating_same_loop_without_
                 same_recipe_repeat_count: 3,
                 ..FactoryProductionState::default()
             },
+            location_anchor_revision: None,
             site_authority_revision: None,
             site_location_id: None,
             construction_power_profile_key: None,

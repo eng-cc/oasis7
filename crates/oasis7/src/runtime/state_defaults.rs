@@ -46,6 +46,10 @@ pub(super) fn default_factory_production_state() -> FactoryProductionState {
     FactoryProductionState::default()
 }
 
+pub(super) fn default_next_industry_settlement_order() -> u64 {
+    1
+}
+
 pub(super) fn default_module_release_required_roles() -> Vec<String> {
     vec![
         "security".to_string(),
@@ -89,6 +93,8 @@ impl Default for WorldState {
             pending_factory_builds: BTreeMap::new(),
             pending_recipe_jobs: BTreeMap::new(),
             settled_recipe_job_ids: BTreeSet::new(),
+            next_industry_settlement_order: default_next_industry_settlement_order(),
+            industry_settlement_orders: BTreeMap::new(),
             recipe_completion_receipts: BTreeMap::new(),
             factory_recycle_receipts: BTreeMap::new(),
             pending_material_transits: BTreeMap::new(),

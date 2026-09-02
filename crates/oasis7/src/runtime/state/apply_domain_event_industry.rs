@@ -941,6 +941,7 @@ impl WorldState {
                 .map_err(|reason| WorldError::ResourceBalanceInvalid {
                     reason: format!("recipe output preflight failed: {reason}"),
                 })?;
+                self.allocate_industry_settlement_order(*job_id)?;
                 let completed_snapshot = FactoryProductionSnapshot::from_recipe_job(&pending);
                 self.pending_recipe_jobs.remove(job_id);
                 for stack in produce {
@@ -1048,6 +1049,7 @@ impl WorldState {
                     return Ok(());
                 }
                 if product_validation_failure {
+                    self.allocate_industry_settlement_order(*action_id)?;
                     self.settled_recipe_job_ids.insert(*action_id);
                 }
                 if let Some(factory) = self.factories.get_mut(factory_id) {

@@ -7,24 +7,25 @@ use super::*;
 const SETTLED_INDUSTRY_HISTORY_LIMIT: usize = 64;
 
 impl WorldState {
-    fn oldest_action_id(ids: &BTreeSet<ActionId>) -> Option<ActionId> {
-        let mut ids = ids.iter();
-        let first = *ids.next()?;
-        let mut previous = first;
-        let mut largest_gap = 0;
-        let mut oldest = first;
-        for current in ids {
-            let gap = current.wrapping_sub(previous);
-            if gap > largest_gap {
-                largest_gap = gap;
-                oldest = *current;
-            }
-            previous = *current;
+    pub(super) fn allocate_industry_settlement_order(
+        &mut self,
+        job_id: ActionId,
+    ) -> Result<u64, WorldError> {
+        if let Some(order) = self.industry_settlement_orders.get(&job_id) {
+            return Ok(*order);
         }
-        if first.wrapping_sub(previous) > largest_gap {
-            oldest = first;
-        }
-        Some(oldest)
+        let order = self.next_industry_settlement_order;
+        let next_order =
+            order
+                .checked_add(1)
+                .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                    reason: format!(
+                        "industry settlement order exhausted: next_order={order} job_id={job_id}"
+                    ),
+                })?;
+        self.industry_settlement_orders.insert(job_id, order);
+        self.next_industry_settlement_order = next_order;
+        Ok(order)
     }
 
     fn is_current_factory_failure_disposition(&self, job_id: ActionId) -> bool {
@@ -67,20 +68,28 @@ impl WorldState {
             }
         }
 
-        // Action IDs are monotonically allocated with wrapping rollover. The
-        // largest circular gap identifies the oldest retained identity without
-        // adding another unbounded recency index.
+        // Only entries with a durable settlement order are eligible for
+        // eviction. Legacy payloads without an order remain conservatively
+        // retained because ActionId order is not a settlement-age authority.
+        let mut ordered_job_ids: Vec<(u64, ActionId)> = settled_industry_job_ids
+            .iter()
+            .filter_map(|job_id| {
+                self.industry_settlement_orders
+                    .get(job_id)
+                    .copied()
+                    .map(|order| (order, *job_id))
+            })
+            .collect();
+        ordered_job_ids.sort_unstable();
         let unprotected_limit =
             SETTLED_INDUSTRY_HISTORY_LIMIT.saturating_sub(protected_failure_job_ids.len());
-        while settled_industry_job_ids.len() > unprotected_limit {
-            let Some(job_id) = Self::oldest_action_id(&settled_industry_job_ids) else {
-                break;
-            };
-            settled_industry_job_ids.remove(&job_id);
+        while ordered_job_ids.len() > unprotected_limit {
+            let (_, job_id) = ordered_job_ids.remove(0);
             self.product_validation_attempts.remove(&job_id);
             self.product_validation_receipts.remove(&job_id);
             self.recipe_completion_receipts.remove(&job_id);
             self.factory_production_failure_dispositions.remove(&job_id);
+            self.industry_settlement_orders.remove(&job_id);
         }
     }
 
@@ -638,6 +647,7 @@ impl WorldState {
                 production: FactoryProductionState::default(),
                 site_authority_revision: pending.site_authority_revision,
                 site_location_id: pending.site_location_id.clone(),
+                location_anchor_revision: pending.location_anchor_revision,
                 construction_power_profile_key: pending
                     .construction_power_obligation
                     .as_ref()
@@ -1006,6 +1016,7 @@ mod tests {
         let mut state = WorldState::default();
         for job_id in 1..=96 {
             state.settled_recipe_job_ids.insert(job_id);
+            state.industry_settlement_orders.insert(job_id, job_id);
             state
                 .product_validation_attempts
                 .insert(job_id, vec![attempt(job_id)]);
@@ -1033,6 +1044,7 @@ mod tests {
         assert_eq!(state.product_validation_receipts.len(), 65);
         assert_eq!(state.recipe_completion_receipts.len(), 64);
         assert_eq!(state.factory_production_failure_dispositions.len(), 64);
+        assert_eq!(state.industry_settlement_orders.len(), 64);
         assert!((1..=32).all(|job_id| {
             !state.product_validation_attempts.contains_key(&job_id)
                 && !state.product_validation_receipts.contains_key(&job_id)
@@ -1067,6 +1079,7 @@ mod tests {
         let mut state = WorldState::default();
         state.settled_recipe_job_ids.insert(job_id);
         state.compact_settled_industry_history();
+        let next_order = state.next_industry_settlement_order;
 
         state
             .apply_domain_event(
@@ -1124,5 +1137,7 @@ mod tests {
                 .factory_production_failure_dispositions
                 .contains_key(&job_id)
         );
+        assert_eq!(state.next_industry_settlement_order, next_order);
+        assert!(state.industry_settlement_orders.is_empty());
     }
 }

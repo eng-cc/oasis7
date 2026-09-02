@@ -672,6 +672,7 @@ fn runtime_gameplay_snapshot_does_not_borrow_retired_agent_factory_for_branch_pr
                 last_completed_recipe_id: Some("recipe.smelter.iron_ingot".to_string()),
                 ..FactoryProductionState::default()
             },
+            location_anchor_revision: None,
             site_authority_revision: None,
             site_location_id: None,
             construction_power_profile_key: None,
