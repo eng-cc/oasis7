@@ -56,6 +56,20 @@ REAL_STACK_PID=""
 REAL_STACK_READER_PID=""
 CONCURRENT_PARENT_A=""
 CONCURRENT_PARENT_B=""
+CONCURRENT_CHILD_A=""
+CONCURRENT_CHILD_B=""
+SIGNAL_PROBE_CHILD_PID=""
+SIGNAL_PROBE_REPORT=""
+SIGNAL_PROBE_MODE="${OASIS7_HARNESS_SIGNAL_ABORT_PROBE:-0}"
+SIGNAL_PROBE_FIXTURE_PID=""
+SIGNAL_PROBE_FIXTURE_PGID=""
+SIGNAL_PROBE_FIXTURE_IDENTITY=""
+SIGNAL_PROBE_TOKEN=""
+SIGNAL_PROBE_COMMON_DIR=""
+SIGNAL_PROBE_LOG=""
+SIGNAL_PROBE_LOG_FD=""
+CLEANUP_RUNNING=0
+CLEANUP_COMPLETED=0
 LIFECYCLE_STEP="initialization"
 
 run_harness() {
@@ -204,9 +218,70 @@ cleanup_recorded_group() {
   wh_terminate_process_group "$pid" "$pgid" 500 "$identity" >/dev/null 2>&1 || true
 }
 
+cleanup_signal_probe_fixture() {
+  local report=${1:-}
+  local probe_tmp_dir probe_root probe_pid probe_pgid probe_identity probe_token probe_common_dir probe_log
+  [[ -f "$report" ]] || return 0
+  read -r probe_tmp_dir probe_root probe_pid probe_pgid probe_identity probe_token probe_common_dir probe_log < <(
+    python3 - "$report" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(
+    payload["tmp_dir"],
+    payload["harness_root"],
+    payload["fixture_pid"],
+    payload["fixture_pgid"],
+    payload["fixture_identity"],
+    payload["reservation_token"],
+    payload["common_dir"],
+    payload["deleted_log"],
+)
+PY
+  )
+  cleanup_recorded_group "$probe_pid" "$probe_pgid" "$probe_identity"
+  if [[ -n "$probe_token" ]]; then
+    wh_release_ports_reservation "$probe_root" "$probe_token" "$probe_common_dir" >/dev/null 2>&1 || true
+  fi
+  local probe_root_parent
+  probe_root_parent="$(dirname "$probe_root")"
+  if [[ -f "$probe_root_parent/.oasis7-harness-test-root" ]] &&
+    [[ "$(tr -d '\n' <"$probe_root_parent/.oasis7-harness-test-root")" == "oasis7-harness-lifecycle-test-v1" ]]; then
+    rm -rf -- "$probe_root_parent"
+  fi
+  if [[ -f "$probe_tmp_dir/.oasis7-signal-probe-owner" ]] &&
+    [[ "$(tr -d '\n' <"$probe_tmp_dir/.oasis7-signal-probe-owner")" == "oasis7-harness-signal-probe-v1" ]]; then
+    rm -rf -- "$probe_tmp_dir"
+  fi
+}
+
 cleanup() {
+  local original_status=$?
+  if [[ "$CLEANUP_COMPLETED" == "1" || "$CLEANUP_RUNNING" == "1" ]]; then
+    return "$original_status"
+  fi
+  CLEANUP_RUNNING=1
   set +e
   local cleanup_status=0
+  if [[ -n "$SIGNAL_PROBE_CHILD_PID" ]]; then
+    kill "$SIGNAL_PROBE_CHILD_PID" >/dev/null 2>&1 || true
+    wait "$SIGNAL_PROBE_CHILD_PID" >/dev/null 2>&1 || true
+  fi
+  if [[ "$SIGNAL_PROBE_MODE" == "1" ]]; then
+    cleanup_recorded_group "$SIGNAL_PROBE_FIXTURE_PID" "$SIGNAL_PROBE_FIXTURE_PGID" "$SIGNAL_PROBE_FIXTURE_IDENTITY"
+    if [[ -n "$SIGNAL_PROBE_TOKEN" ]]; then
+      wh_release_ports_reservation "$HARNESS_ROOT" "$SIGNAL_PROBE_TOKEN" "$SIGNAL_PROBE_COMMON_DIR" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "$SIGNAL_PROBE_LOG_FD" ]]; then
+      eval "exec ${SIGNAL_PROBE_LOG_FD}>&-" 2>/dev/null || true
+      SIGNAL_PROBE_LOG_FD=""
+    fi
+  fi
+  if [[ "$SIGNAL_PROBE_MODE" != "1" ]]; then
+    cleanup_signal_probe_fixture "$SIGNAL_PROBE_REPORT"
+  fi
   if [[ -n "$REAL_STACK_PID" ]]; then
     kill "$REAL_STACK_PID" >/dev/null 2>&1 || true
     wait "$REAL_STACK_PID" >/dev/null 2>&1 || true
@@ -257,8 +332,111 @@ cleanup() {
   else
     echo "lifecycle acceptance: cleanup retained test roots for quiescence diagnostics" >&2
   fi
+  CLEANUP_RUNNING=0
+  CLEANUP_COMPLETED=1
+  if [[ "$cleanup_status" -ne 0 && "$original_status" -eq 0 ]]; then
+    return 1
+  fi
+  return "$original_status"
 }
+
+cleanup_on_signal() {
+  local signal_name=${1:-TERM}
+  local signal_status=143
+  [[ "$signal_name" == "INT" ]] && signal_status=130
+  # Ignore a second signal while the idempotent cleanup is proving quiescence;
+  # EXIT is retained only for normal completion and explicit exit-status
+  # preservation after this handler returns.
+  trap '' INT TERM
+  cleanup
+  exit "$signal_status"
+}
+trap 'cleanup_on_signal INT' INT
+trap 'cleanup_on_signal TERM' TERM
 trap cleanup EXIT
+
+signal_abort_probe() {
+  local report=${OASIS7_HARNESS_SIGNAL_ABORT_REPORT:-}
+  local ports_json
+  [[ -n "$report" && "$report" == /* ]] || {
+    echo "signal probe: absolute report path is required" >&2
+    return 2
+  }
+  SIGNAL_PROBE_REPORT="$report"
+  SIGNAL_PROBE_COMMON_DIR="$(wh_git_common_dir)"
+  SIGNAL_PROBE_LOG="$HARNESS_ROOT/startup.log"
+  printf 'oasis7-harness-signal-probe-v1\n' >"$TMP_DIR/.oasis7-signal-probe-owner"
+  mkdir -p "$HARNESS_ROOT"
+  printf 'signal probe fixture\n' >"$SIGNAL_PROBE_LOG"
+  SIGNAL_PROBE_LOG_FD=9
+  exec 9>>"$SIGNAL_PROBE_LOG"
+  wh_start_managed sleep 300 >&9 2>&1
+  SIGNAL_PROBE_FIXTURE_PID="$WH_MANAGED_PID"
+  SIGNAL_PROBE_FIXTURE_PGID="$WH_MANAGED_PGID"
+  SIGNAL_PROBE_FIXTURE_IDENTITY="$WH_MANAGED_IDENTITY"
+  ports_json="$(wh_resolve_ports_json "$HARNESS_ROOT" "$$" "$(wh_worktree_path)" "$SIGNAL_PROBE_COMMON_DIR")"
+  SIGNAL_PROBE_TOKEN="$(python3 - "$ports_json" <<'PY'
+import json
+import sys
+
+print(json.loads(sys.argv[1])["reservation_token"])
+PY
+)"
+  wh_state_write "$HARNESS_ROOT/state.json" "$(python3 - \
+    "$SIGNAL_PROBE_FIXTURE_PID" "$SIGNAL_PROBE_FIXTURE_PGID" \
+    "$SIGNAL_PROBE_FIXTURE_IDENTITY" "$SIGNAL_PROBE_TOKEN" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "status": "failed",
+    "phase": "cleanup_failed",
+    "failure_reason": "signal probe published final identity-protected cleanup failure",
+    "harness_pid": int(sys.argv[1]),
+    "harness_pgid": int(sys.argv[2]),
+    "harness_identity": sys.argv[3],
+    "launcher_pid": None,
+    "launcher_pgid": None,
+    "launcher_identity": None,
+    "port_reservation_token": sys.argv[4],
+}))
+PY
+  )"
+  rm -f -- "$SIGNAL_PROBE_LOG"
+  python3 - "$report" "$TMP_DIR" "$HARNESS_ROOT" "$SIGNAL_PROBE_FIXTURE_PID" \
+    "$SIGNAL_PROBE_FIXTURE_PGID" "$SIGNAL_PROBE_FIXTURE_IDENTITY" \
+    "$SIGNAL_PROBE_TOKEN" "$SIGNAL_PROBE_COMMON_DIR" "$SIGNAL_PROBE_LOG" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(json.dumps({
+    "published_failure_state": True,
+    "tmp_dir": sys.argv[2],
+    "harness_root": sys.argv[3],
+    "fixture_pid": int(sys.argv[4]),
+    "fixture_pgid": int(sys.argv[5]),
+    "fixture_identity": sys.argv[6],
+    "reservation_token": sys.argv[7],
+    "common_dir": sys.argv[8],
+    "deleted_log": sys.argv[9],
+}) + "\n", encoding="utf-8")
+PY
+  # Model the CI/runner path where a terminating shell does not get a chance
+  # to run its EXIT-only cleanup trap.  The explicit INT/TERM handler below
+  # must own this abort path.
+  trap - EXIT
+  # Keep the probe in a bounded wait so its parent can deliver an external
+  # SIGTERM after the final failure-state publication.
+  sleep 30
+}
+
+if [[ "$SIGNAL_PROBE_MODE" == "1" ]]; then
+  signal_abort_probe
+  exit 0
+fi
 
 reset_owned_harness_root
 
@@ -1404,6 +1582,93 @@ if wh_pid_alive "$timeout_child_pid"; then
   echo "lifecycle acceptance: timeout launcher child survived cleanup" >&2
   exit 1
 fi
+
+lifecycle_step "signal-safe abort cleanup"
+SIGNAL_PROBE_REPORT="$TMP_DIR/signal-probe.json"
+rm -f "$SIGNAL_PROBE_REPORT"
+OASIS7_HARNESS_SIGNAL_ABORT_PROBE=1 \
+OASIS7_HARNESS_SIGNAL_ABORT_REPORT="$SIGNAL_PROBE_REPORT" \
+  python3 - "$ROOT_DIR/scripts/worktree-harness-lifecycle.test.sh" >"$TMP_DIR/signal-probe.log" 2>&1 <<'PY' &
+import os
+import sys
+
+os.setsid()
+os.execv(sys.argv[1], sys.argv[1:])
+PY
+SIGNAL_PROBE_CHILD_PID=$!
+for _ in $(seq 1 120); do
+  [[ -f "$SIGNAL_PROBE_REPORT" ]] && break
+  if ! kill -0 "$SIGNAL_PROBE_CHILD_PID" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.05
+done
+[[ -f "$SIGNAL_PROBE_REPORT" ]] || {
+  cat "$TMP_DIR/signal-probe.log" >&2 || true
+  echo "lifecycle acceptance: signal probe did not publish its final failure state" >&2
+  exit 1
+}
+set +e
+kill -TERM -- "-$SIGNAL_PROBE_CHILD_PID"
+wait "$SIGNAL_PROBE_CHILD_PID"
+signal_probe_status=$?
+set -e
+SIGNAL_PROBE_CHILD_PID=""
+[[ "$signal_probe_status" -eq 143 ]] || {
+  cat "$TMP_DIR/signal-probe.log" >&2 || true
+  echo "lifecycle acceptance: SIGTERM probe exited with ${signal_probe_status}, expected 143" >&2
+  exit 1
+}
+read -r signal_probe_tmp_dir signal_probe_root signal_probe_pid signal_probe_pgid signal_probe_token signal_probe_common_dir signal_probe_log < <(
+  python3 - "$SIGNAL_PROBE_REPORT" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert payload["published_failure_state"] is True, payload
+print(
+    payload["tmp_dir"],
+    payload["harness_root"],
+    payload["fixture_pid"],
+    payload["fixture_pgid"],
+    payload["reservation_token"],
+    payload["common_dir"],
+    payload["deleted_log"],
+)
+PY
+)
+if wh_pid_alive "$signal_probe_pid" || wh_process_group_alive "$signal_probe_pgid"; then
+  cat "$TMP_DIR/signal-probe.log" >&2 || true
+  echo "lifecycle acceptance: SIGTERM probe left its identity-protected fixture alive" >&2
+  exit 1
+fi
+[[ ! -e "$signal_probe_root" && ! -e "$signal_probe_tmp_dir" ]] || {
+  cat "$TMP_DIR/signal-probe.log" >&2 || true
+  echo "lifecycle acceptance: SIGTERM probe left temporary harness roots behind" >&2
+  exit 1
+}
+[[ ! -e "$signal_probe_log" ]] || {
+  echo "lifecycle acceptance: SIGTERM probe left its deleted startup log behind" >&2
+  exit 1
+}
+python3 - "$signal_probe_token" "$signal_probe_common_dir" "$signal_probe_root" <<'PY'
+import json
+import pathlib
+import sys
+
+registry_path = pathlib.Path(sys.argv[2]) / ".oasis7-harness-port-registry" / "reservations.json"
+if registry_path.exists():
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    for token, record in registry.get("reservations", {}).items():
+        assert token != sys.argv[1], record
+        assert record.get("harness_root") != str(pathlib.Path(sys.argv[3]).resolve()), record
+PY
+if command -v lsof >/dev/null 2>&1 && lsof -nP +L1 2>/dev/null | grep -F -- "$signal_probe_log" >/dev/null 2>&1; then
+  echo "lifecycle acceptance: SIGTERM probe left an open deleted startup log" >&2
+  exit 1
+fi
+echo "signal-safe abort cleanup: status=$signal_probe_status fixture_pid=$signal_probe_pid reservation=$signal_probe_token"
 
 lifecycle_step "identity-protected cleanup failure"
 FAILURE_COMMON_DIR="$TMP_DIR/failure-common"
