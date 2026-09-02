@@ -6,6 +6,8 @@
 //! world-facing result before hashing evidence.  The replay artifact is an
 //! evidence projection only; it never calls a provider or applies an effect.
 
+use std::time::{Duration, Instant};
+
 use serde_json::{Value, json};
 
 use super::async_agent_runner::{
@@ -21,6 +23,7 @@ const PILOT_PROTOCOL_VERSION: &str = "oasis7.live-agent-pilot.v1";
 const PILOT_RUNTIME_VERSION: &str = "oasis7.async-agent-actor.v1";
 const PILOT_SCOPE: &str = "single_low_frequency_npc";
 const PILOT_AGENT_ID: &str = "pilot-low-frequency-npc";
+const PILOT_COMPLETION_TIMEOUT: Duration = Duration::from_secs(10);
 
 impl AsyncAgentRunner {
     /// Run the approved P0 deterministic pilot at the P2 rollout stage.
@@ -196,7 +199,8 @@ fn collect_pilot_outcome(
     context: &ContinuousAgentTurnContextV1,
 ) -> Result<AsyncAgentTurnOutcome, AsyncAgentRunnerError> {
     let turn_id = runner.start_turn_with_context(PILOT_AGENT_ID, context.clone())?;
-    for _ in 0..1024 {
+    let deadline = Instant::now() + PILOT_COMPLETION_TIMEOUT;
+    loop {
         let _ = runner.step_world_without_waiting_for_provider()?;
         if let Some(outcome) = runner
             .take_completed()
@@ -205,11 +209,14 @@ fn collect_pilot_outcome(
         {
             return Ok(outcome);
         }
-        std::thread::yield_now();
+        if Instant::now() >= deadline {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(1));
     }
-    Err(AsyncAgentRunnerError::Cognition(
-        "pilot actor did not complete within bounded polling budget".to_string(),
-    ))
+    Err(AsyncAgentRunnerError::Cognition(format!(
+        "pilot actor did not complete before {PILOT_COMPLETION_TIMEOUT:?} deadline"
+    )))
 }
 
 fn normalize_outcome(outcome: &AsyncAgentTurnOutcome) -> Value {
