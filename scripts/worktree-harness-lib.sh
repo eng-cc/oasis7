@@ -1142,7 +1142,11 @@ wh_lifecycle_lock_acquire() {
       elif wh_process_identity_is_legacy "$current_identity"; then
         # The owner is live, but a pre-boot_id record cannot be compared
         # across boots.  Treat it as unknown and retain the lock.
-        observed_identity="legacy-uncertain"
+        # An empty observation is intentional: the recovery predicate below
+        # only reclaims a lock for a stopped owner or a known mismatched
+        # identity.  A sentinel string would itself differ from the legacy
+        # record and incorrectly trigger recovery.
+        observed_identity=""
       else
         # A live PID with an unavailable identity is an uncertainty, not a
         # stale owner.  Waiting is the only safe choice because removing the
