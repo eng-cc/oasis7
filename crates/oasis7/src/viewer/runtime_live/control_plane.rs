@@ -855,10 +855,11 @@ impl ViewerRuntimeLiveServer {
     pub(super) fn enqueue_llm_action_from_sidecar(
         &mut self,
     ) -> Result<Option<AgentDecisionTrace>, AgentDecisionTrace> {
-        let Some(decision) = self
-            .llm_sidecar
-            .next_llm_decision(&self.world, &self.snapshot_config)
-        else {
+        let Some(decision) = self.llm_sidecar.next_llm_decision(
+            &self.world,
+            &self.snapshot_config,
+            self.config.world_id.as_str(),
+        ) else {
             return Ok(None);
         };
         let decision_trace = decision.decision_trace.clone();

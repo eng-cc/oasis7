@@ -17,7 +17,8 @@ use crate::simulator::{
     FeedbackEnvelopeV1, GoalSnapshotInputV1, GoalSnapshotProjector, MemoryContextEntryV1,
     MemoryContextSnapshotV1, MemoryWriteIntent, MemoryWriteStore, MockDecisionProvider,
     ProviderBackedAgentBehavior, ProviderDecision, ProviderDiagnostics, ProviderExecutionMode,
-    ProviderTraceEnvelope, ProviderTranscriptEntry, h_v1,
+    ProviderTraceEnvelope, ProviderTranscriptEntry, ResponseArtifactIdentityV1,
+    RuntimeReceiptReadbackHandleV1, RuntimeReceiptReadbackVerifier, h_v1,
 };
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
@@ -535,6 +536,55 @@ fn target_actor_memory_intents_require_matching_committed_runtime_receipt_exactl
         "runtime_authoritative",
         "provider must not self-assign authoritative provenance"
     );
+}
+
+struct VerifiedWorldReadback;
+
+impl RuntimeReceiptReadbackVerifier for VerifiedWorldReadback {
+    fn verify_world_readback(
+        &self,
+        _context: &ContinuousAgentTurnContextV1,
+        _feedback: &FeedbackEnvelopeV1,
+        receipt: &RuntimeReceiptLineageV1,
+        response_identity: &ResponseArtifactIdentityV1,
+    ) -> Result<RuntimeReceiptReadbackHandleV1, crate::simulator::AsyncAgentRunnerError> {
+        Ok(RuntimeReceiptReadbackHandleV1::from_verified(
+            receipt,
+            response_identity,
+        ))
+    }
+}
+
+#[test]
+fn committed_feedback_can_cross_only_the_world_readback_identity_seam() {
+    let mut runner = provider_backed_runner();
+    let _turn_id = runner
+        .start_turn_with_context(AGENT_ID, host_context())
+        .expect("open provider-backed target turn");
+    let outcome = completed_turn(&mut runner);
+    let mut committed = outcome
+        .feedback_for_runtime_status("committed", Some("receipt-readback-1"))
+        .expect("build correlated committed feedback");
+    committed.candidate_action_id = Some(7);
+    committed.provenance = "runtime_authoritative".to_string();
+    let receipt = runtime_receipt_for_feedback(&committed);
+    let response_identity = outcome
+        .prepared_response_context
+        .as_ref()
+        .expect("response context retained")
+        .response_artifact_identity();
+    let mut store = MemoryWriteStore::default();
+    runner
+        .consume_runtime_feedback_with_world_readback(
+            AGENT_ID,
+            committed,
+            &receipt,
+            &response_identity,
+            &VerifiedWorldReadback,
+            &mut store,
+        )
+        .expect("Runtime readback verifier admits committed memory");
+    assert_eq!(store.entries().len(), 1);
 }
 
 fn assert_non_committed_status_does_not_write(status: &str) {

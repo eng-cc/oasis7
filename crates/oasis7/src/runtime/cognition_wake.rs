@@ -460,16 +460,27 @@ pub struct ContinuationBudgetV1 {
 
 /// Runtime admission input for a continuation.  Deliberately excludes the
 /// continuation identity, wake identity, wake sequence, status and status
-/// digest: those fields are allocated and bound by `World`.
+/// digest: those fields are allocated and bound by `World`.  The paired
+/// fields mirror the simulator proposal schema; branch/finality and the
+/// derived wake tick are runtime bindings and are not part of the proposal
+/// digest.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CognitionContinuationProposalV1 {
+    #[serde(default)]
+    pub schema_version: u16,
+    pub continuation_proposal_id: String,
     pub world_id: String,
+    #[serde(default)]
     pub branch_id: String,
+    #[serde(default)]
     pub finality_epoch: u64,
     #[serde(default)]
     pub finality_block_hash: Option<String>,
+    #[serde(default)]
     pub finality_status: String,
+    #[serde(default)]
     pub reorg_epoch: u64,
+    #[serde(default)]
     pub runtime_manifest_hash: String,
     pub agent_id: String,
     pub agent_session_id: String,
@@ -477,10 +488,21 @@ pub struct CognitionContinuationProposalV1 {
     pub decision_request_id: String,
     pub origin_turn_id: String,
     pub origin_request_digest: String,
-    pub continuation_proposal_id: String,
+    #[serde(default)]
+    pub action_or_plan_kind: String,
     pub proposal_digest: String,
     #[serde(default)]
     pub action_or_envelope_digest: Option<String>,
+    #[serde(default)]
+    pub baseline_observation_digest: String,
+    #[serde(default)]
+    pub goal_digest: String,
+    #[serde(default)]
+    pub policy_digest: String,
+    #[serde(default)]
+    pub policy_revision: u64,
+    #[serde(default)]
+    pub precondition_summary: String,
     pub wake_conditions: Vec<WakeConditionV1>,
     #[serde(default)]
     pub next_wake_tick: Option<u64>,
@@ -488,6 +510,99 @@ pub struct CognitionContinuationProposalV1 {
     #[serde(default)]
     pub valid_until_tick: Option<u64>,
     pub precondition_digest: String,
+    #[serde(default)]
+    pub source: String,
+}
+
+#[derive(Debug, Serialize)]
+struct ContinuationProposalDigestInput<'a> {
+    schema_version: u16,
+    continuation_proposal_id: &'a str,
+    world_id: &'a str,
+    agent_id: &'a str,
+    agent_session_id: &'a str,
+    agent_turn_id: &'a str,
+    decision_request_id: &'a str,
+    origin_turn_id: &'a str,
+    origin_request_digest: &'a str,
+    action_or_plan_kind: &'a str,
+    action_or_envelope_digest: Option<&'a str>,
+    remaining_budget: &'a ContinuationBudgetV1,
+    baseline_observation_digest: &'a str,
+    goal_digest: &'a str,
+    policy_digest: &'a str,
+    policy_revision: u64,
+    precondition_summary: &'a str,
+    precondition_digest: &'a str,
+    wake_conditions: Vec<WakeConditionV1>,
+    valid_until_tick: Option<u64>,
+    source: &'a str,
+}
+
+impl CognitionContinuationProposalV1 {
+    /// Recompute the canonical paired-schema digest. Runtime-derived
+    /// branch/finality and wake-tick fields are intentionally excluded.
+    pub fn proposal_digest(&self) -> String {
+        let mut wake_conditions = self.wake_conditions.clone();
+        wake_conditions.sort_by_key(WakeConditionValidator::canonical_bytes);
+        let payload = ContinuationProposalDigestInput {
+            schema_version: self.schema_version,
+            continuation_proposal_id: &self.continuation_proposal_id,
+            world_id: &self.world_id,
+            agent_id: &self.agent_id,
+            agent_session_id: &self.agent_session_id,
+            agent_turn_id: &self.agent_turn_id,
+            decision_request_id: &self.decision_request_id,
+            origin_turn_id: &self.origin_turn_id,
+            origin_request_digest: &self.origin_request_digest,
+            action_or_plan_kind: &self.action_or_plan_kind,
+            action_or_envelope_digest: self.action_or_envelope_digest.as_deref(),
+            remaining_budget: &self.remaining_budget,
+            baseline_observation_digest: &self.baseline_observation_digest,
+            goal_digest: &self.goal_digest,
+            policy_digest: &self.policy_digest,
+            policy_revision: self.policy_revision,
+            precondition_summary: &self.precondition_summary,
+            precondition_digest: &self.precondition_digest,
+            wake_conditions,
+            valid_until_tick: self.valid_until_tick,
+            source: &self.source,
+        };
+        h_v1("oasis7.cognition.continuation-proposal.v1", &payload)
+    }
+
+    pub fn validate(&self) -> Result<(), WakeConditionError> {
+        let bounded = |value: &str| !value.trim().is_empty() && value.len() <= MAX_ID_BYTES;
+        if self.schema_version != 1
+            || !bounded(&self.continuation_proposal_id)
+            || !bounded(&self.world_id)
+            || !bounded(&self.agent_id)
+            || !bounded(&self.agent_session_id)
+            || !bounded(&self.agent_turn_id)
+            || !bounded(&self.decision_request_id)
+            || !bounded(&self.origin_turn_id)
+            || !bounded(&self.origin_request_digest)
+            || !bounded(&self.action_or_plan_kind)
+            || !bounded(&self.baseline_observation_digest)
+            || !bounded(&self.goal_digest)
+            || !bounded(&self.policy_digest)
+            || !bounded(&self.precondition_summary)
+            || !bounded(&self.precondition_digest)
+            || !bounded(&self.source)
+            || !bounded(&self.proposal_digest)
+            || self
+                .action_or_envelope_digest
+                .as_deref()
+                .is_some_and(|value| !bounded(value))
+            || self.remaining_budget.value == 0
+            || !matches!(self.remaining_budget.unit.as_str(), "steps" | "ticks")
+            || WakeConditionValidator::validate(self.wake_conditions.as_slice()).is_err()
+            || self.proposal_digest != self.proposal_digest()
+        {
+            return Err(WakeConditionError::new("continuation_proposal_invalid"));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

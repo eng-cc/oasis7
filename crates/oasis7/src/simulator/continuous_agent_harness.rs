@@ -21,6 +21,8 @@ pub const CONTINUOUS_AGENT_CONTEXT_VERSION: u16 = 1;
 pub const COGNITION_REQUEST_DIGEST_DOMAIN: &str = "oasis7.cognition.request.v1";
 pub const COGNITION_PROVIDER_INVOCATION_DOMAIN: &str = "oasis7.cognition.provider-invocation.v1";
 pub const COGNITION_RESPONSE_DIGEST_DOMAIN: &str = "oasis7.cognition.response.v1";
+pub const COGNITION_RESPONSE_ARTIFACT_IDENTITY_DOMAIN: &str =
+    "oasis7.cognition.response-artifact-identity.v1";
 const COGNITION_FEEDBACK_DIGEST_DOMAIN: &str = "oasis7.cognition.feedback.v1";
 const MAX_FEEDBACK_REPLAY_ENTRIES: usize = 8;
 
@@ -432,6 +434,119 @@ pub struct ContinuousAgentResponseContextV1 {
     /// replay seam. Runtime may bind this digest to its durable envelope.
     #[serde(default)]
     pub response_digest: Digest32,
+}
+
+/// Identity payload for the response/artifact replay seam. The response
+/// digest proves provider content; this additional digest binds that content
+/// to the complete outer turn lineage before Runtime stores an artifact.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResponseArtifactIdentityV1 {
+    pub schema_version: u16,
+    pub context_discriminator: String,
+    pub context_version: u16,
+    pub agent_session_id: String,
+    pub agent_turn_id: String,
+    pub decision_request_id: String,
+    pub retry_seq: u64,
+    pub transport_attempt: u64,
+    pub request_digest: Digest32,
+    pub response_digest: Digest32,
+    pub artifact_digest: Digest32,
+}
+
+impl ResponseArtifactIdentityV1 {
+    fn canonical_payload(&self) -> Value {
+        let mut payload = serde_json::to_value(self).expect("response identity is serializable");
+        payload
+            .as_object_mut()
+            .expect("response identity is an object")
+            .remove("artifact_digest");
+        payload
+    }
+
+    pub fn validate(&self) -> Result<(), CognitionError> {
+        if self.schema_version != 1
+            || self.context_discriminator != CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR
+            || self.context_version != CONTINUOUS_AGENT_CONTEXT_VERSION
+            || self.agent_session_id.trim().is_empty()
+            || self.agent_turn_id.trim().is_empty()
+            || self.decision_request_id.trim().is_empty()
+            || !self.request_digest.is_canonical_blake3()
+            || !self.response_digest.is_canonical_blake3()
+            || !self.artifact_digest.is_canonical_blake3()
+        {
+            return Err(CognitionError::new(
+                "response_artifact_identity_invalid",
+                "response artifact identity is incomplete or not canonical",
+            ));
+        }
+        if self.artifact_digest
+            != h_v1(
+                COGNITION_RESPONSE_ARTIFACT_IDENTITY_DOMAIN,
+                &self.canonical_payload(),
+            )
+        {
+            return Err(CognitionError::new(
+                "response_artifact_identity_mismatch",
+                "response artifact identity digest does not match its lineage",
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl ContinuousAgentResponseContextV1 {
+    pub fn response_artifact_identity(&self) -> ResponseArtifactIdentityV1 {
+        let mut identity = ResponseArtifactIdentityV1 {
+            schema_version: 1,
+            context_discriminator: self.context_discriminator.clone(),
+            context_version: self.context_version,
+            agent_session_id: self.agent_session_id.clone(),
+            agent_turn_id: self.agent_turn_id.clone(),
+            decision_request_id: self.decision_request_id.clone(),
+            retry_seq: self.retry_seq,
+            transport_attempt: self.transport_attempt,
+            request_digest: self.request_digest.clone(),
+            response_digest: self.response_digest.clone(),
+            artifact_digest: Digest32::default(),
+        };
+        identity.artifact_digest = h_v1(
+            COGNITION_RESPONSE_ARTIFACT_IDENTITY_DOMAIN,
+            &identity.canonical_payload(),
+        );
+        identity
+    }
+
+    pub fn response_artifact_identity_payload(&self) -> Result<Value, CognitionError> {
+        serde_json::to_value(self.response_artifact_identity()).map_err(|e| {
+            CognitionError::new("response_artifact_identity_encoding_failed", e.to_string())
+        })
+    }
+
+    pub fn validate_response_artifact_identity(
+        &self,
+        identity: &ResponseArtifactIdentityV1,
+    ) -> Result<(), CognitionError> {
+        if self.response_digest
+            != h_v1(
+                COGNITION_RESPONSE_DIGEST_DOMAIN,
+                &self.base_decision_response,
+            )
+        {
+            return Err(CognitionError::new(
+                "response_digest_mismatch",
+                "provider response digest does not match its content",
+            ));
+        }
+        identity.validate()?;
+        if identity != &self.response_artifact_identity() {
+            return Err(CognitionError::new(
+                "response_artifact_identity_mismatch",
+                "response artifact identity does not match the response context",
+            ));
+        }
+        Ok(())
+    }
 }
 
 /// Host projection shared by Builtin and ProviderBacked simulator actors for

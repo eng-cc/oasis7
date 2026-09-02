@@ -359,6 +359,18 @@ impl CognitionScheduler {
         value
     }
 
+    pub fn policy_config_digest(&self) -> String {
+        self.policy.policy_config_digest()
+    }
+
+    pub fn cursor_seq(&self) -> u64 {
+        self.cursor.cursor_seq
+    }
+
+    pub fn policy(&self) -> &SchedulerPolicyV1 {
+        &self.policy
+    }
+
     pub fn from_snapshot_json(value: Value) -> Result<Self, SchedulerError> {
         let scheduler: Self = serde_json::from_value(value.clone())
             .map_err(|_| SchedulerError::new("invalid_scheduler_state"))?;

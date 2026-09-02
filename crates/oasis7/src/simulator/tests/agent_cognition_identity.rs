@@ -705,6 +705,17 @@ fn production_outer_context_preserves_retry_transport_and_runtime_binding() {
             &response.base_decision_response
         )
     );
+    let artifact_identity = response.response_artifact_identity();
+    response
+        .validate_response_artifact_identity(&artifact_identity)
+        .expect("response artifact identity binds complete lineage");
+    let identity_payload = response
+        .response_artifact_identity_payload()
+        .expect("encode response artifact identity payload");
+    assert_eq!(
+        identity_payload["artifact_digest"],
+        artifact_identity.artifact_digest.as_str()
+    );
 }
 
 #[test]

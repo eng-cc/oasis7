@@ -28,21 +28,91 @@ impl World {
     /// the cognition projection immediately so a save taken before the first
     /// wake still restores the chosen policy and capacity.
     pub fn with_cognition_scheduler(mut self, policy: SchedulerPolicyV1, capacity: usize) -> Self {
-        let scheduler = CognitionScheduler::new(policy, capacity);
-        self.cognition_set_scheduler(&scheduler);
+        let scheduler = CognitionScheduler::try_new(policy, capacity)
+            .expect("invalid cognition scheduler configuration");
+        self.cognition_commit_scheduler_transaction(&scheduler, "SchedulerConfigured", None)
+            .expect("scheduler configuration must be durable");
         self
+    }
+
+    /// Fallible constructor used by restore/admission paths so invalid
+    /// scheduler policy or capacity can never enter the World projection.
+    pub fn try_with_cognition_scheduler(
+        mut self,
+        policy: SchedulerPolicyV1,
+        capacity: usize,
+    ) -> Result<Self, WorldError> {
+        let scheduler = CognitionScheduler::try_new(policy, capacity)
+            .map_err(|error| scheduler_error(error.code()))?;
+        self.cognition_commit_scheduler_transaction(&scheduler, "SchedulerConfigured", None)?;
+        Ok(self)
+    }
+
+    /// Bind the scheduler and cognition adapters to the World-owned identity.
+    /// An existing contradictory binding is never overwritten.
+    pub fn bind_cognition_runtime(
+        &mut self,
+        world_id: impl Into<String>,
+        branch_id: impl Into<String>,
+        finality_epoch: u64,
+        finality_block_hash: Option<String>,
+        finality_status: impl Into<String>,
+        reorg_epoch: u64,
+    ) -> Result<(), WorldError> {
+        let binding = json!({
+            "world_id": world_id.into(),
+            "branch_id": branch_id.into(),
+            "finality_epoch": finality_epoch,
+            "finality_block_hash": finality_block_hash,
+            "finality_status": finality_status.into(),
+            "reorg_epoch": reorg_epoch,
+            "runtime_manifest_hash": self.current_manifest_hash()?,
+        });
+        if binding["world_id"]
+            .as_str()
+            .unwrap_or_default()
+            .trim()
+            .is_empty()
+            || binding["branch_id"]
+                .as_str()
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+            || binding["finality_status"]
+                .as_str()
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+        {
+            return Err(cognition_validation_error("runtime_binding_invalid"));
+        }
+        if let Some(existing) = self.cognition.get("runtime_binding")
+            && existing != &JsonValue::Null
+            && existing != &binding
+        {
+            return Err(cognition_validation_error("runtime_binding_conflict"));
+        }
+        let mut projection = self.cognition.as_object().cloned().unwrap_or_default();
+        projection.insert("runtime_binding".to_string(), binding);
+        self.cognition = JsonValue::Object(projection);
+        Ok(())
     }
 
     pub fn enqueue_cognition_wake(
         &mut self,
         wake: SchedulerWakeV1,
     ) -> Result<SchedulerEnqueueOutcome, WorldError> {
+        self.validate_cognition_wake_binding(&wake)?;
         let mut scheduler = self.cognition_scheduler()?;
         scheduler.advance_logical_tick(self.state.time);
         let outcome = scheduler
-            .try_enqueue(wake)
+            .try_enqueue(wake.clone())
             .map_err(|error| scheduler_error(error.code()))?;
-        self.cognition_set_scheduler(&scheduler);
+        self.cognition_commit_scheduler_transaction(
+            &scheduler,
+            "SchedulerWakeEnqueued",
+            Some(&wake),
+        )?;
         Ok(outcome)
     }
 
@@ -52,7 +122,7 @@ impl World {
     ) -> Result<Vec<SchedulerWakeV1>, WorldError> {
         let mut scheduler = self.cognition_scheduler()?;
         let selected = scheduler.select_ready(tick);
-        self.cognition_set_scheduler(&scheduler);
+        self.cognition_commit_scheduler_transaction(&scheduler, "SchedulerWakeSelected", None)?;
         Ok(selected)
     }
 
@@ -65,7 +135,7 @@ impl World {
         let mut scheduler = self.cognition_scheduler()?;
         scheduler.release_capacity();
         let recovered = scheduler.recover_capacity_preserving_cursor(tick);
-        self.cognition_set_scheduler(&scheduler);
+        self.cognition_commit_scheduler_transaction(&scheduler, "SchedulerWakeRecovered", None)?;
         Ok(recovered)
     }
 
@@ -126,13 +196,21 @@ impl World {
     /// are accepted from a caller-owned wire projection.
     pub fn admit_cognition_continuation(
         &mut self,
-        proposal: CognitionContinuationProposalV1,
+        mut proposal: CognitionContinuationProposalV1,
     ) -> Result<AgentContinuation, WorldError> {
+        self.bind_cognition_proposal_fields(&mut proposal)?;
+        proposal
+            .validate()
+            .map_err(|error| cognition_validation_error(error.code()))?;
+        self.validate_cognition_proposal_binding(&proposal)?;
         let wake_conditions = WakeConditionValidator::canonicalize(proposal.wake_conditions)
             .map_err(|error| cognition_validation_error(error.code()))?;
         let derived_next_wake_tick =
             WakeConditionValidator::next_wake_tick_at(&wake_conditions, self.state.time)
                 .map_err(|error| cognition_validation_error(error.code()))?;
+        if proposal.next_wake_tick.is_none() {
+            proposal.next_wake_tick = derived_next_wake_tick;
+        }
         if proposal.world_id.trim().is_empty()
             || proposal.branch_id.trim().is_empty()
             || proposal.finality_status.trim().is_empty()
@@ -207,8 +285,46 @@ impl World {
         continuation
             .validate_authoritative()
             .map_err(|error| cognition_validation_error(error.code()))?;
+        let next_wake_tick = continuation
+            .next_wake_tick
+            .ok_or_else(|| cognition_validation_error("continuation_wake_tick_missing"))?;
+        let mut scheduler = self.cognition_scheduler()?;
+        scheduler.advance_logical_tick(self.state.time);
+        let wake = SchedulerWakeV1 {
+            schema_version: SchedulerWakeV1::SCHEMA_VERSION.to_string(),
+            wake_id: continuation.wake_id.clone(),
+            continuation_id: continuation.continuation_id.clone(),
+            world_id: continuation.world_id.clone(),
+            branch_id: continuation.branch_id.clone(),
+            finality_epoch: continuation.finality_epoch,
+            finality_block_hash: continuation
+                .finality_block_hash
+                .clone()
+                .unwrap_or_else(|| "genesis".to_string()),
+            finality_status: continuation.finality_status.clone(),
+            reorg_epoch: continuation.reorg_epoch,
+            runtime_manifest_hash: continuation.runtime_manifest_hash.clone(),
+            agent_id: continuation.agent_id.clone(),
+            agent_session_id: continuation.agent_session_id.clone(),
+            agent_turn_id: continuation.agent_turn_id.clone(),
+            decision_request_id: continuation.decision_request_id.clone(),
+            next_wake_tick,
+            eligible_since_tick: self.state.time,
+            starvation_deadline_tick: self
+                .state
+                .time
+                .saturating_add(scheduler.policy().max_starvation_ticks),
+            initial_priority: scheduler.policy().initial_priority,
+            wake_seq: continuation.wake_seq,
+            retry_seq: 0,
+            status: "pending".to_string(),
+            pending_reason: "capacity_available".to_string(),
+        };
+        scheduler
+            .try_enqueue(wake.clone())
+            .map_err(|error| scheduler_error(error.code()))?;
         continuations.push(continuation.clone());
-        self.cognition_set_continuations(&continuations)?;
+        self.cognition_commit_continuation_transaction(&continuations, &scheduler, &wake)?;
         Ok(continuation)
     }
 
@@ -218,6 +334,9 @@ impl World {
     ) -> Result<(), WorldError> {
         if continuation.schema_version != CONTINUATION_SCHEMA {
             return Err(cognition_validation_error("continuation_schema_mismatch"));
+        }
+        if continuation.continuation_status_digest.is_none() {
+            return Err(cognition_validation_error("legacy_continuation_projection"));
         }
         WakeConditionValidator::validate(continuation.wake_conditions.as_slice())
             .map_err(|error| cognition_validation_error(error.code()))?;
@@ -473,10 +592,134 @@ impl World {
         CognitionScheduler::from_snapshot_json(state).map_err(|error| scheduler_error(error.code()))
     }
 
-    fn cognition_set_scheduler(&mut self, scheduler: &CognitionScheduler) {
-        let mut projection = self.cognition.as_object().cloned().unwrap_or_default();
-        projection.insert("scheduler_state".to_string(), scheduler.snapshot_json());
-        self.cognition = JsonValue::Object(projection);
+    fn validate_cognition_wake_binding(&self, wake: &SchedulerWakeV1) -> Result<(), WorldError> {
+        wake.validate()
+            .map_err(|error| scheduler_error(error.code()))?;
+        if let Some(binding) = self.cognition.get("runtime_binding") {
+            let block_hash = binding["finality_block_hash"].as_str().unwrap_or("genesis");
+            if binding["world_id"].as_str() != Some(wake.world_id.as_str())
+                || binding["branch_id"].as_str() != Some(wake.branch_id.as_str())
+                || binding["finality_epoch"].as_u64() != Some(wake.finality_epoch)
+                || block_hash != wake.finality_block_hash
+                || binding["finality_status"].as_str() != Some(wake.finality_status.as_str())
+                || binding["reorg_epoch"].as_u64() != Some(wake.reorg_epoch)
+                || binding["runtime_manifest_hash"].as_str()
+                    != Some(wake.runtime_manifest_hash.as_str())
+            {
+                return Err(cognition_validation_error("foreign_scheduler_wake"));
+            }
+        }
+        let continuations = self.cognition_continuations_typed()?;
+        if let Some(continuation) = continuations
+            .iter()
+            .find(|continuation| continuation.continuation_id == wake.continuation_id)
+            && (continuation.wake_id != wake.wake_id
+                || continuation.world_id != wake.world_id
+                || continuation.branch_id != wake.branch_id
+                || continuation.finality_epoch != wake.finality_epoch
+                || continuation
+                    .finality_block_hash
+                    .as_deref()
+                    .unwrap_or("genesis")
+                    != wake.finality_block_hash
+                || continuation.finality_status != wake.finality_status
+                || continuation.reorg_epoch != wake.reorg_epoch
+                || continuation.runtime_manifest_hash != wake.runtime_manifest_hash
+                || continuation.agent_id != wake.agent_id
+                || continuation.agent_session_id != wake.agent_session_id
+                || continuation.agent_turn_id != wake.agent_turn_id
+                || continuation.decision_request_id != wake.decision_request_id)
+        {
+            return Err(cognition_validation_error("foreign_scheduler_wake"));
+        }
+        Ok(())
+    }
+
+    fn bind_cognition_proposal_fields(
+        &mut self,
+        proposal: &mut CognitionContinuationProposalV1,
+    ) -> Result<(), WorldError> {
+        let manifest_hash = self.current_manifest_hash()?;
+        if proposal.runtime_manifest_hash.is_empty() {
+            proposal.runtime_manifest_hash = manifest_hash.clone();
+        } else if proposal.runtime_manifest_hash != manifest_hash {
+            return Err(cognition_validation_error("runtime_manifest_mismatch"));
+        }
+        if let Some(binding) = self.cognition.get("runtime_binding") {
+            if proposal.branch_id.is_empty() {
+                proposal.branch_id = binding["branch_id"].as_str().unwrap_or("main").to_string();
+            }
+            if proposal.finality_status.is_empty() {
+                proposal.finality_status = binding["finality_status"]
+                    .as_str()
+                    .unwrap_or("pending")
+                    .to_string();
+            }
+            if proposal.finality_epoch == 0 {
+                proposal.finality_epoch = binding["finality_epoch"].as_u64().unwrap_or_default();
+            }
+            if proposal.reorg_epoch == 0 {
+                proposal.reorg_epoch = binding["reorg_epoch"].as_u64().unwrap_or_default();
+            }
+            if proposal.finality_block_hash.is_none() {
+                proposal.finality_block_hash =
+                    binding["finality_block_hash"].as_str().map(str::to_string);
+            }
+            let block_hash = binding["finality_block_hash"].as_str().map(str::to_string);
+            if binding["world_id"].as_str() != Some(proposal.world_id.as_str())
+                || binding["branch_id"].as_str() != Some(proposal.branch_id.as_str())
+                || binding["finality_epoch"].as_u64() != Some(proposal.finality_epoch)
+                || block_hash != proposal.finality_block_hash
+                || binding["finality_status"].as_str() != Some(proposal.finality_status.as_str())
+                || binding["reorg_epoch"].as_u64() != Some(proposal.reorg_epoch)
+            {
+                return Err(cognition_validation_error("foreign_continuation_proposal"));
+            }
+        } else {
+            if proposal.branch_id.is_empty() {
+                proposal.branch_id = "main".to_string();
+            }
+            if proposal.finality_status.is_empty() {
+                proposal.finality_status = "pending".to_string();
+            }
+            self.bind_cognition_runtime(
+                proposal.world_id.clone(),
+                proposal.branch_id.clone(),
+                proposal.finality_epoch,
+                proposal.finality_block_hash.clone(),
+                proposal.finality_status.clone(),
+                proposal.reorg_epoch,
+            )?;
+        }
+        if !self.state.agents.is_empty() && !self.state.agents.contains_key(&proposal.agent_id) {
+            return Err(cognition_validation_error("continuation_agent_missing"));
+        }
+        Ok(())
+    }
+
+    fn validate_cognition_proposal_binding(
+        &self,
+        proposal: &CognitionContinuationProposalV1,
+    ) -> Result<(), WorldError> {
+        if proposal.runtime_manifest_hash != self.current_manifest_hash()? {
+            return Err(cognition_validation_error("runtime_manifest_mismatch"));
+        }
+        if let Some(binding) = self.cognition.get("runtime_binding") {
+            let block_hash = binding["finality_block_hash"].as_str().map(str::to_string);
+            if binding["world_id"].as_str() != Some(proposal.world_id.as_str())
+                || binding["branch_id"].as_str() != Some(proposal.branch_id.as_str())
+                || binding["finality_epoch"].as_u64() != Some(proposal.finality_epoch)
+                || block_hash != proposal.finality_block_hash
+                || binding["finality_status"].as_str() != Some(proposal.finality_status.as_str())
+                || binding["reorg_epoch"].as_u64() != Some(proposal.reorg_epoch)
+            {
+                return Err(cognition_validation_error("foreign_continuation_proposal"));
+            }
+        }
+        if !self.state.agents.is_empty() && !self.state.agents.contains_key(&proposal.agent_id) {
+            return Err(cognition_validation_error("continuation_agent_missing"));
+        }
+        Ok(())
     }
 
     fn cognition_continuations_typed(&self) -> Result<Vec<AgentContinuation>, WorldError> {

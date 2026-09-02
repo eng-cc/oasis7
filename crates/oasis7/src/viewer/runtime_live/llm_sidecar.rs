@@ -67,6 +67,8 @@ const LOCAL_TEST_PLAYER_ID_PREFIX: &str = "local-test-player-";
 
 #[path = "llm_sidecar_agent_chat.rs"]
 mod agent_chat_support;
+#[path = "llm_sidecar_cognition.rs"]
+mod cognition_context;
 #[path = "llm_sidecar_provider.rs"]
 mod provider_support;
 #[path = "llm_sidecar_runtime_support.rs"]
@@ -224,6 +226,8 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     runtime_seed_locations: Vec<Location>,
     runtime_seed_model: Option<WorldModel>,
     pub(in crate::viewer::runtime_live) chunk_runtime: ChunkRuntimeConfig,
+    provider_session_id: String,
+    provider_context_seq: u64,
 }
 
 pub(in crate::viewer::runtime_live) struct RuntimePlayerBindingPlan {
@@ -254,6 +258,8 @@ impl RuntimeLlmSidecar {
             runtime_seed_locations: Vec::new(),
             runtime_seed_model: None,
             chunk_runtime: ChunkRuntimeConfig::default(),
+            provider_session_id: format!("runtime-live-session-{}", std::process::id()),
+            provider_context_seq: 1,
         }
     }
 
@@ -896,6 +902,7 @@ impl RuntimeLlmSidecar {
         &mut self,
         world: &RuntimeWorld,
         config: &WorldConfig,
+        world_id: &str,
     ) -> Option<RuntimeLlmDecision> {
         if !self.is_llm_mode() || self.llm_decision_mailbox == 0 {
             return None;
@@ -908,7 +915,7 @@ impl RuntimeLlmSidecar {
         if let Err(message) = self.ensure_runner_initialized() {
             return Some(RuntimeLlmDecision::from_error(world, message));
         }
-        let kernel = match self.shadow_kernel.as_mut() {
+        let mut kernel = match self.shadow_kernel.take() {
             Some(kernel) => kernel,
             None => {
                 return Some(RuntimeLlmDecision::from_error(
@@ -917,9 +924,18 @@ impl RuntimeLlmSidecar {
                 ));
             }
         };
+        if matches!(self.runner, Some(RuntimeDecisionRunner::ProviderBacked(_))) {
+            if let Err(message) =
+                self.prepare_provider_request_contexts(world, &mut kernel, world_id)
+            {
+                self.shadow_kernel = Some(kernel);
+                return Some(RuntimeLlmDecision::from_error(world, message));
+            }
+        }
         let runner = match self.runner.as_mut() {
             Some(runner) => runner,
             None => {
+                self.shadow_kernel = Some(kernel);
                 return Some(RuntimeLlmDecision::from_error(
                     world,
                     "llm runner not initialized".to_string(),
@@ -928,12 +944,13 @@ impl RuntimeLlmSidecar {
         };
         let result = match runner {
             RuntimeDecisionRunner::Builtin(runner) => {
-                let result = runner.tick_decide_only(kernel);
-                sync_llm_runner_long_term_memory(kernel, runner);
+                let result = runner.tick_decide_only(&mut kernel);
+                sync_llm_runner_long_term_memory(&mut kernel, runner);
                 result
             }
-            RuntimeDecisionRunner::ProviderBacked(runner) => runner.tick_decide_only(kernel),
+            RuntimeDecisionRunner::ProviderBacked(runner) => runner.tick_decide_only(&mut kernel),
         };
+        self.shadow_kernel = Some(kernel);
         result.map(|tick| RuntimeLlmDecision {
             agent_id: tick.agent_id,
             decision: tick.decision,
@@ -1106,6 +1123,7 @@ impl RuntimeLlmSidecar {
                         adapter,
                         provider_phase1_action_catalog(),
                     )
+                    .require_continuous_request_context()
                     .with_provider_config_ref(format!(
                         "provider://{}/runtime-live/pid-{}/{}",
                         settings.provider_transport,

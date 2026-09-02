@@ -42,6 +42,21 @@ pub struct WorldCommitRecordV1 {
     pub reorg_epoch: u64,
     pub cognition_journal_seq: u64,
     pub status: String,
+    /// Dense identity copied from the validated envelope.  Empty values are
+    /// retained only for read-only compatibility with pre-v1 projections;
+    /// World-created markers always populate every field.
+    #[serde(default)]
+    pub agent_id: String,
+    #[serde(default)]
+    pub agent_session_id: String,
+    #[serde(default)]
+    pub agent_turn_id: String,
+    #[serde(default)]
+    pub decision_request_id: String,
+    #[serde(default)]
+    pub request_digest: String,
+    #[serde(default)]
+    pub feedback_id: String,
     #[serde(default)]
     pub abort_reason: Option<String>,
 }
@@ -120,6 +135,30 @@ impl RuntimeReceiptLineageV1 {
         }
     }
 
+    /// Construct lineage solely from a dense World-owned marker. This is the
+    /// projection used by the live runtime boundary; callers do not supply
+    /// identity fields independently of the durable commit.
+    pub fn from_durable_commit_record(marker: &WorldCommitRecordV1) -> Option<Self> {
+        if marker.agent_id.trim().is_empty()
+            || marker.agent_session_id.trim().is_empty()
+            || marker.agent_turn_id.trim().is_empty()
+            || marker.decision_request_id.trim().is_empty()
+            || marker.request_digest.trim().is_empty()
+            || marker.feedback_id.trim().is_empty()
+        {
+            return None;
+        }
+        Some(Self::from_commit_record(
+            marker,
+            marker.agent_id.clone(),
+            marker.agent_session_id.clone(),
+            marker.agent_turn_id.clone(),
+            marker.decision_request_id.clone(),
+            marker.request_digest.clone(),
+            marker.feedback_id.clone(),
+        ))
+    }
+
     pub fn validate(&self) -> Result<(), CognitionRecoveryError> {
         if self.schema_version != Self::SCHEMA_VERSION
             || self.status != "committed"
@@ -151,6 +190,17 @@ pub struct CognitionResponseRecordV1 {
     pub envelope_digest: String,
     #[serde(default)]
     pub journal_head: String,
+}
+
+/// Canonical digest helper shared by World admission, restore and replay.
+pub(crate) fn cognition_digest_v1<T: Serialize>(domain: &str, payload: &T) -> String {
+    let bytes = oasis7_wasm_abi::encode_canonical_cbor(&(domain, payload))
+        .expect("cognition payload must be canonically encodable");
+    format!("blake3:{}", blake3::hash(&bytes))
+}
+
+pub(crate) fn response_artifact_digest(artifact: &JsonValue) -> String {
+    cognition_digest_v1("oasis7.cognition.response.v1", artifact)
 }
 
 /// Fault-injection fixture used by recovery tests and future storage tests.

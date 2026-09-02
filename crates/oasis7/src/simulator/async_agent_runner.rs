@@ -43,7 +43,10 @@ use super::types::WorldTime;
 
 #[path = "async_agent_runner_feedback.rs"]
 mod feedback;
+pub use self::feedback::{RuntimeReceiptReadbackHandleV1, RuntimeReceiptReadbackVerifier};
 use self::feedback::{validate_feedback, validate_runtime_receipt_lineage};
+#[path = "async_agent_runner_runtime_feedback.rs"]
+mod runtime_feedback;
 #[path = "async_agent_runner_test_support.rs"]
 mod test_support;
 use self::test_support::{BlockingProviderBehavior, BuiltinWaitBehavior};
@@ -717,15 +720,6 @@ impl AsyncAgentRunner {
             .map_err(|error| error.with_feedback_agent(agent_id))
     }
 
-    pub fn consume_runtime_feedback(
-        &mut self,
-        agent_id: &str,
-        feedback: FeedbackEnvelopeV1,
-        store: &mut MemoryWriteStore,
-    ) -> Result<(), AsyncAgentRunnerError> {
-        self.consume_runtime_feedback_with_lineage(agent_id, feedback, None, store)
-    }
-
     /// Consume feedback accompanied by a Runtime-issued receipt lineage.
     /// Caller-signed feedback remains useful for diagnostics, but cannot
     /// promote provider memory intents without this projection.
@@ -784,7 +778,12 @@ impl AsyncAgentRunner {
             self.feedback_store
                 .accept_feedback(feedback.clone())
                 .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
-            self.release_runtime_turn(agent_id, outcome.turn_id);
+            // Runtime `pending` is an in-flight disposition, not a terminal
+            // outcome. Keep the prepared turn occupied so a retry cannot
+            // invoke the provider a second time before Runtime resolves it.
+            if matches!(feedback.status.as_str(), "rejected" | "failed") {
+                self.release_runtime_turn(agent_id, outcome.turn_id);
+            }
             return Ok(());
         }
         let runtime_receipt = runtime_receipt.ok_or_else(|| {

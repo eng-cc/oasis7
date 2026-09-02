@@ -7,11 +7,17 @@
 //! projections, but it never re-executes an effect or creates a debit.
 
 use super::World;
+use super::cognition_persistence_validation::{
+    append_cognition_event, cognition_error, cognition_validation, legacy_recovery_report,
+    parent_root, persist_recovery_report, validate_marker_current_world, validate_response_record,
+};
+use crate::runtime::cognition::{AgentDecisionEnvelopeV1, MvccValidator};
 use crate::runtime::cognition_recovery::{
     CognitionReceiptViewV1, CognitionRecoveryReport, CognitionResponseRecordV1,
-    RuntimeReceiptLineageV1, WorldCommitRecordV1, WorldRootViewV1,
-    default_cognition_persistence_projection,
+    RuntimeReceiptLineageV1, WorldCommitRecordV1, WorldRootViewV1, cognition_digest_v1,
+    default_cognition_persistence_projection, response_artifact_digest,
 };
+use crate::runtime::cognition_scheduler::{CognitionScheduler, SchedulerWakeV1};
 use crate::runtime::cognition_wake::AgentContinuation;
 use crate::runtime::error::WorldError;
 use serde::{Deserialize, Serialize};
@@ -76,6 +82,14 @@ struct CognitionJournalEvent {
     request_digest: Option<String>,
     #[serde(default)]
     feedback_id: Option<String>,
+    #[serde(default)]
+    continuation_id: Option<String>,
+    #[serde(default)]
+    wake_id: Option<String>,
+    #[serde(default)]
+    scheduler_policy_digest: Option<String>,
+    #[serde(default)]
+    cursor_seq: Option<u64>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -105,15 +119,34 @@ impl World {
         &self.cognition
     }
 
-    /// Append a Runtime commit marker to the World-owned durable projection.
-    /// Repeating the exact marker is idempotent; a conflicting identity is a
-    /// fail-closed validation error.
-    pub fn record_cognition_commit(
+    /// Prepare a cognition envelope against the actual current World head.
+    /// The returned marker is provisional; receipt/idempotency authority is
+    /// created only by finalize_cognition_commit.
+    pub fn prepare_cognition_envelope(
         &mut self,
-        marker: WorldCommitRecordV1,
-    ) -> Result<(), WorldError> {
-        validate_marker(&marker)?;
-        let mut projection = if self.cognition.is_null() {
+        envelope: AgentDecisionEnvelopeV1,
+        response_artifact: Option<JsonValue>,
+    ) -> Result<WorldCommitRecordV1, WorldError> {
+        MvccValidator::validate(self, &envelope)
+            .map_err(|error| cognition_validation(error.code()))?;
+        let world_root = self.current_state_root_hash()?;
+        let manifest_hash = self.current_manifest_hash()?;
+        if envelope.base_tick != self.state.time
+            || envelope.base_world_hash != world_root
+            || envelope.runtime_manifest_hash != manifest_hash
+        {
+            return Err(cognition_validation("cognition_world_head_mismatch"));
+        }
+        self.bind_cognition_runtime(
+            envelope.world_id.clone(),
+            envelope.branch_id.clone(),
+            envelope.finality_epoch,
+            envelope.finality_block_hash.clone(),
+            envelope.finality_status.clone(),
+            envelope.reorg_epoch,
+        )?;
+
+        let projection = if self.cognition.is_null() {
             default_cognition_persistence_projection()
         } else {
             self.cognition.clone()
@@ -126,130 +159,322 @@ impl World {
         if let Some(existing) = parsed
             .commit_records
             .iter()
-            .find(|existing| existing.commit_id == marker.commit_id)
+            .find(|record| record.envelope_idempotency_key == envelope.envelope_idempotency_key)
         {
-            if existing == &marker {
-                return Ok(());
+            if existing.envelope_digest == envelope.envelope_digest {
+                return Ok(existing.clone());
             }
-            return Err(cognition_validation("commit_id_conflict"));
-        }
-        if parsed.commit_records.iter().any(|existing| {
-            existing.envelope_idempotency_key == marker.envelope_idempotency_key
-                && existing.envelope_digest != marker.envelope_digest
-        }) {
             return Err(cognition_validation("envelope_idempotency_conflict"));
         }
-        if parsed
-            .idempotency_index
-            .get(&marker.envelope_idempotency_key)
-            .is_some_and(|entry| {
-                entry.envelope_digest != marker.envelope_digest
-                    || (entry.disposition == "committed" && entry.receipt_id != marker.receipt_id)
-            })
-        {
-            return Err(cognition_validation("idempotency_projection_conflict"));
-        }
-        let object = projection
+
+        let action_id = format!("action:{}", self.allocate_next_action_id());
+        let commit_id = cognition_digest_v1(
+            "oasis7.cognition.commit-id.v1",
+            &json!({
+                "envelope_digest": envelope.envelope_digest,
+                "envelope_idempotency_key": envelope.envelope_idempotency_key,
+            }),
+        );
+        let receipt_id = cognition_digest_v1(
+            "oasis7.cognition.receipt-id.v1",
+            &json!({"commit_id": commit_id}),
+        );
+        let receipt_digest = cognition_digest_v1(
+            "oasis7.cognition.receipt.v1",
+            &json!({
+                "receipt_id": receipt_id,
+                "envelope_digest": envelope.envelope_digest,
+                "action_id": action_id,
+                "world_root": world_root,
+            }),
+        );
+        let staged_event_root = cognition_digest_v1(
+            "oasis7.cognition.staged-event-root.v1",
+            &json!({
+                "world_root": world_root,
+                "envelope_digest": envelope.envelope_digest,
+            }),
+        );
+        let finality_block_hash = envelope
+            .finality_block_hash
+            .clone()
+            .unwrap_or_else(|| "genesis".to_string());
+        let marker = WorldCommitRecordV1 {
+            schema_version: WORLD_COMMIT_SCHEMA.to_string(),
+            commit_id,
+            envelope_idempotency_key: envelope.envelope_idempotency_key.clone(),
+            envelope_digest: envelope.envelope_digest.clone(),
+            world_id: envelope.world_id.clone(),
+            branch_id: envelope.branch_id.clone(),
+            finality_epoch: envelope.finality_epoch,
+            finality_block_hash,
+            finality_status: envelope.finality_status.clone(),
+            finality_binding_digest: envelope.derive_finality_binding_digest(),
+            runtime_manifest_hash: manifest_hash,
+            action_id,
+            parent_tick: envelope.base_tick,
+            parent_world_hash: world_root.clone(),
+            staged_event_root,
+            staged_state_root: world_root,
+            receipt_id,
+            receipt_digest,
+            reorg_epoch: envelope.reorg_epoch,
+            cognition_journal_seq: 0,
+            status: "prepared".to_string(),
+            agent_id: envelope.agent_id,
+            agent_session_id: envelope.agent_session_id,
+            agent_turn_id: envelope.agent_turn_id,
+            decision_request_id: envelope.decision_request_id,
+            request_digest: envelope.request_digest,
+            feedback_id: cognition_digest_v1(
+                "oasis7.cognition.feedback-id.v1",
+                &envelope.envelope_digest,
+            ),
+            abort_reason: None,
+        };
+        validate_marker(&marker)?;
+        let mut next = projection;
+        let object = next
             .as_object_mut()
             .ok_or_else(|| cognition_validation("cognition_projection_not_object"))?;
-        let records = object
+        object
             .entry("commit_records")
-            .or_insert_with(|| JsonValue::Array(Vec::new()));
-        records
+            .or_insert_with(|| JsonValue::Array(Vec::new()))
             .as_array_mut()
             .ok_or_else(|| cognition_validation("commit_records_not_array"))?
             .push(serde_json::to_value(&marker).map_err(WorldError::from)?);
-        if marker.status == "committed" {
-            let receipts = object
-                .entry("receipt_registry")
-                .or_insert_with(|| JsonValue::Array(Vec::new()));
-            let receipts = receipts
-                .as_array_mut()
-                .ok_or_else(|| cognition_validation("receipt_registry_not_array"))?;
-            if let Some(existing) = receipts.iter().find(|receipt| {
-                receipt.get("receipt_id").and_then(JsonValue::as_str)
-                    == Some(marker.receipt_id.as_str())
-            }) {
-                if existing.get("receipt_digest").and_then(JsonValue::as_str)
-                    != Some(marker.receipt_digest.as_str())
-                {
-                    return Err(cognition_validation("receipt_digest_conflict"));
-                }
-            } else {
-                receipts.push(json!({
-                    "receipt_id": marker.receipt_id.clone(),
-                    "receipt_digest": marker.receipt_digest.clone(),
-                }));
-            }
-            let idempotency = object
-                .entry("idempotency_index")
-                .or_insert_with(|| JsonValue::Object(serde_json::Map::new()));
-            idempotency
-                .as_object_mut()
-                .ok_or_else(|| cognition_validation("idempotency_index_not_object"))?
-                .insert(
-                    marker.envelope_idempotency_key.clone(),
-                    json!({
-                        "envelope_digest": marker.envelope_digest.clone(),
-                        "disposition": "committed",
-                        "receipt_id": marker.receipt_id.clone(),
-                    }),
-                );
-            let journal = object.entry("cognition_journal").or_insert_with(|| {
+        object
+            .entry("idempotency_index")
+            .or_insert_with(|| JsonValue::Object(serde_json::Map::new()))
+            .as_object_mut()
+            .ok_or_else(|| cognition_validation("idempotency_index_not_object"))?
+            .insert(
+                marker.envelope_idempotency_key.clone(),
                 json!({
-                    "schema_version": JOURNAL_SCHEMA,
-                    "head_seq": 0,
-                    "head_digest": "",
-                    "events": []
-                })
-            });
-            let journal = journal
-                .as_object_mut()
-                .ok_or_else(|| cognition_validation("cognition_journal_not_object"))?;
-            let head_seq = journal
-                .get("head_seq")
-                .and_then(JsonValue::as_u64)
-                .unwrap_or(0);
-            let events = journal
-                .entry("events")
-                .or_insert_with(|| JsonValue::Array(Vec::new()));
-            let events = events
-                .as_array_mut()
-                .ok_or_else(|| cognition_validation("cognition_events_not_array"))?;
-            if !events.iter().any(|event| {
-                event.get("kind").and_then(JsonValue::as_str) == Some("WorldReceiptLinked")
-                    && event
-                        .get("envelope_idempotency_key")
-                        .and_then(JsonValue::as_str)
-                        == Some(marker.envelope_idempotency_key.as_str())
-            }) {
-                let next_seq = head_seq
-                    .max(
-                        events
-                            .iter()
-                            .filter_map(|event| {
-                                event.get("journal_seq").and_then(JsonValue::as_u64)
-                            })
-                            .max()
-                            .unwrap_or(0),
-                    )
-                    .saturating_add(1);
-                events.push(json!({
-                    "journal_seq": next_seq,
-                    "kind": "WorldReceiptLinked",
-                    "envelope_idempotency_key": marker.envelope_idempotency_key.clone(),
-                    "receipt_id": marker.receipt_id.clone(),
-                }));
-                journal.insert("head_seq".to_string(), json!(next_seq));
-            }
+                    "envelope_digest": marker.envelope_digest,
+                    "disposition": "prepared",
+                    "receipt_id": marker.receipt_id,
+                }),
+            );
+        let seq = append_cognition_event(
+            &mut next,
+            "DecisionValidated",
+            json!({
+                "envelope_idempotency_key": marker.envelope_idempotency_key,
+                "agent_id": marker.agent_id,
+                "agent_session_id": marker.agent_session_id,
+                "agent_turn_id": marker.agent_turn_id,
+                "decision_request_id": marker.decision_request_id,
+                "request_digest": marker.request_digest,
+                "feedback_id": marker.feedback_id,
+            }),
+        )?;
+        if let Some(record) = next
+            .get_mut("commit_records")
+            .and_then(JsonValue::as_array_mut)
+            .and_then(|records| records.last_mut())
+        {
+            record["cognition_journal_seq"] = json!(seq);
         }
-        self.cognition = projection;
+        if let Some(artifact) = response_artifact {
+            let response = CognitionResponseRecordV1 {
+                response_digest: response_artifact_digest(&artifact),
+                response_artifact: Some(artifact),
+                envelope_digest: marker.envelope_digest.clone(),
+                journal_head: next["cognition_journal"]["head_digest"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_string(),
+            };
+            next["responses"]
+                .as_array_mut()
+                .ok_or_else(|| cognition_validation("responses_not_array"))?
+                .push(serde_json::to_value(response).map_err(WorldError::from)?);
+        }
+        self.cognition = next;
+        let mut prepared = marker;
+        prepared.cognition_journal_seq = seq;
+        Ok(prepared)
+    }
+
+    /// Finalize a prepared marker and atomically project its receipt,
+    /// idempotency disposition, dense journal link and runtime lineage.
+    pub fn finalize_cognition_commit(
+        &mut self,
+        commit_id: &str,
+    ) -> Result<WorldCommitRecordV1, WorldError> {
+        let projection = self.cognition.clone();
+        let parsed: CognitionProjection = serde_json::from_value(projection.clone())
+            .map_err(|error| cognition_error("invalid_cognition_projection", error))?;
+        let marker = parsed
+            .commit_records
+            .iter()
+            .find(|record| record.commit_id == commit_id)
+            .ok_or_else(|| cognition_validation("commit_record_missing"))?;
+        if marker.status == "committed" {
+            return Ok(marker.clone());
+        }
+        if marker.status != "prepared" {
+            return Err(cognition_validation("commit_record_not_prepared"));
+        }
+        validate_marker_current_world(self, marker)?;
+        let mut committed = marker.clone();
+        committed.status = "committed".to_string();
+        let mut next = projection;
+        let records = next["commit_records"]
+            .as_array_mut()
+            .ok_or_else(|| cognition_validation("commit_records_not_array"))?;
+        let record = records
+            .iter_mut()
+            .find(|record| record.get("commit_id").and_then(JsonValue::as_str) == Some(commit_id))
+            .ok_or_else(|| cognition_validation("commit_record_missing"))?;
+        *record = serde_json::to_value(&committed).map_err(WorldError::from)?;
+        next["receipt_registry"]
+            .as_array_mut()
+            .ok_or_else(|| cognition_validation("receipt_registry_not_array"))?
+            .push(json!({
+                "receipt_id": committed.receipt_id,
+                "receipt_digest": committed.receipt_digest,
+            }));
+        next["idempotency_index"][committed.envelope_idempotency_key.clone()] = json!({
+            "envelope_digest": committed.envelope_digest,
+            "disposition": "committed",
+            "receipt_id": committed.receipt_id,
+        });
+        append_cognition_event(
+            &mut next,
+            "WorldReceiptLinked",
+            json!({
+                "envelope_idempotency_key": committed.envelope_idempotency_key,
+                "receipt_id": committed.receipt_id,
+                "agent_id": committed.agent_id,
+                "agent_session_id": committed.agent_session_id,
+                "agent_turn_id": committed.agent_turn_id,
+                "decision_request_id": committed.decision_request_id,
+                "request_digest": committed.request_digest,
+                "feedback_id": committed.feedback_id,
+            }),
+        )?;
+        if let Some(lineage) = RuntimeReceiptLineageV1::from_durable_commit_record(&committed) {
+            next["receipt_lineage_registry"]
+                .as_array_mut()
+                .ok_or_else(|| cognition_validation("receipt_lineage_registry_not_array"))?
+                .push(serde_json::to_value(lineage).map_err(WorldError::from)?);
+        }
+        let journal_head = next["cognition_journal"]["head_digest"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string();
+        if let Some(response) = next["responses"].as_array_mut().and_then(|responses| {
+            responses.iter_mut().find(|response| {
+                response.get("envelope_digest").and_then(JsonValue::as_str)
+                    == Some(committed.envelope_digest.as_str())
+            })
+        }) {
+            response["journal_head"] = json!(journal_head);
+        }
+        self.cognition = next;
+        Ok(committed)
+    }
+
+    /// Runtime readback verifier for the opaque receipt projection consumed
+    /// by simulator adapters.
+    pub fn verify_runtime_receipt_lineage(
+        &self,
+        lineage: &RuntimeReceiptLineageV1,
+    ) -> Result<(), WorldError> {
+        let readback = self.read_runtime_receipt_lineage(&lineage.receipt_id)?;
+        if &readback == lineage {
+            Ok(())
+        } else {
+            Err(cognition_validation("receipt_lineage_readback_mismatch"))
+        }
+    }
+
+    /// Read and validate a canonical response artifact without re-invoking a
+    /// provider. Missing artifacts, digest mismatches, and stale journal
+    /// heads are rejected.
+    pub fn replay_cognition_response(
+        &self,
+        envelope_digest: &str,
+    ) -> Result<CognitionResponseRecordV1, WorldError> {
+        let projection: CognitionProjection = serde_json::from_value(self.cognition.clone())
+            .map_err(|error| cognition_error("invalid_cognition_projection", error))?;
+        let response = projection
+            .responses
+            .iter()
+            .find(|response| response.envelope_digest == envelope_digest)
+            .ok_or_else(|| cognition_validation("response_missing"))?;
+        let projection_value = serde_json::to_value(&projection).map_err(WorldError::from)?;
+        validate_response_record(&projection_value, response)?;
+        Ok(response.clone())
+    }
+
+    pub(super) fn cognition_commit_scheduler_transaction(
+        &mut self,
+        scheduler: &CognitionScheduler,
+        kind: &str,
+        wake: Option<&SchedulerWakeV1>,
+    ) -> Result<(), WorldError> {
+        let mut next = self.cognition.clone();
+        next["scheduler_state"] = scheduler.snapshot_json();
+        let mut details = json!({
+            "scheduler_policy_digest": scheduler.policy_config_digest(),
+            "cursor_seq": scheduler.cursor_seq(),
+        });
+        if let Some(wake) = wake {
+            let object = details
+                .as_object_mut()
+                .ok_or_else(|| cognition_validation("cognition_event_details_not_object"))?;
+            object.extend(
+                serde_json::to_value(wake)
+                    .map_err(WorldError::from)?
+                    .as_object()
+                    .cloned()
+                    .unwrap_or_default(),
+            );
+        }
+        append_cognition_event(&mut next, kind, details)?;
+        self.cognition = next;
         Ok(())
     }
 
-    /// Persist and validate the correlated Runtime receipt lineage.  Every
-    /// identity field is checked against the committed marker and receipt
-    /// registry before this projection becomes readable.
+    pub(super) fn cognition_commit_continuation_transaction(
+        &mut self,
+        continuations: &[AgentContinuation],
+        scheduler: &CognitionScheduler,
+        wake: &SchedulerWakeV1,
+    ) -> Result<(), WorldError> {
+        let mut next = self.cognition.clone();
+        next["continuations"] = serde_json::to_value(continuations).map_err(WorldError::from)?;
+        next["scheduler_state"] = scheduler.snapshot_json();
+        append_cognition_event(
+            &mut next,
+            "ContinuationScheduled",
+            json!({
+                "continuation_id": wake.continuation_id,
+                "wake_id": wake.wake_id,
+                "world_id": wake.world_id,
+                "agent_id": wake.agent_id,
+                "agent_session_id": wake.agent_session_id,
+                "agent_turn_id": wake.agent_turn_id,
+                "decision_request_id": wake.decision_request_id,
+                "scheduler_policy_digest": scheduler.policy_config_digest(),
+                "cursor_seq": scheduler.cursor_seq(),
+            }),
+        )?;
+        self.cognition = next;
+        Ok(())
+    }
+
+    pub fn record_cognition_commit(
+        &mut self,
+        marker: WorldCommitRecordV1,
+    ) -> Result<(), WorldError> {
+        let _ = marker;
+        return Err(cognition_validation("legacy_commit_projection_fenced"));
+    }
+
     pub fn project_runtime_receipt_lineage(
         &mut self,
         lineage: RuntimeReceiptLineageV1,
@@ -270,6 +495,11 @@ impl World {
             .find(|marker| marker.status == "committed" && marker.receipt_id == lineage.receipt_id)
             .ok_or_else(|| cognition_validation("receipt_commit_marker_missing"))?;
         validate_lineage_binding(&parsed, marker, &lineage)?;
+        if let Some(derived) = RuntimeReceiptLineageV1::from_durable_commit_record(marker) {
+            if derived != lineage {
+                return Err(cognition_validation("receipt_lineage_caller_override"));
+            }
+        }
         if let Some(existing) = parsed
             .receipt_lineage_registry
             .iter()
@@ -293,9 +523,6 @@ impl World {
         Ok(())
     }
 
-    /// Read only a marker-bound receipt lineage.  Missing, malformed or
-    /// contradictory projections are rejected rather than reconstructed from
-    /// caller input.
     pub fn read_runtime_receipt_lineage(
         &self,
         receipt_id: &str,
@@ -321,6 +548,11 @@ impl World {
             .find(|marker| marker.status == "committed" && marker.receipt_id == receipt_id)
             .ok_or_else(|| cognition_validation("receipt_commit_marker_missing"))?;
         validate_lineage_binding(&parsed, marker, lineage)?;
+        if let Some(derived) = RuntimeReceiptLineageV1::from_durable_commit_record(marker) {
+            if derived != *lineage {
+                return Err(cognition_validation("receipt_lineage_binding_mismatch"));
+            }
+        }
         Ok(lineage.clone())
     }
 
@@ -377,16 +609,37 @@ impl World {
             return Ok(legacy_recovery_report());
         };
         validate_marker(marker)?;
+        let dense_marker = !marker.agent_id.is_empty();
+        if dense_marker {
+            validate_marker_current_world(self, marker)?;
+        }
 
         let recovery = parsed.recovery.clone().unwrap_or_default();
-        let root = recovery
-            .world_root
-            .clone()
-            .unwrap_or_else(|| parent_root(marker));
+        let root = if dense_marker {
+            WorldRootViewV1 {
+                schema_version: "world-root-view.v1".to_string(),
+                world_id: marker.world_id.clone(),
+                branch_id: marker.branch_id.clone(),
+                logical_tick: self.state.time,
+                state_root: self.current_state_root_hash()?,
+                head_status: "canonical".to_string(),
+                commit_id: (marker.status == "committed").then(|| marker.commit_id.clone()),
+                quarantine_id: None,
+            }
+        } else {
+            recovery
+                .world_root
+                .clone()
+                .unwrap_or_else(|| parent_root(marker))
+        };
         let response = parsed
             .responses
             .iter()
             .find(|response| response.envelope_digest == marker.envelope_digest);
+        if dense_marker {
+            let response = response.ok_or_else(|| cognition_validation("response_missing"))?;
+            validate_response_record(&projection, response)?;
+        }
 
         if recovery.crash_prefix == "conflict"
             || marker_root_conflict(marker, &root)
@@ -480,10 +733,11 @@ impl World {
             projection_repairs += 1;
         }
         let mut canonical_root = root;
-        if canonical_root.state_root == marker.parent_world_hash
-            || canonical_root.commit_id.is_none()
-            || canonical_root.head_status != "canonical"
-            || canonical_root.quarantine_id.is_some()
+        if !dense_marker
+            && (canonical_root.state_root == marker.parent_world_hash
+                || canonical_root.commit_id.is_none()
+                || canonical_root.head_status != "canonical"
+                || canonical_root.quarantine_id.is_some())
         {
             canonical_root.logical_tick = marker.parent_tick.saturating_add(1);
             canonical_root.state_root = marker.staged_state_root.clone();
@@ -639,12 +893,6 @@ impl World {
     }
 }
 
-fn cognition_validation(code: impl Into<String>) -> WorldError {
-    WorldError::DistributedValidationFailed {
-        reason: format!("cognition validation failed: {}", code.into()),
-    }
-}
-
 fn validate_lineage_binding(
     projection: &CognitionProjection,
     marker: &WorldCommitRecordV1,
@@ -700,100 +948,32 @@ fn validate_lineage_binding(
     {
         return Err(cognition_validation("receipt_lineage_binding_mismatch"));
     }
-    Ok(())
-}
-
-fn cognition_error<T: std::fmt::Display>(code: &'static str, error: T) -> WorldError {
-    WorldError::DistributedValidationFailed {
-        reason: format!("{code}: {error}"),
+    if !marker.agent_id.is_empty()
+        && (marker.agent_id != lineage.agent_id
+            || marker.agent_session_id != lineage.agent_session_id
+            || marker.agent_turn_id != lineage.agent_turn_id
+            || marker.decision_request_id != lineage.decision_request_id
+            || marker.request_digest != lineage.request_digest
+            || marker.feedback_id != lineage.feedback_id)
+    {
+        return Err(cognition_validation("receipt_lineage_binding_mismatch"));
     }
-}
-
-fn persist_recovery_report(
-    projection: &mut JsonValue,
-    report: &CognitionRecoveryReport,
-) -> Result<(), WorldError> {
-    let object = projection
-        .as_object_mut()
-        .ok_or_else(|| cognition_validation("cognition_projection_not_object"))?;
-    let recovery = object
-        .entry("recovery")
-        .or_insert_with(|| JsonValue::Object(serde_json::Map::new()));
-    let recovery = recovery
-        .as_object_mut()
-        .ok_or_else(|| cognition_validation("recovery_projection_not_object"))?;
-    recovery.insert("disposition".to_string(), json!(&report.disposition));
-    recovery.insert("reject_reason".to_string(), json!(&report.reject_reason));
-    recovery.insert(
-        "idempotency_key".to_string(),
-        json!(&report.idempotency_key),
-    );
-    recovery.insert("quarantine_id".to_string(), json!(&report.quarantine_id));
-    recovery.insert("candidate_root".to_string(), json!(&report.candidate_root));
-    recovery.insert(
-        "candidate_receipt".to_string(),
-        json!(&report.candidate_receipt),
-    );
-    recovery.insert("receipt".to_string(), json!(&report.receipt));
-    recovery.insert("world_root".to_string(), json!(&report.world_root));
-    recovery.insert("journal_head".to_string(), json!(&report.journal_head));
-    recovery.insert("retry_count".to_string(), json!(report.retry_count));
-    recovery.insert(
-        "revalidation_count".to_string(),
-        json!(report.revalidation_count),
-    );
-    recovery.insert(
-        "projection_repairs".to_string(),
-        json!(report.projection_repairs),
-    );
-    recovery.insert(
-        "provider_invocation_count".to_string(),
-        json!(report.provider_invocation_count),
-    );
-    recovery.insert(
-        "kernel_invocation_count".to_string(),
-        json!(report.kernel_invocation_count),
-    );
-    recovery.insert("effect_count".to_string(), json!(report.effect_count));
-    recovery.insert("debit_count".to_string(), json!(report.debit_count));
-    recovery.insert(
-        "receipt_count".to_string(),
-        json!(u64::from(report.receipt.is_some())),
-    );
-    recovery.insert(
-        "world_receipt_linked_count".to_string(),
-        json!(report.world_receipt_linked_count),
-    );
-    recovery.insert(
-        "response_replayed".to_string(),
-        json!(report.response_replayed),
-    );
-    Ok(())
-}
-
-fn legacy_recovery_report() -> CognitionRecoveryReport {
-    CognitionRecoveryReport {
-        world_root: None,
-        receipt: None,
-        disposition: "rejected".to_string(),
-        reject_reason: Some("legacy_no_cognition_proof".to_string()),
-        auto_submitted: false,
-        idempotency_key: None,
-        quarantine_id: None,
-        candidate_root: None,
-        candidate_receipt: None,
-        journal_head: String::new(),
-        retry_count: 0,
-        revalidation_count: 0,
-        projection_repairs: 0,
-        provider_invocation_count: 0,
-        kernel_invocation_count: 0,
-        effect_count: 0,
-        debit_count: 0,
-        world_receipt_linked_count: 0,
-        event_count: 0,
-        response_replayed: false,
+    if !marker.agent_id.is_empty()
+        && !projection.cognition_journal.events.iter().any(|event| {
+            event.kind == "WorldReceiptLinked"
+                && event.envelope_idempotency_key == marker.envelope_idempotency_key
+                && event.receipt_id.as_deref() == Some(marker.receipt_id.as_str())
+                && event.agent_id.as_deref() == Some(marker.agent_id.as_str())
+                && event.agent_session_id.as_deref() == Some(marker.agent_session_id.as_str())
+                && event.agent_turn_id.as_deref() == Some(marker.agent_turn_id.as_str())
+                && event.decision_request_id.as_deref() == Some(marker.decision_request_id.as_str())
+                && event.request_digest.as_deref() == Some(marker.request_digest.as_str())
+                && event.feedback_id.as_deref() == Some(marker.feedback_id.as_str())
+        })
+    {
+        return Err(cognition_validation("receipt_lineage_binding_mismatch"));
     }
+    Ok(())
 }
 
 fn select_commit_record(records: &[WorldCommitRecordV1]) -> Option<&WorldCommitRecordV1> {
@@ -826,20 +1006,25 @@ fn validate_marker(marker: &WorldCommitRecordV1) -> Result<(), WorldError> {
             reason: "invalid_commit_record".to_string(),
         });
     }
-    Ok(())
-}
-
-fn parent_root(marker: &WorldCommitRecordV1) -> WorldRootViewV1 {
-    WorldRootViewV1 {
-        schema_version: "world-root-view.v1".to_string(),
-        world_id: marker.world_id.clone(),
-        branch_id: marker.branch_id.clone(),
-        logical_tick: marker.parent_tick,
-        state_root: marker.parent_world_hash.clone(),
-        head_status: "recovery_pending".to_string(),
-        commit_id: None,
-        quarantine_id: None,
+    let dense = [
+        &marker.agent_id,
+        &marker.agent_session_id,
+        &marker.agent_turn_id,
+        &marker.decision_request_id,
+        &marker.request_digest,
+        &marker.feedback_id,
+    ];
+    if marker.agent_id.is_empty() != dense.iter().all(|value| value.is_empty()) {
+        return Err(WorldError::DistributedValidationFailed {
+            reason: "invalid_commit_record_identity".to_string(),
+        });
     }
+    if !marker.agent_id.is_empty() && dense.iter().any(|value| value.trim().is_empty()) {
+        return Err(WorldError::DistributedValidationFailed {
+            reason: "invalid_commit_record_identity".to_string(),
+        });
+    }
+    Ok(())
 }
 
 fn marker_root_conflict(marker: &WorldCommitRecordV1, root: &WorldRootViewV1) -> bool {
@@ -852,7 +1037,11 @@ fn marker_root_conflict(marker: &WorldCommitRecordV1, root: &WorldRootViewV1) ->
     let next = root.state_root == marker.staged_state_root
         && root.logical_tick == marker.parent_tick.saturating_add(1)
         && root.commit_id.as_deref() == Some(marker.commit_id.as_str());
-    !parent && !next
+    let stable = marker.status == "committed"
+        && root.state_root == marker.staged_state_root
+        && root.logical_tick == marker.parent_tick
+        && root.commit_id.as_deref() == Some(marker.commit_id.as_str());
+    !parent && !next && !stable
 }
 
 fn has_receipt_conflict(receipts: &[CognitionReceiptViewV1], marker: &WorldCommitRecordV1) -> bool {

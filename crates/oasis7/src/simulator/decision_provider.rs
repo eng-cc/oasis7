@@ -538,6 +538,10 @@ fn validate_continuous_response_lineage(
             false,
         ));
     }
+    let artifact_identity = response.response_artifact_identity();
+    response
+        .validate_response_artifact_identity(&artifact_identity)
+        .map_err(|error| DecisionProviderError::new(error.code(), error.message(), false))?;
     Ok(())
 }
 

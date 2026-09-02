@@ -532,6 +532,10 @@ impl DecisionProvider for ProviderLoopbackAdapter {
                 false,
             ));
         }
+        let artifact_identity = response.response_artifact_identity();
+        response
+            .validate_response_artifact_identity(&artifact_identity)
+            .map_err(|error| DecisionProviderError::new(error.code(), error.message(), false))?;
         self.validate_response(request, &response.base_decision_response)?;
         Ok(response)
     }

@@ -68,9 +68,9 @@ mod agent_decision;
 #[path = "oasis7_provider_local_bridge/options.rs"]
 mod options;
 use self::agent_decision::{
-    apply_profile_guardrails, build_decision_prompt, build_gateway_agent_params, build_session_key,
-    deterministic_mock_decision, parse_model_decision, provider_decision_label, summarize_text,
-    timeout_seconds_from_budget,
+    apply_profile_guardrails, build_continuous_session_key, build_decision_prompt,
+    build_gateway_agent_params, build_session_key, deterministic_mock_decision,
+    parse_model_decision, provider_decision_label, summarize_text, timeout_seconds_from_budget,
 };
 use self::http_bridge_support::handle_connection;
 pub(crate) use self::invocation::{
@@ -150,7 +150,14 @@ struct FeedbackPartition {
     next_seq: u64,
     digest_by_id: BTreeMap<String, Digest32>,
     digest_by_seq: BTreeMap<u64, (String, Digest32)>,
+    held: BTreeMap<u64, FeedbackEnvelopeV1>,
     recent: VecDeque<String>,
+}
+
+struct ContinuousInvocationIdentity<'a> {
+    provider_invocation_key: &'a str,
+    agent_subject: &'a str,
+    agent_session_id: &'a str,
 }
 
 impl ProviderState {
@@ -327,15 +334,51 @@ impl ProviderState {
             }
             return Ok(());
         }
+        if let Some(previous) = partition
+            .held
+            .values()
+            .find(|previous| previous.feedback_id == feedback.feedback_id)
+        {
+            if h_v1("oasis7.cognition.feedback.v1", previous) != digest {
+                return Err("feedback_id_conflict".to_string());
+            }
+            return Ok(());
+        }
+        if let Some(previous) = partition.held.get(&feedback.feedback_seq) {
+            if h_v1("oasis7.cognition.feedback.v1", previous) != digest {
+                return Err("feedback_identity_collision".to_string());
+            }
+            return Ok(());
+        }
         if let Some((_, previous)) = partition.digest_by_seq.get(&feedback.feedback_seq) {
             if previous != &digest {
                 return Err("feedback_identity_collision".to_string());
             }
             return Ok(());
         }
-        if feedback.feedback_seq != expected {
+        if feedback.feedback_seq > expected {
+            if partition.held.len() >= MAX_RECENT_FEEDBACK {
+                return Err("feedback_sequence_overflow".to_string());
+            }
+            partition.held.insert(feedback.feedback_seq, feedback);
             return Err("feedback_sequence_gap".to_string());
         }
+        if feedback.feedback_seq < expected {
+            return Err("feedback_sequence_gap".to_string());
+        }
+        Self::remember_feedback(partition, &feedback, digest);
+        while let Some(next) = partition.held.remove(&partition.next_seq.saturating_add(1)) {
+            let next_digest = h_v1("oasis7.cognition.feedback.v1", &next);
+            Self::remember_feedback(partition, &next, next_digest);
+        }
+        Ok(())
+    }
+
+    fn remember_feedback(
+        partition: &mut FeedbackPartition,
+        feedback: &FeedbackEnvelopeV1,
+        digest: Digest32,
+    ) {
         partition.next_seq = feedback.feedback_seq;
         partition.digest_by_seq.insert(
             feedback.feedback_seq,
@@ -370,7 +413,6 @@ impl ProviderState {
             partition.recent.pop_front();
         }
         partition.recent.push_back(summary);
-        Ok(())
     }
 
     fn handle_agent_chat(
@@ -433,6 +475,8 @@ impl ProviderState {
             timeout_seconds: timeout_seconds_from_budget(60_000),
             prompt,
             idempotency_key: agent_chat_idempotency_key(&session_key, &request),
+            provider_invocation_key: None,
+            agent_session_id: None,
             chat_request_key: Some(chat_request_key.clone()),
             route_label: route_label.map(ToOwned::to_owned),
         });
@@ -525,7 +569,7 @@ impl ProviderState {
         route_label: Option<&str>,
         invoker: &dyn AgentInvoker,
     ) -> DecisionResponse {
-        self.handle_decision_with_feedback(request, route_label, invoker, Vec::new())
+        self.handle_decision_with_feedback(request, route_label, invoker, Vec::new(), None)
     }
 
     fn handle_continuous_decision(
@@ -555,11 +599,17 @@ impl ProviderState {
             .get(&key)
             .map(|partition| partition.recent.iter().cloned().collect::<Vec<_>>())
             .unwrap_or_default();
+        let provider_invocation_key = context.provider_invocation_key();
         let base = self.handle_decision_with_feedback(
             context.base_decision_request.clone(),
             route_label,
             invoker,
             recent,
+            Some(ContinuousInvocationIdentity {
+                provider_invocation_key: provider_invocation_key.as_str(),
+                agent_subject: context.agent_subject.as_str(),
+                agent_session_id: context.agent_session_id.as_str(),
+            }),
         );
         let response_digest = h_v1("oasis7.cognition.response.v1", &base);
         Ok(ContinuousAgentResponseContextV1 {
@@ -582,6 +632,7 @@ impl ProviderState {
         route_label: Option<&str>,
         invoker: &dyn AgentInvoker,
         recent_feedback: Vec<String>,
+        invocation_identity: Option<ContinuousInvocationIdentity<'_>>,
     ) -> DecisionResponse {
         if let Err(err) = request.validate_contract() {
             self.set_last_error(Some(err.to_string()));
@@ -605,7 +656,24 @@ impl ProviderState {
         self.active_requests.fetch_add(1, Ordering::SeqCst);
         let started_at = Instant::now();
         let prompt = build_decision_prompt(&request, recent_feedback.as_slice());
-        let session_key = build_session_key(&request, self.options.provider_agent_id.as_str());
+        let session_key = invocation_identity
+            .as_ref()
+            .map(|identity| {
+                build_continuous_session_key(
+                    self.options.provider_agent_id.as_str(),
+                    identity.agent_subject,
+                    identity.agent_session_id,
+                )
+            })
+            .unwrap_or_else(|| {
+                build_session_key(&request, self.options.provider_agent_id.as_str())
+            });
+        let provider_invocation_key = invocation_identity
+            .as_ref()
+            .map(|identity| identity.provider_invocation_key.to_string());
+        let agent_session_id = invocation_identity
+            .as_ref()
+            .map(|identity| identity.agent_session_id.to_string());
         let timeout_seconds = timeout_seconds_from_budget(request.timeout_budget_ms);
         let invoke_result = invoker.invoke(AgentInvocation {
             provider_cli_bin: self.options.provider_cli_bin.clone(),
@@ -614,10 +682,13 @@ impl ProviderState {
             session_key: session_key.clone(),
             timeout_seconds,
             prompt,
-            // Timeout is a transport budget, not cognition identity.  Keep
-            // the bridge's legacy inner request stable across timeout changes
-            // until callers migrate to the outer V1 context.
-            idempotency_key: legacy_provider_invocation_key(&request),
+            // The production outer route supplies the validated Runtime key;
+            // only the explicitly fenced legacy route derives an inner key.
+            idempotency_key: provider_invocation_key
+                .clone()
+                .unwrap_or_else(|| legacy_provider_invocation_key(&request)),
+            provider_invocation_key,
+            agent_session_id,
             chat_request_key: None,
             route_label: route_label.map(ToOwned::to_owned),
         });

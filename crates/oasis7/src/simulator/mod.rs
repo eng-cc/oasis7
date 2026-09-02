@@ -65,7 +65,8 @@ pub use asteroid_fragment::generate_fragments;
 #[cfg(not(target_arch = "wasm32"))]
 pub use async_agent_runner::{
     AsyncAgentRunner, AsyncAgentRunnerError, AsyncAgentTurnOutcome, AsyncTurnFeedback, AsyncTurnId,
-    AsyncTurnLifecycle, AsyncWorldEffect, AsyncWorldProgress,
+    AsyncTurnLifecycle, AsyncWorldEffect, AsyncWorldProgress, RuntimeReceiptReadbackHandleV1,
+    RuntimeReceiptReadbackVerifier,
 };
 pub use chunking::{
     CHUNK_SIZE_X_CM, CHUNK_SIZE_Y_CM, CHUNK_SIZE_Z_CM, ChunkBounds, ChunkCoord, chunk_bounds,
@@ -81,11 +82,11 @@ pub use cognition_policy::{
 };
 pub use continuous_agent_harness::{
     AgentCognitionStore, BudgetContractV1, COGNITION_PROVIDER_INVOCATION_DOMAIN,
-    COGNITION_REQUEST_DIGEST_DOMAIN, COGNITION_RESPONSE_DIGEST_DOMAIN,
-    CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR, CONTINUOUS_AGENT_CONTEXT_VERSION, CognitionError,
-    ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1,
-    ContinuousAgentTurnContextV1, Digest32, FeedbackEnvelopeV1, FinalityBindingV1,
-    MemoryWriteIntentV1, RuntimeBindingV1, h_v1,
+    COGNITION_REQUEST_DIGEST_DOMAIN, COGNITION_RESPONSE_ARTIFACT_IDENTITY_DOMAIN,
+    COGNITION_RESPONSE_DIGEST_DOMAIN, CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR,
+    CONTINUOUS_AGENT_CONTEXT_VERSION, CognitionError, ContinuousAgentRequestContextV1,
+    ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1, Digest32, FeedbackEnvelopeV1,
+    FinalityBindingV1, MemoryWriteIntentV1, ResponseArtifactIdentityV1, RuntimeBindingV1, h_v1,
 };
 pub use decision_provider::{
     ActionCatalogEntry, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,

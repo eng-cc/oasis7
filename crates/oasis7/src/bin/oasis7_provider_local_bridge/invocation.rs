@@ -52,6 +52,10 @@ pub(super) struct AgentInvocation {
     pub(super) timeout_seconds: u64,
     pub(super) prompt: String,
     pub(super) idempotency_key: String,
+    /// Present only on the validated continuous-agent route. The legacy
+    /// inner-request route leaves both outer identity fields absent.
+    pub(super) provider_invocation_key: Option<String>,
+    pub(super) agent_session_id: Option<String>,
     pub(super) chat_request_key: Option<String>,
     pub(super) route_label: Option<String>,
 }

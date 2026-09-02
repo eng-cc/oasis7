@@ -20,6 +20,7 @@ mod capability_authorization_validation;
 mod cognition_command;
 mod cognition_orchestration;
 mod cognition_persistence;
+mod cognition_persistence_validation;
 mod economy;
 mod effects;
 mod event_processing;

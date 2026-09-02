@@ -161,6 +161,47 @@ fn proposal_canonical_digest_covers_full_identity_binding_policy_and_budget() {
 }
 
 #[test]
+fn runtime_admission_payload_preserves_full_proposal_contract_and_digest() {
+    let proposal = proposal();
+    let payload = proposal
+        .runtime_admission_payload()
+        .expect("validated proposal admission payload");
+    for field in [
+        "agent_session_id",
+        "agent_turn_id",
+        "decision_request_id",
+        "origin_request_digest",
+        "action_or_plan_kind",
+        "remaining_budget",
+        "baseline_observation_digest",
+        "goal_digest",
+        "policy_digest",
+        "policy_revision",
+        "precondition_digest",
+        "wake_conditions",
+        "source",
+        "proposal_digest",
+    ] {
+        assert!(
+            payload.get(field).is_some(),
+            "admission payload lost {field}"
+        );
+    }
+    assert_eq!(
+        proposal
+            .runtime_admission_digest()
+            .expect("admission digest"),
+        proposal.proposal_digest().expect("proposal digest")
+    );
+    assert!(
+        !proposal
+            .runtime_admission_bytes()
+            .expect("canonical admission bytes")
+            .is_empty()
+    );
+}
+
+#[test]
 fn invalid_proposal_binding_budget_or_digest_fails_closed_without_projection() {
     let mut invalid = serde_json::to_value(proposal()).expect("encode proposal");
     invalid["agent_session_id"] = Value::Null;

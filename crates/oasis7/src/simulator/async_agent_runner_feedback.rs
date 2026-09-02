@@ -1,6 +1,59 @@
+use super::super::continuous_agent_harness::ResponseArtifactIdentityV1;
 use super::{AsyncAgentRunnerError, ContinuousAgentTurnContextV1, Digest32, FeedbackEnvelopeV1};
 
 use crate::runtime::RuntimeReceiptLineageV1;
+
+/// Opaque proof returned by a Runtime-owned world readback verifier. The
+/// simulator can carry and inspect identity, but cannot mint this token from
+/// provider feedback or a caller-provided receipt alone.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeReceiptReadbackHandleV1 {
+    receipt_id: String,
+    receipt_digest: Digest32,
+    response_artifact_digest: Digest32,
+}
+
+impl RuntimeReceiptReadbackHandleV1 {
+    pub fn receipt_id(&self) -> &str {
+        self.receipt_id.as_str()
+    }
+
+    pub fn receipt_digest(&self) -> &Digest32 {
+        &self.receipt_digest
+    }
+
+    pub fn response_artifact_digest(&self) -> &Digest32 {
+        &self.response_artifact_digest
+    }
+
+    /// Runtime code constructs this only after its durable world readback has
+    /// verified the receipt and response identity. It is crate-visible so a
+    /// Runtime adapter can implement the verifier without exposing a public
+    /// authority-fabricating constructor to provider callers.
+    pub(crate) fn from_verified(
+        receipt: &RuntimeReceiptLineageV1,
+        response_identity: &ResponseArtifactIdentityV1,
+    ) -> Self {
+        Self {
+            receipt_id: receipt.receipt_id.clone(),
+            receipt_digest: Digest32::from(receipt.receipt_digest.clone()),
+            response_artifact_digest: response_identity.artifact_digest.clone(),
+        }
+    }
+}
+
+/// Integration seam for Runtime's strict World-readback proof. A provider or
+/// simulator fixture cannot authorize this method by echoing receipt fields;
+/// the implementation must be backed by Runtime's durable commit/readback.
+pub trait RuntimeReceiptReadbackVerifier: Send + Sync {
+    fn verify_world_readback(
+        &self,
+        context: &ContinuousAgentTurnContextV1,
+        feedback: &FeedbackEnvelopeV1,
+        receipt: &RuntimeReceiptLineageV1,
+        response_identity: &ResponseArtifactIdentityV1,
+    ) -> Result<RuntimeReceiptReadbackHandleV1, AsyncAgentRunnerError>;
+}
 
 pub(super) fn validate_feedback(
     context: &ContinuousAgentTurnContextV1,

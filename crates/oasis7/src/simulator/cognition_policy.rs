@@ -764,6 +764,29 @@ pub struct ContinuationProposalV1 {
 }
 
 impl ContinuationProposalV1 {
+    /// Return the complete simulator-owned wire payload Runtime must admit.
+    /// Keeping this projection here prevents callers from silently dropping
+    /// policy, observation, budget, or wake bindings while adapting to a
+    /// Runtime persistence type.
+    pub fn runtime_admission_payload(&self) -> Result<Value, CognitionError> {
+        self.validate()?;
+        serde_json::to_value(self)
+            .map_err(|e| error("continuation_admission_encoding_failed", e.to_string()))
+    }
+
+    /// Canonical bytes for the Runtime admission seam. Runtime may persist
+    /// these bytes or derive its own admission digest without trusting a
+    /// provider-supplied serialization.
+    pub fn runtime_admission_bytes(&self) -> Result<Vec<u8>, CognitionError> {
+        let payload = self.runtime_admission_payload()?;
+        oasis7_wasm_abi::encode_canonical_cbor(&payload)
+            .map_err(|e| error("continuation_admission_encoding_failed", e.to_string()))
+    }
+
+    pub fn runtime_admission_digest(&self) -> Result<Digest32, CognitionError> {
+        self.proposal_digest()
+    }
+
     pub fn proposal_digest(&self) -> Result<Digest32, CognitionError> {
         let mut value = serde_json::to_value(self)
             .map_err(|e| error("continuation_canonical_encoding_failed", e.to_string()))?;

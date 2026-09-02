@@ -5,6 +5,7 @@ use oasis7::simulator::{
     DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION, ObservationEnvelope, ProviderExecutionMode,
     ProviderInteractionTarget, ProviderMissionContext, ProviderNavigationNode,
     ProviderNearbyEntity, ProviderObservation, ProviderRecentEvent, ProviderSelfState,
+    RuntimeBindingV1,
 };
 use std::collections::BTreeMap;
 use std::fs;
@@ -15,6 +16,8 @@ use std::thread;
 
 #[path = "tests_agent_chat.rs"]
 mod tests_agent_chat;
+#[path = "tests_continuous_identity.rs"]
+mod tests_continuous_identity;
 #[path = "tests_newapi_bridge_state.rs"]
 mod tests_newapi_bridge_state;
 #[path = "tests_options.rs"]
@@ -368,6 +371,8 @@ fn build_gateway_agent_params_uses_session_key_and_timeout() {
         timeout_seconds: 15,
         prompt: "{\"action\":\"wait\"}".to_string(),
         idempotency_key: "idem-1".to_string(),
+        provider_invocation_key: None,
+        agent_session_id: None,
         chat_request_key: None,
         route_label: None,
     };

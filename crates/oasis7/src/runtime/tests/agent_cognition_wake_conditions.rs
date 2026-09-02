@@ -7,7 +7,8 @@
 use super::super::*;
 use crate::runtime::{
     AgentContinuation, CognitionContinuationProposalV1, ContinuationBudgetV1, ContinuationStatusV1,
-    ContinuationTransition, WakeConditionV1, WakeConditionValidator, WakeEvaluationContext,
+    ContinuationTransition, SchedulerPolicyV1, WakeConditionV1, WakeConditionValidator,
+    WakeEvaluationContext,
 };
 use serde_json::{Value, json};
 
@@ -68,11 +69,18 @@ fn continuation(status: &str) -> AgentContinuation {
         "continuation_proposal_id": "proposal-42",
         "proposal_digest": "digest:proposal-42",
         "action_or_envelope_digest": null,
+        "action_or_plan_kind": "wait",
+        "baseline_observation_digest": "digest:baseline-42",
+        "goal_digest": "digest:goal-42",
+        "policy_digest": "digest:policy-42",
+        "policy_revision": 1,
+        "precondition_summary": "ready",
         "wake_conditions": [valid("at_or_after_tick")],
         "next_wake_tick": 42,
         "remaining_budget": {"unit": "steps", "value": 2},
         "valid_until_tick": 100,
         "precondition_digest": "digest:precondition-42",
+        "source": "runtime-test",
         "wake_seq": 1,
         "status": status,
         "terminal_disposition": null
@@ -266,23 +274,37 @@ fn typed_predicates_compare_canonical_values_instead_of_raw_encoding_bytes() {
 
 #[test]
 fn runtime_admits_proposals_and_allocates_continuation_identity() {
-    let mut world = World::new();
-    let proposal = CognitionContinuationProposalV1 {
+    let policy: SchedulerPolicyV1 = serde_json::from_value(json!({
+        "schema_version": "scheduler-policy.v1",
+        "max_total_wakes_per_tick": 8,
+        "max_wakes_per_agent_per_tick": 1,
+        "aging_after_ticks": 2,
+        "max_starvation_ticks": 4,
+        "initial_priority": 0,
+        "comparator": SchedulerPolicyV1::COMPARATOR,
+        "service_order": SchedulerPolicyV1::SERVICE_ORDER
+    }))
+    .expect("scheduler policy");
+    let mut world = World::new().with_cognition_scheduler(policy, 1);
+    let manifest_hash = world.current_manifest_hash().expect("manifest hash");
+    let mut proposal = CognitionContinuationProposalV1 {
+        schema_version: 1,
         world_id: WORLD_ID.to_string(),
         branch_id: "main".to_string(),
         finality_epoch: 7,
         finality_block_hash: Some("hash:finality-7".to_string()),
         finality_status: "verified".to_string(),
         reorg_epoch: 3,
-        runtime_manifest_hash: "hash:runtime-manifest-7".to_string(),
+        runtime_manifest_hash: manifest_hash,
         agent_id: AGENT_ID.to_string(),
         agent_session_id: "session.agent-wake-1".to_string(),
         agent_turn_id: "turn.agent-wake-1".to_string(),
         decision_request_id: "request.agent-wake-1".to_string(),
         origin_turn_id: "turn.agent-wake-1".to_string(),
         origin_request_digest: "digest:request-42".to_string(),
+        action_or_plan_kind: "wait".to_string(),
         continuation_proposal_id: "proposal-42".to_string(),
-        proposal_digest: "digest:proposal-42".to_string(),
+        proposal_digest: String::new(),
         action_or_envelope_digest: None,
         wake_conditions: vec![condition(valid("at_or_after_tick"))],
         next_wake_tick: Some(42),
@@ -292,7 +314,14 @@ fn runtime_admits_proposals_and_allocates_continuation_identity() {
         },
         valid_until_tick: Some(100),
         precondition_digest: "digest:precondition-42".to_string(),
+        baseline_observation_digest: "digest:baseline-42".to_string(),
+        goal_digest: "digest:goal-42".to_string(),
+        policy_digest: "digest:policy-42".to_string(),
+        policy_revision: 1,
+        precondition_summary: "ready".to_string(),
+        source: "runtime-test".to_string(),
     };
+    proposal.proposal_digest = proposal.proposal_digest();
     let admitted = world
         .admit_cognition_continuation(proposal)
         .expect("runtime should allocate and validate continuation");

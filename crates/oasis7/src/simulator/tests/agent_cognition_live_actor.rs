@@ -240,3 +240,63 @@ fn completed_provider_turn_remains_single_flight_until_runtime_terminal_feedback
         .expect_err("provider completion is not Runtime terminal feedback");
     assert_eq!(error.code(), "agent_busy");
 }
+
+#[test]
+fn pending_runtime_feedback_retains_awaiting_outcome_until_terminal_or_expiry() {
+    let mut runner = AsyncAgentRunner::builtin_fixture(AGENT_ID);
+    let context = ContinuousAgentTurnContextV1 {
+        agent_id: AGENT_ID.to_string(),
+        agent_session_id: "session.agent-live-pending".to_string(),
+        agent_turn_id: "turn.agent-live-pending".to_string(),
+        decision_request_id: "request.agent-live-pending".to_string(),
+        request_digest: Digest32::from(
+            "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ),
+        memory_snapshot: MemoryContextSnapshotV1::empty("session_private"),
+        goal_snapshot: GoalSnapshotV1::empty(),
+        continuation: None,
+    };
+    let turn_id = runner
+        .start_turn_with_context(AGENT_ID, context.clone())
+        .expect("open turn");
+    let outcome = loop {
+        if let Some(outcome) = runner
+            .poll_completed()
+            .expect("poll turn")
+            .into_iter()
+            .find(|outcome| outcome.turn_id == turn_id)
+        {
+            break outcome;
+        }
+        std::thread::yield_now();
+    };
+    let mut pending = outcome
+        .feedback_for_runtime_status("pending", None)
+        .expect("pending feedback");
+    pending.provenance = "runtime_authoritative".to_string();
+    runner
+        .consume_runtime_feedback(AGENT_ID, pending, &mut MemoryWriteStore::default())
+        .expect("pending feedback is accepted without releasing the turn");
+    assert_eq!(
+        runner
+            .start_turn_with_context(AGENT_ID, context.clone())
+            .expect_err("pending Runtime outcome must block re-entry")
+            .code(),
+        "agent_busy"
+    );
+    runner
+        .expire_runtime_turn(
+            AGENT_ID,
+            context.agent_session_id.as_str(),
+            context.agent_turn_id.as_str(),
+            context.decision_request_id.as_str(),
+        )
+        .expect("explicit lease expiry releases the occupied outcome");
+    assert_eq!(
+        runner
+            .start_turn_with_context(AGENT_ID, context)
+            .expect_err("expiry does not permit request identity replay")
+            .code(),
+        "cognition_error"
+    );
+}

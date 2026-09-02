@@ -79,7 +79,7 @@ fn wake(
 }
 
 fn continuation(status: ContinuationStatusV1) -> AgentContinuation {
-    serde_json::from_value(json!({
+    let mut continuation: AgentContinuation = serde_json::from_value(json!({
         "schema_version": "agent-continuation.v1",
         "continuation_id": "continuation-live-1",
         "wake_id": "wake-live-1",
@@ -108,11 +108,20 @@ fn continuation(status: ContinuationStatusV1) -> AgentContinuation {
         "remaining_budget": {"unit": "steps", "value": 2},
         "valid_until_tick": 100,
         "precondition_digest": "blake3:precondition-live-1",
+        "action_or_plan_kind": "wait",
+        "baseline_observation_digest": "blake3:baseline-live-1",
+        "goal_digest": "blake3:goal-live-1",
+        "policy_digest": "blake3:policy-live-1",
+        "policy_revision": 1,
+        "precondition_summary": "ready",
+        "source": "runtime-test",
         "wake_seq": 1,
         "status": status,
         "terminal_disposition": null
     }))
-    .expect("decode live continuation")
+    .expect("decode live continuation");
+    continuation.refresh_status_digest();
+    continuation
 }
 
 fn world_with_scheduler() -> World {

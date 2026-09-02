@@ -287,6 +287,25 @@ pub(super) fn build_session_key(request: &DecisionRequest, provider_agent_id: &s
         .collect()
 }
 
+pub(super) fn build_continuous_session_key(
+    provider_agent_id: &str,
+    agent_subject: &str,
+    agent_session_id: &str,
+) -> String {
+    let raw = format!(
+        "agent:{provider_agent_id}:subagent:world-simulator:continuous:{agent_subject}:{agent_session_id}"
+    );
+    raw.chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' || ch == ':' {
+                ch
+            } else {
+                '-'
+            }
+        })
+        .collect()
+}
+
 #[derive(Debug, Deserialize)]
 struct ModelDecisionEnvelope {
     decision: String,
