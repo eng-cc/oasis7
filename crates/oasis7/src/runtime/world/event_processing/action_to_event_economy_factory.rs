@@ -3,7 +3,42 @@ use crate::runtime::FACTORY_BUILD_STARTED_MODERN_VERSION;
 use oasis7_wasm_abi::FactoryModuleSpec;
 
 impl World {
-    pub(super) fn build_factory_to_event(
+    pub(in crate::runtime::world) fn validate_module_backed_factory_admission(
+        &self,
+        action_id: ActionId,
+        builder_agent_id: &String,
+        site_id: &String,
+        module_id: &str,
+        spec: &FactoryModuleSpec,
+    ) -> Result<Option<RejectReason>, WorldError> {
+        if module_id.trim().is_empty() {
+            return Ok(Some(RejectReason::RuleDenied {
+                notes: vec!["factory module_id cannot be empty".to_string()],
+            }));
+        }
+        if let WorldEventBody::Domain(DomainEvent::ActionRejected { reason, .. }) =
+            self.build_factory_to_event(action_id, builder_agent_id, site_id, spec)?
+        {
+            return Ok(Some(reason));
+        }
+        if self
+            .state
+            .factory_construction_power_profiles
+            .get(spec.factory_id.as_str())
+            .and_then(|profile| profile.source_module_id.as_deref())
+            != Some(module_id)
+        {
+            return Ok(Some(RejectReason::RuleDenied {
+                notes: vec![format!(
+                    "construction power profile source mismatch: factory_id={} module_id={}",
+                    spec.factory_id, module_id
+                )],
+            }));
+        }
+        Ok(None)
+    }
+
+    pub(in crate::runtime::world) fn build_factory_to_event(
         &self,
         action_id: ActionId,
         builder_agent_id: &String,

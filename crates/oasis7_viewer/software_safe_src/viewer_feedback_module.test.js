@@ -486,6 +486,60 @@ describe("viewer feedback module", () => {
     expect(summaryFor({}).factoryProductionFailureDisposition).toBeNull();
   });
 
+  it("lets a fresh matching schedule recovery own the hero recommendation", () => {
+    const summary = createFeedbackModule({
+      lastGameplayActionFeedback: null,
+      snapshot: {
+        model: { agents: { "agent-0": { id: "agent-0" } }, locations: { base: { id: "base" } } },
+        player_gameplay: {
+          available_actions: [
+            {
+              action_id: "schedule_recipe_smelter_iron_ingot",
+              label: "Queue iron ingot run",
+              protocol_action: "gameplay_action.submit",
+              target_agent_id: "agent-0",
+            },
+            {
+              action_id: "request_snapshot",
+              label: "Refresh gameplay snapshot",
+              protocol_action: "request_snapshot",
+            },
+            {
+              action_id: "advance_step",
+              label: "Advance 1 step",
+              protocol_action: "live_control.step",
+            },
+            {
+              action_id: "resume_play",
+              label: "Resume play",
+              protocol_action: "live_control.play",
+            },
+          ],
+          factory_production_failure_disposition: {
+            action_id: 22,
+            requester_agent_id: "agent-0",
+            factory_id: "factory.target",
+            recipe_id: "recipe.smelter.iron_ingot",
+            blocker_kind: "product_validation_rejected",
+            blocker_detail: "product profile rejected the committed output",
+            disposition_kind: "consumed_lost",
+            next_action: "inspect_product_validation_and_reschedule",
+          },
+        },
+      },
+      uiLocale: "en",
+    }).buildGameplaySummary();
+
+    expect(summary.factoryProductionFailureDisposition.recoveryAction).toEqual(expect.objectContaining({
+      actionId: "schedule_recipe_smelter_iron_ingot",
+      executeKind: "gameplay_action",
+    }));
+    expect(summary.recommendedAction).toEqual(expect.objectContaining({
+      actionId: "schedule_recipe_smelter_iron_ingot",
+      executeKind: "gameplay_action",
+    }));
+  });
+
   it("does not treat live step or play controls as factory failure recovery", () => {
     const failureDisposition = {
       action_id: 21,
@@ -507,7 +561,7 @@ describe("viewer feedback module", () => {
         },
       },
       uiLocale: "en",
-    }).buildGameplaySummary().factoryProductionFailureDisposition;
+    }).buildGameplaySummary();
     const disabledReschedule = {
       action_id: "schedule_recipe_smelter_iron_ingot",
       label: "Queue iron ingot run",
@@ -531,7 +585,8 @@ describe("viewer feedback module", () => {
       protocol_action: "live_control.play",
     };
 
-    expect(summaryFor([disabledReschedule, snapshot, advanceStep, resumePlay])).toEqual(
+    const snapshotSummary = summaryFor([disabledReschedule, snapshot, advanceStep, resumePlay]);
+    expect(snapshotSummary.factoryProductionFailureDisposition).toEqual(
       expect.objectContaining({
         recoveryAction: expect.objectContaining({
           actionId: "request_snapshot",
@@ -540,12 +595,19 @@ describe("viewer feedback module", () => {
         recoveryActionId: "request_snapshot",
       }),
     );
-    expect(summaryFor([disabledReschedule, advanceStep, resumePlay])).toEqual(
+    expect(snapshotSummary.recommendedAction).toEqual(expect.objectContaining({
+      actionId: "request_snapshot",
+      executeKind: "request_snapshot",
+    }));
+
+    const noSafePathSummary = summaryFor([disabledReschedule, advanceStep, resumePlay]);
+    expect(noSafePathSummary.factoryProductionFailureDisposition).toEqual(
       expect.objectContaining({
         recoveryAction: expect.objectContaining({ actionId: "no_safe_path", executeKind: "none" }),
         recoveryActionId: "no_safe_path",
       }),
     );
+    expect(noSafePathSummary.recommendedAction).toBeNull();
   });
 
   it("projects canonical micro depot facilities without inventing quote or ROI fields", () => {

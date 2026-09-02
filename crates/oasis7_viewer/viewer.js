@@ -1642,9 +1642,9 @@ function recoveryActionForDisposition(value2, availableActions, locale, localeTe
       actionField(action2, "protocol_action", "protocolAction"),
       executeKind(action2)
     ].map(normalizedActionToken).filter(Boolean).join("_");
-    return executeKind(action2) === "reprioritize" || /repair|rebuild|reroute|replenish|refill|requote|quote|wait|snapshot|step|play/.test(token);
+    return executeKind(action2) === "reprioritize" || /repair|rebuild|reroute|replenish|refill|requote|quote|wait/.test(token);
   });
-  const selected = matchingScheduleAction || otherRecoveryAction || snapshotAction || {
+  const selected = matchingScheduleAction || snapshotAction || otherRecoveryAction || {
     actionId: "no_safe_path",
     label: localeText2(locale, "暂无安全恢复路径", "No safe recovery path"),
     protocolAction: null,
@@ -2225,40 +2225,35 @@ function createViewerFeedbackModule({
     const wantsResumeProof = /\b(resume|recover|restore|replenish|repair)\b/.test(recoveryCueText);
     const starterOcClaimAvailable = availableActions.some((action2) => action2.executeKind === "claim_starter_oc" && !action2.disabledReason);
     const starterOcBlocksChat = starterOcClaimAvailable && availableActions.some((action2) => action2.executeKind === "agent_chat" && String(action2.disabledReason || "").toLowerCase().includes("starter oc"));
-    const recommendedAction = availableActions.filter((action2) => !action2.disabledReason).sort((left, right) => {
+    const genericRecommendedAction = availableActions.filter((action2) => !action2.disabledReason).sort((left, right) => {
       const priority = (action2) => {
         if (starterOcBlocksChat && action2.executeKind === "claim_starter_oc") return -1;
         if (isRecoveryChoiceState) {
           if (emptyEntityBlocker && action2.executeKind === "claim_first_agent") return -1;
-          if (action2.executeKind === "request_snapshot") return wantsSnapshotProof ? 0 : 2;
-          if (action2.executeKind === "step") return wantsAdvanceProof ? 0 : 1;
-          if (action2.executeKind === "play") return wantsResumeProof ? 1 : 2;
-          if (action2.executeKind === "claim_first_agent") return 1;
-          if (action2.executeKind === "claim_starter_oc") return 1;
-          if (action2.executeKind === "gameplay_action") return 4;
-          if (action2.executeKind === "agent_chat") return 5;
-          return 6;
+          return {
+            request_snapshot: wantsSnapshotProof ? 0 : 2,
+            step: wantsAdvanceProof ? 0 : 1,
+            play: wantsResumeProof ? 1 : 2,
+            claim_first_agent: 1,
+            claim_starter_oc: 1,
+            gameplay_action: 4,
+            agent_chat: 5
+          }[action2.executeKind] ?? 6;
         }
-        switch (action2.executeKind) {
-          case "claim_first_agent":
-          case "claim_starter_oc":
-            return 0;
-          case "gameplay_action":
-            return 0;
-          case "step":
-            return 1;
-          case "play":
-            return 2;
-          case "request_snapshot":
-            return 3;
-          case "agent_chat":
-            return 4;
-          default:
-            return 5;
-        }
+        return {
+          claim_first_agent: 0,
+          claim_starter_oc: 0,
+          gameplay_action: 0,
+          step: 1,
+          play: 2,
+          request_snapshot: 3,
+          agent_chat: 4
+        }[action2.executeKind] ?? 5;
       };
       return priority(left) - priority(right);
     })[0] || null;
+    const factoryFailureRecoveryAction = factoryProductionFailureDisposition?.recoveryAction;
+    const recommendedAction = factoryProductionFailureDisposition ? factoryFailureRecoveryAction?.executeKind === "none" ? null : availableActions.find((action2) => action2.actionId === factoryProductionFailureDisposition.recoveryActionId && action2.executeKind === factoryFailureRecoveryAction?.executeKind && !action2.disabledReason) || null : genericRecommendedAction;
     const recoveryActionDetail = (action2, economicSurface2) => {
       if (!action2) return null;
       if (action2.disabledReason) return action2.disabledReason;

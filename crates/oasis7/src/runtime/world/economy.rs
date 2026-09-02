@@ -134,36 +134,14 @@ impl World {
                 module_id,
                 spec,
             } => {
-                if module_id.trim().is_empty() {
-                    return Ok(EconomyActionResolution::Rejected(
-                        RejectReason::RuleDenied {
-                            notes: vec!["factory module_id cannot be empty".to_string()],
-                        },
-                    ));
-                }
-                let Some(power_profile) = self
-                    .state
-                    .factory_construction_power_profiles
-                    .get(spec.factory_id.as_str())
-                else {
-                    return Ok(EconomyActionResolution::Rejected(
-                        RejectReason::RuleDenied {
-                            notes: vec![format!(
-                                "construction power profile unknown: factory_id={}",
-                                spec.factory_id
-                            )],
-                        },
-                    ));
-                };
-                if power_profile.source_module_id.as_deref() != Some(module_id.as_str()) {
-                    return Ok(EconomyActionResolution::Rejected(
-                        RejectReason::RuleDenied {
-                            notes: vec![format!(
-                                "construction power profile source mismatch: factory_id={} module_id={}",
-                                spec.factory_id, module_id
-                            )],
-                        },
-                    ));
+                if let Some(reason) = self.validate_module_backed_factory_admission(
+                    envelope.id,
+                    builder_agent_id,
+                    site_id,
+                    module_id,
+                    spec,
+                )? {
+                    return Ok(EconomyActionResolution::Rejected(reason));
                 }
                 let preferred_ledger = MaterialLedgerId::agent(builder_agent_id.clone());
                 // Module output may alter the candidate cost, but it may not
@@ -214,6 +192,16 @@ impl World {
                 }
                 if decision.duration_ticks > 0 {
                     resolved_spec.build_time_ticks = decision.duration_ticks;
+                }
+
+                if let Some(reason) = self.validate_module_backed_factory_admission(
+                    envelope.id,
+                    builder_agent_id,
+                    site_id,
+                    module_id,
+                    &resolved_spec,
+                )? {
+                    return Ok(EconomyActionResolution::Rejected(reason));
                 }
 
                 Ok(EconomyActionResolution::Resolved(Action::BuildFactory {

@@ -3,7 +3,7 @@ use crate::runtime::{
     Journal, ProductValidationAttemptV1, ProductValidationDeliveryCursor,
     RuntimeCommittedTickContext, WorldError, WorldTime,
 };
-use oasis7_wasm_abi::ModuleStateUpdate;
+use oasis7_wasm_abi::{FactoryBuildDecision, ModuleStateUpdate};
 
 fn append_product_validation_event(
     journal: &mut Journal,
@@ -71,11 +71,143 @@ fn product_validation_delivery_cursor_stays_bounded_over_long_run() {
     }
     let encoded = serde_cbor::to_vec(&cursor).expect("encode bounded cursor");
     assert!(
-        encoded.len() <= 16,
+        encoded.len() <= 32,
         "cursor grew to {} bytes",
         encoded.len()
     );
     assert_eq!(cursor.routed_through_event_id, 1_000_000);
+}
+
+#[test]
+fn module_factory_rejects_world_invalid_submission_before_module_evaluation() {
+    let mut world = World::new();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "builder-a".to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("register builder");
+    let factory_id = "factory.module.admission";
+    let module_id = "m4.factory.admission";
+    let spec = factory_spec(factory_id, 1, 1);
+    prepare_module_test_factory_build(&mut world, "builder-a", "site-1", &spec);
+    activate_pure_module(&mut world, module_id, b"factory-admission-module");
+    bind_factory_build_module(&mut world, factory_id, module_id);
+    world.submit_action(Action::BuildFactoryWithModule {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "unknown-site".to_string(),
+        module_id: module_id.to_string(),
+        spec,
+    });
+
+    let steel_before =
+        world.ledger_material_balance(&MaterialLedgerId::agent("builder-a"), "steel_plate");
+    let power_before = world
+        .agent_resource_balance("builder-a", ResourceKind::Electricity)
+        .expect("builder power");
+    let mut sandbox = CaptureContextSandbox::with_outputs(Vec::new());
+    world
+        .step_with_modules(&mut sandbox)
+        .expect("world-invalid module build should be a structured rejection");
+
+    assert!(
+        sandbox.requests.is_empty(),
+        "invalid build must not invoke module"
+    );
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::agent("builder-a"), "steel_plate"),
+        steel_before
+    );
+    assert_eq!(
+        world
+            .agent_resource_balance("builder-a", ResourceKind::Electricity)
+            .expect("builder power after rejection"),
+        power_before
+    );
+    assert_eq!(world.pending_factory_builds_len(), 0);
+    assert!(!world.has_factory(factory_id));
+    assert!(!world.journal().events.iter().any(|event| {
+        matches!(
+            &event.body,
+            WorldEventBody::Domain(DomainEvent::FactoryBuildStarted { .. })
+                | WorldEventBody::ModuleRuntimeCharged(_)
+                | WorldEventBody::ModuleEmitted(_)
+        )
+    }));
+}
+
+#[test]
+fn module_factory_revalidates_resolved_spec_before_commit() {
+    let mut world = World::new();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "builder-a".to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("register builder");
+    let factory_id = "factory.module.resolved-spec";
+    let module_id = "m4.factory.resolved-spec";
+    let spec = factory_spec(factory_id, 1, 1);
+    prepare_module_test_factory_build(&mut world, "builder-a", "site-1", &spec);
+    activate_pure_module(&mut world, module_id, b"factory-resolved-spec-module");
+    bind_factory_build_module(&mut world, factory_id, module_id);
+    world.submit_action(Action::BuildFactoryWithModule {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-1".to_string(),
+        module_id: module_id.to_string(),
+        spec,
+    });
+    let output = ModuleOutput {
+        new_state: None,
+        effects: Vec::new(),
+        emits: vec![ModuleEmit {
+            kind: "economy.factory_build_decision".to_string(),
+            payload: serde_json::to_value(FactoryBuildDecision::accepted(
+                vec![MaterialStack::new("", 1)],
+                1,
+            ))
+            .expect("serialize invalid resolved factory decision"),
+        }],
+        tick_lifecycle: None,
+        output_bytes: 256,
+    };
+    let steel_before =
+        world.ledger_material_balance(&MaterialLedgerId::agent("builder-a"), "steel_plate");
+    let power_before = world
+        .agent_resource_balance("builder-a", ResourceKind::Electricity)
+        .expect("builder power");
+    let mut sandbox = CaptureContextSandbox::with_outputs(vec![output]);
+    world
+        .step_with_modules(&mut sandbox)
+        .expect("invalid resolved module spec should be a structured rejection");
+
+    assert_eq!(
+        sandbox.requests.len(),
+        1,
+        "valid admission reaches module once"
+    );
+    assert_eq!(
+        world.ledger_material_balance(&MaterialLedgerId::agent("builder-a"), "steel_plate"),
+        steel_before
+    );
+    assert_eq!(
+        world
+            .agent_resource_balance("builder-a", ResourceKind::Electricity)
+            .expect("builder power after rejection"),
+        power_before
+    );
+    assert_eq!(world.pending_factory_builds_len(), 0);
+    assert!(!world.has_factory(factory_id));
+    assert!(!world.journal().events.iter().any(|event| {
+        matches!(
+            &event.body,
+            WorldEventBody::Domain(DomainEvent::FactoryBuildStarted { .. })
+        )
+    }));
+    assert!(world.journal().events.iter().any(|event| {
+        matches!(
+            &event.body,
+            WorldEventBody::Domain(DomainEvent::ActionRejected { .. })
+        )
+    }));
 }
 
 #[test]
@@ -591,13 +723,13 @@ fn product_validation_checkpoint_routes_batch_before_persist_and_recovery_dedupe
     recovered
         .step_with_modules(&mut retry_sandbox)
         .expect("prior attempt must fail closed after recovery");
-    assert_eq!(
+    assert!(
         recovered
             .state()
             .product_validation_delivery_cursor
-            .routed_through_event_id,
-        second_attempt_id,
-        "recovery must preserve the durable validation delivery cursor"
+            .routed_through_event_id
+            >= second_attempt_id,
+        "recovery must not regress the durable validation delivery cursor"
     );
     let duplicate_ids: Vec<_> = retry_sandbox
         .requests

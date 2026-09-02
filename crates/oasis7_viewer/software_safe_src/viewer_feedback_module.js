@@ -641,42 +641,42 @@ export function createViewerFeedbackModule({
       action.executeKind === "agent_chat"
       && String(action.disabledReason || "").toLowerCase().includes("starter oc")
     ));
-    const recommendedAction = availableActions
+    const genericRecommendedAction = availableActions
       .filter((action) => !action.disabledReason)
       .sort((left, right) => {
         const priority = (action) => {
           if (starterOcBlocksChat && action.executeKind === "claim_starter_oc") return -1;
           if (isRecoveryChoiceState) {
             if (emptyEntityBlocker && action.executeKind === "claim_first_agent") return -1;
-            if (action.executeKind === "request_snapshot") return wantsSnapshotProof ? 0 : 2;
-            if (action.executeKind === "step") return wantsAdvanceProof ? 0 : 1;
-            if (action.executeKind === "play") return wantsResumeProof ? 1 : 2;
-            if (action.executeKind === "claim_first_agent") return 1;
-            if (action.executeKind === "claim_starter_oc") return 1;
-            if (action.executeKind === "gameplay_action") return 4;
-            if (action.executeKind === "agent_chat") return 5;
-            return 6;
+            return {
+              request_snapshot: wantsSnapshotProof ? 0 : 2,
+              step: wantsAdvanceProof ? 0 : 1,
+              play: wantsResumeProof ? 1 : 2,
+              claim_first_agent: 1,
+              claim_starter_oc: 1,
+              gameplay_action: 4,
+              agent_chat: 5,
+            }[action.executeKind] ?? 6;
           }
-          switch (action.executeKind) {
-            case "claim_first_agent":
-            case "claim_starter_oc":
-              return 0;
-            case "gameplay_action":
-              return 0;
-            case "step":
-              return 1;
-            case "play":
-              return 2;
-            case "request_snapshot":
-              return 3;
-            case "agent_chat":
-              return 4;
-            default:
-              return 5;
-          }
+          return {
+            claim_first_agent: 0,
+            claim_starter_oc: 0,
+            gameplay_action: 0,
+            step: 1,
+            play: 2,
+            request_snapshot: 3,
+            agent_chat: 4,
+          }[action.executeKind] ?? 5;
         };
         return priority(left) - priority(right);
       })[0] || null;
+    const factoryFailureRecoveryAction = factoryProductionFailureDisposition?.recoveryAction;
+    const recommendedAction = factoryProductionFailureDisposition
+      ? factoryFailureRecoveryAction?.executeKind === "none" ? null : availableActions.find((action) => (
+        action.actionId === factoryProductionFailureDisposition.recoveryActionId
+        && action.executeKind === factoryFailureRecoveryAction?.executeKind && !action.disabledReason
+      )) || null
+      : genericRecommendedAction;
     const recoveryActionDetail = (action, economicSurface) => {
       if (!action) return null;
       if (action.disabledReason) return action.disabledReason;
