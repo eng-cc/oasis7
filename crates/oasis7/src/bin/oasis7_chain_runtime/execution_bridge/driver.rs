@@ -47,8 +47,9 @@ use super::external_effect::{
     validate_execution_external_effect_for_context,
 };
 use super::product_validation_intent::{
-    ProductValidationIntentMarkerV1, clear_product_validation_intent,
-    load_product_validation_intent, persist_product_validation_intent,
+    ProductValidationIntentMarkerV1, build_product_validation_intent_marker,
+    clear_product_validation_intent, load_product_validation_intent,
+    persist_product_validation_intent_for_staged_world,
     world_is_staged_for_product_validation_intent,
 };
 pub(crate) use super::simulator_mirror::simulator_world_dir_from_execution_world_dir;
@@ -789,18 +790,14 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                 // crash after this write is recognizable as an exact
                 // predecessor marker; a crash after the world write leaves
                 // both artifacts available for continuation.
-                persist_product_validation_intent(
+                persist_product_validation_intent_for_staged_world(
                     intent_records_dir.as_path(),
-                    &ProductValidationIntentMarkerV1 {
-                        schema_version:
-                            super::product_validation_intent::PRODUCT_VALIDATION_INTENT_SCHEMA_V1,
-                        world_id: intent_world_id.clone(),
-                        height: intent_height,
-                        action_root: intent_action_root.clone(),
-                        journal_len: staged.journal().len(),
-                        pre_step_execution_state_root: intent_pre_step_execution_state_root.clone(),
-                        pre_step_external_effect: Some(intent_pre_step_external_effect.clone()),
-                    },
+                    staged,
+                    intent_world_id.as_str(),
+                    intent_height,
+                    intent_action_root.as_str(),
+                    intent_pre_step_execution_state_root.as_str(),
+                    intent_pre_step_external_effect.clone(),
                 )
                 .map_err(|err| WorldError::DistributedValidationFailed {
                     reason: format!(

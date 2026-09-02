@@ -514,32 +514,31 @@ impl World {
             let outputs = job.produce.iter().chain(job.byproducts.iter());
             for (output_index, stack) in outputs.enumerate() {
                 let validation_index = Some(output_index as u32);
-                // A committed receipt is authoritative across recovery even
-                // if the module is no longer active. Resolve its pinned
-                // module first so a retry cannot silently skip validation.
-                let receipt_module_id = self
-                    .state
-                    .product_validation_receipts
-                    .get(&job.job_id)
-                    .and_then(|receipts| {
-                        receipts
-                            .iter()
-                            .find(|receipt| receipt.validation_index == validation_index)
-                    })
-                    .map(|receipt| receipt.module_id.clone());
+                if let Some(rejected) = self.resume_product_validation_receipt(
+                    job.job_id,
+                    validation_index,
+                    job.requester_agent_id.as_str(),
+                    job.factory_id.as_str(),
+                    job.recipe_id.as_str(),
+                    stack,
+                    &mut emitted,
+                )? {
+                    validation_rejected = rejected;
+                    if rejected {
+                        break;
+                    }
+                    continue;
+                }
                 let prior_attempt = self.product_validation_attempt_for_output(
                     job.job_id,
                     validation_index,
                     job.requester_agent_id.as_str(),
                     stack,
-                    receipt_module_id.as_deref(),
+                    None,
                 )?;
-                let Some(module_id) = receipt_module_id
-                    .or_else(|| {
-                        prior_attempt
-                            .as_ref()
-                            .map(|attempt| attempt.module_id.clone())
-                    })
+                let Some(module_id) = prior_attempt
+                    .as_ref()
+                    .map(|attempt| attempt.module_id.clone())
                     .or_else(|| self.resolve_product_module_for_stack(stack.kind.as_str()))
                 else {
                     continue;

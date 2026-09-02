@@ -32,6 +32,18 @@ pub(super) struct ProductValidationIntentMarkerV1 {
     /// from the staged world for replay compatibility.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pre_step_external_effect: Option<ExecutionExternalEffectMaterialization>,
+    /// Root of the exact staged world described by this marker.  A marker is
+    /// published before that world, so a later output can temporarily leave
+    /// the previous same-height generation on disk.
+    #[serde(default)]
+    pub staged_execution_state_root: String,
+    /// Root of the immediately previous same-height staged generation.  This
+    /// makes marker replacement a small transactional chain instead of
+    /// treating a valid earlier generation as corruption.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_staged_execution_state_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_staged_journal_len: Option<usize>,
 }
 
 fn default_schema_version() -> u8 {
@@ -54,8 +66,22 @@ pub(super) fn world_is_staged_for_product_validation_intent(
             marker.height, last_applied_committed_height
         ));
     }
+    let execution_state_root = execution_world_snapshot_root(execution_world)?;
     if execution_world.state().time == marker.height
         && execution_world.journal().len() == marker.journal_len
+        && (marker.staged_execution_state_root.trim().is_empty()
+            || execution_state_root == marker.staged_execution_state_root)
+    {
+        return Ok(true);
+    }
+    if execution_world.state().time == marker.height
+        && marker
+            .previous_staged_journal_len
+            .is_some_and(|journal_len| execution_world.journal().len() == journal_len)
+        && marker
+            .previous_staged_execution_state_root
+            .as_deref()
+            .is_some_and(|root| !root.trim().is_empty() && root == execution_state_root)
     {
         return Ok(true);
     }
@@ -131,6 +157,59 @@ pub(super) fn load_product_validation_intent(
         }
     }
     Ok(Some(marker))
+}
+
+pub(super) fn build_product_validation_intent_marker(
+    records_dir: &Path,
+    staged: &RuntimeWorld,
+    world_id: &str,
+    height: u64,
+    action_root: &str,
+    pre_step_execution_state_root: &str,
+    pre_step_external_effect: ExecutionExternalEffectMaterialization,
+) -> Result<ProductValidationIntentMarkerV1, String> {
+    let previous_marker = load_product_validation_intent(records_dir)?.filter(|marker| {
+        marker.world_id == world_id
+            && marker.height == height
+            && (marker.action_root.is_empty() || marker.action_root == action_root)
+    });
+    let staged_execution_state_root = execution_world_snapshot_root(staged)?;
+    Ok(ProductValidationIntentMarkerV1 {
+        schema_version: PRODUCT_VALIDATION_INTENT_SCHEMA_V1,
+        world_id: world_id.to_string(),
+        height,
+        action_root: action_root.to_string(),
+        journal_len: staged.journal().len(),
+        pre_step_execution_state_root: pre_step_execution_state_root.to_string(),
+        pre_step_external_effect: Some(pre_step_external_effect),
+        staged_execution_state_root,
+        previous_staged_execution_state_root: previous_marker.as_ref().and_then(|marker| {
+            (!marker.staged_execution_state_root.trim().is_empty())
+                .then_some(marker.staged_execution_state_root.clone())
+        }),
+        previous_staged_journal_len: previous_marker.as_ref().map(|marker| marker.journal_len),
+    })
+}
+
+pub(super) fn persist_product_validation_intent_for_staged_world(
+    records_dir: &Path,
+    staged: &RuntimeWorld,
+    world_id: &str,
+    height: u64,
+    action_root: &str,
+    pre_step_execution_state_root: &str,
+    pre_step_external_effect: ExecutionExternalEffectMaterialization,
+) -> Result<(), String> {
+    let marker = build_product_validation_intent_marker(
+        records_dir,
+        staged,
+        world_id,
+        height,
+        action_root,
+        pre_step_execution_state_root,
+        pre_step_external_effect,
+    )?;
+    persist_product_validation_intent(records_dir, &marker)
 }
 
 pub(super) fn persist_product_validation_intent(

@@ -22,7 +22,7 @@ use super::external_effect::{
 };
 use super::product_validation_intent::{
     ProductValidationIntentMarkerV1, load_product_validation_intent,
-    persist_product_validation_intent,
+    persist_product_validation_intent, world_is_staged_for_product_validation_intent,
 };
 use super::*;
 use ed25519_dalek::{Signer, SigningKey};
@@ -173,6 +173,9 @@ fn product_validation_intent_marker_first_crash_window_reconciles_predecessor() 
         pre_step_execution_state_root: execution_world_snapshot_root(&world)
             .expect("predecessor root"),
         pre_step_external_effect: Some(effect.clone()),
+        staged_execution_state_root: String::new(),
+        previous_staged_execution_state_root: None,
+        previous_staged_journal_len: None,
     };
     persist_product_validation_intent(records_dir.as_path(), &marker)
         .expect("persist marker before staged world");
@@ -224,6 +227,9 @@ fn product_validation_intent_roundtrip_preserves_external_effect_cas_bytes() {
         journal_len: 1,
         pre_step_execution_state_root: uninterrupted.pre_step_execution_state_root.clone(),
         pre_step_external_effect: Some(uninterrupted.clone()),
+        staged_execution_state_root: String::new(),
+        previous_staged_execution_state_root: None,
+        previous_staged_journal_len: None,
     };
     persist_product_validation_intent(records_dir.as_path(), &marker)
         .expect("persist complete intent");
@@ -247,6 +253,35 @@ fn product_validation_intent_roundtrip_preserves_external_effect_cas_bytes() {
     assert_eq!(recovered_ref, uninterrupted_ref);
 
     let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn product_validation_intent_recognizes_previous_same_height_generation() {
+    let predecessor = RuntimeWorld::new();
+    let mut previous_generation = predecessor.clone();
+    previous_generation
+        .step()
+        .expect("stage first validation generation");
+    let previous_root = execution_world_snapshot_root(&previous_generation)
+        .expect("hash previous same-height generation");
+    let marker = ProductValidationIntentMarkerV1 {
+        schema_version: super::product_validation_intent::PRODUCT_VALIDATION_INTENT_SCHEMA_V1,
+        world_id: "w1".to_string(),
+        height: 1,
+        action_root: "action-root-1".to_string(),
+        journal_len: previous_generation.journal().len().saturating_add(1),
+        pre_step_execution_state_root: execution_world_snapshot_root(&predecessor)
+            .expect("predecessor root"),
+        pre_step_external_effect: None,
+        staged_execution_state_root: "newer-generation-root".to_string(),
+        previous_staged_execution_state_root: Some(previous_root),
+        previous_staged_journal_len: Some(previous_generation.journal().len()),
+    };
+
+    assert!(
+        world_is_staged_for_product_validation_intent(&previous_generation, &marker, 0)
+            .expect("recognize prior same-height generation")
+    );
 }
 
 #[test]

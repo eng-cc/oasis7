@@ -339,7 +339,11 @@ impl WorldState {
                     .entry(receipt.job_id)
                     .or_default()
                     .push(receipt.clone());
-                if receipt.decision.accepted {
+                if receipt.decision.accepted
+                    && receipt.decision.product_id == receipt.stack.kind
+                    && receipt.stack.amount > 0
+                    && receipt.stack.amount <= receipt.decision.stack_limit as i64
+                {
                     self.latest_product_validation = Some(LastProductValidationState {
                         product_id: receipt.stack.kind.clone(),
                         tradable: receipt.decision.tradable,

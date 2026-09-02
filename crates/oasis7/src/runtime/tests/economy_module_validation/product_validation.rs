@@ -147,6 +147,17 @@ fn product_validation_receipt_reuses_decision_after_crash_window_without_module_
     world = World::from_snapshot(world.snapshot(), journal)
         .expect("recover after committed validation receipt");
 
+    let validation_records_before = world
+        .journal()
+        .events
+        .iter()
+        .filter(|event| {
+            matches!(
+                &event.body,
+                WorldEventBody::Domain(DomainEvent::ProductValidationRecorded { .. })
+            )
+        })
+        .count();
     let mut sandbox = CaptureContextSandbox::with_outputs(Vec::new());
     world
         .step_with_modules(&mut sandbox)
@@ -161,6 +172,96 @@ fn product_validation_receipt_reuses_decision_after_crash_window_without_module_
     assert_eq!(
         world.ledger_material_balance(&MaterialLedgerId::site("site-1"), "logistics_drone"),
         1
+    );
+    assert_eq!(
+        world
+            .journal()
+            .events
+            .iter()
+            .filter(|event| {
+                matches!(
+                    &event.body,
+                    WorldEventBody::Domain(DomainEvent::ProductValidationRecorded { .. })
+                )
+            })
+            .count(),
+        validation_records_before,
+        "recovery must not append a second validation receipt"
+    );
+    assert_eq!(
+        world
+            .journal()
+            .events
+            .iter()
+            .filter(|event| {
+                matches!(
+                    &event.body,
+                    WorldEventBody::Domain(DomainEvent::ProductValidated { .. })
+                )
+            })
+            .count(),
+        0,
+        "recovery must not append a second validation action"
+    );
+}
+
+#[test]
+fn product_validation_receipt_with_invalid_identity_does_not_update_preview() {
+    let mut world = logistics_drone_module_recipe_world("factory.recipe.validation-preview");
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: "factory.recipe.validation-preview".to_string(),
+        recipe_id: "recipe.assembler.logistics_drone".to_string(),
+        plan: RecipeExecutionPlan::accepted(
+            1,
+            vec![
+                MaterialStack::new("motor_mk1", 2),
+                MaterialStack::new("control_chip", 1),
+                MaterialStack::new("chassis_plate", 1),
+            ],
+            vec![MaterialStack::new("logistics_drone", 1)],
+            Vec::new(),
+            10,
+            1,
+        ),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
+    });
+    world.step().expect("start recipe");
+    let pending = world
+        .state()
+        .pending_recipe_jobs
+        .values()
+        .next()
+        .expect("pending recipe")
+        .clone();
+    let mut journal = world.journal().clone();
+    journal.append(WorldEvent {
+        id: journal.events.last().map_or(1, |event| event.id + 1),
+        time: world.state().time,
+        caused_by: None,
+        body: WorldEventBody::Domain(DomainEvent::ProductValidationRecorded {
+            receipt: ProductValidationReceiptV1 {
+                job_id: pending.job_id,
+                validation_index: Some(0),
+                requester_agent_id: pending.requester_agent_id,
+                module_id: "m4.product.logistics_drone".to_string(),
+                stack: pending.produce[0].clone(),
+                decision: ProductValidationDecision::accepted(
+                    "wrong_product",
+                    0,
+                    true,
+                    vec!["fleet_grade".to_string()],
+                ),
+                failure_detail: None,
+            },
+        }),
+    });
+    world = World::from_snapshot(world.snapshot(), journal)
+        .expect("recover invalid validation receipt");
+    assert!(
+        world.state().latest_product_validation.is_none(),
+        "invalid product identity or stack limit must not update latest preview"
     );
 }
 
