@@ -316,6 +316,12 @@ impl WorldState {
                 }
             }
             DomainEvent::ProductValidationRecorded { receipt } => {
+                // A terminal settlement is the authoritative replay marker.
+                // Its validation payload may have been compacted, so do not
+                // repopulate settled history from an old journal tail.
+                if self.settled_recipe_job_ids.contains(&receipt.job_id) {
+                    return Ok(());
+                }
                 if let Some(existing) = self
                     .product_validation_receipts
                     .get(&receipt.job_id)
@@ -361,6 +367,11 @@ impl WorldState {
                             attempt.job_id, attempt.module_id
                         ),
                     });
+                }
+                // See ProductValidationRecorded above: an old pre-settlement
+                // intent must not undo bounded settled-history compaction.
+                if self.settled_recipe_job_ids.contains(&attempt.job_id) {
+                    return Ok(());
                 }
                 if let Some(existing) = self
                     .product_validation_attempts

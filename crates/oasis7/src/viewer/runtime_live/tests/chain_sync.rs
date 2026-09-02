@@ -706,3 +706,54 @@ fn chain_linked_runtime_recipe_completion_is_delivered_once_across_replay() {
             )
     )));
 }
+
+#[test]
+fn chain_linked_runtime_event_suffix_delivers_new_era_recipe_completion() {
+    let recipe_completion = crate::runtime::WorldEvent {
+        id: u64::MAX,
+        time: 83,
+        caused_by: None,
+        body: crate::runtime::WorldEventBody::Domain(
+            crate::runtime::DomainEvent::RecipeCompleted {
+                job_id: 7,
+                requester_agent_id: "agent-0".to_string(),
+                factory_id: "factory-smelter".to_string(),
+                recipe_id: "recipe.iron-ingot".to_string(),
+                accepted_batches: 1,
+                produce: Vec::new(),
+                byproducts: Vec::new(),
+                output_ledger: crate::runtime::MaterialLedgerId::world(),
+                bottleneck_tags: Vec::new(),
+                logistics_route_ids: Vec::new(),
+                logistics_path_ids: Vec::new(),
+            },
+        ),
+    };
+    let mut rollover_recipe_completion = recipe_completion.clone();
+    rollover_recipe_completion.id = 1;
+    let baseline_events = vec![recipe_completion.clone()];
+    let prepared_events = vec![recipe_completion, rollover_recipe_completion];
+
+    let selected = super::super::chain_link::runtime_events_after_baseline(
+        baseline_events.as_slice(),
+        prepared_events.as_slice(),
+        0,
+        1,
+    );
+
+    assert_eq!(selected.len(), 1);
+    assert_eq!(selected[0].id, 1);
+    assert!(matches!(
+        &selected[0].body,
+        crate::runtime::WorldEventBody::Domain(crate::runtime::DomainEvent::RecipeCompleted { .. })
+    ));
+
+    let compacted_selected = super::super::chain_link::runtime_events_after_baseline(
+        baseline_events.as_slice(),
+        std::slice::from_ref(&selected[0]),
+        0,
+        1,
+    );
+    assert_eq!(compacted_selected.len(), 1);
+    assert_eq!(compacted_selected[0].id, 1);
+}

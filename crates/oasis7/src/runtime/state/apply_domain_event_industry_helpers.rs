@@ -1,6 +1,38 @@
 use super::*;
 
+// Settled validation payloads are only needed for a bounded replay/audit
+// window.  Unsettled jobs retain their attempt and receipt payloads so a
+// checkpoint can still recover the in-flight decision without re-running a
+// module.
+const PRODUCT_VALIDATION_SETTLED_HISTORY_LIMIT: usize = 64;
+
 impl WorldState {
+    pub(super) fn compact_settled_product_validation_history(&mut self) {
+        let mut settled_validation_job_ids = BTreeSet::new();
+        for job_id in self
+            .product_validation_attempts
+            .keys()
+            .chain(self.product_validation_receipts.keys())
+        {
+            if self.settled_recipe_job_ids.contains(job_id)
+                && !self.pending_recipe_jobs.contains_key(job_id)
+            {
+                settled_validation_job_ids.insert(*job_id);
+            }
+        }
+
+        // Action IDs are the only durable ordering available in this state;
+        // retaining the highest IDs gives a deterministic recent window while
+        // avoiding another unbounded recency index.
+        let remove_count = settled_validation_job_ids
+            .len()
+            .saturating_sub(PRODUCT_VALIDATION_SETTLED_HISTORY_LIMIT);
+        for job_id in settled_validation_job_ids.into_iter().take(remove_count) {
+            self.product_validation_attempts.remove(&job_id);
+            self.product_validation_receipts.remove(&job_id);
+        }
+    }
+
     pub(super) fn prepare_product_validation_blocker(
         &mut self,
         action_id: &ActionId,
@@ -865,4 +897,107 @@ pub(super) fn validate_recipe_output_capacity(
         })?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn attempt(job_id: ActionId) -> ProductValidationAttemptV1 {
+        ProductValidationAttemptV1 {
+            job_id,
+            validation_index: Some(0),
+            requester_agent_id: "builder-a".to_string(),
+            module_id: "m4.product.test".to_string(),
+            stack: MaterialStack::new("test_product", 1),
+        }
+    }
+
+    fn receipt(job_id: ActionId) -> ProductValidationReceiptV1 {
+        ProductValidationReceiptV1 {
+            job_id,
+            validation_index: Some(0),
+            requester_agent_id: "builder-a".to_string(),
+            module_id: "m4.product.test".to_string(),
+            stack: MaterialStack::new("test_product", 1),
+            decision: ProductValidationDecision::accepted("test_product", 1, true, Vec::new()),
+            failure_detail: None,
+        }
+    }
+
+    #[test]
+    fn settled_product_validation_history_is_bounded_and_restart_stable() {
+        let mut state = WorldState::default();
+        for job_id in 1..=96 {
+            state.settled_recipe_job_ids.insert(job_id);
+            state
+                .product_validation_attempts
+                .insert(job_id, vec![attempt(job_id)]);
+            state
+                .product_validation_receipts
+                .insert(job_id, vec![receipt(job_id)]);
+        }
+        let active_job_id = 10_000;
+        state
+            .product_validation_attempts
+            .insert(active_job_id, vec![attempt(active_job_id)]);
+        state
+            .product_validation_receipts
+            .insert(active_job_id, vec![receipt(active_job_id)]);
+
+        state.compact_settled_product_validation_history();
+
+        assert_eq!(state.product_validation_attempts.len(), 65);
+        assert_eq!(state.product_validation_receipts.len(), 65);
+        assert!((1..=32).all(|job_id| {
+            !state.product_validation_attempts.contains_key(&job_id)
+                && !state.product_validation_receipts.contains_key(&job_id)
+        }));
+        assert!(
+            state
+                .product_validation_attempts
+                .contains_key(&active_job_id)
+        );
+        assert!(
+            state
+                .product_validation_receipts
+                .contains_key(&active_job_id)
+        );
+
+        let encoded = serde_json::to_vec(&state).expect("serialize compacted state");
+        let restored: WorldState =
+            serde_json::from_slice(&encoded).expect("restore compacted state");
+        assert_eq!(
+            restored, state,
+            "restart must preserve compacted state exactly"
+        );
+    }
+
+    #[test]
+    fn settled_product_validation_replay_does_not_repopulate_compacted_history() {
+        let job_id = 77;
+        let mut state = WorldState::default();
+        state.settled_recipe_job_ids.insert(job_id);
+        state.compact_settled_product_validation_history();
+
+        state
+            .apply_domain_event(
+                &DomainEvent::ProductValidationAttemptStarted {
+                    attempt: attempt(job_id),
+                },
+                0,
+            )
+            .expect("settled attempt replay is a no-op");
+        state
+            .apply_domain_event(
+                &DomainEvent::ProductValidationRecorded {
+                    receipt: receipt(job_id),
+                },
+                0,
+            )
+            .expect("settled receipt replay is a no-op");
+
+        assert!(!state.product_validation_attempts.contains_key(&job_id));
+        assert!(!state.product_validation_receipts.contains_key(&job_id));
+    }
 }

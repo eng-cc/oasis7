@@ -3,7 +3,8 @@ use super::*;
 
 use super::super::protocol::{CollectDataCommand, GameplayActionError, GameplayActionRequest};
 use crate::runtime::{
-    MainTokenConfig, MainTokenSupplyState, production_hardened_main_token_config,
+    MainTokenConfig, MainTokenSupplyState, WorldEvent as RuntimeWorldEvent,
+    production_hardened_main_token_config,
 };
 use std::net::ToSocketAddrs;
 
@@ -167,8 +168,10 @@ impl ViewerRuntimeLiveServer {
             .clear_stale_local_test_bindings_for_world(&prepared.world);
         let baseline_logical_time = self.world.state().time;
         let baseline_event_seq = latest_runtime_event_seq(&self.world);
-        let baseline_snapshot_hash = compute_runtime_snapshot_hash(&self.world.snapshot())?;
-        let prepared_snapshot_hash = compute_runtime_snapshot_hash(&prepared.world.snapshot())?;
+        let baseline_snapshot = self.world.snapshot();
+        let prepared_snapshot = prepared.world.snapshot();
+        let baseline_snapshot_hash = compute_runtime_snapshot_hash(&baseline_snapshot)?;
+        let prepared_snapshot_hash = compute_runtime_snapshot_hash(&prepared_snapshot)?;
         let materially_different_world = prepared_snapshot_hash != baseline_snapshot_hash
             && chain_linked_runtime_has_playable_state(&prepared.world);
         if prepared.committed_height < self.last_chain_committed_height
@@ -206,18 +209,21 @@ impl ViewerRuntimeLiveServer {
             });
         }
 
+        // Event IDs are a rolling sequence. Select the prepared journal by
+        // its last full event position first so a new era (MAX -> 1) cannot
+        // hide a completion behind a scalar ID comparison. If compaction or
+        // a reorg removes the common tail, the helper falls back to the
+        // era-aware journal cursor.
+        let runtime_events = runtime_events_after_baseline(
+            self.world.journal().events.as_slice(),
+            prepared.world.journal().events.as_slice(),
+            runtime_last_event_era(&baseline_snapshot),
+            runtime_last_event_era(&prepared_snapshot),
+        );
         self.world = prepared.world;
         self.last_chain_committed_height = prepared.committed_height;
         self.confirm_player_gameplay_progress();
 
-        let runtime_events: Vec<_> = self
-            .world
-            .journal()
-            .events
-            .iter()
-            .filter(|event| event.id > baseline_event_seq)
-            .cloned()
-            .collect();
         let mapped_events: Vec<_> = runtime_events
             .iter()
             .map(|runtime_event| {
@@ -275,6 +281,62 @@ impl ViewerRuntimeLiveServer {
             responses,
         })
     }
+}
+
+pub(super) fn runtime_events_after_baseline(
+    baseline_events: &[RuntimeWorldEvent],
+    prepared_events: &[RuntimeWorldEvent],
+    baseline_event_era: u64,
+    prepared_event_era: u64,
+) -> Vec<RuntimeWorldEvent> {
+    let baseline_event_seq = baseline_events
+        .last()
+        .map(|event| event.id)
+        .unwrap_or_default();
+
+    if let Some(last_baseline_event) = baseline_events.last()
+        && let Some(position) = prepared_events
+            .iter()
+            .rposition(|event| event == last_baseline_event)
+    {
+        return prepared_events
+            .get(position.saturating_add(1)..)
+            .unwrap_or_default()
+            .to_vec();
+    }
+
+    prepared_events
+        .iter()
+        .enumerate()
+        .find(|(index, event)| {
+            (
+                runtime_event_era_at(prepared_events, *index, prepared_event_era),
+                event.id,
+            ) > (baseline_event_era, baseline_event_seq)
+        })
+        .map_or_else(Vec::new, |(index, _)| prepared_events[index..].to_vec())
+}
+
+fn runtime_last_event_era(snapshot: &RuntimeSnapshot) -> u64 {
+    if snapshot.last_event_id == 0 {
+        snapshot.event_id_era.saturating_sub(1)
+    } else {
+        snapshot.event_id_era
+    }
+}
+
+fn runtime_event_era_at(
+    events: &[RuntimeWorldEvent],
+    event_index: usize,
+    last_event_era: u64,
+) -> u64 {
+    let mut era = last_event_era;
+    for pair in events[event_index..].windows(2).rev() {
+        if pair[0].id == u64::MAX && pair[1].id == 1 {
+            era = era.saturating_sub(1);
+        }
+    }
+    era
 }
 
 pub(super) fn submit_chain_linked_gameplay_action(
