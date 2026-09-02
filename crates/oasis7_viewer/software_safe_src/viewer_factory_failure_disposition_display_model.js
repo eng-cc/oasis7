@@ -75,9 +75,9 @@ function recoveryActionForDisposition(value, availableActions, locale, localeTex
       executeKind(action),
     ].map(normalizedActionToken).filter(Boolean).join("_");
     return executeKind(action) === "reprioritize"
-      || /repair|rebuild|reroute|replenish|refill|requote|quote|wait|snapshot|step|play/.test(token);
+      || /repair|rebuild|reroute|replenish|refill|requote|quote|wait/.test(token);
   });
-  const selected = matchingScheduleAction || otherRecoveryAction || snapshotAction || {
+  const selected = matchingScheduleAction || snapshotAction || otherRecoveryAction || {
     actionId: "no_safe_path",
     label: localeText(locale, "暂无安全恢复路径", "No safe recovery path"),
     protocolAction: null,

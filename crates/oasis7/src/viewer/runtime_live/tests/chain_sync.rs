@@ -1,4 +1,5 @@
 use super::*;
+use crate::simulator::WorldEventKind;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 pub(crate) struct TestChainStatusServer {
@@ -633,4 +634,75 @@ fn chain_linked_runtime_committed_height_zero_consumes_persisted_execution_world
     let line = read_response_line(&peer, Duration::from_millis(200))
         .expect("expected zero-height execution-world sync response");
     assert!(!line.trim().is_empty());
+}
+
+#[test]
+fn chain_linked_runtime_recipe_completion_is_delivered_once_across_replay() {
+    let _guard = lock_test_llm_env();
+    let mut source = super::setup_industrial_gameplay_with_completed_jobs(82, 1);
+    let execution_world_dir = runtime_live_temp_dir("chain_sync_recipe_completion");
+    source
+        .world
+        .save_to_dir(execution_world_dir.as_path())
+        .expect("persist completed recipe execution world");
+
+    let chain_status = TestChainStatusServer::start(execution_world_dir.clone());
+    chain_status.committed_height.store(1, Ordering::SeqCst);
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_chain_status_bind(chain_status.addr.clone()),
+    )
+    .expect("runtime server");
+    let mut session = RuntimeLiveSession::new();
+    session.playing = false;
+    session.subscribed.insert(ViewerStream::Events);
+    let (mut writer, peer) = test_writer_pair();
+
+    assert!(
+        server
+            .sync_chain_linked_runtime(&mut session, &mut writer)
+            .expect("initial recipe completion chain sync")
+    );
+    let first_responses = read_available_runtime_live_responses(&peer, Duration::from_millis(200));
+    assert!(first_responses.iter().any(|response| matches!(
+        response,
+        ViewerResponse::Event { event }
+            if matches!(
+                &event.kind,
+                WorldEventKind::RuntimeEvent { kind, .. }
+                    if kind == "runtime.economy.recipe_completed"
+            )
+    )));
+
+    source.world.submit_action(RuntimeAction::MoveAgent {
+        agent_id: "starter-agent-0".to_string(),
+        to: crate::geometry::GeoPos::new(2, 1, 0),
+    });
+    source
+        .world
+        .step()
+        .expect("append replay-following runtime event");
+    source
+        .world
+        .save_to_dir(execution_world_dir.as_path())
+        .expect("persist replay-following execution world");
+    chain_status.committed_height.store(2, Ordering::SeqCst);
+
+    let (mut replay_writer, replay_peer) = test_writer_pair();
+    assert!(
+        server
+            .sync_chain_linked_runtime(&mut session, &mut replay_writer)
+            .expect("replay-following recipe completion chain sync")
+    );
+    let replay_responses =
+        read_available_runtime_live_responses(&replay_peer, Duration::from_millis(200));
+    assert!(!replay_responses.iter().any(|response| matches!(
+        response,
+        ViewerResponse::Event { event }
+            if matches!(
+                &event.kind,
+                WorldEventKind::RuntimeEvent { kind, .. }
+                    if kind == "runtime.economy.recipe_completed"
+            )
+    )));
 }

@@ -1,11 +1,10 @@
 use super::super::{
     ActionId, DomainEvent, MaterialStack, ProductValidationAttemptV1, ProductValidationDecision,
-    ProductValidationReceiptV1, WorldError, WorldEvent, WorldEventBody,
+    ProductValidationDeliveryCursor, ProductValidationReceiptV1, WorldError, WorldEvent,
+    WorldEventBody,
 };
 use super::World;
-use oasis7_wasm_abi::{ModuleSandbox, ModuleStateUpdate};
-
-const PRODUCT_VALIDATION_DELIVERY_CURSOR: &str = "__oasis7.product_validation_delivery.v1";
+use oasis7_wasm_abi::ModuleSandbox;
 
 impl World {
     pub(super) fn product_validation_receipt_for_output(
@@ -197,12 +196,12 @@ impl World {
     }
 
     fn product_validation_event_was_routed(&self, event: &WorldEvent) -> bool {
-        let delivered_ids = self
-            .state
-            .module_states
-            .get(PRODUCT_VALIDATION_DELIVERY_CURSOR)
-            .and_then(|state| serde_cbor::from_slice::<Vec<u64>>(state).ok());
-        if delivered_ids.is_some_and(|ids| ids.contains(&event.id)) {
+        if event.id
+            <= self
+                .state
+                .product_validation_delivery_cursor
+                .routed_through_event_id
+        {
             return true;
         }
         let trace_prefix = format!("event-{}-", event.id);
@@ -225,30 +224,20 @@ impl World {
         {
             return Ok(());
         }
-        let invoked = self.route_event_to_modules(event, sandbox)?;
-        if invoked == 0 || !Self::is_product_validation_event(event) {
+        if !Self::is_product_validation_event(event) {
+            self.route_event_to_modules(event, sandbox)?;
             return Ok(());
         }
-        if self.product_validation_event_was_routed(event) {
-            return Ok(());
-        }
-        let mut delivered_ids = self
-            .state
-            .module_states
-            .get(PRODUCT_VALIDATION_DELIVERY_CURSOR)
-            .and_then(|state| serde_cbor::from_slice::<Vec<u64>>(state).ok())
-            .unwrap_or_default();
-        if delivered_ids.contains(&event.id) {
-            return Ok(());
-        }
-        delivered_ids.push(event.id);
-        delivered_ids.sort_unstable();
+        // The cursor advances after the routing attempt completes. A zero-
+        // subscriber result is also terminal for this committed event: a
+        // later module activation must not replay historical events.
+        self.route_event_to_modules(event, sandbox)?;
         self.append_event(
-            WorldEventBody::ModuleStateUpdated(ModuleStateUpdate {
-                module_id: PRODUCT_VALIDATION_DELIVERY_CURSOR.to_string(),
-                trace_id: format!("product-validation-delivery-{}", event.id),
-                state: serde_cbor::to_vec(&delivered_ids)?,
-            }),
+            WorldEventBody::ProductValidationDeliveryCursorUpdated(
+                ProductValidationDeliveryCursor {
+                    routed_through_event_id: event.id,
+                },
+            ),
             None,
         )?;
         Ok(())

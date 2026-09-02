@@ -181,6 +181,9 @@ pub(super) fn event_kind_label(body: &WorldEventBody) -> &'static str {
         WorldEventBody::ModuleEmitted(_) => "module.emitted",
         WorldEventBody::ModuleStateUpdated(_) => "module.state_updated",
         WorldEventBody::ModuleRuntimeCharged(_) => "module.runtime_charged",
+        WorldEventBody::ProductValidationDeliveryCursorUpdated(_) => {
+            "runtime.product_validation_delivery_cursor_updated"
+        }
         WorldEventBody::SnapshotCreated(_) => "snapshot.created",
         WorldEventBody::ManifestUpdated(_) => "manifest.updated",
         WorldEventBody::RollbackApplied(_) => "rollback.applied",

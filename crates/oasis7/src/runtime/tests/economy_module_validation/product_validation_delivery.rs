@@ -1,7 +1,9 @@
 use super::*;
 use crate::runtime::{
-    Journal, ProductValidationAttemptV1, RuntimeCommittedTickContext, WorldError, WorldTime,
+    Journal, ProductValidationAttemptV1, ProductValidationDeliveryCursor,
+    RuntimeCommittedTickContext, WorldError, WorldTime,
 };
+use oasis7_wasm_abi::ModuleStateUpdate;
 
 fn append_product_validation_event(
     journal: &mut Journal,
@@ -18,6 +20,62 @@ fn append_product_validation_event(
     });
     *id = (*id).saturating_add(1);
     event_id
+}
+
+#[test]
+fn product_validation_delivery_cursor_does_not_shadow_same_name_reducer_state() {
+    let world = World::new();
+    let mut journal = world.journal().clone();
+    journal.append(WorldEvent {
+        id: 1,
+        time: 0,
+        caused_by: None,
+        body: WorldEventBody::ModuleStateUpdated(ModuleStateUpdate {
+            module_id: "__oasis7.product_validation_delivery.v1".to_string(),
+            trace_id: "reducer-state".to_string(),
+            state: vec![0xA5, 0x5A],
+        }),
+    });
+    journal.append(WorldEvent {
+        id: 2,
+        time: 0,
+        caused_by: None,
+        body: WorldEventBody::ProductValidationDeliveryCursorUpdated(
+            ProductValidationDeliveryCursor {
+                routed_through_event_id: 1,
+            },
+        ),
+    });
+    let recovered = World::from_snapshot(world.snapshot(), journal).expect("replay cursor");
+    assert_eq!(
+        recovered
+            .state()
+            .module_states
+            .get("__oasis7.product_validation_delivery.v1"),
+        Some(&vec![0xA5, 0x5A])
+    );
+    assert_eq!(
+        recovered
+            .state()
+            .product_validation_delivery_cursor
+            .routed_through_event_id,
+        1
+    );
+}
+
+#[test]
+fn product_validation_delivery_cursor_stays_bounded_over_long_run() {
+    let mut cursor = ProductValidationDeliveryCursor::default();
+    for event_id in 1..=1_000_000 {
+        cursor.routed_through_event_id = event_id;
+    }
+    let encoded = serde_cbor::to_vec(&cursor).expect("encode bounded cursor");
+    assert!(
+        encoded.len() <= 16,
+        "cursor grew to {} bytes",
+        encoded.len()
+    );
+    assert_eq!(cursor.routed_through_event_id, 1_000_000);
 }
 
 #[test]
@@ -511,6 +569,14 @@ fn product_validation_checkpoint_routes_batch_before_persist_and_recovery_dedupe
         })
         .expect("checkpoint must contain next-output attempt");
     assert_eq!(
+        checkpoint
+            .state()
+            .product_validation_delivery_cursor
+            .routed_through_event_id,
+        second_attempt_id,
+        "checkpoint must persist the completed validation delivery cursor"
+    );
+    assert_eq!(
         delivered_ids,
         vec![first_recorded_id, first_validated_id, second_attempt_id],
         "all earlier batch events and the new attempt must route before persistence"
@@ -525,6 +591,14 @@ fn product_validation_checkpoint_routes_batch_before_persist_and_recovery_dedupe
     recovered
         .step_with_modules(&mut retry_sandbox)
         .expect("prior attempt must fail closed after recovery");
+    assert_eq!(
+        recovered
+            .state()
+            .product_validation_delivery_cursor
+            .routed_through_event_id,
+        second_attempt_id,
+        "recovery must preserve the durable validation delivery cursor"
+    );
     let duplicate_ids: Vec<_> = retry_sandbox
         .requests
         .iter()

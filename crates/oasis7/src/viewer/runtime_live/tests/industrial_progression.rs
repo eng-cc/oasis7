@@ -244,7 +244,7 @@ fn complete_smelter_iron_ingot_jobs(
     }
 }
 
-pub(super) fn setup_industrial_gameplay_with_completed_jobs(
+pub(crate) fn setup_industrial_gameplay_with_completed_jobs(
     signer_seed: u8,
     jobs: u64,
 ) -> ViewerRuntimeLiveServer {

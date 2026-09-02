@@ -856,6 +856,15 @@ impl World {
             WorldEventBody::ModuleRuntimeCharged(charge) => {
                 self.apply_module_runtime_charge_event(charge, time)?;
             }
+            WorldEventBody::ProductValidationDeliveryCursorUpdated(cursor) => {
+                self.state
+                    .product_validation_delivery_cursor
+                    .routed_through_event_id = self
+                    .state
+                    .product_validation_delivery_cursor
+                    .routed_through_event_id
+                    .max(cursor.routed_through_event_id);
+            }
             WorldEventBody::SnapshotCreated(_) => {}
             WorldEventBody::ManifestUpdated(update) => {
                 self.manifest = update.manifest.clone();

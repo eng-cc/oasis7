@@ -210,12 +210,16 @@ impl ViewerRuntimeLiveServer {
         self.last_chain_committed_height = prepared.committed_height;
         self.confirm_player_gameplay_progress();
 
-        let mapped_events: Vec<_> = self
+        let runtime_events: Vec<_> = self
             .world
             .journal()
             .events
             .iter()
             .filter(|event| event.id > baseline_event_seq)
+            .cloned()
+            .collect();
+        let mapped_events: Vec<_> = runtime_events
+            .iter()
             .map(|runtime_event| {
                 map_runtime_event(
                     runtime_event,
@@ -224,6 +228,14 @@ impl ViewerRuntimeLiveServer {
                 )
             })
             .collect();
+        for (runtime_event, mapped_event) in runtime_events.iter().zip(mapped_events.iter()) {
+            if matches!(runtime_event.body, RuntimeWorldEventBody::Domain(_)) {
+                self.llm_sidecar
+                    .notify_action_result_if_needed(runtime_event, mapped_event.clone());
+            }
+            self.llm_sidecar
+                .notify_recipe_completion_if_needed(runtime_event, mapped_event.clone());
+        }
         let pending_batch = self.register_authoritative_batch(mapped_events.as_slice())?;
         let batch_finality_updates =
             self.advance_authoritative_batch_finality(self.world.state().time)?;

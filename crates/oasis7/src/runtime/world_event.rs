@@ -19,6 +19,7 @@ use super::modules::ModuleEvent;
 use super::policy::PolicyDecisionRecord;
 use super::rules::{ActionOverrideRecord, RuleDecisionRecord};
 use super::snapshot::{RollbackEvent, SnapshotMeta};
+use super::state::ProductValidationDeliveryCursor;
 use super::types::{WorldEventId, WorldTime};
 
 /// A world event with full metadata.
@@ -46,6 +47,9 @@ impl WorldEvent {
             WorldEventBody::ModuleEmitted(_) => AuditEventKind::ModuleEmitted,
             WorldEventBody::ModuleStateUpdated(_) => AuditEventKind::ModuleStateUpdated,
             WorldEventBody::ModuleRuntimeCharged(_) => AuditEventKind::ModuleRuntimeCharged,
+            WorldEventBody::ProductValidationDeliveryCursorUpdated(_) => {
+                AuditEventKind::ProductValidationDeliveryCursorUpdated
+            }
             WorldEventBody::SnapshotCreated(_) => AuditEventKind::SnapshotCreated,
             WorldEventBody::ManifestUpdated(_) => AuditEventKind::ManifestUpdated,
             WorldEventBody::RollbackApplied(_) => AuditEventKind::RollbackApplied,
@@ -158,6 +162,7 @@ pub enum WorldEventBody {
     ModuleEmitted(ModuleEmitEvent),
     ModuleStateUpdated(ModuleStateUpdate),
     ModuleRuntimeCharged(ModuleRuntimeChargeEvent),
+    ProductValidationDeliveryCursorUpdated(ProductValidationDeliveryCursor),
     SnapshotCreated(SnapshotMeta),
     ManifestUpdated(ManifestUpdate),
     RollbackApplied(RollbackEvent),

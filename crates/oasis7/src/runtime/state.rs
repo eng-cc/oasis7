@@ -435,6 +435,15 @@ pub struct LastProductValidationState {
     pub tradable: bool,
 }
 
+/// Durable high-water mark for product-validation event routing. Validation
+/// events are generated in journal order, so a scalar cursor keeps recovery
+/// metadata bounded independently from the number of events.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProductValidationDeliveryCursor {
+    #[serde(default)]
+    pub routed_through_event_id: WorldEventId,
+}
+
 /// Persistent mapping from module release request lifecycle to release manifest lifecycle.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ModuleReleaseManifestMappingState {
@@ -565,6 +574,10 @@ pub struct WorldState {
         deserialize_with = "deserialize_btreemap_u64_keys"
     )]
     pub product_validation_attempts: BTreeMap<ActionId, Vec<ProductValidationAttemptV1>>,
+    /// Runtime-owned validation delivery progress is separate from reducer
+    /// module state so a module cannot shadow or overwrite the cursor.
+    #[serde(default)]
+    pub product_validation_delivery_cursor: ProductValidationDeliveryCursor,
     #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
     pub pending_factory_builds: BTreeMap<ActionId, FactoryBuildJobState>,
     #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]

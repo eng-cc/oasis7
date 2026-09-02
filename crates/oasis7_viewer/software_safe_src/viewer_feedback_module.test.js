@@ -486,6 +486,68 @@ describe("viewer feedback module", () => {
     expect(summaryFor({}).factoryProductionFailureDisposition).toBeNull();
   });
 
+  it("does not treat live step or play controls as factory failure recovery", () => {
+    const failureDisposition = {
+      action_id: 21,
+      requester_agent_id: "agent-0",
+      factory_id: "factory.target",
+      recipe_id: "recipe.smelter.iron_ingot",
+      blocker_kind: "product_validation_rejected",
+      blocker_detail: "product profile rejected the committed output",
+      disposition_kind: "consumed_lost",
+      next_action: "inspect_product_validation_and_reschedule",
+    };
+    const summaryFor = (availableActions) => createFeedbackModule({
+      lastGameplayActionFeedback: null,
+      snapshot: {
+        model: { agents: { "agent-0": { id: "agent-0" } }, locations: { base: { id: "base" } } },
+        player_gameplay: {
+          available_actions: availableActions,
+          factory_production_failure_disposition: failureDisposition,
+        },
+      },
+      uiLocale: "en",
+    }).buildGameplaySummary().factoryProductionFailureDisposition;
+    const disabledReschedule = {
+      action_id: "schedule_recipe_smelter_iron_ingot",
+      label: "Queue iron ingot run",
+      protocol_action: "gameplay_action.submit",
+      target_agent_id: "agent-0",
+      disabled_reason: "insufficient iron_ore in site ledger",
+    };
+    const snapshot = {
+      action_id: "request_snapshot",
+      label: "Refresh gameplay snapshot",
+      protocol_action: "request_snapshot",
+    };
+    const advanceStep = {
+      action_id: "advance_step",
+      label: "Advance 1 step",
+      protocol_action: "live_control.step",
+    };
+    const resumePlay = {
+      action_id: "resume_play",
+      label: "Resume play",
+      protocol_action: "live_control.play",
+    };
+
+    expect(summaryFor([disabledReschedule, snapshot, advanceStep, resumePlay])).toEqual(
+      expect.objectContaining({
+        recoveryAction: expect.objectContaining({
+          actionId: "request_snapshot",
+          executeKind: "request_snapshot",
+        }),
+        recoveryActionId: "request_snapshot",
+      }),
+    );
+    expect(summaryFor([disabledReschedule, advanceStep, resumePlay])).toEqual(
+      expect.objectContaining({
+        recoveryAction: expect.objectContaining({ actionId: "no_safe_path", executeKind: "none" }),
+        recoveryActionId: "no_safe_path",
+      }),
+    );
+  });
+
   it("projects canonical micro depot facilities without inventing quote or ROI fields", () => {
     const state = {
       lastGameplayActionFeedback: null,

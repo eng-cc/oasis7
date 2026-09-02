@@ -273,8 +273,8 @@ pub use state::{
     FactoryRecycleReceiptV1, FactorySiteAuthorityV1, FactoryState, IndustryProgressState,
     LocationAnchorV1, LogisticsRouteV1, MaterialTransferReceiptV1, MaterialTransitJobState,
     ModuleInstanceState, ModuleReleaseAttestationState, ModuleReleaseManifestMappingState,
-    ProductValidationAttemptV1, ProductValidationReceiptV1, RecipeCompletionReceiptV1,
-    RecipeJobState, WorldState,
+    ProductValidationAttemptV1, ProductValidationDeliveryCursor, ProductValidationReceiptV1,
+    RecipeCompletionReceiptV1, RecipeJobState, WorldState,
 };
 
 // World
