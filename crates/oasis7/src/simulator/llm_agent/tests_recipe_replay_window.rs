@@ -44,8 +44,17 @@ fn llm_agent_preserves_recent_replays_across_action_id_rollover() {
         REPLAY_WINDOW as usize
     );
     assert!(!behavior.recipe_coverage.completion_receipt_ids.contains(&1));
-    behavior.on_event(&runtime_recipe_completed_event_with_identity(
+    let aged_replay = runtime_recipe_completed_event_with_identity(
         "agent-1", recipe_id, 31_001, 1,
-    ));
-    assert!(behavior.recipe_coverage.completion_receipt_ids.contains(&1));
+    );
+    let memory_before_aged_replay = behavior.memory.short_term.clone();
+    behavior.on_event(&aged_replay);
+    assert_ne!(
+        behavior.memory.short_term, memory_before_aged_replay,
+        "an identity outside the bounded window may be observed once again"
+    );
+    assert_eq!(
+        behavior.recipe_coverage.completion_receipt_ids.len(),
+        REPLAY_WINDOW as usize
+    );
 }

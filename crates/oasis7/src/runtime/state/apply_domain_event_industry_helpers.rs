@@ -984,8 +984,8 @@ mod tests {
 
         assert_eq!(state.product_validation_attempts.len(), 65);
         assert_eq!(state.product_validation_receipts.len(), 65);
-        assert_eq!(state.recipe_completion_receipts.len(), 65);
-        assert_eq!(state.factory_production_failure_dispositions.len(), 65);
+        assert_eq!(state.recipe_completion_receipts.len(), 64);
+        assert_eq!(state.factory_production_failure_dispositions.len(), 64);
         assert!((1..=32).all(|job_id| {
             !state.product_validation_attempts.contains_key(&job_id)
                 && !state.product_validation_receipts.contains_key(&job_id)

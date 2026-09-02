@@ -313,7 +313,7 @@ fn rejected_resolved_factory_spec_discards_all_module_side_effects() {
             wasm_hash: wasm_hash.clone(),
             interface_version: "wasm-1".to_string(),
             abi_contract: ModuleAbiContract::default(),
-            exports: vec!["call".to_string()],
+            exports: vec!["call".to_string(), "reduce".to_string()],
             subscriptions: Vec::new(),
             required_caps: Vec::new(),
             artifact_identity: Some(signed_test_artifact_identity(wasm_hash.as_str())),
