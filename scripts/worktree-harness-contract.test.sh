@@ -725,6 +725,7 @@ if wh_pid_alive "$descendant_pid"; then
 fi
 
 bash -n "$ROOT_DIR/scripts/worktree-harness.sh" "$ROOT_DIR/scripts/worktree-harness-lib.sh"
+grep -Fq -- 'OASIS7_HARNESS_TEST_ROOT' "$ROOT_DIR/scripts/worktree-harness-lib.sh"
 grep -Fq -- '--startup-timeout <secs>' "$ROOT_DIR/scripts/worktree-harness.sh"
 grep -Fq -- 'wh_state_phase "$STATE_FILE" "waiting_metadata"' "$ROOT_DIR/scripts/worktree-harness.sh"
 grep -Fq -- 'smoke_step "open" ab_open' "$ROOT_DIR/scripts/worktree-harness.sh"

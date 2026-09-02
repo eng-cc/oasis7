@@ -817,6 +817,9 @@ write_session_meta() {
       printf 'SOFTWARE_SAFE_VIEWER_URL_EN=%s\n' "$SOFTWARE_SAFE_VIEWER_URL_EN"
     fi
   })"
+  # Command substitution strips trailing newlines; keep session.meta a
+  # complete line-oriented artifact for concurrent readers.
+  meta_payload+=$'\n'
   wh_atomic_write "$META_FILE" "$meta_payload"
 }
 

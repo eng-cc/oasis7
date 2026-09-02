@@ -45,6 +45,38 @@ PY
 wh_harness_root() {
   local repo_root=$1
   local worktree_id=$2
+  # Tests may opt into an explicitly marked disposable root; production keeps
+  # the worktree-scoped output path below and never consults this override.
+  if [[ -n "${OASIS7_HARNESS_TEST_ROOT:-}" ]]; then
+    local test_root=${OASIS7_HARNESS_TEST_ROOT}
+    local test_root_parent test_root_marker marker_value
+    [[ "$test_root" == /* ]] || {
+      echo "error: OASIS7_HARNESS_TEST_ROOT must be an absolute path" >&2
+      return 1
+    }
+    test_root_parent="$(dirname "$test_root")"
+    test_root_parent="$(cd "$test_root_parent" 2>/dev/null && pwd -P)" || {
+      echo "error: OASIS7_HARNESS_TEST_ROOT parent does not exist: $test_root_parent" >&2
+      return 1
+    }
+    test_root="$test_root_parent/$(basename "$test_root")"
+    [[ "$(basename "$test_root")" == "harness" ]] || {
+      echo "error: OASIS7_HARNESS_TEST_ROOT must name a disposable harness child" >&2
+      return 1
+    }
+    test_root_marker="$test_root_parent/.oasis7-harness-test-root"
+    [[ -f "$test_root_marker" ]] || {
+      echo "error: OASIS7_HARNESS_TEST_ROOT is not an owned disposable root" >&2
+      return 1
+    }
+    marker_value="$(tr -d '\n' <"$test_root_marker")"
+    [[ "$marker_value" == "oasis7-harness-lifecycle-test-v1" ]] || {
+      echo "error: OASIS7_HARNESS_TEST_ROOT ownership marker is invalid" >&2
+      return 1
+    }
+    printf '%s\n' "$test_root"
+    return 0
+  fi
   printf '%s/output/harness/%s\n' "$repo_root" "$worktree_id"
 }
 
