@@ -343,6 +343,35 @@ fn runtime_gameplay_snapshot_hides_stale_failure_disposition_after_target_comple
 }
 
 #[test]
+fn runtime_gameplay_snapshot_keeps_failure_after_sibling_completion_returns_factory_idle() {
+    let mut state = failure_disposition_world_state();
+    let target = state
+        .factories
+        .get_mut("factory.target")
+        .expect("target factory");
+
+    // Product validation consumed the target slot, then the sibling slot
+    // completed. That completion leaves the durable failure record and its
+    // current blocker intact while the aggregate factory becomes idle.
+    target.production.status = FactoryProductionStatus::Idle;
+    target.production.active_jobs = 0;
+    target.production.current_job_id = None;
+    target.production.current_recipe_id = None;
+    target.production.last_completed_at = Some(22);
+    target.production.last_completed_recipe_id = Some("recipe.sibling".to_string());
+
+    let gameplay = gameplay_snapshot_for_failure_state(&state);
+    assert_eq!(
+        gameplay
+            .factory_production_failure_disposition
+            .as_ref()
+            .map(|receipt| receipt.action_id.as_str()),
+        Some("19"),
+        "a sibling completion must not hide the still-current consumed/lost recovery card"
+    );
+}
+
+#[test]
 fn runtime_gameplay_snapshot_keeps_target_failure_when_only_unrelated_factory_is_running() {
     let mut state = failure_disposition_world_state();
     let decoy = state

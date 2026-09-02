@@ -117,7 +117,14 @@ impl World {
         receipt: &ProductValidationReceiptV1,
         emitted: &mut Vec<WorldEvent>,
     ) -> Result<(), WorldError> {
-        if self.product_validation_delivery_exists(receipt) {
+        if let Some(event) = self.product_validation_delivery_event(receipt) {
+            // A journaled delivery may have been persisted by the next
+            // output's pre-call checkpoint before the event loop routed it to
+            // subscribers. Requeue that exact event without appending another
+            // journal entry or invoking the validator again.
+            if !emitted.iter().any(|queued| queued.id == event.id) {
+                emitted.push(event);
+            }
             return Ok(());
         }
         self.append_event(
@@ -138,7 +145,10 @@ impl World {
         Ok(())
     }
 
-    fn product_validation_delivery_exists(&self, receipt: &ProductValidationReceiptV1) -> bool {
+    fn product_validation_delivery_event(
+        &self,
+        receipt: &ProductValidationReceiptV1,
+    ) -> Option<WorldEvent> {
         let Some(receipt_position) = self.journal.events.iter().rposition(|event| {
             matches!(
                 &event.body,
@@ -147,7 +157,7 @@ impl World {
                 }) if recorded == receipt
             )
         }) else {
-            return false;
+            return None;
         };
         self.journal
             .events
@@ -162,7 +172,8 @@ impl World {
                         && next.validation_index == receipt.validation_index
                 )
             })
-            .any(|event| Self::product_validation_delivery_matches(event, receipt))
+            .find(|event| Self::product_validation_delivery_matches(event, receipt))
+            .cloned()
     }
 
     fn product_validation_delivery_matches(

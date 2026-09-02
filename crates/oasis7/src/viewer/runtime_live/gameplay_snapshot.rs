@@ -286,8 +286,12 @@ fn is_fresh_factory_production_failure_disposition(
     disposition: &FactoryProductionFailureDispositionV1,
 ) -> bool {
     let production = &factory.production;
-    production.status == FactoryProductionStatus::Blocked
-        && production.active_jobs == 0
+    // The durable disposition and the factory's current blocker record are
+    // the freshness authority. A sibling recipe can complete after this
+    // product-validation loss and transition the aggregate status to Idle
+    // without clearing the still-current consumed/lost inputs. Do not hide
+    // that recovery card merely because the aggregate status changed.
+    production.active_jobs == 0
         && production.current_job_id.is_none()
         && production.current_recipe_id.is_none()
         && production.current_blocker_kind.as_deref() == Some(disposition.blocker_kind.as_str())
