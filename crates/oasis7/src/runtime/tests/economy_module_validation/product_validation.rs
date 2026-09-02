@@ -665,6 +665,133 @@ fn product_validation_checkpoint_is_published_before_validator_call() {
 }
 
 #[test]
+fn product_validation_intent_recovery_preserves_predecessor_prologue() {
+    let mut world = logistics_drone_module_recipe_world("factory.recipe.validation-prologue");
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: "factory.recipe.validation-prologue".to_string(),
+        recipe_id: "recipe.assembler.logistics_drone".to_string(),
+        plan: RecipeExecutionPlan::accepted(
+            1,
+            vec![
+                MaterialStack::new("motor_mk1", 2),
+                MaterialStack::new("control_chip", 1),
+                MaterialStack::new("chassis_plate", 1),
+            ],
+            vec![MaterialStack::new("logistics_drone", 1)],
+            Vec::new(),
+            10,
+            1,
+        ),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
+    });
+    world
+        .step()
+        .expect("start recipe before prologue checkpoint");
+
+    let context = RuntimeCommittedTickContext {
+        height: world.state().time.saturating_add(1),
+        slot: world.state().time,
+        epoch: 0,
+        node_block_hash: String::new(),
+        action_root: String::new(),
+        authority_node_id: "test-authority".to_string(),
+        committed_at_unix_ms: 0,
+    };
+    let mut checkpoint = None;
+    let mut sandbox = CaptureContextSandbox::with_outputs(Vec::new());
+    world
+        .step_with_modules_for_committed_context_with_product_validation_checkpoint(
+            &mut sandbox,
+            &context,
+            &mut |staged| {
+                checkpoint = Some(staged.clone());
+                Ok(())
+            },
+        )
+        .expect("uninterrupted product validation failure must settle");
+    let checkpoint = checkpoint.expect("pre-call checkpoint");
+    let checkpoint_durability = checkpoint
+        .journal()
+        .events
+        .iter()
+        .filter(|event| {
+            matches!(
+                &event.body,
+                WorldEventBody::Domain(DomainEvent::FactoryDurabilityChanged { .. })
+            )
+        })
+        .count();
+    assert_eq!(checkpoint_durability, 1, "prologue must depreciate once");
+    let checkpoint_durability_ppm = checkpoint
+        .state()
+        .factories
+        .get("factory.recipe.validation-prologue")
+        .expect("factory at checkpoint")
+        .durability_ppm;
+
+    // The continuation API is the uninterrupted control for a published
+    // intent. A snapshot/journal round trip models the crash boundary.
+    let mut uninterrupted = checkpoint.clone();
+    let mut uninterrupted_sandbox = CaptureContextSandbox::with_outputs(Vec::new());
+    uninterrupted
+        .step_with_modules_for_committed_context_after_product_validation_intent(
+            &mut uninterrupted_sandbox,
+            &context,
+        )
+        .expect("continue published intent");
+
+    let mut crash_recovered =
+        World::from_snapshot(checkpoint.snapshot(), checkpoint.journal().clone())
+            .expect("recover crash checkpoint");
+    let mut retry_sandbox = CaptureContextSandbox::with_outputs(Vec::new());
+    crash_recovered
+        .step_with_modules_for_committed_context_after_product_validation_intent(
+            &mut retry_sandbox,
+            &context,
+        )
+        .expect("resume after crash");
+    assert!(
+        retry_sandbox.requests.is_empty(),
+        "retry must not call validator"
+    );
+
+    let recovered_durability = crash_recovered
+        .journal()
+        .events
+        .iter()
+        .filter(|event| {
+            matches!(
+                &event.body,
+                WorldEventBody::Domain(DomainEvent::FactoryDurabilityChanged { .. })
+            )
+        })
+        .count();
+    assert_eq!(recovered_durability, checkpoint_durability);
+    assert_eq!(
+        crash_recovered
+            .state()
+            .factories
+            .get("factory.recipe.validation-prologue")
+            .expect("recovered factory")
+            .durability_ppm,
+        checkpoint_durability_ppm,
+        "recovery must not depreciate the factory a second time"
+    );
+    assert_eq!(
+        serde_json::to_vec(crash_recovered.journal()).expect("serialize recovered journal"),
+        serde_json::to_vec(uninterrupted.journal()).expect("serialize control journal"),
+        "crash and uninterrupted continuation event roots must match"
+    );
+    assert_eq!(
+        serde_json::to_vec(&crash_recovered.snapshot()).expect("serialize recovered snapshot"),
+        serde_json::to_vec(&uninterrupted.snapshot()).expect("serialize control snapshot"),
+        "crash and uninterrupted continuation durability roots must match"
+    );
+}
+
+#[test]
 fn schedule_recipe_module_failure_is_correlated_action_rejection() {
     let mut world = logistics_drone_module_recipe_world("factory.recipe.schedule-failure");
     world.submit_action(Action::ScheduleRecipeWithModule {

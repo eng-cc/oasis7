@@ -167,8 +167,29 @@ pub(super) fn build_execution_external_effect_materialization(
     execution_world: &RuntimeWorld,
     context: &NodeExecutionCommitContext,
 ) -> Result<ExecutionExternalEffectMaterialization, String> {
+    build_execution_external_effect_materialization_with_pre_step_root(
+        execution_world,
+        context,
+        None,
+    )
+}
+
+pub(super) fn execution_world_snapshot_root(
+    execution_world: &RuntimeWorld,
+) -> Result<String, String> {
     let pre_step_snapshot = execution_world.snapshot();
-    let pre_step_execution_state_root = blake3_hex(super::to_cbor(pre_step_snapshot)?.as_slice());
+    Ok(blake3_hex(super::to_cbor(pre_step_snapshot)?.as_slice()))
+}
+
+pub(super) fn build_execution_external_effect_materialization_with_pre_step_root(
+    execution_world: &RuntimeWorld,
+    context: &NodeExecutionCommitContext,
+    pre_step_execution_state_root: Option<&str>,
+) -> Result<ExecutionExternalEffectMaterialization, String> {
+    let pre_step_execution_state_root = match pre_step_execution_state_root {
+        Some(root) if !root.trim().is_empty() => root.to_string(),
+        _ => execution_world_snapshot_root(execution_world)?,
+    };
     let world_manifest_hash = execution_world
         .current_manifest_hash()
         .map_err(|err| format!("execution external effect manifest hash failed: {:?}", err))?;

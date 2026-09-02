@@ -377,7 +377,7 @@ impl World {
         product_validation_checkpoint: &mut dyn FnMut(&World) -> Result<(), WorldError>,
     ) -> Result<(), WorldError> {
         self.state.time = self.state.time.saturating_add(1);
-        self.run_modules_for_current_tick(sandbox, None, product_validation_checkpoint)
+        self.run_modules_for_current_tick(sandbox, None, false, product_validation_checkpoint)
     }
 
     pub fn step_with_modules_for_committed_height(
@@ -482,175 +482,197 @@ impl World {
         if !resume_after_product_validation_intent {
             self.state.time = committed_height;
         }
-        self.run_modules_for_current_tick(sandbox, Some(context), product_validation_checkpoint)
+        self.run_modules_for_current_tick(
+            sandbox,
+            Some(context),
+            resume_after_product_validation_intent,
+            product_validation_checkpoint,
+        )
     }
 
     fn run_modules_for_current_tick(
         &mut self,
         sandbox: &mut dyn ModuleSandbox,
         committed_context: Option<&RuntimeCommittedTickContext>,
+        resume_after_product_validation_intent: bool,
         product_validation_checkpoint: &mut dyn FnMut(&World) -> Result<(), WorldError>,
     ) -> Result<(), WorldError> {
-        for event in self.process_factory_depreciation()? {
-            self.route_event_to_modules(&event, sandbox)?;
+        // A product-validation intent is persisted only after the tick
+        // prologue (depreciation and committed action application) has
+        // completed. Re-running that prologue on recovery would append a
+        // second depreciation event and apply the same work against a later
+        // in-memory generation. Continue at due-job processing instead.
+        if !resume_after_product_validation_intent {
+            for event in self.process_factory_depreciation()? {
+                self.route_event_to_modules(&event, sandbox)?;
+            }
         }
-        while let Some(envelope) = self.pending_actions.pop_front() {
-            let mut action_envelope = envelope.clone();
-            let mut post_action_result_event: Option<WorldEvent> = None;
-            let module_resolution =
-                match self.resolve_module_backed_economy_action(&envelope, sandbox) {
-                    Ok(resolution) => resolution,
-                    Err(error @ WorldError::ModuleCallFailed { .. }) => {
-                        // Module traps and malformed outputs are action-scoped
-                        // failures. The module runtime has already journaled the
-                        // failure; convert it to the same durable correlated
-                        // ActionRejected path as a declared module denial.
-                        EconomyActionResolution::Rejected(RejectReason::RuleDenied {
-                            notes: vec![format!(
-                                "economy module evaluation failed; action rejected: {error:?}"
-                            )],
-                        })
-                    }
-                    Err(error) => return Err(error),
-                };
-            match module_resolution {
-                EconomyActionResolution::Resolved(action) => {
-                    action_envelope.action = action;
-                }
-                EconomyActionResolution::Rejected(reason) => {
-                    let followup_context = self.factory_production_followup_context(&envelope);
-                    self.append_action_accepted_event(&envelope)?;
-                    let rejection_body =
-                        WorldEventBody::Domain(super::super::DomainEvent::ActionRejected {
-                            action_id: envelope.id,
-                            reason,
-                        });
-                    self.append_event(rejection_body.clone(), Some(CausedBy::Action(envelope.id)))?;
-                    post_action_result_event = self.journal.events.last().cloned();
-                    self.route_action_to_modules_with_stage_and_event(
-                        &envelope,
-                        ModuleSubscriptionStage::PostAction,
-                        post_action_result_event.as_ref(),
-                        sandbox,
-                    )?;
-                    if let Some(event) = self.journal.events.last() {
-                        let event = event.clone();
-                        self.route_event_to_modules(&event, sandbox)?;
-                    }
-                    if let Some(event) = self.append_factory_production_followup_event(
-                        &envelope,
-                        &rejection_body,
-                        followup_context.as_ref(),
-                    )? {
-                        self.route_event_to_modules(&event, sandbox)?;
-                    }
-                    continue;
-                }
-            }
-
-            let decision = self.evaluate_rule_decisions(&action_envelope, sandbox)?;
-            if decision.verdict == RuleVerdict::Modify {
-                if let Some(override_action) = decision.override_action.clone() {
-                    self.record_action_override(
-                        super::super::ActionOverrideRecord {
-                            action_id: envelope.id,
-                            original_action: envelope.action.clone(),
-                            override_action: override_action.clone(),
-                        },
-                        Some(CausedBy::Action(envelope.id)),
-                    )?;
-                    action_envelope = ActionEnvelope {
-                        id: envelope.id,
-                        action: override_action,
+        if !resume_after_product_validation_intent {
+            while let Some(envelope) = self.pending_actions.pop_front() {
+                let mut action_envelope = envelope.clone();
+                let mut post_action_result_event: Option<WorldEvent> = None;
+                let module_resolution =
+                    match self.resolve_module_backed_economy_action(&envelope, sandbox) {
+                        Ok(resolution) => resolution,
+                        Err(error @ WorldError::ModuleCallFailed { .. }) => {
+                            // Module traps and malformed outputs are action-scoped
+                            // failures. The module runtime has already journaled the
+                            // failure; convert it to the same durable correlated
+                            // ActionRejected path as a declared module denial.
+                            EconomyActionResolution::Rejected(RejectReason::RuleDenied {
+                                notes: vec![format!(
+                                    "economy module evaluation failed; action rejected: {error:?}"
+                                )],
+                            })
+                        }
+                        Err(error) => return Err(error),
                     };
+                match module_resolution {
+                    EconomyActionResolution::Resolved(action) => {
+                        action_envelope.action = action;
+                    }
+                    EconomyActionResolution::Rejected(reason) => {
+                        let followup_context = self.factory_production_followup_context(&envelope);
+                        self.append_action_accepted_event(&envelope)?;
+                        let rejection_body =
+                            WorldEventBody::Domain(super::super::DomainEvent::ActionRejected {
+                                action_id: envelope.id,
+                                reason,
+                            });
+                        self.append_event(
+                            rejection_body.clone(),
+                            Some(CausedBy::Action(envelope.id)),
+                        )?;
+                        post_action_result_event = self.journal.events.last().cloned();
+                        self.route_action_to_modules_with_stage_and_event(
+                            &envelope,
+                            ModuleSubscriptionStage::PostAction,
+                            post_action_result_event.as_ref(),
+                            sandbox,
+                        )?;
+                        if let Some(event) = self.journal.events.last() {
+                            let event = event.clone();
+                            self.route_event_to_modules(&event, sandbox)?;
+                        }
+                        if let Some(event) = self.append_factory_production_followup_event(
+                            &envelope,
+                            &rejection_body,
+                            followup_context.as_ref(),
+                        )? {
+                            self.route_event_to_modules(&event, sandbox)?;
+                        }
+                        continue;
+                    }
                 }
-            }
 
-            if decision.verdict == RuleVerdict::Deny {
-                self.append_action_accepted_event(&envelope)?;
-                self.append_event(
-                    WorldEventBody::Domain(super::super::DomainEvent::ActionRejected {
-                        action_id: envelope.id,
-                        reason: RejectReason::RuleDenied {
-                            notes: decision.notes.clone(),
-                        },
-                    }),
-                    Some(CausedBy::Action(envelope.id)),
-                )?;
-                post_action_result_event = self.journal.events.last().cloned();
-            } else {
-                let deficits = decision.cost.deficits(&self.state.resources);
-                if !deficits.is_empty() {
+                let decision = self.evaluate_rule_decisions(&action_envelope, sandbox)?;
+                if decision.verdict == RuleVerdict::Modify {
+                    if let Some(override_action) = decision.override_action.clone() {
+                        self.record_action_override(
+                            super::super::ActionOverrideRecord {
+                                action_id: envelope.id,
+                                original_action: envelope.action.clone(),
+                                override_action: override_action.clone(),
+                            },
+                            Some(CausedBy::Action(envelope.id)),
+                        )?;
+                        action_envelope = ActionEnvelope {
+                            id: envelope.id,
+                            action: override_action,
+                        };
+                    }
+                }
+
+                if decision.verdict == RuleVerdict::Deny {
                     self.append_action_accepted_event(&envelope)?;
                     self.append_event(
                         WorldEventBody::Domain(super::super::DomainEvent::ActionRejected {
                             action_id: envelope.id,
-                            reason: RejectReason::InsufficientResources { deficits },
+                            reason: RejectReason::RuleDenied {
+                                notes: decision.notes.clone(),
+                            },
                         }),
                         Some(CausedBy::Action(envelope.id)),
                     )?;
                     post_action_result_event = self.journal.events.last().cloned();
                 } else {
-                    match self.apply_resource_delta(&decision.cost) {
-                        Ok(()) => {
-                            if !self.try_apply_runtime_module_action(&action_envelope)? {
-                                let followup_context =
-                                    self.factory_production_followup_context(&envelope);
-                                let event_body = self.action_to_event(&action_envelope)?;
-                                self.preflight_domain_event(&event_body)?;
+                    let deficits = decision.cost.deficits(&self.state.resources);
+                    if !deficits.is_empty() {
+                        self.append_action_accepted_event(&envelope)?;
+                        self.append_event(
+                            WorldEventBody::Domain(super::super::DomainEvent::ActionRejected {
+                                action_id: envelope.id,
+                                reason: RejectReason::InsufficientResources { deficits },
+                            }),
+                            Some(CausedBy::Action(envelope.id)),
+                        )?;
+                        post_action_result_event = self.journal.events.last().cloned();
+                    } else {
+                        match self.apply_resource_delta(&decision.cost) {
+                            Ok(()) => {
+                                if !self.try_apply_runtime_module_action(&action_envelope)? {
+                                    let followup_context =
+                                        self.factory_production_followup_context(&envelope);
+                                    let event_body = self.action_to_event(&action_envelope)?;
+                                    self.preflight_domain_event(&event_body)?;
+                                    self.append_action_accepted_event(&envelope)?;
+                                    self.append_event(
+                                        event_body.clone(),
+                                        Some(CausedBy::Action(envelope.id)),
+                                    )?;
+                                    post_action_result_event = self.journal.events.last().cloned();
+                                    if let Some(event) = self.append_logistics_reroute_receipt(
+                                        &action_envelope.action,
+                                        &event_body,
+                                    )? {
+                                        self.route_event_to_modules(&event, sandbox)?;
+                                    }
+                                    if let Some(event) = self.journal.events.last() {
+                                        let event = event.clone();
+                                        self.route_event_to_modules(&event, sandbox)?;
+                                    }
+                                    if let Some(event) = self
+                                        .append_factory_production_followup_event(
+                                            &envelope,
+                                            &event_body,
+                                            followup_context.as_ref(),
+                                        )?
+                                    {
+                                        self.route_event_to_modules(&event, sandbox)?;
+                                    }
+                                }
+                            }
+                            Err(err) => {
                                 self.append_action_accepted_event(&envelope)?;
                                 self.append_event(
-                                    event_body.clone(),
+                                    WorldEventBody::Domain(
+                                        super::super::DomainEvent::ActionRejected {
+                                            action_id: envelope.id,
+                                            reason: RejectReason::RuleDenied {
+                                                notes: vec![format!(
+                                                    "rule decision cost apply rejected: {err:?}"
+                                                )],
+                                            },
+                                        },
+                                    ),
                                     Some(CausedBy::Action(envelope.id)),
                                 )?;
                                 post_action_result_event = self.journal.events.last().cloned();
-                                if let Some(event) = self.append_logistics_reroute_receipt(
-                                    &action_envelope.action,
-                                    &event_body,
-                                )? {
-                                    self.route_event_to_modules(&event, sandbox)?;
-                                }
-                                if let Some(event) = self.journal.events.last() {
-                                    let event = event.clone();
-                                    self.route_event_to_modules(&event, sandbox)?;
-                                }
-                                if let Some(event) = self.append_factory_production_followup_event(
-                                    &envelope,
-                                    &event_body,
-                                    followup_context.as_ref(),
-                                )? {
-                                    self.route_event_to_modules(&event, sandbox)?;
-                                }
                             }
-                        }
-                        Err(err) => {
-                            self.append_action_accepted_event(&envelope)?;
-                            self.append_event(
-                                WorldEventBody::Domain(super::super::DomainEvent::ActionRejected {
-                                    action_id: envelope.id,
-                                    reason: RejectReason::RuleDenied {
-                                        notes: vec![format!(
-                                            "rule decision cost apply rejected: {err:?}"
-                                        )],
-                                    },
-                                }),
-                                Some(CausedBy::Action(envelope.id)),
-                            )?;
-                            post_action_result_event = self.journal.events.last().cloned();
                         }
                     }
                 }
-            }
 
-            self.route_action_to_modules_with_stage_and_event(
-                &action_envelope,
-                ModuleSubscriptionStage::PostAction,
-                post_action_result_event.as_ref(),
-                sandbox,
-            )?;
-            if let Some(event) = self.journal.events.last() {
-                let event = event.clone();
-                self.route_event_to_modules(&event, sandbox)?;
+                self.route_action_to_modules_with_stage_and_event(
+                    &action_envelope,
+                    ModuleSubscriptionStage::PostAction,
+                    post_action_result_event.as_ref(),
+                    sandbox,
+                )?;
+                if let Some(event) = self.journal.events.last() {
+                    let event = event.clone();
+                    self.route_event_to_modules(&event, sandbox)?;
+                }
             }
         }
         for event in

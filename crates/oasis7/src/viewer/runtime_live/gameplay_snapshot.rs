@@ -298,6 +298,23 @@ fn is_fresh_factory_production_failure_disposition(
             .all(|job| job.factory_id != factory.factory_id)
 }
 
+fn latest_fresh_requester_failure_disposition<'a>(
+    state: &'a WorldState,
+    requester_agent_id: &str,
+) -> Option<&'a FactoryProductionFailureDispositionV1> {
+    state
+        .factory_production_failure_dispositions
+        .iter()
+        .rev()
+        .find_map(|(_, disposition)| {
+            let factory = state.factories.get(disposition.factory_id.as_str())?;
+            (disposition.requester_agent_id == requester_agent_id
+                && factory.builder_agent_id == requester_agent_id
+                && is_fresh_factory_production_failure_disposition(state, factory, disposition))
+            .then_some(disposition)
+        })
+}
+
 pub(super) fn build_player_gameplay_snapshot(
     state: &WorldState,
     controlled_agent_id: Option<&str>,
@@ -347,38 +364,23 @@ pub(super) fn build_player_gameplay_snapshot(
     };
     let factory_production_failure_disposition =
         controlled_agent_id.and_then(|requester_agent_id| {
-            let primary_factory = primary_factory?;
-            let primary_factory_id = primary_factory.factory_id.as_str();
-            state
-                .factory_production_failure_dispositions
-                .iter()
-                .rev()
-                .find(|(_, disposition)| {
-                    disposition.requester_agent_id == requester_agent_id
-                        && disposition.factory_id == primary_factory_id
-                        && is_fresh_factory_production_failure_disposition(
-                            state,
-                            primary_factory,
-                            disposition,
-                        )
-                })
-                .map(
-                    |(_, disposition)| PlayerGameplayFactoryProductionFailureDisposition {
-                        action_id: disposition.action_id.to_string(),
-                        requester_agent_id: disposition.requester_agent_id.clone(),
-                        factory_id: disposition.factory_id.clone(),
-                        recipe_id: disposition.recipe_id.clone(),
-                        blocker_kind: disposition.blocker_kind.clone(),
-                        blocker_detail: disposition.blocker_detail.clone(),
-                        disposition_kind: disposition.disposition_kind.clone(),
-                        consumed_inputs: disposition.consumed_inputs.clone(),
-                        lost_inputs: disposition.lost_inputs.clone(),
-                        consumed_power: disposition.consumed_power,
-                        lost_power: disposition.lost_power,
-                        next_action: disposition.next_action.clone(),
-                        next_recheck: disposition.next_recheck,
-                    },
-                )
+            latest_fresh_requester_failure_disposition(state, requester_agent_id).map(
+                |disposition| PlayerGameplayFactoryProductionFailureDisposition {
+                    action_id: disposition.action_id.to_string(),
+                    requester_agent_id: disposition.requester_agent_id.clone(),
+                    factory_id: disposition.factory_id.clone(),
+                    recipe_id: disposition.recipe_id.clone(),
+                    blocker_kind: disposition.blocker_kind.clone(),
+                    blocker_detail: disposition.blocker_detail.clone(),
+                    disposition_kind: disposition.disposition_kind.clone(),
+                    consumed_inputs: disposition.consumed_inputs.clone(),
+                    lost_inputs: disposition.lost_inputs.clone(),
+                    consumed_power: disposition.consumed_power,
+                    lost_power: disposition.lost_power,
+                    next_action: disposition.next_action.clone(),
+                    next_recheck: disposition.next_recheck,
+                },
+            )
         });
     let finalize = |gameplay| {
         let mut gameplay = finalize_player_gameplay_snapshot(

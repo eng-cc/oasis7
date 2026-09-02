@@ -41,8 +41,8 @@ pub(crate) use super::driver_persistence::{
     remove_partial_execution_world_persistence_files,
 };
 use super::external_effect::{
-    build_execution_external_effect_materialization,
-    load_execution_external_effect_materialization,
+    build_execution_external_effect_materialization_with_pre_step_root,
+    execution_world_snapshot_root, load_execution_external_effect_materialization,
     persist_execution_external_effect_materialization,
 };
 use super::product_validation_intent::{
@@ -612,6 +612,7 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         // ProductValidationAttemptStarted has been persisted. On retry, load
         // that continuation and run the reducer's fail-closed path without
         // resubmitting the committed actions or invoking the validator.
+        let mut pre_step_execution_state_root = None;
         let resume_after_product_validation_intent = if let Some(marker) =
             load_product_validation_intent(self.records_dir.as_path())?
         {
@@ -637,6 +638,10 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                     execution_state_root: record.execution_state_root,
                 });
             } else {
+                if !marker.pre_step_execution_state_root.trim().is_empty() {
+                    pre_step_execution_state_root =
+                        Some(marker.pre_step_execution_state_root.clone());
+                }
                 if marker.height != context.height
                     || marker.world_id != context.world_id
                     || (!marker.action_root.is_empty() && marker.action_root != context.action_root)
@@ -665,11 +670,16 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                 true
             }
         } else {
+            pre_step_execution_state_root =
+                Some(execution_world_snapshot_root(&self.execution_world)?);
             false
         };
 
-        let external_effect =
-            build_execution_external_effect_materialization(&self.execution_world, &context)?;
+        let external_effect = build_execution_external_effect_materialization_with_pre_step_root(
+            &self.execution_world,
+            &context,
+            pre_step_execution_state_root.as_deref(),
+        )?;
 
         let decode_started_at = Instant::now();
         let mut decoded_runtime_actions = Vec::with_capacity(context.committed_actions.len());
@@ -752,6 +762,9 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             let intent_world_id = context.world_id.clone();
             let intent_height = context.height;
             let intent_action_root = context.action_root.clone();
+            let intent_pre_step_execution_state_root = pre_step_execution_state_root
+                .clone()
+                .ok_or_else(|| "missing pre-step execution state root for intent".to_string())?;
             let mut publish_product_validation_intent = move |staged: &RuntimeWorld| {
                 persist_execution_world(intent_world_dir.as_path(), staged).map_err(|err| {
                     WorldError::DistributedValidationFailed {
@@ -770,6 +783,7 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                         height: intent_height,
                         action_root: intent_action_root.clone(),
                         journal_len: staged.journal().len(),
+                        pre_step_execution_state_root: intent_pre_step_execution_state_root.clone(),
                     },
                 )
                 .map_err(|err| WorldError::DistributedValidationFailed {

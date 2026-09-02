@@ -17,6 +17,11 @@ pub(super) struct ProductValidationIntentMarkerV1 {
     #[serde(default)]
     pub action_root: String,
     pub journal_len: usize,
+    /// Root of the execution world immediately before this committed tick.
+    /// This is captured before the staged pre-call world is published so a
+    /// retry cannot mistake the mid-tick continuation for its predecessor.
+    #[serde(default)]
+    pub pre_step_execution_state_root: String,
 }
 
 fn default_schema_version() -> u8 {

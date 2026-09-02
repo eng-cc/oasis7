@@ -365,6 +365,48 @@ fn runtime_gameplay_snapshot_keeps_target_failure_when_only_unrelated_factory_is
 }
 
 #[test]
+fn runtime_gameplay_snapshot_prefers_requester_failure_over_healthy_primary_factory() {
+    let mut state = failure_disposition_world_state();
+    let mut healthy = state
+        .factories
+        .get("factory.target")
+        .cloned()
+        .expect("target factory");
+    healthy.factory_id = "factory.healthy".to_string();
+    healthy.site_id = "site-healthy".to_string();
+    healthy.input_ledger = MaterialLedgerId::site("site-healthy");
+    healthy.output_ledger = MaterialLedgerId::site("site-healthy");
+    healthy.production = FactoryProductionState {
+        status: FactoryProductionStatus::Running,
+        active_jobs: 1,
+        current_job_id: Some(21),
+        current_recipe_id: Some("recipe.healthy".to_string()),
+        completed_jobs: 6,
+        last_completed_at: Some(22),
+        last_completed_recipe_id: Some("recipe.healthy.previous".to_string()),
+        ..FactoryProductionState::default()
+    };
+    state.factories.insert(healthy.factory_id.clone(), healthy);
+
+    let gameplay = gameplay_snapshot_for_failure_state(&state);
+    assert_eq!(
+        gameplay
+            .factory_production_failure_disposition
+            .as_ref()
+            .map(|receipt| receipt.factory_id.as_str()),
+        Some("factory.target"),
+        "a fresh requester-scoped failure must win before healthy primary-factory fallback"
+    );
+    assert_eq!(
+        gameplay
+            .factory_production_failure_disposition
+            .as_ref()
+            .map(|receipt| receipt.action_id.as_str()),
+        Some("19")
+    );
+}
+
+#[test]
 fn runtime_gameplay_snapshot_hides_old_failure_when_target_blocker_changed() {
     let mut state = failure_disposition_world_state();
     let target = state
