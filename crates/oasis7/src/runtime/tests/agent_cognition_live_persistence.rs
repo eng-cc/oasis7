@@ -88,6 +88,52 @@ fn seed_untrusted_recovery_fixture(prefix: &str) -> PathBuf {
     dir
 }
 
+fn canonical_scheduler_state() -> Value {
+    let policy: SchedulerPolicyV1 = serde_json::from_value(json!({
+        "schema_version": "scheduler-policy.v1",
+        "max_total_wakes_per_tick": 8,
+        "max_wakes_per_agent_per_tick": 1,
+        "aging_after_ticks": 2,
+        "max_starvation_ticks": 4,
+        "initial_priority": 0,
+        "comparator": SchedulerPolicyV1::COMPARATOR,
+        "service_order": SchedulerPolicyV1::SERVICE_ORDER
+    }))
+    .expect("decode canonical persistence scheduler policy");
+    let wake: SchedulerWakeV1 = serde_json::from_value(json!({
+        "schema_version": "scheduler-wake.v1",
+        "wake_id": "wake-live-1",
+        "continuation_id": "continuation-live-1",
+        "world_id": WORLD_ID,
+        "branch_id": BRANCH_ID,
+        "finality_epoch": 7,
+        "finality_block_hash": "blake3:finality-block-live-1",
+        "finality_status": "verified",
+        "reorg_epoch": 3,
+        "runtime_manifest_hash": "blake3:runtime-manifest-live-1",
+        "agent_id": "agent-live-persistence",
+        "agent_session_id": "session-live-1",
+        "agent_turn_id": "turn-live-1",
+        "decision_request_id": "request-live-1",
+        "next_wake_tick": 2,
+        "eligible_since_tick": 1,
+        "starvation_deadline_tick": 5,
+        "initial_priority": 0,
+        "wake_seq": 1,
+        "retry_seq": 0,
+        "status": "pending",
+        "pending_reason": "receipt_linked"
+    }))
+    .expect("decode canonical persistence scheduler wake");
+    let mut scheduler =
+        CognitionScheduler::try_new(policy, 1).expect("construct canonical persistence scheduler");
+    scheduler.advance_logical_tick(1);
+    scheduler
+        .try_enqueue(wake)
+        .expect("enqueue canonical persistence wake");
+    scheduler.snapshot_json()
+}
+
 fn cognition_projection(prefix: &str) -> Value {
     let committed = matches!(prefix, "committed" | "committed_missing_projection");
     let conflict = prefix == "conflict";
@@ -167,40 +213,7 @@ fn cognition_projection(prefix: &str) -> Value {
         } else {
             json!({})
         },
-        "scheduler_state": {
-            "schema_version": "scheduler-state.v1",
-            "cursor": {
-                "schema_version": "scheduler-cursor.v1",
-                "logical_tick": 1,
-                "last_served_agent_id": "agent-live-persistence",
-                "cursor_seq": 4,
-                "policy_config_digest": "blake3:scheduler-policy-live-1"
-            },
-            "wakes": [{
-                "schema_version": "scheduler-wake.v1",
-                "wake_id": "wake-live-1",
-                "continuation_id": "continuation-live-1",
-                "world_id": WORLD_ID,
-                "branch_id": BRANCH_ID,
-                "finality_epoch": 7,
-                "finality_block_hash": "blake3:finality-block-live-1",
-                "finality_status": "verified",
-                "reorg_epoch": 3,
-                "runtime_manifest_hash": "blake3:runtime-manifest-live-1",
-                "agent_id": "agent-live-persistence",
-                "agent_session_id": "session-live-1",
-                "agent_turn_id": "turn-live-1",
-                "decision_request_id": "request-live-1",
-                "next_wake_tick": 2,
-                "eligible_since_tick": 1,
-                "starvation_deadline_tick": 5,
-                "initial_priority": 0,
-                "wake_seq": 1,
-                "retry_seq": 0,
-                "status": "pending",
-                "pending_reason": "receipt_linked"
-            }]
-        },
+        "scheduler_state": canonical_scheduler_state(),
         "continuations": [{
             "schema_version": "agent-continuation.v1",
             "continuation_id": "continuation-live-1",

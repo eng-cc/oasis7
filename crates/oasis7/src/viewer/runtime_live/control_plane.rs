@@ -11,14 +11,11 @@ use super::super::protocol::{
     AgentChatAck, AgentChatError, AgentChatRequest, PromptControlAck, PromptControlApplyRequest,
     PromptControlCommand, PromptControlError, PromptControlOperation, PromptControlRollbackRequest,
 };
-use super::decision_trace::is_trace_only_overflow;
 use crate::runtime::{
     AgentIntentAuthorityContext, AgentIntentProviderFailureDisposition, AgentIntentV2,
     World as RuntimeWorld,
 };
-use crate::simulator::{
-    AgentDecision, AgentDecisionTrace, AgentPromptProfile, PromptUpdateOperation, WorldEventKind,
-};
+use crate::simulator::{AgentPromptProfile, PromptUpdateOperation, WorldEventKind};
 use sha2::{Digest, Sha256};
 
 #[path = "control_plane/agent_chat.rs"]
@@ -29,6 +26,8 @@ mod auth_helpers;
 mod llm_sidecar;
 #[path = "control_plane/prompt_profile.rs"]
 mod prompt_profile;
+#[path = "control_plane/provider_action.rs"]
+mod provider_action;
 pub(in crate::viewer::runtime_live) use agent_chat_intent::RuntimePrimaryIntent;
 use agent_chat_intent::{apply_accepted_primary_intent, resolve_agent_chat_intent};
 pub(super) use auth_helpers::map_auth_verify_error_code;
@@ -850,53 +849,6 @@ impl ViewerRuntimeLiveServer {
         let id = self.next_virtual_event_id;
         self.next_virtual_event_id = self.next_virtual_event_id.saturating_add(1);
         id
-    }
-
-    pub(super) fn enqueue_llm_action_from_sidecar(
-        &mut self,
-    ) -> Result<Option<AgentDecisionTrace>, AgentDecisionTrace> {
-        let Some(decision) = self.llm_sidecar.next_llm_decision(
-            &self.world,
-            &self.snapshot_config,
-            self.config.world_id.as_str(),
-        ) else {
-            return Ok(None);
-        };
-        let decision_trace = decision.decision_trace.clone();
-        if let Some(trace) = decision_trace.as_ref() {
-            if trace.llm_error.is_some() && !is_trace_only_overflow(trace) {
-                return Err(trace.clone());
-            }
-            if let Some(message) = trace.parse_error.as_ref() {
-                self.enqueue_virtual_event(WorldEventKind::ActionRejected {
-                    reason: SimulatorRejectReason::RuleDenied {
-                        notes: vec![format!("llm_failed: {}", message)],
-                    },
-                });
-                return Ok(decision_trace);
-            }
-        }
-
-        if let AgentDecision::Act(action) = decision.decision {
-            match simulator_action_to_runtime(&action, &self.world) {
-                Some(runtime_action) => {
-                    let action_id = self.world.submit_action(runtime_action);
-                    self.llm_sidecar
-                        .track_action(action_id, decision.agent_id, action.clone());
-                }
-                None => {
-                    self.enqueue_virtual_event(WorldEventKind::ActionRejected {
-                        reason: SimulatorRejectReason::RuleDenied {
-                            notes: vec![format!(
-                                "runtime llm bridge cannot map action: {}",
-                                simulator_action_label(&action)
-                            )],
-                        },
-                    });
-                }
-            }
-        }
-        Ok(decision_trace)
     }
 }
 

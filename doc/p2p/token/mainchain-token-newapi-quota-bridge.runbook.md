@@ -370,9 +370,18 @@ happy path 期望：
 - 本次 `route_id` / `bridge_deposit_id` 对应 ledger row 进入 `manual_review` 并记录 review reason；`manual_review_count` 只作辅助摘要。
 - 后续 operator review 只能显式 `mark_resolved` 或 `close`，不能口头判成功。
 
-#### Step F: provider smoke 与消耗证据
+#### Step F: provider legacy smoke 与消耗证据
+
+本节的 provider 请求使用旧 `DecisionRequest` DTO，因此只能验证 bare
+`POST /v1/world-simulator/decision` 的 legacy compatibility-only 路径是否可达，不能证明
+Continuous Harness target cognition、Runtime receipt 或 production async 闭环。target lane
+必须改用 `/v1/world-simulator/decision-context` 的
+`ContinuousAgentRequestContextV1`，并以 `/v1/world-simulator/feedback-context` 的
+`FeedbackEnvelopeV1` 完成配对验证；当前 HTTP body 不定义 `compatibility_lane` 字段，路由
+本身是 lane 选择依据。
 
 ```bash
+# Explicit legacy compatibility audit only; this route is not target cognition proof.
 curl -sS -X POST "${PROVIDER_BASE_URL}/v1/world-simulator/decision" \
   -H "Authorization: Bearer ${TEST_PROVIDER_AUTH_TOKEN}" \
   -H 'Content-Type: application/json' \
@@ -420,9 +429,12 @@ curl -sS -X POST "${PROVIDER_BASE_URL}/v1/world-simulator/decision" \
 可重复执行的自动化 smoke:
 
 ```bash
+# This file must be a Runtime-issued pair artifact; do not fabricate it.
+TARGET_CONTEXT_PAYLOAD_FILE="/secure/path/runtime-issued-context-pairs.json"
 ./scripts/provider-remote-https/provider-bridge-contract-smoke.sh \
   --base-url "${PROVIDER_BASE_URL}" \
   --auth-token "${TEST_PROVIDER_AUTH_TOKEN}" \
+  --target-context-payload-file "${TARGET_CONTEXT_PAYLOAD_FILE}" \
   --decision-count 1 \
   --min-successes 1
 ```
@@ -432,10 +444,18 @@ curl -sS -X POST "${PROVIDER_BASE_URL}/v1/world-simulator/decision" \
 读取 active `newapi_user_ref:<ref>` selector，不打印 raw `token_key`：
 
 ```bash
-./scripts/provider-remote-https/provider-bridge-live-gate.sh --decision-count 1
-./scripts/provider-remote-https/provider-bridge-live-gate.sh --decision-count 1 --loopback-target 204 --skip-public
-./scripts/provider-remote-https/provider-bridge-live-gate.sh --decision-count 1 --loopback-target 205 --skip-public
-./scripts/provider-remote-https/provider-bridge-live-gate.sh --decision-count 1 --skip-loopback
+./scripts/provider-remote-https/provider-bridge-live-gate.sh \
+  --target-context-payload-file "${TARGET_CONTEXT_PAYLOAD_FILE}" \
+  --decision-count 1
+./scripts/provider-remote-https/provider-bridge-live-gate.sh \
+  --target-context-payload-file "${TARGET_CONTEXT_PAYLOAD_FILE}" \
+  --decision-count 1 --loopback-target 204 --skip-public
+./scripts/provider-remote-https/provider-bridge-live-gate.sh \
+  --target-context-payload-file "${TARGET_CONTEXT_PAYLOAD_FILE}" \
+  --decision-count 1 --loopback-target 205 --skip-public
+./scripts/provider-remote-https/provider-bridge-live-gate.sh \
+  --target-context-payload-file "${TARGET_CONTEXT_PAYLOAD_FILE}" \
+  --decision-count 1 --skip-loopback
 ```
 
 CI 默认只运行无副作用 harness 回归；真实环境门禁需显式启用：
@@ -451,6 +471,7 @@ OASIS7_CI_RUN_PROVIDER_LIVE_GATE=true ./scripts/ci-tests.sh --required
 ./scripts/provider-remote-https/provider-bridge-contract-smoke.sh \
   --base-url "${PROVIDER_BASE_URL}" \
   --auth-token "${TEST_PROVIDER_AUTH_TOKEN}" \
+  --target-context-payload-file "${TARGET_CONTEXT_PAYLOAD_FILE}" \
   --decision-count 20 \
   --min-successes 1 \
   --expect-provider-error-code-substr quota
@@ -460,12 +481,14 @@ OASIS7_CI_RUN_PROVIDER_LIVE_GATE=true ./scripts/ci-tests.sh --required
 
 ```bash
 ./scripts/provider-remote-https/provider-bridge-live-gate.sh \
+  --target-context-payload-file "${TARGET_CONTEXT_PAYLOAD_FILE}" \
   --skip-public \
   --loopback-target 204 \
   --lowquota-target 204 \
   --lowquota-decision-count 20
 
 ./scripts/provider-remote-https/provider-bridge-live-gate.sh \
+  --target-context-payload-file "${TARGET_CONTEXT_PAYLOAD_FILE}" \
   --skip-loopback \
   --lowquota-target public205 \
   --lowquota-decision-count 20

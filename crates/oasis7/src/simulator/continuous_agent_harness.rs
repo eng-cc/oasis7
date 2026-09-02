@@ -10,6 +10,7 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt;
 
+use oasis7_wasm_abi::CapabilitySubject;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -23,6 +24,9 @@ pub const COGNITION_PROVIDER_INVOCATION_DOMAIN: &str = "oasis7.cognition.provide
 pub const COGNITION_RESPONSE_DIGEST_DOMAIN: &str = "oasis7.cognition.response.v1";
 pub const COGNITION_RESPONSE_ARTIFACT_IDENTITY_DOMAIN: &str =
     "oasis7.cognition.response-artifact-identity.v1";
+pub const COGNITION_CAPABILITY_CATALOG_DOMAIN: &str = "oasis7.cognition.capability-catalog.v1";
+pub const COGNITION_CAPABILITY_INVOCATION_CONTEXT_DOMAIN: &str =
+    "oasis7.cognition.capability-invocation-context.v1";
 const COGNITION_FEEDBACK_DIGEST_DOMAIN: &str = "oasis7.cognition.feedback.v1";
 const MAX_FEEDBACK_REPLAY_ENTRIES: usize = 8;
 
@@ -274,6 +278,97 @@ impl ContinuousAgentRequestContextV1 {
             return Err(CognitionError::new(
                 "missing_retry_lineage",
                 "production provider requests require nonzero retry_seq and transport_attempt",
+            ));
+        }
+        self.validate_production_capability_context()?;
+        Ok(())
+    }
+
+    /// The production target cannot discover capabilities from a null or
+    /// provider-supplied placeholder. Runtime must bind both snapshots to the
+    /// requesting agent and the same world/finality projection carried by the
+    /// outer context. The legacy `validate` path remains available for the
+    /// fenced compatibility entrypoint only.
+    fn validate_production_capability_context(&self) -> Result<(), CognitionError> {
+        let catalog = self
+            .base_decision_request
+            .capability_catalog
+            .as_ref()
+            .ok_or_else(|| {
+                CognitionError::new(
+                    "missing_capability_context",
+                    "production provider requests require a Runtime capability catalog",
+                )
+            })?;
+        let invocation = self
+            .base_decision_request
+            .capability_invocation_context
+            .as_ref()
+            .ok_or_else(|| {
+                CognitionError::new(
+                    "missing_capability_context",
+                    "production provider requests require a Runtime capability invocation context",
+                )
+            })?;
+
+        catalog.validate().map_err(|error| {
+            CognitionError::new(
+                "invalid_capability_context",
+                format!("Runtime capability catalog is invalid: {error}"),
+            )
+        })?;
+        if self.capability_catalog_digest != h_v1(COGNITION_CAPABILITY_CATALOG_DOMAIN, catalog) {
+            return Err(CognitionError::new(
+                "capability_context_digest_mismatch",
+                "capability catalog digest does not match the Runtime-bound snapshot",
+            ));
+        }
+        if self.capability_invocation_context_digest
+            != h_v1(COGNITION_CAPABILITY_INVOCATION_CONTEXT_DOMAIN, invocation)
+        {
+            return Err(CognitionError::new(
+                "capability_context_digest_mismatch",
+                "capability invocation context digest does not match the Runtime-bound context",
+            ));
+        }
+        if catalog.snapshot_id != invocation.catalog_snapshot_id
+            || catalog.subject != invocation.subject
+            || catalog.presenter != invocation.presenter
+        {
+            return Err(CognitionError::new(
+                "capability_context_mismatch",
+                "capability catalog and invocation context are not bound to the same snapshot",
+            ));
+        }
+        if catalog.world_id != self.runtime_binding.world_id
+            || catalog.branch_id != self.runtime_binding.branch_id
+            || catalog.finality_epoch != self.runtime_binding.finality_epoch
+            || catalog.logical_tick != self.runtime_binding.base_tick
+            || catalog.audience.world_id != self.runtime_binding.world_id
+            || catalog.audience.branch_id != self.runtime_binding.branch_id
+            || catalog.audience.finality_epoch != self.runtime_binding.finality_epoch
+        {
+            return Err(CognitionError::new(
+                "capability_runtime_binding_mismatch",
+                "capability catalog is not bound to the request Runtime world/finality projection",
+            ));
+        }
+        match &invocation.subject {
+            CapabilitySubject::Agent { agent_id, .. } if agent_id == &self.agent_subject => {}
+            _ => {
+                return Err(CognitionError::new(
+                    "capability_subject_mismatch",
+                    "capability invocation subject must be the requesting agent",
+                ));
+            }
+        }
+        if invocation.grant_id.trim().is_empty()
+            || invocation.catalog_snapshot_id.trim().is_empty()
+            || invocation.response_nonce.trim().is_empty()
+        {
+            return Err(CognitionError::new(
+                "invalid_capability_context",
+                "capability invocation grant, snapshot, and response nonce are required",
             ));
         }
         Ok(())
@@ -847,6 +942,18 @@ impl AgentCognitionStore {
         }
         let expected = partition.next_seq.saturating_add(1);
         if feedback.feedback_seq > expected {
+            if let Some(previous) = partition.held.get(&feedback.feedback_seq) {
+                if feedback_digest(previous) != feedback_digest_value {
+                    return Err(CognitionError::new(
+                        "feedback_identity_collision",
+                        "feedback_seq was reused with a different held envelope",
+                    ));
+                }
+                return Err(CognitionError::new(
+                    "feedback_sequence_gap",
+                    format!("expected feedback sequence {expected}"),
+                ));
+            }
             if partition.held.len() >= MAX_FEEDBACK_REPLAY_ENTRIES {
                 return Err(CognitionError::new(
                     "feedback_sequence_overflow",

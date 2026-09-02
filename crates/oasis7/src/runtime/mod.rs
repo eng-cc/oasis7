@@ -105,16 +105,17 @@ pub use consensus::{
 // Agent cognition admission boundary
 pub use cognition::{
     AGENT_DECISION_ENVELOPE_V1_SCHEMA, AgentCognitionDisposition, AgentCognitionMailbox,
-    AgentDecisionEnvelopeV1, CognitionValidationError, MvccValidator, PreconditionSubjectV1,
-    PreconditionV1,
+    AgentDecisionEnvelopeV1, CognitionCommitRejectReasonV1, CognitionValidationError,
+    MvccValidator, PreconditionSubjectV1, PreconditionV1, classify_cognition_commit_error,
 };
 
 // Durable cognition commit/recovery boundary
 pub use cognition_recovery::{
     CognitionCrashPrefix, CognitionReceiptViewV1, CognitionRecovery, CognitionRecoveryError,
     CognitionRecoveryFixture, CognitionRecoveryProbe, CognitionRecoveryReport,
-    CognitionResponseRecordV1, CognitionSnapshotV1, RuntimeReceiptLineageV1, WorldCommitRecordV1,
-    WorldRootViewV1,
+    CognitionResponseRecordV1, CognitionSnapshotV1, RuntimeCognitionBaseBindingV1,
+    RuntimeCognitionCommitRequestV1, RuntimeCognitionResponseArtifactV1,
+    RuntimeFeedbackOutboxRecordV1, RuntimeReceiptLineageV1, WorldCommitRecordV1, WorldRootViewV1,
 };
 
 // Durable cognition scheduler, wake and continuation projections

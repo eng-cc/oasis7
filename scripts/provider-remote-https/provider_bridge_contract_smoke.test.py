@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import tempfile
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -73,6 +74,50 @@ class MockProviderHandler(BaseHTTPRequestHandler):
                 "body": body,
             }
         )
+        if self.path == "/v1/world-simulator/feedback-context":
+            self.server.feedback_calls += 1
+            self.write_json({"ok": True})
+            return
+        if self.path == "/v1/world-simulator/decision-context":
+            self.server.target_decision_calls += 1
+            response = {
+                "decision": {"decision": "wait"},
+                "provider_error": None,
+                "diagnostics": {
+                    "provider_id": "provider_local_bridge",
+                    "provider_version": "mock-model",
+                    "latency_ms": 1,
+                },
+                "trace_payload": {
+                    "provider_id": "provider_local_bridge",
+                    "provider_version": "mock-model",
+                    "schema_repair_count": 0,
+                },
+            }
+            if (
+                self.server.quota_error_after is not None
+                and self.server.target_decision_calls > self.server.quota_error_after
+            ):
+                response["provider_error"] = {
+                    "code": self.server.quota_error_code,
+                    "message": self.server.quota_error_message,
+                    "retryable": False,
+                }
+            self.write_json(
+                {
+                    "base_decision_response": response,
+                    "context_discriminator": body["context_discriminator"],
+                    "context_version": body["context_version"],
+                    "agent_session_id": body["agent_session_id"],
+                    "agent_turn_id": body["agent_turn_id"],
+                    "decision_request_id": body["decision_request_id"],
+                    "retry_seq": body["retry_seq"],
+                    "transport_attempt": body["transport_attempt"],
+                    "request_digest": body["request_digest"],
+                    "response_digest": "blake3:" + "b" * 64,
+                }
+            )
+            return
         if self.path != "/v1/world-simulator/decision":
             self.send_error(404)
             return
@@ -153,6 +198,8 @@ class MockProviderServer:
         self.server.quota_error_code = self.quota_error_code
         self.server.quota_error_message = self.quota_error_message
         self.server.decision_calls = 0
+        self.server.target_decision_calls = 0
+        self.server.feedback_calls = 0
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         host, port = self.server.server_address
@@ -169,22 +216,55 @@ class MockProviderServer:
         return list(self.server.requests)
 
 
+def target_payload_file(directory, count=1):
+    requests = []
+    for index in range(1, count + 1):
+        request = smoke.build_target_context_request(index, timeout_ms=5000)
+        requests.append(
+            {
+                "decision_context": request,
+                "feedback_context": {
+                    "feedback_id": f"feedback.smoke-{index}",
+                    "feedback_seq": 1,
+                    "agent_subject": request["agent_subject"],
+                    "agent_session_id": request["agent_session_id"],
+                    "agent_turn_id": request["agent_turn_id"],
+                    "decision_request_id": request["decision_request_id"],
+                    "candidate_action_id": None,
+                    "runtime_receipt_id": None,
+                    "status": "pending",
+                    "request_digest": request["request_digest"],
+                    "reject_reason": None,
+                    "provenance": "runtime_authoritative",
+                },
+            }
+        )
+    path = Path(directory) / "target-context.json"
+    path.write_text(json.dumps({"requests": requests}), encoding="utf-8")
+    return str(path)
+
+
 class ProviderBridgeContractSmokeTests(unittest.TestCase):
     def test_public_ingress_contract_allows_degraded_health_and_decision_success(self):
-        with MockProviderServer(health_ok=False) as server:
-            summary = smoke.run_smoke(
-                smoke.SmokeOptions(
-                    base_url=server.base_url,
-                    auth_token="newapi_user_ref:smoke-user",
-                    timeout_ms=5000,
-                    decision_count=1,
-                    min_successes=1,
-                    expect_provider_error_code_substr="",
-                    require_health_ok=False,
+        with tempfile.TemporaryDirectory() as directory:
+            payload_path = target_payload_file(directory)
+            with MockProviderServer(health_ok=False) as server:
+                summary = smoke.run_smoke(
+                    smoke.SmokeOptions(
+                        base_url=server.base_url,
+                        auth_token="newapi_user_ref:smoke-user",
+                        timeout_ms=5000,
+                        decision_count=1,
+                        min_successes=1,
+                        expect_provider_error_code_substr="",
+                        require_health_ok=False,
+                        target_context_payload_file=payload_path,
+                    )
                 )
-            )
 
         self.assertEqual(summary["status"], "pass")
+        self.assertEqual(summary["lane"], "target_cognition")
+        self.assertEqual(summary["feedback_successes"], 1)
         self.assertEqual(summary["health_status"], "degraded")
         self.assertEqual(
             summary["chain_resource_manifest_schema_version"],
@@ -195,6 +275,10 @@ class ProviderBridgeContractSmokeTests(unittest.TestCase):
             "oasis7.world_resource_delta.v1",
         )
         self.assertEqual(summary["decision_successes"], 1)
+        self.assertEqual(
+            [request["path"] for request in server.requests if request["method"] == "POST"],
+            ["/v1/world-simulator/decision-context", "/v1/world-simulator/feedback-context"],
+        )
         self.assertEqual(summary["decisions"][0]["provider_error_code"], None)
         self.assertTrue(
             all(
@@ -204,41 +288,47 @@ class ProviderBridgeContractSmokeTests(unittest.TestCase):
         )
 
     def test_low_quota_exhaustion_requires_matching_provider_error(self):
-        with MockProviderServer(health_ok=True, quota_error_after=2) as server:
-            summary = smoke.run_smoke(
-                smoke.SmokeOptions(
-                    base_url=server.base_url,
-                    auth_token="newapi_user_ref:lowquota",
-                    timeout_ms=5000,
-                    decision_count=3,
-                    min_successes=2,
-                    expect_provider_error_code_substr="quota",
-                    require_health_ok=True,
+        with tempfile.TemporaryDirectory() as directory:
+            payload_path = target_payload_file(directory, count=3)
+            with MockProviderServer(health_ok=True, quota_error_after=2) as server:
+                summary = smoke.run_smoke(
+                    smoke.SmokeOptions(
+                        base_url=server.base_url,
+                        auth_token="newapi_user_ref:lowquota",
+                        timeout_ms=5000,
+                        decision_count=3,
+                        min_successes=2,
+                        expect_provider_error_code_substr="quota",
+                        require_health_ok=True,
+                        target_context_payload_file=payload_path,
+                    )
                 )
-            )
 
         self.assertEqual(summary["decision_successes"], 2)
         self.assertEqual(summary["matching_provider_errors"], 1)
         self.assertEqual(summary["decisions"][2]["provider_error_code"], "quota_exhausted")
 
     def test_low_quota_exhaustion_matches_provider_error_message(self):
-        with MockProviderServer(
-            health_ok=True,
-            quota_error_after=1,
-            quota_error_code="provider_gateway_unreachable",
-            quota_error_message="upstream returned insufficient_user_quota",
-        ) as server:
-            summary = smoke.run_smoke(
-                smoke.SmokeOptions(
-                    base_url=server.base_url,
-                    auth_token="newapi_user_ref:lowquota",
-                    timeout_ms=5000,
-                    decision_count=2,
-                    min_successes=1,
-                    expect_provider_error_code_substr="quota",
-                    require_health_ok=True,
+        with tempfile.TemporaryDirectory() as directory:
+            payload_path = target_payload_file(directory, count=2)
+            with MockProviderServer(
+                health_ok=True,
+                quota_error_after=1,
+                quota_error_code="provider_gateway_unreachable",
+                quota_error_message="upstream returned insufficient_user_quota",
+            ) as server:
+                summary = smoke.run_smoke(
+                    smoke.SmokeOptions(
+                        base_url=server.base_url,
+                        auth_token="newapi_user_ref:lowquota",
+                        timeout_ms=5000,
+                        decision_count=2,
+                        min_successes=1,
+                        expect_provider_error_code_substr="quota",
+                        require_health_ok=True,
+                        target_context_payload_file=payload_path,
+                    )
                 )
-            )
 
         self.assertEqual(summary["decision_successes"], 1)
         self.assertEqual(summary["matching_provider_errors"], 1)
@@ -254,20 +344,84 @@ class ProviderBridgeContractSmokeTests(unittest.TestCase):
         self.assertEqual(request["timeout_budget_ms"], 4321)
         self.assertEqual(request["observation"]["timeout_budget_ms"], 4321)
 
-    def test_low_quota_exhaustion_fails_without_provider_error(self):
+    def test_target_lane_fails_closed_without_runtime_pair_artifact(self):
         with MockProviderServer(health_ok=True) as server:
-            with self.assertRaisesRegex(RuntimeError, "expected provider_error code or message"):
+            with self.assertRaisesRegex(RuntimeError, "target cognition smoke requires"):
                 smoke.run_smoke(
                     smoke.SmokeOptions(
                         base_url=server.base_url,
-                        auth_token="newapi_user_ref:lowquota",
+                        auth_token="newapi_user_ref:missing-pair",
                         timeout_ms=5000,
-                        decision_count=3,
-                        min_successes=2,
-                        expect_provider_error_code_substr="quota",
+                        decision_count=1,
+                        min_successes=1,
+                        expect_provider_error_code_substr="",
                         require_health_ok=True,
                     )
                 )
+
+    def test_target_lane_rejects_feedback_identity_drift(self):
+        with tempfile.TemporaryDirectory() as directory:
+            request = smoke.build_target_context_request(index=1, timeout_ms=5000)
+            feedback = {
+                "feedback_id": "feedback.smoke-1",
+                "feedback_seq": 1,
+                "agent_subject": request["agent_subject"],
+                "agent_session_id": request["agent_session_id"],
+                "agent_turn_id": request["agent_turn_id"],
+                "decision_request_id": "wrong-request",
+                "status": "pending",
+                "request_digest": request["request_digest"],
+                "provenance": "runtime_authoritative",
+            }
+            path = Path(directory) / "target-context.json"
+            path.write_text(
+                json.dumps(
+                    {"requests": [{"decision_context": request, "feedback_context": feedback}]}
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(RuntimeError, "feedback decision_request_id"):
+                smoke.load_target_context_pairs(str(path), 1)
+
+    def test_low_quota_exhaustion_fails_without_provider_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            payload_path = target_payload_file(directory, count=3)
+            with MockProviderServer(health_ok=True) as server:
+                with self.assertRaisesRegex(RuntimeError, "expected provider_error code or message"):
+                    smoke.run_smoke(
+                        smoke.SmokeOptions(
+                            base_url=server.base_url,
+                            auth_token="newapi_user_ref:lowquota",
+                            timeout_ms=5000,
+                            decision_count=3,
+                            min_successes=2,
+                            expect_provider_error_code_substr="quota",
+                            require_health_ok=True,
+                            target_context_payload_file=payload_path,
+                        )
+                    )
+
+    def test_bare_route_is_explicit_legacy_only(self):
+        with MockProviderServer(health_ok=True) as server:
+            summary = smoke.run_smoke(
+                smoke.SmokeOptions(
+                    base_url=server.base_url,
+                    auth_token="newapi_user_ref:legacy",
+                    timeout_ms=5000,
+                    decision_count=1,
+                    min_successes=1,
+                    expect_provider_error_code_substr="",
+                    require_health_ok=True,
+                    legacy_compatibility_only=True,
+                )
+            )
+        self.assertEqual(summary["lane"], "legacy_compatibility_only")
+        self.assertEqual(summary["feedback_successes"], 0)
+        self.assertEqual(summary["decision_path"], "/v1/world-simulator/decision")
+        self.assertEqual(
+            [request["path"] for request in server.requests if request["method"] == "POST"],
+            ["/v1/world-simulator/decision"],
+        )
 
 
 if __name__ == "__main__":

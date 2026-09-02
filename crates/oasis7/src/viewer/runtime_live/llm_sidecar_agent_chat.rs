@@ -1,5 +1,18 @@
 use super::*;
 
+#[derive(Debug, Clone)]
+pub(in crate::viewer::runtime_live) struct RuntimeProviderAgentChatFailure {
+    pub(in crate::viewer::runtime_live) pending: RuntimePendingProviderAgentChat,
+    pub(in crate::viewer::runtime_live) error: AgentChatError,
+    pub(in crate::viewer::runtime_live) retryable: bool,
+}
+
+#[derive(Debug)]
+pub(in crate::viewer::runtime_live) struct RuntimeProviderAgentChatRequestError {
+    pub(in crate::viewer::runtime_live) error: AgentChatError,
+    pub(in crate::viewer::runtime_live) retryable: bool,
+}
+
 fn validate_provider_agent_chat_response(
     requested_agent_id: &str,
     response: crate::simulator::ProviderAgentChatResponse,
@@ -121,6 +134,50 @@ impl RuntimeLlmSidecar {
             },
         })?;
         Ok((client, settings))
+    }
+
+    /// Preserve the provider feedback handoff performed by the legacy
+    /// provider behavior before the native async runner queues Agent Chat.
+    /// This is an input observation, not a Runtime gameplay effect.
+    pub(super) fn push_provider_player_message_feedback(
+        &self,
+        world: &RuntimeWorld,
+        agent_id: &str,
+        message: &str,
+    ) -> Result<(), AgentChatError> {
+        let (client, _) = self
+            .provider_agent_chat_client(agent_id)
+            .map_err(|failure| failure.error)?;
+        let summary = format!("player_message: {}", message.trim());
+        let ack = client
+            .submit_feedback(&crate::simulator::FeedbackEnvelope {
+                action_id: world.state().time,
+                success: true,
+                reject_reason: None,
+                emitted_events: Vec::new(),
+                world_delta_summary: Some(summary),
+            })
+            .map_err(|error| AgentChatError {
+                code: if error.retryable() {
+                    "provider_unreachable".to_string()
+                } else {
+                    "provider_feedback_rejected".to_string()
+                },
+                message: error.to_string(),
+                agent_id: Some(agent_id.to_string()),
+            })?;
+        if ack.ok {
+            return Ok(());
+        }
+        Err(AgentChatError {
+            code: ack
+                .error_code
+                .unwrap_or_else(|| "provider_feedback_rejected".to_string()),
+            message: ack
+                .error
+                .unwrap_or_else(|| "provider feedback endpoint rejected payload".to_string()),
+            agent_id: Some(agent_id.to_string()),
+        })
     }
 
     pub(super) fn request_provider_agent_chat(

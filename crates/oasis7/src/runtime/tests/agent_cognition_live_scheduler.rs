@@ -10,8 +10,8 @@
 
 use super::super::*;
 use crate::runtime::{
-    AgentContinuation, ContinuationStatusV1, RetentionRecordV1, SchedulerPolicyV1, SchedulerWakeV1,
-    WakeConditionV1,
+    AgentContinuation, CognitionContinuationProposalV1, CognitionScheduler, ContinuationStatusV1,
+    RetentionRecordV1, SchedulerPolicyV1, SchedulerWakeV1, WakeConditionV1,
 };
 use serde_json::{Value, json};
 use std::fs;
@@ -124,8 +124,119 @@ fn continuation(status: ContinuationStatusV1) -> AgentContinuation {
     continuation
 }
 
+fn proposal(world: &World) -> CognitionContinuationProposalV1 {
+    let mut proposal: CognitionContinuationProposalV1 = serde_json::from_value(json!({
+        "schema_version": 1,
+        "continuation_proposal_id": "proposal-live-reorg-1",
+        "world_id": WORLD_ID,
+        "branch_id": BRANCH_ID,
+        "finality_epoch": 7,
+        "finality_block_hash": "blake3:finality-live-7",
+        "finality_status": "verified",
+        "reorg_epoch": 3,
+        "runtime_manifest_hash": world.current_manifest_hash().expect("manifest hash"),
+        "agent_id": AGENT_A,
+        "agent_session_id": "session.agent-live-a",
+        "agent_turn_id": "turn.agent-live-a",
+        "decision_request_id": "request.agent-live-a",
+        "origin_turn_id": "turn.agent-live-a",
+        "origin_request_digest": "blake3:origin-request-live-1",
+        "action_or_plan_kind": "wait",
+        "action_or_envelope_digest": null,
+        "baseline_observation_digest": "blake3:baseline-live-1",
+        "goal_digest": "blake3:goal-live-1",
+        "policy_digest": "blake3:policy-live-1",
+        "policy_revision": 1,
+        "precondition_summary": "ready",
+        "wake_conditions": [{
+            "schema_version": "wake-condition.v1",
+            "kind": "at_or_after_tick",
+            "logical_tick": 1
+        }],
+        "next_wake_tick": 1,
+        "remaining_budget": {"unit": "steps", "value": 2},
+        "valid_until_tick": 100,
+        "precondition_digest": "blake3:precondition-live-1",
+        "source": "runtime-test",
+        "proposal_digest": ""
+    }))
+    .expect("decode live proposal");
+    proposal.proposal_digest = proposal.proposal_digest();
+    proposal
+}
+
 fn world_with_scheduler() -> World {
     World::new().with_cognition_scheduler(policy(), 1)
+}
+
+#[test]
+fn world_step_runs_the_production_scheduler_and_releases_exact_wake_identity() {
+    let mut world = world_with_scheduler();
+    world
+        .enqueue_cognition_wake(wake(
+            AGENT_A,
+            "wake-production",
+            "continuation-production",
+            1,
+        ))
+        .expect("enqueue production wake");
+    world
+        .enqueue_cognition_wake(wake(
+            AGENT_B,
+            "wake-production-pending",
+            "continuation-production-pending",
+            1,
+        ))
+        .expect("enqueue production backpressure wake");
+
+    world
+        .step()
+        .expect("production World step services scheduler");
+    assert_eq!(
+        world.cognition_scheduler_snapshot()["in_flight"]["wake-production"]["wake_id"],
+        "wake-production"
+    );
+    assert_eq!(
+        world
+            .cognition_in_flight_wakes()
+            .expect("read production scheduler leases")
+            .iter()
+            .map(|wake| wake.wake_id.as_str())
+            .collect::<Vec<_>>(),
+        ["wake-production"]
+    );
+    assert!(
+        world.cognition()["cognition_journal"]["events"]
+            .as_array()
+            .expect("cognition journal events")
+            .iter()
+            .any(|event| event["kind"] == "ContinuationWoken")
+    );
+
+    let released = world
+        .release_cognition_wake("wake-production")
+        .expect("release exact production wake");
+    assert_eq!(released.wake_id, "wake-production");
+    assert!(
+        world.cognition_scheduler_snapshot()["in_flight"]
+            .get("wake-production")
+            .is_none()
+    );
+    assert_eq!(
+        world.cognition_scheduler_snapshot()["active"][0]["wake_id"],
+        "wake-production-pending",
+        "exact release must immediately promote the due backpressure wake"
+    );
+    assert!(
+        world.cognition()["cognition_journal"]["events"]
+            .as_array()
+            .expect("cognition journal events")
+            .iter()
+            .any(|event| event["kind"] == "SchedulerWakeReleased")
+    );
+    let before = world.cognition_scheduler_snapshot();
+    assert!(world.release_cognition_wake("wake-missing").is_err());
+    assert_eq!(world.cognition_scheduler_snapshot(), before);
 }
 
 #[test]
@@ -146,6 +257,11 @@ fn world_scheduler_is_nonblocking_fair_and_restores_cursor_and_backpressure() {
     assert_eq!(pending.debit_count, 0);
     assert_eq!(pending.receipt_count, 0);
     assert_eq!(pending.world_receipt_linked_count, 0);
+    assert_eq!(
+        world.cognition_scheduler_snapshot()["cursor"]["cursor_seq"],
+        1,
+        "queue-full service attempt must advance the durable cursor"
+    );
 
     let selected = world
         .select_ready_cognition_wakes(1)
@@ -166,19 +282,19 @@ fn world_scheduler_is_nonblocking_fair_and_restores_cursor_and_backpressure() {
 
     let recovered = restored
         .recover_cognition_scheduler(2)
-        .expect("capacity recovery should preserve the original wake identity and age");
+        .expect("recovery should preserve the selected wake identity and age");
     assert_eq!(
         recovered
             .iter()
             .map(|wake| wake.wake_id.as_str())
             .collect::<Vec<_>>(),
-        ["wake-b"]
+        ["wake-a"]
     );
     let after = restored.cognition_scheduler_snapshot();
     assert_eq!(after["policy"], before["policy"]);
     assert_eq!(after["cursor"], before["cursor"]);
-    assert_eq!(after["backpressure_count"], 0);
-    assert_eq!(after["active"][0]["wake_id"], "wake-b");
+    assert_eq!(after["backpressure_count"], 1);
+    assert_eq!(after["active"][0]["wake_id"], "wake-a");
     assert_eq!(after["active"][0]["eligible_since_tick"], 1);
     assert_eq!(after["active"][0]["retry_seq"], 0);
     assert_eq!(
@@ -192,7 +308,48 @@ fn world_scheduler_is_nonblocking_fair_and_restores_cursor_and_backpressure() {
 }
 
 #[test]
-fn world_wake_evaluation_reads_one_committed_head_for_event_receipt_and_state() {
+fn scheduler_restore_rejects_active_and_inflight_capacity_overflow() {
+    let world = world_with_scheduler();
+    let mut state = world.cognition_scheduler_snapshot();
+    state["active"] = json!([
+        wake(AGENT_A, "wake-overflow-a", "continuation-overflow-a", 1),
+        wake(AGENT_B, "wake-overflow-b", "continuation-overflow-b", 1)
+    ]);
+    assert!(
+        CognitionScheduler::from_snapshot_json(state).is_err(),
+        "restore must reject active plus in-flight entries over capacity"
+    );
+}
+
+#[test]
+fn committed_projection_wake_rejects_unbacked_event_and_receipt_evidence() {
+    let world = world_with_scheduler();
+    let conditions: Vec<WakeConditionV1> = serde_json::from_value(json!([
+        {
+            "schema_version": "wake-condition.v1",
+            "kind": "world_event_committed",
+            "event_digest": "blake3:caller-asserted-event"
+        },
+        {
+            "schema_version": "wake-condition.v1",
+            "kind": "receipt_linked",
+            "receipt_id": "receipt:caller-asserted"
+        }
+    ]))
+    .expect("decode caller evidence conditions");
+    let evaluation = world
+        .evaluate_cognition_wake_from_committed_projection(
+            &conditions,
+            "blake3:caller-asserted-event",
+            "receipt:caller-asserted",
+        )
+        .expect("unbacked evidence should be a deterministic pending result");
+    assert_eq!(evaluation.status, "pending");
+    assert_eq!(evaluation.reason, "condition_not_met");
+}
+
+#[test]
+fn world_wake_evaluation_rejects_caller_evidence_without_projection() {
     let world = world_with_scheduler();
     let conditions: Vec<WakeConditionV1> = serde_json::from_value(json!([
         {
@@ -229,16 +386,16 @@ fn world_wake_evaluation_reads_one_committed_head_for_event_receipt_and_state() 
             "receipt-live-1",
         )
         .expect("committed event/receipt projection should produce a deterministic wake");
-    assert_eq!(committed.status, "ready");
-    assert_eq!(committed.reason, "condition_met");
+    assert_eq!(committed.status, "pending");
+    assert_eq!(committed.reason, "condition_not_met");
 }
 
 #[test]
 fn world_continuation_reorg_invalidates_durable_schedule_without_reexecution() {
     let mut world = world_with_scheduler();
     world
-        .schedule_cognition_continuation(continuation(ContinuationStatusV1::Scheduled))
-        .expect("schedule continuation through World ownership");
+        .admit_cognition_continuation(proposal(&world))
+        .expect("admit continuation proposal through World ownership");
 
     let report = world
         .invalidate_cognition_for_reorg(4)

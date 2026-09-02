@@ -1,4 +1,9 @@
 use super::*;
+use oasis7::capability_invocation_context::CapabilityInvocationContext;
+use oasis7::simulator::{
+    COGNITION_CAPABILITY_CATALOG_DOMAIN, COGNITION_CAPABILITY_INVOCATION_CONTEXT_DOMAIN,
+};
+use oasis7_wasm_abi::CapabilityCatalogSnapshot;
 
 #[derive(Debug, Clone)]
 struct RecordingInvoker {
@@ -84,8 +89,12 @@ fn continuous_context(
     agent_session_id: &str,
     transport_attempt: u64,
 ) -> ContinuousAgentRequestContextV1 {
+    let mut base_decision_request = sample_request();
+    let (catalog, invocation) = production_capabilities(agent_session_id);
+    base_decision_request.capability_catalog = Some(catalog.clone());
+    base_decision_request.capability_invocation_context = Some(invocation.clone());
     let mut context = ContinuousAgentRequestContextV1 {
-        base_decision_request: sample_request(),
+        base_decision_request,
         context_discriminator: oasis7::simulator::CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR
             .to_string(),
         context_version: oasis7::simulator::CONTINUOUS_AGENT_CONTEXT_VERSION,
@@ -108,8 +117,14 @@ fn continuous_context(
             runtime_manifest_hash: Digest32::from(format!("blake3:{}", "c".repeat(64))),
         },
         observation_digest: Digest32::from(format!("blake3:{}", "d".repeat(64))),
-        capability_catalog_digest: Digest32::from(format!("blake3:{}", "e".repeat(64))),
-        capability_invocation_context_digest: Digest32::from(format!("blake3:{}", "f".repeat(64))),
+        capability_catalog_digest: oasis7::simulator::h_v1(
+            COGNITION_CAPABILITY_CATALOG_DOMAIN,
+            &catalog,
+        ),
+        capability_invocation_context_digest: oasis7::simulator::h_v1(
+            COGNITION_CAPABILITY_INVOCATION_CONTEXT_DOMAIN,
+            &invocation,
+        ),
         memory_snapshot_digest: Digest32::from(format!("blake3:{}", "1".repeat(64))),
         goal_snapshot_digest: Digest32::from(format!("blake3:{}", "2".repeat(64))),
         continuation_digest: Digest32::from(format!("blake3:{}", "3".repeat(64))),
@@ -122,6 +137,57 @@ fn continuous_context(
     };
     context.request_digest = context.request_digest();
     context
+}
+
+fn production_capabilities(
+    session_id: &str,
+) -> (CapabilityCatalogSnapshot, CapabilityInvocationContext) {
+    let subject = serde_json::json!({
+        "kind": "agent",
+        "agent_id": "agent-1",
+        "owner_binding": "owner-1",
+        "generation": 1
+    });
+    let presenter = serde_json::json!({
+        "presenter_id": "provider-1",
+        "presenter_kind": "provider",
+        "session_id": session_id
+    });
+    let audience = serde_json::json!({
+        "world_id": "world-bridge",
+        "branch_id": "main",
+        "finality_epoch": 1,
+        "target_kind": "world",
+        "target_id": null
+    });
+    let catalog: CapabilityCatalogSnapshot = serde_json::from_value(serde_json::json!({
+        "snapshot_id": format!("catalog.{session_id}"),
+        "world_id": "world-bridge",
+        "world_head": 7,
+        "branch_id": "main",
+        "finality_epoch": 1,
+        "logical_tick": 7,
+        "module_registry_hash": "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "policy_hash": "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "revocation_epoch": 0,
+        "subject": subject,
+        "presenter": presenter,
+        "audience": audience,
+        "entries": [],
+        "valid_until_tick": 100
+    }))
+    .expect("decode production capability catalog");
+    let invocation = CapabilityInvocationContext {
+        grant_id: format!("grant.{session_id}"),
+        subject: catalog.subject.clone(),
+        presenter: catalog.presenter.clone(),
+        audience: catalog.audience.clone(),
+        catalog_snapshot_id: catalog.snapshot_id.clone(),
+        module_id: String::new(),
+        module_version: String::new(),
+        response_nonce: format!("nonce.{session_id}"),
+    };
+    (catalog, invocation)
 }
 
 #[test]

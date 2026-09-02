@@ -24,6 +24,28 @@ use serde_json::{Value as JsonValue, json};
 const CONTINUATION_SCHEMA: &str = "agent-continuation.v1";
 
 impl World {
+    fn is_terminal_continuation_status(status: ContinuationStatusV1) -> bool {
+        matches!(
+            status,
+            ContinuationStatusV1::Completed
+                | ContinuationStatusV1::Cancelled
+                | ContinuationStatusV1::Invalidated
+                | ContinuationStatusV1::Expired
+                | ContinuationStatusV1::Rejected
+        )
+    }
+
+    fn continuation_lifecycle_event_kind(status: ContinuationStatusV1) -> &'static str {
+        match status {
+            ContinuationStatusV1::Completed => "ContinuationCompleted",
+            ContinuationStatusV1::Cancelled => "ContinuationCancelled",
+            ContinuationStatusV1::Invalidated => "ContinuationInvalidated",
+            ContinuationStatusV1::Expired => "ContinuationExpired",
+            ContinuationStatusV1::Rejected => "ContinuationRejected",
+            _ => "ContinuationTransitioned",
+        }
+    }
+
     /// Configure the durable World scheduler.  Configuration is encoded in
     /// the cognition projection immediately so a save taken before the first
     /// wake still restores the chosen policy and capacity.
@@ -121,9 +143,112 @@ impl World {
         tick: u64,
     ) -> Result<Vec<SchedulerWakeV1>, WorldError> {
         let mut scheduler = self.cognition_scheduler()?;
-        let selected = scheduler.select_ready(tick);
-        self.cognition_commit_scheduler_transaction(&scheduler, "SchedulerWakeSelected", None)?;
+        let continuations = self.cognition_continuations_typed()?;
+        let stale = scheduler.prune_wakes_if(|wake| {
+            self.cognition_wake_has_active_continuation(wake, &continuations)
+        });
+        let selected = scheduler.select_ready_if(tick, |wake| {
+            self.cognition_wake_conditions_ready(wake, &continuations)
+        });
+        let mut transaction = self.clone();
+        for wake in &stale {
+            transaction.cognition_commit_scheduler_transaction(
+                &scheduler,
+                "SchedulerWakeDeactivated",
+                Some(wake),
+            )?;
+        }
+        if selected.is_empty() {
+            transaction.cognition_commit_scheduler_transaction(
+                &scheduler,
+                "SchedulerWakeSelected",
+                None,
+            )?;
+        } else {
+            for wake in &selected {
+                transaction.cognition_commit_scheduler_transaction(
+                    &scheduler,
+                    "SchedulerWakeSelected",
+                    Some(wake),
+                )?;
+                if !wake.continuation_id.trim().is_empty() {
+                    transaction.cognition_commit_scheduler_transaction(
+                        &scheduler,
+                        "ContinuationWoken",
+                        Some(wake),
+                    )?;
+                }
+            }
+        }
+        *self = transaction;
         Ok(selected)
+    }
+
+    /// Run one scheduler service pass from the authoritative World path.
+    ///
+    /// The returned wakes are leases: capacity remains occupied until the
+    /// caller reports completion through `release_cognition_wake`, or until a
+    /// terminal continuation transition deactivates the same wake identity.
+    /// A World without a configured scheduler is intentionally a no-op so
+    /// legacy worlds do not acquire an implicit policy.
+    pub fn service_cognition_scheduler_tick(
+        &mut self,
+        tick: u64,
+    ) -> Result<Vec<SchedulerWakeV1>, WorldError> {
+        let Some(state) = self
+            .cognition
+            .get("scheduler_state")
+            .filter(|state| !state.is_null())
+        else {
+            return Ok(Vec::new());
+        };
+        // An empty ready/backpressure set has no service work. In particular,
+        // do not append a journal event on every tick while a lease is
+        // waiting for its exact completion release.
+        let has_ready_or_pending = state
+            .get("active")
+            .and_then(JsonValue::as_array)
+            .is_some_and(|wakes| !wakes.is_empty())
+            || state
+                .get("backpressure")
+                .and_then(JsonValue::as_object)
+                .is_some_and(|wakes| !wakes.is_empty());
+        if !has_ready_or_pending {
+            return Ok(Vec::new());
+        }
+        self.select_ready_cognition_wakes(tick)
+    }
+
+    /// Release exactly one durable scheduler lease.  Unknown identities are
+    /// rejected transactionally, leaving the scheduler projection unchanged.
+    pub fn release_cognition_wake(&mut self, wake_id: &str) -> Result<SchedulerWakeV1, WorldError> {
+        if wake_id.trim().is_empty() {
+            return Err(scheduler_error("in_flight_wake_missing"));
+        }
+        let mut transaction = self.clone();
+        let mut scheduler = transaction.cognition_scheduler()?;
+        let wake = scheduler
+            .release_in_flight(wake_id)
+            .map_err(|error| scheduler_error(error.code()))?;
+        transaction.cognition_commit_scheduler_transaction(
+            &scheduler,
+            "SchedulerWakeReleased",
+            Some(&wake),
+        )?;
+        // A release makes one bounded slot available immediately. Promote
+        // due backpressure entries in the same World transaction so a
+        // pending wake cannot remain stranded until an out-of-band recovery
+        // call.
+        let recovered = scheduler.recover_capacity_preserving_cursor(self.state.time);
+        for recovered_wake in &recovered {
+            transaction.cognition_commit_scheduler_transaction(
+                &scheduler,
+                "SchedulerWakeRecovered",
+                Some(recovered_wake),
+            )?;
+        }
+        *self = transaction;
+        Ok(wake)
     }
 
     /// Release the in-flight slot abandoned by the process that was restored,
@@ -133,9 +258,25 @@ impl World {
         tick: u64,
     ) -> Result<Vec<SchedulerWakeV1>, WorldError> {
         let mut scheduler = self.cognition_scheduler()?;
-        scheduler.release_capacity();
-        let recovered = scheduler.recover_capacity_preserving_cursor(tick);
-        self.cognition_commit_scheduler_transaction(&scheduler, "SchedulerWakeRecovered", None)?;
+        let mut recovered = scheduler.recover_in_flight_preserving_cursor(tick);
+        recovered.extend(scheduler.recover_capacity_preserving_cursor(tick));
+        let mut transaction = self.clone();
+        if recovered.is_empty() {
+            transaction.cognition_commit_scheduler_transaction(
+                &scheduler,
+                "SchedulerWakeRecovered",
+                None,
+            )?;
+        } else {
+            for wake in &recovered {
+                transaction.cognition_commit_scheduler_transaction(
+                    &scheduler,
+                    "SchedulerWakeRecovered",
+                    Some(wake),
+                )?;
+            }
+        }
+        *self = transaction;
         Ok(recovered)
     }
 
@@ -144,6 +285,19 @@ impl World {
             .get("scheduler_state")
             .cloned()
             .unwrap_or(JsonValue::Null)
+    }
+
+    /// Read the durable scheduler leases for the production dispatcher.
+    /// Unconfigured legacy worlds have no cognition leases.
+    pub fn cognition_in_flight_wakes(&self) -> Result<Vec<SchedulerWakeV1>, WorldError> {
+        if self
+            .cognition
+            .get("scheduler_state")
+            .is_none_or(JsonValue::is_null)
+        {
+            return Ok(Vec::new());
+        }
+        Ok(self.cognition_scheduler()?.in_flight_wakes())
     }
 
     pub fn cognition_execution_metrics(&self) -> JsonValue {
@@ -167,12 +321,17 @@ impl World {
         conditions: &[WakeConditionV1],
     ) -> Result<WakeEvaluation, WorldError> {
         let head_digest = self.current_state_root_hash()?;
-        self.evaluate_cognition_wake_with_context(
-            conditions,
-            WakeEvaluationContext::at(self.state.time)
-                .with_evaluation_head(&head_digest)
-                .with_reorg_epoch(self.cognition_reorg_epoch()),
-        )
+        let (event_digests, receipt_ids) = self.cognition_committed_evidence()?;
+        let mut context = WakeEvaluationContext::at(self.state.time)
+            .with_evaluation_head(&head_digest)
+            .with_reorg_epoch(self.cognition_reorg_epoch());
+        for digest in &event_digests {
+            context = context.with_event(digest);
+        }
+        for receipt_id in &receipt_ids {
+            context = context.with_receipt(receipt_id);
+        }
+        self.evaluate_cognition_wake_with_context(conditions, context)
     }
 
     pub fn evaluate_cognition_wake_from_committed_projection(
@@ -182,12 +341,16 @@ impl World {
         receipt_id: &str,
     ) -> Result<WakeEvaluation, WorldError> {
         let head_digest = self.current_state_root_hash()?;
-        let context = WakeEvaluationContext::at(self.state.time)
-            .with_event(event_digest)
-            .with_receipt(receipt_id)
-            .with_predicate_u64("world.logical_tick", self.state.time)
+        let (event_digests, receipt_ids) = self.cognition_committed_evidence()?;
+        let mut context = WakeEvaluationContext::at(self.state.time)
             .with_reorg_epoch(self.cognition_reorg_epoch())
             .with_evaluation_head(&head_digest);
+        if event_digests.contains(event_digest) {
+            context = context.with_event(event_digest);
+        }
+        if receipt_ids.contains(receipt_id) {
+            context = context.with_receipt(receipt_id);
+        }
         self.evaluate_cognition_wake_with_context(conditions, context)
     }
 
@@ -285,9 +448,10 @@ impl World {
         continuation
             .validate_authoritative()
             .map_err(|error| cognition_validation_error(error.code()))?;
-        let next_wake_tick = continuation
-            .next_wake_tick
-            .ok_or_else(|| cognition_validation_error("continuation_wake_tick_missing"))?;
+        // Untimed event/receipt/state predicates are awakened by committed
+        // evidence. The scheduler uses MAX as a non-timed sentinel and World
+        // selection re-evaluates the typed conditions before delivery.
+        let next_wake_tick = continuation.next_wake_tick.unwrap_or(u64::MAX);
         let mut scheduler = self.cognition_scheduler()?;
         scheduler.advance_logical_tick(self.state.time);
         let wake = SchedulerWakeV1 {
@@ -330,43 +494,9 @@ impl World {
 
     pub fn schedule_cognition_continuation(
         &mut self,
-        mut continuation: AgentContinuation,
+        _continuation: AgentContinuation,
     ) -> Result<(), WorldError> {
-        if continuation.schema_version != CONTINUATION_SCHEMA {
-            return Err(cognition_validation_error("continuation_schema_mismatch"));
-        }
-        if continuation.continuation_status_digest.is_none() {
-            return Err(cognition_validation_error("legacy_continuation_projection"));
-        }
-        WakeConditionValidator::validate(continuation.wake_conditions.as_slice())
-            .map_err(|error| cognition_validation_error(error.code()))?;
-        let derived_next_wake_tick = WakeConditionValidator::next_wake_tick_at(
-            &continuation.wake_conditions,
-            self.state.time,
-        )
-        .map_err(|error| cognition_validation_error(error.code()))?;
-        if continuation.next_wake_tick != derived_next_wake_tick {
-            return Err(cognition_validation_error(
-                "continuation_wake_tick_mismatch",
-            ));
-        }
-        // Legacy adapters may omit the Runtime digest.  Recompute it from
-        // the full projection before persistence so the stored record is
-        // authoritative rather than caller-signed.
-        continuation.refresh_status_digest();
-        continuation
-            .validate_authoritative()
-            .map_err(|error| cognition_validation_error(error.code()))?;
-        let mut continuations = self.cognition_continuations_typed()?;
-        if continuations
-            .iter()
-            .any(|existing| existing.continuation_id == continuation.continuation_id)
-        {
-            return Err(cognition_validation_error("continuation_id_conflict"));
-        }
-        continuations.push(continuation);
-        self.cognition_set_continuations(&continuations)?;
-        Ok(())
+        Err(cognition_validation_error("legacy_continuation_projection"))
     }
 
     /// Apply one Runtime-owned continuation transition and persist its
@@ -377,7 +507,8 @@ impl World {
         to: ContinuationStatusV1,
         logical_tick: u64,
     ) -> Result<AgentContinuation, WorldError> {
-        let mut continuations = self.cognition_continuations_typed()?;
+        let mut transaction = self.clone();
+        let mut continuations = transaction.cognition_continuations_typed()?;
         let continuation = continuations
             .iter_mut()
             .find(|continuation| continuation.continuation_id == continuation_id)
@@ -388,7 +519,23 @@ impl World {
             .validate_authoritative()
             .map_err(|error| cognition_validation_error(error.code()))?;
         let transitioned = continuation.clone();
-        self.cognition_set_continuations(&continuations)?;
+        let mut scheduler = transaction.cognition_scheduler()?;
+        let deactivated = if Self::is_terminal_continuation_status(transitioned.status) {
+            scheduler
+                .deactivate_wake(transitioned.wake_id.as_str())
+                .map_err(|error| scheduler_error(error.code()))?
+        } else {
+            None
+        };
+        let event_kind = Self::continuation_lifecycle_event_kind(transitioned.status);
+        transaction.cognition_commit_continuation_lifecycle_transaction(
+            &continuations,
+            &scheduler,
+            event_kind,
+            &transitioned,
+            deactivated.as_ref(),
+        )?;
+        *self = transaction;
         Ok(transitioned)
     }
 
@@ -396,7 +543,10 @@ impl World {
         &mut self,
         reorg_epoch: u64,
     ) -> Result<JsonValue, WorldError> {
-        let mut continuations = self.cognition_continuations_typed()?;
+        let mut transaction = self.clone();
+        let mut continuations = transaction.cognition_continuations_typed()?;
+        let mut scheduler = transaction.cognition_scheduler()?;
+        let mut transitioned = Vec::new();
         let mut invalidated = 0u64;
         for continuation in &mut continuations {
             if matches!(
@@ -416,8 +566,28 @@ impl World {
             )
             .map_err(|error| cognition_validation_error(error.code()))?;
             invalidated = invalidated.saturating_add(1);
+            let deactivated = scheduler
+                .deactivate_wake(continuation.wake_id.as_str())
+                .map_err(|error| scheduler_error(error.code()))?;
+            transitioned.push((continuation.clone(), deactivated));
         }
-        self.cognition_set_continuations(&continuations)?;
+        for (continuation, deactivated) in &transitioned {
+            transaction.cognition_commit_continuation_lifecycle_transaction(
+                &continuations,
+                &scheduler,
+                "ContinuationInvalidated",
+                continuation,
+                deactivated.as_ref(),
+            )?;
+        }
+        if transitioned.is_empty() {
+            transaction.cognition_commit_scheduler_transaction(
+                &scheduler,
+                "ContinuationReorgChecked",
+                None,
+            )?;
+        }
+        *self = transaction;
         let report = ContinuationReorgReport {
             terminal_disposition: if invalidated > 0 {
                 "reorg_invalidated".to_string()
@@ -496,19 +666,28 @@ impl World {
         conditions: &[WakeConditionV1],
         mut context: WakeEvaluationContext,
     ) -> Result<WakeEvaluationContext, WorldError> {
-        context = context
-            .with_predicate_u64("world.logical_tick", self.state.time)
-            .with_predicate_u64("world.reorg_epoch", self.cognition_reorg_epoch());
-        let state_root = self.current_state_root_hash()?;
-        context = context.with_predicate_value(
-            "world.state_root",
-            &serde_cbor::to_vec(&state_root).map_err(WorldError::from)?,
-        );
-        let manifest_hash = self.current_manifest_hash()?;
-        context = context.with_predicate_value(
-            "world.runtime_manifest_hash",
-            &serde_cbor::to_vec(&manifest_hash).map_err(WorldError::from)?,
-        );
+        let world_id = self.cognition_world_id();
+        let world_predicate_requested = conditions.iter().any(|condition| {
+            condition.kind == "state_predicate"
+                && condition.subject.as_ref().is_some_and(|subject| {
+                    subject.kind == "world" && world_id.as_deref() == Some(subject.id.as_str())
+                })
+        });
+        if world_predicate_requested {
+            context = context
+                .with_predicate_u64("world.logical_tick", self.state.time)
+                .with_predicate_u64("world.reorg_epoch", self.cognition_reorg_epoch());
+            let state_root = self.current_state_root_hash()?;
+            context = context.with_predicate_value(
+                "world.state_root",
+                &serde_cbor::to_vec(&state_root).map_err(WorldError::from)?,
+            );
+            let manifest_hash = self.current_manifest_hash()?;
+            context = context.with_predicate_value(
+                "world.runtime_manifest_hash",
+                &serde_cbor::to_vec(&manifest_hash).map_err(WorldError::from)?,
+            );
+        }
         for condition in conditions {
             if condition.kind != "state_predicate" {
                 continue;
@@ -573,6 +752,19 @@ impl World {
         Ok(context)
     }
 
+    fn cognition_world_id(&self) -> Option<String> {
+        self.cognition
+            .get("runtime_binding")
+            .and_then(|binding| binding.get("world_id"))
+            .and_then(JsonValue::as_str)
+            .filter(|world_id| !world_id.trim().is_empty())
+            .map(str::to_string)
+            .or_else(|| {
+                let world_id = self.chain_resource_manifest().world_id.clone();
+                (world_id != "unbound").then_some(world_id)
+            })
+    }
+
     fn cognition_reorg_epoch(&self) -> u64 {
         self.state
             .agent_intent_ledger
@@ -590,6 +782,48 @@ impl World {
             .cloned()
             .ok_or_else(|| cognition_validation_error("scheduler_unconfigured"))?;
         CognitionScheduler::from_snapshot_json(state).map_err(|error| scheduler_error(error.code()))
+    }
+
+    fn cognition_wake_has_active_continuation(
+        &self,
+        wake: &SchedulerWakeV1,
+        continuations: &[AgentContinuation],
+    ) -> bool {
+        let Some(continuation) = continuations
+            .iter()
+            .find(|continuation| continuation.continuation_id == wake.continuation_id)
+        else {
+            // Legacy scheduler-only wakes remain selectable; there is no
+            // continuation status to invalidate for those projections.
+            return true;
+        };
+        !matches!(
+            continuation.status,
+            ContinuationStatusV1::Completed
+                | ContinuationStatusV1::Cancelled
+                | ContinuationStatusV1::Invalidated
+                | ContinuationStatusV1::Expired
+                | ContinuationStatusV1::Rejected
+        )
+    }
+
+    fn cognition_wake_conditions_ready(
+        &self,
+        wake: &SchedulerWakeV1,
+        continuations: &[AgentContinuation],
+    ) -> bool {
+        let Some(continuation) = continuations
+            .iter()
+            .find(|continuation| continuation.continuation_id == wake.continuation_id)
+        else {
+            return true;
+        };
+        if !self.cognition_wake_has_active_continuation(wake, continuations) {
+            return false;
+        }
+        self.evaluate_cognition_wake(&continuation.wake_conditions)
+            .map(|evaluation| evaluation.status == "ready")
+            .unwrap_or(false)
     }
 
     fn validate_cognition_wake_binding(&self, wake: &SchedulerWakeV1) -> Result<(), WorldError> {

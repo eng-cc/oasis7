@@ -10,7 +10,8 @@ const WORLD_ID: &str = "world-runtime-hardening";
 const AGENT_ID: &str = "agent-runtime-hardening";
 
 fn digest(seed: u8) -> String {
-    format!("blake3:{}", char::from(b'a' + seed).to_string().repeat(64))
+    let hex = b"0123456789abcdef"[(seed % 16) as usize] as char;
+    format!("blake3:{}", hex.to_string().repeat(64))
 }
 
 fn envelope(world: &World) -> AgentDecisionEnvelopeV1 {
@@ -39,7 +40,13 @@ fn envelope(world: &World) -> AgentDecisionEnvelopeV1 {
         valid_until_tick: world.state().time + 10,
         preconditions: Vec::new(),
         decision_kind: "wait".to_string(),
-        action: json!({"type": "wait"}),
+        action: json!({
+            "type": "RegisterAgent",
+            "data": {
+                "agent_id": AGENT_ID,
+                "pos": {"x_cm": 0, "y_cm": 0, "z_cm": 0}
+            }
+        }),
         request_digest,
         decision_digest: String::new(),
         envelope_digest: String::new(),
@@ -53,6 +60,57 @@ fn envelope(world: &World) -> AgentDecisionEnvelopeV1 {
     envelope.provider_invocation_key = envelope.derive_provider_invocation_key();
     envelope.envelope_idempotency_key = envelope.derive_envelope_idempotency_key();
     envelope
+}
+
+fn continuous_commit_request(world: &World) -> RuntimeCognitionCommitRequestV1 {
+    let binding = world
+        .current_cognition_runtime_binding()
+        .expect("current runtime binding");
+    RuntimeCognitionCommitRequestV1 {
+        agent_id: AGENT_ID.to_string(),
+        agent_session_id: "session.runtime-continuous".to_string(),
+        agent_turn_id: "turn.runtime-continuous".to_string(),
+        decision_request_id: "request.runtime-continuous".to_string(),
+        retry_seq: 1,
+        transport_attempt: 1,
+        request_digest: digest(12),
+        observation_digest: digest(13),
+        context_digest: digest(14),
+        capability_snapshot_hash: digest(15),
+        authority_context_hash: digest(16),
+        captured_base_binding: RuntimeCognitionBaseBindingV1 {
+            world_id: binding.world_id,
+            branch_id: binding.branch_id,
+            finality_epoch: binding.finality_epoch,
+            finality_block_hash: binding.finality_block_hash.map(|hash| hash.to_string()),
+            finality_status: binding.finality_status,
+            base_tick: binding.base_tick,
+            base_world_hash: binding.base_world_hash.to_string(),
+            reorg_epoch: binding.reorg_epoch,
+            runtime_manifest_hash: binding.runtime_manifest_hash.to_string(),
+        },
+    }
+}
+
+fn continuous_response_artifact(
+    request: &RuntimeCognitionCommitRequestV1,
+) -> RuntimeCognitionResponseArtifactV1 {
+    let mut artifact = RuntimeCognitionResponseArtifactV1 {
+        schema_version: 1,
+        context_discriminator: RuntimeCognitionResponseArtifactV1::CONTEXT_DISCRIMINATOR
+            .to_string(),
+        context_version: RuntimeCognitionResponseArtifactV1::CONTEXT_VERSION,
+        agent_session_id: request.agent_session_id.clone(),
+        agent_turn_id: request.agent_turn_id.clone(),
+        decision_request_id: request.decision_request_id.clone(),
+        retry_seq: request.retry_seq,
+        transport_attempt: request.transport_attempt,
+        request_digest: request.request_digest.clone(),
+        response_digest: digest(17),
+        artifact_digest: String::new(),
+    };
+    artifact.refresh_artifact_digest();
+    artifact
 }
 
 fn policy() -> SchedulerPolicyV1 {
@@ -158,6 +216,430 @@ fn world_commit_prepare_finalize_is_bound_and_receipt_is_world_derived() {
     assert_eq!(lineage.agent_id, envelope.agent_id);
     assert_eq!(lineage.request_digest, envelope.request_digest);
     assert!(world.verify_runtime_receipt_lineage(&lineage).is_ok());
+}
+
+#[test]
+fn continuous_commit_api_derives_world_authority_and_reads_back_lineage() {
+    let mut world = World::new();
+    world
+        .bind_cognition_runtime(WORLD_ID, "main", 0, None, "pending", 0)
+        .expect("bind World authority");
+    let runtime_binding = world
+        .current_cognition_runtime_binding()
+        .expect("derive canonical World binding");
+    runtime_binding.validate().expect("binding validates");
+    assert_eq!(runtime_binding.base_tick, world.state().time);
+    assert!(runtime_binding.base_world_hash.is_canonical_blake3());
+    assert!(runtime_binding.runtime_manifest_hash.is_canonical_blake3());
+    assert_ne!(
+        runtime_binding.base_world_hash.as_str(),
+        world.current_state_root_hash().expect("raw state root")
+    );
+    let request = continuous_commit_request(&world);
+    request
+        .validate()
+        .expect("continuous request fixture validates");
+    let artifact = continuous_response_artifact(&request);
+    let action: Action = serde_json::from_value(json!({
+        "type": "RegisterAgent",
+        "data": {
+            "agent_id": AGENT_ID,
+            "pos": {"x_cm": 0, "y_cm": 0, "z_cm": 0}
+        }
+    }))
+    .expect("runtime action");
+
+    let (committed, lineage) = world
+        .commit_cognition_action(request.clone(), action, artifact)
+        .expect("World-owned continuous commit");
+
+    assert_eq!(committed.world_id, WORLD_ID);
+    assert_eq!(committed.agent_id, request.agent_id);
+    assert_eq!(committed.action_id, "action:1");
+    assert!(
+        world
+            .journal()
+            .events
+            .iter()
+            .any(|event| event.caused_by == Some(CausedBy::Action(1)))
+    );
+    assert_eq!(world.state().time, 1);
+    assert_eq!(lineage.receipt_id, committed.receipt_id);
+    assert_eq!(lineage.request_digest, request.request_digest);
+    world
+        .verify_runtime_receipt_lineage(&lineage)
+        .expect("readback lineage remains World-bound");
+    world
+        .replay_cognition_response(&committed.envelope_digest)
+        .expect("typed response artifact replays only with its marker binding");
+}
+
+#[test]
+fn continuous_commit_api_rejects_response_outer_lineage_mismatch() {
+    let mut world = World::new();
+    world
+        .bind_cognition_runtime(WORLD_ID, "main", 0, None, "pending", 0)
+        .expect("bind World authority");
+    let request = continuous_commit_request(&world);
+    let mut artifact = continuous_response_artifact(&request);
+    artifact.transport_attempt = artifact.transport_attempt.saturating_add(1);
+    artifact.refresh_artifact_digest();
+    let cognition_before = world.cognition().clone();
+    let action: Action = serde_json::from_value(json!({
+        "type": "RegisterAgent",
+        "data": {
+            "agent_id": AGENT_ID,
+            "pos": {"x_cm": 0, "y_cm": 0, "z_cm": 0}
+        }
+    }))
+    .expect("runtime action");
+
+    assert!(
+        world
+            .commit_cognition_action(request, action, artifact)
+            .is_err()
+    );
+    assert_eq!(world.state().time, 0);
+    assert_eq!(world.cognition(), &cognition_before);
+}
+
+#[test]
+fn continuous_commit_rejects_a_stale_captured_world_head() {
+    let mut world = World::new();
+    world
+        .bind_cognition_runtime(WORLD_ID, "main", 0, None, "pending", 0)
+        .expect("bind World authority");
+    let request = continuous_commit_request(&world);
+    world.step().expect("advance World head");
+    let world_journal_before = world.journal().clone();
+    let action: Action = serde_json::from_value(json!({
+        "type": "RegisterAgent",
+        "data": {
+            "agent_id": AGENT_ID,
+            "pos": {"x_cm": 0, "y_cm": 0, "z_cm": 0}
+        }
+    }))
+    .expect("runtime action");
+    let artifact = continuous_response_artifact(&request);
+    let state_root_before = world.current_state_root_hash().expect("current root");
+    let cognition_before = world.cognition().clone();
+
+    let first = world
+        .commit_cognition_action(request.clone(), action.clone(), artifact.clone())
+        .expect_err("a request captured before the World head moved must be rejected");
+    assert!(matches!(
+        first,
+        WorldError::DistributedValidationFailed { ref reason } if reason == "stale_base"
+    ));
+    assert_eq!(
+        world.current_state_root_hash().expect("root unchanged"),
+        state_root_before
+    );
+    assert_eq!(world.journal(), &world_journal_before);
+    assert_eq!(
+        world.cognition()["commit_records"],
+        cognition_before["commit_records"]
+    );
+    assert!(
+        world.cognition()["receipt_registry"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    let events = world.cognition()["cognition_journal"]["events"]
+        .as_array()
+        .expect("terminal events");
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0]["kind"], "DecisionRejected");
+    assert_eq!(events[1]["kind"], "CognitionTurnCompleted");
+    assert_eq!(events[1]["status"], "rejected");
+
+    let cognition_after_first = world.cognition().clone();
+    world.step().expect("advance again before stale replay");
+    let replay = world
+        .commit_cognition_action(request, action, artifact)
+        .expect_err("same stale identity must replay stale_base");
+    assert!(matches!(
+        replay,
+        WorldError::DistributedValidationFailed { ref reason } if reason == "stale_base"
+    ));
+    assert_eq!(world.cognition(), &cognition_after_first);
+}
+
+#[test]
+fn cognition_commit_error_classifier_is_typed_and_preserves_stable_code() {
+    let stale = WorldError::DistributedValidationFailed {
+        reason: "stale_base".to_string(),
+    };
+    assert_eq!(
+        classify_cognition_commit_error(&stale),
+        Some(CognitionCommitRejectReasonV1::StaleBase)
+    );
+    assert_eq!(
+        CognitionCommitRejectReasonV1::StaleBase.code(),
+        "stale_base"
+    );
+
+    let legacy_stale = WorldError::DistributedValidationFailed {
+        reason: "cognition validation failed: cognition_base_binding_stale".to_string(),
+    };
+    assert_eq!(
+        classify_cognition_commit_error(&legacy_stale),
+        Some(CognitionCommitRejectReasonV1::StaleBase)
+    );
+
+    let unrelated = WorldError::DistributedValidationFailed {
+        reason: "cognition validation failed: response_digest_mismatch".to_string(),
+    };
+    assert_eq!(classify_cognition_commit_error(&unrelated), None);
+}
+
+#[test]
+fn stale_delayed_response_is_durable_rejection_and_idempotent_replay() {
+    let mut world = World::new();
+    world
+        .bind_cognition_runtime(WORLD_ID, "main", 0, None, "pending", 0)
+        .expect("bind World authority");
+    let stale = envelope(&world);
+    world
+        .step()
+        .expect("advance World head before delayed response");
+
+    let state_root_before = world.current_state_root_hash().expect("current root");
+    let journal_before = world.journal().clone();
+    let first = world
+        .prepare_cognition_envelope(stale.clone(), Some(json!({"decision": "wait"})))
+        .expect_err("delayed response must be rejected as stale_base");
+    assert!(matches!(
+        first,
+        WorldError::DistributedValidationFailed { ref reason } if reason == "stale_base"
+    ));
+    assert_eq!(
+        world.current_state_root_hash().expect("root unchanged"),
+        state_root_before
+    );
+    assert_eq!(
+        world.journal(),
+        &journal_before,
+        "stale response submitted no world action"
+    );
+    assert!(
+        world.cognition()["commit_records"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        world.cognition()["receipt_registry"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(world.pending_effects_len(), 0);
+
+    let events = world.cognition()["cognition_journal"]["events"]
+        .as_array()
+        .expect("durable cognition events");
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0]["kind"], "DecisionRejected");
+    assert_eq!(events[1]["kind"], "CognitionTurnCompleted");
+    for event in events {
+        for (field, value) in [
+            ("agent_id", json!(stale.agent_id)),
+            ("agent_session_id", json!(stale.agent_session_id)),
+            ("agent_turn_id", json!(stale.agent_turn_id)),
+            ("decision_request_id", json!(stale.decision_request_id)),
+            ("request_digest", json!(stale.request_digest)),
+            ("envelope_digest", json!(stale.envelope_digest)),
+            (
+                "envelope_idempotency_key",
+                json!(stale.envelope_idempotency_key),
+            ),
+        ] {
+            assert_eq!(event[field], value, "terminal event lost {field}");
+        }
+    }
+    assert_eq!(events[0]["reject_reason"], "stale_base");
+    assert_eq!(events[1]["status"], "rejected");
+
+    let dir = temp_dir("stale-terminal");
+    world
+        .save_to_dir(&dir)
+        .expect("persist stale terminal projection");
+    let mut restored = World::load_from_dir(&dir).expect("restore stale terminal projection");
+    assert_eq!(restored.cognition(), world.cognition());
+    let cognition_after_first = restored.cognition().clone();
+    restored.step().expect("advance again before stale replay");
+    let replay = restored
+        .prepare_cognition_envelope(stale, Some(json!({"decision": "wait"})))
+        .expect_err("same stale identity remains stale_base");
+    assert!(matches!(
+        replay,
+        WorldError::DistributedValidationFailed { ref reason } if reason == "stale_base"
+    ));
+    assert_eq!(restored.cognition(), &cognition_after_first);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn scheduler_persists_selected_wake_identity_and_releases_it_on_cancel() {
+    let mut world = World::new()
+        .try_with_cognition_scheduler(policy(), 1)
+        .expect("validated scheduler");
+    let admitted = world
+        .admit_cognition_continuation(proposal(&world))
+        .expect("admit continuation");
+    world.step().expect("advance to wake tick");
+    let selected = world
+        .select_ready_cognition_wakes(world.state().time)
+        .expect("select ready wake");
+    if selected.is_empty() {
+        // The production World tick may already own the scheduler lease.
+        assert_eq!(
+            world.cognition_scheduler_snapshot()["in_flight"][admitted.wake_id.as_str()]["wake_id"],
+            admitted.wake_id
+        );
+    } else {
+        assert_eq!(selected.len(), 1);
+    }
+    let before = world.cognition_scheduler_snapshot();
+    assert_eq!(
+        before["in_flight"][admitted.wake_id.as_str()]["wake_id"],
+        admitted.wake_id
+    );
+
+    let dir = temp_dir("in-flight-wake");
+    world.save_to_dir(&dir).expect("save selected wake");
+    let mut restored = World::load_from_dir(&dir).expect("restore selected wake");
+    assert_eq!(
+        restored.cognition_scheduler_snapshot()["in_flight"][admitted.wake_id.as_str()],
+        before["in_flight"][admitted.wake_id.as_str()]
+    );
+    let recovered = restored
+        .recover_cognition_scheduler(restored.state().time)
+        .expect("recover selected wake without dropping its identity");
+    assert_eq!(recovered.len(), 1);
+    assert_eq!(recovered[0].wake_id, admitted.wake_id);
+    assert_eq!(
+        restored.cognition_scheduler_snapshot()["active"][0]["wake_id"],
+        admitted.wake_id
+    );
+    restored
+        .transition_cognition_continuation(
+            admitted.continuation_id.as_str(),
+            ContinuationStatusV1::Cancelled,
+            restored.state().time,
+        )
+        .expect("cancel selected continuation");
+    assert!(
+        restored.cognition_scheduler_snapshot()["in_flight"]
+            .get(admitted.wake_id.as_str())
+            .is_none(),
+        "terminal cancellation must release the exact in-flight wake"
+    );
+    let kinds: Vec<&str> = restored.cognition()["cognition_journal"]["events"]
+        .as_array()
+        .expect("journal events")
+        .iter()
+        .filter_map(|event| event["kind"].as_str())
+        .collect();
+    assert!(kinds.contains(&"SchedulerWakeSelected"));
+    assert!(kinds.contains(&"ContinuationCancelled"));
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn event_receipt_and_state_only_continuations_admit_without_a_forced_tick() {
+    let mut world = World::new()
+        .try_with_cognition_scheduler(policy(), 8)
+        .expect("validated scheduler");
+    let cases = [
+        (
+            "event",
+            WakeConditionV1 {
+                schema_version: "wake-condition.v1".to_string(),
+                kind: "world_event_committed".to_string(),
+                logical_tick: None,
+                event_digest: Some(digest(21)),
+                receipt_id: None,
+                subject: None,
+                path_or_rule: None,
+                operator: None,
+                expected_value_bytes: None,
+            },
+        ),
+        (
+            "receipt",
+            WakeConditionV1 {
+                schema_version: "wake-condition.v1".to_string(),
+                kind: "receipt_linked".to_string(),
+                logical_tick: None,
+                event_digest: None,
+                receipt_id: Some("receipt:untimed".to_string()),
+                subject: None,
+                path_or_rule: None,
+                operator: None,
+                expected_value_bytes: None,
+            },
+        ),
+        (
+            "state",
+            WakeConditionV1 {
+                schema_version: "wake-condition.v1".to_string(),
+                kind: "state_predicate".to_string(),
+                logical_tick: None,
+                event_digest: None,
+                receipt_id: None,
+                subject: Some(PreconditionSubjectV1 {
+                    kind: "world".to_string(),
+                    id: WORLD_ID.to_string(),
+                }),
+                path_or_rule: Some("world.logical_tick".to_string()),
+                operator: Some("eq".to_string()),
+                expected_value_bytes: Some(vec![0]),
+            },
+        ),
+    ];
+    let mut state_continuation_id = String::new();
+    for (suffix, condition) in cases {
+        let mut candidate = proposal(&world);
+        candidate.continuation_proposal_id = format!("proposal.untimed-{suffix}");
+        candidate.wake_conditions = vec![condition];
+        candidate.next_wake_tick = None;
+        candidate.proposal_digest = candidate.proposal_digest();
+        let admitted = world
+            .admit_cognition_continuation(candidate)
+            .expect("untimed continuation admission");
+        assert!(admitted.next_wake_tick.is_none());
+        if suffix == "state" {
+            state_continuation_id = admitted.continuation_id;
+        }
+    }
+    let selected = world
+        .select_ready_cognition_wakes(world.state().time)
+        .expect("state predicate wakes evaluate without a forced tick");
+    assert!(
+        selected
+            .iter()
+            .any(|wake| wake.continuation_id == state_continuation_id)
+    );
+}
+
+#[test]
+fn cognition_finalize_linearizes_the_world_action_before_publishing_receipt() {
+    let mut world = World::new();
+    let parent_root = world.current_state_root_hash().expect("parent root");
+    let prepared = world
+        .prepare_cognition_envelope(envelope(&world), Some(json!({"decision": "register"})))
+        .expect("prepare");
+    let committed = world
+        .finalize_cognition_commit(&prepared.commit_id)
+        .expect("finalize");
+
+    assert_eq!(committed.status, "committed");
+    assert_ne!(committed.staged_state_root, parent_root);
+    assert_eq!(world.state().time, 1);
+    assert!(world.state().agents.contains_key(AGENT_ID));
 }
 
 #[test]
@@ -274,5 +756,128 @@ fn response_replay_rejects_missing_or_mismatched_journal_head() {
     write_snapshot(&dir, &snapshot);
     fs::remove_dir_all(dir.join(".distfs-state")).expect("force JSON restore");
     assert!(World::load_from_dir(&dir).is_err());
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn restore_rejects_consistently_tampered_commit_digest() {
+    let mut world = World::new();
+    let prepared = world
+        .prepare_cognition_envelope(envelope(&world), Some(json!({"decision": "register"})))
+        .expect("prepare");
+    let committed = world
+        .finalize_cognition_commit(&prepared.commit_id)
+        .expect("finalize");
+    let dir = temp_dir("tampered-commit-digest");
+    world.save_to_dir(&dir).expect("save");
+    let mut snapshot = read_snapshot(&dir);
+    let forged_digest = "blake3:forged-commit-receipt-digest";
+    snapshot["cognition"]["commit_records"][0]["receipt_digest"] = json!(forged_digest);
+    snapshot["cognition"]["receipt_registry"][0]["receipt_digest"] = json!(forged_digest);
+    snapshot["cognition"]["receipt_lineage_registry"][0]["receipt_digest"] = json!(forged_digest);
+    write_snapshot(&dir, &snapshot);
+    fs::remove_dir_all(dir.join(".distfs-state")).expect("force JSON restore");
+    assert!(
+        World::load_from_dir(&dir).is_err(),
+        "consistent receipt tampering must fail closed"
+    );
+    let _ = fs::remove_dir_all(dir);
+    let _ = committed;
+}
+
+#[test]
+fn restore_rejects_noncanonical_response_digest() {
+    let mut world = World::new();
+    let prepared = world
+        .prepare_cognition_envelope(envelope(&world), Some(json!({"decision": "register"})))
+        .expect("prepare");
+    world
+        .finalize_cognition_commit(&prepared.commit_id)
+        .expect("finalize");
+    let dir = temp_dir("noncanonical-response-digest");
+    world.save_to_dir(&dir).expect("save");
+    let mut snapshot = read_snapshot(&dir);
+    snapshot["cognition"]["responses"][0]["response_digest"] = json!("forged");
+    write_snapshot(&dir, &snapshot);
+    fs::remove_dir_all(dir.join(".distfs-state")).expect("force JSON restore");
+    assert!(
+        World::load_from_dir(&dir).is_err(),
+        "noncanonical response digest must fail closed"
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn recovery_reconciles_every_committed_marker_not_only_the_latest() {
+    let mut world = World::new();
+    let first = envelope(&world);
+    let first_commit = world
+        .prepare_cognition_envelope(first.clone(), Some(json!({"decision": "register"})))
+        .expect("first prepare");
+    let first_commit = world
+        .finalize_cognition_commit(&first_commit.commit_id)
+        .expect("first finalize");
+
+    let mut second = envelope(&world);
+    second.agent_turn_id = "turn.runtime-hardening-2".to_string();
+    second.decision_request_id = "request.runtime-hardening-2".to_string();
+    second.request_digest = digest(10);
+    second.retry_seq = 2;
+    second.decision_digest = second.derive_decision_digest();
+    second.envelope_digest = second.derive_envelope_digest();
+    second.provider_invocation_key = second.derive_provider_invocation_key();
+    second.envelope_idempotency_key = second.derive_envelope_idempotency_key();
+    let second_commit = world
+        .prepare_cognition_envelope(second.clone(), Some(json!({"decision": "register"})))
+        .expect("second prepare");
+    let second_commit = world
+        .finalize_cognition_commit(&second_commit.commit_id)
+        .expect("second finalize");
+
+    let dir = temp_dir("all-committed-markers");
+    world.save_to_dir(&dir).expect("save");
+    let mut snapshot = read_snapshot(&dir);
+    snapshot["cognition"]["receipt_registry"] = json!([{
+        "receipt_id": second_commit.receipt_id,
+        "receipt_digest": second_commit.receipt_digest
+    }]);
+    snapshot["cognition"]["idempotency_index"]
+        .as_object_mut()
+        .expect("idempotency object")
+        .remove(&first.envelope_idempotency_key);
+    snapshot["cognition"]["receipt_lineage_registry"] = json!([{
+        "schema_version": "runtime-receipt-lineage.v1",
+        "status": "committed",
+        "receipt_id": second_commit.receipt_id,
+        "receipt_digest": second_commit.receipt_digest,
+        "envelope_digest": second_commit.envelope_digest,
+        "action_id": second_commit.action_id,
+        "agent_id": second.agent_id,
+        "agent_session_id": second.agent_session_id,
+        "agent_turn_id": second.agent_turn_id,
+        "decision_request_id": second.decision_request_id,
+        "request_digest": second.request_digest,
+        "feedback_id": second_commit.feedback_id
+    }]);
+    snapshot["cognition"]["cognition_journal"]["events"] =
+        snapshot["cognition"]["cognition_journal"]["events"]
+            .as_array()
+            .expect("journal events")
+            .iter()
+            .filter(|event| event["receipt_id"] != first_commit.receipt_id)
+            .cloned()
+            .collect();
+    write_snapshot(&dir, &snapshot);
+    fs::remove_dir_all(dir.join(".distfs-state")).expect("force JSON restore");
+
+    let restored = World::load_from_dir(&dir).expect("restore all committed markers");
+    assert!(
+        restored.cognition()["receipt_registry"]
+            .as_array()
+            .expect("receipt registry")
+            .iter()
+            .any(|receipt| receipt["receipt_id"] == first_commit.receipt_id),
+        "recovery must repair an earlier committed receipt too"
+    );
     let _ = fs::remove_dir_all(dir);
 }

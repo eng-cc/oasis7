@@ -16,8 +16,13 @@ mod capability_authorization;
 mod capability_authorization_admin;
 mod capability_authorization_events;
 mod capability_authorization_state;
+mod capability_authorization_transaction;
 mod capability_authorization_validation;
+mod capability_catalog;
+#[cfg(test)]
+mod capability_test_fixture;
 mod cognition_command;
+mod cognition_feedback;
 mod cognition_orchestration;
 mod cognition_persistence;
 mod cognition_persistence_validation;

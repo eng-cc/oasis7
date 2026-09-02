@@ -57,6 +57,18 @@ pub struct WorldCommitRecordV1 {
     pub request_digest: String,
     #[serde(default)]
     pub feedback_id: String,
+    /// Optional continuous-agent response binding. Legacy markers omit these
+    /// fields; the strict World conversion seam fills them before finalize.
+    #[serde(default)]
+    pub response_context_discriminator: String,
+    #[serde(default)]
+    pub response_context_version: u16,
+    #[serde(default)]
+    pub response_retry_seq: u64,
+    #[serde(default)]
+    pub transport_attempt: u64,
+    #[serde(default)]
+    pub response_artifact_digest: String,
     #[serde(default)]
     pub abort_reason: Option<String>,
 }
@@ -101,6 +113,311 @@ pub struct RuntimeReceiptLineageV1 {
     pub decision_request_id: String,
     pub request_digest: String,
     pub feedback_id: String,
+}
+
+/// Durable Runtime-owned delivery record for provider feedback. The payload is
+/// retained as canonical JSON so adapters can transport the exact envelope,
+/// while the identity and retry state remain under World authority.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuntimeFeedbackOutboxRecordV1 {
+    pub schema_version: String,
+    pub feedback_id: String,
+    pub feedback_seq: u64,
+    pub agent_subject: String,
+    pub agent_session_id: String,
+    pub agent_turn_id: String,
+    pub decision_request_id: String,
+    pub request_digest: String,
+    pub envelope_digest: String,
+    pub payload: JsonValue,
+    pub state: String,
+    pub attempt: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+}
+
+impl RuntimeFeedbackOutboxRecordV1 {
+    pub const SCHEMA_VERSION: &'static str = "runtime-feedback-outbox.v1";
+
+    pub fn validate(&self) -> Result<(), CognitionRecoveryError> {
+        let bounded = |value: &str| !value.trim().is_empty() && value.len() <= 256;
+        let valid_state = matches!(self.state.as_str(), "pending" | "in_flight" | "acked");
+        let payload =
+            serde_json::from_value::<crate::simulator::FeedbackEnvelopeV1>(self.payload.clone())
+                .map_err(|_| CognitionRecoveryError::new("runtime_feedback_payload_invalid"))?;
+        let canonical_payload = serde_json::to_value(&payload)
+            .map_err(|_| CognitionRecoveryError::new("runtime_feedback_payload_invalid"))?;
+        let envelope_digest =
+            cognition_digest_v1("oasis7.runtime.feedback-envelope.v1", &canonical_payload);
+        let feedback_contract_valid = payload.provenance == "runtime_authoritative"
+            && matches!(
+                payload.status.as_str(),
+                "pending" | "committed" | "rejected" | "failed"
+            )
+            && (payload.status != "committed"
+                || (payload.candidate_action_id.is_some()
+                    && payload
+                        .runtime_receipt_id
+                        .as_deref()
+                        .is_some_and(|receipt_id| !receipt_id.trim().is_empty())));
+        if self.schema_version != Self::SCHEMA_VERSION
+            || !bounded(&self.feedback_id)
+            || self.feedback_seq == 0
+            || !bounded(&self.agent_subject)
+            || !bounded(&self.agent_session_id)
+            || !bounded(&self.agent_turn_id)
+            || !bounded(&self.decision_request_id)
+            || !canonical_blake3(&self.request_digest)
+            || self.envelope_digest != envelope_digest
+            || !feedback_contract_valid
+            || !valid_state
+            || self.payload != canonical_payload
+            || payload.feedback_id != self.feedback_id
+            || payload.feedback_seq != self.feedback_seq
+            || payload.agent_subject != self.agent_subject
+            || payload.agent_session_id != self.agent_session_id
+            || payload.agent_turn_id != self.agent_turn_id
+            || payload.decision_request_id != self.decision_request_id
+            || payload.request_digest.to_string() != self.request_digest
+        {
+            return Err(CognitionRecoveryError::new(
+                "runtime_feedback_outbox_record_invalid",
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn from_feedback(
+        feedback: &crate::simulator::FeedbackEnvelopeV1,
+    ) -> Result<Self, CognitionRecoveryError> {
+        let payload = serde_json::to_value(feedback)
+            .map_err(|_| CognitionRecoveryError::new("runtime_feedback_payload_invalid"))?;
+        if feedback.feedback_id.trim().is_empty()
+            || feedback.feedback_seq == 0
+            || feedback.agent_subject.trim().is_empty()
+            || feedback.agent_session_id.trim().is_empty()
+            || feedback.agent_turn_id.trim().is_empty()
+            || feedback.decision_request_id.trim().is_empty()
+            || !feedback.request_digest.is_canonical_blake3()
+            || feedback.provenance != "runtime_authoritative"
+            || !matches!(
+                feedback.status.as_str(),
+                "pending" | "committed" | "rejected" | "failed"
+            )
+            || (feedback.status == "committed"
+                && (feedback.candidate_action_id.is_none()
+                    || feedback
+                        .runtime_receipt_id
+                        .as_deref()
+                        .is_none_or(|receipt_id| receipt_id.trim().is_empty())))
+        {
+            return Err(CognitionRecoveryError::new(
+                "runtime_feedback_outbox_feedback_invalid",
+            ));
+        }
+        let envelope_digest = cognition_digest_v1("oasis7.runtime.feedback-envelope.v1", &payload);
+        let record = Self {
+            schema_version: Self::SCHEMA_VERSION.to_string(),
+            feedback_id: feedback.feedback_id.clone(),
+            feedback_seq: feedback.feedback_seq,
+            agent_subject: feedback.agent_subject.clone(),
+            agent_session_id: feedback.agent_session_id.clone(),
+            agent_turn_id: feedback.agent_turn_id.clone(),
+            decision_request_id: feedback.decision_request_id.clone(),
+            request_digest: feedback.request_digest.to_string(),
+            envelope_digest,
+            payload,
+            state: "pending".to_string(),
+            attempt: 0,
+            last_error: None,
+        };
+        record.validate()?;
+        Ok(record)
+    }
+}
+
+/// World-head identity captured with a continuous-agent request.  This is a
+/// value object rather than an adapter-owned assertion: admission compares it
+/// with the current World binding before allocating any commit IDs.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuntimeCognitionBaseBindingV1 {
+    pub world_id: String,
+    pub branch_id: String,
+    pub finality_epoch: u64,
+    #[serde(default)]
+    pub finality_block_hash: Option<String>,
+    pub finality_status: String,
+    pub base_tick: u64,
+    pub base_world_hash: String,
+    pub reorg_epoch: u64,
+    pub runtime_manifest_hash: String,
+}
+
+impl RuntimeCognitionBaseBindingV1 {
+    pub fn validate(&self) -> Result<(), CognitionRecoveryError> {
+        let bounded = |value: &str| !value.trim().is_empty() && value.len() <= 256;
+        if !bounded(&self.world_id)
+            || !bounded(&self.branch_id)
+            || !bounded(&self.finality_status)
+            || !bounded(&self.base_world_hash)
+            || !bounded(&self.runtime_manifest_hash)
+            || !matches!(
+                self.finality_status.as_str(),
+                "pending" | "verified" | "reorged" | "suspended"
+            )
+            || (self.finality_status == "verified" && self.finality_block_hash.is_none())
+            || self
+                .finality_block_hash
+                .as_deref()
+                .is_some_and(|hash| hash != "genesis" && !canonical_blake3(hash))
+            || !canonical_blake3(&self.base_world_hash)
+            || !canonical_blake3(&self.runtime_manifest_hash)
+        {
+            return Err(CognitionRecoveryError::new(
+                "runtime_cognition_base_binding_invalid",
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// The non-authoritative portion of a continuous-agent turn accepted by the
+/// Runtime commit seam.  World derives branch, finality, root, manifest,
+/// tick, commit and receipt fields; the adapter supplies only this verified
+/// request correlation and its already-mapped Runtime action.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuntimeCognitionCommitRequestV1 {
+    pub agent_id: String,
+    pub agent_session_id: String,
+    pub agent_turn_id: String,
+    pub decision_request_id: String,
+    pub retry_seq: u64,
+    pub transport_attempt: u64,
+    pub request_digest: String,
+    pub observation_digest: String,
+    /// Canonical digest of the verified outer request context. Runtime treats
+    /// this as an input identity and never derives authority from its text.
+    pub context_digest: String,
+    /// Verified capability/authority snapshots. MvccValidator checks these
+    /// against the current World when the World is bound.
+    pub capability_snapshot_hash: String,
+    pub authority_context_hash: String,
+    /// The exact Runtime binding observed while constructing the outer
+    /// request.  Runtime compares every field against the live World head;
+    /// this prevents a valid request from being committed after a tick or
+    /// reorg changed its authority context.
+    pub captured_base_binding: RuntimeCognitionBaseBindingV1,
+}
+
+impl RuntimeCognitionCommitRequestV1 {
+    pub fn validate(&self) -> Result<(), CognitionRecoveryError> {
+        let bounded = |value: &str| !value.trim().is_empty() && value.len() <= 256;
+        if !bounded(&self.agent_id)
+            || !bounded(&self.agent_session_id)
+            || !bounded(&self.agent_turn_id)
+            || !bounded(&self.decision_request_id)
+            || self.retry_seq == 0
+            || self.transport_attempt == 0
+            || !canonical_blake3(&self.request_digest)
+            || !canonical_blake3(&self.observation_digest)
+            || !canonical_blake3(&self.context_digest)
+            || !canonical_blake3(&self.capability_snapshot_hash)
+            || !canonical_blake3(&self.authority_context_hash)
+        {
+            return Err(CognitionRecoveryError::new(
+                "runtime_cognition_commit_request_invalid",
+            ));
+        }
+        self.captured_base_binding.validate()?;
+        Ok(())
+    }
+}
+
+/// Complete outer response/artifact identity emitted by the continuous-agent
+/// adapter.  It is retained as the response artifact so replay can validate
+/// turn/session/request/retry/transport correlation, not merely content.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuntimeCognitionResponseArtifactV1 {
+    pub schema_version: u16,
+    pub context_discriminator: String,
+    pub context_version: u16,
+    pub agent_session_id: String,
+    pub agent_turn_id: String,
+    pub decision_request_id: String,
+    pub retry_seq: u64,
+    pub transport_attempt: u64,
+    pub request_digest: String,
+    pub response_digest: String,
+    pub artifact_digest: String,
+}
+
+impl RuntimeCognitionResponseArtifactV1 {
+    pub const CONTEXT_DISCRIMINATOR: &'static str = "oasis7.continuous-agent-context";
+    pub const CONTEXT_VERSION: u16 = 1;
+
+    pub fn recompute_artifact_digest(&self) -> String {
+        let mut payload = serde_json::to_value(self).unwrap_or(JsonValue::Null);
+        payload
+            .as_object_mut()
+            .expect("response artifact identity is an object")
+            .remove("artifact_digest");
+        cognition_digest_v1("oasis7.cognition.response-artifact-identity.v1", &payload)
+    }
+
+    pub fn refresh_artifact_digest(&mut self) {
+        self.artifact_digest = self.recompute_artifact_digest();
+    }
+
+    pub fn validate(&self) -> Result<(), CognitionRecoveryError> {
+        let bounded = |value: &str| !value.trim().is_empty() && value.len() <= 256;
+        if self.schema_version != Self::CONTEXT_VERSION
+            || self.context_discriminator != Self::CONTEXT_DISCRIMINATOR
+            || self.context_version != Self::CONTEXT_VERSION
+            || !bounded(&self.agent_session_id)
+            || !bounded(&self.agent_turn_id)
+            || !bounded(&self.decision_request_id)
+            || self.retry_seq == 0
+            || self.transport_attempt == 0
+            || !canonical_blake3(&self.request_digest)
+            || !canonical_blake3(&self.response_digest)
+            || !canonical_blake3(&self.artifact_digest)
+            || self.artifact_digest != self.recompute_artifact_digest()
+        {
+            return Err(CognitionRecoveryError::new(
+                "runtime_cognition_response_artifact_invalid",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn validate_for_request(
+        &self,
+        request: &RuntimeCognitionCommitRequestV1,
+    ) -> Result<(), CognitionRecoveryError> {
+        self.validate()?;
+        if self.agent_session_id != request.agent_session_id
+            || self.agent_turn_id != request.agent_turn_id
+            || self.decision_request_id != request.decision_request_id
+            || self.retry_seq != request.retry_seq
+            || self.transport_attempt != request.transport_attempt
+            || self.request_digest != request.request_digest
+        {
+            return Err(CognitionRecoveryError::new(
+                "runtime_cognition_response_lineage_mismatch",
+            ));
+        }
+        Ok(())
+    }
+}
+
+fn canonical_blake3(value: &str) -> bool {
+    let Some(hex) = value.strip_prefix("blake3:") else {
+        return false;
+    };
+    hex.len() == 64
+        && hex
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
 }
 
 impl RuntimeReceiptLineageV1 {
@@ -351,7 +668,9 @@ pub(crate) fn default_cognition_persistence_projection() -> JsonValue {
         "commit_records": [],
         "receipt_registry": [],
         "receipt_lineage_registry": [],
+        "feedback_outbox": {},
         "idempotency_index": {},
+        "staged_actions": {},
         "scheduler_state": null,
         "continuations": [],
         "recovery": {

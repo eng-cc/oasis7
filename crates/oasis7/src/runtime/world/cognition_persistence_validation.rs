@@ -1,7 +1,7 @@
 use super::World;
 use crate::runtime::cognition_recovery::{
-    CognitionRecoveryReport, CognitionResponseRecordV1, WorldCommitRecordV1, WorldRootViewV1,
-    cognition_digest_v1, response_artifact_digest,
+    CognitionRecoveryReport, CognitionResponseRecordV1, RuntimeCognitionResponseArtifactV1,
+    WorldCommitRecordV1, WorldRootViewV1, cognition_digest_v1, response_artifact_digest,
 };
 use crate::runtime::error::WorldError;
 use serde_json::{Value as JsonValue, json};
@@ -42,6 +42,11 @@ pub(super) fn append_cognition_event(
             .ok_or_else(|| validation("cognition_event_details_not_object"))?;
         event.insert("journal_seq".to_string(), json!(next_seq));
         event.insert("kind".to_string(), json!(kind));
+        let event_digest = cognition_digest_v1(
+            "oasis7.cognition.event.v1",
+            &JsonValue::Object(event.clone()),
+        );
+        event.insert("event_digest".to_string(), json!(event_digest));
         events.push(JsonValue::Object(event));
     }
     journal.insert("head_seq".to_string(), json!(next_seq));
@@ -69,11 +74,15 @@ pub(super) fn validate_marker_current_world(
     }
     let root = world.current_state_root_hash()?;
     let manifest = world.current_manifest_hash()?;
-    if marker.parent_tick != world.state().time
-        || marker.parent_world_hash != root
-        || marker.staged_state_root != root
-        || marker.runtime_manifest_hash != manifest
-    {
+    let head_matches = if marker.status == "prepared" {
+        marker.parent_tick == world.state().time
+            && marker.parent_world_hash == root
+            && marker.staged_state_root == root
+    } else {
+        marker.parent_tick.saturating_add(1) == world.state().time
+            && marker.staged_state_root == root
+    };
+    if !head_matches || marker.runtime_manifest_hash != manifest {
         return Err(validation("cognition_world_head_mismatch"));
     }
     if let Some(binding) = world.cognition().get("runtime_binding") {
@@ -98,12 +107,19 @@ pub(super) fn validate_response_record(
     response: &CognitionResponseRecordV1,
 ) -> Result<(), WorldError> {
     if !is_canonical_digest(&response.response_digest) {
-        return Ok(());
+        return Err(validation("response_digest_noncanonical"));
     }
     let artifact = response
         .response_artifact
         .as_ref()
         .ok_or_else(|| validation("response_artifact_missing"))?;
+    if artifact.get("context_discriminator").is_some() {
+        let identity: RuntimeCognitionResponseArtifactV1 = serde_json::from_value(artifact.clone())
+            .map_err(|_| validation("response_artifact_identity_invalid"))?;
+        identity
+            .validate()
+            .map_err(|_| validation("response_artifact_identity_invalid"))?;
+    }
     if response_artifact_digest(artifact) != response.response_digest {
         return Err(validation("response_artifact_digest_mismatch"));
     }
@@ -122,10 +138,81 @@ pub(super) fn validate_response_record(
         "oasis7.cognition.journal-head.v1",
         &json!({"head_seq": head_seq, "events": events}),
     );
-    if response.journal_head.trim().is_empty() || expected != response.journal_head {
+    if response.journal_head.trim().is_empty()
+        || (!journal_head_history_contains(projection, &response.journal_head)
+            && expected != response.journal_head)
+    {
         return Err(validation("response_journal_head_mismatch"));
     }
     Ok(())
+}
+
+pub(super) fn validate_response_lineage_binding(
+    response: &CognitionResponseRecordV1,
+    marker: &WorldCommitRecordV1,
+) -> Result<(), WorldError> {
+    let Some(artifact) = response.response_artifact.as_ref() else {
+        return Err(validation("response_artifact_missing"));
+    };
+    let Some(_) = artifact.get("context_discriminator") else {
+        return Ok(());
+    };
+    let identity: RuntimeCognitionResponseArtifactV1 = serde_json::from_value(artifact.clone())
+        .map_err(|_| validation("response_artifact_identity_invalid"))?;
+    identity
+        .validate()
+        .map_err(|_| validation("response_artifact_identity_invalid"))?;
+    if marker.response_artifact_digest.is_empty() {
+        return Err(validation("response_artifact_marker_missing"));
+    }
+    if identity.agent_session_id != marker.agent_session_id
+        || identity.agent_turn_id != marker.agent_turn_id
+        || identity.decision_request_id != marker.decision_request_id
+        || identity.context_discriminator != marker.response_context_discriminator
+        || identity.context_version != marker.response_context_version
+        || (marker.response_retry_seq > 0 && identity.retry_seq != marker.response_retry_seq)
+        || (marker.transport_attempt > 0 && identity.transport_attempt != marker.transport_attempt)
+        || identity.request_digest != marker.request_digest
+        || (!marker.response_artifact_digest.is_empty()
+            && response.response_digest != marker.response_artifact_digest)
+    {
+        return Err(validation("response_artifact_lineage_mismatch"));
+    }
+    Ok(())
+}
+
+fn journal_head_history_contains(projection: &JsonValue, candidate: &str) -> bool {
+    let Some(journal) = projection.get("cognition_journal") else {
+        return false;
+    };
+    let Some(events) = journal.get("events").and_then(JsonValue::as_array) else {
+        return false;
+    };
+    let head_seq = journal
+        .get("head_seq")
+        .and_then(JsonValue::as_u64)
+        .unwrap_or_default();
+    for prefix_len in 0..=events.len() {
+        let prefix = &events[..prefix_len];
+        let prefix_seq = prefix
+            .iter()
+            .filter_map(|event| event.get("journal_seq").and_then(JsonValue::as_u64))
+            .max()
+            .unwrap_or_default();
+        let sequence = if prefix_len == events.len() {
+            head_seq.max(prefix_seq)
+        } else {
+            prefix_seq
+        };
+        if cognition_digest_v1(
+            "oasis7.cognition.journal-head.v1",
+            &json!({"head_seq": sequence, "events": prefix}),
+        ) == candidate
+        {
+            return true;
+        }
+    }
+    false
 }
 
 pub(super) fn persist_recovery_report(

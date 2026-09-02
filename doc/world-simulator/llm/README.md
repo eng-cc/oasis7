@@ -24,9 +24,13 @@ and Project for the active task.
   concurrent turns for one Agent. `committed/rejected/failed/pending` are the
   only feedback statuses; cancellation and scheduler backpressure map through
   explicit terminal/pending reasons and late-response cleanup.
-- Loopback target decision traffic uses the `ContinuousAgentRequestContextV1` /
-  `ContinuousAgentResponseContextV1` outer wrappers; old DecisionRequest/Response and feedback
-  DTO bodies are accepted only in an explicitly marked `compatibility_lane=legacy_v1`.
+- Loopback target decision traffic uses
+  `POST /v1/world-simulator/decision-context` with the
+  `ContinuousAgentRequestContextV1` / `ContinuousAgentResponseContextV1` outer wrappers;
+  target feedback uses `POST /v1/world-simulator/feedback-context` with `FeedbackEnvelopeV1`.
+  Bare `/v1/world-simulator/decision` and `/v1/world-simulator/feedback` are
+  legacy compatibility-only routes for the old DTO bodies. The current HTTP body does not carry
+  a `compatibility_lane` field; route/adapter selection is the explicit lane boundary.
 - The target response wrapper preserves tagged `wait/wait_ticks/act/query/module_command/
   module_command_response` variants; Query is read-only, and typed module responses require host
   validation before Runtime handling.
@@ -61,10 +65,14 @@ and Project for the active task.
   themselves prove parity, cost, replay closure, release readiness, or default
   enablement.
 - Legacy DTOs and heuristic fallback are compatibility-only lanes: they require
-  explicit lane markers and `legacy_no_cognition_proof`/`legacy_heuristic_used`,
-  and cannot satisfy production async, target parity, or automatic
-  memory/continuation proof. Target traces and feedback use fixed byte/count
+  an explicitly selected legacy route or fixture/profile, and cannot satisfy production async,
+  target parity, or automatic memory/continuation proof. The current HTTP wire does not define a
+  `compatibility_lane` marker; absence of the target outer context remains non-proof. Target traces and feedback use fixed byte/count
   bounds, deterministic redaction, and negative overflow fixtures.
+- Provider `info.capabilities` and `supported_action_sets` are provider metadata only. They are not
+  a complete Runtime subject-bound capability discovery result; target requests must carry the
+  Runtime-generated capability catalog and invocation context, and no standalone provider
+  endpoint grants or discovers world authority.
 - Evaluation evidence must retain a fixed scenario/fixture/profile/provider/
   adapter/protocol/timeout epoch, per-scenario artifacts, and repeated samples
   for nondeterministic providers.  Aggregate counts or historical samples do

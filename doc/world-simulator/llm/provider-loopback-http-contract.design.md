@@ -8,7 +8,7 @@
 
 ## 2. 设计结构
 - 用户侧本地 provider 层：`Local Provider` 以独立本地服务运行，仅监听 `127.0.0.1`。
-- Adapter 层：world-simulator 内新增 `Local ProviderAdapter`，把 Continuous Harness outer request/response/feedback wrappers（其中保留 `DecisionRequest/DecisionResponse/FeedbackEnvelope` inner DTO）与本地 HTTP API 互转。
+- Adapter 层：world-simulator 内新增 `Local ProviderAdapter`，把 Continuous Harness outer request/response/feedback wrappers（其中保留 `DecisionRequest/DecisionResponse` inner DTO，并以 `FeedbackEnvelopeV1` 作为 target feedback）与本地 HTTP API 互转。
 - 配置与发现层：launcher 负责 provider 模式选择、base URL/token 配置、发现与 health-check。
 - 运行与裁决层：runtime/kernel 继续负责动作白名单、规则校验、状态演化与事件产出。
 - 观测层：viewer 与 launcher 展示 provider 连接状态、最近延迟、最后错误、最近动作与 trace 摘要。
@@ -17,8 +17,9 @@
 ## 3. 关键接口 / 入口
 - `GET /v1/provider/info`
 - `GET /v1/provider/health`
-- `POST /v1/world-simulator/decision`：target lane 使用 `ContinuousAgentRequestContextV1` / `ContinuousAgentResponseContextV1` outer wrappers；旧 `DecisionRequest/DecisionResponse` body 仅在显式 `compatibility_lane=legacy_v1` 使用，并记录 `legacy_no_cognition_proof`。
-- `POST /v1/world-simulator/feedback`：target lane 使用 Harness target `FeedbackEnvelope` outer contract；旧 `FeedbackEnvelope` DTO 仅在显式 `compatibility_lane=legacy_v1` 使用，并且不能关闭 target turn 或进入 target memory/continuation。
+- `POST /v1/world-simulator/decision-context`：target lane 使用 `ContinuousAgentRequestContextV1` / `ContinuousAgentResponseContextV1` outer wrappers，严格要求 Runtime binding 与 capability context。
+- `POST /v1/world-simulator/feedback-context`：target lane 使用 `FeedbackEnvelopeV1`，严格要求 Runtime-authoritative receipt/request correlation。
+- `POST /v1/world-simulator/decision` 与 `POST /v1/world-simulator/feedback`：bare route 仅为 legacy compatibility-only；旧 DTO 不得进入 target cognition proof、关闭 target turn 或进入 target memory/continuation。当前 HTTP body 没有 `compatibility_lane` wire 字段，route/adapter 配置是 lane 选择依据。
 - launcher provider 设置入口
 - viewer provider 状态与 trace 调试入口
 
@@ -32,25 +33,29 @@
 
 ### 4.1 Harness contract alignment
 
-Loopback is an adapter/compatibility lane for the Continuous Harness. Its tagged `decision` response
+Loopback is an adapter with a strict target lane and a fenced legacy compatibility lane for the Continuous Harness. Its tagged `decision` response
 preserves `wait/wait_ticks/act/query/module_command/module_command_response` variants; `query` is
 read-only against the frozen world snapshot, while `module_command_response` carries the complete
 host-bound `AgentCommandResponse` and requires catalog/context/nonce validation before Runtime.
 Its response may carry `module_command?`, but the field is only a typed candidate and follows host schema encoding plus
-Runtime validation. The target loopback decision endpoint carries the outer
+Runtime validation. The target loopback decision endpoint is
+`/v1/world-simulator/decision-context` and carries the outer
 `ContinuousAgentRequestContextV1`/`ContinuousAgentResponseContextV1` wrappers; the old
-`DecisionRequest`/`DecisionResponse` DTO body is an explicit `compatibility_lane=legacy_v1` only.
-The target feedback endpoint likewise carries the Harness target `FeedbackEnvelope` outer contract;
-the old DTO uses an explicit compatibility mapping. Legacy `FeedbackEnvelope` uses an explicit adapter mapping; missing
-session/turn/request/digest/receipt correlation is `legacy_no_cognition_proof`. The default lane
+`DecisionRequest`/`DecisionResponse` DTO body is accepted only by the bare
+`/v1/world-simulator/decision` legacy route. The target feedback endpoint is
+`/v1/world-simulator/feedback-context` and carries `FeedbackEnvelopeV1`; the old
+`FeedbackEnvelope` DTO is accepted only by the bare `/v1/world-simulator/feedback` legacy route.
+The current HTTP body has no `compatibility_lane` field; route/adapter selection is the explicit
+compatibility boundary. Missing session/turn/request/digest/receipt correlation is not target proof.
+The target lane
 must use the non-recursive V1 `request_digest` (outer context without its output digest or
 `transport_attempt`) and the
-shared provider invocation derivation. Any heuristic action recovery requires explicit
-`compatibility_lane=legacy_heuristic_v1` and `legacy_heuristic_used`, and is excluded from target
-parity/proven evidence and automatic memory/continuation semantics. Trace and feedback limits,
+shared provider invocation derivation. Any heuristic action recovery is legacy fixture/profile
+behavior only and is excluded from target parity/proven evidence and automatic
+memory/continuation semantics. Trace and feedback limits,
 redaction and overflow behavior follow the Continuous Harness documents; raw HTTP bodies are not
 authority or replay inputs. Target response memory candidates use `MemoryWriteIntentV1`; the existing
-inner DTO is compatibility-lane only, and a committed Runtime outcome is still required.
+inner DTO is legacy-route only, and a committed Runtime outcome is still required.
 
 ## 5. 设计演进计划
 - 先落地 launcher provider 配置、发现和 health-check。

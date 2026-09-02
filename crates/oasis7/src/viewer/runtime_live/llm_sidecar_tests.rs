@@ -99,3 +99,21 @@ fn sync_shadow_kernel_preserves_generated_seed_locations() {
             .contains_key("frag-shadow")
     );
 }
+
+#[test]
+fn stale_provider_replans_stop_at_the_bounded_budget() {
+    let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    for count in 1..=3 {
+        assert!(sidecar.schedule_provider_stale_replan(
+            "agent-0",
+            format!("turn-{count}").as_str(),
+            format!("request-{count}").as_str(),
+        ));
+        sidecar.mark_provider_stale_replan_dispatched("agent-0");
+    }
+    assert!(!sidecar.schedule_provider_stale_replan("agent-0", "turn-4", "request-4"));
+    assert_eq!(
+        sidecar.provider_stale_replan_exhausted_agent().as_deref(),
+        Some("agent-0")
+    );
+}

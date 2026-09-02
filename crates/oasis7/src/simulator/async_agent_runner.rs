@@ -45,6 +45,8 @@ use super::types::WorldTime;
 mod feedback;
 pub use self::feedback::{RuntimeReceiptReadbackHandleV1, RuntimeReceiptReadbackVerifier};
 use self::feedback::{validate_feedback, validate_runtime_receipt_lineage};
+#[path = "async_agent_runner_retry.rs"]
+mod retry;
 #[path = "async_agent_runner_runtime_feedback.rs"]
 mod runtime_feedback;
 #[path = "async_agent_runner_test_support.rs"]

@@ -135,11 +135,10 @@ inner DTO 的已知非-authority diagnostics 可由兼容 adapter 丢弃，但�
 缺少 outer context 的 legacy fixture 只能记录 `legacy_no_cognition_proof`，不能进入
 production async claim。
 
-Legacy compatibility lane 必须显式声明 `compatibility_lane=legacy_v1`；缺省和 production
-async lane 均使用 target outer contract。该 lane 只允许把旧 DTO 映射到 outer fields，必须
-记录 `legacy_no_cognition_proof` 和 adapter version；不得将缺少 cognition proof 的 response
-标为 target/proven。任何 legacy heuristic fallback 必须显式声明
-`compatibility_lane=legacy_heuristic_v1`、记录 `legacy_heuristic_used`，仅限低风险 fixture，
+Legacy compatibility lane 必须由 adapter route 或 fixture/profile 显式选择；缺省和 production
+async lane 均使用 target outer contract。该 lane 只允许把旧 DTO 映射到 outer fields；不得将
+缺少 cognition proof 的 response 标为 target/proven。当前 HTTP wire 不定义
+`compatibility_lane` 字段。任何 legacy heuristic fallback 仅限低风险 fixture/profile，
 不得进入 production async claim、target parity 或自动记忆/continuation 语义。
 
 ### 4.3 Canonical request digest
@@ -328,7 +327,8 @@ MemoryWriteIntentV1 {
 
 `intent_digest` 是 Harness 按 policy 计算的 derived artifact，不是 provider 可自报的 authority。
 现有 inner `MemoryWriteIntent { scope: String, summary: String, tags: Vec<String> }` 保持不变，
-仅能在显式 `compatibility_lane=legacy_v1` 由 adapter 映射；target lane 不按旧 DTO shape 猜测版本。
+仅能经显式选定的 legacy route/adapter 映射；target lane 不按旧 DTO shape 猜测版本。当前
+HTTP wire 不定义 `compatibility_lane` 字段。
 
 P0 的 `MemoryWriteIntentPolicyV1` 冻结为：scope wire enum 为
 `turn_private | session_private | agent_private_long_term`，但 P0 默认 allowlist 只有

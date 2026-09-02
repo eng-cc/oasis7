@@ -101,6 +101,73 @@ impl AgentInvoker for RustDirectLetaiInvoker {
     }
 }
 
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use serde_json::Value;
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn local_cli_fallback_receives_outer_identity_environment() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock after epoch")
+            .as_nanos();
+        let script_path = std::env::temp_dir().join(format!(
+            "oasis7-provider-identity-fallback-{}-{unique}",
+            std::process::id()
+        ));
+        fs::write(
+            &script_path,
+            r##"#!/bin/sh
+printf '{"payloads":[{"text":"{\\\"provider_invocation_key\\\":\\\"%s\\\",\\\"agent_session_id\\\":\\\"%s\\\",\\\"idempotency_key\\\":\\\"%s\\\",\\\"session_key\\\":\\\"%s\\\"}"}]}' "$OASIS7_PROVIDER_INVOCATION_KEY" "$OASIS7_AGENT_SESSION_ID" "$OASIS7_PROVIDER_IDEMPOTENCY_KEY" "$OASIS7_PROVIDER_SESSION_KEY"
+"##,
+        )
+        .expect("write provider fallback fixture");
+        let mut permissions = fs::metadata(&script_path)
+            .expect("read provider fallback fixture")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).expect("make provider fallback executable");
+
+        let invocation = AgentInvocation {
+            provider_cli_bin: script_path.to_string_lossy().into_owned(),
+            agent_id: "main".to_string(),
+            thinking: "off".to_string(),
+            session_key: "agent:main:subagent:world-simulator:continuous:agent-1:session-1"
+                .to_string(),
+            timeout_seconds: 5,
+            prompt: "{\"decision\":\"wait\"}".to_string(),
+            idempotency_key:
+                "blake3:1111111111111111111111111111111111111111111111111111111111111111"
+                    .to_string(),
+            provider_invocation_key: Some(
+                "blake3:2222222222222222222222222222222222222222222222222222222222222222"
+                    .to_string(),
+            ),
+            agent_session_id: Some("session-1".to_string()),
+            chat_request_key: None,
+            route_label: None,
+        };
+        let output = invoke_local_agent(invocation.clone(), "gateway timeout")
+            .expect("local provider fallback should return output");
+        let echoed: Value = serde_json::from_str(output.text.as_str()).expect("echoed JSON");
+        assert_eq!(
+            echoed["provider_invocation_key"],
+            invocation.provider_invocation_key.as_deref().unwrap()
+        );
+        assert_eq!(
+            echoed["agent_session_id"],
+            invocation.agent_session_id.as_deref().unwrap()
+        );
+        assert_eq!(echoed["idempotency_key"], invocation.idempotency_key);
+        assert_eq!(echoed["session_key"], invocation.session_key);
+        let _ = fs::remove_file(script_path);
+    }
+}
+
 fn invoke_gateway_agent(invocation: AgentInvocation) -> Result<AgentInvocationOutput, String> {
     let params = build_gateway_agent_params(&invocation)
         .map_err(|err| format!("serialize gateway call params failed: {err}"))?;
@@ -164,6 +231,7 @@ fn invoke_local_agent(
         .arg(timeout_ms.to_string())
         .arg("--json")
         .envs(route_label_env(invocation.route_label.as_deref()))
+        .envs(invocation_identity_env(&invocation))
         .env(
             oasis7::observability::TRACE_SESSION_ID_ENV,
             resolve_trace_session_id(TRACE_SESSION_PROCESS_LABEL),
@@ -195,6 +263,30 @@ fn invoke_local_agent(
             summarize_text(gateway_error, 240)
         )),
     )
+}
+
+fn invocation_identity_env(invocation: &AgentInvocation) -> Vec<(String, String)> {
+    let mut env = vec![(
+        "OASIS7_PROVIDER_IDEMPOTENCY_KEY".to_string(),
+        invocation.idempotency_key.clone(),
+    )];
+    if let Some(provider_invocation_key) = invocation.provider_invocation_key.as_ref() {
+        env.push((
+            "OASIS7_PROVIDER_INVOCATION_KEY".to_string(),
+            provider_invocation_key.clone(),
+        ));
+    }
+    if let Some(agent_session_id) = invocation.agent_session_id.as_ref() {
+        env.push((
+            "OASIS7_AGENT_SESSION_ID".to_string(),
+            agent_session_id.clone(),
+        ));
+    }
+    env.push((
+        "OASIS7_PROVIDER_SESSION_KEY".to_string(),
+        invocation.session_key.clone(),
+    ));
+    env
 }
 
 fn provider_cli_failure_summary(

@@ -437,11 +437,17 @@ rtk curl -sS http://127.0.0.1:5841/v1/provider/info | jq '{
 
 真实 decision smoke：
 
+本启动探针显式使用 bare legacy compatibility-only 路径；它只证明 bridge 的旧 DTO
+兼容性，不是 target cognition proof。需要 target 证明时，使用 Runtime-issued
+`decision_context`/`feedback_context` pair artifact，调用 provider contract smoke 的
+`--target-context-payload-file`。
+
 ```bash
 rtk ./scripts/provider-remote-https/provider-bridge-contract-smoke.sh \
   --base-url http://127.0.0.1:5841 \
   --auth-token "newapi_user_ref:$TEST_NEWAPI_USER_REF" \
   --timeout-ms 90000 \
+  --legacy-compatibility-only \
   --decision-count 1 \
   --min-successes 1
 ```
@@ -557,6 +563,7 @@ rtk ./scripts/provider-remote-https/provider-bridge-contract-smoke.sh \
   --base-url http://127.0.0.1:5841 \
   --auth-token "newapi_user_ref:$TEST_NEWAPI_USER_REF" \
   --timeout-ms 90000 \
+  --legacy-compatibility-only \
   --decision-count 1 \
   --min-successes 1
 ```

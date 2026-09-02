@@ -24,6 +24,45 @@ const WORLD_STATE_HASH_DOMAIN_V1: &str = "oasis7.runtime.world-state.v1";
 const RUNTIME_MANIFEST_HASH_DOMAIN_V1: &str = "oasis7.runtime.manifest.v1";
 const AUTHORITY_CONTEXT_HASH_DOMAIN_V1: &str = "oasis7.runtime.authority-context.v1";
 
+/// Typed disposition reason for a cognition commit that cannot be applied.
+///
+/// The external wire code is kept stable for existing callers, while Runtime
+/// owns the classification so consumers do not parse diagnostic text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CognitionCommitRejectReasonV1 {
+    StaleBase,
+}
+
+impl CognitionCommitRejectReasonV1 {
+    /// Stable external rejection code used by feedback and terminal events.
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::StaleBase => "stale_base",
+        }
+    }
+}
+
+/// Classify a Runtime cognition commit error without exposing error-text
+/// parsing to an integration boundary.
+///
+/// The legacy wrapped spellings remain accepted for persisted/replayed errors;
+/// new commit paths emit the canonical bare `stale_base` code.
+pub fn classify_cognition_commit_error(
+    error: &super::error::WorldError,
+) -> Option<CognitionCommitRejectReasonV1> {
+    let super::error::WorldError::DistributedValidationFailed { reason } = error else {
+        return None;
+    };
+    matches!(
+        reason.as_str(),
+        "stale_base"
+            | "cognition validation failed: stale_base"
+            | "cognition validation failed: cognition_base_binding_stale"
+            | "cognition validation failed: cognition_world_head_mismatch"
+    )
+    .then_some(CognitionCommitRejectReasonV1::StaleBase)
+}
+
 #[derive(Debug, Serialize)]
 struct WorldStateHashInput<'a> {
     world_id: &'a str,
@@ -92,6 +131,26 @@ fn h_v1<T: Serialize>(domain: &str, payload: &T) -> String {
     let bytes = oasis7_wasm_abi::encode_canonical_cbor(&(domain, payload))
         .expect("cognition identity payload must be canonicalizable");
     format!("blake3:{}", blake3::hash(&bytes))
+}
+
+pub(crate) fn finality_binding_digest_v1(
+    branch_id: &str,
+    finality_epoch: u64,
+    finality_block_hash: Option<&str>,
+    finality_status: &str,
+    reorg_epoch: u64,
+) -> String {
+    h_v1(
+        "oasis7.runtime.finality-binding.v1",
+        &FinalityBindingInput {
+            schema_version: 1,
+            branch_id,
+            finality_epoch,
+            finality_block_hash,
+            finality_status,
+            reorg_epoch,
+        },
+    )
 }
 
 fn world_has_cognition_binding(world: &World) -> bool {
@@ -193,16 +252,12 @@ impl AgentDecisionEnvelopeV1 {
 
     /// Derive the trusted finality tuple binding carried by this envelope.
     pub fn derive_finality_binding_digest(&self) -> String {
-        h_v1(
-            "oasis7.runtime.finality-binding.v1",
-            &FinalityBindingInput {
-                schema_version: 1,
-                branch_id: &self.branch_id,
-                finality_epoch: self.finality_epoch,
-                finality_block_hash: self.finality_block_hash.as_deref(),
-                finality_status: &self.finality_status,
-                reorg_epoch: self.reorg_epoch,
-            },
+        finality_binding_digest_v1(
+            &self.branch_id,
+            self.finality_epoch,
+            self.finality_block_hash.as_deref(),
+            &self.finality_status,
+            self.reorg_epoch,
         )
     }
 

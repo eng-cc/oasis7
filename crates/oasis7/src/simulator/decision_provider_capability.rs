@@ -36,10 +36,42 @@ pub struct ProviderCapabilityContext {
 }
 
 impl ProviderCapabilityContext {
+    /// Validate the pair as one host-bound context before it is handed to a
+    /// provider or used to admit a typed response. The native runtime remains
+    /// authoritative for signatures, grants, and revocation; this check only
+    /// rejects an internally inconsistent or incomplete transport envelope.
+    pub fn validate(&self) -> Result<(), DecisionProviderError> {
+        self.catalog.validate().map_err(|error| {
+            DecisionProviderError::new("invalid_capability_context", error.to_string(), false)
+        })?;
+        if self.catalog.snapshot_id != self.invocation.catalog_snapshot_id
+            || self.catalog.subject != self.invocation.subject
+            || self.catalog.presenter != self.invocation.presenter
+        {
+            return Err(DecisionProviderError::new(
+                "capability_context_mismatch",
+                "capability catalog and invocation context are not bound to the same snapshot",
+                false,
+            ));
+        }
+        if self.invocation.grant_id.trim().is_empty()
+            || self.invocation.catalog_snapshot_id.trim().is_empty()
+            || self.invocation.response_nonce.trim().is_empty()
+        {
+            return Err(DecisionProviderError::new(
+                "invalid_capability_context",
+                "capability invocation grant, snapshot, and response nonce are required",
+                false,
+            ));
+        }
+        Ok(())
+    }
+
     pub fn validate_response(
         &self,
         response: &AgentCommandResponse,
     ) -> Result<(), DecisionProviderError> {
+        self.validate()?;
         response.validate().map_err(|error| {
             DecisionProviderError::new("module_command_response_invalid", error.to_string(), false)
         })?;
@@ -122,9 +154,16 @@ impl DecisionRequest {
             ));
         }
         if let Some(catalog) = self.capability_catalog.as_ref() {
-            catalog.validate().map_err(|error| {
-                DecisionRequestContractError::new("invalid_capability_catalog", error.to_string())
-            })?;
+            let invocation = self
+                .capability_invocation_context
+                .as_ref()
+                .expect("capability context pair checked above");
+            ProviderCapabilityContext {
+                catalog: catalog.clone(),
+                invocation: invocation.clone(),
+            }
+            .validate()
+            .map_err(|error| DecisionRequestContractError::new(error.code, error.message))?;
         }
         self.observation
             .observation

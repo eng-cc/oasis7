@@ -950,6 +950,11 @@ impl ViewerRuntimeLiveServer {
                 );
             }
             let mut decision_trace: Option<AgentDecisionTrace> = None;
+            // Provider-backed cognition commits are Runtime-atomic and may
+            // append their terminal action event before the compatibility
+            // tick below runs. Capture the complete journal delta so the
+            // viewer still presents that authoritative event.
+            let journal_start = self.world.journal().events.len();
             match self.config.decision_mode {
                 ViewerLiveDecisionMode::Script => self.script.enqueue(&mut self.world),
                 ViewerLiveDecisionMode::Llm => {
@@ -1006,21 +1011,24 @@ impl ViewerRuntimeLiveServer {
                     }
                 }
             }
-            let journal_start = self.world.journal().events.len();
-            if let Err(error) = self.world.step() {
-                let (delta_logical_time, delta_event_seq) =
-                    self.control_completion_delta(baseline_logical_time, baseline_event_seq);
-                return self.block_runtime_control(
-                    session,
-                    writer,
-                    action,
-                    "runtime step aborted because world advance failed",
-                    ViewerRuntimeLiveServerError::Runtime(error),
-                    request_id,
-                    delta_logical_time,
-                    delta_event_seq,
-                    true,
-                );
+            // Runtime cognition finalization already advances the World once;
+            // avoid a second logical tick for the same provider action.
+            if self.world.state().time == baseline_logical_time {
+                if let Err(error) = self.world.step() {
+                    let (delta_logical_time, delta_event_seq) =
+                        self.control_completion_delta(baseline_logical_time, baseline_event_seq);
+                    return self.block_runtime_control(
+                        session,
+                        writer,
+                        action,
+                        "runtime step aborted because world advance failed",
+                        ViewerRuntimeLiveServerError::Runtime(error),
+                        request_id,
+                        delta_logical_time,
+                        delta_event_seq,
+                        true,
+                    );
+                }
             }
             session.transient_play_failures = 0;
             if self.world.state().time > baseline_logical_time

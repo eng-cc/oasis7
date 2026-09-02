@@ -587,6 +587,56 @@ fn committed_feedback_can_cross_only_the_world_readback_identity_seam() {
     assert_eq!(store.entries().len(), 1);
 }
 
+#[test]
+fn committed_feedback_without_awaiting_outcome_cannot_use_compatibility_lineage() {
+    let mut runner = provider_backed_runner();
+    runner
+        .start_turn_with_context(AGENT_ID, host_context())
+        .expect("open provider-backed target turn");
+    let outcome = completed_turn(&mut runner);
+    let mut committed = outcome
+        .feedback_for_runtime_status("committed", Some("receipt-readback-missing"))
+        .expect("build correlated committed feedback");
+    committed.candidate_action_id = Some(7);
+    committed.provenance = "runtime_authoritative".to_string();
+    let context = outcome
+        .prepared_context
+        .as_ref()
+        .expect("outcome retains host context");
+    runner
+        .expire_runtime_turn(
+            AGENT_ID,
+            context.agent_session_id.as_str(),
+            context.agent_turn_id.as_str(),
+            context.decision_request_id.as_str(),
+        )
+        .expect("explicit lease expiry removes the awaiting outcome");
+    let receipt = runtime_receipt_for_feedback(&committed);
+    let response_identity = outcome
+        .prepared_response_context
+        .as_ref()
+        .expect("response context retained")
+        .response_artifact_identity();
+    let mut store = MemoryWriteStore::default();
+    let error = runner
+        .consume_runtime_feedback_with_world_readback(
+            AGENT_ID,
+            committed,
+            &receipt,
+            &response_identity,
+            &VerifiedWorldReadback,
+            &mut store,
+        )
+        .expect_err("missing awaiting outcome must not use compatibility lineage");
+    assert!(
+        error
+            .to_string()
+            .contains("Runtime readback requires an awaiting outcome"),
+        "unexpected missing-outcome error: {error}"
+    );
+    assert!(store.entries().is_empty());
+}
+
 fn assert_non_committed_status_does_not_write(status: &str) {
     let mut runner = provider_backed_runner();
     let _turn_id = runner

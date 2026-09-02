@@ -1,6 +1,7 @@
 //! Runtime contract for the trusted module-command authorization lane; provider
 //! responses remain candidates until all live authority checks pass.
 use super::super::*;
+use super::capability_grant_v2_catalog::budget_account_snapshot;
 use super::pos;
 use ed25519_dalek::{Signer, SigningKey};
 use oasis7_wasm_abi::{
@@ -553,6 +554,7 @@ pub(super) fn install_test_capability_authority_with_metadata(
 pub(super) fn fixture_world() -> World {
     fixture_world_with_revocations(BTreeSet::new())
 }
+
 pub(super) fn fixture_world_with_revocations(revoked_grant_ids: BTreeSet<String>) -> World {
     fixture_world_with_revocations_and_budget(revoked_grant_ids, 128)
 }
@@ -740,19 +742,7 @@ pub(super) fn execute_without_invocation_context(
         sandbox,
     )
 }
-fn budget_account_snapshot(world: &World) -> CapabilityBudgetAccount {
-    assert_eq!(
-        world.capability_budget_accounts().len(),
-        1,
-        "fixture has one subject/grant budget account"
-    );
-    world
-        .capability_budget_accounts()
-        .values()
-        .next()
-        .cloned()
-        .expect("fixture budget account")
-}
+
 fn execute_fixture(
     world: &mut World,
     grant: Value,

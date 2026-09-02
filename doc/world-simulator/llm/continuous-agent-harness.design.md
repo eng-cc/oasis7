@@ -168,11 +168,10 @@ Query/result 与 typed module response 的结果仍属于该 turn 的 bounded re
 additive field 只能进入新版本并纳入 digest；旧 inner DTO 没有 outer context 时只记录
 `legacy_no_cognition_proof`，不能进入 production async lane。
 
-Legacy compatibility lane 必须显式声明 `compatibility_lane=legacy_v1`；缺省和 production
-async lane 均使用 target outer contract。该 lane 只允许把旧 DTO 映射到上述 outer fields，必须
-记录 `legacy_no_cognition_proof` 和 adapter version；不得把缺少 cognition proof 的 response
-标成 target/proven。任何 legacy heuristic fallback 还必须显式声明
-`compatibility_lane=legacy_heuristic_v1`、记录 `legacy_heuristic_used`，仅限低风险 fixture，
+Legacy compatibility lane 必须由 adapter route 或 fixture/profile 显式选择；缺省和 production
+async lane 均使用 target outer contract。该 lane 只允许把旧 DTO 映射到上述 outer fields；不得
+把缺少 cognition proof 的 response 标成 target/proven。当前 HTTP wire 不定义
+`compatibility_lane` 字段。任何 legacy heuristic fallback 仅限低风险 fixture/profile，
 不得进入 production async claim、target parity 或自动记忆/continuation 语义。
 
 ### 3.3 FeedbackEnvelope
@@ -447,8 +446,9 @@ MemoryWriteIntentV1 {
 
 `summary?` 的存在性和值由 Harness 规范化；`intent_digest` 是 Harness 根据下方 policy
 计算的 derived artifact，不是 provider 可自报的 authority。现有 inner
-`MemoryWriteIntent { scope: String, summary: String, tags: Vec<String> }` 保持不变，仅能在
-显式 `compatibility_lane=legacy_v1` 由 adapter 映射；target lane 不按旧 DTO shape 猜测版本。
+`MemoryWriteIntent { scope: String, summary: String, tags: Vec<String> }` 保持不变，仅能经
+显式选定的 legacy route/adapter 映射；target lane 不按旧 DTO shape 猜测版本。当前 HTTP wire
+不定义 `compatibility_lane` 字段。
 
 P0 的 memory write gate 是确定性的 `MemoryWriteIntentPolicyV1`。scope registry 保留
 `agent_private_long_term` 作为版本化保留值，但默认 P0 allowlist 只有

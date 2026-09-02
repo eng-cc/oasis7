@@ -346,6 +346,7 @@ impl World {
         let _ = self.process_agent_claim_epochs()?;
         self.refresh_threat_heatmap();
         self.record_tick_consensus()?;
+        let _ = self.service_cognition_scheduler_tick(self.state.time)?;
         Ok(())
     }
 
@@ -582,6 +583,7 @@ impl World {
         } else {
             self.record_tick_consensus()?;
         }
+        let _ = self.service_cognition_scheduler_tick(self.state.time)?;
         Ok(())
     }
 }

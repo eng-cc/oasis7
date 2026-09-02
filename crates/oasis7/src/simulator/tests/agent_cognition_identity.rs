@@ -10,7 +10,8 @@ use crate::runtime::{
     WakeConditionValidator, World,
 };
 use crate::simulator::{
-    AgentCognitionStore, AsyncAgentRunner, ContinuousAgentRequestContextV1,
+    AgentCognitionStore, AsyncAgentRunner, COGNITION_CAPABILITY_CATALOG_DOMAIN,
+    COGNITION_CAPABILITY_INVOCATION_CONTEXT_DOMAIN, ContinuousAgentRequestContextV1,
     ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1, Digest32, FeedbackEnvelopeV1,
     FinalityBindingV1, GoalSnapshotV1, MemoryContextSnapshotV1, MemoryWriteIntentV1,
     RuntimeBindingV1, h_v1,
@@ -70,6 +71,62 @@ fn request_fixture(transport_attempt: u64, timeout_budget_ms: u64) -> Value {
     })
 }
 
+fn production_request_fixture(transport_attempt: u64, timeout_budget_ms: u64) -> Value {
+    let mut fixture = request_fixture(transport_attempt, timeout_budget_ms);
+    let subject = json!({
+        "kind": "agent",
+        "agent_id": "agent-1",
+        "owner_binding": "owner-1",
+        "generation": 1
+    });
+    let presenter = json!({
+        "presenter_id": "provider-1",
+        "presenter_kind": "provider",
+        "session_id": "session.agent-1.v1"
+    });
+    let audience = json!({
+        "world_id": "world-1",
+        "branch_id": "main",
+        "finality_epoch": 7,
+        "target_kind": "world"
+    });
+    let catalog = json!({
+        "snapshot_id": "catalog.agent-1.v1",
+        "world_id": "world-1",
+        "world_head": 42,
+        "branch_id": "main",
+        "finality_epoch": 7,
+        "logical_tick": 42,
+        "module_registry_hash": "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "policy_hash": "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "revocation_epoch": 0,
+        "subject": subject,
+        "presenter": presenter,
+        "audience": audience,
+        "entries": [],
+        "valid_until_tick": 100
+    });
+    let invocation = json!({
+        "grant_id": "grant.agent-1.v1",
+        "subject": catalog["subject"].clone(),
+        "presenter": catalog["presenter"].clone(),
+        "audience": catalog["audience"].clone(),
+        "catalog_snapshot_id": "catalog.agent-1.v1",
+        "module_id": "",
+        "module_version": "",
+        "response_nonce": "nonce.agent-1.v1"
+    });
+    fixture["base_decision_request"]["capability_catalog"] = catalog.clone();
+    fixture["base_decision_request"]["capability_invocation_context"] = invocation.clone();
+    fixture["capability_catalog_digest"] =
+        json!(h_v1(COGNITION_CAPABILITY_CATALOG_DOMAIN, &catalog));
+    fixture["capability_invocation_context_digest"] = json!(h_v1(
+        COGNITION_CAPABILITY_INVOCATION_CONTEXT_DOMAIN,
+        &invocation
+    ));
+    fixture
+}
+
 fn derived_request_digest(fixture: &Value) -> Digest32 {
     let mut canonical = fixture.clone();
     let object = canonical
@@ -98,6 +155,37 @@ fn request_from_value(mut fixture: Value) -> ContinuousAgentRequestContextV1 {
 
 fn request(transport_attempt: u64, timeout_budget_ms: u64) -> ContinuousAgentRequestContextV1 {
     request_from_value(request_fixture(transport_attempt, timeout_budget_ms))
+}
+
+fn production_turn_context(
+    request_context: &ContinuousAgentRequestContextV1,
+) -> ContinuousAgentTurnContextV1 {
+    ContinuousAgentTurnContextV1 {
+        agent_id: request_context.agent_subject.clone(),
+        agent_session_id: request_context.agent_session_id.clone(),
+        agent_turn_id: request_context.agent_turn_id.clone(),
+        decision_request_id: request_context.decision_request_id.clone(),
+        request_digest: request_context.request_digest.clone(),
+        memory_snapshot: MemoryContextSnapshotV1::empty("session_private"),
+        goal_snapshot: GoalSnapshotV1::empty(),
+        continuation: None,
+    }
+}
+
+fn production_observation(agent_id: &str, time: u64) -> Observation {
+    Observation {
+        time,
+        agent_id: agent_id.to_string(),
+        pos: crate::geometry::GeoPos::new(0, 0, 0),
+        self_resources: Default::default(),
+        visibility_range_cm: 0,
+        visible_agents: Vec::new(),
+        visible_locations: Vec::new(),
+        module_lifecycle: Default::default(),
+        module_market: Default::default(),
+        power_market: Default::default(),
+        social_state: Default::default(),
+    }
 }
 
 fn runtime_condition(value: Value) -> WakeConditionV1 {
@@ -648,6 +736,11 @@ fn feedback_sequence_gap_and_same_sequence_collision_fail_closed() {
         .expect_err("a sequence gap must be held/reported");
     assert_eq!(gap.code(), "feedback_sequence_gap");
 
+    let held_collision = store
+        .accept_feedback(feedback("feedback-seq-3b", 3, "different-held"))
+        .expect_err("a held sequence reused with a different envelope must collide");
+    assert_eq!(held_collision.code(), "feedback_identity_collision");
+
     store
         .accept_feedback(feedback("feedback-seq-1", 1, "first"))
         .expect("first sequence accepted");
@@ -659,7 +752,7 @@ fn feedback_sequence_gap_and_same_sequence_collision_fail_closed() {
 
 #[test]
 fn production_outer_context_preserves_retry_transport_and_runtime_binding() {
-    let mut fixture = request_fixture(2, 60_000);
+    let mut fixture = production_request_fixture(2, 60_000);
     fixture["retry_seq"] = json!(2);
     let request_context = request_from_value(fixture);
     let turn_context = ContinuousAgentTurnContextV1 {
@@ -716,6 +809,225 @@ fn production_outer_context_preserves_retry_transport_and_runtime_binding() {
         identity_payload["artifact_digest"],
         artifact_identity.artifact_digest.as_str()
     );
+}
+
+#[test]
+fn retry_awaiting_turn_preserves_identity_and_increments_only_transport_attempt() {
+    let request_context = request_from_value({
+        let mut fixture = production_request_fixture(1, 60_000);
+        fixture["retry_seq"] = json!(1);
+        fixture
+    });
+    let turn_context = production_turn_context(&request_context);
+    let mut runner = AsyncAgentRunner::provider_backed_fixture("agent-1");
+    let turn_id = runner
+        .start_turn_with_request_context_and_observation(
+            "agent-1",
+            production_observation("agent-1", 42),
+            turn_context.clone(),
+            request_context.clone(),
+        )
+        .expect("open production provider turn");
+    let first = loop {
+        if let Some(outcome) = runner
+            .poll_completed()
+            .expect("poll production turn")
+            .into_iter()
+            .find(|outcome| outcome.turn_id == turn_id)
+        {
+            break outcome;
+        }
+        std::thread::yield_now();
+    };
+    assert_eq!(
+        first
+            .prepared_request_context
+            .as_ref()
+            .map(|context| context.transport_attempt),
+        Some(1)
+    );
+
+    let retried_turn_id = runner
+        .retry_awaiting_turn_with_request_context_and_observation(
+            "agent-1",
+            production_observation("agent-1", 43),
+            turn_context.clone(),
+            request_context.clone(),
+        )
+        .expect("awaiting production turn can retry without re-admission");
+    assert_eq!(retried_turn_id, turn_id);
+    assert!(runner.provider_is_still_in_flight("agent-1"));
+    assert_eq!(runner.active_turn_count(), 1);
+    let reentry = runner
+        .start_turn_with_request_context_and_observation(
+            "agent-1",
+            production_observation("agent-1", 43),
+            turn_context,
+            request_context.clone(),
+        )
+        .expect_err("retry must preserve the awaiting single-flight guard");
+    assert_eq!(reentry.code(), "agent_busy");
+    let retry_outcome = loop {
+        if let Some(outcome) = runner
+            .poll_completed()
+            .expect("poll retried production turn")
+            .into_iter()
+            .find(|outcome| outcome.turn_id == turn_id)
+        {
+            break outcome;
+        }
+        std::thread::yield_now();
+    };
+    let retried_context = retry_outcome
+        .prepared_request_context
+        .expect("retry retains outer request context");
+    assert_eq!(retried_context.transport_attempt, 2);
+    assert_eq!(retried_context.retry_seq, 1);
+    assert_eq!(
+        retried_context.request_digest,
+        request_context.request_digest
+    );
+}
+
+#[test]
+fn retry_awaiting_turn_rejects_mismatched_identity_and_digest() {
+    let request_context = request_from_value({
+        let mut fixture = production_request_fixture(1, 60_000);
+        fixture["retry_seq"] = json!(1);
+        fixture
+    });
+    let turn_context = production_turn_context(&request_context);
+    let mut runner = AsyncAgentRunner::provider_backed_fixture("agent-1");
+    let turn_id = runner
+        .start_turn_with_request_context_and_observation(
+            "agent-1",
+            production_observation("agent-1", 42),
+            turn_context.clone(),
+            request_context.clone(),
+        )
+        .expect("open production provider turn");
+    let _ = loop {
+        if let Some(outcome) = runner
+            .poll_completed()
+            .expect("poll production turn")
+            .into_iter()
+            .find(|outcome| outcome.turn_id == turn_id)
+        {
+            break outcome;
+        }
+        std::thread::yield_now();
+    };
+
+    let mut mismatched_context = turn_context.clone();
+    mismatched_context.agent_turn_id = "turn.other".to_string();
+    let identity_error = runner
+        .retry_awaiting_turn_with_request_context_and_observation(
+            "agent-1",
+            production_observation("agent-1", 43),
+            mismatched_context,
+            request_context.clone(),
+        )
+        .expect_err("retry must reject a different turn identity");
+    assert!(identity_error.to_string().contains("retry"));
+
+    let mut mismatched_request = request_context.clone();
+    mismatched_request.request_digest = Digest32::from(format!("blake3:{}", "9".repeat(64)));
+    let digest_error = runner
+        .retry_awaiting_turn_with_request_context_and_observation(
+            "agent-1",
+            production_observation("agent-1", 43),
+            turn_context,
+            mismatched_request,
+        )
+        .expect_err("retry must reject a different request digest");
+    assert!(digest_error.to_string().contains("request_digest"));
+    assert!(!runner.provider_is_still_in_flight("agent-1"));
+}
+
+#[test]
+fn retry_awaiting_turn_rejects_after_terminal_feedback() {
+    let request_context = request_from_value({
+        let mut fixture = production_request_fixture(1, 60_000);
+        fixture["retry_seq"] = json!(1);
+        fixture
+    });
+    let turn_context = production_turn_context(&request_context);
+    let mut runner = AsyncAgentRunner::provider_backed_fixture("agent-1");
+    let turn_id = runner
+        .start_turn_with_request_context_and_observation(
+            "agent-1",
+            production_observation("agent-1", 42),
+            turn_context.clone(),
+            request_context.clone(),
+        )
+        .expect("open production provider turn");
+    let outcome = loop {
+        if let Some(outcome) = runner
+            .poll_completed()
+            .expect("poll production turn")
+            .into_iter()
+            .find(|outcome| outcome.turn_id == turn_id)
+        {
+            break outcome;
+        }
+        std::thread::yield_now();
+    };
+    let mut terminal = outcome
+        .feedback_for_runtime_status("failed", None)
+        .expect("build terminal feedback");
+    terminal.provenance = "runtime_authoritative".to_string();
+    runner
+        .consume_runtime_feedback(
+            "agent-1",
+            terminal,
+            &mut crate::simulator::MemoryWriteStore::default(),
+        )
+        .expect("Runtime terminal feedback releases the turn");
+
+    let error = runner
+        .retry_awaiting_turn_with_request_context_and_observation(
+            "agent-1",
+            production_observation("agent-1", 43),
+            turn_context,
+            request_context,
+        )
+        .expect_err("terminal feedback must make retry unavailable");
+    assert_eq!(error.code(), "cognition_error");
+    assert!(error.to_string().contains("awaiting"));
+}
+
+#[test]
+fn production_context_rejects_null_capability_discovery_context() {
+    let mut fixture = request_fixture(1, 60_000);
+    fixture["retry_seq"] = json!(1);
+    let request_context = request_from_value(fixture);
+    let error = request_context
+        .validate_production_lane()
+        .expect_err("production context must carry Runtime capability discovery");
+    assert_eq!(error.code(), "missing_capability_context");
+}
+
+#[test]
+fn production_context_rejects_capability_for_a_different_agent() {
+    let mut fixture = production_request_fixture(1, 60_000);
+    fixture["retry_seq"] = json!(1);
+    fixture["base_decision_request"]["capability_catalog"]["subject"]["agent_id"] =
+        json!("agent-2");
+    fixture["base_decision_request"]["capability_invocation_context"]["subject"]["agent_id"] =
+        json!("agent-2");
+    let catalog = fixture["base_decision_request"]["capability_catalog"].clone();
+    let invocation = fixture["base_decision_request"]["capability_invocation_context"].clone();
+    fixture["capability_catalog_digest"] =
+        json!(h_v1(COGNITION_CAPABILITY_CATALOG_DOMAIN, &catalog));
+    fixture["capability_invocation_context_digest"] = json!(h_v1(
+        COGNITION_CAPABILITY_INVOCATION_CONTEXT_DOMAIN,
+        &invocation
+    ));
+    let request_context = request_from_value(fixture);
+    let error = request_context
+        .validate_production_lane()
+        .expect_err("production context must bind capabilities to the requesting agent");
+    assert_eq!(error.code(), "capability_subject_mismatch");
 }
 
 #[test]

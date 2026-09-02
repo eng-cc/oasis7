@@ -3,18 +3,18 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::geometry::GeoPos;
 use crate::runtime::{
-    Action as RuntimeAction, AgentIntentV2, CausedBy as RuntimeCausedBy,
-    DomainEvent as RuntimeDomainEvent, ModuleSourcePackage, World as RuntimeWorld,
-    WorldEvent as RuntimeWorldEvent, WorldEventBody as RuntimeWorldEventBody,
+    Action as RuntimeAction, AgentIntentV2, ModuleSourcePackage, World as RuntimeWorld,
 };
+#[cfg(not(target_arch = "wasm32"))]
+use crate::simulator::AsyncAgentRunner;
 use crate::simulator::{
-    Action as SimulatorAction, ActionCatalogEntry, ActionResult, AgentDecision, AgentDecisionTrace,
+    Action as SimulatorAction, ActionCatalogEntry, AgentDecision, AgentDecisionTrace,
     AgentPromptProfile, AgentRunner, CHUNK_GENERATION_SCHEMA_VERSION, ChunkRuntimeConfig,
-    LlmAgentBehavior, LlmAgentConfig, Location, OpenAiChatCompletionClient,
-    ProviderAgentChatRequest, ProviderBackedAgentBehavior, ProviderExecutionMode,
-    ProviderLoopbackAdapter, ProviderLoopbackHttpClient, ResourceOwner, SNAPSHOT_VERSION,
-    WorldConfig, WorldEvent, WorldEventKind, WorldJournal, WorldKernel, WorldModel, WorldSnapshot,
-    evaluate_provider_compatibility, provider_agent_chat_log_key,
+    ContinuousAgentResponseContextV1, LlmAgentBehavior, LlmAgentConfig, Location,
+    OpenAiChatCompletionClient, ProviderAgentChatRequest, ProviderBackedAgentBehavior,
+    ProviderExecutionMode, ProviderLoopbackAdapter, ProviderLoopbackHttpClient, ResourceOwner,
+    SNAPSHOT_VERSION, WorldConfig, WorldEvent, WorldEventKind, WorldJournal, WorldKernel,
+    WorldModel, WorldSnapshot, evaluate_provider_compatibility, provider_agent_chat_log_key,
 };
 use crate::viewer::live::ViewerLiveDecisionMode;
 use crate::viewer::protocol::{AgentChatAck, AgentChatError};
@@ -26,13 +26,17 @@ use super::super::{location_id_for_pos, mapping::runtime_state_to_simulator_mode
 pub(super) struct RuntimePendingAction {
     pub(super) agent_id: String,
     pub(super) action: SimulatorAction,
+    pub(super) cognition: Option<RuntimeProviderActionContext>,
+    /// Runtime may emit an accepted event before its terminal receipt. Keep
+    /// the pending action correlated while ensuring legacy action feedback is
+    /// delivered at most once.
+    pub(super) feedback_emitted: bool,
 }
 
-#[derive(Debug, Clone)]
-pub(super) struct RuntimeLlmDecision {
-    pub(super) agent_id: String,
-    pub(super) decision: AgentDecision,
-    pub(super) decision_trace: Option<AgentDecisionTrace>,
+#[derive(Clone, Debug)]
+pub(in crate::viewer::runtime_live) struct RuntimeProviderActionContext {
+    pub(in crate::viewer::runtime_live) request: cognition_context::ProviderContextState,
+    pub(in crate::viewer::runtime_live) response: ContinuousAgentResponseContextV1,
 }
 
 const BUILTIN_LLM_DECISION_SOURCE: &str = "builtin_llm";
@@ -60,6 +64,7 @@ const VIEWER_AGENT_PROVIDER_PROFILE_ENV: &str = "OASIS7_AGENT_PROVIDER_PROFILE";
 const VIEWER_AGENT_EXECUTION_LANE_ENV: &str = "OASIS7_AGENT_EXECUTION_LANE";
 const VIEWER_AGENT_PROVIDER_MODE_ENV: &str = "OASIS7_AGENT_PROVIDER_MODE";
 const RUNTIME_PROVIDER_CHECK_CACHE_MS: u64 = 2_000;
+const MAX_PROVIDER_TRANSPORT_ATTEMPTS: u64 = 2;
 const PROVIDER_AGENT_CHAT_CAPABILITY: &str = "agent_chat";
 const ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS: &str = "OASIS7_RUNTIME_LIVE_LLM_TIMEOUT_MS";
 const DEFAULT_RUNTIME_LIVE_LLM_TIMEOUT_MS: u64 = 30_000;
@@ -67,12 +72,22 @@ const LOCAL_TEST_PLAYER_ID_PREFIX: &str = "local-test-player-";
 
 #[path = "llm_sidecar_agent_chat.rs"]
 mod agent_chat_support;
+#[path = "llm_sidecar_async.rs"]
+mod async_support;
 #[path = "llm_sidecar_cognition.rs"]
 mod cognition_context;
 #[path = "llm_sidecar_provider.rs"]
 mod provider_support;
+#[path = "llm_sidecar_runtime_feedback.rs"]
+mod runtime_feedback;
 #[path = "llm_sidecar_runtime_support.rs"]
 mod runtime_support;
+#[path = "llm_sidecar_stale.rs"]
+mod stale_replan;
+use self::agent_chat_support::{
+    RuntimeProviderAgentChatFailure, RuntimeProviderAgentChatRequestError,
+};
+use self::async_support::{RuntimeLlmDecision, provider_trace_retryable};
 pub(in crate::viewer::runtime_live) use self::provider_support::provider_settings_from_env;
 use self::provider_support::{
     env_requests_provider_backend, provider_phase1_action_catalog, provider_phase1_memory_summary,
@@ -84,6 +99,9 @@ use self::runtime_support::{
 };
 pub(in crate::viewer::runtime_live) use self::runtime_support::{
     simulator_action_label, simulator_action_to_runtime,
+};
+use self::stale_replan::{
+    MAX_PROVIDER_STALE_REPLANS, ProviderStaleReplanCause, ProviderStaleReplanState,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -125,6 +143,9 @@ pub(in crate::viewer::runtime_live) fn resolve_runtime_live_llm_timeout_ms(
 
 enum RuntimeDecisionRunner {
     Builtin(AgentRunner<LlmAgentBehavior<OpenAiChatCompletionClient>>),
+    #[cfg(not(target_arch = "wasm32"))]
+    ProviderBacked(AsyncAgentRunner),
+    #[cfg(target_arch = "wasm32")]
     ProviderBacked(AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>>),
 }
 
@@ -146,51 +167,6 @@ pub(super) struct RuntimePendingProviderAgentChat {
     /// identity-aware enqueue method.
     pub(super) intent_id: Option<String>,
     pub(super) request_digest: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub(super) struct RuntimeProviderAgentChatFailure {
-    pub(super) pending: RuntimePendingProviderAgentChat,
-    pub(super) error: AgentChatError,
-    pub(super) retryable: bool,
-}
-
-#[derive(Debug)]
-struct RuntimeProviderAgentChatRequestError {
-    error: AgentChatError,
-    retryable: bool,
-}
-
-impl RuntimeLlmDecision {
-    fn from_error(world: &RuntimeWorld, message: String) -> Self {
-        let agent_id = world
-            .state()
-            .agents
-            .keys()
-            .next()
-            .cloned()
-            .unwrap_or_else(|| "runtime-agent-0".to_string());
-        let trace = AgentDecisionTrace {
-            agent_id: agent_id.clone(),
-            time: world.state().time,
-            decision: AgentDecision::Wait,
-            llm_input: None,
-            llm_output: None,
-            llm_error: Some(message),
-            parse_error: None,
-            llm_diagnostics: None,
-            llm_effect_intents: Vec::new(),
-            llm_effect_receipts: Vec::new(),
-            llm_step_trace: Vec::new(),
-            llm_prompt_section_trace: Vec::new(),
-            llm_chat_messages: Vec::new(),
-        };
-        Self {
-            agent_id,
-            decision: AgentDecision::Wait,
-            decision_trace: Some(trace),
-        }
-    }
 }
 
 fn runtime_live_phase1_short_term_goal() -> String {
@@ -226,8 +202,16 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     runtime_seed_locations: Vec<Location>,
     runtime_seed_model: Option<WorldModel>,
     pub(in crate::viewer::runtime_live) chunk_runtime: ChunkRuntimeConfig,
-    provider_session_id: String,
-    provider_context_seq: u64,
+    provider_session_ids: BTreeMap<String, String>,
+    provider_agent_ids: BTreeSet<String>,
+    provider_context_seq: BTreeMap<String, u64>,
+    provider_contexts: BTreeMap<String, cognition_context::ProviderContextState>,
+    provider_retry_contexts: BTreeMap<String, cognition_context::ProviderContextState>,
+    provider_active_turns: BTreeMap<String, cognition_context::ProviderContextState>,
+    provider_wait_until: BTreeMap<String, u64>,
+    provider_feedback_seq: BTreeMap<String, u64>,
+    provider_completed_decisions: VecDeque<RuntimeLlmDecision>,
+    provider_stale_replans: BTreeMap<String, ProviderStaleReplanState>,
 }
 
 pub(in crate::viewer::runtime_live) struct RuntimePlayerBindingPlan {
@@ -258,8 +242,16 @@ impl RuntimeLlmSidecar {
             runtime_seed_locations: Vec::new(),
             runtime_seed_model: None,
             chunk_runtime: ChunkRuntimeConfig::default(),
-            provider_session_id: format!("runtime-live-session-{}", std::process::id()),
-            provider_context_seq: 1,
+            provider_session_ids: BTreeMap::new(),
+            provider_agent_ids: BTreeSet::new(),
+            provider_context_seq: BTreeMap::new(),
+            provider_contexts: BTreeMap::new(),
+            provider_retry_contexts: BTreeMap::new(),
+            provider_active_turns: BTreeMap::new(),
+            provider_wait_until: BTreeMap::new(),
+            provider_feedback_seq: BTreeMap::new(),
+            provider_completed_decisions: VecDeque::new(),
+            provider_stale_replans: BTreeMap::new(),
         }
     }
 
@@ -697,7 +689,6 @@ impl RuntimeLlmSidecar {
             profile.long_term_goal_override.clone(),
         );
     }
-
     pub(super) fn push_chat_message(
         &mut self,
         world: &RuntimeWorld,
@@ -763,8 +754,8 @@ impl RuntimeLlmSidecar {
         }
         let provider_backed = match self.runner.as_ref() {
             Some(RuntimeDecisionRunner::Builtin(_)) => false,
-            Some(RuntimeDecisionRunner::ProviderBacked(runner)) => {
-                if runner.get(agent_id).is_none() {
+            Some(RuntimeDecisionRunner::ProviderBacked(_)) => {
+                if !self.provider_agent_ids.contains(agent_id) {
                     return Err(AgentChatError {
                         code: "agent_not_registered".to_string(),
                         message: format!("agent {} is not registered in provider runner", agent_id),
@@ -782,38 +773,60 @@ impl RuntimeLlmSidecar {
             }
         };
         if provider_backed {
-            let Some(RuntimeDecisionRunner::ProviderBacked(runner)) = self.runner.as_mut() else {
-                return Err(AgentChatError {
-                    code: "llm_init_failed".to_string(),
-                    message: "provider runner disappeared while sending agent chat".to_string(),
-                    agent_id: Some(agent_id.to_string()),
-                });
-            };
-            let Some(agent) = runner.get_mut(agent_id) else {
-                return Err(AgentChatError {
-                    code: "agent_not_registered".to_string(),
-                    message: format!("agent {} is not registered in provider runner", agent_id),
-                    agent_id: Some(agent_id.to_string()),
-                });
-            };
-            agent
-                .behavior
-                .push_player_message_feedback(world.state().time, message)
-                .map_err(|error| AgentChatError {
-                    code: error.code,
-                    message: error.message,
-                    agent_id: Some(agent_id.to_string()),
-                })?;
-            self.pending_provider_agent_chats
-                .push_back(RuntimePendingProviderAgentChat {
-                    agent_id: agent_id.to_string(),
-                    player_id: player_id.to_string(),
-                    message: message.to_string(),
-                    intent_id: intent_identity.map(|(intent_id, _)| intent_id.to_string()),
-                    request_digest: intent_identity
-                        .map(|(_, request_digest)| request_digest.to_string()),
-                });
-            Ok(())
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                // AsyncAgentRunner deliberately exposes no mutable behavior
+                // handle on the world thread. Chat is queued for its
+                // dedicated provider endpoint; the actor remains isolated
+                // from world-thread mutation while that request is drained.
+                self.push_provider_player_message_feedback(world, agent_id, message)?;
+                self.pending_provider_agent_chats
+                    .push_back(RuntimePendingProviderAgentChat {
+                        agent_id: agent_id.to_string(),
+                        player_id: player_id.to_string(),
+                        message: message.to_string(),
+                        intent_id: intent_identity.map(|(intent_id, _)| intent_id.to_string()),
+                        request_digest: intent_identity
+                            .map(|(_, request_digest)| request_digest.to_string()),
+                    });
+                return Ok(());
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                let Some(RuntimeDecisionRunner::ProviderBacked(runner)) = self.runner.as_mut()
+                else {
+                    return Err(AgentChatError {
+                        code: "llm_init_failed".to_string(),
+                        message: "provider runner disappeared while sending agent chat".to_string(),
+                        agent_id: Some(agent_id.to_string()),
+                    });
+                };
+                let Some(agent) = runner.get_mut(agent_id) else {
+                    return Err(AgentChatError {
+                        code: "agent_not_registered".to_string(),
+                        message: format!("agent {} is not registered in provider runner", agent_id),
+                        agent_id: Some(agent_id.to_string()),
+                    });
+                };
+                agent
+                    .behavior
+                    .push_player_message_feedback(world.state().time, message)
+                    .map_err(|error| AgentChatError {
+                        code: error.code,
+                        message: error.message,
+                        agent_id: Some(agent_id.to_string()),
+                    })?;
+                self.pending_provider_agent_chats
+                    .push_back(RuntimePendingProviderAgentChat {
+                        agent_id: agent_id.to_string(),
+                        player_id: player_id.to_string(),
+                        message: message.to_string(),
+                        intent_id: intent_identity.map(|(intent_id, _)| intent_id.to_string()),
+                        request_digest: intent_identity
+                            .map(|(_, request_digest)| request_digest.to_string()),
+                    });
+                Ok(())
+            }
         } else {
             let Some(RuntimeDecisionRunner::Builtin(runner)) = self.runner.as_mut() else {
                 return Err(AgentChatError {
@@ -844,7 +857,6 @@ impl RuntimeLlmSidecar {
             }
         }
     }
-
     pub(super) fn drain_provider_agent_chat_replies(
         &mut self,
         world: &RuntimeWorld,
@@ -900,7 +912,7 @@ impl RuntimeLlmSidecar {
 
     pub(super) fn next_llm_decision(
         &mut self,
-        world: &RuntimeWorld,
+        world: &mut RuntimeWorld,
         config: &WorldConfig,
         world_id: &str,
     ) -> Option<RuntimeLlmDecision> {
@@ -924,6 +936,13 @@ impl RuntimeLlmSidecar {
                 ));
             }
         };
+        #[cfg(not(target_arch = "wasm32"))]
+        if matches!(self.runner, Some(RuntimeDecisionRunner::ProviderBacked(_))) {
+            let decision = self.next_async_provider_decision(world, &mut kernel, world_id);
+            self.shadow_kernel = Some(kernel);
+            return decision;
+        }
+        #[cfg(target_arch = "wasm32")]
         if matches!(self.runner, Some(RuntimeDecisionRunner::ProviderBacked(_))) {
             if let Err(message) =
                 self.prepare_provider_request_contexts(world, &mut kernel, world_id)
@@ -948,70 +967,86 @@ impl RuntimeLlmSidecar {
                 sync_llm_runner_long_term_memory(&mut kernel, runner);
                 result
             }
+            #[cfg(not(target_arch = "wasm32"))]
+            RuntimeDecisionRunner::ProviderBacked(_) => {
+                unreachable!("native provider decisions are polled through AsyncAgentRunner")
+            }
+            #[cfg(target_arch = "wasm32")]
             RuntimeDecisionRunner::ProviderBacked(runner) => runner.tick_decide_only(&mut kernel),
         };
         self.shadow_kernel = Some(kernel);
-        result.map(|tick| RuntimeLlmDecision {
-            agent_id: tick.agent_id,
-            decision: tick.decision,
-            decision_trace: tick.decision_trace,
-        })
-    }
-
-    pub(super) fn track_action(
-        &mut self,
-        action_id: u64,
-        agent_id: String,
-        action: SimulatorAction,
-    ) {
-        self.pending_actions
-            .insert(action_id, RuntimePendingAction { agent_id, action });
-    }
-
-    pub(super) fn notify_action_result(
-        &mut self,
-        action_id: u64,
-        event: WorldEvent,
-        rejected: bool,
-    ) {
-        let Some(pending) = self.pending_actions.remove(&action_id) else {
-            return;
+        let Some(tick) = result else {
+            return None;
         };
-        let success = !rejected;
-        let action_result = ActionResult {
-            action: pending.action,
-            action_id,
-            success,
-            event,
-        };
-        if let Some(runner) = self.runner.as_mut() {
-            match runner {
-                RuntimeDecisionRunner::Builtin(runner) => {
-                    let _ = runner.notify_action_result(pending.agent_id.as_str(), &action_result);
+        #[cfg(target_arch = "wasm32")]
+        let provider_response =
+            if let Some(RuntimeDecisionRunner::ProviderBacked(runner)) = self.runner.as_mut() {
+                runner
+                    .get_mut(tick.agent_id.as_str())
+                    .and_then(|agent| agent.behavior.take_continuous_response_context())
+            } else {
+                None
+            };
+        #[cfg(not(target_arch = "wasm32"))]
+        let provider_response = None;
+        let cognition = self
+            .provider_contexts
+            .get(tick.agent_id.as_str())
+            .cloned()
+            .zip(provider_response)
+            .map(|(request, response)| RuntimeProviderActionContext { request, response });
+        if let Some(cognition) = cognition.as_ref() {
+            if tick
+                .decision_trace
+                .as_ref()
+                .is_none_or(|trace| trace.llm_error.is_none() && trace.parse_error.is_none())
+            {
+                self.provider_active_turns
+                    .insert(tick.agent_id.clone(), cognition.request.clone());
+                match &tick.decision {
+                    AgentDecision::Wait => {
+                        self.schedule_provider_wait(tick.agent_id.as_str(), world.state().time, 1);
+                    }
+                    AgentDecision::WaitTicks(ticks) => {
+                        self.schedule_provider_wait(
+                            tick.agent_id.as_str(),
+                            world.state().time,
+                            *ticks,
+                        );
+                    }
+                    AgentDecision::Act(_) => {
+                        #[cfg(target_arch = "wasm32")]
+                        if let Some(RuntimeDecisionRunner::ProviderBacked(runner)) =
+                            self.runner.as_mut()
+                        {
+                            if let Some(agent) = runner.get_mut(tick.agent_id.as_str()) {
+                                // Runtime receipt/disposition closes an action
+                                // turn; no local retry may re-enter it early.
+                                agent.wait_until = Some(u64::MAX);
+                            }
+                        }
+                    }
+                    AgentDecision::Query(_) | AgentDecision::ModuleCommand { .. } => {}
                 }
-                RuntimeDecisionRunner::ProviderBacked(runner) => {
-                    let _ = runner.notify_action_result(pending.agent_id.as_str(), &action_result);
+            }
+        } else if tick
+            .decision_trace
+            .as_ref()
+            .is_some_and(provider_trace_retryable)
+        {
+            if let Some(context) = self.provider_contexts.get(tick.agent_id.as_str()).cloned() {
+                if context.request_context.transport_attempt < MAX_PROVIDER_TRANSPORT_ATTEMPTS {
+                    self.provider_retry_contexts
+                        .insert(tick.agent_id.clone(), context);
                 }
             }
         }
-    }
-
-    pub(in crate::viewer::runtime_live) fn notify_action_result_if_needed(
-        &mut self,
-        runtime_event: &RuntimeWorldEvent,
-        mapped_event: WorldEvent,
-    ) {
-        let Some(caused_by) = runtime_event.caused_by.as_ref() else {
-            return;
-        };
-        let RuntimeCausedBy::Action(action_id) = caused_by else {
-            return;
-        };
-        let rejected = matches!(
-            runtime_event.body,
-            RuntimeWorldEventBody::Domain(RuntimeDomainEvent::ActionRejected { .. })
-        );
-        self.notify_action_result(*action_id, mapped_event, rejected);
+        Some(RuntimeLlmDecision {
+            agent_id: tick.agent_id,
+            decision: tick.decision,
+            decision_trace: tick.decision_trace,
+            cognition,
+        })
     }
 
     fn sync_shadow_kernel(
@@ -1055,6 +1090,11 @@ impl RuntimeLlmSidecar {
         let provider_settings = provider_settings_from_env()?;
         if self.runner.is_none() {
             self.runner = Some(match provider_settings.as_ref() {
+                #[cfg(not(target_arch = "wasm32"))]
+                Some(_) => {
+                    RuntimeDecisionRunner::ProviderBacked(AsyncAgentRunner::with_default_capacity())
+                }
+                #[cfg(target_arch = "wasm32")]
                 Some(_) => RuntimeDecisionRunner::ProviderBacked(AgentRunner::new()),
                 None => RuntimeDecisionRunner::Builtin(AgentRunner::new()),
             });
@@ -1105,7 +1145,7 @@ impl RuntimeLlmSidecar {
                     runner.register(behavior);
                 }
                 RuntimeDecisionRunner::ProviderBacked(runner) => {
-                    if runner.get(agent_id.as_str()).is_some() {
+                    if self.provider_agent_ids.contains(agent_id.as_str()) {
                         continue;
                     }
                     let settings = provider_settings.as_ref().ok_or_else(|| {
@@ -1125,10 +1165,8 @@ impl RuntimeLlmSidecar {
                     )
                     .require_continuous_request_context()
                     .with_provider_config_ref(format!(
-                        "provider://{}/runtime-live/pid-{}/{}",
-                        settings.provider_transport,
-                        std::process::id(),
-                        agent_id
+                        "provider://{}/runtime-live/{}",
+                        settings.provider_transport, agent_id
                     ))
                     .with_agent_profile(settings.agent_profile.clone())
                     .with_execution_mode(settings.execution_mode)
@@ -1141,7 +1179,10 @@ impl RuntimeLlmSidecar {
                         } else {
                             behavior
                         };
-                    runner.register(behavior);
+                    runner
+                        .register(behavior)
+                        .map_err(|error| format!("provider agent init failed: {error}"))?;
+                    self.provider_agent_ids.insert(agent_id);
                 }
             }
         }

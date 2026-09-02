@@ -954,6 +954,7 @@ Provider smoke after reconcile:
     --base-url "http://$PROVIDER_BIND" \\
     --auth-token "newapi_user_ref:\$TEST_NEWAPI_USER_REF" \\
     --timeout-ms 90000 \\
+    --legacy-compatibility-only \\
     --decision-count 1 \\
     --min-successes 1
 

@@ -6,14 +6,23 @@
 
 ## 目标端点
 
-对外必须暴露以下 4 个 provider contract 端点:
+target lane 对外必须暴露以下 4 个 provider contract 端点:
 
 - `GET /v1/provider/info`
 - `GET /v1/provider/health`
-- `POST /v1/world-simulator/decision`
-- `POST /v1/world-simulator/feedback`
+- `POST /v1/world-simulator/decision-context`
+- `POST /v1/world-simulator/feedback-context`
 
-repo-owned 参考装配中，这 4 个端点由 `oasis7_provider_local_bridge` 提供，公网 `https://` 入口由 `nginx` 代理到本机 `127.0.0.1:5841`。参考 nginx 模板已包含按 IP 与 `Authorization` 的限流，以及连接数限制，用来降低单个 bearer 快速打空 LetAI quota 的风险。
+bridge 还可保留以下 bare 路由用于 legacy compatibility-only 输入：
+
+- `POST /v1/world-simulator/decision`（旧 `DecisionRequest` / `DecisionResponse` DTO）
+- `POST /v1/world-simulator/feedback`（旧 `FeedbackEnvelope` DTO）
+
+bare 路由不承载 `ContinuousAgentRequestContextV1`、`ContinuousAgentResponseContextV1` 或
+`FeedbackEnvelopeV1`，不得作为 target cognition、receipt 或 production async 证明。当前
+HTTP body 没有 `compatibility_lane` 字段；路由/adapter 配置是 lane 选择依据。
+
+repo-owned 参考装配中，这些端点由 `oasis7_provider_local_bridge` 提供，公网 `https://` 入口由 `nginx` 代理到本机 `127.0.0.1:5841`。参考 nginx 模板已包含按 IP 与 `Authorization` 的限流，以及连接数限制，用来降低单个 bearer 快速打空 LetAI quota 的风险。
 
 ## 当前环境矩阵
 
@@ -21,10 +30,10 @@ repo-owned 参考装配中，这 4 个端点由 `oasis7_provider_local_bridge` �
 
 | Lane | Host | Provider bridge | 对外入口 | State 来源 | 当前 live gate |
 | --- | --- | --- | --- | --- | --- |
-| 测试环境 | `39.104.204.172` | `oasis7-remote-provider-bridge.service`，监听 `127.0.0.1:5841` | 暂无公网域名；本机/内网验证优先 | 本机 `/etc/oasis7/newapi-bridge/bridge-state.json` | 2026-06-04 live gate: state realigned to the same NewAPI project/token as 205; loopback decision passes with `provider_version=letai/gpt-5.4` |
-| 正式环境 | `39.104.205.67` | `oasis7-remote-provider-bridge.service`，监听 `127.0.0.1:5841` | `https://t2t.oasis7.tech` | 本机 `/etc/oasis7/newapi-bridge/bridge-state.json` | 2026-06-04 live gate: loopback decision passes with `provider_version=letai/gpt-5.4`; current Codex control host to public TLS is reset before nginx, while 204-to-205 public TLS/HTTP succeeds |
+| 测试环境 | `39.104.204.172` | `oasis7-remote-provider-bridge.service`，监听 `127.0.0.1:5841` | 暂无公网域名；本机/内网验证优先 | 本机 `/etc/oasis7/newapi-bridge/bridge-state.json` | 2026-06-04 live gate: state realigned to the same NewAPI project/token as 205; bare legacy decision smoke passes with `provider_version=letai/gpt-5.4` |
+| 正式环境 | `39.104.205.67` | `oasis7-remote-provider-bridge.service`，监听 `127.0.0.1:5841` | `https://t2t.oasis7.tech` | 本机 `/etc/oasis7/newapi-bridge/bridge-state.json` | 2026-06-04 live gate: bare legacy decision smoke passes with `provider_version=letai/gpt-5.4`; current Codex control host to public TLS is reset before nginx, while 204-to-205 public TLS/HTTP succeeds; this is not target cognition proof |
 
-两套 provider bridge 当前都启用自动映射模式：client 传 `newapi_user_ref:<user_ref>` 或 `bridge_user_id:<id>`，provider bridge 从本机 NewAPI bridge state 解析对应 `token_key`。`GET /v1/provider/health` 可能因上游 health URL 返回 `HTTP 401` 而显示 `degraded`；是否能调用模型以 `POST /v1/world-simulator/decision` smoke 为准。
+两套 provider bridge 当前都启用自动映射模式：client 传 `newapi_user_ref:<user_ref>` 或 `bridge_user_id:<id>`，provider bridge 从本机 NewAPI bridge state 解析对应 `token_key`。`GET /v1/provider/health` 可能因上游 health URL 返回 `HTTP 401` 而显示 `degraded`；是否能调用模型以 target `/v1/world-simulator/decision-context` smoke 为准。若使用仓库现有的 bare-route contract smoke，结果只能证明 legacy compatibility 路径可达，不能替代 target cognition 验证。
 
 ## 仓库资产
 
@@ -184,29 +193,45 @@ curl -sS -H "Authorization: Bearer <alice-bridge-token>" \
 公网 nginx ingress。它不打印 raw `token_key`、密码或私钥。
 
 ```bash
-./scripts/provider-remote-https/provider-bridge-live-gate.sh --decision-count 1
-./scripts/provider-remote-https/provider-bridge-live-gate.sh --decision-count 1 --loopback-target 204 --skip-public
-./scripts/provider-remote-https/provider-bridge-live-gate.sh --decision-count 1 --loopback-target 205 --skip-public
-./scripts/provider-remote-https/provider-bridge-live-gate.sh --decision-count 1 --skip-loopback
+./scripts/provider-remote-https/provider-bridge-live-gate.sh \
+  --target-context-payload-file <runtime-issued-context-pairs.json> \
+  --decision-count 1
+./scripts/provider-remote-https/provider-bridge-live-gate.sh \
+  --target-context-payload-file <runtime-issued-context-pairs.json> \
+  --decision-count 1 --loopback-target 204 --skip-public
+./scripts/provider-remote-https/provider-bridge-live-gate.sh \
+  --target-context-payload-file <runtime-issued-context-pairs.json> \
+  --decision-count 1 --loopback-target 205 --skip-public
+./scripts/provider-remote-https/provider-bridge-live-gate.sh \
+  --target-context-payload-file <runtime-issued-context-pairs.json> \
+  --decision-count 1 --skip-loopback
 ```
+
+如需仅核对 bare 兼容路径，必须显式使用
+`--legacy-compatibility-only`；该模式输出只属于 legacy evidence，不能作为 target
+cognition、Runtime receipt 或 production async 证明。
 
 长跑额度消耗/低额度验证也必须走真实环境，使用 dedicated lowquota persona 后再执行:
 
 ```bash
 ./scripts/provider-remote-https/provider-bridge-live-gate.sh \
+  --target-context-payload-file <runtime-issued-context-pairs.json> \
   --skip-public \
   --loopback-target 204 \
   --lowquota-target 204 \
   --lowquota-decision-count 20
 
 ./scripts/provider-remote-https/provider-bridge-live-gate.sh \
+  --target-context-payload-file <runtime-issued-context-pairs.json> \
   --skip-loopback \
   --lowquota-target public205 \
   --lowquota-decision-count 20
 ```
 
 默认 CI 只跑无副作用的 provider contract 回归；真实环境门禁需要凭据和公网可达性，
-用 `OASIS7_CI_RUN_PROVIDER_LIVE_GATE=true ./scripts/ci-tests.sh --required` 显式启用。
+并且必须提供 Runtime-issued pair artifact；用
+`OASIS7_PROVIDER_LIVE_TARGET_CONTEXT_PAYLOAD_FILE=/secure/path/runtime-issued-context-pairs.json
+OASIS7_CI_RUN_PROVIDER_LIVE_GATE=true ./scripts/ci-tests.sh --required` 显式启用。
 mock 测试只用于保护 harness 解析和失败判定，不作为环境通过证据。
 
 公网入口验证:
@@ -222,14 +247,33 @@ curl -sS -H "Authorization: Bearer <token>" https://t2t.oasis7.tech/v1/provider/
 ./scripts/provider-remote-https/provider-bridge-contract-smoke.sh \
   --base-url https://t2t.oasis7.tech \
   --auth-token <token> \
+  --target-context-payload-file <runtime-issued-context-pairs.json> \
   --decision-count 1 \
   --min-successes 1
 ```
 
-该脚本同时验证 `/v1/provider/info`、`/v1/provider/health` 与
-`POST /v1/world-simulator/decision`。默认允许 health 返回 `degraded`，因为上游
-health URL 可能返回 `HTTP 401`；是否能调用模型仍以 decision smoke 为准。若需要把
-health 也作为硬门禁，追加 `--require-health-ok`。
+该脚本同时验证 `/v1/provider/info`、`/v1/provider/health`、target
+`POST /v1/world-simulator/decision-context` 与配对的
+`POST /v1/world-simulator/feedback-context`。`<runtime-issued-context-pairs.json>`
+必须是由 Runtime 产生的 JSON wrapper artifact，根对象为
+`{"requests":[{"decision_context":<ContinuousAgentRequestContextV1>,
+"feedback_context":<FeedbackEnvelopeV1>}]}`；脚本会在发出请求前拒绝 bare DTO、缺失
+identity/capability context、非 canonical digest、错配 feedback 或不足的 pair 数量。
+provider bridge 仍会执行其自身的 canonical hash、Runtime binding 与 feedback 合同校验；
+本地脚本不把自造 payload 或脚本输出升级为 Runtime attestation。默认允许 health 返回
+`degraded`，因为上游 health URL 可能返回 `HTTP 401`；target cognition proof 仍要求两个
+target POST 都成功。若需要把 health 也作为硬门禁，追加 `--require-health-ok`。
+
+如需单独审计旧兼容入口，必须显式标记为 legacy，且该结果不能替代 target cognition proof：
+
+```bash
+./scripts/provider-remote-https/provider-bridge-contract-smoke.sh \
+  --base-url https://t2t.oasis7.tech \
+  --auth-token <token> \
+  --legacy-compatibility-only \
+  --decision-count 1 \
+  --min-successes 1
+```
 
 若 LetAI 上游对默认 `oasis7-letai-provider-cli/1.0` User-Agent 做了额外拦截，可在 env 里显式覆写:
 

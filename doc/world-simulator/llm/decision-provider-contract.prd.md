@@ -175,9 +175,10 @@ it must not treat a provider tool call as committed execution. Legacy `FeedbackE
 `action_id -> candidate_action_id`; `success=true` requires a Runtime committed receipt, while
 `success=false` requires an explicit Runtime disposition or fails as
 `legacy_feedback_ambiguous`. Missing cognition correlation is `legacy_no_cognition_proof` and
-cannot enter the production async lane. Any heuristic fallback requires explicit
-`compatibility_lane=legacy_heuristic_v1` and `legacy_heuristic_used`, and is excluded from target
-parity/proven evidence and automatic memory/continuation semantics.
+cannot enter the production async lane. Any heuristic fallback is restricted to an explicitly
+selected legacy fixture/profile and is excluded from target parity/proven evidence and automatic
+memory/continuation semantics; the current HTTP bridge does not define a
+`compatibility_lane` wire field.
 
 The canonical status vocabulary is only `committed/rejected/failed/pending`; a no-effect outcome
 is `rejected` with `reject_reason=no_effect`, never a fifth status. P0 scope compatibility may map
@@ -195,7 +196,8 @@ summary string. Tags may be an empty list, while empty tag elements are rejected
 the explicit canonical empty-list encoding.
 Target `DecisionResponse.memory_write_intents` uses `MemoryWriteIntentV1` with
 `schema_version/scope/summary?/tags`; the existing `MemoryWriteIntent` DTO remains unchanged and
-is accepted only through explicit `compatibility_lane=legacy_v1` mapping.
+is accepted only through the explicitly selected legacy route/adapter mapping. The current HTTP
+bridge does not define a `compatibility_lane` wire field.
 - `CapabilitySnapshot`: 本轮 catalog 的 identity/digest；每个动态 capability 绑定 namespace、version、schema ref、manifest/artifact/interface hash、caps 与 runtime `cost_quote`。
   - `TraceEnvelope`: provider transcript、tool trace、latency、token/cost、schema repair 记录。
 - target trace bounds：每 turn 最多 64 条 transcript、64 条 tool trace；单条分别最多 2 KiB、1 KiB；input/output summary 各最多 1 KiB；upstream trace 最多 4 KiB；canonical trace 总计最多 32 KiB。超限不得静默截断，非-authority diagnostics 以 `trace_payload_too_large` 丢弃，authority-bearing overflow fail closed；credential/token/authorization/private-key/path 统一替换为 `<redacted>`。

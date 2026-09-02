@@ -93,10 +93,11 @@ The request digest is computed from canonical V1 outer-context bytes excluding t
 `oasis7.cognition.request.v1`; provider invocation uses the shared domain-separated derivation.
 `FinalityBindingV1` and world binding fields follow the paired Runtime shape and use the shared
 `H_v1` registry. The default target lane is strict. Legacy scope `short_term` may map
-to `turn_private` only with explicit `compatibility_lane=legacy_v1` and
-`memory_scope_alias_used`; heuristic action fallback requires
-`compatibility_lane=legacy_heuristic_v1` plus `legacy_heuristic_used` and is excluded from target
-parity/proven evidence and automatic memory/continuation semantics.
+to `turn_private` only through an explicitly selected legacy route/adapter and
+`memory_scope_alias_used`; heuristic action fallback is restricted to a legacy
+fixture/profile and is excluded from target parity/proven evidence and automatic
+memory/continuation semantics. The current HTTP bridge does not define a
+`compatibility_lane` wire field.
 P0 memory writes allow only `turn_private | session_private`; the reserved
 `agent_private_long_term` enum value is disabled by default and deferred to P2/independent memory
 authority.
@@ -125,7 +126,8 @@ authority.
   empty-list encoding), but empty tag elements are rejected.
 - Target `DecisionResponse.memory_write_intents` carries `MemoryWriteIntentV1` (`schema_version`,
   `scope`, optional `summary`, and `tags`); the existing `MemoryWriteIntent` DTO remains unchanged
-  and is accepted only through explicit `compatibility_lane=legacy_v1` mapping.
+  and is accepted only through the explicitly selected legacy route/adapter mapping. The current
+  HTTP bridge does not define a `compatibility_lane` wire field.
 - `Local Provider` PoC 只允许在低频、低破坏性 agent 类型上试点；高频强一致 actor 不在首轮范围。
 - required 测试必须可离线执行，因此标准层必须先支持 `MockProvider`，不能以外部联网能力作为主验证前提。
 

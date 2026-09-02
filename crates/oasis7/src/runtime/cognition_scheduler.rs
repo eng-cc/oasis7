@@ -202,7 +202,11 @@ pub struct CognitionScheduler {
     backpressure: BTreeMap<String, SchedulerWakeV1>,
     backpressure_priority: BTreeMap<String, i64>,
     recovered_wakes: BTreeSet<String>,
-    in_flight: usize,
+    /// Selected wakes remain durable until their owner reports completion,
+    /// failure, cancellation, or recovery.  Keeping the full identity here
+    /// prevents a restart from releasing an anonymous capacity slot and
+    /// losing the wake that occupied it.
+    in_flight: BTreeMap<String, SchedulerWakeV1>,
     logical_tick: u64,
     cursor: SchedulerCursorV1,
     metrics: SchedulerExecutionMetrics,
@@ -226,7 +230,7 @@ impl CognitionScheduler {
             backpressure: BTreeMap::new(),
             backpressure_priority: BTreeMap::new(),
             recovered_wakes: BTreeSet::new(),
-            in_flight: 0,
+            in_flight: BTreeMap::new(),
             logical_tick: 0,
             metrics: SchedulerExecutionMetrics::default(),
         }
@@ -263,6 +267,11 @@ impl CognitionScheduler {
             self.backpressure_priority
                 .insert(wake_id.clone(), self.effective_priority(&wake));
             self.backpressure.insert(wake_id, wake);
+            // Queue-full is still a service attempt. Persisting this cursor
+            // advancement makes repeated overload deterministic and prevents
+            // a restored scheduler from replaying an unbounded stale prefix.
+            self.cursor.logical_tick = self.logical_tick;
+            self.cursor.cursor_seq = self.cursor.cursor_seq.saturating_add(1);
             Ok(SchedulerEnqueueOutcome {
                 disposition: "pending".to_string(),
                 reason: "scheduler_backpressure".to_string(),
@@ -308,7 +317,104 @@ impl CognitionScheduler {
     }
 
     pub fn release_capacity(&mut self) {
-        self.in_flight = self.in_flight.saturating_sub(1);
+        // Compatibility API for scheduler-only callers. World-owned paths
+        // use `release_in_flight` or `deactivate_wake` with the exact ID.
+        if let Some(wake_id) = self.in_flight.keys().next().cloned() {
+            self.in_flight.remove(&wake_id);
+        }
+    }
+
+    /// Release one selected wake by its durable identity. Terminal lifecycle
+    /// transitions must not free an unrelated in-flight slot.
+    pub fn release_in_flight(&mut self, wake_id: &str) -> Result<SchedulerWakeV1, SchedulerError> {
+        self.in_flight
+            .remove(wake_id)
+            .ok_or_else(|| SchedulerError::new("in_flight_wake_missing"))
+    }
+
+    /// Remove a wake from every scheduler bucket. This is used by terminal,
+    /// cancellation, and reorg transitions so a stale selected wake cannot be
+    /// delivered after its continuation has become inactive.
+    pub fn deactivate_wake(
+        &mut self,
+        wake_id: &str,
+    ) -> Result<Option<SchedulerWakeV1>, SchedulerError> {
+        let mut removed = self.in_flight.remove(wake_id);
+        if removed.is_none() {
+            if let Some(index) = self.active.iter().position(|wake| wake.wake_id == wake_id) {
+                removed = Some(self.active.remove(index));
+            }
+        }
+        if removed.is_none() {
+            removed = self.backpressure.remove(wake_id);
+            self.backpressure_priority.remove(wake_id);
+        }
+        Ok(removed)
+    }
+
+    /// Remove wakes that no longer have an active Runtime continuation. The
+    /// predicate is evaluated across every durable bucket, including an
+    /// in-flight wake restored from a prior process.
+    pub fn prune_wakes_if<F>(&mut self, mut keep: F) -> Vec<SchedulerWakeV1>
+    where
+        F: FnMut(&SchedulerWakeV1) -> bool,
+    {
+        let mut removed = Vec::new();
+        self.active.retain(|wake| {
+            if keep(wake) {
+                true
+            } else {
+                removed.push(wake.clone());
+                false
+            }
+        });
+        let backpressure_ids: Vec<String> = self
+            .backpressure
+            .iter()
+            .filter(|(_, wake)| !keep(wake))
+            .map(|(wake_id, _)| wake_id.clone())
+            .collect();
+        for wake_id in backpressure_ids {
+            if let Some(wake) = self.backpressure.remove(&wake_id) {
+                self.backpressure_priority.remove(&wake_id);
+                removed.push(wake);
+            }
+        }
+        self.in_flight.retain(|wake_id, wake| {
+            if keep(wake) {
+                true
+            } else {
+                let _ = wake_id;
+                removed.push(wake.clone());
+                false
+            }
+        });
+        removed
+    }
+
+    /// Requeue all selected wakes after process recovery, retaining their
+    /// complete identity and preserving the existing cursor. Overflow wakes
+    /// remain in the durable backpressure map rather than being dropped.
+    pub fn recover_in_flight(&mut self, tick: u64) -> Vec<SchedulerWakeV1> {
+        self.advance_logical_tick(tick);
+        let mut wakes: Vec<SchedulerWakeV1> = self.in_flight.values().cloned().collect();
+        wakes.sort_by(|left, right| self.compare(left, right));
+        self.in_flight.clear();
+        let mut recovered = Vec::new();
+        for mut wake in wakes {
+            wake.pending_reason = "scheduler_recovery".to_string();
+            if self.available_slots() > 0 {
+                self.active.push(wake.clone());
+                recovered.push(wake);
+            } else {
+                let wake_id = wake.wake_id.clone();
+                let priority = self.effective_priority(&wake);
+                self.backpressure_priority.insert(wake_id.clone(), priority);
+                self.backpressure.insert(wake_id, wake.clone());
+                recovered.push(wake);
+            }
+        }
+        recovered
     }
 
     pub fn recover_capacity(&mut self, tick: u64) -> Vec<SchedulerWakeV1> {
@@ -345,6 +451,17 @@ impl CognitionScheduler {
         recovered
     }
 
+    /// Recover selected wakes without changing the committed service cursor
+    /// or logical tick. This is the crash-recovery counterpart to selection.
+    pub fn recover_in_flight_preserving_cursor(&mut self, tick: u64) -> Vec<SchedulerWakeV1> {
+        let cursor = self.cursor.clone();
+        let logical_tick = self.logical_tick;
+        let recovered = self.recover_in_flight(tick);
+        self.cursor = cursor;
+        self.logical_tick = logical_tick;
+        recovered
+    }
+
     /// Encode the complete scheduler state used by the World projection.
     /// The extra count is an observability convenience and is ignored by
     /// serde when restoring the typed state.
@@ -367,6 +484,13 @@ impl CognitionScheduler {
         self.cursor.cursor_seq
     }
 
+    /// Return selected leases in canonical wake-id order for the production
+    /// dispatcher. The leases remain occupied until an exact identity is
+    /// released or a terminal/recovery path requeues them.
+    pub fn in_flight_wakes(&self) -> Vec<SchedulerWakeV1> {
+        self.in_flight.values().cloned().collect()
+    }
+
     pub fn policy(&self) -> &SchedulerPolicyV1 {
         &self.policy
     }
@@ -383,7 +507,12 @@ impl CognitionScheduler {
         }
         scheduler.policy.validate()?;
         if scheduler.capacity == 0
-            || scheduler.in_flight > scheduler.capacity
+            || scheduler.in_flight.len() > scheduler.capacity
+            || scheduler
+                .active
+                .len()
+                .saturating_add(scheduler.in_flight.len())
+                > scheduler.capacity
             || scheduler.logical_tick != scheduler.cursor.logical_tick
             || scheduler.cursor.schema_version != "scheduler-cursor.v1"
             || scheduler.cursor.policy_config_digest != scheduler.policy.policy_config_digest()
@@ -400,6 +529,7 @@ impl CognitionScheduler {
             .active
             .iter()
             .chain(scheduler.backpressure.values())
+            .chain(scheduler.in_flight.values())
         {
             wake.validate()?;
             if !wake_ids.insert(wake.wake_id.as_str()) {
@@ -414,6 +544,11 @@ impl CognitionScheduler {
                 return Err(SchedulerError::new("scheduler_wake_binding_mismatch"));
             }
         }
+        for (wake_id, wake) in &scheduler.in_flight {
+            if wake.wake_id != *wake_id {
+                return Err(SchedulerError::new("scheduler_in_flight_identity_mismatch"));
+            }
+        }
         for (wake_id, priority) in &scheduler.backpressure_priority {
             let Some(wake) = scheduler.backpressure.get(wake_id) else {
                 return Err(SchedulerError::new("scheduler_backpressure_mismatch"));
@@ -425,17 +560,34 @@ impl CognitionScheduler {
         if scheduler.backpressure_priority.len() != scheduler.backpressure.len() {
             return Err(SchedulerError::new("scheduler_backpressure_mismatch"));
         }
+        if scheduler.recovered_wakes.iter().any(|wake_id| {
+            wake_id.trim().is_empty() || scheduler.backpressure.contains_key(wake_id)
+        }) {
+            return Err(SchedulerError::new("scheduler_recovered_wake_mismatch"));
+        }
         Ok(scheduler)
     }
 
     pub fn select_ready(&mut self, tick: u64) -> Vec<SchedulerWakeV1> {
+        self.select_ready_if(tick, |_| true)
+    }
+
+    /// Select ready wakes while applying a World-owned eligibility predicate.
+    /// Untimed event/receipt/state wakes must be admitted by their committed
+    /// evidence, not by a synthetic tick or starvation timeout.
+    pub fn select_ready_if<F>(&mut self, tick: u64, mut eligible: F) -> Vec<SchedulerWakeV1>
+    where
+        F: FnMut(&SchedulerWakeV1) -> bool,
+    {
         self.advance_logical_tick(tick);
         let mut indexed: Vec<(usize, SchedulerWakeV1)> = self
             .active
             .iter()
             .cloned()
             .enumerate()
-            .filter(|(_, wake)| self.is_ready(wake, tick))
+            .filter(|(_, wake)| {
+                eligible(wake) && (self.is_ready(wake, tick) || wake.next_wake_tick == u64::MAX)
+            })
             .collect();
         indexed.sort_by(|(_, left), (_, right)| self.compare(left, right));
 
@@ -458,7 +610,9 @@ impl CognitionScheduler {
         }
         self.active
             .retain(|wake| !selected_ids.contains(&wake.wake_id));
-        self.in_flight = self.in_flight.saturating_add(selected.len());
+        for wake in &selected {
+            self.in_flight.insert(wake.wake_id.clone(), wake.clone());
+        }
         selected
     }
 
@@ -481,7 +635,7 @@ impl CognitionScheduler {
 
     fn available_slots(&self) -> usize {
         self.capacity
-            .saturating_sub(self.active.len().saturating_add(self.in_flight))
+            .saturating_sub(self.active.len().saturating_add(self.in_flight.len()))
     }
 
     fn is_ready(&self, wake: &SchedulerWakeV1, tick: u64) -> bool {
@@ -638,7 +792,7 @@ impl CognitionScheduler {
             backpressure: self.backpressure.clone(),
             backpressure_priority: self.backpressure_priority.clone(),
             recovered_wakes: self.recovered_wakes.clone(),
-            in_flight: self.in_flight,
+            in_flight: self.in_flight.clone(),
             logical_tick: self.logical_tick,
             cursor: self.cursor.clone(),
             metrics: self.metrics,

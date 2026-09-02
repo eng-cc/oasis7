@@ -10,15 +10,23 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
     let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
-    let base_url = spawn_runtime_live_mock_http_server(1, {
+    let decision_count = Arc::new(Mutex::new(0_usize));
+    let base_url = spawn_runtime_live_mock_http_server(5, {
         let recorded = Arc::clone(&recorded);
+        let decision_count = Arc::clone(&decision_count);
         move |request| {
-            recorded
-                .lock()
-                .expect("recorded lock")
-                .push(request.clone());
+            {
+                let mut recorded = recorded.lock().expect("recorded lock");
+                recorded.push(request.clone());
+            }
             match (request.method.as_str(), request.path.as_str()) {
                 ("POST", "/v1/world-simulator/decision-context") => {
+                    let request_number = {
+                        let mut decision_count =
+                            decision_count.lock().expect("decision count lock");
+                        *decision_count += 1;
+                        *decision_count
+                    };
                     let decoded: crate::simulator::ContinuousAgentRequestContextV1 =
                         serde_json::from_slice(request.body.as_slice())
                             .expect("decode outer decision request");
@@ -47,17 +55,26 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
                             .is_canonical_blake3(),
                         "runtime binding must carry a canonical manifest hash"
                     );
+                    if request_number == 2 {
+                        return MockHttpResponse {
+                            status_code: 503,
+                            body: serde_json::json!({
+                                "ok": false,
+                                "error": "provider temporarily unavailable"
+                            })
+                            .to_string(),
+                        };
+                    }
                     let response = crate::simulator::DecisionResponse {
                         decision: crate::simulator::ProviderDecision::Act {
-                            action_ref: "speak_to_nearby".to_string(),
-                            action: crate::simulator::Action::SpeakToNearby {
+                            action_ref: "move_agent".to_string(),
+                            action: crate::simulator::Action::MoveAgent {
                                 agent_id: decoded
                                     .base_decision_request
                                     .observation
                                     .agent_id
                                     .clone(),
-                                message: "runtime-live step ok".to_string(),
-                                target_agent_id: None,
+                                to: format!("runtime:{request_number}:0:0"),
                             },
                         },
                         module_command: None,
@@ -70,6 +87,17 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
                     MockHttpResponse {
                         status_code: 200,
                         body: serde_json::to_string(&response).expect("encode decision response"),
+                    }
+                }
+                ("POST", "/v1/world-simulator/feedback-context") => {
+                    let feedback: crate::simulator::FeedbackEnvelopeV1 =
+                        serde_json::from_slice(request.body.as_slice())
+                            .expect("decode Runtime feedback");
+                    assert_eq!(feedback.status, "committed");
+                    assert!(feedback.runtime_receipt_id.is_some());
+                    MockHttpResponse {
+                        status_code: 200,
+                        body: serde_json::json!({"ok": true}).to_string(),
                     }
                 }
                 _ => MockHttpResponse {
@@ -101,53 +129,162 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
     )
     .expect("runtime server");
-    let baseline_time = server.world.state().time;
-    let (mut writer, client) = test_writer_pair();
-    let mut session = RuntimeLiveSession::new();
-
+    let expected_world_id = server.config.world_id.clone();
+    let finality_block_hash =
+        crate::simulator::h_v1("oasis7.viewer.test.finality-block.v1", &expected_world_id)
+            .to_string();
     server
-        .apply_control_mode(
-            ViewerControl::Step { count: 1 },
-            Some(9),
-            &mut session,
-            &mut writer,
+        .world
+        .bind_cognition_runtime(
+            expected_world_id.as_str(),
+            "provider-context-branch",
+            0,
+            Some(finality_block_hash.clone()),
+            "verified",
+            0,
         )
-        .expect("control handled");
-    writer.flush().expect("flush response");
+        .expect("bind authoritative runtime cognition context");
+    server
+        .world
+        .install_test_provider_capability_fixture("agent-0")
+        .expect("install Runtime provider capability fixture");
+    let baseline_event_seq = latest_runtime_event_seq(&server.world);
+    let mut first_decision_observed = false;
+    for _ in 0..64 {
+        server.llm_sidecar.request_decision();
+        match server.enqueue_llm_action_from_sidecar() {
+            Ok(Some(_)) => {
+                first_decision_observed = true;
+                break;
+            }
+            Ok(None) | Err(_) => std::thread::yield_now(),
+        }
+    }
+    assert!(
+        first_decision_observed,
+        "provider-backed action should complete without advancing the World head"
+    );
 
-    let ack = read_control_completion_ack(&client, Duration::from_millis(500))
-        .expect("step should advance with provider-backed decision");
-    assert_eq!(ack.status, ControlCompletionStatus::Advanced);
+    let mut transient_failure_observed = false;
+    for _ in 0..64 {
+        server.llm_sidecar.request_decision();
+        if let Err(trace) = server.enqueue_llm_action_from_sidecar() {
+            assert!(
+                decision_trace_provider_error_retryable(&trace).unwrap_or(false),
+                "second provider response should be retryable: {trace:?}"
+            );
+            transient_failure_observed = true;
+            break;
+        }
+        std::thread::yield_now();
+    }
     assert!(
-        ack.delta_logical_time > 0 || ack.delta_event_seq > 0,
-        "step should report logical or event progress"
+        transient_failure_observed,
+        "transient provider failure should surface"
+    );
+
+    let mut retry_decision_observed = false;
+    for _ in 0..64 {
+        server.llm_sidecar.request_decision();
+        match server.enqueue_llm_action_from_sidecar() {
+            Ok(Some(_)) => {
+                retry_decision_observed = true;
+                break;
+            }
+            Ok(None) | Err(_) => std::thread::yield_now(),
+        }
+    }
+    assert!(
+        retry_decision_observed,
+        "transport retry should complete with the preserved provider turn"
     );
     assert!(
-        server.world.state().time > baseline_time,
-        "step should advance runtime time after requesting provider decision"
+        latest_runtime_event_seq(&server.world) > baseline_event_seq,
+        "provider-backed Runtime commit should append an authoritative event"
     );
-    let feedback = server
-        .latest_player_gameplay_feedback
-        .as_ref()
-        .expect("recent feedback recorded");
-    assert_eq!(feedback.stage, "completed_advanced");
 
     let recorded = recorded.lock().expect("recorded lock");
+    let decision_records: Vec<&RecordedHttpRequest> = recorded
+        .iter()
+        .filter(|request| request.path == "/v1/world-simulator/decision-context")
+        .collect();
+    let feedback_records: Vec<&RecordedHttpRequest> = recorded
+        .iter()
+        .filter(|request| request.path == "/v1/world-simulator/feedback-context")
+        .collect();
+    assert_eq!(decision_records.len(), 3);
     assert_eq!(
-        recorded.len(),
-        1,
-        "step should request one provider decision"
+        feedback_records.len(),
+        2,
+        "recorded paths: {:?}",
+        recorded
+            .iter()
+            .map(|request| request.path.as_str())
+            .collect::<Vec<_>>()
     );
-    assert_eq!(recorded[0].path, "/v1/world-simulator/decision-context");
     assert_eq!(
-        recorded[0].headers.get("content-type").map(String::as_str),
+        decision_records[0].path,
+        "/v1/world-simulator/decision-context"
+    );
+    assert_eq!(
+        decision_records[0]
+            .headers
+            .get("content-type")
+            .map(String::as_str),
         Some("application/json")
     );
     let decision_request: crate::simulator::ContinuousAgentRequestContextV1 =
-        serde_json::from_slice(recorded[0].body.as_slice())
+        serde_json::from_slice(decision_records[0].body.as_slice())
             .expect("decode provider-backed outer decision request");
-    let decision_request = decision_request.base_decision_request;
-    let action_refs: Vec<&str> = decision_request
+    assert_eq!(
+        decision_request.runtime_binding.world_id, expected_world_id,
+        "provider context must preserve the Runtime-owned world identity"
+    );
+    assert_eq!(
+        decision_request.runtime_binding.branch_id, "provider-context-branch",
+        "provider context must preserve the Runtime-owned branch identity"
+    );
+    assert_eq!(decision_request.runtime_binding.finality_epoch, 0);
+    assert_eq!(
+        decision_request
+            .runtime_binding
+            .finality_block_hash
+            .as_ref()
+            .map(|hash| hash.as_str()),
+        Some(finality_block_hash.as_str())
+    );
+    assert_eq!(decision_request.runtime_binding.finality_status, "verified");
+    assert_eq!(decision_request.runtime_binding.reorg_epoch, 0);
+    let current_state_root = server
+        .world
+        .current_state_root_hash()
+        .expect("current Runtime state root");
+    let ad_hoc_state_hash = crate::simulator::h_v1(
+        "oasis7.runtime.world-state.v1",
+        &crate::simulator::Digest32::from(current_state_root),
+    );
+    assert_ne!(
+        decision_request.runtime_binding.base_world_hash, ad_hoc_state_hash,
+        "viewer must not recreate the Runtime binding with an ad-hoc state-root hash"
+    );
+    let provider_observation = &decision_request
+        .base_decision_request
+        .observation
+        .observation;
+    assert!(
+        !provider_observation.self_state.location_ref.is_empty(),
+        "provider context must carry the observed location"
+    );
+    assert!(
+        provider_observation
+            .self_state
+            .resource_summary
+            .get("Electricity")
+            .is_some_and(|amount| *amount > 0),
+        "provider context must carry the observed resources"
+    );
+    let base_decision_request = decision_request.base_decision_request.clone();
+    let action_refs: Vec<&str> = base_decision_request
         .observation
         .action_catalog
         .iter()
@@ -166,7 +303,7 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
             action_refs
         );
     }
-    let memory_summary = decision_request
+    let memory_summary = base_decision_request
         .observation
         .memory_summary
         .as_deref()
@@ -183,5 +320,238 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
         memory_summary.contains("schedule_recipe("),
         "unexpected memory summary: {memory_summary}"
     );
+    let second_request: crate::simulator::ContinuousAgentRequestContextV1 =
+        serde_json::from_slice(decision_records[1].body.as_slice())
+            .expect("decode second provider-backed outer decision request");
+    assert_eq!(
+        decision_request.agent_session_id, second_request.agent_session_id,
+        "transport retry must preserve the Agent session"
+    );
+    assert_eq!(
+        decision_request.agent_subject, second_request.agent_subject,
+        "transport retry must preserve the Agent subject"
+    );
+    let retry_request: crate::simulator::ContinuousAgentRequestContextV1 =
+        serde_json::from_slice(decision_records[2].body.as_slice())
+            .expect("decode transport retry provider-backed request");
+    assert_eq!(second_request.transport_attempt, 1);
+    assert_eq!(retry_request.transport_attempt, 2);
+    assert_eq!(
+        second_request.agent_session_id, retry_request.agent_session_id,
+        "transport retry must preserve the Agent session"
+    );
+    assert_eq!(second_request.agent_turn_id, retry_request.agent_turn_id);
+    assert_eq!(
+        second_request.decision_request_id,
+        retry_request.decision_request_id
+    );
+    assert_eq!(second_request.request_digest, retry_request.request_digest);
+    assert_eq!(second_request.retry_seq, retry_request.retry_seq);
+    for feedback_record in feedback_records {
+        let feedback: crate::simulator::FeedbackEnvelopeV1 =
+            serde_json::from_slice(feedback_record.body.as_slice())
+                .expect("decode delivered Runtime feedback");
+        assert_eq!(feedback.status, "committed");
+        assert_eq!(feedback.provenance, "runtime_authoritative");
+        assert!(feedback.candidate_action_id.is_some());
+        assert!(feedback.runtime_receipt_id.is_some());
+    }
+    clear_runtime_provider_env();
+}
+
+#[test]
+fn runtime_background_play_replans_stale_provider_response_without_transport_retry() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
+    let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
+    let decision_count = Arc::new(Mutex::new(0_usize));
+    let base_url = spawn_runtime_live_mock_http_server(3, {
+        let recorded = Arc::clone(&recorded);
+        let decision_count = Arc::clone(&decision_count);
+        move |request| {
+            recorded
+                .lock()
+                .expect("recorded lock")
+                .push(request.clone());
+            match (request.method.as_str(), request.path.as_str()) {
+                ("POST", "/v1/world-simulator/decision-context") => {
+                    let request_number = {
+                        let mut decision_count = decision_count.lock().expect("count lock");
+                        *decision_count += 1;
+                        *decision_count
+                    };
+                    let decoded: crate::simulator::ContinuousAgentRequestContextV1 =
+                        serde_json::from_slice(request.body.as_slice())
+                            .expect("decode outer decision request");
+                    decoded
+                        .validate_production_lane()
+                        .expect("stale test request must be complete");
+                    let decision = if request_number == 1 {
+                        crate::simulator::ProviderDecision::Act {
+                            action_ref: "move_agent".to_string(),
+                            action: crate::simulator::Action::MoveAgent {
+                                agent_id: decoded
+                                    .base_decision_request
+                                    .observation
+                                    .agent_id
+                                    .clone(),
+                                to: decoded
+                                    .base_decision_request
+                                    .observation
+                                    .observation
+                                    .self_state
+                                    .location_ref
+                                    .clone(),
+                            },
+                        }
+                    } else {
+                        crate::simulator::ProviderDecision::Wait
+                    };
+                    let response = crate::simulator::DecisionResponse {
+                        decision,
+                        module_command: None,
+                        provider_error: None,
+                        diagnostics: crate::simulator::ProviderDiagnostics::default(),
+                        trace_payload: crate::simulator::ProviderTraceEnvelope::default(),
+                        memory_write_intents: Vec::new(),
+                    };
+                    MockHttpResponse {
+                        status_code: 200,
+                        body: serde_json::to_string(&provider_context_response(&decoded, response))
+                            .expect("encode decision response"),
+                    }
+                }
+                ("POST", "/v1/world-simulator/feedback-context") => {
+                    let feedback: crate::simulator::FeedbackEnvelopeV1 =
+                        serde_json::from_slice(request.body.as_slice())
+                            .expect("decode stale Runtime feedback");
+                    assert_eq!(feedback.status, "rejected");
+                    assert_eq!(feedback.reject_reason.as_deref(), Some("stale_base"));
+                    assert!(feedback.runtime_receipt_id.is_none());
+                    MockHttpResponse {
+                        status_code: 200,
+                        body: serde_json::json!({"ok": true}).to_string(),
+                    }
+                }
+                _ => MockHttpResponse {
+                    status_code: 404,
+                    body: serde_json::json!({"ok": false, "error": "not_found"}).to_string(),
+                },
+            }
+        }
+    });
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+        oasis7::env_mut::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
+    }
+
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let world_id = server.config.world_id.clone();
+    let finality_block_hash =
+        crate::simulator::h_v1("oasis7.viewer.test.finality-block.v1", &world_id).to_string();
+    server
+        .world
+        .bind_cognition_runtime(
+            world_id,
+            "main",
+            0,
+            Some(finality_block_hash),
+            "verified",
+            0,
+        )
+        .expect("bind Runtime cognition context");
+    server
+        .world
+        .install_test_provider_capability_fixture("agent-0")
+        .expect("install Runtime provider capability fixture");
+    let (mut writer, _client) = test_writer_pair();
+    let mut session = RuntimeLiveSession::new();
+    session.playing = true;
+
+    let mut stale_feedback_seen = false;
+    let mut replan_request_seen = false;
+    for _ in 0..64 {
+        server
+            .advance_runtime(&mut session, &mut writer, "play", 1, None, false)
+            .expect("stale provider response should be handled");
+        let recorded = recorded.lock().expect("recorded lock");
+        let decisions: Vec<crate::simulator::ContinuousAgentRequestContextV1> = recorded
+            .iter()
+            .filter(|request| request.path == "/v1/world-simulator/decision-context")
+            .map(|request| {
+                serde_json::from_slice(request.body.as_slice()).expect("decode decision request")
+            })
+            .collect();
+        stale_feedback_seen = recorded
+            .iter()
+            .filter(|request| request.path == "/v1/world-simulator/feedback-context")
+            .map(|request| {
+                serde_json::from_slice::<crate::simulator::FeedbackEnvelopeV1>(
+                    request.body.as_slice(),
+                )
+                .expect("decode feedback")
+            })
+            .any(|feedback| {
+                feedback.status == "rejected"
+                    && feedback.reject_reason.as_deref() == Some("stale_base")
+            });
+        replan_request_seen = decisions.len() >= 2;
+        if stale_feedback_seen && replan_request_seen {
+            break;
+        }
+        drop(recorded);
+        std::thread::yield_now();
+    }
+    assert!(
+        stale_feedback_seen,
+        "stale response must produce typed feedback"
+    );
+    assert!(
+        replan_request_seen,
+        "stale response must schedule a new request"
+    );
+    assert_eq!(session.transient_play_failures, 0);
+
+    let recorded = recorded.lock().expect("recorded lock");
+    let decisions: Vec<crate::simulator::ContinuousAgentRequestContextV1> = recorded
+        .iter()
+        .filter(|request| request.path == "/v1/world-simulator/decision-context")
+        .map(|request| {
+            serde_json::from_slice(request.body.as_slice()).expect("decode decision request")
+        })
+        .collect();
+    assert!(decisions.len() >= 2);
+    assert_ne!(decisions[0].agent_turn_id, decisions[1].agent_turn_id);
+    assert_ne!(
+        decisions[0].decision_request_id,
+        decisions[1].decision_request_id
+    );
+    assert!(decisions[1].retry_seq > decisions[0].retry_seq);
+    assert_eq!(decisions[1].transport_attempt, 1);
+    let recent_events = &decisions[1]
+        .base_decision_request
+        .observation
+        .recent_event_summary;
+    assert!(
+        recent_events
+            .iter()
+            .any(|summary| summary.contains("stale_base_replan")
+                && summary.contains(decisions[0].decision_request_id.as_str())
+                && summary.contains("replan_count=1")),
+        "replan request must retain a bounded causal reference: {recent_events:?}"
+    );
+    assert!(!server.world.journal().events.iter().any(|event| matches!(
+        event.body,
+        crate::runtime::WorldEventBody::Domain(crate::runtime::DomainEvent::ActionAccepted { .. })
+            | crate::runtime::WorldEventBody::EffectQueued(_)
+            | crate::runtime::WorldEventBody::ReceiptAppended(_)
+    )));
     clear_runtime_provider_env();
 }

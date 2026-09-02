@@ -24,43 +24,51 @@ impl AsyncAgentRunner {
         verifier: &dyn RuntimeReceiptReadbackVerifier,
         store: &mut MemoryWriteStore,
     ) -> Result<(), AsyncAgentRunnerError> {
-        if feedback.status == "committed" {
-            if let Some(outcome) = self.awaiting_outcomes.values().find(|outcome| {
+        let outcome = self
+            .awaiting_outcomes
+            .values()
+            .find(|outcome| {
                 outcome.agent_id == agent_id
                     && outcome.prepared_context.as_ref().is_some_and(|context| {
                         context.agent_session_id == feedback.agent_session_id
                             && context.agent_turn_id == feedback.agent_turn_id
                             && context.decision_request_id == feedback.decision_request_id
                     })
-            }) {
-                let context = outcome
-                    .prepared_context
-                    .as_ref()
-                    .expect("outcome response has a prepared context");
-                validate_feedback(context, agent_id, &feedback)?;
-                validate_runtime_receipt_lineage(context, &feedback, runtime_receipt)?;
-                let response = outcome.prepared_response_context.as_ref().ok_or_else(|| {
-                    AsyncAgentRunnerError::Cognition(
-                        "Runtime response artifact identity is unavailable".to_string(),
-                    )
-                })?;
-                response
-                    .validate_response_artifact_identity(response_identity)
-                    .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
-                let handle = verifier.verify_world_readback(
-                    context,
-                    &feedback,
-                    runtime_receipt,
-                    response_identity,
-                )?;
-                if handle.receipt_id() != runtime_receipt.receipt_id
-                    || handle.receipt_digest().as_str() != runtime_receipt.receipt_digest
-                    || handle.response_artifact_digest() != &response_identity.artifact_digest
-                {
-                    return Err(AsyncAgentRunnerError::Cognition(
-                        "Runtime readback verifier returned mismatched identity".to_string(),
-                    ));
-                }
+            })
+            .cloned()
+            .ok_or_else(|| {
+                AsyncAgentRunnerError::Cognition(
+                    "Runtime readback requires an awaiting outcome".to_string(),
+                )
+            })?;
+        if feedback.status == "committed" {
+            let context = outcome
+                .prepared_context
+                .as_ref()
+                .expect("outcome response has a prepared context");
+            validate_feedback(context, agent_id, &feedback)?;
+            validate_runtime_receipt_lineage(context, &feedback, runtime_receipt)?;
+            let response = outcome.prepared_response_context.as_ref().ok_or_else(|| {
+                AsyncAgentRunnerError::Cognition(
+                    "Runtime response artifact identity is unavailable".to_string(),
+                )
+            })?;
+            response
+                .validate_response_artifact_identity(response_identity)
+                .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+            let handle = verifier.verify_world_readback(
+                context,
+                &feedback,
+                runtime_receipt,
+                response_identity,
+            )?;
+            if handle.receipt_id() != runtime_receipt.receipt_id
+                || handle.receipt_digest().as_str() != runtime_receipt.receipt_digest
+                || handle.response_artifact_digest() != &response_identity.artifact_digest
+            {
+                return Err(AsyncAgentRunnerError::Cognition(
+                    "Runtime readback verifier returned mismatched identity".to_string(),
+                ));
             }
         }
         self.consume_runtime_feedback_with_lineage(agent_id, feedback, Some(runtime_receipt), store)
