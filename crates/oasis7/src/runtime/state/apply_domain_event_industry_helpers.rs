@@ -68,7 +68,7 @@ impl WorldState {
         spec: &FactoryModuleSpec,
         consume_ledger: &MaterialLedgerId,
         ready_at: &WorldTime,
-        contract_version: u8,
+        contract_version: Option<u8>,
         site_authority_revision: Option<&u64>,
         site_location_id: Option<&str>,
         location_anchor_revision: Option<&u64>,
@@ -127,10 +127,28 @@ impl WorldState {
             });
         }
 
+        // Keep an omitted version distinct from an explicitly classified
+        // historical version zero. Do not let a wire omission turn an
+        // otherwise authority-bound event into a legacy replay: the presence
+        // of any modern admission fact is the structural discriminator.
+        // Genuine historical events have none of these fields and continue
+        // through the explicitly legacy path.
+        let has_modern_admission_facts = site_authority_revision.is_some()
+            || site_location_id.is_some()
+            || location_anchor_revision.is_some()
+            || construction_power_obligation.is_some();
         let modern_contract = match contract_version {
-            0 => false,
-            FACTORY_BUILD_STARTED_MODERN_VERSION => true,
-            unsupported => {
+            None if has_modern_admission_facts => {
+                return Err(WorldError::ResourceBalanceInvalid {
+                    reason: format!(
+                        "modern factory build event is missing its contract discriminator: factory_id={}",
+                        spec.factory_id
+                    ),
+                });
+            }
+            None | Some(0) => false,
+            Some(FACTORY_BUILD_STARTED_MODERN_VERSION) => true,
+            Some(unsupported) => {
                 return Err(WorldError::ResourceBalanceInvalid {
                     reason: format!(
                         "unsupported factory build event contract version: {unsupported}"
@@ -448,7 +466,7 @@ impl WorldState {
                 spec: spec.clone(),
                 consume_ledger: consume_ledger.clone(),
                 ready_at: *ready_at,
-                contract_version,
+                contract_version: contract_version.unwrap_or(0),
                 site_authority_revision: site_authority_revision.copied(),
                 site_location_id: site_location_id.map(ToOwned::to_owned),
                 location_anchor_revision: location_anchor_revision.copied(),

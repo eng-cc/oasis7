@@ -459,6 +459,7 @@ impl World {
     pub(super) fn process_due_economy_jobs_with_modules(
         &mut self,
         sandbox: &mut dyn ModuleSandbox,
+        product_validation_checkpoint: &mut dyn FnMut(&World) -> Result<(), WorldError>,
     ) -> Result<Vec<WorldEvent>, WorldError> {
         let now = self.state.time;
         let mut emitted = Vec::new();
@@ -510,7 +511,6 @@ impl World {
 
         for job in due_recipes {
             let mut validation_rejected = false;
-
             let outputs = job.produce.iter().chain(job.byproducts.iter());
             for (output_index, stack) in outputs.enumerate() {
                 let validation_index = Some(output_index as u32);
@@ -589,6 +589,7 @@ impl World {
                         module_id.as_str(),
                         stack,
                     )?;
+                    product_validation_checkpoint(self)?;
                     match self.evaluate_product_with_module(
                         module_id.as_str(),
                         job.job_id,
@@ -674,7 +675,6 @@ impl World {
             if validation_rejected {
                 continue;
             }
-
             self.append_event(
                 WorldEventBody::Domain(DomainEvent::RecipeCompleted {
                     job_id: job.job_id,

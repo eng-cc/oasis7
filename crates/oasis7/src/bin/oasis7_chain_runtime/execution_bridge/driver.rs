@@ -7,7 +7,7 @@ use oasis7::consensus_action_payload::{
 };
 use oasis7::runtime::{
     BlobStore, ChainResourceDerivationContext, LocalCasStore, RuntimeCommittedTickContext,
-    World as RuntimeWorld, blake3_hex,
+    World as RuntimeWorld, WorldError, blake3_hex,
 };
 use oasis7::simulator::{Action as SimulatorAction, ActionSubmitter, WorldEventKind, WorldKernel};
 use oasis7_node::{
@@ -44,6 +44,10 @@ use super::external_effect::{
     build_execution_external_effect_materialization,
     load_execution_external_effect_materialization,
     persist_execution_external_effect_materialization,
+};
+use super::product_validation_intent::{
+    ProductValidationIntentMarkerV1, clear_product_validation_intent,
+    load_product_validation_intent, persist_product_validation_intent,
 };
 pub(crate) use super::simulator_mirror::simulator_world_dir_from_execution_world_dir;
 use super::simulator_mirror::{load_simulator_execution_world, persist_simulator_execution_world};
@@ -91,6 +95,10 @@ pub(crate) struct NodeRuntimeExecutionDriver {
     pub(super) checkpoint_keep_latest: usize,
     pub(super) retention_reconcile_pending: bool,
     pub(super) retention_reconcile_next_height: Option<u64>,
+    /// Host-side continuation marker for a staged product-validation intent.
+    /// It is deliberately outside the runtime state root and is cleared after
+    /// the authoritative per-height record is published.
+    pub(super) pending_product_validation_intent: Option<ProductValidationIntentMarkerV1>,
 }
 
 impl NodeRuntimeExecutionDriver {
@@ -270,6 +278,8 @@ impl NodeRuntimeExecutionDriver {
         let execution_sandbox: Box<dyn ModuleSandbox + Send> = Box::new(
             WasmExecutor::new(WasmExecutorConfig::default()).map_err(|err| err.to_string())?,
         );
+        let durable_product_validation_intent =
+            load_product_validation_intent(records_dir.as_path())?;
         let mut driver = Self::new_with_sandbox(
             state_path,
             world_dir,
@@ -282,6 +292,28 @@ impl NodeRuntimeExecutionDriver {
             storage_profile.execution_checkpoint_interval,
             storage_profile.execution_checkpoint_keep as usize,
         );
+        driver.pending_product_validation_intent = durable_product_validation_intent;
+        if let Some(marker) = driver.pending_product_validation_intent.as_ref() {
+            let authoritative_record_exists =
+                execution_bridge_record_path(driver.records_dir.as_path(), marker.height).exists();
+            if marker.height <= driver.state.last_applied_committed_height
+                || authoritative_record_exists
+            {
+                clear_product_validation_intent(driver.records_dir.as_path())?;
+                driver.pending_product_validation_intent = None;
+            } else if marker.height != driver.state.last_applied_committed_height.saturating_add(1)
+                || driver.execution_world.state().time != marker.height
+                || driver.execution_world.journal().len() != marker.journal_len
+            {
+                return Err(format!(
+                    "product validation intent marker does not match staged execution world: height={} world_time={} journal_len={} marker_journal_len={}",
+                    marker.height,
+                    driver.execution_world.state().time,
+                    driver.execution_world.journal().len(),
+                    marker.journal_len
+                ));
+            }
+        }
         super::driver_checkpoint_install::recover_checkpoint_install_transaction(
             &mut driver,
             checkpoint_install_transaction,
@@ -302,7 +334,11 @@ impl NodeRuntimeExecutionDriver {
         let has_execution_records =
             !list_execution_bridge_record_heights(driver.records_dir.as_path())?.is_empty()
                 || driver.records_dir.join("latest.json").exists();
-        if driver.state.last_applied_committed_height > 0 || has_execution_records {
+        if driver.pending_product_validation_intent.is_some() {
+            // The world directory is the crash-safe continuation for the
+            // pre-call intent. The authoritative height record does not exist
+            // yet, so restoring it here would erase the intent.
+        } else if driver.state.last_applied_committed_height > 0 || has_execution_records {
             driver.restore_startup_execution_head()?;
         } else {
             if execution_world_bootstrap_required {
@@ -355,6 +391,7 @@ impl NodeRuntimeExecutionDriver {
             checkpoint_keep_latest,
             retention_reconcile_pending,
             retention_reconcile_next_height,
+            pending_product_validation_intent: None,
         }
     }
 
@@ -571,6 +608,66 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             ));
         }
 
+        // A marker is written only after the staged runtime world containing
+        // ProductValidationAttemptStarted has been persisted. On retry, load
+        // that continuation and run the reducer's fail-closed path without
+        // resubmitting the committed actions or invoking the validator.
+        let resume_after_product_validation_intent = if let Some(marker) =
+            load_product_validation_intent(self.records_dir.as_path())?
+        {
+            let authoritative_record_exists =
+                execution_bridge_record_path(self.records_dir.as_path(), marker.height).exists();
+            if marker.height <= self.state.last_applied_committed_height {
+                clear_product_validation_intent(self.records_dir.as_path())?;
+                false
+            } else if authoritative_record_exists && marker.height == context.height {
+                // A record can win the race with marker cleanup. Reconcile to
+                // that authoritative result instead of resuming the stale
+                // pre-call world.
+                clear_product_validation_intent(self.records_dir.as_path())?;
+                self.restore_execution_head_from_record(context.world_id.as_str(), context.height)?;
+                let record = load_execution_bridge_record(
+                    execution_bridge_record_path(self.records_dir.as_path(), context.height)
+                        .as_path(),
+                )?;
+                self.validate_equal_height_replay_identity(&record, &context)?;
+                return Ok(NodeExecutionCommitResult {
+                    execution_height: context.height,
+                    execution_block_hash: record.execution_block_hash,
+                    execution_state_root: record.execution_state_root,
+                });
+            } else {
+                if marker.height != context.height
+                    || marker.world_id != context.world_id
+                    || (!marker.action_root.is_empty() && marker.action_root != context.action_root)
+                {
+                    return Err(format!(
+                        "product validation intent marker does not match committed context: marker_height={} context_height={} marker_world={} context_world={}",
+                        marker.height, context.height, marker.world_id, context.world_id
+                    ));
+                }
+                self.execution_world = load_execution_world_with_policy(
+                    self.world_dir.as_path(),
+                    self.execution_world.release_security_policy().clone(),
+                )?;
+                if self.execution_world.state().time != marker.height
+                    || self.execution_world.journal().len() != marker.journal_len
+                {
+                    return Err(format!(
+                        "product validation intent staged world is inconsistent: height={} world_time={} journal_len={} marker_journal_len={}",
+                        marker.height,
+                        self.execution_world.state().time,
+                        self.execution_world.journal().len(),
+                        marker.journal_len
+                    ));
+                }
+                self.pending_product_validation_intent = Some(marker);
+                true
+            }
+        } else {
+            false
+        };
+
         let external_effect =
             build_execution_external_effect_materialization(&self.execution_world, &context)?;
 
@@ -621,8 +718,10 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             };
         }
         let runtime_step_started_at = Instant::now();
-        for action in decoded_runtime_actions {
-            self.execution_world.submit_action(action);
+        if !resume_after_product_validation_intent {
+            for action in decoded_runtime_actions {
+                self.execution_world.submit_action(action);
+            }
         }
         let committed_tick_context = RuntimeCommittedTickContext {
             height: context.height,
@@ -633,19 +732,68 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             authority_node_id: context.node_id.clone(),
             committed_at_unix_ms: context.committed_at_unix_ms,
         };
-        rollback_on_error!(
-            self.execution_world
-                .step_with_modules_for_committed_context(
-                    &mut *self.execution_sandbox,
-                    &committed_tick_context,
-                )
-                .map_err(|err| {
-                    format!(
-                        "execution driver world.step failed at height {}: {:?}",
-                        context.height, err
+        if resume_after_product_validation_intent {
+            rollback_on_error!(
+                self.execution_world
+                    .step_with_modules_for_committed_context_after_product_validation_intent(
+                        &mut *self.execution_sandbox,
+                        &committed_tick_context,
                     )
+                    .map_err(|err| {
+                        format!(
+                            "execution driver world.resume failed at height {}: {:?}",
+                            context.height, err
+                        )
+                    })
+            );
+        } else {
+            let intent_world_dir = self.world_dir.clone();
+            let intent_records_dir = self.records_dir.clone();
+            let intent_world_id = context.world_id.clone();
+            let intent_height = context.height;
+            let intent_action_root = context.action_root.clone();
+            let mut publish_product_validation_intent = move |staged: &RuntimeWorld| {
+                persist_execution_world(intent_world_dir.as_path(), staged).map_err(|err| {
+                    WorldError::DistributedValidationFailed {
+                        reason: format!(
+                            "publish product validation intent world failed at height {}: {}",
+                            intent_height, err
+                        ),
+                    }
+                })?;
+                persist_product_validation_intent(
+                    intent_records_dir.as_path(),
+                    &ProductValidationIntentMarkerV1 {
+                        schema_version:
+                            super::product_validation_intent::PRODUCT_VALIDATION_INTENT_SCHEMA_V1,
+                        world_id: intent_world_id.clone(),
+                        height: intent_height,
+                        action_root: intent_action_root.clone(),
+                        journal_len: staged.journal().len(),
+                    },
+                )
+                .map_err(|err| WorldError::DistributedValidationFailed {
+                    reason: format!(
+                        "publish product validation intent marker failed at height {}: {}",
+                        intent_height, err
+                    ),
                 })
-        );
+            };
+            rollback_on_error!(
+                self.execution_world
+                    .step_with_modules_for_committed_context_with_product_validation_checkpoint(
+                        &mut *self.execution_sandbox,
+                        &committed_tick_context,
+                        &mut publish_product_validation_intent,
+                    )
+                    .map_err(|err| {
+                        format!(
+                            "execution driver world.step failed at height {}: {:?}",
+                            context.height, err
+                        )
+                    })
+            );
+        }
         let runtime_step_ms = runtime_step_started_at.elapsed();
         let simulator_step_started_at = Instant::now();
         let (simulator_mirror, simulator_observation) = rollback_on_error!(
@@ -819,6 +967,25 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             &self.state
         ));
         let state_persist_ms = state_persist_started_at.elapsed();
+        if self.pending_product_validation_intent.is_some()
+            || load_product_validation_intent(self.records_dir.as_path())?.is_some()
+        {
+            if let Err(err) = clear_product_validation_intent(self.records_dir.as_path()) {
+                // The authoritative record and bridge state are already
+                // durable. A stale marker is harmless: startup removes it
+                // once it observes that its height is settled.
+                oasis7::observability::emit_stderr_or_event(
+                    tracing::Level::WARN,
+                    format!(
+                        "execution driver could not clear settled product validation intent at height {}: {}",
+                        context.height, err
+                    )
+                    .as_str(),
+                    "settled product validation intent cleanup deferred",
+                );
+            }
+            self.pending_product_validation_intent = None;
+        }
         let persist_world_ms = state_persist_ms;
         let retention_started_at = Instant::now();
         let reconcile_due = self.retention_reconcile_pending

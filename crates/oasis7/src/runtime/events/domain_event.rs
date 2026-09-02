@@ -627,10 +627,12 @@ pub enum DomainEvent {
         #[serde(default = "default_world_material_ledger")]
         consume_ledger: MaterialLedgerId,
         ready_at: WorldTime,
-        /// `0` is an explicitly classified historical event; current
-        /// producers must emit version `1` with complete admission facts.
+        /// An omitted version is distinct from an explicitly classified
+        /// historical (`Some(0)`) event. Current producers must emit
+        /// `Some(1)` with complete admission facts; this distinction prevents
+        /// serde omission from silently downgrading a modern event.
         #[serde(default)]
-        contract_version: u8,
+        contract_version: Option<u8>,
         /// Optional for backward-compatible replay of pre-authority events.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         site_authority_revision: Option<u64>,

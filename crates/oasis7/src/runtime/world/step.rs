@@ -362,7 +362,8 @@ impl World {
 
     pub fn step_with_modules(&mut self, sandbox: &mut dyn ModuleSandbox) -> Result<(), WorldError> {
         let mut staged = self.clone();
-        staged.step_with_modules_inner(sandbox)?;
+        let mut no_product_validation_checkpoint = |_world: &World| Ok(());
+        staged.step_with_modules_inner(sandbox, &mut no_product_validation_checkpoint)?;
         *self = staged;
         Ok(())
     }
@@ -370,9 +371,10 @@ impl World {
     fn step_with_modules_inner(
         &mut self,
         sandbox: &mut dyn ModuleSandbox,
+        product_validation_checkpoint: &mut dyn FnMut(&World) -> Result<(), WorldError>,
     ) -> Result<(), WorldError> {
         self.state.time = self.state.time.saturating_add(1);
-        self.run_modules_for_current_tick(sandbox, None)
+        self.run_modules_for_current_tick(sandbox, None, product_validation_checkpoint)
     }
 
     pub fn step_with_modules_for_committed_height(
@@ -397,8 +399,55 @@ impl World {
         sandbox: &mut dyn ModuleSandbox,
         context: &RuntimeCommittedTickContext,
     ) -> Result<(), WorldError> {
+        let mut no_product_validation_checkpoint = |_world: &World| Ok(());
+        self.step_with_modules_for_committed_context_with_product_validation_checkpoint(
+            sandbox,
+            context,
+            &mut no_product_validation_checkpoint,
+        )
+    }
+
+    /// Execute a committed tick while giving the host a durable checkpoint
+    /// opportunity immediately after each product-validation intent is
+    /// appended and before the validator is invoked.  The callback receives
+    /// the staged world; it must publish that world before returning.
+    pub fn step_with_modules_for_committed_context_with_product_validation_checkpoint<F>(
+        &mut self,
+        sandbox: &mut dyn ModuleSandbox,
+        context: &RuntimeCommittedTickContext,
+        product_validation_checkpoint: &mut F,
+    ) -> Result<(), WorldError>
+    where
+        F: FnMut(&World) -> Result<(), WorldError>,
+    {
         let mut staged = self.clone();
-        staged.step_with_modules_for_committed_context_inner(sandbox, context)?;
+        staged.step_with_modules_for_committed_context_inner(
+            sandbox,
+            context,
+            false,
+            product_validation_checkpoint,
+        )?;
+        *self = staged;
+        Ok(())
+    }
+
+    /// Resume a committed tick from a host-published product-validation
+    /// intent.  A crash/retry path intentionally does not invoke the module:
+    /// the due-job reducer observes the persisted attempt and fails closed,
+    /// producing the correlated rejection/disposition exactly once.
+    pub fn step_with_modules_for_committed_context_after_product_validation_intent(
+        &mut self,
+        sandbox: &mut dyn ModuleSandbox,
+        context: &RuntimeCommittedTickContext,
+    ) -> Result<(), WorldError> {
+        let mut no_product_validation_checkpoint = |_world: &World| Ok(());
+        let mut staged = self.clone();
+        staged.step_with_modules_for_committed_context_inner(
+            sandbox,
+            context,
+            true,
+            &mut no_product_validation_checkpoint,
+        )?;
         *self = staged;
         Ok(())
     }
@@ -407,24 +456,37 @@ impl World {
         &mut self,
         sandbox: &mut dyn ModuleSandbox,
         context: &RuntimeCommittedTickContext,
+        resume_after_product_validation_intent: bool,
+        product_validation_checkpoint: &mut dyn FnMut(&World) -> Result<(), WorldError>,
     ) -> Result<(), WorldError> {
         let committed_height = context.height;
-        if committed_height <= self.state.time {
+        if (!resume_after_product_validation_intent && committed_height <= self.state.time)
+            || (resume_after_product_validation_intent && committed_height != self.state.time)
+        {
             return Err(WorldError::DistributedValidationFailed {
                 reason: format!(
-                    "committed execution height must advance runtime time: current={} incoming={}",
-                    self.state.time, committed_height
+                    "committed execution height must {}runtime time: current={} incoming={}",
+                    if resume_after_product_validation_intent {
+                        "match "
+                    } else {
+                        "advance "
+                    },
+                    self.state.time,
+                    committed_height
                 ),
             });
         }
-        self.state.time = committed_height;
-        self.run_modules_for_current_tick(sandbox, Some(context))
+        if !resume_after_product_validation_intent {
+            self.state.time = committed_height;
+        }
+        self.run_modules_for_current_tick(sandbox, Some(context), product_validation_checkpoint)
     }
 
     fn run_modules_for_current_tick(
         &mut self,
         sandbox: &mut dyn ModuleSandbox,
         committed_context: Option<&RuntimeCommittedTickContext>,
+        product_validation_checkpoint: &mut dyn FnMut(&World) -> Result<(), WorldError>,
     ) -> Result<(), WorldError> {
         for event in self.process_factory_depreciation()? {
             self.route_event_to_modules(&event, sandbox)?;
@@ -588,7 +650,9 @@ impl World {
                 self.route_event_to_modules(&event, sandbox)?;
             }
         }
-        for event in self.process_due_economy_jobs_with_modules(sandbox)? {
+        for event in
+            self.process_due_economy_jobs_with_modules(sandbox, product_validation_checkpoint)?
+        {
             self.route_event_to_modules(&event, sandbox)?;
         }
         for event in self.process_due_material_transits()? {

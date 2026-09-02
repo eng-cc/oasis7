@@ -1,5 +1,5 @@
 use super::*;
-use crate::runtime::ProductValidationReceiptV1;
+use crate::runtime::{ProductValidationReceiptV1, RuntimeCommittedTickContext};
 
 #[test]
 fn schedule_recipe_with_module_auto_validates_outputs_before_commit() {
@@ -580,6 +580,87 @@ fn product_validation_attempt_without_receipt_fails_closed_after_crash() {
             .state()
             .factory_production_failure_dispositions
             .contains_key(&pending.job_id)
+    );
+}
+
+#[test]
+fn product_validation_checkpoint_is_published_before_validator_call() {
+    let mut world = logistics_drone_module_recipe_world("factory.recipe.validation-checkpoint");
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: "factory.recipe.validation-checkpoint".to_string(),
+        recipe_id: "recipe.assembler.logistics_drone".to_string(),
+        plan: RecipeExecutionPlan::accepted(
+            1,
+            vec![
+                MaterialStack::new("motor_mk1", 2),
+                MaterialStack::new("control_chip", 1),
+                MaterialStack::new("chassis_plate", 1),
+            ],
+            vec![MaterialStack::new("logistics_drone", 1)],
+            Vec::new(),
+            10,
+            1,
+        ),
+        logistics_route_ids: Vec::new(),
+        logistics_path_ids: Vec::new(),
+    });
+    world.step().expect("start recipe before checkpoint");
+
+    let context = RuntimeCommittedTickContext {
+        height: world.state().time.saturating_add(1),
+        slot: world.state().time,
+        epoch: 0,
+        node_block_hash: String::new(),
+        action_root: String::new(),
+        authority_node_id: "test-authority".to_string(),
+        committed_at_unix_ms: 0,
+    };
+    let mut checkpoint = None;
+    let mut sandbox = CaptureContextSandbox::with_outputs(Vec::new());
+    world
+        .step_with_modules_for_committed_context_with_product_validation_checkpoint(
+            &mut sandbox,
+            &context,
+            &mut |staged| {
+                let attempt = staged
+                    .state()
+                    .product_validation_attempts
+                    .values()
+                    .flat_map(|attempts| attempts.iter())
+                    .next()
+                    .expect("checkpoint must contain pre-call validation intent");
+                assert_eq!(attempt.module_id, "m4.product.logistics_drone");
+                checkpoint = Some(staged.clone());
+                Ok(())
+            },
+        )
+        .expect("checkpointed product validation");
+
+    assert_eq!(
+        sandbox.requests.len(),
+        1,
+        "validator is called once after publish"
+    );
+    let checkpoint = checkpoint.expect("durable checkpoint callback");
+    assert!(checkpoint.journal().events.iter().any(|event| matches!(
+        &event.body,
+        WorldEventBody::Domain(DomainEvent::ProductValidationAttemptStarted { .. })
+    )));
+
+    let mut recovered = World::from_snapshot(checkpoint.snapshot(), checkpoint.journal().clone())
+        .expect("recover from pre-call checkpoint");
+    let mut retry_sandbox = CaptureContextSandbox::with_outputs(Vec::new());
+    recovered
+        .step_with_modules(&mut retry_sandbox)
+        .expect("recovery must fail closed after an unpublished receipt");
+    assert!(retry_sandbox.requests.is_empty());
+    assert!(
+        recovered
+            .state()
+            .factory_production_failure_dispositions
+            .values()
+            .any(|disposition| disposition.blocker_kind == "product_validation")
     );
 }
 

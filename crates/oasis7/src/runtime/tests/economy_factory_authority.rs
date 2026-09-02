@@ -452,7 +452,7 @@ fn factory_build_pins_location_anchor_revision_and_replays_after_anchor_mutation
             ..
         }) = &mut event.body
         {
-            assert_eq!(*contract_version, 1);
+            assert_eq!(*contract_version, Some(1));
             *location_anchor_revision = None;
         }
     }
@@ -488,13 +488,66 @@ fn factory_build_pins_location_anchor_revision_and_replays_after_anchor_mutation
             ..
         }) = &mut event.body
         {
-            *contract_version = 0;
+            *contract_version = Some(0);
             *location_anchor_revision = None;
         }
     }
     let legacy_restored = World::from_snapshot(snapshot_before_build, legacy_journal)
         .expect("historical build event without location pin must replay");
     assert!(legacy_restored.has_factory("factory.pinned-anchor"));
+}
+
+#[test]
+fn stripped_factory_build_contract_version_cannot_downgrade_modern_event() {
+    const CONSTRUCTION_POWER: i64 = 10;
+    let mut world = World::new();
+    register_builder(&mut world, "builder-a");
+    let spec = factory_spec("factory.stripped-version", 1, 1, 1);
+    let builder_ledger = MaterialLedgerId::agent("builder-a");
+    for stack in &spec.build_cost {
+        world
+            .set_ledger_material_balance(builder_ledger.clone(), stack.kind.as_str(), stack.amount)
+            .expect("seed stripped-version construction material");
+    }
+    world
+        .set_agent_resource_balance("builder-a", ResourceKind::Electricity, CONSTRUCTION_POWER)
+        .expect("seed stripped-version power");
+    install_factory_authority(
+        &mut world,
+        "builder-a",
+        "site-1",
+        spec.factory_id.as_str(),
+        CONSTRUCTION_POWER,
+    );
+    let snapshot_before_build = world.snapshot();
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-1".to_string(),
+        spec,
+    });
+    world.step().expect("start stripped-version build");
+
+    let mut journal_json = serde_json::to_value(world.journal()).expect("serialize journal");
+    for event in journal_json["events"]
+        .as_array_mut()
+        .expect("journal events")
+    {
+        if event["body"]["payload"]["type"] == "FactoryBuildStarted" {
+            event["body"]["payload"]["data"]
+                .as_object_mut()
+                .expect("factory build event")
+                .remove("contract_version");
+        }
+    }
+    let stripped_journal: crate::runtime::Journal =
+        serde_json::from_value(journal_json).expect("decode stripped journal");
+    let error = World::from_snapshot(snapshot_before_build, stripped_journal)
+        .expect_err("omitting the modern discriminator must not downgrade the event");
+    assert!(matches!(
+        error,
+        WorldError::ResourceBalanceInvalid { reason }
+            if reason.contains("modern factory build event")
+    ));
 }
 
 #[test]

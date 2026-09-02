@@ -310,7 +310,7 @@ fn runtime_gameplay_snapshot_gates_every_smelter_schedule_by_authoritative_resou
     ];
 
     for (electricity, data, expected_reason) in [
-        (0, i64::MAX, Some("insufficient electricity")),
+        (0, i64::MAX, Some("insufficient factory-owner electricity")),
         (i64::MAX, 0, None),
         (i64::MAX, i64::MAX, None),
     ] {
@@ -426,7 +426,7 @@ fn runtime_gameplay_snapshot_gates_every_smelter_schedule_by_authoritative_resou
         .set_ledger_material_balance(scale_out_site_ledger, "copper_wire", 200)
         .expect("seed alloy copper wire");
     for (electricity, data, expected_reason) in [
-        (0, i64::MAX, Some("insufficient electricity")),
+        (0, i64::MAX, Some("insufficient factory-owner electricity")),
         (i64::MAX, 0, None),
         (i64::MAX, i64::MAX, None),
     ] {

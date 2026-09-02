@@ -11,7 +11,7 @@ pub(super) fn schedule_recipe_disabled_reason(
 ) -> Option<String> {
     let RuntimeAction::ScheduleRecipe {
         factory_id,
-        recipe_id,
+        recipe_id: _,
         plan,
         ..
     } = build_runtime_action_from_gameplay_request(&GameplayActionRequest {
@@ -26,7 +26,6 @@ pub(super) fn schedule_recipe_disabled_reason(
     else {
         return None;
     };
-    let readiness = default_schedule_recipe_readiness(recipe_id.as_str(), 1)?;
     let Some(factory) = state.factories.get(factory_id.as_str()) else {
         return Some(format!(
             "factory {} is not present in the committed world; wait for the factory snapshot",
@@ -64,16 +63,8 @@ pub(super) fn schedule_recipe_disabled_reason(
             factory_id, active_jobs, factory.spec.recipe_slots
         ));
     }
-    let Some(agent) = state.agents.get(agent_id) else {
+    if !state.agents.contains_key(agent_id) {
         return Some(format!("builder agent unavailable: agent_id={agent_id}"));
-    };
-    let resources = &agent.state.resources;
-    let available_electricity = resources.get(ResourceKind::Electricity);
-    if available_electricity < readiness.electricity_cost {
-        return Some(format!(
-            "insufficient electricity: need {}, have {}; replenish electricity before scheduling this run",
-            readiness.electricity_cost, available_electricity
-        ));
     }
     let consume = recipe_consume_with_maintenance_sinks(state, &plan.consume, &plan.produce);
     let consume_ledger = expected_input_ledger;
@@ -98,6 +89,8 @@ pub(super) fn schedule_recipe_disabled_reason(
             factory.builder_agent_id
         ));
     };
+    // Simulator recipe costs are advisory only.  The runtime execution plan is
+    // the sole authority for the electricity obligation of a live submission.
     let available_owner_electricity = owner.state.resources.get(ResourceKind::Electricity);
     if available_owner_electricity < plan.power_required {
         return Some(format!(

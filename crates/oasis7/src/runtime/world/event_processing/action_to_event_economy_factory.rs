@@ -251,7 +251,7 @@ impl World {
             spec: spec.clone(),
             consume_ledger,
             ready_at,
-            contract_version: FACTORY_BUILD_STARTED_MODERN_VERSION,
+            contract_version: Some(FACTORY_BUILD_STARTED_MODERN_VERSION),
             site_authority_revision: Some(site_authority.authority_revision),
             site_location_id: Some(site_authority.location_id.clone()),
             location_anchor_revision: Some(location_anchor_revision),
