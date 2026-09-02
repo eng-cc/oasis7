@@ -54,6 +54,9 @@ LEGACY_UP_PGID=""
 LEGACY_UP_IDENTITY=""
 REAL_STACK_PID=""
 REAL_STACK_READER_PID=""
+REAL_STACK_LATE_CHILD_PID=""
+REAL_STACK_LATE_CHILD_PID_FILE=""
+REAL_STACK_STOP_LEADER=""
 CONCURRENT_PARENT_A=""
 CONCURRENT_PARENT_B=""
 CONCURRENT_CHILD_A=""
@@ -215,6 +218,7 @@ lifecycle_error_trap() {
   lifecycle_process_snapshot "concurrent-child" "${concurrent_child_pid:-}" ""
   lifecycle_process_snapshot "timeout-child" "${timeout_child_pid:-}" ""
   lifecycle_process_snapshot "failure" "${failure_pid:-}" "${failure_pgid:-}"
+  lifecycle_process_snapshot "real-stack-late-child" "${REAL_STACK_LATE_CHILD_PID:-}" ""
   return "$rc"
 }
 
@@ -334,6 +338,10 @@ cleanup() {
   if [[ -n "$REAL_STACK_PID" ]]; then
     kill "$REAL_STACK_PID" >/dev/null 2>&1 || true
     wait "$REAL_STACK_PID" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$REAL_STACK_LATE_CHILD_PID" ]]; then
+    kill "$REAL_STACK_LATE_CHILD_PID" >/dev/null 2>&1 || true
+    wait "$REAL_STACK_LATE_CHILD_PID" >/dev/null 2>&1 || true
   fi
   if [[ -n "$REAL_STACK_READER_PID" ]]; then
     kill "$REAL_STACK_READER_PID" >/dev/null 2>&1 || true
@@ -769,6 +777,8 @@ REAL_STACK_META_ZERO_ACK="$TMP_DIR/real-stack-meta-zero-ack"
 REAL_STACK_META_READY="$TMP_DIR/real-stack-meta-ready"
 REAL_STACK_JSON_READY="$TMP_DIR/real-stack-json-ready"
 REAL_STACK_READER_STOP="$TMP_DIR/real-stack-reader.stop"
+REAL_STACK_LATE_CHILD_PID_FILE="$TMP_DIR/real-stack-late-child.pid"
+REAL_STACK_STOP_LEADER="$TMP_DIR/real-stack-stop-leader"
 mkdir -p "$REAL_STACK_BUNDLE" "$REAL_STACK_OUTPUT"
 cat >"$REAL_STACK_BUNDLE/run-game.sh" <<'REAL_RUN_GAME'
 #!/usr/bin/env python3
@@ -776,6 +786,7 @@ import http.server
 import os
 import pathlib
 import socketserver
+import subprocess
 import sys
 import threading
 import time
@@ -792,6 +803,9 @@ viewer_port = int(option_value("--viewer-port", "4173"))
 web_bind = option_value("--web-bind", "127.0.0.1:5011")
 web_port = int(web_bind.rsplit(":", 1)[-1])
 ready_ack = pathlib.Path(os.environ["OASIS7_HARNESS_TEST_METADATA_ZERO_ACK"])
+meta_path = pathlib.Path(os.environ["OASIS7_HARNESS_TEST_METADATA_PATH"])
+late_child_pid_file = pathlib.Path(os.environ["OASIS7_HARNESS_TEST_LATE_DESCENDANT_PID_FILE"])
+stop_leader = pathlib.Path(os.environ["OASIS7_HARNESS_TEST_STOP_LEADER"])
 
 
 class ViewerHandler(http.server.BaseHTTPRequestHandler):
@@ -818,8 +832,20 @@ viewer = http.server.ThreadingHTTPServer(("127.0.0.1", viewer_port), ViewerHandl
 bridge = socketserver.ThreadingTCPServer(("127.0.0.1", web_port), BridgeHandler)
 threading.Thread(target=viewer.serve_forever, daemon=True).start()
 threading.Thread(target=bridge.serve_forever, daemon=True).start()
+late_child = None
 while True:
-    time.sleep(1)
+    if late_child is None and meta_path.exists():
+        values = {}
+        for line in meta_path.read_text(encoding="utf-8").splitlines():
+            if "=" in line:
+                key, value = line.split("=", 1)
+                values[key] = value
+        if values.get("STACK_READY") == "1":
+            late_child = subprocess.Popen(["sleep", "300"])
+            late_child_pid_file.write_text(f"{late_child.pid}\n", encoding="utf-8")
+    if late_child is not None and stop_leader.exists():
+        os._exit(0)
+    time.sleep(0.05)
 REAL_RUN_GAME
 chmod +x "$REAL_STACK_BUNDLE/run-game.sh"
 
@@ -918,7 +944,10 @@ while True:
     time.sleep(0.01)
 PY
 REAL_STACK_READER_PID=$!
-OASIS7_HARNESS_TEST_METADATA_ZERO_ACK="$REAL_STACK_META_ZERO_ACK" \
+OASIS7_HARNESS_TEST_METADATA_PATH="$REAL_STACK_META" \
+  OASIS7_HARNESS_TEST_METADATA_ZERO_ACK="$REAL_STACK_META_ZERO_ACK" \
+  OASIS7_HARNESS_TEST_LATE_DESCENDANT_PID_FILE="$REAL_STACK_LATE_CHILD_PID_FILE" \
+  OASIS7_HARNESS_TEST_STOP_LEADER="$REAL_STACK_STOP_LEADER" \
   ./scripts/run-launcher-stack.sh "${REAL_STACK_RUN_ARGS[@]}" >"$REAL_STACK_JSON" 2>"$REAL_STACK_LOG" &
 REAL_STACK_PID=$!
 for _ in $(seq 1 120); do
@@ -981,9 +1010,40 @@ REAL_STACK_LAUNCHER_IDENTITY="$(wh_env_file_get "$REAL_STACK_META" LAUNCHER_IDEN
   echo "lifecycle acceptance: real session metadata identity does not match launcher" >&2
   exit 1
 }
-kill "$REAL_STACK_PID" >/dev/null 2>&1 || true
+wait_for_marker "$REAL_STACK_LATE_CHILD_PID_FILE" 20 "real launcher late descendant"
+REAL_STACK_LATE_CHILD_PID="$(tr -d '\n' <"$REAL_STACK_LATE_CHILD_PID_FILE")"
+[[ "$REAL_STACK_LATE_CHILD_PID" =~ ^[1-9][0-9]*$ ]] || {
+  echo "lifecycle acceptance: real launcher late descendant PID was invalid" >&2
+  exit 1
+}
+# The monitor refreshes the authenticated group identity once per second.
+# Let that ordinary cadence observe the child before making the leader exit;
+# session.meta remains the ready-time snapshot and is not the refresh channel.
+sleep 1.25
+touch "$REAL_STACK_STOP_LEADER"
+for _ in $(seq 1 120); do
+  if ! wh_pid_alive "$REAL_STACK_LAUNCHER_PID"; then
+    break
+  fi
+  sleep 0.05
+done
+if wh_pid_alive "$REAL_STACK_LAUNCHER_PID"; then
+  echo "lifecycle acceptance: normal launcher fixture did not exit at the crash boundary" >&2
+  exit 1
+fi
 wait "$REAL_STACK_PID" >/dev/null 2>&1 || true
 REAL_STACK_PID=""
+for _ in $(seq 1 120); do
+  if ! wh_pid_alive "$REAL_STACK_LATE_CHILD_PID"; then
+    break
+  fi
+  sleep 0.05
+done
+if wh_pid_alive "$REAL_STACK_LATE_CHILD_PID" || wh_process_group_alive "$REAL_STACK_LAUNCHER_PGID"; then
+  lifecycle_process_snapshot "real-stack-late-child" "$REAL_STACK_LATE_CHILD_PID" "$REAL_STACK_LAUNCHER_PGID"
+  echo "lifecycle acceptance: normal launcher cleanup left its late descendant or process group alive" >&2
+  exit 1
+fi
 
 # A pre-upgrade record may contain only PIDs.  A live PID without a captured
 # identity is not safe to signal because it may have been reused by a foreign

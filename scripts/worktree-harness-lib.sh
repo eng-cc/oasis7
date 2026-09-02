@@ -952,6 +952,54 @@ wh_process_group_member_identities() {
   printf '%s\n' "$member_records"
 }
 
+# Refresh the authenticated member set while the recorded leader is still
+# live. Launchers commonly create their chain/viewer children after the
+# initial wh_start_managed snapshot; collecting those members during a normal
+# liveness handoff lets a later leader crash be cleaned up without trusting a
+# bare PGID. Existing PID/incarnation records are never replaced, so PID reuse
+# or a foreign process cannot gain authority through a refresh.
+wh_process_group_refresh_identity() {
+  local pid=${1:-}
+  local pgid=${2:-}
+  local expected_identity=${3:-}
+  local leader_identity member_records existing_records merged_records
+  local member_record member_pid member_identity existing_record member_seen
+
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 2
+  [[ "$pgid" =~ ^[1-9][0-9]*$ && "$pgid" -gt 1 ]] || return 2
+  [[ -n "$expected_identity" ]] || return 2
+  wh_process_record_alive "$pid" "$pgid" "$expected_identity" || return 1
+  leader_identity=$(wh_process_identity_leader_part "$expected_identity")
+  member_records=$(wh_process_group_member_identities "$pgid" 2>/dev/null || true)
+  [[ -n "$member_records" ]] || return 1
+  existing_records=$(wh_process_identity_group_part "$expected_identity" 2>/dev/null || true)
+  merged_records="$existing_records"
+
+  while IFS= read -r member_record; do
+    [[ "$member_record" == *=* ]] || continue
+    member_pid=${member_record%%=*}
+    member_identity=${member_record#*=}
+    [[ "$member_pid" =~ ^[1-9][0-9]*$ && -n "$member_identity" ]] || continue
+    member_seen=0
+    while IFS= read -r existing_record; do
+      [[ "$existing_record" == *=* ]] || continue
+      if [[ "${existing_record%%=*}" == "$member_pid" ]]; then
+        member_seen=1
+        break
+      fi
+    done < <(printf '%s\n' "$merged_records" | tr ',' '\n')
+    if [[ "$member_seen" -eq 0 ]]; then
+      if [[ -n "$merged_records" ]]; then
+        merged_records+=","
+      fi
+      merged_records+="${member_pid}=${member_identity}"
+    fi
+  done < <(printf '%s\n' "$member_records" | tr ',' '\n')
+
+  [[ -n "$merged_records" ]] || return 1
+  printf '%s|group=%s\n' "$leader_identity" "$merged_records"
+}
+
 wh_process_identity_leader_part() {
   local identity=${1:-}
   if [[ "$identity" == *"|group="* ]]; then
@@ -1082,6 +1130,29 @@ print(f"ps-start:{hashlib.sha256(sys.argv[1].encode('utf-8')).hexdigest()}")
 PY
 }
 
+# Return the ownership state of a recovery marker target: 0 means live and
+# identity-matching, 1 means stopped or known-stale and safe to reclaim, and 2
+# means unknown and therefore fail-closed. The marker stores the same
+# PID:identity record as the lifecycle lock; unlike a lock owner, a marker may
+# be removed only after this explicit authentication step.
+wh_lifecycle_recovery_marker_status() {
+  local marker_record=${1:-}
+  local marker_pid marker_identity observed_identity
+  [[ "$marker_record" =~ ^([1-9][0-9]*):(.+)$ ]] || return 2
+  marker_pid="${BASH_REMATCH[1]}"
+  marker_identity="${BASH_REMATCH[2]}"
+  if ! wh_pid_alive "$marker_pid"; then
+    return 1
+  fi
+  if wh_process_identity_is_legacy "$marker_identity"; then
+    return 2
+  fi
+  observed_identity=$(wh_process_identity "$marker_pid" 2>/dev/null || true)
+  [[ -n "$observed_identity" ]] || return 2
+  [[ "$observed_identity" == "$marker_identity" ]] && return 0
+  return 1
+}
+
 # Serialize up/down transitions before they touch state, process records, or
 # port reservations.  The symlink target is the owner PID plus its launch
 # identity, allowing a later invocation to recover a lock left by a crashed
@@ -1111,13 +1182,30 @@ wh_lifecycle_lock_acquire() {
     return 2
   }
   local waited_ms=0 current_record current_pid current_identity observed_identity
-  local recovery_record
+  local recovery_record recovery_status
 
   while true; do
     # A recovery claim is deliberately fail-closed.  If its owner is killed
     # between removing the stale lock and publishing the replacement, no
     # other invocation may guess whether it is safe to remove that claim.
-    if [[ -L "$recovery_path" ]]; then
+    if [[ -L "$recovery_path" || -e "$recovery_path" ]]; then
+      recovery_record=$(readlink "$recovery_path" 2>/dev/null || true)
+      recovery_status=2
+      if [[ -n "$recovery_record" ]]; then
+        if wh_lifecycle_recovery_marker_status "$recovery_record"; then
+          recovery_status=0
+        else
+          recovery_status=$?
+        fi
+      fi
+      if [[ "$recovery_status" -eq 1 ]]; then
+        # Compare before removal so a replacement marker cannot be deleted by
+        # a stale-owner observation from an earlier iteration.
+        if [[ "$(readlink "$recovery_path" 2>/dev/null || true)" == "$recovery_record" ]]; then
+          rm -f "$recovery_path"
+        fi
+        continue
+      fi
       if (( waited_ms >= lock_timeout_ms )); then
         echo "error: timed out waiting for lifecycle lock: $lock_path" >&2
         return 1

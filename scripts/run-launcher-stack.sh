@@ -553,7 +553,17 @@ ensure_launcher_alive() {
   local pid="${1:-}"
   local pgid="${2:-}"
   local identity="${3:-}"
-  wh_process_record_alive "$pid" "$pgid" "$identity"
+  local refresh_identity refresh_base_identity
+  refresh_base_identity="$identity"
+  if [[ "$pid" == "$LAUNCHER_PID" && "$pgid" == "$LAUNCHER_PGID" && -n "$LAUNCHER_IDENTITY" ]]; then
+    refresh_base_identity="$LAUNCHER_IDENTITY"
+  fi
+  wh_process_record_alive "$pid" "$pgid" "$refresh_base_identity" || return 1
+  if [[ "$pid" == "$LAUNCHER_PID" && "$pgid" == "$LAUNCHER_PGID" ]]; then
+    if refresh_identity="$(wh_process_group_refresh_identity "$pid" "$pgid" "$refresh_base_identity")"; then
+      LAUNCHER_IDENTITY="$refresh_identity"
+    fi
+  fi
 }
 
 wait_for_http_ready() {

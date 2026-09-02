@@ -206,11 +206,16 @@ if wh_pid_alive "$process_tree_pid" || wh_pid_alive "$process_tree_child_pid"; t
 fi
 
 GROUP_REAP_CHILD_PID_FILE="$TMP_DIR/group-reap-child.pid"
+GROUP_REAP_ARM_FILE="$TMP_DIR/group-reap-arm"
 group_reap_fixture() {
+  while [[ ! -e "$GROUP_REAP_ARM_FILE" ]]; do
+    sleep 0.01
+  done
   sleep 30 &
   echo "$!" >"$GROUP_REAP_CHILD_PID_FILE"
-  # Give wh_start_managed time to capture the launch identity and group
-  # membership before the recorded leader exits.
+  # Keep the leader alive while the parent refreshes the membership after the
+  # descendant starts. This models normal launcher children created after the
+  # initial wh_start_managed snapshot.
   sleep 0.5
   exit 0
 }
@@ -219,11 +224,17 @@ wh_start_managed group_reap_fixture >"$TMP_DIR/group-reap.log" 2>&1
 group_reap_pid="$WH_MANAGED_PID"
 group_reap_pgid="$WH_MANAGED_PGID"
 group_reap_identity="$WH_MANAGED_IDENTITY"
+touch "$GROUP_REAP_ARM_FILE"
 for _ in $(seq 1 40); do
   [[ -s "$GROUP_REAP_CHILD_PID_FILE" ]] && break
   sleep 0.05
 done
 group_reap_child_pid="$(cat "$GROUP_REAP_CHILD_PID_FILE")"
+group_reap_identity="$(wh_process_group_refresh_identity "$group_reap_pid" "$group_reap_pgid" "$group_reap_identity")"
+[[ "$group_reap_identity" == *"${group_reap_child_pid}="* ]] || {
+  echo "process-group identity contract: late descendant was not authenticated while leader was live" >&2
+  exit 1
+}
 for _ in $(seq 1 40); do
   if ! wh_pid_alive "$group_reap_pid"; then
     break
@@ -404,6 +415,127 @@ if [[ "$reused_identity_status" -eq 0 ]] || ! wh_pid_alive "$reused_identity_pid
   exit 1
 fi
 wh_terminate_process_group "$reused_identity_pid" "$reused_identity_pgid" 100 "$reused_identity"
+
+RECOVERY_MARKER_DEAD_ROOT="$TMP_DIR/recovery-marker-dead"
+mkdir -p "$RECOVERY_MARKER_DEAD_ROOT"
+ln -s '999999999:proc-starttime:legacy-dead-ticks' "$RECOVERY_MARKER_DEAD_ROOT/.lifecycle.lock.recovery"
+set +e
+OASIS7_HARNESS_LIFECYCLE_LOCK_TIMEOUT_MS=100 \
+  wh_lifecycle_lock_acquire "$RECOVERY_MARKER_DEAD_ROOT" \
+  >"$TMP_DIR/recovery-marker-dead.log" 2>&1
+recovery_marker_dead_status="$?"
+set -e
+[[ "$recovery_marker_dead_status" -eq 0 ]] || {
+  echo "lifecycle recovery contract: dead recovery marker was not reclaimed" >&2
+  exit 1
+}
+[[ ! -L "$RECOVERY_MARKER_DEAD_ROOT/.lifecycle.lock.recovery" ]] || {
+  echo "lifecycle recovery contract: dead recovery marker remained after reclaim" >&2
+  exit 1
+}
+wh_lifecycle_lock_release
+
+RECOVERY_MARKER_STALE_ROOT="$TMP_DIR/recovery-marker-stale"
+RECOVERY_MARKER_STALE_OWNER_STOP="$TMP_DIR/recovery-marker-stale-owner.stop"
+mkdir -p "$RECOVERY_MARKER_STALE_ROOT"
+recovery_marker_stale_owner() {
+  while [[ ! -e "$RECOVERY_MARKER_STALE_OWNER_STOP" ]]; do
+    sleep 0.05
+  done
+}
+recovery_marker_stale_owner &
+recovery_marker_stale_owner_pid="$!"
+ln -s "$recovery_marker_stale_owner_pid:stale-incarnation" "$RECOVERY_MARKER_STALE_ROOT/.lifecycle.lock.recovery"
+set +e
+OASIS7_HARNESS_LIFECYCLE_LOCK_TIMEOUT_MS=100 \
+  wh_lifecycle_lock_acquire "$RECOVERY_MARKER_STALE_ROOT" \
+  >"$TMP_DIR/recovery-marker-stale.log" 2>&1
+recovery_marker_stale_status="$?"
+set -e
+[[ "$recovery_marker_stale_status" -eq 0 ]] || {
+  echo "lifecycle recovery contract: known-stale recovery marker was not reclaimed" >&2
+  exit 1
+}
+[[ ! -L "$RECOVERY_MARKER_STALE_ROOT/.lifecycle.lock.recovery" ]] || {
+  echo "lifecycle recovery contract: known-stale recovery marker remained after reclaim" >&2
+  exit 1
+}
+wh_lifecycle_lock_release
+touch "$RECOVERY_MARKER_STALE_OWNER_STOP"
+wait "$recovery_marker_stale_owner_pid" >/dev/null 2>&1 || true
+
+RECOVERY_MARKER_LIVE_ROOT="$TMP_DIR/recovery-marker-live"
+RECOVERY_MARKER_LIVE_OWNER_STOP="$TMP_DIR/recovery-marker-live-owner.stop"
+mkdir -p "$RECOVERY_MARKER_LIVE_ROOT"
+recovery_marker_live_owner() {
+  while [[ ! -e "$RECOVERY_MARKER_LIVE_OWNER_STOP" ]]; do
+    sleep 0.05
+  done
+}
+recovery_marker_live_owner &
+recovery_marker_live_owner_pid="$!"
+recovery_marker_live_owner_identity="$(wh_process_identity "$recovery_marker_live_owner_pid")"
+ln -s "$recovery_marker_live_owner_pid:$recovery_marker_live_owner_identity" \
+  "$RECOVERY_MARKER_LIVE_ROOT/.lifecycle.lock.recovery"
+set +e
+OASIS7_HARNESS_LIFECYCLE_LOCK_TIMEOUT_MS=100 \
+  wh_lifecycle_lock_acquire "$RECOVERY_MARKER_LIVE_ROOT" \
+  >"$TMP_DIR/recovery-marker-live.log" 2>&1
+recovery_marker_live_status="$?"
+set -e
+[[ "$recovery_marker_live_status" -ne 0 ]] || {
+  echo "lifecycle recovery contract: live recovery marker owner was reclaimed" >&2
+  exit 1
+}
+[[ "$(readlink "$RECOVERY_MARKER_LIVE_ROOT/.lifecycle.lock.recovery")" == \
+  "$recovery_marker_live_owner_pid:$recovery_marker_live_owner_identity" ]] || {
+  echo "lifecycle recovery contract: live recovery marker was changed" >&2
+  exit 1
+}
+touch "$RECOVERY_MARKER_LIVE_OWNER_STOP"
+wait "$recovery_marker_live_owner_pid" >/dev/null 2>&1 || true
+rm -f "$RECOVERY_MARKER_LIVE_ROOT/.lifecycle.lock.recovery"
+
+RECOVERY_MARKER_UNKNOWN_ROOT="$TMP_DIR/recovery-marker-unknown"
+RECOVERY_MARKER_UNKNOWN_STOP="$TMP_DIR/recovery-marker-unknown.stop"
+mkdir -p "$RECOVERY_MARKER_UNKNOWN_ROOT"
+recovery_marker_unknown_owner() {
+  while [[ ! -e "$RECOVERY_MARKER_UNKNOWN_STOP" ]]; do
+    sleep 0.05
+  done
+}
+recovery_marker_unknown_owner &
+recovery_marker_unknown_owner_pid="$!"
+recovery_marker_unknown_owner_identity="$(wh_process_identity "$recovery_marker_unknown_owner_pid")"
+ln -s "$recovery_marker_unknown_owner_pid:unknown-incarnation" "$RECOVERY_MARKER_UNKNOWN_ROOT/.lifecycle.lock.recovery"
+set +e
+(
+  original_wh_process_identity_definition="$(declare -f wh_process_identity)"
+  eval "$(printf '%s\n' "$original_wh_process_identity_definition" | sed 's/^wh_process_identity /original_wh_process_identity /')"
+  wh_process_identity() {
+    if [[ "${1:-}" == "$recovery_marker_unknown_owner_pid" ]]; then
+      return 1
+    fi
+    original_wh_process_identity "$@"
+  }
+  OASIS7_HARNESS_LIFECYCLE_LOCK_TIMEOUT_MS=100 \
+    wh_lifecycle_lock_acquire "$RECOVERY_MARKER_UNKNOWN_ROOT" \
+    >"$TMP_DIR/recovery-marker-unknown.log" 2>&1
+)
+recovery_marker_unknown_status="$?"
+set -e
+[[ "$recovery_marker_unknown_status" -ne 0 ]] || {
+  echo "lifecycle recovery contract: unknown recovery marker owner was reclaimed" >&2
+  exit 1
+}
+[[ "$(readlink "$RECOVERY_MARKER_UNKNOWN_ROOT/.lifecycle.lock.recovery")" == \
+  "$recovery_marker_unknown_owner_pid:unknown-incarnation" ]] || {
+  echo "lifecycle recovery contract: unknown recovery marker was changed" >&2
+  exit 1
+}
+touch "$RECOVERY_MARKER_UNKNOWN_STOP"
+wait "$recovery_marker_unknown_owner_pid" >/dev/null 2>&1 || true
+rm -f "$RECOVERY_MARKER_UNKNOWN_ROOT/.lifecycle.lock.recovery"
 
 PORT_ROOT="$TMP_DIR/port-reservations"
 PORT_COMMON_DIR="$TMP_DIR/port-registry"
