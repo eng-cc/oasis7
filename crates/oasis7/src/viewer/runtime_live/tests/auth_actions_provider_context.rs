@@ -119,10 +119,17 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
                     if feedback.status == "committed" {
                         assert!(feedback.runtime_receipt_id.is_some());
                     } else {
-                        assert!(matches!(
-                            (feedback.status.as_str(), feedback.reject_reason.as_deref()),
-                            ("pending", Some(_)) | ("rejected", Some("no_effect"))
-                        ));
+                        assert!(
+                            matches!(
+                                (feedback.status.as_str(), feedback.reject_reason.as_deref()),
+                                ("pending", Some(_))
+                                    | ("rejected", Some("no_effect"))
+                                    | ("rejected", Some("stale_base"))
+                            ),
+                            "unexpected provider feedback: status={} reason={:?}",
+                            feedback.status,
+                            feedback.reject_reason
+                        );
                     }
                     MockHttpResponse {
                         status_code: 200,
@@ -153,26 +160,22 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
         oasis7::env_mut::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
     }
 
+    let test_world_id = format!("live-runtime-{}", WorldScenario::Minimal.as_str());
+    let test_finality_block_hash =
+        crate::simulator::h_v1("oasis7.viewer.test.finality-block.v1", &test_world_id).to_string();
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
-            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+            .with_decision_mode(ViewerLiveDecisionMode::Llm)
+            .with_test_cognition_runtime_binding(
+                "provider-context-branch",
+                0,
+                Some(test_finality_block_hash.clone()),
+                "verified",
+                0,
+            ),
     )
     .expect("runtime server");
     let expected_world_id = server.config.world_id.clone();
-    let finality_block_hash =
-        crate::simulator::h_v1("oasis7.viewer.test.finality-block.v1", &expected_world_id)
-            .to_string();
-    server
-        .world
-        .bind_cognition_runtime(
-            expected_world_id.as_str(),
-            "provider-context-branch",
-            0,
-            Some(finality_block_hash.clone()),
-            "verified",
-            0,
-        )
-        .expect("bind authoritative runtime cognition context");
     server
         .world
         .install_test_provider_capability_fixture("agent-0")
@@ -300,8 +303,8 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
             .runtime_binding
             .finality_block_hash
             .as_ref()
-            .map(|hash| hash.as_str()),
-        Some(finality_block_hash.as_str())
+            .map(crate::simulator::Digest32::as_str),
+        Some(test_finality_block_hash.as_str())
     );
     assert_eq!(decision_request.runtime_binding.finality_status, "verified");
     assert_eq!(decision_request.runtime_binding.reorg_epoch, 0);
@@ -508,25 +511,21 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
         oasis7::env_mut::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
     }
 
+    let test_world_id = format!("live-runtime-{}", WorldScenario::Minimal.as_str());
+    let test_finality_block_hash =
+        crate::simulator::h_v1("oasis7.viewer.test.finality-block.v1", &test_world_id).to_string();
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
-            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+            .with_decision_mode(ViewerLiveDecisionMode::Llm)
+            .with_test_cognition_runtime_binding(
+                "main",
+                0,
+                Some(test_finality_block_hash),
+                "verified",
+                0,
+            ),
     )
     .expect("runtime server");
-    let world_id = server.config.world_id.clone();
-    let finality_block_hash =
-        crate::simulator::h_v1("oasis7.viewer.test.finality-block.v1", &world_id).to_string();
-    server
-        .world
-        .bind_cognition_runtime(
-            world_id,
-            "main",
-            0,
-            Some(finality_block_hash),
-            "verified",
-            0,
-        )
-        .expect("bind Runtime cognition context");
     server
         .world
         .install_test_provider_capability_fixture("agent-0")

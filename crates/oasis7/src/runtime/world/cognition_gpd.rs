@@ -70,6 +70,34 @@ fn set_continuations(
     Ok(())
 }
 
+fn context_registry_entry(world: &World, continuation_id: &str) -> Option<JsonValue> {
+    world
+        .cognition
+        .get("continuation_contexts")
+        .and_then(JsonValue::as_object)
+        .and_then(|contexts| contexts.get(continuation_id))
+        .cloned()
+}
+
+fn proposal_context_matches(entry: &JsonValue, proposal: &CognitionContinuationProposalV1) -> bool {
+    entry
+        .get("baseline_observation_digest")
+        .and_then(JsonValue::as_str)
+        == Some(proposal.baseline_observation_digest.as_str())
+        && entry.get("goal_digest").and_then(JsonValue::as_str)
+            == Some(proposal.goal_digest.as_str())
+        && entry.get("policy_digest").and_then(JsonValue::as_str)
+            == Some(proposal.policy_digest.as_str())
+        && entry.get("policy_revision").and_then(JsonValue::as_u64)
+            == Some(proposal.policy_revision)
+        && entry
+            .get("precondition_summary")
+            .and_then(JsonValue::as_str)
+            == Some(proposal.precondition_summary.as_str())
+        && entry.get("precondition_digest").and_then(JsonValue::as_str)
+            == Some(proposal.precondition_digest.as_str())
+}
+
 impl World {
     /// Verify all proposal context digests and its full canonical proposal
     /// identity against the durable continuation. This is the typed seam for
@@ -92,6 +120,11 @@ impl World {
             .into_iter()
             .find(|value| value.continuation_id == continuation_id)
             .ok_or_else(|| handoff_error("continuation_missing"))?;
+        let context_entry = context_registry_entry(self, continuation_id)
+            .ok_or_else(|| handoff_error("cognition_context_missing"))?;
+        if !proposal_context_matches(&context_entry, proposal) {
+            return Err(handoff_error("cognition_context_mismatch"));
+        }
         let binding = self.current_cognition_runtime_binding()?;
         let binding_block_hash = binding
             .finality_block_hash
@@ -276,6 +309,14 @@ impl World {
                 {
                     return Err(handoff_error("continuation_budget_non_monotonic"));
                 }
+                let Some(context_entry) =
+                    context_registry_entry(&transaction, &wake.continuation_id)
+                else {
+                    return Err(handoff_error("cognition_context_missing"));
+                };
+                if !proposal_context_matches(&context_entry, &proposal) {
+                    return Err(handoff_error("cognition_context_mismatch"));
+                }
                 if !matches!(continuation.status, ContinuationStatusV1::Waking) {
                     ContinuationTransition::apply_at_tick(
                         continuation,
@@ -301,7 +342,7 @@ impl World {
         set_continuations(&mut transaction, &continuations)?;
         let replanned_continuation = if let Some(proposal) = replanned_proposal {
             transaction.cognition["scheduler_state"] = scheduler.snapshot_json();
-            Some(transaction.admit_cognition_continuation_inner(proposal)?)
+            Some(transaction.admit_cognition_continuation_inner(proposal, true)?)
         } else {
             transaction.cognition["scheduler_state"] = scheduler.snapshot_json();
             None

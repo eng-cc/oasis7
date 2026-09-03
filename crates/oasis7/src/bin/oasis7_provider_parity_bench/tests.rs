@@ -1,6 +1,11 @@
 use super::*;
+use oasis7::simulator::{
+    COGNITION_RESPONSE_DIGEST_DOMAIN, DecisionProvider, DecisionResponse, FeedbackEnvelopeV1,
+    golden_decision_provider_fixtures, h_v1,
+};
 use std::io::{Read, Write};
 use std::net::TcpListener;
+use std::sync::{Arc, Mutex};
 
 #[test]
 fn parse_options_accepts_provider_loopback_http() {
@@ -178,6 +183,131 @@ fn builtin_parity_guardrail_keeps_valid_move_agent_decision() {
         apply_builtin_parity_guardrail("P0-001", "agent-1", &observation, decision.clone());
     assert_eq!(rewritten, decision);
     assert_eq!(note, None);
+}
+
+#[test]
+fn parity_target_context_is_production_valid() {
+    let fixture = golden_decision_provider_fixtures()
+        .into_iter()
+        .next()
+        .expect("golden parity fixture");
+    let observation = sample_patrol_observation();
+    let (turn_context, request_context) = build_target_context(
+        fixture.request,
+        &observation,
+        fixture.fixture_id.as_str(),
+        "parity-session-test",
+        0,
+    );
+
+    assert_eq!(turn_context.request_digest, request_context.request_digest);
+    request_context
+        .validate_production_lane()
+        .expect("parity target request must satisfy the production lane");
+    turn_context
+        .validate_for_agent("agent-1")
+        .expect("parity target turn context must retain actor identity");
+}
+
+#[test]
+fn parity_target_route_round_trip_uses_outer_context_endpoints() {
+    let fixture = golden_decision_provider_fixtures()
+        .into_iter()
+        .next()
+        .expect("golden parity fixture");
+    let observation = sample_patrol_observation();
+    let (turn_context, request_context) = build_target_context(
+        fixture.request,
+        &observation,
+        fixture.fixture_id.as_str(),
+        "parity-session-route-test",
+        0,
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind route test listener");
+    let bind = listener.local_addr().expect("route test listener address");
+    let paths = Arc::new(Mutex::new(Vec::<String>::new()));
+    let paths_for_server = Arc::clone(&paths);
+    let response_context = request_context.clone();
+    let serve = std::thread::spawn(move || {
+        for _ in 0..2 {
+            let (mut stream, _) = listener.accept().expect("accept route request");
+            let mut request = [0_u8; 8 * 1024];
+            let bytes = stream.read(&mut request).expect("read route request");
+            let request_text = String::from_utf8_lossy(&request[..bytes]);
+            let path = request_text
+                .lines()
+                .next()
+                .and_then(|line| line.split_whitespace().nth(1))
+                .unwrap_or_default()
+                .to_string();
+            paths_for_server
+                .lock()
+                .expect("route test path lock")
+                .push(path.clone());
+            let body = if path == "/v1/world-simulator/decision-context" {
+                let base_response = DecisionResponse::wait("parity-route-test-provider");
+                serde_json::to_string(&ContinuousAgentResponseContextV1 {
+                    base_decision_response: base_response.clone(),
+                    context_discriminator: response_context.context_discriminator.clone(),
+                    context_version: response_context.context_version,
+                    agent_session_id: response_context.agent_session_id.clone(),
+                    agent_turn_id: response_context.agent_turn_id.clone(),
+                    decision_request_id: response_context.decision_request_id.clone(),
+                    retry_seq: response_context.retry_seq,
+                    transport_attempt: response_context.transport_attempt,
+                    request_digest: response_context.request_digest.clone(),
+                    response_digest: h_v1(COGNITION_RESPONSE_DIGEST_DOMAIN, &base_response),
+                })
+                .expect("encode route test response")
+            } else {
+                r#"{"ok":true}"#.to_string()
+            };
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream
+                .write_all(response.as_bytes())
+                .expect("write route test response");
+        }
+    });
+
+    let mut adapter = ProviderLoopbackAdapter::new(&format!("http://{bind}"), None, 5_000)
+        .expect("create loopback adapter");
+    let response = adapter
+        .decide_with_continuous_request_context(
+            &request_context.base_decision_request,
+            &turn_context,
+            &request_context,
+        )
+        .expect("target decision-context request");
+    assert_eq!(response.request_digest, request_context.request_digest);
+    adapter
+        .push_continuous_feedback(&FeedbackEnvelopeV1 {
+            feedback_id: "parity-route-test-feedback".to_string(),
+            feedback_seq: 1,
+            agent_subject: "agent-1".to_string(),
+            agent_session_id: request_context.agent_session_id.clone(),
+            agent_turn_id: request_context.agent_turn_id.clone(),
+            decision_request_id: request_context.decision_request_id.clone(),
+            candidate_action_id: Some(1),
+            runtime_receipt_id: Some("parity-route-test-receipt".to_string()),
+            status: "committed".to_string(),
+            request_digest: request_context.request_digest.clone(),
+            reject_reason: None,
+            provenance: "runtime_authoritative".to_string(),
+        })
+        .expect("target feedback-context request");
+    serve.join().expect("route test server should finish");
+
+    assert_eq!(
+        *paths.lock().expect("route test path lock"),
+        vec![
+            "/v1/world-simulator/decision-context".to_string(),
+            "/v1/world-simulator/feedback-context".to_string(),
+        ]
+    );
 }
 
 #[test]

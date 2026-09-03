@@ -669,7 +669,7 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
             pending_trace: None,
             continuous_turn_context: None,
             continuous_request_context: None,
-            require_continuous_request_context: false,
+            require_continuous_request_context: true,
             pending_response_context: None,
             pending_memory_write_intents: Vec::new(),
         }
@@ -680,9 +680,24 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
         self
     }
 
-    /// Fence this behavior to the production outer-context lane. Callers
-    /// that intentionally use the legacy reduced adapter must leave this
-    /// disabled and use the explicitly compatibility-only runner APIs.
+    /// Explicit compatibility-only constructor for reduced `/decision` and
+    /// `/feedback` adapters. Production callers use the target outer-context
+    /// lane by default and must provide a complete request context.
+    pub fn new_legacy_compatibility(
+        agent_id: impl Into<String>,
+        provider: P,
+        action_catalog: Vec<ActionCatalogEntry>,
+    ) -> Self {
+        Self::new(agent_id, provider, action_catalog).legacy_compatibility()
+    }
+
+    /// Mark this behavior as an explicit legacy compatibility fixture.
+    pub fn legacy_compatibility(mut self) -> Self {
+        self.require_continuous_request_context = false;
+        self
+    }
+
+    /// Reassert the production outer-context lane after configuration.
     pub fn require_continuous_request_context(mut self) -> Self {
         self.require_continuous_request_context = true;
         self

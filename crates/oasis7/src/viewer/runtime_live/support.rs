@@ -29,6 +29,8 @@ impl ViewerRuntimeLiveServerConfig {
             chain_link_policy: ChainLinkPolicy::Enforcing,
             agent_chat_echo_enabled: control_plane::runtime_agent_chat_echo_enabled_from_env(),
             generated_world_dir: None,
+            #[cfg(test)]
+            test_cognition_runtime_binding: None,
         }
     }
 
@@ -47,6 +49,8 @@ impl ViewerRuntimeLiveServerConfig {
             chain_link_policy: ChainLinkPolicy::Enforcing,
             agent_chat_echo_enabled: control_plane::runtime_agent_chat_echo_enabled_from_env(),
             generated_world_dir: None,
+            #[cfg(test)]
+            test_cognition_runtime_binding: None,
         }
     }
 
@@ -57,6 +61,25 @@ impl ViewerRuntimeLiveServerConfig {
 
     pub fn with_world_id(mut self, world_id: impl Into<String>) -> Self {
         self.world_id = world_id.into();
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_test_cognition_runtime_binding(
+        mut self,
+        branch_id: impl Into<String>,
+        finality_epoch: u64,
+        finality_block_hash: Option<String>,
+        finality_status: impl Into<String>,
+        reorg_epoch: u64,
+    ) -> Self {
+        self.test_cognition_runtime_binding = Some((
+            branch_id.into(),
+            finality_epoch,
+            finality_block_hash,
+            finality_status.into(),
+            reorg_epoch,
+        ));
         self
     }
 

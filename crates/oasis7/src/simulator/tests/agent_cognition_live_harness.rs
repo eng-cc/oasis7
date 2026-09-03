@@ -114,6 +114,7 @@ fn provider_backed_runner_with_response(response: DecisionResponse) -> AsyncAgen
         provider,
         vec![ActionCatalogEntry::new("wait", "wait without world effect")],
     )
+    .legacy_compatibility()
     .with_execution_mode(ProviderExecutionMode::HeadlessAgent);
     let mut runner = AsyncAgentRunner::new(16).expect("create target actor runner");
     runner
@@ -136,6 +137,7 @@ fn provider_backed_runner_with_state() -> (
         provider,
         vec![ActionCatalogEntry::new("wait", "wait without world effect")],
     )
+    .legacy_compatibility()
     .with_execution_mode(ProviderExecutionMode::HeadlessAgent);
     let mut runner = AsyncAgentRunner::new(16).expect("create target actor runner");
     runner
@@ -158,6 +160,7 @@ fn provider_failure_runner() -> AsyncAgentRunner {
         provider,
         vec![ActionCatalogEntry::new("wait", "wait without world effect")],
     )
+    .legacy_compatibility()
     .with_execution_mode(ProviderExecutionMode::HeadlessAgent);
     let mut runner = AsyncAgentRunner::new(16).expect("create target actor runner");
     runner
@@ -686,22 +689,44 @@ fn target_actor_continuation_is_runtime_owned_and_rejected_continuation_cannot_r
         "Runtime must own status digest instead of echoing Harness proposal digest"
     );
 
-    let rejected = runner
+    let error = runner
         .apply_runtime_continuation_projection(
             AGENT_ID,
             rejected_runtime_projection(&accepted.proposal),
         )
-        .expect("Runtime rejection invalidates continuation");
-    assert!(!rejected.active);
-    assert_eq!(rejected.status, "rejected");
-    assert_eq!(rejected.provenance, "runtime_authoritative");
-    assert_eq!(rejected.provider_invocation_count, 0);
+        .expect_err("legacy projection cannot claim Runtime authority");
+    assert!(error.to_string().contains("strict continuation"));
+}
+
+#[test]
+fn terminal_feedback_invalidates_continuation_and_cannot_resurrect_old_turn() {
+    let proposal = continuation_proposal();
+    let mut runner = AsyncAgentRunner::builtin_fixture(AGENT_ID);
+    runner
+        .start_turn_with_context(AGENT_ID, host_context())
+        .expect("open turn");
+    let outcome = completed_turn(&mut runner);
+    runner
+        .submit_continuation_proposal(AGENT_ID, proposal.clone())
+        .expect("admit compatibility continuation after the outcome");
+    let mut feedback = outcome
+        .feedback_for_runtime_status("rejected", None)
+        .expect("build terminal feedback");
+    feedback.provenance = "runtime_authoritative".to_string();
+    runner
+        .consume_runtime_feedback(AGENT_ID, feedback, &mut MemoryWriteStore::default())
+        .expect("terminal feedback releases the old turn");
+    let replay_error = runner
+        .start_turn_with_context(AGENT_ID, host_context())
+        .expect_err("terminal feedback must close the original request lineage");
     assert!(
-        runner
-            .start_turn_with_context(AGENT_ID, host_context())
-            .is_ok(),
-        "a rejected continuation must release the actor single-flight"
+        replay_error.to_string().contains("request_replay"),
+        "terminal feedback must not revive the same request: {replay_error}"
     );
+    let error = runner
+        .submit_continuation_proposal(AGENT_ID, proposal)
+        .expect_err("terminal chain cannot be resurrected by the same proposal");
+    assert!(error.to_string().contains("terminal"));
 }
 
 fn runtime_receipt_for_feedback(feedback: &FeedbackEnvelopeV1) -> RuntimeReceiptLineageV1 {
@@ -798,7 +823,7 @@ fn continuation_proposal() -> ContinuationProposalV1 {
         "wake_conditions": [{
             "schema_version": "wake-condition.v1",
             "kind": "receipt_linked",
-            "receipt_id": "receipt-live-harness-1"
+            "receipt_id": "blake3:9999999999999999999999999999999999999999999999999999999999999999"
         }],
         "valid_until_tick": 100,
         "source": "harness",

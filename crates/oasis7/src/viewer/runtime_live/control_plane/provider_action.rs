@@ -13,7 +13,18 @@ impl ViewerRuntimeLiveServer {
     ) -> Result<Option<AgentDecisionTrace>, AgentDecisionTrace> {
         self.drain_provider_feedback_outbox();
         if let Some(agent_id) = self.llm_sidecar.provider_stale_replan_exhausted_agent() {
-            return Err(stale_replan_exhausted_trace(&self.world, agent_id.as_str()));
+            let mut trace = stale_replan_exhausted_trace(&self.world, agent_id.as_str());
+            if let Err(error) = self.handoff_runtime_wake_for_agent(
+                agent_id.as_str(),
+                crate::runtime::ContinuationStatusV1::Rejected,
+                "provider_stale_replan_exhausted",
+            ) {
+                trace.llm_error = Some(format!(
+                    "{}; Runtime wake handoff failed: {error}",
+                    trace.llm_error.take().unwrap_or_default()
+                ));
+            }
+            return Err(trace);
         }
         if let Some(agent_id) = self.llm_sidecar.take_provider_transport_exhausted_agent() {
             return Err(self.finish_provider_transport_exhaustion(agent_id, None));
@@ -49,6 +60,18 @@ impl ViewerRuntimeLiveServer {
                     ) {
                         self.deliver_provider_feedback_best_effort(feedback);
                     }
+                    if let Err(error) = self.handoff_runtime_wake_for_agent(
+                        decision.agent_id.as_str(),
+                        crate::runtime::ContinuationStatusV1::Rejected,
+                        "provider_decision_failed",
+                    ) {
+                        let mut terminal_trace = trace.clone();
+                        terminal_trace.llm_error = Some(format!(
+                            "{}; Runtime wake handoff failed: {error}",
+                            terminal_trace.llm_error.take().unwrap_or_default()
+                        ));
+                        return Err(terminal_trace);
+                    }
                 }
                 return Err(trace.clone());
             }
@@ -65,6 +88,16 @@ impl ViewerRuntimeLiveServer {
                         notes: vec![format!("llm_failed: {}", message)],
                     },
                 });
+                if let Err(error) = self.handoff_runtime_wake_for_agent(
+                    decision.agent_id.as_str(),
+                    crate::runtime::ContinuationStatusV1::Rejected,
+                    "provider_response_parse_failed",
+                ) {
+                    let mut terminal_trace = trace.clone();
+                    terminal_trace.llm_error =
+                        Some(format!("Runtime wake handoff failed: {error}"));
+                    return Err(terminal_trace);
+                }
                 return Ok(decision_trace);
             }
         }
@@ -114,6 +147,27 @@ impl ViewerRuntimeLiveServer {
                                         }],
                                     },
                                 });
+                                let handoff_status = if stale_base {
+                                    crate::runtime::ContinuationStatusV1::Invalidated
+                                } else {
+                                    crate::runtime::ContinuationStatusV1::Rejected
+                                };
+                                let handoff_reason = if stale_base {
+                                    "provider_stale_base_replan"
+                                } else {
+                                    "provider_action_commit_rejected"
+                                };
+                                if let Err(error) = self.handoff_runtime_wake_for_agent(
+                                    cognition.request.request_context.agent_subject.as_str(),
+                                    handoff_status,
+                                    handoff_reason,
+                                ) {
+                                    return Err(wake_handoff_error_trace(
+                                        cognition.request.request_context.agent_subject.as_str(),
+                                        self.world.state().time,
+                                        error,
+                                    ));
+                                }
                             }
                         }
                     } else {
@@ -143,6 +197,26 @@ impl ViewerRuntimeLiveServer {
                             notes: vec![reason],
                         },
                     });
+                    self.handoff_runtime_wake_for_agent(
+                        decision.agent_id.as_str(),
+                        crate::runtime::ContinuationStatusV1::Rejected,
+                        "provider_action_unmappable",
+                    )
+                    .map_err(|error| AgentDecisionTrace {
+                        agent_id: decision.agent_id.clone(),
+                        time: self.world.state().time,
+                        decision: AgentDecision::Wait,
+                        llm_input: None,
+                        llm_output: None,
+                        llm_error: Some(error),
+                        parse_error: None,
+                        llm_diagnostics: None,
+                        llm_effect_intents: Vec::new(),
+                        llm_effect_receipts: Vec::new(),
+                        llm_step_trace: Vec::new(),
+                        llm_prompt_section_trace: Vec::new(),
+                        llm_chat_messages: Vec::new(),
+                    })?;
                 }
             },
             AgentDecision::Wait | AgentDecision::WaitTicks(_) => {
@@ -166,6 +240,26 @@ impl ViewerRuntimeLiveServer {
                         Some(format!("provider requested wait for {ticks} tick(s)")),
                     );
                     self.deliver_provider_feedback_best_effort(feedback);
+                    self.handoff_runtime_wake_for_agent(
+                        decision.agent_id.as_str(),
+                        crate::runtime::ContinuationStatusV1::Rejected,
+                        "provider_wait_compatibility_terminal",
+                    )
+                    .map_err(|error| AgentDecisionTrace {
+                        agent_id: decision.agent_id.clone(),
+                        time: self.world.state().time,
+                        decision: AgentDecision::Wait,
+                        llm_input: None,
+                        llm_output: None,
+                        llm_error: Some(error),
+                        parse_error: None,
+                        llm_diagnostics: None,
+                        llm_effect_intents: Vec::new(),
+                        llm_effect_receipts: Vec::new(),
+                        llm_step_trace: Vec::new(),
+                        llm_prompt_section_trace: Vec::new(),
+                        llm_chat_messages: Vec::new(),
+                    })?;
                 }
             }
             AgentDecision::Query(_) => {
@@ -184,6 +278,26 @@ impl ViewerRuntimeLiveServer {
                     self.llm_sidecar
                         .fail_provider_turn(decision.agent_id.as_str());
                     self.deliver_provider_feedback_best_effort(feedback);
+                    self.handoff_runtime_wake_for_agent(
+                        decision.agent_id.as_str(),
+                        crate::runtime::ContinuationStatusV1::Rejected,
+                        "provider_query_not_executable",
+                    )
+                    .map_err(|error| AgentDecisionTrace {
+                        agent_id: decision.agent_id.clone(),
+                        time: self.world.state().time,
+                        decision: AgentDecision::Wait,
+                        llm_input: None,
+                        llm_output: None,
+                        llm_error: Some(error),
+                        parse_error: None,
+                        llm_diagnostics: None,
+                        llm_effect_intents: Vec::new(),
+                        llm_effect_receipts: Vec::new(),
+                        llm_step_trace: Vec::new(),
+                        llm_prompt_section_trace: Vec::new(),
+                        llm_chat_messages: Vec::new(),
+                    })?;
                 }
             }
             AgentDecision::ModuleCommand { .. } => {
@@ -199,6 +313,26 @@ impl ViewerRuntimeLiveServer {
                     self.llm_sidecar
                         .fail_provider_turn(decision.agent_id.as_str());
                     self.deliver_provider_feedback_best_effort(feedback);
+                    self.handoff_runtime_wake_for_agent(
+                        decision.agent_id.as_str(),
+                        crate::runtime::ContinuationStatusV1::Rejected,
+                        "provider_module_command_not_executable",
+                    )
+                    .map_err(|error| AgentDecisionTrace {
+                        agent_id: decision.agent_id.clone(),
+                        time: self.world.state().time,
+                        decision: AgentDecision::Wait,
+                        llm_input: None,
+                        llm_output: None,
+                        llm_diagnostics: None,
+                        llm_error: Some(error),
+                        parse_error: None,
+                        llm_effect_intents: Vec::new(),
+                        llm_effect_receipts: Vec::new(),
+                        llm_step_trace: Vec::new(),
+                        llm_prompt_section_trace: Vec::new(),
+                        llm_chat_messages: Vec::new(),
+                    })?;
                 }
             }
         }
@@ -247,6 +381,16 @@ impl ViewerRuntimeLiveServer {
             })
             .to_string(),
         );
+        if let Err(error) = self.handoff_runtime_wake_for_agent(
+            trace.agent_id.as_str(),
+            crate::runtime::ContinuationStatusV1::Rejected,
+            "provider_transport_exhausted",
+        ) {
+            trace.llm_error = Some(format!(
+                "{}; Runtime wake handoff failed: {error}",
+                trace.llm_error.take().unwrap_or_default()
+            ));
+        }
         trace
     }
 
@@ -433,7 +577,31 @@ impl ViewerRuntimeLiveServer {
         // delivery are separate so a provider transport failure cannot turn
         // that authoritative commit into a viewer-side ActionRejected event.
         self.deliver_provider_feedback_best_effort(feedback);
+        self.handoff_runtime_wake_for_agent(
+            cognition.request.request_context.agent_subject.as_str(),
+            crate::runtime::ContinuationStatusV1::Completed,
+            "provider_action_committed",
+        )
+        .map_err(ProviderRuntimeActionCommitError::Message)?;
         Ok(())
+    }
+}
+
+fn wake_handoff_error_trace(agent_id: &str, time: u64, error: String) -> AgentDecisionTrace {
+    AgentDecisionTrace {
+        agent_id: agent_id.to_string(),
+        time,
+        decision: AgentDecision::Wait,
+        llm_input: None,
+        llm_output: None,
+        llm_error: Some(error),
+        parse_error: None,
+        llm_diagnostics: None,
+        llm_effect_intents: Vec::new(),
+        llm_effect_receipts: Vec::new(),
+        llm_step_trace: Vec::new(),
+        llm_prompt_section_trace: Vec::new(),
+        llm_chat_messages: Vec::new(),
     }
 }
 

@@ -10,14 +10,16 @@ use super::{
     CognitionJournalEvent, CognitionJournalProjection, CognitionProjection, CognitionReceiptViewV1,
     IdempotencyProjection, WORLD_COMMIT_SCHEMA, append_cognition_event,
 };
-use crate::runtime::cognition::{AgentDecisionEnvelopeV1, finality_binding_digest_v1};
+use crate::runtime::cognition::{
+    AgentDecisionEnvelopeV1, finality_binding_digest_v1, finality_binding_is_legal,
+    world_state_binding_digest_v1,
+};
 use crate::runtime::cognition_recovery::{
     CognitionRecoveryReport, RuntimeCognitionCommitRequestV1, RuntimeCognitionResponseArtifactV1,
     RuntimeReceiptLineageV1, WorldCommitRecordV1, WorldRootViewV1, cognition_digest_v1,
     default_cognition_persistence_projection, response_artifact_digest,
 };
-use crate::runtime::cognition_scheduler::{CognitionScheduler, SchedulerWakeV1};
-use crate::runtime::cognition_wake::AgentContinuation;
+use crate::runtime::cognition_scheduler::SchedulerWakeV1;
 use crate::runtime::error::WorldError;
 use serde_json::{Value as JsonValue, json};
 use std::collections::BTreeMap;
@@ -48,12 +50,29 @@ pub(super) fn validate_prepare_response_artifact(
         .get("outer_lineage")
         .and_then(JsonValue::as_object)
         .ok_or_else(|| cognition_validation("response_outer_lineage_missing"))?;
-    let expected_base_world_hash =
-        cognition_digest_v1("oasis7.runtime.manifest.v1", &envelope.base_world_hash);
-    let expected_manifest_hash = cognition_digest_v1(
-        "oasis7.runtime.manifest.v1",
-        &envelope.runtime_manifest_hash,
-    );
+    let expected_base_world_hash = if envelope.base_world_hash.starts_with("blake3:") {
+        envelope.base_world_hash.clone()
+    } else {
+        world_state_binding_digest_v1(
+            &envelope.world_id,
+            &envelope.branch_id,
+            envelope.finality_epoch,
+            envelope.finality_block_hash.as_deref(),
+            &envelope.finality_status,
+            envelope.base_tick,
+            &envelope.base_world_hash,
+            envelope.reorg_epoch,
+            &envelope.runtime_manifest_hash,
+        )
+    };
+    let expected_manifest_hash = if envelope.runtime_manifest_hash.starts_with("blake3:") {
+        envelope.runtime_manifest_hash.clone()
+    } else {
+        cognition_digest_v1(
+            "oasis7.runtime.manifest.v1",
+            &envelope.runtime_manifest_hash,
+        )
+    };
     let outer_block_hash = outer
         .get("finality_block_hash")
         .and_then(JsonValue::as_str)
@@ -285,7 +304,8 @@ impl World {
         }
 
         let authority = self.current_cognition_runtime_authority()?;
-        if request.captured_base_binding != self.cognition_runtime_base_binding(&authority) {
+        let base_binding = self.cognition_runtime_base_binding(&authority);
+        if request.captured_base_binding != base_binding {
             let stale_digest = cognition_digest_v1(
                 "oasis7.cognition.stale-envelope.v1",
                 &json!({"request": &request, "action": &action_value}),
@@ -321,20 +341,20 @@ impl World {
         let envelope = AgentDecisionEnvelopeV1 {
             schema_version: crate::runtime::cognition::AGENT_DECISION_ENVELOPE_V1_SCHEMA
                 .to_string(),
-            world_id: authority.world_id,
+            world_id: base_binding.world_id.clone(),
             agent_id: request.agent_id,
-            branch_id: authority.branch_id,
-            finality_epoch: authority.finality_epoch,
-            finality_block_hash: authority.finality_block_hash,
-            finality_status: authority.finality_status,
+            branch_id: base_binding.branch_id.clone(),
+            finality_epoch: base_binding.finality_epoch,
+            finality_block_hash: base_binding.finality_block_hash.clone(),
+            finality_status: base_binding.finality_status.clone(),
             agent_session_id: request.agent_session_id,
             agent_turn_id: request.agent_turn_id,
             decision_request_id: request.decision_request_id,
             retry_seq: request.retry_seq,
             base_tick: self.state.time,
-            base_world_hash: authority.base_world_hash,
-            reorg_epoch: authority.reorg_epoch,
-            runtime_manifest_hash: authority.runtime_manifest_hash,
+            base_world_hash: base_binding.base_world_hash.clone(),
+            reorg_epoch: base_binding.reorg_epoch,
+            runtime_manifest_hash: base_binding.runtime_manifest_hash.clone(),
             capability_snapshot_hash: request.capability_snapshot_hash,
             authority_context_hash: request.authority_context_hash,
             observation_digest: request.observation_digest,
@@ -507,102 +527,6 @@ impl World {
             "idempotency_key".to_string(),
             json!(envelope_idempotency_key),
         );
-        self.cognition = next;
-        Ok(())
-    }
-
-    pub(in crate::runtime::world) fn cognition_commit_scheduler_transaction(
-        &mut self,
-        scheduler: &CognitionScheduler,
-        kind: &str,
-        wake: Option<&SchedulerWakeV1>,
-    ) -> Result<(), WorldError> {
-        let mut next = self.cognition.clone();
-        next["scheduler_state"] = scheduler.snapshot_json();
-        let mut details = json!({
-            "scheduler_policy_digest": scheduler.policy_config_digest(),
-            "cursor_seq": scheduler.cursor_seq(),
-        });
-        if let Some(wake) = wake {
-            let object = details
-                .as_object_mut()
-                .ok_or_else(|| cognition_validation("cognition_event_details_not_object"))?;
-            object.extend(
-                serde_json::to_value(wake)
-                    .map_err(WorldError::from)?
-                    .as_object()
-                    .cloned()
-                    .unwrap_or_default(),
-            );
-        }
-        append_cognition_event(&mut next, kind, details)?;
-        self.cognition = next;
-        Ok(())
-    }
-
-    pub(in crate::runtime::world) fn cognition_commit_continuation_transaction(
-        &mut self,
-        continuations: &[AgentContinuation],
-        scheduler: &CognitionScheduler,
-        wake: &SchedulerWakeV1,
-    ) -> Result<(), WorldError> {
-        let mut next = self.cognition.clone();
-        next["continuations"] = serde_json::to_value(continuations).map_err(WorldError::from)?;
-        next["scheduler_state"] = scheduler.snapshot_json();
-        let continuation = continuations
-            .iter()
-            .find(|continuation| continuation.continuation_id == wake.continuation_id);
-        append_cognition_event(
-            &mut next,
-            "ContinuationScheduled",
-            json!({
-                "continuation_id": wake.continuation_id,
-                "wake_id": wake.wake_id,
-                "world_id": wake.world_id,
-                "agent_id": wake.agent_id,
-                "agent_session_id": wake.agent_session_id,
-                "agent_turn_id": wake.agent_turn_id,
-                "decision_request_id": wake.decision_request_id,
-                "status": continuation.map(|value| value.status),
-                "continuation_status_digest":
-                    continuation.and_then(|value| value.continuation_status_digest.clone()),
-                "scheduler_policy_digest": scheduler.policy_config_digest(),
-                "cursor_seq": scheduler.cursor_seq(),
-            }),
-        )?;
-        self.cognition = next;
-        Ok(())
-    }
-
-    pub(in crate::runtime::world) fn cognition_commit_continuation_lifecycle_transaction(
-        &mut self,
-        continuations: &[AgentContinuation],
-        scheduler: &CognitionScheduler,
-        kind: &str,
-        continuation: &AgentContinuation,
-        deactivated_wake: Option<&SchedulerWakeV1>,
-    ) -> Result<(), WorldError> {
-        let mut next = self.cognition.clone();
-        next["continuations"] = serde_json::to_value(continuations).map_err(WorldError::from)?;
-        next["scheduler_state"] = scheduler.snapshot_json();
-        let mut details = json!({
-            "continuation_id": continuation.continuation_id,
-            "wake_id": continuation.wake_id,
-            "world_id": continuation.world_id,
-            "agent_id": continuation.agent_id,
-            "agent_session_id": continuation.agent_session_id,
-            "agent_turn_id": continuation.agent_turn_id,
-            "decision_request_id": continuation.decision_request_id,
-            "status": continuation.status,
-            "continuation_status_digest": continuation.continuation_status_digest,
-            "scheduler_policy_digest": scheduler.policy_config_digest(),
-            "cursor_seq": scheduler.cursor_seq(),
-        });
-        if let Some(wake) = deactivated_wake {
-            details["scheduler_action"] = json!("deactivated");
-            details["wake"] = serde_json::to_value(wake).map_err(WorldError::from)?;
-        }
-        append_cognition_event(&mut next, kind, details)?;
         self.cognition = next;
         Ok(())
     }
@@ -933,6 +857,14 @@ pub(super) fn validate_marker(marker: &WorldCommitRecordV1) -> Result<(), WorldE
     {
         return Err(WorldError::DistributedValidationFailed {
             reason: "invalid_commit_record".to_string(),
+        });
+    }
+    if !finality_binding_is_legal(
+        &marker.finality_status,
+        (marker.finality_block_hash != "genesis").then_some(marker.finality_block_hash.as_str()),
+    ) {
+        return Err(WorldError::DistributedValidationFailed {
+            reason: "invalid_commit_record_finality".to_string(),
         });
     }
     let dense = [

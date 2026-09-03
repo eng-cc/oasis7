@@ -97,6 +97,13 @@ impl AsyncAgentRunner {
                 "unknown pending Runtime turn".to_string(),
             ));
         };
+        self.invalidate_continuation_for_turn(
+            agent_id,
+            agent_session_id,
+            agent_turn_id,
+            decision_request_id,
+            super::ContinuationInvalidationReason::Timeout,
+        );
         self.release_runtime_turn(agent_id, turn_id);
         self.feedback_store.clear_agent(agent_id);
         Ok(())

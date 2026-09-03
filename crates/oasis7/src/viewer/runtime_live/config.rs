@@ -46,6 +46,8 @@ pub struct ViewerRuntimeLiveServerConfig {
     pub chain_link_policy: ChainLinkPolicy,
     pub agent_chat_echo_enabled: bool,
     pub generated_world_dir: Option<PathBuf>,
+    #[cfg(test)]
+    pub(crate) test_cognition_runtime_binding: Option<(String, u64, Option<String>, String, u64)>,
 }
 
 #[derive(Debug)]

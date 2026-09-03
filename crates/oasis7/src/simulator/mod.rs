@@ -74,12 +74,12 @@ pub use chunking::{
 };
 pub use cognition_policy::{
     ContinuationAuthorityContextV1, ContinuationBudgetProgressV1, ContinuationBudgetV1,
-    ContinuationHandle, ContinuationHarness, ContinuationInvalidationReason,
-    ContinuationProjectionV1, ContinuationProposalV1, GoalSnapshotInputV1, GoalSnapshotProjector,
-    GoalSnapshotV1, MemoryContextEntryV1, MemoryContextSnapshotV1, MemoryWriteIntentPolicyV1,
-    MemoryWritePolicyContextV1, MemoryWritePolicyOutcome, MemoryWriteStore,
-    NormalizedMemoryWriteIntentV1, RuntimeContinuationStatusV1, WakeConditionSubjectV1,
-    WakeConditionV1,
+    ContinuationCurrentContextV1, ContinuationHandle, ContinuationHarness,
+    ContinuationInvalidationReason, ContinuationProjectionV1, ContinuationProposalV1,
+    GoalSnapshotInputV1, GoalSnapshotProjector, GoalSnapshotV1, MemoryContextEntryV1,
+    MemoryContextSnapshotV1, MemoryWriteIntentPolicyV1, MemoryWritePolicyContextV1,
+    MemoryWritePolicyOutcome, MemoryWriteStore, NormalizedMemoryWriteIntentV1,
+    RuntimeContinuationStatusV1, WakeConditionSubjectV1, WakeConditionV1,
 };
 pub use continuous_agent_harness::{
     AgentCognitionStore, BudgetContractV1, COGNITION_CAPABILITY_CATALOG_DOMAIN,

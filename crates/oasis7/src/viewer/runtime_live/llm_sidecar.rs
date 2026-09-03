@@ -5,19 +5,20 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use super::super::{location_id_for_pos, mapping::runtime_state_to_simulator_model};
 use crate::geometry::GeoPos;
 use crate::runtime::{
-    Action as RuntimeAction, AgentIntentV2, ModuleSourcePackage, World as RuntimeWorld,
+    Action as RuntimeAction, AgentIntentV2, ModuleSourcePackage, SchedulerWakeV1,
+    World as RuntimeWorld,
 };
 #[cfg(not(target_arch = "wasm32"))]
 use crate::simulator::AsyncAgentRunner;
 use crate::simulator::{
     Action as SimulatorAction, ActionCatalogEntry, AgentDecision, AgentDecisionTrace,
     AgentPromptProfile, AgentRunner, CHUNK_GENERATION_SCHEMA_VERSION, ChunkRuntimeConfig,
-    ContinuousAgentResponseContextV1, LlmAgentBehavior, LlmAgentConfig, Location,
-    OpenAiChatCompletionClient, ProviderAgentChatRequest, ProviderBackedAgentBehavior,
-    ProviderExecutionMode, ProviderLoopbackAdapter, ProviderLoopbackHttpClient, ResourceOwner,
-    RuntimeBindingV1, SNAPSHOT_VERSION, WorldConfig, WorldEvent, WorldEventKind, WorldJournal,
-    WorldKernel, WorldModel, WorldSnapshot, evaluate_provider_compatibility,
-    provider_agent_chat_log_key,
+    ContinuationProposalV1 as SimulatorContinuationProposalV1, ContinuousAgentResponseContextV1,
+    LlmAgentBehavior, LlmAgentConfig, Location, OpenAiChatCompletionClient,
+    ProviderAgentChatRequest, ProviderBackedAgentBehavior, ProviderExecutionMode,
+    ProviderLoopbackAdapter, ProviderLoopbackHttpClient, ResourceOwner, RuntimeBindingV1,
+    SNAPSHOT_VERSION, WorldConfig, WorldEvent, WorldEventKind, WorldJournal, WorldKernel,
+    WorldModel, WorldSnapshot, evaluate_provider_compatibility, provider_agent_chat_log_key,
 };
 use crate::viewer::live::ViewerLiveDecisionMode;
 use crate::viewer::protocol::{AgentChatAck, AgentChatError};
@@ -226,6 +227,7 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     provider_lineage_binding: Option<RuntimeBindingV1>,
     provider_lineage_restored: bool,
     provider_lineage_hydrated: bool,
+    pending_runtime_wakes: BTreeMap<String, SchedulerWakeV1>,
 }
 
 pub(in crate::viewer::runtime_live) struct RuntimePlayerBindingPlan {
@@ -274,6 +276,7 @@ impl RuntimeLlmSidecar {
             provider_lineage_binding: None,
             provider_lineage_restored: false,
             provider_lineage_hydrated: false,
+            pending_runtime_wakes: BTreeMap::new(),
         }
     }
 
@@ -693,6 +696,70 @@ impl RuntimeLlmSidecar {
         if self.is_llm_mode() {
             self.llm_decision_mailbox = self.llm_decision_mailbox.saturating_add(1);
         }
+    }
+
+    /// Mirror Runtime-selected wake leases into the provider adapter without
+    /// inventing a second scheduler. The durable wake remains owned by
+    /// Runtime; this map only tells the next provider request which exact
+    /// continuation identity must be presented.
+    pub(in crate::viewer::runtime_live) fn sync_runtime_wakes(
+        &mut self,
+        world: &RuntimeWorld,
+    ) -> Result<(), String> {
+        let wakes = world
+            .cognition_in_flight_wakes()
+            .map_err(|error| format!("Runtime cognition wake read failed: {error:?}"))?;
+        let live_wake_ids = wakes
+            .iter()
+            .map(|wake| wake.wake_id.as_str())
+            .collect::<BTreeSet<_>>();
+        self.pending_runtime_wakes
+            .retain(|wake_id, _| live_wake_ids.contains(wake_id.as_str()));
+        for wake in wakes {
+            if !self.provider_lineage_hydrated
+                && self
+                    .provider_active_turns
+                    .get(wake.agent_id.as_str())
+                    .is_some_and(|context| {
+                        context.request_context.agent_turn_id == wake.agent_turn_id
+                            && context.request_context.decision_request_id
+                                == wake.decision_request_id
+                    })
+            {
+                // A process-local async runner cannot survive restart. Keep
+                // the exact context identity but make it eligible for one
+                // fresh provider dispatch through the recovered wake.
+                self.provider_active_turns.remove(wake.agent_id.as_str());
+            }
+            self.pending_runtime_wakes
+                .entry(wake.wake_id.clone())
+                .or_insert(wake);
+        }
+        Ok(())
+    }
+
+    pub(in crate::viewer::runtime_live) fn has_pending_runtime_wake_for_agent(
+        &self,
+        agent_id: &str,
+    ) -> bool {
+        self.pending_runtime_wakes
+            .values()
+            .any(|wake| wake.agent_id == agent_id)
+    }
+
+    pub(in crate::viewer::runtime_live) fn pending_runtime_wake_id_for_agent(
+        &self,
+        agent_id: &str,
+    ) -> Option<&str> {
+        self.pending_runtime_wakes
+            .values()
+            .filter(|wake| wake.agent_id == agent_id)
+            .min_by_key(|wake| (wake.wake_seq, wake.wake_id.as_str()))
+            .map(|wake| wake.wake_id.as_str())
+    }
+
+    pub(in crate::viewer::runtime_live) fn clear_runtime_wake(&mut self, wake_id: &str) {
+        self.pending_runtime_wakes.remove(wake_id);
     }
 
     pub(super) fn apply_prompt_profile_to_driver(&mut self, profile: &AgentPromptProfile) {

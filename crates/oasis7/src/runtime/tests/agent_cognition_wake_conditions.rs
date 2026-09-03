@@ -29,12 +29,12 @@ fn valid(kind: &str) -> Value {
         "world_event_committed" => json!({
             "schema_version": "wake-condition.v1",
             "kind": kind,
-            "event_digest": "digest:event-42"
+            "event_digest": "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         }),
         "receipt_linked" => json!({
             "schema_version": "wake-condition.v1",
             "kind": kind,
-            "receipt_id": "receipt-42"
+            "receipt_id": "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         }),
         "state_predicate" => json!({
             "schema_version": "wake-condition.v1",
@@ -59,7 +59,7 @@ fn continuation(status: &str) -> AgentContinuation {
         "finality_block_hash": "blake3:2222222222222222222222222222222222222222222222222222222222222222",
         "finality_status": "verified",
         "reorg_epoch": 3,
-        "runtime_manifest_hash": "hash:runtime-manifest-7",
+        "runtime_manifest_hash": "blake3:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "agent_id": AGENT_ID,
         "agent_session_id": "session.agent-wake-1",
         "agent_turn_id": "turn.agent-wake-1",
@@ -162,7 +162,9 @@ fn missing_reference_false_predicate_and_expired_reference_are_deterministic_pen
         assert_eq!(result["reason"], "condition_not_met");
     }
 
-    let expired = WakeEvaluationContext::at(200).with_gc_references(&["digest:event-42"]);
+    let expired = WakeEvaluationContext::at(200).with_gc_references(&[
+        "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    ]);
     let result = serde_json::to_value(
         WakeConditionValidator::evaluate(&[event, receipt], &expired)
             .expect("expired condition evaluation"),

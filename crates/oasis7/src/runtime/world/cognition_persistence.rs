@@ -1,5 +1,9 @@
+#[path = "cognition_persistence_authority.rs"]
+mod cognition_persistence_authority;
 #[path = "cognition_persistence_support.rs"]
 mod cognition_persistence_support;
+#[path = "cognition_persistence_transactions.rs"]
+mod cognition_persistence_transactions;
 
 use super::World;
 use super::cognition_persistence_validation::{
@@ -8,21 +12,22 @@ use super::cognition_persistence_validation::{
     validate_cognition_journal_integrity, validate_marker_current_world,
     validate_response_lineage_binding, validate_response_record,
 };
-use crate::runtime::cognition::{AgentDecisionEnvelopeV1, MvccValidator};
+use crate::runtime::cognition::{
+    AgentDecisionEnvelopeV1, MvccValidator, world_state_binding_digest_v1,
+};
 use crate::runtime::cognition_recovery::{
     CognitionReceiptViewV1, CognitionRecoveryReport, CognitionResponseRecordV1,
-    RuntimeCognitionBaseBindingV1, RuntimeReceiptLineageV1, WorldCommitRecordV1, WorldRootViewV1,
-    cognition_digest_v1, default_cognition_persistence_projection, response_artifact_digest,
+    RuntimeReceiptLineageV1, WorldCommitRecordV1, WorldRootViewV1, cognition_digest_v1,
+    default_cognition_persistence_projection, response_artifact_digest,
 };
 use crate::runtime::cognition_scheduler::CognitionScheduler;
 use crate::runtime::cognition_wake::AgentContinuation;
 use crate::runtime::error::WorldError;
-use crate::simulator::{Digest32, RuntimeBindingV1};
 use cognition_persistence_support::{
-    canonical_cognition_digest, conflict_report, has_idempotency_conflict, has_receipt_conflict,
-    marker_root_conflict, pending_report, reconcile_committed_projection, record_repair,
-    select_commit_record, stale_base_error, validate_lineage_binding, validate_marker,
-    visible_root_conflict, visible_root_conflict_report,
+    conflict_report, has_idempotency_conflict, has_receipt_conflict, marker_root_conflict,
+    pending_report, reconcile_committed_projection, record_repair, select_commit_record,
+    stale_base_error, validate_lineage_binding, validate_marker, visible_root_conflict,
+    visible_root_conflict_report,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value as JsonValue, json};
@@ -135,11 +140,11 @@ struct RecoveryProjection {
     extra: BTreeMap<String, JsonValue>,
 }
 
-fn canonical_runtime_binding_digest(raw_hash: &str) -> String {
+pub(super) fn canonical_runtime_binding_digest(raw_hash: &str) -> String {
     cognition_digest_v1(RUNTIME_BINDING_DIGEST_DOMAIN, &raw_hash)
 }
 
-struct CognitionRuntimeAuthority {
+pub(super) struct CognitionRuntimeAuthority {
     world_id: String,
     branch_id: String,
     finality_epoch: u64,
@@ -150,111 +155,6 @@ struct CognitionRuntimeAuthority {
     base_world_hash: String,
 }
 impl World {
-    pub fn cognition(&self) -> &JsonValue {
-        &self.cognition
-    }
-
-    fn current_cognition_runtime_authority(&self) -> Result<CognitionRuntimeAuthority, WorldError> {
-        let binding = self
-            .cognition
-            .get("runtime_binding")
-            .and_then(JsonValue::as_object)
-            .ok_or_else(|| cognition_validation("runtime_binding_missing"))?;
-        let read_string = |field: &str| {
-            binding
-                .get(field)
-                .and_then(JsonValue::as_str)
-                .filter(|value| !value.trim().is_empty())
-                .map(str::to_string)
-                .ok_or_else(|| cognition_validation("runtime_binding_invalid"))
-        };
-        let world_id = read_string("world_id")?;
-        let branch_id = read_string("branch_id")?;
-        let manifest_world_id = self.chain_resource_manifest().world_id.as_str();
-        if manifest_world_id != "unbound" && manifest_world_id != world_id.as_str() {
-            return Err(cognition_validation("runtime_world_id_mismatch"));
-        }
-        let finality_status = read_string("finality_status")?;
-        let finality_epoch = binding
-            .get("finality_epoch")
-            .and_then(JsonValue::as_u64)
-            .ok_or_else(|| cognition_validation("runtime_binding_invalid"))?;
-        let reorg_epoch = binding
-            .get("reorg_epoch")
-            .and_then(JsonValue::as_u64)
-            .ok_or_else(|| cognition_validation("runtime_binding_invalid"))?;
-        let finality_block_hash = binding
-            .get("finality_block_hash")
-            .and_then(JsonValue::as_str)
-            .map(str::to_string);
-        if !matches!(
-            finality_status.as_str(),
-            "pending" | "verified" | "reorged" | "suspended"
-        ) || (finality_status == "verified" && finality_block_hash.is_none())
-            || finality_block_hash
-                .as_deref()
-                .is_some_and(|hash| hash != "genesis" && !canonical_cognition_digest(hash))
-        {
-            return Err(cognition_validation("runtime_binding_invalid"));
-        }
-        let runtime_manifest_hash = self.current_manifest_hash()?;
-        if binding
-            .get("runtime_manifest_hash")
-            .and_then(JsonValue::as_str)
-            != Some(runtime_manifest_hash.as_str())
-        {
-            return Err(cognition_validation("runtime_manifest_mismatch"));
-        }
-        Ok(CognitionRuntimeAuthority {
-            world_id,
-            branch_id,
-            finality_epoch,
-            finality_block_hash,
-            finality_status,
-            reorg_epoch,
-            runtime_manifest_hash,
-            base_world_hash: self.current_state_root_hash()?,
-        })
-    }
-
-    fn cognition_runtime_base_binding(
-        &self,
-        authority: &CognitionRuntimeAuthority,
-    ) -> RuntimeCognitionBaseBindingV1 {
-        RuntimeCognitionBaseBindingV1 {
-            world_id: authority.world_id.clone(),
-            branch_id: authority.branch_id.clone(),
-            finality_epoch: authority.finality_epoch,
-            finality_block_hash: authority.finality_block_hash.clone(),
-            finality_status: authority.finality_status.clone(),
-            base_tick: self.state.time,
-            base_world_hash: canonical_runtime_binding_digest(&authority.base_world_hash),
-            reorg_epoch: authority.reorg_epoch,
-            runtime_manifest_hash: canonical_runtime_binding_digest(
-                &authority.runtime_manifest_hash,
-            ),
-        }
-    }
-    pub fn current_cognition_runtime_binding(&self) -> Result<RuntimeBindingV1, WorldError> {
-        let authority = self.current_cognition_runtime_authority()?;
-        let base = self.cognition_runtime_base_binding(&authority);
-        let binding = RuntimeBindingV1 {
-            world_id: base.world_id.clone(),
-            branch_id: base.branch_id.clone(),
-            finality_epoch: base.finality_epoch,
-            finality_block_hash: base.finality_block_hash.clone().map(Digest32::from),
-            finality_status: base.finality_status.clone(),
-            base_tick: base.base_tick,
-            base_world_hash: Digest32::from(base.base_world_hash.clone()),
-            reorg_epoch: base.reorg_epoch,
-            runtime_manifest_hash: Digest32::from(base.runtime_manifest_hash.clone()),
-        };
-        binding
-            .validate()
-            .map_err(|error| cognition_validation(error.code()))?;
-        Ok(binding)
-    }
-
     pub fn prepare_cognition_envelope(
         &mut self,
         envelope: AgentDecisionEnvelopeV1,
@@ -342,9 +242,30 @@ impl World {
             .map_err(|error| cognition_error("cognition_action_invalid", error))?;
         let world_root = self.current_state_root_hash()?;
         let manifest_hash = self.current_manifest_hash()?;
+        let binding_was_unbound = self.cognition_runtime_is_unbound();
+        let expected_world_hash = if binding_was_unbound {
+            world_root.clone()
+        } else {
+            world_state_binding_digest_v1(
+                &envelope.world_id,
+                &envelope.branch_id,
+                envelope.finality_epoch,
+                envelope.finality_block_hash.as_deref(),
+                &envelope.finality_status,
+                self.state.time,
+                &world_root,
+                envelope.reorg_epoch,
+                &manifest_hash,
+            )
+        };
+        let expected_manifest_hash = if binding_was_unbound {
+            manifest_hash.clone()
+        } else {
+            cognition_digest_v1(RUNTIME_BINDING_DIGEST_DOMAIN, &manifest_hash)
+        };
         if envelope.base_tick != self.state.time
-            || envelope.base_world_hash != world_root
-            || envelope.runtime_manifest_hash != manifest_hash
+            || envelope.base_world_hash != expected_world_hash
+            || envelope.runtime_manifest_hash != expected_manifest_hash
         {
             self.record_stale_cognition_rejection(
                 &envelope.agent_id,

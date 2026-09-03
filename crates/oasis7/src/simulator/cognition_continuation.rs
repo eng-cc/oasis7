@@ -5,7 +5,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use super::super::Observation;
 use super::super::continuous_agent_harness::{CognitionError, Digest32, h_v1};
+use super::GoalSnapshotV1;
 
 const CONTINUATION_PROPOSAL_DOMAIN: &str = "oasis7.cognition.continuation-proposal.v1";
 const MAX_WAKE_CONDITIONS: usize = 16;
@@ -74,6 +76,66 @@ impl ContinuationAuthorityContextV1 {
             return Err(error(
                 "continuation_context_stale",
                 "continuation lineage no longer matches the authoritative cognition context",
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Current cognition evidence for a target-lane continuation. Historical
+/// digest strings alone are not current-state proof; the raw observation is
+/// retained until this boundary verifies its canonical digest.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ContinuationCurrentContextV1 {
+    pub observation: Observation,
+    pub authority: ContinuationAuthorityContextV1,
+}
+
+impl ContinuationCurrentContextV1 {
+    pub fn from_observation(
+        observation: Observation,
+        goal: &GoalSnapshotV1,
+        policy_digest: impl Into<String>,
+        precondition_digest: impl Into<String>,
+    ) -> Self {
+        let authority = ContinuationAuthorityContextV1 {
+            baseline_observation_digest: h_v1("oasis7.cognition.observation.v1", &observation)
+                .to_string(),
+            goal_digest: goal.digest.clone(),
+            policy_digest: policy_digest.into(),
+            precondition_digest: precondition_digest.into(),
+        };
+        Self {
+            observation,
+            authority,
+        }
+    }
+
+    pub fn validate_for_agent(&self, agent_id: &str) -> Result<(), CognitionError> {
+        if self.observation.agent_id != agent_id {
+            return Err(error(
+                "continuation_context_identity_mismatch",
+                "current observation does not belong to the continuation agent",
+            ));
+        }
+        self.authority.validate()?;
+        for (name, digest) in [
+            ("goal_digest", &self.authority.goal_digest),
+            ("policy_digest", &self.authority.policy_digest),
+            ("precondition_digest", &self.authority.precondition_digest),
+        ] {
+            if !Digest32::from(digest.as_str()).is_canonical_blake3() {
+                return Err(error(
+                    "continuation_context_digest_invalid",
+                    format!("current {name} is not a canonical BLAKE3-256 digest"),
+                ));
+            }
+        }
+        let observed_digest = h_v1("oasis7.cognition.observation.v1", &self.observation);
+        if self.authority.baseline_observation_digest != observed_digest.as_str() {
+            return Err(error(
+                "continuation_observation_digest_mismatch",
+                "current observation does not match its authoritative digest",
             ));
         }
         Ok(())

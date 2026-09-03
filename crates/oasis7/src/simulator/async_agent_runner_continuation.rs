@@ -3,7 +3,7 @@
 use crate::runtime::AgentContinuation as RuntimeAgentContinuation;
 use crate::simulator::Observation;
 use crate::simulator::cognition_policy::{
-    ContinuationAuthorityContextV1, ContinuationBudgetV1, ContinuationHandle,
+    ContinuationAuthorityContextV1, ContinuationCurrentContextV1, ContinuationHandle,
     ContinuationProposalV1, RuntimeContinuationStatusV1,
 };
 use crate::simulator::continuous_agent_harness::{
@@ -38,24 +38,14 @@ impl AsyncAgentRunner {
         {
             return Err(AsyncAgentRunnerError::AgentBusy(agent_id.to_string()));
         }
-        let remaining_budget = proposal.remaining_budget.clone();
-        let handle = ContinuationHandle {
-            proposal,
-            chain_id: String::new(),
-            continuation_id: String::new(),
-            wake_id: String::new(),
-            wake_seq: 0,
-            continuation_digest: String::new(),
-            continuation_status_digest: String::new(),
-            status: "scheduled".to_string(),
-            terminal_disposition: None,
-            active: true,
-            provenance: "harness_policy".to_string(),
-            world_effect: false,
-            provider_invocation_count: 0,
-            remaining_budget,
-            consumed_budget: 0,
-        };
+        // Even the explicit compatibility lane must register the proposal in
+        // the Harness chain ledger.  Keeping an untracked local handle would
+        // let terminal feedback be followed by a fresh admission of the same
+        // proposal, bypassing the chain's terminal anti-revival fence.
+        let handle = self
+            .continuation_harness
+            .submit(proposal)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
         self.continuations
             .insert(agent_id.to_string(), handle.clone());
         Ok(handle)
@@ -64,7 +54,7 @@ impl AsyncAgentRunner {
     /// Production continuation admission. The proposal is checked against
     /// the current Runtime-derived observation, goal, policy and precondition
     /// digests before it can occupy the agent's continuation slot.
-    pub fn submit_continuation_proposal_with_context(
+    fn submit_continuation_proposal_using_authority(
         &mut self,
         agent_id: &str,
         proposal: ContinuationProposalV1,
@@ -96,6 +86,34 @@ impl AsyncAgentRunner {
         Ok(handle)
     }
 
+    /// Compatibility fence: target admission must include the actual current
+    /// observation, not just historical digest strings.
+    pub fn submit_continuation_proposal_with_context(
+        &mut self,
+        agent_id: &str,
+        proposal: ContinuationProposalV1,
+        context: &ContinuationAuthorityContextV1,
+    ) -> Result<ContinuationHandle, AsyncAgentRunnerError> {
+        let _ = (agent_id, proposal, context);
+        Err(AsyncAgentRunnerError::Cognition(
+            "current cognition observation is required for target continuation admission"
+                .to_string(),
+        ))
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn submit_continuation_proposal_with_current_context(
+        &mut self,
+        agent_id: &str,
+        proposal: ContinuationProposalV1,
+        current: &ContinuationCurrentContextV1,
+    ) -> Result<ContinuationHandle, AsyncAgentRunnerError> {
+        current
+            .validate_for_agent(agent_id)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        self.submit_continuation_proposal_using_authority(agent_id, proposal, &current.authority)
+    }
+
     pub fn apply_runtime_continuation_status(
         &mut self,
         _agent_id: &str,
@@ -114,87 +132,18 @@ impl AsyncAgentRunner {
         agent_id: &str,
         runtime: RuntimeAgentContinuation,
     ) -> Result<ContinuationHandle, AsyncAgentRunnerError> {
-        let existing =
-            self.continuations.get(agent_id).cloned().ok_or_else(|| {
-                AsyncAgentRunnerError::Cognition("unknown continuation".to_string())
-            })?;
-        if !existing.chain_id.is_empty() {
-            let handle = self
-                .continuation_harness
-                .consume_runtime_projection(existing, &runtime)
-                .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
-            if handle.active {
-                self.continuations
-                    .insert(agent_id.to_string(), handle.clone());
-            } else {
-                self.continuations.remove(agent_id);
-            }
-            return Ok(handle);
-        }
-        runtime
-            .validate_authoritative()
-            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
-        if runtime.continuation_proposal_id != existing.proposal.continuation_proposal_id
-            || runtime.proposal_digest != existing.proposal.proposal_digest
-            || runtime.agent_id != existing.proposal.agent_id
-            || runtime.agent_session_id != existing.proposal.agent_session_id
-            || runtime.agent_turn_id != existing.proposal.agent_turn_id
-            || runtime.decision_request_id != existing.proposal.decision_request_id
-            || runtime.origin_turn_id != existing.proposal.origin_turn_id
-            || runtime.origin_request_digest != existing.proposal.origin_request_digest
-        {
-            return Err(AsyncAgentRunnerError::Cognition(
-                "Runtime continuation projection correlation mismatch".to_string(),
-            ));
-        }
-        let (status, active) = match runtime.status {
-            crate::runtime::ContinuationStatusV1::Scheduled => ("scheduled", true),
-            crate::runtime::ContinuationStatusV1::Pending => ("pending", true),
-            crate::runtime::ContinuationStatusV1::Waking => ("waking", true),
-            crate::runtime::ContinuationStatusV1::Consumed => ("consumed", true),
-            crate::runtime::ContinuationStatusV1::Completed => ("completed", false),
-            crate::runtime::ContinuationStatusV1::Cancelled => ("cancelled", false),
-            crate::runtime::ContinuationStatusV1::Invalidated => ("invalidated", false),
-            crate::runtime::ContinuationStatusV1::Expired => ("expired", false),
-            crate::runtime::ContinuationStatusV1::Rejected => ("rejected", false),
-        };
-        let handle = ContinuationHandle {
-            proposal: existing.proposal,
-            chain_id: existing.chain_id,
-            continuation_id: runtime.continuation_id.clone(),
-            wake_id: runtime.wake_id.clone(),
-            wake_seq: runtime.wake_seq,
-            continuation_digest: runtime.continuation_digest(),
-            continuation_status_digest: runtime
-                .continuation_status_digest
-                .clone()
-                .expect("validated Runtime continuation has a status digest"),
-            status: status.to_string(),
-            terminal_disposition: runtime.terminal_disposition.clone(),
-            active,
-            provenance: "runtime_authoritative".to_string(),
-            world_effect: false,
-            provider_invocation_count: 0,
-            remaining_budget: ContinuationBudgetV1 {
-                unit: runtime.remaining_budget.unit.clone(),
-                value: runtime.remaining_budget.value,
-            },
-            consumed_budget: existing.consumed_budget,
-        };
-        if active {
-            self.continuations
-                .insert(agent_id.to_string(), handle.clone());
-        } else {
-            self.continuations.remove(agent_id);
-        }
-        Ok(handle)
+        let _ = (agent_id, runtime);
+        Err(AsyncAgentRunnerError::Cognition(
+            "Runtime projection requires strict continuation admission and current context"
+                .to_string(),
+        ))
     }
 
     /// Production Runtime projection path with current cognition-context
     /// revalidation. The reduced compatibility method above remains available
     /// for legacy fixtures, but cannot admit an unverified context update.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn apply_runtime_continuation_projection_with_context(
+    fn apply_runtime_continuation_projection_using_authority(
         &mut self,
         agent_id: &str,
         runtime: RuntimeAgentContinuation,
@@ -220,6 +169,36 @@ impl AsyncAgentRunner {
             self.continuations.remove(agent_id);
         }
         Ok(handle)
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn apply_runtime_continuation_projection_with_context(
+        &mut self,
+        agent_id: &str,
+        runtime: RuntimeAgentContinuation,
+        authority_context: &ContinuationAuthorityContextV1,
+    ) -> Result<ContinuationHandle, AsyncAgentRunnerError> {
+        let _ = (agent_id, runtime, authority_context);
+        Err(AsyncAgentRunnerError::Cognition(
+            "current cognition observation is required for Runtime projection".to_string(),
+        ))
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn apply_runtime_continuation_projection_with_current_context(
+        &mut self,
+        agent_id: &str,
+        runtime: RuntimeAgentContinuation,
+        current: &ContinuationCurrentContextV1,
+    ) -> Result<ContinuationHandle, AsyncAgentRunnerError> {
+        current
+            .validate_for_agent(agent_id)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        self.apply_runtime_continuation_projection_using_authority(
+            agent_id,
+            runtime,
+            &current.authority,
+        )
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -271,6 +250,7 @@ impl AsyncAgentRunner {
         authority_context: &ContinuationAuthorityContextV1,
         runtime: RuntimeAgentContinuation,
     ) -> Result<Result<AsyncTurnId, ContinuationHandle>, AsyncAgentRunnerError> {
+        Self::validate_current_observation(&observation, authority_context, agent_id)?;
         let (consumed, projection) =
             self.retire_ready_continuation(agent_id, &turn_context, authority_context, &runtime)?;
         if !consumed {
@@ -283,6 +263,19 @@ impl AsyncAgentRunner {
             None,
         )?;
         Ok(Ok(next_turn))
+    }
+
+    fn validate_current_observation(
+        observation: &Observation,
+        authority_context: &ContinuationAuthorityContextV1,
+        agent_id: &str,
+    ) -> Result<(), AsyncAgentRunnerError> {
+        ContinuationCurrentContextV1 {
+            observation: observation.clone(),
+            authority: authority_context.clone(),
+        }
+        .validate_for_agent(agent_id)
+        .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))
     }
 
     /// Production variant retaining the complete outer request lineage for
@@ -314,6 +307,15 @@ impl AsyncAgentRunner {
                 "outer and reduced cognition contexts do not correlate".to_string(),
             ));
         }
+        if request_context.observation_digest.as_str()
+            != authority_context.baseline_observation_digest
+            || request_context.goal_snapshot_digest.as_str() != authority_context.goal_digest
+        {
+            return Err(AsyncAgentRunnerError::Cognition(
+                "outer request cognition digests do not match the current wake context".to_string(),
+            ));
+        }
+        Self::validate_current_observation(&observation, authority_context, agent_id)?;
         let (consumed, projection) =
             self.retire_ready_continuation(agent_id, &turn_context, authority_context, &runtime)?;
         if !consumed {
@@ -326,5 +328,78 @@ impl AsyncAgentRunner {
             Some(request_context),
         )?;
         Ok(Ok(next_turn))
+    }
+
+    /// Production wake consumer: one consumed Runtime wake yields one next
+    /// actor turn, while a terminal wake returns without invoking the actor.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn dispatch_ready_cognition_wake(
+        &mut self,
+        agent_id: &str,
+        current: ContinuationCurrentContextV1,
+        turn_context: ContinuousAgentTurnContextV1,
+        request_context: ContinuousAgentRequestContextV1,
+        runtime: RuntimeAgentContinuation,
+    ) -> Result<Result<AsyncTurnId, ContinuationHandle>, AsyncAgentRunnerError> {
+        current
+            .validate_for_agent(agent_id)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        if turn_context.goal_snapshot.digest != current.authority.goal_digest
+            || request_context.observation_digest.as_str()
+                != current.authority.baseline_observation_digest
+            || request_context.goal_snapshot_digest.as_str() != current.authority.goal_digest
+        {
+            return Err(AsyncAgentRunnerError::Cognition(
+                "next cognition turn does not match the current wake context".to_string(),
+            ));
+        }
+        self.resume_consumed_continuation_with_request_context(
+            agent_id,
+            current.observation,
+            turn_context,
+            request_context,
+            &current.authority,
+            runtime,
+        )
+    }
+
+    /// Rebuild local continuation state in a fresh Agent runner from the
+    /// Runtime-owned proposal and status projection.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn hydrate_runtime_continuation(
+        &mut self,
+        agent_id: &str,
+        proposal: ContinuationProposalV1,
+        current: &ContinuationCurrentContextV1,
+        runtime: RuntimeAgentContinuation,
+    ) -> Result<ContinuationHandle, AsyncAgentRunnerError> {
+        current
+            .validate_for_agent(agent_id)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        if proposal.agent_id != agent_id {
+            return Err(AsyncAgentRunnerError::Cognition(
+                "hydrated continuation agent identity mismatch".to_string(),
+            ));
+        }
+        if self
+            .continuations
+            .get(agent_id)
+            .is_some_and(|continuation| continuation.active)
+        {
+            return Err(AsyncAgentRunnerError::AgentBusy(agent_id.to_string()));
+        }
+        let admitted = self
+            .continuation_harness
+            .submit_with_context(proposal, &current.authority)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        let handle = self
+            .continuation_harness
+            .consume_runtime_projection_with_context(admitted, &runtime, &current.authority)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        if handle.active {
+            self.continuations
+                .insert(agent_id.to_string(), handle.clone());
+        }
+        Ok(handle)
     }
 }

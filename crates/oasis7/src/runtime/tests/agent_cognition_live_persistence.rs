@@ -19,8 +19,9 @@ const WORLD_ID: &str = "world-live-persistence";
 const BRANCH_ID: &str = "main";
 const ENVELOPE_KEY: &str = "blake3:envelope-idempotency-live-1";
 const ENVELOPE_DIGEST: &str = "blake3:envelope-live-1";
-const RECEIPT_ID: &str = "receipt-live-1";
-const RECEIPT_DIGEST: &str = "blake3:receipt-live-1";
+const RECEIPT_ID: &str = "blake3:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+const RECEIPT_DIGEST: &str =
+    "blake3:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
 const R_PARENT: &str = "blake3:root-parent-live-1";
 const R_NEXT: &str = "blake3:root-next-live-1";
 
@@ -107,7 +108,7 @@ fn canonical_scheduler_state() -> Value {
         "world_id": WORLD_ID,
         "branch_id": BRANCH_ID,
         "finality_epoch": 7,
-        "finality_block_hash": "blake3:finality-block-live-1",
+        "finality_block_hash": "blake3:1111111111111111111111111111111111111111111111111111111111111111",
         "finality_status": "verified",
         "reorg_epoch": 3,
         "runtime_manifest_hash": "blake3:runtime-manifest-live-1",
@@ -191,7 +192,7 @@ fn cognition_projection(prefix: &str) -> Value {
             "world_id": WORLD_ID,
             "branch_id": BRANCH_ID,
             "finality_epoch": 7,
-            "finality_block_hash": "blake3:finality-block-live-1",
+            "finality_block_hash": "blake3:1111111111111111111111111111111111111111111111111111111111111111",
             "finality_status": "verified",
             "finality_binding_digest": "blake3:finality-binding-live-1",
             "runtime_manifest_hash": "blake3:runtime-manifest-live-1",
@@ -221,7 +222,7 @@ fn cognition_projection(prefix: &str) -> Value {
             "world_id": WORLD_ID,
             "branch_id": BRANCH_ID,
             "finality_epoch": 7,
-            "finality_block_hash": "blake3:finality-block-live-1",
+            "finality_block_hash": "blake3:1111111111111111111111111111111111111111111111111111111111111111",
             "finality_status": "verified",
             "reorg_epoch": 3,
             "runtime_manifest_hash": "blake3:runtime-manifest-live-1",

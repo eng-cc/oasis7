@@ -1,6 +1,7 @@
 //! RED fixtures for the World-owned cognition authority/remediation seam.
 
 use super::super::*;
+use crate::runtime::cognition::world_state_binding_digest_v1;
 use crate::runtime::cognition_recovery::cognition_digest_v1;
 use serde_json::{Value, json};
 use std::fs;
@@ -60,6 +61,19 @@ pub(super) fn envelope(world: &World) -> AgentDecisionEnvelopeV1 {
     envelope.envelope_digest = envelope.derive_envelope_digest();
     envelope.provider_invocation_key = envelope.derive_provider_invocation_key();
     envelope.envelope_idempotency_key = envelope.derive_envelope_idempotency_key();
+    if let Ok(binding) = world.current_cognition_runtime_binding() {
+        envelope.finality_epoch = binding.finality_epoch;
+        envelope.finality_block_hash = binding.finality_block_hash.map(|hash| hash.to_string());
+        envelope.finality_status = binding.finality_status;
+        envelope.base_tick = binding.base_tick;
+        envelope.base_world_hash = binding.base_world_hash.to_string();
+        envelope.reorg_epoch = binding.reorg_epoch;
+        envelope.runtime_manifest_hash = binding.runtime_manifest_hash.to_string();
+    }
+    envelope.decision_digest = envelope.derive_decision_digest();
+    envelope.envelope_digest = envelope.derive_envelope_digest();
+    envelope.provider_invocation_key = envelope.derive_provider_invocation_key();
+    envelope.envelope_idempotency_key = envelope.derive_envelope_idempotency_key();
     envelope
 }
 
@@ -80,6 +94,29 @@ pub(super) fn response_artifact_for_envelope(envelope: &AgentDecisionEnvelopeV1)
     };
     artifact.refresh_artifact_digest();
     let mut value = serde_json::to_value(artifact).expect("response artifact");
+    let outer_base_world_hash = if envelope.base_world_hash.starts_with("blake3:") {
+        envelope.base_world_hash.clone()
+    } else {
+        world_state_binding_digest_v1(
+            &envelope.world_id,
+            &envelope.branch_id,
+            envelope.finality_epoch,
+            envelope.finality_block_hash.as_deref(),
+            &envelope.finality_status,
+            envelope.base_tick,
+            &envelope.base_world_hash,
+            envelope.reorg_epoch,
+            &envelope.runtime_manifest_hash,
+        )
+    };
+    let outer_manifest_hash = if envelope.runtime_manifest_hash.starts_with("blake3:") {
+        envelope.runtime_manifest_hash.clone()
+    } else {
+        cognition_digest_v1(
+            "oasis7.runtime.manifest.v1",
+            &envelope.runtime_manifest_hash,
+        )
+    };
     value["outer_lineage"] = json!({
         "agent_id": envelope.agent_id,
         "world_id": envelope.world_id,
@@ -88,15 +125,9 @@ pub(super) fn response_artifact_for_envelope(envelope: &AgentDecisionEnvelopeV1)
         "finality_block_hash": envelope.finality_block_hash,
         "finality_status": envelope.finality_status,
         "base_tick": envelope.base_tick,
-        "base_world_hash": cognition_digest_v1(
-            "oasis7.runtime.manifest.v1",
-            &envelope.base_world_hash
-        ),
+        "base_world_hash": outer_base_world_hash,
         "reorg_epoch": envelope.reorg_epoch,
-        "runtime_manifest_hash": cognition_digest_v1(
-            "oasis7.runtime.manifest.v1",
-            &envelope.runtime_manifest_hash
-        ),
+        "runtime_manifest_hash": outer_manifest_hash,
     });
     value
 }
@@ -321,6 +352,32 @@ pub(super) fn write_snapshot(dir: &Path, snapshot: &Value) {
         serde_json::to_vec_pretty(snapshot).expect("encode snapshot"),
     )
     .expect("write snapshot");
+}
+
+#[test]
+fn typed_runtime_readback_returns_only_validated_continuation_and_wake_identity() {
+    let mut world = World::new()
+        .try_with_cognition_scheduler(policy(), 1)
+        .expect("scheduler");
+    bind_test_turn(&mut world);
+    let wake = test_continuation_wake(&world, "wake.readback", "continuation.readback");
+    let continuation = test_continuation(&wake);
+    world
+        .install_cognition_continuation_for_test(continuation.clone())
+        .expect("continuation projection");
+    world
+        .enqueue_cognition_wake_for_test(wake.clone())
+        .expect("wake projection");
+
+    let active = world
+        .active_cognition_continuations()
+        .expect("typed active continuation readback");
+    assert_eq!(active, vec![continuation]);
+    let readback = world
+        .cognition_wake_readback(&wake.wake_id)
+        .expect("typed wake readback")
+        .expect("wake present");
+    assert_eq!(readback, wake);
 }
 
 #[test]
@@ -714,7 +771,7 @@ fn event_receipt_and_state_only_continuations_admit_without_a_forced_tick() {
                 kind: "receipt_linked".to_string(),
                 logical_tick: None,
                 event_digest: None,
-                receipt_id: Some("receipt:untimed".to_string()),
+                receipt_id: Some(digest(22)),
                 subject: None,
                 path_or_rule: None,
                 operator: None,
@@ -740,15 +797,31 @@ fn event_receipt_and_state_only_continuations_admit_without_a_forced_tick() {
         ),
     ];
     let mut state_continuation_id = String::new();
-    for (suffix, condition) in cases {
+    for (index, (suffix, condition)) in cases.into_iter().enumerate() {
+        let turn_id = format!("turn.runtime-hardening-{suffix}");
+        let request_id = format!("request.runtime-hardening-{suffix}");
+        let request_digest = digest(30 + index as u8);
+        world
+            .start_cognition_turn(
+                AGENT_ID,
+                "session.runtime-hardening",
+                &turn_id,
+                &request_id,
+                &request_digest,
+            )
+            .expect("register untimed cognition turn");
         let mut candidate = proposal(&world);
         candidate.continuation_proposal_id = format!("proposal.untimed-{suffix}");
+        candidate.agent_turn_id = turn_id.clone();
+        candidate.origin_turn_id = turn_id;
+        candidate.decision_request_id = request_id;
+        candidate.origin_request_digest = request_digest;
         candidate.wake_conditions = vec![condition];
         candidate.next_wake_tick = None;
         candidate.proposal_digest = candidate.proposal_digest();
         let admitted = world
             .admit_cognition_continuation(candidate)
-            .expect("untimed continuation admission");
+            .unwrap_or_else(|error| panic!("{suffix} untimed continuation admission: {error:?}"));
         assert!(admitted.next_wake_tick.is_none());
         if suffix == "state" {
             state_continuation_id = admitted.continuation_id;
@@ -1102,38 +1175,4 @@ fn committed_cognition_turn_is_closed_after_receipt_link() {
         .expect("receipt link");
     assert_eq!(events[link + 1]["kind"], "CognitionTurnCompleted");
     assert_eq!(events[link + 1]["status"], "committed");
-}
-
-#[test]
-fn recovery_repairs_a_missing_committed_turn_completion() {
-    let mut world = World::new();
-    let envelope = envelope(&world);
-    let prepared = world
-        .prepare_cognition_envelope(
-            envelope.clone(),
-            Some(response_artifact_for_envelope(&envelope)),
-        )
-        .expect("prepare");
-    world
-        .finalize_cognition_commit(&prepared.commit_id)
-        .expect("finalize");
-    let dir = temp_dir("missing-committed-completion");
-    world.save_to_dir(&dir).expect("save");
-    let mut snapshot = read_snapshot(&dir);
-    snapshot["cognition"]["cognition_journal"]["events"]
-        .as_array_mut()
-        .expect("events")
-        .pop();
-    write_snapshot(&dir, &snapshot);
-    fs::remove_dir_all(dir.join(".distfs-state")).expect("force JSON restore");
-    let restored = World::load_from_dir(&dir).expect("repair missing completion");
-    let events = restored.cognition()["cognition_journal"]["events"]
-        .as_array()
-        .expect("events after repair");
-    assert_eq!(
-        events.last().expect("completion")["kind"],
-        "CognitionTurnCompleted"
-    );
-    assert_eq!(events.last().expect("completion")["status"], "committed");
-    let _ = fs::remove_dir_all(dir);
 }

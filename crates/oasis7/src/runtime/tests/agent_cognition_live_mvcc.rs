@@ -8,6 +8,9 @@
 use super::super::*;
 use crate::geometry::GeoPos;
 use crate::models::AgentState;
+use crate::runtime::cognition::world_state_binding_digest_v1;
+use crate::runtime::cognition_recovery::cognition_digest_v1;
+use crate::runtime::util::hash_json;
 use crate::runtime::world::derive_agent_chat_request_digest;
 use serde_json::{Value, json};
 
@@ -20,8 +23,6 @@ const FINALITY_BLOCK_HASH: &str =
     "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const REQUEST_DIGEST: &str =
     "blake3:1111111111111111111111111111111111111111111111111111111111111111";
-const AUTHORITY_CONTEXT_HASH: &str =
-    "blake3:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
 const OBSERVATION_DIGEST: &str =
     "blake3:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
 const CONTEXT_DIGEST: &str =
@@ -98,6 +99,20 @@ fn envelope_value(world: &World, precondition: Option<Value>) -> Value {
     let state_root = world.current_state_root_hash().expect("live state root");
     let manifest_hash = world.current_manifest_hash().expect("live manifest hash");
     let capability_root = world.capability_authorization_root().to_string();
+    let authority_context_hash =
+        hash_json(&world.capability_revocation_state()).expect("live authority context hash");
+    let base_world_hash = world_state_binding_digest_v1(
+        WORLD_ID,
+        BRANCH_ID,
+        4,
+        Some(FINALITY_BLOCK_HASH),
+        "verified",
+        world.state().time,
+        &state_root,
+        4,
+        &manifest_hash,
+    );
+    let runtime_manifest_hash = cognition_digest_v1("oasis7.runtime.manifest.v1", &manifest_hash);
     let mut value = json!({
         "schema_version": AGENT_DECISION_ENVELOPE_V1_SCHEMA,
         "world_id": WORLD_ID,
@@ -111,11 +126,11 @@ fn envelope_value(world: &World, precondition: Option<Value>) -> Value {
         "decision_request_id": "request.live-mvcc",
         "retry_seq": 0,
         "base_tick": world.state().time,
-        "base_world_hash": state_root,
+        "base_world_hash": base_world_hash,
         "reorg_epoch": 4,
-        "runtime_manifest_hash": manifest_hash,
+        "runtime_manifest_hash": runtime_manifest_hash,
         "capability_snapshot_hash": capability_root,
-        "authority_context_hash": AUTHORITY_CONTEXT_HASH,
+        "authority_context_hash": authority_context_hash,
         "observation_digest": OBSERVATION_DIGEST,
         "context_digest": CONTEXT_DIGEST,
         "issued_at_tick": world.state().time,

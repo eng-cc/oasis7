@@ -10,6 +10,40 @@ use serde_json::json;
 use std::fs;
 
 #[test]
+fn recovery_repairs_a_missing_committed_turn_completion() {
+    let mut world = World::new();
+    let envelope = envelope(&world);
+    let prepared = world
+        .prepare_cognition_envelope(
+            envelope.clone(),
+            Some(response_artifact_for_envelope(&envelope)),
+        )
+        .expect("prepare");
+    world
+        .finalize_cognition_commit(&prepared.commit_id)
+        .expect("finalize");
+    let dir = temp_dir("missing-committed-completion");
+    world.save_to_dir(&dir).expect("save");
+    let mut snapshot = read_snapshot(&dir);
+    snapshot["cognition"]["cognition_journal"]["events"]
+        .as_array_mut()
+        .expect("events")
+        .pop();
+    write_snapshot(&dir, &snapshot);
+    fs::remove_dir_all(dir.join(".distfs-state")).expect("force JSON restore");
+    let restored = World::load_from_dir(&dir).expect("repair missing completion");
+    let events = restored.cognition()["cognition_journal"]["events"]
+        .as_array()
+        .expect("events after repair");
+    assert_eq!(
+        events.last().expect("completion")["kind"],
+        "CognitionTurnCompleted"
+    );
+    assert_eq!(events.last().expect("completion")["status"], "committed");
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn runtime_binding_rejects_noncanonical_verified_finality_hash() {
     let mut world = World::new();
     let error = world

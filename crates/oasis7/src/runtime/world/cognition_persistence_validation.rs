@@ -1,4 +1,5 @@
 use super::World;
+use crate::runtime::cognition::world_state_binding_digest_v1;
 use crate::runtime::cognition_recovery::{
     CognitionRecoveryReport, CognitionResponseRecordV1, RuntimeCognitionResponseArtifactV1,
     WorldCommitRecordV1, WorldRootViewV1, cognition_digest_v1, response_artifact_digest,
@@ -79,8 +80,7 @@ pub(super) fn validate_marker_current_world(
             && marker.parent_world_hash == root
             && marker.staged_state_root == root
     } else {
-        marker.parent_tick.saturating_add(1) == world.state().time
-            && marker.staged_state_root == root
+        marker.status == "committed"
     };
     if !head_matches || marker.runtime_manifest_hash != manifest {
         return Err(validation("cognition_world_head_mismatch"));
@@ -262,10 +262,27 @@ pub(super) fn validate_response_lineage_binding(
         .get("finality_block_hash")
         .and_then(JsonValue::as_str)
         .unwrap_or("genesis");
-    let expected_base_world_hash =
-        cognition_digest_v1("oasis7.runtime.manifest.v1", &marker.parent_world_hash);
-    let expected_manifest_hash =
-        cognition_digest_v1("oasis7.runtime.manifest.v1", &marker.runtime_manifest_hash);
+    let expected_base_world_hash = if marker.parent_world_hash.starts_with("blake3:") {
+        marker.parent_world_hash.clone()
+    } else {
+        world_state_binding_digest_v1(
+            &marker.world_id,
+            &marker.branch_id,
+            marker.finality_epoch,
+            (marker.finality_block_hash != "genesis")
+                .then_some(marker.finality_block_hash.as_str()),
+            &marker.finality_status,
+            marker.parent_tick,
+            &marker.parent_world_hash,
+            marker.reorg_epoch,
+            &marker.runtime_manifest_hash,
+        )
+    };
+    let expected_manifest_hash = if marker.runtime_manifest_hash.starts_with("blake3:") {
+        marker.runtime_manifest_hash.clone()
+    } else {
+        cognition_digest_v1("oasis7.runtime.manifest.v1", &marker.runtime_manifest_hash)
+    };
     if outer.get("agent_id").and_then(JsonValue::as_str) != Some(marker.agent_id.as_str())
         || outer.get("world_id").and_then(JsonValue::as_str) != Some(marker.world_id.as_str())
         || outer.get("branch_id").and_then(JsonValue::as_str) != Some(marker.branch_id.as_str())

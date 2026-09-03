@@ -28,8 +28,8 @@ use crate::runtime::RuntimeReceiptLineageV1;
 use super::Observation;
 use super::agent::{ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace};
 use super::cognition_policy::{
-    ContinuationHandle, ContinuationHarness, MemoryWriteIntentPolicyV1, MemoryWritePolicyContextV1,
-    MemoryWriteStore,
+    ContinuationHandle, ContinuationHarness, ContinuationInvalidationReason,
+    MemoryWriteIntentPolicyV1, MemoryWritePolicyContextV1, MemoryWriteStore,
 };
 use super::continuous_agent_harness::{
     AgentCognitionStore, ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1,
@@ -788,6 +788,13 @@ impl AsyncAgentRunner {
             // outcome. Keep the prepared turn occupied so a retry cannot
             // invoke the provider a second time before Runtime resolves it.
             if matches!(feedback.status.as_str(), "rejected" | "failed") {
+                self.invalidate_continuation_for_turn(
+                    agent_id,
+                    &feedback.agent_session_id,
+                    &feedback.agent_turn_id,
+                    &feedback.decision_request_id,
+                    ContinuationInvalidationReason::Rejected,
+                );
                 self.release_runtime_turn(agent_id, outcome.turn_id);
             }
             return Ok(());
@@ -841,6 +848,27 @@ impl AsyncAgentRunner {
         self.awaiting_outcomes.remove(&turn_id);
     }
 
+    fn invalidate_continuation_for_turn(
+        &mut self,
+        agent_id: &str,
+        session_id: &str,
+        turn_id: &str,
+        request_id: &str,
+        reason: ContinuationInvalidationReason,
+    ) {
+        let matches = self.continuations.get(agent_id).is_some_and(|handle| {
+            handle.proposal.agent_session_id == session_id
+                && handle.proposal.agent_turn_id == turn_id
+                && handle.proposal.decision_request_id == request_id
+        });
+        if !matches {
+            return;
+        }
+        if let Some(handle) = self.continuations.remove(agent_id) {
+            let _ = self.continuation_harness.invalidate(handle, reason);
+        }
+    }
+
     /// Test helper: a provider that cooperatively waits until its actor is
     /// dropped.  It exercises the real actor path without leaking a permanent
     /// worker thread.
@@ -868,7 +896,7 @@ impl AsyncAgentRunner {
     /// deterministic mock provider response.
     pub fn provider_backed_fixture(agent_id: &str) -> Self {
         let mut runner = Self::with_default_capacity();
-        let behavior = ProviderBackedAgentBehavior::new(
+        let behavior = ProviderBackedAgentBehavior::new_legacy_compatibility(
             agent_id.to_string(),
             MockDecisionProvider::new("async-fixture-provider"),
             vec![ActionCatalogEntry::new("wait", "wait")],

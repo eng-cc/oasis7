@@ -144,6 +144,11 @@ impl SchedulerWakeV1 {
             || !bounded(&self.status)
             || !bounded(&self.pending_reason)
             || self.status != "pending"
+            || !crate::runtime::cognition::finality_binding_is_legal(
+                &self.finality_status,
+                (self.finality_block_hash != "genesis")
+                    .then_some(self.finality_block_hash.as_str()),
+            )
         {
             return Err(SchedulerError::new("invalid_scheduler_wake"));
         }
@@ -490,6 +495,17 @@ impl CognitionScheduler {
     /// released or a terminal/recovery path requeues them.
     pub fn in_flight_wakes(&self) -> Vec<SchedulerWakeV1> {
         self.in_flight.values().cloned().collect()
+    }
+
+    /// Return one exact durable wake identity from any scheduler bucket.
+    /// Callers must still validate its World binding before dispatching it.
+    pub fn wake_by_id(&self, wake_id: &str) -> Option<SchedulerWakeV1> {
+        self.active
+            .iter()
+            .chain(self.backpressure.values())
+            .chain(self.in_flight.values())
+            .find(|wake| wake.wake_id == wake_id)
+            .cloned()
     }
 
     pub fn policy(&self) -> &SchedulerPolicyV1 {

@@ -102,7 +102,7 @@ fn continuation(status: ContinuationStatusV1) -> AgentContinuation {
         "wake_conditions": [{
             "schema_version": "wake-condition.v1",
             "kind": "receipt_linked",
-            "receipt_id": "receipt-live-1"
+            "receipt_id": "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         }],
         "next_wake_tick": null,
         "remaining_budget": {"unit": "steps", "value": 2},
@@ -394,20 +394,20 @@ fn committed_projection_wake_rejects_unbacked_event_and_receipt_evidence() {
         {
             "schema_version": "wake-condition.v1",
             "kind": "world_event_committed",
-            "event_digest": "blake3:caller-asserted-event"
+            "event_digest": "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         },
         {
             "schema_version": "wake-condition.v1",
             "kind": "receipt_linked",
-            "receipt_id": "receipt:caller-asserted"
+            "receipt_id": "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         }
     ]))
     .expect("decode caller evidence conditions");
     let evaluation = world
         .evaluate_cognition_wake_from_committed_projection(
             &conditions,
-            "blake3:caller-asserted-event",
-            "receipt:caller-asserted",
+            "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         )
         .expect("unbacked evidence should be a deterministic pending result");
     assert_eq!(evaluation.status, "pending");
@@ -421,12 +421,12 @@ fn world_wake_evaluation_rejects_caller_evidence_without_projection() {
         {
             "schema_version": "wake-condition.v1",
             "kind": "world_event_committed",
-            "event_digest": "blake3:committed-event-live-1"
+            "event_digest": "blake3:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
         },
         {
             "schema_version": "wake-condition.v1",
             "kind": "receipt_linked",
-            "receipt_id": "receipt-live-1"
+            "receipt_id": "blake3:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
         },
         {
             "schema_version": "wake-condition.v1",
@@ -448,8 +448,8 @@ fn world_wake_evaluation_rejects_caller_evidence_without_projection() {
     let committed = world
         .evaluate_cognition_wake_from_committed_projection(
             &conditions,
-            "blake3:committed-event-live-1",
-            "receipt-live-1",
+            "blake3:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "blake3:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         )
         .expect("committed event/receipt projection should produce a deterministic wake");
     assert_eq!(committed.status, "pending");
@@ -515,8 +515,8 @@ fn terminal_record() -> RetentionRecordV1 {
         "base_tick": 0,
         "issued_at_tick": 0,
         "terminal_disposition": null,
-        "receipt_id": "receipt-live-1",
-        "receipt_digest": "blake3:receipt-live-1",
+        "receipt_id": "blake3:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "receipt_digest": "blake3:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
         "response_artifact_id": "artifact:live-1",
         "continuation_id": "continuation-live-1",
         "commit_record_id": "commit:live-1"

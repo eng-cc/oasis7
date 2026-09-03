@@ -6,8 +6,10 @@
 
 use crate::runtime::{AgentContinuation, ContinuationBudgetV1, ContinuationStatusV1};
 use crate::simulator::{
-    AsyncAgentRunner, ContinuationAuthorityContextV1, ContinuationHarness,
-    ContinuationInvalidationReason, ContinuationProposalV1, RuntimeContinuationStatusV1, h_v1,
+    AsyncAgentRunner, ContinuationAuthorityContextV1, ContinuationCurrentContextV1,
+    ContinuationHarness, ContinuationInvalidationReason, ContinuationProposalV1,
+    ContinuousAgentTurnContextV1, Digest32, GoalSnapshotV1, MemoryContextSnapshotV1, Observation,
+    RuntimeContinuationStatusV1, h_v1,
 };
 use serde_json::{Value, json};
 
@@ -39,7 +41,7 @@ fn proposal_value() -> Value {
         "wake_conditions": [{
             "schema_version": "wake-condition.v1",
             "kind": "receipt_linked",
-            "receipt_id": "receipt-1"
+            "receipt_id": "blake3:9999999999999999999999999999999999999999999999999999999999999999"
         }],
         "valid_until_tick": 100,
         "source": "harness",
@@ -70,6 +72,47 @@ fn authority_context() -> ContinuationAuthorityContextV1 {
         precondition_digest:
             "blake3:6666666666666666666666666666666666666666666666666666666666666666".to_string(),
     }
+}
+
+fn current_context() -> ContinuationCurrentContextV1 {
+    ContinuationCurrentContextV1::from_observation(
+        Observation {
+            time: 10,
+            agent_id: AGENT_ID.to_string(),
+            pos: crate::geometry::GeoPos::new(0, 0, 0),
+            self_resources: Default::default(),
+            visibility_range_cm: 100,
+            visible_agents: Vec::new(),
+            visible_locations: Vec::new(),
+            module_lifecycle: Default::default(),
+            module_market: Default::default(),
+            power_market: Default::default(),
+            social_state: Default::default(),
+        },
+        &GoalSnapshotV1::empty(),
+        "blake3:5555555555555555555555555555555555555555555555555555555555555555",
+        "blake3:6666666666666666666666666666666666666666666666666666666666666666",
+    )
+}
+
+fn proposal_for_current_context() -> ContinuationProposalV1 {
+    let current = current_context();
+    let mut value = serde_json::to_value(proposal()).expect("encode proposal");
+    value["baseline_observation_digest"] =
+        json!(current.authority.baseline_observation_digest.clone());
+    value["goal_digest"] = json!(current.authority.goal_digest.clone());
+    value["policy_digest"] = json!(current.authority.policy_digest.clone());
+    value["precondition_digest"] = json!(current.authority.precondition_digest.clone());
+    let mut digest_input = value.clone();
+    digest_input
+        .as_object_mut()
+        .expect("proposal object")
+        .remove("proposal_digest");
+    value["proposal_digest"] = json!(h_v1(
+        "oasis7.cognition.continuation-proposal.v1",
+        &digest_input
+    ));
+    serde_json::from_value(value).expect("decode current-context proposal")
 }
 
 fn runtime_projection(
@@ -467,4 +510,135 @@ fn consumed_runtime_wake_must_revalidate_context_and_expose_next_step() {
         .expect_err("changed goal must stop wake-to-action progression");
     assert_eq!(error.code(), "continuation_context_stale");
     assert_eq!(harness.active_count(), 1);
+}
+
+#[test]
+fn current_context_attestation_rejects_changed_observation_before_admission() {
+    let current = current_context();
+    let proposal = proposal_for_current_context();
+    let mut changed = current.clone();
+    changed.observation.pos = crate::geometry::GeoPos::new(1, 0, 0);
+    let mut runner = AsyncAgentRunner::builtin_fixture(AGENT_ID);
+    let error = runner
+        .submit_continuation_proposal_with_current_context(AGENT_ID, proposal, &changed)
+        .expect_err("changed current observation must not admit the old proposal");
+    assert!(error.to_string().contains("observation"));
+}
+
+#[test]
+fn fresh_runner_hydrates_runtime_pending_continuation_and_rejects_stale_wake() {
+    let current = current_context();
+    let proposal = proposal_for_current_context();
+    let runtime = runtime_projection(&proposal, ContinuationStatusV1::Pending, None);
+    let mut runner = AsyncAgentRunner::builtin_fixture(AGENT_ID);
+    let hydrated = runner
+        .hydrate_runtime_continuation(AGENT_ID, proposal.clone(), &current, runtime.clone())
+        .expect("fresh Agent runner hydrates Runtime continuation");
+    assert!(hydrated.active);
+    assert_eq!(hydrated.status, "pending");
+    assert_eq!(hydrated.continuation_id, runtime.continuation_id);
+    assert_eq!(hydrated.wake_id, runtime.wake_id);
+    assert_eq!(
+        hydrated.remaining_budget.value,
+        proposal.remaining_budget.value
+    );
+
+    let mut stale = current;
+    stale.authority.policy_digest =
+        "blake3:9999999999999999999999999999999999999999999999999999999999999999".to_string();
+    let error = runner
+        .apply_runtime_continuation_projection_with_current_context(AGENT_ID, runtime, &stale)
+        .expect_err("hydrated continuation must reject a changed policy digest");
+    assert!(error.to_string().contains("stale"));
+}
+
+#[test]
+fn consumed_wake_dispatches_one_next_actor_turn_and_rejects_late_duplicate() {
+    let current = current_context();
+    let proposal = proposal_for_current_context();
+    let mut runtime = runtime_projection(&proposal, ContinuationStatusV1::Consumed, None);
+    runtime.remaining_budget.value = 1;
+    runtime.refresh_status_digest();
+    runtime
+        .validate_authoritative()
+        .expect("consumed Runtime projection remains authoritative");
+    let mut runner = AsyncAgentRunner::builtin_fixture(AGENT_ID);
+    runner
+        .submit_continuation_proposal_with_current_context(AGENT_ID, proposal, &current)
+        .expect("admit current continuation");
+    let turn_context = ContinuousAgentTurnContextV1 {
+        agent_id: AGENT_ID.to_string(),
+        agent_session_id: "session-continuation-1".to_string(),
+        agent_turn_id: "turn-continuation-next".to_string(),
+        decision_request_id: "request-continuation-next".to_string(),
+        request_digest: Digest32::from(
+            "blake3:7777777777777777777777777777777777777777777777777777777777777777",
+        ),
+        memory_snapshot: MemoryContextSnapshotV1::empty("continuation-test"),
+        goal_snapshot: GoalSnapshotV1::empty(),
+        continuation: None,
+    };
+    let next = runner
+        .resume_consumed_continuation(
+            AGENT_ID,
+            current.observation.clone(),
+            turn_context,
+            &current.authority,
+            runtime.clone(),
+        )
+        .expect("consumed wake enters the next actor turn")
+        .expect("consumed wake is not terminal");
+    let mut saw_next = false;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    while std::time::Instant::now() < deadline {
+        if runner
+            .poll_completed()
+            .expect("poll next actor turn")
+            .iter()
+            .any(|outcome| outcome.turn_id == next)
+        {
+            saw_next = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    assert!(
+        saw_next,
+        "wake dispatch must produce one next actor outcome"
+    );
+    let error = runner
+        .resume_consumed_continuation(
+            AGENT_ID,
+            current.observation,
+            ContinuousAgentTurnContextV1 {
+                agent_id: AGENT_ID.to_string(),
+                agent_session_id: "session-continuation-1".to_string(),
+                agent_turn_id: "turn-continuation-late".to_string(),
+                decision_request_id: "request-continuation-late".to_string(),
+                request_digest: Digest32::from(
+                    "blake3:8888888888888888888888888888888888888888888888888888888888888888",
+                ),
+                memory_snapshot: MemoryContextSnapshotV1::empty("continuation-test"),
+                goal_snapshot: GoalSnapshotV1::empty(),
+                continuation: None,
+            },
+            &current.authority,
+            runtime,
+        )
+        .expect_err("late duplicate wake cannot re-enter after retirement");
+    assert!(error.to_string().contains("unknown continuation"));
+}
+
+#[test]
+fn legacy_runtime_projection_is_fenced_from_authoritative_state() {
+    let proposal = proposal();
+    let runtime = runtime_projection(&proposal, ContinuationStatusV1::Pending, None);
+    let mut runner = AsyncAgentRunner::builtin_fixture(AGENT_ID);
+    runner
+        .submit_continuation_proposal(AGENT_ID, proposal)
+        .expect("legacy proposal remains proposal-only");
+    let error = runner
+        .apply_runtime_continuation_projection(AGENT_ID, runtime)
+        .expect_err("legacy projection cannot cross the Runtime authority fence");
+    assert!(error.to_string().contains("strict continuation"));
 }

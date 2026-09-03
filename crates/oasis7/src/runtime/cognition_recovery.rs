@@ -261,15 +261,10 @@ impl RuntimeCognitionBaseBindingV1 {
             || !bounded(&self.finality_status)
             || !bounded(&self.base_world_hash)
             || !bounded(&self.runtime_manifest_hash)
-            || !matches!(
-                self.finality_status.as_str(),
-                "pending" | "verified" | "reorged" | "suspended"
+            || !crate::runtime::cognition::finality_binding_is_legal(
+                &self.finality_status,
+                self.finality_block_hash.as_deref(),
             )
-            || (self.finality_status == "verified" && self.finality_block_hash.is_none())
-            || self
-                .finality_block_hash
-                .as_deref()
-                .is_some_and(|hash| hash != "genesis" && !canonical_blake3(hash))
             || !canonical_blake3(&self.base_world_hash)
             || !canonical_blake3(&self.runtime_manifest_hash)
         {

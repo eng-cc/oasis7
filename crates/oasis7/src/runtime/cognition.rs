@@ -153,6 +153,41 @@ pub(crate) fn finality_binding_digest_v1(
     )
 }
 
+pub(crate) fn world_state_binding_digest_v1(
+    world_id: &str,
+    branch_id: &str,
+    finality_epoch: u64,
+    finality_block_hash: Option<&str>,
+    finality_status: &str,
+    logical_tick: u64,
+    state_root: &str,
+    reorg_epoch: u64,
+    runtime_manifest_hash: &str,
+) -> String {
+    h_v1(
+        WORLD_STATE_HASH_DOMAIN_V1,
+        &WorldStateHashInput {
+            world_id,
+            branch_id,
+            finality_epoch,
+            finality_block_hash,
+            finality_status,
+            logical_tick,
+            state_root,
+            reorg_epoch,
+            runtime_manifest_hash,
+        },
+    )
+}
+
+pub(crate) fn finality_binding_is_legal(status: &str, block_hash: Option<&str>) -> bool {
+    matches!(status, "pending" | "verified" | "reorged" | "suspended")
+        && match block_hash {
+            Some(hash) => valid_blake3_digest(hash) && status == "verified",
+            None => status != "verified",
+        }
+}
+
 fn world_has_cognition_binding(world: &World) -> bool {
     world.chain_resource_manifest().world_id != "unbound"
         || world.latest_tick_consensus_record().is_some()
@@ -644,16 +679,9 @@ fn validate_finality_binding(
     status: &str,
     block_hash: Option<&str>,
 ) -> Result<(), CognitionValidationError> {
-    if !matches!(status, "pending" | "verified" | "reorged" | "suspended") {
-        return Err(CognitionValidationError::new("recovery_pending"));
-    }
-    match block_hash {
-        Some(hash) if !valid_blake3_digest(hash) => {
-            Err(CognitionValidationError::new("recovery_pending"))
-        }
-        None if status == "verified" => Err(CognitionValidationError::new("recovery_pending")),
-        _ => Ok(()),
-    }
+    finality_binding_is_legal(status, block_hash)
+        .then_some(())
+        .ok_or_else(|| CognitionValidationError::new("recovery_pending"))
 }
 
 fn validate_request_binding(
@@ -720,37 +748,53 @@ fn validate_base_head(
     if envelope.base_tick != world.state().time {
         return Err(CognitionValidationError::new("stale_base"));
     }
+    // Classify an old-fork response before recomputing its visible root.
+    let intent_reorg_epochs: BTreeSet<u64> = world
+        .state()
+        .agent_intent_ledger
+        .values()
+        .filter_map(|intent| intent.reorg_epoch)
+        .collect();
+    if intent_reorg_epochs.len() > 1 {
+        return Err(CognitionValidationError::new("recovery_pending"));
+    }
+    if let Some(&authoritative_reorg_epoch) = intent_reorg_epochs.iter().next()
+        && authoritative_reorg_epoch != envelope.reorg_epoch
+    {
+        return Err(CognitionValidationError::new("reorg_invalidated"));
+    }
+    if let Some(authoritative_reorg_epoch) = world
+        .cognition()
+        .get("runtime_binding")
+        .and_then(JsonValue::as_object)
+        .and_then(|binding| binding.get("reorg_epoch"))
+        .and_then(JsonValue::as_u64)
+        && authoritative_reorg_epoch != envelope.reorg_epoch
+    {
+        return Err(CognitionValidationError::new("reorg_invalidated"));
+    }
     let state_root = world
         .current_state_root_hash()
         .map_err(|_| CognitionValidationError::new("recovery_pending"))?;
     let runtime_manifest_hash = world
         .current_manifest_hash()
         .map_err(|_| CognitionValidationError::new("recovery_pending"))?;
-    let manifest_binding = h_v1(RUNTIME_MANIFEST_HASH_DOMAIN_V1, &runtime_manifest_hash);
-    if envelope.runtime_manifest_hash != runtime_manifest_hash
-        && envelope.runtime_manifest_hash != manifest_binding
-        && envelope.runtime_manifest_hash != world.chain_resource_manifest().manifest_hash
-    {
+    let expected_manifest = h_v1(RUNTIME_MANIFEST_HASH_DOMAIN_V1, &runtime_manifest_hash);
+    if envelope.runtime_manifest_hash != expected_manifest {
         return Err(CognitionValidationError::new("stale_capability_snapshot"));
     }
-    let expected = h_v1(
-        WORLD_STATE_HASH_DOMAIN_V1,
-        &WorldStateHashInput {
-            world_id: envelope.world_id.as_str(),
-            branch_id: envelope.branch_id.as_str(),
-            finality_epoch: envelope.finality_epoch,
-            finality_block_hash: envelope.finality_block_hash.as_deref(),
-            finality_status: envelope.finality_status.as_str(),
-            logical_tick: world.state().time,
-            state_root: state_root.as_str(),
-            reorg_epoch: envelope.reorg_epoch,
-            runtime_manifest_hash: runtime_manifest_hash.as_str(),
-        },
+    let expected = world_state_binding_digest_v1(
+        envelope.world_id.as_str(),
+        envelope.branch_id.as_str(),
+        envelope.finality_epoch,
+        envelope.finality_block_hash.as_deref(),
+        envelope.finality_status.as_str(),
+        world.state().time,
+        state_root.as_str(),
+        envelope.reorg_epoch,
+        runtime_manifest_hash.as_str(),
     );
-    if envelope.base_world_hash != state_root
-        && envelope.base_world_hash != expected
-        && envelope.base_world_hash != h_v1(RUNTIME_MANIFEST_HASH_DOMAIN_V1, &state_root)
-    {
+    if envelope.base_world_hash != expected {
         return Err(CognitionValidationError::new("stale_base"));
     }
     Ok(())

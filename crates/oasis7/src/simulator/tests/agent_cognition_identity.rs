@@ -388,7 +388,7 @@ fn runtime_wake_condition_identity_is_shared_and_order_insensitive() {
     let receipt = runtime_condition(json!({
         "schema_version": "wake-condition.v1",
         "kind": "receipt_linked",
-        "receipt_id": "receipt-42"
+        "receipt_id": "blake3:9999999999999999999999999999999999999999999999999999999999999999"
     }));
     let canonical = WakeConditionValidator::canonicalize(vec![tick, receipt])
         .expect("canonicalize runtime wake conditions");
@@ -1093,8 +1093,7 @@ fn production_provider_behavior_fences_contextless_legacy_entry() {
         "agent-1",
         MockDecisionProvider::new("fenced-provider"),
         vec![ActionCatalogEntry::new("wait", "wait")],
-    )
-    .require_continuous_request_context();
+    );
     let mut runner = AsyncAgentRunner::new(1).expect("create runner");
     runner.register(behavior).expect("register fenced provider");
     let outcome = runner
@@ -1107,6 +1106,21 @@ fn production_provider_behavior_fences_contextless_legacy_entry() {
             code: "continuous_context_required".to_string()
         }
     );
+}
+
+#[test]
+fn legacy_provider_lane_requires_explicit_compatibility_selection() {
+    let behavior = ProviderBackedAgentBehavior::new_legacy_compatibility(
+        "agent-1",
+        MockDecisionProvider::new("legacy-provider"),
+        vec![ActionCatalogEntry::new("wait", "wait")],
+    );
+    let mut runner = AsyncAgentRunner::new(1).expect("create runner");
+    runner.register(behavior).expect("register legacy provider");
+    let outcome = runner
+        .run_one_turn()
+        .expect("legacy compatibility turn completes");
+    assert_eq!(outcome.lifecycle, AsyncTurnLifecycle::Completed);
 }
 
 #[test]

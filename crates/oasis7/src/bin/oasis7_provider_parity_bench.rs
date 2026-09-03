@@ -4,13 +4,15 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use oasis7::simulator::{
     Action, ActionCatalogEntry, ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace,
-    AgentRunner, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
-    DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION, LlmAgentBehavior, Observation,
-    OpenAiChatCompletionClient, ProviderCompatibilityStatus, ProviderExecutionMode,
+    AgentRunner, ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1,
+    ContinuousAgentTurnContextV1, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
+    DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION, LlmAgentBehavior, MockDecisionProvider,
+    Observation, OpenAiChatCompletionClient, ProviderCompatibilityStatus, ProviderExecutionMode,
     ProviderLoopbackAdapter, ProviderLoopbackHttpClient, RuntimePerfSnapshot, WorldConfig,
     WorldEvent, WorldInitConfig, WorldScenario, evaluate_provider_compatibility, initialize_kernel,
     provider_phase1_required_actions, provider_phase1_required_capabilities,
@@ -19,8 +21,11 @@ use serde::{Deserialize, Serialize};
 
 #[path = "oasis7_provider_parity_bench/io_support.rs"]
 mod io_support;
+#[path = "oasis7_provider_parity_bench/target_context.rs"]
+mod target_context;
 
 use self::io_support::{parse_options, print_help, sanitize_filename, write_json, write_jsonl};
+use self::target_context::build_target_context;
 
 const DEFAULT_PROTOCOL_VERSION: &str = "2026-03-12";
 const DEFAULT_ADAPTER_VERSION: &str = "provider_phase1_adapter_v1";
@@ -122,6 +127,11 @@ struct ProviderRunInfo {
     provider_queue_depth: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     agent_profile: Option<String>,
+    /// Route evidence is persisted with every provider run so T4/T5 artifacts
+    /// cannot be mistaken for legacy cognition traffic.
+    cognition_lane: String,
+    decision_route: String,
+    feedback_route: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -219,6 +229,14 @@ struct BuiltinParityBehavior {
 
 struct ProviderBackedLoopbackBehavior {
     inner: oasis7::simulator::ProviderBackedAgentBehavior<ProviderLoopbackAdapter>,
+    request_builder: oasis7::simulator::ProviderBackedAgentBehavior<MockDecisionProvider>,
+    request_builder_state: Arc<Mutex<oasis7::simulator::MockDecisionProviderState>>,
+    feedback_client: ProviderLoopbackHttpClient,
+    fixture_id: String,
+    session_id: String,
+    next_turn: u64,
+    next_feedback_seq: u64,
+    last_response_context: Option<ContinuousAgentResponseContextV1>,
 }
 
 impl AgentBehavior for BenchBehavior {
@@ -371,19 +389,86 @@ impl AgentBehavior for ProviderBackedLoopbackBehavior {
     }
 
     fn decide(&mut self, observation: &Observation) -> AgentDecision {
-        self.inner.decide(observation)
+        let (turn_context, request_context) = self.target_context(observation);
+        self.inner.set_continuous_turn_context(Some(&turn_context));
+        self.inner
+            .set_continuous_request_context(Some(&request_context));
+        let decision = self.inner.decide(observation);
+        self.last_response_context = self.inner.take_continuous_response_context();
+        decision
     }
 
     fn on_action_result(&mut self, result: &ActionResult) {
-        self.inner.on_action_result(result);
+        self.request_builder.on_action_result(result);
+        let Some(response) = self.last_response_context.as_ref() else {
+            return;
+        };
+        let status = if result.success {
+            "committed"
+        } else {
+            "rejected"
+        };
+        let feedback = oasis7::simulator::FeedbackEnvelopeV1 {
+            feedback_id: format!(
+                "{}-feedback-{}",
+                response.decision_request_id, result.action_id
+            ),
+            feedback_seq: self.next_feedback_seq,
+            agent_subject: self.inner.agent_id().to_string(),
+            agent_session_id: response.agent_session_id.clone(),
+            agent_turn_id: response.agent_turn_id.clone(),
+            decision_request_id: response.decision_request_id.clone(),
+            candidate_action_id: Some(result.action_id),
+            runtime_receipt_id: Some(format!("parity-receipt-{}", result.action_id)),
+            status: status.to_string(),
+            request_digest: response.request_digest.clone(),
+            reject_reason: result.reject_reason().map(|reason| format!("{reason:?}")),
+            provenance: "runtime_authoritative".to_string(),
+        };
+        self.next_feedback_seq = self.next_feedback_seq.saturating_add(1);
+        let _ = self.feedback_client.submit_feedback_context(&feedback);
     }
 
     fn on_event(&mut self, event: &WorldEvent) {
+        self.request_builder.on_event(event);
         self.inner.on_event(event);
     }
 
     fn take_decision_trace(&mut self) -> Option<AgentDecisionTrace> {
         self.inner.take_decision_trace()
+    }
+}
+
+impl ProviderBackedLoopbackBehavior {
+    fn target_context(
+        &mut self,
+        observation: &Observation,
+    ) -> (
+        ContinuousAgentTurnContextV1,
+        ContinuousAgentRequestContextV1,
+    ) {
+        // The compatibility-only helper is used solely to reuse the canonical
+        // provider request projection. The request is immediately wrapped in
+        // the target outer V1 context before it reaches the real adapter.
+        let _ = self.request_builder.decide(observation);
+        let _ = self.request_builder.take_decision_trace();
+        let request = self
+            .request_builder_state
+            .lock()
+            .expect("parity request builder state lock")
+            .recorded_requests
+            .last()
+            .cloned()
+            .expect("request builder must record a provider request");
+        let turn = self.next_turn;
+        self.next_turn = self.next_turn.saturating_add(1);
+        build_target_context(
+            request,
+            observation,
+            &self.fixture_id,
+            &self.session_id,
+            turn,
+        )
     }
 }
 
@@ -712,6 +797,9 @@ fn prepare_provider_info(options: &CliOptions) -> Result<ProviderRunInfo, String
             provider_last_error: None,
             provider_queue_depth: None,
             agent_profile: None,
+            cognition_lane: "builtin_host_runner".to_string(),
+            decision_route: "builtin".to_string(),
+            feedback_route: "builtin".to_string(),
         }),
         BenchProviderKind::ProviderLoopbackHttp => {
             let base_url = options.provider_base_url.as_deref().ok_or_else(|| {
@@ -741,6 +829,9 @@ fn prepare_provider_info(options: &CliOptions) -> Result<ProviderRunInfo, String
                 provider_last_error: health.last_error,
                 provider_queue_depth: health.queue_depth,
                 agent_profile: Some(options.agent_provider_profile.clone()),
+                cognition_lane: "target_outer_context_v1".to_string(),
+                decision_route: "/v1/world-simulator/decision-context".to_string(),
+                feedback_route: "/v1/world-simulator/feedback-context".to_string(),
             })
         }
     }
@@ -781,11 +872,18 @@ fn build_behavior(
                 options.agent_provider_connect_timeout_ms,
             )
             .map_err(|err| err.to_string())?;
+            let feedback_client = ProviderLoopbackHttpClient::new(
+                base_url,
+                options.provider_auth_token.as_deref(),
+                options.agent_provider_connect_timeout_ms,
+            )
+            .map_err(|err| err.to_string())?;
             let mut behavior = oasis7::simulator::ProviderBackedAgentBehavior::new(
                 agent_id.to_string(),
                 adapter,
                 phase1_action_catalog(),
             )
+            .require_continuous_request_context()
             .with_provider_config_ref(format!(
                 "provider://loopback-http/parity/{}/{}",
                 options.benchmark_run_id, agent_id
@@ -801,8 +899,44 @@ fn build_behavior(
             if let Some(memory_summary) = parity_memory_summary(options.scenario_id.as_str()) {
                 behavior = behavior.with_memory_summary(memory_summary);
             }
+            let request_builder_provider = MockDecisionProvider::new("parity-request-builder");
+            let request_builder_state = request_builder_provider.shared_state();
+            let mut request_builder =
+                oasis7::simulator::ProviderBackedAgentBehavior::new_legacy_compatibility(
+                    agent_id.to_string(),
+                    request_builder_provider,
+                    phase1_action_catalog(),
+                )
+                .with_provider_config_ref(format!(
+                    "provider://loopback-http/parity/{}/{}",
+                    options.benchmark_run_id, agent_id
+                ))
+                .with_agent_profile(options.agent_provider_profile.clone())
+                .with_execution_mode(options.execution_mode)
+                .with_environment_class(execution_environment_class(options.execution_mode))
+                .with_fixture_id(fixture_id)
+                .with_replay_id(format!("{}:{}", options.benchmark_run_id, fixture_id));
+            if let Some(fallback_reason) = provider.fallback_reason.as_deref() {
+                request_builder = request_builder.with_fallback_reason(fallback_reason);
+            }
+            if let Some(memory_summary) = parity_memory_summary(options.scenario_id.as_str()) {
+                request_builder = request_builder.with_memory_summary(memory_summary);
+            }
             Ok(BenchBehavior::ProviderBacked(
-                ProviderBackedLoopbackBehavior { inner: behavior },
+                ProviderBackedLoopbackBehavior {
+                    inner: behavior,
+                    request_builder,
+                    request_builder_state,
+                    feedback_client,
+                    fixture_id: fixture_id.to_string(),
+                    session_id: format!(
+                        "parity-session-{}-{}",
+                        options.benchmark_run_id, fixture_id
+                    ),
+                    next_turn: 0,
+                    next_feedback_seq: 1,
+                    last_response_context: None,
+                },
             ))
         }
     }

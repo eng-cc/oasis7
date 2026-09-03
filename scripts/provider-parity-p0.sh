@@ -48,8 +48,11 @@ Options:
 
 Notes:
   - builtin runs require the usual builtin LLM env (for example OPENAI_API_KEY).
-  - provider runs require a real local provider exposing /v1/provider/info, /health,
-    /world-simulator/decision and /feedback.
+  - provider runs require a real local provider exposing /v1/provider/info, /v1/provider/health,
+    /v1/world-simulator/decision-context and /v1/world-simulator/feedback-context.
+    These target outer-cognition routes are recorded in T4/T5 provider artifacts.
+    Bare /v1/world-simulator/decision and /v1/world-simulator/feedback are legacy compatibility-only
+    routes and are excluded from target cognition proof.
   - This script prepares T4/T5 parity evidence; it does not auto-sign QA/producer scorecards.
 USAGE
 }
@@ -284,6 +287,19 @@ for provider in providers:
         benchmark_status = "blocked"
 
     metadata_source = valid_samples[0] if valid_samples else (samples[0] if samples else {})
+    provider_metadata = metadata_source.get("provider", {})
+    if not isinstance(provider_metadata, dict):
+      provider_metadata = {}
+    cognition_lane = provider_metadata.get("cognition_lane", "unknown")
+    decision_route = provider_metadata.get("decision_route", "unknown")
+    feedback_route = provider_metadata.get("feedback_route", "unknown")
+    target_route_contract_valid = bool(valid_samples) and all(
+      isinstance(sample.get("provider"), dict)
+      and sample["provider"].get("cognition_lane") == "target_outer_context_v1"
+      and sample["provider"].get("decision_route") == "/v1/world-simulator/decision-context"
+      and sample["provider"].get("feedback_route") == "/v1/world-simulator/feedback-context"
+      for sample in valid_samples
+    )
     aggregated = {
       "benchmark_run_id": run_id,
       "parity_tier": parity_tier,
@@ -318,8 +334,14 @@ for provider in providers:
       "provider_version": valid_samples[0]["provider_version"] if valid_samples else "unknown",
       "adapter_version": valid_samples[0]["adapter_version"] if valid_samples else "unknown",
       "protocol_version": valid_samples[0]["protocol_version"] if valid_samples else "unknown",
+      "cognition_lane": cognition_lane,
+      "decision_route": decision_route,
+      "feedback_route": feedback_route,
       "sample_summaries": [str(path) for path in sample_files],
     }
+    if provider == "provider_loopback_http" and not target_route_contract_valid:
+      aggregated["warnings"].append("target_outer_cognition_route_missing")
+      aggregated["benchmark_status"] = "blocked"
     aggregate[provider] = aggregated
     out_path = summary_dir / f"{scenario_id}.{provider}.json"
     out_path.write_text(json.dumps(aggregated, ensure_ascii=False, indent=2) + "\n")

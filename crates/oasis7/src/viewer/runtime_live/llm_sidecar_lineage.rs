@@ -18,6 +18,9 @@ impl RuntimeLlmSidecar {
                 tracing::warn!(error, "provider lineage checkpoint restore failed");
             }
         }
+        if let Err(error) = self.sync_runtime_wakes(world) {
+            tracing::warn!(error, "Runtime cognition wake projection unavailable");
+        }
         self.provider_lineage_hydrated = true;
         let projection = world.cognition();
         let journal_head_seq = projection
@@ -101,52 +104,11 @@ impl RuntimeLlmSidecar {
                 .or_insert(next);
         }
 
-        // A stale Runtime rejection is durable evidence that the old turn is
-        // closed and one bounded semantic replan is still required. Rebuild
-        // that pending causal edge so a viewer restart cannot strand it.
-        if !self.provider_lineage_restored
-            && let Some(events) = projection
-                .get("cognition_journal")
-                .and_then(|journal| journal.get("events"))
-                .and_then(Value::as_array)
-        {
-            for event in events {
-                if event.get("kind").and_then(Value::as_str) != Some("DecisionRejected")
-                    || event.get("reject_reason").and_then(Value::as_str) != Some("stale_base")
-                {
-                    continue;
-                }
-                let Some(agent_id) = event.get("agent_id").and_then(Value::as_str) else {
-                    continue;
-                };
-                let state = self
-                    .provider_stale_replans
-                    .entry(agent_id.to_string())
-                    .or_insert_with(|| ProviderStaleReplanState {
-                        count: 0,
-                        pending_cause: None,
-                    });
-                state.count = state
-                    .count
-                    .saturating_add(1)
-                    .min(MAX_PROVIDER_STALE_REPLANS);
-                if state.count < MAX_PROVIDER_STALE_REPLANS {
-                    state.pending_cause = Some(ProviderStaleReplanCause {
-                        parent_agent_turn_id: event
-                            .get("agent_turn_id")
-                            .and_then(Value::as_str)
-                            .unwrap_or_default()
-                            .to_string(),
-                        parent_decision_request_id: event
-                            .get("decision_request_id")
-                            .and_then(Value::as_str)
-                            .unwrap_or_default()
-                            .to_string(),
-                        count: state.count,
-                    });
-                }
-            }
-        }
+        // A historical stale rejection only proves that the old turn closed.
+        // It does not prove that a replan is still pending: the corresponding
+        // provider response may already have been retried, committed, or
+        // terminally rejected. Pending replans are restored only from the
+        // sidecar checkpoint, where their exact causal identity is retained.
     }
 
     pub(in crate::viewer::runtime_live) fn mark_provider_transport_exhausted(

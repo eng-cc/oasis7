@@ -46,6 +46,8 @@ struct PersistedProviderLineageV1 {
     provider_late_response_diagnostics: VecDeque<ProviderLateResponseDiagnostic>,
     pending_actions: BTreeMap<u64, RuntimePendingAction>,
     runtime_binding: Option<RuntimeBindingV1>,
+    #[serde(default)]
+    pending_runtime_wakes: BTreeMap<String, crate::runtime::SchedulerWakeV1>,
 }
 
 impl RuntimeLlmSidecar {
@@ -123,6 +125,11 @@ impl RuntimeLlmSidecar {
         self.provider_terminal_states = checkpoint.provider_terminal_states;
         self.provider_late_response_diagnostics = checkpoint.provider_late_response_diagnostics;
         self.pending_actions = checkpoint.pending_actions;
+        self.pending_runtime_wakes = checkpoint
+            .pending_runtime_wakes
+            .into_values()
+            .map(|wake| (wake.wake_id.clone(), wake))
+            .collect();
         self.provider_lineage_binding = current_binding.or(checkpoint.runtime_binding);
         self.provider_lineage_restored = true;
 
@@ -141,6 +148,22 @@ impl RuntimeLlmSidecar {
                     .map(|pending| pending.agent_id.clone()),
             )
             .chain(self.provider_wait_until.keys().cloned())
+            .chain(
+                world
+                    .cognition_in_flight_wakes()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter_map(|wake| {
+                        self.provider_contexts
+                            .get(wake.agent_id.as_str())
+                            .filter(|context| {
+                                context.request_context.agent_turn_id == wake.agent_turn_id
+                                    && context.request_context.decision_request_id
+                                        == wake.decision_request_id
+                            })
+                            .map(|_| wake.agent_id)
+                    }),
+            )
             .collect::<BTreeSet<_>>();
         self.provider_active_turns
             .retain(|agent_id, _| retained_agents.contains(agent_id));
@@ -226,6 +249,7 @@ impl RuntimeLlmSidecar {
             provider_late_response_diagnostics: self.provider_late_response_diagnostics.clone(),
             pending_actions: self.pending_actions.clone(),
             runtime_binding: self.provider_lineage_binding.clone(),
+            pending_runtime_wakes: self.pending_runtime_wakes.clone(),
         };
         let encoded = serde_json::to_vec_pretty(&checkpoint)
             .map_err(|error| format!("provider lineage checkpoint encode failed: {error}"))?;

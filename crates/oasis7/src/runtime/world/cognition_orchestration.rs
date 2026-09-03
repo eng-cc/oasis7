@@ -1,5 +1,8 @@
 use super::World;
 use super::cognition_persistence_validation::append_cognition_event;
+use crate::runtime::cognition::{
+    PreconditionSubjectV1, finality_binding_is_legal, world_state_binding_digest_v1,
+};
 use crate::runtime::cognition_recovery::{RuntimeCognitionBaseBindingV1, cognition_digest_v1};
 use crate::runtime::cognition_retention::{
     CognitionRetentionStore, RetentionExecutionProbe, RetentionRecordV1,
@@ -17,6 +20,9 @@ use crate::simulator::ResourceKind;
 use serde_json::{Value as JsonValue, json};
 
 const CONTINUATION_SCHEMA: &str = "agent-continuation.v1";
+
+#[path = "cognition_orchestration_support.rs"]
+mod cognition_orchestration_support;
 
 impl World {
     fn is_terminal_continuation_status(status: ContinuationStatusV1) -> bool {
@@ -128,6 +134,9 @@ impl World {
         let finality_status = binding["finality_status"]
             .as_str()
             .ok_or_else(|| cognition_validation_error("runtime_binding_invalid"))?;
+        if !finality_binding_is_legal(finality_status, binding["finality_block_hash"].as_str()) {
+            return Err(cognition_validation_error("runtime_binding_invalid"));
+        }
         let base_world_hash = self.current_state_root_hash()?;
         let runtime_manifest_hash = self.current_manifest_hash()?;
         RuntimeCognitionBaseBindingV1 {
@@ -137,7 +146,17 @@ impl World {
             finality_block_hash: binding["finality_block_hash"].as_str().map(str::to_string),
             finality_status: finality_status.to_string(),
             base_tick: self.state.time,
-            base_world_hash: cognition_digest_v1("oasis7.runtime.manifest.v1", &base_world_hash),
+            base_world_hash: world_state_binding_digest_v1(
+                world_id,
+                branch_id,
+                finality_epoch,
+                binding["finality_block_hash"].as_str(),
+                finality_status,
+                self.state.time,
+                &base_world_hash,
+                reorg_epoch,
+                &runtime_manifest_hash,
+            ),
             reorg_epoch,
             runtime_manifest_hash: cognition_digest_v1(
                 "oasis7.runtime.manifest.v1",
@@ -328,6 +347,21 @@ impl World {
         if wake_id.trim().is_empty() {
             return Err(scheduler_error("in_flight_wake_missing"));
         }
+        if let Some(contexts) = self
+            .cognition
+            .get("continuation_contexts")
+            .and_then(JsonValue::as_object)
+        {
+            let scheduler = self.cognition_scheduler()?;
+            if let Some(wake) = scheduler
+                .in_flight_wakes()
+                .into_iter()
+                .find(|wake| wake.wake_id == wake_id)
+                && contexts.contains_key(&wake.continuation_id)
+            {
+                return Err(scheduler_error("wake_disposition_required"));
+            }
+        }
         let mut transaction = self.clone();
         let mut scheduler = transaction.cognition_scheduler()?;
         let wake = scheduler
@@ -491,7 +525,7 @@ impl World {
         proposal: CognitionContinuationProposalV1,
     ) -> Result<AgentContinuation, WorldError> {
         let mut transaction = self.clone();
-        let admitted = transaction.admit_cognition_continuation_inner(proposal)?;
+        let admitted = transaction.admit_cognition_continuation_inner(proposal, false)?;
         transaction.persist_runtime_transaction_if_configured()?;
         *self = transaction;
         Ok(admitted)
@@ -500,6 +534,7 @@ impl World {
     pub(in crate::runtime::world) fn admit_cognition_continuation_inner(
         &mut self,
         mut proposal: CognitionContinuationProposalV1,
+        allow_existing_budget_chain: bool,
     ) -> Result<AgentContinuation, WorldError> {
         if self.cognition_runtime_is_unbound() {
             return Err(cognition_validation_error("runtime_binding_required"));
@@ -555,6 +590,18 @@ impl World {
         {
             return Err(cognition_validation_error("continuation_proposal_conflict"));
         }
+        if !allow_existing_budget_chain
+            && continuations.iter().any(|existing| {
+                existing.agent_id == proposal.agent_id
+                    && existing.agent_session_id == proposal.agent_session_id
+                    && existing.agent_turn_id == proposal.agent_turn_id
+                    && existing.decision_request_id == proposal.decision_request_id
+            })
+        {
+            return Err(cognition_validation_error(
+                "continuation_budget_chain_conflict",
+            ));
+        }
         let allocation = self.allocate_next_proposal_id();
         let continuation_id = format!("continuation:{allocation}");
         let wake_id = format!("wake:{allocation}");
@@ -565,6 +612,14 @@ impl World {
             .max()
             .unwrap_or(0)
             .saturating_add(1);
+        let proposal_context = json!({
+            "baseline_observation_digest": proposal.baseline_observation_digest.clone(),
+            "goal_digest": proposal.goal_digest.clone(),
+            "policy_digest": proposal.policy_digest.clone(),
+            "policy_revision": proposal.policy_revision,
+            "precondition_summary": proposal.precondition_summary.clone(),
+            "precondition_digest": proposal.precondition_digest.clone(),
+        });
         let mut continuation = AgentContinuation {
             schema_version: CONTINUATION_SCHEMA.to_string(),
             continuation_id,
@@ -637,6 +692,14 @@ impl World {
             .try_enqueue(wake.clone())
             .map_err(|error| scheduler_error(error.code()))?;
         continuations.push(continuation.clone());
+        let mut context_registry = self
+            .cognition
+            .get("continuation_contexts")
+            .and_then(JsonValue::as_object)
+            .cloned()
+            .unwrap_or_default();
+        context_registry.insert(continuation.continuation_id.clone(), proposal_context);
+        self.cognition["continuation_contexts"] = JsonValue::Object(context_registry);
         self.cognition_commit_continuation_transaction(&continuations, &scheduler, &wake)?;
         Ok(continuation)
     }
@@ -823,16 +886,30 @@ impl World {
                 })
         });
         if world_predicate_requested {
+            let world_subject = PreconditionSubjectV1 {
+                kind: "world".to_string(),
+                id: world_id.clone().unwrap_or_default(),
+            };
             context = context
-                .with_predicate_u64("world.logical_tick", self.state.time)
-                .with_predicate_u64("world.reorg_epoch", self.cognition_reorg_epoch());
+                .with_subject_predicate_value(
+                    &world_subject,
+                    "world.logical_tick",
+                    &serde_cbor::to_vec(&self.state.time).map_err(WorldError::from)?,
+                )
+                .with_subject_predicate_value(
+                    &world_subject,
+                    "world.reorg_epoch",
+                    &serde_cbor::to_vec(&self.cognition_reorg_epoch()).map_err(WorldError::from)?,
+                );
             let state_root = self.current_state_root_hash()?;
-            context = context.with_predicate_value(
+            context = context.with_subject_predicate_value(
+                &world_subject,
                 "world.state_root",
                 &serde_cbor::to_vec(&state_root).map_err(WorldError::from)?,
             );
             let manifest_hash = self.current_manifest_hash()?;
-            context = context.with_predicate_value(
+            context = context.with_subject_predicate_value(
+                &world_subject,
                 "world.runtime_manifest_hash",
                 &serde_cbor::to_vec(&manifest_hash).map_err(WorldError::from)?,
             );
@@ -886,14 +963,14 @@ impl World {
                         _ => unreachable!(),
                     }
                     .map_err(WorldError::from)?;
-                    context = context.with_predicate_value(path, &value);
+                    context = context.with_subject_predicate_value(subject, path, &value);
                 }
                 ("intent", "intent.status") => {
                     let Some(intent) = self.state.agent_intent_ledger.get(&subject.id) else {
                         continue;
                     };
                     let value = serde_cbor::to_vec(&intent.status).map_err(WorldError::from)?;
-                    context = context.with_predicate_value(path, &value);
+                    context = context.with_subject_predicate_value(subject, path, &value);
                 }
                 _ => {}
             }
@@ -946,6 +1023,14 @@ impl World {
         else {
             return false;
         };
+        if let Some(contexts) = self
+            .cognition
+            .get("continuation_contexts")
+            .and_then(JsonValue::as_object)
+            && !contexts.contains_key(&continuation.continuation_id)
+        {
+            return false;
+        }
         !matches!(
             continuation.status,
             ContinuationStatusV1::Completed
@@ -1025,161 +1110,10 @@ impl World {
         Ok(())
     }
 
-    fn cognition_runtime_is_unbound(&self) -> bool {
+    pub(super) fn cognition_runtime_is_unbound(&self) -> bool {
         self.cognition
             .get("runtime_binding")
             .is_none_or(JsonValue::is_null)
-    }
-
-    fn bind_cognition_proposal_fields(
-        &mut self,
-        proposal: &mut CognitionContinuationProposalV1,
-    ) -> Result<(), WorldError> {
-        let manifest_hash = self.current_manifest_hash()?;
-        if proposal.runtime_manifest_hash.is_empty() {
-            proposal.runtime_manifest_hash = manifest_hash.clone();
-        } else if proposal.runtime_manifest_hash != manifest_hash {
-            return Err(cognition_validation_error("runtime_manifest_mismatch"));
-        }
-        if let Some(binding) = self.cognition.get("runtime_binding") {
-            if proposal.branch_id.is_empty() {
-                proposal.branch_id = binding["branch_id"].as_str().unwrap_or("main").to_string();
-            }
-            if proposal.finality_status.is_empty() {
-                proposal.finality_status = binding["finality_status"]
-                    .as_str()
-                    .unwrap_or("pending")
-                    .to_string();
-            }
-            if proposal.finality_epoch == 0 {
-                proposal.finality_epoch = binding["finality_epoch"].as_u64().unwrap_or_default();
-            }
-            if proposal.reorg_epoch == 0 {
-                proposal.reorg_epoch = binding["reorg_epoch"].as_u64().unwrap_or_default();
-            }
-            if proposal.finality_block_hash.is_none() {
-                proposal.finality_block_hash =
-                    binding["finality_block_hash"].as_str().map(str::to_string);
-            }
-            let block_hash = binding["finality_block_hash"].as_str().map(str::to_string);
-            if binding["world_id"].as_str() != Some(proposal.world_id.as_str())
-                || binding["branch_id"].as_str() != Some(proposal.branch_id.as_str())
-                || binding["finality_epoch"].as_u64() != Some(proposal.finality_epoch)
-                || block_hash != proposal.finality_block_hash
-                || binding["finality_status"].as_str() != Some(proposal.finality_status.as_str())
-                || binding["reorg_epoch"].as_u64() != Some(proposal.reorg_epoch)
-            {
-                return Err(cognition_validation_error("foreign_continuation_proposal"));
-            }
-        } else {
-            return Err(cognition_validation_error("runtime_binding_required"));
-        }
-        if !self.state.agents.is_empty() && !self.state.agents.contains_key(&proposal.agent_id) {
-            return Err(cognition_validation_error("continuation_agent_missing"));
-        }
-        Ok(())
-    }
-
-    fn validate_cognition_proposal_binding(
-        &self,
-        proposal: &CognitionContinuationProposalV1,
-    ) -> Result<(), WorldError> {
-        if proposal.runtime_manifest_hash != self.current_manifest_hash()? {
-            return Err(cognition_validation_error("runtime_manifest_mismatch"));
-        }
-        if let Some(binding) = self.cognition.get("runtime_binding") {
-            let block_hash = binding["finality_block_hash"].as_str().map(str::to_string);
-            if binding["world_id"].as_str() != Some(proposal.world_id.as_str())
-                || binding["branch_id"].as_str() != Some(proposal.branch_id.as_str())
-                || binding["finality_epoch"].as_u64() != Some(proposal.finality_epoch)
-                || block_hash != proposal.finality_block_hash
-                || binding["finality_status"].as_str() != Some(proposal.finality_status.as_str())
-                || binding["reorg_epoch"].as_u64() != Some(proposal.reorg_epoch)
-            {
-                return Err(cognition_validation_error("foreign_continuation_proposal"));
-            }
-        }
-        if !self.state.agents.is_empty() && !self.state.agents.contains_key(&proposal.agent_id) {
-            return Err(cognition_validation_error("continuation_agent_missing"));
-        }
-        Ok(())
-    }
-
-    fn cognition_turn_is_registered(
-        &self,
-        agent_id: &str,
-        agent_session_id: &str,
-        agent_turn_id: &str,
-        decision_request_id: &str,
-        request_digest: &str,
-    ) -> bool {
-        self.cognition
-            .get("cognition_journal")
-            .and_then(|journal| journal.get("events"))
-            .and_then(JsonValue::as_array)
-            .is_some_and(|events| {
-                events.iter().any(|event| {
-                    matches!(
-                        event.get("kind").and_then(JsonValue::as_str),
-                        Some("TurnStarted")
-                            | Some("ContextCaptured")
-                            | Some("RequestDispatched")
-                            | Some("DecisionValidated")
-                    ) && event.get("agent_id").and_then(JsonValue::as_str) == Some(agent_id)
-                        && event.get("agent_session_id").and_then(JsonValue::as_str)
-                            == Some(agent_session_id)
-                        && event.get("agent_turn_id").and_then(JsonValue::as_str)
-                            == Some(agent_turn_id)
-                        && event.get("decision_request_id").and_then(JsonValue::as_str)
-                            == Some(decision_request_id)
-                        && event.get("request_digest").and_then(JsonValue::as_str)
-                            == Some(request_digest)
-                })
-            })
-    }
-
-    pub(in crate::runtime::world) fn cognition_continuations_typed(
-        &self,
-    ) -> Result<Vec<AgentContinuation>, WorldError> {
-        let value = self
-            .cognition
-            .get("continuations")
-            .cloned()
-            .unwrap_or_else(|| JsonValue::Array(Vec::new()));
-        serde_json::from_value(value).map_err(WorldError::from)
-    }
-
-    fn cognition_set_continuations(
-        &mut self,
-        continuations: &[AgentContinuation],
-    ) -> Result<(), WorldError> {
-        let mut projection = self.cognition.as_object().cloned().unwrap_or_default();
-        projection.insert(
-            "continuations".to_string(),
-            serde_json::to_value(continuations).map_err(WorldError::from)?,
-        );
-        self.cognition = JsonValue::Object(projection);
-        Ok(())
-    }
-
-    fn cognition_retention_store(&self) -> Result<CognitionRetentionStore, WorldError> {
-        let Some(value) = self.cognition.get("retention_state") else {
-            return Ok(CognitionRetentionStore::default());
-        };
-        serde_json::from_value(value.clone()).map_err(WorldError::from)
-    }
-
-    fn cognition_set_retention_store(
-        &mut self,
-        store: &CognitionRetentionStore,
-    ) -> Result<(), WorldError> {
-        let mut projection = self.cognition.as_object().cloned().unwrap_or_default();
-        projection.insert(
-            "retention_state".to_string(),
-            serde_json::to_value(store).map_err(WorldError::from)?,
-        );
-        self.cognition = JsonValue::Object(projection);
-        Ok(())
     }
 }
 

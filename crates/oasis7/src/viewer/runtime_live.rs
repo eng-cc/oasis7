@@ -85,6 +85,8 @@ mod support;
 #[cfg(test)]
 mod tests;
 mod transfer_material_quote;
+#[path = "runtime_live/wake_dispatch.rs"]
+mod wake_dispatch;
 #[path = "runtime_live/war_declaration_quote.rs"]
 mod war_declaration_quote;
 mod world_feed;
@@ -119,6 +121,7 @@ use support::{
     bootstrap_runtime_live_world, is_expected_disconnect_error, is_timeout_error,
     latest_runtime_event_seq, lock_shared_server, runtime_metrics, send_response,
 };
+use wake_dispatch::ensure_viewer_runtime_binding;
 pub const VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID: &str = FORMAL_RELEASE_DEFAULT_WORLD_ID;
 pub struct ViewerRuntimeLiveServer {
     config: ViewerRuntimeLiveServerConfig,
@@ -157,6 +160,7 @@ pub struct ViewerRuntimeLiveServer {
     #[cfg(test)]
     authoritative_recovery_dir_override: Option<PathBuf>,
 }
+
 impl ViewerRuntimeLiveServer {
     pub fn new(
         config: ViewerRuntimeLiveServerConfig,
@@ -231,6 +235,7 @@ impl ViewerRuntimeLiveServer {
                 recovered_generation = Some(generation);
             }
         }
+        ensure_viewer_runtime_binding(&mut world, &config)?;
         let initial_world_time = world.state().time;
         let mut llm_sidecar = match seed_model.as_ref() {
             Some(model) => {
@@ -932,6 +937,7 @@ impl ViewerRuntimeLiveServer {
             // still advances instead of comparing against the method-wide
             // starting time.
             let iteration_logical_time = self.world.state().time;
+            self.sync_runtime_wake_projection()?;
             if let Err(reason) = self
                 .llm_sidecar
                 .ensure_gameplay_ready(&self.world, &self.snapshot_config)
@@ -1043,6 +1049,7 @@ impl ViewerRuntimeLiveServer {
                     );
                 }
             }
+            self.sync_runtime_wake_projection()?;
             session.transient_play_failures = 0;
             if self.world.state().time > baseline_logical_time
                 || latest_runtime_event_seq(&self.world) > baseline_event_seq

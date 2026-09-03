@@ -15,7 +15,7 @@ const MAX_ID_BYTES: usize = 128;
 const MAX_PATH_BYTES: usize = 128;
 const MAX_ITEM_BYTES: usize = 768;
 const MAX_LIST_BYTES: usize = 4096;
-const MAX_CONDITIONS: usize = 32;
+const MAX_CONDITIONS: usize = 16;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WakeConditionError {
@@ -73,6 +73,13 @@ pub struct WakeConditionValidator;
 
 impl WakeConditionValidator {
     pub fn validate(conditions: &[WakeConditionV1]) -> Result<(), WakeConditionError> {
+        Self::validate_internal(conditions, true)
+    }
+
+    fn validate_internal(
+        conditions: &[WakeConditionV1],
+        require_canonical_order: bool,
+    ) -> Result<(), WakeConditionError> {
         if conditions.is_empty() {
             return Err(WakeConditionError::new("wake_conditions_empty"));
         }
@@ -81,12 +88,17 @@ impl WakeConditionValidator {
         }
         let mut seen = BTreeSet::new();
         let mut total = 0usize;
+        let mut previous: Option<Vec<u8>> = None;
         for condition in conditions {
             Self::validate_one(condition)?;
             let bytes = Self::canonical_bytes(condition);
             if bytes.len() > MAX_ITEM_BYTES || !seen.insert(bytes.clone()) {
                 return Err(WakeConditionError::new("wake_condition_invalid"));
             }
+            if require_canonical_order && previous.as_ref().is_some_and(|item| item > &bytes) {
+                return Err(WakeConditionError::new("wake_condition_invalid"));
+            }
+            previous = Some(bytes.clone());
             total = total.saturating_add(bytes.len());
             if total > MAX_LIST_BYTES {
                 return Err(WakeConditionError::new("wake_condition_invalid"));
@@ -98,7 +110,7 @@ impl WakeConditionValidator {
     pub fn canonicalize(
         mut conditions: Vec<WakeConditionV1>,
     ) -> Result<Vec<WakeConditionV1>, WakeConditionError> {
-        Self::validate(&conditions)?;
+        Self::validate_internal(&conditions, false)?;
         conditions.sort_by_key(Self::canonical_bytes);
         Ok(conditions)
     }
@@ -197,10 +209,10 @@ impl WakeConditionValidator {
         match condition.kind.as_str() {
             "at_or_after_tick" if exact([true, false, false, false, false, false, false]) => Ok(()),
             "world_event_committed" if exact([false, true, false, false, false, false, false]) => {
-                Self::bounded_text(condition.event_digest.as_deref())
+                Self::canonical_digest(condition.event_digest.as_deref())
             }
             "receipt_linked" if exact([false, false, true, false, false, false, false]) => {
-                Self::bounded_text(condition.receipt_id.as_deref())
+                Self::canonical_digest(condition.receipt_id.as_deref())
             }
             "state_predicate" if exact([false, false, false, true, true, true, true]) => {
                 let subject = condition.subject.as_ref().expect("presence checked");
@@ -256,16 +268,26 @@ impl WakeConditionValidator {
         }
     }
 
-    fn bounded_text(value: Option<&str>) -> Result<(), WakeConditionError> {
+    fn canonical_digest(value: Option<&str>) -> Result<(), WakeConditionError> {
         let Some(value) = value else {
             return Err(WakeConditionError::new("wake_condition_invalid"));
         };
-        if value.is_empty() || value.len() > MAX_ID_BYTES {
-            Err(WakeConditionError::new("wake_condition_invalid"))
-        } else {
+        if valid_blake3_digest(value) {
             Ok(())
+        } else {
+            Err(WakeConditionError::new("wake_condition_invalid"))
         }
     }
+}
+
+fn valid_blake3_digest(value: &str) -> bool {
+    let Some(hex) = value.strip_prefix("blake3:") else {
+        return false;
+    };
+    hex.len() == 64
+        && hex
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
 }
 
 fn valid_predicate_value(path: &str, value: &serde_cbor::Value) -> bool {
@@ -326,7 +348,7 @@ pub struct WakeEvaluationContext {
     event_digests: BTreeSet<String>,
     receipt_ids: BTreeSet<String>,
     gc_references: BTreeSet<String>,
-    predicate_values: BTreeMap<String, Vec<u8>>,
+    predicate_values: BTreeMap<(String, String, String), Vec<u8>>,
 }
 
 impl WakeEvaluationContext {
@@ -358,14 +380,29 @@ impl WakeEvaluationContext {
     }
 
     pub fn with_predicate_value(mut self, path: &str, value: &[u8]) -> Self {
-        self.predicate_values
-            .insert(path.to_string(), value.to_vec());
+        self.predicate_values.insert(
+            (String::new(), String::new(), path.to_string()),
+            value.to_vec(),
+        );
+        self
+    }
+
+    pub fn with_subject_predicate_value(
+        mut self,
+        subject: &PreconditionSubjectV1,
+        path: &str,
+        value: &[u8],
+    ) -> Self {
+        self.predicate_values.insert(
+            (subject.kind.clone(), subject.id.clone(), path.to_string()),
+            value.to_vec(),
+        );
         self
     }
 
     pub fn with_predicate_u64(mut self, path: &str, value: u64) -> Self {
         self.predicate_values.insert(
-            path.to_string(),
+            (String::new(), String::new(), path.to_string()),
             serde_cbor::to_vec(&value).expect("u64 must be CBOR encodable"),
         );
         self
@@ -373,7 +410,7 @@ impl WakeEvaluationContext {
 
     pub fn with_predicate_i64(mut self, path: &str, value: i64) -> Self {
         self.predicate_values.insert(
-            path.to_string(),
+            (String::new(), String::new(), path.to_string()),
             serde_cbor::to_vec(&value).expect("i64 must be CBOR encodable"),
         );
         self
@@ -381,7 +418,7 @@ impl WakeEvaluationContext {
 
     pub fn with_predicate_text(mut self, path: &str, value: &str) -> Self {
         self.predicate_values.insert(
-            path.to_string(),
+            (String::new(), String::new(), path.to_string()),
             serde_cbor::to_vec(&value).expect("text must be CBOR encodable"),
         );
         self
@@ -415,7 +452,16 @@ impl WakeEvaluationContext {
             }
             "state_predicate" => {
                 let path = condition.path_or_rule.as_deref().unwrap_or_default();
-                let Some(actual) = self.predicate_values.get(path) else {
+                let empty_subject = PreconditionSubjectV1::default();
+                let subject = condition.subject.as_ref().unwrap_or(&empty_subject);
+                let Some(actual) = self
+                    .predicate_values
+                    .get(&(subject.kind.clone(), subject.id.clone(), path.to_string()))
+                    .or_else(|| {
+                        self.predicate_values
+                            .get(&(String::new(), String::new(), path.to_string()))
+                    })
+                else {
                     return (false, false);
                 };
                 let expected = condition
@@ -578,8 +624,6 @@ impl CognitionContinuationProposalV1 {
     /// Recompute the canonical paired-schema digest. Runtime-derived
     /// branch/finality and wake-tick fields are intentionally excluded.
     pub fn proposal_digest(&self) -> String {
-        let mut wake_conditions = self.wake_conditions.clone();
-        wake_conditions.sort_by_key(WakeConditionValidator::canonical_bytes);
         let payload = ContinuationProposalDigestInput {
             schema_version: self.schema_version,
             continuation_proposal_id: &self.continuation_proposal_id,
@@ -599,7 +643,7 @@ impl CognitionContinuationProposalV1 {
             policy_revision: self.policy_revision,
             precondition_summary: &self.precondition_summary,
             precondition_digest: &self.precondition_digest,
-            wake_conditions,
+            wake_conditions: self.wake_conditions.clone(),
             valid_until_tick: self.valid_until_tick,
             source: &self.source,
         };
@@ -631,6 +675,10 @@ impl CognitionContinuationProposalV1 {
                 .is_some_and(|value| !bounded(value))
             || self.remaining_budget.value == 0
             || !matches!(self.remaining_budget.unit.as_str(), "steps" | "ticks")
+            || !crate::runtime::cognition::finality_binding_is_legal(
+                &self.finality_status,
+                self.finality_block_hash.as_deref(),
+            )
             || WakeConditionValidator::validate(self.wake_conditions.as_slice()).is_err()
             || self.proposal_digest != self.proposal_digest()
         {
@@ -779,6 +827,10 @@ impl AgentContinuation {
                 .is_some_and(|value| !bounded(value))
             || (self.remaining_budget.value == 0 && !terminal)
             || !matches!(self.remaining_budget.unit.as_str(), "steps" | "ticks")
+            || !crate::runtime::cognition::finality_binding_is_legal(
+                &self.finality_status,
+                self.finality_block_hash.as_deref(),
+            )
         {
             return Err(WakeConditionError::new("recovery_pending"));
         }
