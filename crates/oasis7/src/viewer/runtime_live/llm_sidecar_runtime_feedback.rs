@@ -348,15 +348,14 @@ impl RuntimeLlmSidecar {
             request.agent_subject.as_str(),
             request.agent_session_id.as_str(),
         );
-        let fallback_sequence = self
-            .provider_feedback_seq
-            .get(request.agent_subject.as_str())
-            .copied()
-            .unwrap_or(1);
         let feedback_seq = self
             .provider_feedback_seq_by_session
             .entry(session_key)
-            .or_insert(fallback_sequence);
+            // Compatibility feedback cursors are intentionally scoped to the
+            // Runtime Agent session. The legacy per-agent cursor remains a
+            // high-water mark for migration/observability, but must never
+            // seed a fresh session and leak sequence state across sessions.
+            .or_insert(1);
         let sequence = (*feedback_seq).max(1);
         *feedback_seq = sequence.saturating_add(1);
         self.provider_feedback_seq
