@@ -52,7 +52,7 @@
 
 | node_id | role | host / lane | stack root | service manager | bounded evidence endpoint |
 | --- | --- | --- | --- | --- | --- |
-| `triad-testnet-sequencer` | validator / sequencer | `root@39.104.204.172` | `/opt/oasis7/p2p-testnet` | `oasis7-triad-sequencer.service` | `http://127.0.0.1:6631/v1/chain/rebuild-proof` + `identity-receipt` |
+| `triad-testnet-sequencer` | validator / sequencer | `root@39.104.204.172` | `/opt/oasis7/p2p-testnet` | `oasis7-triad-sequencer.service` | `http://127.0.0.1:6631/v1/chain/rebuild-proof` + governed `identity-receipt-v2` sidecar |
 | `triad-testnet-storage` | validator / storage | `root@39.104.205.67` | `/opt/oasis7/p2p-testnet` | `oasis7-triad-storage.service` | `http://127.0.0.1:6632/v1/chain/status` |
 | `triad-testnet-local` | observer | Linux LAN observer | `/opt/oasis7/p2p-testnet-local` | `oasis7-testnet-observer.service` | `http://127.0.0.1:6633/v1/chain/status` |
 | `triad-testnet-windows-observer` | observer | Windows observer | `C:\oasis7-deploy` | scheduled task `Oasis7Observer` | `http://127.0.0.1:5121/v1/chain/status` |
@@ -80,14 +80,21 @@ the same operator window:
    bounded top-level fields `schema_version`, `observed_at_unix_ms`, `ok`,
    `liveness`, `readiness`, `heights`, `network_head`, `checkpoint`,
    `local_peer_id`, `connected_peers`, `connected_peer_count`, and `proof`.
-2. `identity-receipt` returns the governed signed `oasis7.identity_receipt.v2`
-   envelope; it never emits private key bytes or creates/repairs the key. It
-   binds `signed_payload_sha256` to the SHA-256 of the exact raw
-   `oasis7.identity_receipt.v1` bytes as emitted, before parsing, normalization,
-   projection, or reserialization; it carries `signature_hex`,
-   `canonical_digest`, and mandatory `node_id`, `peer_id`, `key_sha256`,
-   `key_size_bytes`, `key_mode`, `key_uid`, and `key_gid`. The v1 `key_path` is
-   a host-side audit reference only and is never a direct-admission field.
+2. `scripts/p2p-public-testnet-identity-receipt-v2.py` returns the governed
+   signed `oasis7.identity_receipt.v2` envelope. The sidecar consumes the exact
+   raw `oasis7.identity_receipt.v1` byte capture with `--raw-v1`, combines it
+   with the deployment-truth v2 template, and writes the envelope with
+   `--template` and `--out`; the raw v1 object is never itself admitted. The
+   sidecar never emits private key bytes or creates/repairs the key. It binds
+   `signed_payload_sha256` to the SHA-256 of the exact raw v1 bytes before
+   parsing, normalization, projection, or reserialization; it carries
+   `signature_hex`, `canonical_digest`, and mandatory `node_id`, `peer_id`,
+   `key_sha256`, `key_size_bytes`, `key_mode`, `key_uid`, and `key_gid`. The v1
+   `key_path` is a host-side audit reference only and is never a
+   direct-admission field. The template must come from current deployment truth
+   and preserve the existing signer, verifier, trust-root, task/head/plan,
+   capture-window, rotation, issued, and expiry bindings; it is not copied from
+   an unverified receipt.
 The pair input manifest must represent each v2 receipt as an object carrying
 `path`, `role`, `expected_node_id`, `expected_peer_id`, `expected_key_mode`,
 `expected_key_uid`, and `expected_key_gid`; these expectations come from the
@@ -275,9 +282,8 @@ phase、rollback/recovery、readiness 或 release 判断。
 # surface; do not feed its full /v1/chain/status payload into a rebuild gate.
 curl -fsS http://39.104.204.172:6631/v1/chain/rebuild-proof \
   > .tmp/public-testnet-sequencer-204-rebuild-proof.json
-ssh root@39.104.204.172 \
-  '/opt/oasis7/p2p-testnet/current/bin/oasis7_chain_runtime identity-receipt --config-dir /opt/oasis7/p2p-testnet/config --node-id <sequencer-node-id>' \
-  > .tmp/public-testnet-sequencer-204-identity-receipt.json
+ssh root@39.104.204.172 '/opt/oasis7/p2p-testnet/current/bin/oasis7_chain_runtime identity-receipt --node-id "<sequencer-node-id>" --config-dir /opt/oasis7/p2p-testnet/config' > .tmp/public-testnet-sequencer-204-identity-receipt.v1.raw
+python3 scripts/p2p-public-testnet-identity-receipt-v2.py --raw-v1 .tmp/public-testnet-sequencer-204-identity-receipt.v1.raw --template "<governed-sequencer-204-identity-receipt.v2.template.json>" --out .tmp/public-testnet-sequencer-204-identity-receipt.json
 <verified-runtime>/oasis7_chain_runtime verify-rebuild-proof \
   --proof .tmp/public-testnet-sequencer-204-rebuild-proof.json \
   --trusted-signer-id <sequencer-node-id> \
@@ -784,9 +790,8 @@ bounded same-window artifact。204 的输入先按 2.2.1 采集、独立验证�
 ```bash
 curl -fsS http://39.104.204.172:6631/v1/chain/rebuild-proof \
   > .tmp/public-testnet-sequencer-204-rebuild-proof.json
-ssh root@39.104.204.172 \
-  '/opt/oasis7/p2p-testnet/current/bin/oasis7_chain_runtime identity-receipt --config-dir /opt/oasis7/p2p-testnet/config --node-id <sequencer-node-id>' \
-  > .tmp/public-testnet-sequencer-204-identity-receipt.json
+ssh root@39.104.204.172 '/opt/oasis7/p2p-testnet/current/bin/oasis7_chain_runtime identity-receipt --node-id "<sequencer-node-id>" --config-dir /opt/oasis7/p2p-testnet/config' > .tmp/public-testnet-sequencer-204-identity-receipt.v1.raw
+python3 scripts/p2p-public-testnet-identity-receipt-v2.py --raw-v1 .tmp/public-testnet-sequencer-204-identity-receipt.v1.raw --template "<governed-sequencer-204-identity-receipt.v2.template.json>" --out .tmp/public-testnet-sequencer-204-identity-receipt.json
 <verified-runtime>/oasis7_chain_runtime verify-rebuild-proof \
   --proof .tmp/public-testnet-sequencer-204-rebuild-proof.json \
   --trusted-signer-id <sequencer-node-id> \
@@ -929,9 +934,8 @@ rollback runtime 优先从唯一的 `backup-manifest.json` 或 `backup-provenanc
 ```bash
 curl -fsS http://39.104.204.172:6631/v1/chain/rebuild-proof \
   > .tmp/public-testnet-sequencer-204-rebuild-proof.json
-ssh root@39.104.204.172 \
-  '/opt/oasis7/p2p-testnet/current/bin/oasis7_chain_runtime identity-receipt --config-dir /opt/oasis7/p2p-testnet/config --node-id <sequencer-node-id>' \
-  > .tmp/public-testnet-sequencer-204-identity-receipt.json
+ssh root@39.104.204.172 '/opt/oasis7/p2p-testnet/current/bin/oasis7_chain_runtime identity-receipt --node-id "<sequencer-node-id>" --config-dir /opt/oasis7/p2p-testnet/config' > .tmp/public-testnet-sequencer-204-identity-receipt.v1.raw
+python3 scripts/p2p-public-testnet-identity-receipt-v2.py --raw-v1 .tmp/public-testnet-sequencer-204-identity-receipt.v1.raw --template "<governed-sequencer-204-identity-receipt.v2.template.json>" --out .tmp/public-testnet-sequencer-204-identity-receipt.json
 <verified-runtime>/oasis7_chain_runtime verify-rebuild-proof \
   --proof .tmp/public-testnet-sequencer-204-rebuild-proof.json \
   --trusted-signer-id <sequencer-node-id> \

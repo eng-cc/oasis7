@@ -102,6 +102,8 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 "expires_at": expires_at,
             }
         )
+        raw_v1 = self._raw_runtime_identity_receipt_v1_bytes(receipt)
+        receipt["signed_payload_sha256"] = hashlib.sha256(raw_v1).hexdigest()
         receipt["canonical_digest"] = self.module._canonical_receipt_digest(
             receipt, excluded_fields=frozenset({"peer_id"})
         )
@@ -823,6 +825,13 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
         for node in request["nodes"]:
             node["identity_receipt"]["key_uid"] = 1001
             node["identity_receipt"]["key_gid"] = 1002
+            identity = node["identity_receipt"]
+            identity["signed_payload_sha256"] = hashlib.sha256(
+                self._raw_runtime_identity_receipt_v1_bytes(identity)
+            ).hexdigest()
+            identity["canonical_digest"] = self.module._canonical_receipt_digest(
+                identity, excluded_fields=frozenset({"peer_id"})
+            )
 
         plan = self.module.build_plan(request)
         for node in plan["nodes"]:
@@ -1581,6 +1590,96 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             str(raised.exception),
             r"(?i)identity|payload|digest|signature|binding|key",
         )
+
+    def test_executable_v2_sidecar_binds_exact_runtime_raw_v1_bytes(self) -> None:
+        """The governed sidecar must hash the exact runtime bytes, including its key path."""
+        producer = ROOT / "scripts" / "p2p-public-testnet-identity-receipt-v2.py"
+        self.assertTrue(producer.is_file(), f"missing executable v2 producer: {producer}")
+        self.assertNotEqual(producer.stat().st_mode & 0o111, 0, producer)
+
+        request = self._input()
+        identity = request["nodes"][0]["identity_receipt"]
+        runtime_key_path = "/opt/oasis7/p2p-testnet/config/node-keypair.toml"
+        raw_v1 = self._raw_runtime_identity_receipt_v1_bytes(
+            identity, key_path=runtime_key_path
+        )
+        template = dict(identity)
+        template.update(
+            {
+                "signed_payload_sha256": "a" * 64,
+                "signature_hex": "d" * 128,
+                "canonical_digest": "c" * 64,
+            }
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw_path = root / "identity-receipt.v1.raw"
+            template_path = root / "identity-receipt.v2.template.json"
+            output_path = root / "identity-receipt.v2.json"
+            raw_path.write_bytes(raw_v1)
+            template_path.write_text(
+                json.dumps(template, sort_keys=True), encoding="utf-8"
+            )
+            result = subprocess.run(
+                [
+                    "python3",
+                    str(producer),
+                    "--raw-v1",
+                    str(raw_path),
+                    "--template",
+                    str(template_path),
+                    "--out",
+                    str(output_path),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            envelope = json.loads(output_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(envelope["schema_version"], self.module.IDENTITY_RECEIPT_SCHEMA)
+        self.assertEqual(set(envelope), self.module.IDENTITY_RECEIPT_FIELDS)
+        self.assertEqual(
+            envelope["signed_payload_sha256"], hashlib.sha256(raw_v1).hexdigest()
+        )
+        self.assertNotEqual(
+            envelope["signed_payload_sha256"],
+            hashlib.sha256(
+                self._raw_runtime_identity_receipt_v1_bytes(identity)
+            ).hexdigest(),
+        )
+        self.assertNotIn("key_path", envelope)
+        self.assertEqual(
+            envelope["canonical_digest"],
+            self.module._canonical_receipt_digest(
+                envelope, excluded_fields=frozenset({"peer_id"})
+            ),
+        )
+
+    def test_plan_projects_identity_commands_through_governed_v2_sidecar(self) -> None:
+        """Every authoritative identity command must use the executable v2 sidecar."""
+        runbook = (
+            ROOT / "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("p2p-public-testnet-identity-receipt-v2.py", runbook)
+        self.assertIn("--raw-v1", runbook)
+        self.assertIn("--template", runbook)
+        self.assertIn("--out", runbook)
+        self.assertNotIn("oasis7_chain_runtime identity-receipt --config-dir", runbook)
+
+    def test_plan_rejects_synthetic_identity_digest_and_signature_pair(self) -> None:
+        """The all-a/all-b fixture pair must never become an apply-ready identity."""
+        request = self._input()
+        identity = request["nodes"][0]["identity_receipt"]
+        identity["signed_payload_sha256"] = "a" * 64
+        identity["signature_hex"] = "b" * 128
+        identity["canonical_digest"] = self.module._canonical_receipt_digest(
+            identity, excluded_fields=frozenset({"peer_id"})
+        )
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)identity|payload|digest|placeholder")
 
     def test_governed_bootstrap_runbook_describes_v2_identity_envelope_boundary(self) -> None:
         """The authoritative runbook must retire raw v1 direct admission and specify v2."""

@@ -138,8 +138,6 @@ CANONICAL_PROVIDER_UID = {
     "macos-observer": 0,
 }
 RAW_IDENTITY_RECEIPT_V1_KEY_PATH = "/operator/keys/node-keypair.toml"
-SYNTHETIC_RECEIPT_SIGNATURE_HEX = "b" * 128
-SYNTHETIC_RECEIPT_DIGEST_HEX = "a" * 64
 OID_RE = re.compile(r"^[0-9a-fA-F]{40,64}$")
 HEX64_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 SIGNATURE_RE = re.compile(r"^[0-9a-fA-F]{128}$")
@@ -415,11 +413,6 @@ def _validate_identity_raw_v1_digest(
     ).lower()
     if not HEX64_RE.fullmatch(signed_payload):
         _fail(f"{label}.signed_payload_sha256 must be a 64-character digest")
-    if (
-        signed_payload == SYNTHETIC_RECEIPT_DIGEST_HEX
-        and identity_receipt.get("signature_hex") == SYNTHETIC_RECEIPT_SIGNATURE_HEX
-    ):
-        return
     expected = hashlib.sha256(
         _canonical_raw_identity_receipt_v1_bytes(identity_receipt)
     ).hexdigest()

@@ -252,8 +252,6 @@ MAX_CLOCK_SKEW_SECONDS = 5
 # carries the digest of those exact bytes; this path is the canonical key-path
 # binding used when reconstructing the bytes for admission checks.
 RAW_IDENTITY_RECEIPT_V1_KEY_PATH = "/operator/keys/node-keypair.toml"
-SYNTHETIC_RECEIPT_SIGNATURE_HEX = "b" * 128
-SYNTHETIC_RECEIPT_DIGEST_HEX = "a" * 64
 
 
 def die(message: str) -> NoReturn:
@@ -459,22 +457,11 @@ def _canonical_raw_identity_receipt_v1_bytes(
 def _validate_identity_raw_v1_digest(
     identity_receipt: dict[str, Any], label: str
 ) -> None:
-    """Ensure the v2 payload digest cannot be rebound after key metadata drift.
-
-    Existing offline fixtures use an unmistakable all-``a``/all-``b`` digest
-    and signature as shape placeholders.  They remain accepted until the
-    independent verifier seam is reached; real envelopes and any non-fixture
-    digest must be bound to the canonical raw-v1 bytes here as well.
-    """
+    """Ensure the v2 payload digest cannot be rebound after raw-v1 drift."""
     signed_payload = require_hex(
         identity_receipt.get("signed_payload_sha256"),
         f"{label}.signed_payload_sha256",
     )
-    if (
-        signed_payload == SYNTHETIC_RECEIPT_DIGEST_HEX
-        and identity_receipt.get("signature_hex") == SYNTHETIC_RECEIPT_SIGNATURE_HEX
-    ):
-        return
     expected = hashlib.sha256(
         _canonical_raw_identity_receipt_v1_bytes(identity_receipt)
     ).hexdigest()

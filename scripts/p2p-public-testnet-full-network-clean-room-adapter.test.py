@@ -627,6 +627,22 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
             self.adapter.validate_plan(plan)
         self.assertRegex(str(raised.exception), r"(?i)identity.*schema|unsupported|v1|receipt")
 
+    def test_adapter_rejects_synthetic_identity_digest_and_signature_pair(self) -> None:
+        """The adapter must not admit the reserved all-a/all-b placeholder pair."""
+        plan = copy.deepcopy(self.plan)
+        identity = plan["nodes"][0]["identity_receipt"]
+        identity["signed_payload_sha256"] = "a" * 64
+        identity["signature_hex"] = "b" * 128
+        identity["canonical_digest"] = self.adapter._canonical_receipt_digest(
+            identity, excluded_fields=frozenset({"peer_id"})
+        )
+        plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+        with self.assertRaises(self.adapter.AdapterError) as raised:
+            self.adapter.validate_plan(plan)
+        self.assertRegex(
+            str(raised.exception), r"(?i)identity|payload|digest|placeholder"
+        )
+
     def test_rejects_fake_head_signature_and_peer(self) -> None:
         authority = self._authority()
         authority["frozen_head_oid"] = "f" * 40
@@ -2336,6 +2352,13 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         for node in request["nodes"]:
             node["identity_receipt"]["key_uid"] = 1001
             node["identity_receipt"]["key_gid"] = 1002
+            identity = node["identity_receipt"]
+            identity["signed_payload_sha256"] = hashlib.sha256(
+                self.fixture._raw_runtime_identity_receipt_v1_bytes(identity)
+            ).hexdigest()
+            identity["canonical_digest"] = self.adapter._canonical_receipt_digest(
+                identity, excluded_fields=frozenset({"peer_id"})
+            )
         plan = self._bind_test_ledger(self.planner.build_plan(request))
         self.adapter.validate_plan(plan)
 
@@ -2622,6 +2645,13 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
             rotated["deployment_inventory"]["nodes"][name]["peer_id"] = rotated_peer
             node = next(item for item in rotated["nodes"] if item["name"] == name)
             node["identity_receipt"]["peer_id"] = rotated_peer
+            identity = node["identity_receipt"]
+            identity["signed_payload_sha256"] = hashlib.sha256(
+                self.fixture._raw_runtime_identity_receipt_v1_bytes(identity)
+            ).hexdigest()
+            identity["canonical_digest"] = self.adapter._canonical_receipt_digest(
+                identity, excluded_fields=frozenset({"peer_id"})
+            )
         rotated["deployment_inventory"]["receipt"]["signed_payload_sha256"] = (
             inventory_payload_digest(rotated["deployment_inventory"])
         )
