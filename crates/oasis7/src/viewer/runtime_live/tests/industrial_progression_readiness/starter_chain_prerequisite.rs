@@ -100,7 +100,7 @@ fn runtime_rejects_assembler_atomically_before_starter_smelter_settlement() {
 }
 
 #[test]
-fn starter_milestone_survives_history_compaction_latest_recipe_and_restart() {
+fn starter_milestone_survives_latest_recipe_and_restart() {
     let _guard = lock_test_llm_env();
     let (mut server, agent_id, public_key, private_key) =
         setup_runtime_industrial_gameplay_session(81);
@@ -159,45 +159,38 @@ fn starter_milestone_survives_history_compaction_latest_recipe_and_restart() {
     );
     server
         .world
-        .set_ledger_material_balance(smelter_site_ledger, "copper_ore", 400)
-        .expect("seed compaction recipes");
+        .set_ledger_material_balance(smelter_site_ledger, "copper_ore", 10)
+        .expect("seed later recipe");
     server
         .world
         .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Electricity, i64::MAX)
-        .expect("fund compaction recipes");
+        .expect("fund later recipe");
+    let completed_before = server.world.state().industry_progress.completed_recipe_jobs;
     server
-        .world
-        .set_material_balance("hardware_part", 1_000)
-        .expect("fund compaction maintenance");
-
-    for offset in 0..64_u64 {
-        let completed_before = server.world.state().industry_progress.completed_recipe_jobs;
-        server
-            .handle_gameplay_action(signed_gameplay_action_request(
-                crate::viewer::GameplayActionRequest {
-                    action_id: crate::viewer::ACTION_SCHEDULE_SMELTER_COPPER_WIRE.to_string(),
-                    target_agent_id: agent_id.clone(),
-                    actor_agent_id: None,
-                    player_id: "player-a".to_string(),
-                    public_key: None,
-                    auth: None,
-                },
-                1_000 + offset,
-                public_key.as_str(),
-                private_key.as_str(),
-            ))
-            .expect("queue follow-up recipe");
-        for _ in 0..12 {
-            server.world.step().expect("settle follow-up recipe");
-            if server.world.state().industry_progress.completed_recipe_jobs > completed_before {
-                break;
-            }
+        .handle_gameplay_action(signed_gameplay_action_request(
+            crate::viewer::GameplayActionRequest {
+                action_id: crate::viewer::ACTION_SCHEDULE_SMELTER_COPPER_WIRE.to_string(),
+                target_agent_id: agent_id.clone(),
+                actor_agent_id: None,
+                player_id: "player-a".to_string(),
+                public_key: None,
+                auth: None,
+            },
+            1_000,
+            public_key.as_str(),
+            private_key.as_str(),
+        ))
+        .expect("queue follow-up recipe");
+    for _ in 0..12 {
+        server.world.step().expect("settle follow-up recipe");
+        if server.world.state().industry_progress.completed_recipe_jobs > completed_before {
+            break;
         }
-        assert!(
-            server.world.state().industry_progress.completed_recipe_jobs > completed_before,
-            "follow-up recipe {offset} must settle"
-        );
     }
+    assert!(
+        server.world.state().industry_progress.completed_recipe_jobs > completed_before,
+        "follow-up recipe must settle"
+    );
 
     let state = server.world.state();
     assert_eq!(
@@ -208,17 +201,10 @@ fn starter_milestone_survives_history_compaction_latest_recipe_and_restart() {
         Some("recipe.smelter.copper_wire"),
         "a later recipe must overwrite only the volatile latest-completion projection"
     );
-    assert!(
-        !state.recipe_completion_receipts.values().any(|receipt| {
-            receipt.factory_id == crate::viewer::FACTORY_SMELTER_MK1
-                && receipt.recipe_id == "recipe.smelter.iron_ingot"
-        }),
-        "the first receipt must be eligible for bounded history compaction"
-    );
     let restored: crate::runtime::WorldState = serde_json::from_slice(
-        &serde_json::to_vec(state).expect("serialize post-compaction state"),
+        &serde_json::to_vec(state).expect("serialize state after later recipe"),
     )
-    .expect("restore post-compaction state");
+    .expect("restore state after later recipe");
     assert_eq!(
         restored.industry_progress.starter_industrial_milestone,
         Some(milestone),
@@ -228,7 +214,7 @@ fn starter_milestone_survives_history_compaction_latest_recipe_and_restart() {
         restored
             .starter_industrial_feasibility()
             .candidate_available(),
-        "compaction and restart must not relock the assembler candidate"
+        "later completion and restart must not relock the assembler candidate"
     );
 
     let mut restored_world = crate::runtime::World::new_with_state(restored);

@@ -200,6 +200,36 @@ fn settled_history_rollover_retains_newest_low_action_id() {
     assert!(!state.industry_settlement_orders.contains_key(&100));
 }
 
+#[test]
+fn starter_milestone_survives_settled_history_compaction() {
+    let mut state = WorldState::default();
+    let milestone = StarterIndustrialMilestoneV1 {
+        profile_id: STARTER_INDUSTRIAL_PROFILE_ID.to_string(),
+        profile_revision: STARTER_INDUSTRIAL_PROFILE_REVISION,
+        factory_id: STARTER_SMELTER_FACTORY_ID.to_string(),
+        recipe_id: STARTER_SMELTER_RECIPE_ID.to_string(),
+        output_ledger: MaterialLedgerId::site("starter-site"),
+        settlement_job_id: 1,
+        settled_at: 10,
+    };
+    state.industry_progress.starter_industrial_milestone = Some(milestone.clone());
+    for job_id in 1..=65 {
+        seed_settled_history(&mut state, job_id, job_id);
+    }
+
+    state.compact_settled_industry_history();
+
+    assert_eq!(
+        state.industry_progress.starter_industrial_milestone,
+        Some(milestone),
+        "bounded receipt history must not revoke durable progression"
+    );
+    assert!(
+        !state.recipe_completion_receipts.contains_key(&1),
+        "the receipt backing the milestone must remain independently compactable"
+    );
+}
+
 fn pending_recipe_job(job_id: ActionId) -> RecipeJobState {
     RecipeJobState {
         job_id,
