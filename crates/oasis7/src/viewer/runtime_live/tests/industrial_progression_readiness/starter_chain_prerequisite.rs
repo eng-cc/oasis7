@@ -256,6 +256,15 @@ fn starter_milestone_survives_latest_recipe_and_restart() {
             .candidate_available(),
         "the durable settlement milestone must keep assembler eligibility after the starter smelter is recycled"
     );
+    recycled_smelter_state
+        .factory_construction_power_profiles
+        .remove(crate::viewer::FACTORY_ASSEMBLER_MK1);
+    assert!(
+        !recycled_smelter_state
+            .starter_industrial_feasibility()
+            .candidate_available(),
+        "the milestone replaces only the recycled smelter prerequisite, not current assembler authority"
+    );
 
     let expected_feasibility = restored.starter_industrial_feasibility();
     let projected = server

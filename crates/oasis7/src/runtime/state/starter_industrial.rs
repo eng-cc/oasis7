@@ -196,6 +196,32 @@ impl WorldState {
                     && milestone.recipe_id == STARTER_SMELTER_RECIPE_ID
             });
         if milestone_matches {
+            let assembler_profile_ready = self
+                .factory_profiles
+                .get(STARTER_ASSEMBLER_FACTORY_ID)
+                .is_some_and(|profile| {
+                    profile.factory_id == STARTER_ASSEMBLER_FACTORY_ID
+                        && profile.tags.iter().any(|tag| tag == "assembler")
+                });
+            let assembler_power_profile_ready = self
+                .factory_construction_power_profiles
+                .get(STARTER_ASSEMBLER_FACTORY_ID)
+                .is_some_and(|profile| {
+                    profile.factory_id == STARTER_ASSEMBLER_FACTORY_ID
+                        && profile.active
+                        && profile.authority_revision > 0
+                });
+            if !assembler_profile_ready || !assembler_power_profile_ready {
+                return base(
+                    StarterIndustrialFeasibilityStatus::NoSafeStarterChain,
+                    "unknown/not_tracked",
+                    Some(format!(
+                        "starter assembler authority is incomplete after milestone settlement: assembler_profile={assembler_profile_ready} assembler_power_profile={assembler_power_profile_ready}"
+                    )),
+                    "refresh_starter_assembler_authority",
+                    "none",
+                );
+            }
             return base(
                 StarterIndustrialFeasibilityStatus::CandidateAvailable,
                 "durable-milestone-backed",
