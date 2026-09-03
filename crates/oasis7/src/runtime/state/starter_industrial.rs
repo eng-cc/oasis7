@@ -211,10 +211,11 @@ impl WorldState {
                 profile.factory_id == STARTER_ASSEMBLER_FACTORY_ID
                     && profile.tags.iter().any(|tag| tag == "assembler")
             });
-        let recipe_profile_ready = self
-            .recipe_profiles
-            .get(STARTER_SMELTER_RECIPE_ID)
-            .is_some_and(|profile| profile.recipe_id == STARTER_SMELTER_RECIPE_ID);
+        // The map key is the canonical governed recipe identity. Module-backed
+        // profiles may retain their module identity in the payload, so
+        // requiring the payload string to repeat the key would reject a
+        // valid authority projection.
+        let recipe_profile_ready = self.recipe_profiles.contains_key(STARTER_SMELTER_RECIPE_ID);
         let site_authority_ready = self
             .factory_site_authorities
             .get(smelter_factory.site_id.as_str())
