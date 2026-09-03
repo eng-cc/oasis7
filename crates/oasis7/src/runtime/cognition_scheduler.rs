@@ -105,7 +105,8 @@ pub struct SchedulerWakeV1 {
     pub world_id: String,
     pub branch_id: String,
     pub finality_epoch: u64,
-    pub finality_block_hash: String,
+    #[serde(default)]
+    pub finality_block_hash: Option<String>,
     pub finality_status: String,
     pub reorg_epoch: u64,
     pub runtime_manifest_hash: String,
@@ -134,7 +135,10 @@ impl SchedulerWakeV1 {
             || !bounded(&self.continuation_id)
             || !bounded(&self.world_id)
             || !bounded(&self.branch_id)
-            || !bounded(&self.finality_block_hash)
+            || self
+                .finality_block_hash
+                .as_deref()
+                .is_some_and(|hash| !bounded(hash))
             || !bounded(&self.finality_status)
             || !bounded(&self.runtime_manifest_hash)
             || !bounded(&self.agent_id)
@@ -146,8 +150,7 @@ impl SchedulerWakeV1 {
             || self.status != "pending"
             || !crate::runtime::cognition::finality_binding_is_legal(
                 &self.finality_status,
-                (self.finality_block_hash != "genesis")
-                    .then_some(self.finality_block_hash.as_str()),
+                self.finality_block_hash.as_deref(),
             )
         {
             return Err(SchedulerError::new("invalid_scheduler_wake"));

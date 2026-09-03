@@ -36,6 +36,7 @@ pub(super) struct RuntimePendingAction {
     /// delivered at most once.
     pub(super) feedback_emitted: bool,
 }
+
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub(in crate::viewer::runtime_live) struct RuntimeProviderActionContext {
     pub(in crate::viewer::runtime_live) request: cognition_context::ProviderContextState,
@@ -92,6 +93,8 @@ mod runtime_feedback;
 mod runtime_support;
 #[path = "llm_sidecar_stale.rs"]
 mod stale_replan;
+#[path = "llm_sidecar_world_events.rs"]
+mod world_events;
 use self::agent_chat_support::{
     RuntimeProviderAgentChatFailure, RuntimeProviderAgentChatRequestError,
 };
@@ -111,6 +114,7 @@ pub(in crate::viewer::runtime_live) use self::runtime_support::{
 use self::stale_replan::{
     MAX_PROVIDER_STALE_REPLANS, ProviderStaleReplanCause, ProviderStaleReplanState,
 };
+use self::world_events::RuntimePendingProviderWorldEvent;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(in crate::viewer::runtime_live) struct ProviderDecisionSettings {
@@ -225,6 +229,7 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     provider_late_response_diagnostics:
         VecDeque<lineage_persistence::ProviderLateResponseDiagnostic>,
     provider_held_decisions: BTreeMap<String, async_support::RuntimeLlmDecision>,
+    pending_provider_world_events: BTreeMap<String, RuntimePendingProviderWorldEvent>,
     provider_lineage_store: Option<PathBuf>,
     provider_lineage_binding: Option<RuntimeBindingV1>,
     provider_lineage_restored: bool,
@@ -272,6 +277,7 @@ impl RuntimeLlmSidecar {
             provider_terminal_states: BTreeMap::new(),
             provider_late_response_diagnostics: VecDeque::new(),
             provider_held_decisions: BTreeMap::new(),
+            pending_provider_world_events: BTreeMap::new(),
             provider_lineage_store: None,
             provider_lineage_binding: None,
             provider_lineage_restored: false,
@@ -1120,44 +1126,6 @@ impl RuntimeLlmSidecar {
             decision_trace: tick.decision_trace,
             cognition,
         })
-    }
-
-    /// Deliver an authoritative production completion to its owning Agent.
-    /// Runtime-live receives the full runtime receipt through `mapped_event`,
-    /// while the simulator behavior owns coverage state and replay idempotence.
-    pub(in crate::viewer::runtime_live) fn notify_recipe_completion_if_needed(
-        &mut self,
-        runtime_event: &RuntimeWorldEvent,
-        mapped_event: WorldEvent,
-    ) {
-        let RuntimeWorldEventBody::Domain(RuntimeDomainEvent::RecipeCompleted {
-            requester_agent_id,
-            ..
-        }) = &runtime_event.body
-        else {
-            return;
-        };
-
-        let Some(runner) = self.runner.as_mut() else {
-            return;
-        };
-        match runner {
-            RuntimeDecisionRunner::Builtin(runner) => {
-                if let Some(agent) = runner.get_mut(requester_agent_id.as_str()) {
-                    agent.behavior.on_event(&mapped_event);
-                }
-            }
-            #[cfg(not(target_arch = "wasm32"))]
-            RuntimeDecisionRunner::ProviderBacked(runner) => {
-                let _ = runner.notify_world_event(requester_agent_id.as_str(), mapped_event);
-            }
-            #[cfg(target_arch = "wasm32")]
-            RuntimeDecisionRunner::ProviderBacked(runner) => {
-                if let Some(agent) = runner.get_mut(requester_agent_id.as_str()) {
-                    agent.behavior.on_event(&mapped_event);
-                }
-            }
-        }
     }
 
     fn sync_shadow_kernel(

@@ -61,6 +61,9 @@ impl RuntimeLlmSidecar {
         kernel: &mut WorldKernel,
         world_id: &str,
     ) -> Result<(), String> {
+        // The wasm runner uses this path instead of the native async poll;
+        // keep durable provider notifications retryable on both lanes.
+        self.flush_pending_provider_world_events();
         self.hydrate_provider_lineage(world);
         let settings = provider_settings_from_env()?.ok_or_else(|| {
             "provider settings disappeared before context preparation".to_string()
@@ -102,6 +105,11 @@ impl RuntimeLlmSidecar {
             let context = if runtime_wake.is_none()
                 && let Some(mut retry) = self.provider_retry_contexts.remove(&agent_id)
             {
+                if retry.request_context.transport_attempt >= MAX_PROVIDER_TRANSPORT_ATTEMPTS {
+                    self.provider_transport_exhausted.insert(agent_id.clone());
+                    self.persist_provider_lineage_best_effort();
+                    continue;
+                }
                 retry.request_context.transport_attempt =
                     retry.request_context.transport_attempt.saturating_add(1);
                 retry

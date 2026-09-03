@@ -116,6 +116,24 @@ fn prepared_only_is_not_guessable_and_keeps_r_parent() {
 }
 
 #[test]
+fn aborted_marker_is_a_terminal_no_effect_recovery_disposition() {
+    let mut fixture = fixture(CognitionCrashPrefix::PreparedOnly);
+    fixture.commit_record.status = "aborted".to_string();
+    fixture.commit_record.abort_reason = Some("cancelled".to_string());
+
+    let report = recover(fixture);
+    assert_eq!(report["disposition"], "aborted");
+    assert_eq!(report["reject_reason"], "cancelled");
+    assert_eq!(report["world_root"]["state_root"], R_PARENT);
+    assert_eq!(report["world_root"]["head_status"], "canonical");
+    assert!(report["receipt"].is_null());
+    assert_eq!(report["effect_count"], 0);
+    assert_eq!(report["debit_count"], 0);
+    assert_eq!(report["provider_invocation_count"], 0);
+    assert_eq!(report["kernel_invocation_count"], 0);
+}
+
+#[test]
 fn committed_marker_publishes_r_next_and_exact_recorded_receipt_once() {
     let report = recover(fixture(CognitionCrashPrefix::Committed));
     assert_eq!(report["world_root"]["state_root"], R_NEXT);

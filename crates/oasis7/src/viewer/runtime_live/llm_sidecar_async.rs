@@ -71,6 +71,9 @@ impl RuntimeLlmSidecar {
         kernel: &mut WorldKernel,
         world_id: &str,
     ) -> Option<RuntimeLlmDecision> {
+        // Retry notifications that survived a previous chain-link tick or
+        // process restart before admitting another provider turn.
+        self.flush_pending_provider_world_events();
         let completed = {
             let Some(RuntimeDecisionRunner::ProviderBacked(runner)) = self.runner.as_mut() else {
                 return Some(RuntimeLlmDecision::from_error(

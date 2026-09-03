@@ -1,5 +1,139 @@
 use super::*;
 
+fn test_provider_context(
+    agent_id: &str,
+    agent_turn_id: &str,
+    decision_request_id: &str,
+    transport_attempt: u64,
+) -> cognition_context::ProviderContextState {
+    let request_context = crate::simulator::ContinuousAgentRequestContextV1 {
+        base_decision_request: crate::simulator::DecisionRequest {
+            observation: crate::simulator::ObservationEnvelope {
+                agent_id: agent_id.to_string(),
+                world_time: 12,
+                mode: crate::simulator::ProviderExecutionMode::PlayerParity,
+                observation_schema_version:
+                    crate::simulator::DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION.to_string(),
+                action_schema_version: crate::simulator::DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION
+                    .to_string(),
+                environment_class: Some("runtime_live".to_string()),
+                fallback_reason: None,
+                observation: crate::simulator::ProviderObservation {
+                    self_state: crate::simulator::ProviderSelfState {
+                        location_ref: "loc-0".to_string(),
+                        pose_hint: "origin".to_string(),
+                        status_flags: Vec::new(),
+                        resource_summary: BTreeMap::new(),
+                    },
+                    mission_context: crate::simulator::ProviderMissionContext {
+                        goal_summary: "test goal".to_string(),
+                        blocked_reason: None,
+                    },
+                    nearby_entities: Vec::new(),
+                    recent_events: Vec::new(),
+                    local_navigation_graph: Vec::new(),
+                    hazard_summary: Vec::new(),
+                    interaction_targets: Vec::new(),
+                },
+                recent_event_summary: Vec::new(),
+                memory_summary: None,
+                action_catalog: Vec::new(),
+                module_command_catalog: Vec::new(),
+                timeout_budget_ms: 100,
+            },
+            provider_config_ref: None,
+            agent_profile: None,
+            fixture_id: None,
+            replay_id: None,
+            capability_catalog: None,
+            capability_invocation_context: None,
+            timeout_budget_ms: 100,
+        },
+        context_discriminator: crate::simulator::CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR.to_string(),
+        context_version: crate::simulator::CONTINUOUS_AGENT_CONTEXT_VERSION,
+        protocol_version: "oasis7.continuous-agent-request.v1".to_string(),
+        agent_session_id: "session-test".to_string(),
+        agent_turn_id: agent_turn_id.to_string(),
+        decision_request_id: decision_request_id.to_string(),
+        retry_seq: 1,
+        transport_attempt,
+        agent_subject: agent_id.to_string(),
+        runtime_binding: crate::simulator::RuntimeBindingV1 {
+            world_id: "world".to_string(),
+            branch_id: "main".to_string(),
+            finality_epoch: 0,
+            finality_block_hash: None,
+            finality_status: "pending".to_string(),
+            base_tick: 12,
+            base_world_hash: crate::simulator::Digest32::default(),
+            reorg_epoch: 0,
+            runtime_manifest_hash: crate::simulator::Digest32::default(),
+        },
+        observation_digest: crate::simulator::Digest32::default(),
+        capability_catalog_digest: crate::simulator::Digest32::default(),
+        capability_invocation_context_digest: crate::simulator::Digest32::default(),
+        memory_snapshot_digest: crate::simulator::Digest32::default(),
+        goal_snapshot_digest: crate::simulator::Digest32::default(),
+        continuation_digest: crate::simulator::Digest32::default(),
+        adapter_protocol_version: "test".to_string(),
+        budget_contract: crate::simulator::BudgetContractV1 {
+            max_latency_ms: 100,
+            max_repair_attempts: 0,
+        },
+        request_digest: crate::simulator::Digest32::default(),
+    };
+    let turn_context = crate::simulator::ContinuousAgentTurnContextV1 {
+        agent_id: agent_id.to_string(),
+        agent_session_id: "session-test".to_string(),
+        agent_turn_id: agent_turn_id.to_string(),
+        decision_request_id: decision_request_id.to_string(),
+        request_digest: crate::simulator::Digest32::default(),
+        memory_snapshot: crate::simulator::MemoryContextSnapshotV1::empty(agent_id),
+        goal_snapshot: crate::simulator::GoalSnapshotV1::empty(),
+        continuation: None,
+    };
+    cognition_context::ProviderContextState {
+        turn_context,
+        request_context,
+    }
+}
+
+fn test_recipe_completion_event(
+    agent_id: &str,
+    event_id: u64,
+) -> (crate::runtime::WorldEvent, WorldEvent) {
+    let runtime_event = crate::runtime::WorldEvent {
+        id: event_id,
+        time: 83,
+        caused_by: None,
+        body: crate::runtime::WorldEventBody::Domain(
+            crate::runtime::DomainEvent::RecipeCompleted {
+                job_id: 7,
+                requester_agent_id: agent_id.to_string(),
+                factory_id: "factory-smelter".to_string(),
+                recipe_id: "recipe.iron-ingot".to_string(),
+                accepted_batches: 1,
+                produce: Vec::new(),
+                byproducts: Vec::new(),
+                output_ledger: crate::runtime::MaterialLedgerId::world(),
+                bottleneck_tags: Vec::new(),
+                logistics_route_ids: Vec::new(),
+                logistics_path_ids: Vec::new(),
+            },
+        ),
+    };
+    let mapped_event = WorldEvent {
+        id: event_id,
+        time: 83,
+        kind: WorldEventKind::RuntimeEvent {
+            kind: "runtime.economy.recipe_completed".to_string(),
+            domain_kind: Some("recipe=recipe.iron-ingot".to_string()),
+        },
+        runtime_event: Some(runtime_event.clone()),
+    };
+    (runtime_event, mapped_event)
+}
+
 #[test]
 fn bind_agent_player_emits_unbind_before_rebind_for_same_agent() {
     let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
@@ -247,6 +381,175 @@ fn provider_lineage_persists_and_restores_pending_lifecycle_markers() {
     );
     assert!(restored.provider_stale_replans.contains_key("agent-0"));
     assert!(restored.provider_transport_exhausted.contains("agent-0"));
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn provider_lineage_restore_requeues_orphaned_active_context_without_runtime_wake() {
+    let path = std::env::temp_dir().join(format!(
+        "oasis7-viewer-provider-lineage-orphan-{}-{}.json",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos()
+    ));
+    let mut first = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    first.configure_provider_lineage_store(path.clone());
+    let context = test_provider_context("agent-0", "turn-orphaned", "request-orphaned", 1);
+    first
+        .provider_contexts
+        .insert("agent-0".to_string(), context.clone());
+    first
+        .provider_active_turns
+        .insert("agent-0".to_string(), context);
+    first.provider_agent_ids.insert("agent-0".to_string());
+    first
+        .persist_provider_lineage()
+        .expect("persist orphaned provider lineage");
+
+    let mut restored = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    restored.configure_provider_lineage_store(path.clone());
+    restored
+        .restore_provider_lineage(&RuntimeWorld::default())
+        .expect("restore orphaned provider lineage");
+
+    assert!(
+        !restored.provider_active_turns.contains_key("agent-0"),
+        "process-local active marker must not survive a restart"
+    );
+    let retry = restored
+        .provider_retry_contexts
+        .get("agent-0")
+        .expect("orphaned context must be eligible for bounded retry");
+    assert_eq!(retry.request_context.agent_turn_id, "turn-orphaned");
+    assert_eq!(
+        retry.request_context.decision_request_id,
+        "request-orphaned"
+    );
+    assert_eq!(retry.request_context.transport_attempt, 1);
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn provider_lineage_restore_terminalizes_exhausted_orphan_without_retry_loop() {
+    let path = std::env::temp_dir().join(format!(
+        "oasis7-viewer-provider-lineage-exhausted-{}-{}.json",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos()
+    ));
+    let mut first = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    first.configure_provider_lineage_store(path.clone());
+    let context = test_provider_context(
+        "agent-0",
+        "turn-exhausted",
+        "request-exhausted",
+        MAX_PROVIDER_TRANSPORT_ATTEMPTS,
+    );
+    first
+        .provider_contexts
+        .insert("agent-0".to_string(), context.clone());
+    first
+        .provider_active_turns
+        .insert("agent-0".to_string(), context);
+    first.provider_agent_ids.insert("agent-0".to_string());
+    first
+        .persist_provider_lineage()
+        .expect("persist exhausted provider lineage");
+
+    let mut restored = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    restored.configure_provider_lineage_store(path.clone());
+    restored
+        .restore_provider_lineage(&RuntimeWorld::default())
+        .expect("restore exhausted provider lineage");
+
+    assert!(!restored.provider_active_turns.contains_key("agent-0"));
+    assert!(!restored.provider_retry_contexts.contains_key("agent-0"));
+    assert!(restored.provider_transport_exhausted.contains("agent-0"));
+    let _ = std::fs::remove_file(path);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn provider_world_event_mailbox_full_remains_durable_for_retry() {
+    let path = std::env::temp_dir().join(format!(
+        "oasis7-viewer-provider-world-event-{}-{}.json",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos()
+    ));
+    let (runtime_event, mapped_event) = test_recipe_completion_event("agent-0", 77);
+    let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    sidecar.configure_provider_lineage_store(path.clone());
+    sidecar.runner = Some(RuntimeDecisionRunner::ProviderBacked(
+        crate::simulator::AsyncAgentRunner::blocking_provider_fixture("agent-0"),
+    ));
+    let saturated = {
+        let Some(RuntimeDecisionRunner::ProviderBacked(runner)) = sidecar.runner.as_mut() else {
+            panic!("provider runner fixture");
+        };
+        runner
+            .start_turn("agent-0")
+            .expect("start blocking fixture turn");
+        let capacity = runner.mailbox_capacity();
+        let mut full = false;
+        for _ in 0..capacity.saturating_add(1) {
+            match runner.notify_world_event("agent-0", mapped_event.clone()) {
+                Ok(()) => {}
+                Err(crate::simulator::AsyncAgentRunnerError::FeedbackUnavailable(_)) => {
+                    full = true;
+                    break;
+                }
+                Err(error) => panic!("unexpected mailbox fixture error: {error}"),
+            }
+        }
+        full
+    };
+    assert!(saturated, "fixture must exercise the full mailbox path");
+    std::thread::sleep(std::time::Duration::from_millis(20));
+
+    // The actor thread starts concurrently with the fixture setup. If it
+    // consumes the first queued event before the sidecar call, refill the
+    // bounded mailbox and exercise the same error path again.
+    for _ in 0..4 {
+        sidecar.notify_recipe_completion_if_needed(&runtime_event, mapped_event.clone());
+        if sidecar.pending_provider_world_events.len() == 1 {
+            break;
+        }
+        let Some(RuntimeDecisionRunner::ProviderBacked(runner)) = sidecar.runner.as_mut() else {
+            panic!("provider runner fixture");
+        };
+        let capacity = runner.mailbox_capacity();
+        let mut full = false;
+        for _ in 0..capacity.saturating_add(1) {
+            match runner.notify_world_event("agent-0", mapped_event.clone()) {
+                Ok(()) => {}
+                Err(crate::simulator::AsyncAgentRunnerError::FeedbackUnavailable(_)) => {
+                    full = true;
+                    break;
+                }
+                Err(error) => panic!("unexpected mailbox fixture error: {error}"),
+            }
+        }
+        if !full {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+    }
+    assert_eq!(sidecar.pending_provider_world_events.len(), 1);
+    let checkpoint = std::fs::read_to_string(&path).expect("pending event checkpoint");
+    assert!(checkpoint.contains("pending_provider_world_events"));
+    assert!(checkpoint.contains("agent-0"));
+    let mut restored = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    restored.configure_provider_lineage_store(path.clone());
+    restored
+        .restore_provider_lineage(&RuntimeWorld::default())
+        .expect("restore pending provider world event");
+    assert_eq!(restored.pending_provider_world_events.len(), 1);
     let _ = std::fs::remove_file(path);
 }
 

@@ -28,7 +28,8 @@ pub struct WorldCommitRecordV1 {
     pub world_id: String,
     pub branch_id: String,
     pub finality_epoch: u64,
-    pub finality_block_hash: String,
+    #[serde(default)]
+    pub finality_block_hash: Option<String>,
     pub finality_status: String,
     pub finality_binding_digest: String,
     pub runtime_manifest_hash: String,
@@ -706,6 +707,14 @@ impl CognitionRecovery {
             return Ok(conflict_report(fixture, "response_envelope_mismatch"));
         }
 
+        // An aborted marker is a durable terminal decision. It preserves the
+        // canonical parent root and closes the turn without fabricating a
+        // receipt or reopening the request, regardless of which crash-prefix
+        // fixture was used to capture the marker.
+        if fixture.commit_record.status == "aborted" {
+            return Ok(aborted_report(fixture));
+        }
+
         match fixture.prefix {
             CognitionCrashPrefix::BeforePrepared | CognitionCrashPrefix::PreparedOnly => {
                 if fixture.commit_record.status != "prepared" {
@@ -757,6 +766,21 @@ impl CognitionRecovery {
 }
 
 fn validate_marker(marker: &WorldCommitRecordV1) -> Result<(), CognitionRecoveryError> {
+    let valid_abort_reason = marker.abort_reason.as_deref().is_some_and(|reason| {
+        matches!(
+            reason,
+            "stale_base"
+                | "cancelled"
+                | "late_response_after_cancel"
+                | "recovery_operator_abort"
+                | "reorg_invalidated"
+        )
+    });
+    let abort_shape_valid = match marker.status.as_str() {
+        "aborted" => valid_abort_reason,
+        "prepared" | "committed" => marker.abort_reason.is_none(),
+        _ => false,
+    };
     if marker.schema_version != "world-commit-record.v1"
         || marker.commit_id.trim().is_empty()
         || marker.envelope_idempotency_key.trim().is_empty()
@@ -767,11 +791,40 @@ fn validate_marker(marker: &WorldCommitRecordV1) -> Result<(), CognitionRecovery
         || marker.staged_state_root.trim().is_empty()
         || marker.receipt_id.trim().is_empty()
         || marker.receipt_digest.trim().is_empty()
-        || !matches!(marker.status.as_str(), "prepared" | "committed")
+        || !abort_shape_valid
     {
         return Err(CognitionRecoveryError::new("invalid_commit_record"));
     }
     Ok(())
+}
+
+fn aborted_report(fixture: &CognitionRecoveryFixture) -> CognitionRecoveryReport {
+    let mut root = fixture.world_root.clone();
+    root.head_status = "canonical".to_string();
+    root.commit_id = None;
+    root.quarantine_id = None;
+    CognitionRecoveryReport {
+        world_root: Some(root),
+        receipt: None,
+        disposition: "aborted".to_string(),
+        reject_reason: fixture.commit_record.abort_reason.clone(),
+        auto_submitted: false,
+        idempotency_key: Some(fixture.commit_record.envelope_idempotency_key.clone()),
+        quarantine_id: None,
+        candidate_root: None,
+        candidate_receipt: None,
+        journal_head: String::new(),
+        retry_count: 0,
+        revalidation_count: 0,
+        projection_repairs: 0,
+        provider_invocation_count: 0,
+        kernel_invocation_count: 0,
+        effect_count: 0,
+        debit_count: 0,
+        world_receipt_linked_count: 0,
+        event_count: 0,
+        response_replayed: false,
+    }
 }
 
 fn marker_binding_conflict(fixture: &CognitionRecoveryFixture) -> bool {

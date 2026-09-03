@@ -45,6 +45,8 @@ struct PersistedProviderLineageV1 {
     provider_terminal_states: BTreeMap<String, ProviderTerminalState>,
     provider_late_response_diagnostics: VecDeque<ProviderLateResponseDiagnostic>,
     pending_actions: BTreeMap<u64, RuntimePendingAction>,
+    #[serde(default)]
+    pending_provider_world_events: BTreeMap<String, RuntimePendingProviderWorldEvent>,
     runtime_binding: Option<RuntimeBindingV1>,
     #[serde(default)]
     pending_runtime_wakes: BTreeMap<String, crate::runtime::SchedulerWakeV1>,
@@ -125,6 +127,7 @@ impl RuntimeLlmSidecar {
         self.provider_terminal_states = checkpoint.provider_terminal_states;
         self.provider_late_response_diagnostics = checkpoint.provider_late_response_diagnostics;
         self.pending_actions = checkpoint.pending_actions;
+        self.pending_provider_world_events = checkpoint.pending_provider_world_events;
         self.pending_runtime_wakes = checkpoint
             .pending_runtime_wakes
             .into_values()
@@ -165,8 +168,33 @@ impl RuntimeLlmSidecar {
                     }),
             )
             .collect::<BTreeSet<_>>();
+        let orphaned_active_contexts = self
+            .provider_active_turns
+            .iter()
+            .filter(|(agent_id, _)| !retained_agents.contains(*agent_id))
+            .filter_map(|(agent_id, active)| {
+                let context = self.provider_contexts.get(agent_id.as_str())?;
+                let same_identity = context.request_context.agent_turn_id
+                    == active.request_context.agent_turn_id
+                    && context.request_context.decision_request_id
+                        == active.request_context.decision_request_id;
+                same_identity.then(|| (agent_id.clone(), context.clone()))
+            })
+            .collect::<Vec<_>>();
         self.provider_active_turns
             .retain(|agent_id, _| retained_agents.contains(agent_id));
+        let mut recovered_orphan = false;
+        for (agent_id, context) in orphaned_active_contexts {
+            if context.request_context.transport_attempt < MAX_PROVIDER_TRANSPORT_ATTEMPTS {
+                // The active marker is the interrupted dispatch record. Use
+                // its matching context rather than retaining an older retry
+                // entry that could belong to another identity.
+                self.provider_retry_contexts.insert(agent_id, context);
+            } else {
+                self.provider_transport_exhausted.insert(agent_id);
+            }
+            recovered_orphan = true;
+        }
         if binding_changed {
             let mut stale_contexts = self
                 .provider_contexts
@@ -224,6 +252,12 @@ impl RuntimeLlmSidecar {
             self.pending_actions
                 .retain(|_, pending| pending.agent_id != agent_id);
         }
+        if recovered_orphan {
+            // Persist the active-marker removal and retry/exhaustion decision
+            // before the next Runtime tick, so a restart cannot strand the
+            // same identity again.
+            self.persist_provider_lineage_best_effort();
+        }
         Ok(())
     }
 
@@ -248,6 +282,7 @@ impl RuntimeLlmSidecar {
             provider_terminal_states: self.provider_terminal_states.clone(),
             provider_late_response_diagnostics: self.provider_late_response_diagnostics.clone(),
             pending_actions: self.pending_actions.clone(),
+            pending_provider_world_events: self.pending_provider_world_events.clone(),
             runtime_binding: self.provider_lineage_binding.clone(),
             pending_runtime_wakes: self.pending_runtime_wakes.clone(),
         };

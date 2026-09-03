@@ -51,6 +51,10 @@ pub struct ViewerRuntimeLiveServerConfig {
     /// not implicitly grant event visibility.
     pub major_world_event_visibility: MajorWorldEventVisibilityPermission,
     pub generated_world_dir: Option<PathBuf>,
+    /// Optional durable provider lineage path. Generated worlds continue to
+    /// default beside their sidecar; formal/synthetic worlds must opt into a
+    /// stable operator-owned path explicitly.
+    pub provider_lineage_store: Option<PathBuf>,
     #[cfg(test)]
     pub(crate) test_cognition_runtime_binding: Option<(String, u64, Option<String>, String, u64)>,
 }

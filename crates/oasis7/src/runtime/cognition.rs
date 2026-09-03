@@ -183,7 +183,9 @@ pub(crate) fn world_state_binding_digest_v1(
 pub(crate) fn finality_binding_is_legal(status: &str, block_hash: Option<&str>) -> bool {
     matches!(status, "pending" | "verified" | "reorged" | "suspended")
         && match block_hash {
-            Some(hash) => valid_blake3_digest(hash) && status == "verified",
+            // A finality hash is optional until the upstream binding is
+            // verified, but any supplied hash remains a typed binding.
+            Some(hash) => valid_blake3_digest(hash),
             None => status != "verified",
         }
 }

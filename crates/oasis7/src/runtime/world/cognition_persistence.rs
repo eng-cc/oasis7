@@ -1,5 +1,9 @@
 #[path = "cognition_persistence_authority.rs"]
 mod cognition_persistence_authority;
+#[path = "cognition_persistence_recovery.rs"]
+mod cognition_persistence_recovery;
+#[path = "cognition_persistence_reports.rs"]
+mod cognition_persistence_reports;
 #[path = "cognition_persistence_support.rs"]
 mod cognition_persistence_support;
 #[path = "cognition_persistence_transactions.rs"]
@@ -7,8 +11,7 @@ mod cognition_persistence_transactions;
 
 use super::World;
 use super::cognition_persistence_validation::{
-    append_cognition_event, cognition_error, cognition_validation, legacy_recovery_report,
-    parent_root, persist_recovery_report, validate_cognition_journal_head,
+    append_cognition_event, cognition_error, cognition_validation, validate_cognition_journal_head,
     validate_cognition_journal_integrity, validate_marker_current_world,
     validate_response_lineage_binding, validate_response_record,
 };
@@ -16,19 +19,12 @@ use crate::runtime::cognition::{
     AgentDecisionEnvelopeV1, MvccValidator, world_state_binding_digest_v1,
 };
 use crate::runtime::cognition_recovery::{
-    CognitionReceiptViewV1, CognitionRecoveryReport, CognitionResponseRecordV1,
-    RuntimeReceiptLineageV1, WorldCommitRecordV1, WorldRootViewV1, cognition_digest_v1,
+    CognitionReceiptViewV1, CognitionResponseRecordV1, RuntimeReceiptLineageV1,
+    WorldCommitRecordV1, WorldRootViewV1, cognition_digest_v1,
     default_cognition_persistence_projection, response_artifact_digest,
 };
-use crate::runtime::cognition_scheduler::CognitionScheduler;
-use crate::runtime::cognition_wake::AgentContinuation;
 use crate::runtime::error::WorldError;
-use cognition_persistence_support::{
-    conflict_report, has_idempotency_conflict, has_receipt_conflict, marker_root_conflict,
-    pending_report, reconcile_committed_projection, record_repair, select_commit_record,
-    stale_base_error, validate_lineage_binding, validate_marker, visible_root_conflict,
-    visible_root_conflict_report,
-};
+use cognition_persistence_support::{stale_base_error, validate_lineage_binding, validate_marker};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value as JsonValue, json};
 use std::collections::BTreeMap;
@@ -74,9 +70,29 @@ struct CognitionJournalProjection {
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 struct CognitionJournalEvent {
     #[serde(default)]
+    schema_version: String,
+    #[serde(default)]
     journal_seq: u64,
     #[serde(default)]
+    parent_event_digest: String,
+    #[serde(default)]
+    event_kind: String,
+    #[serde(default)]
     kind: String,
+    #[serde(default)]
+    world_id: String,
+    #[serde(default)]
+    branch_id: String,
+    #[serde(default)]
+    finality_epoch: u64,
+    #[serde(default)]
+    finality_block_hash: Option<String>,
+    #[serde(default)]
+    finality_status: String,
+    #[serde(default)]
+    reorg_epoch: u64,
+    #[serde(default)]
+    logical_tick: u64,
     #[serde(default)]
     envelope_idempotency_key: String,
     #[serde(default)]
@@ -95,8 +111,11 @@ struct CognitionJournalEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     decision_request_id: Option<String>,
     #[serde(default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
     request_digest: Option<String>,
+    #[serde(default)]
+    response_digest: Option<String>,
+    #[serde(default)]
+    envelope_digest: Option<String>,
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     feedback_id: Option<String>,
@@ -115,6 +134,16 @@ struct CognitionJournalEvent {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     event_digest: Option<String>,
+    #[serde(default)]
+    retry_seq: u64,
+    #[serde(default)]
+    transport_attempt: u64,
+    #[serde(default)]
+    status: String,
+    #[serde(default)]
+    payload_digest: String,
+    #[serde(default)]
+    causal_refs: Vec<String>,
     #[serde(flatten)]
     extra: BTreeMap<String, JsonValue>,
 }
@@ -336,10 +365,7 @@ impl World {
                 "envelope_digest": envelope.envelope_digest,
             }),
         );
-        let finality_block_hash = envelope
-            .finality_block_hash
-            .clone()
-            .unwrap_or_else(|| "genesis".to_string());
+        let finality_block_hash = envelope.finality_block_hash.clone();
         let marker = WorldCommitRecordV1 {
             schema_version: WORLD_COMMIT_SCHEMA.to_string(),
             commit_id,
@@ -471,9 +497,155 @@ impl World {
     ) -> Result<WorldCommitRecordV1, WorldError> {
         let mut transaction = self.clone();
         let committed = transaction.finalize_cognition_commit_inner(commit_id)?;
+        // Receipt durability is committed evidence. Re-evaluate untimed
+        // receipt/event/state wakes in the same World transaction so queue
+        // service does not depend on a later tick or starvation timeout.
+        transaction.reevaluate_cognition_wakes_after_commit()?;
         transaction.persist_runtime_transaction_if_configured()?;
         *self = transaction;
         Ok(committed)
+    }
+
+    /// Abort a prepared cognition commit at a durable terminal boundary.
+    /// Aborts discard the staged action and record cancellation/failure
+    /// evidence without publishing a receipt or advancing World state.
+    pub fn abort_cognition_commit(
+        &mut self,
+        commit_id: &str,
+        reason: &str,
+    ) -> Result<WorldCommitRecordV1, WorldError> {
+        if !matches!(
+            reason,
+            "stale_base"
+                | "cancelled"
+                | "late_response_after_cancel"
+                | "recovery_operator_abort"
+                | "reorg_invalidated"
+        ) {
+            return Err(cognition_validation("cognition_abort_reason_invalid"));
+        }
+        let mut transaction = self.clone();
+        let projection = transaction.cognition.clone();
+        let parsed: CognitionProjection = serde_json::from_value(projection.clone())
+            .map_err(|error| cognition_error("invalid_cognition_projection", error))?;
+        let marker = parsed
+            .commit_records
+            .iter()
+            .find(|record| record.commit_id == commit_id)
+            .cloned()
+            .ok_or_else(|| cognition_validation("commit_record_missing"))?;
+        if marker.status == "aborted" {
+            if marker.abort_reason.as_deref() == Some(reason) {
+                return Ok(marker.clone());
+            }
+            if reason == "late_response_after_cancel"
+                && marker.abort_reason.as_deref() == Some("cancelled")
+            {
+                let aborted_marker = marker.clone();
+                let late_response = json!({
+                    "status": "rejected",
+                    "reject_reason": reason,
+                    "envelope_idempotency_key": &marker.envelope_idempotency_key,
+                    "envelope_digest": &marker.envelope_digest,
+                    "receipt_id": &marker.receipt_id,
+                    "agent_id": &marker.agent_id,
+                    "agent_session_id": &marker.agent_session_id,
+                    "agent_turn_id": &marker.agent_turn_id,
+                    "decision_request_id": &marker.decision_request_id,
+                    "request_digest": &marker.request_digest,
+                    "feedback_id": &marker.feedback_id,
+                });
+                append_cognition_event(
+                    &mut transaction.cognition,
+                    "LateResponseRejected",
+                    late_response,
+                )?;
+                transaction.persist_runtime_transaction_if_configured()?;
+                *self = transaction;
+                return Ok(aborted_marker);
+            }
+            return Err(cognition_validation("cognition_abort_conflict"));
+        }
+        if marker.status != "prepared" {
+            return Err(cognition_validation("commit_record_not_prepared"));
+        }
+        let mut aborted = marker.clone();
+        aborted.status = "aborted".to_string();
+        aborted.abort_reason = Some(reason.to_string());
+        cognition_persistence_support::validate_marker(&aborted)?;
+        let records = transaction
+            .cognition
+            .get_mut("commit_records")
+            .and_then(JsonValue::as_array_mut)
+            .ok_or_else(|| cognition_validation("commit_records_not_array"))?;
+        let record = records
+            .iter_mut()
+            .find(|record| record.get("commit_id").and_then(JsonValue::as_str) == Some(commit_id))
+            .ok_or_else(|| cognition_validation("commit_record_missing"))?;
+        *record = serde_json::to_value(&aborted).map_err(WorldError::from)?;
+        transaction
+            .cognition
+            .get_mut("staged_actions")
+            .and_then(JsonValue::as_object_mut)
+            .ok_or_else(|| cognition_validation("staged_actions_not_object"))?
+            .remove(commit_id);
+        transaction.cognition["idempotency_index"][aborted.envelope_idempotency_key.clone()] = json!({
+            "envelope_digest": &aborted.envelope_digest,
+            "disposition": "aborted",
+            "receipt_id": &aborted.receipt_id,
+        });
+        let event_details = json!({
+            "status": "rejected",
+            "reject_reason": reason,
+            "envelope_idempotency_key": &aborted.envelope_idempotency_key,
+            "envelope_digest": &aborted.envelope_digest,
+            "receipt_id": &aborted.receipt_id,
+            "agent_id": &aborted.agent_id,
+            "agent_session_id": &aborted.agent_session_id,
+            "agent_turn_id": &aborted.agent_turn_id,
+            "decision_request_id": &aborted.decision_request_id,
+            "request_digest": &aborted.request_digest,
+            "feedback_id": &aborted.feedback_id,
+        });
+        if reason == "late_response_after_cancel" {
+            // A late provider response is evidence against an already
+            // terminal turn, never a new response-bearing turn. Keep the
+            // rejection as its own durable event so recovery can distinguish
+            // it from the cancellation that closed the original lease.
+            append_cognition_event(
+                &mut transaction.cognition,
+                "LateResponseRejected",
+                event_details.clone(),
+            )?;
+        }
+        append_cognition_event(
+            &mut transaction.cognition,
+            "CognitionTurnCancelled",
+            event_details.clone(),
+        )?;
+        append_cognition_event(
+            &mut transaction.cognition,
+            "CognitionTurnCompleted",
+            event_details,
+        )?;
+        transaction.persist_runtime_transaction_if_configured()?;
+        *self = transaction;
+        Ok(aborted)
+    }
+
+    pub(super) fn reevaluate_cognition_wakes_after_commit(&mut self) -> Result<(), WorldError> {
+        let has_scheduler = self
+            .cognition
+            .get("scheduler_state")
+            .is_some_and(|state| !state.is_null());
+        if has_scheduler {
+            // A commit changes receipt, journal-event and state evidence. It
+            // may immediately lease only wakes whose conditions depend on
+            // that evidence; time-only wakes remain under the normal tick
+            // service path.
+            let _ = self.select_ready_cognition_wakes_inner(self.state.time, true)?;
+        }
+        Ok(())
     }
 
     fn finalize_cognition_commit_inner(
@@ -803,6 +975,17 @@ impl World {
             .and_then(|journal| journal.get("events"))
             .and_then(JsonValue::as_array)
             .ok_or_else(|| cognition_validation("cognition_events_missing"))?;
+        if !events.is_empty() {
+            let journal = projection
+                .get("cognition_journal")
+                .ok_or_else(|| cognition_validation("cognition_journal_missing"))?;
+            // Wake evidence is authoritative only after the same dense
+            // journal and head checks used by recovery/replay. A forged
+            // event that happens to carry a self-consistent digest must not
+            // satisfy a live wake by bypassing those checks.
+            validate_cognition_journal_integrity(journal)?;
+            validate_cognition_journal_head(journal)?;
+        }
         for event in events {
             let Some(event_digest) = event.get("event_digest").and_then(JsonValue::as_str) else {
                 continue;
@@ -819,301 +1002,5 @@ impl World {
             committed_events.insert(event_digest.to_string());
         }
         Ok((committed_events, committed_receipts))
-    }
-
-    /// Reconcile a persisted cognition commit without invoking provider,
-    /// kernel, effect, or debit code.
-    pub fn recover_cognition(&mut self) -> Result<CognitionRecoveryReport, WorldError> {
-        let mut projection = if self.cognition.is_null() {
-            default_cognition_persistence_projection()
-        } else {
-            self.cognition.clone()
-        };
-        let feedback_projection_changed =
-            Self::recover_feedback_outbox_projection(&mut projection)?;
-        let mut parsed: CognitionProjection = serde_json::from_value(projection.clone())
-            .map_err(|error| cognition_error("invalid_cognition_projection", error))?;
-
-        if parsed.schema_version.is_empty() {
-            if feedback_projection_changed {
-                self.cognition = projection;
-            }
-            return Ok(legacy_recovery_report());
-        }
-        if parsed.schema_version != PROJECTION_SCHEMA {
-            return Err(WorldError::DistributedValidationFailed {
-                reason: format!(
-                    "cognition projection schema mismatch expected={PROJECTION_SCHEMA} actual={}",
-                    parsed.schema_version
-                ),
-            });
-        }
-        if !parsed.cognition_journal.schema_version.is_empty()
-            && parsed.cognition_journal.schema_version != JOURNAL_SCHEMA
-        {
-            return Err(WorldError::DistributedValidationFailed {
-                reason: format!(
-                    "cognition journal schema mismatch expected={JOURNAL_SCHEMA} actual={}",
-                    parsed.cognition_journal.schema_version
-                ),
-            });
-        }
-        if projection
-            .get("scheduler_state")
-            .is_some_and(|state| !state.is_null())
-        {
-            // Scheduler restore validates policy, bucket disjointness,
-            // capacity, and every durable in-flight wake identity before any
-            // cognition projection is exposed to a caller.
-            CognitionScheduler::from_snapshot_json(
-                projection
-                    .get("scheduler_state")
-                    .cloned()
-                    .unwrap_or(JsonValue::Null),
-            )
-            .map_err(|error| cognition_validation(error.code()))?;
-        }
-
-        // A continuation that advertises an authoritative status digest must
-        // be validated before restore exposes it to scheduling.  Snapshots
-        // from before the digest field existed remain read-only legacy data;
-        // they are not silently promoted to an authoritative projection.
-        if let Some(value) = projection.get("continuations") {
-            let continuations: Vec<AgentContinuation> = serde_json::from_value(value.clone())
-                .map_err(|error| cognition_error("invalid_continuation_projection", error))?;
-            for continuation in continuations {
-                if continuation.continuation_status_digest.is_some() {
-                    continuation
-                        .validate_authoritative()
-                        .map_err(|error| cognition_validation(error.code()))?;
-                }
-            }
-        }
-        if let Some(scheduler_state) = projection
-            .get("scheduler_state")
-            .filter(|state| !state.is_null())
-        {
-            self.validate_persisted_cognition_wakes(scheduler_state)?;
-        }
-
-        for marker in &parsed.commit_records {
-            validate_marker(marker)?;
-        }
-        if parsed
-            .commit_records
-            .iter()
-            .any(|marker| marker.status == "committed" && !marker.agent_id.is_empty())
-        {
-            validate_cognition_journal_integrity(&projection["cognition_journal"])?;
-        }
-        let Some(marker) = select_commit_record(&parsed.commit_records).cloned() else {
-            if feedback_projection_changed {
-                self.cognition = projection;
-            }
-            return Ok(legacy_recovery_report());
-        };
-        let dense_marker = !marker.agent_id.is_empty();
-        if dense_marker {
-            validate_marker_current_world(self, &marker)?;
-        }
-
-        let recovery = parsed.recovery.clone().unwrap_or_default();
-        let trusted_state_root = self.current_state_root_hash()?;
-        let trusted_root = WorldRootViewV1 {
-            schema_version: "world-root-view.v1".to_string(),
-            world_id: marker.world_id.clone(),
-            branch_id: marker.branch_id.clone(),
-            logical_tick: self.state.time,
-            state_root: trusted_state_root.clone(),
-            head_status: "canonical".to_string(),
-            commit_id: (marker.status == "committed").then(|| marker.commit_id.clone()),
-            quarantine_id: None,
-        };
-        let root = if dense_marker {
-            trusted_root.clone()
-        } else {
-            recovery
-                .world_root
-                .clone()
-                .unwrap_or_else(|| parent_root(&marker))
-        };
-        if dense_marker
-            && recovery.world_root.as_ref().is_some_and(|visible| {
-                visible_root_conflict(&marker, visible, &trusted_state_root, self.state.time)
-            })
-        {
-            let report = visible_root_conflict_report(&marker, trusted_root);
-            persist_recovery_report(&mut projection, &report)?;
-            self.cognition = projection;
-            return Ok(report);
-        }
-        let response = parsed
-            .responses
-            .iter()
-            .find(|response| response.envelope_digest == marker.envelope_digest);
-        if dense_marker {
-            // Validate the response after committed-prefix reconciliation
-            // below. A crash can leave an earlier committed journal event
-            // absent while retaining the response for the selected marker;
-            // strict validation against that transient head would reject a
-            // repairable snapshot before reconciliation gets a chance to
-            // restore the missing prefix.
-            response.ok_or_else(|| cognition_validation("response_missing"))?;
-        }
-        let mut response_journal_head = response
-            .map(|response| response.journal_head.clone())
-            .filter(|head| !head.is_empty());
-        let response_replayed = response.is_some();
-
-        if recovery.crash_prefix == "conflict"
-            || marker_root_conflict(&marker, &root)
-            || parsed
-                .commit_records
-                .iter()
-                .filter(|record| record.status == "committed")
-                .any(|record| {
-                    has_receipt_conflict(&parsed.receipt_registry, record)
-                        || has_idempotency_conflict(&parsed.idempotency_index, record)
-                })
-            || response.is_some_and(|response| response.envelope_digest != marker.envelope_digest)
-        {
-            let report = conflict_report(&marker, root);
-            persist_recovery_report(&mut projection, &report)?;
-            self.cognition = projection;
-            return Ok(report);
-        }
-
-        if marker.status == "prepared" {
-            let report = pending_report(&marker, root);
-            persist_recovery_report(&mut projection, &report)?;
-            self.cognition = projection;
-            return Ok(report);
-        }
-
-        // A committed marker is the authority.  If the root still points at
-        // the parent (the crash window between commit and root projection),
-        // repair that projection in the same in-memory transaction.
-        let (new_repaired_ids, mut projection_repairs) =
-            reconcile_committed_projection(&mut projection)?;
-        let journal_repaired = new_repaired_ids.iter().any(|id| {
-            matches!(
-                id.as_str(),
-                "world_receipt_link" | "cognition_turn_completed"
-            )
-        });
-        parsed = serde_json::from_value(projection.clone())
-            .map_err(|error| cognition_error("invalid_cognition_projection", error))?;
-        if dense_marker {
-            validate_cognition_journal_head(&projection["cognition_journal"])?;
-        }
-        if journal_repaired {
-            // Repairing a missing committed journal prefix necessarily changes
-            // the durable head. Rebind each response's journal cursor to the
-            // repaired head before strict replay validation below.
-            let repaired_head = parsed.cognition_journal.head_digest.clone();
-            for response in &mut parsed.responses {
-                response.journal_head = repaired_head.clone();
-            }
-            response_journal_head = Some(repaired_head);
-            projection = serde_json::to_value(&parsed).map_err(WorldError::from)?;
-        }
-        for committed_marker in parsed
-            .commit_records
-            .iter()
-            .filter(|record| record.status == "committed" && !record.agent_id.is_empty())
-        {
-            let response = parsed
-                .responses
-                .iter()
-                .find(|response| response.envelope_digest == committed_marker.envelope_digest)
-                .ok_or_else(|| cognition_validation("response_missing"))?;
-            validate_response_record(&projection, response)?;
-            validate_response_lineage_binding(response, committed_marker)?;
-        }
-        let receipt = CognitionReceiptViewV1 {
-            receipt_id: marker.receipt_id.clone(),
-            receipt_digest: marker.receipt_digest.clone(),
-        };
-        let mut repaired_ids = recovery.repaired_projection_ids;
-        for repaired_id in new_repaired_ids {
-            record_repair(&mut repaired_ids, &repaired_id);
-        }
-        let mut canonical_root = root;
-        if !dense_marker
-            && (canonical_root.state_root == marker.parent_world_hash
-                || canonical_root.commit_id.is_none()
-                || canonical_root.head_status != "canonical"
-                || canonical_root.quarantine_id.is_some())
-        {
-            canonical_root.logical_tick = marker.parent_tick.saturating_add(1);
-            canonical_root.state_root = marker.staged_state_root.clone();
-            canonical_root.head_status = "canonical".to_string();
-            canonical_root.commit_id = Some(marker.commit_id.clone());
-            canonical_root.quarantine_id = None;
-            record_repair(&mut repaired_ids, "world_root");
-        }
-        let repaired_count = repaired_ids
-            .iter()
-            .filter(|id| {
-                matches!(
-                    id.as_str(),
-                    "receipt_registry" | "idempotency_index" | "world_receipt_link"
-                )
-            })
-            .count() as u64;
-        if projection_repairs == 0 && repaired_count > 0 {
-            // The durable repair markers make a second recovery exactly
-            // idempotent while still requiring the projections above to be
-            // structurally present and marker-bound.
-            projection_repairs = repaired_count;
-        }
-
-        if !repaired_ids.is_empty() {
-            let object = projection.as_object_mut().ok_or_else(|| {
-                WorldError::DistributedValidationFailed {
-                    reason: "cognition projection must be an object".to_string(),
-                }
-            })?;
-            object
-                .entry("recovery")
-                .or_insert_with(|| JsonValue::Object(serde_json::Map::new()));
-            if let Some(recovery) = object
-                .get_mut("recovery")
-                .and_then(JsonValue::as_object_mut)
-            {
-                if repaired_ids.iter().any(|id| id == "world_root") {
-                    recovery.insert("world_root".to_string(), json!(&canonical_root));
-                }
-                recovery.insert("repaired_projection_ids".to_string(), json!(repaired_ids));
-            }
-            self.cognition = projection;
-        } else if feedback_projection_changed {
-            self.cognition = projection;
-        }
-
-        let journal_head =
-            response_journal_head.unwrap_or_else(|| parsed.cognition_journal.head_digest.clone());
-        Ok(CognitionRecoveryReport {
-            world_root: Some(canonical_root),
-            receipt: Some(receipt),
-            disposition: "committed".to_string(),
-            reject_reason: None,
-            auto_submitted: false,
-            idempotency_key: Some(marker.envelope_idempotency_key.clone()),
-            quarantine_id: None,
-            candidate_root: None,
-            candidate_receipt: None,
-            journal_head,
-            retry_count: 0,
-            revalidation_count: 0,
-            projection_repairs,
-            provider_invocation_count: 0,
-            kernel_invocation_count: 0,
-            effect_count: 0,
-            debit_count: 0,
-            world_receipt_linked_count: 1,
-            event_count: 1,
-            response_replayed,
-        })
     }
 }

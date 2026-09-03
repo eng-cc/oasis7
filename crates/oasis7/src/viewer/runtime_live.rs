@@ -75,6 +75,7 @@ mod recovery_persistence;
 mod recovery_receipt;
 mod recovery_rollback_v2;
 mod recovery_session;
+mod runtime_script;
 mod schedule_recipe_quote;
 mod session_policy;
 #[path = "runtime_live/smelter_affordability_debug.rs"]
@@ -110,6 +111,7 @@ use gameplay_snapshot::{
     player_gameplay_feedback_from_control_ack,
 };
 use mapping::{map_runtime_event, runtime_state_to_simulator_model};
+use runtime_script::RuntimeLiveScript;
 use session_policy::{
     RuntimeSessionPolicy, RuntimeSessionRevokeMetadata, location_id_for_pos,
     map_session_policy_error_code, normalize_optional_string, session_revoke_metadata_key,
@@ -117,9 +119,9 @@ use session_policy::{
 pub use support::bootstrap_formal_release_runtime_world as viewer_bootstrap_formal_release_runtime_world;
 pub use support::bootstrap_generated_sidecar_runtime_world as viewer_bootstrap_generated_sidecar_runtime_world;
 use support::{
-    FORMAL_RELEASE_DEFAULT_WORLD_ID, RuntimeLiveScript, RuntimeLiveSession,
-    bootstrap_runtime_live_world, is_expected_disconnect_error, is_timeout_error,
-    latest_runtime_event_seq, lock_shared_server, runtime_metrics, send_response,
+    FORMAL_RELEASE_DEFAULT_WORLD_ID, RuntimeLiveSession, bootstrap_runtime_live_world,
+    is_expected_disconnect_error, is_timeout_error, latest_runtime_event_seq, lock_shared_server,
+    runtime_metrics, send_response,
 };
 pub const VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID: &str = FORMAL_RELEASE_DEFAULT_WORLD_ID;
 pub struct ViewerRuntimeLiveServer {
@@ -241,10 +243,8 @@ impl ViewerRuntimeLiveServer {
             }
             None => RuntimeLlmSidecar::new(config.decision_mode),
         };
-        if let Some(generated_world_dir) = config.generated_world_dir.as_deref() {
-            llm_sidecar.configure_provider_lineage_store(
-                generated_world_dir.join("runtime-live-provider-lineage.json"),
-            );
+        if let Some(provider_lineage_store) = config.provider_lineage_store_path() {
+            llm_sidecar.configure_provider_lineage_store(provider_lineage_store);
             llm_sidecar
                 .restore_provider_lineage(&world)
                 .map_err(ViewerRuntimeLiveServerError::Init)?;

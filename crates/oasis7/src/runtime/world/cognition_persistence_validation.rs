@@ -1,5 +1,5 @@
 use super::World;
-use crate::runtime::cognition::world_state_binding_digest_v1;
+use crate::runtime::cognition::{finality_binding_is_legal, world_state_binding_digest_v1};
 use crate::runtime::cognition_recovery::{
     CognitionRecoveryReport, CognitionResponseRecordV1, RuntimeCognitionResponseArtifactV1,
     WorldCommitRecordV1, WorldRootViewV1, cognition_digest_v1, response_artifact_digest,
@@ -12,6 +12,11 @@ pub(super) fn append_cognition_event(
     kind: &str,
     details: JsonValue,
 ) -> Result<u64, WorldError> {
+    const EVENT_SCHEMA: &str = "cognition-journal-event.v1";
+    let binding = projection
+        .get("runtime_binding")
+        .filter(|value| value.is_object())
+        .cloned();
     let journal = projection
         .get_mut("cognition_journal")
         .ok_or_else(|| validation("cognition_journal_missing"))?
@@ -37,12 +42,90 @@ pub(super) fn append_cognition_event(
                     .unwrap_or_default(),
             )
             .saturating_add(1);
+        let payload_digest = cognition_digest_v1("oasis7.cognition.event-payload.v1", &details);
         let mut event = details
             .as_object()
             .cloned()
             .ok_or_else(|| validation("cognition_event_details_not_object"))?;
+        let binding_string = |field: &str, default: &str| {
+            binding
+                .as_ref()
+                .and_then(|value| value.get(field))
+                .and_then(JsonValue::as_str)
+                .unwrap_or(default)
+                .to_string()
+        };
+        let binding_u64 = |field: &str| {
+            binding
+                .as_ref()
+                .and_then(|value| value.get(field))
+                .and_then(JsonValue::as_u64)
+                .unwrap_or_default()
+        };
+        let binding_hash = binding
+            .as_ref()
+            .and_then(|value| value.get("finality_block_hash"))
+            .cloned()
+            .unwrap_or(JsonValue::Null);
+        let previous_event_digest = events
+            .last()
+            .and_then(|event| event.get("event_digest"))
+            .and_then(JsonValue::as_str)
+            .unwrap_or_default();
+        // Keep `kind` for read compatibility with pre-v1 consumers while
+        // making the design's explicit `event_kind` part of the signed
+        // canonical record.
+        event.insert("schema_version".to_string(), json!(EVENT_SCHEMA));
         event.insert("journal_seq".to_string(), json!(next_seq));
+        event.insert(
+            "parent_event_digest".to_string(),
+            json!(previous_event_digest),
+        );
+        event.insert("event_kind".to_string(), json!(kind));
         event.insert("kind".to_string(), json!(kind));
+        event.insert(
+            "world_id".to_string(),
+            json!(binding_string("world_id", "unbound")),
+        );
+        event.insert(
+            "branch_id".to_string(),
+            json!(binding_string("branch_id", "main")),
+        );
+        event.insert(
+            "finality_epoch".to_string(),
+            json!(binding_u64("finality_epoch")),
+        );
+        event.insert("finality_block_hash".to_string(), binding_hash);
+        event.insert(
+            "finality_status".to_string(),
+            json!(binding_string("finality_status", "pending")),
+        );
+        event.insert("reorg_epoch".to_string(), json!(binding_u64("reorg_epoch")));
+        event
+            .entry("logical_tick".to_string())
+            .or_insert_with(|| json!(0));
+        event
+            .entry("request_digest".to_string())
+            .or_insert(JsonValue::Null);
+        event
+            .entry("response_digest".to_string())
+            .or_insert(JsonValue::Null);
+        event
+            .entry("envelope_digest".to_string())
+            .or_insert(JsonValue::Null);
+        event
+            .entry("retry_seq".to_string())
+            .or_insert_with(|| json!(0));
+        event
+            .entry("transport_attempt".to_string())
+            .or_insert_with(|| json!(0));
+        event
+            .entry("status".to_string())
+            .or_insert_with(|| json!("pending"));
+        event.insert("payload_digest".to_string(), json!(payload_digest));
+        event
+            .entry("causal_refs".to_string())
+            .or_insert_with(|| json!([]));
         let event_digest = cognition_digest_v1(
             "oasis7.cognition.event.v1",
             &JsonValue::Object(event.clone()),
@@ -75,7 +158,7 @@ pub(super) fn validate_marker_current_world(
     }
     let root = world.current_state_root_hash()?;
     let manifest = world.current_manifest_hash()?;
-    let head_matches = if marker.status == "prepared" {
+    let head_matches = if matches!(marker.status.as_str(), "prepared" | "aborted") {
         marker.parent_tick == world.state().time
             && marker.parent_world_hash == root
             && marker.staged_state_root == root
@@ -86,11 +169,11 @@ pub(super) fn validate_marker_current_world(
         return Err(validation("cognition_world_head_mismatch"));
     }
     if let Some(binding) = world.cognition().get("runtime_binding") {
-        let block_hash = binding["finality_block_hash"].as_str().unwrap_or("genesis");
+        let block_hash = binding["finality_block_hash"].as_str();
         if binding["world_id"].as_str() != Some(marker.world_id.as_str())
             || binding["branch_id"].as_str() != Some(marker.branch_id.as_str())
             || binding["finality_epoch"].as_u64() != Some(marker.finality_epoch)
-            || block_hash != marker.finality_block_hash
+            || block_hash != marker.finality_block_hash.as_deref()
             || binding["finality_status"].as_str() != Some(marker.finality_status.as_str())
             || binding["reorg_epoch"].as_u64() != Some(marker.reorg_epoch)
             || binding["runtime_manifest_hash"].as_str()
@@ -118,6 +201,7 @@ pub(super) fn validate_cognition_journal_integrity(journal: &JsonValue) -> Resul
         .and_then(JsonValue::as_array)
         .ok_or_else(|| validation("cognition_events_missing"))?;
     let mut previous_seq = 0u64;
+    let mut previous_event_digest = String::new();
     for event in events {
         let object = event
             .as_object()
@@ -132,6 +216,89 @@ pub(super) fn validate_cognition_journal_integrity(journal: &JsonValue) -> Resul
         if sequence != previous_seq.saturating_add(1) {
             return Err(validation("cognition_journal_sequence_mismatch"));
         }
+        let required_string = |field: &str| {
+            object
+                .get(field)
+                .and_then(JsonValue::as_str)
+                .filter(|value| !value.trim().is_empty() && value.len() <= 256)
+        };
+        if required_string("schema_version") != Some("cognition-journal-event.v1")
+            || required_string("event_kind").is_none()
+            || required_string("kind") != required_string("event_kind")
+            || required_string("world_id").is_none()
+            || required_string("branch_id").is_none()
+            || required_string("finality_status").is_none()
+            || object
+                .get("finality_epoch")
+                .and_then(JsonValue::as_u64)
+                .is_none()
+            || object
+                .get("reorg_epoch")
+                .and_then(JsonValue::as_u64)
+                .is_none()
+            || object
+                .get("logical_tick")
+                .and_then(JsonValue::as_u64)
+                .is_none()
+            || object
+                .get("retry_seq")
+                .and_then(JsonValue::as_u64)
+                .is_none()
+            || object
+                .get("transport_attempt")
+                .and_then(JsonValue::as_u64)
+                .is_none()
+            || required_string("status").is_none()
+            || !object.contains_key("finality_block_hash")
+            || !object.contains_key("request_digest")
+            || !object.contains_key("response_digest")
+            || !object.contains_key("envelope_digest")
+            || object
+                .get("causal_refs")
+                .and_then(JsonValue::as_array)
+                .is_none()
+        {
+            return Err(validation("cognition_event_dense_fields_missing"));
+        }
+        let parent = object
+            .get("parent_event_digest")
+            .and_then(JsonValue::as_str)
+            .ok_or_else(|| validation("cognition_event_parent_missing"))?;
+        if parent != previous_event_digest {
+            return Err(validation("cognition_event_parent_mismatch"));
+        }
+        let finality_status = object
+            .get("finality_status")
+            .and_then(JsonValue::as_str)
+            .expect("required finality status");
+        let finality_hash = match object.get("finality_block_hash") {
+            Some(JsonValue::Null) => None,
+            Some(JsonValue::String(hash)) => Some(hash.as_str()),
+            _ => return Err(validation("cognition_event_finality_invalid")),
+        };
+        if !finality_binding_is_legal(finality_status, finality_hash) {
+            return Err(validation("cognition_event_finality_invalid"));
+        }
+        let payload_digest = object
+            .get("payload_digest")
+            .and_then(JsonValue::as_str)
+            .filter(|value| is_canonical_digest(value));
+        if payload_digest.is_none() {
+            return Err(validation("cognition_event_payload_digest_missing"));
+        }
+        if object
+            .get("causal_refs")
+            .and_then(JsonValue::as_array)
+            .is_some_and(|refs| {
+                refs.iter().any(|reference| {
+                    reference
+                        .as_str()
+                        .is_none_or(|value| value.trim().is_empty() || value.len() > 256)
+                })
+            })
+        {
+            return Err(validation("cognition_event_causal_refs_invalid"));
+        }
         let event_digest = object
             .get("event_digest")
             .and_then(JsonValue::as_str)
@@ -145,6 +312,7 @@ pub(super) fn validate_cognition_journal_integrity(journal: &JsonValue) -> Resul
         if expected != event_digest {
             return Err(validation("cognition_event_digest_mismatch"));
         }
+        previous_event_digest = event_digest.to_string();
         previous_seq = sequence;
     }
     let head_seq = journal
@@ -261,7 +429,7 @@ pub(super) fn validate_response_lineage_binding(
     let outer_block_hash = outer
         .get("finality_block_hash")
         .and_then(JsonValue::as_str)
-        .unwrap_or("genesis");
+        .map(str::to_string);
     let expected_base_world_hash = if marker.parent_world_hash.starts_with("blake3:") {
         marker.parent_world_hash.clone()
     } else {
@@ -269,8 +437,7 @@ pub(super) fn validate_response_lineage_binding(
             &marker.world_id,
             &marker.branch_id,
             marker.finality_epoch,
-            (marker.finality_block_hash != "genesis")
-                .then_some(marker.finality_block_hash.as_str()),
+            marker.finality_block_hash.as_deref(),
             &marker.finality_status,
             marker.parent_tick,
             &marker.parent_world_hash,

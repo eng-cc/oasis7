@@ -15,8 +15,8 @@ use crate::runtime::cognition::{
     world_state_binding_digest_v1,
 };
 use crate::runtime::cognition_recovery::{
-    CognitionRecoveryReport, RuntimeCognitionCommitRequestV1, RuntimeCognitionResponseArtifactV1,
-    RuntimeReceiptLineageV1, WorldCommitRecordV1, WorldRootViewV1, cognition_digest_v1,
+    RuntimeCognitionCommitRequestV1, RuntimeCognitionResponseArtifactV1, RuntimeReceiptLineageV1,
+    WorldCommitRecordV1, WorldRootViewV1, cognition_digest_v1,
     default_cognition_persistence_projection, response_artifact_digest,
 };
 use crate::runtime::cognition_scheduler::SchedulerWakeV1;
@@ -76,12 +76,12 @@ pub(super) fn validate_prepare_response_artifact(
     let outer_block_hash = outer
         .get("finality_block_hash")
         .and_then(JsonValue::as_str)
-        .unwrap_or("genesis");
+        .map(str::to_string);
     if outer.get("agent_id").and_then(JsonValue::as_str) != Some(envelope.agent_id.as_str())
         || outer.get("world_id").and_then(JsonValue::as_str) != Some(envelope.world_id.as_str())
         || outer.get("branch_id").and_then(JsonValue::as_str) != Some(envelope.branch_id.as_str())
         || outer.get("finality_epoch").and_then(JsonValue::as_u64) != Some(envelope.finality_epoch)
-        || outer_block_hash != envelope.finality_block_hash.as_deref().unwrap_or("genesis")
+        || outer_block_hash != envelope.finality_block_hash
         || outer.get("finality_status").and_then(JsonValue::as_str)
             != Some(envelope.finality_status.as_str())
         || outer.get("base_tick").and_then(JsonValue::as_u64) != Some(envelope.base_tick)
@@ -278,15 +278,35 @@ impl World {
                     && record.decision_request_id == request.decision_request_id
                     && record.request_digest == request.request_digest
             }) {
-                if let Some(stored_action_digest) = self
+                let stored_action_digest = self
                     .cognition
                     .get("action_digests")
                     .and_then(JsonValue::as_object)
                     .and_then(|digests| digests.get(&existing.commit_id))
                     .and_then(JsonValue::as_str)
-                    && stored_action_digest != action_digest
+                    .map(str::to_string)
+                    .or_else(|| {
+                        parsed
+                            .staged_actions
+                            .get(&existing.commit_id)
+                            .map(|staged| cognition_digest_v1("oasis7.cognition.action.v1", staged))
+                    });
+                if existing.status == "prepared" && stored_action_digest.is_none() {
+                    return Err(cognition_validation("cognition_staged_action_missing"));
+                }
+                if stored_action_digest
+                    .as_deref()
+                    .is_some_and(|stored| stored != action_digest)
                 {
                     return Err(cognition_validation("envelope_idempotency_conflict"));
+                }
+                if existing.status == "aborted" {
+                    return Err(cognition_validation(
+                        existing
+                            .abort_reason
+                            .as_deref()
+                            .unwrap_or("cognition_commit_aborted"),
+                    ));
                 }
                 let response_matches = parsed.responses.iter().any(|response| {
                     response.envelope_digest == existing.envelope_digest
@@ -631,7 +651,7 @@ pub(super) fn reconcile_committed_projection(
                 && event.envelope_idempotency_key == marker.envelope_idempotency_key
                 && (event.receipt_id.as_deref() == Some(marker.receipt_id.as_str())
                     || (event.receipt_id.is_none() && marker.agent_id.is_empty()))
-                && event.extra.get("status").and_then(JsonValue::as_str) == Some("committed")
+                && event.status == "committed"
         });
         if !completed_present {
             let next_seq = parsed
@@ -657,7 +677,7 @@ pub(super) fn reconcile_committed_projection(
                 request_digest: (!marker.request_digest.is_empty())
                     .then(|| marker.request_digest.clone()),
                 feedback_id: (!marker.feedback_id.is_empty()).then(|| marker.feedback_id.clone()),
-                extra: BTreeMap::from([("status".to_string(), json!("committed"))]),
+                status: "committed".to_string(),
                 ..CognitionJournalEvent::default()
             });
             parsed.cognition_journal.head_seq = next_seq;
@@ -718,10 +738,51 @@ pub(super) fn stale_base_error() -> WorldError {
 }
 
 fn refresh_cognition_journal(journal: &mut CognitionJournalProjection) {
+    let mut previous_event_digest = String::new();
     for event in &mut journal.events {
+        if event.schema_version.is_empty() {
+            event.schema_version = "cognition-journal-event.v1".to_string();
+        }
+        if event.event_kind.is_empty() {
+            event.event_kind = event.kind.clone();
+        }
+        if event.kind.is_empty() {
+            event.kind = event.event_kind.clone();
+        }
+        if event.world_id.is_empty() {
+            event.world_id = "unbound".to_string();
+        }
+        if event.branch_id.is_empty() {
+            event.branch_id = "main".to_string();
+        }
+        if event.finality_status.is_empty() {
+            event.finality_status = "pending".to_string();
+        }
+        if event.status.is_empty() {
+            event.status = event
+                .extra
+                .get("status")
+                .and_then(JsonValue::as_str)
+                .unwrap_or("pending")
+                .to_string();
+        }
+        if event.payload_digest.is_empty() {
+            let mut payload = serde_json::to_value(&*event).unwrap_or(JsonValue::Null);
+            if let Some(object) = payload.as_object_mut() {
+                object.remove("event_digest");
+                object.remove("payload_digest");
+            }
+            event.payload_digest =
+                cognition_digest_v1("oasis7.cognition.event-payload.v1", &payload);
+        }
+        if event.parent_event_digest.is_empty() && event.journal_seq > 1 {
+            event.parent_event_digest = previous_event_digest.clone();
+        }
         event.event_digest = None;
         let unsigned = serde_json::to_value(&*event).unwrap_or(JsonValue::Null);
-        event.event_digest = Some(cognition_digest_v1("oasis7.cognition.event.v1", &unsigned));
+        let digest = cognition_digest_v1("oasis7.cognition.event.v1", &unsigned);
+        event.event_digest = Some(digest.clone());
+        previous_event_digest = digest;
     }
     journal.head_seq = journal.head_seq.max(
         journal
@@ -836,13 +897,31 @@ pub(super) fn select_commit_record(
 }
 
 pub(super) fn validate_marker(marker: &WorldCommitRecordV1) -> Result<(), WorldError> {
+    let valid_abort_reason = marker.abort_reason.as_deref().is_some_and(|reason| {
+        matches!(
+            reason,
+            "stale_base"
+                | "cancelled"
+                | "late_response_after_cancel"
+                | "recovery_operator_abort"
+                | "reorg_invalidated"
+        )
+    });
+    let abort_shape_valid = match marker.status.as_str() {
+        "aborted" => valid_abort_reason,
+        "prepared" | "committed" => marker.abort_reason.is_none(),
+        _ => false,
+    };
     if marker.schema_version != WORLD_COMMIT_SCHEMA
         || marker.commit_id.trim().is_empty()
         || marker.envelope_idempotency_key.trim().is_empty()
         || marker.envelope_digest.trim().is_empty()
         || marker.world_id.trim().is_empty()
         || marker.branch_id.trim().is_empty()
-        || marker.finality_block_hash.trim().is_empty()
+        || marker
+            .finality_block_hash
+            .as_deref()
+            .is_some_and(|hash| hash.trim().is_empty())
         || marker.finality_status.trim().is_empty()
         || marker.finality_binding_digest.trim().is_empty()
         || marker.runtime_manifest_hash.trim().is_empty()
@@ -852,8 +931,7 @@ pub(super) fn validate_marker(marker: &WorldCommitRecordV1) -> Result<(), WorldE
         || marker.staged_state_root.trim().is_empty()
         || marker.receipt_id.trim().is_empty()
         || marker.receipt_digest.trim().is_empty()
-        || marker.abort_reason.is_some()
-        || !matches!(marker.status.as_str(), "prepared" | "committed")
+        || !abort_shape_valid
     {
         return Err(WorldError::DistributedValidationFailed {
             reason: "invalid_commit_record".to_string(),
@@ -861,7 +939,7 @@ pub(super) fn validate_marker(marker: &WorldCommitRecordV1) -> Result<(), WorldE
     }
     if !finality_binding_is_legal(
         &marker.finality_status,
-        (marker.finality_block_hash != "genesis").then_some(marker.finality_block_hash.as_str()),
+        marker.finality_block_hash.as_deref(),
     ) {
         return Err(WorldError::DistributedValidationFailed {
             reason: "invalid_commit_record_finality".to_string(),
@@ -926,8 +1004,7 @@ pub(super) fn validate_marker(marker: &WorldCommitRecordV1) -> Result<(), WorldE
         let expected_finality_binding = finality_binding_digest_v1(
             &marker.branch_id,
             marker.finality_epoch,
-            (marker.finality_block_hash != "genesis")
-                .then_some(marker.finality_block_hash.as_str()),
+            marker.finality_block_hash.as_deref(),
             &marker.finality_status,
             marker.reorg_epoch,
         );
@@ -1022,109 +1099,4 @@ pub(super) fn canonical_cognition_digest(value: &str) -> bool {
         && hex
             .bytes()
             .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-}
-
-pub(super) fn pending_report(
-    marker: &WorldCommitRecordV1,
-    root: WorldRootViewV1,
-) -> CognitionRecoveryReport {
-    let mut root = root;
-    root.head_status = "recovery_pending".to_string();
-    root.commit_id = None;
-    root.quarantine_id = None;
-    CognitionRecoveryReport {
-        world_root: Some(root),
-        receipt: None,
-        disposition: "recovery_pending".to_string(),
-        reject_reason: None,
-        auto_submitted: false,
-        idempotency_key: Some(marker.envelope_idempotency_key.clone()),
-        quarantine_id: None,
-        candidate_root: None,
-        candidate_receipt: None,
-        journal_head: String::new(),
-        retry_count: 0,
-        revalidation_count: 1,
-        projection_repairs: 0,
-        provider_invocation_count: 0,
-        kernel_invocation_count: 0,
-        effect_count: 0,
-        debit_count: 0,
-        world_receipt_linked_count: 0,
-        event_count: 0,
-        response_replayed: false,
-    }
-}
-
-pub(super) fn conflict_report(
-    marker: &WorldCommitRecordV1,
-    root: WorldRootViewV1,
-) -> CognitionRecoveryReport {
-    let quarantine_id = format!("quarantine:{}", marker.commit_id);
-    let mut root = root;
-    root.state_root = marker.parent_world_hash.clone();
-    root.logical_tick = marker.parent_tick;
-    root.head_status = "recovery_pending".to_string();
-    root.commit_id = None;
-    root.quarantine_id = Some(quarantine_id.clone());
-    CognitionRecoveryReport {
-        world_root: Some(root),
-        receipt: None,
-        disposition: "recovery_pending".to_string(),
-        reject_reason: Some("commit_conflict".to_string()),
-        auto_submitted: false,
-        idempotency_key: Some(marker.envelope_idempotency_key.clone()),
-        quarantine_id: Some(quarantine_id),
-        candidate_root: Some(marker.staged_state_root.clone()),
-        candidate_receipt: Some(CognitionReceiptViewV1 {
-            receipt_id: marker.receipt_id.clone(),
-            receipt_digest: marker.receipt_digest.clone(),
-        }),
-        journal_head: String::new(),
-        retry_count: 0,
-        revalidation_count: 0,
-        projection_repairs: 0,
-        provider_invocation_count: 0,
-        kernel_invocation_count: 0,
-        effect_count: 0,
-        debit_count: 0,
-        world_receipt_linked_count: 0,
-        event_count: 0,
-        response_replayed: false,
-    }
-}
-
-pub(super) fn visible_root_conflict_report(
-    marker: &WorldCommitRecordV1,
-    mut canonical_root: WorldRootViewV1,
-) -> CognitionRecoveryReport {
-    let quarantine_id = format!("quarantine:{}", marker.commit_id);
-    canonical_root.head_status = "canonical".to_string();
-    canonical_root.commit_id = (marker.status == "committed").then(|| marker.commit_id.clone());
-    canonical_root.quarantine_id = None;
-    CognitionRecoveryReport {
-        world_root: Some(canonical_root),
-        receipt: None,
-        disposition: "recovery_pending".to_string(),
-        reject_reason: Some("world_root_mismatch".to_string()),
-        auto_submitted: false,
-        idempotency_key: Some(marker.envelope_idempotency_key.clone()),
-        quarantine_id: Some(quarantine_id),
-        candidate_root: Some(marker.staged_state_root.clone()),
-        candidate_receipt: Some(CognitionReceiptViewV1 {
-            receipt_id: marker.receipt_id.clone(),
-            receipt_digest: marker.receipt_digest.clone(),
-        }),
-        journal_head: String::new(),
-        retry_count: 0,
-        revalidation_count: 0,
-        projection_repairs: 0,
-        provider_invocation_count: 0,
-        kernel_invocation_count: 0,
-        effect_count: 0,
-        debit_count: 0,
-        world_receipt_linked_count: 0,
-        event_count: 0,
-        response_replayed: false,
-    }
 }

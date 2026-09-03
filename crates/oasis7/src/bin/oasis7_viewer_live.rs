@@ -36,6 +36,7 @@ struct CliOptions {
     agent_chat_echo: bool,
     major_world_event_visibility: MajorWorldEventVisibilityPermission,
     generated_world_dir: Option<PathBuf>,
+    provider_lineage_store: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,6 +71,7 @@ impl Default for CliOptions {
             agent_chat_echo: oasis7::viewer::runtime_agent_chat_echo_enabled_from_env(),
             major_world_event_visibility: MajorWorldEventVisibilityPermission::Unknown,
             generated_world_dir: None,
+            provider_lineage_store: None,
         }
     }
 }
@@ -113,6 +115,7 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
         agent_chat_echo = options.agent_chat_echo,
         major_world_event_visibility = ?options.major_world_event_visibility,
         generated_world_dir = ?options.generated_world_dir,
+        provider_lineage_store = ?options.provider_lineage_store,
         scenario = %options
             .scenario
             .map(|value| value.as_str().to_string())
@@ -168,6 +171,11 @@ fn initialize_viewer_server(options: &CliOptions) -> Result<ViewerRuntimeLiveSer
         });
     let config = if let Some(generated_world_dir) = options.generated_world_dir.as_ref() {
         config.with_generated_world_dir(generated_world_dir.clone())
+    } else {
+        config
+    };
+    let config = if let Some(provider_lineage_store) = options.provider_lineage_store.as_ref() {
+        config.with_provider_lineage_store(provider_lineage_store.clone())
     } else {
         config
     };
@@ -275,6 +283,12 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
                 options.generated_world_dir = Some(PathBuf::from(parse_required_value(
                     &mut iter,
                     "--generated-world-dir",
+                )?));
+            }
+            "--provider-lineage-store" => {
+                options.provider_lineage_store = Some(PathBuf::from(parse_required_value(
+                    &mut iter,
+                    "--provider-lineage-store",
                 )?));
             }
             "--runtime-world" => {
@@ -472,6 +486,7 @@ Options:\n\
   --agent-chat-echo         accept provider-backed local QA chat with an echo event\n\
   --major-world-event-visibility <policy> explicit audience policy: unknown|public|restricted|denied (default: unknown)\n\
   --generated-world-dir <dir> initialize viewer from generated-world/generated-scenario-world and provenance\n\
+  --provider-lineage-store <path> explicit durable provider lineage checkpoint (for formal/synthetic restart recovery)\n\
   -h, --help                show help\n\n\
 Removed:\n\
   --release-config, --runtime-world, all --node-*, --topology, --triad-*, --reward-runtime-*, --no-node, --viewer-no-consensus-gate\n\
@@ -511,6 +526,7 @@ mod tests {
         assert!(options.auto_play);
         assert!(!options.allow_debug_scenario);
         assert_eq!(options.generated_world_dir, None);
+        assert_eq!(options.provider_lineage_store, None);
     }
 
     #[test]
@@ -559,6 +575,21 @@ mod tests {
             MajorWorldEventVisibilityPermission::Restricted
         );
         assert_eq!(options.generated_world_dir, None);
+        assert_eq!(options.provider_lineage_store, None);
+    }
+
+    #[test]
+    fn parse_options_accepts_explicit_provider_lineage_store() {
+        let path = PathBuf::from("/var/lib/oasis7/provider-lineage.json");
+        let options = parse_options(
+            [
+                "--provider-lineage-store",
+                path.to_str().expect("utf8 provider lineage path"),
+            ]
+            .into_iter(),
+        )
+        .expect("provider lineage store");
+        assert_eq!(options.provider_lineage_store, Some(path));
     }
 
     #[test]

@@ -1,8 +1,6 @@
 use super::World;
 use super::cognition_persistence_validation::append_cognition_event;
-use crate::runtime::cognition::{
-    PreconditionSubjectV1, finality_binding_is_legal, world_state_binding_digest_v1,
-};
+use crate::runtime::cognition::{finality_binding_is_legal, world_state_binding_digest_v1};
 use crate::runtime::cognition_recovery::{RuntimeCognitionBaseBindingV1, cognition_digest_v1};
 use crate::runtime::cognition_retention::{
     CognitionRetentionStore, RetentionExecutionProbe, RetentionRecordV1,
@@ -12,17 +10,19 @@ use crate::runtime::cognition_scheduler::{
 };
 use crate::runtime::cognition_wake::{
     AgentContinuation, CognitionContinuationProposalV1, CognitionWakeDispositionV1,
-    ContinuationReorgReport, ContinuationStatusV1, ContinuationTransition, WakeConditionV1,
-    WakeConditionValidator, WakeEvaluation, WakeEvaluationContext,
+    ContinuationReorgReport, ContinuationStatusV1, ContinuationTransition, WakeConditionValidator,
 };
 use crate::runtime::error::WorldError;
-use crate::simulator::ResourceKind;
 use serde_json::{Value as JsonValue, json};
 
 const CONTINUATION_SCHEMA: &str = "agent-continuation.v1";
 
 #[path = "cognition_orchestration_support.rs"]
 mod cognition_orchestration_support;
+#[path = "cognition_turn_lifecycle.rs"]
+mod cognition_turn_lifecycle;
+#[path = "cognition_wake_orchestration.rs"]
+mod cognition_wake_orchestration;
 
 impl World {
     fn is_terminal_continuation_status(status: ContinuationStatusV1) -> bool {
@@ -165,14 +165,29 @@ impl World {
         }
         .validate()
         .map_err(|error| cognition_validation_error(error.code()))?;
-        if let Some(existing) = self.cognition.get("runtime_binding")
-            && existing != &JsonValue::Null
+        let mut projection = self.cognition.as_object().cloned().unwrap_or_default();
+        if let Some(existing) = projection
+            .get("runtime_binding")
+            .filter(|value| *value != &JsonValue::Null)
             && existing != &binding
         {
-            return Err(cognition_validation_error("runtime_binding_conflict"));
+            // A parent binding is immutable while it has live work. Reorg
+            // invalidation records a one-shot epoch which authorizes the next
+            // parent binding; the invalidation path itself never mutates the
+            // historical binding or rebases any continuation.
+            let previous_reorg_epoch = existing
+                .get("reorg_epoch")
+                .and_then(JsonValue::as_u64)
+                .unwrap_or_default();
+            let authorized_epoch = projection
+                .get("reorg_invalidation_epoch")
+                .and_then(JsonValue::as_u64);
+            if reorg_epoch <= previous_reorg_epoch || authorized_epoch != Some(reorg_epoch) {
+                return Err(cognition_validation_error("runtime_binding_conflict"));
+            }
         }
-        let mut projection = self.cognition.as_object().cloned().unwrap_or_default();
         projection.insert("runtime_binding".to_string(), binding);
+        projection.remove("reorg_invalidation_epoch");
         self.cognition = JsonValue::Object(projection);
         Ok(())
     }
@@ -268,6 +283,14 @@ impl World {
         &mut self,
         tick: u64,
     ) -> Result<Vec<SchedulerWakeV1>, WorldError> {
+        self.select_ready_cognition_wakes_inner(tick, false)
+    }
+
+    pub(in crate::runtime::world) fn select_ready_cognition_wakes_inner(
+        &mut self,
+        tick: u64,
+        evidence_only: bool,
+    ) -> Result<Vec<SchedulerWakeV1>, WorldError> {
         if let Some(state) = self
             .cognition
             .get("scheduler_state")
@@ -282,6 +305,11 @@ impl World {
         });
         let selected = scheduler.select_ready_if(tick, |wake| {
             self.cognition_wake_conditions_ready(wake, &continuations, tick)
+                && (!evidence_only
+                    || continuations
+                        .iter()
+                        .find(|continuation| continuation.continuation_id == wake.continuation_id)
+                        .is_some_and(Self::cognition_wake_has_committed_evidence_condition))
         });
         let mut transaction = self.clone();
         for wake in &stale {
@@ -291,7 +319,7 @@ impl World {
                 Some(wake),
             )?;
         }
-        if selected.is_empty() {
+        if selected.is_empty() && !evidence_only {
             transaction.cognition_commit_scheduler_transaction(
                 &scheduler,
                 "SchedulerWakeSelected",
@@ -380,6 +408,7 @@ impl World {
                 Some(recovered_wake),
             )?;
         }
+        let _ = transaction.select_ready_cognition_wakes_inner(transaction.state.time, true)?;
         transaction.persist_runtime_transaction_if_configured()?;
         *self = transaction;
         Ok(wake)
@@ -408,6 +437,7 @@ impl World {
                 )?;
             }
         }
+        let _ = transaction.select_ready_cognition_wakes_inner(tick, true)?;
         transaction.persist_runtime_transaction_if_configured()?;
         *self = transaction;
         Ok(recovered)
@@ -472,52 +502,6 @@ impl World {
                     "debit_count": 0
                 })
             })
-    }
-
-    pub fn evaluate_cognition_wake(
-        &self,
-        conditions: &[WakeConditionV1],
-    ) -> Result<WakeEvaluation, WorldError> {
-        self.evaluate_cognition_wake_at_tick(conditions, self.state.time)
-    }
-
-    fn evaluate_cognition_wake_at_tick(
-        &self,
-        conditions: &[WakeConditionV1],
-        tick: u64,
-    ) -> Result<WakeEvaluation, WorldError> {
-        let head_digest = self.current_state_root_hash()?;
-        let (event_digests, receipt_ids) = self.cognition_committed_evidence()?;
-        let mut context = WakeEvaluationContext::at(tick)
-            .with_evaluation_head(&head_digest)
-            .with_reorg_epoch(self.cognition_reorg_epoch());
-        for digest in &event_digests {
-            context = context.with_event(digest);
-        }
-        for receipt_id in &receipt_ids {
-            context = context.with_receipt(receipt_id);
-        }
-        self.evaluate_cognition_wake_with_context(conditions, context)
-    }
-
-    pub fn evaluate_cognition_wake_from_committed_projection(
-        &self,
-        conditions: &[WakeConditionV1],
-        event_digest: &str,
-        receipt_id: &str,
-    ) -> Result<WakeEvaluation, WorldError> {
-        let head_digest = self.current_state_root_hash()?;
-        let (event_digests, receipt_ids) = self.cognition_committed_evidence()?;
-        let mut context = WakeEvaluationContext::at(self.state.time)
-            .with_reorg_epoch(self.cognition_reorg_epoch())
-            .with_evaluation_head(&head_digest);
-        if event_digests.contains(event_digest) {
-            context = context.with_event(event_digest);
-        }
-        if receipt_ids.contains(receipt_id) {
-            context = context.with_receipt(receipt_id);
-        }
-        self.evaluate_cognition_wake_with_context(conditions, context)
     }
 
     pub fn admit_cognition_continuation(
@@ -665,10 +649,7 @@ impl World {
             world_id: continuation.world_id.clone(),
             branch_id: continuation.branch_id.clone(),
             finality_epoch: continuation.finality_epoch,
-            finality_block_hash: continuation
-                .finality_block_hash
-                .clone()
-                .unwrap_or_else(|| "genesis".to_string()),
+            finality_block_hash: continuation.finality_block_hash.clone(),
             finality_status: continuation.finality_status.clone(),
             reorg_epoch: continuation.reorg_epoch,
             runtime_manifest_hash: continuation.runtime_manifest_hash.clone(),
@@ -759,6 +740,81 @@ impl World {
         let mut scheduler = transaction.cognition_scheduler()?;
         let mut transitioned = Vec::new();
         let mut invalidated = 0u64;
+        let mut aborted_commit_events = Vec::new();
+        let mut aborted_commit_ids = Vec::new();
+        if let Some(records) = transaction
+            .cognition
+            .get_mut("commit_records")
+            .and_then(JsonValue::as_array_mut)
+        {
+            for record in records {
+                if record.get("status").and_then(JsonValue::as_str) != Some("prepared")
+                    || record
+                        .get("reorg_epoch")
+                        .and_then(JsonValue::as_u64)
+                        .is_some_and(|epoch| epoch >= reorg_epoch)
+                {
+                    continue;
+                }
+                record["status"] = json!("aborted");
+                record["abort_reason"] = json!("reorg_invalidated");
+                if let Some(commit_id) = record.get("commit_id").and_then(JsonValue::as_str) {
+                    aborted_commit_ids.push(commit_id.to_string());
+                }
+                aborted_commit_events.push(json!({
+                    "status": "rejected",
+                    "reject_reason": "reorg_invalidated",
+                    "envelope_idempotency_key": record["envelope_idempotency_key"],
+                    "envelope_digest": record["envelope_digest"],
+                    "receipt_id": record["receipt_id"],
+                    "agent_id": record["agent_id"],
+                    "agent_session_id": record["agent_session_id"],
+                    "agent_turn_id": record["agent_turn_id"],
+                    "decision_request_id": record["decision_request_id"],
+                    "request_digest": record["request_digest"],
+                    "feedback_id": record["feedback_id"],
+                }));
+            }
+        }
+        if !aborted_commit_events.is_empty() {
+            if let Some(index) = transaction
+                .cognition
+                .get_mut("idempotency_index")
+                .and_then(JsonValue::as_object_mut)
+            {
+                for event in &aborted_commit_events {
+                    if let Some(key) = event
+                        .get("envelope_idempotency_key")
+                        .and_then(JsonValue::as_str)
+                    {
+                        index
+                            .entry(key.to_string())
+                            .and_modify(|entry| entry["disposition"] = json!("aborted"));
+                    }
+                }
+            }
+            if let Some(staged_actions) = transaction
+                .cognition
+                .get_mut("staged_actions")
+                .and_then(JsonValue::as_object_mut)
+            {
+                for commit_id in &aborted_commit_ids {
+                    staged_actions.remove(commit_id);
+                }
+            }
+            for event in aborted_commit_events {
+                append_cognition_event(
+                    &mut transaction.cognition,
+                    "CognitionTurnCancelled",
+                    event.clone(),
+                )?;
+                append_cognition_event(
+                    &mut transaction.cognition,
+                    "CognitionTurnCompleted",
+                    event,
+                )?;
+            }
+        }
         for continuation in &mut continuations {
             if matches!(
                 continuation.status,
@@ -791,6 +847,7 @@ impl World {
                 deactivated.as_ref(),
             )?;
         }
+        transaction.cognition["reorg_invalidation_epoch"] = json!(reorg_epoch);
         if transitioned.is_empty() {
             transaction.cognition_commit_scheduler_transaction(
                 &scheduler,
@@ -863,143 +920,6 @@ impl World {
         serde_json::to_value(result).map_err(WorldError::from)
     }
 
-    fn evaluate_cognition_wake_with_context(
-        &self,
-        conditions: &[WakeConditionV1],
-        context: WakeEvaluationContext,
-    ) -> Result<WakeEvaluation, WorldError> {
-        let context = self.enrich_cognition_wake_context(conditions, context)?;
-        WakeConditionValidator::evaluate(conditions, &context)
-            .map_err(|error| cognition_validation_error(error.code()))
-    }
-
-    fn enrich_cognition_wake_context(
-        &self,
-        conditions: &[WakeConditionV1],
-        mut context: WakeEvaluationContext,
-    ) -> Result<WakeEvaluationContext, WorldError> {
-        let world_id = self.cognition_world_id();
-        let world_predicate_requested = conditions.iter().any(|condition| {
-            condition.kind == "state_predicate"
-                && condition.subject.as_ref().is_some_and(|subject| {
-                    subject.kind == "world" && world_id.as_deref() == Some(subject.id.as_str())
-                })
-        });
-        if world_predicate_requested {
-            let world_subject = PreconditionSubjectV1 {
-                kind: "world".to_string(),
-                id: world_id.clone().unwrap_or_default(),
-            };
-            context = context
-                .with_subject_predicate_value(
-                    &world_subject,
-                    "world.logical_tick",
-                    &serde_cbor::to_vec(&self.state.time).map_err(WorldError::from)?,
-                )
-                .with_subject_predicate_value(
-                    &world_subject,
-                    "world.reorg_epoch",
-                    &serde_cbor::to_vec(&self.cognition_reorg_epoch()).map_err(WorldError::from)?,
-                );
-            let state_root = self.current_state_root_hash()?;
-            context = context.with_subject_predicate_value(
-                &world_subject,
-                "world.state_root",
-                &serde_cbor::to_vec(&state_root).map_err(WorldError::from)?,
-            );
-            let manifest_hash = self.current_manifest_hash()?;
-            context = context.with_subject_predicate_value(
-                &world_subject,
-                "world.runtime_manifest_hash",
-                &serde_cbor::to_vec(&manifest_hash).map_err(WorldError::from)?,
-            );
-        }
-        for condition in conditions {
-            if condition.kind != "state_predicate" {
-                continue;
-            }
-            let Some(subject) = condition.subject.as_ref() else {
-                continue;
-            };
-            let Some(path) = condition.path_or_rule.as_deref() else {
-                continue;
-            };
-            match (subject.kind.as_str(), path) {
-                ("agent", "agent.status")
-                | ("agent", "agent.position")
-                | ("agent", "agent.inventory_digest")
-                | ("agent", "agent.capability_snapshot_hash")
-                | ("agent", "agent.resource.electricity")
-                | ("agent", "agent.resource.data") => {
-                    let Some(cell) = self.state.agents.get(&subject.id) else {
-                        continue;
-                    };
-                    let value = match path {
-                        "agent.status" => serde_cbor::to_vec(
-                            &cell
-                                .activity
-                                .as_ref()
-                                .map(|activity| activity.status)
-                                .unwrap_or(crate::runtime::AgentActivityStatus::Idle),
-                        ),
-                        "agent.position" => {
-                            serde_cbor::to_vec(&(cell.state.pos.x_cm, cell.state.pos.y_cm))
-                        }
-                        "agent.inventory_digest" => serde_cbor::to_vec(
-                            &oasis7_wasm_abi::canonical_hash(&cell.state.body_state.cargo_entries)
-                                .map_err(|_| {
-                                    cognition_validation_error("predicate_value_invalid")
-                                })?,
-                        ),
-                        "agent.capability_snapshot_hash" => {
-                            serde_cbor::to_vec(&self.capability_authorization_root())
-                        }
-                        "agent.resource.electricity" => {
-                            serde_cbor::to_vec(&cell.state.resources.get(ResourceKind::Electricity))
-                        }
-                        "agent.resource.data" => {
-                            serde_cbor::to_vec(&cell.state.resources.get(ResourceKind::Data))
-                        }
-                        _ => unreachable!(),
-                    }
-                    .map_err(WorldError::from)?;
-                    context = context.with_subject_predicate_value(subject, path, &value);
-                }
-                ("intent", "intent.status") => {
-                    let Some(intent) = self.state.agent_intent_ledger.get(&subject.id) else {
-                        continue;
-                    };
-                    let value = serde_cbor::to_vec(&intent.status).map_err(WorldError::from)?;
-                    context = context.with_subject_predicate_value(subject, path, &value);
-                }
-                _ => {}
-            }
-        }
-        Ok(context)
-    }
-
-    fn cognition_world_id(&self) -> Option<String> {
-        self.cognition
-            .get("runtime_binding")
-            .and_then(|binding| binding.get("world_id"))
-            .and_then(JsonValue::as_str)
-            .filter(|world_id| !world_id.trim().is_empty())
-            .map(str::to_string)
-            .or_else(|| {
-                let world_id = self.chain_resource_manifest().world_id.clone();
-                (world_id != "unbound").then_some(world_id)
-            })
-    }
-
-    fn cognition_reorg_epoch(&self) -> u64 {
-        self.state
-            .agent_intent_ledger
-            .values()
-            .filter_map(|intent| intent.reorg_epoch)
-            .max()
-            .unwrap_or(0)
-    }
-
     pub(in crate::runtime::world) fn cognition_scheduler(
         &self,
     ) -> Result<CognitionScheduler, WorldError> {
@@ -1061,6 +981,15 @@ impl World {
             .unwrap_or(false)
     }
 
+    fn cognition_wake_has_committed_evidence_condition(continuation: &AgentContinuation) -> bool {
+        continuation.wake_conditions.iter().any(|condition| {
+            matches!(
+                condition.kind.as_str(),
+                "world_event_committed" | "receipt_linked" | "state_predicate"
+            )
+        })
+    }
+
     pub(super) fn validate_cognition_wake_binding(
         &self,
         wake: &SchedulerWakeV1,
@@ -1068,7 +997,7 @@ impl World {
         wake.validate()
             .map_err(|error| scheduler_error(error.code()))?;
         if let Some(binding) = self.cognition.get("runtime_binding") {
-            let block_hash = binding["finality_block_hash"].as_str().unwrap_or("genesis");
+            let block_hash = binding["finality_block_hash"].as_str().map(str::to_string);
             if binding["world_id"].as_str() != Some(wake.world_id.as_str())
                 || binding["branch_id"].as_str() != Some(wake.branch_id.as_str())
                 || binding["finality_epoch"].as_u64() != Some(wake.finality_epoch)
@@ -1092,11 +1021,7 @@ impl World {
             || continuation.world_id != wake.world_id
             || continuation.branch_id != wake.branch_id
             || continuation.finality_epoch != wake.finality_epoch
-            || continuation
-                .finality_block_hash
-                .as_deref()
-                .unwrap_or("genesis")
-                != wake.finality_block_hash
+            || continuation.finality_block_hash != wake.finality_block_hash
             || continuation.finality_status != wake.finality_status
             || continuation.reorg_epoch != wake.reorg_epoch
             || continuation.runtime_manifest_hash != wake.runtime_manifest_hash

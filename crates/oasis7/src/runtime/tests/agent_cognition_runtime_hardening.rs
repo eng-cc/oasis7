@@ -273,7 +273,7 @@ pub(super) fn test_continuation_wake(
         "world_id": WORLD_ID,
         "branch_id": "main",
         "finality_epoch": 0,
-        "finality_block_hash": "genesis",
+        "finality_block_hash": null,
         "finality_status": "pending",
         "reorg_epoch": 0,
         "runtime_manifest_hash": world.current_manifest_hash().expect("manifest"),

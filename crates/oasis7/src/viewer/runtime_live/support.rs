@@ -38,6 +38,7 @@ impl ViewerRuntimeLiveServerConfig {
             agent_chat_echo_enabled: control_plane::runtime_agent_chat_echo_enabled_from_env(),
             major_world_event_visibility: MajorWorldEventVisibilityPermission::Unknown,
             generated_world_dir: None,
+            provider_lineage_store: None,
             #[cfg(test)]
             test_cognition_runtime_binding: None,
         }
@@ -59,6 +60,7 @@ impl ViewerRuntimeLiveServerConfig {
             agent_chat_echo_enabled: control_plane::runtime_agent_chat_echo_enabled_from_env(),
             major_world_event_visibility: MajorWorldEventVisibilityPermission::Unknown,
             generated_world_dir: None,
+            provider_lineage_store: None,
             #[cfg(test)]
             test_cognition_runtime_binding: None,
         }
@@ -169,97 +171,21 @@ impl ViewerRuntimeLiveServerConfig {
         self.generated_world_dir = Some(dir.into());
         self
     }
-}
 
-#[derive(Debug, Clone, Default)]
-pub(super) struct RuntimeLiveScript {
-    phase: u8,
-    move_direction: i64,
-}
+    /// Select the operator-owned durable provider lineage checkpoint. When a
+    /// generated world is configured and this is omitted, the checkpoint is
+    /// kept beside that world's immutable sidecar.
+    pub fn with_provider_lineage_store(mut self, path: impl Into<PathBuf>) -> Self {
+        self.provider_lineage_store = Some(path.into());
+        self
+    }
 
-impl RuntimeLiveScript {
-    pub(super) fn enqueue(&mut self, world: &mut RuntimeWorld) {
-        let mut agent_ids: Vec<String> = world.state().agents.keys().cloned().collect();
-        agent_ids.sort();
-
-        if agent_ids.is_empty() {
-            world.submit_action(RuntimeAction::RegisterAgent {
-                agent_id: "runtime-agent-0".to_string(),
-                pos: GeoPos::new(0, 0, 0),
-            });
-            world.submit_action(RuntimeAction::RegisterAgent {
-                agent_id: "runtime-agent-1".to_string(),
-                pos: GeoPos::new(0, 0, 0),
-            });
-            return;
-        }
-
-        let phase = self.phase;
-        self.phase = self.phase.wrapping_add(1) % 4;
-
-        match phase {
-            0 => {
-                let first = &agent_ids[0];
-                let Some(from_pos) = world.state().agents.get(first).map(|cell| cell.state.pos)
-                else {
-                    return;
-                };
-                if self.move_direction == 0 {
-                    self.move_direction = 1;
-                } else {
-                    self.move_direction = -self.move_direction;
-                }
-                let delta_cm = self.move_direction * 1_000;
-                world.submit_action(RuntimeAction::MoveAgent {
-                    agent_id: first.clone(),
-                    to: GeoPos::new(from_pos.x_cm + delta_cm, from_pos.y_cm, from_pos.z_cm),
-                });
-            }
-            1 => {
-                if agent_ids.len() < 2 {
-                    world.submit_action(RuntimeAction::MoveAgent {
-                        agent_id: "missing-agent".to_string(),
-                        to: GeoPos::new(0, 0, 0),
-                    });
-                    return;
-                }
-                let first = &agent_ids[0];
-                let second = &agent_ids[1];
-                let Some(target) = world.state().agents.get(first).map(|cell| cell.state.pos)
-                else {
-                    return;
-                };
-                world.submit_action(RuntimeAction::MoveAgent {
-                    agent_id: second.clone(),
-                    to: target,
-                });
-            }
-            2 => {
-                if agent_ids.len() < 2 {
-                    world.submit_action(RuntimeAction::MoveAgent {
-                        agent_id: "missing-agent".to_string(),
-                        to: GeoPos::new(0, 0, 0),
-                    });
-                    return;
-                }
-                let from = &agent_ids[0];
-                let to = &agent_ids[1];
-                let _ = world.set_agent_resource_balance(from, ResourceKind::Electricity, 64);
-                let _ = world.set_agent_resource_balance(to, ResourceKind::Electricity, 64);
-                world.submit_action(RuntimeAction::EmitResourceTransfer {
-                    from_agent_id: from.clone(),
-                    to_agent_id: to.clone(),
-                    kind: ResourceKind::Electricity,
-                    amount: 1,
-                });
-            }
-            _ => {
-                world.submit_action(RuntimeAction::MoveAgent {
-                    agent_id: "missing-agent".to_string(),
-                    to: GeoPos::new(0, 0, 0),
-                });
-            }
-        }
+    pub(super) fn provider_lineage_store_path(&self) -> Option<PathBuf> {
+        self.provider_lineage_store.clone().or_else(|| {
+            self.generated_world_dir
+                .as_deref()
+                .map(|dir| dir.join("runtime-live-provider-lineage.json"))
+        })
     }
 }
 
@@ -873,6 +799,27 @@ pub(super) fn is_expected_disconnect_error(err: &io::Error) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn provider_lineage_store_path_requires_explicit_formal_path() {
+        let formal = ViewerRuntimeLiveServerConfig::formal_release_default();
+        assert_eq!(formal.provider_lineage_store_path(), None);
+
+        let generated = ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_generated_world_dir("/var/lib/oasis7/generated-world");
+        assert_eq!(
+            generated.provider_lineage_store_path(),
+            Some(PathBuf::from(
+                "/var/lib/oasis7/generated-world/runtime-live-provider-lineage.json"
+            ))
+        );
+
+        let explicit = formal.with_provider_lineage_store("/var/lib/oasis7/formal-lineage.json");
+        assert_eq!(
+            explicit.provider_lineage_store_path(),
+            Some(PathBuf::from("/var/lib/oasis7/formal-lineage.json"))
+        );
+    }
 
     #[test]
     fn default_subscription_requests_initial_snapshot_and_recovery_metadata() {
