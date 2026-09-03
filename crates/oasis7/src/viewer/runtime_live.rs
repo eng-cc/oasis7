@@ -121,7 +121,6 @@ use support::{
     bootstrap_runtime_live_world, is_expected_disconnect_error, is_timeout_error,
     latest_runtime_event_seq, lock_shared_server, runtime_metrics, send_response,
 };
-use wake_dispatch::ensure_viewer_runtime_binding;
 pub const VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID: &str = FORMAL_RELEASE_DEFAULT_WORLD_ID;
 pub struct ViewerRuntimeLiveServer {
     config: ViewerRuntimeLiveServerConfig,
@@ -160,7 +159,6 @@ pub struct ViewerRuntimeLiveServer {
     #[cfg(test)]
     authoritative_recovery_dir_override: Option<PathBuf>,
 }
-
 impl ViewerRuntimeLiveServer {
     pub fn new(
         config: ViewerRuntimeLiveServerConfig,
@@ -235,7 +233,7 @@ impl ViewerRuntimeLiveServer {
                 recovered_generation = Some(generation);
             }
         }
-        ensure_viewer_runtime_binding(&mut world, &config)?;
+        wake_dispatch::ensure_viewer_runtime_binding(&mut world, &config)?;
         let initial_world_time = world.state().time;
         let mut llm_sidecar = match seed_model.as_ref() {
             Some(model) => {
