@@ -83,7 +83,6 @@ pub(super) fn player_gameplay_causality_from_runtime_events(
         detail: override_detail.unwrap_or(fallback),
     })
 }
-
 fn derive_player_gameplay_execution_state(
     stage_status: PlayerGameplayStageStatus,
     recent_feedback: Option<&PlayerGameplayRecentFeedback>,
@@ -99,14 +98,12 @@ fn derive_player_gameplay_execution_state(
             _ => {}
         }
     }
-
     match stage_status {
         PlayerGameplayStageStatus::Blocked => PlayerGameplayExecutionState::Blocked,
         PlayerGameplayStageStatus::BranchReady => PlayerGameplayExecutionState::Completed,
         PlayerGameplayStageStatus::Active => PlayerGameplayExecutionState::Executing,
     }
 }
-
 fn derive_player_gameplay_causality(
     gameplay: &PlayerGameplaySnapshot,
     recent_feedback: Option<&PlayerGameplayRecentFeedback>,
@@ -115,7 +112,6 @@ fn derive_player_gameplay_causality(
     if let Some(signal) = causality_signal {
         return (Some(signal.kind), Some(signal.detail.clone()));
     }
-
     match gameplay.execution_state {
         PlayerGameplayExecutionState::Accepted => (
             Some(PlayerGameplayCausalityKind::QueuedForExecution),
@@ -164,7 +160,6 @@ fn derive_player_gameplay_causality(
         PlayerGameplayExecutionState::Executing => (None, None),
     }
 }
-
 fn finalize_player_gameplay_snapshot(
     mut gameplay: PlayerGameplaySnapshot,
     industry_stage: IndustryStage,
@@ -280,7 +275,6 @@ fn finalize_player_gameplay_snapshot(
     gameplay.recent_feedback = player_facing_feedback;
     gameplay
 }
-
 fn is_fresh_factory_production_failure_disposition(
     state: &WorldState,
     factory: &FactoryState,
@@ -306,7 +300,6 @@ fn is_fresh_factory_production_failure_disposition(
             .pending_recipe_jobs
             .contains_key(&disposition.action_id)
 }
-
 fn latest_fresh_requester_failure_disposition<'a>(
     state: &'a WorldState,
     requester_agent_id: &str,
@@ -323,7 +316,6 @@ fn latest_fresh_requester_failure_disposition<'a>(
             .then_some(disposition)
         })
 }
-
 pub(super) fn build_player_gameplay_snapshot(
     state: &WorldState,
     controlled_agent_id: Option<&str>,
@@ -495,7 +487,6 @@ pub(super) fn build_player_gameplay_snapshot(
             )
         })
     });
-
     let has_first_session_feedback = recent_feedback
         .is_some_and(|feedback| feedback.delta_logical_time > 0 || feedback.delta_event_seq > 0);
     let has_confirmed_world_progress = has_first_session_feedback || confirmed_gameplay_progress;
@@ -596,7 +587,6 @@ pub(super) fn build_player_gameplay_snapshot(
             });
         }
     }
-
     if !has_confirmed_world_progress
         && !has_material_flow
         && !has_factory_ready
@@ -669,7 +659,6 @@ pub(super) fn build_player_gameplay_snapshot(
             fine_grain_action_translation: None,
         });
     }
-
     let fallback_feedback_blocker = if latest_blocker.is_none()
         && primary_factory
             .is_none_or(|factory| factory.production.status == FactoryProductionStatus::Blocked)
@@ -678,7 +667,6 @@ pub(super) fn build_player_gameplay_snapshot(
     } else {
         None
     };
-
     if let Some((blocker_kind, blocker_detail)) = latest_blocker.or(fallback_feedback_blocker) {
         let (progress_detail, progress_percent) = if has_first_output {
             (
@@ -755,7 +743,6 @@ pub(super) fn build_player_gameplay_snapshot(
             fine_grain_action_translation: None,
         });
     }
-
     if has_first_output {
         match industry_stage {
             IndustryStage::Bootstrap => {
@@ -971,7 +958,6 @@ pub(super) fn build_player_gameplay_snapshot(
             }
         }
     }
-
     if has_recipe_running {
         return finalize(PlayerGameplaySnapshot {
             stage_id: PlayerGameplayStageId::PostOnboarding,
@@ -1032,7 +1018,6 @@ pub(super) fn build_player_gameplay_snapshot(
             fine_grain_action_translation: None,
         });
     }
-
     if has_factory_ready {
         return finalize(PlayerGameplaySnapshot {
             stage_id: PlayerGameplayStageId::PostOnboarding,
@@ -1093,7 +1078,6 @@ pub(super) fn build_player_gameplay_snapshot(
             fine_grain_action_translation: None,
         });
     }
-
     if has_material_flow {
         return finalize(PlayerGameplaySnapshot {
             stage_id: PlayerGameplayStageId::PostOnboarding,
@@ -1154,7 +1138,6 @@ pub(super) fn build_player_gameplay_snapshot(
             fine_grain_action_translation: None,
         });
     }
-
     finalize(PlayerGameplaySnapshot {
         stage_id: PlayerGameplayStageId::PostOnboarding,
         stage_status: PlayerGameplayStageStatus::Active,
