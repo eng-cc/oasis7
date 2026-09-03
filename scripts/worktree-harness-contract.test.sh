@@ -12,6 +12,959 @@ wh_state_write "$STATE_FILE" '{"status":"booting"}'
 wh_state_phase "$STATE_FILE" waiting_metadata "waiting for metadata" "$(wh_clock_ms)"
 wh_state_progress "$STATE_FILE" "poll 1" 1
 
+if ! declare -F wh_atomic_write >/dev/null 2>&1; then
+  echo "atomic publication contract: missing wh_atomic_write helper" >&2
+  exit 1
+fi
+
+ATOMIC_STATE_FILE="$TMP_DIR/atomic-state.json"
+atomic_writer() {
+  local attempt
+  for attempt in $(seq 1 24); do
+    wh_state_write "$ATOMIC_STATE_FILE" "$(python3 - "$attempt" <<'PY'
+import json
+import sys
+
+print(json.dumps({"attempt": int(sys.argv[1]), "payload": "x" * 4096}))
+PY
+)"
+  done
+}
+
+atomic_writer &
+atomic_writer_pid=$!
+python3 - "$ATOMIC_STATE_FILE" "$atomic_writer_pid" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+state_path = pathlib.Path(sys.argv[1])
+writer_pid = int(sys.argv[2])
+while True:
+    if state_path.exists():
+        try:
+            payload = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise SystemExit(f"atomic publication exposed partial JSON: {exc}")
+        assert isinstance(payload.get("attempt"), int), payload
+        assert len(payload.get("payload", "")) == 4096, payload
+    try:
+        import os
+        os.kill(writer_pid, 0)
+    except OSError:
+        break
+    time.sleep(0.001)
+PY
+wait "$atomic_writer_pid"
+
+LIFECYCLE_LOCK_UNCERTAINTY_ROOT="$TMP_DIR/lifecycle-lock-identity-uncertainty"
+mkdir -p "$LIFECYCLE_LOCK_UNCERTAINTY_ROOT"
+LIFECYCLE_LOCK_UNCERTAINTY_PATH="$LIFECYCLE_LOCK_UNCERTAINTY_ROOT/.lifecycle.lock"
+lifecycle_lock_uncertainty_stop="$TMP_DIR/lifecycle-lock-identity-uncertainty.stop"
+lifecycle_lock_uncertainty_owner() {
+  while [[ ! -e "$lifecycle_lock_uncertainty_stop" ]]; do
+    sleep 0.05
+  done
+}
+lifecycle_lock_uncertainty_owner &
+lifecycle_lock_uncertainty_owner_pid="$!"
+lifecycle_lock_uncertainty_owner_identity="$(wh_process_identity "$lifecycle_lock_uncertainty_owner_pid")"
+ln -s \
+  "$lifecycle_lock_uncertainty_owner_pid:$lifecycle_lock_uncertainty_owner_identity" \
+  "$LIFECYCLE_LOCK_UNCERTAINTY_PATH"
+(
+  set +e
+  original_identity_definition="$(declare -f wh_process_identity)"
+  eval "$(printf '%s\n' "$original_identity_definition" | sed 's/^wh_process_identity /original_wh_process_identity /')"
+  wh_process_identity() {
+    if [[ "${1:-}" == "$lifecycle_lock_uncertainty_owner_pid" ]]; then
+      return 1
+    fi
+    original_wh_process_identity "$@"
+  }
+  OASIS7_HARNESS_LIFECYCLE_LOCK_TIMEOUT_MS=100 \
+    wh_lifecycle_lock_acquire "$LIFECYCLE_LOCK_UNCERTAINTY_ROOT" \
+    >"$TMP_DIR/lifecycle-lock-identity-uncertainty.log" 2>&1
+  uncertainty_status="$?"
+  touch "$lifecycle_lock_uncertainty_stop"
+  wait "$lifecycle_lock_uncertainty_owner_pid" >/dev/null 2>&1 || true
+  uncertainty_record="$(readlink "$LIFECYCLE_LOCK_UNCERTAINTY_PATH" 2>/dev/null || true)"
+  if [[ "$uncertainty_status" -eq 0 || "$uncertainty_record" != \
+    "$lifecycle_lock_uncertainty_owner_pid:$lifecycle_lock_uncertainty_owner_identity" ]]; then
+    echo "lifecycle lock contract: unavailable owner identity was treated as stale" >&2
+    exit 1
+  fi
+)
+rm -f "$LIFECYCLE_LOCK_UNCERTAINTY_PATH"
+
+LIFECYCLE_LOCK_RACE_ROOT="$TMP_DIR/lifecycle-lock-race"
+LIFECYCLE_LOCK_RACE_PATH="$LIFECYCLE_LOCK_RACE_ROOT/.lifecycle.lock"
+mkdir -p "$LIFECYCLE_LOCK_RACE_ROOT"
+ln -s '999999999:stale-incarnation' "$LIFECYCLE_LOCK_RACE_PATH"
+LIFECYCLE_LOCK_RACE_BIN="$TMP_DIR/lifecycle-lock-race-bin"
+mkdir -p "$LIFECYCLE_LOCK_RACE_BIN"
+LIFECYCLE_LOCK_RACE_PAUSED="$TMP_DIR/lifecycle-lock-race-paused"
+LIFECYCLE_LOCK_RACE_RELEASE="$TMP_DIR/lifecycle-lock-race-release"
+LIFECYCLE_LOCK_RACE_A_ACQUIRED="$TMP_DIR/lifecycle-lock-race-a-acquired"
+LIFECYCLE_LOCK_RACE_B_ACQUIRED="$TMP_DIR/lifecycle-lock-race-b-acquired"
+cat >"$LIFECYCLE_LOCK_RACE_BIN/rm" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+target="${OASIS7_HARNESS_TEST_RM_TARGET:?}"
+paused="${OASIS7_HARNESS_TEST_RM_PAUSED:?}"
+release="${OASIS7_HARNESS_TEST_RM_RELEASE:?}"
+if [[ "$*" == *"$target"* && ! -e "$paused" ]]; then
+  : >"$paused"
+  while [[ ! -e "$release" ]]; do
+    sleep 0.01
+  done
+fi
+exec /bin/rm "$@"
+EOF
+chmod +x "$LIFECYCLE_LOCK_RACE_BIN/rm"
+(
+  export PATH="$LIFECYCLE_LOCK_RACE_BIN:$PATH"
+  export OASIS7_HARNESS_TEST_RM_TARGET="$LIFECYCLE_LOCK_RACE_PATH"
+  export OASIS7_HARNESS_TEST_RM_PAUSED="$LIFECYCLE_LOCK_RACE_PAUSED"
+  export OASIS7_HARNESS_TEST_RM_RELEASE="$LIFECYCLE_LOCK_RACE_RELEASE"
+  if wh_lifecycle_lock_acquire "$LIFECYCLE_LOCK_RACE_ROOT"; then
+    : >"$LIFECYCLE_LOCK_RACE_A_ACQUIRED"
+    sleep 2
+    wh_lifecycle_lock_release
+  fi
+) &
+lifecycle_lock_race_a_pid="$!"
+for _ in $(seq 1 40); do
+  [[ -e "$LIFECYCLE_LOCK_RACE_PAUSED" ]] && break
+  sleep 0.05
+done
+[[ -e "$LIFECYCLE_LOCK_RACE_PAUSED" ]] || {
+  echo "lifecycle lock contract: stale recovery did not reach the ownership handoff" >&2
+  touch "$LIFECYCLE_LOCK_RACE_RELEASE"
+  kill "$lifecycle_lock_race_a_pid" >/dev/null 2>&1 || true
+  wait "$lifecycle_lock_race_a_pid" >/dev/null 2>&1 || true
+  exit 1
+}
+(
+  if wh_lifecycle_lock_acquire "$LIFECYCLE_LOCK_RACE_ROOT"; then
+    : >"$LIFECYCLE_LOCK_RACE_B_ACQUIRED"
+    sleep 2
+    wh_lifecycle_lock_release
+  fi
+) &
+lifecycle_lock_race_b_pid="$!"
+lifecycle_lock_race_b_early=0
+for _ in $(seq 1 10); do
+  if [[ -e "$LIFECYCLE_LOCK_RACE_B_ACQUIRED" ]]; then
+    lifecycle_lock_race_b_early=1
+    break
+  fi
+  sleep 0.05
+done
+touch "$LIFECYCLE_LOCK_RACE_RELEASE"
+set +e
+wait "$lifecycle_lock_race_a_pid"
+lifecycle_lock_race_a_status="$?"
+wait "$lifecycle_lock_race_b_pid"
+lifecycle_lock_race_b_status="$?"
+set -e
+if [[ "$lifecycle_lock_race_b_early" -ne 0 || "$lifecycle_lock_race_a_status" -ne 0 || \
+  "$lifecycle_lock_race_b_status" -ne 0 ]]; then
+  echo "lifecycle lock contract: concurrent stale recovery lost lock ownership" >&2
+  exit 1
+fi
+
+if ! declare -F wh_terminate_process_group >/dev/null 2>&1; then
+  echo "process-tree shutdown contract: missing wh_terminate_process_group helper" >&2
+  exit 1
+fi
+
+PROCESS_TREE_CHILD_PID_FILE="$TMP_DIR/process-tree-child.pid"
+process_tree_fixture() {
+  trap '' TERM
+  sleep 30 &
+  echo "$!" >"$PROCESS_TREE_CHILD_PID_FILE"
+  while :; do
+    sleep 1
+  done
+}
+
+wh_start_managed process_tree_fixture >"$TMP_DIR/process-tree.log" 2>&1
+process_tree_pid="$WH_MANAGED_PID"
+process_tree_pgid="$WH_MANAGED_PGID"
+process_tree_identity="${WH_MANAGED_IDENTITY:-}"
+for _ in $(seq 1 20); do
+  [[ -s "$PROCESS_TREE_CHILD_PID_FILE" ]] && break
+  sleep 0.05
+done
+process_tree_child_pid="$(cat "$PROCESS_TREE_CHILD_PID_FILE")"
+wh_terminate_process_group "$process_tree_pid" "$process_tree_pgid" 100 "$process_tree_identity"
+if wh_pid_alive "$process_tree_pid" || wh_pid_alive "$process_tree_child_pid"; then
+  echo "process-tree shutdown left a managed process alive" >&2
+  exit 1
+fi
+
+GROUP_REAP_CHILD_PID_FILE="$TMP_DIR/group-reap-child.pid"
+GROUP_REAP_ARM_FILE="$TMP_DIR/group-reap-arm"
+group_reap_fixture() {
+  while [[ ! -e "$GROUP_REAP_ARM_FILE" ]]; do
+    sleep 0.01
+  done
+  sleep 30 &
+  echo "$!" >"$GROUP_REAP_CHILD_PID_FILE"
+  # Keep the leader alive while the parent refreshes the membership after the
+  # descendant starts. This models normal launcher children created after the
+  # initial wh_start_managed snapshot.
+  sleep 0.5
+  exit 0
+}
+
+wh_start_managed group_reap_fixture >"$TMP_DIR/group-reap.log" 2>&1
+group_reap_pid="$WH_MANAGED_PID"
+group_reap_pgid="$WH_MANAGED_PGID"
+group_reap_identity="$WH_MANAGED_IDENTITY"
+touch "$GROUP_REAP_ARM_FILE"
+for _ in $(seq 1 40); do
+  [[ -s "$GROUP_REAP_CHILD_PID_FILE" ]] && break
+  sleep 0.05
+done
+group_reap_child_pid="$(cat "$GROUP_REAP_CHILD_PID_FILE")"
+group_reap_identity="$(wh_process_group_refresh_identity "$group_reap_pid" "$group_reap_pgid" "$group_reap_identity")"
+[[ "$group_reap_identity" == *"${group_reap_child_pid}="* ]] || {
+  echo "process-group identity contract: late descendant was not authenticated while leader was live" >&2
+  exit 1
+}
+for _ in $(seq 1 40); do
+  if ! wh_pid_alive "$group_reap_pid"; then
+    break
+  fi
+  sleep 0.05
+done
+if wh_pid_alive "$group_reap_pid"; then
+  echo "process-group shutdown fixture leader did not exit before reaping check" >&2
+  exit 1
+fi
+set +e
+wh_terminate_process_group "$group_reap_pid" "$group_reap_pgid" 100 "$group_reap_identity"
+group_reap_status=$?
+set -e
+if [[ "$group_reap_status" -ne 0 ]] || wh_pid_alive "$group_reap_child_pid" || wh_process_group_alive "$group_reap_pgid"; then
+  echo "process-group shutdown did not safely reap a recorded group after leader exit" >&2
+  exit 1
+fi
+
+wh_start_managed sleep 30 >"$TMP_DIR/foreign-group.log" 2>&1
+foreign_group_pid="$WH_MANAGED_PID"
+foreign_group_pgid="$WH_MANAGED_PGID"
+set +e
+wh_terminate_process_group "$group_reap_pid" "$foreign_group_pgid" 100 "$group_reap_identity"
+foreign_group_status=$?
+set -e
+if [[ "$foreign_group_status" -eq 0 ]] || ! wh_pid_alive "$foreign_group_pid"; then
+  echo "process-group shutdown signaled a foreign group without an authenticated member" >&2
+  exit 1
+fi
+wh_terminate_process_group "$foreign_group_pid" "$foreign_group_pgid" 100 "$WH_MANAGED_IDENTITY"
+
+if [[ -r /proc/self/stat ]]; then
+  [[ -r /proc/sys/kernel/random/boot_id ]] || {
+    echo "process identity contract: Linux boot ID is unavailable" >&2
+    exit 1
+  }
+  linux_boot_id="$(tr -d '[:space:]' </proc/sys/kernel/random/boot_id)"
+  linux_identity="$(wh_process_identity $$)"
+  [[ "$linux_identity" == "proc-starttime:${linux_boot_id}:"* ]] || {
+    echo "process identity contract: Linux identity is not bound to boot ID" >&2
+    exit 1
+  }
+  linux_start_ticks="$(python3 - $$ <<'PY'
+import pathlib
+import sys
+
+contents = pathlib.Path(f"/proc/{sys.argv[1]}/stat").read_text(encoding="utf-8")
+right_paren = contents.rfind(") ")
+print(contents[right_paren + 2 :].split()[19])
+PY
+)"
+  set +e
+  wh_process_record_alive "$$" "$(wh_process_group_id $$)" "proc-starttime:${linux_start_ticks}"
+  legacy_identity_status=$?
+  set -e
+  [[ "$legacy_identity_status" -ne 0 ]] || {
+    echo "process identity contract: legacy Linux identity was accepted as current" >&2
+    exit 1
+  }
+
+  legacy_lock_root="$TMP_DIR/legacy-live-lock"
+  mkdir -p "$legacy_lock_root"
+  ln -s "$$:proc-starttime:${linux_start_ticks}" "$legacy_lock_root/.lifecycle.lock"
+  set +e
+  OASIS7_HARNESS_LIFECYCLE_LOCK_TIMEOUT_MS=100 \
+    wh_lifecycle_lock_acquire "$legacy_lock_root" \
+    >"$TMP_DIR/legacy-live-lock.log" 2>&1
+  legacy_lock_status="$?"
+  set -e
+  [[ "$legacy_lock_status" -ne 0 ]] || {
+    echo "lifecycle lock contract: live legacy Linux owner was reclaimed" >&2
+    exit 1
+  }
+  [[ "$(readlink "$legacy_lock_root/.lifecycle.lock")" == "$$:proc-starttime:${linux_start_ticks}" ]] || {
+    echo "lifecycle lock contract: live legacy Linux record was changed" >&2
+    exit 1
+  }
+  rm -f "$legacy_lock_root/.lifecycle.lock"
+fi
+
+ZOMBIE_FIXTURE_PID_FILE="$TMP_DIR/zombie-fixture.pid"
+zombie_fixture() {
+  python3 - "$ZOMBIE_FIXTURE_PID_FILE" <<'PY'
+import os
+import pathlib
+import subprocess
+import sys
+import time
+
+metadata_path = pathlib.Path(sys.argv[1])
+child_pid = os.fork()
+if child_pid == 0:
+    os.setpgid(0, 0)
+    os._exit(0)
+
+
+def process_state(pid: int) -> str:
+    proc_stat = pathlib.Path(f"/proc/{pid}/stat")
+    try:
+        contents = proc_stat.read_text(encoding="utf-8")
+    except OSError:
+        contents = ""
+    if contents:
+        right_paren = contents.rfind(") ")
+        if right_paren >= 0:
+            fields = contents[right_paren + 2 :].split()
+            if fields:
+                return fields[0]
+    result = subprocess.run(
+        ["ps", "-o", "stat=", "-p", str(pid)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip().split(maxsplit=1)[0] if result.stdout.strip() else ""
+
+
+deadline = time.monotonic() + 10
+while not process_state(child_pid).startswith("Z"):
+    if time.monotonic() >= deadline:
+        raise SystemExit("child did not become a zombie before timeout")
+    time.sleep(0.01)
+
+metadata_path.write_text(
+    "\n".join(
+        str(value)
+        for value in (child_pid, child_pid, os.getpid(), os.getpgrp())
+    )
+    + "\n",
+    encoding="utf-8",
+)
+while True:
+    time.sleep(1)
+PY
+}
+
+wh_start_managed zombie_fixture >"$TMP_DIR/zombie-fixture.log" 2>&1
+zombie_managed_pid="$WH_MANAGED_PID"
+zombie_managed_pgid="$WH_MANAGED_PGID"
+zombie_managed_identity="${WH_MANAGED_IDENTITY:-}"
+for _ in $(seq 1 200); do
+  [[ -s "$ZOMBIE_FIXTURE_PID_FILE" ]] && break
+  sleep 0.05
+done
+[[ -s "$ZOMBIE_FIXTURE_PID_FILE" ]] || {
+  echo "process liveness contract: zombie fixture did not publish metadata" >&2
+  exit 1
+}
+zombie_pid="$(sed -n '1p' "$ZOMBIE_FIXTURE_PID_FILE")"
+zombie_pgid="$(sed -n '2p' "$ZOMBIE_FIXTURE_PID_FILE")"
+zombie_parent_pid="$(sed -n '3p' "$ZOMBIE_FIXTURE_PID_FILE")"
+zombie_parent_pgid="$(sed -n '4p' "$ZOMBIE_FIXTURE_PID_FILE")"
+if wh_pid_alive "$zombie_pid" || wh_process_group_alive "$zombie_pgid"; then
+  echo "process liveness contract: zombie-only PID/group was treated as live" >&2
+  exit 1
+fi
+if ! wh_pid_alive "$zombie_parent_pid" || ! wh_process_group_alive "$zombie_parent_pgid"; then
+  echo "process liveness contract: active non-zombie process/group was treated as dead" >&2
+  exit 1
+fi
+wh_terminate_process_group "$zombie_managed_pid" "$zombie_managed_pgid" 100 "$zombie_managed_identity"
+
+wh_start_managed sleep 30 >"$TMP_DIR/reused-identity.log" 2>&1
+reused_identity_pid="$WH_MANAGED_PID"
+reused_identity_pgid="$WH_MANAGED_PGID"
+reused_identity="${WH_MANAGED_IDENTITY:-}"
+set +e
+wh_terminate_process_group \
+  "$reused_identity_pid" \
+  "$reused_identity_pgid" \
+  100 \
+  "unrelated-reused-process-identity"
+reused_identity_status=$?
+set -e
+if [[ "$reused_identity_status" -eq 0 ]] || ! wh_pid_alive "$reused_identity_pid"; then
+  echo "process-group identity contract: mismatched leader identity was allowed to terminate a live group" >&2
+  exit 1
+fi
+wh_terminate_process_group "$reused_identity_pid" "$reused_identity_pgid" 100 "$reused_identity"
+
+RECOVERY_MARKER_DEAD_ROOT="$TMP_DIR/recovery-marker-dead"
+mkdir -p "$RECOVERY_MARKER_DEAD_ROOT"
+ln -s '999999999:proc-starttime:legacy-dead-ticks' "$RECOVERY_MARKER_DEAD_ROOT/.lifecycle.lock.recovery"
+set +e
+OASIS7_HARNESS_LIFECYCLE_LOCK_TIMEOUT_MS=100 \
+  wh_lifecycle_lock_acquire "$RECOVERY_MARKER_DEAD_ROOT" \
+  >"$TMP_DIR/recovery-marker-dead.log" 2>&1
+recovery_marker_dead_status="$?"
+set -e
+[[ "$recovery_marker_dead_status" -eq 0 ]] || {
+  echo "lifecycle recovery contract: dead recovery marker was not reclaimed" >&2
+  exit 1
+}
+[[ ! -L "$RECOVERY_MARKER_DEAD_ROOT/.lifecycle.lock.recovery" ]] || {
+  echo "lifecycle recovery contract: dead recovery marker remained after reclaim" >&2
+  exit 1
+}
+wh_lifecycle_lock_release
+
+RECOVERY_MARKER_STALE_ROOT="$TMP_DIR/recovery-marker-stale"
+RECOVERY_MARKER_STALE_OWNER_STOP="$TMP_DIR/recovery-marker-stale-owner.stop"
+mkdir -p "$RECOVERY_MARKER_STALE_ROOT"
+recovery_marker_stale_owner() {
+  while [[ ! -e "$RECOVERY_MARKER_STALE_OWNER_STOP" ]]; do
+    sleep 0.05
+  done
+}
+recovery_marker_stale_owner &
+recovery_marker_stale_owner_pid="$!"
+ln -s "$recovery_marker_stale_owner_pid:stale-incarnation" "$RECOVERY_MARKER_STALE_ROOT/.lifecycle.lock.recovery"
+set +e
+OASIS7_HARNESS_LIFECYCLE_LOCK_TIMEOUT_MS=100 \
+  wh_lifecycle_lock_acquire "$RECOVERY_MARKER_STALE_ROOT" \
+  >"$TMP_DIR/recovery-marker-stale.log" 2>&1
+recovery_marker_stale_status="$?"
+set -e
+[[ "$recovery_marker_stale_status" -eq 0 ]] || {
+  echo "lifecycle recovery contract: known-stale recovery marker was not reclaimed" >&2
+  exit 1
+}
+[[ ! -L "$RECOVERY_MARKER_STALE_ROOT/.lifecycle.lock.recovery" ]] || {
+  echo "lifecycle recovery contract: known-stale recovery marker remained after reclaim" >&2
+  exit 1
+}
+wh_lifecycle_lock_release
+touch "$RECOVERY_MARKER_STALE_OWNER_STOP"
+wait "$recovery_marker_stale_owner_pid" >/dev/null 2>&1 || true
+
+RECOVERY_MARKER_LIVE_ROOT="$TMP_DIR/recovery-marker-live"
+RECOVERY_MARKER_LIVE_OWNER_STOP="$TMP_DIR/recovery-marker-live-owner.stop"
+mkdir -p "$RECOVERY_MARKER_LIVE_ROOT"
+recovery_marker_live_owner() {
+  while [[ ! -e "$RECOVERY_MARKER_LIVE_OWNER_STOP" ]]; do
+    sleep 0.05
+  done
+}
+recovery_marker_live_owner &
+recovery_marker_live_owner_pid="$!"
+recovery_marker_live_owner_identity="$(wh_process_identity "$recovery_marker_live_owner_pid")"
+ln -s "$recovery_marker_live_owner_pid:$recovery_marker_live_owner_identity" \
+  "$RECOVERY_MARKER_LIVE_ROOT/.lifecycle.lock.recovery"
+set +e
+OASIS7_HARNESS_LIFECYCLE_LOCK_TIMEOUT_MS=100 \
+  wh_lifecycle_lock_acquire "$RECOVERY_MARKER_LIVE_ROOT" \
+  >"$TMP_DIR/recovery-marker-live.log" 2>&1
+recovery_marker_live_status="$?"
+set -e
+[[ "$recovery_marker_live_status" -ne 0 ]] || {
+  echo "lifecycle recovery contract: live recovery marker owner was reclaimed" >&2
+  exit 1
+}
+[[ "$(readlink "$RECOVERY_MARKER_LIVE_ROOT/.lifecycle.lock.recovery")" == \
+  "$recovery_marker_live_owner_pid:$recovery_marker_live_owner_identity" ]] || {
+  echo "lifecycle recovery contract: live recovery marker was changed" >&2
+  exit 1
+}
+touch "$RECOVERY_MARKER_LIVE_OWNER_STOP"
+wait "$recovery_marker_live_owner_pid" >/dev/null 2>&1 || true
+rm -f "$RECOVERY_MARKER_LIVE_ROOT/.lifecycle.lock.recovery"
+
+RECOVERY_MARKER_UNKNOWN_ROOT="$TMP_DIR/recovery-marker-unknown"
+RECOVERY_MARKER_UNKNOWN_STOP="$TMP_DIR/recovery-marker-unknown.stop"
+mkdir -p "$RECOVERY_MARKER_UNKNOWN_ROOT"
+recovery_marker_unknown_owner() {
+  while [[ ! -e "$RECOVERY_MARKER_UNKNOWN_STOP" ]]; do
+    sleep 0.05
+  done
+}
+recovery_marker_unknown_owner &
+recovery_marker_unknown_owner_pid="$!"
+recovery_marker_unknown_owner_identity="$(wh_process_identity "$recovery_marker_unknown_owner_pid")"
+ln -s "$recovery_marker_unknown_owner_pid:unknown-incarnation" "$RECOVERY_MARKER_UNKNOWN_ROOT/.lifecycle.lock.recovery"
+set +e
+(
+  original_wh_process_identity_definition="$(declare -f wh_process_identity)"
+  eval "$(printf '%s\n' "$original_wh_process_identity_definition" | sed 's/^wh_process_identity /original_wh_process_identity /')"
+  wh_process_identity() {
+    if [[ "${1:-}" == "$recovery_marker_unknown_owner_pid" ]]; then
+      return 1
+    fi
+    original_wh_process_identity "$@"
+  }
+  OASIS7_HARNESS_LIFECYCLE_LOCK_TIMEOUT_MS=100 \
+    wh_lifecycle_lock_acquire "$RECOVERY_MARKER_UNKNOWN_ROOT" \
+    >"$TMP_DIR/recovery-marker-unknown.log" 2>&1
+)
+recovery_marker_unknown_status="$?"
+set -e
+[[ "$recovery_marker_unknown_status" -ne 0 ]] || {
+  echo "lifecycle recovery contract: unknown recovery marker owner was reclaimed" >&2
+  exit 1
+}
+[[ "$(readlink "$RECOVERY_MARKER_UNKNOWN_ROOT/.lifecycle.lock.recovery")" == \
+  "$recovery_marker_unknown_owner_pid:unknown-incarnation" ]] || {
+  echo "lifecycle recovery contract: unknown recovery marker was changed" >&2
+  exit 1
+}
+touch "$RECOVERY_MARKER_UNKNOWN_STOP"
+wait "$recovery_marker_unknown_owner_pid" >/dev/null 2>&1 || true
+rm -f "$RECOVERY_MARKER_UNKNOWN_ROOT/.lifecycle.lock.recovery"
+
+PORT_ROOT="$TMP_DIR/port-reservations"
+PORT_COMMON_DIR="$TMP_DIR/port-registry"
+mkdir -p "$PORT_ROOT"
+PORT_ONE_JSON="$TMP_DIR/ports-one.json"
+PORT_TWO_JSON="$TMP_DIR/ports-two.json"
+set +e
+wh_resolve_ports_json "$PORT_ROOT" "$$" "$(wh_worktree_path)" "$PORT_COMMON_DIR" >"$PORT_ONE_JSON" 2>"$TMP_DIR/ports-one.err" &
+port_one_pid=$!
+wh_resolve_ports_json "$PORT_ROOT" "$$" "$(wh_worktree_path)" "$PORT_COMMON_DIR" >"$PORT_TWO_JSON" 2>"$TMP_DIR/ports-two.err" &
+port_two_pid=$!
+wait "$port_one_pid"
+port_one_status=$?
+wait "$port_two_pid"
+port_two_status=$?
+set -e
+if [[ "$port_one_status" -eq 0 && "$port_two_status" -eq 0 ]]; then
+  first_viewer_port="$(python3 - "$PORT_ONE_JSON" <<'PY'
+import json
+import pathlib
+import sys
+
+print(json.loads(pathlib.Path(sys.argv[1]).read_text())["viewer_port"])
+PY
+)"
+  second_viewer_port="$(python3 - "$PORT_TWO_JSON" <<'PY'
+import json
+import pathlib
+import sys
+
+print(json.loads(pathlib.Path(sys.argv[1]).read_text())["viewer_port"])
+PY
+)"
+  if [[ "$first_viewer_port" == "$second_viewer_port" ]]; then
+    echo "port reservation contract: concurrent callers received the same viewer port" >&2
+    exit 1
+  fi
+fi
+for ports_json in "$PORT_ONE_JSON" "$PORT_TWO_JSON"; do
+  if [[ -s "$ports_json" ]]; then
+    reservation_token="$(python3 - "$ports_json" <<'PY'
+import json
+import pathlib
+import sys
+
+print(json.loads(pathlib.Path(sys.argv[1]).read_text())['reservation_token'])
+PY
+)"
+    wh_release_ports_reservation "$PORT_ROOT" "$reservation_token" "$PORT_COMMON_DIR"
+  fi
+done
+
+ABSENT_RELEASE_ROOT="$TMP_DIR/absent-release"
+ABSENT_RELEASE_COMMON_DIR="$TMP_DIR/absent-release-common"
+mkdir -p "$ABSENT_RELEASE_ROOT"
+wh_release_ports_reservation "$ABSENT_RELEASE_ROOT" "missing-token" "$ABSENT_RELEASE_COMMON_DIR"
+[[ ! -e "$ABSENT_RELEASE_ROOT/.ports.reservation.json" ]] || {
+  echo "port reservation contract: absent release recreated a local reservation" >&2
+  exit 1
+}
+[[ ! -e "$ABSENT_RELEASE_COMMON_DIR/.oasis7-harness-port-registry" ]] || {
+  echo "port reservation contract: absent release recreated the shared registry" >&2
+  exit 1
+}
+
+STALE_PORT_ROOT="$TMP_DIR/stale-port-reservation"
+mkdir -p "$STALE_PORT_ROOT"
+python3 - "$STALE_PORT_ROOT/.ports.reservation.json" <<'PY'
+import json
+import pathlib
+import sys
+
+pathlib.Path(sys.argv[1]).write_text(
+    json.dumps({"schema": 1, "reservation_token": "stale", "owner_pid": 999999999, "ports": {}}) + "\n",
+    encoding="utf-8",
+)
+PY
+stale_ports_json="$TMP_DIR/stale-ports.json"
+wh_resolve_ports_json "$STALE_PORT_ROOT" "$$" "$(wh_worktree_path)" "$PORT_COMMON_DIR" >"$stale_ports_json"
+python3 - "$stale_ports_json" "$STALE_PORT_ROOT/.ports.reservation.json" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
+reservation = json.loads(pathlib.Path(sys.argv[2]).read_text())
+assert payload["reservation_token"] == reservation["reservation_token"], (payload, reservation)
+assert payload["reservation_token"] != "stale", reservation
+PY
+stale_token="$(python3 - "$stale_ports_json" <<'PY'
+import json
+import pathlib
+import sys
+
+print(json.loads(pathlib.Path(sys.argv[1]).read_text())["reservation_token"])
+PY
+)"
+wh_release_ports_reservation "$STALE_PORT_ROOT" "$stale_token" "$PORT_COMMON_DIR"
+[[ ! -e "$STALE_PORT_ROOT/.ports.reservation.json" ]] || {
+  echo "port reservation contract: release left reservation behind" >&2
+  exit 1
+}
+
+IDENTITY_FRESH_ROOT="$TMP_DIR/identity-fresh-reservation"
+IDENTITY_FRESH_COMMON_DIR="$TMP_DIR/identity-fresh-registry"
+mkdir -p "$IDENTITY_FRESH_ROOT"
+identity_fresh_ports_json="$TMP_DIR/identity-fresh-ports.json"
+wh_resolve_ports_json "$IDENTITY_FRESH_ROOT" "$$" "/tmp/oasis7-port-identity-fresh" "$IDENTITY_FRESH_COMMON_DIR" >"$identity_fresh_ports_json"
+python3 - "$identity_fresh_ports_json" "$IDENTITY_FRESH_ROOT/.ports.reservation.json" "$IDENTITY_FRESH_COMMON_DIR/.oasis7-harness-port-registry/reservations.json" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
+local_reservation = json.loads(pathlib.Path(sys.argv[2]).read_text())
+registry = json.loads(pathlib.Path(sys.argv[3]).read_text())
+token = payload["reservation_token"]
+assert local_reservation["owner_identity"], local_reservation
+assert registry["reservations"][token]["owner_identity"] == local_reservation["owner_identity"], registry
+if pathlib.Path("/proc/self/stat").exists():
+    boot_id = pathlib.Path("/proc/sys/kernel/random/boot_id").read_text(encoding="utf-8").strip()
+    assert local_reservation["owner_identity"].startswith(f"proc-starttime:{boot_id}:"), local_reservation
+PY
+identity_fresh_token="$(python3 - "$identity_fresh_ports_json" <<'PY'
+import json
+import pathlib
+import sys
+
+print(json.loads(pathlib.Path(sys.argv[1]).read_text())["reservation_token"])
+PY
+)"
+wh_release_ports_reservation "$IDENTITY_FRESH_ROOT" "$identity_fresh_token" "$IDENTITY_FRESH_COMMON_DIR"
+
+IDENTITY_RECLAIM_ROOT="$TMP_DIR/identity-reclaim"
+IDENTITY_RECLAIM_COMMON_DIR="$TMP_DIR/identity-reclaim-registry"
+IDENTITY_RECLAIM_WORKTREE="/tmp/oasis7-port-identity-reclaim"
+mkdir -p "$IDENTITY_RECLAIM_ROOT" "$IDENTITY_RECLAIM_COMMON_DIR"
+wh_start_managed sleep 30 >"$TMP_DIR/identity-reclaim-owner.log" 2>&1
+identity_reclaim_owner_pid="$WH_MANAGED_PID"
+identity_reclaim_owner_pgid="$WH_MANAGED_PGID"
+identity_reclaim_owner_identity="$WH_MANAGED_IDENTITY"
+identity_reclaim_legacy_identity="old-process-incarnation"
+if [[ -r "/proc/$identity_reclaim_owner_pid/stat" ]]; then
+  identity_reclaim_legacy_identity="$(python3 - "$identity_reclaim_owner_pid" <<'PY'
+import pathlib
+import sys
+
+contents = pathlib.Path(f"/proc/{sys.argv[1]}/stat").read_text(encoding="utf-8")
+right_paren = contents.rfind(") ")
+print(f"proc-starttime:{contents[right_paren + 2 :].split()[19]}")
+PY
+)"
+fi
+identity_reclaim_seed="$(python3 - "$IDENTITY_RECLAIM_WORKTREE" <<'PY'
+import hashlib
+import pathlib
+import sys
+
+seed = int(hashlib.sha256(str(pathlib.Path(sys.argv[1]).resolve()).encode()).hexdigest()[:8], 16)
+print(43000 + (seed % 1500) * 10)
+PY
+)"
+python3 - "$IDENTITY_RECLAIM_COMMON_DIR" "$IDENTITY_RECLAIM_ROOT" "$IDENTITY_RECLAIM_WORKTREE" "$identity_reclaim_owner_pid" "$identity_reclaim_seed" "$identity_reclaim_legacy_identity" <<'PY'
+import json
+import pathlib
+import sys
+
+common_dir = pathlib.Path(sys.argv[1])
+harness_root = pathlib.Path(sys.argv[2])
+worktree = sys.argv[3]
+owner_pid = int(sys.argv[4])
+base = int(sys.argv[5])
+legacy_identity = sys.argv[6]
+registry_dir = common_dir / ".oasis7-harness-port-registry"
+registry_dir.mkdir(parents=True, exist_ok=True)
+registry = {
+    "schema": 1,
+    "reservations": {
+        "identity-reclaim-token": {
+            "schema": 1,
+            "reservation_token": "identity-reclaim-token",
+            "owner_pid": owner_pid,
+            "owner_identity": legacy_identity,
+            "worktree_path": worktree,
+            "harness_root": str(common_dir / "old-harness"),
+            "common_dir": str(common_dir),
+            "registry_path": str(registry_dir / "reservations.json"),
+            "ports": {
+                "viewer_port": base,
+                "web_bind": f"127.0.0.1:{base + 1}",
+                "live_bind": f"127.0.0.1:{base + 2}",
+                "chain_status_bind": f"127.0.0.1:{base + 3}",
+            },
+        }
+    },
+}
+(harness_root / ".ports.reservation.json").write_text(
+    json.dumps(registry["reservations"]["identity-reclaim-token"]) + "\n",
+    encoding="utf-8",
+)
+(registry_dir / "reservations.json").write_text(json.dumps(registry) + "\n", encoding="utf-8")
+PY
+identity_reclaim_ports_json="$TMP_DIR/identity-reclaim-ports.json"
+set +e
+wh_resolve_ports_json "$IDENTITY_RECLAIM_ROOT" "$$" "$IDENTITY_RECLAIM_WORKTREE" "$IDENTITY_RECLAIM_COMMON_DIR" \
+  >"$identity_reclaim_ports_json" 2>"$TMP_DIR/identity-reclaim.err"
+identity_reclaim_status="$?"
+set -e
+if [[ "$identity_reclaim_legacy_identity" == proc-starttime:* ]]; then
+  [[ "$identity_reclaim_status" -ne 0 ]] || {
+    echo "port reservation contract: live legacy Linux owner was reclaimed" >&2
+    exit 1
+  }
+  python3 "$IDENTITY_RECLAIM_ROOT/.ports.reservation.json" "$IDENTITY_RECLAIM_COMMON_DIR/.oasis7-harness-port-registry/reservations.json" <<'PY'
+import json
+import pathlib
+import sys
+
+local_reservation = json.loads(pathlib.Path(sys.argv[1]).read_text())
+registry = json.loads(pathlib.Path(sys.argv[2]).read_text())
+assert local_reservation["reservation_token"] == "identity-reclaim-token", local_reservation
+assert "identity-reclaim-token" in registry["reservations"], registry
+PY
+  rm -f "$IDENTITY_RECLAIM_ROOT/.ports.reservation.json"
+  set +e
+  wh_resolve_ports_json "$IDENTITY_RECLAIM_ROOT" "$$" "$IDENTITY_RECLAIM_WORKTREE" "$IDENTITY_RECLAIM_COMMON_DIR" \
+    >"$TMP_DIR/identity-reclaim-registry-only.json" 2>"$TMP_DIR/identity-reclaim-registry-only.err"
+  identity_reclaim_registry_status="$?"
+  set -e
+  [[ "$identity_reclaim_registry_status" -ne 0 ]] || {
+    echo "port reservation contract: live legacy Linux registry owner was reclaimed" >&2
+    exit 1
+  }
+  python3 "$IDENTITY_RECLAIM_COMMON_DIR/.oasis7-harness-port-registry/reservations.json" <<'PY'
+import json
+import pathlib
+import sys
+
+registry = json.loads(pathlib.Path(sys.argv[1]).read_text())
+assert "identity-reclaim-token" in registry["reservations"], registry
+PY
+  identity_reclaim_token="identity-reclaim-token"
+else
+  [[ "$identity_reclaim_status" -eq 0 ]] || {
+    cat "$TMP_DIR/identity-reclaim.err" >&2
+    exit 1
+  }
+  python3 - "$identity_reclaim_ports_json" "$IDENTITY_RECLAIM_COMMON_DIR/.oasis7-harness-port-registry/reservations.json" "$identity_reclaim_seed" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
+registry = json.loads(pathlib.Path(sys.argv[2]).read_text())
+assert payload["viewer_port"] == int(sys.argv[3]), payload
+assert "identity-reclaim-token" not in registry["reservations"], registry
+PY
+  identity_reclaim_token="$(python3 - "$identity_reclaim_ports_json" <<'PY'
+import json
+import pathlib
+import sys
+
+print(json.loads(pathlib.Path(sys.argv[1]).read_text())["reservation_token"])
+PY
+  )"
+fi
+wh_release_ports_reservation "$IDENTITY_RECLAIM_ROOT" "$identity_reclaim_token" "$IDENTITY_RECLAIM_COMMON_DIR"
+wh_terminate_process_group "$identity_reclaim_owner_pid" "$identity_reclaim_owner_pgid" 100 "$identity_reclaim_owner_identity"
+
+IDENTITY_MISSING_ROOT="$TMP_DIR/identity-missing"
+IDENTITY_MISSING_COMMON_DIR="$TMP_DIR/identity-missing-registry"
+IDENTITY_MISSING_WORKTREE="/tmp/oasis7-port-identity-missing"
+mkdir -p "$IDENTITY_MISSING_ROOT" "$IDENTITY_MISSING_COMMON_DIR"
+wh_start_managed sleep 30 >"$TMP_DIR/identity-missing-owner.log" 2>&1
+identity_missing_owner_pid="$WH_MANAGED_PID"
+identity_missing_owner_pgid="$WH_MANAGED_PGID"
+identity_missing_owner_identity="$WH_MANAGED_IDENTITY"
+identity_missing_seed="$(python3 - "$IDENTITY_MISSING_WORKTREE" <<'PY'
+import hashlib
+import pathlib
+import sys
+
+seed = int(hashlib.sha256(str(pathlib.Path(sys.argv[1]).resolve()).encode()).hexdigest()[:8], 16)
+print(43000 + (seed % 1500) * 10)
+PY
+)"
+python3 - "$IDENTITY_MISSING_COMMON_DIR" "$IDENTITY_MISSING_ROOT" "$IDENTITY_MISSING_WORKTREE" "$identity_missing_owner_pid" "$identity_missing_seed" <<'PY'
+import json
+import pathlib
+import sys
+
+common_dir = pathlib.Path(sys.argv[1])
+harness_root = pathlib.Path(sys.argv[2])
+worktree = sys.argv[3]
+owner_pid = int(sys.argv[4])
+base = int(sys.argv[5])
+registry_dir = common_dir / ".oasis7-harness-port-registry"
+registry_dir.mkdir(parents=True, exist_ok=True)
+registry = {
+    "schema": 1,
+    "reservations": {
+        "identity-missing-token": {
+            "schema": 1,
+            "reservation_token": "identity-missing-token",
+            "owner_pid": owner_pid,
+            "worktree_path": worktree,
+            "harness_root": str(common_dir / "old-harness"),
+            "common_dir": str(common_dir),
+            "registry_path": str(registry_dir / "reservations.json"),
+            "ports": {
+                "viewer_port": base,
+                "web_bind": f"127.0.0.1:{base + 1}",
+                "live_bind": f"127.0.0.1:{base + 2}",
+                "chain_status_bind": f"127.0.0.1:{base + 3}",
+            },
+        }
+    },
+}
+(harness_root / ".ports.reservation.json").write_text(
+    json.dumps(registry["reservations"]["identity-missing-token"]) + "\n",
+    encoding="utf-8",
+)
+(registry_dir / "reservations.json").write_text(json.dumps(registry) + "\n", encoding="utf-8")
+PY
+set +e
+wh_resolve_ports_json "$IDENTITY_MISSING_ROOT" "$$" "$IDENTITY_MISSING_WORKTREE" "$IDENTITY_MISSING_COMMON_DIR" >"$TMP_DIR/identity-missing-ports.json" 2>"$TMP_DIR/identity-missing.err"
+identity_missing_status="$?"
+set -e
+[[ "$identity_missing_status" -ne 0 ]] || {
+  echo "port reservation contract: live owner without identity was not rejected" >&2
+  exit 1
+}
+python3 - "$IDENTITY_MISSING_COMMON_DIR/.oasis7-harness-port-registry/reservations.json" <<'PY'
+import json
+import pathlib
+import sys
+
+registry = json.loads(pathlib.Path(sys.argv[1]).read_text())
+assert "identity-missing-token" in registry["reservations"], registry
+PY
+wh_terminate_process_group "$identity_missing_owner_pid" "$identity_missing_owner_pgid" 100 "$identity_missing_owner_identity"
+identity_missing_reclaim_json="$TMP_DIR/identity-missing-reclaim.json"
+wh_resolve_ports_json "$IDENTITY_MISSING_ROOT" "$$" "$IDENTITY_MISSING_WORKTREE" "$IDENTITY_MISSING_COMMON_DIR" >"$identity_missing_reclaim_json"
+identity_missing_reclaim_token="$(python3 - "$identity_missing_reclaim_json" <<'PY'
+import json
+import pathlib
+import sys
+
+print(json.loads(pathlib.Path(sys.argv[1]).read_text())["reservation_token"])
+PY
+)"
+wh_release_ports_reservation "$IDENTITY_MISSING_ROOT" "$identity_missing_reclaim_token" "$IDENTITY_MISSING_COMMON_DIR"
+
+collision_paths="$(python3 - <<'PY'
+import hashlib
+import pathlib
+
+base = pathlib.Path("/tmp/oasis7-port-collision").resolve()
+seen = {}
+for index in range(500_000):
+    candidate = base / f"worktree-{index}"
+    digest = hashlib.sha256(str(candidate).encode("utf-8")).hexdigest()[:8]
+    if digest in seen:
+        print(seen[digest])
+        print(candidate)
+        break
+    seen[digest] = candidate
+else:
+    raise SystemExit("unable to find deterministic worktree hash collision")
+PY
+)"
+collision_one="$(printf '%s\n' "$collision_paths" | sed -n '1p')"
+collision_two="$(printf '%s\n' "$collision_paths" | sed -n '2p')"
+COLLISION_COMMON_DIR="$TMP_DIR/shared-common-dir"
+mkdir -p "$COLLISION_COMMON_DIR"
+collision_root_one="$TMP_DIR/collision-root-one"
+collision_root_two="$TMP_DIR/collision-root-two"
+same_root_one="$TMP_DIR/same-worktree-root-one"
+same_root_two="$TMP_DIR/same-worktree-root-two"
+collision_ports_one="$TMP_DIR/collision-ports-one.json"
+collision_ports_two="$TMP_DIR/collision-ports-two.json"
+same_ports_one="$TMP_DIR/same-ports-one.json"
+same_ports_two="$TMP_DIR/same-ports-two.json"
+wh_resolve_ports_json "$collision_root_one" "$$" "$collision_one" "$COLLISION_COMMON_DIR" >"$collision_ports_one" 2>"$TMP_DIR/collision-one.err" &
+collision_pid_one=$!
+wh_resolve_ports_json "$collision_root_two" "$$" "$collision_two" "$COLLISION_COMMON_DIR" >"$collision_ports_two" 2>"$TMP_DIR/collision-two.err" &
+collision_pid_two=$!
+set +e
+wait "$collision_pid_one"
+collision_status_one=$?
+wait "$collision_pid_two"
+collision_status_two=$?
+set -e
+[[ "$collision_status_one" -eq 0 && "$collision_status_two" -eq 0 ]] || {
+  cat "$TMP_DIR/collision-one.err" "$TMP_DIR/collision-two.err" >&2
+  exit 1
+}
+wh_resolve_ports_json "$same_root_one" "$$" "$collision_one" "$COLLISION_COMMON_DIR" >"$same_ports_one" 2>"$TMP_DIR/same-one.err" &
+same_pid_one=$!
+wh_resolve_ports_json "$same_root_two" "$$" "$collision_one" "$COLLISION_COMMON_DIR" >"$same_ports_two" 2>"$TMP_DIR/same-two.err" &
+same_pid_two=$!
+set +e
+wait "$same_pid_one"
+same_status_one=$?
+wait "$same_pid_two"
+same_status_two=$?
+set -e
+[[ "$same_status_one" -eq 0 && "$same_status_two" -eq 0 ]] || {
+  cat "$TMP_DIR/same-one.err" "$TMP_DIR/same-two.err" >&2
+  exit 1
+}
+port_collision_failures="$(python3 - "$collision_ports_one" "$collision_ports_two" "$same_ports_one" "$same_ports_two" <<'PY'
+import json
+import pathlib
+import sys
+
+records = [json.loads(pathlib.Path(path).read_text()) for path in sys.argv[1:]]
+failures = []
+if records[0]["viewer_port"] == records[1]["viewer_port"]:
+    failures.append("distinct colliding worktree paths received the same port set")
+if records[2]["viewer_port"] == records[3]["viewer_port"]:
+    failures.append("same worktree path across distinct roots received the same port set")
+if failures:
+    print("\n".join(failures), file=sys.stderr)
+print(len(failures))
+PY
+)"
+[[ "$port_collision_failures" == "0" ]] || exit 1
+
 python3 - "$STATE_FILE" <<'PY'
 import json
 import sys
@@ -53,21 +1006,23 @@ set -e
 }
 descendant_pid="$(cat "$DESCENDANT_PID_FILE")"
 for _ in $(seq 1 20); do
-  if ! kill -0 "$descendant_pid" >/dev/null 2>&1; then
+  if ! wh_pid_alive "$descendant_pid"; then
     break
   fi
   sleep 0.05
 done
-if kill -0 "$descendant_pid" >/dev/null 2>&1; then
+if wh_pid_alive "$descendant_pid"; then
   echo "deadline watchdog left descendant process alive: $descendant_pid" >&2
   exit 1
 fi
 
 bash -n "$ROOT_DIR/scripts/worktree-harness.sh" "$ROOT_DIR/scripts/worktree-harness-lib.sh"
+grep -Fq -- 'OASIS7_HARNESS_TEST_ROOT' "$ROOT_DIR/scripts/worktree-harness-lib.sh"
 grep -Fq -- '--startup-timeout <secs>' "$ROOT_DIR/scripts/worktree-harness.sh"
 grep -Fq -- 'wh_state_phase "$STATE_FILE" "waiting_metadata"' "$ROOT_DIR/scripts/worktree-harness.sh"
 grep -Fq -- 'smoke_step "open" ab_open' "$ROOT_DIR/scripts/worktree-harness.sh"
 grep -Fq -- 'smoke_step "screenshot" ab_screenshot' "$ROOT_DIR/scripts/worktree-harness.sh"
+grep -Fq -- 'wh_atomic_write "$META_FILE"' "$ROOT_DIR/scripts/run-launcher-stack.sh"
 ! grep -Fq -- 'seq 1 180' "$ROOT_DIR/scripts/worktree-harness.sh"
 
 echo "worktree harness contract: PASS"
