@@ -31,6 +31,7 @@ mod m1_builtin_wasm_artifact;
 mod m4_builtin_wasm_artifact;
 mod m5_builtin_wasm_artifact;
 mod main_token;
+mod major_world_event;
 mod manifest;
 mod module_source_compiler;
 mod module_store;
@@ -306,10 +307,18 @@ pub use snapshot::{
 
 // State
 pub use state::{
-    FactoryBuildJobState, FactoryProductionState, FactoryProductionStatus, FactoryState,
-    IndustryProgressState, LogisticsRouteV1, MaterialTransferReceiptV1, MaterialTransitJobState,
+    AgentLocationAuthorityV1, FACTORY_BUILD_STARTED_MODERN_VERSION, FactoryBuildJobState,
+    FactoryBuildPowerObligationV1, FactoryConstructionPowerMode, FactoryConstructionPowerProfileV1,
+    FactoryProductionFailureDispositionV1, FactoryProductionState, FactoryProductionStatus,
+    FactoryRecycleReceiptV1, FactorySiteAuthorityV1, FactoryState, IndustryProgressState,
+    LocationAnchorV1, LogisticsRouteV1, MaterialTransferReceiptV1, MaterialTransitJobState,
     ModuleInstanceState, ModuleReleaseAttestationState, ModuleReleaseManifestMappingState,
-    RecipeJobState, WorldState,
+    ProductValidationAttemptV1, ProductValidationDeliveryCursor, ProductValidationReceiptV1,
+    RecipeCompletionReceiptV1, RecipeJobState, STARTER_ASSEMBLER_FACTORY_ID,
+    STARTER_INDUSTRIAL_COMPLETION_BOUNDARY, STARTER_INDUSTRIAL_PROFILE_ID,
+    STARTER_INDUSTRIAL_PROFILE_REVISION, STARTER_SMELTER_FACTORY_ID, STARTER_SMELTER_RECIPE_ID,
+    StarterIndustrialFeasibilityResult, StarterIndustrialFeasibilityStatus,
+    StarterIndustrialMilestoneV1, WorldState,
 };
 
 // World
@@ -326,6 +335,16 @@ pub use world::{
 pub use world::{rollback_affected_census_digest, rollback_journal_commitment};
 
 // World event
+#[cfg(test)]
+pub(crate) use major_world_event::project_major_world_events;
+pub use major_world_event::{
+    MAJOR_WORLD_EVENT_PROJECTION_SCHEMA_VERSION, MajorWorldEventAnchor, MajorWorldEventAnchorScope,
+    MajorWorldEventCategory, MajorWorldEventCausalReference, MajorWorldEventFreshness,
+    MajorWorldEventIdentity, MajorWorldEventLifecycle, MajorWorldEventProjection,
+    MajorWorldEventProjectionContext, MajorWorldEventSource, MajorWorldEventSourceAuthority,
+    MajorWorldEventStreamState, MajorWorldEventVisibilityPermission,
+    project_major_world_events_with_canonical_state,
+};
 pub use world_event::{
     CapabilityAuthorizationEvent, ModuleRuntimeChargeEvent, WorldEvent, WorldEventBody,
 };

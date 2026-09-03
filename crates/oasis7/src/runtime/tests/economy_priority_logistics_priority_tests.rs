@@ -13,6 +13,15 @@ fn due_recipe_jobs_prioritize_survival_over_expansion() {
     world
         .set_material_balance("circuit_board", 4)
         .expect("seed build circuits");
+    prepare_factory_build_id(&mut world, "builder-a", "site-1", "factory.priority");
+    world
+        .upsert_factory_profile(FactoryProfileV1 {
+            factory_id: "factory.priority".to_string(),
+            tier: 1,
+            recipe_slots: 2,
+            tags: vec!["assembly".to_string()],
+        })
+        .expect("set two-slot factory profile");
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
@@ -102,6 +111,15 @@ fn bottleneck_pressure_bumps_recipe_completion_priority() {
     world
         .set_material_balance("circuit_board", 4)
         .expect("seed build circuits");
+    prepare_factory_build_id(&mut world, "builder-a", "site-1", "factory.bottleneck");
+    world
+        .upsert_factory_profile(FactoryProfileV1 {
+            factory_id: "factory.bottleneck".to_string(),
+            tier: 1,
+            recipe_slots: 2,
+            tags: vec!["assembly".to_string()],
+        })
+        .expect("set two-slot bottleneck profile");
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),

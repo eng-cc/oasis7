@@ -1,3 +1,58 @@
+use crate::runtime::{
+    DomainEvent as RuntimeDomainEvent, MaterialLedgerId, MaterialStack,
+    WorldEvent as RuntimeWorldEvent, WorldEventBody as RuntimeWorldEventBody,
+};
+
+#[path = "tests_recipe_replay_window.rs"]
+mod tests_recipe_replay_window;
+
+fn establish_completed_recipe_for_test<C: LlmCompletionClient>(
+    behavior: &mut LlmAgentBehavior<C>,
+    recipe_id: &str,
+) {
+    behavior.recipe_coverage.mark_completed(recipe_id);
+}
+
+fn runtime_recipe_completed_event_with_identity(
+    requester_agent_id: &str,
+    recipe_id: &str,
+    event_id: u64,
+    job_id: u64,
+) -> WorldEvent {
+    let runtime_event = RuntimeWorldEvent {
+        id: event_id,
+        time: event_id.saturating_add(1),
+        caused_by: None,
+        body: RuntimeWorldEventBody::Domain(RuntimeDomainEvent::RecipeCompleted {
+            job_id,
+            requester_agent_id: requester_agent_id.to_string(),
+            factory_id: "factory.alpha".to_string(),
+            recipe_id: recipe_id.to_string(),
+            accepted_batches: 1,
+            produce: vec![MaterialStack::new("control_chip", 1)],
+            byproducts: Vec::new(),
+            output_ledger: MaterialLedgerId::world(),
+            bottleneck_tags: Vec::new(),
+            logistics_route_ids: Vec::new(),
+            logistics_path_ids: Vec::new(),
+        }),
+    };
+
+    WorldEvent {
+        id: runtime_event.id,
+        time: runtime_event.time,
+        kind: WorldEventKind::RuntimeEvent {
+            kind: "runtime.economy.recipe_completed".to_string(),
+            domain_kind: Some(format!("recipe={recipe_id}")),
+        },
+        runtime_event: Some(runtime_event),
+    }
+}
+
+fn runtime_recipe_completed_event(requester_agent_id: &str, recipe_id: &str) -> WorldEvent {
+    runtime_recipe_completed_event_with_identity(requester_agent_id, recipe_id, 12_200, 12_199)
+}
+
 #[test]
 fn llm_agent_segments_move_agent_when_target_distance_exceeds_limit() {
     let client = MockClient {
@@ -154,36 +209,10 @@ fn llm_agent_hard_switches_schedule_recipe_to_next_uncovered_recipe() {
         "loc-home",
     );
 
-    behavior.on_action_result(&ActionResult {
-        action: Action::ScheduleRecipe {
-            owner: ResourceOwner::Agent {
-                agent_id: "agent-1".to_string(),
-            },
-            factory_id: "factory.alpha".to_string(),
-            recipe_id: "recipe.assembler.control_chip".to_string(),
-            batches: 1,
-        },
-        action_id: 520,
-        success: true,
-        event: WorldEvent {
-            id: 620,
-            time: 120,
-            kind: WorldEventKind::RecipeScheduled {
-                owner: ResourceOwner::Agent {
-                    agent_id: "agent-1".to_string(),
-                },
-                factory_id: "factory.alpha".to_string(),
-                recipe_id: "recipe.assembler.control_chip".to_string(),
-                batches: 1,
-                electricity_cost: 6,
-                hardware_cost: 2,
-                data_output: 1,
-                finished_product_id: "product.component.control_chip".to_string(),
-                finished_product_units: 1,
-            },
-            runtime_event: None,
-        },
-    });
+    establish_completed_recipe_for_test(
+        &mut behavior,
+        "recipe.assembler.control_chip",
+    );
 
     let mut observation = make_observation();
     observation
@@ -217,6 +246,212 @@ fn llm_agent_hard_switches_schedule_recipe_to_next_uncovered_recipe() {
 }
 
 #[test]
+fn llm_agent_counts_pure_simulator_recipe_event_as_completed_coverage() {
+    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), MockClient::default());
+    let event = WorldEvent {
+        id: 12_001,
+        time: 12_002,
+        kind: WorldEventKind::RecipeScheduled {
+            owner: ResourceOwner::Agent {
+                agent_id: "agent-1".to_string(),
+            },
+            factory_id: "factory.alpha".to_string(),
+            recipe_id: "recipe.assembler.control_chip".to_string(),
+            batches: 1,
+            electricity_cost: 6,
+            hardware_cost: 2,
+            data_output: 1,
+            finished_product_id: "product.component.control_chip".to_string(),
+            finished_product_units: 1,
+        },
+        runtime_event: None,
+    };
+
+    behavior.on_event(&event);
+
+    assert!(
+        behavior
+            .recipe_coverage
+            .is_completed("recipe.assembler.control_chip"),
+        "the pure simulator event carries an already-applied atomic recipe transformation"
+    );
+}
+
+#[test]
+fn llm_agent_counts_pure_simulator_recipe_result_as_completed_coverage() {
+    let behavior = LlmAgentBehavior::new("agent-1", base_config(), MockClient::default());
+    let mut runner: crate::simulator::AgentRunner<LlmAgentBehavior<MockClient>> =
+        crate::simulator::AgentRunner::new();
+    runner.register(behavior);
+    let event = WorldEvent {
+        id: 12_101,
+        time: 12_102,
+        kind: WorldEventKind::RecipeScheduled {
+            owner: ResourceOwner::Agent {
+                agent_id: "agent-1".to_string(),
+            },
+            factory_id: "factory.alpha".to_string(),
+            recipe_id: "recipe.assembler.control_chip".to_string(),
+            batches: 1,
+            electricity_cost: 6,
+            hardware_cost: 2,
+            data_output: 1,
+            finished_product_id: "product.component.control_chip".to_string(),
+            finished_product_units: 1,
+        },
+        runtime_event: None,
+    };
+    let action = Action::ScheduleRecipe {
+        owner: ResourceOwner::Agent {
+            agent_id: "agent-1".to_string(),
+        },
+        factory_id: "factory.alpha".to_string(),
+        recipe_id: "recipe.assembler.control_chip".to_string(),
+        batches: 1,
+    };
+
+    let result = ActionResult {
+        action,
+        action_id: 12_100,
+        success: true,
+        event,
+    };
+    assert!(runner.notify_action_result("agent-1", &result));
+
+    assert!(
+        runner
+            .get("agent-1")
+            .expect("registered agent")
+            .behavior
+            .recipe_coverage
+            .is_completed("recipe.assembler.control_chip"),
+        "AgentRunner must deliver the WorldKernel-shaped atomic simulator result as authoritative completion feedback"
+    );
+}
+
+#[test]
+fn llm_agent_keeps_recipe_coverage_idempotent_across_completion_feedback() {
+    let recipe_id = "recipe.assembler.control_chip";
+    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), MockClient::default());
+    let scheduled_event = WorldEvent {
+        id: 12_101,
+        time: 12_102,
+        kind: WorldEventKind::RecipeScheduled {
+            owner: ResourceOwner::Agent {
+                agent_id: "agent-1".to_string(),
+            },
+            factory_id: "factory.alpha".to_string(),
+            recipe_id: recipe_id.to_string(),
+            batches: 1,
+            electricity_cost: 6,
+            hardware_cost: 2,
+            data_output: 1,
+            finished_product_id: "product.component.control_chip".to_string(),
+            finished_product_units: 1,
+        },
+        runtime_event: None,
+    };
+    let action = Action::ScheduleRecipe {
+        owner: ResourceOwner::Agent {
+            agent_id: "agent-1".to_string(),
+        },
+        factory_id: "factory.alpha".to_string(),
+        recipe_id: recipe_id.to_string(),
+        batches: 1,
+    };
+
+    behavior.on_action_result(&ActionResult {
+        action,
+        action_id: 12_100,
+        success: true,
+        event: scheduled_event,
+    });
+    assert!(behavior.recipe_coverage.is_completed(recipe_id));
+
+    // A completion for another requester is not feedback for this Agent.
+    behavior.on_event(&runtime_recipe_completed_event("agent-2", recipe_id));
+    assert!(behavior.recipe_coverage.is_completed(recipe_id));
+
+    let completion = runtime_recipe_completed_event("agent-1", recipe_id);
+    behavior.on_event(&completion);
+    behavior.on_event(&completion);
+
+    assert!(behavior.recipe_coverage.is_completed(recipe_id));
+    assert_eq!(
+        behavior.recipe_coverage.completed.len(),
+        1,
+        "replaying one authoritative receipt must not duplicate coverage state"
+    );
+}
+
+#[test]
+fn llm_agent_keeps_distinct_recipe_completion_jobs_in_feedback_memory() {
+    let recipe_id = "recipe.assembler.control_chip";
+    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), MockClient::default());
+
+    behavior.on_event(&runtime_recipe_completed_event_with_identity(
+        "agent-1", recipe_id, 12_220, 12_219,
+    ));
+    behavior.on_event(&runtime_recipe_completed_event_with_identity(
+        "agent-1", recipe_id, 12_222, 12_221,
+    ));
+    // A replayed receipt may be wrapped in a fresh journal event, but its
+    // durable job identity must still suppress duplicate feedback.
+    behavior.on_event(&runtime_recipe_completed_event_with_identity(
+        "agent-1", recipe_id, 12_224, 12_221,
+    ));
+
+    assert!(behavior.recipe_coverage.is_completed(recipe_id));
+    assert_eq!(
+        behavior.memory.short_term.len(),
+        2,
+        "two distinct completion jobs must remain observable even when they use one recipe"
+    );
+}
+
+#[test]
+fn llm_agent_bounds_recipe_completion_replay_window_and_preserves_recent_replays() {
+    const REPLAY_WINDOW: usize = 64;
+    let recipe_id = "recipe.assembler.control_chip";
+    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), MockClient::default());
+
+    for offset in 0..=REPLAY_WINDOW {
+        let job_id = 13_000 + offset as u64;
+        behavior.on_event(&runtime_recipe_completed_event_with_identity(
+            "agent-1",
+            recipe_id,
+            job_id + 1_000,
+            job_id,
+        ));
+    }
+
+    assert_eq!(
+        behavior.recipe_coverage.completion_receipt_ids.len(),
+        REPLAY_WINDOW,
+        "completion receipt dedupe must stay bounded after long-running production"
+    );
+    let memory_before_replays = behavior.memory.short_term.len();
+
+    behavior.on_event(&runtime_recipe_completed_event_with_identity(
+        "agent-1", recipe_id, 14_100, 13_064,
+    ));
+    assert_eq!(
+        behavior.memory.short_term.len(),
+        memory_before_replays,
+        "recent receipt replay must not add feedback memory"
+    );
+
+    behavior.on_event(&runtime_recipe_completed_event_with_identity(
+        "agent-1", recipe_id, 14_101, 13_000,
+    ));
+    assert_eq!(
+        behavior.memory.short_term.len(),
+        memory_before_replays + 1,
+        "a receipt outside the bounded window may be observed again"
+    );
+}
+
+#[test]
 fn llm_agent_keeps_hard_switch_within_current_factory_kind() {
     let client = MockClient {
         output: Some(
@@ -232,36 +467,10 @@ fn llm_agent_keeps_hard_switch_within_current_factory_kind() {
         "loc-home",
     );
 
-    behavior.on_action_result(&ActionResult {
-        action: Action::ScheduleRecipe {
-            owner: ResourceOwner::Agent {
-                agent_id: "agent-1".to_string(),
-            },
-            factory_id: "factory.alpha".to_string(),
-            recipe_id: "recipe.assembler.control_chip".to_string(),
-            batches: 1,
-        },
-        action_id: 560,
-        success: true,
-        event: WorldEvent {
-            id: 660,
-            time: 130,
-            kind: WorldEventKind::RecipeScheduled {
-                owner: ResourceOwner::Agent {
-                    agent_id: "agent-1".to_string(),
-                },
-                factory_id: "factory.alpha".to_string(),
-                recipe_id: "recipe.assembler.control_chip".to_string(),
-                batches: 1,
-                electricity_cost: 6,
-                hardware_cost: 2,
-                data_output: 1,
-                finished_product_id: "product.component.control_chip".to_string(),
-                finished_product_units: 1,
-            },
-            runtime_event: None,
-        },
-    });
+    establish_completed_recipe_for_test(
+        &mut behavior,
+        "recipe.assembler.control_chip",
+    );
 
     let mut observation = make_observation();
     observation
@@ -309,42 +518,13 @@ fn llm_agent_hands_off_coverage_to_known_assembler_after_last_smelter_recipe() {
         "loc-home",
     );
 
-    for (offset, recipe_id, finished_product_id) in [
-        (0_u64, "recipe.smelter.iron_ingot", "iron_ingot"),
-        (1_u64, "recipe.smelter.copper_wire", "copper_wire"),
-        (2_u64, "recipe.smelter.polymer_resin", "polymer_resin"),
-        (3_u64, "recipe.smelter.alloy_plate", "alloy_plate"),
+    for recipe_id in [
+        "recipe.smelter.iron_ingot",
+        "recipe.smelter.copper_wire",
+        "recipe.smelter.polymer_resin",
+        "recipe.smelter.alloy_plate",
     ] {
-        behavior.on_action_result(&ActionResult {
-            action: Action::ScheduleRecipe {
-                owner: ResourceOwner::Agent {
-                    agent_id: "agent-1".to_string(),
-                },
-                factory_id: "factory.smelter.1".to_string(),
-                recipe_id: recipe_id.to_string(),
-                batches: 1,
-            },
-            action_id: 700 + offset,
-            success: true,
-            event: WorldEvent {
-                id: 800 + offset,
-                time: 200 + offset,
-                kind: WorldEventKind::RecipeScheduled {
-                    owner: ResourceOwner::Agent {
-                        agent_id: "agent-1".to_string(),
-                    },
-                    factory_id: "factory.smelter.1".to_string(),
-                    recipe_id: recipe_id.to_string(),
-                    batches: 1,
-                    electricity_cost: 6,
-                    hardware_cost: 2,
-                    data_output: 1,
-                    finished_product_id: finished_product_id.to_string(),
-                    finished_product_units: 1,
-                },
-                runtime_event: None,
-            },
-        });
+        establish_completed_recipe_for_test(&mut behavior, recipe_id);
     }
 
     let mut observation = make_observation();
@@ -393,41 +573,12 @@ fn llm_agent_moves_before_cross_factory_coverage_handoff() {
         "loc-assembler",
     );
 
-    for (offset, recipe_id, finished_product_id) in [
-        (0_u64, "recipe.smelter.iron_ingot", "iron_ingot"),
-        (1_u64, "recipe.smelter.copper_wire", "copper_wire"),
-        (2_u64, "recipe.smelter.polymer_resin", "polymer_resin"),
+    for recipe_id in [
+        "recipe.smelter.iron_ingot",
+        "recipe.smelter.copper_wire",
+        "recipe.smelter.polymer_resin",
     ] {
-        behavior.on_action_result(&ActionResult {
-            action: Action::ScheduleRecipe {
-                owner: ResourceOwner::Agent {
-                    agent_id: "agent-1".to_string(),
-                },
-                factory_id: "factory.smelter.1".to_string(),
-                recipe_id: recipe_id.to_string(),
-                batches: 1,
-            },
-            action_id: 900 + offset,
-            success: true,
-            event: WorldEvent {
-                id: 1_000 + offset,
-                time: 230 + offset,
-                kind: WorldEventKind::RecipeScheduled {
-                    owner: ResourceOwner::Agent {
-                        agent_id: "agent-1".to_string(),
-                    },
-                    factory_id: "factory.smelter.1".to_string(),
-                    recipe_id: recipe_id.to_string(),
-                    batches: 1,
-                    electricity_cost: 6,
-                    hardware_cost: 2,
-                    data_output: 1,
-                    finished_product_id: finished_product_id.to_string(),
-                    finished_product_units: 1,
-                },
-                runtime_event: None,
-            },
-        });
+        establish_completed_recipe_for_test(&mut behavior, recipe_id);
     }
 
     let mut observation = make_observation();
@@ -489,36 +640,10 @@ fn llm_agent_hard_switches_with_factory_kind_inferred_from_recipe_hint() {
     let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), client);
     behavior.remember_factory_location_hint("factory.alpha", "loc-home", None);
 
-    behavior.on_action_result(&ActionResult {
-        action: Action::ScheduleRecipe {
-            owner: ResourceOwner::Agent {
-                agent_id: "agent-1".to_string(),
-            },
-            factory_id: "factory.alpha".to_string(),
-            recipe_id: "recipe.assembler.control_chip".to_string(),
-            batches: 1,
-        },
-        action_id: 1_060,
-        success: true,
-        event: WorldEvent {
-            id: 1_160,
-            time: 240,
-            kind: WorldEventKind::RecipeScheduled {
-                owner: ResourceOwner::Agent {
-                    agent_id: "agent-1".to_string(),
-                },
-                factory_id: "factory.alpha".to_string(),
-                recipe_id: "recipe.assembler.control_chip".to_string(),
-                batches: 1,
-                electricity_cost: 6,
-                hardware_cost: 2,
-                data_output: 1,
-                finished_product_id: "control_chip".to_string(),
-                finished_product_units: 1,
-            },
-            runtime_event: None,
-        },
-    });
+    establish_completed_recipe_for_test(
+        &mut behavior,
+        "recipe.assembler.control_chip",
+    );
 
     let mut observation = make_observation();
     observation.visible_locations = vec![ObservedLocation {
@@ -571,41 +696,12 @@ fn llm_agent_builds_missing_factory_before_cross_stage_coverage_handoff() {
         "loc-home",
     );
 
-    for (offset, recipe_id, finished_product_id) in [
-        (0_u64, "recipe.smelter.iron_ingot", "iron_ingot"),
-        (1_u64, "recipe.smelter.copper_wire", "copper_wire"),
-        (2_u64, "recipe.smelter.polymer_resin", "polymer_resin"),
+    for recipe_id in [
+        "recipe.smelter.iron_ingot",
+        "recipe.smelter.copper_wire",
+        "recipe.smelter.polymer_resin",
     ] {
-        behavior.on_action_result(&ActionResult {
-            action: Action::ScheduleRecipe {
-                owner: ResourceOwner::Agent {
-                    agent_id: "agent-1".to_string(),
-                },
-                factory_id: "factory.smelter.1".to_string(),
-                recipe_id: recipe_id.to_string(),
-                batches: 1,
-            },
-            action_id: 1_200 + offset,
-            success: true,
-            event: WorldEvent {
-                id: 1_300 + offset,
-                time: 260 + offset,
-                kind: WorldEventKind::RecipeScheduled {
-                    owner: ResourceOwner::Agent {
-                        agent_id: "agent-1".to_string(),
-                    },
-                    factory_id: "factory.smelter.1".to_string(),
-                    recipe_id: recipe_id.to_string(),
-                    batches: 1,
-                    electricity_cost: 6,
-                    hardware_cost: 2,
-                    data_output: 1,
-                    finished_product_id: finished_product_id.to_string(),
-                    finished_product_units: 1,
-                },
-                runtime_event: None,
-            },
-        });
+        establish_completed_recipe_for_test(&mut behavior, recipe_id);
     }
 
     let mut observation = make_observation();
@@ -665,36 +761,10 @@ fn llm_agent_preserves_hard_switch_on_noncanonical_same_kind_factory() {
         "loc-home",
     );
 
-    behavior.on_action_result(&ActionResult {
-        action: Action::ScheduleRecipe {
-            owner: ResourceOwner::Agent {
-                agent_id: "agent-1".to_string(),
-            },
-            factory_id: "factory.assembler.legacy".to_string(),
-            recipe_id: "recipe.assembler.control_chip".to_string(),
-            batches: 1,
-        },
-        action_id: 860,
-        success: true,
-        event: WorldEvent {
-            id: 960,
-            time: 220,
-            kind: WorldEventKind::RecipeScheduled {
-                owner: ResourceOwner::Agent {
-                    agent_id: "agent-1".to_string(),
-                },
-                factory_id: "factory.assembler.legacy".to_string(),
-                recipe_id: "recipe.assembler.control_chip".to_string(),
-                batches: 1,
-                electricity_cost: 6,
-                hardware_cost: 2,
-                data_output: 1,
-                finished_product_id: "control_chip".to_string(),
-                finished_product_units: 1,
-            },
-            runtime_event: None,
-        },
-    });
+    establish_completed_recipe_for_test(
+        &mut behavior,
+        "recipe.assembler.control_chip",
+    );
 
     let mut observation = make_observation();
     observation
@@ -825,39 +895,8 @@ fn llm_agent_rewrites_wait_ticks_to_sustained_schedule_after_full_recipe_coverag
         ),
     ];
 
-    for (offset, (recipe_id, electricity_cost, hardware_cost, finished_product_id)) in
-        coverage_events.into_iter().enumerate()
-    {
-        behavior.on_action_result(&ActionResult {
-            action: Action::ScheduleRecipe {
-                owner: ResourceOwner::Agent {
-                    agent_id: "agent-1".to_string(),
-                },
-                factory_id: "factory.alpha".to_string(),
-                recipe_id: recipe_id.to_string(),
-                batches: 1,
-            },
-            action_id: 910 + offset as u64,
-            success: true,
-            event: WorldEvent {
-                id: 920 + offset as u64,
-                time: 181 + offset as u64,
-                kind: WorldEventKind::RecipeScheduled {
-                    owner: ResourceOwner::Agent {
-                        agent_id: "agent-1".to_string(),
-                    },
-                    factory_id: "factory.alpha".to_string(),
-                    recipe_id: recipe_id.to_string(),
-                    batches: 1,
-                    electricity_cost,
-                    hardware_cost,
-                    data_output: 1,
-                    finished_product_id: finished_product_id.to_string(),
-                    finished_product_units: 1,
-                },
-                runtime_event: None,
-            },
-        });
+    for (recipe_id, _, _, _) in coverage_events {
+        establish_completed_recipe_for_test(&mut behavior, recipe_id);
     }
 
     let mut observation = make_observation();
@@ -954,37 +993,8 @@ fn llm_agent_rewrites_wait_to_recovery_action_after_full_recipe_coverage() {
         "recipe.assembler.module_rack",
         "recipe.assembler.factory_core",
     ];
-    for (offset, recipe_id) in covered_recipe_ids.into_iter().enumerate() {
-        behavior.on_action_result(&ActionResult {
-            action: Action::ScheduleRecipe {
-                owner: ResourceOwner::Agent {
-                    agent_id: "agent-1".to_string(),
-                },
-                factory_id: "factory.alpha".to_string(),
-                recipe_id: recipe_id.to_string(),
-                batches: 1,
-            },
-            action_id: 940 + offset as u64,
-            success: true,
-            event: WorldEvent {
-                id: 950 + offset as u64,
-                time: 201 + offset as u64,
-                kind: WorldEventKind::RecipeScheduled {
-                    owner: ResourceOwner::Agent {
-                        agent_id: "agent-1".to_string(),
-                    },
-                    factory_id: "factory.alpha".to_string(),
-                    recipe_id: recipe_id.to_string(),
-                    batches: 1,
-                    electricity_cost: 6,
-                    hardware_cost: 2,
-                    data_output: 1,
-                    finished_product_id: format!("product.{recipe_id}"),
-                    finished_product_units: 1,
-                },
-                runtime_event: None,
-            },
-        });
+    for recipe_id in covered_recipe_ids {
+        establish_completed_recipe_for_test(&mut behavior, recipe_id);
     }
 
     let mut observation = make_observation();

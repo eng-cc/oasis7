@@ -59,6 +59,72 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
     }
 }
 
+impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
+    /// Keep a deterministic, bounded identity window for completion replays.
+    /// ActionIds are allocated globally, so numeric or circular ordering is
+    /// not a reliable age signal when unrelated actions make the IDs sparse.
+    /// The serialized insertion order is the sole eviction authority.
+    fn remember_recipe_completion_receipt(&mut self, job_id: u64) -> bool {
+        if self
+            .recipe_coverage
+            .completion_receipt_ids
+            .contains(&job_id)
+        {
+            return false;
+        }
+        self.recipe_coverage.completion_receipt_ids.insert(job_id);
+        self.recipe_coverage
+            .completion_receipt_order
+            .push_back(job_id);
+        while self.recipe_coverage.completion_receipt_order.len() > RECIPE_COMPLETION_REPLAY_WINDOW
+        {
+            if let Some(job_id) = self.recipe_coverage.completion_receipt_order.pop_front() {
+                self.recipe_coverage.completion_receipt_ids.remove(&job_id);
+            }
+        }
+        true
+    }
+
+    /// Consume authoritative completion feedback for this agent. Runtime-backed
+    /// execution must reach `RecipeCompleted`; the pure simulator applies the
+    /// recipe resource transformation atomically, so its successful
+    /// `RecipeScheduled` event is also a completion receipt. Event/job identity
+    /// keeps replay or duplicate delivery idempotent.
+    fn consume_recipe_completion_feedback(&mut self, event: &WorldEvent) -> Option<bool> {
+        let (receipt_id, requester_agent_id, recipe_id) =
+            if let Some(runtime_event) = event.runtime_event.as_ref() {
+                let RuntimeWorldEventBody::Domain(RuntimeDomainEvent::RecipeCompleted {
+                    job_id,
+                    requester_agent_id,
+                    recipe_id,
+                    ..
+                }) = &runtime_event.body
+                else {
+                    return None;
+                };
+                (*job_id, requester_agent_id.as_str(), recipe_id.as_str())
+            } else {
+                let WorldEventKind::RecipeScheduled {
+                    owner: ResourceOwner::Agent { agent_id },
+                    recipe_id,
+                    ..
+                } = &event.kind
+                else {
+                    return None;
+                };
+                (event.id, agent_id.as_str(), recipe_id.as_str())
+            };
+        if requester_agent_id != self.agent_id || !RecipeCoverageProgress::is_tracked(recipe_id) {
+            return None;
+        }
+        if !self.remember_recipe_completion_receipt(receipt_id) {
+            return Some(false);
+        }
+        self.recipe_coverage.mark_completed(recipe_id);
+        Some(true)
+    }
+}
+
 impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
     fn agent_id(&self) -> &str {
         self.agent_id.as_str()
@@ -863,6 +929,9 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
 
     fn on_action_result(&mut self, result: &ActionResult) {
         let time = result.event.time;
+        if result.success {
+            let _ = self.consume_recipe_completion_feedback(&result.event);
+        }
         self.depleted_mine_location_cooldowns
             .retain(|_, cooldown_until_time| *cooldown_until_time >= time);
         self.trim_mine_failure_streaks(time);
@@ -944,14 +1013,7 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
                     Some(factory_kind.as_str()),
                 );
             }
-            Action::ScheduleRecipe {
-                factory_id,
-                recipe_id,
-                ..
-            } => {
-                if result.success {
-                    self.recipe_coverage.mark_completed(recipe_id.as_str());
-                }
+            Action::ScheduleRecipe { factory_id, .. } => {
                 if let Some(RejectReason::AgentNotAtLocation { location_id, .. }) =
                     result.reject_reason()
                 {
@@ -1055,6 +1117,7 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
     }
 
     fn on_event(&mut self, event: &WorldEvent) {
+        let recipe_completion = self.consume_recipe_completion_feedback(event);
         if let WorldEventKind::FactoryBuilt {
             factory_id,
             location_id,
@@ -1068,16 +1131,18 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
                 Some(factory_kind.as_str()),
             );
         }
-        if let WorldEventKind::RecipeScheduled { recipe_id, .. } = &event.kind {
-            self.recipe_coverage.mark_completed(recipe_id.as_str());
-        }
         if matches!(event.kind, WorldEventKind::FragmentsReplenished { .. }) {
             self.known_compound_availability_by_location.clear();
             self.depleted_mine_location_cooldowns.clear();
             self.mine_failure_streaks_by_location.clear();
         }
-        self.memory
-            .record_event(event.time, format!("event: {:?}", event.kind));
+        // Replaying the same completion receipt should not add another
+        // feedback entry; the first delivery remains the single coverage
+        // transition and the generic event memory remains bounded in meaning.
+        if recipe_completion != Some(false) {
+            self.memory
+                .record_event(event.time, format!("event: {:?}", event.kind));
+        }
     }
 
     fn take_decision_trace(&mut self) -> Option<AgentDecisionTrace> {

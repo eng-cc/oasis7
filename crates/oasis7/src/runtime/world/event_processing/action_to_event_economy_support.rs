@@ -1,4 +1,5 @@
 use super::*;
+use oasis7_wasm_abi::FactoryModuleSpec;
 
 impl World {
     pub(crate) fn schedule_recipe_local_scarcity_delay_for_quote(
@@ -15,10 +16,10 @@ impl World {
             .ok_or_else(|| format!("factory not found: {factory_id}"))?;
         let effective_consume = merge_recipe_consume_with_maintenance_sink(self, consume, produce);
         let preferred_consume_ledger = factory.input_ledger.clone();
-        let consume_ledger = self.select_material_consume_ledger_with_world_fallback(
-            preferred_consume_ledger.clone(),
-            &effective_consume,
-        );
+        // Quote the same site-bound ledger that ScheduleRecipe will use. The
+        // BuildFactory compatibility fallback must not make a recipe quote
+        // appear affordable from global stock.
+        let consume_ledger = preferred_consume_ledger.clone();
         for stack in &effective_consume {
             if stack.amount <= 0 {
                 return Err(format!(
@@ -50,6 +51,26 @@ impl World {
         };
         Ok((delay, reason.to_string()))
     }
+}
+
+pub(super) fn aggregate_material_stacks_for_admission(
+    label: &str,
+    stacks: &[MaterialStack],
+) -> Result<BTreeMap<String, i64>, String> {
+    let mut aggregated = BTreeMap::<String, i64>::new();
+    for stack in stacks {
+        if stack.kind.trim().is_empty() || stack.amount <= 0 {
+            return Err(format!(
+                "{label} must be positive and named: {}={}",
+                stack.kind, stack.amount
+            ));
+        }
+        let total = aggregated.entry(stack.kind.clone()).or_insert(0);
+        *total = (*total)
+            .checked_add(stack.amount)
+            .ok_or_else(|| format!("{label} amount overflow for material kind {}", stack.kind))?;
+    }
+    Ok(aggregated)
 }
 
 pub(super) fn authenticated_collect_data_to_event(
@@ -399,6 +420,48 @@ pub(super) fn recipe_preferred_tags_compatible(
         let normalized = tag.trim().to_ascii_lowercase();
         !normalized.is_empty() && normalized_factory.contains(normalized.as_str())
     })
+}
+
+pub(super) fn normalized_factory_tags(tags: &[String]) -> Vec<String> {
+    let normalized: BTreeSet<String> = tags
+        .iter()
+        .map(|tag| tag.trim().to_ascii_lowercase())
+        .filter(|tag| !tag.is_empty())
+        .collect();
+    normalized.into_iter().collect()
+}
+
+pub(super) fn factory_profile_matches_spec(
+    profile: &crate::runtime::FactoryProfileV1,
+    spec: &FactoryModuleSpec,
+) -> Result<(), String> {
+    if profile.factory_id != spec.factory_id {
+        return Err(format!(
+            "factory profile identity mismatch: profile={} spec={}",
+            profile.factory_id, spec.factory_id
+        ));
+    }
+    if profile.tier != spec.tier {
+        return Err(format!(
+            "factory profile tier mismatch: factory_id={} profile={} spec={}",
+            spec.factory_id, profile.tier, spec.tier
+        ));
+    }
+    if profile.recipe_slots != spec.recipe_slots {
+        return Err(format!(
+            "factory profile recipe_slots mismatch: factory_id={} profile={} spec={}",
+            spec.factory_id, profile.recipe_slots, spec.recipe_slots
+        ));
+    }
+    if normalized_factory_tags(&profile.tags) != normalized_factory_tags(&spec.tags) {
+        return Err(format!(
+            "factory profile tags mismatch: factory_id={} profile={:?} spec={:?}",
+            spec.factory_id,
+            normalized_factory_tags(&profile.tags),
+            normalized_factory_tags(&spec.tags)
+        ));
+    }
+    Ok(())
 }
 
 pub(super) fn resolve_recipe_bottleneck_tags(

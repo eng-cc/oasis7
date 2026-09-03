@@ -51,6 +51,22 @@ fn smelter_affordability_debug_seed_publishes_real_factory_and_disabled_replenis
             .get(ResourceKind::Data),
         0
     );
+    let smelter_input_ledger = server
+        .world
+        .state()
+        .factories
+        .get(crate::viewer::FACTORY_SMELTER_MK1)
+        .expect("seeded smelter")
+        .input_ledger
+        .clone();
+    server
+        .world
+        .set_ledger_material_balance(smelter_input_ledger.clone(), "iron_ore", 48)
+        .expect("seed enough authoritative input to isolate the electricity blocker");
+    server
+        .world
+        .set_ledger_material_balance(smelter_input_ledger, "carbon_fuel", 12)
+        .expect("seed enough authoritative fuel to isolate the electricity blocker");
 
     server
         .session_policy
@@ -74,7 +90,10 @@ fn smelter_affordability_debug_seed_publishes_real_factory_and_disabled_replenis
         .find(|action| action.action_id == crate::viewer::ACTION_SCHEDULE_SMELTER_IRON_INGOT)
         .expect("smelter schedule action");
     let reason = action.disabled_reason.as_deref().expect("disabled action");
-    assert!(reason.contains("insufficient electricity"));
+    assert!(
+        reason.contains("insufficient factory-owner electricity"),
+        "unexpected readiness reason: {reason}"
+    );
     assert!(reason.contains("replenish electricity"));
 }
 

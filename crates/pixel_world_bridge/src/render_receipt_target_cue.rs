@@ -255,6 +255,8 @@ pub(super) fn reconcile_receipt_target_cues(
         .is_some_and(|selection| selection.kind == "agent" && selection.id == agent.id);
     let style = agent_visual_style(agent, is_selected, animation_ms, index);
     let body_half_size = agent_unanimated_size_px(agent, is_selected) as f32 / 2.0;
+    let receipt_base_layer_z =
+        (AGENT_LAYER_Z + SELECTED_ENTITY_LAYER_Z_OFFSET + 0.01).max(style.layer_z);
 
     for spec in receipt_cue_specs(
         &receipt_target.state,
@@ -269,7 +271,7 @@ pub(super) fn reconcile_receipt_target_cues(
             canvas_y - f64::from(spec.offset.y),
             width,
             height,
-            style.layer_z + AGENT_CORE_LAYER_Z_OFFSET + spec.layer_z_offset,
+            receipt_base_layer_z + AGENT_CORE_LAYER_Z_OFFSET + spec.layer_z_offset,
         ));
         transform.rotation = Quat::from_rotation_z(spec.rotation);
         if let Some(entity) = existing_by_key.remove(&key) {

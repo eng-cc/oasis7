@@ -13,10 +13,12 @@ fn industry_stage_progresses_from_bootstrap_to_scale_out_and_governance() {
     world
         .set_material_balance("circuit_board", 4)
         .expect("seed build circuits");
+    let spec = factory_spec("factory.stage", 1, 1);
+    prepare_factory_build(&mut world, "builder-a", "site-1", &spec);
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
-        spec: factory_spec("factory.stage", 1, 1),
+        spec,
     });
     world.step().expect("start build");
     world.step().expect("factory ready");
@@ -131,6 +133,7 @@ fn mixed_recipe_completions_on_one_factory_do_not_unlock_scale_out() {
     world
         .set_material_balance("circuit_board", 4)
         .expect("seed build circuits");
+    prepare_factory_build_id(&mut world, "builder-a", "site-1", "factory.stage.mixed");
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
@@ -220,10 +223,12 @@ fn factory_blocker_resets_stable_line_and_requires_three_fresh_completions() {
     world
         .set_material_balance("circuit_board", 4)
         .expect("seed build circuits");
+    let spec = factory_spec("factory.stage.blocker", 1, 1);
+    prepare_factory_build(&mut world, "builder-a", "site-1", &spec);
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
-        spec: factory_spec("factory.stage.blocker", 1, 1),
+        spec,
     });
     world.step().expect("start build");
     world.step().expect("factory ready");
@@ -375,6 +380,7 @@ fn industry_stage_downgrades_when_last_completed_factory_is_recycled() {
     world
         .set_material_balance("circuit_board", 4)
         .expect("seed build circuits");
+    prepare_factory_build_id(&mut world, "builder-a", "site-1", "factory.stage");
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),

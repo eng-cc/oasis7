@@ -3,6 +3,7 @@ import { buildGameplayEconomicSurface } from "./viewer_feedback_gameplay_economi
 import { buildValidationUnlockPreviewDisplayModel } from "./viewer_validation_unlock_preview_display_model.js";
 import { buildWaitResolutionQuoteDisplayModel } from "./viewer_wait_resolution_quote_display_model.js";
 import { normalizeFirstDeliveryPreview } from "./first_delivery_preview_display_model.js";
+import { normalizeFactoryProductionFailureDisposition } from "./viewer_factory_failure_disposition_display_model.js";
 function isRecord(value) {
   return value != null && typeof value === "object" && !Array.isArray(value);
 }
@@ -593,10 +594,18 @@ export function createViewerFeedbackModule({
           return localeText(locale, "执行世界未就绪", "Execution World Not Ready");
         case "runtime_snapshot_empty_entities":
           return localeText(locale, "认领第一个 Agent", "Claim the first Agent");
+        case "product_validation":
+        case "product_validation_rejected":
+          return localeText(locale, "产品验证失败", "Product validation failed");
         default:
           return resolvedBlockerKind || null;
       }
     })();
+    const factoryProductionFailureDisposition = normalizeFactoryProductionFailureDisposition(
+      gameplay.factory_production_failure_disposition ?? gameplay.factoryProductionFailureDisposition,
+      locale,
+      localeText, availableActions,
+    );
     const narrativeNextStep = pendingEmptyWorldClaimSync
       ? localeText(
         locale,
@@ -632,42 +641,42 @@ export function createViewerFeedbackModule({
       action.executeKind === "agent_chat"
       && String(action.disabledReason || "").toLowerCase().includes("starter oc")
     ));
-    const recommendedAction = availableActions
+    const genericRecommendedAction = availableActions
       .filter((action) => !action.disabledReason)
       .sort((left, right) => {
         const priority = (action) => {
           if (starterOcBlocksChat && action.executeKind === "claim_starter_oc") return -1;
           if (isRecoveryChoiceState) {
             if (emptyEntityBlocker && action.executeKind === "claim_first_agent") return -1;
-            if (action.executeKind === "request_snapshot") return wantsSnapshotProof ? 0 : 2;
-            if (action.executeKind === "step") return wantsAdvanceProof ? 0 : 1;
-            if (action.executeKind === "play") return wantsResumeProof ? 1 : 2;
-            if (action.executeKind === "claim_first_agent") return 1;
-            if (action.executeKind === "claim_starter_oc") return 1;
-            if (action.executeKind === "gameplay_action") return 4;
-            if (action.executeKind === "agent_chat") return 5;
-            return 6;
+            return {
+              request_snapshot: wantsSnapshotProof ? 0 : 2,
+              step: wantsAdvanceProof ? 0 : 1,
+              play: wantsResumeProof ? 1 : 2,
+              claim_first_agent: 1,
+              claim_starter_oc: 1,
+              gameplay_action: 4,
+              agent_chat: 5,
+            }[action.executeKind] ?? 6;
           }
-          switch (action.executeKind) {
-            case "claim_first_agent":
-            case "claim_starter_oc":
-              return 0;
-            case "gameplay_action":
-              return 0;
-            case "step":
-              return 1;
-            case "play":
-              return 2;
-            case "request_snapshot":
-              return 3;
-            case "agent_chat":
-              return 4;
-            default:
-              return 5;
-          }
+          return {
+            claim_first_agent: 0,
+            claim_starter_oc: 0,
+            gameplay_action: 0,
+            step: 1,
+            play: 2,
+            request_snapshot: 3,
+            agent_chat: 4,
+          }[action.executeKind] ?? 5;
         };
         return priority(left) - priority(right);
       })[0] || null;
+    const factoryFailureRecoveryAction = factoryProductionFailureDisposition?.recoveryAction;
+    const recommendedAction = factoryProductionFailureDisposition
+      ? factoryFailureRecoveryAction?.executeKind === "none" ? null : availableActions.find((action) => (
+        action.actionId === factoryProductionFailureDisposition.recoveryActionId
+        && action.executeKind === factoryFailureRecoveryAction?.executeKind && !action.disabledReason
+      )) || null
+      : genericRecommendedAction;
     const recoveryActionDetail = (action, economicSurface) => {
       if (!action) return null;
       if (action.disabledReason) return action.disabledReason;
@@ -889,11 +898,16 @@ export function createViewerFeedbackModule({
         reason: displayableString(option.reason) || null,
         recommended: option.recommended === true,
       }));
-    const waitResolutionQuote = buildWaitResolutionQuoteDisplayModel(
-      gameplay.wait_resolution_quote ?? gameplay.waitResolutionQuote,
-      locale,
-      localeText,
-    );
+    if (factoryProductionFailureDisposition) {
+      fallbackTradeoffPreview.length = 0;
+    }
+    const waitResolutionQuote = factoryProductionFailureDisposition
+      ? null
+      : buildWaitResolutionQuoteDisplayModel(
+        gameplay.wait_resolution_quote ?? gameplay.waitResolutionQuote,
+        locale,
+        localeText,
+      );
     if (waitResolutionQuote) {
       const safeWaitIndex = fallbackTradeoffPreview.findIndex((option) => option.valueClass === "safe_wait");
       fallbackTradeoffPreview.splice(safeWaitIndex < 0 ? fallbackTradeoffPreview.length : safeWaitIndex, safeWaitIndex < 0 ? 0 : 1, waitResolutionQuote.fallbackTradeoffOption);
@@ -907,7 +921,7 @@ export function createViewerFeedbackModule({
     const requiredNextDecisionClass = displayableString(
       gameplay.required_next_decision_class ?? gameplay.requiredNextDecisionClass,
     );
-    const noSafeFallbackHandoff = noSafeFallbackReason
+    const noSafeFallbackHandoff = !factoryProductionFailureDisposition && (noSafeFallbackReason
       || requiredNextDecisionActionId
       || requiredNextDecisionClass
       ? {
@@ -915,7 +929,7 @@ export function createViewerFeedbackModule({
         requiredNextDecisionActionId,
         requiredNextDecisionClass,
       }
-      : null;
+      : null);
     const recoveryOptionComparisons = (
       Array.isArray(gameplay.recovery_options)
         ? gameplay.recovery_options
@@ -1164,6 +1178,7 @@ export function createViewerFeedbackModule({
       branchRecommendations,
       microDepotFacilities,
       validationUnlockPreview,
+      factoryProductionFailureDisposition,
       narrativeBlockerDetail,
       narrativeNextStep,
       economicSurface,

@@ -1,6 +1,56 @@
 use super::*;
 
 impl World {
+    pub(super) fn profile_governance_event(
+        &self,
+        action_id: ActionId,
+        action: &Action,
+    ) -> Option<DomainEvent> {
+        match action {
+            Action::GovernMaterialProfile {
+                operator_agent_id,
+                proposal_id,
+                profile,
+            } => Some(self.evaluate_govern_material_profile_action(
+                action_id,
+                operator_agent_id.as_str(),
+                *proposal_id,
+                profile,
+            )),
+            Action::GovernProductProfile {
+                operator_agent_id,
+                proposal_id,
+                profile,
+            } => Some(self.evaluate_govern_product_profile_action(
+                action_id,
+                operator_agent_id.as_str(),
+                *proposal_id,
+                profile,
+            )),
+            Action::GovernRecipeProfile {
+                operator_agent_id,
+                proposal_id,
+                profile,
+            } => Some(self.evaluate_govern_recipe_profile_action(
+                action_id,
+                operator_agent_id.as_str(),
+                *proposal_id,
+                profile,
+            )),
+            Action::GovernFactoryProfile {
+                operator_agent_id,
+                proposal_id,
+                profile,
+            } => Some(self.evaluate_govern_factory_profile_action(
+                action_id,
+                operator_agent_id.as_str(),
+                *proposal_id,
+                profile,
+            )),
+            _ => None,
+        }
+    }
+
     pub(super) fn evaluate_govern_material_profile_action(
         &self,
         action_id: ActionId,

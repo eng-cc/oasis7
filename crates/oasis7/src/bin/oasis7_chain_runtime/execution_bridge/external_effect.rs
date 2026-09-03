@@ -22,7 +22,7 @@ use super::{
 };
 
 impl ExecutionExternalEffectMaterialization {
-    fn validate(&self) -> Result<(), String> {
+    pub(super) fn validate(&self) -> Result<(), String> {
         if self.schema_version < EXECUTION_EXTERNAL_EFFECT_SCHEMA_V1 {
             return Err(format!(
                 "execution external effect has invalid schema_version={} at height={}",
@@ -70,6 +70,69 @@ impl ExecutionExternalEffectMaterialization {
         }
         Ok(())
     }
+}
+
+pub(super) fn validate_execution_external_effect_for_context(
+    materialization: &ExecutionExternalEffectMaterialization,
+    context: &NodeExecutionCommitContext,
+) -> Result<(), String> {
+    materialization.validate()?;
+    let mismatches = [
+        (
+            "world_id",
+            materialization.world_id.as_str(),
+            context.world_id.as_str(),
+        ),
+        (
+            "node_id",
+            materialization.node_id.as_str(),
+            context.node_id.as_str(),
+        ),
+        (
+            "node_block_hash",
+            materialization.node_block_hash.as_str(),
+            context.node_block_hash.as_str(),
+        ),
+        (
+            "action_root",
+            materialization.action_root.as_str(),
+            context.action_root.as_str(),
+        ),
+    ];
+    for (field, actual, expected) in mismatches {
+        if actual != expected {
+            return Err(format!(
+                "execution external effect {field} mismatch at height={}: expected={} actual={}",
+                context.height, expected, actual
+            ));
+        }
+    }
+    if materialization.height != context.height
+        || materialization.slot != context.slot
+        || materialization.epoch != context.epoch
+        || materialization.committed_at_unix_ms != context.committed_at_unix_ms
+    {
+        return Err(format!(
+            "execution external effect context metadata mismatch at height={}: effect=({}, {}, {}, {}) context=({}, {}, {}, {})",
+            context.height,
+            materialization.height,
+            materialization.slot,
+            materialization.epoch,
+            materialization.committed_at_unix_ms,
+            context.height,
+            context.slot,
+            context.epoch,
+            context.committed_at_unix_ms,
+        ));
+    }
+    let expected_actions = collect_execution_committed_action_anchors(context);
+    if materialization.committed_actions != expected_actions {
+        return Err(format!(
+            "execution external effect committed action anchors mismatch at height={}",
+            context.height
+        ));
+    }
+    Ok(())
 }
 
 pub(super) fn execution_module_anchor_hash(
@@ -167,8 +230,29 @@ pub(super) fn build_execution_external_effect_materialization(
     execution_world: &RuntimeWorld,
     context: &NodeExecutionCommitContext,
 ) -> Result<ExecutionExternalEffectMaterialization, String> {
+    build_execution_external_effect_materialization_with_pre_step_root(
+        execution_world,
+        context,
+        None,
+    )
+}
+
+pub(super) fn execution_world_snapshot_root(
+    execution_world: &RuntimeWorld,
+) -> Result<String, String> {
     let pre_step_snapshot = execution_world.snapshot();
-    let pre_step_execution_state_root = blake3_hex(super::to_cbor(pre_step_snapshot)?.as_slice());
+    Ok(blake3_hex(super::to_cbor(pre_step_snapshot)?.as_slice()))
+}
+
+pub(super) fn build_execution_external_effect_materialization_with_pre_step_root(
+    execution_world: &RuntimeWorld,
+    context: &NodeExecutionCommitContext,
+    pre_step_execution_state_root: Option<&str>,
+) -> Result<ExecutionExternalEffectMaterialization, String> {
+    let pre_step_execution_state_root = match pre_step_execution_state_root {
+        Some(root) if !root.trim().is_empty() => root.to_string(),
+        _ => execution_world_snapshot_root(execution_world)?,
+    };
     let world_manifest_hash = execution_world
         .current_manifest_hash()
         .map_err(|err| format!("execution external effect manifest hash failed: {:?}", err))?;

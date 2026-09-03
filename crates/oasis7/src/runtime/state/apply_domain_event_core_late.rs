@@ -1013,6 +1013,21 @@ impl WorldState {
                         ),
                     });
                 }
+                // FactoryProfileV1 is an immutable identity/capability
+                // contract. Replaying the exact profile is a byte-stable
+                // no-op; a second payload for the same factory id is never an
+                // overwrite, even when governance metadata differs.
+                if let Some(existing) = self.factory_profiles.get(&profile.factory_id) {
+                    if existing == profile {
+                        return Ok(());
+                    }
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "factory profile id is immutable and conflicts with persisted profile: factory_id={}",
+                            profile.factory_id
+                        ),
+                    });
+                }
                 self.factory_profiles
                     .insert(profile.factory_id.clone(), profile.clone());
                 if let Some(cell) = self.agents.get_mut(operator_agent_id) {

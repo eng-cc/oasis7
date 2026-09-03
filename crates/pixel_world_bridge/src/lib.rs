@@ -17,6 +17,12 @@ use web_sys::HtmlCanvasElement;
 
 mod host_state;
 mod render;
+#[path = "lib_test_hit_targets.rs"]
+mod test_hit_targets;
+
+use test_hit_targets::{
+    hotspot_test_hit_targets, publish_hotspot_test_hit_targets, publish_location_test_hit_targets,
+};
 
 thread_local! {
     static BRIDGE_SHARED: RefCell<BridgeSharedState> = RefCell::new(BridgeSharedState::default());
@@ -99,6 +105,12 @@ struct Link {
     from: Position,
     to: Position,
     emphasis: Option<f64>,
+    #[serde(default)]
+    status: Option<String>,
+    #[serde(default)]
+    source_class: Option<String>,
+    #[serde(default)]
+    freshness: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -196,6 +208,12 @@ struct ReceiptTarget {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+struct ActiveIntentTarget {
+    agent_id: String,
+    status: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
 struct RecommendedTarget {
     agent_id: String,
 }
@@ -234,6 +252,8 @@ struct RenderState {
     receipt_target: Option<ReceiptTarget>,
     #[serde(default)]
     recommended_target: Option<RecommendedTarget>,
+    #[serde(default)]
+    active_intent_target: Option<ActiveIntentTarget>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -746,9 +766,13 @@ fn render_signature(render_state: Option<&RenderState>, mode: RenderSignatureMod
     render_state.links.len().hash(&mut hasher);
     for link in &render_state.links {
         link.id.hash(&mut hasher);
+        link.kind.hash(&mut hasher);
         hash_position(&mut hasher, &link.from);
         hash_position(&mut hasher, &link.to);
         hash_f64(&mut hasher, link.emphasis.unwrap_or(0.0));
+        link.status.hash(&mut hasher);
+        link.source_class.hash(&mut hasher);
+        link.freshness.hash(&mut hasher);
     }
 
     if matches!(mode, RenderSignatureMode::Content) {
@@ -772,6 +796,17 @@ fn render_signature(render_state: Option<&RenderState>, mode: RenderSignatureMod
     render_state.recommended_target.is_some().hash(&mut hasher);
     if let Some(recommended_target) = render_state.recommended_target.as_ref() {
         recommended_target.agent_id.hash(&mut hasher);
+    }
+
+    if matches!(mode, RenderSignatureMode::Content) {
+        render_state
+            .active_intent_target
+            .is_some()
+            .hash(&mut hasher);
+        if let Some(active_intent_target) = render_state.active_intent_target.as_ref() {
+            active_intent_target.agent_id.hash(&mut hasher);
+            active_intent_target.status.hash(&mut hasher);
+        }
     }
 
     hasher.finish()
@@ -873,37 +908,6 @@ fn hit_test(hit_regions: &[HitRegion], x: f64, y: f64) -> Option<(String, String
         }
     }
     None
-}
-
-fn hotspot_test_hit_targets(hit_regions: &[HitRegion]) -> Vec<HotspotTestHitTarget> {
-    hit_regions
-        .iter()
-        .filter(|region| region.kind == "hotspot")
-        .map(|region| HotspotTestHitTarget {
-            kind: region.kind,
-            id: region.id.clone(),
-            canvas_x: (region.left + region.right) / 2.0,
-            canvas_y: (region.top + region.bottom) / 2.0,
-        })
-        .collect()
-}
-
-fn publish_hotspot_test_hit_targets(hit_regions: &[HitRegion]) {
-    let targets = hotspot_test_hit_targets(hit_regions);
-    BRIDGE_SHARED.with(|shared| shared.borrow_mut().hotspot_test_targets = targets);
-}
-
-fn publish_location_test_hit_targets(hit_regions: &[HitRegion]) {
-    let targets = hit_regions
-        .iter()
-        .filter(|region| region.kind == "location")
-        .map(|region| LocationTestHitTarget {
-            id: region.id.clone(),
-            canvas_x: (region.left + region.right) / 2.0,
-            canvas_y: (region.top + region.bottom) / 2.0,
-        })
-        .collect();
-    BRIDGE_SHARED.with(|shared| shared.borrow_mut().location_test_targets = targets);
 }
 
 fn click_selection_from_hit(hit: Option<(String, String)>) -> Option<(String, String)> {

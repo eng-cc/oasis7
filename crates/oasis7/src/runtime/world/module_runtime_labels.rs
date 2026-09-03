@@ -7,6 +7,16 @@ pub(super) fn event_kind_label(body: &WorldEventBody) -> &'static str {
         WorldEventBody::Domain(event) => match event {
             DomainEvent::AgentRegistered { .. } => "domain.agent_registered",
             DomainEvent::AgentMoved { .. } => "domain.agent_moved",
+            DomainEvent::AgentLocationAuthorityUpdated { .. } => {
+                "domain.agent_location_authority_updated"
+            }
+            DomainEvent::LocationAnchorUpdated { .. } => "domain.location_anchor_updated",
+            DomainEvent::FactorySiteAuthorityUpdated { .. } => {
+                "domain.economy.factory_site_authority_updated"
+            }
+            DomainEvent::FactoryConstructionPowerProfileUpdated { .. } => {
+                "domain.economy.factory_construction_power_profile_updated"
+            }
             DomainEvent::ActionAccepted { .. } => "domain.action_accepted",
             DomainEvent::ActionRejected { .. } => "domain.action_rejected",
             DomainEvent::AgentIntentProposed { .. } => "domain.agent_intent_proposed",
@@ -146,6 +156,12 @@ pub(super) fn event_kind_label(body: &WorldEventBody) -> &'static str {
             DomainEvent::CrisisTimedOut { .. } => "domain.gameplay.crisis_timed_out",
             DomainEvent::MetaProgressGranted { .. } => "domain.gameplay.meta_progress_granted",
             DomainEvent::ProductValidated { .. } => "domain.economy.product_validated",
+            DomainEvent::ProductValidationRecorded { .. } => {
+                "domain.economy.product_validation_recorded"
+            }
+            DomainEvent::ProductValidationAttemptStarted { .. } => {
+                "domain.economy.product_validation_attempt_started"
+            }
             DomainEvent::MaterialProfileGoverned { .. } => {
                 "domain.economy.material_profile_governed"
             }
@@ -165,6 +181,9 @@ pub(super) fn event_kind_label(body: &WorldEventBody) -> &'static str {
         WorldEventBody::ModuleEmitted(_) => "module.emitted",
         WorldEventBody::ModuleStateUpdated(_) => "module.state_updated",
         WorldEventBody::ModuleRuntimeCharged(_) => "module.runtime_charged",
+        WorldEventBody::ProductValidationDeliveryCursorUpdated(_) => {
+            "runtime.product_validation_delivery_cursor_updated"
+        }
         WorldEventBody::SnapshotCreated(_) => "snapshot.created",
         WorldEventBody::ManifestUpdated(_) => "manifest.updated",
         WorldEventBody::RollbackApplied(_) => "rollback.applied",

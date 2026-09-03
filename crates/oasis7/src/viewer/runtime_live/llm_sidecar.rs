@@ -5,20 +5,22 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use super::super::{location_id_for_pos, mapping::runtime_state_to_simulator_model};
 use crate::geometry::GeoPos;
 use crate::runtime::{
-    Action as RuntimeAction, AgentIntentV2, ModuleSourcePackage, SchedulerWakeV1,
-    World as RuntimeWorld,
+    Action as RuntimeAction, AgentIntentV2, CausedBy as RuntimeCausedBy,
+    DomainEvent as RuntimeDomainEvent, ModuleSourcePackage, SchedulerWakeV1, World as RuntimeWorld,
+    WorldEvent as RuntimeWorldEvent, WorldEventBody as RuntimeWorldEventBody,
 };
 #[cfg(not(target_arch = "wasm32"))]
 use crate::simulator::AsyncAgentRunner;
 use crate::simulator::{
-    Action as SimulatorAction, ActionCatalogEntry, AgentDecision, AgentDecisionTrace,
-    AgentPromptProfile, AgentRunner, CHUNK_GENERATION_SCHEMA_VERSION, ChunkRuntimeConfig,
-    ContinuationProposalV1 as SimulatorContinuationProposalV1, ContinuousAgentResponseContextV1,
-    LlmAgentBehavior, LlmAgentConfig, Location, OpenAiChatCompletionClient,
-    ProviderAgentChatRequest, ProviderBackedAgentBehavior, ProviderExecutionMode,
-    ProviderLoopbackAdapter, ProviderLoopbackHttpClient, ResourceOwner, RuntimeBindingV1,
-    SNAPSHOT_VERSION, WorldConfig, WorldEvent, WorldEventKind, WorldJournal, WorldKernel,
-    WorldModel, WorldSnapshot, evaluate_provider_compatibility, provider_agent_chat_log_key,
+    Action as SimulatorAction, ActionCatalogEntry, ActionResult, AgentBehavior, AgentDecision,
+    AgentDecisionTrace, AgentPromptProfile, AgentRunner, CHUNK_GENERATION_SCHEMA_VERSION,
+    ChunkRuntimeConfig, ContinuationProposalV1 as SimulatorContinuationProposalV1,
+    ContinuousAgentResponseContextV1, LlmAgentBehavior, LlmAgentConfig, Location,
+    OpenAiChatCompletionClient, ProviderAgentChatRequest, ProviderBackedAgentBehavior,
+    ProviderExecutionMode, ProviderLoopbackAdapter, ProviderLoopbackHttpClient, ResourceOwner,
+    RuntimeBindingV1, SNAPSHOT_VERSION, WorldConfig, WorldEvent, WorldEventKind, WorldJournal,
+    WorldKernel, WorldModel, WorldSnapshot, evaluate_provider_compatibility,
+    provider_agent_chat_log_key,
 };
 use crate::viewer::live::ViewerLiveDecisionMode;
 use crate::viewer::protocol::{AgentChatAck, AgentChatError};
@@ -229,14 +231,12 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     provider_lineage_hydrated: bool,
     pending_runtime_wakes: BTreeMap<String, SchedulerWakeV1>,
 }
-
 pub(in crate::viewer::runtime_live) struct RuntimePlayerBindingPlan {
     agent_player_bindings: BTreeMap<String, String>,
     player_agent_bindings: BTreeMap<String, String>,
     agent_public_key_bindings: BTreeMap<String, String>,
     events: Vec<WorldEventKind>,
 }
-
 impl RuntimeLlmSidecar {
     pub(in crate::viewer::runtime_live) fn new(decision_mode: ViewerLiveDecisionMode) -> Self {
         Self {
@@ -279,7 +279,6 @@ impl RuntimeLlmSidecar {
             pending_runtime_wakes: BTreeMap::new(),
         }
     }
-
     pub(in crate::viewer::runtime_live) fn with_runtime_seed_model(
         mut self,
         model: &WorldModel,
@@ -288,7 +287,6 @@ impl RuntimeLlmSidecar {
         self.runtime_seed_model = Some(model.clone());
         self
     }
-
     pub(in crate::viewer::runtime_live) fn seed_location_for_pos(
         &self,
         pos: GeoPos,
@@ -298,19 +296,15 @@ impl RuntimeLlmSidecar {
             .find(|location| location.pos == pos)
             .cloned()
     }
-
     pub(in crate::viewer::runtime_live) fn is_llm_mode(&self) -> bool {
         matches!(self.decision_mode, ViewerLiveDecisionMode::Llm)
     }
-
     pub(in crate::viewer::runtime_live) fn supports_prompt_control(&self) -> bool {
         !env_requests_provider_backend()
     }
-
     pub(in crate::viewer::runtime_live) fn supports_agent_chat(&self) -> bool {
         true
     }
-
     pub(in crate::viewer::runtime_live) fn refresh_provider_check_snapshot(&mut self) {
         let Ok(Some(settings)) = provider_settings_from_env() else {
             self.provider_check_snapshot = None;
@@ -330,7 +324,6 @@ impl RuntimeLlmSidecar {
         {
             return;
         }
-
         let probe_timeout_ms = if settings.provider_transport == REMOTE_HTTPS_PROVIDER_TRANSPORT {
             settings.connect_timeout_ms.max(1_500)
         } else {
@@ -381,13 +374,11 @@ impl RuntimeLlmSidecar {
             },
         );
     }
-
     pub(in crate::viewer::runtime_live) fn provider_check_snapshot(
         &self,
     ) -> Option<&RuntimeProviderCheckSnapshot> {
         self.provider_check_snapshot.as_ref()
     }
-
     pub(in crate::viewer::runtime_live) fn ensure_gameplay_ready(
         &mut self,
         world: &RuntimeWorld,
@@ -402,7 +393,6 @@ impl RuntimeLlmSidecar {
         })?;
         Ok(())
     }
-
     pub(in crate::viewer::runtime_live) fn consume_player_auth_nonce(
         &mut self,
         player_id: &str,
@@ -412,7 +402,6 @@ impl RuntimeLlmSidecar {
         self.commit_player_auth_nonce(player_id, nonce);
         Ok(())
     }
-
     pub(in crate::viewer::runtime_live) fn validate_player_auth_nonce(
         &self,
         player_id: &str,
@@ -435,7 +424,6 @@ impl RuntimeLlmSidecar {
         }
         Ok(())
     }
-
     pub(in crate::viewer::runtime_live) fn commit_player_auth_nonce(
         &mut self,
         player_id: &str,
@@ -444,7 +432,6 @@ impl RuntimeLlmSidecar {
         self.player_auth_last_nonce
             .insert(player_id.trim().to_string(), nonce);
     }
-
     pub(in crate::viewer::runtime_live) fn find_chat_intent_replay(
         &self,
         player_id: &str,
@@ -477,7 +464,6 @@ impl RuntimeLlmSidecar {
         ack.idempotent_replay = true;
         Ok(Some(ack))
     }
-
     pub(in crate::viewer::runtime_live) fn record_chat_intent_ack(
         &mut self,
         player_id: &str,
@@ -501,7 +487,6 @@ impl RuntimeLlmSidecar {
         };
         self.player_chat_intent_acks.insert(key, record);
     }
-
     pub(in crate::viewer::runtime_live) fn clear_chat_intent_acks_for_player(
         &mut self,
         player_id: &str,
@@ -510,7 +495,6 @@ impl RuntimeLlmSidecar {
         self.player_chat_intent_acks
             .retain(|(record_player_id, _, _), _| record_player_id != player_id);
     }
-
     pub(in crate::viewer::runtime_live) fn bound_agent_for_player(
         &self,
         player_id: &str,
@@ -519,7 +503,6 @@ impl RuntimeLlmSidecar {
             .get(player_id.trim())
             .map(String::as_str)
     }
-
     pub(in crate::viewer::runtime_live) fn clear_player_binding(
         &mut self,
         player_id: &str,
@@ -534,7 +517,6 @@ impl RuntimeLlmSidecar {
             public_key,
         })
     }
-
     pub(in crate::viewer::runtime_live) fn clear_stale_local_test_bindings_for_world(
         &mut self,
         world: &RuntimeWorld,
@@ -559,7 +541,6 @@ impl RuntimeLlmSidecar {
         }
         stale_count
     }
-
     pub(in crate::viewer::runtime_live) fn bind_agent_player(
         &mut self,
         agent_id: &str,
@@ -1139,6 +1120,39 @@ impl RuntimeLlmSidecar {
             decision_trace: tick.decision_trace,
             cognition,
         })
+    }
+
+    /// Deliver an authoritative production completion to its owning Agent.
+    /// Runtime-live receives the full runtime receipt through `mapped_event`,
+    /// while the simulator behavior owns coverage state and replay idempotence.
+    pub(in crate::viewer::runtime_live) fn notify_recipe_completion_if_needed(
+        &mut self,
+        runtime_event: &RuntimeWorldEvent,
+        mapped_event: WorldEvent,
+    ) {
+        let RuntimeWorldEventBody::Domain(RuntimeDomainEvent::RecipeCompleted {
+            requester_agent_id,
+            ..
+        }) = &runtime_event.body
+        else {
+            return;
+        };
+
+        let Some(runner) = self.runner.as_mut() else {
+            return;
+        };
+        match runner {
+            RuntimeDecisionRunner::Builtin(runner) => {
+                if let Some(agent) = runner.get_mut(requester_agent_id.as_str()) {
+                    agent.behavior.on_event(&mapped_event);
+                }
+            }
+            RuntimeDecisionRunner::ProviderBacked(runner) => {
+                if let Some(agent) = runner.get_mut(requester_agent_id.as_str()) {
+                    agent.behavior.on_event(&mapped_event);
+                }
+            }
+        }
     }
 
     fn sync_shadow_kernel(

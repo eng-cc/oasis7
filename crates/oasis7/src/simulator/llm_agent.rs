@@ -15,6 +15,8 @@ use std::fmt;
 use std::fs;
 use std::path::Path;
 
+use crate::runtime::{DomainEvent as RuntimeDomainEvent, WorldEventBody as RuntimeWorldEventBody};
+
 use super::agent::{
     ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, AgentQuery, AgentQueryResult,
     LlmChatMessageTrace, LlmChatRole, LlmDecisionDiagnostics, LlmEffectIntentTrace,
@@ -39,6 +41,8 @@ mod execution_controls;
 mod memory_selector;
 mod openai_payload;
 mod prompt_assembly;
+mod recipe_coverage;
+use recipe_coverage::RecipeCoverageProgress;
 
 pub use memory_selector::{MemorySelector, MemorySelectorConfig};
 pub use prompt_assembly::{
@@ -219,6 +223,7 @@ const PROMPT_CONVERSATION_MAX_ITEMS: usize = 12;
 const PROMPT_OBSERVATION_VISIBLE_AGENTS_MAX: usize = 5;
 const PROMPT_OBSERVATION_VISIBLE_LOCATIONS_MAX: usize = 5;
 const CONVERSATION_HISTORY_MAX_ITEMS: usize = 64;
+const RECIPE_COMPLETION_REPLAY_WINDOW: usize = 64;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PromptLastActionSummary {
@@ -226,11 +231,6 @@ struct PromptLastActionSummary {
     success: bool,
     reject_reason: Option<String>,
     decision_rewrite: Option<DecisionRewriteReceipt>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-struct RecipeCoverageProgress {
-    completed: BTreeSet<String>,
 }
 
 impl RecipeCoverageProgress {
@@ -250,11 +250,12 @@ impl RecipeCoverageProgress {
             .any(|candidate| candidate == &recipe_id.trim())
     }
 
-    fn mark_completed(&mut self, recipe_id: &str) {
+    fn mark_completed(&mut self, recipe_id: &str) -> bool {
         let normalized = recipe_id.trim();
         if Self::is_tracked(normalized) {
-            self.completed.insert(normalized.to_string());
+            return self.completed.insert(normalized.to_string());
         }
+        false
     }
 
     fn is_completed(&self, recipe_id: &str) -> bool {
