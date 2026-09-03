@@ -8,6 +8,10 @@ use sha2::{Digest, Sha256};
 pub(super) struct RuntimePendingProviderWorldEvent {
     pub(super) agent_id: String,
     pub(super) event: WorldEvent,
+    /// The Runtime head at which this event was observed.  Old checkpoints
+    /// may omit it; those entries retain the prior compatibility behavior.
+    #[serde(default)]
+    pub(super) runtime_binding: Option<RuntimeBindingV1>,
 }
 
 fn provider_world_event_key(agent_id: &str, event: &WorldEvent) -> String {
@@ -15,7 +19,16 @@ fn provider_world_event_key(agent_id: &str, event: &WorldEvent) -> String {
     digest.update(b"oasis7.viewer.provider-world-event.v1");
     digest.update(agent_id.as_bytes());
     digest.update([0]);
-    digest.update(serde_json::to_vec(event).expect("WorldEvent must remain serializable"));
+    // Runtime event identity is the durable dedup key.  The mapped simulator
+    // projection may gain presentation fields without causing a second
+    // provider notification.
+    if let Some(runtime_event) = event.runtime_event.as_ref() {
+        digest.update(
+            serde_json::to_vec(runtime_event).expect("RuntimeWorldEvent must remain serializable"),
+        );
+    } else {
+        digest.update(serde_json::to_vec(event).expect("WorldEvent must remain serializable"));
+    }
     format!("provider-world-event-{}", hex::encode(digest.finalize()))
 }
 
@@ -28,6 +41,21 @@ impl RuntimeLlmSidecar {
         runtime_event: &RuntimeWorldEvent,
         mapped_event: WorldEvent,
     ) {
+        self.notify_recipe_completion_with_binding(runtime_event, mapped_event, None);
+    }
+
+    /// Queue a completion before the provider runner is available (notably
+    /// during chain-sync startup), retaining the Runtime binding so a later
+    /// reorg/replacement cannot deliver an event from the wrong world head.
+    pub(in crate::viewer::runtime_live) fn notify_recipe_completion_with_binding(
+        &mut self,
+        runtime_event: &RuntimeWorldEvent,
+        mapped_event: WorldEvent,
+        runtime_binding: Option<RuntimeBindingV1>,
+    ) {
+        if self.provider_lineage_binding.is_none() {
+            self.provider_lineage_binding = runtime_binding.clone();
+        }
         let RuntimeWorldEventBody::Domain(RuntimeDomainEvent::RecipeCompleted {
             requester_agent_id,
             ..
@@ -40,10 +68,10 @@ impl RuntimeLlmSidecar {
             .runner
             .as_ref()
             .is_some_and(|runner| matches!(runner, RuntimeDecisionRunner::ProviderBacked(_)));
-        let provider_expected =
-            self.runner.is_none() && self.is_llm_mode() && env_requests_provider_backend();
-        if provider_runner || provider_expected {
-            self.enqueue_provider_world_event(requester_agent_id, mapped_event);
+        // A missing runner is a startup phase, not proof that the event has no
+        // owner.  Keep it durable and flush after runner registration.
+        if provider_runner || self.runner.is_none() {
+            self.enqueue_provider_world_event(requester_agent_id, mapped_event, runtime_binding);
         } else if let Some(RuntimeDecisionRunner::Builtin(runner)) = self.runner.as_mut() {
             if let Some(agent) = runner.get_mut(requester_agent_id.as_str()) {
                 agent.behavior.on_event(&mapped_event);
@@ -51,13 +79,19 @@ impl RuntimeLlmSidecar {
         }
     }
 
-    fn enqueue_provider_world_event(&mut self, agent_id: &str, event: WorldEvent) {
+    fn enqueue_provider_world_event(
+        &mut self,
+        agent_id: &str,
+        event: WorldEvent,
+        runtime_binding: Option<RuntimeBindingV1>,
+    ) {
         let key = provider_world_event_key(agent_id, &event);
         self.pending_provider_world_events
             .entry(key)
             .or_insert_with(|| RuntimePendingProviderWorldEvent {
                 agent_id: agent_id.to_string(),
                 event,
+                runtime_binding,
             });
         // Persist before trying the actor. If the process stops after the
         // actor accepts the command but before this checkpoint is cleared,
@@ -81,8 +115,12 @@ impl RuntimeLlmSidecar {
                 .get_mut(agent_id)
                 .map(|agent| agent.behavior.on_event(&event))
                 .ok_or_else(|| format!("provider actor unavailable: {agent_id}")),
-            Some(RuntimeDecisionRunner::Builtin(_)) => {
-                Err("provider world event requested from builtin runner".to_string())
+            Some(RuntimeDecisionRunner::Builtin(runner)) => {
+                let Some(agent) = runner.get_mut(agent_id) else {
+                    return Err(format!("builtin actor unavailable: {agent_id}"));
+                };
+                agent.behavior.on_event(&event);
+                Ok(())
             }
             None => Err("provider runner not initialized".to_string()),
         }
@@ -92,10 +130,25 @@ impl RuntimeLlmSidecar {
         let pending = self
             .pending_provider_world_events
             .iter()
-            .map(|(key, pending)| (key.clone(), pending.agent_id.clone(), pending.event.clone()))
+            .map(|(key, pending)| (key.clone(), pending.clone()))
             .collect::<Vec<_>>();
         let mut delivered = false;
-        for (key, agent_id, event) in pending {
+        for (key, pending) in pending {
+            if let (Some(saved), Some(current)) = (
+                pending.runtime_binding.as_ref(),
+                self.provider_lineage_binding.as_ref(),
+            ) && saved != current
+            {
+                self.pending_provider_world_events.remove(key.as_str());
+                self.provider_world_event_quarantine.insert(
+                    key,
+                    "runtime_binding_replaced_before_provider_delivery".to_string(),
+                );
+                delivered = true;
+                continue;
+            }
+            let agent_id = pending.agent_id;
+            let event = pending.event;
             match self.dispatch_provider_world_event(agent_id.as_str(), event) {
                 Ok(()) => {
                     self.pending_provider_world_events.remove(key.as_str());

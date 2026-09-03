@@ -9,6 +9,11 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmDecision {
     pub(in crate::viewer::runtime_live) decision: AgentDecision,
     pub(in crate::viewer::runtime_live) decision_trace: Option<AgentDecisionTrace>,
     pub(in crate::viewer::runtime_live) cognition: Option<RuntimeProviderActionContext>,
+    /// Provider memory intents remain attached to the response until the
+    /// Runtime receipt/readback gate accepts them.
+    #[serde(default)]
+    pub(in crate::viewer::runtime_live) memory_write_intents:
+        Vec<crate::simulator::MemoryWriteIntent>,
 }
 
 pub(super) fn provider_trace_retryable(trace: &AgentDecisionTrace) -> bool {
@@ -24,6 +29,17 @@ pub(super) fn provider_trace_retryable(trace: &AgentDecisionTrace) -> bool {
                 .and_then(serde_json::Value::as_bool)
         })
         .unwrap_or(false)
+}
+
+/// Context capture identifies the logical request, not one transport attempt.
+/// Normalize the attempt before hashing so a retry can append only a new
+/// `RequestDispatched` event while reusing the already captured context.
+pub(crate) fn runtime_provider_context_digest(
+    request: &crate::simulator::ContinuousAgentRequestContextV1,
+) -> String {
+    let mut logical_request = request.clone();
+    logical_request.transport_attempt = 1;
+    crate::simulator::h_v1("oasis7.cognition.context.v1", &logical_request).to_string()
 }
 
 impl RuntimeLlmDecision {
@@ -59,6 +75,7 @@ impl RuntimeLlmDecision {
             decision: AgentDecision::Wait,
             decision_trace: Some(trace),
             cognition: None,
+            memory_write_intents: Vec::new(),
         }
     }
 }
@@ -137,7 +154,8 @@ impl RuntimeLlmSidecar {
         let now = world.state().time;
         let candidates = self.provider_agent_ids.iter().cloned().collect::<Vec<_>>();
         for agent_id in candidates {
-            if self.provider_active_turns.contains_key(&agent_id)
+            if self.provider_recovery_pending.contains_key(&agent_id)
+                || self.provider_active_turns.contains_key(&agent_id)
                 || self
                     .provider_wait_until
                     .get(&agent_id)
@@ -166,13 +184,21 @@ impl RuntimeLlmSidecar {
                     ));
                 }
             };
+            if let Err(error) = runtime_provider_prefix(world, &context) {
+                let _ = runtime_provider_failure(world, &context, "persistence_failure");
+                return Some(RuntimeLlmDecision::from_agent_error(
+                    world,
+                    agent_id,
+                    format!("Runtime cognition prefix rejected provider I/O: {error}"),
+                ));
+            }
             let start_result = match self.runner.as_mut() {
                 Some(RuntimeDecisionRunner::ProviderBacked(runner)) => runner
                     .start_turn_with_request_context_and_observation(
                         agent_id.as_str(),
                         observation,
-                        context.turn_context,
-                        context.request_context,
+                        context.turn_context.clone(),
+                        context.request_context.clone(),
                     ),
                 _ => {
                     return Some(RuntimeLlmDecision::from_error(
@@ -182,6 +208,7 @@ impl RuntimeLlmSidecar {
                 }
             };
             if let Err(error) = start_result {
+                let _ = runtime_provider_failure(world, &context, "provider_failure");
                 return Some(RuntimeLlmDecision::from_agent_error(
                     world,
                     agent_id,
@@ -198,7 +225,7 @@ impl RuntimeLlmSidecar {
 
     fn provider_decision_from_async_outcome(
         &mut self,
-        world: &RuntimeWorld,
+        world: &mut RuntimeWorld,
         kernel: &mut WorldKernel,
         outcome: AsyncAgentTurnOutcome,
     ) -> RuntimeLlmDecision {
@@ -221,7 +248,11 @@ impl RuntimeLlmSidecar {
         let cognition = context
             .clone()
             .zip(outcome.prepared_response_context.clone())
-            .map(|(request, response)| RuntimeProviderActionContext { request, response });
+            .map(|(request, response)| RuntimeProviderActionContext {
+                request,
+                response,
+                memory_write_intents: outcome.memory_write_intents.clone(),
+            });
         let decision = outcome.decision.unwrap_or(AgentDecision::Wait);
         let decision_trace = outcome.decision_trace.or_else(|| {
             (outcome.lifecycle == AsyncTurnLifecycle::Failed).then(|| AgentDecisionTrace {
@@ -268,6 +299,26 @@ impl RuntimeLlmSidecar {
         {
             if let Some(context) = context {
                 if context.request_context.transport_attempt < MAX_PROVIDER_TRANSPORT_ATTEMPTS {
+                    let mut retry_context = context.request_context.clone();
+                    retry_context.transport_attempt =
+                        retry_context.transport_attempt.saturating_add(1);
+                    if let Err(error) = runtime_provider_dispatch(world, &retry_context) {
+                        tracing::warn!(
+                            agent_id,
+                            error,
+                            "Runtime cognition retry dispatch rejected"
+                        );
+                        let _ = runtime_provider_failure(world, &context, "persistence_failure");
+                        self.mark_provider_transport_exhausted(agent_id.clone());
+                        self.persist_provider_lineage_best_effort();
+                        return RuntimeLlmDecision {
+                            agent_id,
+                            decision,
+                            decision_trace,
+                            cognition,
+                            memory_write_intents: outcome.memory_write_intents,
+                        };
+                    }
                     let retry_result = kernel
                         .observe(agent_id.as_str())
                         .map_err(|error| format!("provider retry observation failed: {error:?}"))
@@ -299,8 +350,13 @@ impl RuntimeLlmSidecar {
                     // context remains reusable and every later world tick can
                     // redispatch the same exhausted transport attempt.
                     self.mark_provider_transport_exhausted(agent_id.clone());
+                    let _ = runtime_provider_failure(world, &context, "failed_provider");
                 }
             }
+        } else if let Some(context) = context {
+            // A provider/actor failure that is not retryable must be closed
+            // durably before the control plane observes the typed error.
+            let _ = runtime_provider_failure(world, &context, "provider_failure");
         }
         self.persist_provider_lineage_best_effort();
         RuntimeLlmDecision {
@@ -308,6 +364,113 @@ impl RuntimeLlmSidecar {
             decision,
             decision_trace,
             cognition,
+            memory_write_intents: outcome.memory_write_intents,
         }
     }
+}
+
+fn cognition_event_matches(
+    world: &RuntimeWorld,
+    kind: &str,
+    request: &crate::simulator::ContinuousAgentRequestContextV1,
+) -> bool {
+    world
+        .cognition()
+        .get("cognition_journal")
+        .and_then(|journal| journal.get("events"))
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|events| {
+            events.iter().any(|event| {
+                event.get("event_kind").and_then(serde_json::Value::as_str) == Some(kind)
+                    && event.get("agent_id").and_then(serde_json::Value::as_str)
+                        == Some(request.agent_subject.as_str())
+                    && event
+                        .get("agent_session_id")
+                        .and_then(serde_json::Value::as_str)
+                        == Some(request.agent_session_id.as_str())
+                    && event
+                        .get("agent_turn_id")
+                        .and_then(serde_json::Value::as_str)
+                        == Some(request.agent_turn_id.as_str())
+                    && event
+                        .get("decision_request_id")
+                        .and_then(serde_json::Value::as_str)
+                        == Some(request.decision_request_id.as_str())
+                    && event
+                        .get("request_digest")
+                        .and_then(serde_json::Value::as_str)
+                        == Some(request.request_digest.to_string().as_str())
+            })
+        })
+}
+
+pub(super) fn runtime_provider_prefix(
+    world: &mut RuntimeWorld,
+    context: &cognition_context::ProviderContextState,
+) -> Result<(), String> {
+    let request = &context.request_context;
+    let request_digest = request.request_digest.to_string();
+    if !cognition_event_matches(world, "TurnStarted", request) {
+        world
+            .start_cognition_turn(
+                request.agent_subject.as_str(),
+                request.agent_session_id.as_str(),
+                request.agent_turn_id.as_str(),
+                request.decision_request_id.as_str(),
+                request_digest.as_str(),
+            )
+            .map_err(|error| format!("TurnStarted failed: {error:?}"))?;
+    }
+    if !cognition_event_matches(world, "ContextCaptured", request) {
+        let context_digest = runtime_provider_context_digest(request);
+        world
+            .capture_cognition_context(
+                request.agent_subject.as_str(),
+                request.agent_session_id.as_str(),
+                request.agent_turn_id.as_str(),
+                request.decision_request_id.as_str(),
+                request_digest.as_str(),
+                context_digest.as_str(),
+            )
+            .map_err(|error| format!("ContextCaptured failed: {error:?}"))?;
+    }
+    runtime_provider_dispatch(world, request)
+}
+
+pub(super) fn runtime_provider_dispatch(
+    world: &mut RuntimeWorld,
+    request: &crate::simulator::ContinuousAgentRequestContextV1,
+) -> Result<(), String> {
+    world
+        .dispatch_cognition_request(
+            request.agent_subject.as_str(),
+            request.agent_session_id.as_str(),
+            request.agent_turn_id.as_str(),
+            request.decision_request_id.as_str(),
+            request.request_digest.to_string().as_str(),
+            request.provider_invocation_key().to_string().as_str(),
+            request.retry_seq,
+            request.transport_attempt,
+        )
+        .map_err(|error| format!("RequestDispatched failed: {error:?}"))
+}
+
+pub(super) fn runtime_provider_failure(
+    world: &mut RuntimeWorld,
+    context: &cognition_context::ProviderContextState,
+    reason: &str,
+) -> Result<(), String> {
+    let request = &context.request_context;
+    world
+        .fail_cognition_turn(
+            request.agent_subject.as_str(),
+            request.agent_session_id.as_str(),
+            request.agent_turn_id.as_str(),
+            request.decision_request_id.as_str(),
+            request.request_digest.to_string().as_str(),
+            reason,
+            request.retry_seq,
+            request.transport_attempt,
+        )
+        .map_err(|error| format!("CognitionTurnFailed failed: {error:?}"))
 }

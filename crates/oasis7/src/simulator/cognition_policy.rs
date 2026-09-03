@@ -387,7 +387,7 @@ pub enum MemoryWritePolicyOutcome {
     Pending,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MemoryWriteStore {
     entries: Vec<Value>,
     committed_by_digest: BTreeMap<String, String>,

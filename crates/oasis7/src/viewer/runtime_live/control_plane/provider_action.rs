@@ -3,7 +3,8 @@ use super::llm_sidecar::RuntimeProviderActionContext;
 use super::*;
 use crate::runtime::{
     CognitionCommitRejectReasonV1, RuntimeCognitionBaseBindingV1, RuntimeCognitionCommitRequestV1,
-    RuntimeCognitionResponseArtifactV1, classify_cognition_commit_error,
+    RuntimeCognitionResponseArtifactV1, RuntimeFeedbackProjectionV1, RuntimeFeedbackRequestV1,
+    classify_cognition_commit_error,
 };
 use crate::simulator::{Action as SimulatorAction, AgentDecision, h_v1};
 
@@ -185,6 +186,19 @@ impl ViewerRuntimeLiveServer {
                         "runtime llm bridge cannot map action: {}",
                         simulator_action_label(&action)
                     );
+                    self.llm_sidecar
+                        .fail_provider_cognition_turn(
+                            &mut self.world,
+                            decision.agent_id.as_str(),
+                            "cognition_failed",
+                        )
+                        .map_err(|error| {
+                            wake_handoff_error_trace(
+                                decision.agent_id.as_str(),
+                                self.world.state().time,
+                                error,
+                            )
+                        })?;
                     if let Some(feedback) = self.llm_sidecar.fail_provider_turn_with_feedback(
                         decision.agent_id.as_str(),
                         "rejected",
@@ -237,33 +251,55 @@ impl ViewerRuntimeLiveServer {
                         "pending",
                         None,
                         None,
-                        Some(format!("provider requested wait for {ticks} tick(s)")),
+                        Some("retry_scheduled".to_string()),
                     );
                     self.deliver_provider_feedback_best_effort(feedback);
-                    self.handoff_runtime_wake_for_agent(
-                        decision.agent_id.as_str(),
-                        crate::runtime::ContinuationStatusV1::Rejected,
-                        "provider_wait_compatibility_terminal",
-                    )
-                    .map_err(|error| AgentDecisionTrace {
-                        agent_id: decision.agent_id.clone(),
-                        time: self.world.state().time,
-                        decision: AgentDecision::Wait,
-                        llm_input: None,
-                        llm_output: None,
-                        llm_error: Some(error),
-                        parse_error: None,
-                        llm_diagnostics: None,
-                        llm_effect_intents: Vec::new(),
-                        llm_effect_receipts: Vec::new(),
-                        llm_step_trace: Vec::new(),
-                        llm_prompt_section_trace: Vec::new(),
-                        llm_chat_messages: Vec::new(),
-                    })?;
+                    if cognition.request.turn_context.continuation.is_some() {
+                        // A Runtime-resumed request already consumed the
+                        // selected wake and admitted its next continuation.
+                        // Keep that continuation under the normal scheduler;
+                        // local Viewer wait timers must not terminalize it.
+                        self.llm_sidecar
+                            .fail_provider_turn(decision.agent_id.as_str());
+                    } else {
+                        self.handoff_runtime_wake_for_agent(
+                            decision.agent_id.as_str(),
+                            crate::runtime::ContinuationStatusV1::Rejected,
+                            "provider_wait_compatibility_terminal",
+                        )
+                        .map_err(|error| AgentDecisionTrace {
+                            agent_id: decision.agent_id.clone(),
+                            time: self.world.state().time,
+                            decision: AgentDecision::Wait,
+                            llm_input: None,
+                            llm_output: None,
+                            llm_error: Some(error),
+                            parse_error: None,
+                            llm_diagnostics: None,
+                            llm_effect_intents: Vec::new(),
+                            llm_effect_receipts: Vec::new(),
+                            llm_step_trace: Vec::new(),
+                            llm_prompt_section_trace: Vec::new(),
+                            llm_chat_messages: Vec::new(),
+                        })?;
+                    }
                 }
             }
             AgentDecision::Query(_) => {
                 if let Some(cognition) = decision.cognition {
+                    self.llm_sidecar
+                        .fail_provider_cognition_turn(
+                            &mut self.world,
+                            decision.agent_id.as_str(),
+                            "cognition_failed",
+                        )
+                        .map_err(|error| {
+                            wake_handoff_error_trace(
+                                decision.agent_id.as_str(),
+                                self.world.state().time,
+                                error,
+                            )
+                        })?;
                     let feedback = self.llm_sidecar.provider_feedback(
                         &cognition,
                         None,
@@ -302,6 +338,19 @@ impl ViewerRuntimeLiveServer {
             }
             AgentDecision::ModuleCommand { .. } => {
                 if let Some(cognition) = decision.cognition {
+                    self.llm_sidecar
+                        .fail_provider_cognition_turn(
+                            &mut self.world,
+                            decision.agent_id.as_str(),
+                            "cognition_failed",
+                        )
+                        .map_err(|error| {
+                            wake_handoff_error_trace(
+                                decision.agent_id.as_str(),
+                                self.world.state().time,
+                                error,
+                            )
+                        })?;
                     let feedback = self.llm_sidecar.provider_feedback(
                         &cognition,
                         None,
@@ -398,14 +447,58 @@ impl ViewerRuntimeLiveServer {
         &mut self,
         feedback: crate::simulator::FeedbackEnvelopeV1,
     ) {
-        if let Err(error) = self.world.enqueue_runtime_feedback(feedback) {
+        self.deliver_provider_feedback_with_projection(
+            feedback,
+            RuntimeFeedbackProjectionV1::default(),
+        );
+    }
+
+    fn deliver_provider_feedback_with_projection(
+        &mut self,
+        feedback: crate::simulator::FeedbackEnvelopeV1,
+        projection: RuntimeFeedbackProjectionV1,
+    ) {
+        if let Err(error) = self.allocate_runtime_feedback(feedback, projection) {
             tracing::warn!(
                 error = ?error,
-                "Runtime feedback outbox enqueue failed; provider feedback was not delivered"
+                "Runtime feedback allocation failed; provider feedback was not delivered"
             );
             return;
         }
         self.drain_provider_feedback_outbox();
+    }
+
+    fn allocate_runtime_feedback(
+        &mut self,
+        feedback: crate::simulator::FeedbackEnvelopeV1,
+        projection: RuntimeFeedbackProjectionV1,
+    ) -> Result<crate::runtime::RuntimeFeedbackOutboxRecordV1, String> {
+        let status = feedback.status.clone();
+        let request = RuntimeFeedbackRequestV1 {
+            // Runtime receipts already carry a Runtime-issued feedback id.
+            // All other dispositions receive their id and sequence from the
+            // Runtime allocator, never from the adapter-local compatibility
+            // counter.
+            feedback_id: feedback
+                .runtime_receipt_id
+                .as_ref()
+                .map(|_| feedback.feedback_id.clone()),
+            agent_subject: feedback.agent_subject,
+            agent_session_id: feedback.agent_session_id,
+            agent_turn_id: feedback.agent_turn_id,
+            decision_request_id: feedback.decision_request_id,
+            candidate_action_id: feedback.candidate_action_id,
+            runtime_receipt_id: feedback.runtime_receipt_id,
+            status: feedback.status,
+            request_digest: feedback.request_digest.to_string(),
+            reject_reason: canonical_feedback_reason(
+                status.as_str(),
+                feedback.reject_reason.as_deref(),
+            ),
+        };
+        self.world
+            .allocate_runtime_feedback_with_projection(request, projection)
+            .map_err(|error| format!("Runtime feedback allocation failed: {error:?}"))
     }
 
     /// Drive the Runtime-owned feedback outbox without making the provider
@@ -436,21 +529,28 @@ impl ViewerRuntimeLiveServer {
                     continue;
                 }
             };
-            let feedback = match serde_json::from_value::<crate::simulator::FeedbackEnvelopeV1>(
-                claimed.payload.clone(),
-            ) {
-                Ok(feedback) => feedback,
+            let payload = match claimed.transport_payload() {
+                Ok(payload) => payload,
                 Err(error) => {
                     self.retry_runtime_feedback_outbox(
                         feedback_id.as_str(),
-                        format!("feedback payload decode failed: {error}"),
+                        format!("feedback transport payload validation failed: {error}"),
                     );
                     continue;
                 }
             };
+            if let Err(error) =
+                serde_json::from_value::<crate::simulator::FeedbackEnvelopeV1>(payload.clone())
+            {
+                self.retry_runtime_feedback_outbox(
+                    feedback_id.as_str(),
+                    format!("feedback transport payload decode failed: {error}"),
+                );
+                continue;
+            }
             match self
                 .llm_sidecar
-                .deliver_provider_cognition_feedback(&feedback)
+                .deliver_provider_cognition_feedback(&payload)
             {
                 Ok(()) => {
                     if let Err(error) = self.world.ack_runtime_feedback(feedback_id.as_str()) {
@@ -561,22 +661,58 @@ impl ViewerRuntimeLiveServer {
             simulator_action,
             Some(cognition.clone()),
         );
-        let feedback = self
-            .llm_sidecar
-            .finalize_provider_action(
-                action_id,
-                "committed",
-                Some(committed.receipt_id),
-                Some(lineage.feedback_id),
+        let feedback = self.llm_sidecar.provider_feedback(
+            cognition,
+            Some(action_id),
+            "committed",
+            Some(committed.receipt_id.clone()),
+            Some(lineage.feedback_id.clone()),
+            None,
+        );
+        let feedback_projection = RuntimeFeedbackProjectionV1 {
+            envelope_digest: Some(lineage.envelope_digest.clone()),
+            emitted_events: Vec::new(),
+            committed_event_summary: Some(format!(
+                "runtime_receipt_id={} action_id={}",
+                lineage.receipt_id, lineage.action_id
+            )),
+            world_delta_summary: None,
+        };
+        let queued_feedback = self
+            .allocate_runtime_feedback(feedback.clone(), feedback_projection)
+            .map_err(|error| {
+                tracing::warn!(
+                    error,
+                    "Runtime receipt committed but feedback outbox allocation failed"
+                );
+                error
+            })
+            .ok();
+        let feedback = queued_feedback
+            .as_ref()
+            .and_then(|record| record.transport_payload().ok())
+            .and_then(|payload| serde_json::from_value(payload).ok())
+            .unwrap_or(feedback);
+        self.llm_sidecar
+            .consume_provider_memory_after_receipt(
+                cognition.request.request_context.agent_subject.as_str(),
+                feedback.clone(),
+                &lineage,
             )
+            .map_err(ProviderRuntimeActionCommitError::Message)?;
+        let finalized = self
+            .llm_sidecar
+            .finalize_provider_action_with_feedback(action_id, feedback)
             .ok_or_else(|| {
                 "provider cognition single-flight did not close after Runtime receipt".to_string()
-            })
-            .map_err(ProviderRuntimeActionCommitError::Message)?;
+            });
+        finalized.map_err(ProviderRuntimeActionCommitError::Message)?;
         // Runtime has already committed and issued the receipt. Queueing and
         // delivery are separate so a provider transport failure cannot turn
         // that authoritative commit into a viewer-side ActionRejected event.
-        self.deliver_provider_feedback_best_effort(feedback);
+        if queued_feedback.is_some() {
+            self.drain_provider_feedback_outbox();
+        }
         self.handoff_runtime_wake_for_agent(
             cognition.request.request_context.agent_subject.as_str(),
             crate::runtime::ContinuationStatusV1::Completed,
@@ -584,6 +720,49 @@ impl ViewerRuntimeLiveServer {
         )
         .map_err(ProviderRuntimeActionCommitError::Message)?;
         Ok(())
+    }
+}
+
+fn canonical_feedback_reason(status: &str, reason: Option<&str>) -> Option<String> {
+    match status {
+        "committed" => None,
+        "pending" => Some("retry_scheduled".to_string()),
+        "failed" => Some(
+            matches!(
+                reason,
+                Some("failed_provider")
+                    | Some("failed_persist")
+                    | Some("cognition_failed")
+                    | Some("provider_unavailable")
+            )
+            .then_some(reason.unwrap_or("provider_unavailable"))
+            .unwrap_or("provider_unavailable")
+            .to_string(),
+        ),
+        "rejected" => Some(
+            matches!(
+                reason,
+                Some("stale_base")
+                    | Some("expired")
+                    | Some("stale_capability_snapshot")
+                    | Some("authority_denied")
+                    | Some("intent_conflict")
+                    | Some("reorg_invalidated")
+                    | Some("finality_anchor_mismatch")
+                    | Some("precondition_failed")
+                    | Some("action_rejected")
+                    | Some("idempotency_conflict")
+                    | Some("no_effect")
+                    | Some("cancelled")
+                    | Some("late_response_after_cancel")
+                    | Some("legacy_no_cognition_proof")
+                    | Some("cognition_context_mismatch")
+            )
+            .then_some(reason.unwrap_or("action_rejected"))
+            .unwrap_or("action_rejected")
+            .to_string(),
+        ),
+        _ => reason.map(ToOwned::to_owned),
     }
 }
 
@@ -635,7 +814,7 @@ fn provider_cognition_commit_inputs(
             transport_attempt: request.transport_attempt,
             request_digest: request.request_digest.to_string(),
             observation_digest: request.observation_digest.to_string(),
-            context_digest: h_v1("oasis7.cognition.context.v1", request).to_string(),
+            context_digest: super::llm_sidecar::runtime_provider_context_digest(request),
             capability_snapshot_hash,
             authority_context_hash,
             captured_base_binding: RuntimeCognitionBaseBindingV1 {

@@ -98,8 +98,16 @@ impl RuntimeLlmSidecar {
 
         for feedback in feedbacks {
             let next = feedback.feedback_seq.max(1).saturating_add(1);
+            let session_key = provider_feedback_session_key(
+                feedback.agent_subject.as_str(),
+                feedback.agent_session_id.as_str(),
+            );
             self.provider_feedback_seq
-                .entry(feedback.agent_subject)
+                .entry(feedback.agent_subject.clone())
+                .and_modify(|current| *current = (*current).max(next))
+                .or_insert(next);
+            self.provider_feedback_seq_by_session
+                .entry(session_key)
                 .and_modify(|current| *current = (*current).max(next))
                 .or_insert(next);
         }
@@ -139,4 +147,8 @@ impl RuntimeLlmSidecar {
             self.persist_provider_lineage_best_effort();
         }
     }
+}
+
+pub(super) fn provider_feedback_session_key(agent_subject: &str, session_id: &str) -> String {
+    format!("{agent_subject}\u{1f}{session_id}")
 }

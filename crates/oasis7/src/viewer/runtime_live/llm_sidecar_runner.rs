@@ -1,6 +1,23 @@
 use super::*;
 
 impl RuntimeLlmSidecar {
+    pub(in crate::viewer::runtime_live) fn apply_prompt_profile_to_driver(
+        &mut self,
+        profile: &AgentPromptProfile,
+    ) {
+        let Some(RuntimeDecisionRunner::Builtin(runner)) = self.runner.as_mut() else {
+            return;
+        };
+        let Some(agent) = runner.get_mut(profile.agent_id.as_str()) else {
+            return;
+        };
+        agent.behavior.apply_prompt_overrides(
+            profile.system_prompt_override.clone(),
+            profile.short_term_goal_override.clone(),
+            profile.long_term_goal_override.clone(),
+        );
+    }
+
     pub(super) fn ensure_runner_initialized(&mut self) -> Result<(), String> {
         let kernel = self
             .shadow_kernel

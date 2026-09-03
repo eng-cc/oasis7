@@ -620,6 +620,40 @@ struct ContinuationProposalDigestInput<'a> {
     source: &'a str,
 }
 
+/// Runtime-facing identity for the next logical request emitted after a
+/// selected continuation wake.  The resumed request deliberately has a new
+/// session/turn/request and request digest (the wake's continuation digest is
+/// part of the next Harness request context), while the continuation proposal
+/// retains the original `origin_request_digest` as its causal lineage.
+///
+/// Runtime allocates no Agent identity here: these values are supplied by the
+/// Harness, validated against the proposal and recorded before provider I/O.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CognitionContinuationResumeRequestV1 {
+    pub agent_session_id: String,
+    pub agent_turn_id: String,
+    pub decision_request_id: String,
+    pub request_digest: String,
+    pub context_digest: String,
+}
+
+impl CognitionContinuationResumeRequestV1 {
+    pub fn validate(&self) -> Result<(), WakeConditionError> {
+        let bounded = |value: &str| !value.trim().is_empty() && value.len() <= MAX_ID_BYTES;
+        if !bounded(&self.agent_session_id)
+            || !bounded(&self.agent_turn_id)
+            || !bounded(&self.decision_request_id)
+            || !bounded(&self.request_digest)
+            || !bounded(&self.context_digest)
+            || !valid_blake3_digest(&self.request_digest)
+            || !valid_blake3_digest(&self.context_digest)
+        {
+            return Err(WakeConditionError::new("cognition_resume_identity_invalid"));
+        }
+        Ok(())
+    }
+}
+
 impl CognitionContinuationProposalV1 {
     /// Recompute the canonical paired-schema digest. Runtime-derived
     /// branch/finality and wake-tick fields are intentionally excluded.

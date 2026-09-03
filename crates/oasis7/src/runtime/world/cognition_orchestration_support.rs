@@ -1,3 +1,4 @@
+use super::super::cognition_persistence_validation::strict_optional_finality_hash;
 use super::World;
 use crate::runtime::cognition_retention::CognitionRetentionStore;
 use crate::runtime::cognition_wake::{AgentContinuation, CognitionContinuationProposalV1};
@@ -39,9 +40,9 @@ impl World {
         }
         if proposal.finality_block_hash.is_none() {
             proposal.finality_block_hash =
-                binding["finality_block_hash"].as_str().map(str::to_string);
+                strict_optional_finality_hash(binding.get("finality_block_hash"))?;
         }
-        let block_hash = binding["finality_block_hash"].as_str().map(str::to_string);
+        let block_hash = strict_optional_finality_hash(binding.get("finality_block_hash"))?;
         if binding["world_id"].as_str() != Some(proposal.world_id.as_str())
             || binding["branch_id"].as_str() != Some(proposal.branch_id.as_str())
             || binding["finality_epoch"].as_u64() != Some(proposal.finality_epoch)
@@ -71,7 +72,7 @@ impl World {
             ));
         }
         if let Some(binding) = self.cognition.get("runtime_binding") {
-            let block_hash = binding["finality_block_hash"].as_str().map(str::to_string);
+            let block_hash = strict_optional_finality_hash(binding.get("finality_block_hash"))?;
             if binding["world_id"].as_str() != Some(proposal.world_id.as_str())
                 || binding["branch_id"].as_str() != Some(proposal.branch_id.as_str())
                 || binding["finality_epoch"].as_u64() != Some(proposal.finality_epoch)
@@ -119,8 +120,18 @@ impl World {
                             == Some(agent_turn_id)
                         && event.get("decision_request_id").and_then(JsonValue::as_str)
                             == Some(decision_request_id)
-                        && event.get("request_digest").and_then(JsonValue::as_str)
+                        // An initial turn matches its own request digest. A
+                        // continuation wake creates a new logical request
+                        // digest because the Runtime continuation context is
+                        // part of the next Harness request identity; its
+                        // TurnStarted event therefore carries the stable
+                        // origin digest for admission correlation.
+                        && (event.get("request_digest").and_then(JsonValue::as_str)
                             == Some(request_digest)
+                            || event
+                                .get("origin_request_digest")
+                                .and_then(JsonValue::as_str)
+                                == Some(request_digest))
                 })
             })
     }

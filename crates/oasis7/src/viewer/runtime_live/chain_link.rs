@@ -239,8 +239,11 @@ impl ViewerRuntimeLiveServer {
                 self.llm_sidecar
                     .notify_action_result_if_needed(runtime_event, mapped_event.clone());
             }
-            self.llm_sidecar
-                .notify_recipe_completion_if_needed(runtime_event, mapped_event.clone());
+            self.llm_sidecar.notify_recipe_completion_with_binding(
+                runtime_event,
+                mapped_event.clone(),
+                self.world.current_cognition_runtime_binding().ok(),
+            );
         }
         let pending_batch = self.register_authoritative_batch(mapped_events.as_slice())?;
         let batch_finality_updates =

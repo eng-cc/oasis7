@@ -1,4 +1,46 @@
+use super::super::mapping::runtime_state_to_simulator_model;
 use super::*;
+use crate::simulator::{
+    CHUNK_GENERATION_SCHEMA_VERSION, SNAPSHOT_VERSION, WorldJournal, WorldSnapshot,
+};
+
+impl RuntimeLlmSidecar {
+    /// Rebuild the simulator shadow from the authoritative Runtime snapshot
+    /// before provider-backed cognition reads or queues any decision.
+    pub(super) fn sync_shadow_kernel(
+        &mut self,
+        world: &RuntimeWorld,
+        config: &WorldConfig,
+    ) -> Result<(), String> {
+        let runtime_snapshot = world.snapshot();
+        let snapshot = WorldSnapshot {
+            version: SNAPSHOT_VERSION,
+            chunk_generation_schema_version: CHUNK_GENERATION_SCHEMA_VERSION,
+            time: world.state().time,
+            config: config.clone(),
+            model: runtime_state_to_simulator_model(
+                world.state(),
+                self,
+                self.runtime_seed_model.as_ref(),
+            ),
+            runtime_snapshot: Some(runtime_snapshot.clone()),
+            player_gameplay: None,
+            chain_resource_manifest: Default::default(),
+            latest_chain_resource_delta: Default::default(),
+            chunk_runtime: ChunkRuntimeConfig::default(),
+            intel_ttl_ticks: 0,
+            next_event_id: 0,
+            next_action_id: runtime_snapshot.next_action_id.max(1),
+            pending_actions: Vec::new(),
+            journal_len: 0,
+        };
+        self.shadow_kernel = Some(
+            WorldKernel::from_snapshot(snapshot, WorldJournal::new())
+                .map_err(|err| format!("runtime live shadow kernel rebuild failed: {err:?}"))?,
+        );
+        Ok(())
+    }
+}
 
 pub(super) fn runtime_provider_check_now_unix_ms() -> u64 {
     SystemTime::now()

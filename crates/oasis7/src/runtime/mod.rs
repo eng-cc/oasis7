@@ -16,6 +16,7 @@ mod builtin_wasm_identity_manifest;
 mod builtin_wasm_materializer;
 mod capability_authorization;
 mod cognition;
+mod cognition_feedback_contract;
 mod cognition_recovery;
 mod cognition_retention;
 mod cognition_scheduler;
@@ -116,7 +117,8 @@ pub use cognition_recovery::{
     CognitionRecoveryFixture, CognitionRecoveryProbe, CognitionRecoveryReport,
     CognitionResponseRecordV1, CognitionSnapshotV1, RuntimeCognitionBaseBindingV1,
     RuntimeCognitionCommitRequestV1, RuntimeCognitionResponseArtifactV1,
-    RuntimeFeedbackOutboxRecordV1, RuntimeReceiptLineageV1, WorldCommitRecordV1, WorldRootViewV1,
+    RuntimeFeedbackOutboxRecordV1, RuntimeFeedbackProjectionV1, RuntimeFeedbackRequestV1,
+    RuntimeReceiptLineageV1, WorldCommitRecordV1, WorldRootViewV1,
 };
 
 // Durable cognition scheduler, wake and continuation projections
@@ -131,10 +133,10 @@ pub use cognition_scheduler::{
 };
 pub use cognition_wake::{
     AgentContinuation, CognitionBudgetConsumptionV1, CognitionContextDigestsV1,
-    CognitionContinuationProposalV1, CognitionWakeDispositionV1, CognitionWakeHandoffResultV1,
-    ContinuationBudgetV1, ContinuationReorgReport, ContinuationStatusV1, ContinuationTransition,
-    WakeConditionError, WakeConditionV1, WakeConditionValidator, WakeEvaluation,
-    WakeEvaluationContext,
+    CognitionContinuationProposalV1, CognitionContinuationResumeRequestV1,
+    CognitionWakeDispositionV1, CognitionWakeHandoffResultV1, ContinuationBudgetV1,
+    ContinuationReorgReport, ContinuationStatusV1, ContinuationTransition, WakeConditionError,
+    WakeConditionV1, WakeConditionValidator, WakeEvaluation, WakeEvaluationContext,
 };
 
 // Events

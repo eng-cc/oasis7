@@ -20,7 +20,7 @@ impl World {
         self.evaluate_cognition_wake_at_tick(conditions, self.state.time)
     }
 
-    pub(super) fn evaluate_cognition_wake_at_tick(
+    pub(in crate::runtime::world) fn evaluate_cognition_wake_at_tick(
         &self,
         conditions: &[WakeConditionV1],
         tick: u64,
@@ -187,7 +187,7 @@ impl World {
             })
     }
 
-    fn cognition_reorg_epoch(&self) -> u64 {
+    pub(in crate::runtime::world) fn cognition_reorg_epoch(&self) -> u64 {
         let binding_epoch = self
             .cognition
             .get("runtime_binding")

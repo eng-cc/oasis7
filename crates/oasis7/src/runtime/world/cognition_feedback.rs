@@ -6,11 +6,12 @@
 
 use super::World;
 use crate::runtime::cognition_recovery::{
-    RuntimeFeedbackOutboxRecordV1, default_cognition_persistence_projection,
+    RuntimeFeedbackOutboxRecordV1, RuntimeFeedbackProjectionV1, RuntimeFeedbackRequestV1,
+    cognition_digest_v1, default_cognition_persistence_projection,
 };
 use crate::runtime::error::WorldError;
 use crate::runtime::world::cognition_persistence_validation::append_cognition_event;
-use crate::simulator::FeedbackEnvelopeV1;
+use crate::simulator::{Digest32, FeedbackEnvelopeV1};
 use serde_json::{Value as JsonValue, json};
 use std::collections::BTreeMap;
 
@@ -75,6 +76,7 @@ fn persist_outbox(
             "feedback_digest": record.envelope_digest,
             "feedback_state": record.state,
             "attempt": record.attempt,
+            "projection": record.projection,
         }),
     )?;
     world.cognition = projection;
@@ -82,6 +84,80 @@ fn persist_outbox(
 }
 
 impl World {
+    /// Allocate and queue a complete Runtime-authoritative feedback envelope.
+    /// Sequence allocation is durable per `(agent_subject, session)` and the
+    /// derived id is stable for an exact disposition replay. Adapters never
+    /// need to mint feedback identity or sequence values locally.
+    pub fn allocate_runtime_feedback(
+        &mut self,
+        request: RuntimeFeedbackRequestV1,
+    ) -> Result<RuntimeFeedbackOutboxRecordV1, WorldError> {
+        self.allocate_runtime_feedback_with_projection(
+            request,
+            RuntimeFeedbackProjectionV1::default(),
+        )
+    }
+
+    /// Allocate and queue a complete Runtime-authoritative feedback envelope
+    /// with its optional bounded cognition/world projection. The projection
+    /// is validated in the same identity transaction and cannot alter the
+    /// disposition or receipt requirements.
+    pub fn allocate_runtime_feedback_with_projection(
+        &mut self,
+        request: RuntimeFeedbackRequestV1,
+        feedback_projection: RuntimeFeedbackProjectionV1,
+    ) -> Result<RuntimeFeedbackOutboxRecordV1, WorldError> {
+        let projection = current_projection(self);
+        let records = parse_outbox(&projection)?;
+        let requested_id = request.feedback_id.clone();
+        let feedback_id = requested_id.unwrap_or_else(|| {
+            cognition_digest_v1(
+                "oasis7.runtime.feedback-id.v1",
+                &json!({
+                    "agent_subject": &request.agent_subject,
+                    "agent_session_id": &request.agent_session_id,
+                    "agent_turn_id": &request.agent_turn_id,
+                    "decision_request_id": &request.decision_request_id,
+                    "candidate_action_id": request.candidate_action_id,
+                    "runtime_receipt_id": &request.runtime_receipt_id,
+                    "status": &request.status,
+                    "request_digest": &request.request_digest,
+                    "reject_reason": &request.reject_reason,
+                }),
+            )
+        });
+        let feedback_seq = if let Some(existing) = records.get(&feedback_id) {
+            existing.feedback_seq
+        } else {
+            records
+                .values()
+                .filter(|existing| {
+                    existing.agent_subject == request.agent_subject
+                        && existing.agent_session_id == request.agent_session_id
+                })
+                .map(|existing| existing.feedback_seq)
+                .max()
+                .unwrap_or_default()
+                .checked_add(1)
+                .ok_or_else(|| feedback_error("feedback_sequence_overflow"))?
+        };
+        let feedback = FeedbackEnvelopeV1 {
+            feedback_id,
+            feedback_seq,
+            agent_subject: request.agent_subject,
+            agent_session_id: request.agent_session_id,
+            agent_turn_id: request.agent_turn_id,
+            decision_request_id: request.decision_request_id,
+            candidate_action_id: request.candidate_action_id,
+            runtime_receipt_id: request.runtime_receipt_id,
+            status: request.status,
+            request_digest: Digest32::from(request.request_digest),
+            reject_reason: request.reject_reason,
+            provenance: "runtime_authoritative".to_string(),
+        };
+        self.enqueue_runtime_feedback_with_projection(feedback, feedback_projection)
+    }
+
     /// Queue one Runtime-authoritative feedback envelope. Re-enqueueing the
     /// exact canonical envelope is idempotent; reusing its identity with any
     /// changed field is rejected before the projection is touched.
@@ -89,12 +165,28 @@ impl World {
         &mut self,
         feedback: FeedbackEnvelopeV1,
     ) -> Result<RuntimeFeedbackOutboxRecordV1, WorldError> {
-        let record = RuntimeFeedbackOutboxRecordV1::from_feedback(&feedback)
-            .map_err(|error| feedback_error(error.code()))?;
+        self.enqueue_runtime_feedback_with_projection(
+            feedback,
+            RuntimeFeedbackProjectionV1::default(),
+        )
+    }
+
+    fn enqueue_runtime_feedback_with_projection(
+        &mut self,
+        feedback: FeedbackEnvelopeV1,
+        feedback_projection: RuntimeFeedbackProjectionV1,
+    ) -> Result<RuntimeFeedbackOutboxRecordV1, WorldError> {
+        let record = RuntimeFeedbackOutboxRecordV1::from_feedback_with_projection(
+            &feedback,
+            feedback_projection,
+        )
+        .map_err(|error| feedback_error(error.code()))?;
         let projection = current_projection(self);
         let mut records = parse_outbox(&projection)?;
         if let Some(existing) = records.get(&record.feedback_id) {
-            if existing.envelope_digest != record.envelope_digest {
+            if existing.envelope_digest != record.envelope_digest
+                || existing.projection != record.projection
+            {
                 return Err(feedback_error("feedback_identity_collision"));
             }
             return Ok(existing.clone());

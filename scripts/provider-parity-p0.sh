@@ -54,6 +54,9 @@ Notes:
     Bare /v1/world-simulator/decision and /v1/world-simulator/feedback are legacy compatibility-only
     routes and are excluded from target cognition proof.
   - This script prepares T4/T5 parity evidence; it does not auto-sign QA/producer scorecards.
+    benchmark_status is execution/sample coverage only. When both providers are present,
+    parity_status and release_gate expose the machine-readable PRD gate disposition;
+    profile/fixture binding and relative wait/latency class are required for a passed gate.
 USAGE
 }
 
@@ -191,7 +194,7 @@ if [[ "${PROVIDER_PARITY_P0_AGGREGATE_ONLY:-0}" != "1" ]]; then
   fi
 fi
 
-python3 - "$OUT_DIR" "$RUN_ID" "$SCENARIO_ID" "$PARITY_TIER" "$SAMPLES" "$RUN_BUILTIN" "$RUN_PROVIDER" <<'PY'
+python3 - "$OUT_DIR" "$RUN_ID" "$SCENARIO_ID" "$PARITY_TIER" "$SAMPLES" "$RUN_BUILTIN" "$RUN_PROVIDER" "$AGENT_PROVIDER_PROFILE" "$TIMEOUT_MS" "$TICKS" <<'PY'
 import csv
 import json
 import math
@@ -206,6 +209,9 @@ parity_tier = sys.argv[4]
 requested_samples = int(sys.argv[5])
 run_builtin = int(sys.argv[6])
 run_provider = int(sys.argv[7])
+configured_agent_profile = sys.argv[8]
+requested_timeout_ms = int(sys.argv[9])
+requested_ticks = int(sys.argv[10])
 
 providers = []
 if run_builtin:
@@ -259,7 +265,19 @@ def runtime_perf_tick_coverage_sample_count(samples):
 for provider in providers:
     sample_files = sorted((out_dir / "samples" / provider).glob("sample_*/summary/*.json"))
     samples = [json.loads(path.read_text()) for path in sample_files]
-    valid_samples = [s for s in samples if s["status"] != "invalid_fixture"]
+    valid_samples = [s for s in samples if s.get("status") != "invalid_fixture"]
+    sample_status_counts = {}
+    for sample in samples:
+      status = str(sample.get("status") or "missing").strip().lower()
+      sample_status_counts[status] = sample_status_counts.get(status, 0) + 1
+    successful_sample_statuses = {"passed"}
+    sample_statuses_complete = bool(valid_samples) and all(
+      str(sample.get("status") or "").strip().lower() in successful_sample_statuses
+      for sample in valid_samples
+    )
+    sample_outcomes_complete = sample_statuses_complete and all(
+      sample.get("goal_completed") is True for sample in valid_samples
+    )
     completion_rate = 0.0 if not valid_samples else sum(1 for s in valid_samples if s["goal_completed"]) / len(valid_samples)
     total_decision_steps = sum(s["decision_steps"] for s in valid_samples)
     invalid_action_rate = 0.0 if total_decision_steps == 0 else sum(s["invalid_action_count"] for s in valid_samples) / total_decision_steps
@@ -282,9 +300,12 @@ for provider in providers:
         error_codes[code] = error_codes.get(code, 0) + count
     benchmark_status = "insufficient_data"
     if len(valid_samples) >= requested_samples:
-      benchmark_status = "passed" if completion_rate > 0.0 else "failed"
-      if error_codes.get("session_cross_talk", 0) > 0:
+      if error_codes.get("session_cross_talk", 0) > 0 or "blocked" in sample_status_counts:
         benchmark_status = "blocked"
+      elif not sample_outcomes_complete:
+        benchmark_status = "failed"
+      else:
+        benchmark_status = "passed"
 
     metadata_source = valid_samples[0] if valid_samples else (samples[0] if samples else {})
     provider_metadata = metadata_source.get("provider", {})
@@ -293,6 +314,24 @@ for provider in providers:
     cognition_lane = provider_metadata.get("cognition_lane", "unknown")
     decision_route = provider_metadata.get("decision_route", "unknown")
     feedback_route = provider_metadata.get("feedback_route", "unknown")
+    profile_values = []
+    for sample in valid_samples:
+      sample_provider = sample.get("provider")
+      if isinstance(sample_provider, dict):
+        profile = sample_provider.get("agent_profile")
+        if isinstance(profile, str) and profile.strip():
+          profile_values.append(profile.strip())
+    if provider == "builtin":
+      profile_binding_status = "configured_baseline"
+      observed_agent_profile = configured_agent_profile
+    else:
+      observed_agent_profile = profile_values[0] if profile_values else None
+      profile_binding_status = (
+        "matched"
+        if valid_samples and len(profile_values) == len(valid_samples)
+        and all(profile == configured_agent_profile for profile in profile_values)
+        else "missing_or_mismatched"
+      )
     target_route_contract_valid = bool(valid_samples) and all(
       isinstance(sample.get("provider"), dict)
       and sample["provider"].get("cognition_lane") == "target_outer_context_v1"
@@ -310,15 +349,25 @@ for provider in providers:
       "action_schema_version": metadata_source.get("action_schema_version", "unknown"),
       "environment_class": metadata_source.get("environment_class", "unknown"),
       "fallback_reason": metadata_source.get("fallback_reason"),
+      "requested_timeout_ms": requested_timeout_ms,
+      "requested_ticks": requested_ticks,
+      "agent_profile": observed_agent_profile,
+      "profile_binding_status": profile_binding_status,
       "sample_count": len(samples),
       "valid_samples": len(valid_samples),
       "invalid_fixture": len(samples) - len(valid_samples),
+      "sample_status_counts": sample_status_counts,
       "completion_rate": completion_rate,
       "invalid_action_rate": invalid_action_rate,
       "timeout_rate": timeout_rate,
       "recoverable_error_resolution_rate": recoverable_resolution_rate,
       "median_extra_wait_ms": median_wait,
       "p95_extra_wait_ms": p95_wait,
+      "median_latency_ms": median_wait,
+      "p95_latency_ms": p95_wait,
+      "relative_wait_gap_median_ms": None,
+      "relative_wait_gap_p95_ms": None,
+      "latency_class": None,
       "trace_completeness": trace_completeness,
       "context_drift_count": context_drift_count,
       "runtime_perf": {
@@ -330,6 +379,13 @@ for provider in providers:
       },
       "warnings": warnings,
       "benchmark_status": benchmark_status,
+      "parity_status": "blocked",
+      "release_gate": "blocked",
+      "parity_gate": {
+        "status": "blocked",
+        "passed": False,
+        "checks": {},
+      },
       "error_counts": error_codes,
       "provider_version": valid_samples[0]["provider_version"] if valid_samples else "unknown",
       "adapter_version": valid_samples[0]["adapter_version"] if valid_samples else "unknown",
@@ -343,6 +399,144 @@ for provider in providers:
       aggregated["warnings"].append("target_outer_cognition_route_missing")
       aggregated["benchmark_status"] = "blocked"
     aggregate[provider] = aggregated
+
+def sample_identity(sample):
+    run_id = sample.get("benchmark_run_id")
+    parity_tier = sample.get("parity_tier")
+    scenario_id = sample.get("scenario_id")
+    fixture_id = sample.get("fixture_id")
+    seed = sample.get("seed")
+    if any(
+      not isinstance(value, str) or not value.strip()
+      for value in (run_id, parity_tier, scenario_id, fixture_id)
+    ) or seed is None:
+      return None
+    return (run_id.strip(), parity_tier.strip(), scenario_id.strip(), fixture_id.strip(), str(seed))
+
+def build_fixture_binding_status(left, right):
+    if not left or not right:
+      return "missing_provider"
+    left_identities = {
+      identity for identity in (sample_identity(sample) for sample in left)
+      if identity is not None
+    }
+    right_identities = {
+      identity for identity in (sample_identity(sample) for sample in right)
+      if identity is not None
+    }
+    if len(left_identities) != len(left) or len(right_identities) != len(right):
+      return "missing_or_invalid_identity"
+    return "matched" if left_identities == right_identities else "mismatched"
+
+def make_gate_check(value, limit, *, passed):
+    return {"value": value, "limit": limit, "passed": bool(passed)}
+
+builtin = aggregate.get("builtin")
+provider_summary = aggregate.get("provider_loopback_http")
+fixture_binding_status = "missing_provider"
+if builtin is not None and provider_summary is not None:
+    builtin_samples = []
+    for path in sorted((out_dir / "samples" / "builtin").glob("sample_*/summary/*.json")):
+      sample = json.loads(path.read_text())
+      if sample.get("status") != "invalid_fixture":
+        builtin_samples.append(sample)
+    provider_samples = []
+    for path in sorted((out_dir / "samples" / "provider_loopback_http").glob("sample_*/summary/*.json")):
+      sample = json.loads(path.read_text())
+      if sample.get("status") != "invalid_fixture":
+        provider_samples.append(sample)
+    fixture_binding_status = build_fixture_binding_status(builtin_samples, provider_samples)
+else:
+    fixture_binding_status = "missing_provider"
+
+for summary in aggregate.values():
+    summary["fixture_binding_status"] = fixture_binding_status
+
+if builtin is not None and provider_summary is not None:
+    builtin_median = builtin["median_latency_ms"]
+    builtin_p95 = builtin["p95_latency_ms"]
+    provider_median = provider_summary["median_latency_ms"]
+    provider_p95 = provider_summary["p95_latency_ms"]
+    if isinstance(builtin_median, (int, float)) and isinstance(provider_median, (int, float)):
+      relative_median = max(0, provider_median - builtin_median)
+    else:
+      relative_median = None
+    if isinstance(builtin_p95, (int, float)) and isinstance(provider_p95, (int, float)):
+      relative_p95 = max(0, provider_p95 - builtin_p95)
+    else:
+      relative_p95 = None
+    builtin["relative_wait_gap_median_ms"] = 0
+    builtin["relative_wait_gap_p95_ms"] = 0
+    provider_summary["relative_wait_gap_median_ms"] = relative_median
+    provider_summary["relative_wait_gap_p95_ms"] = relative_p95
+    # Keep the established extra-wait fields as the Local Provider's absolute
+    # observed waits.  Relative gaps are the behavior gate; latency class is
+    # the rollout gate over the provider's absolute waits.
+    provider_summary["median_extra_wait_ms"] = provider_median
+    provider_summary["p95_extra_wait_ms"] = provider_p95
+
+    if provider_median is not None and provider_p95 is not None:
+      if provider_median <= 500 and provider_p95 <= 1500:
+        latency_class = "A"
+      elif provider_median <= 15000 and provider_p95 <= 20000:
+        latency_class = "B"
+      else:
+        latency_class = "C"
+    else:
+      latency_class = None
+    provider_summary["latency_class"] = latency_class
+    builtin["latency_class"] = None
+
+    completion_gap = abs(provider_summary["completion_rate"] - builtin["completion_rate"])
+    builtin_invalid_rate = builtin["invalid_action_rate"]
+    provider_invalid_rate = provider_summary["invalid_action_rate"]
+    invalid_action_pass = (
+      provider_invalid_rate <= 0.03
+      and provider_invalid_rate <= builtin_invalid_rate * 2
+    )
+    checks = {
+      "sample_status": make_gate_check(
+        provider_summary["benchmark_status"], "passed", passed=(
+          builtin["benchmark_status"] == "passed"
+          and provider_summary["benchmark_status"] == "passed"
+        )
+      ),
+      "fixture_binding": make_gate_check(fixture_binding_status, "matched", passed=fixture_binding_status == "matched"),
+      "profile_binding": make_gate_check(
+        provider_summary["profile_binding_status"], "matched", passed=provider_summary["profile_binding_status"] == "matched"
+      ),
+      "completion_rate_gap": make_gate_check(completion_gap, 0.05, passed=completion_gap <= 0.05),
+      "invalid_action_rate": make_gate_check(provider_invalid_rate, {"absolute": 0.03, "relative_to_builtin": 2}, passed=invalid_action_pass),
+      "timeout_rate": make_gate_check(provider_summary["timeout_rate"], 0.02, passed=provider_summary["timeout_rate"] <= 0.02),
+      "relative_wait_gap_median_ms": make_gate_check(relative_median, 5000, passed=relative_median is not None and relative_median <= 5000),
+      "relative_wait_gap_p95_ms": make_gate_check(relative_p95, 8000, passed=relative_p95 is not None and relative_p95 <= 8000),
+      "trace_completeness": make_gate_check(provider_summary["trace_completeness"], 0.95, passed=provider_summary["trace_completeness"] >= 0.95),
+      "recoverable_error_resolution_rate": make_gate_check(provider_summary["recoverable_error_resolution_rate"], 0.90, passed=provider_summary["recoverable_error_resolution_rate"] >= 0.90),
+    }
+    gate_passed = all(check["passed"] for check in checks.values())
+    parity_status = "passed" if gate_passed else (
+      "blocked" if fixture_binding_status != "matched" or provider_summary["profile_binding_status"] != "matched" or builtin["benchmark_status"] != "passed" or provider_summary["benchmark_status"] in {"insufficient_data", "blocked"}
+      else "failed"
+    )
+    provider_summary["parity_gate"] = {
+      "status": parity_status,
+      "passed": gate_passed,
+      "checks": checks,
+    }
+    provider_summary["parity_status"] = parity_status
+    if parity_status == "blocked":
+      provider_summary["release_gate"] = "blocked"
+    elif latency_class == "C":
+      provider_summary["release_gate"] = "blocked"
+    elif parity_status != "passed" or latency_class == "B":
+      provider_summary["release_gate"] = "experimental_only"
+    else:
+      provider_summary["release_gate"] = "default_candidate"
+    builtin["parity_gate"] = provider_summary["parity_gate"]
+    builtin["parity_status"] = parity_status
+    builtin["release_gate"] = provider_summary["release_gate"]
+
+for provider, aggregated in aggregate.items():
     out_path = summary_dir / f"{scenario_id}.{provider}.json"
     out_path.write_text(json.dumps(aggregated, ensure_ascii=False, indent=2) + "\n")
 
@@ -361,7 +555,13 @@ with combined_csv.open("w", newline="") as handle:
       "action_schema_version",
       "environment_class",
       "fallback_reason",
+      "agent_profile",
+      "profile_binding_status",
+      "fixture_binding_status",
       "trace_completeness",
+      "relative_wait_gap_median_ms",
+      "relative_wait_gap_p95_ms",
+      "latency_class",
       "recoverable_error_resolution_rate",
       "context_drift_count",
       "runtime_perf.tick.coverage_sample_count",
@@ -369,6 +569,8 @@ with combined_csv.open("w", newline="") as handle:
       "runtime_perf.tick.over_budget_ratio_ppm_peak",
       "warnings",
       "benchmark_status",
+      "parity_status",
+      "release_gate",
     ]
     builtin = aggregate.get("builtin", {})
     provider_summary = aggregate.get("provider_loopback_http", {})
@@ -392,6 +594,18 @@ with failures_md.open("w") as handle:
         summary = aggregate.get(provider, {})
         handle.write(f"## {provider}\n")
         handle.write(f"- benchmark_status: {summary.get('benchmark_status', 'unknown')}\n")
+        handle.write(f"- parity_status: {summary.get('parity_status', 'unknown')}\n")
+        handle.write(f"- release_gate: {summary.get('release_gate', 'unknown')}\n")
+        handle.write(f"- agent_profile: {summary.get('agent_profile', 'unknown')}\n")
+        handle.write(f"- profile_binding_status: {summary.get('profile_binding_status', 'unknown')}\n")
+        handle.write(f"- fixture_binding_status: {summary.get('fixture_binding_status', 'unknown')}\n")
+        handle.write(f"- latency_class: {summary.get('latency_class', 'unknown')}\n")
+        handle.write(
+            f"- relative_wait_gap_median_ms: {summary.get('relative_wait_gap_median_ms', 'unknown')}\n"
+        )
+        handle.write(
+            f"- relative_wait_gap_p95_ms: {summary.get('relative_wait_gap_p95_ms', 'unknown')}\n"
+        )
         for code, count in sorted(summary.get("error_counts", {}).items()):
             handle.write(f"- {code}: {count}\n")
         if not summary.get("error_counts"):

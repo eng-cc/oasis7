@@ -4,7 +4,9 @@
 //! methods makes the authority boundary easier to audit without changing the
 //! persisted projection shape.
 
-use super::super::cognition_persistence_validation::{cognition_error, cognition_validation};
+use super::super::cognition_persistence_validation::{
+    cognition_error, cognition_event_payload_projection, cognition_validation,
+};
 use super::World;
 use super::{
     CognitionJournalEvent, CognitionJournalProjection, CognitionProjection, CognitionReceiptViewV1,
@@ -767,11 +769,9 @@ fn refresh_cognition_journal(journal: &mut CognitionJournalProjection) {
                 .to_string();
         }
         if event.payload_digest.is_empty() {
-            let mut payload = serde_json::to_value(&*event).unwrap_or(JsonValue::Null);
-            if let Some(object) = payload.as_object_mut() {
-                object.remove("event_digest");
-                object.remove("payload_digest");
-            }
+            let payload = cognition_event_payload_projection(
+                &serde_json::to_value(&*event).unwrap_or(JsonValue::Null),
+            );
             event.payload_digest =
                 cognition_digest_v1("oasis7.cognition.event-payload.v1", &payload);
         }
@@ -1042,6 +1042,13 @@ pub(super) fn marker_root_conflict(marker: &WorldCommitRecordV1, root: &WorldRoo
     if root.world_id != marker.world_id || root.branch_id != marker.branch_id {
         return true;
     }
+    // A committed marker is historical evidence after a later ordinary World
+    // tick. The current root is intentionally different from the marker's
+    // staged root in that case; `committed_marker_history_conflict` verifies
+    // the durable receipt-link boundary for this historical branch.
+    if marker.status == "committed" && root.logical_tick > marker.parent_tick {
+        return false;
+    }
     let parent = root.state_root == marker.parent_world_hash
         && root.logical_tick == marker.parent_tick
         && root.commit_id.is_none();
@@ -1053,6 +1060,45 @@ pub(super) fn marker_root_conflict(marker: &WorldCommitRecordV1, root: &WorldRoo
         && root.logical_tick == marker.parent_tick
         && root.commit_id.as_deref() == Some(marker.commit_id.as_str());
     !parent && !next && !stable
+}
+
+/// Verify that a committed marker has a durable receipt-link boundary. Once a
+/// later ordinary tick advances the World root, the marker remains valid as
+/// historical evidence only when this canonical link still proves its parent
+/// and committed state roots. Older projections lack the optional boundary
+/// fields; their receipt/link identity remains the compatibility proof.
+pub(super) fn committed_marker_history_conflict(
+    projection: &JsonValue,
+    marker: &WorldCommitRecordV1,
+    current_tick: u64,
+) -> bool {
+    if marker.status != "committed" || current_tick <= marker.parent_tick {
+        return false;
+    }
+    let Some(events) = projection
+        .get("cognition_journal")
+        .and_then(|journal| journal.get("events"))
+        .and_then(JsonValue::as_array)
+    else {
+        return true;
+    };
+    let Some(link) = events.iter().find(|event| {
+        event.get("event_kind").and_then(JsonValue::as_str) == Some("WorldReceiptLinked")
+            && event
+                .get("envelope_idempotency_key")
+                .and_then(JsonValue::as_str)
+                == Some(marker.envelope_idempotency_key.as_str())
+            && event.get("receipt_id").and_then(JsonValue::as_str)
+                == Some(marker.receipt_id.as_str())
+    }) else {
+        return true;
+    };
+    let optional_matches =
+        |field: &str, expected: &JsonValue| link.get(field).is_none_or(|value| value == expected);
+    !optional_matches("commit_id", &json!(marker.commit_id))
+        || !optional_matches("parent_tick", &json!(marker.parent_tick))
+        || !optional_matches("parent_world_hash", &json!(marker.parent_world_hash))
+        || !optional_matches("staged_state_root", &json!(marker.staged_state_root))
 }
 
 pub(super) fn visible_root_conflict(

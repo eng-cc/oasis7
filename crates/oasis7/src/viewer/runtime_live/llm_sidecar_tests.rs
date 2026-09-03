@@ -472,6 +472,143 @@ fn provider_lineage_restore_terminalizes_exhausted_orphan_without_retry_loop() {
     let _ = std::fs::remove_file(path);
 }
 
+#[test]
+fn provider_lineage_restore_quarantines_missing_or_mismatched_active_identity() {
+    let path = std::env::temp_dir().join(format!(
+        "oasis7-viewer-provider-lineage-quarantine-{}-{}.json",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos()
+    ));
+    let mut first = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    first.configure_provider_lineage_store(path.clone());
+    let context = test_provider_context("agent-missing", "turn-missing", "request-missing", 1);
+    first
+        .provider_active_turns
+        .insert("agent-missing".to_string(), context.clone());
+    first.provider_agent_ids.insert("agent-missing".to_string());
+    let mut mismatched = context.clone();
+    mismatched.request_context.agent_turn_id = "turn-newer".to_string();
+    mismatched.turn_context.agent_turn_id = "turn-newer".to_string();
+    first
+        .provider_contexts
+        .insert("agent-mismatch".to_string(), mismatched.clone());
+    first
+        .provider_active_turns
+        .insert("agent-mismatch".to_string(), context);
+    first
+        .provider_agent_ids
+        .insert("agent-mismatch".to_string());
+    first
+        .persist_provider_lineage()
+        .expect("persist quarantined provider lineage");
+
+    let mut restored = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    restored.configure_provider_lineage_store(path.clone());
+    restored
+        .restore_provider_lineage(&RuntimeWorld::default())
+        .expect("restore quarantined provider lineage");
+
+    assert!(!restored.provider_active_turns.contains_key("agent-missing"));
+    assert!(
+        !restored
+            .provider_active_turns
+            .contains_key("agent-mismatch")
+    );
+    assert_eq!(
+        restored
+            .provider_recovery_pending
+            .get("agent-missing")
+            .map(|record| record.reason.as_str()),
+        Some("active_context_missing")
+    );
+    assert_eq!(
+        restored
+            .provider_recovery_pending
+            .get("agent-mismatch")
+            .map(|record| record.reason.as_str()),
+        Some("active_context_identity_mismatch")
+    );
+    assert!(restored.provider_contexts.contains_key("agent-mismatch"));
+    assert!(
+        !restored
+            .provider_retry_contexts
+            .contains_key("agent-mismatch")
+    );
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn recipe_completion_before_runner_registration_is_durable_and_deduplicated() {
+    let path = std::env::temp_dir().join(format!(
+        "oasis7-viewer-provider-world-event-startup-{}-{}.json",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos()
+    ));
+    let (runtime_event, mapped_event) = test_recipe_completion_event("agent-0", 111);
+    let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    sidecar.configure_provider_lineage_store(path.clone());
+    sidecar.notify_recipe_completion_if_needed(&runtime_event, mapped_event.clone());
+    sidecar.notify_recipe_completion_if_needed(&runtime_event, mapped_event);
+    assert_eq!(sidecar.pending_provider_world_events.len(), 1);
+    let checkpoint = std::fs::read_to_string(&path).expect("startup event checkpoint");
+    assert!(checkpoint.contains("pending_provider_world_events"));
+    assert!(checkpoint.contains("111"));
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn queued_recipe_completion_from_replaced_runtime_head_is_quarantined() {
+    let (runtime_event, mapped_event) = test_recipe_completion_event("agent-0", 112);
+    let old_binding = test_provider_context("agent-0", "turn-old", "request-old", 1)
+        .request_context
+        .runtime_binding;
+    let mut new_binding = old_binding.clone();
+    new_binding.branch_id = "replacement".to_string();
+    let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    sidecar.provider_lineage_binding = Some(new_binding);
+    sidecar.notify_recipe_completion_with_binding(&runtime_event, mapped_event, Some(old_binding));
+    assert!(sidecar.pending_provider_world_events.is_empty());
+    assert_eq!(
+        sidecar.provider_world_event_quarantine.len(),
+        1,
+        "a replacement Runtime head must not deliver an old completion"
+    );
+}
+
+#[test]
+fn provider_feedback_compatibility_cursor_is_partitioned_by_session() {
+    let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    let first = test_provider_context("agent-0", "turn-a", "request-a", 1).request_context;
+    let mut second = first.clone();
+    second.agent_session_id = "session-other".to_string();
+    let first_feedback = sidecar.provider_feedback_for_request(
+        &first,
+        None,
+        "rejected",
+        None,
+        None,
+        Some("no_effect".to_string()),
+    );
+    let second_feedback = sidecar.provider_feedback_for_request(
+        &second,
+        None,
+        "rejected",
+        None,
+        None,
+        Some("no_effect".to_string()),
+    );
+    assert_eq!(first_feedback.feedback_seq, 1);
+    assert_eq!(second_feedback.feedback_seq, 1);
+    assert_ne!(first_feedback.feedback_id, second_feedback.feedback_id);
+    assert_eq!(sidecar.provider_feedback_seq_by_session.len(), 2);
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn provider_world_event_mailbox_full_remains_durable_for_retry() {

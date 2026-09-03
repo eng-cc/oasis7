@@ -223,7 +223,7 @@ impl World {
         }) {
             return Err(lifecycle_error("cognition_context_missing"));
         }
-        if let Some(existing) = events.iter().find(|event| {
+        let dispatches = events.iter().filter(|event| {
             same_identity(
                 event,
                 agent_id,
@@ -232,19 +232,42 @@ impl World {
                 decision_request_id,
                 request_digest,
             ) && event.get("event_kind").and_then(JsonValue::as_str) == Some("RequestDispatched")
-        }) {
-            if existing
+        });
+        let mut highest_attempt = 0;
+        let mut exact_attempt = false;
+        for existing in dispatches {
+            let existing_key = existing
                 .get("provider_invocation_key")
-                .and_then(JsonValue::as_str)
-                == Some(provider_invocation_key)
-                && existing.get("retry_seq").and_then(JsonValue::as_u64) == Some(retry_seq)
-                && existing
-                    .get("transport_attempt")
-                    .and_then(JsonValue::as_u64)
-                    == Some(transport_attempt)
+                .and_then(JsonValue::as_str);
+            let existing_retry_seq = existing.get("retry_seq").and_then(JsonValue::as_u64);
+            let existing_attempt = existing
+                .get("transport_attempt")
+                .and_then(JsonValue::as_u64);
+            if existing_key == Some(provider_invocation_key)
+                && existing_retry_seq == Some(retry_seq)
+                && existing_attempt == Some(transport_attempt)
             {
-                return Ok(());
+                exact_attempt = true;
             }
+            if existing_key != Some(provider_invocation_key)
+                || existing_retry_seq != Some(retry_seq)
+            {
+                return Err(lifecycle_error("cognition_dispatch_conflict"));
+            }
+            highest_attempt = highest_attempt.max(existing_attempt.unwrap_or_default());
+        }
+        if exact_attempt {
+            // An adapter may retry after it has lost the Runtime response;
+            // replaying the latest exact tuple is a no-op. A replay of an
+            // older attempt after a newer one is stale and must not pretend
+            // that transport attempts are monotonic.
+            return if transport_attempt == highest_attempt {
+                Ok(())
+            } else {
+                Err(lifecycle_error("cognition_dispatch_conflict"))
+            };
+        }
+        if highest_attempt > 0 && transport_attempt <= highest_attempt {
             return Err(lifecycle_error("cognition_dispatch_conflict"));
         }
         append_turn_event(

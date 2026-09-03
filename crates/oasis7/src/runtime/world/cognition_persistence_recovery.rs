@@ -6,17 +6,18 @@
 
 use super::super::cognition_persistence_validation::{
     cognition_error, cognition_validation, legacy_recovery_report, parent_root,
-    persist_recovery_report, validate_cognition_journal_head, validate_cognition_journal_integrity,
-    validate_marker_current_world, validate_response_lineage_binding, validate_response_record,
+    persist_recovery_report, strict_optional_finality_hash, validate_cognition_journal_head,
+    validate_cognition_journal_integrity, validate_marker_current_world,
+    validate_response_lineage_binding, validate_response_record,
 };
 use super::World;
 use super::cognition_persistence_reports::{
     conflict_report, pending_report, visible_root_conflict_report,
 };
 use super::cognition_persistence_support::{
-    has_idempotency_conflict, has_receipt_conflict, marker_root_conflict,
-    reconcile_committed_projection, record_repair, select_commit_record, validate_marker,
-    visible_root_conflict,
+    committed_marker_history_conflict, has_idempotency_conflict, has_receipt_conflict,
+    marker_root_conflict, reconcile_committed_projection, record_repair, select_commit_record,
+    validate_marker, visible_root_conflict,
 };
 use super::{CognitionProjection, JOURNAL_SCHEMA, PROJECTION_SCHEMA};
 use crate::runtime::cognition_recovery::{
@@ -65,6 +66,18 @@ impl World {
                     parsed.cognition_journal.schema_version
                 ),
             });
+        }
+        // Validate the persisted optional finality shape even for a
+        // marker-less projection. Otherwise a malformed runtime binding would
+        // be treated as an unproven legacy snapshot and silently normalized to
+        // the same state as an explicitly absent hash.
+        if let Some(binding) = projection.get("runtime_binding") {
+            if !binding.is_null() && !binding.is_object() {
+                return Err(cognition_validation("recovery_pending"));
+            }
+            if binding.is_object() {
+                strict_optional_finality_hash(binding.get("finality_block_hash"))?;
+            }
         }
         // A terminal failure turn has no commit marker, but its dense event
         // chain is still durable authority. Validate that chain on restore
@@ -123,11 +136,30 @@ impl World {
                 }
             }
         }
+        // Validity windows are Runtime authority, not a scheduler hint. Run
+        // the same durable expiry transition against the restored
+        // projection before validating wake references, so a persisted wake
+        // cannot consume a lease after its deadline merely because the
+        // process was offline.
+        let mut expiry_world = self.clone();
+        // Recovery assembles and validates a candidate projection before
+        // exposing it. Keep the helper's transaction in-memory so a later
+        // validation failure cannot publish a partial expiry side effect.
+        *expiry_world.persistence_dir.borrow_mut() = None;
+        expiry_world.cognition = projection.clone();
+        expiry_world.expire_cognition_continuations_at_tick(self.state.time)?;
+        let expiry_projection_changed = expiry_world.cognition != projection;
+        if expiry_projection_changed {
+            projection = expiry_world.cognition;
+            parsed = serde_json::from_value(projection.clone())
+                .map_err(|error| cognition_error("invalid_cognition_projection", error))?;
+        }
         if let Some(scheduler_state) = projection
             .get("scheduler_state")
             .filter(|state| !state.is_null())
         {
-            self.validate_persisted_cognition_wakes(scheduler_state)?;
+            expiry_world.cognition = projection.clone();
+            expiry_world.validate_persisted_cognition_wakes(scheduler_state)?;
         }
 
         for marker in &parsed.commit_records {
@@ -151,7 +183,7 @@ impl World {
             }
         }
         let Some(marker) = select_commit_record(&parsed.commit_records).cloned() else {
-            if feedback_projection_changed {
+            if feedback_projection_changed || expiry_projection_changed {
                 self.cognition = projection;
             }
             return Ok(legacy_recovery_report());
@@ -211,6 +243,7 @@ impl World {
 
         if recovery.crash_prefix == "conflict"
             || marker_root_conflict(&marker, &root)
+            || committed_marker_history_conflict(&projection, &marker, self.state.time)
             || parsed
                 .commit_records
                 .iter()
@@ -324,6 +357,45 @@ impl World {
             projection_repairs = repaired_count;
         }
 
+        let replacing_legacy_report = projection
+            .get("recovery")
+            .and_then(JsonValue::as_object)
+            .is_some_and(|recovery| {
+                recovery.get("disposition").and_then(JsonValue::as_str) == Some("rejected")
+                    && recovery.get("reject_reason").and_then(JsonValue::as_str)
+                        == Some("legacy_no_cognition_proof")
+            });
+        let journal_head =
+            response_journal_head.unwrap_or_else(|| parsed.cognition_journal.head_digest.clone());
+        let report = CognitionRecoveryReport {
+            world_root: Some(canonical_root.clone()),
+            receipt: Some(receipt.clone()),
+            disposition: "committed".to_string(),
+            reject_reason: None,
+            auto_submitted: false,
+            idempotency_key: Some(marker.envelope_idempotency_key.clone()),
+            quarantine_id: None,
+            candidate_root: None,
+            candidate_receipt: None,
+            journal_head,
+            retry_count: 0,
+            revalidation_count: 0,
+            projection_repairs,
+            provider_invocation_count: 0,
+            kernel_invocation_count: 0,
+            effect_count: 0,
+            debit_count: 0,
+            world_receipt_linked_count: 1,
+            event_count: 1,
+            response_replayed,
+        };
+        // A committed marker can be restored from a snapshot whose additive
+        // recovery field still carries the legacy default. Persist the
+        // verified outcome even when no projection repair was required, while
+        // leaving an existing crash-prefix report stable on replay.
+        if replacing_legacy_report {
+            persist_recovery_report(&mut projection, &report)?;
+        }
         if !repaired_ids.is_empty() {
             let object = projection.as_object_mut().ok_or_else(|| {
                 WorldError::DistributedValidationFailed {
@@ -343,33 +415,10 @@ impl World {
                 recovery.insert("repaired_projection_ids".to_string(), json!(repaired_ids));
             }
             self.cognition = projection;
-        } else if feedback_projection_changed {
+        } else if feedback_projection_changed || replacing_legacy_report {
             self.cognition = projection;
         }
 
-        let journal_head =
-            response_journal_head.unwrap_or_else(|| parsed.cognition_journal.head_digest.clone());
-        Ok(CognitionRecoveryReport {
-            world_root: Some(canonical_root),
-            receipt: Some(receipt),
-            disposition: "committed".to_string(),
-            reject_reason: None,
-            auto_submitted: false,
-            idempotency_key: Some(marker.envelope_idempotency_key.clone()),
-            quarantine_id: None,
-            candidate_root: None,
-            candidate_receipt: None,
-            journal_head,
-            retry_count: 0,
-            revalidation_count: 0,
-            projection_repairs,
-            provider_invocation_count: 0,
-            kernel_invocation_count: 0,
-            effect_count: 0,
-            debit_count: 0,
-            world_receipt_linked_count: 1,
-            event_count: 1,
-            response_replayed,
-        })
+        Ok(report)
     }
 }

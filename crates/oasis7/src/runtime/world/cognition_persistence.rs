@@ -1,5 +1,7 @@
 #[path = "cognition_persistence_authority.rs"]
 mod cognition_persistence_authority;
+#[path = "cognition_persistence_readback.rs"]
+mod cognition_persistence_readback;
 #[path = "cognition_persistence_recovery.rs"]
 mod cognition_persistence_recovery;
 #[path = "cognition_persistence_reports.rs"]
@@ -11,9 +13,8 @@ mod cognition_persistence_transactions;
 
 use super::World;
 use super::cognition_persistence_validation::{
-    append_cognition_event, cognition_error, cognition_validation, validate_cognition_journal_head,
-    validate_cognition_journal_integrity, validate_marker_current_world,
-    validate_response_lineage_binding, validate_response_record,
+    append_cognition_event, cognition_error, cognition_validation, validate_marker_current_world,
+    validate_response_lineage_binding,
 };
 use crate::runtime::cognition::{
     AgentDecisionEnvelopeV1, MvccValidator, world_state_binding_digest_v1,
@@ -24,7 +25,7 @@ use crate::runtime::cognition_recovery::{
     default_cognition_persistence_projection, response_artifact_digest,
 };
 use crate::runtime::error::WorldError;
-use cognition_persistence_support::{stale_base_error, validate_lineage_binding, validate_marker};
+use cognition_persistence_support::{stale_base_error, validate_marker};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value as JsonValue, json};
 use std::collections::BTreeMap;
@@ -183,6 +184,146 @@ pub(super) struct CognitionRuntimeAuthority {
     runtime_manifest_hash: String,
     base_world_hash: String,
 }
+
+fn cognition_event_matches_envelope(
+    event: &JsonValue,
+    kind: &str,
+    envelope: &AgentDecisionEnvelopeV1,
+) -> bool {
+    event.get("event_kind").and_then(JsonValue::as_str) == Some(kind)
+        && event.get("agent_id").and_then(JsonValue::as_str) == Some(envelope.agent_id.as_str())
+        && event.get("agent_session_id").and_then(JsonValue::as_str)
+            == Some(envelope.agent_session_id.as_str())
+        && event.get("agent_turn_id").and_then(JsonValue::as_str)
+            == Some(envelope.agent_turn_id.as_str())
+        && event.get("decision_request_id").and_then(JsonValue::as_str)
+            == Some(envelope.decision_request_id.as_str())
+        && event.get("request_digest").and_then(JsonValue::as_str)
+            == Some(envelope.request_digest.as_str())
+}
+
+/// Ensure a response-bearing commit has the registered provider lifecycle
+/// prefix in the same journal transaction. Existing exact prefix events are
+/// idempotent; a different request digest remains a distinct turn identity.
+fn ensure_cognition_lifecycle_prefix(
+    projection: &mut JsonValue,
+    envelope: &AgentDecisionEnvelopeV1,
+    response_artifact: Option<&JsonValue>,
+) -> Result<(), WorldError> {
+    let transport_attempt = response_artifact
+        .and_then(|artifact| artifact.get("transport_attempt"))
+        .and_then(JsonValue::as_u64)
+        .unwrap_or(1);
+    let has_event = |kind: &str, projection: &JsonValue| {
+        projection
+            .get("cognition_journal")
+            .and_then(|journal| journal.get("events"))
+            .and_then(JsonValue::as_array)
+            .is_some_and(|events| {
+                events
+                    .iter()
+                    .any(|event| cognition_event_matches_envelope(event, kind, envelope))
+            })
+    };
+    if !has_event("TurnStarted", projection) {
+        append_cognition_event(
+            projection,
+            "TurnStarted",
+            json!({
+                "agent_id": envelope.agent_id,
+                "agent_session_id": envelope.agent_session_id,
+                "agent_turn_id": envelope.agent_turn_id,
+                "decision_request_id": envelope.decision_request_id,
+                "request_digest": envelope.request_digest,
+                "logical_tick": envelope.issued_at_tick,
+                "status": "running",
+            }),
+        )?;
+    }
+    let context_conflict = projection
+        .get("cognition_journal")
+        .and_then(|journal| journal.get("events"))
+        .and_then(JsonValue::as_array)
+        .is_some_and(|events| {
+            events.iter().any(|event| {
+                cognition_event_matches_envelope(event, "ContextCaptured", envelope)
+                    && event.get("context_digest").and_then(JsonValue::as_str)
+                        != Some(envelope.context_digest.as_str())
+            })
+        });
+    if context_conflict {
+        return Err(cognition_validation("cognition_context_conflict"));
+    }
+    if !has_event("ContextCaptured", projection) {
+        append_cognition_event(
+            projection,
+            "ContextCaptured",
+            json!({
+                "agent_id": envelope.agent_id,
+                "agent_session_id": envelope.agent_session_id,
+                "agent_turn_id": envelope.agent_turn_id,
+                "decision_request_id": envelope.decision_request_id,
+                "request_digest": envelope.request_digest,
+                "context_digest": envelope.context_digest,
+                "logical_tick": envelope.issued_at_tick,
+                "status": "running",
+            }),
+        )?;
+    }
+    let dispatches: Vec<&JsonValue> = projection
+        .get("cognition_journal")
+        .and_then(|journal| journal.get("events"))
+        .and_then(JsonValue::as_array)
+        .map(|events| {
+            events
+                .iter()
+                .filter(|event| {
+                    cognition_event_matches_envelope(event, "RequestDispatched", envelope)
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut highest_attempt = 0;
+    for dispatch in dispatches {
+        if dispatch
+            .get("provider_invocation_key")
+            .and_then(JsonValue::as_str)
+            != Some(envelope.provider_invocation_key.as_str())
+            || dispatch.get("retry_seq").and_then(JsonValue::as_u64) != Some(envelope.retry_seq)
+        {
+            return Err(cognition_validation("cognition_dispatch_conflict"));
+        }
+        highest_attempt = highest_attempt.max(
+            dispatch
+                .get("transport_attempt")
+                .and_then(JsonValue::as_u64)
+                .unwrap_or_default(),
+        );
+    }
+    if transport_attempt < highest_attempt {
+        return Err(cognition_validation("cognition_dispatch_conflict"));
+    }
+    if transport_attempt > highest_attempt {
+        append_cognition_event(
+            projection,
+            "RequestDispatched",
+            json!({
+                "agent_id": envelope.agent_id,
+                "agent_session_id": envelope.agent_session_id,
+                "agent_turn_id": envelope.agent_turn_id,
+                "decision_request_id": envelope.decision_request_id,
+                "request_digest": envelope.request_digest,
+                "provider_invocation_key": envelope.provider_invocation_key,
+                "retry_seq": envelope.retry_seq,
+                "transport_attempt": transport_attempt,
+                "logical_tick": envelope.issued_at_tick,
+                "status": "waiting_provider",
+            }),
+        )?;
+    }
+    Ok(())
+}
+
 impl World {
     pub fn prepare_cognition_envelope(
         &mut self,
@@ -316,6 +457,17 @@ impl World {
             envelope.reorg_epoch,
         )?;
 
+        // Bind the runtime first so every prefix event carries the exact
+        // persisted authority fields. Response identity was validated before
+        // mutation so a malformed artifact cannot leave a partial prefix.
+        let mut lifecycle_projection = self.cognition.clone();
+        ensure_cognition_lifecycle_prefix(
+            &mut lifecycle_projection,
+            &envelope,
+            response_artifact.as_ref(),
+        )?;
+        self.cognition = lifecycle_projection;
+
         let projection = if self.cognition.is_null() {
             default_cognition_persistence_projection()
         } else {
@@ -448,6 +600,45 @@ impl World {
                     "receipt_id": marker.receipt_id,
                 }),
             );
+        if let Some(identity) = response_identity.as_ref() {
+            // Response delivery is a first-class turn boundary. Persist the
+            // two response-bearing lifecycle events before validation and
+            // receipt publication so restore/replay can distinguish a
+            // provider response from a merely validated envelope.
+            append_cognition_event(
+                &mut next,
+                "ResponseRecorded",
+                json!({
+                    "agent_id": marker.agent_id,
+                    "agent_session_id": marker.agent_session_id,
+                    "agent_turn_id": marker.agent_turn_id,
+                    "decision_request_id": marker.decision_request_id,
+                    "request_digest": marker.request_digest,
+                    "envelope_idempotency_key": marker.envelope_idempotency_key,
+                    "envelope_digest": marker.envelope_digest,
+                    "response_digest": identity.response_digest,
+                    "response_artifact_digest": marker.response_artifact_digest,
+                    "retry_seq": identity.retry_seq,
+                    "transport_attempt": identity.transport_attempt,
+                    "status": "received",
+                }),
+            )?;
+            append_cognition_event(
+                &mut next,
+                "DecisionEnvelopeSubmitted",
+                json!({
+                    "agent_id": marker.agent_id,
+                    "agent_session_id": marker.agent_session_id,
+                    "agent_turn_id": marker.agent_turn_id,
+                    "decision_request_id": marker.decision_request_id,
+                    "request_digest": marker.request_digest,
+                    "envelope_idempotency_key": marker.envelope_idempotency_key,
+                    "envelope_digest": marker.envelope_digest,
+                    "response_digest": identity.response_digest,
+                    "status": "submitted",
+                }),
+            )?;
+        }
         let seq = append_cognition_event(
             &mut next,
             "DecisionValidated",
@@ -741,8 +932,12 @@ impl World {
             &mut next,
             "WorldReceiptLinked",
             json!({
+                "commit_id": committed.commit_id,
                 "envelope_idempotency_key": committed.envelope_idempotency_key,
                 "receipt_id": committed.receipt_id,
+                "parent_tick": committed.parent_tick,
+                "parent_world_hash": committed.parent_world_hash,
+                "staged_state_root": committed.staged_state_root,
                 "agent_id": committed.agent_id,
                 "agent_session_id": committed.agent_session_id,
                 "agent_turn_id": committed.agent_turn_id,
@@ -787,220 +982,5 @@ impl World {
         staged_world.cognition = next;
         *self = staged_world;
         Ok(committed)
-    }
-
-    /// Runtime readback verifier for the opaque receipt projection consumed
-    /// by simulator adapters.
-    pub fn verify_runtime_receipt_lineage(
-        &self,
-        lineage: &RuntimeReceiptLineageV1,
-    ) -> Result<(), WorldError> {
-        let readback = self.read_runtime_receipt_lineage(&lineage.receipt_id)?;
-        if &readback == lineage {
-            Ok(())
-        } else {
-            Err(cognition_validation("receipt_lineage_readback_mismatch"))
-        }
-    }
-
-    /// Read and validate a canonical response artifact without re-invoking a
-    /// provider. Missing artifacts, digest mismatches, and stale journal
-    /// heads are rejected.
-    pub fn replay_cognition_response(
-        &self,
-        envelope_digest: &str,
-    ) -> Result<CognitionResponseRecordV1, WorldError> {
-        let projection: CognitionProjection = serde_json::from_value(self.cognition.clone())
-            .map_err(|error| cognition_error("invalid_cognition_projection", error))?;
-        let projection_value = serde_json::to_value(&projection).map_err(WorldError::from)?;
-        let journal = projection_value
-            .get("cognition_journal")
-            .ok_or_else(|| cognition_validation("cognition_journal_missing"))?;
-        validate_cognition_journal_integrity(journal)?;
-        validate_cognition_journal_head(journal)?;
-        let response = projection
-            .responses
-            .iter()
-            .find(|response| response.envelope_digest == envelope_digest)
-            .ok_or_else(|| cognition_validation("response_missing"))?;
-        validate_response_record(&projection_value, response)?;
-        let marker = projection
-            .commit_records
-            .iter()
-            .find(|marker| {
-                marker.status == "committed" && marker.envelope_digest == envelope_digest
-            })
-            .ok_or_else(|| cognition_validation("response_commit_marker_missing"))?;
-        validate_marker(marker)?;
-        validate_response_lineage_binding(response, marker)?;
-        Ok(response.clone())
-    }
-
-    pub fn record_cognition_commit(
-        &mut self,
-        marker: WorldCommitRecordV1,
-    ) -> Result<(), WorldError> {
-        let _ = marker;
-        return Err(cognition_validation("legacy_commit_projection_fenced"));
-    }
-
-    pub fn project_runtime_receipt_lineage(
-        &mut self,
-        lineage: RuntimeReceiptLineageV1,
-    ) -> Result<(), WorldError> {
-        lineage
-            .validate()
-            .map_err(|error| cognition_validation(error.code()))?;
-        let projection = if self.cognition.is_null() {
-            default_cognition_persistence_projection()
-        } else {
-            self.cognition.clone()
-        };
-        let mut parsed: CognitionProjection = serde_json::from_value(projection.clone())
-            .map_err(|error| cognition_error("invalid_cognition_projection", error))?;
-        let marker = parsed
-            .commit_records
-            .iter()
-            .find(|marker| marker.status == "committed" && marker.receipt_id == lineage.receipt_id)
-            .ok_or_else(|| cognition_validation("receipt_commit_marker_missing"))?;
-        if RuntimeReceiptLineageV1::from_durable_commit_record(marker).is_none() {
-            return Err(cognition_validation(
-                "receipt_lineage_dense_marker_required",
-            ));
-        }
-        validate_lineage_binding(&parsed, marker, &lineage)?;
-        let derived = RuntimeReceiptLineageV1::from_durable_commit_record(marker)
-            .expect("dense marker checked above");
-        if derived != lineage {
-            return Err(cognition_validation("receipt_lineage_caller_override"));
-        }
-        if let Some(existing) = parsed
-            .receipt_lineage_registry
-            .iter()
-            .find(|existing| existing.receipt_id == lineage.receipt_id)
-        {
-            if existing == &lineage {
-                return Ok(());
-            }
-            return Err(cognition_validation("receipt_lineage_conflict"));
-        }
-        parsed.receipt_lineage_registry.push(lineage);
-        let mut projection = projection;
-        projection
-            .as_object_mut()
-            .ok_or_else(|| cognition_validation("cognition_projection_not_object"))?
-            .insert(
-                "receipt_lineage_registry".to_string(),
-                serde_json::to_value(parsed.receipt_lineage_registry).map_err(WorldError::from)?,
-            );
-        self.cognition = projection;
-        Ok(())
-    }
-
-    pub fn read_runtime_receipt_lineage(
-        &self,
-        receipt_id: &str,
-    ) -> Result<RuntimeReceiptLineageV1, WorldError> {
-        let projection = if self.cognition.is_null() {
-            default_cognition_persistence_projection()
-        } else {
-            self.cognition.clone()
-        };
-        let parsed: CognitionProjection = serde_json::from_value(projection)
-            .map_err(|error| cognition_error("invalid_cognition_projection", error))?;
-        let lineage = parsed
-            .receipt_lineage_registry
-            .iter()
-            .find(|lineage| lineage.receipt_id == receipt_id)
-            .ok_or_else(|| cognition_validation("receipt_lineage_missing"))?;
-        lineage
-            .validate()
-            .map_err(|error| cognition_validation(error.code()))?;
-        let marker = parsed
-            .commit_records
-            .iter()
-            .find(|marker| marker.status == "committed" && marker.receipt_id == receipt_id)
-            .ok_or_else(|| cognition_validation("receipt_commit_marker_missing"))?;
-        validate_marker(marker)?;
-        if let Some(response) = parsed
-            .responses
-            .iter()
-            .find(|response| response.envelope_digest == marker.envelope_digest)
-        {
-            validate_response_lineage_binding(response, marker)?;
-        }
-        validate_lineage_binding(&parsed, marker, lineage)?;
-        let derived = RuntimeReceiptLineageV1::from_durable_commit_record(marker)
-            .ok_or_else(|| cognition_validation("receipt_lineage_dense_marker_required"))?;
-        if derived != *lineage {
-            return Err(cognition_validation("receipt_lineage_binding_mismatch"));
-        }
-        Ok(lineage.clone())
-    }
-
-    pub(super) fn cognition_committed_evidence(
-        &self,
-    ) -> Result<
-        (
-            std::collections::BTreeSet<String>,
-            std::collections::BTreeSet<String>,
-        ),
-        WorldError,
-    > {
-        let projection = if self.cognition.is_null() {
-            default_cognition_persistence_projection()
-        } else {
-            self.cognition.clone()
-        };
-        let parsed: CognitionProjection = serde_json::from_value(projection.clone())
-            .map_err(|error| cognition_error("invalid_cognition_projection", error))?;
-        let mut committed_receipts = std::collections::BTreeSet::new();
-        for marker in parsed
-            .commit_records
-            .iter()
-            .filter(|marker| marker.status == "committed")
-        {
-            validate_marker(marker)?;
-            if parsed.receipt_registry.iter().any(|receipt| {
-                receipt.receipt_id == marker.receipt_id
-                    && receipt.receipt_digest == marker.receipt_digest
-            }) {
-                committed_receipts.insert(marker.receipt_id.clone());
-            }
-        }
-
-        let mut committed_events = std::collections::BTreeSet::new();
-        let events = projection
-            .get("cognition_journal")
-            .and_then(|journal| journal.get("events"))
-            .and_then(JsonValue::as_array)
-            .ok_or_else(|| cognition_validation("cognition_events_missing"))?;
-        if !events.is_empty() {
-            let journal = projection
-                .get("cognition_journal")
-                .ok_or_else(|| cognition_validation("cognition_journal_missing"))?;
-            // Wake evidence is authoritative only after the same dense
-            // journal and head checks used by recovery/replay. A forged
-            // event that happens to carry a self-consistent digest must not
-            // satisfy a live wake by bypassing those checks.
-            validate_cognition_journal_integrity(journal)?;
-            validate_cognition_journal_head(journal)?;
-        }
-        for event in events {
-            let Some(event_digest) = event.get("event_digest").and_then(JsonValue::as_str) else {
-                continue;
-            };
-            let mut unsigned = event.clone();
-            let Some(object) = unsigned.as_object_mut() else {
-                return Err(cognition_validation("cognition_event_not_object"));
-            };
-            object.remove("event_digest");
-            let expected = cognition_digest_v1("oasis7.cognition.event.v1", &unsigned);
-            if expected != event_digest {
-                return Err(cognition_validation("cognition_event_digest_mismatch"));
-            }
-            committed_events.insert(event_digest.to_string());
-        }
-        Ok((committed_events, committed_receipts))
     }
 }

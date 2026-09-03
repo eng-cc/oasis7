@@ -48,6 +48,8 @@ mod constants;
 mod control_blocking;
 #[path = "runtime_live/control_feedback.rs"]
 mod control_feedback;
+#[path = "runtime_live/control_mode.rs"]
+mod control_mode;
 #[path = "runtime_live/control_plane.rs"]
 mod control_plane;
 #[path = "runtime_live/control_utils.rs"]
@@ -866,58 +868,6 @@ impl ViewerRuntimeLiveServer {
         Ok(())
     }
 
-    fn apply_control_mode(
-        &mut self,
-        mode: ViewerControl,
-        request_id: Option<u64>,
-        session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
-    ) -> Result<(), ViewerRuntimeLiveServerError> {
-        if let Err(reason) = self.ensure_gameplay_ready_for_control(&mode) {
-            return self.block_gameplay_control(
-                session,
-                writer,
-                control_mode_label(&mode),
-                "gameplay control rejected before world advance",
-                reason,
-                request_id,
-                0,
-                0,
-                false,
-            );
-        }
-        match mode {
-            ViewerControl::Pause => {
-                self.pause_auto_play(session);
-                session.next_play_step_at = None;
-                session.transient_play_failures = 0;
-            }
-            ViewerControl::Play => {
-                self.resume_auto_play(session);
-            }
-            ViewerControl::Step { count } => {
-                self.pause_auto_play(session);
-                session.next_play_step_at = None;
-                session.transient_play_failures = 0;
-                self.advance_runtime(session, writer, "step", count.max(1), request_id, true)?;
-            }
-            ViewerControl::Seek { tick } => {
-                self.pause_auto_play(session);
-                session.next_play_step_at = None;
-                session.transient_play_failures = 0;
-                emit_stderr_or_event(
-                    Level::INFO,
-                    format!(
-                        "viewer runtime live: ignore seek control in live mode (target_tick={tick})"
-                    )
-                    .as_str(),
-                    "viewer runtime live ignored seek control in live mode",
-                );
-            }
-        }
-        Ok(())
-    }
-
     fn advance_runtime(
         &mut self,
         session: &mut RuntimeLiveSession,
@@ -1069,8 +1019,11 @@ impl ViewerRuntimeLiveServer {
                     self.llm_sidecar
                         .notify_action_result_if_needed(runtime_event, event.clone());
                 }
-                self.llm_sidecar
-                    .notify_recipe_completion_if_needed(runtime_event, event.clone());
+                self.llm_sidecar.notify_recipe_completion_with_binding(
+                    runtime_event,
+                    event.clone(),
+                    self.world.current_cognition_runtime_binding().ok(),
+                );
                 mapped_events.push(event);
             }
             mapped_events.extend(self.pending_virtual_events.drain(..));

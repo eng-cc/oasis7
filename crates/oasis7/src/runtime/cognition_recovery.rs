@@ -116,126 +116,9 @@ pub struct RuntimeReceiptLineageV1 {
     pub feedback_id: String,
 }
 
-/// Durable Runtime-owned delivery record for provider feedback. The payload is
-/// retained as canonical JSON so adapters can transport the exact envelope,
-/// while the identity and retry state remain under World authority.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RuntimeFeedbackOutboxRecordV1 {
-    pub schema_version: String,
-    pub feedback_id: String,
-    pub feedback_seq: u64,
-    pub agent_subject: String,
-    pub agent_session_id: String,
-    pub agent_turn_id: String,
-    pub decision_request_id: String,
-    pub request_digest: String,
-    pub envelope_digest: String,
-    pub payload: JsonValue,
-    pub state: String,
-    pub attempt: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_error: Option<String>,
-}
-
-impl RuntimeFeedbackOutboxRecordV1 {
-    pub const SCHEMA_VERSION: &'static str = "runtime-feedback-outbox.v1";
-
-    pub fn validate(&self) -> Result<(), CognitionRecoveryError> {
-        let bounded = |value: &str| !value.trim().is_empty() && value.len() <= 256;
-        let valid_state = matches!(self.state.as_str(), "pending" | "in_flight" | "acked");
-        let payload =
-            serde_json::from_value::<crate::simulator::FeedbackEnvelopeV1>(self.payload.clone())
-                .map_err(|_| CognitionRecoveryError::new("runtime_feedback_payload_invalid"))?;
-        let canonical_payload = serde_json::to_value(&payload)
-            .map_err(|_| CognitionRecoveryError::new("runtime_feedback_payload_invalid"))?;
-        let envelope_digest =
-            cognition_digest_v1("oasis7.runtime.feedback-envelope.v1", &canonical_payload);
-        let feedback_contract_valid = payload.provenance == "runtime_authoritative"
-            && matches!(
-                payload.status.as_str(),
-                "pending" | "committed" | "rejected" | "failed"
-            )
-            && (payload.status != "committed"
-                || (payload.candidate_action_id.is_some()
-                    && payload
-                        .runtime_receipt_id
-                        .as_deref()
-                        .is_some_and(|receipt_id| !receipt_id.trim().is_empty())));
-        if self.schema_version != Self::SCHEMA_VERSION
-            || !bounded(&self.feedback_id)
-            || self.feedback_seq == 0
-            || !bounded(&self.agent_subject)
-            || !bounded(&self.agent_session_id)
-            || !bounded(&self.agent_turn_id)
-            || !bounded(&self.decision_request_id)
-            || !canonical_blake3(&self.request_digest)
-            || self.envelope_digest != envelope_digest
-            || !feedback_contract_valid
-            || !valid_state
-            || self.payload != canonical_payload
-            || payload.feedback_id != self.feedback_id
-            || payload.feedback_seq != self.feedback_seq
-            || payload.agent_subject != self.agent_subject
-            || payload.agent_session_id != self.agent_session_id
-            || payload.agent_turn_id != self.agent_turn_id
-            || payload.decision_request_id != self.decision_request_id
-            || payload.request_digest.to_string() != self.request_digest
-        {
-            return Err(CognitionRecoveryError::new(
-                "runtime_feedback_outbox_record_invalid",
-            ));
-        }
-        Ok(())
-    }
-
-    pub(crate) fn from_feedback(
-        feedback: &crate::simulator::FeedbackEnvelopeV1,
-    ) -> Result<Self, CognitionRecoveryError> {
-        let payload = serde_json::to_value(feedback)
-            .map_err(|_| CognitionRecoveryError::new("runtime_feedback_payload_invalid"))?;
-        if feedback.feedback_id.trim().is_empty()
-            || feedback.feedback_seq == 0
-            || feedback.agent_subject.trim().is_empty()
-            || feedback.agent_session_id.trim().is_empty()
-            || feedback.agent_turn_id.trim().is_empty()
-            || feedback.decision_request_id.trim().is_empty()
-            || !feedback.request_digest.is_canonical_blake3()
-            || feedback.provenance != "runtime_authoritative"
-            || !matches!(
-                feedback.status.as_str(),
-                "pending" | "committed" | "rejected" | "failed"
-            )
-            || (feedback.status == "committed"
-                && (feedback.candidate_action_id.is_none()
-                    || feedback
-                        .runtime_receipt_id
-                        .as_deref()
-                        .is_none_or(|receipt_id| receipt_id.trim().is_empty())))
-        {
-            return Err(CognitionRecoveryError::new(
-                "runtime_feedback_outbox_feedback_invalid",
-            ));
-        }
-        let envelope_digest = cognition_digest_v1("oasis7.runtime.feedback-envelope.v1", &payload);
-        let record = Self {
-            schema_version: Self::SCHEMA_VERSION.to_string(),
-            feedback_id: feedback.feedback_id.clone(),
-            feedback_seq: feedback.feedback_seq,
-            agent_subject: feedback.agent_subject.clone(),
-            agent_session_id: feedback.agent_session_id.clone(),
-            agent_turn_id: feedback.agent_turn_id.clone(),
-            decision_request_id: feedback.decision_request_id.clone(),
-            request_digest: feedback.request_digest.to_string(),
-            envelope_digest,
-            payload,
-            state: "pending".to_string(),
-            attempt: 0,
-            last_error: None,
-        };
-        record.validate()?;
-        Ok(record)
-    }
-}
+pub use super::cognition_feedback_contract::{
+    RuntimeFeedbackOutboxRecordV1, RuntimeFeedbackProjectionV1, RuntimeFeedbackRequestV1,
+};
 
 /// World-head identity captured with a continuous-agent request.  This is a
 /// value object rather than an adapter-owned assertion: admission compares it
@@ -628,7 +511,7 @@ pub struct CognitionRecoveryError {
 }
 
 impl CognitionRecoveryError {
-    fn new(code: &'static str) -> Self {
+    pub(crate) fn new(code: &'static str) -> Self {
         Self { code }
     }
 

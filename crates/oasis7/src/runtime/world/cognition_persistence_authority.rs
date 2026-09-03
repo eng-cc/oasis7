@@ -1,4 +1,6 @@
-use super::super::cognition_persistence_validation::cognition_validation;
+use super::super::cognition_persistence_validation::{
+    cognition_validation, strict_optional_finality_hash,
+};
 use super::{CognitionRuntimeAuthority, World, canonical_runtime_binding_digest};
 use crate::runtime::cognition::{finality_binding_is_legal, world_state_binding_digest_v1};
 use crate::runtime::cognition_recovery::RuntimeCognitionBaseBindingV1;
@@ -44,10 +46,8 @@ impl World {
             .get("reorg_epoch")
             .and_then(JsonValue::as_u64)
             .ok_or_else(|| cognition_validation("runtime_binding_invalid"))?;
-        let finality_block_hash = binding
-            .get("finality_block_hash")
-            .and_then(JsonValue::as_str)
-            .map(str::to_string);
+        let finality_block_hash =
+            strict_optional_finality_hash(binding.get("finality_block_hash"))?;
         if !finality_binding_is_legal(&finality_status, finality_block_hash.as_deref()) {
             return Err(cognition_validation("runtime_binding_invalid"));
         }

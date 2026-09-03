@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use super::super::{location_id_for_pos, mapping::runtime_state_to_simulator_model};
+use super::super::location_id_for_pos;
 use crate::geometry::GeoPos;
 use crate::runtime::{
     Action as RuntimeAction, AgentIntentV2, DomainEvent as RuntimeDomainEvent, ModuleSourcePackage,
@@ -13,14 +13,13 @@ use crate::runtime::{
 use crate::simulator::AsyncAgentRunner;
 use crate::simulator::{
     Action as SimulatorAction, ActionCatalogEntry, AgentBehavior, AgentDecision,
-    AgentDecisionTrace, AgentPromptProfile, AgentRunner, CHUNK_GENERATION_SCHEMA_VERSION,
-    ChunkRuntimeConfig, ContinuationProposalV1 as SimulatorContinuationProposalV1,
-    ContinuousAgentResponseContextV1, LlmAgentBehavior, LlmAgentConfig, Location,
-    OpenAiChatCompletionClient, ProviderAgentChatRequest, ProviderBackedAgentBehavior,
-    ProviderExecutionMode, ProviderLoopbackAdapter, ProviderLoopbackHttpClient, ResourceOwner,
-    RuntimeBindingV1, SNAPSHOT_VERSION, WorldConfig, WorldEvent, WorldEventKind, WorldJournal,
-    WorldKernel, WorldModel, WorldSnapshot, evaluate_provider_compatibility,
-    provider_agent_chat_log_key,
+    AgentDecisionTrace, AgentPromptProfile, AgentRunner, ChunkRuntimeConfig,
+    ContinuationProposalV1 as SimulatorContinuationProposalV1, ContinuousAgentResponseContextV1,
+    LlmAgentBehavior, LlmAgentConfig, Location, MemoryWriteStore, OpenAiChatCompletionClient,
+    ProviderAgentChatRequest, ProviderBackedAgentBehavior, ProviderExecutionMode,
+    ProviderLoopbackAdapter, ProviderLoopbackHttpClient, ResourceOwner, RuntimeBindingV1,
+    WorldConfig, WorldEvent, WorldEventKind, WorldKernel, WorldModel,
+    evaluate_provider_compatibility, provider_agent_chat_log_key,
 };
 use crate::viewer::live::ViewerLiveDecisionMode;
 use crate::viewer::protocol::{AgentChatAck, AgentChatError};
@@ -41,6 +40,11 @@ pub(super) struct RuntimePendingAction {
 pub(in crate::viewer::runtime_live) struct RuntimeProviderActionContext {
     pub(in crate::viewer::runtime_live) request: cognition_context::ProviderContextState,
     pub(in crate::viewer::runtime_live) response: ContinuousAgentResponseContextV1,
+    /// Keep provider memory intents correlated with the response until the
+    /// Runtime receipt/readback authorizes their durable projection.
+    #[serde(default)]
+    pub(in crate::viewer::runtime_live) memory_write_intents:
+        Vec<crate::simulator::MemoryWriteIntent>,
 }
 const BUILTIN_LLM_DECISION_SOURCE: &str = "builtin_llm";
 const PROVIDER_BACKED_DECISION_SOURCE: &str = "provider_backed";
@@ -79,6 +83,8 @@ mod agent_chat_support;
 mod async_support;
 #[path = "llm_sidecar_cognition.rs"]
 mod cognition_context;
+#[path = "llm_sidecar_decision.rs"]
+mod decision;
 #[path = "llm_sidecar_lineage.rs"]
 mod lineage;
 #[path = "llm_sidecar_lineage_persistence.rs"]
@@ -98,6 +104,7 @@ mod world_events;
 use self::agent_chat_support::{
     RuntimeProviderAgentChatFailure, RuntimeProviderAgentChatRequestError,
 };
+pub(in crate::viewer::runtime_live) use self::async_support::runtime_provider_context_digest;
 use self::async_support::{RuntimeLlmDecision, provider_trace_retryable};
 pub(in crate::viewer::runtime_live) use self::provider_support::provider_settings_from_env;
 use self::provider_support::{
@@ -220,8 +227,17 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     provider_contexts: BTreeMap<String, cognition_context::ProviderContextState>,
     provider_retry_contexts: BTreeMap<String, cognition_context::ProviderContextState>,
     provider_active_turns: BTreeMap<String, cognition_context::ProviderContextState>,
+    /// An active marker without an exactly matching context is a recovery
+    /// fence, not an invitation to allocate a fresh provider turn.  Keeping
+    /// the marker durable prevents a restart from silently losing identity
+    /// evidence and issuing a duplicate provider call.
+    provider_recovery_pending: BTreeMap<String, lineage_persistence::ProviderRecoveryPending>,
     provider_wait_until: BTreeMap<String, u64>,
     provider_feedback_seq: BTreeMap<String, u64>,
+    /// Compatibility feedback sequencing is partitioned by Agent session;
+    /// Runtime-issued feedback identity remains the eventual authority.
+    provider_feedback_seq_by_session: BTreeMap<String, u64>,
+    provider_memory_store: MemoryWriteStore,
     provider_completed_decisions: VecDeque<RuntimeLlmDecision>,
     provider_stale_replans: BTreeMap<String, ProviderStaleReplanState>,
     provider_transport_exhausted: BTreeSet<String>,
@@ -230,6 +246,7 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
         VecDeque<lineage_persistence::ProviderLateResponseDiagnostic>,
     provider_held_decisions: BTreeMap<String, async_support::RuntimeLlmDecision>,
     pending_provider_world_events: BTreeMap<String, RuntimePendingProviderWorldEvent>,
+    provider_world_event_quarantine: BTreeMap<String, String>,
     provider_lineage_store: Option<PathBuf>,
     provider_lineage_binding: Option<RuntimeBindingV1>,
     provider_lineage_restored: bool,
@@ -243,6 +260,27 @@ pub(in crate::viewer::runtime_live) struct RuntimePlayerBindingPlan {
     events: Vec<WorldEventKind>,
 }
 impl RuntimeLlmSidecar {
+    pub(in crate::viewer::runtime_live) fn pending_actions_empty(&self) -> bool {
+        self.pending_actions.is_empty()
+    }
+
+    pub(in crate::viewer::runtime_live) fn provider_contexts_empty(&self) -> bool {
+        self.provider_contexts.is_empty()
+    }
+
+    pub(in crate::viewer::runtime_live) fn provider_has_terminal_status(
+        &self,
+        status: &str,
+    ) -> bool {
+        self.provider_terminal_states
+            .values()
+            .any(|terminal| terminal.status == status)
+    }
+
+    pub(in crate::viewer::runtime_live) fn provider_memory_store(&self) -> &MemoryWriteStore {
+        &self.provider_memory_store
+    }
+
     pub(in crate::viewer::runtime_live) fn new(decision_mode: ViewerLiveDecisionMode) -> Self {
         Self {
             decision_mode,
@@ -269,8 +307,11 @@ impl RuntimeLlmSidecar {
             provider_contexts: BTreeMap::new(),
             provider_retry_contexts: BTreeMap::new(),
             provider_active_turns: BTreeMap::new(),
+            provider_recovery_pending: BTreeMap::new(),
             provider_wait_until: BTreeMap::new(),
             provider_feedback_seq: BTreeMap::new(),
+            provider_feedback_seq_by_session: BTreeMap::new(),
+            provider_memory_store: MemoryWriteStore::default(),
             provider_completed_decisions: VecDeque::new(),
             provider_stale_replans: BTreeMap::new(),
             provider_transport_exhausted: BTreeSet::new(),
@@ -278,6 +319,7 @@ impl RuntimeLlmSidecar {
             provider_late_response_diagnostics: VecDeque::new(),
             provider_held_decisions: BTreeMap::new(),
             pending_provider_world_events: BTreeMap::new(),
+            provider_world_event_quarantine: BTreeMap::new(),
             provider_lineage_store: None,
             provider_lineage_binding: None,
             provider_lineage_restored: false,
@@ -749,22 +791,6 @@ impl RuntimeLlmSidecar {
         self.pending_runtime_wakes.remove(wake_id);
     }
 
-    pub(super) fn apply_prompt_profile_to_driver(&mut self, profile: &AgentPromptProfile) {
-        let Some(runner) = self.runner.as_mut() else {
-            return;
-        };
-        let RuntimeDecisionRunner::Builtin(runner) = runner else {
-            return;
-        };
-        let Some(agent) = runner.get_mut(profile.agent_id.as_str()) else {
-            return;
-        };
-        agent.behavior.apply_prompt_overrides(
-            profile.system_prompt_override.clone(),
-            profile.short_term_goal_override.clone(),
-            profile.long_term_goal_override.clone(),
-        );
-    }
     pub(super) fn push_chat_message(
         &mut self,
         world: &RuntimeWorld,
@@ -984,181 +1010,6 @@ impl RuntimeLlmSidecar {
             }
         }
         (replies, failures)
-    }
-
-    pub(super) fn next_llm_decision(
-        &mut self,
-        world: &mut RuntimeWorld,
-        config: &WorldConfig,
-        world_id: &str,
-    ) -> Option<RuntimeLlmDecision> {
-        if !self.is_llm_mode() || self.llm_decision_mailbox == 0 {
-            return None;
-        }
-        self.llm_decision_mailbox = self.llm_decision_mailbox.saturating_sub(1);
-
-        if let Err(message) = self.sync_shadow_kernel(world, config) {
-            return Some(RuntimeLlmDecision::from_error(world, message));
-        }
-        if let Err(message) = self.ensure_runner_initialized() {
-            return Some(RuntimeLlmDecision::from_error(world, message));
-        }
-        let mut kernel = match self.shadow_kernel.take() {
-            Some(kernel) => kernel,
-            None => {
-                return Some(RuntimeLlmDecision::from_error(
-                    world,
-                    "shadow kernel not initialized".to_string(),
-                ));
-            }
-        };
-        #[cfg(not(target_arch = "wasm32"))]
-        if matches!(self.runner, Some(RuntimeDecisionRunner::ProviderBacked(_))) {
-            let decision = self.next_async_provider_decision(world, &mut kernel, world_id);
-            self.shadow_kernel = Some(kernel);
-            return decision;
-        }
-        #[cfg(target_arch = "wasm32")]
-        if matches!(self.runner, Some(RuntimeDecisionRunner::ProviderBacked(_))) {
-            if let Err(message) =
-                self.prepare_provider_request_contexts(world, &mut kernel, world_id)
-            {
-                self.shadow_kernel = Some(kernel);
-                return Some(RuntimeLlmDecision::from_error(world, message));
-            }
-        }
-        let runner = match self.runner.as_mut() {
-            Some(runner) => runner,
-            None => {
-                self.shadow_kernel = Some(kernel);
-                return Some(RuntimeLlmDecision::from_error(
-                    world,
-                    "llm runner not initialized".to_string(),
-                ));
-            }
-        };
-        let result = match runner {
-            RuntimeDecisionRunner::Builtin(runner) => {
-                let result = runner.tick_decide_only(&mut kernel);
-                sync_llm_runner_long_term_memory(&mut kernel, runner);
-                result
-            }
-            #[cfg(not(target_arch = "wasm32"))]
-            RuntimeDecisionRunner::ProviderBacked(_) => {
-                unreachable!("native provider decisions are polled through AsyncAgentRunner")
-            }
-            #[cfg(target_arch = "wasm32")]
-            RuntimeDecisionRunner::ProviderBacked(runner) => runner.tick_decide_only(&mut kernel),
-        };
-        self.shadow_kernel = Some(kernel);
-        let Some(tick) = result else {
-            return None;
-        };
-        #[cfg(target_arch = "wasm32")]
-        let provider_response =
-            if let Some(RuntimeDecisionRunner::ProviderBacked(runner)) = self.runner.as_mut() {
-                runner
-                    .get_mut(tick.agent_id.as_str())
-                    .and_then(|agent| agent.behavior.take_continuous_response_context())
-            } else {
-                None
-            };
-        #[cfg(not(target_arch = "wasm32"))]
-        let provider_response = None;
-        let cognition = self
-            .provider_contexts
-            .get(tick.agent_id.as_str())
-            .cloned()
-            .zip(provider_response)
-            .map(|(request, response)| RuntimeProviderActionContext { request, response });
-        if let Some(cognition) = cognition.as_ref() {
-            if tick
-                .decision_trace
-                .as_ref()
-                .is_none_or(|trace| trace.llm_error.is_none() && trace.parse_error.is_none())
-            {
-                self.provider_active_turns
-                    .insert(tick.agent_id.clone(), cognition.request.clone());
-                match &tick.decision {
-                    AgentDecision::Wait => {
-                        self.schedule_provider_wait(tick.agent_id.as_str(), world.state().time, 1);
-                    }
-                    AgentDecision::WaitTicks(ticks) => {
-                        self.schedule_provider_wait(
-                            tick.agent_id.as_str(),
-                            world.state().time,
-                            *ticks,
-                        );
-                    }
-                    AgentDecision::Act(_) => {
-                        #[cfg(target_arch = "wasm32")]
-                        if let Some(RuntimeDecisionRunner::ProviderBacked(runner)) =
-                            self.runner.as_mut()
-                        {
-                            if let Some(agent) = runner.get_mut(tick.agent_id.as_str()) {
-                                // Runtime receipt/disposition closes an action
-                                // turn; no local retry may re-enter it early.
-                                agent.wait_until = Some(u64::MAX);
-                            }
-                        }
-                    }
-                    AgentDecision::Query(_) | AgentDecision::ModuleCommand { .. } => {}
-                }
-            }
-        } else if tick
-            .decision_trace
-            .as_ref()
-            .is_some_and(provider_trace_retryable)
-        {
-            if let Some(context) = self.provider_contexts.get(tick.agent_id.as_str()).cloned() {
-                if context.request_context.transport_attempt < MAX_PROVIDER_TRANSPORT_ATTEMPTS {
-                    self.provider_retry_contexts
-                        .insert(tick.agent_id.clone(), context);
-                    self.persist_provider_lineage_best_effort();
-                } else {
-                    self.mark_provider_transport_exhausted(tick.agent_id.clone());
-                }
-            }
-        }
-        Some(RuntimeLlmDecision {
-            agent_id: tick.agent_id,
-            decision: tick.decision,
-            decision_trace: tick.decision_trace,
-            cognition,
-        })
-    }
-
-    fn sync_shadow_kernel(
-        &mut self,
-        world: &RuntimeWorld,
-        config: &WorldConfig,
-    ) -> Result<(), String> {
-        let runtime_snapshot = world.snapshot();
-        let next_event_id = 0;
-        let next_action_id = runtime_snapshot.next_action_id.max(1);
-        let model =
-            runtime_state_to_simulator_model(world.state(), self, self.runtime_seed_model.as_ref());
-        let snapshot = WorldSnapshot {
-            version: SNAPSHOT_VERSION,
-            chunk_generation_schema_version: CHUNK_GENERATION_SCHEMA_VERSION,
-            time: world.state().time,
-            config: config.clone(),
-            model,
-            runtime_snapshot: Some(runtime_snapshot),
-            player_gameplay: None,
-            chain_resource_manifest: Default::default(),
-            latest_chain_resource_delta: Default::default(),
-            chunk_runtime: ChunkRuntimeConfig::default(),
-            intel_ttl_ticks: 0,
-            next_event_id,
-            next_action_id,
-            pending_actions: Vec::new(),
-            journal_len: 0,
-        };
-        let kernel = WorldKernel::from_snapshot(snapshot, WorldJournal::new())
-            .map_err(|err| format!("runtime live shadow kernel rebuild failed: {err:?}"))?;
-        self.shadow_kernel = Some(kernel);
-        Ok(())
     }
 }
 

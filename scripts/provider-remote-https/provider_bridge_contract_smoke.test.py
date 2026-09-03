@@ -81,7 +81,7 @@ class MockProviderHandler(BaseHTTPRequestHandler):
         if self.path == "/v1/world-simulator/decision-context":
             self.server.target_decision_calls += 1
             response = {
-                "decision": {"decision": "wait"},
+                "decision": "wait",
                 "provider_error": None,
                 "diagnostics": {
                     "provider_id": "provider_local_bridge",
@@ -94,7 +94,9 @@ class MockProviderHandler(BaseHTTPRequestHandler):
                     "schema_repair_count": 0,
                 },
             }
-            if (
+            if self.server.empty_target_response:
+                response = {}
+            elif (
                 self.server.quota_error_after is not None
                 and self.server.target_decision_calls > self.server.quota_error_after
             ):
@@ -184,11 +186,13 @@ class MockProviderServer:
         quota_error_after=None,
         quota_error_code="quota_exhausted",
         quota_error_message="mock quota exhausted",
+        empty_target_response=False,
     ):
         self.health_ok = health_ok
         self.quota_error_after = quota_error_after
         self.quota_error_code = quota_error_code
         self.quota_error_message = quota_error_message
+        self.empty_target_response = empty_target_response
 
     def __enter__(self):
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), MockProviderHandler)
@@ -197,6 +201,7 @@ class MockProviderServer:
         self.server.quota_error_after = self.quota_error_after
         self.server.quota_error_code = self.quota_error_code
         self.server.quota_error_message = self.quota_error_message
+        self.server.empty_target_response = self.empty_target_response
         self.server.decision_calls = 0
         self.server.target_decision_calls = 0
         self.server.feedback_calls = 0
@@ -358,6 +363,26 @@ class ProviderBridgeContractSmokeTests(unittest.TestCase):
                         require_health_ok=True,
                     )
                 )
+
+    def test_target_lane_rejects_empty_inner_decision_response(self):
+        with tempfile.TemporaryDirectory() as directory:
+            payload_path = target_payload_file(directory)
+            with MockProviderServer(health_ok=True, empty_target_response=True) as server:
+                with self.assertRaisesRegex(
+                    RuntimeError, "target provider response base decision"
+                ):
+                    smoke.run_smoke(
+                        smoke.SmokeOptions(
+                            base_url=server.base_url,
+                            auth_token="newapi_user_ref:empty-inner",
+                            timeout_ms=5000,
+                            decision_count=1,
+                            min_successes=1,
+                            expect_provider_error_code_substr="",
+                            require_health_ok=True,
+                            target_context_payload_file=payload_path,
+                        )
+                    )
 
     def test_target_lane_rejects_feedback_identity_drift(self):
         with tempfile.TemporaryDirectory() as directory:

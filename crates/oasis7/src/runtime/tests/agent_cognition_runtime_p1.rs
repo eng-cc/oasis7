@@ -533,6 +533,269 @@ fn provider_failure_before_response_is_durable_terminal_without_receipt_or_effec
     let _ = fs::remove_dir_all(dir);
 }
 
+#[test]
+fn committed_cognition_history_survives_later_world_progression_and_restore() {
+    let mut world = World::new();
+    bind_test_turn(&mut world);
+    let decision = envelope(&world);
+    let prepared = world
+        .prepare_cognition_envelope(
+            decision.clone(),
+            Some(response_artifact_for_envelope(&decision)),
+        )
+        .expect("prepare");
+    let committed = world
+        .finalize_cognition_commit(&prepared.commit_id)
+        .expect("finalize");
+    let commit_tick = world.state().time;
+    world.step().expect("ordinary world progression");
+    assert!(world.state().time > commit_tick);
+
+    let dir = temp_dir("committed-history-after-progress");
+    world.save_to_dir(&dir).expect("save progressed world");
+    fs::remove_dir_all(dir.join(".distfs-state")).expect("force JSON restore");
+    let restored = World::load_from_dir(&dir).expect("historical committed receipt remains valid");
+    assert_eq!(restored.cognition()["recovery"]["disposition"], "committed");
+    assert_eq!(
+        restored.cognition()["recovery"]["receipt"]["receipt_id"],
+        committed.receipt_id
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn same_key_transport_retry_is_monotonic_and_exact_duplicates_are_idempotent() {
+    let mut world = World::new();
+    bind_test_turn(&mut world);
+    let request_digest = digest(5);
+    let provider_key = digest(6);
+    world
+        .capture_cognition_context(
+            AGENT_ID,
+            "session.runtime-hardening",
+            "turn.runtime-hardening",
+            "request.runtime-hardening",
+            &request_digest,
+            &digest(4),
+        )
+        .expect("capture context");
+    world
+        .dispatch_cognition_request(
+            AGENT_ID,
+            "session.runtime-hardening",
+            "turn.runtime-hardening",
+            "request.runtime-hardening",
+            &request_digest,
+            &provider_key,
+            1,
+            1,
+        )
+        .expect("first dispatch");
+    world
+        .dispatch_cognition_request(
+            AGENT_ID,
+            "session.runtime-hardening",
+            "turn.runtime-hardening",
+            "request.runtime-hardening",
+            &request_digest,
+            &provider_key,
+            1,
+            2,
+        )
+        .expect("second transport attempt");
+    world
+        .dispatch_cognition_request(
+            AGENT_ID,
+            "session.runtime-hardening",
+            "turn.runtime-hardening",
+            "request.runtime-hardening",
+            &request_digest,
+            &provider_key,
+            1,
+            2,
+        )
+        .expect("duplicate attempt is idempotent");
+    let stale_replay = world
+        .dispatch_cognition_request(
+            AGENT_ID,
+            "session.runtime-hardening",
+            "turn.runtime-hardening",
+            "request.runtime-hardening",
+            &request_digest,
+            &provider_key,
+            1,
+            1,
+        )
+        .expect_err("an older transport attempt cannot replay after a newer one");
+    assert!(format!("{stale_replay:?}").contains("cognition_dispatch_conflict"));
+    let events = world.cognition()["cognition_journal"]["events"]
+        .as_array()
+        .expect("events");
+    let attempts: Vec<u64> = events
+        .iter()
+        .filter(|event| event["event_kind"] == "RequestDispatched")
+        .filter_map(|event| event["transport_attempt"].as_u64())
+        .collect();
+    assert_eq!(attempts, vec![1, 2]);
+    let collision = world
+        .dispatch_cognition_request(
+            AGENT_ID,
+            "session.runtime-hardening",
+            "turn.runtime-hardening",
+            "request.runtime-hardening",
+            &request_digest,
+            &digest(7),
+            1,
+            3,
+        )
+        .expect_err("changed provider invocation key must conflict");
+    assert!(format!("{collision:?}").contains("cognition_dispatch_conflict"));
+}
+
+#[test]
+fn reorg_invalidates_response_artifacts_and_rejects_stale_epoch_requests() {
+    let mut world = World::new()
+        .try_with_cognition_scheduler(policy(), 1)
+        .expect("scheduler");
+    bind_test_turn(&mut world);
+    let decision = envelope(&world);
+    let prepared = world
+        .prepare_cognition_envelope(
+            decision.clone(),
+            Some(response_artifact_for_envelope(&decision)),
+        )
+        .expect("prepare");
+    world
+        .admit_cognition_continuation(proposal(&world))
+        .expect("continuation");
+    world
+        .invalidate_cognition_for_reorg(1)
+        .expect("invalidate old epoch");
+    assert_eq!(
+        world.cognition()["responses"][0]["invalidation_reason"],
+        "reorg_invalidated"
+    );
+    assert_eq!(
+        world.cognition()["responses"][0]["envelope_digest"],
+        prepared.envelope_digest
+    );
+    assert!(
+        world.cognition()["cognition_journal"]["events"]
+            .as_array()
+            .expect("events")
+            .iter()
+            .any(|event| {
+                event["event_kind"] == "CognitionResponseInvalidated"
+                    && event["envelope_digest"] == prepared.envelope_digest
+                    && event["agent_turn_id"] == decision.agent_turn_id
+                    && event["request_digest"] == decision.request_digest
+                    && event["invalidation_reason"] == "reorg_invalidated"
+            })
+    );
+    let stale = world
+        .invalidate_cognition_for_reorg(0)
+        .expect_err("a stale reorg epoch must not rewrite newer invalidation");
+    assert!(format!("{stale:?}").contains("reorg_epoch_stale"));
+}
+
+#[test]
+fn persisted_finality_hash_shape_is_strictly_optional_or_string() {
+    let mut world = World::new();
+    world
+        .bind_cognition_runtime(WORLD_ID, "main", 0, None, "pending", 0)
+        .expect("binding");
+    let dir = temp_dir("malformed-finality-json-shape");
+    world.save_to_dir(&dir).expect("save");
+    let mut snapshot = read_snapshot(&dir);
+    snapshot["cognition"]["runtime_binding"]["finality_block_hash"] = json!(42);
+    write_snapshot(&dir, &snapshot);
+    fs::remove_dir_all(dir.join(".distfs-state")).expect("force JSON restore");
+    let error =
+        World::load_from_dir(&dir).expect_err("numeric finality hash is malformed, not absent");
+    assert!(format!("{error:?}").contains("recovery_pending"));
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn rehashed_event_with_forged_payload_digest_is_rejected_on_restore() {
+    let mut world = World::new();
+    bind_test_turn(&mut world);
+    let decision = envelope(&world);
+    let prepared = world
+        .prepare_cognition_envelope(
+            decision.clone(),
+            Some(response_artifact_for_envelope(&decision)),
+        )
+        .expect("prepare");
+    world
+        .finalize_cognition_commit(&prepared.commit_id)
+        .expect("finalize");
+    let dir = temp_dir("forged-event-payload-digest");
+    world.save_to_dir(&dir).expect("save");
+    let mut snapshot = read_snapshot(&dir);
+    let events = snapshot["cognition"]["cognition_journal"]["events"]
+        .as_array_mut()
+        .expect("events");
+    events[1]["payload_digest"] = json!(digest(99));
+    for event in events.iter_mut() {
+        let object = event.as_object_mut().expect("event object");
+        object.remove("event_digest");
+        let unsigned = Value::Object(object.clone());
+        object.insert(
+            "event_digest".to_string(),
+            json!(cognition_digest_v1("oasis7.cognition.event.v1", &unsigned)),
+        );
+    }
+    let journal = &mut snapshot["cognition"]["cognition_journal"];
+    journal["head_digest"] = json!(cognition_digest_v1(
+        "oasis7.cognition.journal-head.v1",
+        &json!({"head_seq": journal["head_seq"], "events": journal["events"]})
+    ));
+    write_snapshot(&dir, &snapshot);
+    fs::remove_dir_all(dir.join(".distfs-state")).expect("force JSON restore");
+    assert!(World::load_from_dir(&dir).is_err());
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn response_bearing_commit_emits_complete_dense_lifecycle_prefix() {
+    let mut world = World::new();
+    bind_test_turn(&mut world);
+    let decision = envelope(&world);
+    let prepared = world
+        .prepare_cognition_envelope(
+            decision.clone(),
+            Some(response_artifact_for_envelope(&decision)),
+        )
+        .expect("prepare");
+    world
+        .finalize_cognition_commit(&prepared.commit_id)
+        .expect("finalize");
+    let kinds: Vec<&str> = world.cognition()["cognition_journal"]["events"]
+        .as_array()
+        .expect("events")
+        .iter()
+        .filter(|event| {
+            event["agent_turn_id"] == decision.agent_turn_id
+                && event["request_digest"] == decision.request_digest
+        })
+        .filter_map(|event| event["event_kind"].as_str())
+        .collect();
+    assert_eq!(
+        kinds,
+        vec![
+            "TurnStarted",
+            "ContextCaptured",
+            "RequestDispatched",
+            "ResponseRecorded",
+            "DecisionEnvelopeSubmitted",
+            "DecisionValidated",
+            "WorldReceiptLinked",
+            "CognitionTurnCompleted",
+        ]
+    );
+}
+
 fn continuous_request_for_envelope(
     world: &World,
     envelope: &AgentDecisionEnvelopeV1,

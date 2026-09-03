@@ -104,7 +104,15 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
                         provider_error: None,
                         diagnostics: crate::simulator::ProviderDiagnostics::default(),
                         trace_payload: crate::simulator::ProviderTraceEnvelope::default(),
-                        memory_write_intents: Vec::new(),
+                        memory_write_intents: if request_number == 1 {
+                            vec![crate::simulator::MemoryWriteIntent {
+                                scope: "session_private".to_string(),
+                                summary: "first provider action committed".to_string(),
+                                tags: vec!["e2e".to_string()],
+                            }]
+                        } else {
+                            Vec::new()
+                        },
                     };
                     let response = provider_context_response(&decoded, response);
                     MockHttpResponse {
@@ -125,6 +133,7 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
                                 ("pending", Some(_))
                                     | ("rejected", Some("no_effect"))
                                     | ("rejected", Some("stale_base"))
+                                    | ("rejected", Some("action_rejected"))
                             ),
                             "unexpected provider feedback: status={} reason={:?}",
                             feedback.status,
@@ -163,9 +172,18 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
     let test_world_id = format!("live-runtime-{}", WorldScenario::Minimal.as_str());
     let test_finality_block_hash =
         crate::simulator::h_v1("oasis7.viewer.test.finality-block.v1", &test_world_id).to_string();
+    let lineage_path = std::env::temp_dir().join(format!(
+        "oasis7-runtime-live-provider-e2e-{}-{}.json",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos()
+    ));
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm)
+            .with_provider_lineage_store(lineage_path.clone())
             .with_test_cognition_runtime_binding(
                 "provider-context-branch",
                 0,
@@ -266,6 +284,102 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
     drop(_guard);
     phase_result.expect("provider context phases should complete");
     step_result.expect("multi-step control should advance each requested iteration");
+
+    // A simulated Viewer restart restores the adapter checkpoint against the
+    // same Runtime world.  The committed identity is terminal and therefore
+    // cannot be redispatched as a duplicate provider turn.
+    let mut restored_sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    restored_sidecar.configure_provider_lineage_store(lineage_path.clone());
+    restored_sidecar
+        .restore_provider_lineage(&server.world)
+        .expect("restore production provider lineage after restart");
+    assert!(restored_sidecar.pending_actions_empty());
+    assert!(restored_sidecar.provider_contexts_empty());
+    assert!(restored_sidecar.provider_has_terminal_status("committed"));
+    assert_eq!(
+        restored_sidecar.provider_memory_store().entries().len(),
+        1,
+        "committed provider memory projection must survive adapter restart"
+    );
+    let _ = std::fs::remove_file(&lineage_path);
+
+    // Production-surface lifecycle proof: the actual RuntimeLive sidecar
+    // prefixes provider I/O, records the retry as a new transport attempt on
+    // the same identity, and closes exactly once at the authoritative receipt.
+    let lifecycle_events = server.world.cognition()["cognition_journal"]["events"]
+        .as_array()
+        .expect("Runtime cognition journal events");
+    let dispatches = lifecycle_events
+        .iter()
+        .filter(|event| event["event_kind"] == "RequestDispatched")
+        .collect::<Vec<_>>();
+    let retried = dispatches
+        .iter()
+        .find(|event| event["transport_attempt"] == 2)
+        .expect("transport retry must be durably dispatched");
+    let turn_id = retried["agent_turn_id"]
+        .as_str()
+        .expect("retry turn identity");
+    let request_id = retried["decision_request_id"]
+        .as_str()
+        .expect("retry request identity");
+    let same_turn = |event: &&serde_json::Value| {
+        event["agent_turn_id"].as_str() == Some(turn_id)
+            && event["decision_request_id"].as_str() == Some(request_id)
+    };
+    assert_eq!(
+        lifecycle_events
+            .iter()
+            .filter(|event| same_turn(event) && event["event_kind"] == "TurnStarted")
+            .count(),
+        1,
+        "restart/retry must not duplicate TurnStarted"
+    );
+    assert_eq!(
+        lifecycle_events
+            .iter()
+            .filter(|event| same_turn(event) && event["event_kind"] == "ContextCaptured")
+            .count(),
+        1,
+        "retry must reuse the captured context"
+    );
+    let attempts = dispatches
+        .iter()
+        .filter(|event| same_turn(event))
+        .filter_map(|event| event["transport_attempt"].as_u64())
+        .collect::<Vec<_>>();
+    assert_eq!(attempts, vec![1, 2]);
+    for kind in ["ResponseRecorded", "WorldReceiptLinked"] {
+        assert_eq!(
+            lifecycle_events
+                .iter()
+                .filter(|event| same_turn(event) && event["event_kind"] == kind)
+                .count(),
+            1,
+            "successful provider retry must emit one {kind}"
+        );
+    }
+    assert_eq!(
+        lifecycle_events
+            .iter()
+            .filter(|event| {
+                same_turn(event)
+                    && event["event_kind"] == "CognitionTurnCompleted"
+                    && event["status"] == "committed"
+            })
+            .count(),
+        1,
+        "successful provider retry must close the turn once"
+    );
+    let memory_entry = server
+        .llm_sidecar
+        .provider_memory_store()
+        .entries()
+        .first()
+        .expect("committed provider memory intent");
+    assert_eq!(memory_entry["scope"], "session_private");
+    assert_eq!(memory_entry["provenance"], "runtime_authoritative");
+    assert!(memory_entry["receipt_id"].as_str().is_some());
 
     let (decision_records, feedback_records, recorded_paths) = captured_requests;
     assert_eq!(decision_records.len(), 3);
@@ -649,4 +763,214 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
             | crate::runtime::WorldEventBody::EffectQueued(_)
             | crate::runtime::WorldEventBody::ReceiptAppended(_)
     )));
+}
+
+#[test]
+fn runtime_provider_backed_wake_resumes_with_fresh_request_and_origin_lineage() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
+    let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
+    let base_url = spawn_runtime_live_mock_http_server(4, {
+        let recorded = Arc::clone(&recorded);
+        move |request| {
+            recorded
+                .lock()
+                .expect("recorded lock")
+                .push(request.clone());
+            if request.path != "/v1/world-simulator/decision-context" {
+                return MockHttpResponse {
+                    status_code: 404,
+                    body: serde_json::json!({"ok": false, "error": "not_found"}).to_string(),
+                };
+            }
+            let decoded: crate::simulator::ContinuousAgentRequestContextV1 =
+                serde_json::from_slice(request.body.as_slice())
+                    .expect("decode continuation decision request");
+            decoded
+                .validate_production_lane()
+                .expect("continuation request must be production-valid");
+            let response = crate::simulator::DecisionResponse {
+                decision: crate::simulator::ProviderDecision::Act {
+                    action_ref: "move_agent".to_string(),
+                    action: crate::simulator::Action::MoveAgent {
+                        agent_id: decoded.base_decision_request.observation.agent_id.clone(),
+                        to: "runtime:continuation:0:0".to_string(),
+                    },
+                },
+                module_command: None,
+                provider_error: None,
+                diagnostics: crate::simulator::ProviderDiagnostics::default(),
+                trace_payload: crate::simulator::ProviderTraceEnvelope::default(),
+                memory_write_intents: Vec::new(),
+            };
+            MockHttpResponse {
+                status_code: 200,
+                body: serde_json::to_string(&provider_context_response(&decoded, response))
+                    .expect("encode continuation response"),
+            }
+        }
+    });
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+        oasis7::env_mut::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
+    }
+
+    let world_id = format!("wake-runtime-{}", WorldScenario::Minimal.as_str());
+    let finality_block_hash =
+        crate::simulator::h_v1("oasis7.viewer.test.finality-block.v1", &world_id).to_string();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm)
+            .with_test_cognition_runtime_binding(
+                "continuation-branch",
+                0,
+                Some(finality_block_hash),
+                "verified",
+                0,
+            ),
+    )
+    .expect("runtime server");
+    server.world = server.world.clone().with_cognition_scheduler(
+        serde_json::from_value(serde_json::json!({
+            "schema_version": "scheduler-policy.v1",
+            "max_total_wakes_per_tick": 8,
+            "max_wakes_per_agent_per_tick": 1,
+            "aging_after_ticks": 2,
+            "max_starvation_ticks": 4,
+            "initial_priority": 0,
+            "comparator": "deadline_due_desc,next_wake_tick_asc,effective_priority_desc,starvation_deadline_tick_asc,cursor_distance_asc,agent_id_asc,continuation_id_asc,wake_seq_asc",
+            "service_order": "stable_round_robin"
+        }))
+        .expect("decode continuation scheduler policy"),
+        8,
+    );
+    server
+        .world
+        .install_test_provider_capability_fixture("agent-0")
+        .expect("install Runtime provider capability fixture");
+
+    let origin_session = "continuation-origin-session";
+    let origin_turn = "continuation-origin-turn";
+    let origin_request = "blake3:continuation-origin-request";
+    server
+        .world
+        .start_cognition_turn(
+            "agent-0",
+            origin_session,
+            origin_turn,
+            "continuation-origin-request-id",
+            origin_request,
+        )
+        .expect("register continuation origin turn");
+    let mut proposal: crate::runtime::CognitionContinuationProposalV1 =
+        serde_json::from_value(serde_json::json!({
+            "schema_version": 1,
+            "continuation_proposal_id": "provider-wake-proposal-1",
+            "world_id": server.config.world_id,
+            "branch_id": "continuation-branch",
+            "finality_epoch": 0,
+            "finality_status": "verified",
+            "reorg_epoch": 0,
+            "agent_id": "agent-0",
+            "agent_session_id": origin_session,
+            "agent_turn_id": origin_turn,
+            "decision_request_id": "continuation-origin-request-id",
+            "origin_turn_id": origin_turn,
+            "origin_request_digest": origin_request,
+            "action_or_plan_kind": "wait",
+            "proposal_digest": "",
+            "baseline_observation_digest": "blake3:continuation-baseline",
+            "goal_digest": "blake3:continuation-goal",
+            "policy_digest": "blake3:continuation-policy",
+            "policy_revision": 1,
+            "precondition_summary": "provider wake is ready",
+            "wake_conditions": [{
+                "schema_version": "wake-condition.v1",
+                "kind": "at_or_after_tick",
+                "logical_tick": 0
+            }],
+            "remaining_budget": {"unit": "steps", "value": 2},
+            "valid_until_tick": 100,
+            "precondition_digest": "blake3:continuation-precondition",
+            "source": "provider-production-e2e"
+        }))
+        .expect("decode continuation proposal");
+    proposal.proposal_digest = proposal.proposal_digest();
+    let admitted = server
+        .world
+        .admit_cognition_continuation(proposal)
+        .expect("admit Runtime continuation");
+    let selected = server
+        .world
+        .select_ready_cognition_wakes(server.world.state().time)
+        .expect("select Runtime continuation wake");
+    assert_eq!(selected.len(), 1);
+    assert_eq!(selected[0].wake_id, admitted.wake_id);
+
+    let mut trace = None;
+    wait_for_provider_phase(
+        "provider continuation request",
+        Duration::from_secs(5),
+        || {
+            server.llm_sidecar.request_decision();
+            match server.enqueue_llm_action_from_sidecar() {
+                Ok(Some(value)) => {
+                    trace = Some(value);
+                    Ok(true)
+                }
+                Ok(None) => Ok(false),
+                Err(value) => Err(format!("provider continuation request failed: {value:?}")),
+            }
+        },
+    )
+    .expect("provider continuation request should commit");
+    assert!(trace.is_some());
+
+    clear_runtime_provider_env();
+    drop(_guard);
+    let requests = recorded.lock().expect("recorded requests");
+    let decisions = requests
+        .iter()
+        .filter(|request| request.path == "/v1/world-simulator/decision-context")
+        .map(|request| {
+            serde_json::from_slice::<crate::simulator::ContinuousAgentRequestContextV1>(
+                request.body.as_slice(),
+            )
+            .expect("decode recorded continuation request")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(decisions.len(), 1);
+    assert!(
+        decisions[0].continuation_digest != crate::simulator::Digest32::default(),
+        "provider request must carry the Runtime-selected continuation projection"
+    );
+
+    let events = server.world.cognition()["cognition_journal"]["events"]
+        .as_array()
+        .expect("Runtime cognition journal events");
+    let resumed_turn = events
+        .iter()
+        .find(|event| {
+            event["event_kind"] == "TurnStarted"
+                && event["wake_id"] == admitted.wake_id
+                && event["agent_turn_id"] != origin_turn
+        })
+        .expect("Runtime must start a fresh resumed turn");
+    assert_ne!(resumed_turn["agent_session_id"], origin_session);
+    assert_ne!(resumed_turn["agent_turn_id"], origin_turn);
+    assert_ne!(
+        resumed_turn["decision_request_id"],
+        "continuation-origin-request-id"
+    );
+    assert_eq!(resumed_turn["origin_turn_id"], origin_turn);
+    assert_eq!(resumed_turn["origin_request_digest"], origin_request);
+    assert!(
+        events.iter().any(|event| {
+            event["event_kind"] == "ContinuationReplanned" && event["wake_id"] == admitted.wake_id
+        }),
+        "Runtime must durably hand off the selected wake before provider I/O"
+    );
 }

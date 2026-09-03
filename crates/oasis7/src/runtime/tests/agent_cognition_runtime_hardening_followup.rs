@@ -253,6 +253,95 @@ fn typed_wake_handoff_requires_terminal_or_validated_replan() {
 }
 
 #[test]
+fn runtime_resume_admits_new_request_digest_with_stable_origin_lineage() {
+    let mut world = World::new()
+        .try_with_cognition_scheduler(policy(), 1)
+        .expect("scheduler");
+    bind_test_turn(&mut world);
+    let original = proposal(&world);
+    let admitted = world
+        .admit_cognition_continuation(original.clone())
+        .expect("admit continuation");
+    world.step().expect("advance to wake tick");
+    let wake_id = world
+        .cognition_in_flight_wakes()
+        .expect("in-flight wake")
+        .first()
+        .expect("selected wake")
+        .wake_id
+        .clone();
+
+    let mut next = original.clone();
+    next.continuation_proposal_id = "proposal-runtime-resume-next".to_string();
+    next.agent_session_id = "session.runtime-resume-next".to_string();
+    next.agent_turn_id = "turn.runtime-resume-next".to_string();
+    next.decision_request_id = "request.runtime-resume-next".to_string();
+    // `budget_spent` is charged by Runtime before the next proposal is
+    // admitted.  The proposal therefore carries the residual budget (2 - 1),
+    // rather than replaying the original budget of two steps.
+    next.remaining_budget.value = 1;
+    next.proposal_digest = next.proposal_digest();
+    let request_digest = digest(81);
+    let result = world
+        .resume_cognition_wake(
+            &wake_id,
+            next.clone(),
+            1,
+            CognitionContinuationResumeRequestV1 {
+                agent_session_id: next.agent_session_id.clone(),
+                agent_turn_id: next.agent_turn_id.clone(),
+                decision_request_id: next.decision_request_id.clone(),
+                request_digest: request_digest.clone(),
+                context_digest: digest(82),
+            },
+        )
+        .expect("Runtime should atomically consume and resume the wake");
+    let resumed = result
+        .replanned_continuation
+        .expect("resume should allocate the next continuation");
+    assert_eq!(resumed.agent_session_id, next.agent_session_id);
+    assert_eq!(resumed.decision_request_id, next.decision_request_id);
+    assert_eq!(
+        resumed.origin_request_digest,
+        original.origin_request_digest
+    );
+    assert_eq!(resumed.remaining_budget.value, 1);
+
+    let events = world.cognition()["cognition_journal"]["events"]
+        .as_array()
+        .expect("journal events");
+    assert!(events.iter().any(|event| {
+        event["event_kind"] == "TurnStarted"
+            && event["decision_request_id"] == next.decision_request_id
+            && event["request_digest"] == request_digest
+            && event["origin_request_digest"] == original.origin_request_digest
+            && event["continuation_id"] == admitted.continuation_id
+            && event["wake_id"] == wake_id
+    }));
+    let replay = world
+        .resume_cognition_wake(
+            &wake_id,
+            next,
+            1,
+            CognitionContinuationResumeRequestV1 {
+                agent_session_id: "session.runtime-resume-next".to_string(),
+                agent_turn_id: "turn.runtime-resume-next".to_string(),
+                decision_request_id: "request.runtime-resume-next".to_string(),
+                request_digest,
+                context_digest: digest(82),
+            },
+        )
+        .expect("an exact resume replay returns the durable result");
+    assert_eq!(
+        replay
+            .replanned_continuation
+            .expect("replayed continuation")
+            .continuation_id,
+        resumed.continuation_id
+    );
+}
+
+#[test]
 fn recovery_rejects_a_tampered_trailing_cognition_event() {
     let mut world = World::new();
     let envelope = envelope(&world);
@@ -553,5 +642,122 @@ fn production_lease_consumer_releases_only_the_dispatched_wake() {
             .cognition_in_flight_wakes()
             .expect("leases")
             .is_empty()
+    );
+}
+
+#[test]
+fn continuation_validity_window_expires_and_releases_wake_before_delivery() {
+    let mut world = World::new()
+        .try_with_cognition_scheduler(policy(), 1)
+        .expect("scheduler");
+    bind_test_turn(&mut world);
+    let mut expired_proposal = proposal(&world);
+    expired_proposal.valid_until_tick = Some(world.state().time);
+    expired_proposal.proposal_digest = expired_proposal.proposal_digest();
+    let admitted = world
+        .admit_cognition_continuation(expired_proposal)
+        .expect("admit expiring continuation");
+
+    world.step().expect("advance beyond validity window");
+    assert_eq!(world.cognition()["continuations"][0]["status"], "expired");
+    assert_eq!(
+        world.cognition()["continuations"][0]["terminal_disposition"],
+        "expired"
+    );
+    assert!(
+        world
+            .cognition_in_flight_wakes()
+            .expect("leases")
+            .is_empty()
+    );
+    assert!(
+        world.cognition()["cognition_journal"]["events"]
+            .as_array()
+            .expect("events")
+            .iter()
+            .any(|event| event["event_kind"] == "ContinuationExpired"
+                && event["continuation_id"] == admitted.continuation_id)
+    );
+}
+
+#[test]
+fn stale_replan_context_releases_old_continuation_without_budget_spend() {
+    let mut world = World::new()
+        .try_with_cognition_scheduler(policy(), 1)
+        .expect("scheduler");
+    bind_test_turn(&mut world);
+    let admitted_proposal = proposal(&world);
+    let admitted = world
+        .admit_cognition_continuation(admitted_proposal.clone())
+        .expect("admit continuation");
+    world.step().expect("advance to wake tick");
+    let wake_id = world
+        .cognition_in_flight_wakes()
+        .expect("in-flight wake")
+        .first()
+        .expect("leased wake")
+        .wake_id
+        .clone();
+    let mut stale = admitted_proposal;
+    stale.goal_digest = digest(90);
+    stale.proposal_digest = stale.proposal_digest();
+    let error = world
+        .handoff_cognition_wake(
+            &wake_id,
+            CognitionWakeDispositionV1::Replan {
+                proposal: stale,
+                budget_spent: 1,
+            },
+        )
+        .expect_err("stale context must not be replanned");
+    assert!(format!("{error:?}").contains("cognition_context_mismatch"));
+    assert!(
+        world
+            .cognition_in_flight_wakes()
+            .expect("leases")
+            .is_empty()
+    );
+    assert_eq!(world.cognition()["continuations"][0]["status"], "rejected");
+    assert_eq!(
+        world.cognition()["continuations"][0]["remaining_budget"]["value"],
+        2
+    );
+}
+
+#[test]
+fn wake_handoff_revalidates_current_state_head_before_budget_debit() {
+    let mut world = World::new()
+        .try_with_cognition_scheduler(policy(), 1)
+        .expect("scheduler");
+    bind_test_turn(&mut world);
+    let admitted = world
+        .admit_cognition_continuation(proposal(&world))
+        .expect("admit continuation");
+    world.step().expect("advance to wake tick");
+    let wake_id = world
+        .cognition_in_flight_wakes()
+        .expect("in-flight wake")
+        .first()
+        .expect("leased wake")
+        .wake_id
+        .clone();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "agent-evidence-mutation".to_string(),
+        pos: super::pos(0, 0),
+    });
+    world.step().expect("mutate world evidence head");
+    let error = world
+        .consume_cognition_continuation_budget(&admitted.continuation_id, 1)
+        .expect_err("stale selected evidence must not spend budget");
+    assert!(format!("{error:?}").contains("cognition_wake_evidence_stale"));
+    assert!(
+        world
+            .cognition_in_flight_wakes()
+            .expect("leases")
+            .is_empty()
+    );
+    assert_eq!(
+        world.cognition()["continuations"][0]["remaining_budget"]["value"],
+        2
     );
 }

@@ -4,6 +4,7 @@ use crate::runtime::{
     WorldEvent as RuntimeWorldEvent, WorldEventBody as RuntimeWorldEventBody,
 };
 use crate::simulator::{Action as SimulatorAction, ActionResult, FeedbackEnvelopeV1};
+use serde_json::Value as JsonValue;
 
 impl RuntimeLlmSidecar {
     pub(in crate::viewer::runtime_live) fn schedule_provider_stale_replan(
@@ -98,6 +99,23 @@ impl RuntimeLlmSidecar {
             self.pending_actions.insert(action_id, pending);
             return;
         }
+        // A provider-backed action is finalized from the Runtime receipt
+        // before the corresponding world event reaches this adapter.  The
+        // later ActionAccepted callback is an informational replay and must
+        // not resurrect an already terminal single-flight action.
+        if let Some(cognition) = pending.cognition.as_ref()
+            && self
+                .provider_terminal_states
+                .get(pending.agent_id.as_str())
+                .is_some_and(|terminal| {
+                    terminal.agent_turn_id == cognition.request.request_context.agent_turn_id
+                        && terminal.decision_request_id
+                            == cognition.request.request_context.decision_request_id
+                })
+        {
+            self.persist_provider_lineage_best_effort();
+            return;
+        }
         let success = !rejected;
         let action_result = ActionResult {
             action: pending.action.clone(),
@@ -150,34 +168,84 @@ impl RuntimeLlmSidecar {
         if !matches!(status, "committed" | "rejected" | "failed") {
             return None;
         }
+        let Some(pending) = self.pending_actions.get(&action_id).cloned() else {
+            return None;
+        };
+        let Some(cognition) = pending.cognition.as_ref() else {
+            // Builtin/legacy actions have no provider envelope to finalize.
+            self.pending_actions.remove(&action_id);
+            self.release_provider_turn(pending.agent_id.as_str());
+            return None;
+        };
+        let feedback = self.provider_feedback(
+            cognition,
+            Some(action_id),
+            status,
+            runtime_receipt_id,
+            feedback_id,
+            None,
+        );
+        self.finalize_provider_action_with_feedback(action_id, feedback)
+    }
+
+    /// Finalize with a prebuilt Runtime feedback envelope.  This lets the
+    /// production control plane consume provider memory intents against the
+    /// exact Runtime receipt before the sidecar releases the awaiting actor
+    /// outcome, without minting a second feedback sequence/id.
+    pub(in crate::viewer::runtime_live) fn finalize_provider_action_with_feedback(
+        &mut self,
+        action_id: u64,
+        feedback: FeedbackEnvelopeV1,
+    ) -> Option<FeedbackEnvelopeV1> {
         let Some(pending) = self.pending_actions.remove(&action_id) else {
             return None;
         };
-        let feedback = pending.cognition.as_ref().map(|cognition| {
-            self.provider_feedback(
-                cognition,
-                Some(action_id),
-                status,
-                runtime_receipt_id,
-                feedback_id,
-                None,
-            )
-        });
         if let Some(cognition) = pending.cognition.as_ref() {
             self.record_provider_terminal_state(
                 pending.agent_id.as_str(),
                 &cognition.request,
-                status,
-                None,
-                feedback
-                    .as_ref()
-                    .map(|feedback| feedback.feedback_id.clone()),
+                feedback.status.as_str(),
+                feedback.reject_reason.clone(),
+                Some(feedback.feedback_id.clone()),
             );
         }
         self.provider_held_decisions
             .remove(pending.agent_id.as_str());
         self.release_provider_turn(pending.agent_id.as_str());
-        feedback
+        Some(feedback)
+    }
+
+    /// Apply intents captured by a ProviderBacked actor only after the Runtime
+    /// has read back and verified the committed receipt lineage.  Rejected or
+    /// pending dispositions never enter the MemoryWriteStore.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(in crate::viewer::runtime_live) fn consume_provider_memory_after_receipt(
+        &mut self,
+        agent_id: &str,
+        feedback: FeedbackEnvelopeV1,
+        receipt: &crate::runtime::RuntimeReceiptLineageV1,
+    ) -> Result<(), String> {
+        let Some(RuntimeDecisionRunner::ProviderBacked(runner)) = self.runner.as_mut() else {
+            return Ok(());
+        };
+        runner
+            .consume_runtime_feedback_with_lineage(
+                agent_id,
+                feedback,
+                Some(receipt),
+                &mut self.provider_memory_store,
+            )
+            .map_err(|error| format!("provider memory receipt gate rejected intents: {error}"))
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub(in crate::viewer::runtime_live) fn consume_provider_memory_after_receipt(
+        &mut self,
+        _agent_id: &str,
+        _feedback: FeedbackEnvelopeV1,
+        _receipt: &crate::runtime::RuntimeReceiptLineageV1,
+    ) -> Result<(), String> {
+        Ok(())
     }
 
     /// Close a provider response that did not produce a Runtime action (for
@@ -186,6 +254,22 @@ impl RuntimeLlmSidecar {
         self.clear_provider_stale_replans(agent_id);
         self.provider_held_decisions.remove(agent_id);
         self.release_provider_turn(agent_id);
+    }
+
+    /// Close a successful provider response that cannot enter the typed
+    /// Runtime action lane (for example a query or module command).  The
+    /// Runtime failure is recorded before the Viewer exposes the rejected
+    /// disposition, so these responses cannot leave a running turn behind.
+    pub(in crate::viewer::runtime_live) fn fail_provider_cognition_turn(
+        &self,
+        world: &mut RuntimeWorld,
+        agent_id: &str,
+        reason: &str,
+    ) -> Result<(), String> {
+        let Some(context) = self.provider_contexts.get(agent_id) else {
+            return Ok(());
+        };
+        super::async_support::runtime_provider_failure(world, context, reason)
     }
 
     /// Create a typed terminal disposition for a provider request that never
@@ -251,7 +335,7 @@ impl RuntimeLlmSidecar {
         )
     }
 
-    fn provider_feedback_for_request(
+    pub(in crate::viewer::runtime_live) fn provider_feedback_for_request(
         &mut self,
         request: &crate::simulator::ContinuousAgentRequestContextV1,
         candidate_action_id: Option<u64>,
@@ -260,14 +344,31 @@ impl RuntimeLlmSidecar {
         feedback_id: Option<String>,
         reject_reason: Option<String>,
     ) -> FeedbackEnvelopeV1 {
-        let feedback_seq = self
+        let session_key = lineage::provider_feedback_session_key(
+            request.agent_subject.as_str(),
+            request.agent_session_id.as_str(),
+        );
+        let fallback_sequence = self
             .provider_feedback_seq
-            .entry(request.agent_subject.clone())
-            .or_insert(1);
+            .get(request.agent_subject.as_str())
+            .copied()
+            .unwrap_or(1);
+        let feedback_seq = self
+            .provider_feedback_seq_by_session
+            .entry(session_key)
+            .or_insert(fallback_sequence);
         let sequence = (*feedback_seq).max(1);
         *feedback_seq = sequence.saturating_add(1);
-        let feedback_id = feedback_id
-            .unwrap_or_else(|| format!("runtime-feedback:{}:{}", request.agent_subject, sequence));
+        self.provider_feedback_seq
+            .entry(request.agent_subject.clone())
+            .and_modify(|current| *current = (*current).max(sequence.saturating_add(1)))
+            .or_insert(sequence.saturating_add(1));
+        let feedback_id = feedback_id.unwrap_or_else(|| {
+            format!(
+                "runtime-feedback:{}:{}:{}",
+                request.agent_subject, request.agent_session_id, sequence
+            )
+        });
         let feedback = FeedbackEnvelopeV1 {
             feedback_id,
             feedback_seq: sequence,
@@ -306,7 +407,7 @@ impl RuntimeLlmSidecar {
     /// read back and verified by Runtime before this method is called.
     pub(in crate::viewer::runtime_live) fn deliver_provider_cognition_feedback(
         &self,
-        feedback: &FeedbackEnvelopeV1,
+        payload: &JsonValue,
     ) -> Result<(), String> {
         let settings = provider_settings_from_env()?
             .ok_or_else(|| "provider settings disappeared before feedback delivery".to_string())?;
@@ -318,7 +419,7 @@ impl RuntimeLlmSidecar {
         )
         .map_err(|error| format!("provider feedback client initialization failed: {error}"))?;
         let ack = client
-            .submit_feedback_context(feedback)
+            .submit_feedback_context_payload(payload)
             .map_err(|error| format!("provider cognition feedback delivery failed: {error}"))?;
         if !ack.ok {
             return Err(format!(

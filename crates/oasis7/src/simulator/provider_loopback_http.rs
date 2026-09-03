@@ -445,6 +445,17 @@ impl ProviderLoopbackHttpClient {
         self.post_json("/v1/world-simulator/feedback-context", feedback)
     }
 
+    /// Submit the Runtime outbox's canonical transport payload. Runtime
+    /// feedback projections (including envelope digest and committed event
+    /// summaries) are intentionally carried as JSON extensions; adapting the
+    /// payload back to `FeedbackEnvelopeV1` would silently discard them.
+    pub fn submit_feedback_context_payload(
+        &self,
+        payload: &serde_json::Value,
+    ) -> Result<ProviderFeedbackAck, ProviderLoopbackHttpError> {
+        self.post_json("/v1/world-simulator/feedback-context", payload)
+    }
+
     pub fn request_agent_chat(
         &self,
         request: &ProviderAgentChatRequest,

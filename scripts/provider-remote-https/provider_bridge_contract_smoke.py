@@ -376,7 +376,69 @@ def validate_target_context_response(response: dict, request: dict) -> dict:
         raise RuntimeError("target provider response transport lineage does not echo request")
     _require_digest(response.get("request_digest"), "target provider response request_digest")
     _require_digest(response.get("response_digest"), "target provider response response_digest")
-    return _require_object(response.get("base_decision_response"), "target provider response base")
+    base = _require_object(response.get("base_decision_response"), "target provider response base")
+    validate_base_decision_response(base)
+    return base
+
+
+SUPPORTED_DECISIONS = {
+    "wait",
+    "wait_ticks",
+    "act",
+    "query",
+    "module_command",
+    "module_command_response",
+}
+
+
+def validate_base_decision_response(response: dict) -> None:
+    """Require the tagged DecisionResponse shape before counting a decision.
+
+    The typed Rust adapter performs the full catalog/action validation.  This
+    smoke validator owns the earlier wire boundary, so it must at least reject
+    an empty or untagged inner object and malformed structured provider errors.
+    """
+    if not response:
+        raise RuntimeError(
+            "target provider response base decision response must contain a decision or provider_error"
+        )
+    provider_error = response.get("provider_error")
+    decision = response.get("decision")
+    if provider_error is not None:
+        if not isinstance(provider_error, dict):
+            raise RuntimeError("target provider response provider_error must be an object")
+        if not isinstance(provider_error.get("code"), str) or not provider_error["code"].strip():
+            raise RuntimeError("target provider response provider_error requires code")
+        if not isinstance(provider_error.get("message"), str) or not provider_error["message"].strip():
+            raise RuntimeError("target provider response provider_error requires message")
+        if "retryable" in provider_error and not isinstance(provider_error["retryable"], bool):
+            raise RuntimeError("target provider response provider_error requires boolean retryable")
+        if decision is not None and decision != "wait":
+            raise RuntimeError(
+                "target provider response provider_error may only accompany the wait decision"
+            )
+        return
+
+    if not isinstance(decision, str) or decision not in SUPPORTED_DECISIONS:
+        raise RuntimeError(
+            "target provider response base decision response requires a supported decision tag"
+        )
+    if decision == "wait_ticks":
+        ticks = response.get("ticks")
+        if isinstance(ticks, bool) or not isinstance(ticks, int) or ticks < 0:
+            raise RuntimeError("target provider response wait_ticks requires non-negative integer ticks")
+    elif decision == "act":
+        if not isinstance(response.get("action_ref"), str) or not response["action_ref"].strip():
+            raise RuntimeError("target provider response act requires action_ref")
+        _require_object(response.get("action"), "target provider response act action")
+    elif decision == "query":
+        if not isinstance(response.get("query_ref"), str) or not response["query_ref"].strip():
+            raise RuntimeError("target provider response query requires query_ref")
+        _require_object(response.get("query"), "target provider response query")
+    elif decision == "module_command":
+        _require_object(response.get("module_command"), "target provider response module_command")
+    elif decision == "module_command_response":
+        _require_object(response.get("response"), "target provider response module response")
 
 
 def provider_error_code(response: dict) -> str:
@@ -403,6 +465,16 @@ def provider_version(response: dict) -> str:
     if isinstance(trace, dict):
         return str(trace.get("provider_version") or "").strip()
     return ""
+
+
+def decision_tag(response: dict) -> Optional[str]:
+    value = response.get("decision")
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        nested = value.get("decision")
+        return nested if isinstance(nested, str) else None
+    return None
 
 
 def require_provider_resource_schema(info: dict) -> None:
@@ -501,9 +573,7 @@ def run_smoke(options: SmokeOptions) -> dict:
                 "provider_error_message": error_message[:500] if error_message else None,
                 "provider_version": provider_version(base_response) or None,
                 "elapsed_ms": int(elapsed * 1000),
-                "decision": response.get("decision", {}).get("decision")
-                if isinstance(response.get("decision"), dict)
-                else None,
+                "decision": decision_tag(base_response),
             }
         )
         if target_request is not None:
@@ -523,7 +593,7 @@ def run_smoke(options: SmokeOptions) -> dict:
             feedback_successes += 1
             decision_results[-1]["feedback_http_status"] = feedback_status
             decision_results[-1]["feedback_elapsed_ms"] = int(feedback_elapsed * 1000)
-            decision_results[-1]["decision"] = base_response.get("decision", {}).get("decision")
+            decision_results[-1]["decision"] = decision_tag(base_response)
 
     if successes < options.min_successes:
         raise RuntimeError(

@@ -92,6 +92,214 @@ fn runtime_feedback_outbox_is_durable_ordered_retryable_and_recoverable() {
 }
 
 #[test]
+fn runtime_feedback_allocator_owns_sequence_and_exact_replay_identity() {
+    let mut world = World::new();
+    let request_digest =
+        crate::simulator::h_v1("oasis7.cognition.request.v1", &"runtime-feedback-request")
+            .to_string();
+    let request = RuntimeFeedbackRequestV1 {
+        feedback_id: None,
+        agent_subject: SUBJECT_ID.to_string(),
+        agent_session_id: "runtime-feedback-session".to_string(),
+        agent_turn_id: "runtime-feedback-turn".to_string(),
+        decision_request_id: "runtime-feedback-decision".to_string(),
+        candidate_action_id: Some(7),
+        runtime_receipt_id: Some("runtime-feedback-receipt".to_string()),
+        status: "committed".to_string(),
+        request_digest: request_digest.clone(),
+        reject_reason: None,
+    };
+    let first = world
+        .allocate_runtime_feedback(request.clone())
+        .expect("Runtime allocates a complete feedback envelope");
+    assert_eq!(first.feedback_seq, 1);
+    assert_eq!(first.state, "pending");
+
+    let replay = world
+        .allocate_runtime_feedback(request)
+        .expect("exact disposition replay is idempotent");
+    assert_eq!(replay.feedback_id, first.feedback_id);
+    assert_eq!(replay.feedback_seq, first.feedback_seq);
+    assert_eq!(world.runtime_feedback_outbox().expect("outbox").len(), 1);
+
+    let second = world
+        .allocate_runtime_feedback(RuntimeFeedbackRequestV1 {
+            feedback_id: None,
+            agent_subject: SUBJECT_ID.to_string(),
+            agent_session_id: "runtime-feedback-session".to_string(),
+            agent_turn_id: "runtime-feedback-turn-2".to_string(),
+            decision_request_id: "runtime-feedback-decision-2".to_string(),
+            candidate_action_id: None,
+            runtime_receipt_id: None,
+            status: "rejected".to_string(),
+            request_digest,
+            reject_reason: Some("stale_base".to_string()),
+        })
+        .expect("next disposition receives the next Runtime sequence");
+    assert_eq!(second.feedback_seq, 2);
+    assert_ne!(second.feedback_id, first.feedback_id);
+}
+
+#[test]
+fn runtime_feedback_disposition_mapping_rejects_contradictions_and_bounds_projection() {
+    let mut world = World::new();
+    let request_digest =
+        crate::simulator::h_v1("oasis7.cognition.request.v1", &"feedback-disposition");
+    let contradictory = RuntimeFeedbackRequestV1 {
+        feedback_id: None,
+        agent_subject: SUBJECT_ID.to_string(),
+        agent_session_id: "feedback-disposition-session".to_string(),
+        agent_turn_id: "feedback-disposition-turn".to_string(),
+        decision_request_id: "feedback-disposition-request".to_string(),
+        candidate_action_id: Some(1),
+        runtime_receipt_id: Some("receipt-contradictory".to_string()),
+        status: "rejected".to_string(),
+        request_digest: request_digest.to_string(),
+        reject_reason: None,
+    };
+    assert!(
+        world.allocate_runtime_feedback(contradictory).is_err(),
+        "rejected feedback cannot carry a committed action/receipt"
+    );
+
+    let unknown_reason = RuntimeFeedbackRequestV1 {
+        candidate_action_id: None,
+        runtime_receipt_id: None,
+        status: "rejected".to_string(),
+        reject_reason: Some("provider_free_text".to_string()),
+        agent_subject: SUBJECT_ID.to_string(),
+        agent_session_id: "feedback-disposition-session".to_string(),
+        agent_turn_id: "feedback-disposition-turn-2".to_string(),
+        decision_request_id: "feedback-disposition-request-2".to_string(),
+        request_digest: request_digest.to_string(),
+        feedback_id: None,
+    };
+    assert!(
+        world.allocate_runtime_feedback(unknown_reason).is_err(),
+        "rejected feedback requires a stable Runtime reason"
+    );
+
+    let projected = world
+        .allocate_runtime_feedback_with_projection(
+            RuntimeFeedbackRequestV1 {
+                feedback_id: None,
+                agent_subject: SUBJECT_ID.to_string(),
+                agent_session_id: "feedback-disposition-session".to_string(),
+                agent_turn_id: "feedback-disposition-turn-projected".to_string(),
+                decision_request_id: "feedback-disposition-request-projected".to_string(),
+                candidate_action_id: Some(2),
+                runtime_receipt_id: Some("receipt-projected".to_string()),
+                status: "committed".to_string(),
+                request_digest: request_digest.to_string(),
+                reject_reason: None,
+            },
+            RuntimeFeedbackProjectionV1 {
+                envelope_digest: Some(
+                    crate::simulator::h_v1("oasis7.cognition.envelope.v1", &"projected-envelope")
+                        .to_string(),
+                ),
+                emitted_events: vec![json!({"kind": "action_committed"})],
+                committed_event_summary: Some("one bounded event".to_string()),
+                world_delta_summary: Some("state root advanced".to_string()),
+            },
+        )
+        .expect("valid Runtime projection should be durable");
+    let projected_payload = projected
+        .transport_payload()
+        .expect("transport payload is revalidated");
+    assert_eq!(
+        projected_payload["emitted_events"][0]["kind"],
+        json!("action_committed")
+    );
+    assert_eq!(
+        projected_payload["committed_event_summary"],
+        json!("one bounded event")
+    );
+
+    let oversize = RuntimeFeedbackProjectionV1 {
+        envelope_digest: Some(
+            crate::simulator::h_v1("oasis7.cognition.envelope.v1", &"feedback-envelope")
+                .to_string(),
+        ),
+        emitted_events: Vec::new(),
+        committed_event_summary: Some("x".repeat(513)),
+        world_delta_summary: None,
+    };
+    let accepted = world
+        .allocate_runtime_feedback_with_projection(
+            RuntimeFeedbackRequestV1 {
+                feedback_id: None,
+                agent_subject: SUBJECT_ID.to_string(),
+                agent_session_id: "feedback-disposition-session".to_string(),
+                agent_turn_id: "feedback-disposition-turn-3".to_string(),
+                decision_request_id: "feedback-disposition-request-3".to_string(),
+                candidate_action_id: Some(3),
+                runtime_receipt_id: Some("receipt-3".to_string()),
+                status: "committed".to_string(),
+                request_digest: request_digest.to_string(),
+                reject_reason: None,
+            },
+            oversize,
+        )
+        .expect_err("oversize projection must not cross Runtime feedback boundary");
+    assert!(format!("{accepted:?}").contains("feedback_projection_too_large"));
+
+    let too_many_events = RuntimeFeedbackProjectionV1 {
+        envelope_digest: None,
+        emitted_events: vec![json!("event"); 33],
+        committed_event_summary: None,
+        world_delta_summary: None,
+    };
+    assert!(
+        world
+            .allocate_runtime_feedback_with_projection(
+                RuntimeFeedbackRequestV1 {
+                    feedback_id: None,
+                    agent_subject: SUBJECT_ID.to_string(),
+                    agent_session_id: "feedback-disposition-session".to_string(),
+                    agent_turn_id: "feedback-disposition-turn-too-many".to_string(),
+                    decision_request_id: "feedback-disposition-request-too-many".to_string(),
+                    candidate_action_id: Some(4),
+                    runtime_receipt_id: Some("receipt-too-many".to_string()),
+                    status: "committed".to_string(),
+                    request_digest: request_digest.to_string(),
+                    reject_reason: None,
+                },
+                too_many_events,
+            )
+            .is_err(),
+        "feedback projection event count is bounded"
+    );
+
+    let sensitive_event = RuntimeFeedbackProjectionV1 {
+        envelope_digest: None,
+        emitted_events: vec![json!({"token": "must-not-cross"})],
+        committed_event_summary: None,
+        world_delta_summary: None,
+    };
+    assert!(
+        world
+            .allocate_runtime_feedback_with_projection(
+                RuntimeFeedbackRequestV1 {
+                    feedback_id: None,
+                    agent_subject: SUBJECT_ID.to_string(),
+                    agent_session_id: "feedback-disposition-session".to_string(),
+                    agent_turn_id: "feedback-disposition-turn-sensitive".to_string(),
+                    decision_request_id: "feedback-disposition-request-sensitive".to_string(),
+                    candidate_action_id: Some(5),
+                    runtime_receipt_id: Some("receipt-sensitive".to_string()),
+                    status: "committed".to_string(),
+                    request_digest: request_digest.to_string(),
+                    reject_reason: None,
+                },
+                sensitive_event,
+            )
+            .is_err(),
+        "sensitive feedback projection is rejected before transport"
+    );
+}
+
+#[test]
 fn runtime_feedback_outbox_rejects_identity_collision_and_tampered_restore() {
     let mut world = World::new();
     world

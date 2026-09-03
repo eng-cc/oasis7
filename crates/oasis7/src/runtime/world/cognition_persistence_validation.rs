@@ -42,7 +42,6 @@ pub(super) fn append_cognition_event(
                     .unwrap_or_default(),
             )
             .saturating_add(1);
-        let payload_digest = cognition_digest_v1("oasis7.cognition.event-payload.v1", &details);
         let mut event = details
             .as_object()
             .cloned()
@@ -122,10 +121,14 @@ pub(super) fn append_cognition_event(
         event
             .entry("status".to_string())
             .or_insert_with(|| json!("pending"));
-        event.insert("payload_digest".to_string(), json!(payload_digest));
         event
             .entry("causal_refs".to_string())
             .or_insert_with(|| json!([]));
+        let payload_digest = cognition_digest_v1(
+            "oasis7.cognition.event-payload.v1",
+            &cognition_event_payload_projection(&JsonValue::Object(event.clone())),
+        );
+        event.insert("payload_digest".to_string(), json!(payload_digest));
         let event_digest = cognition_digest_v1(
             "oasis7.cognition.event.v1",
             &JsonValue::Object(event.clone()),
@@ -149,6 +152,21 @@ pub(super) fn append_cognition_event(
     Ok(next_seq)
 }
 
+/// Return the canonical event payload independently of journal linkage. The
+/// sequence, parent pointer and event digest are transport metadata; all
+/// other dense/defaulted fields are part of the signed payload and therefore
+/// must be covered identically on append and restore.
+pub(super) fn cognition_event_payload_projection(event: &JsonValue) -> JsonValue {
+    let mut payload = event.clone();
+    if let Some(object) = payload.as_object_mut() {
+        object.remove("journal_seq");
+        object.remove("parent_event_digest");
+        object.remove("payload_digest");
+        object.remove("event_digest");
+    }
+    payload
+}
+
 pub(super) fn validate_marker_current_world(
     world: &World,
     marker: &WorldCommitRecordV1,
@@ -169,11 +187,11 @@ pub(super) fn validate_marker_current_world(
         return Err(validation("cognition_world_head_mismatch"));
     }
     if let Some(binding) = world.cognition().get("runtime_binding") {
-        let block_hash = binding["finality_block_hash"].as_str();
+        let block_hash = strict_optional_finality_hash(binding.get("finality_block_hash"))?;
         if binding["world_id"].as_str() != Some(marker.world_id.as_str())
             || binding["branch_id"].as_str() != Some(marker.branch_id.as_str())
             || binding["finality_epoch"].as_u64() != Some(marker.finality_epoch)
-            || block_hash != marker.finality_block_hash.as_deref()
+            || block_hash.as_deref() != marker.finality_block_hash.as_deref()
             || binding["finality_status"].as_str() != Some(marker.finality_status.as_str())
             || binding["reorg_epoch"].as_u64() != Some(marker.reorg_epoch)
             || binding["runtime_manifest_hash"].as_str()
@@ -285,6 +303,13 @@ pub(super) fn validate_cognition_journal_integrity(journal: &JsonValue) -> Resul
             .filter(|value| is_canonical_digest(value));
         if payload_digest.is_none() {
             return Err(validation("cognition_event_payload_digest_missing"));
+        }
+        let expected_payload_digest = cognition_digest_v1(
+            "oasis7.cognition.event-payload.v1",
+            &cognition_event_payload_projection(event),
+        );
+        if payload_digest != Some(expected_payload_digest.as_str()) {
+            return Err(validation("cognition_event_payload_digest_mismatch"));
         }
         if object
             .get("causal_refs")
@@ -588,6 +613,21 @@ pub(super) fn cognition_error<T: std::fmt::Display>(code: &'static str, error: T
 pub(super) fn cognition_validation(code: impl Into<String>) -> WorldError {
     WorldError::DistributedValidationFailed {
         reason: format!("cognition validation failed: {}", code.into()),
+    }
+}
+
+/// Decode persisted optional finality hashes without normalizing malformed
+/// JSON into `None`. Missing or explicit `null` values preserve optional
+/// absence; a supplied hash must remain a string so recovery cannot silently
+/// weaken its binding.
+pub(super) fn strict_optional_finality_hash(
+    value: Option<&JsonValue>,
+) -> Result<Option<String>, WorldError> {
+    match value {
+        None => Ok(None),
+        Some(JsonValue::Null) => Ok(None),
+        Some(JsonValue::String(hash)) => Ok(Some(hash.clone())),
+        _ => Err(validation("recovery_pending")),
     }
 }
 

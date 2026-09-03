@@ -133,7 +133,12 @@ pub(super) fn validate_runtime_receipt_lineage(
             "committed feedback requires a Runtime action lineage".to_string(),
         ));
     };
-    if receipt.action_id != candidate_action_id.to_string() {
+    // Runtime's durable action identity is serialized as `action:<id>`;
+    // compatibility fixtures historically carried the numeric suffix alone.
+    // Accept exactly either representation while rejecting every other value.
+    let numeric_action_id = candidate_action_id.to_string();
+    let runtime_action_id = format!("action:{numeric_action_id}");
+    if receipt.action_id != numeric_action_id && receipt.action_id != runtime_action_id {
         return Err(AsyncAgentRunnerError::Cognition(
             "Runtime receipt action lineage does not match feedback".to_string(),
         ));

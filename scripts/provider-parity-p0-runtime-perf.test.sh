@@ -15,16 +15,23 @@ write_sample() {
   local cognition_lane="builtin_host_runner"
   local decision_route="builtin"
   local feedback_route="builtin"
+  local agent_profile=""
   if [[ "$provider" == "provider_loopback_http" ]]; then
     cognition_lane="target_outer_context_v1"
     decision_route="/v1/world-simulator/decision-context"
     feedback_route="/v1/world-simulator/feedback-context"
+    agent_profile="oasis7_p0_low_freq_npc"
   fi
   local summary_dir="$tmp_root/out/samples/$provider/sample_$sample_index/summary"
   mkdir -p "$summary_dir"
   cat >"$summary_dir/sample.json" <<JSON
 {
-  "status": "ok",
+  "benchmark_run_id": "runtime-perf-test",
+  "parity_tier": "P0",
+  "scenario_id": "P0-001",
+  "fixture_id": "P0-001_sample_$sample_index",
+  "seed": "seed-1",
+  "status": "passed",
   "goal_completed": true,
   "decision_steps": 10,
   "invalid_action_count": 0,
@@ -37,6 +44,7 @@ write_sample() {
   "adapter_version": "test-adapter",
   "protocol_version": "test-protocol",
   "provider": {
+    "agent_profile": "$agent_profile",
     "cognition_lane": "$cognition_lane",
     "decision_route": "$decision_route",
     "feedback_route": "$feedback_route"
@@ -52,6 +60,56 @@ write_sample() {
 JSON
 }
 
+write_sample_with_status() {
+  local provider=$1
+  local sample_index=$2
+  local status=$3
+  local goal_completed=$4
+  local median_latency_ms=$5
+  local p95_latency_ms=$6
+  local agent_profile=${7:-}
+  local fixture_id=${8:-"P0-001_sample_$sample_index"}
+  if [[ "$provider" == "provider_loopback_http" && -z "$agent_profile" ]]; then
+    agent_profile="oasis7_p0_low_freq_npc"
+  fi
+  local sample_dir="$tmp_root/status/out/samples/$provider/sample_$sample_index/summary"
+  mkdir -p "$sample_dir"
+  cat >"$sample_dir/sample.json" <<JSON
+{
+  "benchmark_run_id": "status-test",
+  "parity_tier": "P0",
+  "scenario_id": "P0-001",
+  "fixture_id": "$fixture_id",
+  "seed": "seed-1",
+  "status": "$status",
+  "goal_completed": $goal_completed,
+  "decision_steps": 10,
+  "invalid_action_count": 0,
+  "timeout_count": 0,
+  "recoverable_error_count": 0,
+  "median_latency_ms": $median_latency_ms,
+  "p95_latency_ms": $p95_latency_ms,
+  "trace_completeness_ratio_ppm": 1000000,
+  "provider_version": "test-provider",
+  "adapter_version": "test-adapter",
+  "protocol_version": "test-protocol",
+  "provider": {
+    "agent_profile": "$agent_profile",
+    "cognition_lane": "target_outer_context_v1",
+    "decision_route": "/v1/world-simulator/decision-context",
+    "feedback_route": "/v1/world-simulator/feedback-context"
+  },
+  "runtime_perf": {
+    "tick": {
+      "samples_total": 1,
+      "p95_ms": 1,
+      "over_budget_ratio_ppm": 0
+    }
+  }
+}
+JSON
+}
+
 write_sample_without_runtime_perf() {
   local provider=$1
   local sample_index=$2
@@ -59,7 +117,7 @@ write_sample_without_runtime_perf() {
   mkdir -p "$summary_dir"
   cat >"$summary_dir/sample.json" <<JSON
 {
-  "status": "ok",
+  "status": "passed",
   "goal_completed": true,
   "decision_steps": 10,
   "invalid_action_count": 0,
@@ -80,7 +138,7 @@ write_sample_with_legacy_routes() {
   mkdir -p "$summary_dir"
   cat >"$summary_dir/sample.json" <<'JSON'
 {
-  "status": "ok",
+  "status": "passed",
   "goal_completed": true,
   "decision_steps": 1,
   "invalid_action_count": 0,
@@ -129,6 +187,14 @@ assert provider["runtime_perf"]["tick"]["over_budget_ratio_ppm_peak"] == 30
 assert provider["cognition_lane"] == "target_outer_context_v1"
 assert provider["decision_route"] == "/v1/world-simulator/decision-context"
 assert provider["feedback_route"] == "/v1/world-simulator/feedback-context"
+assert builtin["agent_profile"] == "oasis7_p0_low_freq_npc"
+assert provider["agent_profile"] == "oasis7_p0_low_freq_npc"
+assert provider["relative_wait_gap_median_ms"] == 0
+assert provider["relative_wait_gap_p95_ms"] == 0
+assert provider["latency_class"] == "A"
+assert builtin["latency_class"] is None
+assert provider["parity_status"] == "passed"
+assert provider["release_gate"] == "default_candidate"
 
 rows = {
     row["metric"]: row
@@ -138,6 +204,144 @@ assert rows["runtime_perf.tick.p95_ms_peak"]["builtin"] == "7.25"
 assert rows["runtime_perf.tick.p95_ms_peak"]["provider_loopback_http"] == "8.5"
 assert rows["runtime_perf.tick.over_budget_ratio_ppm_peak"]["builtin"] == "20"
 assert rows["runtime_perf.tick.over_budget_ratio_ppm_peak"]["provider_loopback_http"] == "30"
+PY
+
+write_sample_with_status builtin 1 passed true 10 20
+write_sample_with_status provider_loopback_http 1 passed true 601 1620
+
+PROVIDER_PARITY_P0_AGGREGATE_ONLY=1 ./scripts/provider-parity-p0.sh \
+  --run-id status-test \
+  --scenario-id P0-001 \
+  --samples 2 \
+  --out-dir "$tmp_root/status/out"
+
+python3 - "$tmp_root/status/out" <<'PY'
+import json
+import pathlib
+import sys
+
+out_dir = pathlib.Path(sys.argv[1])
+builtin = json.loads((out_dir / "summary" / "P0-001.builtin.json").read_text())
+provider = json.loads((out_dir / "summary" / "P0-001.provider_loopback_http.json").read_text())
+assert builtin["benchmark_status"] == "insufficient_data"
+assert provider["benchmark_status"] == "insufficient_data"
+assert provider["parity_status"] == "blocked"
+assert provider["release_gate"] == "blocked"
+PY
+
+write_sample_with_status builtin 1 passed true 10 20
+write_sample_with_status builtin 2 passed false 10 20
+write_sample_with_status provider_loopback_http 2 failed false 11 21
+
+PROVIDER_PARITY_P0_AGGREGATE_ONLY=1 ./scripts/provider-parity-p0.sh \
+  --run-id failed-sample-test \
+  --scenario-id P0-001 \
+  --samples 2 \
+  --out-dir "$tmp_root/status/out"
+
+python3 - "$tmp_root/status/out" <<'PY'
+import json
+import pathlib
+import sys
+
+out_dir = pathlib.Path(sys.argv[1])
+builtin = json.loads((out_dir / "summary" / "P0-001.builtin.json").read_text())
+provider = json.loads((out_dir / "summary" / "P0-001.provider_loopback_http.json").read_text())
+assert builtin["benchmark_status"] == "failed"
+assert provider["benchmark_status"] == "failed"
+assert provider["parity_status"] == "blocked"
+assert provider["release_gate"] == "blocked"
+PY
+
+write_sample_with_status builtin 1 passed true 10 20
+write_sample_with_status builtin 2 passed true 10 20
+write_sample_with_status provider_loopback_http 1 passed true 601 1620
+write_sample_with_status provider_loopback_http 2 passed true 601 1620
+
+PROVIDER_PARITY_P0_AGGREGATE_ONLY=1 ./scripts/provider-parity-p0.sh \
+  --run-id latency-class-b-test \
+  --scenario-id P0-001 \
+  --samples 2 \
+  --out-dir "$tmp_root/status/out"
+
+python3 - "$tmp_root/status/out" <<'PY'
+import json
+import pathlib
+import sys
+
+out_dir = pathlib.Path(sys.argv[1])
+provider = json.loads((out_dir / "summary" / "P0-001.provider_loopback_http.json").read_text())
+assert provider["parity_status"] == "passed"
+assert provider["relative_wait_gap_median_ms"] == 591
+assert provider["relative_wait_gap_p95_ms"] == 1600
+assert provider["latency_class"] == "B"
+assert provider["release_gate"] == "experimental_only"
+PY
+
+write_sample_with_status provider_loopback_http 2 passed true 11 21 oasis7_p0_low_freq_npc mismatched-fixture
+
+PROVIDER_PARITY_P0_AGGREGATE_ONLY=1 ./scripts/provider-parity-p0.sh \
+  --run-id fixture-binding-test \
+  --scenario-id P0-001 \
+  --samples 2 \
+  --out-dir "$tmp_root/status/out"
+
+python3 - "$tmp_root/status/out" <<'PY'
+import json
+import pathlib
+import sys
+
+out_dir = pathlib.Path(sys.argv[1])
+provider = json.loads((out_dir / "summary" / "P0-001.provider_loopback_http.json").read_text())
+assert provider["fixture_binding_status"] == "mismatched"
+assert provider["parity_status"] == "blocked"
+assert provider["release_gate"] == "blocked"
+PY
+
+write_sample_with_status provider_loopback_http 2 passed true 11 21 wrong_profile
+
+PROVIDER_PARITY_P0_AGGREGATE_ONLY=1 ./scripts/provider-parity-p0.sh \
+  --run-id profile-binding-test \
+  --scenario-id P0-001 \
+  --samples 2 \
+  --out-dir "$tmp_root/status/out"
+
+python3 - "$tmp_root/status/out" <<'PY'
+import json
+import pathlib
+import sys
+
+out_dir = pathlib.Path(sys.argv[1])
+provider = json.loads((out_dir / "summary" / "P0-001.provider_loopback_http.json").read_text())
+assert provider["profile_binding_status"] == "missing_or_mismatched"
+assert provider["parity_status"] == "blocked"
+assert provider["release_gate"] == "blocked"
+PY
+
+write_sample_with_status builtin 1 passed true 10 20
+write_sample_with_status builtin 2 passed true 10 20
+write_sample_with_status provider_loopback_http 1 passed true 6010 8030
+write_sample_with_status provider_loopback_http 2 passed true 6010 8030
+
+PROVIDER_PARITY_P0_AGGREGATE_ONLY=1 ./scripts/provider-parity-p0.sh \
+  --run-id relative-wait-threshold-test \
+  --scenario-id P0-001 \
+  --samples 2 \
+  --out-dir "$tmp_root/status/out"
+
+python3 - "$tmp_root/status/out" <<'PY'
+import json
+import pathlib
+import sys
+
+out_dir = pathlib.Path(sys.argv[1])
+provider = json.loads((out_dir / "summary" / "P0-001.provider_loopback_http.json").read_text())
+assert provider["relative_wait_gap_median_ms"] == 6000
+assert provider["relative_wait_gap_p95_ms"] == 8010
+assert provider["parity_status"] == "failed"
+assert provider["release_gate"] == "experimental_only"
+assert provider["parity_gate"]["checks"]["relative_wait_gap_median_ms"]["passed"] is False
+assert provider["parity_gate"]["checks"]["relative_wait_gap_p95_ms"]["passed"] is False
 PY
 
 write_sample_with_legacy_routes
@@ -157,6 +361,8 @@ import sys
 out_dir = pathlib.Path(sys.argv[1])
 provider = json.loads((out_dir / "summary" / "P0-001.provider_loopback_http.json").read_text())
 assert provider["benchmark_status"] == "blocked"
+assert provider["parity_status"] == "blocked"
+assert provider["release_gate"] == "blocked"
 assert "target_outer_cognition_route_missing" in provider["warnings"]
 assert provider["decision_route"] == "/v1/world-simulator/decision"
 assert provider["feedback_route"] == "/v1/world-simulator/feedback"
