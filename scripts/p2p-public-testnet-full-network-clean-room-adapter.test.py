@@ -566,6 +566,67 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
                         self.adapter.validate_plan(plan)
                     self.assertRegex(str(raised.exception), expected_error)
 
+    def test_adapter_rejects_receipt_freshness_outside_plan_capture_window(self) -> None:
+        """Current-looking v2 receipts cannot escape the adapter's bounded capture interval."""
+        mutations = (
+            (
+                "issued-before-plan-start",
+                {"issued_at": "2026-08-29T23:59:59Z", "expires_at": "2099-01-01T00:00:00Z"},
+            ),
+            (
+                "expires-after-plan-end",
+                {"issued_at": "2026-09-01T00:00:00Z", "expires_at": "2100-01-01T00:00:00Z"},
+            ),
+            (
+                "inverted-inside-capture-window",
+                {"issued_at": "2026-08-31T00:00:00Z", "expires_at": "2026-08-30T12:00:00Z"},
+            ),
+        )
+        for scope, node_name in [
+            ("inventory", None),
+            *(('identity', name) for name in self.planner.NODE_ORDER),
+        ]:
+            for label, freshness in mutations:
+                with self.subTest(scope=scope, node=node_name, mutation=label):
+                    plan = copy.deepcopy(self.plan)
+                    self._bind_current_receipt_freshness(plan)
+                    if scope == "inventory":
+                        receipt = plan["deployment_inventory"]["receipt"]
+                    else:
+                        receipt = next(
+                            node["identity_receipt"]
+                            for node in plan["nodes"]
+                            if node["name"] == node_name
+                        )
+                    receipt.update(freshness)
+                    receipt["canonical_digest"] = self.adapter._canonical_receipt_digest(
+                        receipt,
+                        excluded_fields=frozenset(
+                            {"signed_payload_sha256"}
+                            if scope == "inventory"
+                            else {"peer_id"}
+                        ),
+                    )
+                    plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+                    with self.assertRaises(self.adapter.AdapterError) as raised:
+                        self.adapter.validate_plan(plan)
+                    self.assertRegex(
+                        str(raised.exception),
+                        r"(?i)capture|issued|expires|fresh|window|stale|inverted",
+                    )
+
+    def test_adapter_rejects_direct_runtime_identity_v1_admission(self) -> None:
+        """The raw runtime identity receipt remains input material, never an admission envelope."""
+        plan = copy.deepcopy(self.plan)
+        raw_identity = self.fixture._raw_runtime_identity_receipt_v1_bytes(
+            plan["nodes"][0]["identity_receipt"]
+        )
+        plan["nodes"][0]["identity_receipt"] = json.loads(raw_identity)
+        plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+        with self.assertRaises(self.adapter.AdapterError) as raised:
+            self.adapter.validate_plan(plan)
+        self.assertRegex(str(raised.exception), r"(?i)identity.*schema|unsupported|v1|receipt")
+
     def test_rejects_fake_head_signature_and_peer(self) -> None:
         authority = self._authority()
         authority["frozen_head_oid"] = "f" * 40
@@ -750,6 +811,67 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
             self.assertRegex(receipt["bindings"]["evidence_sha256"], r"^[0-9a-f]{64}$")
         self.assertIn("authority", verifier_calls)
         self.assertIn("fresh-root-probe", verifier_calls)
+
+    def test_identity_verifier_binding_carries_raw_v1_digest_and_governed_context(self) -> None:
+        """The v2 envelope verifier input must bind raw v1 bytes and all admission context."""
+        plan = copy.deepcopy(self.plan)
+        self._bind_current_receipt_freshness(plan)
+        for node in plan["nodes"]:
+            identity = node["identity_receipt"]
+            raw_v1 = self.fixture._raw_runtime_identity_receipt_v1_bytes(identity)
+            identity["signed_payload_sha256"] = hashlib.sha256(raw_v1).hexdigest()
+            identity["canonical_digest"] = self.adapter._canonical_receipt_digest(
+                identity, excluded_fields=frozenset({"peer_id"})
+            )
+        plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+
+        verified_identities: list[tuple[dict[str, object], dict[str, object]]] = []
+
+        def verifier(
+            plan_dto: dict[str, object], receipt: dict[str, object]
+        ) -> dict[str, object]:
+            bindings = receipt.get("bindings", {})
+            if bindings.get("kind") == "identity":
+                verified_identities.append((receipt, bindings))
+            return {
+                "verified": True,
+                "bindings": bindings,
+                "verifier_id": self.adapter.CANONICAL_VERIFIER_ID,
+                "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
+                "signer_id": "governance-signer",
+            }
+
+        self.adapter._verify_plan_receipts_with_verifier(plan, verifier)
+
+        self.assertEqual(len(verified_identities), len(self.planner.NODE_ORDER))
+        for receipt, bindings in verified_identities:
+            node = next(item for item in plan["nodes"] if item["name"] == bindings["node"])
+            identity = node["identity_receipt"]
+            expected_bindings = {
+                "kind": "identity",
+                "task_uid": plan["task_uid"],
+                "frozen_head_oid": plan["head_oid"],
+                "plan_digest": plan["plan_digest"],
+                "node": node["name"],
+                "node_id": node["node_id"],
+                "peer_id": identity["peer_id"],
+                "key_sha256": identity["key_sha256"],
+                "key_size_bytes": identity["key_size_bytes"],
+                "key_mode": identity["key_mode"],
+                "key_uid": identity["key_uid"],
+                "key_gid": identity["key_gid"],
+                "capture_window_id": identity["capture_window_id"],
+                "rotation_epoch": identity["rotation_epoch"],
+                "issued_at": identity["issued_at"],
+                "expires_at": identity["expires_at"],
+                "signed_payload_sha256": identity["signed_payload_sha256"],
+                "consumer_impact_record": self.adapter._consumer_impact_locator(plan),
+            }
+            self.assertEqual(bindings, expected_bindings)
+            self.assertEqual(receipt["schema_version"], self.adapter.IDENTITY_RECEIPT_SCHEMA)
+            self.assertEqual(receipt["signed_payload_sha256"], identity["signed_payload_sha256"])
+            self.assertEqual(receipt["verifier_id"], self.adapter.CANONICAL_VERIFIER_ID)
+            self.assertEqual(receipt["trust_root_id"], self.adapter.CANONICAL_TRUST_ROOT_ID)
 
     def test_apply_persists_preflight_complete_checkpoint_before_first_operation(self) -> None:
         authority = self._authority(apply_authorized=True)

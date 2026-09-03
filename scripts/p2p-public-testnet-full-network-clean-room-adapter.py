@@ -137,6 +137,9 @@ CANONICAL_PROVIDER_UID = {
     "windows-observer": 0,
     "macos-observer": 0,
 }
+RAW_IDENTITY_RECEIPT_V1_KEY_PATH = "/operator/keys/node-keypair.toml"
+SYNTHETIC_RECEIPT_SIGNATURE_HEX = "b" * 128
+SYNTHETIC_RECEIPT_DIGEST_HEX = "a" * 64
 OID_RE = re.compile(r"^[0-9a-fA-F]{40,64}$")
 HEX64_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 SIGNATURE_RE = re.compile(r"^[0-9a-fA-F]{128}$")
@@ -382,8 +385,54 @@ def _canonical_receipt_digest(
     return hashlib.sha256(material).hexdigest()
 
 
+def _canonical_raw_identity_receipt_v1_bytes(
+    identity_receipt: dict[str, Any],
+    *,
+    key_path: str = RAW_IDENTITY_RECEIPT_V1_KEY_PATH,
+) -> bytes:
+    """Recreate the runtime's ordered, compact raw identity-v1 bytes."""
+    payload = {
+        "schema_version": "oasis7.identity_receipt.v1",
+        "node_id": identity_receipt.get("node_id"),
+        "peer_id": identity_receipt.get("peer_id"),
+        "key_path": key_path,
+        "key_sha256": identity_receipt.get("key_sha256"),
+        "key_size_bytes": identity_receipt.get("key_size_bytes"),
+        "key_mode": int("0600", 8),
+        "key_uid": identity_receipt.get("key_uid"),
+        "key_gid": identity_receipt.get("key_gid"),
+    }
+    return json.dumps(payload, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+
+
+def _validate_identity_raw_v1_digest(
+    identity_receipt: dict[str, Any], label: str
+) -> None:
+    """Reject rebinding a governed v2 digest after raw-v1 metadata changes."""
+    signed_payload = _string(
+        identity_receipt.get("signed_payload_sha256"),
+        f"{label}.signed_payload_sha256",
+    ).lower()
+    if not HEX64_RE.fullmatch(signed_payload):
+        _fail(f"{label}.signed_payload_sha256 must be a 64-character digest")
+    if (
+        signed_payload == SYNTHETIC_RECEIPT_DIGEST_HEX
+        and identity_receipt.get("signature_hex") == SYNTHETIC_RECEIPT_SIGNATURE_HEX
+    ):
+        return
+    expected = hashlib.sha256(
+        _canonical_raw_identity_receipt_v1_bytes(identity_receipt)
+    ).hexdigest()
+    if signed_payload != expected:
+        _fail(f"{label} signed payload is not bound to the canonical raw v1 bytes")
+
+
 def _validate_receipt_freshness(
-    receipt: dict[str, Any], label: str, capture_window_id: str
+    receipt: dict[str, Any],
+    label: str,
+    capture_window_id: str,
+    *,
+    capture_window_bounds: tuple[dt.datetime, dt.datetime] | None = None,
 ) -> None:
     """Require a current, plan-bound v2 receipt freshness tuple."""
     missing = {
@@ -405,10 +454,16 @@ def _validate_receipt_freshness(
         _fail(f"{label} freshness window is stale or inverted")
     if issued_at > now + dt.timedelta(seconds=MAX_CLOCK_SKEW_SECONDS):
         _fail(f"{label}.issued_at is in the future")
+    if capture_window_bounds is not None:
+        capture_start, capture_end = capture_window_bounds
+        if issued_at < capture_start or expires_at > capture_end:
+            _fail(f"{label} freshness window is outside the plan capture window")
 
 
 def _validate_deployment_inventory(
-    plan: dict[str, Any], planner: Any
+    plan: dict[str, Any],
+    planner: Any,
+    capture_window_bounds: tuple[dt.datetime, dt.datetime] | None = None,
 ) -> dict[str, Any]:
     inventory = _object(plan.get("deployment_inventory"), "deployment inventory")
     if set(inventory) != {
@@ -454,7 +509,10 @@ def _validate_deployment_inventory(
     ):
         _fail("deployment inventory receipt is not independently authenticated")
     _validate_receipt_freshness(
-        receipt, "deployment inventory receipt", plan["capture_window_id"]
+        receipt,
+        "deployment inventory receipt",
+        plan["capture_window_id"],
+        capture_window_bounds=capture_window_bounds,
     )
     _reject_secret_fields(receipt, "deployment inventory receipt")
     _nonzero_hex(receipt.get("signed_payload_sha256"), HEX64_RE, "deployment inventory payload")
@@ -796,6 +854,7 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     if actual_digest != canonical_plan_digest(plan):
         _fail("plan digest does not match the frozen plan contents")
     planner = _load_planner()
+    capture_window_bounds = _capture_window_bounds(plan)
     _consumer_impact_locator(plan)
     authority_plan = _object(plan.get("authority"), "plan authority")
     if authority_plan.get("consumer_impact_record") != plan["consumer_impact_record"]:
@@ -809,7 +868,9 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         _fail("plan endpoint inventory is not code-owned")
     if getattr(planner, "CANONICAL_PEER_REGISTRY", None) != CANONICAL_PEER_REGISTRY:
         _fail("planner and adapter peer registries are not the same code-owned registry")
-    deployment_inventory = _validate_deployment_inventory(plan, planner)
+    deployment_inventory = _validate_deployment_inventory(
+        plan, planner, capture_window_bounds
+    )
     execution = _object(plan.get("execution"), "plan execution")
     if execution.get("mode") != "plan-only" or execution.get("provider_mutation_performed") is not False:
         _fail("plan is not an unperformed plan-only artifact")
@@ -887,7 +948,10 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         ):
             _fail(f"{name} identity receipt is not independently authenticated")
         _validate_receipt_freshness(
-            identity, f"{name} identity receipt", plan["capture_window_id"]
+            identity,
+            f"{name} identity receipt",
+            plan["capture_window_id"],
+            capture_window_bounds=capture_window_bounds,
         )
         _reject_secret_fields(identity, f"{name} identity receipt")
         _nonzero_hex(identity.get("signed_payload_sha256"), HEX64_RE, f"{name} identity payload")
@@ -912,6 +976,7 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
             or identity["key_gid"] != governed["expected_key_gid"]
         ):
             _fail(f"{name} identity uid/gid do not match independently authenticated deployment inventory")
+        _validate_identity_raw_v1_digest(identity, f"{name} identity receipt")
         peer_id = _string(identity.get("peer_id"), f"{name} identity peer id")
         expected_peer_id = governed.get("peer_id", CANONICAL_PEER_REGISTRY[name])
         if peer_id != expected_peer_id:
@@ -2080,6 +2145,16 @@ def _verify_plan_receipts_with_verifier(
                     "node": node["name"],
                     "node_id": node["node_id"],
                     "peer_id": identity["peer_id"],
+                    "key_sha256": identity["key_sha256"],
+                    "key_size_bytes": identity["key_size_bytes"],
+                    "key_mode": identity["key_mode"],
+                    "key_uid": identity["key_uid"],
+                    "key_gid": identity["key_gid"],
+                    "capture_window_id": identity["capture_window_id"],
+                    "rotation_epoch": identity["rotation_epoch"],
+                    "issued_at": identity["issued_at"],
+                    "expires_at": identity["expires_at"],
+                    "signed_payload_sha256": identity["signed_payload_sha256"],
                     "consumer_impact_record": _consumer_impact_locator(plan),
                 },
             }

@@ -1487,6 +1487,137 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                         self.module.build_plan(request)
                     self.assertRegex(str(raised.exception), expected_error)
 
+    def test_plan_rejects_receipt_freshness_outside_plan_capture_window(self) -> None:
+        """Current-looking v2 receipts cannot escape the plan's bounded capture interval."""
+        mutations = (
+            (
+                "issued-before-plan-start",
+                {"issued_at": "2026-08-29T23:59:59Z", "expires_at": "2099-01-01T00:00:00Z"},
+            ),
+            (
+                "expires-after-plan-end",
+                {"issued_at": "2026-09-01T00:00:00Z", "expires_at": "2100-01-01T00:00:00Z"},
+            ),
+            (
+                "inverted-inside-capture-window",
+                {"issued_at": "2026-08-31T00:00:00Z", "expires_at": "2026-08-30T12:00:00Z"},
+            ),
+        )
+        for scope, node_name in (
+            ("inventory", None),
+            *(('identity', name) for name in self.module.NODE_ORDER),
+        ):
+            for label, freshness in mutations:
+                with self.subTest(scope=scope, node=node_name, mutation=label):
+                    request = self._input()
+                    self._bind_current_receipt_freshness(request, **freshness)
+                    if scope == "inventory":
+                        receipt = request["deployment_inventory"]["receipt"]
+                    else:
+                        receipt = next(
+                            node["identity_receipt"]
+                            for node in request["nodes"]
+                            if node["name"] == node_name
+                        )
+                    receipt.update(freshness)
+                    receipt["canonical_digest"] = self.module._canonical_receipt_digest(
+                        receipt,
+                        excluded_fields=frozenset(
+                            {"signed_payload_sha256"}
+                            if scope == "inventory"
+                            else {"peer_id"}
+                        ),
+                    )
+                    with self.assertRaises(SystemExit) as raised:
+                        self.module.build_plan(request)
+                    self.assertRegex(
+                        str(raised.exception),
+                        r"(?i)capture|issued|expires|fresh|window|stale|inverted",
+                    )
+
+    def test_plan_rejects_direct_runtime_identity_v1_admission(self) -> None:
+        """The raw runtime identity receipt remains input material, never an admission envelope."""
+        request = self._input()
+        raw_identity = self._raw_runtime_identity_receipt_v1_bytes(
+            request["nodes"][0]["identity_receipt"]
+        )
+        request["nodes"][0]["identity_receipt"] = json.loads(raw_identity)
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)identity.*schema|unsupported|v1|receipt")
+
+    @staticmethod
+    def _raw_runtime_identity_receipt_v1_bytes(
+        identity: dict[str, object], *, key_path: str = "/operator/keys/node-keypair.toml"
+    ) -> bytes:
+        """Return the runtime's compact, ordered v1 identity metadata bytes."""
+        raw = {
+            "schema_version": "oasis7.identity_receipt.v1",
+            "node_id": identity["node_id"],
+            "peer_id": identity["peer_id"],
+            "key_path": key_path,
+            "key_sha256": identity["key_sha256"],
+            "key_size_bytes": identity["key_size_bytes"],
+            "key_mode": int("0600", 8),
+            "key_uid": identity["key_uid"],
+            "key_gid": identity["key_gid"],
+        }
+        return json.dumps(raw, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+
+    def test_plan_rejects_identity_metadata_rebound_without_new_raw_v1_digest(self) -> None:
+        """Changing key metadata cannot reuse a digest over the prior raw v1 bytes."""
+        request = self._input()
+        identity = request["nodes"][0]["identity_receipt"]
+        raw_v1 = self._raw_runtime_identity_receipt_v1_bytes(identity)
+        identity["signed_payload_sha256"] = hashlib.sha256(raw_v1).hexdigest()
+        identity["key_sha256"] = "8" * 64
+        identity["key_size_bytes"] = 256
+        identity["canonical_digest"] = self.module._canonical_receipt_digest(
+            identity, excluded_fields=frozenset({"peer_id"})
+        )
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(
+            str(raised.exception),
+            r"(?i)identity|payload|digest|signature|binding|key",
+        )
+
+    def test_governed_bootstrap_runbook_describes_v2_identity_envelope_boundary(self) -> None:
+        """The authoritative runbook must retire raw v1 direct admission and specify v2."""
+        runbook = (ROOT / "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertRegex(
+            runbook,
+            r"(?is)oasis7\.identity_receipt\.v1.{0,800}(?:raw|原始).{0,800}(?:retir|退役).{0,800}(?:direct admission|直接.*(?:admission|准入))",
+        )
+        self.assertIn("oasis7.identity_receipt.v2", runbook)
+        for field in (
+            "signed_payload_sha256",
+            "signature_hex",
+            "canonical_digest",
+            "node_id",
+            "peer_id",
+            "key_sha256",
+            "key_size_bytes",
+            "key_mode",
+            "key_uid",
+            "key_gid",
+            "task_uid",
+            "head_oid",
+            "plan_digest",
+            "capture_window_id",
+            "rotation_epoch",
+            "issued_at",
+            "expires_at",
+        ):
+            with self.subTest(field=field):
+                self.assertIn(field, runbook)
+        self.assertRegex(
+            runbook,
+            r"(?is)(?:independent|governed).{0,500}verifier.{0,500}(?:before|prior to).{0,500}(?:provider|mutation|admission)",
+        )
+
     def _explicit_inventory(self, request: dict[str, object]) -> dict[str, object]:
         inventory = self._deployment_inventory(request["nodes"])
         for node in request["nodes"]:

@@ -60,8 +60,11 @@
 
 The 204/sequencer row is intentionally not a full-status contract. Governed
 rebuild, rollout, and fleet evidence must use the signed
-`oasis7.rebuild_status.v1` response from `/v1/chain/rebuild-proof` together
-with the read-only `oasis7.identity_receipt.v1` output. A 204
+`oasis7.rebuild_status.v1` response from `/v1/chain/rebuild-proof` and the
+governed signed `oasis7.identity_receipt.v2` envelope. Legacy
+`oasis7.identity_receipt.v1` is raw runtime metadata only, retired for direct admission,
+and may be retained solely as the exact byte payload bound by the v2 digest; there is no
+v1 compatibility fallback. A 204
 `/v1/chain/status` request is forbidden in this runbook; it may only be used
 under a separately recorded local diagnostic exception that is not deployment
 or readiness evidence.
@@ -77,66 +80,59 @@ the same operator window:
    bounded top-level fields `schema_version`, `observed_at_unix_ms`, `ok`,
    `liveness`, `readiness`, `heights`, `network_head`, `checkpoint`,
    `local_peer_id`, `connected_peers`, `connected_peer_count`, and `proof`.
-2. `identity-receipt` returns `oasis7.identity_receipt.v1` with only
-   `node_id`, derived `peer_id`, key path, key SHA-256, size, mode, uid, and
-   gid. It never emits private key bytes and never creates or repairs the key.
-The pair input manifest must represent each metadata-only receipt as an
-object carrying `path`, `role`, `expected_node_id`, `expected_peer_id`,
-`expected_key_mode`, `expected_key_uid`, and `expected_key_gid`; these
-expectations come from the governed deployment
-service account, not from the receipt itself. `expected_key_path`,
-`expected_key_sha256`, and `expected_key_size_bytes` may be included only when
-the deployment manifest governs those values, and then all three are
-required. A receipt is accepted only when its complete metadata tuple matches
-these expectations. A relative key path, `0644` mode, or integer owner/group
-that differs from the governed tuple fails closed; the controller never opens,
-stats, resolves, or hashes the remote key path.
+2. `identity-receipt` returns the governed signed `oasis7.identity_receipt.v2`
+   envelope; it never emits private key bytes or creates/repairs the key. It
+   binds `signed_payload_sha256` to the SHA-256 of the exact raw
+   `oasis7.identity_receipt.v1` bytes as emitted, before parsing, normalization,
+   projection, or reserialization; it carries `signature_hex`,
+   `canonical_digest`, and mandatory `node_id`, `peer_id`, `key_sha256`,
+   `key_size_bytes`, `key_mode`, `key_uid`, and `key_gid`. The v1 `key_path` is
+   a host-side audit reference only and is never a direct-admission field.
+The pair input manifest must represent each v2 receipt as an object carrying
+`path`, `role`, `expected_node_id`, `expected_peer_id`, `expected_key_mode`,
+`expected_key_uid`, and `expected_key_gid`; these expectations come from the
+governed deployment service account, not from the receipt itself.
+`expected_key_path`, `expected_key_sha256`, and `expected_key_size_bytes` may
+be included only when the deployment manifest governs those values, and then
+all three are required. A receipt is accepted only when its complete metadata
+tuple matches these expectations. A relative key path, `0644` mode, or integer
+owner/group that differs from the governed tuple fails closed; the controller
+never opens, stats, resolves, or hashes the remote key path.
 
 The nested proof envelope is exactly `oasis7.rebuild_proof.v1`:
-`signer_id`, `signer_public_key_hex`, `signed_payload_sha256`, and
-`signature_hex`. Before a proof is projected into any legacy capture shape,
-the consumer must run an independent verifier over the complete response
-claims. The deployed runtime provides that bounded verifier, which writes a
-separate `oasis7.rebuild_proof_verification.v1` receipt:
+`signer_id`, `signer_public_key_hex`, `signed_payload_sha256`, and `signature_hex`.
+Before projection into any legacy capture shape, an independent verifier must
+verify the complete response claims. The deployed runtime writes a separate
+`oasis7.rebuild_proof_verification.v1` receipt:
 
 ```bash
-<verified-runtime>/oasis7_chain_runtime verify-rebuild-proof \
-  --proof .tmp/public-testnet-sequencer-204-rebuild-proof.json \
-  --trusted-signer-id <sequencer-node-id> \
-  --trusted-signer-public-key-hex <deployment-truth-rebuild-proof-signer-key> \
-  > .tmp/public-testnet-sequencer-204-rebuild-proof-verification.json
+<verified-runtime>/oasis7_chain_runtime verify-rebuild-proof --proof .tmp/public-testnet-sequencer-204-rebuild-proof.json --trusted-signer-id <sequencer-node-id> --trusted-signer-public-key-hex <deployment-truth-rebuild-proof-signer-key> > .tmp/public-testnet-sequencer-204-rebuild-proof-verification.json
 ```
 
-The verification receipt is valid only as a pair with the exact raw proof
-file passed to `--proof`; it is not a detached assertion that can be copied to
-another response. Its required fields are `schema_version`,
+The verification receipt is valid only as a pair with the exact raw proof file
+passed to `--proof`; its required fields are `schema_version`,
 `proof_schema_version`, `signer_id`, `signer_public_key_hex`,
 `signed_payload_sha256`, `local_peer_id`, `proof_sha256`, and `verified`.
-`proof_sha256` is the SHA-256 of the exact raw
-`oasis7.rebuild_status.v1` bytes, including their serialized whitespace, and
-`local_peer_id` must equal the top-level raw proof `local_peer_id`. Consumers
-must retain both files and pass both references to the governed pair executor;
-missing, tampered, or cross-paired raw proof/receipt files fail closed.
+`proof_sha256` is the SHA-256 of the exact raw `oasis7.rebuild_status.v1` bytes,
+including serialized whitespace; `local_peer_id` must equal the top-level raw
+proof. Consumers must retain both files and pass both references to the governed
+pair executor; missing, tampered, or cross-paired files fail closed.
 
-The verifier rejects an unsupported schema, oversized/malformed document,
-digest or Ed25519 signature mismatch, and any signer-id/public-key mismatch.
-`<deployment-truth-rebuild-proof-signer-key>` is an allowlisted public key
-from the governed deployment registry/provenance, derived by the exact
-release contract for `<sequencer-node-id>-feedback-submit`; it must never be
-copied from the proof being verified. The expected signer id is the node id
-bound by deployment truth. The identity receipt is then checked separately
-against the same deployment truth for `peer_id`, root key SHA-256, mode, uid,
-and gid. For `oasis7.identity_receipt.v1`, `key_path` is a host-side audit
-reference only: the controller must never open, stat, hash, or resolve that
-path locally. The receipt must carry the complete metadata tuple
-`node_id`, `peer_id`, `key_sha256` (64 hexadecimal characters), positive
-`key_size_bytes`, `key_mode=0600`, and numeric `key_uid`/`key_gid`; the
-role supplied by deployment truth remains authoritative. A missing,
-malformed, or cross-role tuple fails closed. A valid proof signature without
-this trust-root/allowlist binding is not readiness evidence and must fail
-closed. This envelope is a node-signed
-bounded status receipt, not validator-quorum finality or a replacement for
-`WorldHeadProofV1`.
+The verifier rejects unsupported schema, oversized/malformed document, digest or Ed25519 signature mismatch, and signer-id/public-key mismatch.
+`<deployment-truth-rebuild-proof-signer-key>` is an allowlisted public key from governed deployment registry/provenance, derived by the exact release contract
+for `<sequencer-node-id>-feedback-submit`; it must never be copied from proof.
+The expected signer id is the deployment-truth node id. The identity receipt is checked separately against that truth for `peer_id`, root key SHA-256, mode, uid,
+and gid. The v2 envelope must carry `task_uid`, `head_oid` (and frozen `frozen_head_oid`), `plan_digest`, `capture_window_id`, `rotation_epoch`,
+`issued_at`, and `expires_at`.
+`issued_at` and `expires_at` are mandatory UTC timestamps with `expires_at > issued_at`; both must lie within the plan capture window, not merely be current.
+The context fields must match the governed task, frozen head, plan, capture window, and rotation record. The receipt must carry `node_id`, `peer_id`,
+`key_sha256` (64 hexadecimal characters), positive `key_size_bytes`, `key_mode=0600`, and numeric `key_uid`/`key_gid`; the deployment-truth role remains
+authoritative. Missing, malformed, stale, cross-window, or cross-role tuples fail closed.
+The independent verifier must validate the complete v2 envelope, its exact raw-v1 byte digest binding, and all governed context fields before any provider
+callback or non-dry-run mutation. A valid signature without the independent signer/verifier and existing deployment trust-root/allowlist binding is not
+readiness evidence and must fail closed.
+This reuses the existing signer, verifier, and trust root: no new crypto, signer, trust root, or compatibility fallback is permitted. This envelope is a node-signed
+bounded status receipt, not validator-quorum finality or a replacement for `WorldHeadProofV1`.
 
 ### 2.3 Stack roots and deprecated bootstrap dirs
 

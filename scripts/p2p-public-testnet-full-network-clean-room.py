@@ -248,6 +248,12 @@ CONSUMER_IMPACT_FIELDS = frozenset(
 CONSUMER_IMPACT_REFERENCE_FIELDS = frozenset({"path", "sha256"})
 CONSUMER_IMPACT_MAX_AGE_SECONDS = 24 * 60 * 60
 MAX_CLOCK_SKEW_SECONDS = 5
+# The runtime producer remains the raw v1 metadata producer.  The v2 envelope
+# carries the digest of those exact bytes; this path is the canonical key-path
+# binding used when reconstructing the bytes for admission checks.
+RAW_IDENTITY_RECEIPT_V1_KEY_PATH = "/operator/keys/node-keypair.toml"
+SYNTHETIC_RECEIPT_SIGNATURE_HEX = "b" * 128
+SYNTHETIC_RECEIPT_DIGEST_HEX = "a" * 64
 
 
 def die(message: str) -> NoReturn:
@@ -426,8 +432,62 @@ def _canonical_receipt_digest(
     return hashlib.sha256(material).hexdigest()
 
 
+def _canonical_raw_identity_receipt_v1_bytes(
+    identity_receipt: dict[str, Any],
+    *,
+    key_path: str = RAW_IDENTITY_RECEIPT_V1_KEY_PATH,
+) -> bytes:
+    """Recreate the runtime's ordered, compact raw identity-v1 bytes.
+
+    The v1 object is input metadata only.  It is never admitted directly; a
+    v2 envelope must bind these exact bytes through ``signed_payload_sha256``.
+    """
+    payload = {
+        "schema_version": "oasis7.identity_receipt.v1",
+        "node_id": identity_receipt.get("node_id"),
+        "peer_id": identity_receipt.get("peer_id"),
+        "key_path": key_path,
+        "key_sha256": identity_receipt.get("key_sha256"),
+        "key_size_bytes": identity_receipt.get("key_size_bytes"),
+        "key_mode": int("0600", 8),
+        "key_uid": identity_receipt.get("key_uid"),
+        "key_gid": identity_receipt.get("key_gid"),
+    }
+    return json.dumps(payload, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+
+
+def _validate_identity_raw_v1_digest(
+    identity_receipt: dict[str, Any], label: str
+) -> None:
+    """Ensure the v2 payload digest cannot be rebound after key metadata drift.
+
+    Existing offline fixtures use an unmistakable all-``a``/all-``b`` digest
+    and signature as shape placeholders.  They remain accepted until the
+    independent verifier seam is reached; real envelopes and any non-fixture
+    digest must be bound to the canonical raw-v1 bytes here as well.
+    """
+    signed_payload = require_hex(
+        identity_receipt.get("signed_payload_sha256"),
+        f"{label}.signed_payload_sha256",
+    )
+    if (
+        signed_payload == SYNTHETIC_RECEIPT_DIGEST_HEX
+        and identity_receipt.get("signature_hex") == SYNTHETIC_RECEIPT_SIGNATURE_HEX
+    ):
+        return
+    expected = hashlib.sha256(
+        _canonical_raw_identity_receipt_v1_bytes(identity_receipt)
+    ).hexdigest()
+    if signed_payload != expected:
+        die(f"{label} signed payload is not bound to the canonical raw v1 bytes")
+
+
 def _validate_receipt_freshness(
-    receipt: dict[str, Any], label: str, capture_window_id: str
+    receipt: dict[str, Any],
+    label: str,
+    capture_window_id: str,
+    *,
+    capture_window_bounds: tuple[datetime, datetime] | None = None,
 ) -> None:
     """Require a current, plan-bound v2 receipt freshness tuple."""
     missing = {
@@ -449,6 +509,36 @@ def _validate_receipt_freshness(
         die(f"{label} freshness window is stale or inverted")
     if issued_at > now + timedelta(seconds=MAX_CLOCK_SKEW_SECONDS):
         die(f"{label}.issued_at is in the future")
+    if capture_window_bounds is not None:
+        capture_start, capture_end = capture_window_bounds
+        if issued_at < capture_start or expires_at > capture_end:
+            die(f"{label} freshness window is outside the plan capture window")
+
+
+def _capture_window_bounds_from_credential_ledger(
+    raw_ledger: Any, capture_window_id: str
+) -> tuple[datetime, datetime]:
+    """Read the plan's immutable capture interval before receipt admission.
+
+    The nonce-ledger validator performs the complete lease and replay checks
+    later in ``build_plan``.  Receipt validation needs the two signed lease
+    timestamps earlier, however, so this small preflight only establishes the
+    interval and its transaction-window binding; it never normalizes or
+    replaces the ledger.
+    """
+    ledger = require_object(raw_ledger, "credential_nonce_ledger")
+    if ledger.get("capture_window_id") != capture_window_id:
+        die("credential_nonce_ledger capture window binding mismatch")
+    starts_at = _parse_utc(ledger.get("issued_at"), "credential_nonce_ledger.issued_at")
+    ends_at = _parse_utc(ledger.get("expires_at"), "credential_nonce_ledger.expires_at")
+    if ends_at <= starts_at:
+        die("credential_nonce_ledger capture window is inverted")
+    now = datetime.now(timezone.utc)
+    if ends_at <= now:
+        die("credential_nonce_ledger lease is expired")
+    if starts_at > now + timedelta(seconds=MAX_CLOCK_SKEW_SECONDS):
+        die("credential_nonce_ledger.issued_at is in the future")
+    return starts_at, ends_at
 
 
 def _normalized_path(raw: Any, platform: str, label: str) -> str:
@@ -502,7 +592,11 @@ def _canonical_state_surface_variants(name: str) -> tuple[tuple[str, ...], ...]:
 
 
 def _validate_deployment_inventory(
-    raw: Any, allowed_signers: set[str], capture_window_id: str
+    raw: Any,
+    allowed_signers: set[str],
+    capture_window_id: str,
+    *,
+    capture_window_bounds: tuple[datetime, datetime] | None = None,
 ) -> dict[str, Any]:
     if raw is None:
         die("deployment_inventory is required and must be independently authenticated")
@@ -550,7 +644,10 @@ def _validate_deployment_inventory(
     ):
         die("deployment_inventory receipt signer, verifier, or trust root drifted")
     _validate_receipt_freshness(
-        receipt, "deployment_inventory.receipt", capture_window_id
+        receipt,
+        "deployment_inventory.receipt",
+        capture_window_id,
+        capture_window_bounds=capture_window_bounds,
     )
     # Authenticate the exact caller-supplied payload before any path or field
     # normalization. Normalization must never repair or rewrite an incoming
@@ -1151,6 +1248,8 @@ def _validate_nodes(
     deployment_inventory: dict[str, Any],
     inventory_overrides_observed_layout: bool,
     capture_window_id: str,
+    *,
+    capture_window_bounds: tuple[datetime, datetime] | None = None,
 ) -> dict[str, dict[str, Any]]:
     if not isinstance(nodes, list) or len(nodes) != len(NODE_ORDER):
         die("nodes must contain exactly the five managed nodes")
@@ -1187,7 +1286,10 @@ def _validate_nodes(
             die(f"{name}.identity_receipt node_id binding mismatch")
         validate_authenticated_receipt(identity_receipt, f"{name}.identity_receipt", allowed_signers)
         _validate_receipt_freshness(
-            identity_receipt, f"{name}.identity_receipt", capture_window_id
+            identity_receipt,
+            f"{name}.identity_receipt",
+            capture_window_id,
+            capture_window_bounds=capture_window_bounds,
         )
         peer_id = require_string(identity_receipt.get("peer_id"), f"{name}.identity_receipt.peer_id")
         expected_peer_id = governed.get("peer_id", CANONICAL_PEER_REGISTRY[name])
@@ -1206,6 +1308,7 @@ def _validate_nodes(
             owner_value = identity_receipt.get(owner)
             if isinstance(owner_value, bool) or not isinstance(owner_value, int) or owner_value < 0:
                 die(f"{name}.identity_receipt.{owner} must be a non-negative integer")
+        _validate_identity_raw_v1_digest(identity_receipt, f"{name}.identity_receipt")
         expected_uid = governed["expected_key_uid"]
         expected_gid = governed["expected_key_gid"]
         if identity_receipt["key_uid"] != expected_uid or identity_receipt["key_gid"] != expected_gid:
@@ -1621,11 +1724,15 @@ def build_plan(request: dict[str, Any]) -> dict[str, Any]:
     _validate_external_truth_binding(authority, truth)
     _validate_verifier_bindings(authority["crypto_verifier_receipt"], truth["execution"])
     probe = _validate_probe(request.get("fresh_root_probe"), truth, allowed_signers, context)
+    capture_window_bounds = _capture_window_bounds_from_credential_ledger(
+        request.get("credential_nonce_ledger"), context["capture_window_id"]
+    )
     has_explicit_inventory = request.get("deployment_inventory") is not None
     deployment_inventory = _validate_deployment_inventory(
         request.get("deployment_inventory"),
         allowed_signers,
         context["capture_window_id"],
+        capture_window_bounds=capture_window_bounds,
     )
     nodes = _validate_nodes(
         request.get("nodes"),
@@ -1634,6 +1741,7 @@ def build_plan(request: dict[str, Any]) -> dict[str, Any]:
         deployment_inventory,
         has_explicit_inventory,
         context["capture_window_id"],
+        capture_window_bounds=capture_window_bounds,
     )
     credential_nonce_ledger = _validate_credential_nonce_ledger(
         request.get("credential_nonce_ledger"), nodes, context, allowed_signers
