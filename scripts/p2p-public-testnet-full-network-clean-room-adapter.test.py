@@ -832,9 +832,14 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         """The v2 envelope verifier input must bind raw v1 bytes and all admission context."""
         plan = copy.deepcopy(self.plan)
         self._bind_current_receipt_freshness(plan)
+        raw_v1_by_node: dict[str, bytes] = {}
         for node in plan["nodes"]:
             identity = node["identity_receipt"]
-            raw_v1 = self.fixture._raw_runtime_identity_receipt_v1_bytes(identity)
+            raw_v1 = self.fixture._raw_runtime_identity_receipt_v1_bytes(
+                identity,
+                key_path="/opt/oasis7/p2p-testnet/config/node-keypair.toml",
+            )
+            raw_v1_by_node[node["name"]] = raw_v1
             identity["signed_payload_sha256"] = hashlib.sha256(raw_v1).hexdigest()
             identity["canonical_digest"] = self.adapter._canonical_receipt_digest(
                 identity, excluded_fields=frozenset({"peer_id"})
@@ -849,6 +854,7 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
             bindings = receipt.get("bindings", {})
             if bindings.get("kind") == "identity":
                 verified_identities.append((receipt, bindings))
+                self.assertEqual(receipt["raw_v1_bytes"], raw_v1_by_node[bindings["node"]])
             return {
                 "verified": True,
                 "bindings": bindings,
@@ -857,7 +863,11 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
                 "signer_id": "governance-signer",
             }
 
-        self.adapter._verify_plan_receipts_with_verifier(plan, verifier)
+        self.adapter._verify_plan_receipts_with_verifier(
+            plan,
+            verifier,
+            raw_v1_bytes_by_node=raw_v1_by_node,
+        )
 
         self.assertEqual(len(verified_identities), len(self.planner.NODE_ORDER))
         for receipt, bindings in verified_identities:

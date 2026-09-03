@@ -52,7 +52,7 @@
 
 | node_id | role | host / lane | stack root | service manager | bounded evidence endpoint |
 | --- | --- | --- | --- | --- | --- |
-| `triad-testnet-sequencer` | validator / sequencer | `root@39.104.204.172` | `/opt/oasis7/p2p-testnet` | `oasis7-triad-sequencer.service` | `http://127.0.0.1:6631/v1/chain/rebuild-proof` + governed `identity-receipt-v2` sidecar |
+| `triad-testnet-sequencer` | validator / sequencer | `root@39.104.204.172` | `/opt/oasis7/p2p-testnet` | `oasis7-triad-sequencer.service` | `http://127.0.0.1:6631/v1/chain/rebuild-proof` + capability-gated identity-v2 four-command evidence |
 | `triad-testnet-storage` | validator / storage | `root@39.104.205.67` | `/opt/oasis7/p2p-testnet` | `oasis7-triad-storage.service` | `http://127.0.0.1:6632/v1/chain/status` |
 | `triad-testnet-local` | observer | Linux LAN observer | `/opt/oasis7/p2p-testnet-local` | `oasis7-testnet-observer.service` | `http://127.0.0.1:6633/v1/chain/status` |
 | `triad-testnet-windows-observer` | observer | Windows observer | `C:\oasis7-deploy` | scheduled task `Oasis7Observer` | `http://127.0.0.1:5121/v1/chain/status` |
@@ -60,62 +60,67 @@
 
 The 204/sequencer row is intentionally not a full-status contract. Governed
 rebuild, rollout, and fleet evidence must use the signed
-`oasis7.rebuild_status.v1` response from `/v1/chain/rebuild-proof` and the
-governed signed `oasis7.identity_receipt.v2` envelope. Legacy
-`oasis7.identity_receipt.v1` is raw runtime metadata only, retired for direct admission,
-and may be retained solely as the exact byte payload bound by the v2 digest; there is no
-v1 compatibility fallback. A 204
-`/v1/chain/status` request is forbidden in this runbook; it may only be used
-under a separately recorded local diagnostic exception that is not deployment
-or readiness evidence.
+`oasis7.rebuild_status.v1` response from `/v1/chain/rebuild-proof` and, once
+the identity-v2 capability is provisioned, a separately verified
+`oasis7.identity_receipt.v2` envelope. Legacy `oasis7.identity_receipt.v1` is
+raw runtime metadata only, retired for direct admission, and may be retained
+solely as the exact byte payload bound by the v2 digest; there is no v1
+compatibility fallback. The identity-v2 path is currently **NOT PROVISIONED /
+CAPABILITY BLOCKED**: a copied signature, callback, or `verified: true` field
+is not evidence. A 204 `/v1/chain/status` request is forbidden in this
+runbook; it may only be used under a separately recorded local diagnostic
+exception that is not deployment or readiness evidence.
 
 Credential files may be used by an operator as local access aids, but this runbook only records target identities and never records secret values.
 
-### 2.2.1 Bounded 204 proof and identity contract
+### 2.2.1 Bounded 204 proof and identity-v2 contract
 
-The only 204 evidence accepted by this runbook is the pair below, captured in
-the same operator window:
+The 204 proof remains a bounded, same-window artifact. Identity-v2 evidence is
+separate and is not created by the proof verifier. The current required set is
+exactly `sequencer-204`, `storage-205`, `linux-lan-observer`,
+`windows-observer`, and `macos-observer`, once each; a plan may not shrink it to
+nodes with convenient receipts.
 
 1. `/v1/chain/rebuild-proof` returns `oasis7.rebuild_status.v1` with the
    bounded top-level fields `schema_version`, `observed_at_unix_ms`, `ok`,
    `liveness`, `readiness`, `heights`, `network_head`, `checkpoint`,
    `local_peer_id`, `connected_peers`, `connected_peer_count`, and `proof`.
-2. `scripts/p2p-public-testnet-identity-receipt-v2.py` returns the governed
-   signed `oasis7.identity_receipt.v2` envelope. The sidecar consumes the exact
-   raw `oasis7.identity_receipt.v1` byte capture with `--raw-v1`, combines it
-   with the deployment-truth v2 template, and writes the envelope with
-   `--template` and `--out`; the raw v1 object is never itself admitted. The
-   sidecar never emits private key bytes or creates/repairs the key. It binds
-   `signed_payload_sha256` to the SHA-256 of the exact raw v1 bytes before
-   parsing, normalization, projection, or reserialization; it carries
-   `signature_hex`, `canonical_digest`, and mandatory `node_id`, `peer_id`,
-   `key_sha256`, `key_size_bytes`, `key_mode`, `key_uid`, and `key_gid`. The v1
-   `key_path` is a host-side audit reference only and is never a
-   direct-admission field. The template must come from current deployment truth
-   and preserve the existing signer, verifier, trust-root, task/head/plan,
-   capture-window, rotation, issued, and expiry bindings; it is not copied from
-   an unverified receipt.
-The pair input manifest must represent each v2 receipt as an object carrying
-`path`, `role`, `expected_node_id`, `expected_peer_id`, `expected_key_mode`,
-`expected_key_uid`, and `expected_key_gid`; these expectations come from the
-governed deployment service account, not from the receipt itself.
-`expected_key_path`, `expected_key_sha256`, and `expected_key_size_bytes` may
-be included only when the deployment manifest governs those values, and then
-all three are required. A receipt is accepted only when its complete metadata
-tuple matches these expectations. A relative key path, `0644` mode, or integer
-owner/group that differs from the governed tuple fails closed; the controller
-never opens, stats, resolves, or hashes the remote key path.
-
+2. For every managed node, retain exact raw `oasis7.identity_receipt.v1` bytes and run section 7. The raw object is never admitted; its byte SHA-256 and exact
+   key tuple (`node_id`, `peer_id`, `key_sha256`, `key_size_bytes`, `key_mode=0600`, `key_uid`, `key_gid`) remain authoritative in the v2 envelope beside
+   `signature_hex` and `canonical_digest`; `key_path` remains raw-only. The payload binds these fields to task/HEAD, pre-receipt plan-intent digest, context digest, capture window, rotation, and freshness.
+3. One exact `oasis7.identity_receipt.v2_raw_map.v1` manifest must contain only
+   `node_name`, `node_id`, `peer_id`, `raw_v1_path`, `sha256`, and `size_bytes`
+   per managed node. The adapter checks regular non-symlink paths and exact
+   bytes; it never derives `key_path`, synthesizes JSON, or pairs by position.
+4. Context is exact `oasis7.identity_v2_context.v1` with
+   `schema_version`, `network_id`, `task_uid`, `head_oid`, `capture_window_id`,
+   `capture_start`, `capture_end`, `rotation_epoch`, `issued_at`, and
+   `expires_at`. Plan intent is exact `oasis7.clean_room_plan_intent.v1` with
+   `context_digest`, `adapter_action`, and sorted node/reset-surface entries.
+   The order is context -> context digest -> plan intent -> plan digest ->
+   payload -> signature -> verification receipt -> final plan; final-plan
+   digest never flows upstream.
+5. Only `oasis7.identity_v2_verification_receipt.v1` with
+   `mode=current_admission`, `verified=true`, and `apply_authorized=true` may
+   enter a destructive plan or adapter transaction. `historical_audit` is
+   forensic only (`historical_only=true`, `apply_authorized=false`), including
+   when a retired key was valid at issuance. Its raw, payload, envelope,
+   trust-config, registry, verifier, task/HEAD, node/peer, window, rotation,
+   and authorization digests must be retained and independently checked.
+6. Identity-v2 trust config, provider registry, public-key pin, and verifier
+   executable pin must be independently installed under the existing governed
+   root authority described in
+   `public-testnet-governance-trust-root-provisioning.md`. Caller/plan/template
+   supplied digests are not anchors. Until those pins and the verifier exist,
+   the four-command path remains capability blocked.
 The nested proof envelope is exactly `oasis7.rebuild_proof.v1`:
 `signer_id`, `signer_public_key_hex`, `signed_payload_sha256`, and `signature_hex`.
 Before projection into any legacy capture shape, an independent verifier must
 verify the complete response claims. The deployed runtime writes a separate
 `oasis7.rebuild_proof_verification.v1` receipt:
-
 ```bash
 <verified-runtime>/oasis7_chain_runtime verify-rebuild-proof --proof .tmp/public-testnet-sequencer-204-rebuild-proof.json --trusted-signer-id <sequencer-node-id> --trusted-signer-public-key-hex <deployment-truth-rebuild-proof-signer-key> > .tmp/public-testnet-sequencer-204-rebuild-proof-verification.json
 ```
-
 The verification receipt is valid only as a pair with the exact raw proof file
 passed to `--proof`; its required fields are `schema_version`,
 `proof_schema_version`, `signer_id`, `signer_public_key_hex`,
@@ -124,22 +129,15 @@ passed to `--proof`; its required fields are `schema_version`,
 including serialized whitespace; `local_peer_id` must equal the top-level raw
 proof. Consumers must retain both files and pass both references to the governed
 pair executor; missing, tampered, or cross-paired files fail closed.
-
 The verifier rejects unsupported schema, oversized/malformed document, digest or Ed25519 signature mismatch, and signer-id/public-key mismatch.
 `<deployment-truth-rebuild-proof-signer-key>` is an allowlisted public key from governed deployment registry/provenance, derived by the exact release contract
 for `<sequencer-node-id>-feedback-submit`; it must never be copied from proof.
-The expected signer id is the deployment-truth node id. The identity receipt is checked separately against that truth for `peer_id`, root key SHA-256, mode, uid,
-and gid. The v2 envelope must carry `task_uid`, `head_oid` (and frozen `frozen_head_oid`), `plan_digest`, `capture_window_id`, `rotation_epoch`,
-`issued_at`, and `expires_at`.
-`issued_at` and `expires_at` are mandatory UTC timestamps with `expires_at > issued_at`; both must lie within the plan capture window, not merely be current.
-The context fields must match the governed task, frozen head, plan, capture window, and rotation record. The receipt must carry `node_id`, `peer_id`,
-`key_sha256` (64 hexadecimal characters), positive `key_size_bytes`, `key_mode=0600`, and numeric `key_uid`/`key_gid`; the deployment-truth role remains
-authoritative. Missing, malformed, stale, cross-window, or cross-role tuples fail closed.
-The independent verifier must validate the complete v2 envelope, its exact raw-v1 byte digest binding, and all governed context fields before any provider
-callback or non-dry-run mutation. A valid signature without the independent signer/verifier and existing deployment trust-root/allowlist binding is not
-readiness evidence and must fail closed.
-This reuses the existing signer, verifier, and trust root: no new crypto, signer, trust root, or compatibility fallback is permitted. This envelope is a node-signed
-bounded status receipt, not validator-quorum finality or a replacement for `WorldHeadProofV1`.
+The expected signer id for this proof is the deployment-truth node id. Identity-v2
+uses its own dedicated signer profile and domain; it must not reuse this proof
+signer or a node-consensus key. The identity-v2 payload, context, raw-map,
+freshness, current-admission, and independent-pin requirements are listed
+above. This envelope is a node-signed bounded status receipt, not
+validator-quorum finality or a replacement for `WorldHeadProofV1`.
 
 ### 2.3 Stack roots and deprecated bootstrap dirs
 
@@ -274,6 +272,24 @@ phase、rollback/recovery、readiness 或 release 判断。
 ### Goal
 在任何 destructive 操作前，把本轮 live rebuild 真值先读出来并记下。
 
+### Identity-v2 evidence preparation (capability-gated)
+
+The executor must first produce exact raw-v1 bytes, an unsigned deployment-truth template, context, and plan intent for each of the five managed nodes. Context and intent precede the payload and contain no receipt, signature, verdict, or final-plan digest. The governed sidecar is `scripts/p2p-public-testnet-identity-receipt-v2.py`; bridge mode accepts `--raw-v1`, `--template`, `--out`, `--context`, `--plan-intent`, `--trust-config`, `--provider-registry`, `--provider-ref`, `--signer-tool`, `--verifier-tool`, and `--evidence-map-out`, invokes the four fixed commands below, and retains exact evidence. Its legacy shape-only mode is not admission. The sequence below is the only approved argument shape; repeat it in one capture window. `<identity-v2-tool>` is a deployment-provided, independently pinned executable. Until the trust config, registry, provider, and verifier pins exist, this sequence is capability blocked.
+
+The planner handoff must include its exact `--identity-v2-evidence-map <verified-map.json>` option: `python3 scripts/p2p-public-testnet-full-network-clean-room.py --input <authenticated-five-node-truth-envelope> --identity-v2-evidence-map <verified-map.json> --out <plan.json> --json`. The adapter validation-only handoff must include the same map and `--identity-v2-mode current_admission`, while omitting `--apply`: `python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.py --plan <plan.json> --authority <authority.json> --journal <journal.jsonl> --ledger <ledger.jsonl> --identity-v2-evidence-map <verified-map.json> --identity-v2-mode current_admission`. These placeholders are operator-bound artifacts, not live paths; the pair executor remains blocked until it consumes this retained map.
+
+```bash
+<identity-v2-tool> prepare --raw-v1 <node>.identity-receipt.v1.raw --template <node>.identity-v2.unsigned-template.json --context <node>.identity-v2.context.json --plan-intent <managed-five-node.plan-intent.json> --trust-config /operator/truth/identity-v2-trust-config.json --provider-registry /operator/truth/identity-v2-provider-registry.json --payload-out <node>.identity-v2.payload.bin --manifest-out <node>.identity-v2.prepare.json
+<identity-v2-tool> sign --payload <node>.identity-v2.payload.bin --manifest <node>.identity-v2.prepare.json --provider-registry /operator/truth/identity-v2-provider-registry.json --provider-ref <approved-custody-provider-id> --signature-out <node>.identity-v2.signature.hex --attestation-out <node>.identity-v2.provider-attestation.json
+<identity-v2-tool> assemble --payload <node>.identity-v2.payload.bin --manifest <node>.identity-v2.prepare.json --signature <node>.identity-v2.signature.hex --attestation <node>.identity-v2.provider-attestation.json --provider-registry /operator/truth/identity-v2-provider-registry.json --out <node>.identity-v2.envelope.json
+<identity-v2-tool> verify --mode current_admission --envelope <node>.identity-v2.envelope.json --raw-v1 <node>.identity-receipt.v1.raw --context <node>.identity-v2.context.json --plan-intent <managed-five-node.plan-intent.json> --trust-config /operator/truth/identity-v2-trust-config.json --provider-registry /operator/truth/identity-v2-provider-registry.json --out <node>.identity-v2.verified.json --verification-out <node>.identity-v2.verification.json
+```
+
+`assemble` must receive and byte-check the explicit payload before writing an envelope. `verify` must independently reconstruct the prefixed payload, check
+current trust/revocation, and emit a fresh receipt. The independently pinned/governed verifier must run before any provider request, mutation, or admission
+decision; only its fresh receipt can authorize current evidence. A historical-audit receipt is forensic only. Planner, adapter, and validator-pair integration
+remains a prerequisite; this block does not invent bridge flags.
+
 ### Required checks
 1. 优先使用标准 truth capture 脚本：
 
@@ -283,7 +299,8 @@ phase、rollback/recovery、readiness 或 release 判断。
 curl -fsS http://39.104.204.172:6631/v1/chain/rebuild-proof \
   > .tmp/public-testnet-sequencer-204-rebuild-proof.json
 ssh root@39.104.204.172 '/opt/oasis7/p2p-testnet/current/bin/oasis7_chain_runtime identity-receipt --node-id "<sequencer-node-id>" --config-dir /opt/oasis7/p2p-testnet/config' > .tmp/public-testnet-sequencer-204-identity-receipt.v1.raw
-python3 scripts/p2p-public-testnet-identity-receipt-v2.py --raw-v1 .tmp/public-testnet-sequencer-204-identity-receipt.v1.raw --template "<governed-sequencer-204-identity-receipt.v2.template.json>" --out .tmp/public-testnet-sequencer-204-identity-receipt.json
+# Run scripts/p2p-public-testnet-identity-receipt-v2.py in bridge mode per
+# section 7; its legacy shape-only mode is not admission evidence.
 <verified-runtime>/oasis7_chain_runtime verify-rebuild-proof \
   --proof .tmp/public-testnet-sequencer-204-rebuild-proof.json \
   --trusted-signer-id <sequencer-node-id> \
@@ -438,7 +455,7 @@ any additional signing requirements.
 
 ### C0.5 Canonical pair transaction (task #3324; predecessor task #3318)
 
-新的受治理入口是 `scripts/p2p-public-testnet-rebuild-validators.sh plan|apply|resume|rollback`，它将请求转发到 local-first 执行器 `scripts/p2p-public-testnet-validator-pair-rebuild.py`。它必须先以 `plan` 模式验证签名的 `oasis7.validator_pair_rebuild_provenance.v1`、package `BUILDINFO`/`SHA256SUMS`、deployment manifest、genesis、registry、bootstrap 和 world 的 hash/size 绑定，以及每台 host 的同文件系统容量/inode receipt；plan 同时执行 live GitHub/SSH bounded read-only re-observation，但不调用 systemd 或修改节点。可复核的证据模板位于 `doc/testing/templates/public-testnet-validator-pair-rebuild-evidence-v1.json`。
+新的受治理入口是 `scripts/p2p-public-testnet-rebuild-validators.sh plan|apply|resume|rollback`，它将请求转发到 local-first 执行器 `scripts/p2p-public-testnet-validator-pair-rebuild.py`。它必须先以 `plan` 模式验证签名的 `oasis7.validator_pair_rebuild_provenance.v1`、package `BUILDINFO`/`SHA256SUMS`、deployment manifest、genesis、registry、bootstrap 和 world 的 hash/size 绑定，以及每台 host 的同文件系统容量/inode receipt；plan 同时执行 live GitHub/SSH bounded read-only re-observation，但不调用 systemd 或修改节点。可复核的证据模板位于 `doc/testing/templates/public-testnet-validator-pair-rebuild-evidence-v1.json`。下面的 invocation 保留当前 legacy `--identity-receipts` 形状，仅供接口迁移参考；在 identity-v2 bridge 发布前不得执行 admission 或 destructive apply。
 
 每个 governed tree 在进入容量预算前都必须先完成无跟随 symlink 的完整 inventory：`entry_count` 必须等于 `link_count + dir_count + file_count`，并同时绑定 `total_bytes`。world tree 的任何嵌套 symlink（包括目录或 broken link）都直接拒绝；inode 预算覆盖备份、package、governed entries 以及允许复制的目录、文件和 symlink。apply 阶段重新采集并比对同一 inventory，staged governed receipt 也必须逐项一致。
 
@@ -508,9 +525,20 @@ Resume is permitted only for phases `prepared`, `preflight`, `preflight_failed`,
 The plan is deterministic (`oasis7.validator_pair_rebuild_plan.v1`) but performs bounded live read-only GitHub/SSH re-observation; it is not local-only, does not call systemd, and does not perform destructive activity. Runtime transaction IDs and timestamps are assigned only after the plan is durably journaled (each JSON write flushes the file and its parent directory). The transaction is fail-closed and records a complete stopped-state backup manifest before mutation. Mutation order is always `storage-205` then `sequencer-204`; startup order is always `sequencer-204` then `storage-205`.
 `--sequencer-proof-verifier` must point to an executable regular file whose SHA-256 and size match the verified package runtime; the executor invokes that exact binary over the raw proof and compares its complete receipt before any host mutation.
 The host adapter remains mandatory for the `preflight`, `backup`, `apply`, and `rollback` callbacks; it cannot establish human stop authority or replace direct observation. On automatic or manual rollback, the executor must first reauthorize live human authority and perform a fresh `human_direct_ssh` read-only observation of both fixed validators; only then may the rollback callback and local restore run. Missing/failed re-observation, callback, or restore is recorded as `rollback_failed`; generic adapter `quiesce` can never authorize restore. Each transaction-bound receipt covers active/running, bounded healthz, role listener (`6632/6832` storage-205; `6631/6831` sequencer-204), `NRestarts=0`, no OOM/panic/segfault, exact runtime hash/size, and `full_chain_status_called=false` for 204.
-The receipt must consume cryptographically verified identity receipts and the signed 204 proof under the trust-root allowlist; host self-report alone is not evidence. The observer gate remains `hold` until provider closure is independently verified; without this receipt the executor cannot mark `applied`.
+The receipt must consume cryptographically verified identity-v2 envelopes and
+their `current_admission` verification receipts, plus the signed 204 proof
+under the governance-root-approved allowlists; host self-report alone is not
+evidence. The observer gate remains `hold` until provider closure is
+independently verified; without this evidence the executor cannot mark
+`applied`.
+The current pair-executor CLI still exposes the legacy `--identity-receipts`
+input and has no published identity-v2/raw-map admission option. Do not invent
+a replacement flag or pass a v2 file through the legacy shape. Runtime and
+identity integration must first publish the exact accepted v2 input schema,
+including the five-node raw map and per-node verification receipts; until then
+this pair-executor path remains capability blocked for identity-v2 admission.
 Every mutation callback receipt (`backup`/`apply`/`rollback`) must explicitly include `observer_mutation=false`, a non-empty executor-bound `transaction_id`, and the strict current-window binding; human direct observations are not callbacks. `--quiescence-transaction-id` binds only the in-memory observation/audit reference and never substitutes for a callback ID/file/field (`--quiescence-id` is its CLI alias).
-The deterministic `plan` has no runtime `transaction_id`; `apply` assigns it after journaling and later receipts echo it exactly. Before each mutation callback, persist `oasis7.validator_pair_rebuild_adapter_binding.v1` fixing immutable `plan_digest`, transaction, phase, identity paths/digests with role/node/peer IDs, raw 204 proof and optional verifier receipt; the adapter must echo these bindings plus `captured_at` in-window, or fail closed on omission, substitution, alternate proof, or staleness.
+The deterministic `plan` has no runtime `transaction_id`; `apply` assigns it after journaling and later receipts echo it exactly. Before each mutation callback, persist `oasis7.validator_pair_rebuild_adapter_binding.v1` fixing immutable `plan_digest`, transaction, phase, the five-node identity-v2 evidence paths/digests with role/node/peer IDs, the exact raw map, raw 204 proof, and current-admission verification receipts; the adapter must echo these bindings plus `captured_at` in-window, or fail closed on omission, substitution, alternate proof, or staleness.
 Any failed identity, capacity, health, restart, OOM, panic or segfault gate invokes the recorded same-filesystem rollback and retains its receipt. The pair executor never mutates an observer. A sequencer/204 proof uses a bounded endpoint; full `/v1/chain/status` on 204 is forbidden.
 
 壳脚本的 `oasis7.validator_pair_rebuild_receipt_contract.v1` envelope 将 plan/transaction digest 绑定到每台节点的 platform 与完整无跟随 symlink 的 state-root inventory，并记录精确 destructive target 解析、indexed sidecar/archive/module store、execution/bridge/runtime/replication root 及 observer 等价物、direct read-only observation reference、带 metadata/capacity 的 forensic backup manifest hash 与 machine-checkable `seed_eligible=false` proof。
@@ -785,19 +813,13 @@ Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differ
 
 在作出 `Fleet healthy` 或 recovery update 结论前，必须保留一个
 bounded same-window artifact。204 的输入先按 2.2.1 采集、独立验证并
-保留 proof/identity receipts：
-
-```bash
-curl -fsS http://39.104.204.172:6631/v1/chain/rebuild-proof \
-  > .tmp/public-testnet-sequencer-204-rebuild-proof.json
-ssh root@39.104.204.172 '/opt/oasis7/p2p-testnet/current/bin/oasis7_chain_runtime identity-receipt --node-id "<sequencer-node-id>" --config-dir /opt/oasis7/p2p-testnet/config' > .tmp/public-testnet-sequencer-204-identity-receipt.v1.raw
-python3 scripts/p2p-public-testnet-identity-receipt-v2.py --raw-v1 .tmp/public-testnet-sequencer-204-identity-receipt.v1.raw --template "<governed-sequencer-204-identity-receipt.v2.template.json>" --out .tmp/public-testnet-sequencer-204-identity-receipt.json
-<verified-runtime>/oasis7_chain_runtime verify-rebuild-proof \
-  --proof .tmp/public-testnet-sequencer-204-rebuild-proof.json \
-  --trusted-signer-id <sequencer-node-id> \
-  --trusted-signer-public-key-hex <deployment-truth-rebuild-proof-signer-key> \
-  > .tmp/public-testnet-sequencer-204-rebuild-proof-verification.json
-```
+保留 proof/identity-v2 evidence。五节点闭包还必须保留每个 managed node
+的 raw-v1 map entry、context、plan-intent、prepare manifest、immutable
+payload、provider attestation、envelope、current-admission verified
+envelope 和 verification receipt。缺少任一节点或任一 digest binding，
+不得形成 `Fleet healthy` 或 recovery 结论。Use the retained Phase A proof,
+proof-verification receipt, and section 7 identity-v2 artifacts; do not rerun a
+legacy sidecar command here.
 
 The existing `p2p-public-testnet-fleet-health.py` collector is status-shaped
 and has no signed-proof input. Do not pass it a 204 `/v1/chain/status` URL or
@@ -892,27 +914,15 @@ Invoke-RestMethod -UseBasicParsing http://127.0.0.1:5121/v1/chain/status |
 ### Preflight
 For current five-node fleet preflight, first load each managed node's real env/deploy metadata and use its actual status bind. The legacy `.tmp/testnet-*-bootstrap/node.env` paths below are only valid when intentionally rebuilding those bootstrap staging directories.
 
-Complete the Phase A 204 proof, identity receipt, and independent verifier
-steps first. The preflight consumes the resulting bounded projection file;
+Complete the Phase A 204 proof and independent verifier steps first. Also
+complete the section 7 four-command identity-v2 sequence for the exact managed
+node set and retain its `current_admission` verification receipts. The
+preflight consumes the resulting bounded projection file; it must not treat a
+legacy sidecar output or a `historical_audit` receipt as admission evidence.
 `--sequencer-status-url` must not point at the 204 full-status endpoint.
-
-```bash
-./scripts/p2p-public-testnet-preflight.sh \
-  --bundle doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json \
-  --sequencer-status-json .tmp/public-testnet-sequencer-204-capture.json \
-  --sequencer-ip 39.104.204.172 \
-  --sequencer-port 6831 \
-  --storage-status-url http://39.104.205.67:6632/v1/chain/status \
-  --storage-ip 39.104.205.67 \
-  --storage-port 6832 \
-  --sequencer-ssh-host root@39.104.204.172 \
-  --sequencer-sshpass-env PUBLIC_TESTNET_SEQUENCER_SSHPASS \
-  --storage-ssh-host root@39.104.205.67 \
-  --storage-sshpass-env PUBLIC_TESTNET_STORAGE_SSHPASS \
-  --observer-env <current-linux-lan-observer-node.env> \
-  --observer-env <current-macos-observer-node.env> \
-  --out-dir .tmp/public-testnet-preflight
-```
+Use the Phase A capture and the existing preflight entrypoint with its current
+deployment-truth arguments; this section intentionally does not duplicate that
+long command block.
 
 ### Package version replacement
 ```bash
@@ -931,18 +941,9 @@ Windows 计划要求 `windows-x64-SHA256SUMS` 覆盖并传输受治理的 bundle
 rollback runtime 优先从唯一的 `backup-manifest.json` 或 `backup-provenance.json` runtime path 解析，并在声明 SHA-256 时闭合校验；没有 manifest/provenance 时仅支持按顺序检查 `runtime/oasis7_chain_runtime.exe`、`bin/oasis7_chain_runtime.exe`，两者同时存在或都不存在均 fail closed，且最终路径必须保持在 rollback root 内。该 root 还必须提供与 node-local 相同相对路径的 `config/` bundle/genesis/manifest，以及 `CURRENT_VERSION`、`DEPLOYED_BUILDINFO`。脚本把所有已知 path-bearing bundle/manifest 字段改写为 active node-local 路径，并通过结构化路径分类拒绝残留 Unix/build-worktree 或非 deploy/install root 路径，随后用无 BOM UTF-8 临时文件原子替换本地化配置。常规替换使用 `rpc-running`，在 60–300 秒有界窗口内同时要求 runtime process 与 RPC `running=true`；`strict-ready` 另要求可用的 readiness truth 为 true。scheduled-task child 一旦终止且结果非零（包括 `255`），脚本立即保留并输出本次诊断文件的精确路径、传播 child exit code，并以 `rollback_required=true` 进入 known-good rollback。rollback 在任何 runtime 解锁等待前先比较 installed 与 known-good SHA，并输出 `rollback_runtime_restore_required`：hash 相等时跳过 runtime unlock/replacement；hash 不等时才执行有界解锁和 runtime 恢复。config 与 deployment provenance 也逐项比较 SHA，只恢复发生变化的 component，并输出 `rollback_component_restored` 或 `rollback_component_unchanged`。整个路径保留 identity/state；锁仍阻断确需执行的 runtime 恢复时才以 `lock_remains=true` fail closed，且不自动重启。
 
 ### Validator status
-```bash
-curl -fsS http://39.104.204.172:6631/v1/chain/rebuild-proof \
-  > .tmp/public-testnet-sequencer-204-rebuild-proof.json
-ssh root@39.104.204.172 '/opt/oasis7/p2p-testnet/current/bin/oasis7_chain_runtime identity-receipt --node-id "<sequencer-node-id>" --config-dir /opt/oasis7/p2p-testnet/config' > .tmp/public-testnet-sequencer-204-identity-receipt.v1.raw
-python3 scripts/p2p-public-testnet-identity-receipt-v2.py --raw-v1 .tmp/public-testnet-sequencer-204-identity-receipt.v1.raw --template "<governed-sequencer-204-identity-receipt.v2.template.json>" --out .tmp/public-testnet-sequencer-204-identity-receipt.json
-<verified-runtime>/oasis7_chain_runtime verify-rebuild-proof \
-  --proof .tmp/public-testnet-sequencer-204-rebuild-proof.json \
-  --trusted-signer-id <sequencer-node-id> \
-  --trusted-signer-public-key-hex <deployment-truth-rebuild-proof-signer-key> \
-  > .tmp/public-testnet-sequencer-204-rebuild-proof-verification.json
-ssh root@39.104.205.67 'curl -s http://127.0.0.1:6632/v1/chain/status'
-```
+Use the retained Phase A proof, proof-verification receipt, and section 7
+identity-v2 artifacts; the current five-node status commands below provide the
+additional live health samples.
 
 ### Current five-node status
 ```bash
@@ -963,19 +964,12 @@ observers, record `CURRENT_VERSION`, runtime hash or artifact lineage,
 consensus heights, and `consensus.network_head.decision`.
 
 ### Peer id truth
-```bash
-curl -fsS http://39.104.204.172:6631/v1/chain/rebuild-proof | jq -r '.local_peer_id'
-curl -fsS http://39.104.205.67:6632/v1/chain/rebuild-proof | jq -r '.replication.local_peer_id // .local_peer_id'
-cat doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt
-```
+Use the Phase A bounded proof/status capture and the governed bootstrap-peer
+artifact; do not derive peer IDs from an unverified status projection.
 
 ### Seed closure
-```bash
-./scripts/p2p-verify-state-sync-closure.sh \
-  --world-dir <seed-world-dir> \
-  --execution-records-dir <seed-execution-records-dir> \
-  --store-dir <seed-store-dir>
-```
+Use the Phase E closure command and retain its receipt; this checklist does not
+duplicate the recovery command.
 
 ## 16. Open Design Follow-Ups
 这份 runbook 可以让部署更稳，但它也明确保留两项后续硬化方向：

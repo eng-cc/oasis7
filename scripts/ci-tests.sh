@@ -279,6 +279,8 @@ run_required_gate_checks() {
   run python3 ./scripts/product-doc-governance-check.test.py
   run python3 ./scripts/p2p-public-testnet-full-network-clean-room.test.py
   run python3 ./scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py
+  run python3 ./scripts/p2p-public-testnet-identity-v2-signing-tool.test.py
+  run python3 ./scripts/p2p-public-testnet-identity-v2-cli-bridge.test.py
   run ./scripts/lint-skills.sh
   run ./scripts/check-windows-paths.sh
   run bash ./scripts/check-script-executable-bits.sh

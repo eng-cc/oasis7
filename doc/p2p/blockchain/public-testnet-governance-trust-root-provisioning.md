@@ -42,3 +42,62 @@ adapter must own the regular file; the numeric UID is deployment-local and is
 never supplied by a plan or authority envelope. The fixture's public-key
 values are non-secret test material and must not be treated as production
 signing credentials.
+
+## Identity-v2 admission profile (not provisioned)
+
+Identity-v2 is a separate signing domain and authority profile. It does not
+reuse the rebuild-proof signer, a node-consensus key, or the fixture keys
+above. The profile may be activated only after a governance-root-approved
+deployment record authorizes it; writing a tool or a digest does not grant
+signer authority. This profile is currently **NOT PROVISIONED / CAPABILITY
+BLOCKED**. No live provider, private key, credential, node, or production
+identity configuration is created by this document.
+
+The deployment must reserve these code-owned paths before activation:
+
+| artifact | deployment path | independent admission requirement |
+| --- | --- | --- |
+| governance root | `/operator/truth/governance-root.json` | The fixed regular file and semantic `root_digest` must match the independently pinned governance-root values above. |
+| identity-v2 trust config | `/operator/truth/identity-v2-trust-config.json` | Exact file SHA-256 is pinned by deployment authority under the governance root; the caller may assert this path but may not select another path or supply the pin. |
+| provider registry | `/operator/truth/identity-v2-provider-registry.json` | Exact registry bytes and digest are pinned by deployment authority under the governance root; `provider-ref` selects only a non-secret allowlisted ID. |
+| independent verifier | path recorded by the provider registry | The executable must be a deployment-owned regular executable with an independently pinned SHA-256; a self-reported digest or caller command/endpoint is not evidence. |
+
+The identity-v2 trust config must use the exact schema
+`oasis7.identity_v2_trust_config.v1` and fields `schema_version`, `network_id`,
+`trust_root_id`, `verifier_id`, `algorithm`, `rotation_epoch`, `allowlist`,
+and `revocations`. Each allowlist entry binds one immutable `signer_id` to a
+public-only `public_key_ref`, its `public_key_sha256`, status, and validity
+interval. Public key replacement requires a new signer identity. The exact
+`revocations` entries contain `signer_id`, `effective_at`, and `reason`; issuer
+and replacement metadata, where required by the governance ledger, must be
+recorded outside the caller-supplied input. Unknown or stale revocation state
+blocks current admission.
+
+The provider registry must bind each approved provider ID to its signer,
+public-key digest, Ed25519 algorithm, authenticated custody adapter, adapter
+SHA-256, and the verifier executable/digest. The registry's trust-config digest
+is a consistency check, not the independent root of trust: the deployment
+authority must pin the registry and trust-config bytes separately under the
+governance root. No registry entry may expose a private-key path, secret,
+endpoint, arbitrary command, or credential.
+
+All deployment artifacts listed above and every ancestor must satisfy the regular
+non-symlink, ownership, and mode policy before use. Identity-v2 verification
+must bind the exact raw-v1 bytes, context digest, pre-receipt plan-intent
+digest, task, frozen HEAD, node/peer tuple, capture window, rotation, and
+trust-config/provider-registry/verifier digests. A receipt with
+`mode=historical_audit` is forensic only (`historical_only=true`,
+`apply_authorized=false`), even when a retired key was valid at issuance;
+destructive apply requires a fresh `current_admission` receipt with
+`apply_authorized=true` and an independent current-authority recheck.
+
+The sidecar bridge now invokes the four fixed commands and independently calls
+the verifier seam, but deployment trust-config, registry, and verifier pin
+values remain unset here. The planner requires `--identity-v2-evidence-map`; the
+adapter accepts that exact map with `--identity-v2-mode current_admission` for
+validation-only use, without `--apply`. The validator-pair executor still has
+no v2 production admission input. Operators must not add guessed CLI flags or
+pass identity-v2 material through the legacy identity-receipts input. The
+governed bootstrap runbook documents the software interface as a
+capability-gated prerequisite, not as evidence that production provisioning
+has occurred.

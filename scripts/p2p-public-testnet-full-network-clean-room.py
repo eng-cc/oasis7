@@ -11,19 +11,35 @@ never restores old chain state.
 from __future__ import annotations
 
 import argparse
+import copy
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+import os
 import re
+import subprocess
 import sys
+import tempfile
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from typing import Any, NoReturn
+from typing import Any, Mapping, NoReturn
 
 
 INPUT_SCHEMA = "oasis7.public_testnet_full_network_clean_room_input.v1"
 PLAN_SCHEMA = "oasis7.public_testnet_full_network_clean_room_plan.v1"
 DEPLOYMENT_INVENTORY_SCHEMA = "oasis7.deployment_inventory.v2"
 IDENTITY_RECEIPT_SCHEMA = "oasis7.identity_receipt.v2"
+IDENTITY_V2_EVIDENCE_SCHEMA = "oasis7.identity_v2_evidence_map.v1"
+# These are deployment-owned admission anchors, not caller-selectable CLI
+# inputs.  They remain unprovisioned until governance installs the v2 profile;
+# the isolated test harness may patch the loaded module constants only.
+IDENTITY_V2_VERIFY_TOOL_PATH = Path(__file__).resolve().with_name(
+    "p2p-public-testnet-identity-v2-signing-tool.py"
+)
+IDENTITY_V2_VERIFY_TOOL_SHA256: str | None = None
+IDENTITY_V2_TRUST_CONFIG_PATH = Path("/operator/truth/identity-v2-trust-config.json")
+IDENTITY_V2_TRUST_CONFIG_SHA256: str | None = None
+IDENTITY_V2_PROVIDER_REGISTRY_PATH = Path("/operator/truth/identity-v2-provider-registry.json")
+IDENTITY_V2_PROVIDER_REGISTRY_SHA256: str | None = None
 DEPLOYMENT_INVENTORY_RECEIPT_FIELDS = frozenset(
     {
         "schema_version",
@@ -68,6 +84,31 @@ IDENTITY_RECEIPT_FIELDS = frozenset(
 OID_RE = re.compile(r"^[0-9a-fA-F]{40,64}$")
 HEX64_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 SIGNATURE_RE = re.compile(r"^[0-9a-fA-F]{128}$")
+IDENTITY_V2_ENVELOPE_FIELDS = frozenset(
+    {
+        "domain_separator", "schema_version", "signer_id", "verifier_id", "trust_root_id",
+        "task_uid", "head_oid", "frozen_head_oid", "plan_digest", "context_digest",
+        "capture_window_id", "rotation_epoch", "issued_at", "expires_at", "node_id", "peer_id",
+        "key_sha256", "key_size_bytes", "key_mode", "key_uid", "key_gid", "signed_payload_sha256",
+        "signature_hex", "canonical_digest", "authenticated", "verified", "historical_only",
+        "apply_authorized",
+    }
+)
+IDENTITY_V2_ENVELOPE_REQUIRED_FIELDS = IDENTITY_V2_ENVELOPE_FIELDS - {
+    "historical_only", "apply_authorized"
+}
+IDENTITY_V2_SIGNED_FIELDS = IDENTITY_V2_ENVELOPE_REQUIRED_FIELDS - {
+    "signature_hex", "canonical_digest", "authenticated", "verified"
+}
+IDENTITY_V2_VERIFICATION_FIELDS = frozenset(
+    {
+        "schema_version", "mode", "evaluation_time", "raw_v1_sha256", "canonical_payload_sha256",
+        "envelope_sha256", "signer_id", "public_key_sha256", "trust_config_sha256",
+        "provider_registry_sha256", "verifier_executable_sha256", "task_uid", "head_oid", "node_id",
+        "peer_id", "capture_window_id", "rotation_epoch", "historical_only", "apply_authorized",
+        "authority_scope", "verified",
+    }
+)
 SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{1,127}$")
 SECRET_KEY_RE = re.compile(
     r"(?:password|secret|token|private[_-]?key|api[_-]?key|access[_-]?key|sshpass)",
@@ -252,6 +293,19 @@ MAX_CLOCK_SKEW_SECONDS = 5
 # carries the digest of those exact bytes; this path is the canonical key-path
 # binding used when reconstructing the bytes for admission checks.
 RAW_IDENTITY_RECEIPT_V1_KEY_PATH = "/operator/keys/node-keypair.toml"
+RAW_IDENTITY_RECEIPT_V1_FIELDS = frozenset(
+    {
+        "schema_version",
+        "node_id",
+        "peer_id",
+        "key_path",
+        "key_sha256",
+        "key_size_bytes",
+        "key_mode",
+        "key_uid",
+        "key_gid",
+    }
+)
 
 
 def die(message: str) -> NoReturn:
@@ -454,17 +508,80 @@ def _canonical_raw_identity_receipt_v1_bytes(
     return json.dumps(payload, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
 
 
-def _validate_identity_raw_v1_digest(
-    identity_receipt: dict[str, Any], label: str
+def _validate_raw_identity_receipt_v1_bytes(
+    identity_receipt: dict[str, Any], raw_v1_bytes: bytes, label: str
 ) -> None:
-    """Ensure the v2 payload digest cannot be rebound after raw-v1 drift."""
+    """Validate supplied runtime bytes before using them as an admission hash.
+
+    The bytes are authoritative input from the runtime.  We validate their
+    v1 envelope and identity projection, but deliberately do not reconstruct
+    or constrain ``key_path``: that field is exactly why callers must forward
+    the original bytes instead of asking admission to guess a path.
+    """
+    if not isinstance(raw_v1_bytes, bytes) or not raw_v1_bytes:
+        die(f"{label} raw-v1 bytes must be non-empty bytes")
+    try:
+        raw = json.loads(raw_v1_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        die(f"{label} raw-v1 bytes are not valid UTF-8 JSON: {error.__class__.__name__}")
+    if not isinstance(raw, dict):
+        die(f"{label} raw-v1 bytes must contain a JSON object")
+    if set(raw) != RAW_IDENTITY_RECEIPT_V1_FIELDS:
+        missing = sorted(RAW_IDENTITY_RECEIPT_V1_FIELDS - set(raw))
+        extra = sorted(set(raw) - RAW_IDENTITY_RECEIPT_V1_FIELDS)
+        die(f"{label} raw-v1 fields are not exact (missing={missing}, extra={extra})")
+    if raw.get("schema_version") != "oasis7.identity_receipt.v1":
+        die(f"{label} raw-v1 schema is unsupported")
+    for field in ("node_id", "peer_id", "key_path"):
+        if not isinstance(raw.get(field), str) or not raw[field].strip():
+            die(f"{label} raw-v1 {field} must be a non-empty string")
+    require_hex(raw.get("key_sha256"), f"{label}.raw-v1.key_sha256")
+    for field in ("key_size_bytes", "key_mode", "key_uid", "key_gid"):
+        value = raw.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            die(f"{label} raw-v1 {field} must be a non-negative integer")
+    if raw["key_size_bytes"] <= 0:
+        die(f"{label} raw-v1 key_size_bytes must be positive")
+    try:
+        expected_key_mode = int(str(identity_receipt.get("key_mode")), 8)
+    except (TypeError, ValueError):
+        die(f"{label} governed v2 key_mode is malformed")
+    if (
+        raw["node_id"] != identity_receipt.get("node_id")
+        or raw["peer_id"] != identity_receipt.get("peer_id")
+        or raw["key_sha256"].lower() != str(identity_receipt.get("key_sha256", "")).lower()
+        or raw["key_size_bytes"] != identity_receipt.get("key_size_bytes")
+        or raw["key_uid"] != identity_receipt.get("key_uid")
+        or raw["key_gid"] != identity_receipt.get("key_gid")
+        or raw["key_mode"] != expected_key_mode
+    ):
+        die(f"{label} raw-v1 identity does not match the governed v2 identity")
+
+
+def _validate_identity_raw_v1_digest(
+    identity_receipt: dict[str, Any],
+    label: str,
+    *,
+    raw_v1_bytes: bytes | None = None,
+) -> None:
+    """Ensure the v2 payload digest cannot be rebound after raw-v1 drift.
+
+    Admission callers that possess the runtime output pass those exact bytes.
+    The compatibility fallback is retained for older plan fixtures that
+    predate the byte-forwarding seam; it is never used by the adapter's
+    governed verifier path.
+    """
     signed_payload = require_hex(
         identity_receipt.get("signed_payload_sha256"),
         f"{label}.signed_payload_sha256",
     )
-    expected = hashlib.sha256(
-        _canonical_raw_identity_receipt_v1_bytes(identity_receipt)
-    ).hexdigest()
+    if raw_v1_bytes is not None:
+        _validate_raw_identity_receipt_v1_bytes(identity_receipt, raw_v1_bytes, label)
+        expected = hashlib.sha256(raw_v1_bytes).hexdigest()
+    else:
+        expected = hashlib.sha256(
+            _canonical_raw_identity_receipt_v1_bytes(identity_receipt)
+        ).hexdigest()
     if signed_payload != expected:
         die(f"{label} signed payload is not bound to the canonical raw v1 bytes")
 
@@ -475,6 +592,7 @@ def _validate_receipt_freshness(
     capture_window_id: str,
     *,
     capture_window_bounds: tuple[datetime, datetime] | None = None,
+    expected_rotation_epoch: str | None = CANONICAL_ROTATION_EPOCH,
 ) -> None:
     """Require a current, plan-bound v2 receipt freshness tuple."""
     missing = {
@@ -487,7 +605,7 @@ def _validate_receipt_freshness(
         die(f"{label} freshness fields are incomplete: {', '.join(sorted(missing))}")
     if receipt.get("capture_window_id") != capture_window_id:
         die(f"{label}.capture_window_id does not match the transaction capture window")
-    if receipt.get("rotation_epoch") != CANONICAL_ROTATION_EPOCH:
+    if expected_rotation_epoch is not None and receipt.get("rotation_epoch") != expected_rotation_epoch:
         die(f"{label}.rotation_epoch is not the governed rotation epoch")
     issued_at = _parse_utc(receipt.get("issued_at"), f"{label}.issued_at")
     expires_at = _parse_utc(receipt.get("expires_at"), f"{label}.expires_at")
@@ -500,6 +618,304 @@ def _validate_receipt_freshness(
         capture_start, capture_end = capture_window_bounds
         if issued_at < capture_start or expires_at > capture_end:
             die(f"{label} freshness window is outside the plan capture window")
+
+
+def _evidence_descriptor(value: Any, label: str) -> tuple[Path, bytes]:
+    if not isinstance(value, dict) or set(value) != {"path", "sha256", "size_bytes"}:
+        die(f"{label} descriptor fields are not exact")
+    path_value = value.get("path")
+    if not isinstance(path_value, str) or not path_value.strip():
+        die(f"{label}.path must be a non-empty string")
+    path = Path(path_value)
+    if not path.is_absolute():
+        die(f"{label}.path must be an absolute capture path")
+    if path.is_symlink() or not path.is_file():
+        die(f"{label} must be a regular non-symlink file")
+    digest = value.get("sha256")
+    if not isinstance(digest, str) or HEX64_RE.fullmatch(digest) is None:
+        die(f"{label}.sha256 is malformed")
+    size = value.get("size_bytes")
+    if isinstance(size, bool) or not isinstance(size, int) or size <= 0:
+        die(f"{label}.size_bytes is malformed")
+    try:
+        payload = path.read_bytes()
+    except OSError as error:
+        die(f"{label} is unreadable: {error.__class__.__name__}")
+    if len(payload) != size or hashlib.sha256(payload).hexdigest() != digest.lower():
+        die(f"{label} digest or size does not match its bytes")
+    return path, payload
+
+
+def _identity_v2_evidence_map(
+    value: Any,
+    request: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, bytes], dict[str, dict[str, Any]]]:
+    """Validate the retained v2 map and return the exact runtime byte map."""
+    evidence = require_object(value, "identity-v2 evidence map")
+    if set(evidence) != {"schema_version", "task_uid", "head_oid", "context", "plan_intent", "entries"}:
+        die("identity-v2 evidence map fields are not exact")
+    if evidence.get("schema_version") != IDENTITY_V2_EVIDENCE_SCHEMA:
+        die("identity-v2 evidence map schema is unsupported")
+    authority = require_object(request.get("authority"), "authority")
+    if evidence.get("task_uid") != authority.get("task_uid") or evidence.get("head_oid") != authority.get("head_oid"):
+        die("identity-v2 evidence map task/head binding mismatch")
+    context_path, context_bytes = _evidence_descriptor(evidence.get("context"), "identity-v2 context")
+    intent_path, intent_bytes = _evidence_descriptor(evidence.get("plan_intent"), "identity-v2 plan intent")
+    try:
+        context = json.loads(context_bytes.decode("utf-8"))
+        intent = json.loads(intent_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        die(f"identity-v2 context/intent JSON is malformed: {error.__class__.__name__}")
+    context = require_object(context, "identity-v2 context")
+    intent = require_object(intent, "identity-v2 plan intent")
+    if context.get("task_uid") != evidence["task_uid"] or context.get("head_oid") != evidence["head_oid"]:
+        die("identity-v2 context task/head binding mismatch")
+    if context.get("capture_window_id") != request.get("capture_window_id"):
+        die("identity-v2 context capture window binding mismatch")
+    if intent.get("context_digest") != hashlib.sha256(
+        json.dumps(context, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest():
+        die("identity-v2 plan intent context binding mismatch")
+    if not isinstance(intent.get("context_digest"), str) or HEX64_RE.fullmatch(intent["context_digest"]) is None:
+        die("identity-v2 plan intent context digest is malformed")
+    entries = evidence.get("entries")
+    if not isinstance(entries, list) or len(entries) != len(NODE_ORDER):
+        die("identity-v2 evidence map must contain exactly five entries")
+    expected_by_name = {name: EXPECTED_NODES[name] for name in NODE_ORDER}
+    seen: set[str] = set()
+    raw_by_node: dict[str, bytes] = {}
+    envelopes_by_node: dict[str, dict[str, Any]] = {}
+    for index, raw_entry in enumerate(entries):
+        entry = require_object(raw_entry, f"identity-v2 evidence entries[{index}]")
+        if set(entry) != {"node_name", "node_id", "peer_id", "raw_v1", "signed_envelope", "verification"}:
+            die(f"identity-v2 evidence entries[{index}] fields are not exact")
+        name = require_string(entry.get("node_name"), f"identity-v2 evidence entries[{index}].node_name")
+        if name in seen or name not in expected_by_name:
+            die("identity-v2 evidence map node set is duplicate or unexpected")
+        seen.add(name)
+        expected = expected_by_name[name]
+        if entry.get("node_id") != expected["node_id"]:
+            die(f"identity-v2 evidence {name} node id binding mismatch")
+        expected_peer = CANONICAL_PEER_REGISTRY[name]
+        if entry.get("peer_id") != expected_peer:
+            die(f"identity-v2 evidence {name} peer binding mismatch")
+        _, raw_bytes = _evidence_descriptor(entry.get("raw_v1"), f"identity-v2 {name} raw-v1")
+        envelope_path, envelope_bytes = _evidence_descriptor(
+            entry.get("signed_envelope"), f"identity-v2 {name} signed envelope"
+        )
+        verification_path, verification_bytes = _evidence_descriptor(
+            entry.get("verification"), f"identity-v2 {name} verification"
+        )
+        try:
+            envelope = json.loads(envelope_bytes.decode("utf-8"))
+            verification = json.loads(verification_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            die(f"identity-v2 {name} evidence JSON is malformed: {error.__class__.__name__}")
+        envelope = require_object(envelope, f"identity-v2 {name} envelope")
+        verification = require_object(verification, f"identity-v2 {name} verification")
+        if set(envelope) not in {
+            IDENTITY_V2_ENVELOPE_REQUIRED_FIELDS,
+            IDENTITY_V2_ENVELOPE_FIELDS,
+        }:
+            die(f"identity-v2 {name} envelope fields are not exact")
+        if envelope.get("schema_version") != IDENTITY_RECEIPT_SCHEMA or envelope.get("domain_separator") != "oasis7.identity_receipt.v2/signature/v1":
+            die(f"identity-v2 {name} envelope schema/domain is unsupported")
+        if envelope.get("authenticated") not in {False, True} or envelope.get("verified") not in {False, True}:
+            die(f"identity-v2 {name} envelope verdict is malformed")
+        if envelope.get("historical_only", False) is not False or envelope.get("apply_authorized", True) is not True:
+            die(f"identity-v2 {name} envelope is not current-admission evidence")
+        for field, expected_value in (
+            ("task_uid", evidence["task_uid"]), ("head_oid", evidence["head_oid"]),
+            ("frozen_head_oid", evidence["head_oid"]), ("node_id", expected["node_id"]),
+            ("peer_id", expected_peer), ("capture_window_id", request["capture_window_id"]),
+        ):
+            if envelope.get(field) != expected_value:
+                die(f"identity-v2 {name} envelope {field} binding mismatch")
+        if set(verification) != IDENTITY_V2_VERIFICATION_FIELDS:
+            die(f"identity-v2 {name} verification fields are not exact")
+        if verification.get("schema_version") != "oasis7.identity_v2_verification_receipt.v1":
+            die(f"identity-v2 {name} verification schema is unsupported")
+        if verification.get("mode") != "current_admission" or verification.get("historical_only") is not False or verification.get("apply_authorized") is not True or verification.get("verified") is not True:
+            die(f"identity-v2 {name} verification is not current-admission evidence")
+        if verification.get("authority_scope") != "deployed-governance-root":
+            die(f"identity-v2 {name} verification authority scope is not governed")
+        for field in (
+            "raw_v1_sha256", "canonical_payload_sha256", "envelope_sha256",
+            "public_key_sha256", "trust_config_sha256", "provider_registry_sha256",
+            "verifier_executable_sha256",
+        ):
+            if not isinstance(verification.get(field), str) or HEX64_RE.fullmatch(verification[field]) is None:
+                die(f"identity-v2 {name} verification {field} is malformed")
+        signed_payload = b"OASIS7-IDENTITY-RECEIPT-V2\0" + json.dumps(
+            {field: envelope[field] for field in IDENTITY_V2_SIGNED_FIELDS},
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        if verification.get("canonical_payload_sha256") != hashlib.sha256(signed_payload).hexdigest():
+            die(f"identity-v2 {name} verification is not bound to canonical payload bytes")
+        expected_envelope_digest = hashlib.sha256(
+            json.dumps(
+                {
+                    **{field: envelope[field] for field in IDENTITY_V2_SIGNED_FIELDS},
+                    "signature_hex": envelope["signature_hex"],
+                },
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        if envelope.get("canonical_digest") != expected_envelope_digest:
+            die(f"identity-v2 {name} envelope canonical digest is not independently bound")
+        if verification.get("envelope_sha256") != hashlib.sha256(envelope_bytes).hexdigest():
+            die(f"identity-v2 {name} verification is not bound to envelope bytes")
+        for field in ("task_uid", "head_oid", "node_id", "peer_id", "capture_window_id", "rotation_epoch", "signer_id"):
+            if verification.get(field) != envelope.get(field):
+                die(f"identity-v2 {name} verification {field} binding mismatch")
+        if verification.get("raw_v1_sha256") != hashlib.sha256(raw_bytes).hexdigest():
+            die(f"identity-v2 {name} verification is not bound to exact raw-v1 bytes")
+        if envelope.get("signed_payload_sha256") != hashlib.sha256(raw_bytes).hexdigest():
+            die(f"identity-v2 {name} envelope is not bound to exact raw-v1 bytes")
+        raw_by_node[name] = raw_bytes
+        envelopes_by_node[name] = envelope
+    if seen != set(NODE_ORDER):
+        die("identity-v2 evidence map node set is incomplete")
+    return evidence, raw_by_node, envelopes_by_node
+
+
+def _identity_v2_pin_file(path_value: Path, expected_sha256: str | None, label: str) -> Path:
+    """Validate one code-owned identity-v2 admission anchor before execution."""
+    path = Path(path_value)
+    if not path.is_absolute() or path.is_symlink() or not path.is_file():
+        die(f"identity-v2 {label} is not a regular code-owned file")
+    if expected_sha256 is None or HEX64_RE.fullmatch(expected_sha256) is None:
+        die(f"identity-v2 {label} digest pin is not provisioned")
+    try:
+        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError as error:
+        die(f"identity-v2 {label} cannot be read: {error.__class__.__name__}")
+    if actual != expected_sha256.lower():
+        die(f"identity-v2 {label} digest pin does not match its bytes")
+    return path
+
+
+def _identity_v2_admission_anchors() -> tuple[Path, Path, Path]:
+    """Return independently pinned verifier, trust, and provider paths."""
+    tool = _identity_v2_pin_file(
+        IDENTITY_V2_VERIFY_TOOL_PATH,
+        IDENTITY_V2_VERIFY_TOOL_SHA256,
+        "verify tool",
+    )
+    trust = _identity_v2_pin_file(
+        IDENTITY_V2_TRUST_CONFIG_PATH,
+        IDENTITY_V2_TRUST_CONFIG_SHA256,
+        "trust config",
+    )
+    registry = _identity_v2_pin_file(
+        IDENTITY_V2_PROVIDER_REGISTRY_PATH,
+        IDENTITY_V2_PROVIDER_REGISTRY_SHA256,
+        "provider registry",
+    )
+    return tool, trust, registry
+
+
+def _independently_verify_identity_v2_entries(
+    evidence: dict[str, Any],
+    context_path: Path,
+    intent_path: Path,
+) -> dict[str, dict[str, Any]]:
+    """Re-run the pinned S2 verifier over every exact retained artifact.
+
+    The verification receipt embedded in the evidence map is retention
+    evidence only.  Admission is gated by a fresh verifier process whose
+    inputs are the map's exact raw/envelope/context/intent bytes and whose
+    executable and authority files are code-owned, independently pinned
+    anchors.  Temporary verifier outputs are never promoted to admission
+    artifacts.
+    """
+    tool, trust, registry = _identity_v2_admission_anchors()
+    entries = evidence.get("entries")
+    if not isinstance(entries, list):
+        die("identity-v2 evidence entries are not a list")
+    verified_by_node: dict[str, dict[str, Any]] = {}
+    for index, raw_entry in enumerate(entries):
+        entry = require_object(raw_entry, f"identity-v2 evidence entries[{index}]")
+        name = require_string(entry.get("node_name"), f"identity-v2 evidence entries[{index}].node_name")
+        raw_path, _ = _evidence_descriptor(entry.get("raw_v1"), f"identity-v2 {name} raw-v1")
+        envelope_path, envelope_bytes = _evidence_descriptor(
+            entry.get("signed_envelope"), f"identity-v2 {name} signed envelope"
+        )
+        verification_path, verification_bytes = _evidence_descriptor(
+            entry.get("verification"), f"identity-v2 {name} verification"
+        )
+        with tempfile.TemporaryDirectory(prefix="oasis7-identity-v2-admission-") as directory:
+            temporary = Path(directory)
+            verified_path = temporary / "verified-envelope.json"
+            fresh_receipt_path = temporary / "verification.json"
+            command = [
+                sys.executable,
+                str(tool),
+                "verify",
+                "--mode",
+                "current_admission",
+                "--envelope",
+                str(envelope_path),
+                "--raw-v1",
+                str(raw_path),
+                "--context",
+                str(context_path),
+                "--plan-intent",
+                str(intent_path),
+                "--trust-config",
+                str(trust),
+                "--provider-registry",
+                str(registry),
+                "--out",
+                str(verified_path),
+                "--verification-out",
+                str(fresh_receipt_path),
+            ]
+            try:
+                result = subprocess.run(
+                    command,
+                    cwd=str(Path(__file__).resolve().parent),
+                    env={"PATH": os.environ.get("PATH", ""), "PYTHONIOENCODING": "utf-8"},
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+            except (OSError, subprocess.TimeoutExpired) as error:
+                die(f"identity-v2 independent verifier failed for {name}: {error.__class__.__name__}")
+            if result.returncode != 0:
+                detail = result.stderr.strip().splitlines()[-1] if result.stderr.strip() else "no diagnostic"
+                die(f"identity-v2 independent verifier rejected {name}: {detail[:240]}")
+            try:
+                retained_envelope = json.loads(envelope_bytes.decode("utf-8"))
+                verified_envelope = json.loads(verified_path.read_text(encoding="utf-8"))
+                fresh_receipt = json.loads(fresh_receipt_path.read_text(encoding="utf-8"))
+                retained_receipt = json.loads(verification_bytes.decode("utf-8"))
+            except (OSError, UnicodeError, json.JSONDecodeError) as error:
+                die(f"identity-v2 independent verifier output for {name} is malformed: {error.__class__.__name__}")
+        verified_envelope = require_object(verified_envelope, f"identity-v2 {name} verified envelope")
+        fresh_receipt = require_object(fresh_receipt, f"identity-v2 {name} fresh verification")
+        retained_receipt = require_object(retained_receipt, f"identity-v2 {name} retained verification")
+        if fresh_receipt.get("verified") is not True or fresh_receipt.get("mode") != "current_admission":
+            die(f"identity-v2 independent verifier did not authorize {name}")
+        if fresh_receipt.get("historical_only") is not False or fresh_receipt.get("apply_authorized") is not True:
+            die(f"identity-v2 independent verifier returned non-current evidence for {name}")
+        # The retained receipt must describe the same exact bytes and authority
+        # result as the fresh run.  Evaluation time is expected to advance.
+        for field in IDENTITY_V2_VERIFICATION_FIELDS - {"evaluation_time"}:
+            if retained_receipt.get(field) != fresh_receipt.get(field):
+                die(f"identity-v2 {name} retained verification differs from fresh verification")
+        retained_envelope = require_object(retained_envelope, f"identity-v2 {name} retained envelope")
+        if verified_envelope.get("authenticated") is not True or verified_envelope.get("verified") is not True:
+            die(f"identity-v2 independent verifier did not emit an authenticated envelope for {name}")
+        for field in IDENTITY_V2_SIGNED_FIELDS | {"signature_hex", "canonical_digest"}:
+            if verified_envelope.get(field) != retained_envelope.get(field):
+                die(f"identity-v2 {name} fresh envelope binding differs from retained envelope")
+        verified_by_node[name] = fresh_receipt
+    return verified_by_node
 
 
 def _capture_window_bounds_from_credential_ledger(
@@ -1237,9 +1653,18 @@ def _validate_nodes(
     capture_window_id: str,
     *,
     capture_window_bounds: tuple[datetime, datetime] | None = None,
+    raw_v1_bytes_by_node: Mapping[str, bytes] | None = None,
+    identity_v2_evidence: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
     if not isinstance(nodes, list) or len(nodes) != len(NODE_ORDER):
         die("nodes must contain exactly the five managed nodes")
+    if raw_v1_bytes_by_node is not None:
+        if not isinstance(raw_v1_bytes_by_node, Mapping):
+            die("exact runtime raw-v1 bytes must be supplied as a node mapping")
+        if set(raw_v1_bytes_by_node) != set(NODE_ORDER):
+            missing = sorted(set(NODE_ORDER) - set(raw_v1_bytes_by_node))
+            extra = sorted(set(raw_v1_bytes_by_node) - set(NODE_ORDER))
+            die(f"exact runtime raw-v1 node mapping is not exact (missing={missing}, extra={extra})")
     by_name: dict[str, dict[str, Any]] = {}
     seen_peer_ids: set[str] = set()
     for index, raw in enumerate(nodes):
@@ -1271,12 +1696,19 @@ def _validate_nodes(
             )
         if identity_receipt.get("node_id") != expected["node_id"]:
             die(f"{name}.identity_receipt node_id binding mismatch")
-        validate_authenticated_receipt(identity_receipt, f"{name}.identity_receipt", allowed_signers)
+        validate_authenticated_receipt(
+            identity_receipt,
+            f"{name}.identity_receipt",
+            None if identity_v2_evidence is not None else allowed_signers,
+        )
         _validate_receipt_freshness(
             identity_receipt,
             f"{name}.identity_receipt",
             capture_window_id,
             capture_window_bounds=capture_window_bounds,
+            expected_rotation_epoch=(
+                None if identity_v2_evidence is not None else CANONICAL_ROTATION_EPOCH
+            ),
         )
         peer_id = require_string(identity_receipt.get("peer_id"), f"{name}.identity_receipt.peer_id")
         expected_peer_id = governed.get("peer_id", CANONICAL_PEER_REGISTRY[name])
@@ -1295,7 +1727,16 @@ def _validate_nodes(
             owner_value = identity_receipt.get(owner)
             if isinstance(owner_value, bool) or not isinstance(owner_value, int) or owner_value < 0:
                 die(f"{name}.identity_receipt.{owner} must be a non-negative integer")
-        _validate_identity_raw_v1_digest(identity_receipt, f"{name}.identity_receipt")
+        raw_v1_bytes = None
+        if raw_v1_bytes_by_node is not None:
+            if name not in raw_v1_bytes_by_node:
+                die(f"{name}.identity_receipt is missing exact runtime raw-v1 bytes")
+            raw_v1_bytes = raw_v1_bytes_by_node[name]
+        _validate_identity_raw_v1_digest(
+            identity_receipt,
+            f"{name}.identity_receipt",
+            raw_v1_bytes=raw_v1_bytes,
+        )
         expected_uid = governed["expected_key_uid"]
         expected_gid = governed["expected_key_gid"]
         if identity_receipt["key_uid"] != expected_uid or identity_receipt["key_gid"] != expected_gid:
@@ -1305,9 +1746,10 @@ def _validate_nodes(
         # the derived identity canonical digest after those fields are checked;
         # the inventory receipt's signed payload remains immutable and is
         # validated before normalization above.
-        identity_receipt["canonical_digest"] = _canonical_receipt_digest(
-            identity_receipt, excluded_fields=frozenset({"peer_id"})
-        )
+        if identity_v2_evidence is None:
+            identity_receipt["canonical_digest"] = _canonical_receipt_digest(
+                identity_receipt, excluded_fields=frozenset({"peer_id"})
+            )
         path_style = "windows" if expected["platform"] == "windows-x64" else "posix"
         if inventory_overrides_observed_layout:
             expected_root = _normalized_path(
@@ -1695,11 +2137,50 @@ def _operation_journal(
     return journal
 
 
-def build_plan(request: dict[str, Any]) -> dict[str, Any]:
+def build_plan(
+    request: dict[str, Any],
+    *,
+    raw_v1_bytes_by_node: Mapping[str, bytes] | None = None,
+    identity_v2_evidence: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     request = require_object(request, "clean-room input")
     reject_secret_fields(request)
     if request.get("schema_version") != INPUT_SCHEMA:
         die("input schema is unsupported")
+    if identity_v2_evidence is not None:
+        evidence, evidence_raw, envelopes = _identity_v2_evidence_map(
+            identity_v2_evidence, request
+        )
+        context_descriptor_path, _ = _evidence_descriptor(
+            evidence.get("context"), "identity-v2 context"
+        )
+        intent_descriptor_path, _ = _evidence_descriptor(
+            evidence.get("plan_intent"), "identity-v2 plan intent"
+        )
+        _independently_verify_identity_v2_entries(
+            evidence, context_descriptor_path, intent_descriptor_path
+        )
+        request = copy.deepcopy(request)
+        projected_nodes = []
+        for node in request.get("nodes", []):
+            node_copy = copy.deepcopy(node)
+            name = node_copy.get("name")
+            envelope = envelopes.get(name)
+            if envelope is None:
+                die(f"identity-v2 evidence is missing node {name}")
+            node_copy["identity_receipt"] = {
+                field: envelope[field] for field in IDENTITY_RECEIPT_FIELDS
+            }
+            # This is an explicit projection from the separate verification
+            # receipt, never authority copied from an unsigned template.
+            node_copy["identity_receipt"]["authenticated"] = True
+            node_copy["identity_receipt"]["verified"] = True
+            projected_nodes.append(node_copy)
+        request["nodes"] = projected_nodes
+        if raw_v1_bytes_by_node is not None:
+            die("identity-v2 evidence map cannot be combined with caller raw-v1 mapping")
+        raw_v1_bytes_by_node = evidence_raw
+        identity_v2_evidence = evidence
     context = _validate_transaction_context(request)
     consumer_impact_record = _validate_consumer_impact_record(
         request.get("consumer_impact_record")
@@ -1729,6 +2210,8 @@ def build_plan(request: dict[str, Any]) -> dict[str, Any]:
         has_explicit_inventory,
         context["capture_window_id"],
         capture_window_bounds=capture_window_bounds,
+        raw_v1_bytes_by_node=raw_v1_bytes_by_node,
+        identity_v2_evidence=identity_v2_evidence,
     )
     credential_nonce_ledger = _validate_credential_nonce_ledger(
         request.get("credential_nonce_ledger"), nodes, context, allowed_signers
@@ -1843,6 +2326,10 @@ def build_plan(request: dict[str, Any]) -> dict[str, Any]:
             "provider_mutation_requires_external_authority": True,
         },
     }
+    if identity_v2_evidence is not None:
+        # Retain the complete map as forensic evidence. It is immutable plan
+        # input; the legacy receipt above is only an explicit projection.
+        plan["identity_v2_evidence"] = identity_v2_evidence
     material = json.dumps(plan, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
     plan["plan_digest"] = hashlib.sha256(material).hexdigest()
     return plan
@@ -1868,8 +2355,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--input", required=True, type=Path, help="authenticated five-node truth envelope")
     parser.add_argument("--out", type=Path, help="optional plan output path")
     parser.add_argument("--json", action="store_true", help="print the complete machine-readable plan")
+    parser.add_argument(
+        "--identity-v2-evidence-map",
+        type=Path,
+        help="explicit verified identity-v2 evidence map to retain and project",
+    )
     args = parser.parse_args(argv)
-    plan = build_plan(load_json(args.input).copy())
+    if args.identity_v2_evidence_map is None:
+        die("identity-v2 evidence map is required for planner CLI admission")
+    evidence = load_json(args.identity_v2_evidence_map)
+    plan = build_plan(load_json(args.input).copy(), identity_v2_evidence=evidence)
     if args.out is not None:
         output = args.out.expanduser()
         if output.is_symlink():

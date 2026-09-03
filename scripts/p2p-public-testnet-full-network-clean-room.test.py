@@ -16,12 +16,22 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE_PATH = ROOT / "scripts" / "p2p-public-testnet-full-network-clean-room.py"
+SIDECAR_PATH = ROOT / "scripts" / "p2p-public-testnet-identity-receipt-v2.py"
 
 
 def load_module():
     spec = importlib.util.spec_from_file_location("full_network_clean_room", MODULE_PATH)
     if spec is None or spec.loader is None:
         raise AssertionError(f"cannot load clean-room module: {MODULE_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_sidecar_module():
+    spec = importlib.util.spec_from_file_location("identity_receipt_v2_sidecar", SIDECAR_PATH)
+    if spec is None or spec.loader is None:
+        raise AssertionError(f"cannot load identity receipt v2 sidecar: {SIDECAR_PATH}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -1398,7 +1408,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
         self.assertEqual(first["execution"]["mode"], "plan-only")
         self.assertFalse(first["execution"]["provider_mutation_performed"])
 
-    def test_cli_writes_only_plan_artifact(self) -> None:
+    def test_cli_rejects_missing_identity_v2_evidence_map(self) -> None:
         request = self._input()
         with tempfile.TemporaryDirectory() as directory:
             input_path = Path(directory) / "input.json"
@@ -1418,11 +1428,10 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
             )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            plan = json.loads(output_path.read_text(encoding="utf-8"))
-            self.assertEqual(plan["execution"]["mode"], "plan-only")
-            self.assertFalse(plan["execution"]["plan_is_apply_proof"])
-            self.assertFalse(plan["execution"]["provider_mutation_performed"])
+            self.assertNotEqual(result.returncode, 0, "legacy input bypassed identity-v2 admission")
+            self.assertRegex(result.stderr, r"(?i)identity.?v2|evidence|admission|verification")
+            self.assertFalse(output_path.exists())
+            self.assertEqual(sorted(path.name for path in Path(directory).iterdir()), ["input.json"])
 
     def test_plan_accepts_current_v2_inventory_and_identity_receipt_freshness(self) -> None:
         """Current capture/rotation/time bindings are valid for every receipt."""
@@ -1656,6 +1665,195 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 envelope, excluded_fields=frozenset({"peer_id"})
             ),
         )
+
+    def test_v2_sidecar_executes_signer_and_verifier_over_final_canonical_payload(self) -> None:
+        """The final v2 payload must pass the existing signer and verifier seam."""
+        sidecar = load_sidecar_module()
+        request = self._input()
+        identity = request["nodes"][0]["identity_receipt"]
+        context = {
+            "task_uid": request["task_uid"],
+            "frozen_head_oid": request["head_oid"],
+            "plan_digest": "p" * 64,
+            "node_id": identity["node_id"],
+            "peer_id": identity["peer_id"],
+        }
+        signer_calls: list[tuple[bytes, dict[str, object]]] = []
+        verifier_calls: list[tuple[bytes, dict[str, object], dict[str, object]]] = []
+
+        def signer(payload: bytes, received_context: dict[str, object]) -> str:
+            signer_calls.append((payload, dict(received_context)))
+            return "d" * 128
+
+        def verifier(
+            payload: bytes,
+            envelope: dict[str, object],
+            received_context: dict[str, object],
+        ) -> dict[str, object]:
+            verifier_calls.append((payload, dict(envelope), dict(received_context)))
+            return {"verified": True}
+
+        template = dict(identity)
+        template.update(
+            {
+                "signed_payload_sha256": "a" * 64,
+                "signature_hex": "d" * 128,
+                "canonical_digest": "c" * 64,
+            }
+        )
+        raw_v1 = self._raw_runtime_identity_receipt_v1_bytes(identity)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw_path = root / "identity-receipt.v1.raw"
+            template_path = root / "identity-receipt.v2.template.json"
+            output_path = root / "identity-receipt.v2.json"
+            raw_path.write_bytes(raw_v1)
+            template_path.write_text(json.dumps(template), encoding="utf-8")
+            envelope = sidecar.create(
+                raw_path,
+                template_path,
+                output_path,
+                context=context,
+                signer=signer,
+                verifier=verifier,
+            )
+
+        self.assertEqual(len(signer_calls), 1)
+        self.assertEqual(len(verifier_calls), 1)
+        self.assertEqual(signer_calls[0][1], context)
+        self.assertEqual(verifier_calls[0][2], context)
+        self.assertEqual(verifier_calls[0][0], signer_calls[0][0])
+        self.assertEqual(verifier_calls[0][1]["signature_hex"], "d" * 128)
+        self.assertEqual(envelope["signature_hex"], "d" * 128)
+        self.assertIn(request["task_uid"].encode(), signer_calls[0][0])
+        self.assertIn(request["head_oid"].encode(), signer_calls[0][0])
+        self.assertIn(context["plan_digest"].encode(), signer_calls[0][0])
+
+    def test_executable_v2_sidecar_rejects_raw_template_identity_cross_pair(self) -> None:
+        """A raw identity from one node cannot be wrapped with another node's template."""
+        request = self._input()
+        raw_identity = request["nodes"][0]["identity_receipt"]
+        template_identity = request["nodes"][1]["identity_receipt"]
+        raw_v1 = self._raw_runtime_identity_receipt_v1_bytes(
+            raw_identity, key_path="/opt/oasis7/p2p-testnet/config/node-keypair.toml"
+        )
+        template = dict(template_identity)
+        template.update(
+            {
+                "signed_payload_sha256": "a" * 64,
+                "signature_hex": "d" * 128,
+                "canonical_digest": "c" * 64,
+            }
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw_path = root / "identity-receipt.v1.raw"
+            template_path = root / "identity-receipt.v2.template.json"
+            output_path = root / "identity-receipt.v2.json"
+            raw_path.write_bytes(raw_v1)
+            template_path.write_text(json.dumps(template), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    "python3",
+                    str(SIDECAR_PATH),
+                    "--raw-v1",
+                    str(raw_path),
+                    "--template",
+                    str(template_path),
+                    "--out",
+                    str(output_path),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertRegex(result.stderr, r"(?i)node|peer|key|identity|match")
+        self.assertFalse(output_path.exists())
+
+    def test_executable_v2_sidecar_rejects_malformed_template_freshness(self) -> None:
+        """Malformed freshness metadata must never be emitted as a v2 envelope."""
+        request = self._input()
+        identity = request["nodes"][0]["identity_receipt"]
+        template = dict(identity)
+        template.update(
+            {
+                "issued_at": "not-an-rfc3339-timestamp",
+                "signed_payload_sha256": "a" * 64,
+                "signature_hex": "d" * 128,
+                "canonical_digest": "c" * 64,
+            }
+        )
+        raw_v1 = self._raw_runtime_identity_receipt_v1_bytes(identity)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw_path = root / "identity-receipt.v1.raw"
+            template_path = root / "identity-receipt.v2.template.json"
+            output_path = root / "identity-receipt.v2.json"
+            raw_path.write_bytes(raw_v1)
+            template_path.write_text(json.dumps(template), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    "python3",
+                    str(SIDECAR_PATH),
+                    "--raw-v1",
+                    str(raw_path),
+                    "--template",
+                    str(template_path),
+                    "--out",
+                    str(output_path),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertRegex(result.stderr, r"(?i)issued|expires|timestamp|fresh|time")
+        self.assertFalse(output_path.exists())
+
+    def test_sidecar_to_plan_rejects_template_carried_signature_without_verification(self) -> None:
+        """A shape-valid sidecar output is not admission evidence without verification."""
+        request = self._input()
+        identity = request["nodes"][0]["identity_receipt"]
+        raw_v1 = self._raw_runtime_identity_receipt_v1_bytes(identity)
+        template = dict(identity)
+        template.update(
+            {
+                "signed_payload_sha256": "a" * 64,
+                "signature_hex": "d" * 128,
+                "canonical_digest": "c" * 64,
+            }
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw_path = root / "identity-receipt.v1.raw"
+            template_path = root / "identity-receipt.v2.template.json"
+            output_path = root / "identity-receipt.v2.json"
+            raw_path.write_bytes(raw_v1)
+            template_path.write_text(json.dumps(template), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    "python3",
+                    str(SIDECAR_PATH),
+                    "--raw-v1",
+                    str(raw_path),
+                    "--template",
+                    str(template_path),
+                    "--out",
+                    str(output_path),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            request["nodes"][0]["identity_receipt"] = json.loads(
+                output_path.read_text(encoding="utf-8")
+            )
+
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)signature|verif|auth|trust|receipt")
 
     def test_plan_projects_identity_commands_through_governed_v2_sidecar(self) -> None:
         """Every authoritative identity command must use the executable v2 sidecar."""

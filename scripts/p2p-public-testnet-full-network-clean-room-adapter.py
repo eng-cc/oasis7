@@ -40,7 +40,7 @@ import posixpath
 import re
 import stat
 import tempfile
-from typing import Any, Callable, NoReturn
+from typing import Any, Callable, Mapping, NoReturn
 
 
 PLAN_SCHEMA = "oasis7.public_testnet_full_network_clean_room_plan.v1"
@@ -51,6 +51,7 @@ PROVIDER_RECEIPT_SCHEMA = "oasis7.clean_room_provider_receipt.v1"
 NO_BACKUP_AUTHORITY_SCHEMA = "oasis7.no_backup_authority.v1"
 RECOVERY_RECEIPT_SCHEMA = "oasis7.recovery_receipt.v1"
 IDENTITY_RECEIPT_SCHEMA = "oasis7.identity_receipt.v2"
+IDENTITY_V2_EVIDENCE_SCHEMA = "oasis7.identity_v2_evidence_map.v1"
 IDENTITY_RECEIPT_FIELDS = frozenset(
     {
         "schema_version",
@@ -138,6 +139,19 @@ CANONICAL_PROVIDER_UID = {
     "macos-observer": 0,
 }
 RAW_IDENTITY_RECEIPT_V1_KEY_PATH = "/operator/keys/node-keypair.toml"
+RAW_IDENTITY_RECEIPT_V1_FIELDS = frozenset(
+    {
+        "schema_version",
+        "node_id",
+        "peer_id",
+        "key_path",
+        "key_sha256",
+        "key_size_bytes",
+        "key_mode",
+        "key_uid",
+        "key_gid",
+    }
+)
 OID_RE = re.compile(r"^[0-9a-fA-F]{40,64}$")
 HEX64_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 SIGNATURE_RE = re.compile(r"^[0-9a-fA-F]{128}$")
@@ -230,6 +244,7 @@ TRANSPORT_PLAN_FIELDS = frozenset(
         "operation_journal_contract",
         "adapter_verification",
         "consumer_impact_record",
+        "identity_v2_evidence",
     }
 )
 
@@ -403,19 +418,75 @@ def _canonical_raw_identity_receipt_v1_bytes(
     return json.dumps(payload, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
 
 
-def _validate_identity_raw_v1_digest(
-    identity_receipt: dict[str, Any], label: str
+def _validate_raw_identity_receipt_v1_bytes(
+    identity_receipt: dict[str, Any], raw_v1_bytes: bytes, label: str
 ) -> None:
-    """Reject rebinding a governed v2 digest after raw-v1 metadata changes."""
+    """Validate forwarded runtime bytes before invoking the provider verifier."""
+    if not isinstance(raw_v1_bytes, bytes) or not raw_v1_bytes:
+        _fail(f"{label} raw-v1 bytes must be non-empty bytes")
+    try:
+        raw = json.loads(raw_v1_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        _fail(f"{label} raw-v1 bytes are not valid UTF-8 JSON: {error.__class__.__name__}")
+    if not isinstance(raw, dict):
+        _fail(f"{label} raw-v1 bytes must contain a JSON object")
+    if set(raw) != RAW_IDENTITY_RECEIPT_V1_FIELDS:
+        missing = sorted(RAW_IDENTITY_RECEIPT_V1_FIELDS - set(raw))
+        extra = sorted(set(raw) - RAW_IDENTITY_RECEIPT_V1_FIELDS)
+        _fail(f"{label} raw-v1 fields are not exact (missing={missing}, extra={extra})")
+    if raw.get("schema_version") != "oasis7.identity_receipt.v1":
+        _fail(f"{label} raw-v1 schema is unsupported")
+    for field in ("node_id", "peer_id", "key_path"):
+        if not isinstance(raw.get(field), str) or not raw[field].strip():
+            _fail(f"{label} raw-v1 {field} must be a non-empty string")
+    _nonzero_hex(raw.get("key_sha256"), HEX64_RE, f"{label}.raw-v1.key_sha256")
+    for field in ("key_size_bytes", "key_mode", "key_uid", "key_gid"):
+        value = raw.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            _fail(f"{label} raw-v1 {field} must be a non-negative integer")
+    if raw["key_size_bytes"] <= 0:
+        _fail(f"{label} raw-v1 key_size_bytes must be positive")
+    try:
+        expected_key_mode = int(str(identity_receipt.get("key_mode")), 8)
+    except (TypeError, ValueError):
+        _fail(f"{label} governed v2 key_mode is malformed")
+    if (
+        raw["node_id"] != identity_receipt.get("node_id")
+        or raw["peer_id"] != identity_receipt.get("peer_id")
+        or raw["key_sha256"].lower() != str(identity_receipt.get("key_sha256", "")).lower()
+        or raw["key_size_bytes"] != identity_receipt.get("key_size_bytes")
+        or raw["key_uid"] != identity_receipt.get("key_uid")
+        or raw["key_gid"] != identity_receipt.get("key_gid")
+        or raw["key_mode"] != expected_key_mode
+    ):
+        _fail(f"{label} raw-v1 identity does not match the governed v2 identity")
+
+
+def _validate_identity_raw_v1_digest(
+    identity_receipt: dict[str, Any],
+    label: str,
+    *,
+    raw_v1_bytes: bytes | None = None,
+) -> None:
+    """Reject rebinding a governed v2 digest after raw-v1 metadata changes.
+
+    When the runtime output is available, callers must provide its exact bytes
+    so admission never reconstructs a payload from a guessed key path.  The
+    no-byte fallback remains for pre-v2 plan fixtures only.
+    """
     signed_payload = _string(
         identity_receipt.get("signed_payload_sha256"),
         f"{label}.signed_payload_sha256",
     ).lower()
     if not HEX64_RE.fullmatch(signed_payload):
         _fail(f"{label}.signed_payload_sha256 must be a 64-character digest")
-    expected = hashlib.sha256(
-        _canonical_raw_identity_receipt_v1_bytes(identity_receipt)
-    ).hexdigest()
+    if raw_v1_bytes is not None:
+        _validate_raw_identity_receipt_v1_bytes(identity_receipt, raw_v1_bytes, label)
+        expected = hashlib.sha256(raw_v1_bytes).hexdigest()
+    else:
+        expected = hashlib.sha256(
+            _canonical_raw_identity_receipt_v1_bytes(identity_receipt)
+        ).hexdigest()
     if signed_payload != expected:
         _fail(f"{label} signed payload is not bound to the canonical raw v1 bytes")
 
@@ -426,6 +497,7 @@ def _validate_receipt_freshness(
     capture_window_id: str,
     *,
     capture_window_bounds: tuple[dt.datetime, dt.datetime] | None = None,
+    expected_rotation_epoch: str | None = CANONICAL_ROTATION_EPOCH,
 ) -> None:
     """Require a current, plan-bound v2 receipt freshness tuple."""
     missing = {
@@ -438,7 +510,7 @@ def _validate_receipt_freshness(
         _fail(f"{label} freshness fields are incomplete: {', '.join(sorted(missing))}")
     if receipt.get("capture_window_id") != capture_window_id:
         _fail(f"{label}.capture_window_id does not match the transaction capture window")
-    if receipt.get("rotation_epoch") != CANONICAL_ROTATION_EPOCH:
+    if expected_rotation_epoch is not None and receipt.get("rotation_epoch") != expected_rotation_epoch:
         _fail(f"{label}.rotation_epoch is not the governed rotation epoch")
     issued_at = _parse_utc(receipt.get("issued_at"), f"{label}.issued_at")
     expires_at = _parse_utc(receipt.get("expires_at"), f"{label}.expires_at")
@@ -838,7 +910,11 @@ def _validate_plan_semantic_bindings(
         _fail("plan observer gate is not the code-owned fail-closed contract")
 
 
-def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
+def validate_plan(
+    plan: dict[str, Any],
+    *,
+    raw_v1_bytes_by_node: Mapping[str, bytes] | None = None,
+) -> dict[str, Any]:
     """Validate immutable planner output and all code-owned inventories."""
     plan = _object(plan, "plan")
     if plan.get("schema_version") != PLAN_SCHEMA:
@@ -853,6 +929,32 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     if authority_plan.get("consumer_impact_record") != plan["consumer_impact_record"]:
         _fail("plan authority is not bound to the consumer impact record")
     _validate_planner_authority(plan)
+    identity_v2_evidence: dict[str, Any] | None = None
+    evidence_raw_v1: Mapping[str, bytes] | None = None
+    if plan.get("identity_v2_evidence") is not None:
+        identity_v2_evidence = _object(plan.get("identity_v2_evidence"), "identity-v2 evidence map")
+        try:
+            validated_evidence, evidence_raw_v1, _ = planner._identity_v2_evidence_map(
+                identity_v2_evidence,
+                {
+                    "authority": authority_plan,
+                    "capture_window_id": plan.get("capture_window_id"),
+                },
+            )
+            context_path, _ = planner._evidence_descriptor(
+                validated_evidence.get("context"), "identity-v2 context"
+            )
+            intent_path, _ = planner._evidence_descriptor(
+                validated_evidence.get("plan_intent"), "identity-v2 plan intent"
+            )
+            planner._independently_verify_identity_v2_entries(
+                validated_evidence, context_path, intent_path
+            )
+        except (SystemExit, KeyError, TypeError) as error:
+            _fail(f"identity-v2 evidence map validation failed: {error}")
+        if raw_v1_bytes_by_node is not None:
+            _fail("identity-v2 evidence map cannot be combined with caller raw-v1 mapping")
+        raw_v1_bytes_by_node = evidence_raw_v1
     if plan.get("node_order") != list(planner.NODE_ORDER):
         _fail("plan node order is not the code-owned five-node order")
     if plan.get("canonical_host_inventory") != planner.CANONICAL_HOST_INVENTORY:
@@ -887,6 +989,16 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         _fail("plan does not contain exactly the canonical five nodes")
     if [node.get("name") for node in nodes] != list(planner.NODE_ORDER):
         _fail("plan nodes are not in the code-owned five-node order")
+    if raw_v1_bytes_by_node is not None:
+        if not isinstance(raw_v1_bytes_by_node, Mapping):
+            _fail("exact runtime raw-v1 bytes must be supplied as a node mapping")
+        if set(raw_v1_bytes_by_node) != set(planner.NODE_ORDER):
+            missing = sorted(set(planner.NODE_ORDER) - set(raw_v1_bytes_by_node))
+            extra = sorted(set(raw_v1_bytes_by_node) - set(planner.NODE_ORDER))
+            _fail(
+                "exact runtime raw-v1 node mapping is not exact "
+                f"(missing={missing}, extra={extra})"
+            )
     by_name: dict[str, dict[str, Any]] = {}
     seen_peer_ids: set[str] = set()
     for node_value in nodes:
@@ -934,7 +1046,10 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
             identity.get("schema_version") != IDENTITY_RECEIPT_SCHEMA
             or identity.get("authenticated") is not True
             or identity.get("verified") is not True
-            or identity.get("signer_id") not in CANONICAL_SIGNER_ALLOWLIST
+            or (
+                identity_v2_evidence is None
+                and identity.get("signer_id") not in CANONICAL_SIGNER_ALLOWLIST
+            )
             or identity.get("verifier_id") != CANONICAL_VERIFIER_ID
             or identity.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID
             or identity.get("node_id") != node["node_id"]
@@ -945,12 +1060,15 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
             f"{name} identity receipt",
             plan["capture_window_id"],
             capture_window_bounds=capture_window_bounds,
+            expected_rotation_epoch=(
+                None if identity_v2_evidence is not None else CANONICAL_ROTATION_EPOCH
+            ),
         )
         _reject_secret_fields(identity, f"{name} identity receipt")
         _nonzero_hex(identity.get("signed_payload_sha256"), HEX64_RE, f"{name} identity payload")
         _nonzero_hex(identity.get("signature_hex"), SIGNATURE_RE, f"{name} identity signature")
         _nonzero_hex(identity.get("canonical_digest"), HEX64_RE, f"{name} identity digest")
-        if identity.get("canonical_digest") != _canonical_receipt_digest(
+        if identity_v2_evidence is None and identity.get("canonical_digest") != _canonical_receipt_digest(
             identity, excluded_fields=frozenset({"peer_id"})
         ):
             _fail(f"{name} identity receipt canonical digest is not independently bound")
@@ -969,7 +1087,15 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
             or identity["key_gid"] != governed["expected_key_gid"]
         ):
             _fail(f"{name} identity uid/gid do not match independently authenticated deployment inventory")
-        _validate_identity_raw_v1_digest(identity, f"{name} identity receipt")
+        _validate_identity_raw_v1_digest(
+            identity,
+            f"{name} identity receipt",
+            raw_v1_bytes=(
+                raw_v1_bytes_by_node[name]
+                if raw_v1_bytes_by_node is not None
+                else None
+            ),
+        )
         peer_id = _string(identity.get("peer_id"), f"{name} identity peer id")
         expected_peer_id = governed.get("peer_id", CANONICAL_PEER_REGISTRY[name])
         if peer_id != expected_peer_id:
@@ -1096,6 +1222,7 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "plan_digest": actual_digest,
         "deployment_inventory": deployment_inventory,
         "capture_window_id": plan["capture_window_id"],
+        "identity_v2_evidence": identity_v2_evidence,
     }
 
 
@@ -1193,9 +1320,14 @@ def _validate_no_backup_authority(plan: dict[str, Any]) -> None:
         _fail("no-backup authority receipt bindings are not exact")
 
 
-def validate_authority(plan: dict[str, Any], authority: dict[str, Any]) -> dict[str, Any]:
+def validate_authority(
+    plan: dict[str, Any],
+    authority: dict[str, Any],
+    *,
+    raw_v1_bytes_by_node: Mapping[str, bytes] | None = None,
+) -> dict[str, Any]:
     """Validate external authority without accepting caller-owned identities."""
-    validate_plan(plan)
+    validate_plan(plan, raw_v1_bytes_by_node=raw_v1_bytes_by_node)
     authority = _object(authority, "adapter authority")
     _reject_secret_fields(authority, "adapter authority")
     if set(authority) - {
@@ -1494,9 +1626,14 @@ def _read_ledger(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def validate_credential_ledger(plan: dict[str, Any], path: Path) -> dict[str, int]:
+def validate_credential_ledger(
+    plan: dict[str, Any],
+    path: Path,
+    *,
+    raw_v1_bytes_by_node: Mapping[str, bytes] | None = None,
+) -> dict[str, int]:
     """Validate ownership, one-shot format, uniqueness, and replay state."""
-    validate_plan(plan)
+    validate_plan(plan, raw_v1_bytes_by_node=raw_v1_bytes_by_node)
     rows = _read_ledger(Path(path))
     seen: set[str] = set()
     plan_nonces = {_node_nonce(plan, node) for node in plan["nodes"]}
@@ -1679,9 +1816,11 @@ def validate_remote_preflight(
     node: dict[str, Any],
     evidence: dict[str, Any],
     verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None,
+    *,
+    raw_v1_bytes_by_node: Mapping[str, bytes] | None = None,
 ) -> dict[str, Any]:
     """Validate pinned remote evidence and its signed verifier-bound receipt."""
-    validate_plan(plan)
+    validate_plan(plan, raw_v1_bytes_by_node=raw_v1_bytes_by_node)
     node = _object(node, "remote preflight node")
     evidence = _object(evidence, "remote preflight evidence")
     if set(evidence) - {
@@ -2099,6 +2238,8 @@ def _verify_receipt_with_verifier(
 def _verify_plan_receipts_with_verifier(
     plan: dict[str, Any],
     verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None,
+    *,
+    raw_v1_bytes_by_node: Mapping[str, bytes] | None = None,
 ) -> None:
     """Verify inventory and identity evidence through the existing seam.
 
@@ -2111,6 +2252,17 @@ def _verify_plan_receipts_with_verifier(
     """
     if verifier is None:
         _fail("deployment inventory and identity receipts require an independent verifier")
+    if raw_v1_bytes_by_node is not None and not isinstance(raw_v1_bytes_by_node, Mapping):
+        _fail("exact runtime raw-v1 bytes must be supplied as a node mapping")
+    if raw_v1_bytes_by_node is not None:
+        expected_nodes = {node["name"] for node in plan["nodes"]}
+        if set(raw_v1_bytes_by_node) != expected_nodes:
+            missing = sorted(expected_nodes - set(raw_v1_bytes_by_node))
+            extra = sorted(set(raw_v1_bytes_by_node) - expected_nodes)
+            _fail(
+                "exact runtime raw-v1 node mapping is not exact "
+                f"(missing={missing}, extra={extra})"
+            )
     inventory = _object(plan.get("deployment_inventory"), "deployment inventory")
     inventory_receipt = _object(inventory.get("receipt"), "deployment inventory receipt")
     evidence: list[dict[str, Any]] = [
@@ -2156,6 +2308,16 @@ def _verify_plan_receipts_with_verifier(
     for item in evidence:
         verifier_receipt = copy.deepcopy(item["receipt"])
         verifier_receipt["bindings"] = item["bindings"]
+        if item["bindings"]["kind"] == "identity" and raw_v1_bytes_by_node is not None:
+            node_name = item["bindings"]["node"]
+            raw_v1_bytes = raw_v1_bytes_by_node.get(node_name)
+            identity = item["receipt"]
+            _validate_identity_raw_v1_digest(
+                identity,
+                f"{node_name} identity receipt",
+                raw_v1_bytes=raw_v1_bytes,
+            )
+            verifier_receipt["raw_v1_bytes"] = raw_v1_bytes
         try:
             _verify_receipt_with_verifier(plan, verifier_receipt, verifier)
         except AdapterError as error:
@@ -3132,6 +3294,7 @@ def _execute_unlocked(
     transport: Any = None,
     dry_run: bool = True,
     provenance_verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None,
+    raw_v1_bytes_by_node: Mapping[str, bytes] | None = None,
     resume_record: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Plan or execute a transaction through an explicitly injected adapter.
@@ -3141,8 +3304,12 @@ def _execute_unlocked(
     contracts are present.  The current repository does not supply a provider
     transport; this is intentional and keeps this adapter safe by default.
     """
-    validated = validate_plan(plan)
-    authority_summary = validate_authority(plan, authority)
+    validated = validate_plan(plan, raw_v1_bytes_by_node=raw_v1_bytes_by_node)
+    authority_summary = validate_authority(
+        plan,
+        authority,
+        raw_v1_bytes_by_node=raw_v1_bytes_by_node,
+    )
     declared_ledger = Path(plan["credential_nonce_ledger"]["path"]).absolute()
     requested_ledger = Path(ledger_path).absolute()
     if requested_ledger != declared_ledger:
@@ -3152,7 +3319,11 @@ def _execute_unlocked(
     _consumer_impact_locator(plan)
     provenance_verified = _verify_provenance(plan, authority, provenance_verifier)
     if resume_record is None:
-        ledger_summary = validate_credential_ledger(plan, Path(ledger_path))
+        ledger_summary = validate_credential_ledger(
+            plan,
+            Path(ledger_path),
+            raw_v1_bytes_by_node=raw_v1_bytes_by_node,
+        )
     else:
         resume_nonce_state = _object(
             resume_record.get("nonce_reservation_state"), "resume nonce state"
@@ -3236,7 +3407,11 @@ def _execute_unlocked(
     # Nested deployment/identity evidence is an apply-only trust boundary.
     # Place it after the existing authorization gate so an unauthorized caller
     # still fails before any newly introduced verifier callbacks run.
-    _verify_plan_receipts_with_verifier(plan, provenance_verifier)
+    _verify_plan_receipts_with_verifier(
+        plan,
+        provenance_verifier,
+        raw_v1_bytes_by_node=raw_v1_bytes_by_node,
+    )
     # Re-check the code-owned trust root against the live filesystem after
     # authority/provenance validation and before journal/nonce/provider work.
     _consumer_impact_locator(plan)
@@ -3325,7 +3500,13 @@ def _execute_unlocked(
                 transport_node = _transport_node(node)
                 _consumer_impact_locator(plan)
                 evidence = transport.inspect_node(transport_node)
-                validated_evidence = validate_remote_preflight(plan, node, evidence, provenance_verifier)
+                validated_evidence = validate_remote_preflight(
+                    plan,
+                    node,
+                    evidence,
+                    provenance_verifier,
+                    raw_v1_bytes_by_node=raw_v1_bytes_by_node,
+                )
                 preflight_evidence_receipts.append(validated_evidence["receipt"])
             _write_journal(
                 Path(journal_path),
@@ -3577,7 +3758,11 @@ def _execute_unlocked(
                 if _rollback_candidate(operation):
                     rollback_candidates.append(operation)
             try:
-                validate_authority(plan, authority)
+                validate_authority(
+                    plan,
+                    authority,
+                    raw_v1_bytes_by_node=raw_v1_bytes_by_node,
+                )
                 if provenance_verifier is None:
                     _fail("rollback requires the independent provider receipt verifier callback")
                 if _verify_provenance(plan, authority, provenance_verifier) is not True:
@@ -3673,6 +3858,7 @@ def execute(
     transport: Any = None,
     dry_run: bool = True,
     provenance_verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None,
+    raw_v1_bytes_by_node: Mapping[str, bytes] | None = None,
 ) -> dict[str, Any]:
     """Serialize one transaction while retaining the implementation boundary."""
     lock = _acquire_transaction_lock(Path(journal_path))
@@ -3685,6 +3871,7 @@ def execute(
             transport=transport,
             dry_run=dry_run,
             provenance_verifier=provenance_verifier,
+            raw_v1_bytes_by_node=raw_v1_bytes_by_node,
         )
     finally:
         _release_transaction_lock(lock)
@@ -3699,10 +3886,15 @@ def _resume_transaction_unlocked(
     transport: Any = None,
     dry_run: bool = True,
     provenance_verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None,
+    raw_v1_bytes_by_node: Mapping[str, bytes] | None = None,
 ) -> dict[str, Any]:
     """Resume only a complete/planned journal; ambiguous state is terminal."""
-    validate_plan(plan)
-    authority_summary = validate_authority(plan, authority)
+    validate_plan(plan, raw_v1_bytes_by_node=raw_v1_bytes_by_node)
+    authority_summary = validate_authority(
+        plan,
+        authority,
+        raw_v1_bytes_by_node=raw_v1_bytes_by_node,
+    )
     provenance_verified = False
     if not dry_run:
         if authority_summary["apply_authorized"] is not True:
@@ -3887,6 +4079,7 @@ def _resume_transaction_unlocked(
             transport=transport,
             dry_run=False,
             provenance_verifier=provenance_verifier,
+            raw_v1_bytes_by_node=raw_v1_bytes_by_node,
             resume_record=record,
         )
     if status in {"prepared", "running"} and dry_run:
@@ -3936,6 +4129,7 @@ def resume_transaction(
     transport: Any = None,
     dry_run: bool = True,
     provenance_verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None,
+    raw_v1_bytes_by_node: Mapping[str, bytes] | None = None,
 ) -> dict[str, Any]:
     """Serialize resume/reconciliation against the same transaction lock."""
     lock = _acquire_transaction_lock(Path(journal_path))
@@ -3948,6 +4142,7 @@ def resume_transaction(
             transport=transport,
             dry_run=dry_run,
             provenance_verifier=provenance_verifier,
+            raw_v1_bytes_by_node=raw_v1_bytes_by_node,
         )
     finally:
         _release_transaction_lock(lock)
@@ -3962,6 +4157,35 @@ def _load_json(path: Path, label: str) -> dict[str, Any]:
         _fail(f"{label} is unreadable")
 
 
+def _current_identity_v2_admission(
+    plan: dict[str, Any],
+    authority: dict[str, Any],
+    evidence_map: dict[str, Any],
+    mode: str,
+) -> dict[str, Any]:
+    """Fence identity-v2 admission before journal, ledger, or transport work."""
+    if mode not in {"current_admission", "historical_audit"}:
+        _fail("identity-v2 mode is unsupported")
+    retained = plan.get("identity_v2_evidence")
+    if not isinstance(retained, dict) or retained != evidence_map:
+        _fail("identity-v2 evidence map is not the exact map retained by the frozen plan")
+    # Current identity verification is a prerequisite, not apply authority.
+    # Historical evidence deliberately cannot pass this boundary.
+    if mode != "current_admission":
+        _fail("historical identity-v2 evidence is audit-only and cannot authorize admission")
+    if authority.get("apply_authorized") is True:
+        _fail("identity-v2 current admission cannot grant provider apply authority")
+    return {
+        "schema_version": "oasis7.identity_v2_admission.v1",
+        "identity_v2_mode": mode,
+        "identity_v2_evidence": retained,
+        "plan_digest": plan["plan_digest"],
+        "transaction_id": plan["transaction_id"],
+        "provider_mutation_performed": False,
+        "status": "identity-v2-admission-validated",
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Execute or dry-run a governed full-network clean-room adapter transaction"
@@ -3971,14 +4195,39 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--journal", required=True, type=Path)
     parser.add_argument("--ledger", required=True, type=Path)
     parser.add_argument(
+        "--identity-v2-evidence-map",
+        type=Path,
+        help="exact v2 evidence map retained by the frozen plan",
+    )
+    parser.add_argument(
+        "--identity-v2-mode",
+        choices=("current_admission", "historical_audit"),
+        help="identity-v2 admission mode; current mode is validation-only until apply authority exists",
+    )
+    parser.add_argument(
         "--apply",
         action="store_true",
         help="require an injected provider transport; otherwise fail closed",
     )
     args = parser.parse_args(argv)
+    if (args.identity_v2_evidence_map is None) != (args.identity_v2_mode is None):
+        _fail("identity-v2 evidence-map and mode must be supplied together")
+    plan = _load_json(args.plan, "plan")
+    authority = _load_json(args.authority, "authority")
+    if args.identity_v2_evidence_map is not None:
+        evidence_map = _load_json(args.identity_v2_evidence_map, "identity-v2 evidence map")
+        # This bridge path deliberately performs no lock, journal, ledger, or
+        # provider work. It validates the current receipt closure before any
+        # future execute/resume call can be made eligible.
+        validate_authority(plan, authority)
+        result = _current_identity_v2_admission(
+            plan, authority, evidence_map, args.identity_v2_mode
+        )
+        print(json.dumps(result, ensure_ascii=True, sort_keys=True))
+        return 0
     result = execute(
-        _load_json(args.plan, "plan"),
-        _load_json(args.authority, "authority"),
+        plan,
+        authority,
         journal_path=args.journal,
         ledger_path=args.ledger,
         dry_run=not args.apply,
