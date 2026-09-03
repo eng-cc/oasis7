@@ -553,6 +553,7 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         rebuild_available: None,
         pivot_available: None,
         validation_unlock_preview: None,
+        starter_industrial_feasibility: None,
         factory_production_failure_disposition: None,
         recovery_options: Vec::new(),
         fine_grain_action_translation: None,
@@ -628,6 +629,10 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         Some("unverified")
     );
     assert_eq!(gameplay.recovery_path_kind.as_deref(), Some("unverified"));
+    assert!(
+        gameplay.starter_industrial_feasibility.is_none(),
+        "legacy snapshots without the optional starter feasibility field remain readable"
+    );
     assert!(gameplay.fallback_tradeoff_preview.is_none());
     assert!(gameplay.no_safe_fallback_reason.is_none());
     assert!(gameplay.required_next_decision_action_id.is_none());

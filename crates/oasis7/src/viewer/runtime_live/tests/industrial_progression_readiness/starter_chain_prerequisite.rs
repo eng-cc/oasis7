@@ -28,7 +28,20 @@ fn setup_before_smelter_settlement(seed: u8) -> (ViewerRuntimeLiveServer, String
 fn viewer_disables_assembler_before_starter_smelter_settlement() {
     let _guard = lock_test_llm_env();
     let (mut server, agent_id, _, _) = setup_before_smelter_settlement(79);
+    let expected_feasibility = server.world.state().starter_industrial_feasibility();
     let gameplay = expect_player_gameplay(&mut server, "assembler before smelter settlement");
+    assert_eq!(
+        gameplay.starter_industrial_feasibility.as_ref(),
+        Some(&expected_feasibility),
+        "Viewer must expose the same canonical blocked starter-chain result used by runtime"
+    );
+    assert_eq!(
+        gameplay
+            .starter_industrial_feasibility
+            .as_ref()
+            .map(|result| result.status),
+        Some(crate::runtime::StarterIndustrialFeasibilityStatus::NoSafeStarterChain)
+    );
     let action = gameplay
         .available_actions
         .iter()
@@ -41,6 +54,14 @@ fn viewer_disables_assembler_before_starter_smelter_settlement() {
     assert!(reason.contains("starter Smelter production"));
     assert!(reason.contains("recipe.smelter.iron_ingot"));
     assert_eq!(action.target_agent_id.as_deref(), Some(agent_id.as_str()));
+
+    let encoded = serde_json::to_value(&gameplay).expect("serialize blocked gameplay snapshot");
+    let restored: crate::simulator::PlayerGameplaySnapshot =
+        serde_json::from_value(encoded).expect("restore blocked gameplay snapshot");
+    assert_eq!(
+        restored, gameplay,
+        "starter feasibility must round-trip losslessly"
+    );
 }
 
 #[test]
@@ -215,6 +236,31 @@ fn starter_milestone_survives_latest_recipe_and_restart() {
             .starter_industrial_feasibility()
             .candidate_available(),
         "later completion and restart must not relock the assembler candidate"
+    );
+
+    let expected_feasibility = restored.starter_industrial_feasibility();
+    let projected = server
+        .compat_snapshot(Some("player-a"))
+        .player_gameplay
+        .expect("candidate player gameplay snapshot");
+    assert_eq!(
+        projected.starter_industrial_feasibility.as_ref(),
+        Some(&expected_feasibility),
+        "Viewer and runtime-live must expose identical candidate feasibility"
+    );
+    assert_eq!(
+        projected
+            .starter_industrial_feasibility
+            .as_ref()
+            .map(|result| result.status),
+        Some(crate::runtime::StarterIndustrialFeasibilityStatus::CandidateAvailable)
+    );
+    let encoded = serde_json::to_value(&projected).expect("serialize candidate gameplay snapshot");
+    let restored_projected: crate::simulator::PlayerGameplaySnapshot =
+        serde_json::from_value(encoded).expect("restore candidate gameplay snapshot");
+    assert_eq!(
+        restored_projected, projected,
+        "candidate starter feasibility must round-trip losslessly"
     );
 
     let mut restored_world = crate::runtime::World::new_with_state(restored);

@@ -1,6 +1,7 @@
 use crate::runtime::{
     FactoryProductionFailureDispositionV1, FactoryProductionStatus, FactoryState, IndustryStage,
-    WorldEvent as RuntimeWorldEvent, WorldEventBody as RuntimeWorldEventBody, WorldState,
+    StarterIndustrialFeasibilityResult, WorldEvent as RuntimeWorldEvent,
+    WorldEventBody as RuntimeWorldEventBody, WorldState,
 };
 use crate::simulator::persist::{
     PlayerAgentClaimSnapshot, PlayerGameplayCausalityKind, PlayerGameplayExecutionState,
@@ -336,6 +337,8 @@ pub(super) fn build_player_gameplay_snapshot(
     first_agent_claim_target_available: bool,
     agent_claim: Option<PlayerAgentClaimSnapshot>,
 ) -> PlayerGameplaySnapshot {
+    let starter_industrial_feasibility: StarterIndustrialFeasibilityResult =
+        state.starter_industrial_feasibility();
     let mut available_actions = base_available_actions(
         controlled_agent_id,
         gameplay_enabled,
@@ -345,6 +348,7 @@ pub(super) fn build_player_gameplay_snapshot(
     if gameplay_enabled {
         extend_available_actions(
             state,
+            &starter_industrial_feasibility,
             controlled_agent_id,
             first_agent_claim_target_available,
             &mut available_actions,
@@ -400,6 +404,7 @@ pub(super) fn build_player_gameplay_snapshot(
             causality_signal,
         );
         gameplay.primary_intent = primary_intent.clone();
+        gameplay.starter_industrial_feasibility = Some(starter_industrial_feasibility.clone());
         gameplay
     };
     if !gameplay_enabled {
@@ -465,6 +470,7 @@ pub(super) fn build_player_gameplay_snapshot(
             rebuild_available: None,
             pivot_available: None,
             validation_unlock_preview: None,
+            starter_industrial_feasibility: None,
             factory_production_failure_disposition: None,
             recovery_options: Vec::new(),
             fine_grain_action_translation: None,
@@ -583,6 +589,7 @@ pub(super) fn build_player_gameplay_snapshot(
                 rebuild_available: None,
                 pivot_available: None,
                 validation_unlock_preview: None,
+                starter_industrial_feasibility: None,
                 factory_production_failure_disposition: None,
                 recovery_options: Vec::new(),
                 fine_grain_action_translation: None,
@@ -656,6 +663,7 @@ pub(super) fn build_player_gameplay_snapshot(
             rebuild_available: None,
             pivot_available: None,
             validation_unlock_preview: None,
+            starter_industrial_feasibility: None,
             factory_production_failure_disposition: None,
             recovery_options: Vec::new(),
             fine_grain_action_translation: None,
@@ -741,6 +749,7 @@ pub(super) fn build_player_gameplay_snapshot(
             rebuild_available: None,
             pivot_available: None,
             validation_unlock_preview: None,
+            starter_industrial_feasibility: None,
             factory_production_failure_disposition: None,
             recovery_options: Vec::new(),
             fine_grain_action_translation: None,
@@ -828,6 +837,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     rebuild_available: None,
                     pivot_available: None,
                     validation_unlock_preview: None,
+                    starter_industrial_feasibility: None,
                     factory_production_failure_disposition: None,
                     recovery_options: Vec::new(),
                     fine_grain_action_translation: None,
@@ -890,6 +900,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     rebuild_available: None,
                     pivot_available: None,
                     validation_unlock_preview: None,
+                    starter_industrial_feasibility: None,
                     factory_production_failure_disposition: None,
                     recovery_options: Vec::new(),
                     fine_grain_action_translation: None,
@@ -952,6 +963,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     rebuild_available: None,
                     pivot_available: None,
                     validation_unlock_preview: None,
+                    starter_industrial_feasibility: None,
                     factory_production_failure_disposition: None,
                     recovery_options: Vec::new(),
                     fine_grain_action_translation: None,
@@ -1014,6 +1026,7 @@ pub(super) fn build_player_gameplay_snapshot(
             rebuild_available: None,
             pivot_available: None,
             validation_unlock_preview: None,
+            starter_industrial_feasibility: None,
             factory_production_failure_disposition: None,
             recovery_options: Vec::new(),
             fine_grain_action_translation: None,
@@ -1073,8 +1086,9 @@ pub(super) fn build_player_gameplay_snapshot(
             repair_available: None,
             rebuild_available: None,
             pivot_available: None,
-            validation_unlock_preview: None,
-            factory_production_failure_disposition: None,
+                    validation_unlock_preview: None,
+                    starter_industrial_feasibility: None,
+                    factory_production_failure_disposition: None,
             recovery_options: Vec::new(),
             fine_grain_action_translation: None,
         });
@@ -1133,8 +1147,9 @@ pub(super) fn build_player_gameplay_snapshot(
             repair_available: None,
             rebuild_available: None,
             pivot_available: None,
-            validation_unlock_preview: None,
-            factory_production_failure_disposition: None,
+                    validation_unlock_preview: None,
+                    starter_industrial_feasibility: None,
+                    factory_production_failure_disposition: None,
             recovery_options: Vec::new(),
             fine_grain_action_translation: None,
         });
@@ -1193,6 +1208,7 @@ pub(super) fn build_player_gameplay_snapshot(
         rebuild_available: None,
         pivot_available: None,
         validation_unlock_preview: None,
+        starter_industrial_feasibility: None,
         factory_production_failure_disposition: None,
         recovery_options: Vec::new(),
         fine_grain_action_translation: None,

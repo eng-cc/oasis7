@@ -24,7 +24,9 @@ use super::control_plane::{
     ensure_agent_player_access_runtime, ensure_agent_player_binding_target_runtime,
     map_auth_verify_error_code, normalize_optional_public_key,
 };
-use crate::runtime::{Action as RuntimeAction, IndustryStage, WorldState};
+use crate::runtime::{
+    Action as RuntimeAction, IndustryStage, StarterIndustrialFeasibilityResult, WorldState,
+};
 use crate::simulator::{
     PlayerGameplayAction, PlayerGameplayRecentFeedback, ResourceKind, ResourceOwner, WorldKernel,
 };
@@ -106,11 +108,14 @@ pub(super) fn supports_runtime_gameplay_actions() -> bool {
     true
 }
 
-fn starter_assembler_build_disabled_reason(state: &WorldState) -> Option<String> {
-    state.starter_industrial_feasibility().disabled_reason()
+fn starter_assembler_build_disabled_reason(
+    feasibility: &StarterIndustrialFeasibilityResult,
+) -> Option<String> {
+    feasibility.disabled_reason()
 }
 pub(super) fn extend_available_actions(
     state: &WorldState,
+    starter_industrial_feasibility: &StarterIndustrialFeasibilityResult,
     first_agent_id: Option<&str>,
     first_agent_claim_target_available: bool,
     actions: &mut Vec<PlayerGameplayAction>,
@@ -184,9 +189,10 @@ pub(super) fn extend_available_actions(
             label: "Queue Assembler MK1 construction".to_string(),
             protocol_action: GAMEPLAY_ACTION_PROTOCOL.to_string(),
             target_agent_id: Some(agent_id.to_string()),
-            disabled_reason: starter_assembler_build_disabled_reason(state).or_else(|| {
-                factory_build_disabled_reason(state, agent_id, ACTION_BUILD_ASSEMBLER_MK1)
-            }),
+            disabled_reason: starter_assembler_build_disabled_reason(
+                starter_industrial_feasibility,
+            )
+            .or_else(|| factory_build_disabled_reason(state, agent_id, ACTION_BUILD_ASSEMBLER_MK1)),
         });
         return;
     }

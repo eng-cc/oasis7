@@ -16,6 +16,7 @@ use super::world_model::{WorldConfig, WorldModel};
 use crate::chain_resource_schema::{ChainResourceDelta, ChainResourceManifest};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::runtime::Snapshot as RuntimeSnapshot;
+use crate::runtime::StarterIndustrialFeasibilityResult;
 use oasis7_wasm_abi::MaterialStack;
 #[cfg(target_arch = "wasm32")]
 use serde_json::Value as RuntimeSnapshot;
@@ -493,6 +494,8 @@ pub struct PlayerGameplaySnapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validation_unlock_preview: Option<ProductValidationUnlockPreview>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub starter_industrial_feasibility: Option<StarterIndustrialFeasibilityResult>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub factory_production_failure_disposition:
         Option<PlayerGameplayFactoryProductionFailureDisposition>,
 }
@@ -643,6 +646,8 @@ struct PlayerGameplaySnapshotSerde {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     validation_unlock_preview: Option<ProductValidationUnlockPreview>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    starter_industrial_feasibility: Option<StarterIndustrialFeasibilityResult>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     factory_production_failure_disposition:
         Option<PlayerGameplayFactoryProductionFailureDisposition>,
 }
@@ -745,6 +750,7 @@ impl<'de> Deserialize<'de> for PlayerGameplaySnapshot {
             rebuild_available: legacy.rebuild_available,
             pivot_available: legacy.pivot_available,
             validation_unlock_preview: legacy.validation_unlock_preview,
+            starter_industrial_feasibility: legacy.starter_industrial_feasibility,
             factory_production_failure_disposition: legacy.factory_production_failure_disposition,
         })
     }
