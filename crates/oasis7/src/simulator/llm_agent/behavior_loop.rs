@@ -85,30 +85,42 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
         true
     }
 
-    /// Consume only the authoritative runtime completion receipt for this
-    /// agent. A schedule event is intentionally not enough to close recipe
-    /// coverage: production must reach the runtime's RecipeCompleted state.
-    /// The coverage set makes replay/duplicate delivery idempotent.
+    /// Consume authoritative completion feedback for this agent. Runtime-backed
+    /// execution must reach `RecipeCompleted`; the pure simulator applies the
+    /// recipe resource transformation atomically, so its successful
+    /// `RecipeScheduled` event is also a completion receipt. Event/job identity
+    /// keeps replay or duplicate delivery idempotent.
     fn consume_recipe_completion_feedback(&mut self, event: &WorldEvent) -> Option<bool> {
-        let runtime_event = event.runtime_event.as_ref()?;
-        let RuntimeWorldEventBody::Domain(RuntimeDomainEvent::RecipeCompleted {
-            job_id,
-            requester_agent_id,
-            recipe_id,
-            ..
-        }) = &runtime_event.body
-        else {
-            return None;
-        };
-        if requester_agent_id != &self.agent_id
-            || !RecipeCoverageProgress::is_tracked(recipe_id.as_str())
-        {
+        let (receipt_id, requester_agent_id, recipe_id) =
+            if let Some(runtime_event) = event.runtime_event.as_ref() {
+                let RuntimeWorldEventBody::Domain(RuntimeDomainEvent::RecipeCompleted {
+                    job_id,
+                    requester_agent_id,
+                    recipe_id,
+                    ..
+                }) = &runtime_event.body
+                else {
+                    return None;
+                };
+                (*job_id, requester_agent_id.as_str(), recipe_id.as_str())
+            } else {
+                let WorldEventKind::RecipeScheduled {
+                    owner: ResourceOwner::Agent { agent_id },
+                    recipe_id,
+                    ..
+                } = &event.kind
+                else {
+                    return None;
+                };
+                (event.id, agent_id.as_str(), recipe_id.as_str())
+            };
+        if requester_agent_id != self.agent_id || !RecipeCoverageProgress::is_tracked(recipe_id) {
             return None;
         }
-        if !self.remember_recipe_completion_receipt(*job_id) {
+        if !self.remember_recipe_completion_receipt(receipt_id) {
             return Some(false);
         }
-        self.recipe_coverage.mark_completed(recipe_id.as_str());
+        self.recipe_coverage.mark_completed(recipe_id);
         Some(true)
     }
 }
@@ -917,6 +929,9 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
 
     fn on_action_result(&mut self, result: &ActionResult) {
         let time = result.event.time;
+        if result.success {
+            let _ = self.consume_recipe_completion_feedback(&result.event);
+        }
         self.depleted_mine_location_cooldowns
             .retain(|_, cooldown_until_time| *cooldown_until_time >= time);
         self.trim_mine_failure_streaks(time);

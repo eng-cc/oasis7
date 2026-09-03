@@ -246,7 +246,7 @@ fn llm_agent_hard_switches_schedule_recipe_to_next_uncovered_recipe() {
 }
 
 #[test]
-fn llm_agent_does_not_count_recipe_schedule_as_completed_coverage() {
+fn llm_agent_counts_pure_simulator_recipe_event_as_completed_coverage() {
     let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), MockClient::default());
     let event = WorldEvent {
         id: 12_001,
@@ -270,16 +270,19 @@ fn llm_agent_does_not_count_recipe_schedule_as_completed_coverage() {
     behavior.on_event(&event);
 
     assert!(
-        !behavior
+        behavior
             .recipe_coverage
             .is_completed("recipe.assembler.control_chip"),
-        "scheduled work is not production completion and must not close recipe coverage"
+        "the pure simulator event carries an already-applied atomic recipe transformation"
     );
 }
 
 #[test]
-fn llm_agent_does_not_count_successful_schedule_result_as_completed_coverage() {
-    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), MockClient::default());
+fn llm_agent_counts_pure_simulator_recipe_result_as_completed_coverage() {
+    let behavior = LlmAgentBehavior::new("agent-1", base_config(), MockClient::default());
+    let mut runner: crate::simulator::AgentRunner<LlmAgentBehavior<MockClient>> =
+        crate::simulator::AgentRunner::new();
+    runner.register(behavior);
     let event = WorldEvent {
         id: 12_101,
         time: 12_102,
@@ -307,23 +310,27 @@ fn llm_agent_does_not_count_successful_schedule_result_as_completed_coverage() {
         batches: 1,
     };
 
-    behavior.on_action_result(&ActionResult {
+    let result = ActionResult {
         action,
         action_id: 12_100,
         success: true,
         event,
-    });
+    };
+    assert!(runner.notify_action_result("agent-1", &result));
 
     assert!(
-        !behavior
+        runner
+            .get("agent-1")
+            .expect("registered agent")
+            .behavior
             .recipe_coverage
             .is_completed("recipe.assembler.control_chip"),
-        "a successful schedule only starts production and must not close recipe coverage"
+        "AgentRunner must deliver the WorldKernel-shaped atomic simulator result as authoritative completion feedback"
     );
 }
 
 #[test]
-fn llm_agent_marks_recipe_coverage_from_authoritative_completion_once() {
+fn llm_agent_keeps_recipe_coverage_idempotent_across_completion_feedback() {
     let recipe_id = "recipe.assembler.control_chip";
     let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), MockClient::default());
     let scheduled_event = WorldEvent {
@@ -359,11 +366,11 @@ fn llm_agent_marks_recipe_coverage_from_authoritative_completion_once() {
         success: true,
         event: scheduled_event,
     });
-    assert!(!behavior.recipe_coverage.is_completed(recipe_id));
+    assert!(behavior.recipe_coverage.is_completed(recipe_id));
 
     // A completion for another requester is not feedback for this Agent.
     behavior.on_event(&runtime_recipe_completed_event("agent-2", recipe_id));
-    assert!(!behavior.recipe_coverage.is_completed(recipe_id));
+    assert!(behavior.recipe_coverage.is_completed(recipe_id));
 
     let completion = runtime_recipe_completed_event("agent-1", recipe_id);
     behavior.on_event(&completion);
