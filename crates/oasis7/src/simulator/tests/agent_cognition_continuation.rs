@@ -1,4 +1,4 @@
-//! Harness-policy RED fixtures for ContinuationProposalV1.
+//! Harness-policy fixtures for ContinuationProposalV1 and wake progression.
 //!
 //! Harness owns the bounded proposal and policy fields; Runtime owns the
 //! durable schedule/status projection and finality truth.  These fixtures
@@ -6,8 +6,8 @@
 
 use crate::runtime::{AgentContinuation, ContinuationBudgetV1, ContinuationStatusV1};
 use crate::simulator::{
-    AsyncAgentRunner, ContinuationHarness, ContinuationInvalidationReason, ContinuationProposalV1,
-    RuntimeContinuationStatusV1, h_v1,
+    AsyncAgentRunner, ContinuationAuthorityContextV1, ContinuationHarness,
+    ContinuationInvalidationReason, ContinuationProposalV1, RuntimeContinuationStatusV1, h_v1,
 };
 use serde_json::{Value, json};
 
@@ -57,6 +57,19 @@ fn proposal() -> ContinuationProposalV1 {
     let digest = h_v1("oasis7.cognition.continuation-proposal.v1", &digest_input);
     value["proposal_digest"] = json!(digest.as_str());
     serde_json::from_value(value).expect("decode ContinuationProposalV1")
+}
+
+fn authority_context() -> ContinuationAuthorityContextV1 {
+    ContinuationAuthorityContextV1 {
+        baseline_observation_digest:
+            "blake3:3333333333333333333333333333333333333333333333333333333333333333".to_string(),
+        goal_digest: "blake3:4444444444444444444444444444444444444444444444444444444444444444"
+            .to_string(),
+        policy_digest: "blake3:5555555555555555555555555555555555555555555555555555555555555555"
+            .to_string(),
+        precondition_digest:
+            "blake3:6666666666666666666666666666666666666666666666666666666666666666".to_string(),
+    }
 }
 
 fn runtime_projection(
@@ -328,4 +341,130 @@ fn continuation_submission_is_proposal_only_and_rejects_uncorrelated_runtime_sta
         proposal_only && uncorrelated_status_rejected,
         "Harness must remain proposal-only and reject uncorrelated Runtime status: proposal_only={proposal_only}, uncorrelated_status_rejected={uncorrelated_status_rejected}, handle={handle:?}"
     );
+}
+
+#[test]
+fn strict_continuation_admission_revalidates_every_authoritative_digest() {
+    for (field, replacement) in [
+        (
+            "baseline_observation_digest",
+            "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ),
+        (
+            "goal_digest",
+            "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        ),
+        (
+            "policy_digest",
+            "blake3:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        ),
+        (
+            "precondition_digest",
+            "blake3:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        ),
+    ] {
+        let mut current = authority_context();
+        match field {
+            "baseline_observation_digest" => {
+                current.baseline_observation_digest = replacement.to_string()
+            }
+            "goal_digest" => current.goal_digest = replacement.to_string(),
+            "policy_digest" => current.policy_digest = replacement.to_string(),
+            "precondition_digest" => current.precondition_digest = replacement.to_string(),
+            _ => unreachable!("fixture field is exhaustive"),
+        }
+        let mut harness = ContinuationHarness::default();
+        let error = harness
+            .submit_with_context(proposal(), &current)
+            .expect_err("changed authoritative context must reject the old proposal");
+        assert_eq!(error.code(), "continuation_context_stale", "field={field}");
+        assert_eq!(harness.active_count(), 0, "field={field}");
+    }
+}
+
+#[test]
+fn continuation_budget_is_chain_owned_monotonic_and_duplicate_wake_idempotent() {
+    let mut harness = ContinuationHarness::default();
+    let context = authority_context();
+    let mut current = harness
+        .submit_with_context(proposal(), &context)
+        .expect("strict continuation admission");
+
+    let first = harness
+        .consume_wake(&mut current, "wake-delivery-1", 1)
+        .expect("consume one step");
+    assert_eq!(first.remaining, 1);
+    assert!(!first.exhausted);
+
+    let duplicate = harness
+        .consume_wake(&mut current, "wake-delivery-1", 99)
+        .expect("duplicate delivery is idempotent");
+    assert_eq!(duplicate.remaining, 1);
+    assert!(duplicate.duplicate);
+    assert_eq!(current.remaining_budget.value, 1);
+
+    let mut reset_attempt: Value = serde_json::to_value(proposal()).expect("encode proposal");
+    reset_attempt["continuation_proposal_id"] = json!("proposal-reset-attempt");
+    reset_attempt["remaining_budget"] = json!({"unit": "steps", "value": 2});
+    let mut digest_input = reset_attempt.clone();
+    digest_input
+        .as_object_mut()
+        .expect("proposal object")
+        .remove("proposal_digest");
+    reset_attempt["proposal_digest"] = json!(h_v1(
+        "oasis7.cognition.continuation-proposal.v1",
+        &digest_input
+    ));
+    let reset_attempt: ContinuationProposalV1 =
+        serde_json::from_value(reset_attempt).expect("decode reset attempt");
+    let error = harness
+        .submit_with_context(reset_attempt, &context)
+        .expect_err("new proposal ID cannot reset a chain budget");
+    assert_eq!(error.code(), "continuation_budget_increase");
+
+    let exhausted = harness
+        .consume_wake(&mut current, "wake-delivery-2", 1)
+        .expect("consume final step");
+    assert_eq!(exhausted.remaining, 0);
+    assert!(exhausted.exhausted);
+    assert_eq!(
+        exhausted.terminal_disposition.as_deref(),
+        Some("budget_exhausted")
+    );
+    assert!(!current.active);
+}
+
+#[test]
+fn consumed_runtime_wake_must_revalidate_context_and_expose_next_step() {
+    let mut harness = ContinuationHarness::default();
+    let context = authority_context();
+    let submitted = harness
+        .submit_with_context(proposal(), &context)
+        .expect("strict continuation admission");
+    let mut runtime = runtime_projection(&submitted.proposal, ContinuationStatusV1::Consumed, None);
+    runtime.remaining_budget.value = 1;
+    runtime.refresh_status_digest();
+    runtime
+        .validate_authoritative()
+        .expect("consumed projection remains authoritative");
+
+    let ready = harness
+        .advance_ready_wake(submitted, &runtime, &context)
+        .expect("valid consumed wake advances to the next cognition step");
+    assert_eq!(ready.status, "consumed");
+    assert_eq!(ready.remaining_budget.value, 1);
+    assert!(!ready.active, "the consumed wake is retired before replan");
+
+    let mut stale = authority_context();
+    stale.goal_digest =
+        "blake3:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".to_string();
+    let mut harness = ContinuationHarness::default();
+    let submitted = harness
+        .submit_with_context(proposal(), &context)
+        .expect("strict continuation admission");
+    let error = harness
+        .advance_ready_wake(submitted, &runtime, &stale)
+        .expect_err("changed goal must stop wake-to-action progression");
+    assert_eq!(error.code(), "continuation_context_stale");
+    assert_eq!(harness.active_count(), 1);
 }

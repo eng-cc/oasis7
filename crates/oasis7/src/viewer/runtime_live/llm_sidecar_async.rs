@@ -3,7 +3,7 @@ use super::*;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::simulator::{AsyncAgentTurnOutcome, AsyncTurnLifecycle};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(in crate::viewer::runtime_live) struct RuntimeLlmDecision {
     pub(in crate::viewer::runtime_live) agent_id: String,
     pub(in crate::viewer::runtime_live) decision: AgentDecision,
@@ -95,10 +95,36 @@ impl RuntimeLlmSidecar {
             let _ = runner.take_completed();
         }
         for outcome in completed {
+            if self
+                .provider_terminal_states
+                .get(outcome.agent_id.as_str())
+                .is_some_and(|terminal| {
+                    outcome
+                        .prepared_request_context
+                        .as_ref()
+                        .is_some_and(|request| {
+                            request.agent_turn_id == terminal.agent_turn_id
+                                && request.decision_request_id == terminal.decision_request_id
+                        })
+                })
+            {
+                self.record_late_provider_response(&outcome);
+                tracing::warn!(
+                    agent_id = outcome.agent_id,
+                    "discarded late provider response after terminal feedback"
+                );
+                continue;
+            }
             let decision = self.provider_decision_from_async_outcome(world, kernel, outcome);
             self.provider_completed_decisions.push_back(decision);
         }
+        if !self.provider_completed_decisions.is_empty() {
+            self.persist_provider_lineage_best_effort();
+        }
         if let Some(decision) = self.provider_completed_decisions.pop_front() {
+            self.provider_held_decisions
+                .insert(decision.agent_id.clone(), decision.clone());
+            self.persist_provider_lineage_best_effort();
             return Some(decision);
         }
 
@@ -273,6 +299,7 @@ impl RuntimeLlmSidecar {
                 }
             }
         }
+        self.persist_provider_lineage_best_effort();
         RuntimeLlmDecision {
             agent_id,
             decision,

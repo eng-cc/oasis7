@@ -238,6 +238,14 @@ impl ViewerRuntimeLiveServer {
             }
             None => RuntimeLlmSidecar::new(config.decision_mode),
         };
+        if let Some(generated_world_dir) = config.generated_world_dir.as_deref() {
+            llm_sidecar.configure_provider_lineage_store(
+                generated_world_dir.join("runtime-live-provider-lineage.json"),
+            );
+            llm_sidecar
+                .restore_provider_lineage(&world)
+                .map_err(ViewerRuntimeLiveServerError::Init)?;
+        }
         llm_sidecar.chunk_runtime = chunk_runtime;
         if let Some(generation) = recovered_generation.as_ref() {
             Self::restore_persisted_session_side_effects(

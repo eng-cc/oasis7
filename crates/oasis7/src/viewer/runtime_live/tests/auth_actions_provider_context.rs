@@ -4,6 +4,24 @@ use super::auth_actions::{
 };
 use super::*;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+fn wait_for_provider_phase(
+    label: &str,
+    timeout: Duration,
+    mut poll: impl FnMut() -> Result<bool, String>,
+) -> Result<(), String> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if poll()? {
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            return Err(format!("{label} did not complete within {timeout:?}"));
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    }
+}
 
 #[test]
 fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_loopback() {
@@ -160,78 +178,99 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
         .install_test_provider_capability_fixture("agent-0")
         .expect("install Runtime provider capability fixture");
     let baseline_event_seq = latest_runtime_event_seq(&server.world);
-    let mut first_decision_observed = false;
-    for _ in 0..64 {
-        server.llm_sidecar.request_decision();
-        match server.enqueue_llm_action_from_sidecar() {
-            Ok(Some(_)) => {
-                first_decision_observed = true;
-                break;
+    let phase_result = (|| {
+        wait_for_provider_phase(
+            "initial provider-backed action",
+            Duration::from_secs(5),
+            || {
+                server.llm_sidecar.request_decision();
+                match server.enqueue_llm_action_from_sidecar() {
+                    Ok(Some(_)) => Ok(true),
+                    Ok(None) => Ok(false),
+                    Err(trace) => Err(format!("initial provider action failed: {trace:?}")),
+                }
+            },
+        )?;
+        wait_for_provider_phase("transient provider failure", Duration::from_secs(5), || {
+            server.llm_sidecar.request_decision();
+            match server.enqueue_llm_action_from_sidecar() {
+                Ok(_) => Ok(false),
+                Err(trace) => {
+                    if decision_trace_provider_error_retryable(&trace).unwrap_or(false) {
+                        Ok(true)
+                    } else {
+                        Err(format!("unexpected provider failure: {trace:?}"))
+                    }
+                }
             }
-            Ok(None) | Err(_) => std::thread::yield_now(),
-        }
-    }
-    assert!(
-        first_decision_observed,
-        "provider-backed action should complete without advancing the World head"
-    );
-
-    let mut transient_failure_observed = false;
-    for _ in 0..64 {
-        server.llm_sidecar.request_decision();
-        if let Err(trace) = server.enqueue_llm_action_from_sidecar() {
-            assert!(
-                decision_trace_provider_error_retryable(&trace).unwrap_or(false),
-                "second provider response should be retryable: {trace:?}"
+        })?;
+        wait_for_provider_phase("transport retry", Duration::from_secs(5), || {
+            server.llm_sidecar.request_decision();
+            match server.enqueue_llm_action_from_sidecar() {
+                Ok(Some(_)) => Ok(true),
+                Ok(None) => Ok(false),
+                Err(trace) => Err(format!("transport retry failed: {trace:?}")),
+            }
+        })?;
+        if latest_runtime_event_seq(&server.world) <= baseline_event_seq {
+            return Err(
+                "provider-backed Runtime commit did not append an authoritative event".to_string(),
             );
-            transient_failure_observed = true;
-            break;
         }
-        std::thread::yield_now();
-    }
-    assert!(
-        transient_failure_observed,
-        "transient provider failure should surface"
-    );
+        Ok::<(), String>(())
+    })();
+    let captured_requests = {
+        let recorded = recorded.lock().expect("recorded lock");
+        let decisions = recorded
+            .iter()
+            .filter(|request| request.path == "/v1/world-simulator/decision-context")
+            .cloned()
+            .collect::<Vec<_>>();
+        let feedbacks = recorded
+            .iter()
+            .filter(|request| request.path == "/v1/world-simulator/feedback-context")
+            .cloned()
+            .collect::<Vec<_>>();
+        let paths = recorded
+            .iter()
+            .map(|request| request.path.clone())
+            .collect::<Vec<_>>();
+        (decisions, feedbacks, paths)
+    };
+    let step_result = {
+        let baseline_time = server.world.state().time;
+        let (mut writer, _client) = test_writer_pair();
+        let mut session = RuntimeLiveSession::new();
+        server
+            .advance_runtime(&mut session, &mut writer, "step", 2, None, true)
+            .map_err(|error| format!("multi-step control failed: {error:?}"))
+            .and_then(|_| {
+                (server.world.state().time == baseline_time + 2)
+                    .then_some(())
+                    .ok_or_else(|| {
+                        format!(
+                            "Step {{ count: 2 }} advanced to {}, expected {}",
+                            server.world.state().time,
+                            baseline_time + 2
+                        )
+                    })
+            })
+    };
+    // Keep process-global provider configuration scoped to the polling phase.
+    // All phase assertions happen after this guard is released, so a timeout
+    // cannot poison the mutex and cascade into unrelated fixtures.
+    clear_runtime_provider_env();
+    drop(_guard);
+    phase_result.expect("provider context phases should complete");
+    step_result.expect("multi-step control should advance each requested iteration");
 
-    let mut retry_decision_observed = false;
-    for _ in 0..64 {
-        server.llm_sidecar.request_decision();
-        match server.enqueue_llm_action_from_sidecar() {
-            Ok(Some(_)) => {
-                retry_decision_observed = true;
-                break;
-            }
-            Ok(None) | Err(_) => std::thread::yield_now(),
-        }
-    }
-    assert!(
-        retry_decision_observed,
-        "transport retry should complete with the preserved provider turn"
-    );
-    assert!(
-        latest_runtime_event_seq(&server.world) > baseline_event_seq,
-        "provider-backed Runtime commit should append an authoritative event"
-    );
-
-    let recorded = recorded.lock().expect("recorded lock");
-    let decision_records: Vec<&RecordedHttpRequest> = recorded
-        .iter()
-        .filter(|request| request.path == "/v1/world-simulator/decision-context")
-        .collect();
-    let feedback_records: Vec<&RecordedHttpRequest> = recorded
-        .iter()
-        .filter(|request| request.path == "/v1/world-simulator/feedback-context")
-        .collect();
+    let (decision_records, feedback_records, recorded_paths) = captured_requests;
     assert_eq!(decision_records.len(), 3);
     assert_eq!(
         feedback_records.len(),
         2,
         "recorded paths: {:?}",
-        recorded
-            .iter()
-            .map(|request| request.path.as_str())
-            .collect::<Vec<_>>()
+        recorded_paths
     );
     assert_eq!(
         decision_records[0].path,
@@ -367,19 +406,6 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
         assert!(feedback.candidate_action_id.is_some());
         assert!(feedback.runtime_receipt_id.is_some());
     }
-    drop(recorded);
-    let baseline_time = server.world.state().time;
-    let (mut writer, _client) = test_writer_pair();
-    let mut session = RuntimeLiveSession::new();
-    server
-        .advance_runtime(&mut session, &mut writer, "step", 2, None, true)
-        .expect("multi-step control should advance each requested iteration");
-    assert_eq!(
-        server.world.state().time,
-        baseline_time + 2,
-        "Step {{ count: 2 }} must not lose the second tick after the first iteration"
-    );
-    clear_runtime_provider_env();
 }
 
 #[test]

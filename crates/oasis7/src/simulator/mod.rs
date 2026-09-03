@@ -73,7 +73,8 @@ pub use chunking::{
     chunk_coord_of, chunk_coords, chunk_grid_dims, chunk_seed,
 };
 pub use cognition_policy::{
-    ContinuationBudgetV1, ContinuationHandle, ContinuationHarness, ContinuationInvalidationReason,
+    ContinuationAuthorityContextV1, ContinuationBudgetProgressV1, ContinuationBudgetV1,
+    ContinuationHandle, ContinuationHarness, ContinuationInvalidationReason,
     ContinuationProjectionV1, ContinuationProposalV1, GoalSnapshotInputV1, GoalSnapshotProjector,
     GoalSnapshotV1, MemoryContextEntryV1, MemoryContextSnapshotV1, MemoryWriteIntentPolicyV1,
     MemoryWritePolicyContextV1, MemoryWritePolicyOutcome, MemoryWriteStore,

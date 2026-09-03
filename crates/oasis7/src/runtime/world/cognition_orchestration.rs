@@ -1,11 +1,6 @@
-//! World-owned cognition scheduler, wake, continuation and retention bridge.
-//!
-//! The focused cognition modules are deliberately provider-free state
-//! machines.  This bridge gives `World` one durable owner for them: every
-//! mutation is encoded back into the additive cognition projection so the
-//! existing JSON/distfs snapshot pipeline restores the exact same lifecycle.
-
 use super::World;
+use super::cognition_persistence_validation::append_cognition_event;
+use crate::runtime::cognition_recovery::{RuntimeCognitionBaseBindingV1, cognition_digest_v1};
 use crate::runtime::cognition_retention::{
     CognitionRetentionStore, RetentionExecutionProbe, RetentionRecordV1,
 };
@@ -13,9 +8,9 @@ use crate::runtime::cognition_scheduler::{
     CognitionScheduler, SchedulerEnqueueOutcome, SchedulerPolicyV1, SchedulerWakeV1,
 };
 use crate::runtime::cognition_wake::{
-    AgentContinuation, CognitionContinuationProposalV1, ContinuationReorgReport,
-    ContinuationStatusV1, ContinuationTransition, WakeConditionV1, WakeConditionValidator,
-    WakeEvaluation, WakeEvaluationContext,
+    AgentContinuation, CognitionContinuationProposalV1, CognitionWakeDispositionV1,
+    ContinuationReorgReport, ContinuationStatusV1, ContinuationTransition, WakeConditionV1,
+    WakeConditionValidator, WakeEvaluation, WakeEvaluationContext,
 };
 use crate::runtime::error::WorldError;
 use crate::simulator::ResourceKind;
@@ -46,9 +41,6 @@ impl World {
         }
     }
 
-    /// Configure the durable World scheduler.  Configuration is encoded in
-    /// the cognition projection immediately so a save taken before the first
-    /// wake still restores the chosen policy and capacity.
     pub fn with_cognition_scheduler(mut self, policy: SchedulerPolicyV1, capacity: usize) -> Self {
         let scheduler = CognitionScheduler::try_new(policy, capacity)
             .expect("invalid cognition scheduler configuration");
@@ -57,8 +49,6 @@ impl World {
         self
     }
 
-    /// Fallible constructor used by restore/admission paths so invalid
-    /// scheduler policy or capacity can never enter the World projection.
     pub fn try_with_cognition_scheduler(
         mut self,
         policy: SchedulerPolicyV1,
@@ -70,9 +60,30 @@ impl World {
         Ok(self)
     }
 
-    /// Bind the scheduler and cognition adapters to the World-owned identity.
-    /// An existing contradictory binding is never overwritten.
     pub fn bind_cognition_runtime(
+        &mut self,
+        world_id: impl Into<String>,
+        branch_id: impl Into<String>,
+        finality_epoch: u64,
+        finality_block_hash: Option<String>,
+        finality_status: impl Into<String>,
+        reorg_epoch: u64,
+    ) -> Result<(), WorldError> {
+        let mut transaction = self.clone();
+        transaction.bind_cognition_runtime_inner(
+            world_id,
+            branch_id,
+            finality_epoch,
+            finality_block_hash,
+            finality_status,
+            reorg_epoch,
+        )?;
+        transaction.persist_runtime_transaction_if_configured()?;
+        *self = transaction;
+        Ok(())
+    }
+
+    fn bind_cognition_runtime_inner(
         &mut self,
         world_id: impl Into<String>,
         branch_id: impl Into<String>,
@@ -108,6 +119,33 @@ impl World {
         {
             return Err(cognition_validation_error("runtime_binding_invalid"));
         }
+        let world_id = binding["world_id"]
+            .as_str()
+            .ok_or_else(|| cognition_validation_error("runtime_binding_invalid"))?;
+        let branch_id = binding["branch_id"]
+            .as_str()
+            .ok_or_else(|| cognition_validation_error("runtime_binding_invalid"))?;
+        let finality_status = binding["finality_status"]
+            .as_str()
+            .ok_or_else(|| cognition_validation_error("runtime_binding_invalid"))?;
+        let base_world_hash = self.current_state_root_hash()?;
+        let runtime_manifest_hash = self.current_manifest_hash()?;
+        RuntimeCognitionBaseBindingV1 {
+            world_id: world_id.to_string(),
+            branch_id: branch_id.to_string(),
+            finality_epoch,
+            finality_block_hash: binding["finality_block_hash"].as_str().map(str::to_string),
+            finality_status: finality_status.to_string(),
+            base_tick: self.state.time,
+            base_world_hash: cognition_digest_v1("oasis7.runtime.manifest.v1", &base_world_hash),
+            reorg_epoch,
+            runtime_manifest_hash: cognition_digest_v1(
+                "oasis7.runtime.manifest.v1",
+                &runtime_manifest_hash,
+            ),
+        }
+        .validate()
+        .map_err(|error| cognition_validation_error(error.code()))?;
         if let Some(existing) = self.cognition.get("runtime_binding")
             && existing != &JsonValue::Null
             && existing != &binding
@@ -120,7 +158,56 @@ impl World {
         Ok(())
     }
 
+    pub fn start_cognition_turn(
+        &mut self,
+        agent_id: &str,
+        agent_session_id: &str,
+        agent_turn_id: &str,
+        decision_request_id: &str,
+        request_digest: &str,
+    ) -> Result<(), WorldError> {
+        let bounded = |value: &str| !value.trim().is_empty() && value.len() <= 256;
+        if self.cognition_runtime_is_unbound()
+            || !bounded(agent_id)
+            || !bounded(agent_session_id)
+            || !bounded(agent_turn_id)
+            || !bounded(decision_request_id)
+            || !bounded(request_digest)
+        {
+            return Err(cognition_validation_error("cognition_turn_invalid"));
+        }
+        if !self.state.agents.is_empty() && !self.state.agents.contains_key(agent_id) {
+            return Err(cognition_validation_error("cognition_agent_missing"));
+        }
+        let mut transaction = self.clone();
+        append_cognition_event(
+            &mut transaction.cognition,
+            "TurnStarted",
+            json!({
+                "agent_id": agent_id,
+                "agent_session_id": agent_session_id,
+                "agent_turn_id": agent_turn_id,
+                "decision_request_id": decision_request_id,
+                "request_digest": request_digest,
+            }),
+        )?;
+        transaction.persist_runtime_transaction_if_configured()?;
+        *self = transaction;
+        Ok(())
+    }
+
     pub fn enqueue_cognition_wake(
+        &mut self,
+        wake: SchedulerWakeV1,
+    ) -> Result<SchedulerEnqueueOutcome, WorldError> {
+        let mut transaction = self.clone();
+        let outcome = transaction.enqueue_cognition_wake_inner(wake)?;
+        transaction.persist_runtime_transaction_if_configured()?;
+        *self = transaction;
+        Ok(outcome)
+    }
+
+    fn enqueue_cognition_wake_inner(
         &mut self,
         wake: SchedulerWakeV1,
     ) -> Result<SchedulerEnqueueOutcome, WorldError> {
@@ -135,6 +222,26 @@ impl World {
             "SchedulerWakeEnqueued",
             Some(&wake),
         )?;
+        Ok(outcome)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn enqueue_cognition_wake_for_test(
+        &mut self,
+        wake: SchedulerWakeV1,
+    ) -> Result<SchedulerEnqueueOutcome, WorldError> {
+        let mut transaction = self.clone();
+        let mut scheduler = transaction.cognition_scheduler()?;
+        scheduler.advance_logical_tick(transaction.state.time);
+        let outcome = scheduler
+            .try_enqueue(wake.clone())
+            .map_err(|error| scheduler_error(error.code()))?;
+        transaction.cognition_commit_scheduler_transaction(
+            &scheduler,
+            "SchedulerWakeEnqueued",
+            Some(&wake),
+        )?;
+        *self = transaction;
         Ok(outcome)
     }
 
@@ -155,7 +262,7 @@ impl World {
             self.cognition_wake_has_active_continuation(wake, &continuations)
         });
         let selected = scheduler.select_ready_if(tick, |wake| {
-            self.cognition_wake_conditions_ready(wake, &continuations)
+            self.cognition_wake_conditions_ready(wake, &continuations, tick)
         });
         let mut transaction = self.clone();
         for wake in &stale {
@@ -187,17 +294,11 @@ impl World {
                 }
             }
         }
+        transaction.persist_runtime_transaction_if_configured()?;
         *self = transaction;
         Ok(selected)
     }
 
-    /// Run one scheduler service pass from the authoritative World path.
-    ///
-    /// The returned wakes are leases: capacity remains occupied until the
-    /// caller reports completion through `release_cognition_wake`, or until a
-    /// terminal continuation transition deactivates the same wake identity.
-    /// A World without a configured scheduler is intentionally a no-op so
-    /// legacy worlds do not acquire an implicit policy.
     pub fn service_cognition_scheduler_tick(
         &mut self,
         tick: u64,
@@ -209,9 +310,6 @@ impl World {
         else {
             return Ok(Vec::new());
         };
-        // An empty ready/backpressure set has no service work. In particular,
-        // do not append a journal event on every tick while a lease is
-        // waiting for its exact completion release.
         let has_ready_or_pending = state
             .get("active")
             .and_then(JsonValue::as_array)
@@ -226,8 +324,6 @@ impl World {
         self.select_ready_cognition_wakes(tick)
     }
 
-    /// Release exactly one durable scheduler lease.  Unknown identities are
-    /// rejected transactionally, leaving the scheduler projection unchanged.
     pub fn release_cognition_wake(&mut self, wake_id: &str) -> Result<SchedulerWakeV1, WorldError> {
         if wake_id.trim().is_empty() {
             return Err(scheduler_error("in_flight_wake_missing"));
@@ -242,10 +338,6 @@ impl World {
             "SchedulerWakeReleased",
             Some(&wake),
         )?;
-        // A release makes one bounded slot available immediately. Promote
-        // due backpressure entries in the same World transaction so a
-        // pending wake cannot remain stranded until an out-of-band recovery
-        // call.
         let recovered = scheduler.recover_capacity_preserving_cursor(self.state.time);
         for recovered_wake in &recovered {
             transaction.cognition_commit_scheduler_transaction(
@@ -254,20 +346,19 @@ impl World {
                 Some(recovered_wake),
             )?;
         }
+        transaction.persist_runtime_transaction_if_configured()?;
         *self = transaction;
         Ok(wake)
     }
 
-    /// Release the in-flight slot abandoned by the process that was restored,
-    /// then recover pending wakes without advancing the committed cursor.
     pub fn recover_cognition_scheduler(
         &mut self,
         tick: u64,
     ) -> Result<Vec<SchedulerWakeV1>, WorldError> {
-        let mut scheduler = self.cognition_scheduler()?;
+        let mut transaction = self.clone();
+        let mut scheduler = transaction.cognition_scheduler()?;
         let mut recovered = scheduler.recover_in_flight_preserving_cursor(tick);
         recovered.extend(scheduler.recover_capacity_preserving_cursor(tick));
-        let mut transaction = self.clone();
         if recovered.is_empty() {
             transaction.cognition_commit_scheduler_transaction(
                 &scheduler,
@@ -283,6 +374,7 @@ impl World {
                 )?;
             }
         }
+        transaction.persist_runtime_transaction_if_configured()?;
         *self = transaction;
         Ok(recovered)
     }
@@ -294,8 +386,6 @@ impl World {
             .unwrap_or(JsonValue::Null)
     }
 
-    /// Read the durable scheduler leases for the production dispatcher.
-    /// Unconfigured legacy worlds have no cognition leases.
     pub fn cognition_in_flight_wakes(&self) -> Result<Vec<SchedulerWakeV1>, WorldError> {
         if self
             .cognition
@@ -305,6 +395,33 @@ impl World {
             return Ok(Vec::new());
         }
         Ok(self.cognition_scheduler()?.in_flight_wakes())
+    }
+
+    pub fn consume_cognition_wake<F>(
+        &mut self,
+        wake_id: &str,
+        dispatch: F,
+    ) -> Result<SchedulerWakeV1, WorldError>
+    where
+        F: FnOnce(&SchedulerWakeV1) -> Result<CognitionWakeDispositionV1, WorldError>,
+    {
+        let wake = self
+            .cognition_in_flight_wakes()?
+            .into_iter()
+            .find(|wake| wake.wake_id == wake_id)
+            .ok_or_else(|| scheduler_error("in_flight_wake_missing"))?;
+        let disposition = dispatch(&wake)?;
+        Ok(self.handoff_cognition_wake(wake_id, disposition)?.wake)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn install_cognition_continuation_for_test(
+        &mut self,
+        continuation: AgentContinuation,
+    ) -> Result<(), WorldError> {
+        let mut continuations = self.cognition_continuations_typed()?;
+        continuations.push(continuation);
+        self.cognition_set_continuations(&continuations)
     }
 
     pub fn cognition_execution_metrics(&self) -> JsonValue {
@@ -327,9 +444,17 @@ impl World {
         &self,
         conditions: &[WakeConditionV1],
     ) -> Result<WakeEvaluation, WorldError> {
+        self.evaluate_cognition_wake_at_tick(conditions, self.state.time)
+    }
+
+    fn evaluate_cognition_wake_at_tick(
+        &self,
+        conditions: &[WakeConditionV1],
+        tick: u64,
+    ) -> Result<WakeEvaluation, WorldError> {
         let head_digest = self.current_state_root_hash()?;
         let (event_digests, receipt_ids) = self.cognition_committed_evidence()?;
-        let mut context = WakeEvaluationContext::at(self.state.time)
+        let mut context = WakeEvaluationContext::at(tick)
             .with_evaluation_head(&head_digest)
             .with_reorg_epoch(self.cognition_reorg_epoch());
         for digest in &event_digests {
@@ -361,38 +486,25 @@ impl World {
         self.evaluate_cognition_wake_with_context(conditions, context)
     }
 
-    /// Admit an agent-owned continuation proposal at the Runtime boundary.
-    /// Identity, sequence, status and digest fields are allocated here; none
-    /// are accepted from a caller-owned wire projection.
     pub fn admit_cognition_continuation(
         &mut self,
         proposal: CognitionContinuationProposalV1,
     ) -> Result<AgentContinuation, WorldError> {
-        // Admission allocates a process-global proposal sequence as well as
-        // binding the cognition projection. Keep both mutations in the same
-        // World transaction so a rejected proposal cannot poison the next
-        // request with a forged runtime binding or consume an ID.
         let mut transaction = self.clone();
         let admitted = transaction.admit_cognition_continuation_inner(proposal)?;
+        transaction.persist_runtime_transaction_if_configured()?;
         *self = transaction;
         Ok(admitted)
     }
 
-    fn admit_cognition_continuation_inner(
+    pub(in crate::runtime::world) fn admit_cognition_continuation_inner(
         &mut self,
         mut proposal: CognitionContinuationProposalV1,
     ) -> Result<AgentContinuation, WorldError> {
-        let runtime_was_bound = !self.cognition_runtime_is_unbound();
-        self.bind_cognition_proposal_fields(&mut proposal)?;
-        if !runtime_was_bound {
-            self.cognition
-                .as_object_mut()
-                .ok_or_else(|| cognition_validation_error("cognition_projection_not_object"))?
-                .insert(
-                    "runtime_binding_source".to_string(),
-                    JsonValue::String("continuation_admission_compatibility".to_string()),
-                );
+        if self.cognition_runtime_is_unbound() {
+            return Err(cognition_validation_error("runtime_binding_required"));
         }
+        self.bind_cognition_proposal_fields(&mut proposal)?;
         proposal
             .validate()
             .map_err(|error| cognition_validation_error(error.code()))?;
@@ -428,19 +540,13 @@ impl World {
             return Err(cognition_validation_error("continuation_proposal_invalid"));
         }
         let mut continuations = self.cognition_continuations_typed()?;
-        if runtime_was_bound
-            && self.cognition.get("runtime_binding_source")
-                != Some(&JsonValue::String(
-                    "continuation_admission_compatibility".to_string(),
-                ))
-            && !self.cognition_turn_is_registered(
-                &proposal.agent_id,
-                &proposal.agent_session_id,
-                &proposal.agent_turn_id,
-                &proposal.decision_request_id,
-                &proposal.origin_request_digest,
-            )
-        {
+        if !self.cognition_turn_is_registered(
+            &proposal.agent_id,
+            &proposal.agent_session_id,
+            &proposal.agent_turn_id,
+            &proposal.decision_request_id,
+            &proposal.origin_request_digest,
+        ) {
             return Err(cognition_validation_error("continuation_turn_unregistered"));
         }
         if continuations
@@ -494,9 +600,6 @@ impl World {
         continuation
             .validate_authoritative()
             .map_err(|error| cognition_validation_error(error.code()))?;
-        // Untimed event/receipt/state predicates are awakened by committed
-        // evidence. The scheduler uses MAX as a non-timed sentinel and World
-        // selection re-evaluates the typed conditions before delivery.
         let next_wake_tick = continuation.next_wake_tick.unwrap_or(u64::MAX);
         let mut scheduler = self.cognition_scheduler()?;
         scheduler.advance_logical_tick(self.state.time);
@@ -545,8 +648,6 @@ impl World {
         Err(cognition_validation_error("legacy_continuation_projection"))
     }
 
-    /// Apply one Runtime-owned continuation transition and persist its
-    /// refreshed status digest in the same World projection update.
     pub fn transition_cognition_continuation(
         &mut self,
         continuation_id: &str,
@@ -581,6 +682,7 @@ impl World {
             &transitioned,
             deactivated.as_ref(),
         )?;
+        transaction.persist_runtime_transaction_if_configured()?;
         *self = transaction;
         Ok(transitioned)
     }
@@ -633,6 +735,7 @@ impl World {
                 None,
             )?;
         }
+        transaction.persist_runtime_transaction_if_configured()?;
         *self = transaction;
         let report = ContinuationReorgReport {
             terminal_disposition: if invalidated > 0 {
@@ -820,7 +923,9 @@ impl World {
             .unwrap_or(0)
     }
 
-    fn cognition_scheduler(&self) -> Result<CognitionScheduler, WorldError> {
+    pub(in crate::runtime::world) fn cognition_scheduler(
+        &self,
+    ) -> Result<CognitionScheduler, WorldError> {
         let state = self
             .cognition
             .get("scheduler_state")
@@ -839,10 +944,7 @@ impl World {
             .iter()
             .find(|continuation| continuation.continuation_id == wake.continuation_id)
         else {
-            // Legacy scheduler-only projections remain readable while an
-            // unbound World is migrated. Once Runtime authority is bound,
-            // every wake must resolve to its durable continuation.
-            return self.cognition_runtime_is_unbound();
+            return false;
         };
         !matches!(
             continuation.status,
@@ -858,17 +960,18 @@ impl World {
         &self,
         wake: &SchedulerWakeV1,
         continuations: &[AgentContinuation],
+        tick: u64,
     ) -> bool {
         let Some(continuation) = continuations
             .iter()
             .find(|continuation| continuation.continuation_id == wake.continuation_id)
         else {
-            return self.cognition_runtime_is_unbound();
+            return false;
         };
         if !self.cognition_wake_has_active_continuation(wake, continuations) {
             return false;
         }
-        self.evaluate_cognition_wake(&continuation.wake_conditions)
+        self.evaluate_cognition_wake_at_tick(&continuation.wake_conditions, tick)
             .map(|evaluation| evaluation.status == "ready")
             .unwrap_or(false)
     }
@@ -898,11 +1001,7 @@ impl World {
             .iter()
             .find(|continuation| continuation.continuation_id == wake.continuation_id)
         else {
-            return if self.cognition_runtime_is_unbound() {
-                Ok(())
-            } else {
-                Err(cognition_validation_error("foreign_scheduler_wake"))
-            };
+            return Err(cognition_validation_error("foreign_scheduler_wake"));
         };
         if continuation.wake_id != wake.wake_id
             || continuation.world_id != wake.world_id
@@ -973,20 +1072,7 @@ impl World {
                 return Err(cognition_validation_error("foreign_continuation_proposal"));
             }
         } else {
-            if proposal.branch_id.is_empty() {
-                proposal.branch_id = "main".to_string();
-            }
-            if proposal.finality_status.is_empty() {
-                proposal.finality_status = "pending".to_string();
-            }
-            self.bind_cognition_runtime(
-                proposal.world_id.clone(),
-                proposal.branch_id.clone(),
-                proposal.finality_epoch,
-                proposal.finality_block_hash.clone(),
-                proposal.finality_status.clone(),
-                proposal.reorg_epoch,
-            )?;
+            return Err(cognition_validation_error("runtime_binding_required"));
         }
         if !self.state.agents.is_empty() && !self.state.agents.contains_key(&proposal.agent_id) {
             return Err(cognition_validation_error("continuation_agent_missing"));
@@ -1052,7 +1138,9 @@ impl World {
             })
     }
 
-    fn cognition_continuations_typed(&self) -> Result<Vec<AgentContinuation>, WorldError> {
+    pub(in crate::runtime::world) fn cognition_continuations_typed(
+        &self,
+    ) -> Result<Vec<AgentContinuation>, WorldError> {
         let value = self
             .cognition
             .get("continuations")

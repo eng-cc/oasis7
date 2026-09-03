@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use super::PreconditionSubjectV1;
+use super::cognition_scheduler::SchedulerWakeV1;
 const WAKE_SCHEMA: &str = "wake-condition.v1";
 const CONTINUATION_SCHEMA: &str = "agent-continuation.v1";
 const WAKE_CONDITIONS_DIGEST_DOMAIN: &str = "oasis7.cognition.wake-conditions.v1";
@@ -514,6 +515,40 @@ pub struct CognitionContinuationProposalV1 {
     pub source: String,
 }
 
+/// The context digests that an agent/provider must re-present when handing a
+/// ready wake back to Runtime. Runtime does not invent a goal or policy; it
+/// verifies this typed set against the originally admitted proposal digest.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CognitionContextDigestsV1 {
+    pub baseline_observation_digest: String,
+    pub goal_digest: String,
+    pub policy_digest: String,
+    pub precondition_digest: String,
+}
+
+impl CognitionContextDigestsV1 {
+    pub fn from_proposal(proposal: &CognitionContinuationProposalV1) -> Self {
+        Self {
+            baseline_observation_digest: proposal.baseline_observation_digest.clone(),
+            goal_digest: proposal.goal_digest.clone(),
+            policy_digest: proposal.policy_digest.clone(),
+            precondition_digest: proposal.precondition_digest.clone(),
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), WakeConditionError> {
+        let bounded = |value: &str| !value.trim().is_empty() && value.len() <= MAX_ID_BYTES;
+        if !bounded(&self.baseline_observation_digest)
+            || !bounded(&self.goal_digest)
+            || !bounded(&self.policy_digest)
+            || !bounded(&self.precondition_digest)
+        {
+            return Err(WakeConditionError::new("cognition_context_invalid"));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Serialize)]
 struct ContinuationProposalDigestInput<'a> {
     schema_version: u16,
@@ -619,6 +654,40 @@ pub enum ContinuationStatusV1 {
     Rejected,
 }
 
+/// A typed handoff is the only Runtime-owned completion path for a leased
+/// wake. A replan carries the complete next proposal so the World can admit
+/// it under the same transaction; no adapter may mark a wake consumed merely
+/// by acknowledging a lease.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CognitionWakeDispositionV1 {
+    Terminal {
+        status: ContinuationStatusV1,
+        reason: String,
+    },
+    Replan {
+        proposal: CognitionContinuationProposalV1,
+        budget_spent: u64,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CognitionBudgetConsumptionV1 {
+    pub continuation_id: String,
+    pub wake_id: String,
+    pub consumed: u64,
+    pub remaining_budget: ContinuationBudgetV1,
+    pub status: ContinuationStatusV1,
+    pub continuation_status_digest: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CognitionWakeHandoffResultV1 {
+    pub wake: SchedulerWakeV1,
+    pub continuation: AgentContinuation,
+    #[serde(default)]
+    pub replanned_continuation: Option<AgentContinuation>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentContinuation {
     pub schema_version: String,
@@ -672,6 +741,14 @@ impl AgentContinuation {
     /// digest and match the canonical status fields exactly.
     pub fn validate_authoritative(&self) -> Result<(), WakeConditionError> {
         let bounded = |value: &str| !value.trim().is_empty() && value.len() <= MAX_ID_BYTES;
+        let terminal = matches!(
+            self.status,
+            ContinuationStatusV1::Completed
+                | ContinuationStatusV1::Cancelled
+                | ContinuationStatusV1::Invalidated
+                | ContinuationStatusV1::Expired
+                | ContinuationStatusV1::Rejected
+        );
         if self.schema_version != CONTINUATION_SCHEMA
             || !bounded(&self.continuation_id)
             || !bounded(&self.wake_id)
@@ -700,20 +777,12 @@ impl AgentContinuation {
                 .terminal_disposition
                 .as_deref()
                 .is_some_and(|value| !bounded(value))
-            || self.remaining_budget.value == 0
+            || (self.remaining_budget.value == 0 && !terminal)
             || !matches!(self.remaining_budget.unit.as_str(), "steps" | "ticks")
         {
             return Err(WakeConditionError::new("recovery_pending"));
         }
         WakeConditionValidator::validate(self.wake_conditions.as_slice())?;
-        let terminal = matches!(
-            self.status,
-            ContinuationStatusV1::Completed
-                | ContinuationStatusV1::Cancelled
-                | ContinuationStatusV1::Invalidated
-                | ContinuationStatusV1::Expired
-                | ContinuationStatusV1::Rejected
-        );
         if (terminal && self.terminal_disposition.is_none())
             || (!terminal && self.terminal_disposition.is_some())
             || self.continuation_status_digest.as_deref() != Some(self.status_digest().as_str())

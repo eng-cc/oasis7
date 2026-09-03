@@ -23,6 +23,7 @@ mod capability_catalog;
 mod capability_test_fixture;
 mod cognition_command;
 mod cognition_feedback;
+mod cognition_gpd;
 mod cognition_orchestration;
 mod cognition_persistence;
 mod cognition_persistence_validation;
@@ -78,7 +79,9 @@ pub use module_tick_runtime::{
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use oasis7_wasm_router::PreparedSubscription;
@@ -354,6 +357,12 @@ pub struct World {
     scheduler_cursor: Option<String>,
     #[serde(skip)]
     receipt_signer: Option<ReceiptSigner>,
+    /// The last World store attached to this runtime. This is process-local
+    /// metadata and is never part of the serialized authority projection.
+    /// Cognition transactions use it to persist their committed snapshot
+    /// before returning a delivery/receipt to a caller.
+    #[serde(skip, default)]
+    persistence_dir: RefCell<Option<PathBuf>>,
     #[serde(default)]
     runtime_memory_limits: WorldRuntimeMemoryLimits,
     #[serde(default)]
@@ -400,6 +409,28 @@ impl World {
 
     pub fn new_production_hardened() -> Self {
         Self::new_with_release_security_policy(ReleaseSecurityPolicy::production_hardened())
+    }
+
+    /// Production bootstrap seam: install the World-owned cognition
+    /// authority before any provider turn or scheduler wake is admitted.
+    pub fn new_production_hardened_with_cognition_binding(
+        world_id: impl Into<String>,
+        branch_id: impl Into<String>,
+        finality_epoch: u64,
+        finality_block_hash: Option<String>,
+        finality_status: impl Into<String>,
+        reorg_epoch: u64,
+    ) -> Result<Self, WorldError> {
+        let mut world = Self::new_production_hardened();
+        world.bind_cognition_runtime(
+            world_id,
+            branch_id,
+            finality_epoch,
+            finality_block_hash,
+            finality_status,
+            reorg_epoch,
+        )?;
+        Ok(world)
     }
 
     pub fn new_with_state(mut state: WorldState) -> Self {
@@ -490,6 +521,7 @@ impl World {
             proposals: BTreeMap::new(),
             scheduler_cursor: None,
             receipt_signer: None,
+            persistence_dir: RefCell::new(None),
             runtime_memory_limits: WorldRuntimeMemoryLimits::default(),
             runtime_backpressure_stats: WorldRuntimeBackpressureStats::default(),
             logistics_sla_metrics: LogisticsSlaMetrics::default(),

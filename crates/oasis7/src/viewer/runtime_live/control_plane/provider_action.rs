@@ -218,6 +218,8 @@ impl ViewerRuntimeLiveServer {
         ) {
             self.deliver_provider_feedback_best_effort(feedback);
         }
+        self.llm_sidecar
+            .clear_provider_transport_exhausted(agent_id.as_str());
         let mut trace = prior_trace.unwrap_or_else(|| AgentDecisionTrace {
             agent_id: agent_id.clone(),
             time: self.world.state().time,

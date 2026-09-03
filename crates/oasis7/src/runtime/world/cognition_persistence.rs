@@ -1,11 +1,3 @@
-//! World-owned durable cognition projection and recovery.
-//!
-//! The provider and kernel are intentionally absent from this module.  Once a
-//! process has restarted, the only inputs accepted by recovery are the
-//! persisted commit marker, cognition journal, response artifact, receipt
-//! registry, idempotency index and root projection.  Recovery may repair
-//! projections, but it never re-executes an effect or creates a debit.
-
 #[path = "cognition_persistence_support.rs"]
 mod cognition_persistence_support;
 
@@ -30,6 +22,7 @@ use cognition_persistence_support::{
     canonical_cognition_digest, conflict_report, has_idempotency_conflict, has_receipt_conflict,
     marker_root_conflict, pending_report, reconcile_committed_projection, record_repair,
     select_commit_record, stale_base_error, validate_lineage_binding, validate_marker,
+    visible_root_conflict, visible_root_conflict_report,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value as JsonValue, json};
@@ -39,7 +32,6 @@ const PROJECTION_SCHEMA: &str = "cognition-persistence.v1";
 const JOURNAL_SCHEMA: &str = "cognition-journal.v1";
 const WORLD_COMMIT_SCHEMA: &str = "world-commit-record.v1";
 const RUNTIME_BINDING_DIGEST_DOMAIN: &str = "oasis7.runtime.manifest.v1";
-
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 struct CognitionProjection {
     #[serde(default)]
@@ -58,18 +50,11 @@ struct CognitionProjection {
     idempotency_index: BTreeMap<String, IdempotencyProjection>,
     #[serde(default)]
     recovery: Option<RecoveryProjection>,
-    /// Runtime-owned action staging.  An action is present only between the
-    /// prepared marker and the effect-linearizing finalize transaction; it is
-    /// removed when the commit publishes the World state.
     #[serde(default)]
     staged_actions: BTreeMap<String, JsonValue>,
-    /// Preserve newer cognition fields when an older runtime rewrites a
-    /// projection.  This is deliberately opaque and never contributes
-    /// authority to a commit or receipt.
     #[serde(flatten)]
     extra: BTreeMap<String, JsonValue>,
 }
-
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 struct CognitionJournalProjection {
     #[serde(default)]
@@ -81,7 +66,6 @@ struct CognitionJournalProjection {
     #[serde(default)]
     events: Vec<CognitionJournalEvent>,
 }
-
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 struct CognitionJournalEvent {
     #[serde(default)]
@@ -123,9 +107,6 @@ struct CognitionJournalEvent {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     cursor_seq: Option<u64>,
-    /// Digest of the canonical event object (without this field).  Keeping
-    /// it in the typed projection prevents recovery repairs from silently
-    /// dropping the durable wake evidence that was written by append.
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     event_digest: Option<String>,
@@ -142,7 +123,6 @@ struct IdempotencyProjection {
     #[serde(default)]
     receipt_id: String,
 }
-
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 struct RecoveryProjection {
     #[serde(default)]
@@ -169,9 +149,6 @@ struct CognitionRuntimeAuthority {
     runtime_manifest_hash: String,
     base_world_hash: String,
 }
-
-/// Return the additive projection exposed by a world.  This is useful for
-/// checkpoint tooling while keeping the fields themselves runtime-owned.
 impl World {
     pub fn cognition(&self) -> &JsonValue {
         &self.cognition
@@ -258,9 +235,6 @@ impl World {
             ),
         }
     }
-
-    /// Return the canonical World-owned binding consumed by the continuous
-    /// agent outer request. Every root/hash is recomputed from this World.
     pub fn current_cognition_runtime_binding(&self) -> Result<RuntimeBindingV1, WorldError> {
         let authority = self.current_cognition_runtime_authority()?;
         let base = self.cognition_runtime_base_binding(&authority);
@@ -281,10 +255,30 @@ impl World {
         Ok(binding)
     }
 
-    /// Prepare a cognition envelope against the actual current World head.
-    /// The returned marker is provisional; receipt/idempotency authority is
-    /// created only by finalize_cognition_commit.
     pub fn prepare_cognition_envelope(
+        &mut self,
+        envelope: AgentDecisionEnvelopeV1,
+        response_artifact: Option<JsonValue>,
+    ) -> Result<WorldCommitRecordV1, WorldError> {
+        let mut transaction = self.clone();
+        let result = transaction.prepare_cognition_envelope_inner(envelope, response_artifact);
+        match result {
+            Ok(marker) => {
+                transaction.persist_runtime_transaction_if_configured()?;
+                *self = transaction;
+                Ok(marker)
+            }
+            Err(error) => {
+                if transaction.cognition != self.cognition {
+                    transaction.persist_runtime_transaction_if_configured()?;
+                    *self = transaction;
+                }
+                Err(error)
+            }
+        }
+    }
+
+    fn prepare_cognition_envelope_inner(
         &mut self,
         envelope: AgentDecisionEnvelopeV1,
         response_artifact: Option<JsonValue>,
@@ -344,9 +338,6 @@ impl World {
             }
             return Err(cognition_validation(error.code()));
         }
-        // The cognition wire format keeps the action opaque, but an
-        // authoritative World commit may only stage an action understood by
-        // this runtime.  Provider-only payloads remain non-authoritative.
         serde_json::from_value::<crate::runtime::Action>(envelope.action.clone())
             .map_err(|error| cognition_error("cognition_action_invalid", error))?;
         let world_root = self.current_state_root_hash()?;
@@ -557,6 +548,17 @@ impl World {
         &mut self,
         commit_id: &str,
     ) -> Result<WorldCommitRecordV1, WorldError> {
+        let mut transaction = self.clone();
+        let committed = transaction.finalize_cognition_commit_inner(commit_id)?;
+        transaction.persist_runtime_transaction_if_configured()?;
+        *self = transaction;
+        Ok(committed)
+    }
+
+    fn finalize_cognition_commit_inner(
+        &mut self,
+        commit_id: &str,
+    ) -> Result<WorldCommitRecordV1, WorldError> {
         let projection = self.cognition.clone();
         let parsed: CognitionProjection = serde_json::from_value(projection.clone())
             .map_err(|error| cognition_error("invalid_cognition_projection", error))?;
@@ -588,6 +590,7 @@ impl World {
             .get(commit_id)
             .cloned()
             .ok_or_else(|| cognition_validation("cognition_staged_action_missing"))?;
+        let action_digest = cognition_digest_v1("oasis7.cognition.action.v1", &action_value);
         let action = serde_json::from_value::<crate::runtime::Action>(action_value)
             .map_err(|error| cognition_error("cognition_action_invalid", error))?;
 
@@ -612,6 +615,15 @@ impl World {
             .as_object_mut()
             .ok_or_else(|| cognition_validation("staged_actions_not_object"))?
             .remove(commit_id);
+        if !next.get("action_digests").is_some_and(JsonValue::is_object) {
+            next.as_object_mut()
+                .ok_or_else(|| cognition_validation("cognition_projection_not_object"))?
+                .insert("action_digests".to_string(), json!({}));
+        }
+        next.get_mut("action_digests")
+            .and_then(JsonValue::as_object_mut)
+            .ok_or_else(|| cognition_validation("action_digests_not_object"))?
+            .insert(committed.commit_id.clone(), json!(action_digest));
         let records = next["commit_records"]
             .as_array_mut()
             .ok_or_else(|| cognition_validation("commit_records_not_array"))?;
@@ -707,12 +719,17 @@ impl World {
     ) -> Result<CognitionResponseRecordV1, WorldError> {
         let projection: CognitionProjection = serde_json::from_value(self.cognition.clone())
             .map_err(|error| cognition_error("invalid_cognition_projection", error))?;
+        let projection_value = serde_json::to_value(&projection).map_err(WorldError::from)?;
+        let journal = projection_value
+            .get("cognition_journal")
+            .ok_or_else(|| cognition_validation("cognition_journal_missing"))?;
+        validate_cognition_journal_integrity(journal)?;
+        validate_cognition_journal_head(journal)?;
         let response = projection
             .responses
             .iter()
             .find(|response| response.envelope_digest == envelope_digest)
             .ok_or_else(|| cognition_validation("response_missing"))?;
-        let projection_value = serde_json::to_value(&projection).map_err(WorldError::from)?;
         validate_response_record(&projection_value, response)?;
         let marker = projection
             .commit_records
@@ -980,23 +997,35 @@ impl World {
         }
 
         let recovery = parsed.recovery.clone().unwrap_or_default();
+        let trusted_state_root = self.current_state_root_hash()?;
+        let trusted_root = WorldRootViewV1 {
+            schema_version: "world-root-view.v1".to_string(),
+            world_id: marker.world_id.clone(),
+            branch_id: marker.branch_id.clone(),
+            logical_tick: self.state.time,
+            state_root: trusted_state_root.clone(),
+            head_status: "canonical".to_string(),
+            commit_id: (marker.status == "committed").then(|| marker.commit_id.clone()),
+            quarantine_id: None,
+        };
         let root = if dense_marker {
-            WorldRootViewV1 {
-                schema_version: "world-root-view.v1".to_string(),
-                world_id: marker.world_id.clone(),
-                branch_id: marker.branch_id.clone(),
-                logical_tick: self.state.time,
-                state_root: self.current_state_root_hash()?,
-                head_status: "canonical".to_string(),
-                commit_id: (marker.status == "committed").then(|| marker.commit_id.clone()),
-                quarantine_id: None,
-            }
+            trusted_root.clone()
         } else {
             recovery
                 .world_root
                 .clone()
                 .unwrap_or_else(|| parent_root(&marker))
         };
+        if dense_marker
+            && recovery.world_root.as_ref().is_some_and(|visible| {
+                visible_root_conflict(&marker, visible, &trusted_state_root, self.state.time)
+            })
+        {
+            let report = visible_root_conflict_report(&marker, trusted_root);
+            persist_recovery_report(&mut projection, &report)?;
+            self.cognition = projection;
+            return Ok(report);
+        }
         let response = parsed
             .responses
             .iter()

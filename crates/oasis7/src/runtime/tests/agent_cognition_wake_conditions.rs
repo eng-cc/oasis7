@@ -56,7 +56,7 @@ fn continuation(status: &str) -> AgentContinuation {
         "world_id": WORLD_ID,
         "branch_id": "main",
         "finality_epoch": 7,
-        "finality_block_hash": "hash:finality-7",
+        "finality_block_hash": "blake3:2222222222222222222222222222222222222222222222222222222222222222",
         "finality_status": "verified",
         "reorg_epoch": 3,
         "runtime_manifest_hash": "hash:runtime-manifest-7",
@@ -286,13 +286,37 @@ fn runtime_admits_proposals_and_allocates_continuation_identity() {
     }))
     .expect("scheduler policy");
     let mut world = World::new().with_cognition_scheduler(policy, 1);
+    world
+        .bind_cognition_runtime(
+            WORLD_ID,
+            "main",
+            7,
+            Some(
+                "blake3:2222222222222222222222222222222222222222222222222222222222222222"
+                    .to_string(),
+            ),
+            "verified",
+            3,
+        )
+        .expect("bind cognition authority");
+    world
+        .start_cognition_turn(
+            AGENT_ID,
+            "session.agent-wake-1",
+            "turn.agent-wake-1",
+            "request.agent-wake-1",
+            "digest:request-42",
+        )
+        .expect("register cognition turn");
     let manifest_hash = world.current_manifest_hash().expect("manifest hash");
     let mut proposal = CognitionContinuationProposalV1 {
         schema_version: 1,
         world_id: WORLD_ID.to_string(),
         branch_id: "main".to_string(),
         finality_epoch: 7,
-        finality_block_hash: Some("hash:finality-7".to_string()),
+        finality_block_hash: Some(
+            "blake3:2222222222222222222222222222222222222222222222222222222222222222".to_string(),
+        ),
         finality_status: "verified".to_string(),
         reorg_epoch: 3,
         runtime_manifest_hash: manifest_hash,

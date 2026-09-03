@@ -238,6 +238,7 @@ impl World {
         let action_value = serde_json::to_value(&action).map_err(WorldError::from)?;
         let response_artifact_value =
             response_artifact_with_outer_lineage(&response_artifact, &request)?;
+        let action_digest = cognition_digest_v1("oasis7.cognition.action.v1", &action_value);
 
         // Idempotency is keyed by the complete outer request identity, not by
         // the current World head. A retry can arrive after the committed
@@ -258,6 +259,16 @@ impl World {
                     && record.decision_request_id == request.decision_request_id
                     && record.request_digest == request.request_digest
             }) {
+                if let Some(stored_action_digest) = self
+                    .cognition
+                    .get("action_digests")
+                    .and_then(JsonValue::as_object)
+                    .and_then(|digests| digests.get(&existing.commit_id))
+                    .and_then(JsonValue::as_str)
+                    && stored_action_digest != action_digest
+                {
+                    return Err(cognition_validation("envelope_idempotency_conflict"));
+                }
                 let response_matches = parsed.responses.iter().any(|response| {
                     response.envelope_digest == existing.envelope_digest
                         && response.response_artifact.as_ref() == Some(&response_artifact_value)
@@ -286,7 +297,8 @@ impl World {
                     "envelope_digest": stale_digest
                 }),
             );
-            self.record_stale_cognition_rejection(
+            let mut transaction = self.clone();
+            transaction.record_stale_cognition_rejection(
                 &request.agent_id,
                 &request.agent_session_id,
                 &request.agent_turn_id,
@@ -295,6 +307,8 @@ impl World {
                 &stale_digest,
                 &stale_key,
             )?;
+            transaction.persist_runtime_transaction_if_configured()?;
+            *self = transaction;
             return Err(stale_base_error());
         }
         if !self.state.agents.is_empty() && !self.state.agents.contains_key(&request.agent_id) {
@@ -1032,6 +1046,21 @@ pub(super) fn marker_root_conflict(marker: &WorldCommitRecordV1, root: &WorldRoo
     !parent && !next && !stable
 }
 
+pub(super) fn visible_root_conflict(
+    marker: &WorldCommitRecordV1,
+    visible: &WorldRootViewV1,
+    trusted_state_root: &str,
+    trusted_tick: u64,
+) -> bool {
+    visible.world_id != marker.world_id
+        || visible.branch_id != marker.branch_id
+        || visible.state_root != trusted_state_root
+        || visible.logical_tick != trusted_tick
+        || visible.head_status != "canonical"
+        || (marker.status == "committed"
+            && visible.commit_id.as_deref() != Some(marker.commit_id.as_str()))
+}
+
 pub(super) fn has_receipt_conflict(
     receipts: &[CognitionReceiptViewV1],
     marker: &WorldCommitRecordV1,
@@ -1111,6 +1140,41 @@ pub(super) fn conflict_report(
         receipt: None,
         disposition: "recovery_pending".to_string(),
         reject_reason: Some("commit_conflict".to_string()),
+        auto_submitted: false,
+        idempotency_key: Some(marker.envelope_idempotency_key.clone()),
+        quarantine_id: Some(quarantine_id),
+        candidate_root: Some(marker.staged_state_root.clone()),
+        candidate_receipt: Some(CognitionReceiptViewV1 {
+            receipt_id: marker.receipt_id.clone(),
+            receipt_digest: marker.receipt_digest.clone(),
+        }),
+        journal_head: String::new(),
+        retry_count: 0,
+        revalidation_count: 0,
+        projection_repairs: 0,
+        provider_invocation_count: 0,
+        kernel_invocation_count: 0,
+        effect_count: 0,
+        debit_count: 0,
+        world_receipt_linked_count: 0,
+        event_count: 0,
+        response_replayed: false,
+    }
+}
+
+pub(super) fn visible_root_conflict_report(
+    marker: &WorldCommitRecordV1,
+    mut canonical_root: WorldRootViewV1,
+) -> CognitionRecoveryReport {
+    let quarantine_id = format!("quarantine:{}", marker.commit_id);
+    canonical_root.head_status = "canonical".to_string();
+    canonical_root.commit_id = (marker.status == "committed").then(|| marker.commit_id.clone());
+    canonical_root.quarantine_id = None;
+    CognitionRecoveryReport {
+        world_root: Some(canonical_root),
+        receipt: None,
+        disposition: "recovery_pending".to_string(),
+        reject_reason: Some("world_root_mismatch".to_string()),
         auto_submitted: false,
         idempotency_key: Some(marker.envelope_idempotency_key.clone()),
         quarantine_id: Some(quarantine_id),

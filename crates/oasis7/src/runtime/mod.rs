@@ -129,9 +129,11 @@ pub use cognition_scheduler::{
     SchedulerExecutionMetrics, SchedulerPolicyV1, SchedulerWakeV1,
 };
 pub use cognition_wake::{
-    AgentContinuation, CognitionContinuationProposalV1, ContinuationBudgetV1,
-    ContinuationReorgReport, ContinuationStatusV1, ContinuationTransition, WakeConditionError,
-    WakeConditionV1, WakeConditionValidator, WakeEvaluation, WakeEvaluationContext,
+    AgentContinuation, CognitionBudgetConsumptionV1, CognitionContextDigestsV1,
+    CognitionContinuationProposalV1, CognitionWakeDispositionV1, CognitionWakeHandoffResultV1,
+    ContinuationBudgetV1, ContinuationReorgReport, ContinuationStatusV1, ContinuationTransition,
+    WakeConditionError, WakeConditionV1, WakeConditionValidator, WakeEvaluation,
+    WakeEvaluationContext,
 };
 
 // Events

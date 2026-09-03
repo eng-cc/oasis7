@@ -23,13 +23,13 @@ use std::thread::{self, JoinHandle};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::runtime::{AgentContinuation as RuntimeAgentContinuation, RuntimeReceiptLineageV1};
+use crate::runtime::RuntimeReceiptLineageV1;
 
 use super::Observation;
 use super::agent::{ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace};
 use super::cognition_policy::{
-    ContinuationHandle, ContinuationProposalV1, MemoryWriteIntentPolicyV1,
-    MemoryWritePolicyContextV1, MemoryWriteStore, RuntimeContinuationStatusV1,
+    ContinuationHandle, ContinuationHarness, MemoryWriteIntentPolicyV1, MemoryWritePolicyContextV1,
+    MemoryWriteStore,
 };
 use super::continuous_agent_harness::{
     AgentCognitionStore, ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1,
@@ -45,6 +45,8 @@ use super::types::WorldTime;
 mod feedback;
 pub use self::feedback::{RuntimeReceiptReadbackHandleV1, RuntimeReceiptReadbackVerifier};
 use self::feedback::{validate_feedback, validate_runtime_receipt_lineage};
+#[path = "async_agent_runner_continuation.rs"]
+mod continuation;
 #[path = "async_agent_runner_retry.rs"]
 mod retry;
 #[path = "async_agent_runner_runtime_feedback.rs"]
@@ -354,6 +356,7 @@ pub struct AsyncAgentRunner {
     awaiting_runtime: BTreeMap<String, AsyncTurnId>,
     awaiting_outcomes: BTreeMap<AsyncTurnId, AsyncAgentTurnOutcome>,
     feedback_store: AgentCognitionStore,
+    continuation_harness: ContinuationHarness,
     continuations: BTreeMap<String, ContinuationHandle>,
 }
 
@@ -372,6 +375,7 @@ impl AsyncAgentRunner {
             awaiting_runtime: BTreeMap::new(),
             awaiting_outcomes: BTreeMap::new(),
             feedback_store: AgentCognitionStore::default(),
+            continuation_harness: ContinuationHarness::default(),
             continuations: BTreeMap::new(),
         })
     }
@@ -835,125 +839,6 @@ impl AsyncAgentRunner {
     fn release_runtime_turn(&mut self, agent_id: &str, turn_id: AsyncTurnId) {
         self.awaiting_runtime.remove(agent_id);
         self.awaiting_outcomes.remove(&turn_id);
-    }
-
-    pub fn submit_continuation_proposal(
-        &mut self,
-        agent_id: &str,
-        proposal: ContinuationProposalV1,
-    ) -> Result<ContinuationHandle, AsyncAgentRunnerError> {
-        if !self.actors.contains_key(agent_id) {
-            return Err(AsyncAgentRunnerError::AgentNotRegistered(
-                agent_id.to_string(),
-            ));
-        }
-        if proposal.agent_id != agent_id {
-            return Err(AsyncAgentRunnerError::Cognition(
-                "continuation proposal agent identity mismatch".to_string(),
-            ));
-        }
-        proposal
-            .validate()
-            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
-        if self
-            .continuations
-            .get(agent_id)
-            .is_some_and(|continuation| continuation.active)
-        {
-            return Err(AsyncAgentRunnerError::AgentBusy(agent_id.to_string()));
-        }
-        let mut handle = ContinuationHandle {
-            proposal,
-            continuation_id: String::new(),
-            wake_id: String::new(),
-            wake_seq: 0,
-            continuation_digest: String::new(),
-            continuation_status_digest: String::new(),
-            status: "scheduled".to_string(),
-            terminal_disposition: None,
-            active: true,
-            provenance: "harness_policy".to_string(),
-            world_effect: false,
-            provider_invocation_count: 0,
-        };
-        self.continuations
-            .insert(agent_id.to_string(), handle.clone());
-        Ok(handle)
-    }
-
-    pub fn apply_runtime_continuation_status(
-        &mut self,
-        agent_id: &str,
-        runtime: RuntimeContinuationStatusV1,
-    ) -> Result<ContinuationHandle, AsyncAgentRunnerError> {
-        let _ = runtime;
-        Err(AsyncAgentRunnerError::Cognition(
-            "legacy Runtime continuation status lacks an authoritative projection".to_string(),
-        ))
-    }
-
-    /// Apply a complete Runtime-owned continuation projection.  Runtime, not
-    /// this runner, allocates schedule IDs, sequence and status digests.
-    pub fn apply_runtime_continuation_projection(
-        &mut self,
-        agent_id: &str,
-        runtime: RuntimeAgentContinuation,
-    ) -> Result<ContinuationHandle, AsyncAgentRunnerError> {
-        let existing =
-            self.continuations.get(agent_id).cloned().ok_or_else(|| {
-                AsyncAgentRunnerError::Cognition("unknown continuation".to_string())
-            })?;
-        runtime
-            .validate_authoritative()
-            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
-        if runtime.continuation_proposal_id != existing.proposal.continuation_proposal_id
-            || runtime.proposal_digest != existing.proposal.proposal_digest
-            || runtime.agent_id != existing.proposal.agent_id
-            || runtime.agent_session_id != existing.proposal.agent_session_id
-            || runtime.agent_turn_id != existing.proposal.agent_turn_id
-            || runtime.decision_request_id != existing.proposal.decision_request_id
-            || runtime.origin_turn_id != existing.proposal.origin_turn_id
-            || runtime.origin_request_digest != existing.proposal.origin_request_digest
-        {
-            return Err(AsyncAgentRunnerError::Cognition(
-                "Runtime continuation projection correlation mismatch".to_string(),
-            ));
-        }
-        let (status, active) = match runtime.status {
-            crate::runtime::ContinuationStatusV1::Scheduled => ("scheduled", true),
-            crate::runtime::ContinuationStatusV1::Pending => ("pending", true),
-            crate::runtime::ContinuationStatusV1::Waking => ("waking", true),
-            crate::runtime::ContinuationStatusV1::Consumed => ("consumed", true),
-            crate::runtime::ContinuationStatusV1::Completed => ("completed", false),
-            crate::runtime::ContinuationStatusV1::Cancelled => ("cancelled", false),
-            crate::runtime::ContinuationStatusV1::Invalidated => ("invalidated", false),
-            crate::runtime::ContinuationStatusV1::Expired => ("expired", false),
-            crate::runtime::ContinuationStatusV1::Rejected => ("rejected", false),
-        };
-        let handle = ContinuationHandle {
-            proposal: existing.proposal,
-            continuation_id: runtime.continuation_id.clone(),
-            wake_id: runtime.wake_id.clone(),
-            wake_seq: runtime.wake_seq,
-            continuation_digest: runtime.continuation_digest(),
-            continuation_status_digest: runtime
-                .continuation_status_digest
-                .clone()
-                .expect("validated Runtime continuation has a status digest"),
-            status: status.to_string(),
-            terminal_disposition: runtime.terminal_disposition.clone(),
-            active,
-            provenance: "runtime_authoritative".to_string(),
-            world_effect: false,
-            provider_invocation_count: 0,
-        };
-        if active {
-            self.continuations
-                .insert(agent_id.to_string(), handle.clone());
-        } else {
-            self.continuations.remove(agent_id);
-        }
-        Ok(handle)
     }
 
     /// Test helper: a provider that cooperatively waits until its actor is

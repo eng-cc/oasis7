@@ -58,7 +58,7 @@ fn wake(
         "world_id": WORLD_ID,
         "branch_id": BRANCH_ID,
         "finality_epoch": 7,
-        "finality_block_hash": "blake3:finality-live-7",
+        "finality_block_hash": "blake3:1111111111111111111111111111111111111111111111111111111111111111",
         "finality_status": "verified",
         "reorg_epoch": 3,
         "runtime_manifest_hash": "blake3:runtime-manifest-live-7",
@@ -86,7 +86,7 @@ fn continuation(status: ContinuationStatusV1) -> AgentContinuation {
         "world_id": WORLD_ID,
         "branch_id": BRANCH_ID,
         "finality_epoch": 7,
-        "finality_block_hash": "blake3:finality-live-7",
+        "finality_block_hash": "blake3:1111111111111111111111111111111111111111111111111111111111111111",
         "finality_status": "verified",
         "reorg_epoch": 3,
         "runtime_manifest_hash": "blake3:runtime-manifest-live-7",
@@ -131,7 +131,7 @@ fn proposal(world: &World) -> CognitionContinuationProposalV1 {
         "world_id": WORLD_ID,
         "branch_id": BRANCH_ID,
         "finality_epoch": 7,
-        "finality_block_hash": "blake3:finality-live-7",
+        "finality_block_hash": "blake3:1111111111111111111111111111111111111111111111111111111111111111",
         "finality_status": "verified",
         "reorg_epoch": 3,
         "runtime_manifest_hash": world.current_manifest_hash().expect("manifest hash"),
@@ -166,28 +166,98 @@ fn proposal(world: &World) -> CognitionContinuationProposalV1 {
 }
 
 fn world_with_scheduler() -> World {
-    World::new().with_cognition_scheduler(policy(), 1)
+    let mut world = World::new().with_cognition_scheduler(policy(), 1);
+    world
+        .bind_cognition_runtime(
+            WORLD_ID,
+            BRANCH_ID,
+            7,
+            Some(
+                "blake3:1111111111111111111111111111111111111111111111111111111111111111"
+                    .to_string(),
+            ),
+            "verified",
+            3,
+        )
+        .expect("bind live cognition authority");
+    world
+        .start_cognition_turn(
+            AGENT_A,
+            "session.agent-live-a",
+            "turn.agent-live-a",
+            "request.agent-live-a",
+            "blake3:origin-request-live-1",
+        )
+        .expect("register live cognition turn");
+    world
+}
+
+fn enqueue_fixture_wake(world: &mut World, wake: SchedulerWakeV1) {
+    let mut wake = wake;
+    wake.runtime_manifest_hash = world.cognition()["runtime_binding"]["runtime_manifest_hash"]
+        .as_str()
+        .expect("bound runtime manifest")
+        .to_string();
+    let mut continuation: AgentContinuation = serde_json::from_value(json!({
+        "schema_version": "agent-continuation.v1",
+        "continuation_id": wake.continuation_id,
+        "wake_id": wake.wake_id,
+        "world_id": wake.world_id,
+        "branch_id": wake.branch_id,
+        "finality_epoch": wake.finality_epoch,
+        "finality_block_hash": wake.finality_block_hash,
+        "finality_status": wake.finality_status,
+        "reorg_epoch": wake.reorg_epoch,
+        "runtime_manifest_hash": wake.runtime_manifest_hash,
+        "agent_id": wake.agent_id,
+        "agent_session_id": wake.agent_session_id,
+        "agent_turn_id": wake.agent_turn_id,
+        "decision_request_id": wake.decision_request_id,
+        "origin_turn_id": wake.agent_turn_id,
+        "origin_request_digest": "blake3:fixture-origin-request-0000000000000000000000000000000000000000000000000000000000000000",
+        "continuation_proposal_id": "proposal.fixture-wake",
+        "proposal_digest": "blake3:fixture-proposal-0000000000000000000000000000000000000000000000000000000000000000",
+        "action_or_envelope_digest": null,
+        "wake_conditions": [{
+            "schema_version": "wake-condition.v1",
+            "kind": "at_or_after_tick",
+            "logical_tick": wake.next_wake_tick
+        }],
+        "next_wake_tick": wake.next_wake_tick,
+        "remaining_budget": {"unit": "steps", "value": 2},
+        "valid_until_tick": 100,
+        "precondition_digest": "blake3:fixture-precondition-0000000000000000000000000000000000000000000000000000000000000000",
+        "wake_seq": wake.wake_seq,
+        "logical_tick": 0,
+        "status": "scheduled",
+        "terminal_disposition": null
+    }))
+    .expect("decode fixture continuation");
+    continuation.refresh_status_digest();
+    world
+        .install_cognition_continuation_for_test(continuation)
+        .expect("install fixture continuation");
+    world
+        .enqueue_cognition_wake_for_test(wake)
+        .expect("enqueue fixture wake");
 }
 
 #[test]
 fn world_step_runs_the_production_scheduler_and_releases_exact_wake_identity() {
     let mut world = world_with_scheduler();
-    world
-        .enqueue_cognition_wake(wake(
-            AGENT_A,
-            "wake-production",
-            "continuation-production",
-            1,
-        ))
-        .expect("enqueue production wake");
-    world
-        .enqueue_cognition_wake(wake(
+    enqueue_fixture_wake(
+        &mut world,
+        wake(AGENT_A, "wake-production", "continuation-production", 1),
+    );
+    enqueue_fixture_wake(
+        &mut world,
+        wake(
             AGENT_B,
             "wake-production-pending",
             "continuation-production-pending",
             1,
-        ))
-        .expect("enqueue production backpressure wake");
+        ),
+    );
 
     world
         .step()
@@ -242,21 +312,17 @@ fn world_step_runs_the_production_scheduler_and_releases_exact_wake_identity() {
 #[test]
 fn world_scheduler_is_nonblocking_fair_and_restores_cursor_and_backpressure() {
     let mut world = world_with_scheduler();
-    let accepted = world
-        .enqueue_cognition_wake(wake(AGENT_A, "wake-a", "continuation-a", 1))
-        .expect("first wake should fit the bounded World scheduler");
-    assert_eq!(accepted.disposition, "accepted");
+    enqueue_fixture_wake(&mut world, wake(AGENT_A, "wake-a", "continuation-a", 1));
+    assert_eq!(
+        world.cognition_scheduler_snapshot()["active"][0]["wake_id"],
+        "wake-a"
+    );
 
-    let pending = world
-        .enqueue_cognition_wake(wake(AGENT_B, "wake-b", "continuation-b", 1))
-        .expect("queue-full is a durable pending disposition, not a blocking error");
-    assert_eq!(pending.disposition, "pending");
-    assert_eq!(pending.reason, "scheduler_backpressure");
-    assert_eq!(pending.provider_invocation_count, 0);
-    assert_eq!(pending.effect_count, 0);
-    assert_eq!(pending.debit_count, 0);
-    assert_eq!(pending.receipt_count, 0);
-    assert_eq!(pending.world_receipt_linked_count, 0);
+    enqueue_fixture_wake(&mut world, wake(AGENT_B, "wake-b", "continuation-b", 1));
+    assert_eq!(
+        world.cognition_scheduler_snapshot()["backpressure_count"],
+        1
+    );
     assert_eq!(
         world.cognition_scheduler_snapshot()["cursor"]["cursor_seq"],
         1,
@@ -461,9 +527,10 @@ fn terminal_record() -> RetentionRecordV1 {
 #[test]
 fn world_scheduler_state_is_durable_json_and_contains_no_provider_effect_or_debit_replay() {
     let mut world = world_with_scheduler();
-    world
-        .enqueue_cognition_wake(wake(AGENT_A, "wake-json", "continuation-json", 1))
-        .expect("enqueue live wake");
+    enqueue_fixture_wake(
+        &mut world,
+        wake(AGENT_A, "wake-json", "continuation-json", 1),
+    );
     let state: Value = world.cognition_scheduler_snapshot();
     assert_eq!(state["policy"]["schema_version"], "scheduler-policy.v1");
     assert_eq!(state["cursor"]["schema_version"], "scheduler-cursor.v1");

@@ -101,6 +101,156 @@ fn sync_shadow_kernel_preserves_generated_seed_locations() {
 }
 
 #[test]
+fn provider_lineage_persists_and_restores_pending_lifecycle_markers() {
+    let path = std::env::temp_dir().join(format!(
+        "oasis7-viewer-provider-lineage-{}-{}.json",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos()
+    ));
+    let mut first = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    first.configure_provider_lineage_store(path.clone());
+    first
+        .provider_session_ids
+        .insert("agent-0".to_string(), "session-7".to_string());
+    first.provider_context_seq.insert("agent-0".to_string(), 4);
+    let request_context = crate::simulator::ContinuousAgentRequestContextV1 {
+        base_decision_request: crate::simulator::DecisionRequest {
+            observation: crate::simulator::ObservationEnvelope {
+                agent_id: "agent-0".to_string(),
+                world_time: 12,
+                mode: crate::simulator::ProviderExecutionMode::PlayerParity,
+                observation_schema_version:
+                    crate::simulator::DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION.to_string(),
+                action_schema_version: crate::simulator::DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION
+                    .to_string(),
+                environment_class: Some("runtime_live".to_string()),
+                fallback_reason: None,
+                observation: crate::simulator::ProviderObservation::default(),
+                recent_event_summary: Vec::new(),
+                memory_summary: None,
+                action_catalog: Vec::new(),
+                module_command_catalog: Vec::new(),
+                timeout_budget_ms: 100,
+            },
+            provider_config_ref: None,
+            agent_profile: None,
+            fixture_id: None,
+            replay_id: None,
+            capability_catalog: None,
+            capability_invocation_context: None,
+            timeout_budget_ms: 100,
+        },
+        context_discriminator: crate::simulator::CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR.to_string(),
+        context_version: crate::simulator::CONTINUOUS_AGENT_CONTEXT_VERSION,
+        protocol_version: "oasis7.continuous-agent-request.v1".to_string(),
+        agent_session_id: "session-7".to_string(),
+        agent_turn_id: "turn-active".to_string(),
+        decision_request_id: "request-active".to_string(),
+        retry_seq: 4,
+        transport_attempt: 2,
+        agent_subject: "agent-0".to_string(),
+        runtime_binding: crate::simulator::RuntimeBindingV1 {
+            world_id: "world".to_string(),
+            branch_id: "main".to_string(),
+            finality_epoch: 0,
+            finality_block_hash: None,
+            finality_status: "pending".to_string(),
+            base_tick: 12,
+            base_world_hash: crate::simulator::Digest32::default(),
+            reorg_epoch: 0,
+            runtime_manifest_hash: crate::simulator::Digest32::default(),
+        },
+        observation_digest: crate::simulator::Digest32::default(),
+        capability_catalog_digest: crate::simulator::Digest32::default(),
+        capability_invocation_context_digest: crate::simulator::Digest32::default(),
+        memory_snapshot_digest: crate::simulator::Digest32::default(),
+        goal_snapshot_digest: crate::simulator::Digest32::default(),
+        continuation_digest: crate::simulator::Digest32::default(),
+        adapter_protocol_version: "test".to_string(),
+        budget_contract: crate::simulator::BudgetContractV1 {
+            max_latency_ms: 100,
+            max_repair_attempts: 0,
+        },
+        request_digest: crate::simulator::Digest32::default(),
+    };
+    let turn_context = crate::simulator::ContinuousAgentTurnContextV1 {
+        agent_id: "agent-0".to_string(),
+        agent_session_id: "session-7".to_string(),
+        agent_turn_id: "turn-active".to_string(),
+        decision_request_id: "request-active".to_string(),
+        request_digest: crate::simulator::Digest32::default(),
+        memory_snapshot: crate::simulator::MemoryContextSnapshotV1::empty("agent-0"),
+        goal_snapshot: crate::simulator::GoalSnapshotV1::empty(),
+        continuation: None,
+    };
+    let active_context = cognition_context::ProviderContextState {
+        turn_context,
+        request_context,
+    };
+    first
+        .provider_contexts
+        .insert("agent-0".to_string(), active_context.clone());
+    first
+        .provider_retry_contexts
+        .insert("agent-0".to_string(), active_context.clone());
+    first
+        .provider_active_turns
+        .insert("agent-0".to_string(), active_context);
+    first.provider_agent_ids.insert("agent-0".to_string());
+    first.provider_wait_until.insert("agent-0".to_string(), 19);
+    first.provider_terminal_states.insert(
+        "agent-0".to_string(),
+        super::lineage_persistence::ProviderTerminalState {
+            agent_turn_id: "turn-1".to_string(),
+            decision_request_id: "request-1".to_string(),
+            status: "rejected".to_string(),
+            reject_reason: Some("no_effect".to_string()),
+            feedback_id: Some("feedback-1".to_string()),
+        },
+    );
+    first.schedule_provider_stale_replan("agent-0", "turn-2", "request-4");
+    first.mark_provider_transport_exhausted("agent-0".to_string());
+    first
+        .persist_provider_lineage()
+        .expect("persist provider lineage");
+
+    let mut restored = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    restored.configure_provider_lineage_store(path.clone());
+    restored
+        .restore_provider_lineage(&RuntimeWorld::default())
+        .expect("restore provider lineage");
+
+    assert_eq!(
+        restored.provider_session_ids.get("agent-0"),
+        Some(&"session-7".to_string())
+    );
+    assert_eq!(restored.provider_context_seq.get("agent-0"), Some(&4));
+    assert_eq!(
+        restored
+            .provider_contexts
+            .get("agent-0")
+            .map(|context| context.request_context.transport_attempt),
+        Some(2)
+    );
+    assert!(restored.provider_retry_contexts.contains_key("agent-0"));
+    assert!(restored.provider_active_turns.contains_key("agent-0"));
+    assert_eq!(restored.provider_wait_until.get("agent-0"), Some(&19));
+    assert_eq!(
+        restored
+            .provider_terminal_states
+            .get("agent-0")
+            .and_then(|state| state.reject_reason.as_deref()),
+        Some("no_effect")
+    );
+    assert!(restored.provider_stale_replans.contains_key("agent-0"));
+    assert!(restored.provider_transport_exhausted.contains("agent-0"));
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
 fn stale_provider_replans_stop_at_the_bounded_budget() {
     let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
     for count in 1..=3 {

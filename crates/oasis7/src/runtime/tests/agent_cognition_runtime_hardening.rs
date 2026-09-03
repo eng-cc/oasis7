@@ -7,15 +7,15 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const WORLD_ID: &str = "world-runtime-hardening";
-const AGENT_ID: &str = "agent-runtime-hardening";
+pub(super) const WORLD_ID: &str = "world-runtime-hardening";
+pub(super) const AGENT_ID: &str = "agent-runtime-hardening";
 
-fn digest(seed: u8) -> String {
+pub(super) fn digest(seed: u8) -> String {
     let hex = b"0123456789abcdef"[(seed % 16) as usize] as char;
     format!("blake3:{}", hex.to_string().repeat(64))
 }
 
-fn envelope(world: &World) -> AgentDecisionEnvelopeV1 {
+pub(super) fn envelope(world: &World) -> AgentDecisionEnvelopeV1 {
     let request_digest = digest(0);
     let mut envelope = AgentDecisionEnvelopeV1 {
         schema_version: AGENT_DECISION_ENVELOPE_V1_SCHEMA.to_string(),
@@ -63,7 +63,7 @@ fn envelope(world: &World) -> AgentDecisionEnvelopeV1 {
     envelope
 }
 
-fn response_artifact_for_envelope(envelope: &AgentDecisionEnvelopeV1) -> Value {
+pub(super) fn response_artifact_for_envelope(envelope: &AgentDecisionEnvelopeV1) -> Value {
     let mut artifact = RuntimeCognitionResponseArtifactV1 {
         schema_version: 1,
         context_discriminator: RuntimeCognitionResponseArtifactV1::CONTEXT_DISCRIMINATOR
@@ -101,7 +101,7 @@ fn response_artifact_for_envelope(envelope: &AgentDecisionEnvelopeV1) -> Value {
     value
 }
 
-fn continuous_commit_request(world: &World) -> RuntimeCognitionCommitRequestV1 {
+pub(super) fn continuous_commit_request(world: &World) -> RuntimeCognitionCommitRequestV1 {
     let binding = world
         .current_cognition_runtime_binding()
         .expect("current runtime binding");
@@ -131,7 +131,7 @@ fn continuous_commit_request(world: &World) -> RuntimeCognitionCommitRequestV1 {
     }
 }
 
-fn continuous_response_artifact(
+pub(super) fn continuous_response_artifact(
     request: &RuntimeCognitionCommitRequestV1,
 ) -> RuntimeCognitionResponseArtifactV1 {
     let mut artifact = RuntimeCognitionResponseArtifactV1 {
@@ -152,7 +152,7 @@ fn continuous_response_artifact(
     artifact
 }
 
-fn policy() -> SchedulerPolicyV1 {
+pub(super) fn policy() -> SchedulerPolicyV1 {
     serde_json::from_value(json!({
         "schema_version": "scheduler-policy.v1",
         "max_total_wakes_per_tick": 8,
@@ -166,7 +166,7 @@ fn policy() -> SchedulerPolicyV1 {
     .expect("policy")
 }
 
-fn proposal(world: &World) -> CognitionContinuationProposalV1 {
+pub(super) fn proposal(world: &World) -> CognitionContinuationProposalV1 {
     let mut proposal = CognitionContinuationProposalV1 {
         schema_version: 1,
         continuation_proposal_id: "proposal.runtime-hardening".to_string(),
@@ -215,7 +215,94 @@ fn proposal(world: &World) -> CognitionContinuationProposalV1 {
     proposal
 }
 
-fn temp_dir(label: &str) -> PathBuf {
+pub(super) fn bind_test_turn(world: &mut World) {
+    world
+        .bind_cognition_runtime(WORLD_ID, "main", 0, None, "pending", 0)
+        .expect("bind test Runtime authority");
+    world
+        .start_cognition_turn(
+            AGENT_ID,
+            "session.runtime-hardening",
+            "turn.runtime-hardening",
+            "request.runtime-hardening",
+            &digest(5),
+        )
+        .expect("register test cognition turn");
+}
+
+pub(super) fn test_continuation_wake(
+    world: &World,
+    wake_id: &str,
+    continuation_id: &str,
+) -> SchedulerWakeV1 {
+    serde_json::from_value(json!({
+        "schema_version": "scheduler-wake.v1",
+        "wake_id": wake_id,
+        "continuation_id": continuation_id,
+        "world_id": WORLD_ID,
+        "branch_id": "main",
+        "finality_epoch": 0,
+        "finality_block_hash": "genesis",
+        "finality_status": "pending",
+        "reorg_epoch": 0,
+        "runtime_manifest_hash": world.current_manifest_hash().expect("manifest"),
+        "agent_id": AGENT_ID,
+        "agent_session_id": "session.consumer",
+        "agent_turn_id": "turn.consumer",
+        "decision_request_id": "request.consumer",
+        "next_wake_tick": 0,
+        "eligible_since_tick": 0,
+        "starvation_deadline_tick": 4,
+        "initial_priority": 0,
+        "wake_seq": 1,
+        "retry_seq": 0,
+        "status": "pending",
+        "pending_reason": "capacity_available"
+    }))
+    .expect("wake")
+}
+
+pub(super) fn test_continuation(wake: &SchedulerWakeV1) -> AgentContinuation {
+    let mut continuation: AgentContinuation = serde_json::from_value(json!({
+        "schema_version": "agent-continuation.v1",
+        "continuation_id": wake.continuation_id,
+        "wake_id": wake.wake_id,
+        "world_id": wake.world_id,
+        "branch_id": wake.branch_id,
+        "finality_epoch": wake.finality_epoch,
+        "finality_block_hash": null,
+        "finality_status": wake.finality_status,
+        "reorg_epoch": wake.reorg_epoch,
+        "runtime_manifest_hash": wake.runtime_manifest_hash,
+        "agent_id": wake.agent_id,
+        "agent_session_id": wake.agent_session_id,
+        "agent_turn_id": wake.agent_turn_id,
+        "decision_request_id": wake.decision_request_id,
+        "origin_turn_id": wake.agent_turn_id,
+        "origin_request_digest": digest(23),
+        "continuation_proposal_id": "proposal.consumer",
+        "proposal_digest": digest(24),
+        "action_or_envelope_digest": null,
+        "wake_conditions": [{
+            "schema_version": "wake-condition.v1",
+            "kind": "at_or_after_tick",
+            "logical_tick": 0
+        }],
+        "next_wake_tick": 0,
+        "remaining_budget": {"unit": "steps", "value": 2},
+        "valid_until_tick": 10,
+        "precondition_digest": digest(25),
+        "wake_seq": wake.wake_seq,
+        "logical_tick": 0,
+        "status": "scheduled",
+        "terminal_disposition": null
+    }))
+    .expect("continuation");
+    continuation.refresh_status_digest();
+    continuation
+}
+
+pub(super) fn temp_dir(label: &str) -> PathBuf {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -223,12 +310,12 @@ fn temp_dir(label: &str) -> PathBuf {
     std::env::temp_dir().join(format!("oasis7-runtime-hardening-{label}-{nonce}"))
 }
 
-fn read_snapshot(dir: &Path) -> Value {
+pub(super) fn read_snapshot(dir: &Path) -> Value {
     serde_json::from_slice(&fs::read(dir.join("snapshot.json")).expect("snapshot"))
         .expect("decode snapshot")
 }
 
-fn write_snapshot(dir: &Path, snapshot: &Value) {
+pub(super) fn write_snapshot(dir: &Path, snapshot: &Value) {
     fs::write(
         dir.join("snapshot.json"),
         serde_json::to_vec_pretty(snapshot).expect("encode snapshot"),
@@ -536,6 +623,7 @@ fn scheduler_persists_selected_wake_identity_and_releases_it_on_cancel() {
     let mut world = World::new()
         .try_with_cognition_scheduler(policy(), 1)
         .expect("validated scheduler");
+    bind_test_turn(&mut world);
     let admitted = world
         .admit_cognition_continuation(proposal(&world))
         .expect("admit continuation");
@@ -603,6 +691,7 @@ fn event_receipt_and_state_only_continuations_admit_without_a_forced_tick() {
     let mut world = World::new()
         .try_with_cognition_scheduler(policy(), 8)
         .expect("validated scheduler");
+    bind_test_turn(&mut world);
     let cases = [
         (
             "event",
@@ -727,6 +816,7 @@ fn continuation_admission_recomputes_digest_binds_authority_and_enqueues_wake() 
     let mut world = World::new()
         .try_with_cognition_scheduler(policy(), 2)
         .expect("validated scheduler");
+    bind_test_turn(&mut world);
     let proposal = proposal(&world);
     let admitted = world
         .admit_cognition_continuation(proposal.clone())
@@ -1046,136 +1136,4 @@ fn recovery_repairs_a_missing_committed_turn_completion() {
     );
     assert_eq!(events.last().expect("completion")["status"], "committed");
     let _ = fs::remove_dir_all(dir);
-}
-
-#[test]
-fn recovery_rejects_a_tampered_trailing_cognition_event() {
-    let mut world = World::new();
-    let envelope = envelope(&world);
-    let prepared = world
-        .prepare_cognition_envelope(
-            envelope.clone(),
-            Some(response_artifact_for_envelope(&envelope)),
-        )
-        .expect("prepare");
-    world
-        .finalize_cognition_commit(&prepared.commit_id)
-        .expect("finalize");
-    let dir = temp_dir("tampered-trailing-cognition-event");
-    world.save_to_dir(&dir).expect("save");
-    let mut snapshot = read_snapshot(&dir);
-    snapshot["cognition"]["cognition_journal"]["events"]
-        .as_array_mut()
-        .expect("events")
-        .push(json!({"journal_seq": 99, "kind": "ForgedTrailingEvent"}));
-    write_snapshot(&dir, &snapshot);
-    fs::remove_dir_all(dir.join(".distfs-state")).expect("force JSON restore");
-    assert!(World::load_from_dir(&dir).is_err());
-    let _ = fs::remove_dir_all(dir);
-}
-
-#[test]
-fn recovery_rejects_a_missing_middle_cognition_event() {
-    let mut world = World::new();
-    let envelope = envelope(&world);
-    let prepared = world
-        .prepare_cognition_envelope(
-            envelope.clone(),
-            Some(response_artifact_for_envelope(&envelope)),
-        )
-        .expect("prepare");
-    world
-        .finalize_cognition_commit(&prepared.commit_id)
-        .expect("finalize");
-    let dir = temp_dir("missing-middle-cognition-event");
-    world.save_to_dir(&dir).expect("save");
-    let mut snapshot = read_snapshot(&dir);
-    snapshot["cognition"]["cognition_journal"]["events"]
-        .as_array_mut()
-        .expect("events")
-        .remove(1);
-    write_snapshot(&dir, &snapshot);
-    fs::remove_dir_all(dir.join(".distfs-state")).expect("force JSON restore");
-    assert!(World::load_from_dir(&dir).is_err());
-    let _ = fs::remove_dir_all(dir);
-}
-
-#[test]
-fn unknown_continuation_wake_is_rejected() {
-    let mut world = World::new()
-        .try_with_cognition_scheduler(policy(), 1)
-        .expect("scheduler");
-    world
-        .bind_cognition_runtime(WORLD_ID, "main", 0, None, "pending", 0)
-        .expect("bind World authority");
-    let binding = world.current_cognition_runtime_binding().expect("binding");
-    let wake: SchedulerWakeV1 = serde_json::from_value(json!({
-        "schema_version": "scheduler-wake.v1",
-        "wake_id": "wake-unknown-continuation",
-        "continuation_id": "continuation-does-not-exist",
-        "world_id": WORLD_ID,
-        "branch_id": "main",
-        "finality_epoch": 0,
-        "finality_block_hash": "genesis",
-        "finality_status": "pending",
-        "reorg_epoch": 0,
-        "runtime_manifest_hash": binding.runtime_manifest_hash.to_string(),
-        "agent_id": AGENT_ID,
-        "agent_session_id": "session.unknown",
-        "agent_turn_id": "turn.unknown",
-        "decision_request_id": "request.unknown",
-        "next_wake_tick": 0,
-        "eligible_since_tick": 0,
-        "starvation_deadline_tick": 4,
-        "initial_priority": 0,
-        "wake_seq": 1,
-        "retry_seq": 0,
-        "status": "pending",
-        "pending_reason": "capacity_available"
-    }))
-    .expect("wake");
-    assert!(world.enqueue_cognition_wake(wake).is_err());
-}
-
-#[test]
-fn scheduler_rejects_duplicate_wake_while_original_lease_is_in_flight() {
-    let mut world = World::new()
-        .try_with_cognition_scheduler(policy(), 1)
-        .expect("scheduler");
-    let continuation = world
-        .admit_cognition_continuation(proposal(&world))
-        .expect("continuation");
-    world.step().expect("service scheduler");
-    let wake: SchedulerWakeV1 = serde_json::from_value(
-        world.cognition_scheduler_snapshot()["in_flight"][&continuation.wake_id].clone(),
-    )
-    .expect("in-flight wake");
-    assert!(world.enqueue_cognition_wake(wake).is_err());
-}
-
-#[test]
-fn bound_world_rejects_continuation_without_a_registered_turn() {
-    let mut world = World::new()
-        .try_with_cognition_scheduler(policy(), 1)
-        .expect("scheduler");
-    world
-        .bind_cognition_runtime(WORLD_ID, "main", 0, None, "pending", 0)
-        .expect("bind World authority");
-    assert!(
-        world
-            .admit_cognition_continuation(proposal(&world))
-            .is_err()
-    );
-}
-
-#[test]
-fn failed_first_proposal_does_not_install_runtime_binding() {
-    let mut world = World::new()
-        .try_with_cognition_scheduler(policy(), 1)
-        .expect("scheduler");
-    let before = world.cognition().clone();
-    let mut candidate = proposal(&world);
-    candidate.proposal_digest = digest(99);
-    assert!(world.admit_cognition_continuation(candidate).is_err());
-    assert_eq!(world.cognition(), &before);
 }

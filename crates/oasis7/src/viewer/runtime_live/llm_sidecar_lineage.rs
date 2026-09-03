@@ -13,6 +13,11 @@ impl RuntimeLlmSidecar {
         if self.provider_lineage_hydrated {
             return;
         }
+        if self.provider_lineage_store.is_some() && !self.provider_lineage_restored {
+            if let Err(error) = self.restore_provider_lineage(world) {
+                tracing::warn!(error, "provider lineage checkpoint restore failed");
+            }
+        }
         self.provider_lineage_hydrated = true;
         let projection = world.cognition();
         let journal_head_seq = projection
@@ -99,10 +104,11 @@ impl RuntimeLlmSidecar {
         // A stale Runtime rejection is durable evidence that the old turn is
         // closed and one bounded semantic replan is still required. Rebuild
         // that pending causal edge so a viewer restart cannot strand it.
-        if let Some(events) = projection
-            .get("cognition_journal")
-            .and_then(|journal| journal.get("events"))
-            .and_then(Value::as_array)
+        if !self.provider_lineage_restored
+            && let Some(events) = projection
+                .get("cognition_journal")
+                .and_then(|journal| journal.get("events"))
+                .and_then(Value::as_array)
         {
             for event in events {
                 if event.get("kind").and_then(Value::as_str) != Some("DecisionRejected")
@@ -148,6 +154,7 @@ impl RuntimeLlmSidecar {
         agent_id: String,
     ) {
         self.provider_transport_exhausted.insert(agent_id);
+        self.persist_provider_lineage_best_effort();
     }
 
     pub(in crate::viewer::runtime_live) fn provider_transport_exhausted_agent(
@@ -159,8 +166,15 @@ impl RuntimeLlmSidecar {
     pub(in crate::viewer::runtime_live) fn take_provider_transport_exhausted_agent(
         &mut self,
     ) -> Option<String> {
-        let agent_id = self.provider_transport_exhausted_agent()?;
-        self.provider_transport_exhausted.remove(&agent_id);
-        Some(agent_id)
+        self.provider_transport_exhausted_agent()
+    }
+
+    pub(in crate::viewer::runtime_live) fn clear_provider_transport_exhausted(
+        &mut self,
+        agent_id: &str,
+    ) {
+        if self.provider_transport_exhausted.remove(agent_id) {
+            self.persist_provider_lineage_best_effort();
+        }
     }
 }

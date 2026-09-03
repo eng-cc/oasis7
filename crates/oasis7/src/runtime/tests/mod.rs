@@ -74,6 +74,7 @@ mod agent_cognition_recovery;
 mod agent_cognition_retention_gc;
 mod agent_cognition_runtime_feedback;
 mod agent_cognition_runtime_hardening;
+mod agent_cognition_runtime_hardening_followup;
 mod agent_cognition_scheduler_backpressure;
 mod agent_cognition_scheduler_fairness;
 mod agent_cognition_wake_conditions;

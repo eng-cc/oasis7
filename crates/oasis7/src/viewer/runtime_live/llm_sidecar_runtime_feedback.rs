@@ -28,6 +28,7 @@ impl RuntimeLlmSidecar {
             parent_decision_request_id: parent_decision_request_id.to_string(),
             count: state.count,
         });
+        self.persist_provider_lineage_best_effort();
         true
     }
 
@@ -46,11 +47,14 @@ impl RuntimeLlmSidecar {
     ) {
         if let Some(state) = self.provider_stale_replans.get_mut(agent_id) {
             state.pending_cause = None;
+            self.persist_provider_lineage_best_effort();
         }
     }
 
     pub(in crate::viewer::runtime_live) fn clear_provider_stale_replans(&mut self, agent_id: &str) {
-        self.provider_stale_replans.remove(agent_id);
+        if self.provider_stale_replans.remove(agent_id).is_some() {
+            self.persist_provider_lineage_best_effort();
+        }
     }
 
     pub(in crate::viewer::runtime_live) fn provider_stale_replan_exhausted_agent(
@@ -78,6 +82,7 @@ impl RuntimeLlmSidecar {
                 feedback_emitted: false,
             },
         );
+        self.persist_provider_lineage_best_effort();
     }
 
     pub(in crate::viewer::runtime_live) fn notify_action_result(
@@ -114,6 +119,7 @@ impl RuntimeLlmSidecar {
         }
         pending.feedback_emitted = true;
         if rejected {
+            self.clear_provider_stale_replans(pending.agent_id.as_str());
             self.release_provider_turn(pending.agent_id.as_str());
         } else {
             // ActionAccepted is an intermediate Runtime acknowledgement. The
@@ -121,6 +127,7 @@ impl RuntimeLlmSidecar {
             // Runtime receipt/terminal callback is supplied.
             self.pending_actions.insert(action_id, pending);
         }
+        self.persist_provider_lineage_best_effort();
     }
 
     /// Runtime integration seam for the typed feedback path. A viewer event
@@ -156,6 +163,19 @@ impl RuntimeLlmSidecar {
                 None,
             )
         });
+        if let Some(cognition) = pending.cognition.as_ref() {
+            self.record_provider_terminal_state(
+                pending.agent_id.as_str(),
+                &cognition.request,
+                status,
+                None,
+                feedback
+                    .as_ref()
+                    .map(|feedback| feedback.feedback_id.clone()),
+            );
+        }
+        self.provider_held_decisions
+            .remove(pending.agent_id.as_str());
         self.release_provider_turn(pending.agent_id.as_str());
         feedback
     }
@@ -163,6 +183,8 @@ impl RuntimeLlmSidecar {
     /// Close a provider response that did not produce a Runtime action (for
     /// example an unmappable or non-retryable candidate).
     pub(in crate::viewer::runtime_live) fn fail_provider_turn(&mut self, agent_id: &str) {
+        self.clear_provider_stale_replans(agent_id);
+        self.provider_held_decisions.remove(agent_id);
         self.release_provider_turn(agent_id);
     }
 
@@ -180,6 +202,7 @@ impl RuntimeLlmSidecar {
             return None;
         }
         let context = self.provider_contexts.get(agent_id).cloned();
+        let reject_reason = reject_reason.into();
         let feedback = context.as_ref().map(|context| {
             self.provider_feedback_for_request(
                 &context.request_context,
@@ -187,9 +210,24 @@ impl RuntimeLlmSidecar {
                 status,
                 None,
                 None,
-                Some(reject_reason.into()),
+                Some(reject_reason.clone()),
             )
         });
+        if let Some(context) = context.as_ref() {
+            self.record_provider_terminal_state(
+                agent_id,
+                context,
+                status,
+                Some(reject_reason.clone()),
+                feedback
+                    .as_ref()
+                    .map(|feedback| feedback.feedback_id.clone()),
+            );
+        }
+        if reject_reason != "stale_base" {
+            self.clear_provider_stale_replans(agent_id);
+        }
+        self.provider_held_decisions.remove(agent_id);
         self.release_provider_turn(agent_id);
         feedback
     }
@@ -230,7 +268,7 @@ impl RuntimeLlmSidecar {
         *feedback_seq = sequence.saturating_add(1);
         let feedback_id = feedback_id
             .unwrap_or_else(|| format!("runtime-feedback:{}:{}", request.agent_subject, sequence));
-        FeedbackEnvelopeV1 {
+        let feedback = FeedbackEnvelopeV1 {
             feedback_id,
             feedback_seq: sequence,
             agent_subject: request.agent_subject.clone(),
@@ -243,7 +281,24 @@ impl RuntimeLlmSidecar {
             request_digest: request.request_digest.clone(),
             reject_reason,
             provenance: "runtime_authoritative".to_string(),
+        };
+        if matches!(status, "committed" | "rejected" | "failed") {
+            if let Some(context) = self
+                .provider_contexts
+                .get(request.agent_subject.as_str())
+                .cloned()
+            {
+                self.record_provider_terminal_state(
+                    request.agent_subject.as_str(),
+                    &context,
+                    status,
+                    feedback.reject_reason.clone(),
+                    Some(feedback.feedback_id.clone()),
+                );
+            }
         }
+        self.persist_provider_lineage_best_effort();
+        feedback
     }
 
     /// Deliver the Runtime-committed feedback through the same provider
@@ -283,6 +338,8 @@ impl RuntimeLlmSidecar {
         self.provider_active_turns.remove(agent_id);
         self.provider_wait_until.remove(agent_id);
         self.provider_contexts.remove(agent_id);
+        self.provider_held_decisions.remove(agent_id);
+        self.persist_provider_lineage_best_effort();
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -316,6 +373,7 @@ impl RuntimeLlmSidecar {
         let wait_until = now.saturating_add(ticks.max(1));
         self.provider_wait_until
             .insert(agent_id.to_string(), wait_until);
+        self.persist_provider_lineage_best_effort();
     }
 
     pub(in crate::viewer::runtime_live) fn release_due_provider_waits(
@@ -341,6 +399,14 @@ impl RuntimeLlmSidecar {
                 world.enqueue_runtime_feedback(feedback).map_err(|error| {
                     format!("Runtime feedback outbox enqueue failed after provider wait: {error:?}")
                 })?;
+                self.record_provider_terminal_state(
+                    agent_id.as_str(),
+                    &context,
+                    "rejected",
+                    Some("no_effect".to_string()),
+                    None,
+                );
+                self.clear_provider_stale_replans(agent_id.as_str());
             }
             self.release_provider_turn(agent_id.as_str());
         }

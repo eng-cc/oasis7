@@ -8,11 +8,12 @@ use crate::simulator::{
     ProviderRecentEvent, ProviderSelfState, RuntimeBindingV1, h_v1,
 };
 use oasis7_wasm_abi::{CapabilityCatalogSnapshot, CapabilityPresenter, CapabilitySubject};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 const PROVIDER_ADAPTER_PROTOCOL_VERSION: &str = "world-simulator-provider-loopback-http-v1";
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub(in crate::viewer::runtime_live) struct ProviderContextState {
     pub(in crate::viewer::runtime_live) turn_context: ContinuousAgentTurnContextV1,
     pub(in crate::viewer::runtime_live) request_context: ContinuousAgentRequestContextV1,
@@ -65,6 +66,7 @@ impl RuntimeLlmSidecar {
             "provider settings disappeared before context preparation".to_string()
         })?;
         let runtime_binding = world.current_runtime_binding(world_id)?;
+        self.provider_lineage_binding = Some(runtime_binding.clone());
         let recent_event_summary = recent_runtime_event_summaries(world);
         self.release_due_provider_waits(world)?;
         if !matches!(self.runner, Some(RuntimeDecisionRunner::ProviderBacked(_))) {
@@ -85,6 +87,7 @@ impl RuntimeLlmSidecar {
             let observation = kernel
                 .observe(agent_id.as_str())
                 .map_err(|error| format!("provider context observation failed: {error:?}"))?;
+            let replan_cause = self.provider_stale_replan_cause(agent_id.as_str());
             let context = if let Some(mut retry) = self.provider_retry_contexts.remove(&agent_id) {
                 retry.request_context.transport_attempt =
                     retry.request_context.transport_attempt.saturating_add(1);
@@ -108,7 +111,6 @@ impl RuntimeLlmSidecar {
                     .entry(agent_id.clone())
                     .or_insert(session_id)
                     .clone();
-                let replan_cause = self.provider_stale_replan_cause(agent_id.as_str());
                 let (turn_context, request_context) = build_provider_context(
                     session_id.as_str(),
                     current_sequence,
@@ -120,15 +122,16 @@ impl RuntimeLlmSidecar {
                     capability_context,
                     replan_cause.as_ref(),
                 )?;
-                if replan_cause.is_some() {
-                    self.mark_provider_stale_replan_dispatched(agent_id.as_str());
-                }
                 ProviderContextState {
                     turn_context,
                     request_context,
                 }
             };
             self.provider_contexts.insert(agent_id.clone(), context);
+            if replan_cause.is_some() {
+                self.mark_provider_stale_replan_dispatched(agent_id.as_str());
+            }
+            self.persist_provider_lineage_best_effort();
         }
         Ok(())
     }
