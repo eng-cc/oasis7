@@ -149,9 +149,9 @@ pub use native_resolution::{
 pub use persist::{
     PersistError, PlayerAgentClaimOwnedSnapshot, PlayerAgentClaimQuoteSnapshot,
     PlayerAgentClaimSnapshot, PlayerGameplayAction, PlayerGameplayCausalityKind,
-    PlayerGameplayExecutionState, PlayerGameplayGoalKind, PlayerGameplayRecentFeedback,
-    PlayerGameplaySnapshot, PlayerGameplayStageId, PlayerGameplayStageStatus, WorldJournal,
-    WorldSnapshot,
+    PlayerGameplayExecutionState, PlayerGameplayFactoryProductionFailureDisposition,
+    PlayerGameplayGoalKind, PlayerGameplayRecentFeedback, PlayerGameplaySnapshot,
+    PlayerGameplayStageId, PlayerGameplayStageStatus, WorldJournal, WorldSnapshot,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use provider_loopback_adapter::ProviderLoopbackAdapter;

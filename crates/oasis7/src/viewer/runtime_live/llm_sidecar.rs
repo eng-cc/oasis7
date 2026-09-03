@@ -8,9 +8,9 @@ use crate::runtime::{
     WorldEvent as RuntimeWorldEvent, WorldEventBody as RuntimeWorldEventBody,
 };
 use crate::simulator::{
-    Action as SimulatorAction, ActionCatalogEntry, ActionResult, AgentDecision, AgentDecisionTrace,
-    AgentPromptProfile, AgentRunner, CHUNK_GENERATION_SCHEMA_VERSION, ChunkRuntimeConfig,
-    LlmAgentBehavior, LlmAgentConfig, Location, OpenAiChatCompletionClient,
+    Action as SimulatorAction, ActionCatalogEntry, ActionResult, AgentBehavior, AgentDecision,
+    AgentDecisionTrace, AgentPromptProfile, AgentRunner, CHUNK_GENERATION_SCHEMA_VERSION,
+    ChunkRuntimeConfig, LlmAgentBehavior, LlmAgentConfig, Location, OpenAiChatCompletionClient,
     ProviderAgentChatRequest, ProviderBackedAgentBehavior, ProviderExecutionMode,
     ProviderLoopbackAdapter, ProviderLoopbackHttpClient, ResourceOwner, SNAPSHOT_VERSION,
     WorldConfig, WorldEvent, WorldEventKind, WorldJournal, WorldKernel, WorldModel, WorldSnapshot,
@@ -995,6 +995,39 @@ impl RuntimeLlmSidecar {
             RuntimeWorldEventBody::Domain(RuntimeDomainEvent::ActionRejected { .. })
         );
         self.notify_action_result(*action_id, mapped_event, rejected);
+    }
+
+    /// Deliver an authoritative production completion to its owning Agent.
+    /// Runtime-live receives the full runtime receipt through `mapped_event`,
+    /// while the simulator behavior owns coverage state and replay idempotence.
+    pub(in crate::viewer::runtime_live) fn notify_recipe_completion_if_needed(
+        &mut self,
+        runtime_event: &RuntimeWorldEvent,
+        mapped_event: WorldEvent,
+    ) {
+        let RuntimeWorldEventBody::Domain(RuntimeDomainEvent::RecipeCompleted {
+            requester_agent_id,
+            ..
+        }) = &runtime_event.body
+        else {
+            return;
+        };
+
+        let Some(runner) = self.runner.as_mut() else {
+            return;
+        };
+        match runner {
+            RuntimeDecisionRunner::Builtin(runner) => {
+                if let Some(agent) = runner.get_mut(requester_agent_id.as_str()) {
+                    agent.behavior.on_event(&mapped_event);
+                }
+            }
+            RuntimeDecisionRunner::ProviderBacked(runner) => {
+                if let Some(agent) = runner.get_mut(requester_agent_id.as_str()) {
+                    agent.behavior.on_event(&mapped_event);
+                }
+            }
+        }
     }
 
     fn sync_shadow_kernel(

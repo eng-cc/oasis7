@@ -1,4 +1,5 @@
 use super::*;
+use crate::runtime::MaterialLedgerId;
 
 const LOCAL_TEST_PLAYER_ID_PREFIX: &str = "local-test-player-";
 
@@ -28,7 +29,7 @@ impl ViewerRuntimeLiveServer {
             .map_err(|err| format!("seed smelter data failed: {err:?}"))?;
         let build = crate::viewer::gameplay_actions::runtime_factory_build_action(
             agent_id.as_str(),
-            "runtime:smelter-affordability",
+            "site-smelter",
             crate::viewer::FACTORY_SMELTER_MK1,
             crate::viewer::FACTORY_SMELTER_MK1,
         )
@@ -44,6 +45,12 @@ impl ViewerRuntimeLiveServer {
         }
         if !self.world.has_factory(crate::viewer::FACTORY_SMELTER_MK1) {
             return Err("debug scenario did not build the smelter".to_string());
+        }
+        let smelter_ledger = MaterialLedgerId::site("site-smelter");
+        for (material, amount) in [("iron_ore", 8), ("carbon_fuel", 2)] {
+            self.world
+                .set_ledger_material_balance(smelter_ledger.clone(), material, amount)
+                .map_err(|err| format!("seed smelter recipe material failed: {err:?}"))?;
         }
         self.world.submit_action(RuntimeAction::ClaimStarterOc {
             agent_id: agent_id.clone(),

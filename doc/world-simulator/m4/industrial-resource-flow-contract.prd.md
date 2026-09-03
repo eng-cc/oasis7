@@ -111,6 +111,20 @@ N/A: 本专题不新增 Agent 推理、provider observation 或公共 action sch
 - `BuildFactory(factory.power.radiation.mk1)` 的设施注册、owner/location 继承和发电入账由 runtime 实现拥有。
 - 历史包含 storage 或 Location pool 的快照/事件必须由专业实现明确兼容或拒绝，不能静默吞错。
 
+#### BuildFactory site authority and construction power obligation
+
+`BuildFactory` 的持久站点 authority 与事件/state 字段由 [`world-runtime` Factory site admission and construction power contract](../../world-runtime/prd.md#factory-site-admission-and-construction-power-contract) 唯一承接；本节只冻结 M4/domain 对这些字段的语义输入，不创建第二份 site registry 或 runtime schema。
+
+- M4 construction profile 的唯一 runtime lookup 是 `WorldState.factory_construction_power_profiles: BTreeMap<factory_id, FactoryConstructionPowerProfileV1>`；map key 必须与提交的 `FactoryModuleSpec.factory_id` 逐字相等。每条 profile 必须冻结 `factory_id`、canonical `factory_kind`、`source_module_id`（direct profile 可为 `None`）、非负整数 `electricity_amount`、唯一 `authority_revision`、`active` 与本批次允许的 `start_only_sink` mode。amount/revision/source 必须来自 M4-governed profile authority event/state；不能从 caller payload、WASM module output、simulator `factory_build_electricity_cost`、`FactoryModuleSpec.base_power_draw`、maintenance、recipe power 或 Agent battery 推导。`FactoryProfileV1` 只是按 `factory_id` 索引的能力/recipe metadata，不是 construction power source。
+- 对 `BuildFactoryWithModule`，请求 `module_id` 必须与 exact profile 的 `source_module_id` 相等；对 direct `BuildFactory`，不要求 caller 提供 module id，但仍必须按 exact `factory_id` 解析同一 governed profile。缺 profile、inactive、key 不匹配、source mismatch 或 revision 冲突都必须 `unknown/blocked`，不得由 caller fabricated power 补齐。
+- `start_only_sink` 表示在 runtime admission 成功时从 builder-held electricity 一次性消费；它不形成 completion hold、未来 reservation、Location pool credit 或自动 top-up。power 缺失/冲突/过期时为 `unknown/blocked`，在首个 construction sink 前不得接受。
+- Site authority 的 `site_id`、`location_id`、owner、explicit access allowlist、`active`、`chunk_ready` 与 revision，以及 builder 的 `AgentLocationAuthorityV1.agent_id/location_id/active/authority_revision`，必须来自同一 fresh authority snapshot。co-location 只接受两个 canonical `location_id` 精确相等；M4 不允许按 GeoPos 距离、最近地点、共址猜测、Agent 推荐、材料账本或客户端缓存补齐缺失事实；owner 自动 access，非 owner 只有显式授权，空 allowlist 不是公开访问。
+- 建设材料 obligation 与 electricity obligation 都必须记录 payer/ledger、数量、before/after 与 authority revision，并和 `FactoryBuildStarted` 的 pending commitment 原子落地。global/world electricity、Location electricity、已移除的 storage path 不能作为隐式 payer。
+- Site registration、owner/access/readiness 更新的认证 authority 与 revision transition 由 runtime/governance 入口拥有；M4 profile 只声明 domain prerequisite，不允许 module output 绕过 runtime admission。已接受 job 固定 site/location/power identity，后续 site metadata 漂移不能静默迁移或重算；新 site candidate 必须另建 intent。
+- 旧 snapshot/event 可由 runtime legacy adapter 读取；缺少 site registry 或 power obligation 时不得 retroactively 充电、猜测 authority 或获得新建厂资格。旧 Location pool/PowerStorage 事件只能明确兼容或拒绝，不能静默转成 owner-held electricity。
+
+本批次不冻结绝对 construction 数值来源之外的价格/公式，不实现 site topology/path search、relocation、maintenance/runway、recipe/terminal settlement、PowerPlant activation 或 Viewer/Agent surface；这些仍由 runtime、产品/gameplay 和相关专业合同分别拥有。M4/runtime/QA 必须用同一 fixture 验证：缺 site/access/readiness 或 power 时无 sink；builder-held electricity 单次结算；direct/module parity；pending/completion/replay exactly-once；旧事件只读兼容且不绕过新 authority。
+
 ### 动态电力报价与订单合同
 
 - 动态报价配置保留 `dynamic_price_enabled`、base/min/max price、scarcity adjustment 与 allowed price band；`market_distance_price_per_km_bps` 只作为 deprecated snapshot/config 兼容字段读取，当前报价不使用距离调整。具体数值由当前配置和 runtime 测试拥有，不在本 PRD 冻结。

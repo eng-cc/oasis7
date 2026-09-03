@@ -27,6 +27,7 @@ mod fine_grain_translation;
 mod governance_vote_quote;
 mod governance_vote_quote_debug;
 mod industrial_progression;
+pub(super) use industrial_progression::setup_industrial_gameplay_with_completed_jobs;
 mod industrial_progression_grind;
 mod industrial_progression_preview;
 mod industrial_progression_readiness;

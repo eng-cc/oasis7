@@ -410,6 +410,15 @@ impl World {
         event: &WorldEvent,
         sandbox: &mut dyn ModuleSandbox,
     ) -> Result<usize, WorldError> {
+        self.route_event_to_modules_with_event_era(event, None, sandbox)
+    }
+
+    pub(super) fn route_event_to_modules_with_event_era(
+        &mut self,
+        event: &WorldEvent,
+        product_validation_event_id_era: Option<u64>,
+        sandbox: &mut dyn ModuleSandbox,
+    ) -> Result<usize, WorldError> {
         let event_kind = event_kind_label(&event.body);
         let event_value = serde_json::to_value(event)?;
         let invocations = self.collect_active_module_invocations()?;
@@ -434,7 +443,16 @@ impl World {
                 world_config_hash = Some(self.current_manifest_hash()?);
             }
 
-            let trace_id = format!("event-{}-{}", event.id, instance_id);
+            let trace_id = product_validation_event_id_era.map_or_else(
+                || format!("event-{}-{}", event.id, instance_id),
+                |event_id_era| {
+                    super::economy_product_validation::product_validation_event_trace_id(
+                        event_id_era,
+                        event.id,
+                        instance_id.as_str(),
+                    )
+                },
+            );
             let module_manifest_hash = hash_json(&manifest)?;
             let ctx = ModuleContext {
                 v: "wasm-1".to_string(),

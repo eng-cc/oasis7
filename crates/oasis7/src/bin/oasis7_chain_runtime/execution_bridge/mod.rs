@@ -6,6 +6,7 @@ use oasis7_proto::distributed::{BlobRef, WIRE_ENCODING_CBOR, WorldBlock, WorldHe
 use serde::{Deserialize, Serialize};
 
 mod driver_startup_recovery;
+mod product_validation_intent;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct ExecutionBridgeState {

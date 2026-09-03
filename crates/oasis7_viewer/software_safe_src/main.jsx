@@ -25,6 +25,7 @@ import {
 import { recoveryOptionVisualFixture } from "./viewer_recovery_option_fixture.js";
 import { AgentActivitySurface } from "./agent_activity_surface.jsx";
 import { AgentIntentSurface } from "./agent_intent_surface.jsx";
+import { FactoryProductionFailureDispositionCard } from "./factory_production_failure_disposition_card.jsx";
 import { AgentContextLite } from "./agent_context_lite.jsx";
 import { buildAgentContextDisplayModel } from "./viewer_agent_context_display_model.js";
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
@@ -553,7 +554,13 @@ function MetricCard(props) {
 
 function EventCard(props) {
   return (
-    <div class={props.class ?? "event-card"} data-action-state={props.actionState}>
+    <div
+      class={props.class ?? "event-card"}
+      data-action-state={props.actionState}
+      data-testid={props.testId}
+      role={props.role}
+      aria-live={props.ariaLive}
+    >
       <div class="event-card__title">
         <span>{props.title}</span>
         <Show when={props.badge}>
@@ -2421,6 +2428,12 @@ function WorldSummaryPanel(props = {}) {
                   {gameplayProgressLabel(gameplay().progressPercent, locale())}
                 </Badge>
               </div>
+              <FactoryProductionFailureDispositionCard
+                disposition={gameplay().factoryProductionFailureDisposition}
+                locale={locale()}
+                localeText={tr}
+                onAction={renderGameplayAction}
+              />
               <EventCard
                 title={tr(locale(), "控制证明", "Control Proof")}
                 badge={gameplay().controlProof?.state || gameplay().executionState || "-"}
@@ -4272,9 +4285,11 @@ function setFixtureHostedGate() {
 
 function openFixtureDetails(name) {
   queueMicrotask(() => {
-    if (name === "gameplay_diagnostics_expanded") {
+    if (name === "gameplay_diagnostics_expanded" || name === "factory_production_failure_disposition") {
       document.getElementById("viewer-gameplay-details")?.setAttribute("open", "");
-      document.getElementById("viewer-diagnostics-panel")?.setAttribute("open", "");
+      if (name === "gameplay_diagnostics_expanded") {
+        document.getElementById("viewer-diagnostics-panel")?.setAttribute("open", "");
+      }
     }
   });
 }
@@ -4304,6 +4319,43 @@ function installViewerVisualFixture() {
       setFixturePlayerAuth();
       setFixtureChatHistory();
       setFixtureDiagnostics();
+    },
+    factory_production_failure_disposition() {
+      core.injectSnapshot(viewerFixtureBaseSnapshot({
+        player_gameplay: {
+          available_actions: [
+            {
+              action_id: "schedule_recipe_smelter_iron_ingot",
+              label: "Queue iron ingot run",
+              protocol_action: "gameplay_action.submit",
+              target_agent_id: "agent-0",
+              disabled_reason: "insufficient iron_ore in site ledger",
+            },
+            {
+              action_id: "request_snapshot",
+              label: "Refresh gameplay snapshot",
+              protocol_action: "request_snapshot",
+            },
+          ],
+          factory_production_failure_disposition: {
+            action_id: "19",
+            requester_agent_id: "agent-0",
+            factory_id: "factory.target",
+            recipe_id: "recipe.smelter.iron_ingot",
+            blocker_kind: "product_validation_rejected",
+            blocker_detail: "product profile rejected the committed output",
+            disposition_kind: "consumed_lost",
+            consumed_inputs: [{ kind: "iron_ore", amount: 3 }],
+            lost_inputs: [{ kind: "iron_ore", amount: 3 }],
+            consumed_power: 7,
+            lost_power: 7,
+            next_action: "inspect_product_validation_and_reschedule",
+            next_recheck: null,
+          },
+        },
+      }), { returnState: false });
+      core.applySelection({ kind: "agent", id: "agent-0" });
+      setFixturePlayerAuth();
     },
     hosted_login_gate() {
       core.injectSnapshot(viewerFixtureBaseSnapshot(), { returnState: false });

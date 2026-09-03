@@ -315,6 +315,88 @@ impl WorldState {
                     cell.last_active = now;
                 }
             }
+            DomainEvent::ProductValidationRecorded { receipt } => {
+                // A terminal settlement is the authoritative replay marker.
+                // Its validation payload may have been compacted, so do not
+                // repopulate settled history from an old journal tail.
+                if self.settled_recipe_job_ids.contains(&receipt.job_id) {
+                    return Ok(());
+                }
+                if let Some(existing) = self
+                    .product_validation_receipts
+                    .get(&receipt.job_id)
+                    .and_then(|receipts| {
+                        receipts
+                            .iter()
+                            .find(|existing| existing.validation_index == receipt.validation_index)
+                    })
+                {
+                    if existing == receipt {
+                        return Ok(());
+                    }
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "product validation conflicts with persisted receipt: job_id={} index={:?}",
+                            receipt.job_id, receipt.validation_index
+                        ),
+                    });
+                }
+                self.product_validation_receipts
+                    .entry(receipt.job_id)
+                    .or_default()
+                    .push(receipt.clone());
+                if receipt.decision.accepted
+                    && receipt.decision.product_id == receipt.stack.kind
+                    && receipt.stack.amount > 0
+                    && receipt.stack.amount <= receipt.decision.stack_limit as i64
+                {
+                    self.latest_product_validation = Some(LastProductValidationState {
+                        product_id: receipt.stack.kind.clone(),
+                        tradable: receipt.decision.tradable,
+                    });
+                }
+                if let Some(cell) = self.agents.get_mut(&receipt.requester_agent_id) {
+                    cell.last_active = now;
+                }
+            }
+            DomainEvent::ProductValidationAttemptStarted { attempt } => {
+                if attempt.job_id == 0 || attempt.module_id.trim().is_empty() {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "product validation attempt identity is invalid: job_id={} module_id={}",
+                            attempt.job_id, attempt.module_id
+                        ),
+                    });
+                }
+                // See ProductValidationRecorded above: an old pre-settlement
+                // intent must not undo bounded settled-history compaction.
+                if self.settled_recipe_job_ids.contains(&attempt.job_id) {
+                    return Ok(());
+                }
+                if let Some(existing) = self
+                    .product_validation_attempts
+                    .get(&attempt.job_id)
+                    .and_then(|attempts| {
+                        attempts
+                            .iter()
+                            .find(|existing| existing.validation_index == attempt.validation_index)
+                    })
+                {
+                    if existing == attempt {
+                        return Ok(());
+                    }
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "product validation attempt conflicts with persisted intent: job_id={} index={:?}",
+                            attempt.job_id, attempt.validation_index
+                        ),
+                    });
+                }
+                self.product_validation_attempts
+                    .entry(attempt.job_id)
+                    .or_default()
+                    .push(attempt.clone());
+            }
             _ => unreachable!(
                 "apply_domain_event_governance_meta received unsupported event variant"
             ),

@@ -1,12 +1,12 @@
 use crate::runtime::{
-    FactoryProductionStatus, IndustryStage, WorldEvent as RuntimeWorldEvent,
-    WorldEventBody as RuntimeWorldEventBody, WorldState,
+    FactoryProductionFailureDispositionV1, FactoryProductionStatus, FactoryState, IndustryStage,
+    WorldEvent as RuntimeWorldEvent, WorldEventBody as RuntimeWorldEventBody, WorldState,
 };
 use crate::simulator::persist::{
     PlayerAgentClaimSnapshot, PlayerGameplayCausalityKind, PlayerGameplayExecutionState,
-    PlayerGameplayGoalKind, PlayerGameplayPrimaryIntent, PlayerGameplayRecentFeedback,
-    PlayerGameplaySnapshot, PlayerGameplayStageId, PlayerGameplayStageStatus,
-    ProductValidationUnlockPreview,
+    PlayerGameplayFactoryProductionFailureDisposition, PlayerGameplayGoalKind,
+    PlayerGameplayPrimaryIntent, PlayerGameplayRecentFeedback, PlayerGameplaySnapshot,
+    PlayerGameplayStageId, PlayerGameplayStageStatus, ProductValidationUnlockPreview,
 };
 use crate::viewer::ACTION_CLAIM_FIRST_AGENT;
 #[path = "gameplay_snapshot_fallback.rs"]
@@ -15,6 +15,8 @@ mod fallback;
 mod fine_grain;
 #[path = "gameplay_snapshot_intent.rs"]
 mod intent;
+#[path = "gameplay_snapshot_status.rs"]
+mod status;
 #[path = "gameplay_snapshot_sync.rs"]
 mod sync;
 use super::branch_commitment::{branch_recommendations, effective_branch_stage_status};
@@ -25,7 +27,7 @@ use super::gameplay_snapshot_helpers::{
 };
 use super::gameplay_snapshot_lane::apply_small_player_lane_truth;
 use super::gameplay_validation_preview::product_validation_unlock_preview;
-use super::player_gameplay::extend_available_actions;
+use super::player_gameplay::{extend_available_actions, player_starter_industrial_feasibility};
 use fallback::{
     fallback_tradeoff_decision_for_gameplay, player_gameplay_fallback_action,
     player_gameplay_fallback_tradeoff_preview, player_gameplay_wait_resolution_quote,
@@ -35,6 +37,11 @@ use fine_grain::{
     player_gameplay_player_facing_feedback,
 };
 use intent::{player_gameplay_intent_scope, player_gameplay_intent_summary};
+use status::{
+    player_gameplay_escalation_hint, player_gameplay_last_world_change,
+    player_gameplay_primary_blocker, player_gameplay_response_window_class,
+    player_gameplay_stalled_reason, player_gameplay_status_reason,
+};
 use sync::first_session_runtime_sync_blocker;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct PlayerGameplayCausalitySignal {
@@ -75,125 +82,6 @@ pub(super) fn player_gameplay_causality_from_runtime_events(
         detail: override_detail.unwrap_or(fallback),
     })
 }
-
-fn player_gameplay_status_reason(
-    gameplay: &PlayerGameplaySnapshot,
-    recent_feedback: Option<&PlayerGameplayRecentFeedback>,
-) -> Option<String> {
-    gameplay
-        .causality_detail
-        .clone()
-        .or_else(|| gameplay.blocker_detail.clone())
-        .or_else(|| recent_feedback.and_then(|feedback| feedback.reason.clone()))
-        .or_else(|| gameplay.blocker_kind.clone())
-}
-
-fn player_gameplay_last_world_change(
-    gameplay: &PlayerGameplaySnapshot,
-    recent_feedback: Option<&PlayerGameplayRecentFeedback>,
-) -> Option<String> {
-    recent_feedback
-        .filter(|feedback| feedback.delta_logical_time > 0 || feedback.delta_event_seq > 0)
-        .map(|feedback| feedback.effect.clone())
-        .filter(|effect| !effect.trim().is_empty())
-        .or_else(|| {
-            matches!(
-                gameplay.causality_kind,
-                Some(PlayerGameplayCausalityKind::GoalProgressed)
-            )
-            .then(|| gameplay.progress_detail.clone())
-        })
-}
-
-fn player_gameplay_primary_blocker(
-    gameplay: &PlayerGameplaySnapshot,
-    status_reason: Option<&String>,
-) -> Option<String> {
-    if gameplay.execution_state != PlayerGameplayExecutionState::Blocked
-        && gameplay.stage_status != PlayerGameplayStageStatus::Blocked
-    {
-        return None;
-    }
-    gameplay
-        .blocker_detail
-        .clone()
-        .or_else(|| gameplay.blocker_kind.clone())
-        .or_else(|| status_reason.cloned())
-}
-
-fn player_gameplay_response_window_class(
-    gameplay: &PlayerGameplaySnapshot,
-    recent_feedback: Option<&PlayerGameplayRecentFeedback>,
-) -> Option<String> {
-    if let Some(feedback) = recent_feedback {
-        return Some(match feedback.stage.as_str() {
-            "accepted" | "submitted" | "queued" | "ack" => {
-                "waiting_for_committed_progress".to_string()
-            }
-            "completed_no_progress" => "stalled_needs_escalation".to_string(),
-            "blocked" => "blocked_needs_repair".to_string(),
-            "rejected" => "request_rejected".to_string(),
-            "completed_advanced" => "resolved".to_string(),
-            _ => match gameplay.execution_state {
-                PlayerGameplayExecutionState::Accepted => "waiting_for_committed_progress",
-                PlayerGameplayExecutionState::Blocked => "blocked_needs_repair",
-                PlayerGameplayExecutionState::Rejected => "request_rejected",
-                PlayerGameplayExecutionState::Completed => "resolved",
-                PlayerGameplayExecutionState::Executing => "watch_next_tick",
-            }
-            .to_string(),
-        });
-    }
-
-    match gameplay.execution_state {
-        PlayerGameplayExecutionState::Accepted => {
-            Some("waiting_for_committed_progress".to_string())
-        }
-        PlayerGameplayExecutionState::Blocked => Some("blocked_needs_repair".to_string()),
-        PlayerGameplayExecutionState::Rejected => Some("request_rejected".to_string()),
-        PlayerGameplayExecutionState::Completed => Some("resolved".to_string()),
-        PlayerGameplayExecutionState::Executing => None,
-    }
-}
-
-fn player_gameplay_stalled_reason(
-    gameplay: &PlayerGameplaySnapshot,
-    recent_feedback: Option<&PlayerGameplayRecentFeedback>,
-) -> Option<String> {
-    recent_feedback
-        .filter(|feedback| matches!(feedback.stage.as_str(), "completed_no_progress" | "blocked"))
-        .and_then(|feedback| feedback.reason.clone())
-        .or_else(|| {
-            (gameplay.execution_state == PlayerGameplayExecutionState::Blocked)
-                .then(|| {
-                    gameplay
-                        .blocker_detail
-                        .clone()
-                        .or_else(|| gameplay.blocker_kind.clone())
-                })
-                .flatten()
-        })
-}
-
-fn player_gameplay_escalation_hint(
-    gameplay: &PlayerGameplaySnapshot,
-    recent_feedback: Option<&PlayerGameplayRecentFeedback>,
-) -> Option<String> {
-    recent_feedback
-        .filter(|feedback| {
-            matches!(
-                feedback.stage.as_str(),
-                "accepted" | "submitted" | "queued" | "ack" | "completed_no_progress" | "blocked"
-            )
-        })
-        .and_then(|feedback| feedback.hint.clone())
-        .or_else(|| {
-            (gameplay.execution_state == PlayerGameplayExecutionState::Blocked
-                || gameplay.execution_state == PlayerGameplayExecutionState::Accepted)
-                .then(|| gameplay.next_step_hint.clone())
-        })
-}
-
 fn derive_player_gameplay_execution_state(
     stage_status: PlayerGameplayStageStatus,
     recent_feedback: Option<&PlayerGameplayRecentFeedback>,
@@ -209,14 +97,12 @@ fn derive_player_gameplay_execution_state(
             _ => {}
         }
     }
-
     match stage_status {
         PlayerGameplayStageStatus::Blocked => PlayerGameplayExecutionState::Blocked,
         PlayerGameplayStageStatus::BranchReady => PlayerGameplayExecutionState::Completed,
         PlayerGameplayStageStatus::Active => PlayerGameplayExecutionState::Executing,
     }
 }
-
 fn derive_player_gameplay_causality(
     gameplay: &PlayerGameplaySnapshot,
     recent_feedback: Option<&PlayerGameplayRecentFeedback>,
@@ -225,7 +111,6 @@ fn derive_player_gameplay_causality(
     if let Some(signal) = causality_signal {
         return (Some(signal.kind), Some(signal.detail.clone()));
     }
-
     match gameplay.execution_state {
         PlayerGameplayExecutionState::Accepted => (
             Some(PlayerGameplayCausalityKind::QueuedForExecution),
@@ -274,15 +159,18 @@ fn derive_player_gameplay_causality(
         PlayerGameplayExecutionState::Executing => (None, None),
     }
 }
-
 fn finalize_player_gameplay_snapshot(
     mut gameplay: PlayerGameplaySnapshot,
     industry_stage: IndustryStage,
     validation_unlock_preview: Option<ProductValidationUnlockPreview>,
+    factory_production_failure_disposition: Option<
+        PlayerGameplayFactoryProductionFailureDisposition,
+    >,
     recent_feedback: Option<&PlayerGameplayRecentFeedback>,
     causality_signal: Option<&PlayerGameplayCausalitySignal>,
 ) -> PlayerGameplaySnapshot {
     gameplay.validation_unlock_preview = validation_unlock_preview;
+    gameplay.factory_production_failure_disposition = factory_production_failure_disposition;
     gameplay.can_reprioritize = gameplay
         .available_actions
         .iter()
@@ -366,12 +254,67 @@ fn finalize_player_gameplay_snapshot(
         .map(str::to_string);
     gameplay.resume_next_step = Some(gameplay.next_step_hint.clone());
     apply_small_player_lane_truth(&mut gameplay);
+    if gameplay.factory_production_failure_disposition.is_some() {
+        gameplay.wait_resolution_quote = None;
+        gameplay.repair_available = None;
+        gameplay.rebuild_available = None;
+        gameplay.pivot_available = None;
+        gameplay.recovery_path_kind = None;
+        gameplay.recovery_path_detail = None;
+        gameplay.recovery_options.clear();
+        gameplay.fallback_action_id = None;
+        gameplay.fallback_action_label = None;
+        gameplay.fallback_tradeoff_preview = None;
+        gameplay.no_safe_fallback_reason = None;
+        gameplay.required_next_decision_action_id = None;
+        gameplay.required_next_decision_class = None;
+    }
     gameplay.fine_grain_action_translation =
         player_gameplay_fine_grain_action_translation(&gameplay, recent_feedback);
     gameplay.recent_feedback = player_facing_feedback;
     gameplay
 }
-
+fn is_fresh_factory_production_failure_disposition(
+    state: &WorldState,
+    factory: &FactoryState,
+    disposition: &FactoryProductionFailureDispositionV1,
+) -> bool {
+    let production = &factory.production;
+    // The durable disposition and the factory's current blocker record are
+    // the freshness authority. A sibling recipe can complete after this
+    // product-validation loss and transition the aggregate status to Idle
+    // without clearing the still-current consumed/lost inputs. Do not hide
+    // that recovery card merely because the aggregate status changed.
+    // `active_jobs` is an aggregate across recipe slots and may include an
+    // unrelated sibling that is still running. The failed job's own identity
+    // and absence from pending jobs remain the freshness checks below.
+    production.current_job_id.is_none()
+        && production.current_recipe_id.is_none()
+        && production
+            .current_blocker_action_id
+            .is_none_or(|action_id| action_id == disposition.action_id)
+        && production.current_blocker_kind.as_deref() == Some(disposition.blocker_kind.as_str())
+        && production.current_blocker_detail.as_deref() == Some(disposition.blocker_detail.as_str())
+        && !state
+            .pending_recipe_jobs
+            .contains_key(&disposition.action_id)
+}
+fn latest_fresh_requester_failure_disposition<'a>(
+    state: &'a WorldState,
+    requester_agent_id: &str,
+) -> Option<&'a FactoryProductionFailureDispositionV1> {
+    state
+        .factory_production_failure_dispositions
+        .iter()
+        .rev()
+        .find_map(|(_, disposition)| {
+            let factory = state.factories.get(disposition.factory_id.as_str())?;
+            (disposition.requester_agent_id == requester_agent_id
+                && factory.builder_agent_id == requester_agent_id
+                && is_fresh_factory_production_failure_disposition(state, factory, disposition))
+            .then_some(disposition)
+        })
+}
 pub(super) fn build_player_gameplay_snapshot(
     state: &WorldState,
     controlled_agent_id: Option<&str>,
@@ -385,6 +328,7 @@ pub(super) fn build_player_gameplay_snapshot(
     first_agent_claim_target_available: bool,
     agent_claim: Option<PlayerAgentClaimSnapshot>,
 ) -> PlayerGameplaySnapshot {
+    let starter_industrial_feasibility = state.starter_industrial_feasibility();
     let mut available_actions = base_available_actions(
         controlled_agent_id,
         gameplay_enabled,
@@ -394,6 +338,7 @@ pub(super) fn build_player_gameplay_snapshot(
     if gameplay_enabled {
         extend_available_actions(
             state,
+            &starter_industrial_feasibility,
             controlled_agent_id,
             first_agent_claim_target_available,
             &mut available_actions,
@@ -401,15 +346,57 @@ pub(super) fn build_player_gameplay_snapshot(
     }
     let industry_stage = state.industry_progress.stage;
     let validation_unlock_preview = product_validation_unlock_preview(state);
+    let primary_factory = match controlled_agent_id {
+        Some(agent_id) => state
+            .factories
+            .values()
+            .filter(|factory| factory.builder_agent_id == agent_id)
+            .max_by_key(|factory| {
+                let production = &factory.production;
+                (
+                    production.completed_jobs > 0 || production.last_completed_at.is_some(),
+                    production.status != FactoryProductionStatus::Blocked,
+                    production.status == FactoryProductionStatus::Running,
+                    factory.factory_id == crate::viewer::FACTORY_SMELTER_MK1,
+                    production.completed_jobs,
+                    production.last_completed_at.unwrap_or(0),
+                )
+            }),
+        None => primary_factory_for_player_gameplay(state),
+    };
+    let factory_production_failure_disposition =
+        controlled_agent_id.and_then(|requester_agent_id| {
+            latest_fresh_requester_failure_disposition(state, requester_agent_id).map(
+                |disposition| PlayerGameplayFactoryProductionFailureDisposition {
+                    action_id: disposition.action_id.to_string(),
+                    requester_agent_id: disposition.requester_agent_id.clone(),
+                    factory_id: disposition.factory_id.clone(),
+                    recipe_id: disposition.recipe_id.clone(),
+                    blocker_kind: disposition.blocker_kind.clone(),
+                    blocker_detail: disposition.blocker_detail.clone(),
+                    disposition_kind: disposition.disposition_kind.clone(),
+                    consumed_inputs: disposition.consumed_inputs.clone(),
+                    lost_inputs: disposition.lost_inputs.clone(),
+                    consumed_power: disposition.consumed_power,
+                    lost_power: disposition.lost_power,
+                    next_action: disposition.next_action.clone(),
+                    next_recheck: disposition.next_recheck,
+                },
+            )
+        });
     let finalize = |gameplay| {
         let mut gameplay = finalize_player_gameplay_snapshot(
             gameplay,
             industry_stage,
             validation_unlock_preview.clone(),
+            factory_production_failure_disposition.clone(),
             recent_feedback,
             causality_signal,
         );
         gameplay.primary_intent = primary_intent.clone();
+        gameplay.starter_industrial_feasibility = Some(player_starter_industrial_feasibility(
+            &starter_industrial_feasibility,
+        ));
         gameplay
     };
     if !gameplay_enabled {
@@ -475,11 +462,12 @@ pub(super) fn build_player_gameplay_snapshot(
             rebuild_available: None,
             pivot_available: None,
             validation_unlock_preview: None,
+            starter_industrial_feasibility: None,
+            factory_production_failure_disposition: None,
             recovery_options: Vec::new(),
             fine_grain_action_translation: None,
         });
     }
-    let primary_factory = primary_factory_for_player_gameplay(state);
     let latest_blocker = primary_factory.and_then(|factory| {
         let kind = factory.production.current_blocker_kind.as_ref()?;
         let detail = factory
@@ -499,7 +487,6 @@ pub(super) fn build_player_gameplay_snapshot(
             )
         })
     });
-
     let has_first_session_feedback = recent_feedback
         .is_some_and(|feedback| feedback.delta_logical_time > 0 || feedback.delta_event_seq > 0);
     let has_confirmed_world_progress = has_first_session_feedback || confirmed_gameplay_progress;
@@ -593,12 +580,13 @@ pub(super) fn build_player_gameplay_snapshot(
                 rebuild_available: None,
                 pivot_available: None,
                 validation_unlock_preview: None,
+                starter_industrial_feasibility: None,
+                factory_production_failure_disposition: None,
                 recovery_options: Vec::new(),
                 fine_grain_action_translation: None,
             });
         }
     }
-
     if !has_confirmed_world_progress
         && !has_material_flow
         && !has_factory_ready
@@ -665,11 +653,12 @@ pub(super) fn build_player_gameplay_snapshot(
             rebuild_available: None,
             pivot_available: None,
             validation_unlock_preview: None,
+            starter_industrial_feasibility: None,
+            factory_production_failure_disposition: None,
             recovery_options: Vec::new(),
             fine_grain_action_translation: None,
         });
     }
-
     let fallback_feedback_blocker = if latest_blocker.is_none()
         && primary_factory
             .is_none_or(|factory| factory.production.status == FactoryProductionStatus::Blocked)
@@ -678,7 +667,6 @@ pub(super) fn build_player_gameplay_snapshot(
     } else {
         None
     };
-
     if let Some((blocker_kind, blocker_detail)) = latest_blocker.or(fallback_feedback_blocker) {
         let (progress_detail, progress_percent) = if has_first_output {
             (
@@ -749,11 +737,12 @@ pub(super) fn build_player_gameplay_snapshot(
             rebuild_available: None,
             pivot_available: None,
             validation_unlock_preview: None,
+            starter_industrial_feasibility: None,
+            factory_production_failure_disposition: None,
             recovery_options: Vec::new(),
             fine_grain_action_translation: None,
         });
     }
-
     if has_first_output {
         match industry_stage {
             IndustryStage::Bootstrap => {
@@ -835,6 +824,8 @@ pub(super) fn build_player_gameplay_snapshot(
                     rebuild_available: None,
                     pivot_available: None,
                     validation_unlock_preview: None,
+                    starter_industrial_feasibility: None,
+                    factory_production_failure_disposition: None,
                     recovery_options: Vec::new(),
                     fine_grain_action_translation: None,
                 });
@@ -896,6 +887,8 @@ pub(super) fn build_player_gameplay_snapshot(
                     rebuild_available: None,
                     pivot_available: None,
                     validation_unlock_preview: None,
+                    starter_industrial_feasibility: None,
+                    factory_production_failure_disposition: None,
                     recovery_options: Vec::new(),
                     fine_grain_action_translation: None,
                 });
@@ -957,13 +950,14 @@ pub(super) fn build_player_gameplay_snapshot(
                     rebuild_available: None,
                     pivot_available: None,
                     validation_unlock_preview: None,
+                    starter_industrial_feasibility: None,
+                    factory_production_failure_disposition: None,
                     recovery_options: Vec::new(),
                     fine_grain_action_translation: None,
                 });
             }
         }
     }
-
     if has_recipe_running {
         return finalize(PlayerGameplaySnapshot {
             stage_id: PlayerGameplayStageId::PostOnboarding,
@@ -1018,11 +1012,12 @@ pub(super) fn build_player_gameplay_snapshot(
             rebuild_available: None,
             pivot_available: None,
             validation_unlock_preview: None,
+            starter_industrial_feasibility: None,
+            factory_production_failure_disposition: None,
             recovery_options: Vec::new(),
             fine_grain_action_translation: None,
         });
     }
-
     if has_factory_ready {
         return finalize(PlayerGameplaySnapshot {
             stage_id: PlayerGameplayStageId::PostOnboarding,
@@ -1076,12 +1071,13 @@ pub(super) fn build_player_gameplay_snapshot(
             repair_available: None,
             rebuild_available: None,
             pivot_available: None,
-            validation_unlock_preview: None,
+                    validation_unlock_preview: None,
+                    starter_industrial_feasibility: None,
+                    factory_production_failure_disposition: None,
             recovery_options: Vec::new(),
             fine_grain_action_translation: None,
         });
     }
-
     if has_material_flow {
         return finalize(PlayerGameplaySnapshot {
             stage_id: PlayerGameplayStageId::PostOnboarding,
@@ -1135,12 +1131,13 @@ pub(super) fn build_player_gameplay_snapshot(
             repair_available: None,
             rebuild_available: None,
             pivot_available: None,
-            validation_unlock_preview: None,
+                    validation_unlock_preview: None,
+                    starter_industrial_feasibility: None,
+                    factory_production_failure_disposition: None,
             recovery_options: Vec::new(),
             fine_grain_action_translation: None,
         });
     }
-
     finalize(PlayerGameplaySnapshot {
         stage_id: PlayerGameplayStageId::PostOnboarding,
         stage_status: PlayerGameplayStageStatus::Active,
@@ -1194,6 +1191,8 @@ pub(super) fn build_player_gameplay_snapshot(
         rebuild_available: None,
         pivot_available: None,
         validation_unlock_preview: None,
+        starter_industrial_feasibility: None,
+        factory_production_failure_disposition: None,
         recovery_options: Vec::new(),
         fine_grain_action_translation: None,
     })

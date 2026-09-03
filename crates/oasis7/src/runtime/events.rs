@@ -21,6 +21,11 @@ use super::main_token::{
 };
 use super::node_points::EpochSettlementReport;
 use super::reward_asset::NodeRewardMintRecord;
+use super::state::{
+    AgentLocationAuthorityV1, FactoryBuildPowerObligationV1, FactoryConstructionPowerProfileV1,
+    FactorySiteAuthorityV1, LocationAnchorV1, ProductValidationAttemptV1,
+    ProductValidationReceiptV1,
+};
 use super::types::{ActionId, MaterialLedgerId, ProposalId, WorldTime};
 
 mod domain_event;

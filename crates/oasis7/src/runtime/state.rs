@@ -4,7 +4,7 @@ use crate::models::AgentState;
 use crate::simulator::{ModuleInstallTarget, ResourceKind};
 use oasis7_wasm_abi::{
     FactoryModuleSpec, FactoryProfileV1, MaterialProfileV1, MaterialStack, ModuleManifest,
-    ProductProfileV1, RecipeProfileV1,
+    ProductProfileV1, ProductValidationDecision, RecipeProfileV1,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::agent_cell::{AgentCell, AgentIntentV2};
 use super::error::WorldError;
 use super::events::ModuleProfileChanges;
-use super::events::{DomainEvent, IndustryStage, MaterialMarketQuote, MaterialTransitPriority};
+use super::events::{DomainEvent, MaterialTransitPriority};
 use super::gameplay_state::{
     AgentClaimState, AllianceState, CrisisState, CrisisStatus, EconomicContractState,
     EconomicContractStatus, GOVERNANCE_IDENTITY_DEFAULT_MAX_VOTE_WEIGHT, GameplayPolicyState,
@@ -47,44 +47,48 @@ mod apply_domain_event_gameplay;
 mod apply_domain_event_governance_meta;
 mod apply_domain_event_industry;
 mod apply_domain_event_industry_helpers;
+#[cfg(test)]
+mod apply_domain_event_industry_history_tests;
 mod apply_domain_event_intent;
 mod apply_domain_event_main_token;
+mod factory_authority;
+mod industry_state;
 mod logistics_path_authority;
+mod starter_industrial;
 #[path = "state_defaults.rs"]
 mod state_defaults;
 mod support;
 
+pub use self::starter_industrial::{
+    IndustryProgressState, STARTER_ASSEMBLER_FACTORY_ID, STARTER_INDUSTRIAL_COMPLETION_BOUNDARY,
+    STARTER_INDUSTRIAL_PROFILE_ID, STARTER_INDUSTRIAL_PROFILE_REVISION, STARTER_SMELTER_FACTORY_ID,
+    STARTER_SMELTER_RECIPE_ID, StarterIndustrialFeasibilityResult,
+    StarterIndustrialFeasibilityStatus, StarterIndustrialMilestoneV1,
+};
 use self::support::*;
 pub(super) use logistics_path_authority::LogisticsPathAuthorityV1;
 
 fn default_world_material_ledger() -> MaterialLedgerId {
     state_defaults::default_world_material_ledger()
 }
-
 fn default_logistics_route_available() -> bool {
     state_defaults::default_logistics_route_available()
 }
-
 fn default_logistics_capacity_units() -> i64 {
     state_defaults::default_logistics_capacity_units()
 }
-
 fn default_material_ledgers() -> BTreeMap<MaterialLedgerId, BTreeMap<String, i64>> {
     state_defaults::default_material_ledgers()
 }
-
 fn default_material_transit_priority() -> MaterialTransitPriority {
     state_defaults::default_material_transit_priority()
 }
-
 fn default_module_market_order_id() -> u64 {
     state_defaults::default_module_market_order_id()
 }
-
 fn default_module_market_sale_id() -> u64 {
     state_defaults::default_module_market_sale_id()
 }
-
 fn default_next_module_instance_id() -> u64 {
     state_defaults::default_next_module_instance_id()
 }
@@ -104,138 +108,14 @@ fn default_factory_production_state() -> FactoryProductionState {
 fn default_module_release_required_roles() -> Vec<String> {
     state_defaults::default_module_release_required_roles()
 }
-
 const ALLIANCE_MIN_MEMBER_COUNT: usize = 2;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum FactoryProductionStatus {
-    Idle,
-    Running,
-    Blocked,
-    Paused,
-}
-
-impl Default for FactoryProductionStatus {
-    fn default() -> Self {
-        Self::Idle
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct FactoryProductionState {
-    #[serde(default)]
-    pub status: FactoryProductionStatus,
-    #[serde(default)]
-    pub active_jobs: u16,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub current_job_id: Option<ActionId>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub current_recipe_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_started_at: Option<WorldTime>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_completed_at: Option<WorldTime>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_blocked_at: Option<WorldTime>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_resumed_at: Option<WorldTime>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub current_blocker_kind: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub current_blocker_detail: Option<String>,
-    #[serde(default)]
-    pub completed_jobs: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_completed_recipe_id: Option<String>,
-    #[serde(default)]
-    pub same_recipe_repeat_count: u32,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_completed_canonical_snapshot: Option<FactoryProductionSnapshot>,
-}
-
-impl Default for FactoryProductionState {
-    fn default() -> Self {
-        Self {
-            status: FactoryProductionStatus::Idle,
-            active_jobs: 0,
-            current_job_id: None,
-            current_recipe_id: None,
-            last_started_at: None,
-            last_completed_at: None,
-            last_blocked_at: None,
-            last_resumed_at: None,
-            current_blocker_kind: None,
-            current_blocker_detail: None,
-            completed_jobs: 0,
-            last_completed_recipe_id: None,
-            same_recipe_repeat_count: 0,
-            last_completed_canonical_snapshot: None,
-        }
-    }
-}
-
-/// Stable prerequisite facts for the latest completed recipe on a factory.
-///
-/// This snapshot intentionally excludes transient execution details such as
-/// duration/ETA, live balances, and market quotes.  The factory containing it
-/// is the partition key for the candidate window.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct FactoryProductionSnapshot {
-    #[serde(default)]
-    pub recipe_id: String,
-    #[serde(default)]
-    pub consume: Vec<MaterialStack>,
-    #[serde(default)]
-    pub consume_ledger: MaterialLedgerId,
-    #[serde(default)]
-    pub power_required: i64,
-    #[serde(default)]
-    pub output_ledger: MaterialLedgerId,
-    #[serde(default)]
-    pub bottleneck_tags: Vec<String>,
-    #[serde(default)]
-    pub logistics_route_ids: Vec<String>,
-    #[serde(default)]
-    pub logistics_path_ids: Vec<String>,
-}
-
-impl FactoryProductionSnapshot {
-    fn from_recipe_job(job: &RecipeJobState) -> Self {
-        Self {
-            recipe_id: job.recipe_id.clone(),
-            consume: normalize_material_stacks(&job.consume),
-            consume_ledger: job.consume_ledger.clone(),
-            power_required: job.power_required,
-            output_ledger: job.output_ledger.clone(),
-            bottleneck_tags: normalize_bottleneck_tags(&job.bottleneck_tags),
-            logistics_route_ids: job.logistics_route_ids.clone(),
-            logistics_path_ids: job.logistics_path_ids.clone(),
-        }
-    }
-}
-
-fn normalize_material_stacks(stacks: &[MaterialStack]) -> Vec<MaterialStack> {
-    let mut merged = BTreeMap::<String, i64>::new();
-    for stack in stacks {
-        let kind = stack.kind.trim().to_ascii_lowercase();
-        let amount = merged.entry(kind).or_default();
-        *amount = amount.saturating_add(stack.amount);
-    }
-    merged
-        .into_iter()
-        .map(|(kind, amount)| MaterialStack::new(kind, amount))
-        .collect()
-}
-
-fn normalize_bottleneck_tags(tags: &[String]) -> Vec<String> {
-    tags.iter()
-        .map(|tag| tag.trim().to_ascii_lowercase())
-        .filter(|tag| !tag.is_empty())
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect()
-}
+pub use self::industry_state::{
+    AgentLocationAuthorityV1, FACTORY_BUILD_STARTED_MODERN_VERSION, FactoryBuildPowerObligationV1,
+    FactoryConstructionPowerMode, FactoryConstructionPowerProfileV1, FactoryProductionSnapshot,
+    FactoryProductionState, FactoryProductionStatus, FactoryRecycleReceiptV1,
+    FactorySiteAuthorityV1, LocationAnchorV1, ProductValidationAttemptV1,
+    ProductValidationReceiptV1, RecipeCompletionReceiptV1,
+};
 
 /// Persisted factory instance state.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -252,6 +132,16 @@ pub struct FactoryState {
     pub durability_ppm: i64,
     #[serde(default = "default_factory_production_state")]
     pub production: FactoryProductionState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub site_authority_revision: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub site_location_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location_anchor_revision: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub construction_power_profile_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub construction_power_profile_revision: Option<u64>,
     pub built_at: WorldTime,
 }
 
@@ -265,6 +155,17 @@ pub struct FactoryBuildJobState {
     #[serde(default = "default_world_material_ledger")]
     pub consume_ledger: MaterialLedgerId,
     pub ready_at: WorldTime,
+    /// Build event contract discriminator; zero is legacy replay only.
+    #[serde(default)]
+    pub contract_version: u8,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub site_authority_revision: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub site_location_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location_anchor_revision: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub construction_power_obligation: Option<FactoryBuildPowerObligationV1>,
 }
 
 /// In-flight recipe execution tracked by job id.
@@ -361,6 +262,30 @@ pub struct LogisticsSettlementReceiptV1 {
     pub governance_tax_electricity: i64,
 }
 
+/// Durable disposition for a product-validation failure after a recipe has
+/// already sunk its committed inputs and electricity.
+///
+/// The action id is the stable identity. Keeping the exact consumed/lost
+/// payload makes replay of the blocker idempotent while allowing a conflicting
+/// same-id event to fail closed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FactoryProductionFailureDispositionV1 {
+    pub action_id: ActionId,
+    pub requester_agent_id: String,
+    pub factory_id: String,
+    pub recipe_id: String,
+    pub blocker_kind: String,
+    pub blocker_detail: String,
+    pub disposition_kind: String,
+    pub consumed_inputs: Vec<MaterialStack>,
+    pub lost_inputs: Vec<MaterialStack>,
+    pub consumed_power: i64,
+    pub lost_power: i64,
+    pub next_action: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_recheck: Option<WorldTime>,
+}
+
 /// Comparable one-time receipt for an immediate material transfer.
 ///
 /// The transfer action id is the stable identity. Keeping the settled payload
@@ -379,21 +304,6 @@ pub struct MaterialTransferReceiptV1 {
     pub priority: MaterialTransitPriority,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub route_id: Option<String>,
-}
-
-/// Lightweight observability state for industry progression and market snapshots.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct IndustryProgressState {
-    #[serde(default)]
-    pub stage: IndustryStage,
-    #[serde(default)]
-    pub stage_updated_at: WorldTime,
-    #[serde(default)]
-    pub completed_recipe_jobs: u64,
-    #[serde(default)]
-    pub completed_material_transits: u64,
-    #[serde(default)]
-    pub latest_market_quotes: BTreeMap<String, MaterialMarketQuote>,
 }
 
 /// Active market listing for one module artifact.
@@ -513,6 +423,30 @@ pub struct LastProductValidationState {
     pub tradable: bool,
 }
 
+/// Durable high-water mark for product-validation event routing. Validation
+/// events are generated in journal order, so a scalar cursor keeps recovery
+/// metadata bounded independently from the number of events.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProductValidationDeliveryCursor {
+    #[serde(default)]
+    pub routed_through_event_id: WorldEventId,
+    /// Era-aware bounded high-water mark; old snapshots default this era to 0.
+    #[serde(default)]
+    pub event_id_era: u64,
+}
+
+impl ProductValidationDeliveryCursor {
+    pub fn has_routed(&self, event_id_era: u64, event_id: WorldEventId) -> bool {
+        (self.event_id_era, self.routed_through_event_id) >= (event_id_era, event_id)
+    }
+    pub fn advance_to(&mut self, event_id_era: u64, event_id: WorldEventId) {
+        if (event_id_era, event_id) > (self.event_id_era, self.routed_through_event_id) {
+            self.event_id_era = event_id_era;
+            self.routed_through_event_id = event_id;
+        }
+    }
+}
+
 /// Persistent mapping from module release request lifecycle to release manifest lifecycle.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ModuleReleaseManifestMappingState {
@@ -579,10 +513,23 @@ pub struct WorldState {
     pub settled_logistics_transit_ids: BTreeSet<ActionId>,
     #[serde(default)]
     pub logistics_settlement_receipts: BTreeMap<ActionId, LogisticsSettlementReceiptV1>,
+    /// Product-validation failure dispositions are keyed by the recipe
+    /// action id so a post-start sink is recorded exactly once across replay.
+    #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
+    pub factory_production_failure_dispositions:
+        BTreeMap<ActionId, FactoryProductionFailureDispositionV1>,
     /// Direct material transfer action ids are single-use. The comparable
     /// receipt distinguishes an exact replay from a tampered same-id event.
     #[serde(default)]
     pub direct_material_transfer_receipts: BTreeMap<ActionId, MaterialTransferReceiptV1>,
+    /// Product-module decisions are scoped to a production job/output and
+    /// survive snapshots so retries do not invoke the module twice.
+    #[serde(
+        default,
+        skip_serializing_if = "BTreeMap::is_empty",
+        deserialize_with = "deserialize_btreemap_u64_keys"
+    )]
+    pub product_validation_receipts: BTreeMap<ActionId, Vec<ProductValidationReceiptV1>>,
     #[serde(default)]
     pub product_profiles: BTreeMap<String, ProductProfileV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -591,6 +538,20 @@ pub struct WorldState {
     pub recipe_profiles: BTreeMap<String, RecipeProfileV1>,
     #[serde(default)]
     pub factory_profiles: BTreeMap<String, FactoryProfileV1>,
+    /// Canonical agent-to-location assignments. Old snapshots decode this as
+    /// an empty registry and cannot thereby grant new site admission.
+    #[serde(default)]
+    pub agent_location_authorities: BTreeMap<String, AgentLocationAuthorityV1>,
+    /// Runtime-owned exact location identities. Old snapshots decode this as
+    /// an empty registry and cannot thereby grant new authority or admission.
+    #[serde(default)]
+    pub location_anchors: BTreeMap<String, LocationAnchorV1>,
+    /// Canonical factory-site admission records.
+    #[serde(default)]
+    pub factory_site_authorities: BTreeMap<String, FactorySiteAuthorityV1>,
+    /// M4-governed construction electricity profiles keyed by exact factory id.
+    #[serde(default)]
+    pub factory_construction_power_profiles: BTreeMap<String, FactoryConstructionPowerProfileV1>,
     #[serde(default)]
     pub factories: BTreeMap<String, FactoryState>,
     /// Factory identities are single-use.  Recycling leaves a durable
@@ -604,6 +565,22 @@ pub struct WorldState {
     /// a settled duplicate from an unknown/reordered completion.
     #[serde(default)]
     pub settled_factory_build_ids: BTreeSet<ActionId>,
+    /// Construction obligations remain auditable after FactoryBuilt settles
+    /// the pending job; old snapshots decode this as an empty map.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub factory_construction_receipts: BTreeMap<String, FactoryBuildPowerObligationV1>,
+    /// Pre-call intents prevent a crash between module side effects and the
+    /// validation receipt from causing a second validator invocation.
+    #[serde(
+        default,
+        skip_serializing_if = "BTreeMap::is_empty",
+        deserialize_with = "deserialize_btreemap_u64_keys"
+    )]
+    pub product_validation_attempts: BTreeMap<ActionId, Vec<ProductValidationAttemptV1>>,
+    /// Runtime-owned validation delivery progress is separate from reducer
+    /// module state so a module cannot shadow or overwrite the cursor.
+    #[serde(default)]
+    pub product_validation_delivery_cursor: ProductValidationDeliveryCursor,
     #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
     pub pending_factory_builds: BTreeMap<ActionId, FactoryBuildJobState>,
     #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
@@ -613,6 +590,24 @@ pub struct WorldState {
     /// the same completion/start identity must not sink or credit it again.
     #[serde(default)]
     pub settled_recipe_job_ids: BTreeSet<ActionId>,
+    /// Monotonic settlement position for new industry terminal outcomes.
+    #[serde(default = "state_defaults::default_next_industry_settlement_order")]
+    pub next_industry_settlement_order: u64,
+    /// Durable insertion order for bounded industry history compaction.
+    #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
+    pub industry_settlement_orders: BTreeMap<ActionId, u64>,
+    /// Full completion payloads for new recipe settlements.  The ID set above
+    /// remains a compatibility projection for pre-receipt snapshots.
+    #[serde(
+        default,
+        skip_serializing_if = "BTreeMap::is_empty",
+        deserialize_with = "deserialize_btreemap_u64_keys"
+    )]
+    pub recipe_completion_receipts: BTreeMap<ActionId, RecipeCompletionReceiptV1>,
+    /// Full recycle payloads for new retired-factory tombstones.  The legacy
+    /// ID set remains authoritative only when no receipt exists.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub factory_recycle_receipts: BTreeMap<String, FactoryRecycleReceiptV1>,
     #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
     pub pending_material_transits: BTreeMap<ActionId, MaterialTransitJobState>,
     #[serde(default)]
@@ -1043,6 +1038,10 @@ impl WorldState {
             )?,
             DomainEvent::AgentRegistered { .. }
             | DomainEvent::AgentMoved { .. }
+            | DomainEvent::AgentLocationAuthorityUpdated { .. }
+            | DomainEvent::LocationAnchorUpdated { .. }
+            | DomainEvent::FactorySiteAuthorityUpdated { .. }
+            | DomainEvent::FactoryConstructionPowerProfileUpdated { .. }
             | DomainEvent::ActionAccepted { .. }
             | DomainEvent::ActionRejected { .. }
             | DomainEvent::Observation { .. }
@@ -1136,7 +1135,9 @@ impl WorldState {
             | DomainEvent::CrisisResolved { .. }
             | DomainEvent::CrisisTimedOut { .. }
             | DomainEvent::MetaProgressGranted { .. }
-            | DomainEvent::ProductValidated { .. } => {
+            | DomainEvent::ProductValidated { .. }
+            | DomainEvent::ProductValidationRecorded { .. }
+            | DomainEvent::ProductValidationAttemptStarted { .. } => {
                 self.apply_domain_event_governance_meta(event, now)?
             }
         }

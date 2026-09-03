@@ -17,6 +17,9 @@ pub(in crate::viewer::runtime_live) fn runtime_event_kind_label(
         RuntimeWorldEventBody::ModuleEmitted(_) => "module_emitted",
         RuntimeWorldEventBody::ModuleStateUpdated(_) => "module_state_updated",
         RuntimeWorldEventBody::ModuleRuntimeCharged(_) => "module_runtime_charged",
+        RuntimeWorldEventBody::ProductValidationDeliveryCursorUpdated(_) => {
+            "product_validation_delivery_cursor_updated"
+        }
         RuntimeWorldEventBody::SnapshotCreated(_) => "snapshot_created",
         RuntimeWorldEventBody::ManifestUpdated(_) => "manifest_updated",
         RuntimeWorldEventBody::RollbackApplied(_) => "rollback_applied",

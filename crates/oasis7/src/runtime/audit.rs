@@ -23,6 +23,7 @@ pub enum AuditEventKind {
     ModuleEmitted,
     ModuleStateUpdated,
     ModuleRuntimeCharged,
+    ProductValidationDeliveryCursorUpdated,
     SnapshotCreated,
     ManifestUpdated,
     RollbackApplied,
