@@ -5,14 +5,14 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use super::super::{location_id_for_pos, mapping::runtime_state_to_simulator_model};
 use crate::geometry::GeoPos;
 use crate::runtime::{
-    Action as RuntimeAction, AgentIntentV2, CausedBy as RuntimeCausedBy,
-    DomainEvent as RuntimeDomainEvent, ModuleSourcePackage, SchedulerWakeV1, World as RuntimeWorld,
-    WorldEvent as RuntimeWorldEvent, WorldEventBody as RuntimeWorldEventBody,
+    Action as RuntimeAction, AgentIntentV2, DomainEvent as RuntimeDomainEvent, ModuleSourcePackage,
+    SchedulerWakeV1, World as RuntimeWorld, WorldEvent as RuntimeWorldEvent,
+    WorldEventBody as RuntimeWorldEventBody,
 };
 #[cfg(not(target_arch = "wasm32"))]
 use crate::simulator::AsyncAgentRunner;
 use crate::simulator::{
-    Action as SimulatorAction, ActionCatalogEntry, ActionResult, AgentBehavior, AgentDecision,
+    Action as SimulatorAction, ActionCatalogEntry, AgentBehavior, AgentDecision,
     AgentDecisionTrace, AgentPromptProfile, AgentRunner, CHUNK_GENERATION_SCHEMA_VERSION,
     ChunkRuntimeConfig, ContinuationProposalV1 as SimulatorContinuationProposalV1,
     ContinuousAgentResponseContextV1, LlmAgentBehavior, LlmAgentConfig, Location,
@@ -1147,6 +1147,11 @@ impl RuntimeLlmSidecar {
                     agent.behavior.on_event(&mapped_event);
                 }
             }
+            #[cfg(not(target_arch = "wasm32"))]
+            RuntimeDecisionRunner::ProviderBacked(runner) => {
+                let _ = runner.notify_world_event(requester_agent_id.as_str(), mapped_event);
+            }
+            #[cfg(target_arch = "wasm32")]
             RuntimeDecisionRunner::ProviderBacked(runner) => {
                 if let Some(agent) = runner.get_mut(requester_agent_id.as_str()) {
                     agent.behavior.on_event(&mapped_event);
