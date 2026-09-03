@@ -214,14 +214,7 @@ impl WorldState {
         let recipe_profile_ready = self
             .recipe_profiles
             .get(STARTER_SMELTER_RECIPE_ID)
-            .is_some_and(|profile| {
-                profile.recipe_id == STARTER_SMELTER_RECIPE_ID
-                    && profile.stage_gate == "bootstrap"
-                    && profile
-                        .preferred_factory_tags
-                        .iter()
-                        .any(|tag| tag == "smelter")
-            });
+            .is_some_and(|profile| profile.recipe_id == STARTER_SMELTER_RECIPE_ID);
         let site_authority_ready = self
             .factory_site_authorities
             .get(smelter_factory.site_id.as_str())
