@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -32,7 +33,43 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 TOOL = ROOT / "scripts" / "p2p-public-testnet-identity-v2-signing-tool.py"
-OPENSSL = Path("/opt/homebrew/bin/openssl")
+
+
+def _supports_ed25519(path: Path) -> bool:
+    """Check that a candidate can run the real Ed25519 fixture operations."""
+    result = subprocess.run(
+        [str(path), "genpkey", "-algorithm", "ED25519", "-out", os.devnull],
+        capture_output=True,
+    )
+    return result.returncode == 0
+
+
+def resolve_openssl() -> Path:
+    """Resolve an executable OpenSSL implementation with Ed25519 support."""
+    candidates: list[Path] = []
+    discovered = shutil.which("openssl")
+    if discovered is not None:
+        candidates.append(Path(discovered))
+    candidates.extend(
+        Path(candidate)
+        for candidate in (
+            "/opt/homebrew/bin/openssl",
+            "/usr/local/bin/openssl",
+            "/usr/bin/openssl",
+        )
+    )
+    seen: set[Path] = set()
+    for path in candidates:
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if resolved.is_file() and os.access(resolved, os.X_OK) and _supports_ed25519(resolved):
+            return resolved
+    raise RuntimeError("test prerequisite missing: no executable OpenSSL with Ed25519 support")
+
+
+OPENSSL = resolve_openssl()
 PREFIX = b"OASIS7-IDENTITY-RECEIPT-V2\0"
 NETWORK_ID = "oasis7-public-testnet-governed-20260606"
 TRUST_ROOT_ID = "oasis7-public-testnet-governance-root-v1"
@@ -524,6 +561,12 @@ class IdentityV2SigningToolContractTests(unittest.TestCase):
         self.assertEqual(first["raw_v1_sha256"], self.raw_digest)
         self.assertEqual(first["context_digest"], self.context_digest)
         self.assertEqual(first["plan_digest"], self.plan_digest)
+
+    def test_openssl_selection_supports_host_ed25519_operations(self) -> None:
+        """The selected host binary must support the real Ed25519 fixture."""
+        self.assertTrue(OPENSSL.is_file())
+        self.assertTrue(os.access(OPENSSL, os.X_OK))
+        self.assertTrue(_supports_ed25519(OPENSSL))
 
     def test_real_ed25519_sign_assemble_verify_preserves_one_immutable_payload(self) -> None:
         payload, manifest, signature, attestation, envelope = self._prepare_sign_assemble()
