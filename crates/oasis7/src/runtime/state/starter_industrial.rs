@@ -211,11 +211,6 @@ impl WorldState {
                 profile.factory_id == STARTER_ASSEMBLER_FACTORY_ID
                     && profile.tags.iter().any(|tag| tag == "assembler")
             });
-        // The map key is the canonical governed recipe identity. Module-backed
-        // profiles may retain their module identity in the payload, so
-        // requiring the payload string to repeat the key would reject a
-        // valid authority projection.
-        let recipe_profile_ready = self.recipe_profiles.contains_key(STARTER_SMELTER_RECIPE_ID);
         let site_authority_ready = self
             .factory_site_authorities
             .get(smelter_factory.site_id.as_str())
@@ -244,7 +239,6 @@ impl WorldState {
             });
         if !smelter_profile_ready
             || !assembler_profile_ready
-            || !recipe_profile_ready
             || !site_authority_ready
             || !smelter_power_profile_ready
             || !assembler_power_profile_ready
@@ -253,7 +247,7 @@ impl WorldState {
                 StarterIndustrialFeasibilityStatus::NoSafeStarterChain,
                 "unknown/not_tracked",
                 Some(format!(
-                    "starter industrial profile authority is incomplete: smelter_profile={smelter_profile_ready} assembler_profile={assembler_profile_ready} recipe_profile={recipe_profile_ready} site_authority={site_authority_ready} smelter_power_profile={smelter_power_profile_ready} assembler_power_profile={assembler_power_profile_ready}"
+                    "starter industrial profile authority is incomplete: smelter_profile={smelter_profile_ready} assembler_profile={assembler_profile_ready} site_authority={site_authority_ready} smelter_power_profile={smelter_power_profile_ready} assembler_power_profile={assembler_power_profile_ready}"
                 )),
                 "refresh_starter_industrial_authority",
                 "none",
