@@ -16,7 +16,6 @@ use super::world_model::{WorldConfig, WorldModel};
 use crate::chain_resource_schema::{ChainResourceDelta, ChainResourceManifest};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::runtime::Snapshot as RuntimeSnapshot;
-use crate::runtime::StarterIndustrialFeasibilityResult;
 use oasis7_wasm_abi::MaterialStack;
 #[cfg(target_arch = "wasm32")]
 use serde_json::Value as RuntimeSnapshot;
@@ -494,10 +493,33 @@ pub struct PlayerGameplaySnapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validation_unlock_preview: Option<ProductValidationUnlockPreview>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub starter_industrial_feasibility: Option<StarterIndustrialFeasibilityResult>,
+    pub starter_industrial_feasibility: Option<PlayerStarterIndustrialFeasibility>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub factory_production_failure_disposition:
         Option<PlayerGameplayFactoryProductionFailureDisposition>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlayerStarterIndustrialFeasibilityStatus {
+    CandidateAvailable,
+    NoSafeStarterChain,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerStarterIndustrialFeasibility {
+    pub profile_id: String,
+    pub profile_revision: u64,
+    pub authority_snapshot: String,
+    pub status: PlayerStarterIndustrialFeasibilityStatus,
+    pub evidence_class: String,
+    pub completion_boundary: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocker: Option<String>,
+    pub next_action: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_recheck: Option<WorldTime>,
+    pub progression_effect: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -646,7 +668,7 @@ struct PlayerGameplaySnapshotSerde {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     validation_unlock_preview: Option<ProductValidationUnlockPreview>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    starter_industrial_feasibility: Option<StarterIndustrialFeasibilityResult>,
+    starter_industrial_feasibility: Option<PlayerStarterIndustrialFeasibility>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     factory_production_failure_disposition:
         Option<PlayerGameplayFactoryProductionFailureDisposition>,

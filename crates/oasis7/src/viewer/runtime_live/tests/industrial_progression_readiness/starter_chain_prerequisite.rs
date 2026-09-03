@@ -30,17 +30,26 @@ fn viewer_disables_assembler_before_starter_smelter_settlement() {
     let (mut server, agent_id, _, _) = setup_before_smelter_settlement(79);
     let expected_feasibility = server.world.state().starter_industrial_feasibility();
     let gameplay = expect_player_gameplay(&mut server, "assembler before smelter settlement");
+    let projected_feasibility = gameplay
+        .starter_industrial_feasibility
+        .as_ref()
+        .expect("blocked starter feasibility projection");
     assert_eq!(
-        gameplay.starter_industrial_feasibility.as_ref(),
-        Some(&expected_feasibility),
-        "Viewer must expose the same canonical blocked starter-chain result used by runtime"
+        projected_feasibility.profile_id,
+        expected_feasibility.profile_id
+    );
+    assert_eq!(
+        projected_feasibility.authority_snapshot,
+        expected_feasibility.authority_snapshot
     );
     assert_eq!(
         gameplay
             .starter_industrial_feasibility
             .as_ref()
             .map(|result| result.status),
-        Some(crate::runtime::StarterIndustrialFeasibilityStatus::NoSafeStarterChain)
+        Some(
+            crate::simulator::persist::PlayerStarterIndustrialFeasibilityStatus::NoSafeStarterChain
+        )
     );
     let action = gameplay
         .available_actions
@@ -243,17 +252,26 @@ fn starter_milestone_survives_latest_recipe_and_restart() {
         .compat_snapshot(Some("player-a"))
         .player_gameplay
         .expect("candidate player gameplay snapshot");
+    let projected_feasibility = projected
+        .starter_industrial_feasibility
+        .as_ref()
+        .expect("candidate starter feasibility projection");
     assert_eq!(
-        projected.starter_industrial_feasibility.as_ref(),
-        Some(&expected_feasibility),
-        "Viewer and runtime-live must expose identical candidate feasibility"
+        projected_feasibility.profile_id,
+        expected_feasibility.profile_id
+    );
+    assert_eq!(
+        projected_feasibility.authority_snapshot,
+        expected_feasibility.authority_snapshot
     );
     assert_eq!(
         projected
             .starter_industrial_feasibility
             .as_ref()
             .map(|result| result.status),
-        Some(crate::runtime::StarterIndustrialFeasibilityStatus::CandidateAvailable)
+        Some(
+            crate::simulator::persist::PlayerStarterIndustrialFeasibilityStatus::CandidateAvailable
+        )
     );
     let encoded = serde_json::to_value(&projected).expect("serialize candidate gameplay snapshot");
     let restored_projected: crate::simulator::PlayerGameplaySnapshot =

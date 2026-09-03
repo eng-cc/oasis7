@@ -25,7 +25,11 @@ use super::control_plane::{
     map_auth_verify_error_code, normalize_optional_public_key,
 };
 use crate::runtime::{
-    Action as RuntimeAction, IndustryStage, StarterIndustrialFeasibilityResult, WorldState,
+    Action as RuntimeAction, IndustryStage, StarterIndustrialFeasibilityResult,
+    StarterIndustrialFeasibilityStatus, WorldState,
+};
+use crate::simulator::persist::{
+    PlayerStarterIndustrialFeasibility, PlayerStarterIndustrialFeasibilityStatus,
 };
 use crate::simulator::{
     PlayerGameplayAction, PlayerGameplayRecentFeedback, ResourceKind, ResourceOwner, WorldKernel,
@@ -106,6 +110,30 @@ fn data_collection_preflight(
 
 pub(super) fn supports_runtime_gameplay_actions() -> bool {
     true
+}
+
+pub(super) fn player_starter_industrial_feasibility(
+    result: &StarterIndustrialFeasibilityResult,
+) -> PlayerStarterIndustrialFeasibility {
+    PlayerStarterIndustrialFeasibility {
+        profile_id: result.profile_id.clone(),
+        profile_revision: result.profile_revision,
+        authority_snapshot: result.authority_snapshot.clone(),
+        status: match result.status {
+            StarterIndustrialFeasibilityStatus::CandidateAvailable => {
+                PlayerStarterIndustrialFeasibilityStatus::CandidateAvailable
+            }
+            StarterIndustrialFeasibilityStatus::NoSafeStarterChain => {
+                PlayerStarterIndustrialFeasibilityStatus::NoSafeStarterChain
+            }
+        },
+        evidence_class: result.evidence_class.clone(),
+        completion_boundary: result.completion_boundary.clone(),
+        blocker: result.blocker.clone(),
+        next_action: result.next_action.clone(),
+        next_recheck: result.next_recheck,
+        progression_effect: result.progression_effect.clone(),
+    }
 }
 
 fn starter_assembler_build_disabled_reason(

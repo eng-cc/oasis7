@@ -1,7 +1,6 @@
 use crate::runtime::{
     FactoryProductionFailureDispositionV1, FactoryProductionStatus, FactoryState, IndustryStage,
-    StarterIndustrialFeasibilityResult, WorldEvent as RuntimeWorldEvent,
-    WorldEventBody as RuntimeWorldEventBody, WorldState,
+    WorldEvent as RuntimeWorldEvent, WorldEventBody as RuntimeWorldEventBody, WorldState,
 };
 use crate::simulator::persist::{
     PlayerAgentClaimSnapshot, PlayerGameplayCausalityKind, PlayerGameplayExecutionState,
@@ -28,7 +27,7 @@ use super::gameplay_snapshot_helpers::{
 };
 use super::gameplay_snapshot_lane::apply_small_player_lane_truth;
 use super::gameplay_validation_preview::product_validation_unlock_preview;
-use super::player_gameplay::extend_available_actions;
+use super::player_gameplay::{extend_available_actions, player_starter_industrial_feasibility};
 use fallback::{
     fallback_tradeoff_decision_for_gameplay, player_gameplay_fallback_action,
     player_gameplay_fallback_tradeoff_preview, player_gameplay_wait_resolution_quote,
@@ -329,8 +328,7 @@ pub(super) fn build_player_gameplay_snapshot(
     first_agent_claim_target_available: bool,
     agent_claim: Option<PlayerAgentClaimSnapshot>,
 ) -> PlayerGameplaySnapshot {
-    let starter_industrial_feasibility: StarterIndustrialFeasibilityResult =
-        state.starter_industrial_feasibility();
+    let starter_industrial_feasibility = state.starter_industrial_feasibility();
     let mut available_actions = base_available_actions(
         controlled_agent_id,
         gameplay_enabled,
@@ -396,7 +394,9 @@ pub(super) fn build_player_gameplay_snapshot(
             causality_signal,
         );
         gameplay.primary_intent = primary_intent.clone();
-        gameplay.starter_industrial_feasibility = Some(starter_industrial_feasibility.clone());
+        gameplay.starter_industrial_feasibility = Some(player_starter_industrial_feasibility(
+            &starter_industrial_feasibility,
+        ));
         gameplay
     };
     if !gameplay_enabled {
