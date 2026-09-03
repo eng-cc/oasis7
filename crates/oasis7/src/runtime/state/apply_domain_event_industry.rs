@@ -5,6 +5,7 @@ use super::apply_domain_event_industry_helpers::{
 };
 use super::*;
 use crate::runtime::AgentActivityV1;
+use crate::runtime::IndustryStage;
 
 impl WorldState {
     pub(super) fn apply_domain_event_industry(
@@ -974,6 +975,15 @@ impl WorldState {
                     .industry_progress
                     .completed_recipe_jobs
                     .saturating_add(1);
+                self.record_starter_industrial_milestone_if_match(
+                    *job_id,
+                    factory_id,
+                    recipe_id,
+                    *accepted_batches,
+                    produce,
+                    output_ledger,
+                    now,
+                );
                 if let Some(factory) = self.factories.get_mut(factory_id) {
                     factory.production.active_jobs =
                         factory.production.active_jobs.saturating_sub(1);

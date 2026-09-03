@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::agent_cell::{AgentCell, AgentIntentV2};
 use super::error::WorldError;
 use super::events::ModuleProfileChanges;
-use super::events::{DomainEvent, IndustryStage, MaterialMarketQuote, MaterialTransitPriority};
+use super::events::{DomainEvent, MaterialTransitPriority};
 use super::gameplay_state::{
     AgentClaimState, AllianceState, CrisisState, CrisisStatus, EconomicContractState,
     EconomicContractStatus, GOVERNANCE_IDENTITY_DEFAULT_MAX_VOTE_WEIGHT, GameplayPolicyState,
@@ -54,10 +54,17 @@ mod apply_domain_event_main_token;
 mod factory_authority;
 mod industry_state;
 mod logistics_path_authority;
+mod starter_industrial;
 #[path = "state_defaults.rs"]
 mod state_defaults;
 mod support;
 
+pub use self::starter_industrial::{
+    IndustryProgressState, STARTER_ASSEMBLER_FACTORY_ID, STARTER_INDUSTRIAL_COMPLETION_BOUNDARY,
+    STARTER_INDUSTRIAL_PROFILE_ID, STARTER_INDUSTRIAL_PROFILE_REVISION, STARTER_SMELTER_FACTORY_ID,
+    STARTER_SMELTER_RECIPE_ID, StarterIndustrialFeasibilityResult,
+    StarterIndustrialFeasibilityStatus, StarterIndustrialMilestoneV1,
+};
 use self::support::*;
 pub(super) use logistics_path_authority::LogisticsPathAuthorityV1;
 
@@ -297,21 +304,6 @@ pub struct MaterialTransferReceiptV1 {
     pub priority: MaterialTransitPriority,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub route_id: Option<String>,
-}
-
-/// Lightweight observability state for industry progression and market snapshots.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct IndustryProgressState {
-    #[serde(default)]
-    pub stage: IndustryStage,
-    #[serde(default)]
-    pub stage_updated_at: WorldTime,
-    #[serde(default)]
-    pub completed_recipe_jobs: u64,
-    #[serde(default)]
-    pub completed_material_transits: u64,
-    #[serde(default)]
-    pub latest_market_quotes: BTreeMap<String, MaterialMarketQuote>,
 }
 
 /// Active market listing for one module artifact.

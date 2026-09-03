@@ -107,45 +107,7 @@ pub(super) fn supports_runtime_gameplay_actions() -> bool {
 }
 
 fn starter_assembler_build_disabled_reason(state: &WorldState) -> Option<String> {
-    const STARTER_SMELTER_FACTORY_ID: &str = "factory.smelter.mk1";
-    const STARTER_SMELTER_RECIPE_ID: &str = "recipe.smelter.iron_ingot";
-    const STARTER_ASSEMBLER_FACTORY_ID: &str = "factory.assembler.mk1";
-    let Some(smelter) = state.factories.get(STARTER_SMELTER_FACTORY_ID) else {
-        return Some(format!(
-            "starter assembler requires a completed starter Smelter production receipt: complete {STARTER_SMELTER_RECIPE_ID} on {STARTER_SMELTER_FACTORY_ID} before building {STARTER_ASSEMBLER_FACTORY_ID}"
-        ));
-    };
-    let matching_receipt = state.recipe_completion_receipts.values().any(|receipt| {
-        receipt.factory_id == STARTER_SMELTER_FACTORY_ID
-            && receipt.recipe_id == STARTER_SMELTER_RECIPE_ID
-            && receipt.output_ledger == smelter.output_ledger
-            && receipt.accepted_batches > 0
-            && receipt
-                .produce
-                .iter()
-                .any(|stack| stack.kind == "iron_ingot" && stack.amount > 0)
-    });
-    let matching_legacy_snapshot = smelter.production.last_completed_recipe_id.as_deref()
-        == Some(STARTER_SMELTER_RECIPE_ID)
-        && smelter.production.completed_jobs > 0
-        && smelter
-            .production
-            .last_completed_canonical_snapshot
-            .as_ref()
-            .is_some_and(|snapshot| {
-                snapshot.recipe_id == STARTER_SMELTER_RECIPE_ID
-                    && snapshot.output_ledger == smelter.output_ledger
-                    && snapshot
-                        .produce
-                        .iter()
-                        .any(|stack| stack.kind == "iron_ingot" && stack.amount > 0)
-            });
-    if matching_receipt || matching_legacy_snapshot {
-        return None;
-    }
-    Some(format!(
-        "starter assembler requires a completed starter Smelter production receipt: complete {STARTER_SMELTER_RECIPE_ID} on {STARTER_SMELTER_FACTORY_ID} before building {STARTER_ASSEMBLER_FACTORY_ID}"
-    ))
+    state.starter_industrial_feasibility().disabled_reason()
 }
 pub(super) fn extend_available_actions(
     state: &WorldState,

@@ -275,7 +275,11 @@ pub use state::{
     LocationAnchorV1, LogisticsRouteV1, MaterialTransferReceiptV1, MaterialTransitJobState,
     ModuleInstanceState, ModuleReleaseAttestationState, ModuleReleaseManifestMappingState,
     ProductValidationAttemptV1, ProductValidationDeliveryCursor, ProductValidationReceiptV1,
-    RecipeCompletionReceiptV1, RecipeJobState, WorldState,
+    RecipeCompletionReceiptV1, RecipeJobState, STARTER_ASSEMBLER_FACTORY_ID,
+    STARTER_INDUSTRIAL_COMPLETION_BOUNDARY, STARTER_INDUSTRIAL_PROFILE_ID,
+    STARTER_INDUSTRIAL_PROFILE_REVISION, STARTER_SMELTER_FACTORY_ID, STARTER_SMELTER_RECIPE_ID,
+    StarterIndustrialFeasibilityResult, StarterIndustrialFeasibilityStatus,
+    StarterIndustrialMilestoneV1, WorldState,
 };
 
 // World
