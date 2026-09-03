@@ -246,6 +246,16 @@ fn starter_milestone_survives_latest_recipe_and_restart() {
             .candidate_available(),
         "later completion and restart must not relock the assembler candidate"
     );
+    let mut recycled_smelter_state = restored.clone();
+    recycled_smelter_state
+        .factories
+        .remove(crate::viewer::FACTORY_SMELTER_MK1);
+    assert!(
+        recycled_smelter_state
+            .starter_industrial_feasibility()
+            .candidate_available(),
+        "the durable settlement milestone must keep assembler eligibility after the starter smelter is recycled"
+    );
 
     let expected_feasibility = restored.starter_industrial_feasibility();
     let projected = server

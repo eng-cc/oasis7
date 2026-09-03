@@ -185,6 +185,26 @@ impl WorldState {
             }
         };
 
+        let milestone_matches = self
+            .industry_progress
+            .starter_industrial_milestone
+            .as_ref()
+            .is_some_and(|milestone| {
+                milestone.profile_id == STARTER_INDUSTRIAL_PROFILE_ID
+                    && milestone.profile_revision == STARTER_INDUSTRIAL_PROFILE_REVISION
+                    && milestone.factory_id == STARTER_SMELTER_FACTORY_ID
+                    && milestone.recipe_id == STARTER_SMELTER_RECIPE_ID
+            });
+        if milestone_matches {
+            return base(
+                StarterIndustrialFeasibilityStatus::CandidateAvailable,
+                "durable-milestone-backed",
+                None,
+                "build_factory_assembler_mk1",
+                "open_assembler_candidate_only",
+            );
+        }
+
         let Some(smelter_factory) = smelter_factory else {
             return base(
                 StarterIndustrialFeasibilityStatus::NoSafeStarterChain,
@@ -282,18 +302,7 @@ impl WorldState {
                             .iter()
                             .any(|stack| stack.kind == "iron_ingot" && stack.amount > 0)
                 });
-        let milestone_matches = self
-            .industry_progress
-            .starter_industrial_milestone
-            .as_ref()
-            .is_some_and(|milestone| {
-                milestone.profile_id == STARTER_INDUSTRIAL_PROFILE_ID
-                    && milestone.profile_revision == STARTER_INDUSTRIAL_PROFILE_REVISION
-                    && milestone.factory_id == STARTER_SMELTER_FACTORY_ID
-                    && milestone.recipe_id == STARTER_SMELTER_RECIPE_ID
-                    && smelter_output_ledger.as_ref() == Some(&milestone.output_ledger)
-            });
-        if !milestone_matches && !receipt_matches && !legacy_snapshot_matches {
+        if !receipt_matches && !legacy_snapshot_matches {
             return base(
                 StarterIndustrialFeasibilityStatus::NoSafeStarterChain,
                 "unknown/not_tracked",
