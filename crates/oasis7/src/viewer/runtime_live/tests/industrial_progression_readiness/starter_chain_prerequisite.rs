@@ -159,7 +159,7 @@ fn starter_milestone_survives_latest_recipe_and_restart() {
     );
     server
         .world
-        .set_ledger_material_balance(smelter_site_ledger, "copper_ore", 10)
+        .set_ledger_material_balance(smelter_site_ledger, "copper_ore", 36)
         .expect("seed later recipe");
     server
         .world
