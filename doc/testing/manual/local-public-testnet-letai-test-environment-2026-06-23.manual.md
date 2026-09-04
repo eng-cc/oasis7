@@ -217,6 +217,14 @@ export OASIS7_NEWAPI_BRIDGE_PRICING_RULES="$(
 `OASIS7_PROVIDER_FEEDBACK_STATE_PATH` 是可选的 provider-local persistence 配置；配置后可在
 provider bridge 进程重启后保留有界的 request/feedback lineage。它不等价于 Runtime
 journal/recovery certification，也不构成 release 或 default enablement 证明。
+本手册不把 packaged/managed/remote/systemd wiring 作为当前前置条件，也不为这些部署形态
+增加拓扑或上线认证要求；它们留待另行授权的运维切片。
+
+本地报告必须明确记录 `lane`、`decision_route`、`feedback_route`。target cognition
+只能记录 `target_cognition`、`/v1/world-simulator/decision-context`、
+`/v1/world-simulator/feedback-context`；`legacy_compatibility_only` 只能记录
+`/v1/world-simulator/decision`，feedback route 记为 `null` / `not_run`，不能把 bare
+route 成功算作 target feedback 或完整决策通过。
 
 target cognition smoke/live gate 还必须使用 Runtime-issued 的配对 wrapper artifact。先在受控路径
 设置同一个变量；不要自造 payload，也不要把它与 `--legacy-compatibility-only` 混用：
@@ -465,6 +473,29 @@ rtk ./scripts/provider-remote-https/provider-bridge-contract-smoke.sh \
   --min-successes 1
 ```
 
+target feedback 的当前 bridge 合同是 diagnostic-only。`feedback-context` 必须携带与
+本次 `decision-context` 完全一致的 agent/session/turn/request identity 和
+`request_digest`，并先在 bridge 中找到已接受的 decision response。只允许 bounded
+`pending`/`rejected`/`failed` diagnostics（reason 必须在当前 status allowlist）；这类
+反馈只是 provider-local diagnostic，不产生 Runtime action、committed receipt 或
+world projection，也不构成本地/remote recovery 证明。
+
+以下结果必须明确记为拒绝，不能写成“已提交”或“已执行”：
+
+- `status=committed`，或带 `candidate_action_id` / `runtime_receipt_id`：HTTP `409`
+  `feedback_disposition_unverifiable`。
+- 带当前 `FeedbackEnvelopeV1` 未定义的 `projection` 或其他 outer field：HTTP `400`
+  `unknown_context_field`。
+- 未知 request、session/turn 不匹配、request digest 不匹配：HTTP `409`，分别为
+  `unknown_feedback`、`feedback_correlation_mismatch`、`feedback_digest_mismatch`。
+- reason 缺失、超界或不在 status allowlist：HTTP `409`
+  `feedback_disposition_reason_invalid`。
+
+只有同一 request lineage 的 bounded diagnostic 返回 `{"ok":true}` 才能记为
+feedback accepted；这不等于 Runtime authority 或恢复/发布证明。若 contract smoke
+输出使用 `decision_path` / `feedback_path`，归档时分别规范化为
+`decision_route` / `feedback_route`。
+
 ```bash
 rtk ./scripts/provider-remote-https/provider-bridge-contract-smoke.sh \
   --base-url http://127.0.0.1:5841 \
@@ -659,7 +690,11 @@ rtk curl -sSI 'http://127.0.0.1:4173/viewer.html?ws=ws://127.0.0.1:5011&test_api
 - target context payload path (Runtime-issued, sanitized):
 - provider feedback state path (optional, sanitized):
 - provider model / max_output_tokens:
+- lane (`target_cognition` / `legacy_compatibility_only`):
+- decision_route:
+- feedback_route:
 - provider decision smoke result:
+- feedback accepted/rejected summary and `error_code`:
 - recharge branch result, if any:
 - caveats:
 ```

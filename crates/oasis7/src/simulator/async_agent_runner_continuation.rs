@@ -13,6 +13,46 @@ use crate::simulator::continuous_agent_harness::{
 use super::{AsyncAgentRunner, AsyncAgentRunnerError, AsyncTurnId};
 
 impl AsyncAgentRunner {
+    /// Return the proposal identity currently occupying an Agent's
+    /// continuation slot.  Runtime-owned continuation identity is checked by
+    /// the Viewer before a restarted wake is allowed to proceed.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn active_continuation_proposal_id(&self, agent_id: &str) -> Option<&str> {
+        self.continuations
+            .get(agent_id)
+            .filter(|continuation| continuation.active)
+            .map(|continuation| continuation.proposal.continuation_proposal_id.as_str())
+    }
+
+    /// Validate an already-local Harness handle against a fresh Runtime
+    /// projection without advancing either local ledger.  This closes the
+    /// same-process path's pre-mutation identity check just as hydration does
+    /// for a restarted runner.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn validate_active_continuation_with_authority(
+        &self,
+        agent_id: &str,
+        authority: &ContinuationAuthorityContextV1,
+        runtime: &RuntimeAgentContinuation,
+    ) -> Result<(), AsyncAgentRunnerError> {
+        let existing = self
+            .continuations
+            .get(agent_id)
+            .filter(|continuation| continuation.active)
+            .cloned()
+            .ok_or_else(|| AsyncAgentRunnerError::Cognition("unknown continuation".to_string()))?;
+        runtime.validate_authoritative().map_err(|error| {
+            AsyncAgentRunnerError::Cognition(format!(
+                "Runtime continuation projection invalid: {error}"
+            ))
+        })?;
+        let mut harness = self.continuation_harness.clone();
+        harness
+            .consume_runtime_projection_with_context(existing, runtime, authority)
+            .map(|_| ())
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))
+    }
+
     pub fn submit_continuation_proposal(
         &mut self,
         agent_id: &str,
@@ -483,6 +523,58 @@ impl AsyncAgentRunner {
         if handle.active {
             self.continuations
                 .insert(agent_id.to_string(), handle.clone());
+        }
+        Ok(handle)
+    }
+
+    /// Rebuild a fresh runner's exact Harness continuation from the
+    /// Runtime-owned projection.  The Harness is cloned and all validation is
+    /// performed against the clone before replacing local state, so a stale or
+    /// mismatched restart checkpoint cannot partially mutate the new runner.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn hydrate_runtime_continuation_with_authority(
+        &mut self,
+        agent_id: &str,
+        proposal: ContinuationProposalV1,
+        authority: &ContinuationAuthorityContextV1,
+        runtime: RuntimeAgentContinuation,
+    ) -> Result<ContinuationHandle, AsyncAgentRunnerError> {
+        if !self.actors.contains_key(agent_id) {
+            return Err(AsyncAgentRunnerError::AgentNotRegistered(
+                agent_id.to_string(),
+            ));
+        }
+        if proposal.agent_id != agent_id || runtime.agent_id != agent_id {
+            return Err(AsyncAgentRunnerError::Cognition(
+                "hydrated continuation agent identity mismatch".to_string(),
+            ));
+        }
+        if self.active_continuation_proposal_id(agent_id).is_some() {
+            return Err(AsyncAgentRunnerError::AgentBusy(agent_id.to_string()));
+        }
+        runtime.validate_authoritative().map_err(|error| {
+            AsyncAgentRunnerError::Cognition(format!(
+                "Runtime continuation projection invalid: {error}"
+            ))
+        })?;
+        authority
+            .validate_proposal(&proposal)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+
+        let mut harness = self.continuation_harness.clone();
+        let admitted = harness
+            .submit_with_context(proposal, authority)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        let handle = harness
+            .consume_runtime_projection_with_context(admitted, &runtime, authority)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+
+        self.continuation_harness = harness;
+        if handle.active {
+            self.continuations
+                .insert(agent_id.to_string(), handle.clone());
+        } else {
+            self.continuations.remove(agent_id);
         }
         Ok(handle)
     }

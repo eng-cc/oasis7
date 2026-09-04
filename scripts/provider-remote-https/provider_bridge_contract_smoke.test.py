@@ -445,6 +445,42 @@ class ProviderBridgeContractSmokeTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "base must be a JSON object"):
             smoke.validate_target_context_response(response, request)
 
+    def test_target_outer_validators_reject_unknown_authority_fields_with_stable_code(self):
+        request = smoke.build_target_context_request(index=1, timeout_ms=5000)
+        request["unknown_authority_field"] = True
+        with self.assertRaisesRegex(RuntimeError, r"^unknown_context_field:"):
+            smoke.validate_target_context_request(request)
+
+        response = valid_target_response(smoke.build_target_context_request(index=1, timeout_ms=5000))
+        response["unknown_authority_field"] = True
+        with self.assertRaisesRegex(RuntimeError, r"^unknown_context_field:"):
+            smoke.validate_target_context_response(response, request={})
+
+        feedback = valid_target_feedback(smoke.build_target_context_request(index=1, timeout_ms=5000))
+        feedback["unknown_authority_field"] = True
+        with self.assertRaisesRegex(RuntimeError, r"^unknown_context_field:"):
+            smoke.validate_target_context_feedback(feedback, request)
+
+    def test_target_feedback_rejects_unverifiable_authority_and_invalid_reasons(self):
+        request = smoke.build_target_context_request(index=1, timeout_ms=5000)
+        for mutate in (
+            lambda feedback: feedback.update(
+                status="committed", candidate_action_id=7, runtime_receipt_id="receipt-forged"
+            ),
+            lambda feedback: feedback.update(candidate_action_id=7),
+            lambda feedback: feedback.update(runtime_receipt_id="receipt-forged"),
+        ):
+            feedback = valid_target_feedback(request)
+            mutate(feedback)
+            with self.assertRaisesRegex(RuntimeError, "feedback_disposition_unverifiable"):
+                smoke.validate_target_context_feedback(feedback, request)
+
+        for status in ("rejected", "failed"):
+            feedback = valid_target_feedback(request)
+            feedback.update(status=status, reject_reason="forged_reason")
+            with self.assertRaisesRegex(RuntimeError, "feedback_disposition_reason_invalid"):
+                smoke.validate_target_context_feedback(feedback, request)
+
     def test_target_request_requires_strict_positive_integer_lineage(self):
         request = smoke.build_target_context_request(index=1, timeout_ms=5000)
         for field in ("retry_seq", "transport_attempt"):

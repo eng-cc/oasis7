@@ -433,15 +433,16 @@ impl CognitionScheduler {
     }
 
     pub fn recover_capacity(&mut self, tick: u64) -> Vec<SchedulerWakeV1> {
-        self.recover_capacity_if(tick, |_| false)
+        self.recover_capacity_if(tick, |wake| Self::is_ready_at(wake, tick))
     }
 
     /// Recover pending capacity with a World-owned eligibility predicate.
     ///
-    /// Tick-ready wakes retain the scheduler-only behavior. Untimed wakes
-    /// (`next_wake_tick == u64::MAX`) additionally require the caller's
-    /// committed-evidence predicate, so a queue release cannot lease an
-    /// event/receipt/state wake whose condition is still false.
+    /// The caller's predicate is authoritative for recovery readiness. World
+    /// callers use it to re-evaluate every wake condition from committed
+    /// evidence, including mixed tick-plus-evidence wakes. Scheduler-only
+    /// callers should use [`Self::recover_capacity`], which supplies the
+    /// timer/starvation readiness predicate.
     pub fn recover_capacity_if<F>(&mut self, tick: u64, mut eligible: F) -> Vec<SchedulerWakeV1>
     where
         F: FnMut(&SchedulerWakeV1) -> bool,
@@ -454,8 +455,7 @@ impl CognitionScheduler {
             if self.available_slots() == 0 {
                 break;
             }
-            let ready =
-                self.is_ready(&wake, tick) || (wake.next_wake_tick == u64::MAX && eligible(&wake));
+            let ready = eligible(&wake);
             if !ready {
                 continue;
             }
@@ -473,7 +473,7 @@ impl CognitionScheduler {
     /// The cursor is committed by `select_ready`; restoring a process must
     /// not advance it merely because an abandoned in-flight slot is released.
     pub fn recover_capacity_preserving_cursor(&mut self, tick: u64) -> Vec<SchedulerWakeV1> {
-        self.recover_capacity_if_preserving_cursor(tick, |_| false)
+        self.recover_capacity_if_preserving_cursor(tick, |wake| Self::is_ready_at(wake, tick))
     }
 
     /// Evidence-aware capacity recovery that leaves the durable cursor and
@@ -693,6 +693,10 @@ impl CognitionScheduler {
     }
 
     fn is_ready(&self, wake: &SchedulerWakeV1, tick: u64) -> bool {
+        Self::is_ready_at(wake, tick)
+    }
+
+    fn is_ready_at(wake: &SchedulerWakeV1, tick: u64) -> bool {
         wake.next_wake_tick <= tick || wake.starvation_deadline_tick <= tick
     }
 

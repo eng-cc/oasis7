@@ -376,6 +376,31 @@ impl ContinuousAgentRequestContextV1 {
     }
 
     pub fn validate_value(value: &Value) -> Result<(), CognitionError> {
+        validate_outer_fields(
+            value,
+            &[
+                "base_decision_request",
+                "context_discriminator",
+                "context_version",
+                "protocol_version",
+                "agent_session_id",
+                "agent_turn_id",
+                "decision_request_id",
+                "retry_seq",
+                "transport_attempt",
+                "agent_subject",
+                "runtime_binding",
+                "observation_digest",
+                "capability_catalog_digest",
+                "capability_invocation_context_digest",
+                "memory_snapshot_digest",
+                "goal_snapshot_digest",
+                "continuation_digest",
+                "adapter_protocol_version",
+                "budget_contract",
+                "request_digest",
+            ],
+        )?;
         let context: Self = serde_json::from_value(value.clone())
             .map_err(|error| CognitionError::new("unknown_context_field", error.to_string()))?;
         context.validate_structure()
@@ -565,6 +590,27 @@ impl ResponseArtifactIdentityV1 {
 }
 
 impl ContinuousAgentResponseContextV1 {
+    pub fn validate_value(value: &Value) -> Result<(), CognitionError> {
+        validate_outer_fields(
+            value,
+            &[
+                "base_decision_response",
+                "context_discriminator",
+                "context_version",
+                "agent_session_id",
+                "agent_turn_id",
+                "decision_request_id",
+                "retry_seq",
+                "transport_attempt",
+                "request_digest",
+                "response_digest",
+            ],
+        )?;
+        serde_json::from_value::<Self>(value.clone())
+            .map_err(|error| CognitionError::new("unknown_context_field", error.to_string()))?;
+        Ok(())
+    }
+
     pub fn response_artifact_identity(&self) -> ResponseArtifactIdentityV1 {
         let mut identity = ResponseArtifactIdentityV1 {
             schema_version: 1,
@@ -695,10 +741,9 @@ pub struct FeedbackEnvelopeV1 {
 }
 
 impl FeedbackEnvelopeV1 {
-    /// Validate the target feedback object's outer keys. Projection fields are
-    /// deliberately allow-listed because Runtime's canonical outbox payload
-    /// carries them as non-authority extensions; all other unknown fields
-    /// fail closed instead of being silently discarded by serde.
+    /// Validate the target feedback object's outer keys. Runtime projection
+    /// fields are intentionally rejected: this bridge has no verifier that
+    /// can turn a projection into Runtime authority.
     pub fn validate_value(value: &Value) -> Result<(), CognitionError> {
         validate_outer_fields(
             value,
@@ -715,10 +760,6 @@ impl FeedbackEnvelopeV1 {
                 "request_digest",
                 "reject_reason",
                 "provenance",
-                "envelope_digest",
-                "emitted_events",
-                "committed_event_summary",
-                "world_delta_summary",
             ],
         )?;
         Ok(())

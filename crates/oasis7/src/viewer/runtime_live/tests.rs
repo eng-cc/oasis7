@@ -17,6 +17,8 @@ mod auth_actions_feedback;
 mod auth_actions_fragment_replenishment;
 #[path = "tests/auth_actions_provider_context.rs"]
 mod auth_actions_provider_context;
+#[path = "tests/auth_actions_provider_continuation_restart.rs"]
+mod auth_actions_provider_continuation_restart;
 mod authoritative;
 mod background_play;
 mod chain_sync;

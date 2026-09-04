@@ -545,6 +545,27 @@ fn fresh_runner_hydrates_runtime_pending_continuation_and_rejects_stale_wake() {
 }
 
 #[test]
+fn fresh_runner_authority_hydration_rejects_runtime_lineage_mismatch_without_mutation() {
+    let current = current_context();
+    let proposal = proposal_for_current_context();
+    let mut runtime = runtime_projection(&proposal, ContinuationStatusV1::Pending, None);
+    runtime.proposal_digest =
+        "blake3:9999999999999999999999999999999999999999999999999999999999999999".to_string();
+    runtime.refresh_status_digest();
+    let mut runner = AsyncAgentRunner::builtin_fixture(AGENT_ID);
+    let error = runner
+        .hydrate_runtime_continuation_with_authority(
+            AGENT_ID,
+            proposal,
+            &current.authority,
+            runtime,
+        )
+        .expect_err("mismatched Runtime proposal digest must fail closed");
+    assert!(error.to_string().contains("lineage"));
+    assert_eq!(runner.active_continuation_proposal_id(AGENT_ID), None);
+}
+
+#[test]
 fn consumed_wake_dispatches_one_next_actor_turn_and_rejects_late_duplicate() {
     let current = current_context();
     let proposal = proposal_for_current_context();

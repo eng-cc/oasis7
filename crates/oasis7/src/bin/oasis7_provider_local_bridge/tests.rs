@@ -1,4 +1,5 @@
 use super::*;
+use crate::agent_decision::parse_model_decision;
 use crate::letai_direct::{format_auto_topup_retry_failure, is_retryable_letai_error};
 use oasis7::simulator::{
     Action, ActionCatalogEntry, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
@@ -92,7 +93,6 @@ fn continuous_feedback_partitions_interleaved_agents_and_sessions() {
         reject_reason: None,
         provenance: "runtime_authoritative".to_string(),
     };
-
     let agent_a_first = feedback("agent-a", "session-a", 1);
     seed_accepted_feedback_lineage(&state, &agent_a_first);
     state

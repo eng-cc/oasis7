@@ -46,6 +46,13 @@ struct PersistedProviderLineageV1 {
     provider_contexts: BTreeMap<String, cognition_context::ProviderContextState>,
     provider_retry_contexts: BTreeMap<String, cognition_context::ProviderContextState>,
     provider_active_turns: BTreeMap<String, cognition_context::ProviderContextState>,
+    /// The exact simulator proposal admitted into the Harness.  Runtime's
+    /// durable continuation projection omits Harness chain inputs, so this
+    /// mirror is required for restart hydration.
+    #[serde(default)]
+    provider_continuation_proposals: BTreeMap<String, SimulatorContinuationProposalV1>,
+    #[serde(default)]
+    provider_continuation_recovery_pending: BTreeMap<String, String>,
     #[serde(default)]
     provider_recovery_pending: BTreeMap<String, ProviderRecoveryPending>,
     provider_wait_until: BTreeMap<String, u64>,
@@ -106,6 +113,18 @@ impl RuntimeLlmSidecar {
                 checkpoint.schema_version
             ));
         }
+        for (proposal_id, proposal) in &checkpoint.provider_continuation_proposals {
+            if proposal_id != &proposal.continuation_proposal_id {
+                return Err(format!(
+                    "provider continuation checkpoint key mismatch for {proposal_id}"
+                ));
+            }
+            proposal.validate().map_err(|error| {
+                format!(
+                    "provider continuation checkpoint proposal invalid ({proposal_id}): {error}"
+                )
+            })?;
+        }
         let current_binding = checkpoint
             .runtime_binding
             .as_ref()
@@ -126,6 +145,9 @@ impl RuntimeLlmSidecar {
         self.provider_contexts = checkpoint.provider_contexts;
         self.provider_retry_contexts = checkpoint.provider_retry_contexts;
         self.provider_active_turns = checkpoint.provider_active_turns;
+        self.provider_continuation_proposals = checkpoint.provider_continuation_proposals;
+        self.provider_continuation_recovery_pending =
+            checkpoint.provider_continuation_recovery_pending;
         self.provider_recovery_pending = checkpoint.provider_recovery_pending;
         self.provider_wait_until = checkpoint.provider_wait_until;
         self.provider_feedback_seq = checkpoint.provider_feedback_seq;
@@ -333,6 +355,10 @@ impl RuntimeLlmSidecar {
             self.provider_held_decisions.remove(agent_id.as_str());
             self.pending_actions
                 .retain(|_, pending| pending.agent_id != agent_id);
+            self.provider_continuation_proposals
+                .retain(|_, proposal| proposal.agent_id != agent_id);
+            self.provider_continuation_recovery_pending
+                .remove(agent_id.as_str());
         }
         if recovered_orphan {
             // Persist the active-marker removal and retry/exhaustion decision
@@ -355,6 +381,10 @@ impl RuntimeLlmSidecar {
             provider_contexts: self.provider_contexts.clone(),
             provider_retry_contexts: self.provider_retry_contexts.clone(),
             provider_active_turns: self.provider_active_turns.clone(),
+            provider_continuation_proposals: self.provider_continuation_proposals.clone(),
+            provider_continuation_recovery_pending: self
+                .provider_continuation_recovery_pending
+                .clone(),
             provider_recovery_pending: self.provider_recovery_pending.clone(),
             provider_wait_until: self.provider_wait_until.clone(),
             provider_feedback_seq: self.provider_feedback_seq.clone(),

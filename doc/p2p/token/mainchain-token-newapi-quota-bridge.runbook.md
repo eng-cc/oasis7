@@ -195,6 +195,36 @@ curl -sS -X POST http://127.0.0.1:5852/v1/bridge/bind \
 - 游戏 runtime / launcher 只接收 bearer selector，不接收 raw `token_key`。
 - 完成一次 `play/step`、`agent_chat` 或 provider decision smoke 后，验证 trace 中出现同一用户路径下的 token usage / provider decision 证据。
 
+#### target feedback 的当前桥接边界
+
+`/v1/world-simulator/feedback-context` 是 target lane 的 feedback route，必须与
+`/v1/world-simulator/decision-context` 的同一对 Runtime-issued context 配对。当前
+bridge 只验证已接受 decision response 的 `agent_subject`、session/turn/request id
+和 `request_digest`，只接受 bounded diagnostic feedback：
+
+- `pending` 只能不带 reason，或使用 `recovery_pending`、`retry_scheduled`、
+  `scheduler_backpressure`。
+- `rejected` 必须使用已登记的拒绝 reason；`failed` 必须使用
+  `failed_provider`、`failed_persist`、`cognition_failed` 或
+  `provider_unavailable`。
+- 这些记录仅表示 provider-local diagnostic，不能创建 Runtime authority、committed
+  action、receipt、world projection，也不能据此声称本地/remote 异步恢复或发布就绪。
+
+当前 bridge 没有 Runtime receipt/projection verifier，因此以下输入必须显式失败关闭：
+
+- `status=committed`，或任意 status 携带 `candidate_action_id` / `runtime_receipt_id`：
+  HTTP `409`，`error_code=feedback_disposition_unverifiable`。
+- 携带当前 `FeedbackEnvelopeV1` 未定义的 `projection` 或其他 outer field：HTTP
+  `400`，`error_code=unknown_context_field`；不得把它当成已验证投影。
+- 未见过对应 decision、session/turn 不一致或 digest 不一致：HTTP `409`，分别为
+  `unknown_feedback`、`feedback_correlation_mismatch` 或 `feedback_digest_mismatch`。
+- reason 缺失、超界或不在当前 status allowlist：HTTP `409`，
+  `error_code=feedback_disposition_reason_invalid`。
+
+只有同一 request lineage 的 bounded diagnostic 返回 `{"ok":true}` 才能记为
+feedback accepted；该结果仍不是 Runtime committed receipt。上述错误码应原样写入
+测试报告，不能改写成“反馈已提交”或“动作已执行”。
+
 ### 6.7 全链路测试步骤矩阵
 
 测试前从 `~/Documents/keys/test_keys.txt` 选择一组 persona，把对应字段临时导出到 operator shell。不要把该文件内容贴进 issue、PR、聊天、CI log 或 public terminal recording。
@@ -522,6 +552,14 @@ OASIS7_CI_RUN_PROVIDER_LIVE_GATE=true ./scripts/ci-tests.sh --required
 - chain `action_id` / tx id / explorer link，以及实际 `from_account_id`。
 - reconcile response 摘要和本次 route/ledger row 状态。
 - provider smoke response 摘要。
+- `lane`：`target_cognition` 或 `legacy_compatibility_only`。
+- `decision_route`：实际使用的决策路由；target 必须为
+  `/v1/world-simulator/decision-context`，legacy 才能为 `/v1/world-simulator/decision`。
+- `feedback_route`：实际使用的反馈路由；target 必须为
+  `/v1/world-simulator/feedback-context`，legacy compatibility audit 记为 `null` / `not_run`。
+- target feedback 的 HTTP status、`ok`、`feedback_id`/request correlation 摘要及
+  `error_code`（若失败）；禁止把 `feedback_disposition_unverifiable`、
+  `unknown_context_field` 或 correlation error 记为 Runtime receipt。
 - LetAI/NewAPI usage 摘要。
 - 对失败 path，记录 `manual_review` reason 和 operator review resolution。
 
@@ -587,7 +625,16 @@ OASIS7_CI_RUN_PROVIDER_LIVE_GATE=true ./scripts/ci-tests.sh --required
   - 定向测试命令与结果
   - `bridge_deposit_id -> external_order_id -> review_reason/resolution` 证据
 
+provider target evidence 还必须保留 `lane`、`decision_route`、`feedback_route` 三个
+字段。contract smoke 当前输出中的 `decision_path` / `feedback_path` 应在归档报告中
+规范化为上述 route 字段；legacy lane 的 feedback route 不得留空后被解释成 target
+feedback 已通过。
+
 ## 11. 当前缺口
 - richer operator runbook automation 还未脚本化。
 - dashboard / replay / re-credit UI 仍未实现。
 - 当前 runbook 仍默认 operator 手工持有 deployment 输入，不含 secret rotation / KMS / HSM 闭环。
+- `OASIS7_PROVIDER_FEEDBACK_STATE_PATH` 持久化仍是可选的 provider-local continuity；
+  即使配置，也不构成 Runtime journal/recovery、remote recovery、release 或 default
+  enablement 证明。managed/packaged/remote/systemd wiring 延后到另行授权的运维切片，
+  本 runbook 不新增其拓扑或部署要求。

@@ -288,6 +288,63 @@ write_sample_without_illegal_schema_metric() {
 JSON
 }
 
+write_sample_with_illegal_schema_evidence_gap() {
+  local summary_dir="$tmp_root/missing-schema-evidence/out/samples/provider_loopback_http/sample_1/summary"
+  mkdir -p "$summary_dir"
+  cat >"$summary_dir/sample.json" <<'JSON'
+{
+  "status": "passed",
+  "execution_authority": "simulator_world_kernel",
+  "runtime_certification_status": "not_certified",
+  "runtime_certification_reason": "local simulator smoke; unified Runtime execution and receipt authority is not wired",
+  "goal_completed": true,
+  "decision_steps": 10,
+  "invalid_action_count": 0,
+  "illegal_schema_count": 1,
+  "error_counts": {},
+  "timeout_count": 0,
+  "recoverable_error_count": 0,
+  "metric_schema_version": "recoverable_error_resolution_rate.v1",
+  "sample_id": "P0-001_sample_1",
+  "trace_validity": "valid",
+  "recovery_events": [],
+  "recoverable_error_resolution_rate": {
+    "numerator": 0,
+    "denominator": 0,
+    "value": null,
+    "zero_case": "not_applicable",
+    "gate_status": "not_evaluable"
+  },
+  "illegal_schema_rate": {
+    "numerator": 1,
+    "denominator": 10,
+    "value": 0.1,
+    "zero_case": null,
+    "gate_status": "evaluable"
+  },
+  "median_latency_ms": 11,
+  "p95_latency_ms": 22,
+  "trace_completeness_ratio_ppm": 1000000,
+  "provider_version": "test-provider",
+  "adapter_version": "test-adapter",
+  "protocol_version": "test-protocol",
+  "provider": {
+    "agent_profile": "oasis7_p0_low_freq_npc",
+    "cognition_lane": "target_outer_context_v1",
+    "decision_route": "/v1/world-simulator/decision-context",
+    "feedback_route": "/v1/world-simulator/feedback-context"
+  },
+  "runtime_perf": {
+    "tick": {
+      "samples_total": 1,
+      "p95_ms": 1,
+      "over_budget_ratio_ppm": 0
+    }
+  }
+}
+JSON
+}
+
 write_sample builtin 1 4.5 10
 write_sample builtin 2 7.25 20
 write_sample provider_loopback_http 1 8.5 30
@@ -594,6 +651,59 @@ assert provider["illegal_schema_status"] == "blocked"
 assert provider["illegal_schema_rate"]["gate_status"] == "blocked"
 assert provider["benchmark_status"] == "blocked"
 assert any("illegal_schema_count is missing" in error for error in provider["illegal_schema_errors"])
+PY
+
+write_sample_with_illegal_schema_evidence_gap
+
+PROVIDER_PARITY_P0_AGGREGATE_ONLY=1 ./scripts/provider-parity-p0.sh \
+  --run-id illegal-schema-evidence-gap-test \
+  --scenario-id P0-001 \
+  --samples 1 \
+  --provider-only \
+  --out-dir "$tmp_root/missing-schema-evidence/out"
+
+python3 - "$tmp_root/missing-schema-evidence/out" <<'PY'
+import json
+import pathlib
+import sys
+
+out_dir = pathlib.Path(sys.argv[1])
+provider = json.loads((out_dir / "summary" / "P0-001.provider_loopback_http.json").read_text())
+assert provider["illegal_schema_status"] == "blocked"
+assert provider["illegal_schema_rate"]["gate_status"] == "blocked"
+assert provider["benchmark_status"] == "blocked"
+assert any("invalid_action_schema" in error for error in provider["illegal_schema_errors"])
+PY
+
+write_sample_with_illegal_schema_evidence_gap
+python3 - "$tmp_root/missing-schema-evidence/out/samples/provider_loopback_http/sample_1/summary/sample.json" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text())
+payload["error_counts"] = "malformed-error-counts"
+path.write_text(json.dumps(payload))
+PY
+
+PROVIDER_PARITY_P0_AGGREGATE_ONLY=1 ./scripts/provider-parity-p0.sh \
+  --run-id illegal-schema-malformed-counts-test \
+  --scenario-id P0-001 \
+  --samples 1 \
+  --provider-only \
+  --out-dir "$tmp_root/missing-schema-evidence/out"
+
+python3 - "$tmp_root/missing-schema-evidence/out" <<'PY'
+import json
+import pathlib
+import sys
+
+out_dir = pathlib.Path(sys.argv[1])
+provider = json.loads((out_dir / "summary" / "P0-001.provider_loopback_http.json").read_text())
+assert provider["illegal_schema_status"] == "blocked"
+assert provider["benchmark_status"] == "blocked"
+assert any("error_counts object" in error for error in provider["illegal_schema_errors"])
 PY
 
 write_recovery_sample() {

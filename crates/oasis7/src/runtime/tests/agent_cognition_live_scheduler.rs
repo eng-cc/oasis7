@@ -648,6 +648,34 @@ fn world_retention_gc_keeps_terminal_pins_and_replay_is_read_only_after_restore(
     assert_eq!(replay["world_receipt_linked_delta"], 0);
     assert_eq!(restored.cognition_execution_metrics(), before);
 
+    for (field, value) in [
+        ("agent_session_id", "session.live-other"),
+        ("agent_turn_id", "turn.live-other"),
+        ("decision_request_id", "request.live-other"),
+    ] {
+        let mut mismatched = json!({
+            "schema_version": "agent-decision-envelope.v1",
+            "world_id": WORLD_ID,
+            "agent_session_id": "session.live-1",
+            "agent_turn_id": "turn.live-1",
+            "decision_request_id": "request.live-1",
+            "envelope_idempotency_key": "key:live-1",
+            "envelope_digest": "blake3:envelope-live-1",
+            "base_tick": 1_001,
+            "issued_at_tick": 1_001,
+            "gc_floor_tick": 1_000
+        });
+        mismatched[field] = json!(value);
+        let error = restored
+            .replay_cognition_terminal(
+                RetentionReplayRequestV1::from_json(mismatched)
+                    .expect("decode World replay mismatch fixture"),
+            )
+            .expect_err("World replay must reject mismatched lineage");
+        assert!(format!("{error:?}").contains("idempotency_conflict"));
+        assert_eq!(restored.cognition_execution_metrics(), before);
+    }
+
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -705,6 +733,9 @@ fn terminal_record() -> RetentionRecordV1 {
         "world_id": WORLD_ID,
         "envelope_idempotency_key": "key:live-1",
         "envelope_digest": "blake3:envelope-live-1",
+        "agent_session_id": "session.live-1",
+        "agent_turn_id": "turn.live-1",
+        "decision_request_id": "request.live-1",
         "status": "committed",
         "base_tick": 1_001,
         "issued_at_tick": 1_001,

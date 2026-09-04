@@ -76,7 +76,8 @@ mod options;
 use self::agent_decision::{
     apply_profile_guardrails, build_continuous_session_key, build_decision_prompt,
     build_gateway_agent_params, build_session_key, deterministic_mock_decision,
-    parse_model_decision, provider_decision_label, summarize_text, timeout_seconds_from_budget,
+    legacy_model_output_error_response, parse_provider_output, provider_decision_label,
+    strict_model_output_error_response, summarize_text, timeout_seconds_from_budget,
 };
 use self::feedback_state::load_feedback_state;
 use self::http_bridge_support::handle_connection;
@@ -394,6 +395,14 @@ impl ProviderState {
                 return Err("feedback_sequence_overflow".to_string());
             }
             partition.held.insert(feedback.feedback_seq, feedback);
+            if let Err(error) = feedback_state::persist_cognition_state(
+                self.feedback_state_path.as_deref(),
+                &accepted_requests,
+                &partitions,
+            ) {
+                *partitions = previous_partitions;
+                return Err(format!("feedback_state_persist_failed: {error}"));
+            }
             return Err("feedback_sequence_gap".to_string());
         }
         if feedback.feedback_seq < expected {
@@ -610,7 +619,7 @@ impl ProviderState {
         route_label: Option<&str>,
         invoker: &dyn AgentInvoker,
     ) -> DecisionResponse {
-        self.handle_decision_with_feedback(request, route_label, invoker, Vec::new(), None)
+        self.handle_decision_with_feedback(request, route_label, invoker, Vec::new(), None, false)
     }
 
     fn handle_continuous_decision(
@@ -651,6 +660,7 @@ impl ProviderState {
                 agent_subject: context.agent_subject.as_str(),
                 agent_session_id: context.agent_session_id.as_str(),
             }),
+            true,
         );
         let response_digest = h_v1("oasis7.cognition.response.v1", &base);
         let response = ContinuousAgentResponseContextV1 {
@@ -676,6 +686,7 @@ impl ProviderState {
         invoker: &dyn AgentInvoker,
         recent_feedback: Vec<String>,
         invocation_identity: Option<ContinuousInvocationIdentity<'_>>,
+        strict_target: bool,
     ) -> DecisionResponse {
         if let Err(err) = request.validate_contract() {
             self.set_last_error(Some(err.to_string()));
@@ -739,10 +750,11 @@ impl ProviderState {
         let latency_ms = started_at.elapsed().as_millis() as u64;
 
         match invoke_result {
-            Ok(output) => match parse_model_decision(
+            Ok(output) => match parse_provider_output(
                 request.observation.agent_id.as_str(),
                 &request,
                 output.text.as_str(),
+                strict_target,
             ) {
                 Ok((decision, schema_repair_count)) => {
                     let (decision, module_command) = match decision {
@@ -820,67 +832,26 @@ impl ProviderState {
                     }
                 }
                 Err(err) => {
+                    if strict_target {
+                        let detail =
+                            format!("invalid_action_schema: bridge_model_output_invalid: {err}");
+                        self.set_last_error(Some(detail.clone()));
+                        return strict_model_output_error_response(
+                            self.provider_id(),
+                            &output,
+                            latency_ms,
+                            detail,
+                        );
+                    }
                     let detail = format!("bridge_model_output_invalid: {err}");
                     self.set_last_error(Some(detail.clone()));
-                    let (decision, guardrail_note) =
-                        apply_profile_guardrails(&request, ProviderDecision::Wait);
-                    let mut tool_trace = Vec::new();
-                    if let Some(route_note) = output.route_note.clone() {
-                        tool_trace.push(route_note);
-                    }
-                    tool_trace.push(detail.clone());
-                    if let Some(note) = guardrail_note.clone() {
-                        tool_trace.push(note);
-                    }
-                    DecisionResponse {
-                        decision,
-                        module_command: None,
-                        provider_error: None,
-                        diagnostics: ProviderDiagnostics {
-                            provider_id: Some(self.provider_id().to_string()),
-                            provider_version: output.provider_version.clone(),
-                            latency_ms: Some(latency_ms.max(output.duration_ms.unwrap_or(0))),
-                            retry_count: 0,
-                        },
-                        trace_payload: ProviderTraceEnvelope {
-                            provider_id: Some(self.provider_id().to_string()),
-                            input_summary: Some(summarize_text(output.prompt.as_str(), 512)),
-                            output_summary: Some(match guardrail_note {
-                                Some(note) => format!(
-                                    "invalid_model_output: {}; {}; raw={}",
-                                    detail,
-                                    note,
-                                    summarize_text(output.text.as_str(), 512)
-                                ),
-                                None => format!(
-                                    "invalid_model_output: {}; raw={}",
-                                    detail,
-                                    summarize_text(output.text.as_str(), 512)
-                                ),
-                            }),
-                            latency_ms: Some(latency_ms.max(output.duration_ms.unwrap_or(0))),
-                            transcript: vec![
-                                ProviderTranscriptEntry {
-                                    role: "user".to_string(),
-                                    content: summarize_text(output.prompt.as_str(), 4000),
-                                },
-                                ProviderTranscriptEntry {
-                                    role: "assistant".to_string(),
-                                    content: summarize_text(output.text.as_str(), 4000),
-                                },
-                            ],
-                            tool_trace,
-                            token_usage: Some(ProviderTokenUsage {
-                                prompt_tokens: output.prompt_tokens,
-                                completion_tokens: output.completion_tokens,
-                                total_tokens: output.total_tokens,
-                            }),
-                            cost_cents: None,
-                            upstream_trace: output.upstream_trace.clone(),
-                            schema_repair_count: 1,
-                        },
-                        memory_write_intents: Vec::new(),
-                    }
+                    legacy_model_output_error_response(
+                        self.provider_id(),
+                        &request,
+                        &output,
+                        latency_ms,
+                        detail,
+                    )
                 }
             },
             Err(err) => {

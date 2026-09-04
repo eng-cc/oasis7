@@ -12,13 +12,48 @@ use super::{
     MAX_ACCEPTED_REQUESTS, MAX_RECENT_FEEDBACK, ProviderState,
 };
 
+const MAX_FEEDBACK_ID_BYTES: usize = 256;
+const MAX_DIAGNOSTIC_REASON_BYTES: usize = 256;
+const PENDING_DIAGNOSTIC_REASONS: &[&str] = &[
+    "recovery_pending",
+    "retry_scheduled",
+    "scheduler_backpressure",
+];
+const REJECTED_DIAGNOSTIC_REASONS: &[&str] = &[
+    "stale_base",
+    "expired",
+    "stale_capability_snapshot",
+    "authority_denied",
+    "intent_conflict",
+    "reorg_invalidated",
+    "finality_anchor_mismatch",
+    "precondition_failed",
+    "action_rejected",
+    "idempotency_conflict",
+    "no_effect",
+    "cancelled",
+    "late_response_after_cancel",
+    "legacy_no_cognition_proof",
+    "cognition_context_mismatch",
+];
+const FAILED_DIAGNOSTIC_REASONS: &[&str] = &[
+    "failed_provider",
+    "failed_persist",
+    "cognition_failed",
+    "provider_unavailable",
+];
+
+fn bounded_nonempty(value: &str, max_bytes: usize) -> bool {
+    !value.trim().is_empty() && value.len() <= max_bytes
+}
+
 pub(super) fn validate_feedback_contract(feedback: &FeedbackEnvelopeV1) -> Result<(), String> {
-    if feedback.feedback_id.trim().is_empty()
+    if !bounded_nonempty(feedback.feedback_id.as_str(), MAX_FEEDBACK_ID_BYTES)
         || feedback.feedback_seq == 0
-        || feedback.agent_subject.trim().is_empty()
-        || feedback.agent_session_id.trim().is_empty()
-        || feedback.agent_turn_id.trim().is_empty()
-        || feedback.decision_request_id.trim().is_empty()
+        || !bounded_nonempty(feedback.agent_subject.as_str(), MAX_FEEDBACK_ID_BYTES)
+        || !bounded_nonempty(feedback.agent_session_id.as_str(), MAX_FEEDBACK_ID_BYTES)
+        || !bounded_nonempty(feedback.agent_turn_id.as_str(), MAX_FEEDBACK_ID_BYTES)
+        || !bounded_nonempty(feedback.decision_request_id.as_str(), MAX_FEEDBACK_ID_BYTES)
         || !feedback.request_digest.is_canonical_blake3()
         || feedback.provenance != "runtime_authoritative"
         || !matches!(
@@ -28,14 +63,39 @@ pub(super) fn validate_feedback_contract(feedback: &FeedbackEnvelopeV1) -> Resul
     {
         return Err("feedback_contract_invalid".to_string());
     }
-    if feedback.status == "committed"
-        && (feedback.candidate_action_id.is_none()
-            || feedback
-                .runtime_receipt_id
-                .as_deref()
-                .is_none_or(|value| value.trim().is_empty()))
+    if feedback.candidate_action_id.is_some() || feedback.runtime_receipt_id.is_some() {
+        return Err("feedback_disposition_unverifiable".to_string());
+    }
+    if feedback
+        .reject_reason
+        .as_deref()
+        .is_some_and(|reason| !bounded_nonempty(reason, MAX_DIAGNOSTIC_REASON_BYTES))
     {
-        return Err("feedback_contract_invalid".to_string());
+        return Err("feedback_disposition_reason_invalid".to_string());
+    }
+    let reason_is_allowed = match feedback.status.as_str() {
+        "pending" => feedback
+            .reject_reason
+            .as_deref()
+            .is_none_or(|reason| PENDING_DIAGNOSTIC_REASONS.contains(&reason)),
+        "rejected" => feedback
+            .reject_reason
+            .as_deref()
+            .is_some_and(|reason| REJECTED_DIAGNOSTIC_REASONS.contains(&reason)),
+        "failed" => feedback
+            .reject_reason
+            .as_deref()
+            .is_some_and(|reason| FAILED_DIAGNOSTIC_REASONS.contains(&reason)),
+        // Runtime receipt verification is deliberately not implemented in
+        // this bridge, so committed/action-bearing input is never admitted.
+        "committed" => false,
+        _ => false,
+    };
+    if feedback.status == "committed" {
+        return Err("feedback_disposition_unverifiable".to_string());
+    }
+    if !reason_is_allowed {
+        return Err("feedback_disposition_reason_invalid".to_string());
     }
     Ok(())
 }

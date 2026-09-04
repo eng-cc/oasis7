@@ -21,6 +21,61 @@ SUPPORTED_DECISIONS = {
     "module_command_response",
 }
 
+TARGET_REQUEST_FIELDS = frozenset(
+    {
+        "base_decision_request",
+        "context_discriminator",
+        "context_version",
+        "protocol_version",
+        "agent_session_id",
+        "agent_turn_id",
+        "decision_request_id",
+        "retry_seq",
+        "transport_attempt",
+        "agent_subject",
+        "runtime_binding",
+        "observation_digest",
+        "capability_catalog_digest",
+        "capability_invocation_context_digest",
+        "memory_snapshot_digest",
+        "goal_snapshot_digest",
+        "continuation_digest",
+        "adapter_protocol_version",
+        "budget_contract",
+        "request_digest",
+    }
+)
+TARGET_RESPONSE_FIELDS = frozenset(
+    {
+        "base_decision_response",
+        "context_discriminator",
+        "context_version",
+        "agent_session_id",
+        "agent_turn_id",
+        "decision_request_id",
+        "retry_seq",
+        "transport_attempt",
+        "request_digest",
+        "response_digest",
+    }
+)
+TARGET_FEEDBACK_FIELDS = frozenset(
+    {
+        "feedback_id",
+        "feedback_seq",
+        "agent_subject",
+        "agent_session_id",
+        "agent_turn_id",
+        "decision_request_id",
+        "candidate_action_id",
+        "runtime_receipt_id",
+        "status",
+        "request_digest",
+        "reject_reason",
+        "provenance",
+    }
+)
+
 
 def _require_object(value, label):
     if not isinstance(value, dict):
@@ -31,6 +86,15 @@ def _require_object(value, label):
 def _require_digest(value, label):
     if not isinstance(value, str) or not CANONICAL_DIGEST_RE.fullmatch(value):
         raise RuntimeError(f"{label} must be a canonical blake3: digest")
+
+
+def _validate_outer_fields(value, allowed, label):
+    value = _require_object(value, label)
+    unknown = sorted(set(value) - set(allowed))
+    if unknown:
+        raise RuntimeError(
+            f"unknown_context_field: {label} contains unknown outer field `{unknown[0]}`"
+        )
 
 
 def validate_base_decision_response(response):
@@ -80,6 +144,7 @@ def validate_base_decision_response(response):
 
 def validate_target_context_response(response, request):
     """Validate the complete outer response wrapper and its inner decision."""
+    _validate_outer_fields(response, TARGET_RESPONSE_FIELDS, "target provider response")
     response = _require_object(response, "target provider response")
     request = _require_object(request, "target decision context request")
     if response.get("context_discriminator") != CONTINUOUS_CONTEXT_DISCRIMINATOR:

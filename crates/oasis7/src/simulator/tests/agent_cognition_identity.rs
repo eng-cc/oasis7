@@ -588,11 +588,11 @@ fn outer_response_and_feedback_reject_unknown_authority_fields_during_decode() {
         serde_json::to_value(ProviderDecision::Wait).expect("encode wait decision"),
     );
     response["unknown_authority_field"] = json!(true);
-    let response_error = serde_json::from_value::<ContinuousAgentResponseContextV1>(response)
-        .expect_err("unknown outer response authority fields must not be discarded");
-    assert!(
-        response_error.to_string().contains("unknown field"),
-        "{response_error}"
+    assert_eq!(
+        ContinuousAgentResponseContextV1::validate_value(&response)
+            .expect_err("unknown response field must use the stable contract error")
+            .code(),
+        "unknown_context_field"
     );
 
     let feedback = json!({
@@ -607,9 +607,18 @@ fn outer_response_and_feedback_reject_unknown_authority_fields_during_decode() {
         "provenance": "runtime_authoritative",
         "unknown_authority_field": "must-fail-closed"
     });
-    let feedback_error = FeedbackEnvelopeV1::validate_value(&feedback)
-        .expect_err("unknown outer feedback authority fields must not be discarded");
-    assert_eq!(feedback_error.code(), "unknown_context_field");
+    assert_eq!(
+        FeedbackEnvelopeV1::validate_value(&feedback)
+            .expect_err("unknown outer feedback authority fields must not be discarded")
+            .code(),
+        "unknown_context_field"
+    );
+
+    let mut request = request_fixture(0, 60_000);
+    request["unknown_authority_field"] = json!(true);
+    let request_error = ContinuousAgentRequestContextV1::validate_value(&request)
+        .expect_err("unknown request field must use the stable contract error");
+    assert_eq!(request_error.code(), "unknown_context_field");
 }
 
 #[test]

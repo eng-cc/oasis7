@@ -21,7 +21,10 @@ from provider_response_validator import (  # noqa: E402
     CANONICAL_DIGEST_RE,
     CONTINUOUS_CONTEXT_DISCRIMINATOR,
     CONTINUOUS_CONTEXT_VERSION,
+    TARGET_FEEDBACK_FIELDS,
+    TARGET_REQUEST_FIELDS,
     SUPPORTED_DECISIONS,
+    _validate_outer_fields,
     _require_digest,
     _require_object,
     validate_base_decision_response,
@@ -234,6 +237,7 @@ def build_target_context_request(index: int, timeout_ms: int) -> dict:
 
 
 def validate_target_context_request(request: dict) -> None:
+    _validate_outer_fields(request, TARGET_REQUEST_FIELDS, "target decision context")
     if request.get("context_discriminator") != CONTINUOUS_CONTEXT_DISCRIMINATOR:
         raise RuntimeError(
             "target decision context must use the continuous-agent outer wrapper"
@@ -307,6 +311,8 @@ def validate_target_context_request(request: dict) -> None:
 
 
 def validate_target_context_feedback(feedback: dict, request: dict) -> None:
+    _validate_outer_fields(feedback, TARGET_FEEDBACK_FIELDS, "target feedback")
+    request = _require_object(request, "target decision context request")
     for field in (
         "feedback_id",
         "agent_subject",
@@ -319,9 +325,16 @@ def validate_target_context_feedback(feedback: dict, request: dict) -> None:
     ):
         if field not in feedback:
             raise RuntimeError(f"target feedback wrapper requires {field}")
+        if not isinstance(feedback[field], str) or not feedback[field].strip():
+            raise RuntimeError(f"target feedback wrapper requires non-empty {field}")
     if feedback["provenance"] != "runtime_authoritative":
         raise RuntimeError("target feedback must carry Runtime-authoritative provenance")
-    if feedback["status"] not in {"pending", "committed", "rejected", "failed"}:
+    if not isinstance(feedback["status"], str) or feedback["status"] not in {
+        "pending",
+        "committed",
+        "rejected",
+        "failed",
+    }:
         raise RuntimeError("target feedback status is outside the v1 registry")
     feedback_seq = feedback.get("feedback_seq")
     if isinstance(feedback_seq, bool) or not isinstance(feedback_seq, int) or feedback_seq <= 0:
@@ -333,11 +346,37 @@ def validate_target_context_feedback(feedback: dict, request: dict) -> None:
             raise RuntimeError(f"target feedback {field} does not match decision context")
     if feedback["request_digest"] != request["request_digest"]:
         raise RuntimeError("target feedback request_digest does not match decision context")
-    if feedback["status"] == "committed" and (
-        feedback.get("candidate_action_id") is None
-        or not str(feedback.get("runtime_receipt_id") or "").strip()
+    if feedback.get("candidate_action_id") is not None or feedback.get("runtime_receipt_id") is not None:
+        raise RuntimeError(
+            "feedback_disposition_unverifiable: target feedback action or Runtime receipt "
+            "requires a verifier unavailable in this route"
+        )
+    if feedback["status"] == "committed":
+        raise RuntimeError(
+            "feedback_disposition_unverifiable: committed target feedback cannot be verified "
+            "by this route"
+        )
+    reason = feedback.get("reject_reason")
+    if reason is not None and (
+        not isinstance(reason, str) or not reason.strip() or len(reason.encode("utf-8")) > 256
     ):
-        raise RuntimeError("committed target feedback requires action and Runtime receipt")
+        raise RuntimeError("feedback_disposition_reason_invalid: target feedback reason is unbounded")
+    allowed_reasons = {
+        "pending": {None, "recovery_pending", "retry_scheduled", "scheduler_backpressure"},
+        "rejected": {
+            "stale_base", "expired", "stale_capability_snapshot", "authority_denied",
+            "intent_conflict", "reorg_invalidated", "finality_anchor_mismatch",
+            "precondition_failed", "action_rejected", "idempotency_conflict", "no_effect",
+            "cancelled", "late_response_after_cancel", "legacy_no_cognition_proof",
+            "cognition_context_mismatch",
+        },
+        "failed": {"failed_provider", "failed_persist", "cognition_failed", "provider_unavailable"},
+    }
+    if reason not in allowed_reasons[feedback["status"]]:
+        raise RuntimeError(
+            "feedback_disposition_reason_invalid: target feedback reason is not in the "
+            "Runtime status/reason allowlist"
+        )
 
 
 def load_target_context_pairs(path: str, decision_count: int) -> list[tuple[dict, dict]]:

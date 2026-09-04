@@ -32,9 +32,32 @@ pub(super) fn handle_connection(
             write_json_response(stream, 200, &response)
         }
         ("POST", "/v1/world-simulator/decision-context") => {
-            let decoded: ContinuousAgentRequestContextV1 = match serde_json::from_slice(
-                request.body.as_slice(),
-            ) {
+            let value: serde_json::Value = match serde_json::from_slice(request.body.as_slice()) {
+                Ok(value) => value,
+                Err(error) => {
+                    return write_json_response(
+                        stream,
+                        400,
+                        &serde_json::json!({
+                            "ok": false,
+                            "error_code": "continuous_context_invalid",
+                            "error": format!("decode continuous decision request failed: {error}"),
+                        }),
+                    );
+                }
+            };
+            if let Err(error) = ContinuousAgentRequestContextV1::validate_value(&value) {
+                return write_json_response(
+                    stream,
+                    400,
+                    &serde_json::json!({
+                        "ok": false,
+                        "error_code": error.code(),
+                        "error": error.message(),
+                    }),
+                );
+            }
+            let decoded: ContinuousAgentRequestContextV1 = match serde_json::from_value(value) {
                 Ok(decoded) => decoded,
                 Err(error) => {
                     return write_json_response(

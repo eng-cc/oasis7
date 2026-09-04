@@ -61,7 +61,8 @@ impl RuntimeLlmSidecar {
             match runner {
                 #[cfg(not(target_arch = "wasm32"))]
                 RuntimeDecisionRunner::Builtin(runner) => {
-                    if self.provider_agent_ids.contains(agent_id.as_str()) {
+                    if runner.has_agent(agent_id.as_str()) {
+                        self.provider_agent_ids.insert(agent_id);
                         continue;
                     }
                     let mut config = LlmAgentConfig::from_default_sources_for_agent(
@@ -134,7 +135,8 @@ impl RuntimeLlmSidecar {
                     runner.register(behavior);
                 }
                 RuntimeDecisionRunner::ProviderBacked(runner) => {
-                    if self.provider_agent_ids.contains(agent_id.as_str()) {
+                    if runner.has_agent(agent_id.as_str()) {
+                        self.provider_agent_ids.insert(agent_id);
                         continue;
                     }
                     let settings = provider_settings.as_ref().ok_or_else(|| {

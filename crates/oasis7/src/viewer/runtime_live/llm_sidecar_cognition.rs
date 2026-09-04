@@ -81,6 +81,9 @@ impl RuntimeLlmSidecar {
             .iter()
             .filter(|agent_id| {
                 !self.provider_recovery_pending.contains_key(*agent_id)
+                    && !self
+                        .provider_continuation_recovery_pending
+                        .contains_key(*agent_id)
                     && !self.provider_active_turns.contains_key(*agent_id)
                     && (self.has_pending_runtime_wake_for_agent(agent_id.as_str())
                         || !self.provider_contexts.contains_key(*agent_id)
@@ -92,9 +95,9 @@ impl RuntimeLlmSidecar {
         for agent_id in agent_ids {
             let settings = match provider_settings.as_ref() {
                 Some(settings) => settings.clone(),
-                None => builtin_cognition_settings(agent_id.as_str())?,
+                None => continuation_support::builtin_cognition_settings(agent_id.as_str())?,
             };
-            if !provider_actor_exists(self, agent_id.as_str()) {
+            if !continuation_support::provider_actor_exists(self, agent_id.as_str()) {
                 self.quarantine_missing_provider_agent(world, agent_id.as_str());
                 continue;
             }
@@ -118,6 +121,13 @@ impl RuntimeLlmSidecar {
                 .cloned();
             if let Some(wake) = runtime_wake.as_ref() {
                 let continuation = active_runtime_continuation_for_wake(world, wake)?;
+                #[cfg(not(target_arch = "wasm32"))]
+                self.ensure_runtime_harness_continuation(
+                    agent_id.as_str(),
+                    &continuation,
+                    wake.wake_id.as_str(),
+                    world,
+                )?;
                 if continuation.remaining_budget.value == 1 {
                     // A positive simulator proposal cannot represent a final
                     // zero-budget resume. Let Runtime consume that last unit
@@ -194,6 +204,10 @@ impl RuntimeLlmSidecar {
                                 )
                             })?;
                     }
+                    self.provider_continuation_proposals
+                        .remove(continuation.continuation_proposal_id.as_str());
+                    self.provider_continuation_recovery_pending
+                        .remove(agent_id.as_str());
                     self.pending_runtime_wakes.remove(&wake.wake_id);
                     self.provider_contexts.remove(agent_id.as_str());
                     self.provider_active_turns.remove(agent_id.as_str());
@@ -284,6 +298,23 @@ impl RuntimeLlmSidecar {
                 if let (Some(wake), Some(proposal)) =
                     (runtime_wake.as_ref(), runtime_resume_proposal)
                 {
+                    let predecessor_proposal_id =
+                        active_runtime_continuation_for_wake(world, wake)?.continuation_proposal_id;
+                    let next_proposal = runtime_continuation
+                        .as_ref()
+                        .expect("Runtime resume always produces a next Harness proposal")
+                        .clone();
+                    self.provider_continuation_proposals.insert(
+                        next_proposal.continuation_proposal_id.clone(),
+                        next_proposal.clone(),
+                    );
+                    if let Err(error) = self.persist_provider_lineage() {
+                        self.provider_continuation_proposals
+                            .remove(next_proposal.continuation_proposal_id.as_str());
+                        return Err(format!(
+                            "provider continuation lineage persistence failed before Runtime wake resume: {error}"
+                        ));
+                    }
                     let resume = crate::runtime::CognitionContinuationResumeRequestV1 {
                         agent_session_id: request_context.agent_session_id.clone(),
                         agent_turn_id: request_context.agent_turn_id.clone(),
@@ -345,6 +376,10 @@ impl RuntimeLlmSidecar {
                                 },
                             );
                             self.pending_runtime_wakes.remove(&wake.wake_id);
+                            self.provider_continuation_proposals
+                                .remove(predecessor_proposal_id.as_str());
+                            self.provider_continuation_proposals
+                                .remove(next_proposal.continuation_proposal_id.as_str());
                             self.provider_contexts.remove(agent_id.as_str());
                             self.provider_active_turns.remove(agent_id.as_str());
                             self.provider_retry_contexts.remove(agent_id.as_str());
@@ -380,6 +415,8 @@ impl RuntimeLlmSidecar {
                                 )
                             })?;
                     }
+                    self.provider_continuation_proposals
+                        .remove(predecessor_proposal_id.as_str());
                     // The selected wake has been consumed. Its re-planned
                     // continuation is now Runtime-active and will be selected
                     // by the normal scheduler on a later tick; never retain
@@ -422,34 +459,6 @@ fn provider_policy_context_digest(
     crate::simulator::h_v1("oasis7.cognition.provider-policy.v1", &policy_hash).to_string()
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-fn builtin_cognition_settings(agent_id: &str) -> Result<ProviderDecisionSettings, String> {
-    let config = LlmAgentConfig::from_default_sources_for_agent(agent_id)
-        .map_err(|error| format!("builtin cognition config failed for {agent_id}: {error}"))?;
-    Ok(ProviderDecisionSettings {
-        requested_provider_mode: "builtin_llm".to_string(),
-        provider_transport: "builtin_openai".to_string(),
-        base_url: config.base_url,
-        auth_token: None,
-        connect_timeout_ms: config.timeout_ms.max(1),
-        decision_timeout_ms: config.timeout_ms.max(1),
-        agent_profile: config.prompt_profile.as_str().to_string(),
-        execution_mode: ProviderExecutionMode::HeadlessAgent,
-        fallback_reason: None,
-    })
-}
-
-fn provider_actor_exists(sidecar: &RuntimeLlmSidecar, agent_id: &str) -> bool {
-    match sidecar.runner.as_ref() {
-        #[cfg(not(target_arch = "wasm32"))]
-        Some(RuntimeDecisionRunner::Builtin(runner))
-        | Some(RuntimeDecisionRunner::ProviderBacked(runner)) => runner.has_agent(agent_id),
-        #[cfg(target_arch = "wasm32")]
-        Some(RuntimeDecisionRunner::ProviderBacked(runner)) => runner.get(agent_id).is_some(),
-        _ => false,
-    }
-}
-
 impl RuntimeLlmSidecar {
     fn quarantine_missing_provider_agent(&mut self, world: &mut RuntimeWorld, agent_id: &str) {
         self.provider_agent_ids.remove(agent_id);
@@ -459,6 +468,9 @@ impl RuntimeLlmSidecar {
         self.provider_retry_contexts.remove(agent_id);
         self.provider_active_turns.remove(agent_id);
         self.provider_recovery_pending.remove(agent_id);
+        self.provider_continuation_recovery_pending.remove(agent_id);
+        self.provider_continuation_proposals
+            .retain(|_, proposal| proposal.agent_id != agent_id);
         self.provider_wait_until.remove(agent_id);
         self.provider_stale_replans.remove(agent_id);
         self.provider_transport_exhausted.remove(agent_id);
@@ -720,7 +732,7 @@ pub(super) fn active_runtime_continuation_for_wake(
         })
 }
 
-fn runtime_context_digests_for_continuation(
+pub(super) fn runtime_context_digests_for_continuation(
     world: &RuntimeWorld,
     continuation_id: &str,
 ) -> Result<crate::runtime::CognitionContextDigestsV1, String> {

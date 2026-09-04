@@ -21,6 +21,9 @@ fn record(status: &str, suffix: &str) -> RetentionRecordV1 {
         "world_id": WORLD_ID,
         "envelope_idempotency_key": format!("{ENVELOPE_KEY}-{suffix}"),
         "envelope_digest": format!("{ENVELOPE_DIGEST}-{suffix}"),
+        "agent_session_id": format!("session-{suffix}"),
+        "agent_turn_id": format!("turn-{suffix}"),
+        "decision_request_id": format!("request-{suffix}"),
         "status": status,
         "base_tick": 10,
         "issued_at_tick": 10,
@@ -139,9 +142,9 @@ fn v1_replay_binds_record_identity_and_persisted_gc_floor() {
     let request = RetentionReplayRequestV1::from_json(json!({
         "schema_version": "agent-decision-envelope.v1",
         "world_id": WORLD_ID,
-        "agent_session_id": "session-1",
-        "agent_turn_id": "turn-1",
-        "decision_request_id": "request-1",
+        "agent_session_id": "session-replay-v1",
+        "agent_turn_id": "turn-replay-v1",
+        "decision_request_id": "request-replay-v1",
         "envelope_idempotency_key": format!("{REPLAY_KEY}-v1"),
         "envelope_digest": format!("{REPLAY_DIGEST}-v1"),
         "base_tick": 10,
@@ -155,6 +158,36 @@ fn v1_replay_binds_record_identity_and_persisted_gc_floor() {
         .expect("complete proof should replay committed receipt");
     assert_eq!(replay.receipt_id.as_deref(), Some(RECEIPT_ID));
     assert_eq!(probe, RetentionExecutionProbe::default());
+
+    for (field, value) in [
+        ("agent_session_id", "session-other"),
+        ("agent_turn_id", "turn-other"),
+        ("decision_request_id", "request-other"),
+    ] {
+        let mut mismatched = json!({
+            "schema_version": "agent-decision-envelope.v1",
+            "world_id": WORLD_ID,
+            "agent_session_id": "session-replay-v1",
+            "agent_turn_id": "turn-replay-v1",
+            "decision_request_id": "request-replay-v1",
+            "envelope_idempotency_key": format!("{REPLAY_KEY}-v1"),
+            "envelope_digest": format!("{REPLAY_DIGEST}-v1"),
+            "base_tick": 10,
+            "issued_at_tick": 10,
+            "gc_floor_tick": 10
+        });
+        mismatched[field] = json!(value);
+        let mismatched = RetentionReplayRequestV1::from_json(mismatched)
+            .expect("decode mutated mismatch fixture");
+        assert_eq!(
+            store
+                .replay_v1(mismatched, &mut probe)
+                .expect_err("lineage mismatch must be rejected")
+                .code(),
+            "idempotency_conflict",
+            "mismatched {field} must not replay"
+        );
+    }
 
     let legacy = RetentionReplayRequestV1::from_json(json!({
         "world_id": WORLD_ID,

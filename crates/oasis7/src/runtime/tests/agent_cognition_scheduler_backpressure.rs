@@ -174,3 +174,76 @@ fn untimed_backpressure_requires_committed_evidence_and_preserves_cursor() {
     assert_eq!(scheduler.pending_backpressure_count(), 0);
     assert_eq!(scheduler.cursor_seq(), cursor_before + 1);
 }
+
+#[test]
+fn evidence_ineligible_wake_stays_backpressured_at_starvation_boundary() {
+    let mut scheduler = CognitionScheduler::new(policy(), 1);
+    scheduler
+        .try_enqueue(wake("agent-a", "cont-a", "wake-a", 1))
+        .expect("first wake accepted");
+    let mut evidence_wake = wake("agent-b", "cont-b", "wake-b", 1);
+    evidence_wake.next_wake_tick = u64::MAX;
+    scheduler
+        .try_enqueue(evidence_wake)
+        .expect("evidence wake becomes durable pending");
+
+    assert_eq!(scheduler.select_ready(10).len(), 1);
+    scheduler.release_capacity();
+
+    let not_ready = scheduler.recover_capacity_if_preserving_cursor(14, |_| false);
+    assert!(
+        not_ready.is_empty(),
+        "starvation readiness must not bypass authoritative evidence eligibility"
+    );
+    assert!(scheduler.is_backpressured("wake-b"));
+    assert_eq!(scheduler.pending_backpressure_count(), 1);
+    assert_eq!(
+        scheduler.snapshot_json()["active"].as_array().map(Vec::len),
+        Some(0)
+    );
+
+    let recovered = scheduler.recover_capacity_if_preserving_cursor(14, |_| true);
+    assert_eq!(recovered.len(), 1);
+    assert_eq!(recovered[0].wake_id, "wake-b");
+    assert!(
+        scheduler
+            .recover_capacity_if_preserving_cursor(14, |_| true)
+            .is_empty()
+    );
+}
+
+#[test]
+fn mixed_tick_and_evidence_wake_stays_backpressured_when_evidence_is_false() {
+    let mut scheduler = CognitionScheduler::new(policy(), 1);
+    scheduler
+        .try_enqueue(wake("agent-a", "cont-a", "wake-a", 1))
+        .expect("first wake accepted");
+    let mixed_wake = wake("agent-b", "cont-b", "wake-b", 10);
+    scheduler
+        .try_enqueue(mixed_wake)
+        .expect("mixed wake becomes durable pending");
+
+    assert_eq!(scheduler.select_ready(10).len(), 1);
+    scheduler.release_capacity();
+
+    let not_ready = scheduler.recover_capacity_if_preserving_cursor(10, |_| false);
+    assert!(
+        not_ready.is_empty(),
+        "a due tick must not bypass an unsatisfied evidence condition"
+    );
+    assert!(scheduler.is_backpressured("wake-b"));
+    assert_eq!(scheduler.pending_backpressure_count(), 1);
+    assert_eq!(
+        scheduler.snapshot_json()["active"].as_array().map(Vec::len),
+        Some(0)
+    );
+
+    let recovered = scheduler.recover_capacity_if_preserving_cursor(10, |_| true);
+    assert_eq!(recovered.len(), 1);
+    assert_eq!(recovered[0].wake_id, "wake-b");
+    assert!(
+        scheduler
+            .recover_capacity_if_preserving_cursor(10, |_| true)
+            .is_empty()
+    );
+}

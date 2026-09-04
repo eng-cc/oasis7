@@ -89,7 +89,7 @@ fn continuous_feedback_holds_gaps_and_drains_in_order_with_bounded_diagnostics()
     }
     let mut held_collision = feedback(4);
     held_collision.feedback_id = "feedback-gap-collision".to_string();
-    held_collision.reject_reason = Some("different-envelope".to_string());
+    held_collision.reject_reason = Some("recovery_pending".to_string());
     assert_eq!(
         state
             .record_continuous_feedback(held_collision)
@@ -223,19 +223,213 @@ fn continuous_feedback_cursor_and_lineage_survive_provider_restart() {
     state
         .handle_continuous_decision(context.clone(), None, &recording_invoker())
         .expect("register first response");
-    state
-        .record_continuous_feedback(feedback_for_context(&context, "restart-feedback-1", 1))
-        .expect("persist first feedback");
+    assert_eq!(
+        state
+            .record_continuous_feedback(feedback_for_context(&context, "restart-feedback-2", 2))
+            .expect_err("out-of-order feedback must be persisted as a bounded hold"),
+        "feedback_sequence_gap"
+    );
     drop(state);
 
     let restarted =
         ProviderState::new_with_feedback_state_path(CliOptions::default(), Some(path.clone()))
             .expect("restarted bridge state");
+    assert!(
+        restarted
+            .recent_feedback
+            .lock()
+            .expect("feedback lock")
+            .get(&("agent-1".to_string(), "session-restart".to_string()))
+            .is_some_and(|partition| partition.held.contains_key(&2)),
+        "persisted state must retain the held successor across restart"
+    );
+    restarted
+        .record_continuous_feedback(feedback_for_context(&context, "restart-feedback-1", 1))
+        .expect("persisted predecessor drains the held successor");
+
+    let partitions = restarted.recent_feedback.lock().expect("feedback lock");
+    let partition = &partitions[&("agent-1".to_string(), "session-restart".to_string())];
+    assert_eq!(partition.next_seq, 2);
+    assert!(partition.held.is_empty());
+    drop(partitions);
     restarted
         .record_continuous_feedback(feedback_for_context(&context, "restart-feedback-2", 2))
-        .expect("persisted cursor accepts the next sequence after restart");
+        .expect("duplicate drained successor is idempotent after restart");
 
     let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn held_feedback_rolls_back_when_configured_state_persistence_fails() {
+    let path = std::env::temp_dir().join(format!(
+        "oasis7-provider-feedback-rollback-{}/state.json",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(path.parent().expect("rollback parent"));
+    let state =
+        ProviderState::new_with_feedback_state_path(CliOptions::default(), Some(path.clone()))
+            .expect("bridge state with missing persistence parent");
+    let context = continuous_context("session-rollback", 1);
+    state
+        .accepted_requests
+        .lock()
+        .expect("accepted request lock")
+        .insert(
+            context.decision_request_id.clone(),
+            AcceptedRequestIdentity {
+                agent_subject: context.agent_subject.clone(),
+                agent_session_id: context.agent_session_id.clone(),
+                agent_turn_id: context.agent_turn_id.clone(),
+                decision_request_id: context.decision_request_id.clone(),
+                request_digest: context.request_digest.clone(),
+                response_digest: Digest32::from(format!("blake3:{}", "b".repeat(64))),
+            },
+        );
+
+    let error = state
+        .record_continuous_feedback(feedback_for_context(&context, "rollback-feedback", 2))
+        .expect_err("persistence failure must be surfaced");
+    assert!(
+        error.starts_with("feedback_state_persist_failed:"),
+        "unexpected persistence error: {error}"
+    );
+    assert!(
+        state
+            .recent_feedback
+            .lock()
+            .expect("feedback lock")
+            .get(&("agent-1".to_string(), "session-rollback".to_string()))
+            .is_none_or(|partition| partition.held.is_empty()),
+        "a failed persist must roll back the held successor"
+    );
+    let _ = std::fs::remove_dir_all(path.parent().expect("rollback parent"));
+}
+
+#[test]
+fn target_decision_rejects_heuristic_model_output_but_legacy_keeps_compatibility() {
+    for (index, raw) in [
+        "```json\n{\"decision\":\"wait\"}\n```",
+        "Here is the decision: {\"decision\":\"wait\"}",
+        "not-json",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let state = ProviderState::new(CliOptions::default()).expect("provider state");
+        let context = continuous_context(&format!("session-strict-{index}"), 1);
+        let invoker = RecordingInvoker {
+            response: Ok(AgentInvocationOutput {
+                prompt: "prompt".to_string(),
+                text: raw.to_string(),
+                provider_version: Some("provider/test".to_string()),
+                duration_ms: Some(1),
+                prompt_tokens: None,
+                completion_tokens: None,
+                total_tokens: None,
+                route_note: None,
+                upstream_trace: None,
+            }),
+            invocations: Arc::new(Mutex::new(Vec::new())),
+        };
+        let response = state
+            .handle_continuous_decision(context, None, &invoker)
+            .expect("strict target response is still structurally returned");
+        assert_eq!(
+            response.base_decision_response.decision,
+            ProviderDecision::Wait
+        );
+        let error = response
+            .base_decision_response
+            .provider_error
+            .as_ref()
+            .expect("strict target malformed output must be an explicit provider error");
+        assert_eq!(error.code, "invalid_action_schema");
+        assert_eq!(
+            response
+                .base_decision_response
+                .trace_payload
+                .schema_repair_count,
+            0
+        );
+    }
+
+    let state = ProviderState::new(CliOptions::default()).expect("provider state");
+    let invoker = RecordingInvoker {
+        response: Ok(AgentInvocationOutput {
+            prompt: "prompt".to_string(),
+            text: "```json\n{\"decision\":\"wait\"}\n```".to_string(),
+            provider_version: Some("provider/test".to_string()),
+            duration_ms: Some(1),
+            prompt_tokens: None,
+            completion_tokens: None,
+            total_tokens: None,
+            route_note: None,
+            upstream_trace: None,
+        }),
+        invocations: Arc::new(Mutex::new(Vec::new())),
+    };
+    let legacy = state.handle_decision(sample_request(), None, &invoker);
+    assert_eq!(legacy.decision, ProviderDecision::Wait);
+    assert!(legacy.provider_error.is_none());
+    assert_eq!(legacy.trace_payload.schema_repair_count, 1);
+}
+
+#[test]
+fn target_feedback_admits_only_correlated_bounded_diagnostics() {
+    let context = continuous_context("session-feedback-policy", 1);
+    for (status, reason) in [
+        ("pending", None),
+        ("pending", Some("scheduler_backpressure")),
+        ("rejected", Some("no_effect")),
+        ("failed", Some("provider_unavailable")),
+    ] {
+        let state = ProviderState::new(CliOptions {
+            mode: ProviderMode::Mock,
+            ..CliOptions::default()
+        })
+        .expect("provider state");
+        state
+            .handle_continuous_decision(context.clone(), None, &recording_invoker())
+            .expect("register response lineage");
+        let mut feedback = feedback_for_context(
+            &context,
+            &format!("feedback-{status}-{}", reason.unwrap_or("none")),
+            1,
+        );
+        feedback.status = status.to_string();
+        feedback.reject_reason = reason.map(ToOwned::to_owned);
+        state
+            .record_continuous_feedback(feedback)
+            .expect("allowlisted correlated diagnostic");
+    }
+
+    for authority_kind in 0..3 {
+        let state = ProviderState::new(CliOptions {
+            mode: ProviderMode::Mock,
+            ..CliOptions::default()
+        })
+        .expect("provider state");
+        state
+            .handle_continuous_decision(context.clone(), None, &recording_invoker())
+            .expect("register response lineage");
+        let mut feedback = feedback_for_context(&context, "feedback-unverifiable", 1);
+        match authority_kind {
+            0 => {
+                feedback.status = "committed".to_string();
+                feedback.candidate_action_id = Some(7);
+                feedback.runtime_receipt_id = Some("receipt-forged".to_string());
+            }
+            1 => feedback.candidate_action_id = Some(7),
+            2 => feedback.runtime_receipt_id = Some("receipt-forged".to_string()),
+            _ => unreachable!(),
+        }
+        assert_eq!(
+            state
+                .record_continuous_feedback(feedback)
+                .expect_err("unverifiable authority must not enter prompts"),
+            "feedback_disposition_unverifiable"
+        );
+    }
 }
 
 fn continuous_context(

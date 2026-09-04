@@ -92,10 +92,32 @@ pub(in crate::viewer::runtime_live::control_plane::llm_sidecar) fn admit_provide
     let handle = runner
         .submit_continuation_proposal_with_current_context(
             request.agent_subject.as_str(),
-            simulator,
+            simulator.clone(),
             &current,
         )
         .map_err(|error| format!("provider Wait Harness admission failed: {error}"))?;
+    let proposal_id = simulator.continuation_proposal_id.clone();
+    sidecar
+        .provider_continuation_proposals
+        .insert(proposal_id.clone(), simulator);
+    if let Err(error) = sidecar.persist_provider_lineage() {
+        if let Some(runner) = sidecar
+            .runner
+            .as_mut()
+            .and_then(RuntimeDecisionRunner::async_runner_mut)
+        {
+            let _ = runner.invalidate_continuation_for_agent(
+                request.agent_subject.as_str(),
+                crate::simulator::ContinuationInvalidationReason::Rejected,
+            );
+        }
+        sidecar
+            .provider_continuation_proposals
+            .remove(proposal_id.as_str());
+        return Err(format!(
+            "provider Wait Harness lineage persistence failed before Runtime admission: {error}"
+        ));
+    }
     let admitted = match world.admit_cognition_continuation(runtime) {
         Ok(admitted) => admitted,
         Err(error) => {
@@ -109,6 +131,10 @@ pub(in crate::viewer::runtime_live::control_plane::llm_sidecar) fn admit_provide
                     crate::simulator::ContinuationInvalidationReason::Rejected,
                 );
             }
+            sidecar
+                .provider_continuation_proposals
+                .remove(proposal_id.as_str());
+            sidecar.persist_provider_lineage_best_effort();
             return Err(format!("provider Wait Runtime admission failed: {error:?}"));
         }
     };

@@ -39,6 +39,15 @@ pub struct RetentionRecordV1 {
     pub world_id: String,
     pub envelope_idempotency_key: String,
     pub envelope_digest: String,
+    /// Exact cognition lineage for the terminal envelope. Optional during
+    /// deserialization so legacy snapshots remain recoverable, but replay
+    /// refuses any record that cannot prove all three identities.
+    #[serde(default)]
+    pub agent_session_id: Option<String>,
+    #[serde(default)]
+    pub agent_turn_id: Option<String>,
+    #[serde(default)]
+    pub decision_request_id: Option<String>,
     pub status: String,
     pub base_tick: u64,
     pub issued_at_tick: u64,
@@ -296,7 +305,16 @@ impl CognitionRetentionStore {
             .records
             .get(key)
             .ok_or_else(|| RetentionError::new("expired_idempotency"))?;
+        if record.agent_session_id.is_none()
+            || record.agent_turn_id.is_none()
+            || record.decision_request_id.is_none()
+        {
+            return Err(RetentionError::new("legacy_no_cognition_proof"));
+        }
         if request.world_id.as_deref() != Some(record.world_id.as_str())
+            || request.agent_session_id.as_deref() != record.agent_session_id.as_deref()
+            || request.agent_turn_id.as_deref() != record.agent_turn_id.as_deref()
+            || request.decision_request_id.as_deref() != record.decision_request_id.as_deref()
             || digest != record.envelope_digest
             || request.base_tick != Some(record.base_tick)
             || request.issued_at_tick != Some(record.issued_at_tick)

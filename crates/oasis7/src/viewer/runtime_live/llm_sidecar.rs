@@ -83,6 +83,8 @@ mod agent_chat_support;
 mod async_support;
 #[path = "llm_sidecar_cognition.rs"]
 mod cognition_context;
+#[path = "llm_sidecar_continuation.rs"]
+mod continuation_support;
 #[path = "llm_sidecar_decision.rs"]
 mod decision;
 #[path = "llm_sidecar_lineage.rs"]
@@ -244,6 +246,14 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     provider_contexts: BTreeMap<String, cognition_context::ProviderContextState>,
     provider_retry_contexts: BTreeMap<String, cognition_context::ProviderContextState>,
     provider_active_turns: BTreeMap<String, cognition_context::ProviderContextState>,
+    /// Exact simulator proposals admitted into the Harness for Runtime-owned
+    /// continuations.  Runtime projections alone cannot recreate the
+    /// provider-side chain identity after restart.
+    provider_continuation_proposals: BTreeMap<String, SimulatorContinuationProposalV1>,
+    /// A continuation hydration mismatch fences only the affected Agent until
+    /// its authoritative lineage is repaired; it must not fall back to a new
+    /// provider turn or mutate Runtime state.
+    provider_continuation_recovery_pending: BTreeMap<String, String>,
     /// An active marker without an exactly matching context is a recovery
     /// fence, not an invitation to allocate a fresh provider turn.  Keeping
     /// the marker durable prevents a restart from silently losing identity
@@ -324,6 +334,8 @@ impl RuntimeLlmSidecar {
             provider_contexts: BTreeMap::new(),
             provider_retry_contexts: BTreeMap::new(),
             provider_active_turns: BTreeMap::new(),
+            provider_continuation_proposals: BTreeMap::new(),
+            provider_continuation_recovery_pending: BTreeMap::new(),
             provider_recovery_pending: BTreeMap::new(),
             provider_wait_until: BTreeMap::new(),
             provider_feedback_seq: BTreeMap::new(),

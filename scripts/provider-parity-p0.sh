@@ -329,7 +329,11 @@ def assess_illegal_schema_sample(sample):
     elif numerator > denominator:
       errors.append("illegal_schema_count exceeds decision_steps")
     error_counts = sample.get("error_counts")
-    if isinstance(error_counts, dict) and "invalid_action_schema" in error_counts:
+    if numerator > 0 and not isinstance(error_counts, dict):
+      errors.append("positive illegal_schema_count requires error_counts object")
+    elif numerator > 0 and "invalid_action_schema" not in error_counts:
+      errors.append("positive illegal_schema_count requires invalid_action_schema errors")
+    elif isinstance(error_counts, dict) and "invalid_action_schema" in error_counts:
       observed_errors = error_counts.get("invalid_action_schema")
       if not nonnegative_int(observed_errors) or observed_errors != numerator:
         errors.append("illegal_schema_count does not match invalid_action_schema errors")
@@ -616,7 +620,12 @@ for provider in providers:
       warnings.append("runtime_perf_missing")
     error_codes = {}
     for sample in samples:
-      for code, count in sample.get("error_counts", {}).items():
+      error_counts = sample.get("error_counts", {})
+      if not isinstance(error_counts, dict):
+        continue
+      for code, count in error_counts.items():
+        if not isinstance(code, str) or not nonnegative_int(count):
+          continue
         error_codes[code] = error_codes.get(code, 0) + count
     benchmark_status = "insufficient_data"
     if len(valid_samples) >= requested_samples:
