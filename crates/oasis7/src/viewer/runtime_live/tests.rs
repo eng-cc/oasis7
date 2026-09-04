@@ -20,6 +20,8 @@ mod auth_actions_provider_context;
 mod authoritative;
 mod background_play;
 mod chain_sync;
+#[path = "tests/provider_continuation_drains.rs"]
+mod provider_continuation_drains;
 pub(super) use chain_sync::TestChainStatusServer;
 mod chain_sync_feedback;
 mod claim_choice;

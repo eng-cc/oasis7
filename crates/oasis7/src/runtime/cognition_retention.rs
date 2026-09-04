@@ -8,6 +8,8 @@ use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+use super::cognition::is_canonical_identifier;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RetentionError {
     code: &'static str,
@@ -111,27 +113,27 @@ impl RetentionReplayRequestV1 {
             && self
                 .world_id
                 .as_deref()
-                .is_some_and(|value| !value.is_empty())
+                .is_some_and(|value| is_canonical_identifier(value, 128))
             && self
                 .agent_session_id
                 .as_deref()
-                .is_some_and(|value| !value.is_empty())
+                .is_some_and(|value| is_canonical_identifier(value, 128))
             && self
                 .agent_turn_id
                 .as_deref()
-                .is_some_and(|value| !value.is_empty())
+                .is_some_and(|value| is_canonical_identifier(value, 128))
             && self
                 .decision_request_id
                 .as_deref()
-                .is_some_and(|value| !value.is_empty())
+                .is_some_and(|value| is_canonical_identifier(value, 128))
             && self
                 .envelope_idempotency_key
                 .as_deref()
-                .is_some_and(|value| !value.is_empty())
+                .is_some_and(|value| is_canonical_identifier(value, 256))
             && self
                 .envelope_digest
                 .as_deref()
-                .is_some_and(|value| !value.is_empty())
+                .is_some_and(|value| is_canonical_identifier(value, 256))
             && self.base_tick.is_some()
             && self.issued_at_tick.is_some()
             && self.gc_floor_tick.is_some()
@@ -141,6 +143,10 @@ impl RetentionReplayRequestV1 {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CognitionRetentionStore {
     horizon: u64,
+    /// Highest GC floor applied to this durable store. Replay requests must
+    /// bind to this floor rather than supplying a weaker caller-local value.
+    #[serde(default)]
+    gc_floor_tick: u64,
     records: BTreeMap<String, RetentionRecordV1>,
     pins: BTreeMap<String, BTreeSet<String>>,
     response_artifacts: BTreeSet<String>,
@@ -176,11 +182,16 @@ impl CognitionRetentionStore {
         self.response_artifacts.contains(artifact_id)
     }
 
+    pub fn gc_floor_tick(&self) -> u64 {
+        self.gc_floor_tick
+    }
+
     pub fn gc(
         &mut self,
         now_tick: u64,
         gc_floor_tick: u64,
     ) -> Result<RetentionGcReport, RetentionError> {
+        self.gc_floor_tick = self.gc_floor_tick.max(gc_floor_tick);
         let mut deleted_count = 0usize;
         let mut retained_terminal_count = 0usize;
         let pinned_reference_count = self.pins.values().map(BTreeSet::len).sum();
@@ -234,7 +245,7 @@ impl CognitionRetentionStore {
         Ok(())
     }
 
-    pub fn replay(
+    pub(crate) fn replay(
         &self,
         key: &str,
         digest: &str,
@@ -257,6 +268,42 @@ impl CognitionRetentionStore {
             effect_delta: 0,
             world_receipt_linked_delta: 0,
         })
+    }
+
+    /// Replay a committed terminal record only after proving the complete v1
+    /// request and binding it to the persisted record and current GC floor.
+    /// The legacy key/digest seam remains available internally for focused
+    /// store fixtures, but World-facing callers must use this method.
+    pub fn replay_v1(
+        &self,
+        request: RetentionReplayRequestV1,
+        probe: &mut RetentionExecutionProbe,
+    ) -> Result<RetentionReplayResult, RetentionError> {
+        let request_floor = request.gc_floor_tick;
+        self.classify_replay(request.clone())?;
+        if request_floor != Some(self.gc_floor_tick) {
+            return Err(RetentionError::new("expired_idempotency"));
+        }
+        let key = request
+            .envelope_idempotency_key
+            .as_deref()
+            .ok_or_else(|| RetentionError::new("legacy_no_cognition_proof"))?;
+        let digest = request
+            .envelope_digest
+            .as_deref()
+            .ok_or_else(|| RetentionError::new("legacy_no_cognition_proof"))?;
+        let record = self
+            .records
+            .get(key)
+            .ok_or_else(|| RetentionError::new("expired_idempotency"))?;
+        if request.world_id.as_deref() != Some(record.world_id.as_str())
+            || digest != record.envelope_digest
+            || request.base_tick != Some(record.base_tick)
+            || request.issued_at_tick != Some(record.issued_at_tick)
+        {
+            return Err(RetentionError::new("idempotency_conflict"));
+        }
+        self.replay(key, digest, probe)
     }
 
     fn rebuild_artifact_index(&mut self) {

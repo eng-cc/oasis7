@@ -230,6 +230,7 @@ pub struct BudgetContractV1 {
 /// inner timeout is likewise a transport budget, not a provider invocation
 /// identity; the normalized `budget_contract` remains the policy input.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ContinuousAgentRequestContextV1 {
     pub base_decision_request: DecisionRequest,
     pub context_discriminator: String,
@@ -374,6 +375,12 @@ impl ContinuousAgentRequestContextV1 {
         Ok(())
     }
 
+    pub fn validate_value(value: &Value) -> Result<(), CognitionError> {
+        let context: Self = serde_json::from_value(value.clone())
+            .map_err(|error| CognitionError::new("unknown_context_field", error.to_string()))?;
+        context.validate_structure()
+    }
+
     fn validate_structure(&self) -> Result<(), CognitionError> {
         if self.context_discriminator != CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR {
             return Err(CognitionError::new(
@@ -425,40 +432,6 @@ impl ContinuousAgentRequestContextV1 {
             }
         }
         self.runtime_binding.validate()?;
-        Ok(())
-    }
-
-    pub fn validate_value(value: &Value) -> Result<(), CognitionError> {
-        let version = value
-            .get("context_version")
-            .and_then(Value::as_u64)
-            .ok_or_else(|| {
-                CognitionError::new(
-                    "unsupported_context_version",
-                    "continuous-agent context_version is missing or invalid",
-                )
-            })?;
-        if version != u64::from(CONTINUOUS_AGENT_CONTEXT_VERSION) {
-            return Err(CognitionError::new(
-                "unsupported_context_version",
-                format!("unsupported continuous-agent context version {version}"),
-            ));
-        }
-        let discriminator = value
-            .get("context_discriminator")
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                CognitionError::new(
-                    "unsupported_context_discriminator",
-                    "continuous-agent context discriminator is missing or invalid",
-                )
-            })?;
-        if discriminator != CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR {
-            return Err(CognitionError::new(
-                "unsupported_context_discriminator",
-                "continuous-agent context discriminator is not recognized",
-            ));
-        }
         Ok(())
     }
 
@@ -515,6 +488,7 @@ impl ContinuousAgentRequestContextV1 {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ContinuousAgentResponseContextV1 {
     pub base_decision_response: DecisionResponse,
     pub context_discriminator: String,
@@ -721,6 +695,35 @@ pub struct FeedbackEnvelopeV1 {
 }
 
 impl FeedbackEnvelopeV1 {
+    /// Validate the target feedback object's outer keys. Projection fields are
+    /// deliberately allow-listed because Runtime's canonical outbox payload
+    /// carries them as non-authority extensions; all other unknown fields
+    /// fail closed instead of being silently discarded by serde.
+    pub fn validate_value(value: &Value) -> Result<(), CognitionError> {
+        validate_outer_fields(
+            value,
+            &[
+                "feedback_id",
+                "feedback_seq",
+                "agent_subject",
+                "agent_session_id",
+                "agent_turn_id",
+                "decision_request_id",
+                "candidate_action_id",
+                "runtime_receipt_id",
+                "status",
+                "request_digest",
+                "reject_reason",
+                "provenance",
+                "envelope_digest",
+                "emitted_events",
+                "committed_event_summary",
+                "world_delta_summary",
+            ],
+        )?;
+        Ok(())
+    }
+
     /// Legacy feedback has no runtime disposition/receipt and therefore cannot
     /// be promoted to authoritative cognition feedback.
     pub fn from_legacy_value(value: Value) -> Result<Self, CognitionError> {
@@ -1086,6 +1089,25 @@ impl AgentCognitionStore {
 
 fn default_schema_version() -> u16 {
     1
+}
+
+fn validate_outer_fields(value: &Value, allowed: &[&str]) -> Result<(), CognitionError> {
+    let Some(object) = value.as_object() else {
+        return Err(CognitionError::new(
+            "unknown_context_field",
+            "continuous-agent outer context must be a JSON object",
+        ));
+    };
+    if let Some(field) = object
+        .keys()
+        .find(|field| !allowed.iter().any(|allowed| allowed == field))
+    {
+        return Err(CognitionError::new(
+            "unknown_context_field",
+            format!("unknown continuous-agent outer field `{field}`"),
+        ));
+    }
+    Ok(())
 }
 
 fn feedback_digest(feedback: &FeedbackEnvelopeV1) -> Digest32 {

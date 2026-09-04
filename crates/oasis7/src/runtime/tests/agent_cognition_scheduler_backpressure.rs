@@ -137,3 +137,40 @@ fn full_queue_preserves_retry_sequence_and_age_until_capacity_returns() {
     assert_eq!(before["effective_priority"], after["effective_priority"]);
     assert_eq!(after["reason"], "scheduler_backpressure");
 }
+
+#[test]
+fn untimed_backpressure_requires_committed_evidence_and_preserves_cursor() {
+    let mut scheduler = CognitionScheduler::new(policy(), 1);
+    scheduler
+        .try_enqueue(wake("agent-a", "cont-a", "wake-a", 1))
+        .expect("first wake accepted");
+    let mut untimed = wake("agent-b", "cont-b", "wake-b", 1);
+    untimed.next_wake_tick = u64::MAX;
+    scheduler
+        .try_enqueue(untimed)
+        .expect("untimed wake becomes durable pending");
+    let cursor_before = scheduler.cursor_seq();
+    let selected = scheduler.select_ready(10);
+    assert_eq!(selected.len(), 1);
+    scheduler.release_capacity();
+
+    let not_ready = scheduler.recover_capacity_if_preserving_cursor(10, |_| false);
+    assert!(
+        not_ready.is_empty(),
+        "false evidence must not lease an untimed wake"
+    );
+    assert_eq!(scheduler.pending_backpressure_count(), 1);
+    assert_eq!(scheduler.cursor_seq(), cursor_before + 1);
+
+    let recovered =
+        scheduler.recover_capacity_if_preserving_cursor(10, |wake| wake.wake_id == "wake-b");
+    assert_eq!(
+        recovered
+            .iter()
+            .map(|wake| wake.wake_id.as_str())
+            .collect::<Vec<_>>(),
+        ["wake-b"]
+    );
+    assert_eq!(scheduler.pending_backpressure_count(), 0);
+    assert_eq!(scheduler.cursor_seq(), cursor_before + 1);
+}

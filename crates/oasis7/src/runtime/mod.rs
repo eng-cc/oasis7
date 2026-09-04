@@ -20,6 +20,7 @@ mod cognition_feedback_contract;
 mod cognition_recovery;
 mod cognition_retention;
 mod cognition_scheduler;
+mod cognition_validation;
 mod cognition_wake;
 mod consensus;
 mod effect;

@@ -199,6 +199,38 @@ fn precondition_registry_accepts_supported_paths_and_declared_operators() {
 }
 
 #[test]
+fn runtime_identity_and_resource_registry_reject_noncanonical_or_unknown_values() {
+    let mut decomposed = envelope_fixture();
+    decomposed["agent_id"] = json!("Cafe\u{301}");
+    assert_rejected_without_effect(decomposed, "invalid_identity");
+
+    let mut whitespace_subject = envelope_fixture();
+    whitespace_subject["preconditions"] = json!([{
+        "schema_version": 1,
+        "subject": {"kind": "world", "id": "   "},
+        "path_or_rule": "world.logical_tick",
+        "operator": "eq",
+        "expected_value_bytes": [1],
+        "missing_behavior": "fail"
+    }]);
+    assert_rejected_without_effect(whitespace_subject, "precondition_failed");
+
+    let unknown_resource: PreconditionV1 = serde_json::from_value(json!({
+        "schema_version": 1,
+        "subject": {"kind": "agent", "id": AGENT_ID},
+        "path_or_rule": "agent.resource.oxygen",
+        "operator": "eq",
+        "expected_value_bytes": [1],
+        "missing_behavior": "fail"
+    }))
+    .expect("decode unknown resource precondition");
+    assert!(
+        MvccValidator::validate_precondition_shape(&unknown_resource).is_err(),
+        "unknown resource paths must not pass generic shape validation"
+    );
+}
+
+#[test]
 fn unknown_type_malformed_duplicate_and_bounded_preconditions_fail_closed_without_effect() {
     let mut unknown_path = envelope_fixture();
     unknown_path["preconditions"] = json!([{

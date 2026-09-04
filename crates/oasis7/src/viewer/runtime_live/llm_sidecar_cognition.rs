@@ -116,6 +116,93 @@ impl RuntimeLlmSidecar {
                 .filter(|wake| wake.agent_id == agent_id)
                 .min_by_key(|wake| (wake.wake_seq, wake.wake_id.as_str()))
                 .cloned();
+            if let Some(wake) = runtime_wake.as_ref() {
+                let continuation = active_runtime_continuation_for_wake(world, wake)?;
+                if continuation.remaining_budget.value == 1 {
+                    // A positive simulator proposal cannot represent a final
+                    // zero-budget resume. Let Runtime consume that last unit
+                    // atomically instead of rejecting the wake after it has
+                    // been selected (which would leave a ghost continuation).
+                    let runtime_context = runtime_context_digests_for_continuation(
+                        world,
+                        wake.continuation_id.as_str(),
+                    )?;
+                    let consumption = world
+                        .consume_cognition_continuation_budget_with_context(
+                            continuation.continuation_id.as_str(),
+                            1,
+                            runtime_context.clone(),
+                        )
+                        .map_err(|error| {
+                            format!(
+                                "Runtime final continuation budget consumption rejected {}: {error:?}",
+                                wake.wake_id
+                            )
+                        })?;
+                    #[cfg(not(target_arch = "wasm32"))]
+                    if let Some(runner) = self
+                        .runner
+                        .as_mut()
+                        .and_then(RuntimeDecisionRunner::async_runner_mut)
+                    {
+                        // Runtime owns the terminal status, budget and status
+                        // digest. Carry that exact transition into the
+                        // Harness before clearing the Viewer mirrors; a
+                        // generic local invalidation would misclassify the
+                        // completed continuation as expired.
+                        if consumption.status != crate::runtime::ContinuationStatusV1::Completed
+                            || consumption.remaining_budget.value != 0
+                        {
+                            return Err(format!(
+                                "Runtime final continuation projection is not terminal for {}",
+                                wake.wake_id
+                            ));
+                        }
+                        let mut terminal_projection = continuation.clone();
+                        terminal_projection.remaining_budget = consumption.remaining_budget.clone();
+                        terminal_projection.status = consumption.status;
+                        terminal_projection.logical_tick = world.state().time;
+                        terminal_projection.continuation_status_digest =
+                            Some(consumption.continuation_status_digest.clone());
+                        terminal_projection.terminal_disposition =
+                            Some("budget_exhausted".to_string());
+                        terminal_projection
+                            .validate_authoritative()
+                            .map_err(|error| {
+                                format!(
+                                    "Runtime final continuation projection invalid for {}: {error}",
+                                    wake.wake_id
+                                )
+                            })?;
+                        let authority = crate::simulator::ContinuationAuthorityContextV1 {
+                            baseline_observation_digest: runtime_context
+                                .baseline_observation_digest,
+                            goal_digest: runtime_context.goal_digest,
+                            policy_digest: runtime_context.policy_digest,
+                            precondition_digest: runtime_context.precondition_digest,
+                        };
+                        runner
+                            .apply_runtime_terminal_continuation_projection(
+                                agent_id.as_str(),
+                                terminal_projection,
+                                &authority,
+                            )
+                            .map_err(|error| {
+                                format!(
+                                    "Harness final continuation projection failed {}: {error}",
+                                    wake.wake_id
+                                )
+                            })?;
+                    }
+                    self.pending_runtime_wakes.remove(&wake.wake_id);
+                    self.provider_contexts.remove(agent_id.as_str());
+                    self.provider_active_turns.remove(agent_id.as_str());
+                    self.provider_retry_contexts.remove(agent_id.as_str());
+                    self.provider_wait_until.remove(agent_id.as_str());
+                    self.persist_provider_lineage_best_effort();
+                    continue;
+                }
+            }
             let context = if runtime_wake.is_none()
                 && let Some(mut retry) = self.provider_retry_contexts.remove(&agent_id)
             {
@@ -631,6 +718,28 @@ pub(super) fn active_runtime_continuation_for_wake(
                 wake.wake_id
             )
         })
+}
+
+fn runtime_context_digests_for_continuation(
+    world: &RuntimeWorld,
+    continuation_id: &str,
+) -> Result<crate::runtime::CognitionContextDigestsV1, String> {
+    let entry = world
+        .cognition()
+        .get("continuation_contexts")
+        .and_then(Value::as_object)
+        .and_then(|contexts| contexts.get(continuation_id))
+        .cloned()
+        .ok_or_else(|| {
+            format!(
+                "Runtime continuation context missing for final budget consumption {continuation_id}"
+            )
+        })?;
+    serde_json::from_value(entry).map_err(|error| {
+        format!(
+            "Runtime continuation context invalid for final budget consumption {continuation_id}: {error}"
+        )
+    })
 }
 
 fn runtime_continuation_for_wake_with_identity(

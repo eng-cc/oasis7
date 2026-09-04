@@ -38,6 +38,7 @@ write_sample() {
   "goal_completed": true,
   "decision_steps": 10,
   "invalid_action_count": 0,
+  "illegal_schema_count": 0,
   "timeout_count": 0,
   "recoverable_error_count": 0,
   "metric_schema_version": "recoverable_error_resolution_rate.v1",
@@ -50,6 +51,13 @@ write_sample() {
     "value": null,
     "zero_case": "not_applicable",
     "gate_status": "not_evaluable"
+  },
+  "illegal_schema_rate": {
+    "numerator": 0,
+    "denominator": 10,
+    "value": 0.0,
+    "zero_case": null,
+    "gate_status": "evaluable"
   },
   "median_latency_ms": 11,
   "p95_latency_ms": 22,
@@ -102,6 +110,7 @@ write_sample_with_status() {
   "goal_completed": $goal_completed,
   "decision_steps": 10,
   "invalid_action_count": 0,
+  "illegal_schema_count": 0,
   "timeout_count": 0,
   "recoverable_error_count": 0,
   "metric_schema_version": "recoverable_error_resolution_rate.v1",
@@ -114,6 +123,13 @@ write_sample_with_status() {
     "value": null,
     "zero_case": "not_applicable",
     "gate_status": "not_evaluable"
+  },
+  "illegal_schema_rate": {
+    "numerator": 0,
+    "denominator": 10,
+    "value": 0.0,
+    "zero_case": null,
+    "gate_status": "evaluable"
   },
   "median_latency_ms": $median_latency_ms,
   "p95_latency_ms": $p95_latency_ms,
@@ -152,6 +168,7 @@ write_sample_without_runtime_perf() {
   "goal_completed": true,
   "decision_steps": 10,
   "invalid_action_count": 0,
+  "illegal_schema_count": 0,
   "timeout_count": 0,
   "recoverable_error_count": 0,
   "metric_schema_version": "recoverable_error_resolution_rate.v1",
@@ -164,6 +181,13 @@ write_sample_without_runtime_perf() {
     "value": null,
     "zero_case": "not_applicable",
     "gate_status": "not_evaluable"
+  },
+  "illegal_schema_rate": {
+    "numerator": 0,
+    "denominator": 10,
+    "value": 0.0,
+    "zero_case": null,
+    "gate_status": "evaluable"
   },
   "median_latency_ms": 11,
   "p95_latency_ms": 22,
@@ -187,6 +211,54 @@ write_sample_with_legacy_routes() {
   "goal_completed": true,
   "decision_steps": 1,
   "invalid_action_count": 0,
+  "illegal_schema_count": 0,
+  "timeout_count": 0,
+  "recoverable_error_count": 0,
+  "metric_schema_version": "recoverable_error_resolution_rate.v1",
+  "sample_id": "P0-001_sample_1",
+  "trace_validity": "valid",
+  "recovery_events": [],
+  "recoverable_error_resolution_rate": {
+    "numerator": 0,
+    "denominator": 0,
+    "value": null,
+    "zero_case": "not_applicable",
+    "gate_status": "not_evaluable"
+  },
+  "illegal_schema_rate": {
+    "numerator": 0,
+    "denominator": 1,
+    "value": 0.0,
+    "zero_case": null,
+    "gate_status": "evaluable"
+  },
+  "median_latency_ms": 11,
+  "p95_latency_ms": 22,
+  "trace_completeness_ratio_ppm": 1000000,
+  "provider_version": "legacy-test-provider",
+  "adapter_version": "legacy-test-adapter",
+  "protocol_version": "legacy-test-protocol",
+  "provider": {
+    "cognition_lane": "legacy_compatibility",
+    "decision_route": "/v1/world-simulator/decision",
+    "feedback_route": "/v1/world-simulator/feedback"
+  }
+}
+JSON
+}
+
+write_sample_without_illegal_schema_metric() {
+  local summary_dir="$tmp_root/missing-schema/out/samples/provider_loopback_http/sample_1/summary"
+  mkdir -p "$summary_dir"
+  cat >"$summary_dir/sample.json" <<'JSON'
+{
+  "status": "passed",
+  "execution_authority": "simulator_world_kernel",
+  "runtime_certification_status": "not_certified",
+  "runtime_certification_reason": "local simulator smoke; unified Runtime execution and receipt authority is not wired",
+  "goal_completed": true,
+  "decision_steps": 10,
+  "invalid_action_count": 0,
   "timeout_count": 0,
   "recoverable_error_count": 0,
   "metric_schema_version": "recoverable_error_resolution_rate.v1",
@@ -203,13 +275,14 @@ write_sample_with_legacy_routes() {
   "median_latency_ms": 11,
   "p95_latency_ms": 22,
   "trace_completeness_ratio_ppm": 1000000,
-  "provider_version": "legacy-test-provider",
-  "adapter_version": "legacy-test-adapter",
-  "protocol_version": "legacy-test-protocol",
+  "provider_version": "test-provider",
+  "adapter_version": "test-adapter",
+  "protocol_version": "test-protocol",
   "provider": {
-    "cognition_lane": "legacy_compatibility",
-    "decision_route": "/v1/world-simulator/decision",
-    "feedback_route": "/v1/world-simulator/feedback"
+    "agent_profile": "oasis7_p0_low_freq_npc",
+    "cognition_lane": "target_outer_context_v1",
+    "decision_route": "/v1/world-simulator/decision-context",
+    "feedback_route": "/v1/world-simulator/feedback-context"
   }
 }
 JSON
@@ -256,6 +329,13 @@ assert provider["runtime_certification_errors"] == []
 assert provider["parity_status"] == "blocked"
 assert provider["release_gate"] == "blocked"
 assert provider["parity_gate"]["checks"]["runtime_certification"]["passed"] is False
+assert provider["illegal_schema_rate"] == {
+    "numerator": 0,
+    "denominator": 20,
+    "value": 0.0,
+    "zero_case": None,
+    "gate_status": "evaluable",
+}
 
 rows = {
     row["metric"]: row
@@ -265,6 +345,7 @@ assert rows["runtime_perf.tick.p95_ms_peak"]["builtin"] == "7.25"
 assert rows["runtime_perf.tick.p95_ms_peak"]["provider_loopback_http"] == "8.5"
 assert rows["runtime_perf.tick.over_budget_ratio_ppm_peak"]["builtin"] == "20"
 assert rows["runtime_perf.tick.over_budget_ratio_ppm_peak"]["provider_loopback_http"] == "30"
+assert rows["illegal_schema_rate"]["builtin"].find("denominator': 20") >= 0
 PY
 
 python3 - "$tmp_root/out/samples/provider_loopback_http/sample_1/summary/sample.json" <<'PY'
@@ -493,6 +574,28 @@ assert rows["runtime_perf.tick.coverage_sample_count"]["builtin"] == "0"
 assert rows["warnings"]["builtin"] == "runtime_perf_missing"
 PY
 
+write_sample_without_illegal_schema_metric
+
+PROVIDER_PARITY_P0_AGGREGATE_ONLY=1 ./scripts/provider-parity-p0.sh \
+  --run-id illegal-schema-missing-test \
+  --scenario-id P0-001 \
+  --samples 1 \
+  --provider-only \
+  --out-dir "$tmp_root/missing-schema/out"
+
+python3 - "$tmp_root/missing-schema/out" <<'PY'
+import json
+import pathlib
+import sys
+
+out_dir = pathlib.Path(sys.argv[1])
+provider = json.loads((out_dir / "summary" / "P0-001.provider_loopback_http.json").read_text())
+assert provider["illegal_schema_status"] == "blocked"
+assert provider["illegal_schema_rate"]["gate_status"] == "blocked"
+assert provider["benchmark_status"] == "blocked"
+assert any("illegal_schema_count is missing" in error for error in provider["illegal_schema_errors"])
+PY
+
 write_recovery_sample() {
   local root=$1
   local mode=$2
@@ -615,6 +718,7 @@ sample = {
     "goal_completed": goal_completed,
     "decision_steps": 10,
     "invalid_action_count": 0,
+    "illegal_schema_count": 0,
     "timeout_count": denominator,
     "recoverable_error_count": denominator,
     "fatal_error_count": 0,
@@ -625,6 +729,13 @@ sample = {
     "trace_validity": "valid",
     "recovery_events": events,
     "recoverable_error_resolution_rate": metric,
+    "illegal_schema_rate": {
+        "numerator": 0,
+        "denominator": 10,
+        "value": 0.0,
+        "zero_case": None,
+        "gate_status": "evaluable",
+    },
     "error_counts": {"timeout": denominator} if denominator else {},
     "provider_version": "test-provider",
     "adapter_version": "test-adapter",

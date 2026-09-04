@@ -21,6 +21,10 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                 options.generated_world_dir =
                     parse_required_value(&mut iter, "--generated-world-dir")?;
             }
+            "--provider-lineage-store" => {
+                options.provider_lineage_store =
+                    parse_required_value(&mut iter, "--provider-lineage-store")?;
+            }
             "--live-bind" => {
                 options.live_bind = parse_required_value(&mut iter, "--live-bind")?;
             }
@@ -556,6 +560,8 @@ Options:\n\
   --auto-play                  start oasis7_viewer_live gameplay/world progression on connect (default)\n\
   --no-auto-play               keep oasis7_viewer_live gameplay/world paused until explicit Play actions\n\
   --allow-debug-scenario       allow seeded debug scenarios such as llm_bootstrap\n\
+  --provider-lineage-store <path>\n\
+                               explicit durable provider lineage checkpoint for formal/synthetic restart recovery\n\
   --agent-decision-source <src>\n\
                                agent decision source: builtin_llm|provider_backed\n\
   --agent-provider-backend <id>\n\

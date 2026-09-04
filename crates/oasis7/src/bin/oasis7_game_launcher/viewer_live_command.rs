@@ -22,6 +22,11 @@ pub(super) fn build_oasis7_viewer_live_command(
             .arg("--generated-world-dir")
             .arg(options.generated_world_dir.as_str());
     }
+    if !options.provider_lineage_store.trim().is_empty() {
+        command
+            .arg("--provider-lineage-store")
+            .arg(options.provider_lineage_store.as_str());
+    }
     if options.chain_enabled || options.deployment_mode == "hosted_public_join" {
         command
             .arg("--chain-status-bind")

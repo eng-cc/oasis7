@@ -40,7 +40,7 @@
   - PRD-WORLD_SIMULATOR-038A: As an `agent_engineer`, I want parity harnesses and provider requests to carry a stable gameplay profile / skill id, so that benchmark evidence reflects a fixed玩法口径 instead of accidental prompt drift.
 - Critical User Flows:
   1. Flow-PARITY-001（单场景对标）:
-     `同一 observation fixture / 场景脚本 -> 内置 agent 运行 -> Local Provider provider（固定 agent_profile）运行 -> 对比完成率、等待差值、无效动作率、trace 完整度`。
+     `同一 observation fixture / 场景脚本 -> 内置 agent 运行 -> Local Provider provider（固定 agent_profile）运行 -> 对比完成率、等待差值、无效动作率、非法 schema 率、trace 完整度`。
   2. Flow-PARITY-002（玩家试玩盲测）:
      `制作人或 QA 使用同一场景分别试玩 builtin / agent_direct_connect -> 记录主观评分与关键阻断差异 -> 汇总 parity 结论`。
   3. Flow-PARITY-003（阻断判定）:
@@ -51,7 +51,7 @@
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | Parity 场景集 | `scenario_id/tier/goal` | QA 选择场景集执行对标 | `pending -> running -> passed/failed` | 先单 agent，再多轮记忆，再多 agent | QA / producer 可审阅 |
-| 行为质量对标 | `completion_rate/invalid_action_rate/retry_count` | 自动对比 builtin vs Local Provider | `bench_done -> compared` | 使用同批 observation/seed | 只读指标 |
+| 行为质量对标 | `completion_rate/invalid_action_rate/illegal_schema_rate/timeout_rate/retry_count` | 自动对比 builtin vs Local Provider | `bench_done -> compared` | 使用同批 observation/seed | 只读指标 |
 | 时延体感对标 | `relative_wait_gap_ms/latency_class` | 记录玩家可感知等待 | `sampled -> aggregated` | 先看与 builtin 的相对差值，再判定 `A/B/C` rollout class | 只读指标 |
 | 记忆连续性对标 | `memory_hit_quality/context_drift_count` | 检查多轮行为是否连续 | `session_done -> reviewed` | 按对话/任务回合统计 | 只读指标 |
 | 观测与恢复对标 | `trace_completeness/error_recoverability` | QA 校验能否解释问题并恢复 | `issue_seen -> diagnosed -> recovered/blocked` | 缺任一观测面视为失败 | QA 裁定 |
@@ -102,6 +102,7 @@
   - 行为等价硬门禁:
     - `completion_rate_gap <= 5pp`
     - `invalid_action_rate <= 3%` 且不超过 builtin 2 倍
+    - `illegal_schema_rate <= 3%` 且不超过 builtin 2 倍
     - `timeout_rate <= 2%`
     - `relative_wait_gap_median <= 5000ms`
     - `relative_wait_gap_p95 <= 8000ms`
@@ -124,6 +125,16 @@
       绝不输出 zero-case `1.0`，也不能以 zero-case 通过恢复门禁。缺失/非法事件 schema 是
       `blocked`，不是从 denominator 中静默排除。
 
+    - `illegal_schema_rate` 是独立于 `invalid_action_rate` 的 machine-readable metric object：只统计
+      `error_counts.invalid_action_schema` 对应的非法 schema 失败，sample 级 `numerator` 为
+      `illegal_schema_count`，`denominator` 固定为该 sample 的 `decision_steps`。每个 sample 必须
+      输出 `illegal_schema_count` 与包含 `numerator/denominator/value/zero_case/gate_status` 的
+      `illegal_schema_rate`；聚合 summary 与 `combined.csv` 也必须保留同名 `illegal_schema_rate`。
+      `illegal_schema_count` 超过 `decision_steps`、与 `invalid_action_schema` 计数不一致，或任一
+      必需字段/metric object 缺失时，sample 与批次均为 `blocked`，不得静默按缺失为零或缩小
+      denominator。`decision_steps == 0` 时沿用 `zero_case: "not_applicable"` 与
+      `gate_status: "not_evaluable"`，不能作为通过证据。
+
     benchmark 实现者必须在每个样本的 summary 中输出以下 machine-readable shape（字段名和
     enum 固定；`trace_validity` 为 `valid | invalid_fixture | blocked`；`event_seq` 由
     host/trace collector 分配并在 sample 内严格递增）。旧的 scalar
@@ -134,28 +145,44 @@
       "metric_schema_version": "recoverable_error_resolution_rate.v1",
       "sample_id": "sample-001",
       "trace_validity": "valid",
+      "decision_steps": 1,
+      "illegal_schema_count": 0,
+      "illegal_schema_rate": {
+        "numerator": 0,
+        "denominator": 1,
+        "value": 0.0,
+        "zero_case": null,
+        "gate_status": "evaluable"
+      },
+      "recoverable_error_count": 1,
       "recovery_events": [
         {
           "event_kind": "recoverable_error",
           "event_seq": 4,
           "error_id": "error-001",
           "error_code": "timeout",
+          "sample_id": "sample-001",
           "agent_id": "agent-0",
           "agent_session_id": "session-001",
           "recovery_chain_id": "chain-001",
           "agent_turn_id": "turn-002",
-          "decision_request_id": "request-002"
+          "decision_request_id": "request-002",
+          "request_digest": "blake3:0000000000000000000000000000000000000000000000000000000000000000"
         },
         {
           "event_kind": "recovery_resolved",
           "event_seq": 6,
           "error_id": "error-001",
+          "sample_id": "sample-001",
           "agent_id": "agent-0",
           "agent_session_id": "session-001",
           "recovery_chain_id": "chain-001",
           "agent_turn_id": "turn-003",
+          "decision_request_id": "request-003",
+          "request_digest": "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "retry_seq": 2,
           "origin_turn_id": "turn-002",
-          "origin_request_digest": "blake3:origin-request",
+          "origin_request_digest": "blake3:0000000000000000000000000000000000000000000000000000000000000000",
           "authority": "runtime_or_fixture_host",
           "runtime_outcome": "action_committed",
           "authority_ref": "receipt-or-recovery-record-001"
@@ -173,6 +200,9 @@
 
     `runtime_outcome` 允许 `action_committed` 或 `next_turn_admitted`；后者仍必须是 host/Runtime
     权威的后续合法 cognition turn，不得由 Wait、目标字符串或 `goal_completed=true` 单独替代。
+    示例中的 `blake3:` 值是格式有效的 64-hex 占位 digest；真实样本必须写入对应请求的规范 digest，
+    且 resolved event 的 `request_digest` 必须与 origin request 不同、`origin_request_digest` 必须与
+    originating error 的 `request_digest` 相同。
     聚合结果必须对所有有效样本累加 numerator/denominator 后再计算 ratio，不得按 sample 的
     `goal_completed` 反推恢复率；聚合 summary 也必须保留同名 object 及 `gate_status`。
 
@@ -185,6 +215,7 @@
     | `P0-005-goal-flag-only` | 1 个 timeout，无后续合法恢复，但 summary 错误地写 `goal_completed=true` | `0 / 1` | `0.0 / evaluable` | **必须 failed**；goal flag 不能代替 recovery event |
     | `no-recoverable-error` | 有效样本中没有 recoverable error | `0 / 0` | `null / not_evaluable` | 不得以 zero-case 通过 |
     | `malformed-or-out-of-order` | 缺 `authority_ref`，或 recovery 的 `event_seq <= error.event_seq`，或 chain/Agent 不匹配 | 不产出可通过的 ratio | `blocked` | **必须 blocked**，不得缩小 denominator |
+    | `illegal-schema-metric-missing` | sample 缺少 `illegal_schema_count` 或 `illegal_schema_rate`，或两者与 `decision_steps` 不一致 | 不产出可通过的 ratio | `blocked` | **必须 blocked**，不得按缺失为零 |
 
   - `P0-005`（拒绝路径恢复）的验收是比全局 90% 更严格的 scenario gate：每个有效样本必须
     注入且只注入一个 recoverable error，故 `denominator == valid_sample_count`；每个 error
@@ -208,6 +239,9 @@
   - 若用户主观评分与自动指标明显冲突，必须要求 `qa_engineer` 输出失败签名解释，不得只采信单一维度。
   - recoverable error event 缺少 `error_id`、authority reference、严格顺序或 recovery-chain
     identity 时，整条样本/批次进入 `blocked`；实现不得通过缩小 denominator 将其变成通过。
+  - 非法 schema metric 缺少 `illegal_schema_count`/`illegal_schema_rate`，或声明值与
+    `decision_steps`、`error_counts.invalid_action_schema` 不一致时，整条样本/批次进入 `blocked`；
+    实现不得把缺失 metric 当作零。
 - Non-Functional Requirements:
   - NFR-1: parity 评估脚本必须支持固定 fixture / seed / timeout，以保证对比可复现。
   - NFR-2: 主观评分卡必须与自动指标一并归档，不允许只有截图结论没有数值。

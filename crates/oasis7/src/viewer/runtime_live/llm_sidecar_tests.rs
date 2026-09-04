@@ -385,6 +385,70 @@ fn provider_lineage_persists_and_restores_pending_lifecycle_markers() {
 }
 
 #[test]
+fn provider_lineage_restore_requeues_retryable_held_outcome_as_restart_retry() {
+    let path = std::env::temp_dir().join(format!(
+        "oasis7-viewer-provider-lineage-held-retry-{}-{}.json",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos()
+    ));
+    let mut first = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    first.configure_provider_lineage_store(path.clone());
+    first.provider_agent_ids.insert("agent-0".to_string());
+    first.provider_contexts.insert(
+        "agent-0".to_string(),
+        test_provider_context("agent-0", "turn-retry", "request-retry", 1),
+    );
+    first.provider_held_decisions.insert(
+        "agent-0".to_string(),
+        async_support::RuntimeLlmDecision {
+            agent_id: "agent-0".to_string(),
+            decision: crate::simulator::AgentDecision::Wait,
+            decision_trace: Some(crate::simulator::AgentDecisionTrace {
+                agent_id: "agent-0".to_string(),
+                time: 12,
+                decision: crate::simulator::AgentDecision::Wait,
+                llm_input: None,
+                llm_output: Some(r#"{"provider_error":{"retryable":true}}"#.to_string()),
+                llm_error: None,
+                parse_error: None,
+                llm_diagnostics: None,
+                llm_effect_intents: Vec::new(),
+                llm_effect_receipts: Vec::new(),
+                llm_step_trace: Vec::new(),
+                llm_prompt_section_trace: Vec::new(),
+                llm_chat_messages: Vec::new(),
+            }),
+            cognition: None,
+            memory_write_intents: Vec::new(),
+            continuation_admitted: false,
+        },
+    );
+    first
+        .persist_provider_lineage()
+        .expect("persist held retryable provider lineage");
+
+    let mut restored = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    restored.configure_provider_lineage_store(path.clone());
+    restored
+        .restore_provider_lineage(&RuntimeWorld::default())
+        .expect("restore held retryable provider lineage");
+
+    assert!(!restored.provider_held_decisions.contains_key("agent-0"));
+    assert!(restored.provider_completed_decisions.is_empty());
+    let retry = restored
+        .provider_retry_contexts
+        .get("agent-0")
+        .expect("retryable held outcome must be requeued after restart");
+    assert_eq!(retry.request_context.agent_turn_id, "turn-retry");
+    assert_eq!(retry.request_context.decision_request_id, "request-retry");
+    assert_eq!(retry.request_context.transport_attempt, 1);
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
 fn provider_lineage_restore_requeues_orphaned_active_context_without_runtime_wake() {
     let path = std::env::temp_dir().join(format!(
         "oasis7-viewer-provider-lineage-orphan-{}-{}.json",

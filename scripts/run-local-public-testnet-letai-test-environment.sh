@@ -84,6 +84,7 @@ Options:
   --viewer-ws-bind <host:port>   Viewer live websocket bind (default: 127.0.0.1:5011)
   --viewer-generated-world-dir <dir>
                                   Generated-world root for viewer live sidecar map bootstrap
+                                  Provider lineage checkpoint is stored at <output-dir>/viewer-provider-lineage.json
   --static-bind <host>           Static viewer bind host (default: 127.0.0.1)
   --static-port <port>           Static viewer port (default: 4173)
   --proxy <url>                  HTTP/HTTPS proxy exported for provider calls
@@ -795,6 +796,7 @@ start_viewer_live() {
   fi
   mkdir -p "$OUTPUT_DIR"
   local log_path="$OUTPUT_DIR/viewer-live.log"
+  local provider_lineage_store="$OUTPUT_DIR/viewer-provider-lineage.json"
   local generated_world_args=()
   if [[ -n "$VIEWER_GENERATED_WORLD_DIR" ]]; then
     VIEWER_GENERATED_WORLD_DIR="$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).expanduser().resolve())' "$VIEWER_GENERATED_WORLD_DIR")"
@@ -804,6 +806,7 @@ start_viewer_live() {
     generated_world_args=(--generated-world-dir "$VIEWER_GENERATED_WORLD_DIR")
     log "viewer live generated world dir: $VIEWER_GENERATED_WORLD_DIR"
   fi
+  log "viewer live provider lineage store: $provider_lineage_store"
   log "starting viewer live api=$VIEWER_API_BIND ws=$VIEWER_WS_BIND; log=$log_path"
   submit_service "oasis7.local-public-testnet.viewer-live" "$log_path" \
     env \
@@ -823,6 +826,7 @@ start_viewer_live() {
       --chain-status-bind "$chain_status_bind" \
       --chain-submit-bind "$chain_submit_bind_value" \
       --chain-link-policy enforcing \
+      --provider-lineage-store "$provider_lineage_store" \
       --no-auto-play \
       --llm \
       "${generated_world_args[@]}" \

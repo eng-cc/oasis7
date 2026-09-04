@@ -8,21 +8,30 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
+use unicode_normalization::UnicodeNormalization;
 
+use super::cognition_validation::{validate_precondition_shape, validate_preconditions};
 use super::util::hash_json;
 use super::world::World;
 
 pub const AGENT_DECISION_ENVELOPE_V1_SCHEMA: &str = "agent-decision-envelope.v1";
-const MAX_IDENTIFIER_BYTES: usize = 128;
-const MAX_PATH_BYTES: usize = 128;
-const MAX_EXPECTED_VALUE_BYTES: usize = 512;
-const MAX_PRECONDITIONS: usize = 32;
-const MAX_PRECONDITION_BYTES: usize = 4096;
+pub(crate) const MAX_IDENTIFIER_BYTES: usize = 128;
+pub(crate) const MAX_PATH_BYTES: usize = 128;
+pub(crate) const MAX_EXPECTED_VALUE_BYTES: usize = 512;
+pub(crate) const MAX_PRECONDITIONS: usize = 32;
+pub(crate) const MAX_PRECONDITION_BYTES: usize = 4096;
 const DIGEST_HEX_BYTES: usize = 64;
 
 const WORLD_STATE_HASH_DOMAIN_V1: &str = "oasis7.runtime.world-state.v1";
 const RUNTIME_MANIFEST_HASH_DOMAIN_V1: &str = "oasis7.runtime.manifest.v1";
 const AUTHORITY_CONTEXT_HASH_DOMAIN_V1: &str = "oasis7.runtime.authority-context.v1";
+
+pub(crate) fn is_canonical_identifier(value: &str, max_bytes: usize) -> bool {
+    !value.trim().is_empty()
+        && value.len() <= max_bytes
+        && !value.chars().any(char::is_control)
+        && value.nfc().collect::<String>() == value
+}
 
 /// Typed disposition reason for a cognition commit that cannot be applied.
 ///
@@ -355,7 +364,7 @@ pub struct CognitionValidationError {
 }
 
 impl CognitionValidationError {
-    fn new(code: &'static str) -> Self {
+    pub(crate) fn new(code: &'static str) -> Self {
         Self { code }
     }
 
@@ -694,9 +703,9 @@ fn validate_request_binding(
     }
     // Runtime treats request_digest as an opaque, Agent-owned verified binding.
     // It does not re-hash prompt, memory, goal, or response fields here.
-    if envelope.agent_session_id.trim().is_empty()
-        || envelope.agent_turn_id.trim().is_empty()
-        || envelope.decision_request_id.trim().is_empty()
+    if !is_canonical_identifier(&envelope.agent_session_id, MAX_IDENTIFIER_BYTES)
+        || !is_canonical_identifier(&envelope.agent_turn_id, MAX_IDENTIFIER_BYTES)
+        || !is_canonical_identifier(&envelope.decision_request_id, MAX_IDENTIFIER_BYTES)
     {
         return Err(CognitionValidationError::new("invalid_identity"));
     }
@@ -1040,23 +1049,29 @@ fn compare_precondition(
     condition: &PreconditionV1,
     actual: JsonValue,
 ) -> Result<(), CognitionValidationError> {
-    let expected: JsonValue = serde_cbor::from_slice(condition.expected_value_bytes.as_slice())
-        .map_err(|_| CognitionValidationError::new("precondition_failed"))?;
-    let is_numeric = condition.path_or_rule == "world.logical_tick"
-        || condition.path_or_rule == "world.reorg_epoch"
-        || condition.path_or_rule.starts_with("agent.resource.");
+    let is_unsigned = matches!(
+        condition.path_or_rule.as_str(),
+        "world.logical_tick" | "world.reorg_epoch"
+    );
+    let is_numeric = is_unsigned || is_supported_resource_path(condition.path_or_rule.as_str());
     if is_numeric {
-        let left = actual
-            .as_i64()
-            .ok_or_else(|| CognitionValidationError::new("precondition_failed"))?;
-        let right = expected
-            .as_i64()
-            .or_else(|| {
-                expected
-                    .as_u64()
-                    .and_then(|value| i64::try_from(value).ok())
-            })
-            .ok_or_else(|| CognitionValidationError::new("precondition_failed"))?;
+        let left = if is_unsigned {
+            actual.as_u64().map(i128::from)
+        } else {
+            actual.as_i64().map(i128::from)
+        };
+        let right = if is_unsigned {
+            serde_cbor::from_slice::<u64>(condition.expected_value_bytes.as_slice())
+                .ok()
+                .map(i128::from)
+        } else {
+            serde_cbor::from_slice::<i64>(condition.expected_value_bytes.as_slice())
+                .ok()
+                .map(i128::from)
+        };
+        let (Some(left), Some(right)) = (left, right) else {
+            return Err(CognitionValidationError::new("precondition_failed"));
+        };
         let matches = match condition.operator.as_str() {
             "eq" => left == right,
             "neq" => left != right,
@@ -1070,6 +1085,8 @@ fn compare_precondition(
             return Ok(());
         }
     } else {
+        let expected: JsonValue = serde_cbor::from_slice(condition.expected_value_bytes.as_slice())
+            .map_err(|_| CognitionValidationError::new("precondition_failed"))?;
         let matches = match condition.operator.as_str() {
             "eq" => actual == expected,
             "neq" => actual != expected,
@@ -1104,97 +1121,12 @@ fn valid_blake3_digest(value: &str) -> bool {
 }
 
 fn validate_identifier(value: &str, _field: &str) -> Result<(), CognitionValidationError> {
-    if value.trim().is_empty() || value.len() > MAX_IDENTIFIER_BYTES {
+    if !is_canonical_identifier(value, MAX_IDENTIFIER_BYTES) {
         return Err(CognitionValidationError::new("invalid_identity"));
     }
     Ok(())
 }
 
-fn validate_preconditions(conditions: &[PreconditionV1]) -> Result<(), CognitionValidationError> {
-    if conditions.len() > MAX_PRECONDITIONS {
-        return Err(CognitionValidationError::new("precondition_failed"));
-    }
-    let mut total_bytes = 0usize;
-    let mut seen = BTreeSet::new();
-    for condition in conditions {
-        validate_precondition_shape(condition)?;
-        validate_precondition_value(condition)?;
-        let canonical = serde_json::to_vec(condition)
-            .map_err(|_| CognitionValidationError::new("precondition_failed"))?;
-        total_bytes = total_bytes.saturating_add(canonical.len());
-        if total_bytes > MAX_PRECONDITION_BYTES || !seen.insert(canonical) {
-            return Err(CognitionValidationError::new("precondition_failed"));
-        }
-    }
-    Ok(())
-}
-
-fn validate_precondition_shape(condition: &PreconditionV1) -> Result<(), CognitionValidationError> {
-    if condition.schema_version != 1
-        || condition.missing_behavior != "fail"
-        || condition.expected_value_bytes.is_empty()
-        || condition.expected_value_bytes.len() > MAX_EXPECTED_VALUE_BYTES
-        || condition.path_or_rule.is_empty()
-        || condition.path_or_rule.len() > MAX_PATH_BYTES
-        || condition.subject.id.trim().is_empty()
-        || condition.subject.id.len() > MAX_IDENTIFIER_BYTES
-        || !matches!(
-            condition.subject.kind.as_str(),
-            "world" | "agent" | "intent"
-        )
-    {
-        return Err(CognitionValidationError::new("precondition_failed"));
-    }
-
-    let numeric = matches!(
-        condition.path_or_rule.as_str(),
-        "world.logical_tick" | "world.reorg_epoch"
-    ) || condition.path_or_rule.starts_with("agent.resource.")
-        && condition.path_or_rule.len() > "agent.resource.".len();
-    let equality = matches!(
-        condition.path_or_rule.as_str(),
-        "world.state_root"
-            | "world.runtime_manifest_hash"
-            | "agent.status"
-            | "agent.position"
-            | "agent.inventory_digest"
-            | "agent.capability_snapshot_hash"
-            | "intent.status"
-    );
-    if !numeric && !equality {
-        return Err(CognitionValidationError::new("precondition_failed"));
-    }
-    let operator_valid = matches!(
-        condition.operator.as_str(),
-        "eq" | "neq" | "lt" | "lte" | "gt" | "gte"
-    );
-    let equality_operator = matches!(condition.operator.as_str(), "eq" | "neq");
-    if !operator_valid || (equality && !equality_operator) {
-        return Err(CognitionValidationError::new("precondition_failed"));
-    }
-    Ok(())
-}
-
-fn validate_precondition_value(condition: &PreconditionV1) -> Result<(), CognitionValidationError> {
-    // Deterministic CBOR is the v1 value encoding.  The direct shape helper
-    // deliberately does not evaluate values so adapters can use [1] as a
-    // small shape fixture; World admission performs the type check.
-    let bytes = condition.expected_value_bytes.as_slice();
-    let valid = if condition.path_or_rule == "world.logical_tick"
-        || condition.path_or_rule == "world.reorg_epoch"
-    {
-        serde_cbor::from_slice::<u64>(bytes).is_ok()
-    } else if condition.path_or_rule.starts_with("agent.resource.") {
-        serde_cbor::from_slice::<i64>(bytes).is_ok()
-    } else {
-        // Equality registry values are validated as canonical CBOR, with
-        // their detailed state type enforced when a concrete world binding is
-        // available.  This still rejects malformed CBOR and duplicate data.
-        serde_cbor::from_slice::<serde_cbor::Value>(bytes).is_ok()
-    };
-    if valid {
-        Ok(())
-    } else {
-        Err(CognitionValidationError::new("precondition_failed"))
-    }
+pub(crate) fn is_supported_resource_path(path: &str) -> bool {
+    matches!(path, "agent.resource.electricity" | "agent.resource.data")
 }

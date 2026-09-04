@@ -224,6 +224,37 @@ impl AsyncAgentRunner {
         Ok(handle)
     }
 
+    /// Reconcile a terminal Runtime projection after Runtime has already
+    /// validated the authoritative context for the exact wake. Terminal
+    /// cleanup does not dispatch a new provider turn, so it must not require
+    /// a fresh observation whose precondition may have changed after the
+    /// preceding committed action.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn apply_runtime_terminal_continuation_projection(
+        &mut self,
+        agent_id: &str,
+        runtime: RuntimeAgentContinuation,
+        authority_context: &ContinuationAuthorityContextV1,
+    ) -> Result<ContinuationHandle, AsyncAgentRunnerError> {
+        if !matches!(
+            runtime.status,
+            crate::runtime::ContinuationStatusV1::Completed
+                | crate::runtime::ContinuationStatusV1::Cancelled
+                | crate::runtime::ContinuationStatusV1::Invalidated
+                | crate::runtime::ContinuationStatusV1::Expired
+                | crate::runtime::ContinuationStatusV1::Rejected
+        ) {
+            return Err(AsyncAgentRunnerError::Cognition(
+                "Runtime terminal continuation projection has a non-terminal status".to_string(),
+            ));
+        }
+        self.apply_runtime_continuation_projection_using_authority(
+            agent_id,
+            runtime,
+            authority_context,
+        )
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     pub fn apply_runtime_continuation_projection_with_context(
         &mut self,

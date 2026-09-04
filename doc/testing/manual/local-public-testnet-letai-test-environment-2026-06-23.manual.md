@@ -69,7 +69,7 @@ rtk ./scripts/run-local-public-testnet-letai-test-environment.sh \
 - 启动 `oasis7_newapi_bridge_service` 到 `127.0.0.1:5852`。
 - 启动 LetAI provider bridge 到 `127.0.0.1:5841`，并设置同一份 `OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH`。
 - 启动 `oasis7_viewer_live` 与 static viewer；`--chain-status-bind` 读本机 observer，`--chain-submit-bind` 写 submit-capable endpoint。
-- 打印后续 bind/deposit/signed transfer/reconcile/provider smoke 的 operator command 模板。
+- 打印后续 bind/deposit/signed transfer/reconcile/provider smoke 的 operator command 模板；其中自动打印的 provider smoke 仍是 legacy compatibility audit，按本手册第 10 节的 target command 才能做 target readiness 验证。
 
 脚本不会自动提交 signed OC transfer。真实充值交易仍必须由 operator 显式选择 persona、nonce、amount 和 memo 后执行。
 
@@ -204,6 +204,7 @@ rtk ./scripts/cargo-dev.sh build \
 
 ```bash
 export OASIS7_NEWAPI_BRIDGE_STATE_PATH=/tmp/oasis7-newapi-bridge-state.json
+export OASIS7_PROVIDER_FEEDBACK_STATE_PATH=/tmp/oasis7-provider-feedback-state.json
 export OASIS7_NEWAPI_BRIDGE_CHAIN_BASE_URL=http://127.0.0.1:19083
 export OASIS7_NEWAPI_BRIDGE_LETAI_BASE_URL=https://api.letai.run
 export OASIS7_NEWAPI_BRIDGE_PRICING_VERSION=pv-1
@@ -211,6 +212,17 @@ export OASIS7_NEWAPI_BRIDGE_PRICING_RULES="$(
   sed -n 's/^OASIS7_NEWAPI_BRIDGE_PRICING_RULES="\(.*\)"$/\1/p' \
     scripts/newapi-bridge-service/pricing-rules.example.env
 )"
+```
+
+`OASIS7_PROVIDER_FEEDBACK_STATE_PATH` 是可选的 provider-local persistence 配置；配置后可在
+provider bridge 进程重启后保留有界的 request/feedback lineage。它不等价于 Runtime
+journal/recovery certification，也不构成 release 或 default enablement 证明。
+
+target cognition smoke/live gate 还必须使用 Runtime-issued 的配对 wrapper artifact。先在受控路径
+设置同一个变量；不要自造 payload，也不要把它与 `--legacy-compatibility-only` 混用：
+
+```bash
+export OASIS7_PROVIDER_LIVE_TARGET_CONTEXT_PAYLOAD_FILE="<local-secure-dir>/runtime-issued-context-pairs.json"
 ```
 
 `OASIS7_NEWAPI_BRIDGE_CHAIN_BASE_URL` 是 bridge reconcile 读取 confirmed tx 的本机 observer/explorer 入口，不是 signed transfer 的广播入口。
@@ -418,6 +430,7 @@ rtk env \
   https_proxy=http://127.0.0.1:7897 \
   all_proxy=socks5://127.0.0.1:7897 \
   OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH=/tmp/oasis7-newapi-bridge-state.json \
+  OASIS7_PROVIDER_FEEDBACK_STATE_PATH=/tmp/oasis7-provider-feedback-state.json \
   OASIS7_REMOTE_LLM_MAX_OUTPUT_TOKENS=64 \
   ./scripts/run-local-letai-provider-bridge.sh \
     --config /tmp/oasis7-letai-merged-local-bridge.env \
@@ -435,12 +448,12 @@ rtk curl -sS http://127.0.0.1:5841/v1/provider/info | jq '{
 }'
 ```
 
-真实 decision smoke：
+provider decision smoke 分为两个互斥 lane：
 
-本启动探针显式使用 bare legacy compatibility-only 路径；它只证明 bridge 的旧 DTO
-兼容性，不是 target cognition proof。需要 target 证明时，使用 Runtime-issued
-`decision_context`/`feedback_context` pair artifact，调用 provider contract smoke 的
-`--target-context-payload-file`。
+下面的 legacy compatibility-only 命令是可选的旧 DTO 可达性审计，只能产生 legacy evidence，
+不计入环境 readiness、target cognition 或完整 LLM 决策通过。需要 target 证明时，必须使用
+Runtime-issued `decision_context`/`feedback_context` pair artifact，并调用 provider contract
+smoke 的 `--target-context-payload-file`。
 
 ```bash
 rtk ./scripts/provider-remote-https/provider-bridge-contract-smoke.sh \
@@ -452,12 +465,23 @@ rtk ./scripts/provider-remote-https/provider-bridge-contract-smoke.sh \
   --min-successes 1
 ```
 
+```bash
+rtk ./scripts/provider-remote-https/provider-bridge-contract-smoke.sh \
+  --base-url http://127.0.0.1:5841 \
+  --auth-token "newapi_user_ref:$TEST_NEWAPI_USER_REF" \
+  --timeout-ms 90000 \
+  --target-context-payload-file "${OASIS7_PROVIDER_LIVE_TARGET_CONTEXT_PAYLOAD_FILE:?set Runtime-issued target context pair artifact}" \
+  --decision-count 1 \
+  --min-successes 1
+```
+
 若本轮是在测试充值/额度功能，`insufficient_user_quota` 不自动等于环境失败，但必须先区分来源：
 - `5852` reconcile 前余额不足：这是充值前状态。
 - `5852` reconcile 已 `credited/reconciled` 后仍余额不足：这是充值传播、token/project 绑定或 provider bearer selector 问题。
 - 只看到 `5841` provider auto-topup trace，不能算 OC -> NewAPI 充值链路通过。
 
-如果测试目标是非充值的完整 LLM 决策流程，则仍需要 `decision_successes >= 1`。
+如果测试目标是非充值的 target cognition / 完整 LLM 决策流程，则必须执行上面的 target lane，
+并满足 `decision_successes >= 1`；legacy compatibility-only 成功不计入该通过条件。
 
 ## 11. 启动 viewer live 并绑定同一 testnet 节点
 
@@ -563,7 +587,7 @@ rtk ./scripts/provider-remote-https/provider-bridge-contract-smoke.sh \
   --base-url http://127.0.0.1:5841 \
   --auth-token "newapi_user_ref:$TEST_NEWAPI_USER_REF" \
   --timeout-ms 90000 \
-  --legacy-compatibility-only \
+  --target-context-payload-file "${OASIS7_PROVIDER_LIVE_TARGET_CONTEXT_PAYLOAD_FILE:?set Runtime-issued target context pair artifact}" \
   --decision-count 1 \
   --min-successes 1
 ```
@@ -580,9 +604,9 @@ rtk curl -sSI 'http://127.0.0.1:4173/viewer.html?ws=ws://127.0.0.1:5011&test_api
 | 测试目标 | 必须通过 | 可接受的充值分支 |
 | --- | --- | --- |
 | 本地启动 test 环境 | manifest/world/chain/network、节点 ready/synced、viewer/API 绑定同一节点、页面 200 | 不涉及 LetAI 充值 |
-| LLM-backed agent 决策 | provider info、decision smoke `decision_successes >= 1` | 不接受 `insufficient_user_quota` 作为通过 |
+| LLM-backed agent 决策 | provider info、target decision/feedback smoke `decision_successes >= 1` | legacy compatibility-only 成功不计入；不接受 `insufficient_user_quota` 作为通过 |
 | OC -> NewAPI/LetAI 充值功能 | `5852` health、bind、deposit route、signed testnet OC transfer、reconcile `credited/reconciled`、provider 用 `newapi_user_ref:<ref>` 消费成功 | `insufficient_user_quota` 是有效测试现象，但只有在 reconcile 前或明确记录为传播/绑定问题时才可接受 |
-| 环境 readiness | testnet 大世界入口 + provider decision 通过；若声称完整链路，还必须包含 `5852` 充值证据 | 需要在测试报告中明确当前是环境 readiness、充值链路，还是稳定 LLM 决策绿灯 |
+| 环境 readiness | testnet 大世界入口 + target provider decision/feedback 通过；若声称完整链路，还必须包含 `5852` 充值证据 | 需要在测试报告中明确当前是环境 readiness、充值链路，还是稳定 LLM 决策绿灯；本表不构成 release/default enablement 证明 |
 | 玩家 UI 端到端测试 | 本 runbook 环境 ready 后，再运行 Playwright/agent-browser 用例并产出 UI 操作证据 | 充值分支只能说明 provider/额度路径，不替代玩家 UI 操作通过 |
 
 ## 15. 常见问题
@@ -593,7 +617,7 @@ rtk curl -sSI 'http://127.0.0.1:4173/viewer.html?ws=ws://127.0.0.1:5011&test_api
 
 ### `insufficient_user_quota`
 
-这是充值/额度测试的核心现象之一。若目标是完整充值链路，先看 `5852` 是否完成 bind、deposit route、signed transfer 和 reconcile；reconcile 前余额不足是正常前置状态，reconcile 后仍不足才进入传播/绑定/token 诊断。若目标是普通 LLM 决策，降 `OASIS7_REMOTE_LLM_MAX_OUTPUT_TOKENS` 后仍失败才应阻断。
+这是充值/额度测试的核心现象之一。若目标是完整充值链路，先看 `5852` 是否完成 bind、deposit route、signed transfer 和 reconcile；reconcile 前余额不足是正常前置状态，reconcile 后仍不足才进入传播/绑定/token 诊断。若目标是 target cognition / 普通 LLM 决策，必须先执行配对的 decision/feedback target smoke；legacy compatibility-only 成功不能替代它。降低 `OASIS7_REMOTE_LLM_MAX_OUTPUT_TOKENS` 后 target lane 仍失败才应阻断。
 
 ### `auto_topup_skipped` / `platform_key_missing`
 
@@ -632,6 +656,8 @@ rtk curl -sSI 'http://127.0.0.1:4173/viewer.html?ws=ws://127.0.0.1:5011&test_api
 - reconcile result:
 - provider bridge URL:
 - provider auth selector:
+- target context payload path (Runtime-issued, sanitized):
+- provider feedback state path (optional, sanitized):
 - provider model / max_output_tokens:
 - provider decision smoke result:
 - recharge branch result, if any:

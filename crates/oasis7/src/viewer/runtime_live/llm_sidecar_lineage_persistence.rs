@@ -132,7 +132,36 @@ impl RuntimeLlmSidecar {
         self.provider_feedback_seq_by_session = checkpoint.provider_feedback_seq_by_session;
         self.provider_memory_store = checkpoint.provider_memory_store;
         self.provider_completed_decisions = checkpoint.provider_completed_decisions;
+        self.provider_transport_exhausted = checkpoint.provider_transport_exhausted;
         for (agent_id, decision) in checkpoint.provider_held_decisions {
+            if decision.cognition.is_none()
+                && decision
+                    .decision_trace
+                    .as_ref()
+                    .is_some_and(provider_trace_retryable)
+            {
+                // A held retryable error is a control-plane delivery detail,
+                // not a durable provider response. Its in-memory async actor
+                // cannot survive process restart, so replaying the stale error
+                // would strand the logical turn. Requeue the saved context so
+                // the next prepare pass dispatches exactly the next transport
+                // attempt with the same identity.
+                if self.provider_transport_exhausted.contains(&agent_id) {
+                    continue;
+                }
+                if let Some(context) = self.provider_contexts.get(&agent_id).cloned() {
+                    if context.request_context.transport_attempt < MAX_PROVIDER_TRANSPORT_ATTEMPTS {
+                        self.provider_retry_contexts.insert(agent_id, context);
+                    } else {
+                        self.provider_transport_exhausted.insert(agent_id);
+                    }
+                } else {
+                    // Without a correlated request context there is no safe
+                    // way to retry or replay this outcome after restart.
+                    self.provider_transport_exhausted.insert(agent_id);
+                }
+                continue;
+            }
             if !self
                 .provider_completed_decisions
                 .iter()
@@ -144,7 +173,6 @@ impl RuntimeLlmSidecar {
             self.provider_held_decisions.insert(agent_id, decision);
         }
         self.provider_stale_replans = checkpoint.provider_stale_replans;
-        self.provider_transport_exhausted = checkpoint.provider_transport_exhausted;
         self.provider_terminal_states = checkpoint.provider_terminal_states;
         self.provider_late_response_diagnostics = checkpoint.provider_late_response_diagnostics;
         self.pending_actions = checkpoint.pending_actions;

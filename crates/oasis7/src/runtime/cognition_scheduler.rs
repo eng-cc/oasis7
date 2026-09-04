@@ -10,6 +10,8 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+use super::cognition::is_canonical_identifier;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SchedulerError {
     code: &'static str,
@@ -129,7 +131,7 @@ impl SchedulerWakeV1 {
     pub const SCHEMA_VERSION: &'static str = "scheduler-wake.v1";
 
     pub fn validate(&self) -> Result<(), SchedulerError> {
-        let bounded = |value: &str| !value.trim().is_empty() && value.len() <= 128;
+        let bounded = |value: &str| is_canonical_identifier(value, 128);
         if self.schema_version != Self::SCHEMA_VERSION
             || !bounded(&self.wake_id)
             || !bounded(&self.continuation_id)
@@ -431,6 +433,19 @@ impl CognitionScheduler {
     }
 
     pub fn recover_capacity(&mut self, tick: u64) -> Vec<SchedulerWakeV1> {
+        self.recover_capacity_if(tick, |_| false)
+    }
+
+    /// Recover pending capacity with a World-owned eligibility predicate.
+    ///
+    /// Tick-ready wakes retain the scheduler-only behavior. Untimed wakes
+    /// (`next_wake_tick == u64::MAX`) additionally require the caller's
+    /// committed-evidence predicate, so a queue release cannot lease an
+    /// event/receipt/state wake whose condition is still false.
+    pub fn recover_capacity_if<F>(&mut self, tick: u64, mut eligible: F) -> Vec<SchedulerWakeV1>
+    where
+        F: FnMut(&SchedulerWakeV1) -> bool,
+    {
         self.advance_logical_tick(tick);
         let mut candidates: Vec<SchedulerWakeV1> = self.backpressure.values().cloned().collect();
         candidates.sort_by(|left, right| self.compare(left, right));
@@ -439,7 +454,9 @@ impl CognitionScheduler {
             if self.available_slots() == 0 {
                 break;
             }
-            if !self.is_ready(&wake, tick) {
+            let ready =
+                self.is_ready(&wake, tick) || (wake.next_wake_tick == u64::MAX && eligible(&wake));
+            if !ready {
                 continue;
             }
             self.backpressure.remove(&wake.wake_id);
@@ -456,9 +473,22 @@ impl CognitionScheduler {
     /// The cursor is committed by `select_ready`; restoring a process must
     /// not advance it merely because an abandoned in-flight slot is released.
     pub fn recover_capacity_preserving_cursor(&mut self, tick: u64) -> Vec<SchedulerWakeV1> {
+        self.recover_capacity_if_preserving_cursor(tick, |_| false)
+    }
+
+    /// Evidence-aware capacity recovery that leaves the durable cursor and
+    /// logical tick untouched, just like the scheduler-only recovery path.
+    pub fn recover_capacity_if_preserving_cursor<F>(
+        &mut self,
+        tick: u64,
+        eligible: F,
+    ) -> Vec<SchedulerWakeV1>
+    where
+        F: FnMut(&SchedulerWakeV1) -> bool,
+    {
         let cursor = self.cursor.clone();
         let logical_tick = self.logical_tick;
-        let recovered = self.recover_capacity(tick);
+        let recovered = self.recover_capacity_if(tick, eligible);
         self.cursor = cursor;
         self.logical_tick = logical_tick;
         recovered
@@ -544,7 +574,7 @@ impl CognitionScheduler {
                 .cursor
                 .last_served_agent_id
                 .as_deref()
-                .is_some_and(|agent_id| agent_id.trim().is_empty() || agent_id.len() > 128)
+                .is_some_and(|agent_id| !is_canonical_identifier(agent_id, 128))
         {
             return Err(SchedulerError::new("scheduler_policy_digest_mismatch"));
         }
@@ -585,7 +615,7 @@ impl CognitionScheduler {
             return Err(SchedulerError::new("scheduler_backpressure_mismatch"));
         }
         if scheduler.recovered_wakes.iter().any(|wake_id| {
-            wake_id.trim().is_empty() || scheduler.backpressure.contains_key(wake_id)
+            !is_canonical_identifier(wake_id, 128) || scheduler.backpressure.contains_key(wake_id)
         }) {
             return Err(SchedulerError::new("scheduler_recovered_wake_mismatch"));
         }

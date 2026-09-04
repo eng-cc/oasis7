@@ -43,6 +43,12 @@
   - 监听地址 `--bind-addr`
   - 自动 reconcile 间隔 `--reconcile-interval-seconds`
   - route TTL `--route-ttl-seconds`
+- target cognition/live gate 输入（仅在执行 target provider smoke/live gate 时需要）
+  - `OASIS7_PROVIDER_LIVE_TARGET_CONTEXT_PAYLOAD_FILE=<private-path>/runtime-issued-context-pairs.json`
+  - 文件必须是 Runtime-issued 的 `decision_context`/`feedback_context` 配对 wrapper artifact；缺失、不可读或自行伪造时，target lane 必须失败关闭。
+- provider-local feedback continuity（可选）
+  - `OASIS7_PROVIDER_FEEDBACK_STATE_PATH=<private-state-dir>/provider-feedback-state.json`
+  - 配置后可跨 provider bridge 进程重启保留有界的 request/feedback lineage；这是 provider-local persistence，不是 Runtime journal/recovery certification，也不构成 release 或 default enablement 证明。
 - 值班 owner
   - `runtime_engineer`
   - `qa_engineer`
@@ -370,12 +376,12 @@ happy path 期望：
 - 本次 `route_id` / `bridge_deposit_id` 对应 ledger row 进入 `manual_review` 并记录 review reason；`manual_review_count` 只作辅助摘要。
 - 后续 operator review 只能显式 `mark_resolved` 或 `close`，不能口头判成功。
 
-#### Step F: provider legacy smoke 与消耗证据
+#### Step F: provider compatibility audit、target smoke 与消耗证据
 
-本节的 provider 请求使用旧 `DecisionRequest` DTO，因此只能验证 bare
-`POST /v1/world-simulator/decision` 的 legacy compatibility-only 路径是否可达，不能证明
-Continuous Harness target cognition、Runtime receipt 或 production async 闭环。target lane
-必须改用 `/v1/world-simulator/decision-context` 的
+以下第一条请求使用旧 `DecisionRequest` DTO，只能作为显式的 legacy compatibility-only
+审计，不计入 target readiness 或完整链路通过。它不能证明 Continuous Harness target
+cognition、Runtime receipt 或 production async 闭环。target lane 必须改用
+`/v1/world-simulator/decision-context` 的
 `ContinuousAgentRequestContextV1`，并以 `/v1/world-simulator/feedback-context` 的
 `FeedbackEnvelopeV1` 完成配对验证；当前 HTTP body 不定义 `compatibility_lane` 字段，路由
 本身是 lane 选择依据。
@@ -429,8 +435,10 @@ curl -sS -X POST "${PROVIDER_BASE_URL}/v1/world-simulator/decision" \
 可重复执行的自动化 smoke:
 
 ```bash
-# This file must be a Runtime-issued pair artifact; do not fabricate it.
-TARGET_CONTEXT_PAYLOAD_FILE="/secure/path/runtime-issued-context-pairs.json"
+# Required for the target lane; this file must be a Runtime-issued pair artifact.
+# Do not fabricate it. The same variable is consumed by the live-gate wrapper.
+export OASIS7_PROVIDER_LIVE_TARGET_CONTEXT_PAYLOAD_FILE="/secure/path/runtime-issued-context-pairs.json"
+TARGET_CONTEXT_PAYLOAD_FILE="${OASIS7_PROVIDER_LIVE_TARGET_CONTEXT_PAYLOAD_FILE:?set a Runtime-issued target context pair artifact}"
 ./scripts/provider-remote-https/provider-bridge-contract-smoke.sh \
   --base-url "${PROVIDER_BASE_URL}" \
   --auth-token "${TEST_PROVIDER_AUTH_TOKEN}" \
@@ -439,9 +447,11 @@ TARGET_CONTEXT_PAYLOAD_FILE="/secure/path/runtime-issued-context-pairs.json"
   --min-successes 1
 ```
 
-正式环境/测试环境验收不得只看 mock。需要发现真实 ECS、nginx ingress、LetAI
+正式环境/测试环境验收不得只看 mock 或 legacy compatibility smoke。需要发现真实 ECS、nginx ingress、LetAI
 额度和 state 映射问题时，必须跑 live gate。live gate 会从真实 204/205 ECS
-读取 active `newapi_user_ref:<ref>` selector，不打印 raw `token_key`：
+读取 active `newapi_user_ref:<ref>` selector，不打印 raw `token_key`；target lane 必须使用上面
+的 `OASIS7_PROVIDER_LIVE_TARGET_CONTEXT_PAYLOAD_FILE`，不能用 `--legacy-compatibility-only`
+替代：
 
 ```bash
 ./scripts/provider-remote-https/provider-bridge-live-gate.sh \

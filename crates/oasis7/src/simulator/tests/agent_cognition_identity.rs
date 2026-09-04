@@ -446,9 +446,19 @@ fn outer_request_roundtrips_and_unknown_version_fails_closed() {
 
     let mut unknown_version = fixture;
     unknown_version["context_version"] = json!(99);
-    let error = ContinuousAgentRequestContextV1::validate_value(&unknown_version)
+    let error = request_from_value(unknown_version)
+        .validate()
         .expect_err("unknown context version must fail closed");
     assert_eq!(error.code(), "unsupported_context_version");
+}
+
+#[test]
+fn outer_request_rejects_unknown_authority_fields_during_decode() {
+    let mut fixture = request_fixture(0, 60_000);
+    fixture["unknown_authority_field"] = json!("must-fail-closed");
+    let error = serde_json::from_value::<ContinuousAgentRequestContextV1>(fixture)
+        .expect_err("unknown outer request authority fields must not be discarded");
+    assert!(error.to_string().contains("unknown field"), "{error}");
 }
 
 #[test]
@@ -570,6 +580,36 @@ fn outer_response_preserves_all_six_tagged_provider_decisions() {
         let encoded = serde_json::to_value(response).expect("encode outer response");
         assert_eq!(encoded["base_decision_response"]["decision"], decision);
     }
+}
+
+#[test]
+fn outer_response_and_feedback_reject_unknown_authority_fields_during_decode() {
+    let mut response = response_fixture(
+        serde_json::to_value(ProviderDecision::Wait).expect("encode wait decision"),
+    );
+    response["unknown_authority_field"] = json!(true);
+    let response_error = serde_json::from_value::<ContinuousAgentResponseContextV1>(response)
+        .expect_err("unknown outer response authority fields must not be discarded");
+    assert!(
+        response_error.to_string().contains("unknown field"),
+        "{response_error}"
+    );
+
+    let feedback = json!({
+        "feedback_id": "feedback-unknown-field",
+        "feedback_seq": 1,
+        "agent_subject": "agent-1",
+        "agent_session_id": "session-1",
+        "agent_turn_id": "turn-1",
+        "decision_request_id": "request-1",
+        "status": "pending",
+        "request_digest": "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "provenance": "runtime_authoritative",
+        "unknown_authority_field": "must-fail-closed"
+    });
+    let feedback_error = FeedbackEnvelopeV1::validate_value(&feedback)
+        .expect_err("unknown outer feedback authority fields must not be discarded");
+    assert_eq!(feedback_error.code(), "unknown_context_field");
 }
 
 #[test]

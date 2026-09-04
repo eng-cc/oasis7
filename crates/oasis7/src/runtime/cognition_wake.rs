@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use super::PreconditionSubjectV1;
+use super::cognition::{is_canonical_identifier, is_supported_resource_path};
 use super::cognition_scheduler::SchedulerWakeV1;
 const WAKE_SCHEMA: &str = "wake-condition.v1";
 const CONTINUATION_SCHEMA: &str = "agent-continuation.v1";
@@ -217,7 +218,7 @@ impl WakeConditionValidator {
             "state_predicate" if exact([false, false, false, true, true, true, true]) => {
                 let subject = condition.subject.as_ref().expect("presence checked");
                 let path = condition.path_or_rule.as_deref().expect("presence checked");
-                if subject.id.is_empty() || subject.id.len() > MAX_ID_BYTES {
+                if !is_canonical_identifier(&subject.id, MAX_ID_BYTES) {
                     return Err(WakeConditionError::new("wake_condition_invalid"));
                 }
                 let (expected_subject, numeric) = match path {
@@ -227,11 +228,7 @@ impl WakeConditionValidator {
                     | "agent.position"
                     | "agent.inventory_digest"
                     | "agent.capability_snapshot_hash" => ("agent", false),
-                    path if path.starts_with("agent.resource.")
-                        && matches!(path, "agent.resource.electricity" | "agent.resource.data") =>
-                    {
-                        ("agent", true)
-                    }
+                    path if is_supported_resource_path(path) => ("agent", true),
                     "intent.status" => ("intent", false),
                     _ => return Err(WakeConditionError::new("wake_condition_invalid")),
                 };
@@ -296,7 +293,7 @@ fn valid_predicate_value(path: &str, value: &serde_cbor::Value) -> bool {
             value,
             serde_cbor::Value::Integer(value) if *value >= 0 && *value <= u64::MAX as i128
         ),
-        "agent.resource.electricity" | "agent.resource.data" => matches!(
+        path if is_supported_resource_path(path) => matches!(
             value,
             serde_cbor::Value::Integer(value)
                 if *value >= i64::MIN as i128 && *value <= i64::MAX as i128
@@ -583,7 +580,7 @@ impl CognitionContextDigestsV1 {
     }
 
     pub fn validate(&self) -> Result<(), WakeConditionError> {
-        let bounded = |value: &str| !value.trim().is_empty() && value.len() <= MAX_ID_BYTES;
+        let bounded = |value: &str| is_canonical_identifier(value, MAX_ID_BYTES);
         if !bounded(&self.baseline_observation_digest)
             || !bounded(&self.goal_digest)
             || !bounded(&self.policy_digest)
@@ -639,7 +636,7 @@ pub struct CognitionContinuationResumeRequestV1 {
 
 impl CognitionContinuationResumeRequestV1 {
     pub fn validate(&self) -> Result<(), WakeConditionError> {
-        let bounded = |value: &str| !value.trim().is_empty() && value.len() <= MAX_ID_BYTES;
+        let bounded = |value: &str| is_canonical_identifier(value, MAX_ID_BYTES);
         if !bounded(&self.agent_session_id)
             || !bounded(&self.agent_turn_id)
             || !bounded(&self.decision_request_id)
@@ -685,7 +682,7 @@ impl CognitionContinuationProposalV1 {
     }
 
     pub fn validate(&self) -> Result<(), WakeConditionError> {
-        let bounded = |value: &str| !value.trim().is_empty() && value.len() <= MAX_ID_BYTES;
+        let bounded = |value: &str| is_canonical_identifier(value, MAX_ID_BYTES);
         if self.schema_version != 1
             || !bounded(&self.continuation_proposal_id)
             || !bounded(&self.world_id)
@@ -822,7 +819,7 @@ impl AgentContinuation {
     /// projection crossing into the simulator must carry the Runtime-issued
     /// digest and match the canonical status fields exactly.
     pub fn validate_authoritative(&self) -> Result<(), WakeConditionError> {
-        let bounded = |value: &str| !value.trim().is_empty() && value.len() <= MAX_ID_BYTES;
+        let bounded = |value: &str| is_canonical_identifier(value, MAX_ID_BYTES);
         let terminal = matches!(
             self.status,
             ContinuationStatusV1::Completed

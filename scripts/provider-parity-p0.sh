@@ -312,6 +312,41 @@ def recovery_blocked_metric(denominator):
       "gate_status": "blocked",
     }
 
+def nonnegative_int(value):
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+def assess_illegal_schema_sample(sample):
+    """Require an explicit schema-error numerator and decision-step denominator."""
+    errors = []
+    denominator = sample.get("decision_steps")
+    if not nonnegative_int(denominator):
+      errors.append("decision_steps must be a non-negative integer")
+      denominator = 0
+    numerator = sample.get("illegal_schema_count")
+    if not nonnegative_int(numerator):
+      errors.append("illegal_schema_count is missing or invalid")
+      numerator = 0
+    elif numerator > denominator:
+      errors.append("illegal_schema_count exceeds decision_steps")
+    error_counts = sample.get("error_counts")
+    if isinstance(error_counts, dict) and "invalid_action_schema" in error_counts:
+      observed_errors = error_counts.get("invalid_action_schema")
+      if not nonnegative_int(observed_errors) or observed_errors != numerator:
+        errors.append("illegal_schema_count does not match invalid_action_schema errors")
+    expected = recovery_metric(numerator, denominator)
+    declared = sample.get("illegal_schema_rate")
+    if not isinstance(declared, dict):
+      errors.append("illegal_schema_rate must be an object")
+    elif declared != expected:
+      errors.append("declared illegal schema metric does not match the sample counts")
+    if errors:
+      return {
+        "status": "blocked",
+        "metric": recovery_blocked_metric(denominator),
+        "errors": errors,
+      }
+    return {"status": "valid", "metric": expected, "errors": []}
+
 def nonempty_text(value):
     return isinstance(value, str) and bool(value.strip())
 
@@ -495,6 +530,7 @@ for provider in providers:
       and s.get("trace_validity") != "invalid_fixture"
     ]
     recovery_assessments = [assess_recovery_sample(sample) for sample in valid_samples]
+    illegal_schema_assessments = [assess_illegal_schema_sample(sample) for sample in valid_samples]
     certification_assessments = [assess_runtime_certification(sample) for sample in valid_samples]
     certification_errors = [
       error
@@ -517,6 +553,25 @@ for provider in providers:
     recovery_errors = [
       error
       for result in recovery_assessments
+      for error in result["errors"]
+    ]
+    illegal_schema_blocked = any(
+      result["status"] == "blocked" for result in illegal_schema_assessments
+    )
+    illegal_schema_denominator = sum(
+      result["metric"]["denominator"] for result in illegal_schema_assessments
+    )
+    illegal_schema_numerator = sum(
+      result["metric"]["numerator"] for result in illegal_schema_assessments
+    )
+    illegal_schema_metric = (
+      illegal_schema_blocked
+      and recovery_blocked_metric(illegal_schema_denominator)
+      or recovery_metric(illegal_schema_numerator, illegal_schema_denominator)
+    )
+    illegal_schema_errors = [
+      error
+      for result in illegal_schema_assessments
       for error in result["errors"]
     ]
     p0_recovery_complete = (
@@ -569,6 +624,7 @@ for provider in providers:
         error_codes.get("session_cross_talk", 0) > 0
         or "blocked" in sample_status_counts
         or recovery_blocked
+        or illegal_schema_blocked
         or certification_errors
       ):
         benchmark_status = "blocked"
@@ -636,6 +692,10 @@ for provider in providers:
       "recoverable_error_resolution_rate": recoverable_resolution_metric,
       "recovery_ledger_status": "blocked" if recovery_blocked else "valid",
       "recovery_ledger_errors": recovery_errors,
+      "illegal_schema_count": illegal_schema_numerator,
+      "illegal_schema_rate": illegal_schema_metric,
+      "illegal_schema_status": "blocked" if illegal_schema_blocked else "valid",
+      "illegal_schema_errors": illegal_schema_errors,
       "execution_authority": metadata_source.get("execution_authority", "unknown"),
       "runtime_certification_status": runtime_certification_status,
       "runtime_certification_reason": metadata_source.get("runtime_certification_reason"),
@@ -773,6 +833,16 @@ if builtin is not None and provider_summary is not None:
       provider_invalid_rate <= 0.03
       and provider_invalid_rate <= builtin_invalid_rate * 2
     )
+    builtin_illegal_schema = builtin["illegal_schema_rate"]
+    provider_illegal_schema = provider_summary["illegal_schema_rate"]
+    illegal_schema_pass = (
+      builtin_illegal_schema.get("gate_status") == "evaluable"
+      and provider_illegal_schema.get("gate_status") == "evaluable"
+      and builtin_illegal_schema.get("value") is not None
+      and provider_illegal_schema.get("value") is not None
+      and provider_illegal_schema["value"] <= 0.03
+      and provider_illegal_schema["value"] <= builtin_illegal_schema["value"] * 2
+    )
     checks = {
       "sample_status": make_gate_check(
         provider_summary["benchmark_status"], "passed", passed=(
@@ -786,6 +856,9 @@ if builtin is not None and provider_summary is not None:
       ),
       "completion_rate_gap": make_gate_check(completion_gap, 0.05, passed=completion_gap <= 0.05),
       "invalid_action_rate": make_gate_check(provider_invalid_rate, {"absolute": 0.03, "relative_to_builtin": 2}, passed=invalid_action_pass),
+      "illegal_schema_rate": make_gate_check(
+        provider_illegal_schema, {"absolute": 0.03, "relative_to_builtin": 2}, passed=illegal_schema_pass
+      ),
       "timeout_rate": make_gate_check(provider_summary["timeout_rate"], 0.02, passed=provider_summary["timeout_rate"] <= 0.02),
       "relative_wait_gap_median_ms": make_gate_check(relative_median, 5000, passed=relative_median is not None and relative_median <= 5000),
       "relative_wait_gap_p95_ms": make_gate_check(relative_p95, 8000, passed=relative_p95 is not None and relative_p95 <= 8000),
@@ -857,6 +930,7 @@ with combined_csv.open("w", newline="") as handle:
       "execution_authority",
       "runtime_certification_status",
       "recoverable_error_resolution_rate",
+      "illegal_schema_rate",
       "context_drift_count",
       "runtime_perf.tick.coverage_sample_count",
       "runtime_perf.tick.p95_ms_peak",

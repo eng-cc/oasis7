@@ -200,6 +200,7 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
             ),
     )
     .expect("runtime server");
+    super::provider_continuation_drains::install_cognition_scheduler(&mut server);
     let expected_world_id = server.config.world_id.clone();
     server
         .world
@@ -285,12 +286,14 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
             })
     };
     step_provider_gate.store(true, std::sync::atomic::Ordering::Release);
+    let step_drain_result =
+        super::provider_continuation_drains::drain_step_provider_response(&mut server);
     // Keep provider configuration scoped to polling; release it before assertions.
     clear_runtime_provider_env();
     drop(_guard);
     phase_result.expect("provider context phases should complete");
     step_result.expect("multi-step control should advance each requested iteration");
-
+    step_drain_result.expect("multi-step provider response should be accepted and drained");
     // A simulated Viewer restart restores the adapter checkpoint against the
     // same Runtime world.  The committed identity is terminal and therefore
     // cannot be redispatched as a duplicate provider turn.
@@ -308,7 +311,6 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
         "committed provider memory projection must survive adapter restart"
     );
     let _ = std::fs::remove_file(&lineage_path);
-
     // Production-surface lifecycle proof: the actual RuntimeLive sidecar
     // prefixes provider I/O, records the retry as a new transport attempt on
     // the same identity, and closes exactly once at the authoritative receipt.
@@ -1060,7 +1062,6 @@ fn runtime_provider_backed_wake_resumes_with_fresh_request_and_origin_lineage() 
         oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
         oasis7::env_mut::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
     }
-
     let world_id = format!("wake-runtime-{}", WorldScenario::Minimal.as_str());
     let finality_block_hash =
         crate::simulator::h_v1("oasis7.viewer.test.finality-block.v1", &world_id).to_string();
@@ -1094,7 +1095,6 @@ fn runtime_provider_backed_wake_resumes_with_fresh_request_and_origin_lineage() 
         .world
         .install_test_provider_capability_fixture("agent-0")
         .expect("install Runtime provider capability fixture");
-
     let mut wait_trace = None;
     wait_for_provider_phase("provider Wait admission", Duration::from_secs(5), || {
         server.llm_sidecar.request_decision();
@@ -1121,7 +1121,6 @@ fn runtime_provider_backed_wake_resumes_with_fresh_request_and_origin_lineage() 
         "provider Wait must leave a durable Runtime continuation: {}",
         server.world.cognition()
     );
-
     server.world.step().expect("normal Runtime tick wakes Wait");
     server
         .sync_runtime_wake_projection()
@@ -1142,9 +1141,8 @@ fn runtime_provider_backed_wake_resumes_with_fresh_request_and_origin_lineage() 
     })
     .expect("Runtime wake must resume one fresh provider turn");
     assert!(action_trace.is_some());
-
-    clear_runtime_provider_env();
-    drop(_guard);
+    super::provider_continuation_drains::drain_final_continuation(&mut server)
+        .expect("final continuation wake must terminate at Runtime budget exhaustion");
     let requests = recorded.lock().expect("recorded requests");
     let decisions = requests
         .iter()
@@ -1169,7 +1167,6 @@ fn runtime_provider_backed_wake_resumes_with_fresh_request_and_origin_lineage() 
     );
     assert_ne!(decisions[0].agent_turn_id, decisions[1].agent_turn_id);
     assert_ne!(decisions[0].agent_session_id, decisions[1].agent_session_id);
-
     let cognition = server.world.cognition();
     let events = cognition["cognition_journal"]["events"]
         .as_array()
@@ -1192,4 +1189,11 @@ fn runtime_provider_backed_wake_resumes_with_fresh_request_and_origin_lineage() 
             .is_some_and(|records| records.iter().any(|record| record["status"] == "committed")),
         "resumed provider action must commit through Runtime"
     );
+    drop(requests);
+    server.llm_sidecar.request_decision();
+    server
+        .enqueue_llm_action_from_sidecar()
+        .expect("ordinary next turn AgentBusy");
+    clear_runtime_provider_env();
+    drop(_guard);
 }

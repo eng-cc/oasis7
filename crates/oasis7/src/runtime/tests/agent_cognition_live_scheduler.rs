@@ -11,7 +11,8 @@
 use super::super::*;
 use crate::runtime::{
     AgentContinuation, CognitionContinuationProposalV1, CognitionScheduler, ContinuationStatusV1,
-    RetentionRecordV1, SchedulerPolicyV1, SchedulerWakeV1, WakeConditionV1,
+    RetentionRecordV1, RetentionReplayRequestV1, SchedulerPolicyV1, SchedulerWakeV1,
+    WakeConditionV1,
 };
 use serde_json::{Value, json};
 use std::fs;
@@ -193,6 +194,28 @@ fn world_with_scheduler() -> World {
 }
 
 fn enqueue_fixture_wake(world: &mut World, wake: SchedulerWakeV1) {
+    let conditions = json!([{
+        "schema_version": "wake-condition.v1",
+        "kind": "at_or_after_tick",
+        "logical_tick": wake.next_wake_tick
+    }]);
+    enqueue_fixture_wake_with_conditions(world, wake, conditions);
+}
+
+fn enqueue_fixture_wake_with_conditions(
+    world: &mut World,
+    wake: SchedulerWakeV1,
+    conditions: Value,
+) {
+    enqueue_fixture_wake_with_conditions_until(world, wake, conditions, 100);
+}
+
+fn enqueue_fixture_wake_with_conditions_until(
+    world: &mut World,
+    wake: SchedulerWakeV1,
+    conditions: Value,
+    valid_until_tick: u64,
+) {
     let mut wake = wake;
     wake.runtime_manifest_hash = world.cognition()["runtime_binding"]["runtime_manifest_hash"]
         .as_str()
@@ -218,14 +241,10 @@ fn enqueue_fixture_wake(world: &mut World, wake: SchedulerWakeV1) {
         "continuation_proposal_id": "proposal.fixture-wake",
         "proposal_digest": "blake3:fixture-proposal-0000000000000000000000000000000000000000000000000000000000000000",
         "action_or_envelope_digest": null,
-        "wake_conditions": [{
-            "schema_version": "wake-condition.v1",
-            "kind": "at_or_after_tick",
-            "logical_tick": wake.next_wake_tick
-        }],
+        "wake_conditions": conditions,
         "next_wake_tick": wake.next_wake_tick,
         "remaining_budget": {"unit": "steps", "value": 2},
-        "valid_until_tick": 100,
+        "valid_until_tick": valid_until_tick,
         "precondition_digest": "blake3:fixture-precondition-0000000000000000000000000000000000000000000000000000000000000000",
         "wake_seq": wake.wake_seq,
         "logical_tick": 0,
@@ -307,6 +326,119 @@ fn world_step_runs_the_production_scheduler_and_releases_exact_wake_identity() {
     let before = world.cognition_scheduler_snapshot();
     assert!(world.release_cognition_wake("wake-missing").is_err());
     assert_eq!(world.cognition_scheduler_snapshot(), before);
+}
+
+#[test]
+fn committed_state_evidence_promotes_untimed_backpressure_after_restore_and_release() {
+    let mut world = world_with_scheduler();
+    enqueue_fixture_wake(
+        &mut world,
+        wake(
+            AGENT_A,
+            "wake-evidence-owner",
+            "continuation-evidence-owner",
+            1,
+        ),
+    );
+    let untimed = wake(
+        AGENT_B,
+        "wake-evidence-pending",
+        "continuation-evidence-pending",
+        u64::MAX,
+    );
+    enqueue_fixture_wake_with_conditions(
+        &mut world,
+        untimed,
+        json!([{
+            "schema_version": "wake-condition.v1",
+            "kind": "state_predicate",
+            "subject": {"kind": "world", "id": WORLD_ID},
+            "path_or_rule": "world.logical_tick",
+            "operator": "gte",
+            "expected_value_bytes": serde_cbor::to_vec(&1_u64).expect("encode tick")
+        }]),
+    );
+    assert_eq!(
+        world.cognition_scheduler_snapshot()["backpressure_count"],
+        1
+    );
+
+    world.step().expect("lease the capacity owner");
+    let dir = temp_dir("untimed-backpressure");
+    world.save_to_dir(&dir).expect("persist backpressure state");
+    let mut restored = World::load_from_dir(&dir).expect("restore backpressure state");
+    assert_eq!(
+        restored.cognition_scheduler_snapshot()["backpressure_count"],
+        1
+    );
+
+    restored
+        .release_cognition_wake("wake-evidence-owner")
+        .expect("release exact owner and promote committed evidence wake");
+    let scheduler = restored.cognition_scheduler_snapshot();
+    assert_eq!(scheduler["backpressure_count"], 0);
+    assert_eq!(
+        scheduler["in_flight"]["wake-evidence-pending"]["wake_id"],
+        "wake-evidence-pending"
+    );
+    assert_eq!(
+        scheduler["in_flight"]["wake-evidence-pending"]["next_wake_tick"],
+        u64::MAX
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn untimed_backpressure_expires_before_starvation_without_committed_evidence() {
+    let mut world = world_with_scheduler();
+    enqueue_fixture_wake(
+        &mut world,
+        wake(AGENT_A, "wake-expiry-owner", "continuation-expiry-owner", 1),
+    );
+    let untimed = wake(
+        AGENT_B,
+        "wake-expiry-pending",
+        "continuation-expiry-pending",
+        u64::MAX,
+    );
+    enqueue_fixture_wake_with_conditions_until(
+        &mut world,
+        untimed,
+        json!([{
+            "schema_version": "wake-condition.v1",
+            "kind": "state_predicate",
+            "subject": {"kind": "world", "id": WORLD_ID},
+            "path_or_rule": "world.logical_tick",
+            "operator": "gte",
+            "expected_value_bytes": serde_cbor::to_vec(&99_u64).expect("encode tick")
+        }]),
+        2,
+    );
+
+    world.step().expect("lease the capacity owner");
+    assert_eq!(
+        world.cognition_scheduler_snapshot()["backpressure_count"],
+        1
+    );
+    world
+        .service_cognition_scheduler_tick(3)
+        .expect("expire an untimed wake before starvation");
+    assert_eq!(
+        world.cognition_scheduler_snapshot()["backpressure_count"],
+        0
+    );
+    assert!(
+        world
+            .cognition_continuations()
+            .as_array()
+            .is_some_and(|continuations| {
+                continuations.iter().any(|continuation| {
+                    continuation["continuation_id"] == "continuation-expiry-pending"
+                        && continuation["status"] == "expired"
+                })
+            })
+    );
 }
 
 #[test]
@@ -493,13 +625,75 @@ fn world_retention_gc_keeps_terminal_pins_and_replay_is_read_only_after_restore(
 
     let dir = temp_dir("retention-replay");
     world.save_to_dir(&dir).expect("save pinned terminal state");
-    let mut restored = World::load_from_dir(&dir).expect("restore pinned terminal state");
+    let restored = World::load_from_dir(&dir).expect("restore pinned terminal state");
     let replay = restored
-        .replay_cognition_terminal("key:live-1", "blake3:envelope-live-1")
+        .replay_cognition_terminal(
+            RetentionReplayRequestV1::from_json(json!({
+                "schema_version": "agent-decision-envelope.v1",
+                "world_id": WORLD_ID,
+                "agent_session_id": "session.live-1",
+                "agent_turn_id": "turn.live-1",
+                "decision_request_id": "request.live-1",
+                "envelope_idempotency_key": "key:live-1",
+                "envelope_digest": "blake3:envelope-live-1",
+                "base_tick": 1_001,
+                "issued_at_tick": 1_001,
+                "gc_floor_tick": 1_000
+            }))
+            .expect("decode v1 replay request"),
+        )
         .expect("terminal replay should read its canonical record");
     assert_eq!(replay["provider_invocation_count"], 0);
     assert_eq!(replay["effect_delta"], 0);
     assert_eq!(replay["world_receipt_linked_delta"], 0);
+    assert_eq!(restored.cognition_execution_metrics(), before);
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn world_terminal_replay_rejects_legacy_and_expired_proof_without_mutating_metrics() {
+    let mut world = world_with_scheduler();
+    world
+        .record_cognition_terminal(terminal_record())
+        .expect("record terminal cognition outcome through World ownership");
+    world.pin_cognition_reference("key:live-1", "pending_wake");
+    world
+        .gc_cognition(2_000, 1_500)
+        .expect("advance durable replay GC floor while pinned");
+    let dir = temp_dir("retention-proof-rejection");
+    world.save_to_dir(&dir).expect("save replay proof state");
+    let restored = World::load_from_dir(&dir).expect("restore replay proof state");
+    let before = restored.cognition_execution_metrics();
+
+    let legacy = RetentionReplayRequestV1::from_json(json!({
+        "world_id": WORLD_ID,
+        "envelope_idempotency_key": "key:live-1",
+        "envelope_digest": "blake3:envelope-live-1"
+    }))
+    .expect("decode legacy replay request");
+    let legacy_error = restored
+        .replay_cognition_terminal(legacy)
+        .expect_err("legacy replay must require complete v1 proof");
+    assert!(format!("{legacy_error:?}").contains("legacy_no_cognition_proof"));
+
+    let expired = RetentionReplayRequestV1::from_json(json!({
+        "schema_version": "agent-decision-envelope.v1",
+        "world_id": WORLD_ID,
+        "agent_session_id": "session.live-1",
+        "agent_turn_id": "turn.live-1",
+        "decision_request_id": "request.live-1",
+        "envelope_idempotency_key": "key:live-1",
+        "envelope_digest": "blake3:envelope-live-1",
+        "base_tick": 1_000,
+        "issued_at_tick": 1_000,
+        "gc_floor_tick": 1_500
+    }))
+    .expect("decode expired replay request");
+    let expired_error = restored
+        .replay_cognition_terminal(expired)
+        .expect_err("replay below the persisted GC floor must expire");
+    assert!(format!("{expired_error:?}").contains("expired_idempotency"));
     assert_eq!(restored.cognition_execution_metrics(), before);
 
     let _ = fs::remove_dir_all(dir);
@@ -512,8 +706,8 @@ fn terminal_record() -> RetentionRecordV1 {
         "envelope_idempotency_key": "key:live-1",
         "envelope_digest": "blake3:envelope-live-1",
         "status": "committed",
-        "base_tick": 0,
-        "issued_at_tick": 0,
+        "base_tick": 1_001,
+        "issued_at_tick": 1_001,
         "terminal_disposition": null,
         "receipt_id": "blake3:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         "receipt_digest": "blake3:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",

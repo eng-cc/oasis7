@@ -30,18 +30,22 @@ const CONTEXT_DIGEST: &str =
 const INTENT_MESSAGE: &str = "live cognition request";
 
 fn live_world() -> World {
+    live_world_at(NOW, 4)
+}
+
+fn live_world_at(time: u64, reorg_epoch: u64) -> World {
     let mut state = WorldState {
-        time: NOW,
+        time,
         ..WorldState::default()
     };
     state.agents.insert(
         AGENT_ID.to_string(),
-        AgentCell::new(AgentState::new(AGENT_ID, GeoPos::new(10, 20, 0)), NOW),
+        AgentCell::new(AgentState::new(AGENT_ID, GeoPos::new(10, 20, 0)), time),
     );
     let authority = AgentIntentAuthorityContext {
-        intent_tick: Some(NOW),
+        intent_tick: Some(time),
         world_id: Some(WORLD_ID.to_string()),
-        reorg_epoch: Some(4),
+        reorg_epoch: Some(reorg_epoch),
         authority_scope: Some("agent:live-mvcc".to_string()),
         replaces_intent_id: None,
     };
@@ -61,15 +65,15 @@ fn live_world() -> World {
             .to_string(),
         target_id: None,
         effect_intent_id: None,
-        intent_tick: Some(NOW),
+        intent_tick: Some(time),
         world_id: Some(WORLD_ID.to_string()),
-        reorg_epoch: Some(4),
+        reorg_epoch: Some(reorg_epoch),
         authority_scope: Some("agent:live-mvcc".to_string()),
         status: "accepted".to_string(),
         source: "player".to_string(),
-        logical_time: NOW,
+        logical_time: time,
         event_seq: 3,
-        updated_at: NOW,
+        updated_at: time,
         receipt_ref: None,
         reason_code: None,
         reason_summary: None,
@@ -85,17 +89,33 @@ fn live_world() -> World {
 }
 
 fn precondition_for_tick(expected_tick: u64) -> Value {
+    precondition_for("world.logical_tick", expected_tick)
+}
+
+fn precondition_for(path: &str, expected: u64) -> Value {
+    precondition_for_operator(path, "eq", expected)
+}
+
+fn precondition_for_operator(path: &str, operator: &str, expected: u64) -> Value {
     json!({
         "schema_version": 1,
         "subject": {"kind": "world", "id": WORLD_ID},
-        "path_or_rule": "world.logical_tick",
-        "operator": "eq",
-        "expected_value_bytes": serde_cbor::to_vec(&expected_tick).expect("encode tick"),
+        "path_or_rule": path,
+        "operator": operator,
+        "expected_value_bytes": serde_cbor::to_vec(&expected).expect("encode precondition"),
         "missing_behavior": "fail"
     })
 }
 
 fn envelope_value(world: &World, precondition: Option<Value>) -> Value {
+    envelope_value_with_reorg(world, precondition, 4)
+}
+
+fn envelope_value_with_reorg(
+    world: &World,
+    precondition: Option<Value>,
+    reorg_epoch: u64,
+) -> Value {
     let state_root = world.current_state_root_hash().expect("live state root");
     let manifest_hash = world.current_manifest_hash().expect("live manifest hash");
     let capability_root = world.capability_authorization_root().to_string();
@@ -109,7 +129,7 @@ fn envelope_value(world: &World, precondition: Option<Value>) -> Value {
         "verified",
         world.state().time,
         &state_root,
-        4,
+        reorg_epoch,
         &manifest_hash,
     );
     let runtime_manifest_hash = cognition_digest_v1("oasis7.runtime.manifest.v1", &manifest_hash);
@@ -127,7 +147,7 @@ fn envelope_value(world: &World, precondition: Option<Value>) -> Value {
         "retry_seq": 0,
         "base_tick": world.state().time,
         "base_world_hash": base_world_hash,
-        "reorg_epoch": 4,
+        "reorg_epoch": reorg_epoch,
         "runtime_manifest_hash": runtime_manifest_hash,
         "capability_snapshot_hash": capability_root,
         "authority_context_hash": authority_context_hash,
@@ -191,6 +211,53 @@ fn fresh_live_world_envelope_is_accepted_against_real_authoritative_state() {
     let candidate = envelope(&world);
     MvccValidator::validate(&world, &candidate)
         .expect("fresh candidate should match the real World head");
+}
+
+#[test]
+fn unsigned_world_tick_and_reorg_preconditions_accept_values_above_i64_max() {
+    let high_tick = i64::MAX as u64 + 1;
+    let world = live_world_at(high_tick, 4);
+    let candidate: AgentDecisionEnvelopeV1 = serde_json::from_value(envelope_value(
+        &world,
+        Some(precondition_for_tick(high_tick)),
+    ))
+    .expect("decode high tick envelope");
+    MvccValidator::validate(&world, &candidate)
+        .expect("u64 logical tick equality must not downcast through i64");
+    let candidate: AgentDecisionEnvelopeV1 = serde_json::from_value(envelope_value(
+        &world,
+        Some(precondition_for_operator(
+            "world.logical_tick",
+            "gte",
+            i64::MAX as u64,
+        )),
+    ))
+    .expect("decode high tick ordering envelope");
+    MvccValidator::validate(&world, &candidate)
+        .expect("u64 logical tick ordering must remain unsigned");
+
+    let high_reorg = i64::MAX as u64 + 1;
+    let world = live_world_at(NOW, high_reorg);
+    let candidate: AgentDecisionEnvelopeV1 = serde_json::from_value(envelope_value_with_reorg(
+        &world,
+        Some(precondition_for("world.reorg_epoch", high_reorg)),
+        high_reorg,
+    ))
+    .expect("decode high reorg envelope");
+    MvccValidator::validate(&world, &candidate)
+        .expect("u64 reorg epoch equality must not downcast through i64");
+    let candidate: AgentDecisionEnvelopeV1 = serde_json::from_value(envelope_value_with_reorg(
+        &world,
+        Some(precondition_for_operator(
+            "world.reorg_epoch",
+            "gt",
+            i64::MAX as u64,
+        )),
+        high_reorg,
+    ))
+    .expect("decode high reorg ordering envelope");
+    MvccValidator::validate(&world, &candidate)
+        .expect("u64 reorg epoch ordering must remain unsigned");
 }
 
 #[test]

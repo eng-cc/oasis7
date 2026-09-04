@@ -2,10 +2,12 @@ use super::World;
 use super::cognition_persistence_validation::{
     append_cognition_event, strict_optional_finality_hash,
 };
-use crate::runtime::cognition::{finality_binding_is_legal, world_state_binding_digest_v1};
+use crate::runtime::cognition::{
+    finality_binding_is_legal, is_canonical_identifier, world_state_binding_digest_v1,
+};
 use crate::runtime::cognition_recovery::{RuntimeCognitionBaseBindingV1, cognition_digest_v1};
 use crate::runtime::cognition_retention::{
-    CognitionRetentionStore, RetentionExecutionProbe, RetentionRecordV1,
+    CognitionRetentionStore, RetentionExecutionProbe, RetentionRecordV1, RetentionReplayRequestV1,
 };
 use crate::runtime::cognition_scheduler::{
     CognitionScheduler, SchedulerEnqueueOutcome, SchedulerPolicyV1, SchedulerWakeV1,
@@ -113,21 +115,15 @@ impl World {
             "reorg_epoch": reorg_epoch,
             "runtime_manifest_hash": self.current_manifest_hash()?,
         });
-        if binding["world_id"]
+        if !binding["world_id"]
             .as_str()
-            .unwrap_or_default()
-            .trim()
-            .is_empty()
-            || binding["branch_id"]
+            .is_some_and(|value| is_canonical_identifier(value, 128))
+            || !binding["branch_id"]
                 .as_str()
-                .unwrap_or_default()
-                .trim()
-                .is_empty()
-            || binding["finality_status"]
+                .is_some_and(|value| is_canonical_identifier(value, 128))
+            || !binding["finality_status"]
                 .as_str()
-                .unwrap_or_default()
-                .trim()
-                .is_empty()
+                .is_some_and(|value| is_canonical_identifier(value, 128))
         {
             return Err(cognition_validation_error("runtime_binding_invalid"));
         }
@@ -206,7 +202,7 @@ impl World {
         decision_request_id: &str,
         request_digest: &str,
     ) -> Result<(), WorldError> {
-        let bounded = |value: &str| !value.trim().is_empty() && value.len() <= 256;
+        let bounded = |value: &str| is_canonical_identifier(value, 256);
         if self.cognition_runtime_is_unbound()
             || !bounded(agent_id)
             || !bounded(agent_session_id)
@@ -489,7 +485,11 @@ impl World {
             "SchedulerWakeReleased",
             Some(&wake),
         )?;
-        let recovered = scheduler.recover_capacity_preserving_cursor(self.state.time);
+        let continuations = transaction.cognition_continuations_typed()?;
+        let tick = transaction.state.time;
+        let recovered = scheduler.recover_capacity_if_preserving_cursor(tick, |wake| {
+            transaction.cognition_wake_conditions_ready(wake, &continuations, tick)
+        });
         for recovered_wake in &recovered {
             transaction.cognition_commit_scheduler_transaction(
                 &scheduler,
@@ -510,8 +510,12 @@ impl World {
         let mut transaction = self.clone();
         let mut scheduler = transaction.cognition_scheduler()?;
         let mut recovered = scheduler.recover_in_flight_preserving_cursor(tick);
-        recovered.extend(scheduler.recover_capacity_preserving_cursor(tick));
         let mut continuations = transaction.cognition_continuations_typed()?;
+        recovered.extend(
+            scheduler.recover_capacity_if_preserving_cursor(tick, |wake| {
+                transaction.cognition_wake_conditions_ready(wake, &continuations, tick)
+            }),
+        );
         let mut status_recovered = false;
         for continuation in &mut continuations {
             if continuation.status == ContinuationStatusV1::Pending
@@ -888,13 +892,22 @@ impl World {
 
     pub fn replay_cognition_terminal(
         &self,
-        key: &str,
-        digest: &str,
+        request: RetentionReplayRequestV1,
     ) -> Result<JsonValue, WorldError> {
+        let world_id = self
+            .cognition
+            .get("runtime_binding")
+            .and_then(|binding| binding.get("world_id"))
+            .and_then(JsonValue::as_str)
+            .filter(|value| is_canonical_identifier(value, 128))
+            .ok_or_else(|| cognition_validation_error("runtime_binding_required"))?;
+        if request.world_id.as_deref() != Some(world_id) {
+            return Err(cognition_validation_error("foreign_replay_request"));
+        }
         let store = self.cognition_retention_store()?;
         let mut probe = RetentionExecutionProbe::default();
         let result = store
-            .replay(key, digest, &mut probe)
+            .replay_v1(request, &mut probe)
             .map_err(|error| cognition_validation_error(error.code()))?;
         serde_json::to_value(result).map_err(WorldError::from)
     }
@@ -940,7 +953,7 @@ impl World {
         )
     }
 
-    fn cognition_wake_conditions_ready(
+    pub(in crate::runtime::world) fn cognition_wake_conditions_ready(
         &self,
         wake: &SchedulerWakeV1,
         continuations: &[AgentContinuation],
@@ -953,6 +966,12 @@ impl World {
             return false;
         };
         if !self.cognition_wake_has_active_continuation(wake, continuations) {
+            return false;
+        }
+        if continuation
+            .valid_until_tick
+            .is_some_and(|valid_until| tick > valid_until)
+        {
             return false;
         }
         self.evaluate_cognition_wake_at_tick(&continuation.wake_conditions, tick)

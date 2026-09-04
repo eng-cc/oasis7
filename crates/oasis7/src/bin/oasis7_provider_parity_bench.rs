@@ -37,7 +37,7 @@ use self::behavior_support::{
 use self::io_support::{parse_options, print_help, sanitize_filename, write_json, write_jsonl};
 use self::recovery_ledger::{
     RECOVERY_METRIC_SCHEMA_VERSION, RecoveryErrorEvidence, RecoveryLedger, RecoveryLineage,
-    RecoveryMetricSummary, scenario_goal_completed,
+    RecoveryMetricSummary, metric_summary, scenario_goal_completed,
 };
 use self::target_context::build_target_context;
 
@@ -221,6 +221,8 @@ struct SampleSummary {
     completion_time_ms: u64,
     decision_steps: u64,
     invalid_action_count: u64,
+    illegal_schema_count: u64,
+    illegal_schema_rate: RecoveryMetricSummary,
     timeout_count: u64,
     recoverable_error_count: u64,
     fatal_error_count: u64,
@@ -551,6 +553,7 @@ fn main() {
     let mut action_kind_counts = BTreeMap::new();
     let mut error_counts = BTreeMap::new();
     let mut invalid_action_count = 0_u64;
+    let mut illegal_schema_count = 0_u64;
     let mut timeout_count = 0_u64;
     let mut recoverable_error_count = 0_u64;
     let mut fatal_error_count = 0_u64;
@@ -606,6 +609,9 @@ fn main() {
                 }
                 "provider_unreachable" | "invalid_action_schema" | "action_rejected" => {
                     recoverable_error_count += 1;
+                    if code == "invalid_action_schema" {
+                        illegal_schema_count += 1;
+                    }
                 }
                 "context_drift" => {
                     context_drift_count += 1;
@@ -725,6 +731,7 @@ fn main() {
         status = "blocked".to_string();
     }
     let trace_completeness_ratio_ppm = ratio_ppm(trace_present_count, decision_steps);
+    let illegal_schema_rate = metric_summary(illegal_schema_count, decision_steps);
     let summary = SampleSummary {
         benchmark_run_id: options.benchmark_run_id.clone(),
         mode: options.execution_mode.as_str().to_string(),
@@ -749,6 +756,8 @@ fn main() {
         completion_time_ms: run_started_at.elapsed().as_millis().min(u64::MAX as u128) as u64,
         decision_steps,
         invalid_action_count,
+        illegal_schema_count,
+        illegal_schema_rate,
         timeout_count,
         recoverable_error_count,
         fatal_error_count,
@@ -804,6 +813,16 @@ fn main() {
     );
     println!("decision_steps: {}", summary.decision_steps);
     println!("invalid_action_count: {}", summary.invalid_action_count);
+    println!(
+        "illegal_schema_rate: {}/{} ({})",
+        summary.illegal_schema_rate.numerator,
+        summary.illegal_schema_rate.denominator,
+        summary
+            .illegal_schema_rate
+            .value
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "null".to_string())
+    );
     println!("timeout_count: {}", summary.timeout_count);
     println!(
         "trace_completeness_ratio_ppm: {}",

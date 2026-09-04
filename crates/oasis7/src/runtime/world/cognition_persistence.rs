@@ -844,6 +844,19 @@ impl World {
             .get("scheduler_state")
             .is_some_and(|state| !state.is_null());
         if has_scheduler {
+            let mut scheduler = self.cognition_scheduler()?;
+            let continuations = self.cognition_continuations_typed()?;
+            let tick = self.state.time;
+            let recovered = scheduler.recover_capacity_if_preserving_cursor(tick, |wake| {
+                self.cognition_wake_conditions_ready(wake, &continuations, tick)
+            });
+            for wake in &recovered {
+                self.cognition_commit_scheduler_transaction(
+                    &scheduler,
+                    "SchedulerWakeRecovered",
+                    Some(wake),
+                )?;
+            }
             // A commit changes receipt, journal-event and state evidence. It
             // may immediately lease only wakes whose conditions depend on
             // that evidence; time-only wakes remain under the normal tick

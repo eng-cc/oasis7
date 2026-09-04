@@ -93,16 +93,23 @@ fn continuous_feedback_partitions_interleaved_agents_and_sessions() {
         provenance: "runtime_authoritative".to_string(),
     };
 
+    let agent_a_first = feedback("agent-a", "session-a", 1);
+    seed_accepted_feedback_lineage(&state, &agent_a_first);
     state
-        .record_continuous_feedback(feedback("agent-a", "session-a", 1))
+        .record_continuous_feedback(agent_a_first)
         .expect("agent A feedback");
+    let agent_b_first = feedback("agent-b", "session-b", 1);
+    seed_accepted_feedback_lineage(&state, &agent_b_first);
     state
-        .record_continuous_feedback(feedback("agent-b", "session-b", 1))
+        .record_continuous_feedback(agent_b_first)
         .expect("agent B feedback");
+    let agent_a_second = feedback("agent-a", "session-a", 2);
+    seed_accepted_feedback_lineage(&state, &agent_a_second);
     state
-        .record_continuous_feedback(feedback("agent-a", "session-a", 2))
+        .record_continuous_feedback(agent_a_second)
         .expect("agent A second feedback");
     let mut id_collision = feedback("agent-a", "session-a", 3);
+    seed_accepted_feedback_lineage(&state, &id_collision);
     id_collision.feedback_id = "feedback-agent-a-session-a-1".to_string();
     assert_eq!(
         state
@@ -124,6 +131,26 @@ fn continuous_feedback_partitions_interleaved_agents_and_sessions() {
             .len(),
         1
     );
+}
+
+fn seed_accepted_feedback_lineage(state: &ProviderState, feedback: &FeedbackEnvelopeV1) {
+    state
+        .accepted_requests
+        .lock()
+        .expect("accepted request lock")
+        .insert(
+            feedback.decision_request_id.clone(),
+            AcceptedRequestIdentity {
+                agent_subject: feedback.agent_subject.clone(),
+                agent_session_id: feedback.agent_session_id.clone(),
+                agent_turn_id: feedback.agent_turn_id.clone(),
+                decision_request_id: feedback.decision_request_id.clone(),
+                request_digest: feedback.request_digest.clone(),
+                response_digest: Digest32::from(
+                    "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                ),
+            },
+        );
 }
 
 #[test]

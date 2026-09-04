@@ -103,6 +103,36 @@ fn every_wake_condition_kind_accepts_only_its_one_of_registry() {
 }
 
 #[test]
+fn state_predicate_subject_requires_nfc_and_nonempty_canonical_identity() {
+    let mut decomposed = valid("state_predicate");
+    decomposed["subject"]["id"] = json!("Cafe\u{301}");
+    assert_eq!(
+        WakeConditionValidator::validate(&[condition(decomposed)])
+            .expect_err("decomposed subject id must fail closed")
+            .code(),
+        "wake_condition_invalid"
+    );
+
+    let mut whitespace = valid("state_predicate");
+    whitespace["subject"]["id"] = json!("   ");
+    assert_eq!(
+        WakeConditionValidator::validate(&[condition(whitespace)])
+            .expect_err("whitespace-only subject id must fail closed")
+            .code(),
+        "wake_condition_invalid"
+    );
+
+    let mut unknown_resource = valid("state_predicate");
+    unknown_resource["path_or_rule"] = json!("agent.resource.oxygen");
+    assert_eq!(
+        WakeConditionValidator::validate(&[condition(unknown_resource)])
+            .expect_err("unknown resource path must fail closed")
+            .code(),
+        "wake_condition_invalid"
+    );
+}
+
+#[test]
 fn wake_conditions_are_nonempty_all_of_sorted_and_bounded() {
     let empty = WakeConditionValidator::validate(&[]).expect_err("empty wake list must fail");
     assert_eq!(empty.code(), "wake_conditions_empty");

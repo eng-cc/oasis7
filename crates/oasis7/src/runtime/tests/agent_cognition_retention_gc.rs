@@ -130,3 +130,85 @@ fn committed_replay_never_calls_provider_or_reexecutes_effect_or_receipt() {
     assert_eq!(second["world_receipt_linked_delta"], 0);
     assert_eq!(probe.provider_invocation_count, 0);
 }
+
+#[test]
+fn v1_replay_binds_record_identity_and_persisted_gc_floor() {
+    let mut store = CognitionRetentionStore::with_horizon(100);
+    store.insert(record("committed", "replay-v1"));
+    store.gc(50, 10).expect("persist replay GC floor");
+    let request = RetentionReplayRequestV1::from_json(json!({
+        "schema_version": "agent-decision-envelope.v1",
+        "world_id": WORLD_ID,
+        "agent_session_id": "session-1",
+        "agent_turn_id": "turn-1",
+        "decision_request_id": "request-1",
+        "envelope_idempotency_key": format!("{REPLAY_KEY}-v1"),
+        "envelope_digest": format!("{REPLAY_DIGEST}-v1"),
+        "base_tick": 10,
+        "issued_at_tick": 10,
+        "gc_floor_tick": 10
+    }))
+    .expect("decode v1 replay request");
+    let mut probe = RetentionExecutionProbe::default();
+    let replay = store
+        .replay_v1(request, &mut probe)
+        .expect("complete proof should replay committed receipt");
+    assert_eq!(replay.receipt_id.as_deref(), Some(RECEIPT_ID));
+    assert_eq!(probe, RetentionExecutionProbe::default());
+
+    let legacy = RetentionReplayRequestV1::from_json(json!({
+        "world_id": WORLD_ID,
+        "envelope_idempotency_key": format!("{REPLAY_KEY}-v1"),
+        "envelope_digest": format!("{REPLAY_DIGEST}-v1")
+    }))
+    .expect("decode legacy replay request");
+    assert_eq!(
+        store
+            .replay_v1(legacy, &mut probe)
+            .expect_err("legacy proof must be rejected")
+            .code(),
+        "legacy_no_cognition_proof"
+    );
+
+    let foreign = RetentionReplayRequestV1::from_json(json!({
+        "schema_version": "agent-decision-envelope.v1",
+        "world_id": "foreign-world",
+        "agent_session_id": "session-1",
+        "agent_turn_id": "turn-1",
+        "decision_request_id": "request-1",
+        "envelope_idempotency_key": format!("{REPLAY_KEY}-v1"),
+        "envelope_digest": format!("{REPLAY_DIGEST}-v1"),
+        "base_tick": 10,
+        "issued_at_tick": 10,
+        "gc_floor_tick": 10
+    }))
+    .expect("decode foreign replay request");
+    assert_eq!(
+        store
+            .replay_v1(foreign, &mut probe)
+            .expect_err("foreign replay proof must be rejected")
+            .code(),
+        "idempotency_conflict"
+    );
+
+    let wrong_floor = RetentionReplayRequestV1::from_json(json!({
+        "schema_version": "agent-decision-envelope.v1",
+        "world_id": WORLD_ID,
+        "agent_session_id": "session-1",
+        "agent_turn_id": "turn-1",
+        "decision_request_id": "request-1",
+        "envelope_idempotency_key": format!("{REPLAY_KEY}-v1"),
+        "envelope_digest": format!("{REPLAY_DIGEST}-v1"),
+        "base_tick": 10,
+        "issued_at_tick": 10,
+        "gc_floor_tick": 0
+    }))
+    .expect("decode weak-floor replay request");
+    assert_eq!(
+        store
+            .replay_v1(wrong_floor, &mut probe)
+            .expect_err("weak replay floor must be rejected")
+            .code(),
+        "expired_idempotency"
+    );
+}
