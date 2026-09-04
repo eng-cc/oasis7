@@ -100,6 +100,19 @@ fn proposal_context_matches(entry: &JsonValue, proposal: &CognitionContinuationP
             == Some(proposal.precondition_digest.as_str())
 }
 
+fn current_context_matches_entry(current: &CognitionContextDigestsV1, entry: &JsonValue) -> bool {
+    entry
+        .get("baseline_observation_digest")
+        .and_then(JsonValue::as_str)
+        == Some(current.baseline_observation_digest.as_str())
+        && entry.get("goal_digest").and_then(JsonValue::as_str)
+            == Some(current.goal_digest.as_str())
+        && entry.get("policy_digest").and_then(JsonValue::as_str)
+            == Some(current.policy_digest.as_str())
+        && entry.get("precondition_digest").and_then(JsonValue::as_str)
+            == Some(current.precondition_digest.as_str())
+}
+
 fn register_cognition_resume_lifecycle(
     world: &mut World,
     wake_id: &str,
@@ -310,36 +323,37 @@ impl World {
         if continuation.reorg_epoch != self.cognition_reorg_epoch() {
             return Some("cognition_wake_evidence_stale");
         }
-        if let Some(selected) = self
+        let Some(selected) = self
             .cognition
             .get("continuation_evaluations")
             .and_then(JsonValue::as_object)
             .and_then(|evaluations| evaluations.get(continuation_id))
+        else {
+            return Some("cognition_wake_evaluation_missing");
+        };
+        let current_head = match self.current_state_root_hash() {
+            Ok(head) => head,
+            Err(_) => return Some("cognition_wake_evidence_stale"),
+        };
+        if selected
+            .get("evaluation_head_digest")
+            .and_then(JsonValue::as_str)
+            != Some(current_head.as_str())
         {
-            let current_head = match self.current_state_root_hash() {
-                Ok(head) => head,
-                Err(_) => return Some("cognition_wake_evidence_stale"),
-            };
-            if selected
-                .get("evaluation_head_digest")
+            return Some("cognition_wake_evidence_stale");
+        }
+        if selected.get("evaluation_tick").and_then(JsonValue::as_u64)
+            != Some(evaluation.evaluation_tick)
+            || selected
+                .get("evaluation_digest")
                 .and_then(JsonValue::as_str)
-                != Some(current_head.as_str())
-            {
-                return Some("cognition_wake_evidence_stale");
-            }
-            if selected.get("evaluation_tick").and_then(JsonValue::as_u64)
-                != Some(evaluation.evaluation_tick)
-                || selected
-                    .get("evaluation_digest")
-                    .and_then(JsonValue::as_str)
-                    != Some(evaluation.evaluation_digest.as_str())
-                || selected
-                    .get("conditions_digest")
-                    .and_then(JsonValue::as_str)
-                    != Some(evaluation.conditions_digest.as_str())
-            {
-                return Some("cognition_wake_evidence_stale");
-            }
+                != Some(evaluation.evaluation_digest.as_str())
+            || selected
+                .get("conditions_digest")
+                .and_then(JsonValue::as_str)
+                != Some(evaluation.conditions_digest.as_str())
+        {
+            return Some("cognition_wake_evidence_stale");
         }
         None
     }
@@ -423,6 +437,45 @@ impl World {
         }
     }
 
+    /// Revalidate an admitted proposal against a context rebuilt by the
+    /// current Runtime/Harness boundary. A proposal's historical digests are
+    /// not accepted as their own current-state proof.
+    pub fn validate_cognition_context_digests_with_current_context(
+        &self,
+        continuation_id: &str,
+        proposal: &CognitionContinuationProposalV1,
+        current_context: CognitionContextDigestsV1,
+    ) -> Result<CognitionContextDigestsV1, WorldError> {
+        current_context
+            .validate()
+            .map_err(|error| handoff_error(error.code()))?;
+        let expected = CognitionContextDigestsV1::from_proposal(proposal);
+        if current_context != expected {
+            return Err(handoff_error("cognition_context_mismatch"));
+        }
+        let context = self.validate_cognition_context_digests(continuation_id, proposal)?;
+        if context != current_context {
+            return Err(handoff_error("cognition_context_mismatch"));
+        }
+        Ok(current_context)
+    }
+
+    fn validate_current_context_for_continuation(
+        &self,
+        continuation_id: &str,
+        current_context: &CognitionContextDigestsV1,
+    ) -> Result<(), WorldError> {
+        current_context
+            .validate()
+            .map_err(|error| handoff_error(error.code()))?;
+        let entry = context_registry_entry(self, continuation_id)
+            .ok_or_else(|| handoff_error("cognition_context_missing"))?;
+        if !current_context_matches_entry(current_context, &entry) {
+            return Err(handoff_error("cognition_context_mismatch"));
+        }
+        Ok(())
+    }
+
     /// Consume one selected wake and atomically admit the next logical
     /// request in its continuation chain. The next request receives fresh
     /// Harness session/turn/request identity and its own request digest; the
@@ -443,6 +496,34 @@ impl World {
         budget_spent: u64,
         resume: CognitionContinuationResumeRequestV1,
     ) -> Result<CognitionWakeHandoffResultV1, WorldError> {
+        self.resume_cognition_wake_inner(wake_id, proposal, budget_spent, resume, None)
+    }
+
+    pub fn resume_cognition_wake_with_context(
+        &mut self,
+        wake_id: &str,
+        proposal: CognitionContinuationProposalV1,
+        budget_spent: u64,
+        resume: CognitionContinuationResumeRequestV1,
+        current_context: CognitionContextDigestsV1,
+    ) -> Result<CognitionWakeHandoffResultV1, WorldError> {
+        self.resume_cognition_wake_inner(
+            wake_id,
+            proposal,
+            budget_spent,
+            resume,
+            Some(current_context),
+        )
+    }
+
+    fn resume_cognition_wake_inner(
+        &mut self,
+        wake_id: &str,
+        proposal: CognitionContinuationProposalV1,
+        budget_spent: u64,
+        resume: CognitionContinuationResumeRequestV1,
+        current_context: Option<CognitionContextDigestsV1>,
+    ) -> Result<CognitionWakeHandoffResultV1, WorldError> {
         let mut transaction = self.clone();
         let Some(wake) = transaction
             .cognition_in_flight_wakes()?
@@ -461,6 +542,12 @@ impl World {
             .into_iter()
             .find(|value| value.continuation_id == wake.continuation_id)
             .ok_or_else(|| handoff_error("continuation_missing"))?;
+        if let Some(current_context) = current_context.as_ref() {
+            transaction.validate_current_context_for_continuation(
+                &continuation.continuation_id,
+                current_context,
+            )?;
+        }
         register_cognition_resume_lifecycle(
             &mut transaction,
             wake_id,
@@ -468,15 +555,30 @@ impl World {
             &proposal,
             &resume,
         )?;
-        let result = transaction.handoff_cognition_wake(
+        let result = transaction.handoff_cognition_wake_inner(
             wake_id,
             CognitionWakeDispositionV1::Replan {
                 proposal,
                 budget_spent,
             },
-        )?;
-        *self = transaction;
-        Ok(result)
+            current_context,
+        );
+        match result {
+            Ok(result) => {
+                *self = transaction;
+                Ok(result)
+            }
+            Err(error) => {
+                // `handoff_cognition_wake_inner` may terminalize a stale or
+                // invalid wake before returning the error. Preserve that
+                // durable cleanup instead of dropping the nested clone.
+                if transaction.cognition != self.cognition {
+                    transaction.persist_runtime_transaction_if_configured()?;
+                    *self = transaction;
+                }
+                Err(error)
+            }
+        }
     }
 
     /// Verify all proposal context digests and its full canonical proposal
@@ -555,6 +657,28 @@ impl World {
         continuation_id: &str,
         amount: u64,
     ) -> Result<CognitionBudgetConsumptionV1, WorldError> {
+        self.consume_cognition_continuation_budget_inner(continuation_id, amount, None)
+    }
+
+    pub fn consume_cognition_continuation_budget_with_context(
+        &mut self,
+        continuation_id: &str,
+        amount: u64,
+        current_context: CognitionContextDigestsV1,
+    ) -> Result<CognitionBudgetConsumptionV1, WorldError> {
+        self.consume_cognition_continuation_budget_inner(
+            continuation_id,
+            amount,
+            Some(current_context),
+        )
+    }
+
+    fn consume_cognition_continuation_budget_inner(
+        &mut self,
+        continuation_id: &str,
+        amount: u64,
+        current_context: Option<CognitionContextDigestsV1>,
+    ) -> Result<CognitionBudgetConsumptionV1, WorldError> {
         if amount == 0 {
             return Err(handoff_error("continuation_budget_amount_invalid"));
         }
@@ -563,6 +687,25 @@ impl World {
             .into_iter()
             .find(|value| value.continuation_id == continuation_id)
             .ok_or_else(|| handoff_error("continuation_missing"))?;
+        if let Some(current_context) = current_context.as_ref() {
+            if let Err(error) =
+                self.validate_current_context_for_continuation(continuation_id, current_context)
+            {
+                if !terminal_status(live_continuation.status)
+                    && self
+                        .cognition_in_flight_wakes()?
+                        .iter()
+                        .any(|wake| wake.continuation_id == continuation_id)
+                {
+                    self.terminalize_cognition_wake(
+                        &live_continuation.wake_id,
+                        ContinuationStatusV1::Rejected,
+                        "cognition_context_mismatch",
+                    )?;
+                }
+                return Err(error);
+            }
+        }
         if let Some(reason) =
             self.live_cognition_wake_invalid_reason(continuation_id, &live_continuation)
         {
@@ -624,10 +767,37 @@ impl World {
             continuation.terminal_disposition = Some("budget_exhausted".to_string());
             continuation.refresh_status_digest();
         }
-        let consumed = continuation.clone();
         let deactivated = scheduler
             .deactivate_wake(&wake.wake_id)
             .map_err(|error| handoff_error(error.code()))?;
+        if continuation.remaining_budget.value > 0 {
+            // Partial debits keep the continuation live. Requeue its exact
+            // wake so it cannot remain in `consumed` with no future lease.
+            ContinuationTransition::apply_at_tick(
+                continuation,
+                ContinuationStatusV1::Scheduled,
+                transaction.state.time,
+            )
+            .map_err(|error| handoff_error(error.code()))?;
+            continuation.refresh_status_digest();
+            let mut requeued = wake.clone();
+            requeued.next_wake_tick = continuation.next_wake_tick.unwrap_or(u64::MAX);
+            requeued.eligible_since_tick = transaction.state.time;
+            requeued.pending_reason = "budget_remaining".to_string();
+            let outcome = scheduler
+                .try_enqueue(requeued)
+                .map_err(|error| handoff_error(error.code()))?;
+            if outcome.disposition == "pending" {
+                ContinuationTransition::apply_at_tick(
+                    continuation,
+                    ContinuationStatusV1::Pending,
+                    transaction.state.time,
+                )
+                .map_err(|error| handoff_error(error.code()))?;
+                continuation.refresh_status_digest();
+            }
+        }
+        let consumed = continuation.clone();
         transaction.cognition_commit_continuation_lifecycle_transaction(
             &continuations,
             &scheduler,
@@ -661,6 +831,24 @@ impl World {
         wake_id: &str,
         disposition: CognitionWakeDispositionV1,
     ) -> Result<CognitionWakeHandoffResultV1, WorldError> {
+        self.handoff_cognition_wake_inner(wake_id, disposition, None)
+    }
+
+    pub fn handoff_cognition_wake_with_context(
+        &mut self,
+        wake_id: &str,
+        disposition: CognitionWakeDispositionV1,
+        current_context: CognitionContextDigestsV1,
+    ) -> Result<CognitionWakeHandoffResultV1, WorldError> {
+        self.handoff_cognition_wake_inner(wake_id, disposition, Some(current_context))
+    }
+
+    fn handoff_cognition_wake_inner(
+        &mut self,
+        wake_id: &str,
+        disposition: CognitionWakeDispositionV1,
+        current_context: Option<CognitionContextDigestsV1>,
+    ) -> Result<CognitionWakeHandoffResultV1, WorldError> {
         let live_wake = self
             .cognition_in_flight_wakes()?
             .into_iter()
@@ -671,6 +859,19 @@ impl World {
             .into_iter()
             .find(|value| value.continuation_id == live_wake.continuation_id)
             .ok_or_else(|| handoff_error("continuation_missing"))?;
+        if let Some(current_context) = current_context.as_ref() {
+            if let Err(error) = self.validate_current_context_for_continuation(
+                &live_continuation.continuation_id,
+                current_context,
+            ) {
+                self.terminalize_cognition_wake(
+                    &live_wake.wake_id,
+                    ContinuationStatusV1::Rejected,
+                    "cognition_context_mismatch",
+                )?;
+                return Err(error);
+            }
+        }
         if let Some(reason) = self.live_cognition_wake_invalid_reason(
             &live_continuation.continuation_id,
             &live_continuation,
@@ -685,7 +886,12 @@ impl World {
         }
         if let CognitionWakeDispositionV1::Replan { proposal, .. } = &disposition {
             let context_matches = context_registry_entry(self, &live_continuation.continuation_id)
-                .is_some_and(|entry| proposal_context_matches(&entry, proposal));
+                .is_some_and(|entry| {
+                    proposal_context_matches(&entry, proposal)
+                        && current_context
+                            .as_ref()
+                            .is_none_or(|current| current_context_matches_entry(current, &entry))
+                });
             if !context_matches {
                 self.terminalize_cognition_wake(
                     &live_wake.wake_id,

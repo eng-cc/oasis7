@@ -4,7 +4,7 @@ use crate::runtime::AgentContinuation as RuntimeAgentContinuation;
 use crate::simulator::Observation;
 use crate::simulator::cognition_policy::{
     ContinuationAuthorityContextV1, ContinuationCurrentContextV1, ContinuationHandle,
-    ContinuationProposalV1, RuntimeContinuationStatusV1,
+    ContinuationInvalidationReason, ContinuationProposalV1, RuntimeContinuationStatusV1,
 };
 use crate::simulator::continuous_agent_harness::{
     ContinuousAgentRequestContextV1, ContinuousAgentTurnContextV1,
@@ -112,6 +112,59 @@ impl AsyncAgentRunner {
             .validate_for_agent(agent_id)
             .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
         self.submit_continuation_proposal_using_authority(agent_id, proposal, &current.authority)
+    }
+
+    /// Reconcile the exact Runtime wake transition with the Harness chain.
+    /// Runtime returns the consumed predecessor and (when budget remains) a
+    /// newly admitted continuation proposal. Keeping this transition here
+    /// prevents the Viewer from treating a durable wake as resumed before the
+    /// Harness has retired the predecessor and admitted the next bounded turn.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn reconcile_runtime_wake_with_current_context(
+        &mut self,
+        agent_id: &str,
+        current: &ContinuationCurrentContextV1,
+        consumed_runtime: &RuntimeAgentContinuation,
+        next_proposal: Option<ContinuationProposalV1>,
+    ) -> Result<(), AsyncAgentRunnerError> {
+        current
+            .validate_for_agent(agent_id)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        let existing =
+            self.continuations.get(agent_id).cloned().ok_or_else(|| {
+                AsyncAgentRunnerError::Cognition("unknown continuation".to_string())
+            })?;
+        let retired = self
+            .continuation_harness
+            .advance_ready_wake(existing, consumed_runtime, &current.authority)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        self.continuations.remove(agent_id);
+        if let Some(next_proposal) = next_proposal {
+            let _ = self.submit_continuation_proposal_with_current_context(
+                agent_id,
+                next_proposal,
+                current,
+            )?;
+        }
+        debug_assert!(!retired.active);
+        Ok(())
+    }
+
+    /// Close a locally admitted proposal when Runtime rejects the paired
+    /// durable admission. This is an explicit rollback of the Harness
+    /// projection; it never claims that Runtime itself was admitted.
+    pub fn invalidate_continuation_for_agent(
+        &mut self,
+        agent_id: &str,
+        reason: ContinuationInvalidationReason,
+    ) -> Result<(), AsyncAgentRunnerError> {
+        let Some(handle) = self.continuations.remove(agent_id) else {
+            return Ok(());
+        };
+        self.continuation_harness
+            .invalidate(handle, reason)
+            .map(|_| ())
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))
     }
 
     pub fn apply_runtime_continuation_status(

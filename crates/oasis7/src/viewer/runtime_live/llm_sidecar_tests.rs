@@ -581,6 +581,27 @@ fn queued_recipe_completion_from_replaced_runtime_head_is_quarantined() {
     );
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn provider_world_event_for_missing_actor_is_quarantined_once() {
+    let (runtime_event, mapped_event) = test_recipe_completion_event("agent-missing", 113);
+    let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    sidecar.runner = Some(RuntimeDecisionRunner::ProviderBacked(
+        crate::simulator::AsyncAgentRunner::with_default_capacity(),
+    ));
+
+    sidecar.notify_recipe_completion_if_needed(&runtime_event, mapped_event);
+
+    assert!(sidecar.pending_provider_world_events.is_empty());
+    assert_eq!(sidecar.provider_world_event_quarantine.len(), 1);
+    assert!(
+        sidecar
+            .provider_world_event_quarantine
+            .values()
+            .any(|reason| reason == "provider_actor_missing:agent-missing")
+    );
+}
+
 #[test]
 fn provider_feedback_compatibility_cursor_is_partitioned_by_session() {
     let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);

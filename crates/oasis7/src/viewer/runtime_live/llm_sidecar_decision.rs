@@ -1,3 +1,4 @@
+use super::super::decision_trace::is_trace_only_overflow;
 use super::*;
 
 impl RuntimeLlmSidecar {
@@ -33,7 +34,10 @@ impl RuntimeLlmSidecar {
             }
         };
         #[cfg(not(target_arch = "wasm32"))]
-        if matches!(self.runner, Some(RuntimeDecisionRunner::ProviderBacked(_))) {
+        if matches!(
+            self.runner,
+            Some(RuntimeDecisionRunner::Builtin(_) | RuntimeDecisionRunner::ProviderBacked(_))
+        ) {
             let decision = self.next_async_provider_decision(world, &mut kernel, world_id);
             self.shadow_kernel = Some(kernel);
             return decision;
@@ -96,15 +100,16 @@ impl RuntimeLlmSidecar {
                 ));
             }
         };
-        let result = match runner {
+        let result: Option<crate::simulator::AgentTickResult> = match runner {
+            #[cfg(target_arch = "wasm32")]
             RuntimeDecisionRunner::Builtin(runner) => {
                 let result = runner.tick_decide_only(&mut kernel);
                 sync_llm_runner_long_term_memory(&mut kernel, runner);
                 result
             }
             #[cfg(not(target_arch = "wasm32"))]
-            RuntimeDecisionRunner::ProviderBacked(_) => {
-                unreachable!("native provider decisions are polled through AsyncAgentRunner")
+            RuntimeDecisionRunner::Builtin(_) | RuntimeDecisionRunner::ProviderBacked(_) => {
+                unreachable!("native decisions are polled through AsyncAgentRunner")
             }
             #[cfg(target_arch = "wasm32")]
             RuntimeDecisionRunner::ProviderBacked(runner) => runner.tick_decide_only(&mut kernel),
@@ -147,18 +152,27 @@ impl RuntimeLlmSidecar {
                 memory_write_intents: memory_write_intents.clone(),
             });
         if let Some(cognition) = cognition.as_ref() {
-            if tick
-                .decision_trace
-                .as_ref()
-                .is_none_or(|trace| trace.llm_error.is_none() && trace.parse_error.is_none())
-            {
+            if tick.decision_trace.as_ref().is_none_or(|trace| {
+                trace.parse_error.is_none()
+                    && (trace.llm_error.is_none() || is_trace_only_overflow(trace))
+            }) {
                 self.provider_active_turns
                     .insert(tick.agent_id.clone(), cognition.request.clone());
                 match &tick.decision {
                     AgentDecision::Wait => {
+                        #[cfg(target_arch = "wasm32")]
+                        tracing::warn!(
+                            agent_id = tick.agent_id.as_str(),
+                            "WASM ProviderBacked Wait uses the compatibility timer; native Runtime durable continuation admission is not available on this lane"
+                        );
                         self.schedule_provider_wait(tick.agent_id.as_str(), world.state().time, 1);
                     }
                     AgentDecision::WaitTicks(ticks) => {
+                        #[cfg(target_arch = "wasm32")]
+                        tracing::warn!(
+                            agent_id = tick.agent_id.as_str(),
+                            "WASM ProviderBacked WaitTicks uses the compatibility timer; native Runtime durable continuation admission is not available on this lane"
+                        );
                         self.schedule_provider_wait(
                             tick.agent_id.as_str(),
                             world.state().time,
@@ -201,6 +215,7 @@ impl RuntimeLlmSidecar {
             decision_trace: tick.decision_trace,
             cognition,
             memory_write_intents,
+            continuation_admitted: false,
         })
     }
 }

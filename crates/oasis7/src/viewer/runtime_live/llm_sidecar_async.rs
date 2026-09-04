@@ -1,3 +1,4 @@
+use super::super::decision_trace::is_trace_only_overflow;
 use super::*;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -14,6 +15,11 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmDecision {
     #[serde(default)]
     pub(in crate::viewer::runtime_live) memory_write_intents:
         Vec<crate::simulator::MemoryWriteIntent>,
+    /// True only when a normal provider Wait was admitted through both the
+    /// Harness and Runtime durable continuation seams. The control plane must
+    /// not fall back to a local timer for this case.
+    #[serde(default)]
+    pub(in crate::viewer::runtime_live) continuation_admitted: bool,
 }
 
 pub(super) fn provider_trace_retryable(trace: &AgentDecisionTrace) -> bool {
@@ -76,6 +82,7 @@ impl RuntimeLlmDecision {
             decision_trace: Some(trace),
             cognition: None,
             memory_write_intents: Vec::new(),
+            continuation_admitted: false,
         }
     }
 }
@@ -92,7 +99,11 @@ impl RuntimeLlmSidecar {
         // process restart before admitting another provider turn.
         self.flush_pending_provider_world_events();
         let completed = {
-            let Some(RuntimeDecisionRunner::ProviderBacked(runner)) = self.runner.as_mut() else {
+            let Some(runner) = self
+                .runner
+                .as_mut()
+                .and_then(RuntimeDecisionRunner::async_runner_mut)
+            else {
                 return Some(RuntimeLlmDecision::from_error(
                     world,
                     "provider runner not initialized".to_string(),
@@ -108,7 +119,11 @@ impl RuntimeLlmSidecar {
                 }
             }
         };
-        if let Some(RuntimeDecisionRunner::ProviderBacked(runner)) = self.runner.as_mut() {
+        if let Some(runner) = self
+            .runner
+            .as_mut()
+            .and_then(RuntimeDecisionRunner::async_runner_mut)
+        {
             // `poll_completed` also records outcomes for compatibility users;
             // this production adapter consumes them into its own decision
             // queue so an outcome cannot accumulate across world ticks.
@@ -163,11 +178,11 @@ impl RuntimeLlmSidecar {
             {
                 continue;
             }
-            let in_flight = matches!(
-                self.runner.as_ref(),
-                Some(RuntimeDecisionRunner::ProviderBacked(runner))
-                    if runner.provider_is_still_in_flight(agent_id.as_str())
-            );
+            let in_flight = self
+                .runner
+                .as_ref()
+                .and_then(RuntimeDecisionRunner::async_runner)
+                .is_some_and(|runner| runner.provider_is_still_in_flight(agent_id.as_str()));
             if in_flight {
                 continue;
             }
@@ -192,21 +207,22 @@ impl RuntimeLlmSidecar {
                     format!("Runtime cognition prefix rejected provider I/O: {error}"),
                 ));
             }
-            let start_result = match self.runner.as_mut() {
-                Some(RuntimeDecisionRunner::ProviderBacked(runner)) => runner
-                    .start_turn_with_request_context_and_observation(
-                        agent_id.as_str(),
-                        observation,
-                        context.turn_context.clone(),
-                        context.request_context.clone(),
-                    ),
-                _ => {
-                    return Some(RuntimeLlmDecision::from_error(
-                        world,
-                        "provider runner disappeared while starting an async turn".to_string(),
-                    ));
-                }
+            let Some(runner) = self
+                .runner
+                .as_mut()
+                .and_then(RuntimeDecisionRunner::async_runner_mut)
+            else {
+                return Some(RuntimeLlmDecision::from_error(
+                    world,
+                    "provider runner disappeared while starting an async turn".to_string(),
+                ));
             };
+            let start_result = runner.start_turn_with_request_context_and_observation(
+                agent_id.as_str(),
+                observation,
+                context.turn_context.clone(),
+                context.request_context.clone(),
+            );
             if let Err(error) = start_result {
                 let _ = runtime_provider_failure(world, &context, "provider_failure");
                 return Some(RuntimeLlmDecision::from_agent_error(
@@ -254,7 +270,7 @@ impl RuntimeLlmSidecar {
                 memory_write_intents: outcome.memory_write_intents.clone(),
             });
         let decision = outcome.decision.unwrap_or(AgentDecision::Wait);
-        let decision_trace = outcome.decision_trace.or_else(|| {
+        let mut decision_trace = outcome.decision_trace.or_else(|| {
             (outcome.lifecycle == AsyncTurnLifecycle::Failed).then(|| AgentDecisionTrace {
                 agent_id: agent_id.clone(),
                 time: world.state().time,
@@ -274,16 +290,52 @@ impl RuntimeLlmSidecar {
                 llm_chat_messages: Vec::new(),
             })
         });
+        let mut continuation_admitted = false;
         if let Some(cognition) = cognition.as_ref() {
-            if decision_trace
-                .as_ref()
-                .is_none_or(|trace| trace.llm_error.is_none() && trace.parse_error.is_none())
-            {
+            if decision_trace.as_ref().is_none_or(|trace| {
+                trace.parse_error.is_none()
+                    && (trace.llm_error.is_none() || is_trace_only_overflow(trace))
+            }) {
                 self.provider_active_turns
                     .insert(agent_id.clone(), cognition.request.clone());
                 match &decision {
                     AgentDecision::Wait => {
-                        self.schedule_provider_wait(agent_id.as_str(), world.state().time, 1);
+                        continuation_admitted =
+                            match self.admit_provider_wait_continuation(world, kernel, cognition) {
+                                Ok(()) => true,
+                                Err(error) => {
+                                    tracing::warn!(
+                                        agent_id = agent_id.as_str(),
+                                        error = error.as_str(),
+                                        "provider Wait continuation admission failed"
+                                    );
+                                    let _ = runtime_provider_failure(
+                                        world,
+                                        &cognition.request,
+                                        "continuation_admission_failed",
+                                    );
+                                    let mut trace = decision_trace.clone().unwrap_or_else(|| {
+                                        AgentDecisionTrace {
+                                            agent_id: agent_id.clone(),
+                                            time: world.state().time,
+                                            decision: AgentDecision::Wait,
+                                            llm_input: None,
+                                            llm_output: None,
+                                            llm_error: None,
+                                            parse_error: None,
+                                            llm_diagnostics: None,
+                                            llm_effect_intents: Vec::new(),
+                                            llm_effect_receipts: Vec::new(),
+                                            llm_step_trace: Vec::new(),
+                                            llm_prompt_section_trace: Vec::new(),
+                                            llm_chat_messages: Vec::new(),
+                                        }
+                                    });
+                                    trace.llm_error = Some(error);
+                                    decision_trace = Some(trace);
+                                    false
+                                }
+                            };
                     }
                     AgentDecision::WaitTicks(ticks) => {
                         self.schedule_provider_wait(agent_id.as_str(), world.state().time, *ticks);
@@ -317,13 +369,24 @@ impl RuntimeLlmSidecar {
                             decision_trace,
                             cognition,
                             memory_write_intents: outcome.memory_write_intents,
+                            continuation_admitted,
                         };
                     }
                     let retry_result = kernel
                         .observe(agent_id.as_str())
                         .map_err(|error| format!("provider retry observation failed: {error:?}"))
-                        .and_then(|observation| match self.runner.as_mut() {
-                            Some(RuntimeDecisionRunner::ProviderBacked(runner)) => runner
+                        .and_then(|observation| {
+                            let Some(runner) = self
+                                .runner
+                                .as_mut()
+                                .and_then(RuntimeDecisionRunner::async_runner_mut)
+                            else {
+                                return Err(
+                                    "provider runner disappeared while retrying an async turn"
+                                        .to_string(),
+                                );
+                            };
+                            runner
                                 .retry_awaiting_turn_with_request_context_and_observation(
                                     agent_id.as_str(),
                                     observation,
@@ -331,15 +394,26 @@ impl RuntimeLlmSidecar {
                                     context.request_context.clone(),
                                 )
                                 .map(|_| ())
-                                .map_err(|error| error.to_string()),
-                            _ => Err("provider runner disappeared while retrying an async turn"
-                                .to_string()),
+                                .map_err(|error| error.to_string())
                         });
                     if let Err(error) = retry_result {
                         tracing::warn!(
                             agent_id,
                             error,
                             "async provider transport retry could not be dispatched"
+                        );
+                        // Runtime has already admitted transport attempt 2.
+                        // Close that exact attempt when the actor cannot
+                        // accept the retry; failing the stale attempt-1
+                        // context leaves the durable Runtime turn open.
+                        let retry_runtime_context = cognition_context::ProviderContextState {
+                            turn_context: context.turn_context.clone(),
+                            request_context: retry_context,
+                        };
+                        let _ = runtime_provider_failure(
+                            world,
+                            &retry_runtime_context,
+                            "failed_provider",
                         );
                         self.mark_provider_transport_exhausted(agent_id.clone());
                     }
@@ -365,6 +439,7 @@ impl RuntimeLlmSidecar {
             decision_trace,
             cognition,
             memory_write_intents: outcome.memory_write_intents,
+            continuation_admitted,
         }
     }
 }
@@ -374,6 +449,8 @@ fn cognition_event_matches(
     kind: &str,
     request: &crate::simulator::ContinuousAgentRequestContextV1,
 ) -> bool {
+    let expected_context_digest =
+        (kind == "ContextCaptured").then(|| runtime_provider_context_digest(request));
     world
         .cognition()
         .get("cognition_journal")
@@ -400,6 +477,12 @@ fn cognition_event_matches(
                         .get("request_digest")
                         .and_then(serde_json::Value::as_str)
                         == Some(request.request_digest.to_string().as_str())
+                    && expected_context_digest.as_deref().is_none_or(|expected| {
+                        event
+                            .get("context_digest")
+                            .and_then(serde_json::Value::as_str)
+                            == Some(expected)
+                    })
             })
         })
 }

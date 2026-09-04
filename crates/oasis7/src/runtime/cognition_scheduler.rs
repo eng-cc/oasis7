@@ -320,6 +320,10 @@ impl CognitionScheduler {
         })
     }
 
+    pub fn is_backpressured(&self, wake_id: &str) -> bool {
+        self.backpressure.contains_key(wake_id)
+    }
+
     pub fn advance_logical_tick(&mut self, tick: u64) {
         self.logical_tick = self.logical_tick.max(tick);
         self.cursor.logical_tick = self.logical_tick;

@@ -8,23 +8,37 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use oasis7::simulator::{
-    Action, ActionCatalogEntry, ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace,
-    AgentRunner, ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1,
-    ContinuousAgentTurnContextV1, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
-    DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION, LlmAgentBehavior, MockDecisionProvider,
-    Observation, OpenAiChatCompletionClient, ProviderCompatibilityStatus, ProviderExecutionMode,
-    ProviderLoopbackAdapter, ProviderLoopbackHttpClient, RuntimePerfSnapshot, WorldConfig,
-    WorldEvent, WorldInitConfig, WorldScenario, evaluate_provider_compatibility, initialize_kernel,
+    ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, AgentRunner,
+    ContinuousAgentRequestContextV1, ContinuousAgentTurnContextV1,
+    DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION, DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
+    LlmAgentBehavior, MockDecisionProvider, Observation, OpenAiChatCompletionClient,
+    ProviderCompatibilityStatus, ProviderExecutionMode, ProviderLoopbackAdapter,
+    ProviderLoopbackHttpClient, RuntimePerfSnapshot, WorldConfig, WorldEvent, WorldInitConfig,
+    WorldScenario, evaluate_provider_compatibility, initialize_kernel,
     provider_phase1_required_actions, provider_phase1_required_capabilities,
 };
 use serde::{Deserialize, Serialize};
 
+#[path = "oasis7_provider_parity_bench/behavior_support.rs"]
+mod behavior_support;
 #[path = "oasis7_provider_parity_bench/io_support.rs"]
 mod io_support;
+#[path = "oasis7_provider_parity_bench/recovery_ledger.rs"]
+mod recovery_ledger;
 #[path = "oasis7_provider_parity_bench/target_context.rs"]
 mod target_context;
 
+use self::behavior_support::{
+    action_ref_from_decision, apply_builtin_parity_guardrail, builtin_parity_short_term_goal,
+    classify_trace_error, decision_label, derive_status, execution_environment_class,
+    parity_memory_summary, percentile_u64, phase1_action_catalog, ratio_ppm,
+    unavailable_recovery_lineage,
+};
 use self::io_support::{parse_options, print_help, sanitize_filename, write_json, write_jsonl};
+use self::recovery_ledger::{
+    RECOVERY_METRIC_SCHEMA_VERSION, RecoveryErrorEvidence, RecoveryLedger, RecoveryLineage,
+    RecoveryMetricSummary, scenario_goal_completed,
+};
 use self::target_context::build_target_context;
 
 const DEFAULT_PROTOCOL_VERSION: &str = "2026-03-12";
@@ -34,6 +48,9 @@ const DEFAULT_TICKS: u64 = 20;
 const DEFAULT_PROVIDER_CONNECT_TIMEOUT_MS: u64 = 15_000;
 const DEFAULT_PROVIDER_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
 const DEFAULT_MAX_MOVE_DISTANCE_CM_PER_TICK: i64 = 1_000_000;
+const LOCAL_EXECUTION_AUTHORITY: &str = "simulator_world_kernel";
+const RUNTIME_CERTIFICATION_STATUS: &str = "not_certified";
+const RUNTIME_CERTIFICATION_REASON: &str = "unified Runtime execution and receipt authority is not wired; this is local simulator smoke only";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -197,6 +214,9 @@ struct SampleSummary {
     scenario: String,
     seed: String,
     status: String,
+    execution_authority: String,
+    runtime_certification_status: String,
+    runtime_certification_reason: String,
     goal_completed: bool,
     completion_time_ms: u64,
     decision_steps: u64,
@@ -204,6 +224,11 @@ struct SampleSummary {
     timeout_count: u64,
     recoverable_error_count: u64,
     fatal_error_count: u64,
+    metric_schema_version: String,
+    sample_id: String,
+    trace_validity: String,
+    recovery_events: Vec<recovery_ledger::RecoveryEvent>,
+    recoverable_error_resolution_rate: RecoveryMetricSummary,
     trace_completeness_ratio_ppm: u64,
     median_latency_ms: u64,
     p95_latency_ms: u64,
@@ -231,12 +256,13 @@ struct ProviderBackedLoopbackBehavior {
     inner: oasis7::simulator::ProviderBackedAgentBehavior<ProviderLoopbackAdapter>,
     request_builder: oasis7::simulator::ProviderBackedAgentBehavior<MockDecisionProvider>,
     request_builder_state: Arc<Mutex<oasis7::simulator::MockDecisionProviderState>>,
-    feedback_client: ProviderLoopbackHttpClient,
     fixture_id: String,
     session_id: String,
     next_turn: u64,
-    next_feedback_seq: u64,
-    last_response_context: Option<ContinuousAgentResponseContextV1>,
+    retry_seq: u64,
+    current_recovery_lineage: Option<RecoveryLineage>,
+    recovery_chain_id: String,
+    recovery_origin: Option<RecoveryLineage>,
 }
 
 impl AgentBehavior for BenchBehavior {
@@ -272,6 +298,21 @@ impl AgentBehavior for BenchBehavior {
         match self {
             Self::Builtin(inner) => inner.take_decision_trace(),
             Self::ProviderBacked(inner) => inner.take_decision_trace(),
+        }
+    }
+}
+
+impl BenchBehavior {
+    fn current_recovery_lineage(&self) -> Option<RecoveryLineage> {
+        match self {
+            Self::Builtin(_) => None,
+            Self::ProviderBacked(inner) => inner.current_recovery_lineage(),
+        }
+    }
+
+    fn note_recoverable_error(&mut self, lineage: RecoveryLineage) {
+        if let Self::ProviderBacked(inner) = self {
+            inner.note_recoverable_error(lineage);
         }
     }
 }
@@ -319,70 +360,6 @@ impl AgentBehavior for BuiltinParityBehavior {
     }
 }
 
-fn apply_builtin_parity_guardrail(
-    scenario_id: &str,
-    agent_id: &str,
-    observation: &Observation,
-    decision: AgentDecision,
-) -> (AgentDecision, Option<String>) {
-    if scenario_id != "P0-001" {
-        return (decision, None);
-    }
-    let Some(preferred_location) = preferred_patrol_move_target(observation) else {
-        return (decision, None);
-    };
-    if decision_is_valid_patrol_move(&decision, observation) {
-        return (decision, None);
-    }
-    (
-        AgentDecision::Act(Action::MoveAgent {
-            agent_id: agent_id.to_string(),
-            to: preferred_location.clone(),
-        }),
-        Some(format!(
-            "builtin_parity_guardrail: reroute {} -> move_agent({})",
-            decision_label(&decision),
-            preferred_location,
-        )),
-    )
-}
-
-fn decision_is_valid_patrol_move(decision: &AgentDecision, observation: &Observation) -> bool {
-    let current_location_id = estimated_current_location_id(observation);
-    matches!(
-        decision,
-        AgentDecision::Act(Action::MoveAgent { to, .. })
-            if observation.visible_locations.iter().any(|location| {
-                location.location_id == *to
-                    && location.distance_cm > 0
-                    && location.distance_cm <= DEFAULT_MAX_MOVE_DISTANCE_CM_PER_TICK
-                    && Some(location.location_id.as_str()) != current_location_id
-            })
-    )
-}
-
-fn preferred_patrol_move_target(observation: &Observation) -> Option<String> {
-    let current_location_id = estimated_current_location_id(observation);
-    observation
-        .visible_locations
-        .iter()
-        .filter(|location| {
-            location.distance_cm > 0
-                && location.distance_cm <= DEFAULT_MAX_MOVE_DISTANCE_CM_PER_TICK
-                && Some(location.location_id.as_str()) != current_location_id
-        })
-        .min_by_key(|location| location.distance_cm)
-        .map(|location| location.location_id.clone())
-}
-
-fn estimated_current_location_id(observation: &Observation) -> Option<&str> {
-    observation
-        .visible_locations
-        .iter()
-        .min_by_key(|location| location.distance_cm)
-        .map(|location| location.location_id.as_str())
-}
-
 impl AgentBehavior for ProviderBackedLoopbackBehavior {
     fn agent_id(&self) -> &str {
         self.inner.agent_id()
@@ -390,43 +367,28 @@ impl AgentBehavior for ProviderBackedLoopbackBehavior {
 
     fn decide(&mut self, observation: &Observation) -> AgentDecision {
         let (turn_context, request_context) = self.target_context(observation);
+        self.current_recovery_lineage = Some(target_context::recovery_lineage(
+            &request_context,
+            &self.recovery_chain_id,
+        ));
         self.inner.set_continuous_turn_context(Some(&turn_context));
         self.inner
             .set_continuous_request_context(Some(&request_context));
         let decision = self.inner.decide(observation);
-        self.last_response_context = self.inner.take_continuous_response_context();
+        let _ = self.inner.take_continuous_response_context();
         decision
     }
 
     fn on_action_result(&mut self, result: &ActionResult) {
         self.request_builder.on_action_result(result);
-        let Some(response) = self.last_response_context.as_ref() else {
-            return;
-        };
-        let status = if result.success {
-            "committed"
-        } else {
-            "rejected"
-        };
-        let feedback = oasis7::simulator::FeedbackEnvelopeV1 {
-            feedback_id: format!(
-                "{}-feedback-{}",
-                response.decision_request_id, result.action_id
-            ),
-            feedback_seq: self.next_feedback_seq,
-            agent_subject: self.inner.agent_id().to_string(),
-            agent_session_id: response.agent_session_id.clone(),
-            agent_turn_id: response.agent_turn_id.clone(),
-            decision_request_id: response.decision_request_id.clone(),
-            candidate_action_id: Some(result.action_id),
-            runtime_receipt_id: Some(format!("parity-receipt-{}", result.action_id)),
-            status: status.to_string(),
-            request_digest: response.request_digest.clone(),
-            reject_reason: result.reject_reason().map(|reason| format!("{reason:?}")),
-            provenance: "runtime_authoritative".to_string(),
-        };
-        self.next_feedback_seq = self.next_feedback_seq.saturating_add(1);
-        let _ = self.feedback_client.submit_feedback_context(&feedback);
+        if result.success {
+            // This executable owns only the simulator smoke loop. A successful
+            // simulator action cannot manufacture Runtime receipt evidence;
+            // the pending recovery remains unresolved until a unified Runtime
+            // executor is wired into the runner.
+            self.recovery_origin = None;
+            self.retry_seq = 1;
+        }
     }
 
     fn on_event(&mut self, event: &WorldEvent) {
@@ -436,6 +398,23 @@ impl AgentBehavior for ProviderBackedLoopbackBehavior {
 
     fn take_decision_trace(&mut self) -> Option<AgentDecisionTrace> {
         self.inner.take_decision_trace()
+    }
+}
+
+impl ProviderBackedLoopbackBehavior {
+    fn current_recovery_lineage(&self) -> Option<RecoveryLineage> {
+        self.current_recovery_lineage.clone()
+    }
+
+    fn note_recoverable_error(&mut self, lineage: RecoveryLineage) {
+        // Multiple unresolved errors cannot be safely assigned to the next
+        // action without an authority-backed receipt. Clear the candidate
+        // rather than falling back to FIFO or another inferred association.
+        match self.recovery_origin.as_ref() {
+            None => self.recovery_origin = Some(lineage),
+            Some(existing) if existing == &lineage => {}
+            Some(_) => self.recovery_origin = None,
+        }
     }
 }
 
@@ -462,13 +441,28 @@ impl ProviderBackedLoopbackBehavior {
             .expect("request builder must record a provider request");
         let turn = self.next_turn;
         self.next_turn = self.next_turn.saturating_add(1);
-        build_target_context(
-            request,
-            observation,
-            &self.fixture_id,
-            &self.session_id,
-            turn,
-        )
+        let contexts = if let Some(origin) = self.recovery_origin.clone() {
+            self.retry_seq = self.retry_seq.saturating_add(1).max(2);
+            target_context::build_target_context_for_retry(
+                request,
+                observation,
+                &self.fixture_id,
+                &self.session_id,
+                turn,
+                self.retry_seq,
+                &origin,
+            )
+        } else {
+            self.retry_seq = 1;
+            build_target_context(
+                request,
+                observation,
+                &self.fixture_id,
+                &self.session_id,
+                turn,
+            )
+        };
+        contexts
     }
 }
 
@@ -564,6 +558,11 @@ fn main() {
     let mut trace_present_count = 0_u64;
     let mut decision_steps = 0_u64;
     let mut latencies = Vec::new();
+    let sample_id = fixture_id.clone();
+    let mut recovery_ledger = RecoveryLedger::new(sample_id.clone());
+    notes.push(format!(
+        "runtime certification unavailable: {RUNTIME_CERTIFICATION_REASON}"
+    ));
 
     for step_index in 1..=options.ticks {
         let Some(result) = runner.tick(&mut kernel) else {
@@ -571,6 +570,9 @@ fn main() {
             continue;
         };
         decision_steps += 1;
+        let recovery_lineage = runner
+            .get_mut(result.agent_id.as_str())
+            .and_then(|agent| agent.behavior.current_recovery_lineage());
         let action_ref = action_ref_from_decision(&result.decision);
         if let Some(action_ref) = action_ref.as_ref() {
             let entry = action_kind_counts.entry(action_ref.clone()).or_insert(0);
@@ -616,17 +618,43 @@ fn main() {
                     fatal_error_count += 1;
                 }
             }
+            if matches!(
+                code.as_str(),
+                "timeout" | "provider_unreachable" | "invalid_action_schema" | "action_rejected"
+            ) {
+                let lineage = recovery_lineage
+                    .clone()
+                    .unwrap_or_else(|| unavailable_recovery_lineage(result.agent_id.as_str()));
+                recovery_ledger.record_recoverable_error(RecoveryErrorEvidence {
+                    error_code: code.clone(),
+                    lineage: lineage.clone(),
+                });
+                if let Some(agent) = runner.get_mut(result.agent_id.as_str()) {
+                    agent.behavior.note_recoverable_error(lineage);
+                }
+            }
         }
 
         let action_success = result.action_result.as_ref().map(|value| value.success);
         if matches!(action_success, Some(false)) {
             invalid_action_count += 1;
-            let entry = error_counts
-                .entry("action_rejected".to_string())
-                .or_insert(0);
-            *entry += 1;
             if error_code.is_none() {
+                let entry = error_counts
+                    .entry("action_rejected".to_string())
+                    .or_insert(0);
+                *entry += 1;
                 error_code = Some("action_rejected".to_string());
+                recoverable_error_count += 1;
+                let lineage = recovery_lineage
+                    .clone()
+                    .unwrap_or_else(|| unavailable_recovery_lineage(result.agent_id.as_str()));
+                recovery_ledger.record_recoverable_error(RecoveryErrorEvidence {
+                    error_code: "action_rejected".to_string(),
+                    lineage: lineage.clone(),
+                });
+                if let Some(agent) = runner.get_mut(result.agent_id.as_str()) {
+                    agent.behavior.note_recoverable_error(lineage);
+                }
             }
         }
 
@@ -681,13 +709,21 @@ fn main() {
         });
     }
 
+    let recovery_assessment = recovery_ledger.assess();
+    for error in &recovery_assessment.errors {
+        notes.push(format!("recovery ledger blocked: {error}"));
+    }
     let goal_completed = scenario_goal_completed(
         options.scenario_id.as_str(),
         &action_kind_counts,
         &error_counts,
         invalid_action_count,
+        &recovery_assessment.metric,
     );
-    let status = derive_status(goal_completed, &error_counts, &notes);
+    let mut status = derive_status(goal_completed, &error_counts, &notes);
+    if recovery_assessment.trace_validity == recovery_ledger::TraceValidity::Blocked {
+        status = "blocked".to_string();
+    }
     let trace_completeness_ratio_ppm = ratio_ppm(trace_present_count, decision_steps);
     let summary = SampleSummary {
         benchmark_run_id: options.benchmark_run_id.clone(),
@@ -706,6 +742,9 @@ fn main() {
         scenario: options.scenario.as_str().to_string(),
         seed,
         status,
+        execution_authority: LOCAL_EXECUTION_AUTHORITY.to_string(),
+        runtime_certification_status: RUNTIME_CERTIFICATION_STATUS.to_string(),
+        runtime_certification_reason: RUNTIME_CERTIFICATION_REASON.to_string(),
         goal_completed,
         completion_time_ms: run_started_at.elapsed().as_millis().min(u64::MAX as u128) as u64,
         decision_steps,
@@ -713,6 +752,11 @@ fn main() {
         timeout_count,
         recoverable_error_count,
         fatal_error_count,
+        metric_schema_version: RECOVERY_METRIC_SCHEMA_VERSION.to_string(),
+        sample_id,
+        trace_validity: recovery_assessment.trace_validity.as_str().to_string(),
+        recovery_events: recovery_assessment.recovery_events,
+        recoverable_error_resolution_rate: recovery_assessment.metric,
         trace_completeness_ratio_ppm,
         median_latency_ms: percentile_u64(&latencies, 50.0),
         p95_latency_ms: percentile_u64(&latencies, 95.0),
@@ -767,13 +811,24 @@ fn main() {
     );
     println!("median_latency_ms: {}", summary.median_latency_ms);
     println!("p95_latency_ms: {}", summary.p95_latency_ms);
+    println!(
+        "recoverable_error_resolution_rate: {}/{} ({})",
+        summary.recoverable_error_resolution_rate.numerator,
+        summary.recoverable_error_resolution_rate.denominator,
+        summary
+            .recoverable_error_resolution_rate
+            .value
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "null".to_string())
+    );
+    let exit_code = exit_code_for_status(summary.status.as_str());
+    if exit_code != 0 {
+        process::exit(exit_code);
+    }
 }
 
-fn execution_environment_class(mode: ProviderExecutionMode) -> &'static str {
-    match mode {
-        ProviderExecutionMode::PlayerParity => "player_parity_linux",
-        ProviderExecutionMode::HeadlessAgent => "headless_linux",
-    }
+fn exit_code_for_status(status: &str) -> i32 {
+    if status == "passed" { 0 } else { 1 }
 }
 
 fn prepare_provider_info(options: &CliOptions) -> Result<ProviderRunInfo, String> {
@@ -872,12 +927,6 @@ fn build_behavior(
                 options.agent_provider_connect_timeout_ms,
             )
             .map_err(|err| err.to_string())?;
-            let feedback_client = ProviderLoopbackHttpClient::new(
-                base_url,
-                options.provider_auth_token.as_deref(),
-                options.agent_provider_connect_timeout_ms,
-            )
-            .map_err(|err| err.to_string())?;
             let mut behavior = oasis7::simulator::ProviderBackedAgentBehavior::new(
                 agent_id.to_string(),
                 adapter,
@@ -922,196 +971,27 @@ fn build_behavior(
             if let Some(memory_summary) = parity_memory_summary(options.scenario_id.as_str()) {
                 request_builder = request_builder.with_memory_summary(memory_summary);
             }
+            let session_id = format!("parity-session-{}-{}", options.benchmark_run_id, fixture_id);
             Ok(BenchBehavior::ProviderBacked(
                 ProviderBackedLoopbackBehavior {
                     inner: behavior,
                     request_builder,
                     request_builder_state,
-                    feedback_client,
                     fixture_id: fixture_id.to_string(),
-                    session_id: format!(
-                        "parity-session-{}-{}",
-                        options.benchmark_run_id, fixture_id
-                    ),
+                    session_id: session_id.clone(),
                     next_turn: 0,
-                    next_feedback_seq: 1,
-                    last_response_context: None,
+                    retry_seq: 1,
+                    current_recovery_lineage: None,
+                    recovery_chain_id: target_context::recovery_chain_id(
+                        fixture_id,
+                        &session_id,
+                        agent_id,
+                    ),
+                    recovery_origin: None,
                 },
             ))
         }
     }
-}
-
-fn builtin_parity_short_term_goal(scenario_id: &str) -> Option<String> {
-    parity_memory_summary(scenario_id).map(str::to_string)
-}
-
-fn parity_memory_summary(scenario_id: &str) -> Option<&'static str> {
-    match scenario_id {
-        "P0-001" => Some(
-            "goal=巡游移动; prefer move_agent to the nearest visible non-current location; do not idle when a legal move is available",
-        ),
-        "P0-002" => Some(
-            "goal=近邻观察; prefer inspect_target on a visible agent or location before waiting",
-        ),
-        "P0-003" => Some(
-            "goal=简单对话; prefer speak_to_nearby with a short nearby message instead of idle waiting",
-        ),
-        "P0-004" => Some(
-            "goal=简单交互; prefer one legal simple_interact on a visible target before waiting",
-        ),
-        "P0-005" => Some(
-            "goal=拒绝路径恢复; after one recoverable failure, prefer a legal recovery action or short wait_ticks with an explicit recovery attempt",
-        ),
-        _ => None,
-    }
-}
-
-fn phase1_action_catalog() -> Vec<ActionCatalogEntry> {
-    vec![
-        ActionCatalogEntry::new("wait", "yield current turn without acting"),
-        ActionCatalogEntry::new("wait_ticks", "sleep for a bounded number of ticks"),
-        ActionCatalogEntry::new("move_agent", "move to a neighboring location"),
-        ActionCatalogEntry::new("speak_to_nearby", "emit a lightweight nearby speech event"),
-        ActionCatalogEntry::new(
-            "inspect_target",
-            "emit a lightweight target inspection event",
-        ),
-        ActionCatalogEntry::new(
-            "simple_interact",
-            "emit a lightweight single-step interaction event",
-        ),
-    ]
-}
-
-fn action_ref_from_decision(decision: &AgentDecision) -> Option<String> {
-    match decision {
-        AgentDecision::Wait => Some("wait".to_string()),
-        AgentDecision::WaitTicks(_) => Some("wait_ticks".to_string()),
-        AgentDecision::Act(action) => Some(action_ref_from_action(action).to_string()),
-        AgentDecision::Query(_) => Some("evaluate_micro_depot_quote".to_string()),
-        AgentDecision::ModuleCommand { .. } => Some("module_command".to_string()),
-    }
-}
-
-fn action_ref_from_action(action: &Action) -> &'static str {
-    match action {
-        Action::MoveAgent { .. } => "move_agent",
-        Action::SpeakToNearby { .. } => "speak_to_nearby",
-        Action::InspectTarget { .. } => "inspect_target",
-        Action::SimpleInteract { .. } => "simple_interact",
-        _ => "other",
-    }
-}
-
-fn decision_label(decision: &AgentDecision) -> String {
-    match decision {
-        AgentDecision::Wait => "wait".to_string(),
-        AgentDecision::WaitTicks(ticks) => format!("wait_ticks:{ticks}"),
-        AgentDecision::Act(action) => format!("act:{}", action_ref_from_action(action)),
-        AgentDecision::Query(_) => "query:evaluate_micro_depot_quote".to_string(),
-        AgentDecision::ModuleCommand { .. } => "module_command".to_string(),
-    }
-}
-
-fn classify_trace_error(
-    trace: Option<&AgentDecisionTrace>,
-    action_result: Option<&ActionResult>,
-) -> Option<String> {
-    if let Some(result) = action_result {
-        if !result.success {
-            return Some("action_rejected".to_string());
-        }
-    }
-    let err =
-        trace.and_then(|value| value.llm_error.as_deref().or(value.parse_error.as_deref()))?;
-    let lowered = err.to_ascii_lowercase();
-    if lowered.contains("timeout") {
-        Some("timeout".to_string())
-    } else if lowered.contains("provider_unreachable") || lowered.contains("unreachable") {
-        Some("provider_unreachable".to_string())
-    } else if lowered.contains("invalid_action_schema") || lowered.contains("schema") {
-        Some("invalid_action_schema".to_string())
-    } else if lowered.contains("session_cross_talk") || lowered.contains("cross talk") {
-        Some("session_cross_talk".to_string())
-    } else if lowered.contains("context_drift") || lowered.contains("drift") {
-        Some("context_drift".to_string())
-    } else {
-        None
-    }
-}
-
-fn scenario_goal_completed(
-    scenario_id: &str,
-    action_kind_counts: &BTreeMap<String, u64>,
-    error_counts: &BTreeMap<String, u64>,
-    invalid_action_count: u64,
-) -> bool {
-    match scenario_id {
-        "P0-001" => action_kind_counts.get("move_agent").copied().unwrap_or(0) >= 3,
-        "P0-002" => {
-            action_kind_counts
-                .get("inspect_target")
-                .copied()
-                .unwrap_or(0)
-                >= 1
-        }
-        "P0-003" => {
-            action_kind_counts
-                .get("speak_to_nearby")
-                .copied()
-                .unwrap_or(0)
-                >= 2
-        }
-        "P0-004" => {
-            action_kind_counts
-                .get("simple_interact")
-                .copied()
-                .unwrap_or(0)
-                >= 1
-                && invalid_action_count == 0
-        }
-        "P0-005" => !error_counts.is_empty() && invalid_action_count == 0,
-        _ => action_kind_counts.values().copied().sum::<u64>() > 0,
-    }
-}
-
-fn derive_status(
-    goal_completed: bool,
-    error_counts: &BTreeMap<String, u64>,
-    notes: &[String],
-) -> String {
-    if error_counts.contains_key("session_cross_talk") {
-        return "blocked".to_string();
-    }
-    if notes.iter().any(|note| note.contains("invalid_fixture")) {
-        return "invalid_fixture".to_string();
-    }
-    if goal_completed {
-        "passed".to_string()
-    } else {
-        "failed".to_string()
-    }
-}
-
-fn ratio_ppm(numerator: u64, denominator: u64) -> u64 {
-    if denominator == 0 {
-        0
-    } else {
-        numerator
-            .saturating_mul(1_000_000)
-            .saturating_div(denominator)
-    }
-}
-
-fn percentile_u64(values: &[u64], percentile: f64) -> u64 {
-    if values.is_empty() {
-        return 0;
-    }
-    let mut sorted = values.to_vec();
-    sorted.sort_unstable();
-    let rank = (((sorted.len() - 1) as f64) * percentile / 100.0).round() as usize;
-    sorted[rank.min(sorted.len() - 1)]
 }
 
 #[cfg(test)]

@@ -30,6 +30,7 @@ use super::types::{
     ResourceOwner,
 };
 
+mod behavior_context;
 mod behavior_guardrails;
 mod behavior_loop;
 mod behavior_prompt;
@@ -1086,6 +1087,7 @@ pub struct LlmAgentBehavior<C: LlmCompletionClient> {
     depleted_mine_location_cooldowns: BTreeMap<String, u64>,
     mine_failure_streaks_by_location: BTreeMap<String, MineFailureStreak>,
     recipe_coverage: RecipeCoverageProgress,
+    continuous_context: behavior_context::ContinuousAgentContext,
 }
 
 impl LlmAgentBehavior<OpenAiChatCompletionClient> {
@@ -1143,6 +1145,7 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
             depleted_mine_location_cooldowns: BTreeMap::new(),
             mine_failure_streaks_by_location: BTreeMap::new(),
             recipe_coverage: RecipeCoverageProgress::default(),
+            continuous_context: behavior_context::ContinuousAgentContext::default(),
         }
     }
 

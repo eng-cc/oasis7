@@ -108,4 +108,37 @@ impl AsyncAgentRunner {
         self.feedback_store.clear_agent(agent_id);
         Ok(())
     }
+
+    /// Release the actor's completed outcome after a provider Wait has been
+    /// admitted as a continuation. Unlike `expire_runtime_turn`, this keeps
+    /// the Harness continuation chain active: the Runtime-owned wake is now
+    /// the durable owner of the next invocation, so expiring here would
+    /// incorrectly invalidate a successfully admitted wait.
+    pub fn release_runtime_turn_for_continuation(
+        &mut self,
+        agent_id: &str,
+        agent_session_id: &str,
+        agent_turn_id: &str,
+        decision_request_id: &str,
+    ) -> Result<(), AsyncAgentRunnerError> {
+        let Some((&turn_id, _outcome)) = self.awaiting_outcomes.iter().find(|(_, outcome)| {
+            outcome.agent_id == agent_id
+                && outcome.prepared_context.as_ref().is_some_and(|context| {
+                    context.agent_session_id == agent_session_id
+                        && context.agent_turn_id == agent_turn_id
+                        && context.decision_request_id == decision_request_id
+                })
+        }) else {
+            return Err(AsyncAgentRunnerError::Cognition(
+                "unknown pending Runtime turn".to_string(),
+            ));
+        };
+        self.release_runtime_turn(agent_id, turn_id);
+        // A provider Wait is terminal for this logical request once Runtime
+        // has admitted its continuation. Clear the single-flight marker so
+        // the fresh wake/resume request can enter the actor; request replay
+        // protection remains in digest_by_request_id.
+        self.feedback_store.clear_agent(agent_id);
+        Ok(())
+    }
 }

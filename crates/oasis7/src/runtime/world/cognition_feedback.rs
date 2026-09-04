@@ -17,6 +17,45 @@ use std::collections::BTreeMap;
 
 const OUTBOX_FIELD: &str = "feedback_outbox";
 
+fn verify_feedback_receipt_lineage(
+    world: &World,
+    request: &RuntimeFeedbackRequestV1,
+    feedback_projection: &RuntimeFeedbackProjectionV1,
+) -> Result<Option<String>, WorldError> {
+    if request.status != "committed" {
+        return Ok(None);
+    }
+    let receipt_id = request
+        .runtime_receipt_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| feedback_error("feedback_receipt_required"))?;
+    let lineage = world.read_runtime_receipt_lineage(receipt_id)?;
+    if lineage.agent_id != request.agent_subject
+        || lineage.agent_session_id != request.agent_session_id
+        || lineage.agent_turn_id != request.agent_turn_id
+        || lineage.decision_request_id != request.decision_request_id
+        || lineage.request_digest != request.request_digest
+        || request
+            .candidate_action_id
+            .is_some_and(|action_id| lineage.action_id != format!("action:{action_id}"))
+        || feedback_projection
+            .envelope_digest
+            .as_deref()
+            .is_some_and(|digest| digest != lineage.envelope_digest)
+    {
+        return Err(feedback_error("feedback_receipt_lineage_mismatch"));
+    }
+    if request
+        .feedback_id
+        .as_deref()
+        .is_some_and(|feedback_id| feedback_id != lineage.feedback_id)
+    {
+        return Err(feedback_error("feedback_receipt_lineage_mismatch"));
+    }
+    Ok(Some(lineage.feedback_id))
+}
+
 fn feedback_error(code: impl Into<String>) -> WorldError {
     WorldError::CapabilityAuthorizationDenied {
         reason: code.into(),
@@ -109,7 +148,9 @@ impl World {
     ) -> Result<RuntimeFeedbackOutboxRecordV1, WorldError> {
         let projection = current_projection(self);
         let records = parse_outbox(&projection)?;
-        let requested_id = request.feedback_id.clone();
+        let receipt_feedback_id =
+            verify_feedback_receipt_lineage(self, &request, &feedback_projection)?;
+        let requested_id = request.feedback_id.clone().or(receipt_feedback_id);
         let feedback_id = requested_id.unwrap_or_else(|| {
             cognition_digest_v1(
                 "oasis7.runtime.feedback-id.v1",

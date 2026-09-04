@@ -240,21 +240,32 @@ impl ViewerRuntimeLiveServer {
                         AgentDecision::WaitTicks(ticks) => (*ticks).max(1),
                         _ => unreachable!("wait branch is exhaustive"),
                     };
-                    self.llm_sidecar.schedule_provider_wait(
-                        decision.agent_id.as_str(),
-                        self.world.state().time,
-                        ticks,
-                    );
+                    if !decision.continuation_admitted {
+                        self.llm_sidecar.schedule_provider_wait(
+                            decision.agent_id.as_str(),
+                            self.world.state().time,
+                            ticks,
+                        );
+                    }
                     let feedback = self.llm_sidecar.provider_feedback(
                         &cognition,
                         None,
                         "pending",
                         None,
                         None,
-                        Some("retry_scheduled".to_string()),
+                        Some(if decision.continuation_admitted {
+                            "continuation_admitted".to_string()
+                        } else {
+                            "retry_scheduled".to_string()
+                        }),
                     );
                     self.deliver_provider_feedback_best_effort(feedback);
-                    if cognition.request.turn_context.continuation.is_some() {
+                    if decision.continuation_admitted {
+                        // The native ProviderBacked path has already released
+                        // the actor outcome while retaining the Harness chain;
+                        // Runtime now owns the durable wake. No local timer or
+                        // compatibility terminal handoff may close it.
+                    } else if cognition.request.turn_context.continuation.is_some() {
                         // A Runtime-resumed request already consumed the
                         // selected wake and admitted its next continuation.
                         // Keep that continuation under the normal scheduler;
@@ -698,6 +709,7 @@ impl ViewerRuntimeLiveServer {
                 cognition.request.request_context.agent_subject.as_str(),
                 feedback.clone(),
                 &lineage,
+                cognition.memory_write_intents.as_slice(),
             )
             .map_err(ProviderRuntimeActionCommitError::Message)?;
         let finalized = self

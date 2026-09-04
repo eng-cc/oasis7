@@ -12,8 +12,8 @@ use crate::runtime::{
 #[cfg(not(target_arch = "wasm32"))]
 use crate::simulator::AsyncAgentRunner;
 use crate::simulator::{
-    Action as SimulatorAction, ActionCatalogEntry, AgentBehavior, AgentDecision,
-    AgentDecisionTrace, AgentPromptProfile, AgentRunner, ChunkRuntimeConfig,
+    Action as SimulatorAction, ActionCatalogEntry, AgentDecision, AgentDecisionTrace,
+    AgentPromptProfile, AgentRunner, ChunkRuntimeConfig,
     ContinuationProposalV1 as SimulatorContinuationProposalV1, ContinuousAgentResponseContextV1,
     LlmAgentBehavior, LlmAgentConfig, Location, MemoryWriteStore, OpenAiChatCompletionClient,
     ProviderAgentChatRequest, ProviderBackedAgentBehavior, ProviderExecutionMode,
@@ -113,7 +113,6 @@ use self::provider_support::{
 use self::runtime_support::{
     hash_chat_message, normalize_optional_public_key, restore_behavior_long_term_memory_from_model,
     runtime_provider_check_cache_key, runtime_provider_check_now_unix_ms,
-    sync_llm_runner_long_term_memory,
 };
 pub(in crate::viewer::runtime_live) use self::runtime_support::{
     simulator_action_label, simulator_action_to_runtime,
@@ -161,11 +160,29 @@ pub(in crate::viewer::runtime_live) fn resolve_runtime_live_llm_timeout_ms(
 }
 
 enum RuntimeDecisionRunner {
+    #[cfg(not(target_arch = "wasm32"))]
+    Builtin(AsyncAgentRunner),
+    #[cfg(target_arch = "wasm32")]
     Builtin(AgentRunner<LlmAgentBehavior<OpenAiChatCompletionClient>>),
     #[cfg(not(target_arch = "wasm32"))]
     ProviderBacked(AsyncAgentRunner),
     #[cfg(target_arch = "wasm32")]
     ProviderBacked(AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>>),
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl RuntimeDecisionRunner {
+    fn async_runner(&self) -> Option<&AsyncAgentRunner> {
+        match self {
+            Self::Builtin(runner) | Self::ProviderBacked(runner) => Some(runner),
+        }
+    }
+
+    fn async_runner_mut(&mut self) -> Option<&mut AsyncAgentRunner> {
+        match self {
+            Self::Builtin(runner) | Self::ProviderBacked(runner) => Some(runner),
+        }
+    }
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -190,8 +207,8 @@ pub(super) struct RuntimePendingProviderAgentChat {
 
 fn runtime_live_phase1_short_term_goal() -> String {
     concat!(
-        "post_onboarding.establish_first_capability 阶段，先做第一条可持续工业线。 ",
-        "开局默认种子资源通常已足够首个 smelter：若 self_resources.electricity>=10 且 data>=5 且还没有 factory.smelter.mk1，",
+        "post_onboarding.establish_first_capability 阶段，建设可持续工业线。 ",
+        "开局种子资源已足够首个 smelter：若 self_resources.electricity>=10 且 data>=5 且还没有 factory.smelter.mk1，",
         "优先 build_factory(factory.smelter.mk1)，不要先 harvest_radiation。 ",
         "只有在 electricity<10 时才先 harvest_radiation；只有在 data<5 时才先 mine_compound/refine_compound。 ",
         "smelter 建好后立刻 schedule_recipe(recipe.smelter.iron_ingot 或其他首批 smelter 配方)，避免 wait。"
@@ -930,32 +947,66 @@ impl RuntimeLlmSidecar {
                 Ok(())
             }
         } else {
-            let Some(RuntimeDecisionRunner::Builtin(runner)) = self.runner.as_mut() else {
-                return Err(AgentChatError {
-                    code: "llm_init_failed".to_string(),
-                    message: "builtin llm runner disappeared while sending agent chat".to_string(),
-                    agent_id: Some(agent_id.to_string()),
-                });
-            };
+            #[cfg(not(target_arch = "wasm32"))]
             {
-                let Some(agent) = runner.get_mut(agent_id) else {
-                    return Err(AgentChatError {
-                        code: "agent_not_registered".to_string(),
-                        message: format!("agent {} is not registered in llm runner", agent_id),
-                        agent_id: Some(agent_id.to_string()),
-                    });
-                };
-                if !agent
-                    .behavior
-                    .push_player_message(world.state().time, message)
-                {
+                if message.trim().is_empty() {
                     return Err(AgentChatError {
                         code: "empty_message".to_string(),
                         message: "chat message cannot be empty".to_string(),
                         agent_id: Some(agent_id.to_string()),
                     });
                 }
-                Ok(())
+                let Some(runner) = self
+                    .runner
+                    .as_mut()
+                    .and_then(RuntimeDecisionRunner::async_runner_mut)
+                else {
+                    return Err(AgentChatError {
+                        code: "llm_init_failed".to_string(),
+                        message: "builtin llm runner disappeared while sending agent chat"
+                            .to_string(),
+                        agent_id: Some(agent_id.to_string()),
+                    });
+                };
+                runner
+                    .notify_player_message(agent_id, world.state().time, message)
+                    .map_err(|error| AgentChatError {
+                        code: error.code().to_string(),
+                        message: error.to_string(),
+                        agent_id: Some(agent_id.to_string()),
+                    })?;
+                return Ok(());
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                let Some(RuntimeDecisionRunner::Builtin(runner)) = self.runner.as_mut() else {
+                    return Err(AgentChatError {
+                        code: "llm_init_failed".to_string(),
+                        message: "builtin llm runner disappeared while sending agent chat"
+                            .to_string(),
+                        agent_id: Some(agent_id.to_string()),
+                    });
+                };
+                {
+                    let Some(agent) = runner.get_mut(agent_id) else {
+                        return Err(AgentChatError {
+                            code: "agent_not_registered".to_string(),
+                            message: format!("agent {} is not registered in llm runner", agent_id),
+                            agent_id: Some(agent_id.to_string()),
+                        });
+                    };
+                    if !agent
+                        .behavior
+                        .push_player_message(world.state().time, message)
+                    {
+                        return Err(AgentChatError {
+                            code: "empty_message".to_string(),
+                            message: "chat message cannot be empty".to_string(),
+                            agent_id: Some(agent_id.to_string()),
+                        });
+                    }
+                    Ok(())
+                }
             }
         }
     }

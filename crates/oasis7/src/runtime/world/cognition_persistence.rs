@@ -284,43 +284,57 @@ fn ensure_cognition_lifecycle_prefix(
         })
         .unwrap_or_default();
     let mut highest_attempt = 0;
+    let mut exact_attempt = false;
     for dispatch in dispatches {
-        if dispatch
+        let existing_key = dispatch
             .get("provider_invocation_key")
-            .and_then(JsonValue::as_str)
-            != Some(envelope.provider_invocation_key.as_str())
-            || dispatch.get("retry_seq").and_then(JsonValue::as_u64) != Some(envelope.retry_seq)
+            .and_then(JsonValue::as_str);
+        let existing_retry_seq = dispatch.get("retry_seq").and_then(JsonValue::as_u64);
+        let existing_attempt = dispatch
+            .get("transport_attempt")
+            .and_then(JsonValue::as_u64);
+        if existing_key == Some(envelope.provider_invocation_key.as_str())
+            && existing_retry_seq == Some(envelope.retry_seq)
+            && existing_attempt == Some(transport_attempt)
+        {
+            exact_attempt = true;
+        }
+        if existing_key != Some(envelope.provider_invocation_key.as_str())
+            || existing_retry_seq != Some(envelope.retry_seq)
         {
             return Err(cognition_validation("cognition_dispatch_conflict"));
         }
-        highest_attempt = highest_attempt.max(
-            dispatch
-                .get("transport_attempt")
-                .and_then(JsonValue::as_u64)
-                .unwrap_or_default(),
-        );
+        highest_attempt = highest_attempt.max(existing_attempt.unwrap_or_default());
     }
-    if transport_attempt < highest_attempt {
+    if exact_attempt {
+        // A response retry may replay the latest exact dispatch tuple after
+        // losing the prior Runtime result. Replaying an older attempt after a
+        // newer one remains stale and must not mutate the durable prefix.
+        return if transport_attempt == highest_attempt {
+            Ok(())
+        } else {
+            Err(cognition_validation("cognition_dispatch_conflict"))
+        };
+    }
+    if transport_attempt != highest_attempt.saturating_add(1) {
         return Err(cognition_validation("cognition_dispatch_conflict"));
     }
-    if transport_attempt > highest_attempt {
-        append_cognition_event(
-            projection,
-            "RequestDispatched",
-            json!({
-                "agent_id": envelope.agent_id,
-                "agent_session_id": envelope.agent_session_id,
-                "agent_turn_id": envelope.agent_turn_id,
-                "decision_request_id": envelope.decision_request_id,
-                "request_digest": envelope.request_digest,
-                "provider_invocation_key": envelope.provider_invocation_key,
-                "retry_seq": envelope.retry_seq,
-                "transport_attempt": transport_attempt,
-                "logical_tick": envelope.issued_at_tick,
-                "status": "waiting_provider",
-            }),
-        )?;
-    }
+    append_cognition_event(
+        projection,
+        "RequestDispatched",
+        json!({
+            "agent_id": envelope.agent_id,
+            "agent_session_id": envelope.agent_session_id,
+            "agent_turn_id": envelope.agent_turn_id,
+            "decision_request_id": envelope.decision_request_id,
+            "request_digest": envelope.request_digest,
+            "provider_invocation_key": envelope.provider_invocation_key,
+            "retry_seq": envelope.retry_seq,
+            "transport_attempt": transport_attempt,
+            "logical_tick": envelope.issued_at_tick,
+            "status": "waiting_provider",
+        }),
+    )?;
     Ok(())
 }
 

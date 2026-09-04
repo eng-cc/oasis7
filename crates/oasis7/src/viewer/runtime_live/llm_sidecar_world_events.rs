@@ -32,6 +32,16 @@ fn provider_world_event_key(agent_id: &str, event: &WorldEvent) -> String {
     format!("provider-world-event-{}", hex::encode(digest.finalize()))
 }
 
+fn provider_event_actor_missing(error: &str, agent_id: &str) -> bool {
+    // Keep mailbox/backpressure errors retryable.  Only an explicit actor
+    // absence is terminal for this event; this prevents a deleted Agent from
+    // creating a durable retry loop while preserving transient delivery.
+    error.contains("agent is not registered")
+        || error.contains("provider actor unavailable")
+        || error.contains("builtin actor unavailable")
+        || (error.contains("actor is unavailable") && error.contains(agent_id))
+}
+
 impl RuntimeLlmSidecar {
     /// Deliver an authoritative production completion to its owning Agent.
     /// Runtime-live receives the full runtime receipt through `mapped_event`,
@@ -64,6 +74,14 @@ impl RuntimeLlmSidecar {
             return;
         };
 
+        #[cfg(not(target_arch = "wasm32"))]
+        let provider_runner = self.runner.as_ref().is_some_and(|runner| {
+            matches!(
+                runner,
+                RuntimeDecisionRunner::Builtin(_) | RuntimeDecisionRunner::ProviderBacked(_)
+            )
+        });
+        #[cfg(target_arch = "wasm32")]
         let provider_runner = self
             .runner
             .as_ref()
@@ -72,9 +90,13 @@ impl RuntimeLlmSidecar {
         // owner.  Keep it durable and flush after runner registration.
         if provider_runner || self.runner.is_none() {
             self.enqueue_provider_world_event(requester_agent_id, mapped_event, runtime_binding);
-        } else if let Some(RuntimeDecisionRunner::Builtin(runner)) = self.runner.as_mut() {
-            if let Some(agent) = runner.get_mut(requester_agent_id.as_str()) {
-                agent.behavior.on_event(&mapped_event);
+        }
+        #[cfg(target_arch = "wasm32")]
+        if !provider_runner {
+            if let Some(RuntimeDecisionRunner::Builtin(runner)) = self.runner.as_mut() {
+                if let Some(agent) = runner.get_mut(requester_agent_id.as_str()) {
+                    agent.behavior.on_event(&mapped_event);
+                }
             }
         }
     }
@@ -107,7 +129,10 @@ impl RuntimeLlmSidecar {
     ) -> Result<(), String> {
         match self.runner.as_mut() {
             #[cfg(not(target_arch = "wasm32"))]
-            Some(RuntimeDecisionRunner::ProviderBacked(runner)) => runner
+            Some(
+                RuntimeDecisionRunner::Builtin(runner)
+                | RuntimeDecisionRunner::ProviderBacked(runner),
+            ) => runner
                 .notify_world_event(agent_id, event)
                 .map_err(|error| error.to_string()),
             #[cfg(target_arch = "wasm32")]
@@ -115,6 +140,7 @@ impl RuntimeLlmSidecar {
                 .get_mut(agent_id)
                 .map(|agent| agent.behavior.on_event(&event))
                 .ok_or_else(|| format!("provider actor unavailable: {agent_id}")),
+            #[cfg(target_arch = "wasm32")]
             Some(RuntimeDecisionRunner::Builtin(runner)) => {
                 let Some(agent) = runner.get_mut(agent_id) else {
                     return Err(format!("builtin actor unavailable: {agent_id}"));
@@ -155,11 +181,23 @@ impl RuntimeLlmSidecar {
                     delivered = true;
                 }
                 Err(error) => {
-                    tracing::warn!(
-                        agent_id,
-                        error,
-                        "provider world event delivery deferred for retry"
-                    );
+                    if provider_event_actor_missing(error.as_str(), agent_id.as_str()) {
+                        self.pending_provider_world_events.remove(key.as_str());
+                        self.provider_world_event_quarantine
+                            .insert(key, format!("provider_actor_missing:{agent_id}"));
+                        delivered = true;
+                        tracing::warn!(
+                            agent_id,
+                            error,
+                            "provider world event quarantined because its actor is missing"
+                        );
+                    } else {
+                        tracing::warn!(
+                            agent_id,
+                            error,
+                            "provider world event delivery deferred for retry"
+                        );
+                    }
                 }
             }
         }

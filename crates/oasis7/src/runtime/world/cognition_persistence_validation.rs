@@ -6,6 +6,7 @@ use crate::runtime::cognition_recovery::{
 };
 use crate::runtime::error::WorldError;
 use serde_json::{Value as JsonValue, json};
+use std::collections::BTreeMap;
 
 pub(super) fn append_cognition_event(
     projection: &mut JsonValue,
@@ -188,15 +189,25 @@ pub(super) fn validate_marker_current_world(
     }
     if let Some(binding) = world.cognition().get("runtime_binding") {
         let block_hash = strict_optional_finality_hash(binding.get("finality_block_hash"))?;
-        if binding["world_id"].as_str() != Some(marker.world_id.as_str())
-            || binding["branch_id"].as_str() != Some(marker.branch_id.as_str())
-            || binding["finality_epoch"].as_u64() != Some(marker.finality_epoch)
-            || block_hash.as_deref() != marker.finality_block_hash.as_deref()
-            || binding["finality_status"].as_str() != Some(marker.finality_status.as_str())
-            || binding["reorg_epoch"].as_u64() != Some(marker.reorg_epoch)
-            || binding["runtime_manifest_hash"].as_str()
-                != Some(marker.runtime_manifest_hash.as_str())
-        {
+        let identity_matches = binding["world_id"].as_str() == Some(marker.world_id.as_str())
+            && binding["branch_id"].as_str() == Some(marker.branch_id.as_str())
+            && binding["runtime_manifest_hash"].as_str()
+                == Some(marker.runtime_manifest_hash.as_str());
+        // Committed receipts are immutable historical evidence. A later
+        // canonical reorg/rebind may legitimately change finality fields and
+        // reorg epoch, but it may not move the receipt to another world,
+        // branch, or runtime manifest. Prepared/aborted records still require
+        // the exact current binding because they have not become history.
+        let binding_matches = if marker.status == "committed" {
+            identity_matches
+        } else {
+            identity_matches
+                && binding["finality_epoch"].as_u64() == Some(marker.finality_epoch)
+                && block_hash.as_deref() == marker.finality_block_hash.as_deref()
+                && binding["finality_status"].as_str() == Some(marker.finality_status.as_str())
+                && binding["reorg_epoch"].as_u64() == Some(marker.reorg_epoch)
+        };
+        if !binding_matches {
             return Err(validation("cognition_finality_binding_mismatch"));
         }
     }
@@ -220,6 +231,10 @@ pub(super) fn validate_cognition_journal_integrity(journal: &JsonValue) -> Resul
         .ok_or_else(|| validation("cognition_events_missing"))?;
     let mut previous_seq = 0u64;
     let mut previous_event_digest = String::new();
+    let mut lifecycle: BTreeMap<(String, String, String, String, String), LifecycleState> =
+        BTreeMap::new();
+    let mut dispatch_attempts: BTreeMap<(String, String, String, String, String), u64> =
+        BTreeMap::new();
     for event in events {
         let object = event
             .as_object()
@@ -337,6 +352,7 @@ pub(super) fn validate_cognition_journal_integrity(journal: &JsonValue) -> Resul
         if expected != event_digest {
             return Err(validation("cognition_event_digest_mismatch"));
         }
+        validate_lifecycle_event(object, &mut lifecycle, &mut dispatch_attempts)?;
         previous_event_digest = event_digest.to_string();
         previous_seq = sequence;
     }
@@ -350,6 +366,169 @@ pub(super) fn validate_cognition_journal_integrity(journal: &JsonValue) -> Resul
     if head_seq < previous_seq || head_seq > previous_seq.saturating_add(1) {
         return Err(validation("cognition_journal_head_sequence_mismatch"));
     }
+    Ok(())
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LifecycleState {
+    Started,
+    ContextCaptured,
+    Dispatched,
+    ResponseRecorded,
+    Submitted,
+    Validated,
+    Linked,
+    Failed,
+    Cancelled,
+    Completed,
+}
+
+fn validate_lifecycle_event(
+    event: &serde_json::Map<String, JsonValue>,
+    states: &mut BTreeMap<(String, String, String, String, String), LifecycleState>,
+    attempts: &mut BTreeMap<(String, String, String, String, String), u64>,
+) -> Result<(), WorldError> {
+    let kind = event
+        .get("event_kind")
+        .and_then(JsonValue::as_str)
+        .unwrap_or_default();
+    // Scheduler/continuation/feedback records are not turn lifecycle events;
+    // they may carry an agent identity but have their own state machine.
+    if !matches!(
+        kind,
+        "TurnStarted"
+            | "ContextCaptured"
+            | "RequestDispatched"
+            | "ResponseRecorded"
+            | "DecisionEnvelopeSubmitted"
+            | "DecisionValidated"
+            | "WorldReceiptLinked"
+            | "DecisionRejected"
+            | "CognitionTurnFailed"
+            | "CognitionTurnCancelled"
+            | "CognitionTurnCompleted"
+            | "LateResponseRejected"
+    ) {
+        return Ok(());
+    }
+    let key = (
+        event
+            .get("agent_id")
+            .and_then(JsonValue::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        event
+            .get("agent_session_id")
+            .and_then(JsonValue::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        event
+            .get("agent_turn_id")
+            .and_then(JsonValue::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        event
+            .get("decision_request_id")
+            .and_then(JsonValue::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        event
+            .get("request_digest")
+            .and_then(JsonValue::as_str)
+            .unwrap_or_default()
+            .to_string(),
+    );
+    // Legacy sparse events do not have a complete identity and are validated
+    // by their marker/recovery compatibility path instead.
+    if key.0.is_empty()
+        || key.1.is_empty()
+        || key.2.is_empty()
+        || key.3.is_empty()
+        || key.4.is_empty()
+    {
+        return Ok(());
+    }
+    let state = states.get(&key).copied();
+    let next = match kind {
+        "TurnStarted" if state.is_none() => LifecycleState::Started,
+        "DecisionRejected" if state.is_none() => LifecycleState::Cancelled,
+        "ContextCaptured" if matches!(state, Some(LifecycleState::Started)) => {
+            LifecycleState::ContextCaptured
+        }
+        "RequestDispatched"
+            if matches!(
+                state,
+                Some(LifecycleState::ContextCaptured | LifecycleState::Dispatched)
+            ) =>
+        {
+            let attempt = event
+                .get("transport_attempt")
+                .and_then(JsonValue::as_u64)
+                .ok_or_else(|| validation("cognition_transport_attempt_invalid"))?;
+            let previous = attempts.get(&key).copied().unwrap_or_default();
+            if attempt != previous.saturating_add(1) {
+                return Err(validation("cognition_transport_attempt_gap"));
+            }
+            attempts.insert(key.clone(), attempt);
+            LifecycleState::Dispatched
+        }
+        "ResponseRecorded" if matches!(state, Some(LifecycleState::Dispatched)) => {
+            LifecycleState::ResponseRecorded
+        }
+        "DecisionEnvelopeSubmitted" if matches!(state, Some(LifecycleState::ResponseRecorded)) => {
+            LifecycleState::Submitted
+        }
+        "DecisionValidated"
+            if matches!(
+                state,
+                Some(
+                    LifecycleState::ContextCaptured
+                        | LifecycleState::Dispatched
+                        | LifecycleState::ResponseRecorded
+                        | LifecycleState::Submitted
+                )
+            ) =>
+        {
+            LifecycleState::Validated
+        }
+        "WorldReceiptLinked" if matches!(state, Some(LifecycleState::Validated)) => {
+            LifecycleState::Linked
+        }
+        "CognitionTurnFailed"
+            if matches!(
+                state,
+                Some(LifecycleState::ContextCaptured | LifecycleState::Dispatched)
+            ) =>
+        {
+            LifecycleState::Failed
+        }
+        "CognitionTurnCancelled" if !matches!(state, None | Some(LifecycleState::Completed)) => {
+            LifecycleState::Cancelled
+        }
+        "CognitionTurnCompleted"
+            if matches!(
+                state,
+                Some(
+                    LifecycleState::Failed
+                        | LifecycleState::Cancelled
+                        | LifecycleState::Validated
+                        | LifecycleState::Linked
+                )
+            ) =>
+        {
+            LifecycleState::Completed
+        }
+        "LateResponseRejected"
+            if matches!(
+                state,
+                Some(LifecycleState::Cancelled | LifecycleState::Completed)
+            ) =>
+        {
+            state.unwrap()
+        }
+        _ => return Err(validation("cognition_lifecycle_order_invalid")),
+    };
+    states.insert(key, next);
     Ok(())
 }
 

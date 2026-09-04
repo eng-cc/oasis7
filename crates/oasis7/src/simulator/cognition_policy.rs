@@ -389,6 +389,11 @@ pub enum MemoryWritePolicyOutcome {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MemoryWriteStore {
+    /// Monotonic store revision used to bind a retrieved snapshot to the
+    /// committed memory projection that produced it.  Older checkpoints did
+    /// not persist a revision, so serde defaults them to the empty revision.
+    #[serde(default)]
+    revision: u64,
     entries: Vec<Value>,
     committed_by_digest: BTreeMap<String, String>,
 }
@@ -396,6 +401,59 @@ pub struct MemoryWriteStore {
 impl MemoryWriteStore {
     pub fn entries(&self) -> &[Value] {
         &self.entries
+    }
+
+    /// Build a deterministic, bounded snapshot for the next turn of one
+    /// Agent session.  Runtime-authoritative entries carry their originating
+    /// Harness identity; entries from another Agent/session (or legacy
+    /// checkpoints without that identity) are never projected into this
+    /// context.  The newest entries are selected while preserving commit
+    /// order in the resulting snapshot.
+    pub fn context_snapshot(
+        &self,
+        agent_id: &str,
+        agent_session_id: &str,
+        scope: &str,
+        max_entries: usize,
+    ) -> MemoryContextSnapshotV1 {
+        let limit = max_entries.min(MAX_MEMORY_INTENTS);
+        let mut selected = self
+            .entries
+            .iter()
+            .filter(|entry| {
+                entry.get("agent_id").and_then(Value::as_str) == Some(agent_id)
+                    && entry.get("agent_session_id").and_then(Value::as_str)
+                        == Some(agent_session_id)
+                    && entry.get("scope").and_then(Value::as_str) == Some(scope)
+            })
+            .filter_map(|entry| {
+                let id = entry.get("intent_digest")?.as_str()?.to_string();
+                let summary = entry.get("summary")?.as_str()?.to_string();
+                let tags = entry
+                    .get("tags")
+                    .and_then(Value::as_array)
+                    .map(|tags| {
+                        tags.iter()
+                            .filter_map(Value::as_str)
+                            .map(str::to_string)
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                Some(MemoryContextEntryV1 { id, summary, tags })
+            })
+            .collect::<Vec<_>>();
+        if selected.len() > limit {
+            let keep_from = selected.len() - limit;
+            selected.drain(..keep_from);
+        }
+        let mut snapshot = MemoryContextSnapshotV1 {
+            revision: self.revision,
+            entries: selected,
+            scope: scope.to_string(),
+            digest: String::new(),
+        };
+        snapshot.digest = snapshot.computed_digest();
+        snapshot
     }
 
     pub fn apply(
@@ -447,7 +505,28 @@ impl MemoryWriteStore {
                 .to_string(),
         );
         self.entries.push(entry);
+        self.revision = self.revision.saturating_add(1);
         Ok(())
+    }
+
+    fn annotate_context(&mut self, digest: &Digest32, context: &MemoryWritePolicyContextV1) {
+        let digest = digest.as_str();
+        if let Some(entry) = self
+            .entries
+            .iter_mut()
+            .rev()
+            .find(|entry| entry.get("intent_digest").and_then(Value::as_str) == Some(digest))
+        {
+            if let Some(object) = entry.as_object_mut() {
+                object.insert("agent_id".to_string(), json!(context.agent_id));
+                object.insert(
+                    "agent_session_id".to_string(),
+                    json!(context.agent_session_id),
+                );
+                object.insert("agent_turn_id".to_string(), json!(context.agent_turn_id));
+                object.insert("request_digest".to_string(), json!(context.request_digest));
+            }
+        }
     }
 
     /// Commit only from the Runtime receipt projection.  The lower-level
@@ -461,17 +540,36 @@ impl MemoryWriteStore {
         digest: Digest32,
         receipt: &crate::runtime::RuntimeReceiptLineageV1,
     ) -> Result<(), CognitionError> {
+        self.apply_runtime_receipt_with_context(intent, digest, receipt, None)
+    }
+
+    /// Runtime receipt gate with optional Harness identity metadata.  The
+    /// metadata is deliberately outside the intent digest: it is retrieval
+    /// partitioning evidence, while the receipt and policy context remain the
+    /// authority for whether the write may be committed.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn apply_runtime_receipt_with_context(
+        &mut self,
+        intent: NormalizedMemoryWriteIntentV1,
+        digest: Digest32,
+        receipt: &crate::runtime::RuntimeReceiptLineageV1,
+        context: Option<&MemoryWritePolicyContextV1>,
+    ) -> Result<(), CognitionError> {
         receipt.validate().map_err(|runtime_error| {
             error("memory_runtime_receipt_invalid", runtime_error.to_string())
         })?;
         self.apply(
             intent,
-            digest,
+            digest.clone(),
             MemoryWritePolicyOutcome::Committed {
                 receipt_id: receipt.receipt_id.clone(),
                 provenance: "runtime_authoritative".to_string(),
             },
-        )
+        )?;
+        if let Some(context) = context {
+            self.annotate_context(&digest, context);
+        }
+        Ok(())
     }
 }
 

@@ -45,6 +45,8 @@ use super::types::WorldTime;
 mod feedback;
 pub use self::feedback::{RuntimeReceiptReadbackHandleV1, RuntimeReceiptReadbackVerifier};
 use self::feedback::{validate_feedback, validate_runtime_receipt_lineage};
+#[path = "async_agent_runner_actor_controls.rs"]
+mod actor_controls;
 #[path = "async_agent_runner_continuation.rs"]
 mod continuation;
 #[path = "async_agent_runner_retry.rs"]
@@ -190,6 +192,15 @@ enum ActorCommand {
     },
     ActionResult(ActionResult),
     Event(WorldEvent),
+    PromptOverrides {
+        system_prompt: Option<String>,
+        short_term_goal: Option<String>,
+        long_term_goal: Option<String>,
+    },
+    PlayerMessage {
+        world_time: WorldTime,
+        message: String,
+    },
     Shutdown,
 }
 
@@ -288,6 +299,27 @@ impl AgentActor {
                         ActorCommand::Event(event) => {
                             let _ = panic::catch_unwind(AssertUnwindSafe(|| {
                                 behavior.on_event(&event);
+                            }));
+                        }
+                        ActorCommand::PromptOverrides {
+                            system_prompt,
+                            short_term_goal,
+                            long_term_goal,
+                        } => {
+                            let _ = panic::catch_unwind(AssertUnwindSafe(|| {
+                                behavior.set_prompt_overrides(
+                                    system_prompt,
+                                    short_term_goal,
+                                    long_term_goal,
+                                );
+                            }));
+                        }
+                        ActorCommand::PlayerMessage {
+                            world_time,
+                            message,
+                        } => {
+                            let _ = panic::catch_unwind(AssertUnwindSafe(|| {
+                                behavior.on_player_message(world_time, message.as_str());
                             }));
                         }
                         ActorCommand::Shutdown => break,
@@ -561,7 +593,20 @@ impl AsyncAgentRunner {
         if self
             .continuations
             .get(agent_id)
-            .is_some_and(|continuation| continuation.active)
+            .is_some_and(|continuation| {
+                continuation.active
+                    && !context.as_ref().is_some_and(|context| {
+                        context.continuation.as_ref().is_some_and(|next| {
+                            next.continuation_proposal_id
+                                == continuation.proposal.continuation_proposal_id
+                                && next.proposal_digest == continuation.proposal.proposal_digest
+                                && next.agent_session_id == continuation.proposal.agent_session_id
+                                && next.agent_turn_id == continuation.proposal.agent_turn_id
+                                && next.decision_request_id
+                                    == continuation.proposal.decision_request_id
+                        })
+                    })
+            })
         {
             return Err(AsyncAgentRunnerError::AgentBusy(agent_id.to_string()));
         }
@@ -814,6 +859,11 @@ impl AsyncAgentRunner {
             provenance: "provider_unverified".to_string(),
         };
         let policy = MemoryWriteIntentPolicyV1::default();
+        runtime_receipt.validate().map_err(|error| {
+            AsyncAgentRunnerError::Cognition(format!(
+                "Runtime receipt lineage invalid for memory projection: {error}"
+            ))
+        })?;
         let mut normalized = Vec::with_capacity(outcome.memory_write_intents.len());
         for intent in outcome.memory_write_intents {
             let intent = MemoryWriteIntentV1 {
@@ -823,18 +873,50 @@ impl AsyncAgentRunner {
                 tags: intent.tags,
                 compatibility_reason: None,
             };
-            let intent = policy
-                .normalize(intent, &policy_context)
-                .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
-            let digest = policy
-                .intent_digest(&intent, &policy_context)
-                .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+            let intent = match policy.normalize(intent, &policy_context) {
+                Ok(intent) => intent,
+                Err(error) => {
+                    // The Runtime receipt already committed the world action.
+                    // A provider-authored memory intent is a separate bounded
+                    // projection and may be rejected without rewriting that
+                    // authoritative disposition as ActionRejected.
+                    tracing::warn!(
+                        agent_id,
+                        code = error.code(),
+                        error = %error,
+                        "provider memory intent rejected after Runtime commit"
+                    );
+                    continue;
+                }
+            };
+            let digest = match policy.intent_digest(&intent, &policy_context) {
+                Ok(digest) => digest,
+                Err(error) => {
+                    tracing::warn!(
+                        agent_id,
+                        code = error.code(),
+                        error = %error,
+                        "provider memory intent digest rejected after Runtime commit"
+                    );
+                    continue;
+                }
+            };
             normalized.push((intent, digest));
         }
         for (intent, digest) in normalized {
-            store
-                .apply_runtime_receipt(intent, digest, runtime_receipt)
-                .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+            if let Err(error) = store.apply_runtime_receipt_with_context(
+                intent,
+                digest,
+                runtime_receipt,
+                Some(&policy_context),
+            ) {
+                tracing::warn!(
+                    agent_id,
+                    code = error.code(),
+                    error = %error,
+                    "provider memory projection rejected after Runtime commit"
+                );
+            }
         }
         self.feedback_store
             .accept_feedback(feedback)

@@ -435,6 +435,10 @@ impl World {
         &mut self,
         tick: u64,
     ) -> Result<Vec<SchedulerWakeV1>, WorldError> {
+        // Expiry is independent of queue visibility. In-flight leases can be
+        // the only scheduler entries after a crash or provider stall, and
+        // they must be terminalized before the early no-ready return below.
+        self.expire_cognition_continuations_at_tick(tick)?;
         let Some(state) = self
             .cognition
             .get("scheduler_state")
@@ -507,6 +511,26 @@ impl World {
         let mut scheduler = transaction.cognition_scheduler()?;
         let mut recovered = scheduler.recover_in_flight_preserving_cursor(tick);
         recovered.extend(scheduler.recover_capacity_preserving_cursor(tick));
+        let mut continuations = transaction.cognition_continuations_typed()?;
+        let mut status_recovered = false;
+        for continuation in &mut continuations {
+            if continuation.status == ContinuationStatusV1::Pending
+                && scheduler.wake_by_id(&continuation.wake_id).is_some()
+                && !scheduler.is_backpressured(&continuation.wake_id)
+            {
+                ContinuationTransition::apply_at_tick(
+                    continuation,
+                    ContinuationStatusV1::Scheduled,
+                    tick,
+                )
+                .map_err(|error| cognition_validation_error(error.code()))?;
+                continuation.refresh_status_digest();
+                status_recovered = true;
+            }
+        }
+        if status_recovered {
+            transaction.cognition_set_continuations(&continuations)?;
+        }
         if recovered.is_empty() {
             transaction.cognition_commit_scheduler_transaction(
                 &scheduler,
@@ -754,9 +778,18 @@ impl World {
             status: "pending".to_string(),
             pending_reason: "capacity_available".to_string(),
         };
-        scheduler
+        let enqueue_outcome = scheduler
             .try_enqueue(wake.clone())
             .map_err(|error| scheduler_error(error.code()))?;
+        if enqueue_outcome.disposition == "pending" {
+            ContinuationTransition::apply_at_tick(
+                &mut continuation,
+                ContinuationStatusV1::Pending,
+                self.state.time,
+            )
+            .map_err(|error| cognition_validation_error(error.code()))?;
+            continuation.refresh_status_digest();
+        }
         continuations.push(continuation.clone());
         let mut context_registry = self
             .cognition

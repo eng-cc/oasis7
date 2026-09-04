@@ -388,9 +388,15 @@ with open(sys.argv[1], encoding="utf-8") as handle:
     print(json.dumps(json.load(handle), separators=(",", ":")))
 PY
 )"
+  local response_validator_source
+  response_validator_source="$(<"$ROOT_DIR/scripts/provider-remote-https/provider_response_validator.py")"
   local remote_script
-  remote_script="$(cat <<'PY'
+  remote_script="$(cat <<PY
 import json, os, subprocess, tempfile
+
+# Embedded from provider_response_validator.py so the remote host uses the
+# same strict target-response boundary as the local contract smoke.
+${response_validator_source}
 
 auth = os.environ['AUTH_TOKEN']
 payload_file = os.environ['TARGET_CONTEXT_PAYLOAD']
@@ -437,14 +443,12 @@ for index, pair in enumerate(pairs[:count], start=1):
     if not isinstance(request, dict) or not isinstance(feedback, dict):
         raise SystemExit('target context pair %d is not a strict decision/feedback pair' % index)
     response = curl_json('/v1/world-simulator/decision-context', request)
-    for field in ('context_discriminator', 'context_version', 'agent_session_id',
-                  'agent_turn_id', 'decision_request_id', 'retry_seq',
-                  'transport_attempt', 'request_digest'):
-        if response.get(field) != request.get(field):
-            raise SystemExit('target response identity mismatch for %s' % field)
-    base = response.get('base_decision_response')
-    if not isinstance(base, dict):
-        raise SystemExit('target response is missing base_decision_response')
+    if not isinstance(response, dict):
+        raise SystemExit('target response must be a JSON object')
+    try:
+        base = validate_target_context_response(response, request)
+    except RuntimeError as exc:
+        raise SystemExit(str(exc))
     error = base.get('provider_error')
     diagnostics = base.get('diagnostics') or {}
     if error is None:

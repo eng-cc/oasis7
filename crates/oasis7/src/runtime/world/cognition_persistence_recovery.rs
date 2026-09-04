@@ -112,13 +112,21 @@ impl World {
             // Scheduler restore validates policy, bucket disjointness,
             // capacity, and every durable in-flight wake identity before any
             // cognition projection is exposed to a caller.
-            CognitionScheduler::from_snapshot_json(
+            let scheduler = CognitionScheduler::from_snapshot_json(
                 projection
                     .get("scheduler_state")
                     .cloned()
                     .unwrap_or(JsonValue::Null),
             )
             .map_err(|error| cognition_validation(error.code()))?;
+            let evaluations = projection
+                .get("continuation_evaluations")
+                .and_then(JsonValue::as_object);
+            for wake in scheduler.in_flight_wakes() {
+                if evaluations.is_none_or(|values| !values.contains_key(&wake.continuation_id)) {
+                    return Err(cognition_validation("cognition_wake_evaluation_missing"));
+                }
+            }
         }
 
         // A continuation that advertises an authoritative status digest must

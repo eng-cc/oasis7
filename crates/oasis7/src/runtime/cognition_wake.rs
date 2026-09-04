@@ -970,7 +970,8 @@ impl ContinuationTransition {
             ),
             ContinuationStatusV1::Pending => matches!(
                 to,
-                ContinuationStatusV1::Waking
+                ContinuationStatusV1::Scheduled
+                    | ContinuationStatusV1::Waking
                     | ContinuationStatusV1::Cancelled
                     | ContinuationStatusV1::Invalidated
                     | ContinuationStatusV1::Expired

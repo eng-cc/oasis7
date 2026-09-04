@@ -13,6 +13,7 @@ from pathlib import Path
 
 
 SCRIPT_PATH = Path(__file__).with_name("provider_bridge_contract_smoke.py")
+LIVE_GATE_PATH = Path(__file__).with_name("provider-bridge-live-gate.sh")
 
 
 def load_smoke_module():
@@ -249,6 +250,35 @@ def target_payload_file(directory, count=1):
     return str(path)
 
 
+def valid_target_response(request):
+    return {
+        "base_decision_response": {"decision": "wait", "provider_error": None},
+        "context_discriminator": smoke.CONTINUOUS_CONTEXT_DISCRIMINATOR,
+        "context_version": smoke.CONTINUOUS_CONTEXT_VERSION,
+        "agent_session_id": request["agent_session_id"],
+        "agent_turn_id": request["agent_turn_id"],
+        "decision_request_id": request["decision_request_id"],
+        "retry_seq": request["retry_seq"],
+        "transport_attempt": request["transport_attempt"],
+        "request_digest": request["request_digest"],
+        "response_digest": "blake3:" + "b" * 64,
+    }
+
+
+def valid_target_feedback(request):
+    return {
+        "feedback_id": "feedback.smoke-1",
+        "feedback_seq": 1,
+        "agent_subject": request["agent_subject"],
+        "agent_session_id": request["agent_session_id"],
+        "agent_turn_id": request["agent_turn_id"],
+        "decision_request_id": request["decision_request_id"],
+        "status": "pending",
+        "request_digest": request["request_digest"],
+        "provenance": "runtime_authoritative",
+    }
+
+
 class ProviderBridgeContractSmokeTests(unittest.TestCase):
     def test_public_ingress_contract_allows_degraded_health_and_decision_success(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -383,6 +413,64 @@ class ProviderBridgeContractSmokeTests(unittest.TestCase):
                             target_context_payload_file=payload_path,
                         )
                     )
+
+    def test_shared_target_response_validator_rejects_untagged_response(self):
+        with self.assertRaisesRegex(RuntimeError, "supported decision tag"):
+            smoke.validate_base_decision_response({"provider_error": None})
+
+    def test_shared_target_response_validator_rejects_malformed_response(self):
+        with self.assertRaisesRegex(RuntimeError, "requires code"):
+            smoke.validate_base_decision_response(
+                {"provider_error": {"message": "malformed"}}
+            )
+
+    def test_shared_target_response_validator_rejects_missing_wrapper_digest(self):
+        request = smoke.build_target_context_request(index=1, timeout_ms=5000)
+        response = valid_target_response(request)
+        response.pop("response_digest")
+        with self.assertRaisesRegex(RuntimeError, "response_digest"):
+            smoke.validate_target_context_response(response, request)
+
+    def test_shared_target_response_validator_rejects_wrapper_identity_drift(self):
+        request = smoke.build_target_context_request(index=1, timeout_ms=5000)
+        response = valid_target_response(request)
+        response["agent_turn_id"] = "wrong-turn"
+        with self.assertRaisesRegex(RuntimeError, "agent_turn_id does not echo"):
+            smoke.validate_target_context_response(response, request)
+
+    def test_shared_target_response_validator_rejects_malformed_wrapper(self):
+        request = smoke.build_target_context_request(index=1, timeout_ms=5000)
+        response = valid_target_response(request)
+        response["base_decision_response"] = []
+        with self.assertRaisesRegex(RuntimeError, "base must be a JSON object"):
+            smoke.validate_target_context_response(response, request)
+
+    def test_target_request_requires_strict_positive_integer_lineage(self):
+        request = smoke.build_target_context_request(index=1, timeout_ms=5000)
+        for field in ("retry_seq", "transport_attempt"):
+            for invalid in (True, False, 0, -1, "1", None):
+                with self.subTest(field=field, invalid=invalid):
+                    malformed = dict(request)
+                    malformed[field] = invalid
+                    with self.assertRaisesRegex(RuntimeError, "positive integer"):
+                        smoke.validate_target_context_request(malformed)
+
+    def test_target_feedback_requires_strict_positive_integer_sequence(self):
+        request = smoke.build_target_context_request(index=1, timeout_ms=5000)
+        for invalid in (True, False, 0, -1, "1", None):
+            with self.subTest(invalid=invalid):
+                feedback = valid_target_feedback(request)
+                feedback["feedback_seq"] = invalid
+                with self.assertRaisesRegex(RuntimeError, "positive integer"):
+                    smoke.validate_target_context_feedback(feedback, request)
+
+    def test_live_gate_uses_complete_shared_target_response_validator(self):
+        live_gate = LIVE_GATE_PATH.read_text(encoding="utf-8")
+        self.assertIn("response_validator_source", live_gate)
+        self.assertIn(
+            "base = validate_target_context_response(response, request)",
+            live_gate,
+        )
 
     def test_target_lane_rejects_feedback_identity_drift(self):
         with tempfile.TemporaryDirectory() as directory:

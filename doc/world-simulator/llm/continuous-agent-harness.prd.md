@@ -6,7 +6,7 @@
 
 ## 1. Executive Summary
 
-world-simulator 已有 `Observation -> AgentBehavior::decide -> candidate decision -> runtime validation/execution -> trace` 的局部闭环，但它还不是一个可持续、可恢复、可隔离的 Agent cognition harness。当前 builtin 与 ProviderBacked 两条路径在 continuation、memory 和 prompt/context 处理上存在行为分叉；DecisionRequest 没有足够的 turn/request identity；local bridge 的反馈与幂等边界也不足以支持多个 Agent 并行。
+world-simulator 仍保留 `AgentRunner::tick` 的同步 simulator 基线；但在 native runtime-live lane，`RuntimeDecisionRunner::Builtin` 与 `RuntimeDecisionRunner::ProviderBacked` 现在都使用同一个 `AsyncAgentRunner`。Provider 的 `Wait` 结果会经过 Harness proposal/current-context 校验、Runtime admission、durable wake selection/readback，再恢复下一次 cognition turn；等待 provider 时 world 不被阻塞。这是当前可观察的 native wiring，不等于完整的 remote paired、restart/reconnect 或 release 证明。
 
 本专题冻结一个 provider-neutral 的 Continuous Agent Harness 合同。Harness 负责一次 Agent session 内的感知组装、记忆检索、目标/continuation 投影、provider 调用、候选决策规范化、反馈路由和 memory write intent policy；Runtime 仍是世界事实、动作语义、授权、前置条件、提交、receipt、replay 与最终副作用的唯一权威。Harness 的任何成功都不等于世界状态已经改变。
 
@@ -18,19 +18,38 @@ world-simulator 已有 `Observation -> AgentBehavior::decide -> candidate decisi
 
 | 能力 | current | partial | target | proven 条件 | 当前证据/限制 |
 | --- | --- | --- | --- | --- | --- |
-| cognition loop | `AgentRunner::tick` 同步调用 `AgentBehavior::decide` | runtime-live 有 sidecar/mailbox seam | 可独立推进世界的异步 turn 协议 | 等待 provider 时世界与其他 Agent 仍按 runtime 合同推进，且 turn 结果可关联 | `crates/oasis7/src/simulator/runner.rs`、`crates/oasis7/src/viewer/runtime_live/llm_sidecar.rs` |
-| provider boundary | `DecisionProvider`、Mock/loopback 和 typed DTO 存在 | Builtin/ProviderBacked 使用不同 runner 分支 | 两者均实现同一 Harness lifecycle 和错误合同 | 同一 fixture 下 request、failure、feedback、memory 语义等价 | `decision-provider-contract.*` 已冻结 advisory/provider 与 runtime authority 边界 |
-| identity/idempotency | `DecisionRequest` 有配置/profile 等字段但无完整 turn/request identity | `replay_id` 可作为 metadata 传递 | Session/Turn/DecisionRequest identity 与 canonical digest 绑定 | retry 保持同 key；新 turn、观察或 authority 输入必得新 key；collision fail closed | local bridge 已从 timeout-independent legacy DTO 计算 invocation key，并在 `H_v1` 派生前移除 `timeout_budget_ms`；host ProviderBacked adapter 已传递完整 outer V1 context/response lineage，Mock harness 有对应 proof。真实 HTTP/loopback outer V1 wire mapping 与 paired production artifact 尚未证明，仍保持 `partial`/no-production-proof |
+| cognition loop | simulator `AgentRunner::tick` 仍同步调用 `AgentBehavior::decide`；native runtime-live 的 Builtin/ProviderBacked 由共同 `AsyncAgentRunner` 驱动，等待 provider 时 world 可继续推进 | 完整 paired scheduler/MVCC、remote provider、restart/reconnect proof 仍缺失 | 可独立推进世界的异步 turn 协议 | 等待 provider 时世界与其他 Agent 仍按 runtime 合同推进，且 turn 结果可关联 | `crates/oasis7/src/simulator/runner.rs`、`crates/oasis7/src/simulator/async_agent_runner.rs`、`crates/oasis7/src/viewer/runtime_live/llm_sidecar_async.rs` |
+| provider boundary | `DecisionProvider`、Mock/loopback 和 typed DTO 存在；native runtime-live Builtin/ProviderBacked 共用 `AsyncAgentRunner`、request context 与反馈 handoff | provider-specific behavior equivalence、real paired lifecycle、restart/reconnect proof 尚未完成 | 两者均实现同一 Harness lifecycle 和错误合同 | 同一 fixture 下 request、failure、feedback、memory 语义等价 | `decision-provider-contract.*` 已冻结 advisory/provider 与 runtime authority 边界；deterministic loopback 只支持合同验收，不是 real-provider proof |
+| identity/idempotency | target adapter/loopback 可观察到 host-issued session/turn/request identity 与 canonical digest；legacy lane 仍较弱 | production paired HTTP、restart/rebind/reorg 下的 identity continuity 与完整 proof 缺失 | Session/Turn/DecisionRequest identity 与 canonical digest 绑定 | retry 保持同 key；新 turn、观察或 authority 输入必得新 key；collision fail closed | local bridge 已从 timeout-independent legacy DTO 计算 invocation key，并在 `H_v1` 派生前移除 `timeout_budget_ms`；host ProviderBacked adapter 已传递完整 outer V1 context/response lineage，Mock harness 有对应 proof。真实 HTTP/loopback outer V1 wire mapping、paired production artifact 与 restart/rebind continuity 尚未证明，仍保持 `partial`/no-production-proof |
 | concurrency | 单一同步 runner 的调用序列隐含串行 | sidecar 有 pending/mailbox 状态 | 每个 Agent 至多一个 in-flight turn；不同 Agent 可并行 | 并发/重入 fixture 无双 provider call、双 action 或反馈串线 | 单 Agent 的隐含串行不等于跨 adapter 的协议保证 |
-| feedback | `FeedbackEnvelope` 与 bridge feedback endpoint 存在 | trace/action/receipt 可桥接 | 反馈按 `agent/session/turn/request/action/receipt` 关联、分区、排序 | A/B Agent 交错反馈永不进入对方 context；late/unknown feedback 不产生 cognition effect | local `ProviderState` 的 `recent_feedback` 已按 `(agent_subject, agent_session_id)` 分区并校验 `feedback_seq`、gap 与 collision；real HTTP/paired-artifact 与端到端 production proof 仍缺失 |
-| memory | builtin 有本地 AgentMemory；协议有 `memory_write_intents` | provider response 能携带 intent，但没有统一生产 consumer | retrieval 是带 digest 的 snapshot；write intent 经 Harness policy 且只在 authoritative outcome 后提交 | 未提交/拒绝/超时不会写入；同 intent retry exactly-once；越权 scope 被拒绝 | `memory_write_intents` 目前主要是协议字段 |
-| goals | builtin config 使用 short/long goal 字符串，provider mission 有 summary | goal 可进入 request/context | P0 使用兼容性的 `GoalSnapshot`；后续再演进 GoalGraph | goal revision 纳入 digest，旧计划不会跨 revision 执行 | GoalGraph/belief memory 不在 P0 |
-| continuation | builtin `ActiveExecuteUntil` 可在内存中跳过重复 LLM | continuation 与 Builtin 行为绑定 | Harness-owned bounded continuation，Builtin/ProviderBacked 共用 | world/goal/policy/observation digest 变化、reject 或 expiry 会停止 continuation | continuation 当前不是 runtime primitive，也未跨 provider 统一 |
+| feedback | `FeedbackEnvelope` 与 bridge feedback endpoint 存在；deterministic local bridge 已有按 subject/session 分区、顺序和 gap/collision 校验；native Builtin/ProviderBacked 都进入 typed Runtime feedback seam | Runtime-owned identity/disposition-to-receipt mapping、paired production feedback 与 restart/late-response proof 仍不完整 | 反馈按 `agent/session/turn/request/action/receipt` 关联、分区、排序 | A/B Agent 交错反馈永不进入对方 context；late/unknown feedback 不产生 cognition effect | local `ProviderState` 的 `recent_feedback` 已按 `(agent_subject, agent_session_id)` 分区并校验 `feedback_seq`、gap 与 collision；real HTTP/paired-artifact 与端到端 production proof 仍缺失 |
+| memory | builtin 有本地 AgentMemory；native ProviderBacked receipt-gated consumer 与 `memory_write_intents` policy seam 可观察 | ProviderBacked production/wasm consumer、paired journal exactly-once、restart/replay proof 仍缺失 | retrieval 是带 digest 的 snapshot；write intent 经 Harness policy 且只在 authoritative outcome 后提交 | 未提交/拒绝/超时不会写入；同 intent retry exactly-once；越权 scope 被拒绝 | native path 仅在匹配 Runtime receipt lineage 后消费 intents；deterministic/DTO evidence 不能替代 paired production proof |
+| goals | builtin short/long goal 与 typed `GoalSnapshot` projection/validation seam 存在；provider 可携带 summary | live ProviderBacked 的 trusted host goal binding、非空/当前 revision 与 stale cleanup 尚未形成完整 proof | P0 使用兼容性的 `GoalSnapshot`；后续再演进 GoalGraph | goal revision 纳入 digest，旧计划不会跨 revision 执行 | GoalGraph/belief memory 不在 P0；live ProviderBacked empty/unbound GoalSnapshot 仍是 partial 风险 |
+| continuation | native runtime-live 的 ordinary `Wait` 已经走 Harness current-context/proposal 校验、Runtime admission、durable wake selection/readback 与 resume；Builtin/ProviderBacked 共享该 async lifecycle | `WaitTicks` compatibility timer、WASM durable admission、remote paired Runtime、failure/restart/reconnect/rebind/reorg 与完整 production proof 仍缺失 | Harness-owned bounded continuation，Builtin/ProviderBacked 共用 | world/goal/policy/observation digest 变化、reject 或 expiry 会停止 continuation | Runtime owns durable schedule/wake; current native `Wait` wiring is implemented, but real-provider paired/restart evidence remains absent |
 | failure policy | timeout/invalid output 已有 trace/Wait/ActionRejected 方向 | adapter-specific 错误分类不完全统一 | 稳定 error code、无 heuristic fallback、无失败副作用 | 每类错误均有 deterministic terminal state 和负例副作用证明 | provider 错误不能成为 world fact |
 | durable turn/replay | `AgentDecisionTrace` 是 diagnostics/observability payload | `replay_id` 可随 request 传递 | cognition journal/replay 与 runtime paired contract 对齐 | replay 不重新调用 provider、不重复 action/memory/effect | journal schema/实现明确留给 paired runtime docs |
 | cognition economy | latency/token/cost 在 trace 中可见 | 可作评测输入 | cognition reserve/settle 单独设计，Harness 只传递预算与诊断 | 需独立 economy fixture 与 runtime receipt 证明 | P0 不引入 `CognitionLease` 或资源扣账 |
 
 当前没有任何一行的目标能力可标记为 `proven`。存在的实现、DTO 或测试只能支持 `current`/`partial`，不能把生产闭环、回放闭合或多 Agent 隔离提前写成已交付。
+
+deterministic mock/loopback 可以证明 schema、identity、顺序和负例的设计验收，但不能证明真实
+provider 的 paired 行为等价、Runtime journal/receipt 在 restart/reconnect 后的恢复，或 release
+所需的无重复副作用。上述证据缺失时，能力必须保持 `partial`/no-production-proof，不能以降低
+target 或放宽 parity metric 来改写为 `proven`。
+
+### 2.1 S7 当前验收边界与平台口径
+
+本节只更新当前源码可观察的能力边界，不把 durable target 或 `proven` 条件提前标记为完成：
+
+| 证据面 | 当前可接受的结论 | 明确不能推出的结论 |
+| --- | --- | --- |
+| native runtime-live | Builtin 与 ProviderBacked 共用 `AsyncAgentRunner`；native `Wait` 经 Harness proposal/current-context 校验、Runtime admission、wake selection/readback 后恢复 | 不等于 P0.2/P0.3/P1 的完整 paired、journal/recovery、remote 或 release 证明；`WaitTicks` compatibility timer 仍不是该证明 |
+| WASM/browser | 只保留 shared DTO/policy 类型的编译兼容性；`viewer::runtime_live`、provider transport 与 async runner 模块均由 `cfg(not(target_arch = "wasm32"))` 排除 | 不存在本切片新增的 browser Local Provider service；WASM compatibility timer 不是 native durable continuation 证明 |
+| local parity benchmark | `execution_authority=simulator_world_kernel` 且 `runtime_certification_status=not_certified` 的 simulator-world smoke/sample evidence | benchmark 的 per-agent Runtime shadow receipt（若生成）属于另一套 world/authority，不能认证同一 simulator world 的 Runtime 语义 |
+| deferred product surface | P0 继续使用现有 fixture、observation 与 action semantics | 本切片不新增或承诺 unified world/observation 或 `Speak`/`Inspect`/`Interact` API expansion；该扩展按用户决定 deferred |
+| remote/release | real remote HTTP paired provider、Runtime journal/restart/reconnect/rebind/reorg 仍是后续 full proof | local tests、mock/loopback 或 benchmark machine `release_gate` 不能单独声明 release/default-enabled |
+
+因此，P0.1/P0.2/P0.3、P1 provider convergence/durable continuation 与本表的 `proven` 条件继续作为 durable target；只有对应完整成功与负例、以及配对 Runtime/remote 证据齐全后才能变更状态。
 
 ## 3. 权威边界
 

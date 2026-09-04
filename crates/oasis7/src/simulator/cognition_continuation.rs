@@ -91,6 +91,16 @@ pub struct ContinuationCurrentContextV1 {
     pub authority: ContinuationAuthorityContextV1,
 }
 
+/// Digest the state that can make a continuation stale while ignoring the
+/// simulator clock. Logical ticks are the wake scheduler's trigger, not an
+/// observation precondition; including the clock would make every ordinary
+/// tick invalidate an otherwise unchanged wait.
+pub fn continuation_observation_digest(observation: &Observation) -> String {
+    let mut stable = observation.clone();
+    stable.time = 0;
+    h_v1("oasis7.cognition.observation.v1", &stable).to_string()
+}
+
 impl ContinuationCurrentContextV1 {
     pub fn from_observation(
         observation: Observation,
@@ -99,8 +109,7 @@ impl ContinuationCurrentContextV1 {
         precondition_digest: impl Into<String>,
     ) -> Self {
         let authority = ContinuationAuthorityContextV1 {
-            baseline_observation_digest: h_v1("oasis7.cognition.observation.v1", &observation)
-                .to_string(),
+            baseline_observation_digest: continuation_observation_digest(&observation),
             goal_digest: goal.digest.clone(),
             policy_digest: policy_digest.into(),
             precondition_digest: precondition_digest.into(),
@@ -131,7 +140,7 @@ impl ContinuationCurrentContextV1 {
                 ));
             }
         }
-        let observed_digest = h_v1("oasis7.cognition.observation.v1", &self.observation);
+        let observed_digest = continuation_observation_digest(&self.observation);
         if self.authority.baseline_observation_digest != observed_digest.as_str() {
             return Err(error(
                 "continuation_observation_digest_mismatch",
@@ -338,10 +347,34 @@ impl ContinuationProposalV1 {
     pub fn proposal_digest(&self) -> Result<Digest32, CognitionError> {
         let mut value = serde_json::to_value(self)
             .map_err(|e| error("continuation_canonical_encoding_failed", e.to_string()))?;
-        value
+        let object = value
             .as_object_mut()
-            .expect("continuation proposal is an object")
-            .remove("proposal_digest");
+            .expect("continuation proposal is an object");
+        object.remove("proposal_digest");
+        // Runtime's paired digest input keeps every optional member of a
+        // wake condition explicit (null included). The simulator wire type
+        // omits those members for compactness, so restore the Runtime shape
+        // only inside the cross-boundary digest domain.
+        if let Some(wakes) = object
+            .get_mut("wake_conditions")
+            .and_then(Value::as_array_mut)
+        {
+            for wake in wakes {
+                if let Some(wake) = wake.as_object_mut() {
+                    for field in [
+                        "logical_tick",
+                        "event_digest",
+                        "receipt_id",
+                        "subject",
+                        "path_or_rule",
+                        "operator",
+                        "expected_value_bytes",
+                    ] {
+                        wake.entry(field).or_insert(Value::Null);
+                    }
+                }
+            }
+        }
         Ok(h_v1(CONTINUATION_PROPOSAL_DOMAIN, &value))
     }
 
@@ -506,7 +539,6 @@ impl ContinuationHarness {
             &json!({
                 "world_id": proposal.world_id,
                 "agent_id": proposal.agent_id,
-                "agent_session_id": proposal.agent_session_id,
                 "origin_turn_id": proposal.origin_turn_id,
                 "origin_request_digest": proposal.origin_request_digest,
             }),

@@ -9,7 +9,7 @@ use crate::simulator::{
     AsyncAgentRunner, ContinuationAuthorityContextV1, ContinuationCurrentContextV1,
     ContinuationHarness, ContinuationInvalidationReason, ContinuationProposalV1,
     ContinuousAgentTurnContextV1, Digest32, GoalSnapshotV1, MemoryContextSnapshotV1, Observation,
-    RuntimeContinuationStatusV1, h_v1,
+    RuntimeContinuationStatusV1,
 };
 use serde_json::{Value, json};
 
@@ -51,14 +51,14 @@ fn proposal_value() -> Value {
 
 fn proposal() -> ContinuationProposalV1 {
     let mut value = proposal_value();
-    let mut digest_input = value.clone();
-    digest_input
-        .as_object_mut()
-        .expect("proposal object")
-        .remove("proposal_digest");
-    let digest = h_v1("oasis7.cognition.continuation-proposal.v1", &digest_input);
-    value["proposal_digest"] = json!(digest.as_str());
-    serde_json::from_value(value).expect("decode ContinuationProposalV1")
+    value["proposal_digest"] = json!("");
+    let mut proposal: ContinuationProposalV1 =
+        serde_json::from_value(value).expect("decode ContinuationProposalV1");
+    proposal.proposal_digest = proposal
+        .proposal_digest()
+        .expect("canonical continuation proposal digest")
+        .to_string();
+    proposal
 }
 
 fn authority_context() -> ContinuationAuthorityContextV1 {
@@ -103,16 +103,13 @@ fn proposal_for_current_context() -> ContinuationProposalV1 {
     value["goal_digest"] = json!(current.authority.goal_digest.clone());
     value["policy_digest"] = json!(current.authority.policy_digest.clone());
     value["precondition_digest"] = json!(current.authority.precondition_digest.clone());
-    let mut digest_input = value.clone();
-    digest_input
-        .as_object_mut()
-        .expect("proposal object")
-        .remove("proposal_digest");
-    value["proposal_digest"] = json!(h_v1(
-        "oasis7.cognition.continuation-proposal.v1",
-        &digest_input
-    ));
-    serde_json::from_value(value).expect("decode current-context proposal")
+    let mut proposal: ContinuationProposalV1 =
+        serde_json::from_value(value).expect("decode current-context proposal");
+    proposal.proposal_digest = proposal
+        .proposal_digest()
+        .expect("canonical current-context proposal digest")
+        .to_string();
+    proposal
 }
 
 fn runtime_projection(
@@ -449,17 +446,12 @@ fn continuation_budget_is_chain_owned_monotonic_and_duplicate_wake_idempotent() 
     let mut reset_attempt: Value = serde_json::to_value(proposal()).expect("encode proposal");
     reset_attempt["continuation_proposal_id"] = json!("proposal-reset-attempt");
     reset_attempt["remaining_budget"] = json!({"unit": "steps", "value": 2});
-    let mut digest_input = reset_attempt.clone();
-    digest_input
-        .as_object_mut()
-        .expect("proposal object")
-        .remove("proposal_digest");
-    reset_attempt["proposal_digest"] = json!(h_v1(
-        "oasis7.cognition.continuation-proposal.v1",
-        &digest_input
-    ));
-    let reset_attempt: ContinuationProposalV1 =
+    let mut reset_attempt: ContinuationProposalV1 =
         serde_json::from_value(reset_attempt).expect("decode reset attempt");
+    reset_attempt.proposal_digest = reset_attempt
+        .proposal_digest()
+        .expect("canonical reset attempt digest")
+        .to_string();
     let error = harness
         .submit_with_context(reset_attempt, &context)
         .expect_err("new proposal ID cannot reset a chain budget");

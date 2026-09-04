@@ -17,6 +17,14 @@
   - SC-6: 首期 `P0` parity 样本必须使用固定的 Local Provider 玩法 profile（当前默认 `oasis7_p0_low_freq_npc`；旧别名 `legacy_p0_low_freq_npc` 已移除），并在 summary / scorecard 中保留该 profile 标识，避免“同场景不同 skill”造成假性通过。
   - SC-7: 只有当行为等价硬门禁通过且 `latency_class` 达到 `A (default-candidate)` 时，才允许把该 provider 作为默认体验或推进更大范围扩面。
 
+### 当前验收边界（S7 bounded scope）
+
+- native runtime-live 的 Builtin 与 ProviderBacked 已共用 `AsyncAgentRunner`；native `Wait` 经过 Harness current-context/proposal 校验、Runtime admission、durable wake selection/readback 后才能恢复。`WaitTicks` compatibility timer 仍不属于该 durable path。该基础设施状态不是 parity gate 通过，也不改变 P0/P1/P2 的目标条件。
+- WASM/browser 本切片只接受 shared DTO/policy 类型的编译兼容性：`viewer::runtime_live` 以及 provider transport/async runner 模块均在 `cfg(not(target_arch = "wasm32"))` lane。没有新增 browser Local Provider service；compatibility timer 不能作为 native durable 或 parity release 证明。
+- 当前 parity benchmark 是 simulator-world smoke/sample evidence，机器字段必须保持 `execution_authority=simulator_world_kernel`、`runtime_certification_status=not_certified`。任何 per-agent Runtime shadow receipt 都属于独立 Runtime/world authority，不是同一 simulator world 的 Runtime certification。
+- `benchmark_status` 只表示执行/sample coverage；机器 `parity_status`/`release_gate` 不能替代真实 Local Provider paired artifact、Runtime receipt/journal 的 failure/restart/reconnect 证据，亦不能替代 QA 与 producer 双视角 scorecard。缺少这些证据时不得把 provider 标为 `proven`、release-ready 或 default-enabled。
+- P0 继续使用已有 observation fixture、scenario script 与 action semantics。本专题不新增 unified world/observation 或 `Speak`/`Inspect`/`Interact` surface；该产品扩展按用户决定 deferred。P0/P1/P2 的 durable target 与完整验收条件保持不变。
+
 ## 2. User Experience & Functionality
 - User Personas:
   - 玩家 / 制作人：希望切换到 `Local Provider` 后，不明显感觉到 agent 变笨、变慢、变脆弱。
@@ -55,6 +63,8 @@
   - AC-4: 文档定义 builtin 与 Local Provider 的对标指标与采样方法，避免不同输入条件导致比较失真。
   - AC-5: 文档要求 QA/producer 双视角输出 parity 结论：自动指标 + 主观试玩评分。
   - AC-6: 文档要求 `Local Provider(Local HTTP)` 专题与 `Decision Provider` 专题后续任务都以 parity 为上线目标，而非仅以“接通”作为完成条件。
+  - AC-7: 文档明确 native common `AsyncAgentRunner` 与 Wait→Harness→Runtime admission→wake wiring 只是当前基础设施状态，不替代 parity gate、Runtime paired proof 或 P0/P1/P2 target。
+  - AC-8: 文档明确 benchmark 的 simulator-world authority、`runtime_certification_status=not_certified`、WASM compile-only 边界、deferred unified interaction surface，以及真实 remote paired/restart/reconnect 与 QA/producer scorecard 均是独立证据条件；缺任一时不得声明 release/default。
 - Non-Goals:
   - 不要求 `Local Provider` 与内置 agent 在内部 prompt、工具栈或 memory backend 上实现完全一致。
   - 不把高频战斗、经济关键路径在首轮 parity 中纳入必须通过范围。
@@ -67,6 +77,7 @@
 - Evaluation Strategy:
   - `test_tier_required`: fixture 对标、mock provider、自动指标比较、错误恢复演练。
   - `test_tier_full`: 真实 `Local Provider(Local HTTP)` 低频 NPC + 多轮记忆试玩，输出自动指标与主观评分卡。
+  - `test_tier_required` 的 mock/loopback 输出只证明 schema、identity、顺序、聚合与 negative fixtures；`test_tier_full` 仍要求同一 fixture/profile 的真实 provider paired run、Runtime receipt/journal failure/restart/reconnect evidence 与 QA/producer scorecard。
 
 ## 4. Technical Specifications
 - Architecture Overview:
@@ -86,6 +97,7 @@
   - `P0 低频单 NPC`：移动、观察、对话、简单交互。
   - `P1 多轮记忆/对话`：跨 3~5 轮任务目标保持、失败后重试、上下文连续性。
   - `P2 多 agent 并发`：2~5 个低频 agent 并发，不要求高频战斗 parity。
+  - 上述场景使用已有 fixture/observation/action semantics；unified world/observation 与 `Speak`/`Inspect`/`Interact` 新 surface 不在本轮 parity scope，待后续产品决策与对应 authority 合同后再纳入。
 - Metrics & Thresholds:
   - 行为等价硬门禁:
     - `completion_rate_gap <= 5pp`
@@ -95,6 +107,96 @@
     - `relative_wait_gap_p95 <= 8000ms`
     - `trace_completeness >= 95%`
     - `recoverable_error_resolution_rate >= 90%`
+  - `recoverable_error_resolution_rate` 的 canonical metric contract（`v1`）:
+    - 统计单位是一个由 Harness/Runtime trace 识别的 `recoverable_error` occurrence，不是
+      sample 数、`goal_completed` 数或 provider 自报的“已恢复”。`denominator` 是所有有效样本
+      中的 recoverable error occurrence，包含最终 timeout、failed、rejected 或没有后续恢复事件的
+      occurrence；`numerator` 是其中存在一个合法、有序、同一 recovery chain 关联的
+      `recovery_resolved` event 的 occurrence，每个 `error_id` 最多计一次。
+    - 合法恢复必须由 benchmark host/Runtime 产生，而不是 provider transcript：事件必须与同一
+      `sample_id`、`agent_id`、`agent_session_id`、`recovery_chain_id` 和 `error_id` 关联，且
+      `recovery_resolved.event_seq > recoverable_error.event_seq`。恢复可以跨新的 retry turn，
+      但必须携带 `origin_turn_id`/`origin_request_digest`，并有 Runtime/fixture-host authority
+      reference；被拒绝、过期、pending、重复、串 Agent、错误链或乱序事件不计入 numerator。
+    - `value = numerator / denominator`。当 `denominator == 0` 时固定输出
+      `value: null`、`zero_case: "not_applicable"`、`gate_status: "not_evaluable"`；当
+      `denominator > 0` 时 `zero_case` 必须为 `null`、`gate_status` 必须为 `evaluable`。
+      绝不输出 zero-case `1.0`，也不能以 zero-case 通过恢复门禁。缺失/非法事件 schema 是
+      `blocked`，不是从 denominator 中静默排除。
+
+    benchmark 实现者必须在每个样本的 summary 中输出以下 machine-readable shape（字段名和
+    enum 固定；`trace_validity` 为 `valid | invalid_fixture | blocked`；`event_seq` 由
+    host/trace collector 分配并在 sample 内严格递增）。旧的 scalar
+    `recoverable_error_resolution_rate` 不足以作为 gate 证据，必须输出这个 object：
+
+    ```json
+    {
+      "metric_schema_version": "recoverable_error_resolution_rate.v1",
+      "sample_id": "sample-001",
+      "trace_validity": "valid",
+      "recovery_events": [
+        {
+          "event_kind": "recoverable_error",
+          "event_seq": 4,
+          "error_id": "error-001",
+          "error_code": "timeout",
+          "agent_id": "agent-0",
+          "agent_session_id": "session-001",
+          "recovery_chain_id": "chain-001",
+          "agent_turn_id": "turn-002",
+          "decision_request_id": "request-002"
+        },
+        {
+          "event_kind": "recovery_resolved",
+          "event_seq": 6,
+          "error_id": "error-001",
+          "agent_id": "agent-0",
+          "agent_session_id": "session-001",
+          "recovery_chain_id": "chain-001",
+          "agent_turn_id": "turn-003",
+          "origin_turn_id": "turn-002",
+          "origin_request_digest": "blake3:origin-request",
+          "authority": "runtime_or_fixture_host",
+          "runtime_outcome": "action_committed",
+          "authority_ref": "receipt-or-recovery-record-001"
+        }
+      ],
+      "recoverable_error_resolution_rate": {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1.0,
+        "zero_case": null,
+        "gate_status": "evaluable"
+      }
+    }
+    ```
+
+    `runtime_outcome` 允许 `action_committed` 或 `next_turn_admitted`；后者仍必须是 host/Runtime
+    权威的后续合法 cognition turn，不得由 Wait、目标字符串或 `goal_completed=true` 单独替代。
+    聚合结果必须对所有有效样本累加 numerator/denominator 后再计算 ratio，不得按 sample 的
+    `goal_completed` 反推恢复率；聚合 summary 也必须保留同名 object 及 `gate_status`。
+
+    benchmark 必须至少通过以下验收案例（示例均假设其它 parity gate 已满足）：
+
+    | Case | 输入事件 | numerator / denominator | value / gate_status | P0-005 结果 |
+    | --- | --- | --- | --- | --- |
+    | `P0-005-happy` | 10 个样本各有 1 个 timeout，均有严格后序、同链、host/Runtime-authorized `recovery_resolved` | `10 / 10` | `1.0 / evaluable` | 可通过恢复项 |
+    | `P0-005-unresolved-timeout` | 10 个样本中 9 个有合法恢复，1 个 timeout 后没有 recovery event | `9 / 10` | `0.9 / evaluable` | **必须 failed**；P0-005 要求 `numerator == denominator` |
+    | `P0-005-goal-flag-only` | 1 个 timeout，无后续合法恢复，但 summary 错误地写 `goal_completed=true` | `0 / 1` | `0.0 / evaluable` | **必须 failed**；goal flag 不能代替 recovery event |
+    | `no-recoverable-error` | 有效样本中没有 recoverable error | `0 / 0` | `null / not_evaluable` | 不得以 zero-case 通过 |
+    | `malformed-or-out-of-order` | 缺 `authority_ref`，或 recovery 的 `event_seq <= error.event_seq`，或 chain/Agent 不匹配 | 不产出可通过的 ratio | `blocked` | **必须 blocked**，不得缩小 denominator |
+
+  - `P0-005`（拒绝路径恢复）的验收是比全局 90% 更严格的 scenario gate：每个有效样本必须
+    注入且只注入一个 recoverable error，故 `denominator == valid_sample_count`；每个 error
+    都必须有严格后序的合法 `recovery_resolved` event，故 `numerator == denominator`，并且
+    不得存在 unresolved error。timeout 后没有任何合法后续恢复，即使样本最终
+    `goal_completed=true`，也必须标记 sample/scenario `failed`，不能标记 `passed`。
+  - 设计验收与发布证据分开：deterministic mock/loopback 只可验收上述 schema、顺序、聚合、
+    zero-case 和 P0-005 negative fixtures；它不能证明真实 provider 的行为等价、Runtime
+    paired receipt/recovery、restart/reconnect 后无重复副作用，也不能把 capability 标为
+    `proven` 或把 provider 提升为默认启用。发布/扩面仍需 builtin 与真实
+    `Local Provider(Local HTTP)` 同 fixture/profile 的 paired artifact，以及包含 failure/restart/
+    reconnect 的 Runtime/Journal 证据。
   - 发布/默认启用附加门槛:
     - `latency_class A (default-candidate)`: Local Provider `median_extra_wait_ms <= 500ms` 且 `p95_extra_wait_ms <= 1500ms`
     - `latency_class B (experimental-only)`: Local Provider `median_extra_wait_ms <= 15000ms` 且 `p95_extra_wait_ms <= 20000ms`
@@ -104,6 +206,8 @@
   - 若 `Local Provider` 请求成功但返回持续 `Wait` 造成任务停滞，应计入 completion gap，而不是简单视作“无错误”。
   - 若 builtin 本身也慢于 `latency_class A`，不得据此直接判定 parity 失败；应先看 `relative_wait_gap` 是否满足行为等价硬门禁，再看 Local Provider 是否仅可保留在 `experimental`。
   - 若用户主观评分与自动指标明显冲突，必须要求 `qa_engineer` 输出失败签名解释，不得只采信单一维度。
+  - recoverable error event 缺少 `error_id`、authority reference、严格顺序或 recovery-chain
+    identity 时，整条样本/批次进入 `blocked`；实现不得通过缩小 denominator 将其变成通过。
 - Non-Functional Requirements:
   - NFR-1: parity 评估脚本必须支持固定 fixture / seed / timeout，以保证对比可复现。
   - NFR-2: 主观评分卡必须与自动指标一并归档，不允许只有截图结论没有数值。

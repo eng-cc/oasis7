@@ -267,7 +267,7 @@ impl World {
                 Err(lifecycle_error("cognition_dispatch_conflict"))
             };
         }
-        if highest_attempt > 0 && transport_attempt <= highest_attempt {
+        if transport_attempt != highest_attempt.saturating_add(1) {
             return Err(lifecycle_error("cognition_dispatch_conflict"));
         }
         append_turn_event(

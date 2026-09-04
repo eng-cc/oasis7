@@ -5,12 +5,28 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 import json
-import re
+from pathlib import Path
 import sys
 import time
 from typing import Optional, Tuple
 import urllib.error
 import urllib.request
+
+
+_SHARED_VALIDATOR_DIR = Path(__file__).resolve().parent
+if str(_SHARED_VALIDATOR_DIR) not in sys.path:
+    sys.path.insert(0, str(_SHARED_VALIDATOR_DIR))
+
+from provider_response_validator import (  # noqa: E402
+    CANONICAL_DIGEST_RE,
+    CONTINUOUS_CONTEXT_DISCRIMINATOR,
+    CONTINUOUS_CONTEXT_VERSION,
+    SUPPORTED_DECISIONS,
+    _require_digest,
+    _require_object,
+    validate_base_decision_response,
+    validate_target_context_response,
+)
 
 
 DEFAULT_TIMEOUT_MS = 15000
@@ -19,9 +35,6 @@ CHAIN_RESOURCE_DELTA_SCHEMA_V1 = "oasis7.world_resource_delta.v1"
 TARGET_DECISION_PATH = "/v1/world-simulator/decision-context"
 TARGET_FEEDBACK_PATH = "/v1/world-simulator/feedback-context"
 LEGACY_DECISION_PATH = "/v1/world-simulator/decision"
-CONTINUOUS_CONTEXT_DISCRIMINATOR = "oasis7.continuous-agent-context"
-CONTINUOUS_CONTEXT_VERSION = 1
-CANONICAL_DIGEST_RE = re.compile(r"^blake3:[0-9a-f]{64}$")
 
 
 @dataclass(frozen=True)
@@ -220,17 +233,6 @@ def build_target_context_request(index: int, timeout_ms: int) -> dict:
     }
 
 
-def _require_object(value: object, label: str) -> dict:
-    if not isinstance(value, dict):
-        raise RuntimeError(f"{label} must be a JSON object")
-    return value
-
-
-def _require_digest(value: object, label: str) -> None:
-    if not isinstance(value, str) or not CANONICAL_DIGEST_RE.fullmatch(value):
-        raise RuntimeError(f"{label} must be a canonical blake3: digest")
-
-
 def validate_target_context_request(request: dict) -> None:
     if request.get("context_discriminator") != CONTINUOUS_CONTEXT_DISCRIMINATOR:
         raise RuntimeError(
@@ -254,8 +256,12 @@ def validate_target_context_request(request: dict) -> None:
                 raise RuntimeError(f"target decision context requires {field}")
         else:
             _require_object(value, f"target decision context {field}")
-    if request["retry_seq"] <= 0 or request["transport_attempt"] <= 0:
-        raise RuntimeError("target decision context requires retry/transport lineage")
+    for field in ("retry_seq", "transport_attempt"):
+        value = request.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise RuntimeError(
+                f"target decision context {field} requires a positive integer"
+            )
     for field in (
         "observation_digest",
         "capability_catalog_digest",
@@ -317,8 +323,9 @@ def validate_target_context_feedback(feedback: dict, request: dict) -> None:
         raise RuntimeError("target feedback must carry Runtime-authoritative provenance")
     if feedback["status"] not in {"pending", "committed", "rejected", "failed"}:
         raise RuntimeError("target feedback status is outside the v1 registry")
-    if not isinstance(feedback["feedback_seq"], int) or feedback["feedback_seq"] <= 0:
-        raise RuntimeError("target feedback requires a positive feedback_seq")
+    feedback_seq = feedback.get("feedback_seq")
+    if isinstance(feedback_seq, bool) or not isinstance(feedback_seq, int) or feedback_seq <= 0:
+        raise RuntimeError("target feedback feedback_seq requires a positive integer")
     _require_digest(feedback["request_digest"], "target feedback request_digest")
     for field in ("agent_subject", "agent_session_id", "agent_turn_id", "decision_request_id"):
         request_field = "agent_subject" if field == "agent_subject" else field
@@ -355,90 +362,6 @@ def load_target_context_pairs(path: str, decision_count: int) -> list[tuple[dict
         validate_target_context_feedback(feedback, request)
         pairs.append((request, feedback))
     return pairs
-
-
-def validate_target_context_response(response: dict, request: dict) -> dict:
-    if response.get("context_discriminator") != CONTINUOUS_CONTEXT_DISCRIMINATOR:
-        raise RuntimeError("target provider response missing continuous-agent wrapper")
-    if response.get("context_version") != CONTINUOUS_CONTEXT_VERSION:
-        raise RuntimeError("target provider response context version is not 1")
-    for field in (
-        "agent_session_id",
-        "agent_turn_id",
-        "decision_request_id",
-        "request_digest",
-    ):
-        if response.get(field) != request.get(field):
-            raise RuntimeError(f"target provider response {field} does not echo request")
-    if response.get("retry_seq") != request.get("retry_seq"):
-        raise RuntimeError("target provider response retry lineage does not echo request")
-    if response.get("transport_attempt") != request.get("transport_attempt"):
-        raise RuntimeError("target provider response transport lineage does not echo request")
-    _require_digest(response.get("request_digest"), "target provider response request_digest")
-    _require_digest(response.get("response_digest"), "target provider response response_digest")
-    base = _require_object(response.get("base_decision_response"), "target provider response base")
-    validate_base_decision_response(base)
-    return base
-
-
-SUPPORTED_DECISIONS = {
-    "wait",
-    "wait_ticks",
-    "act",
-    "query",
-    "module_command",
-    "module_command_response",
-}
-
-
-def validate_base_decision_response(response: dict) -> None:
-    """Require the tagged DecisionResponse shape before counting a decision.
-
-    The typed Rust adapter performs the full catalog/action validation.  This
-    smoke validator owns the earlier wire boundary, so it must at least reject
-    an empty or untagged inner object and malformed structured provider errors.
-    """
-    if not response:
-        raise RuntimeError(
-            "target provider response base decision response must contain a decision or provider_error"
-        )
-    provider_error = response.get("provider_error")
-    decision = response.get("decision")
-    if provider_error is not None:
-        if not isinstance(provider_error, dict):
-            raise RuntimeError("target provider response provider_error must be an object")
-        if not isinstance(provider_error.get("code"), str) or not provider_error["code"].strip():
-            raise RuntimeError("target provider response provider_error requires code")
-        if not isinstance(provider_error.get("message"), str) or not provider_error["message"].strip():
-            raise RuntimeError("target provider response provider_error requires message")
-        if "retryable" in provider_error and not isinstance(provider_error["retryable"], bool):
-            raise RuntimeError("target provider response provider_error requires boolean retryable")
-        if decision is not None and decision != "wait":
-            raise RuntimeError(
-                "target provider response provider_error may only accompany the wait decision"
-            )
-        return
-
-    if not isinstance(decision, str) or decision not in SUPPORTED_DECISIONS:
-        raise RuntimeError(
-            "target provider response base decision response requires a supported decision tag"
-        )
-    if decision == "wait_ticks":
-        ticks = response.get("ticks")
-        if isinstance(ticks, bool) or not isinstance(ticks, int) or ticks < 0:
-            raise RuntimeError("target provider response wait_ticks requires non-negative integer ticks")
-    elif decision == "act":
-        if not isinstance(response.get("action_ref"), str) or not response["action_ref"].strip():
-            raise RuntimeError("target provider response act requires action_ref")
-        _require_object(response.get("action"), "target provider response act action")
-    elif decision == "query":
-        if not isinstance(response.get("query_ref"), str) or not response["query_ref"].strip():
-            raise RuntimeError("target provider response query requires query_ref")
-        _require_object(response.get("query"), "target provider response query")
-    elif decision == "module_command":
-        _require_object(response.get("module_command"), "target provider response module_command")
-    elif decision == "module_command_response":
-        _require_object(response.get("response"), "target provider response module response")
 
 
 def provider_error_code(response: dict) -> str:

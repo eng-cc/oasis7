@@ -653,6 +653,97 @@ fn same_key_transport_retry_is_monotonic_and_exact_duplicates_are_idempotent() {
 }
 
 #[test]
+fn transport_attempt_gap_is_rejected_instead_of_becoming_a_forged_prefix() {
+    let mut world = World::new();
+    bind_test_turn(&mut world);
+    let request_digest = digest(5);
+    world
+        .capture_cognition_context(
+            AGENT_ID,
+            "session.runtime-hardening",
+            "turn.runtime-hardening",
+            "request.runtime-hardening",
+            &request_digest,
+            &digest(4),
+        )
+        .expect("capture context");
+    let error = world
+        .dispatch_cognition_request(
+            AGENT_ID,
+            "session.runtime-hardening",
+            "turn.runtime-hardening",
+            "request.runtime-hardening",
+            &request_digest,
+            &digest(6),
+            1,
+            3,
+        )
+        .expect_err("first persisted transport attempt must be one");
+    assert!(format!("{error:?}").contains("cognition_dispatch_conflict"));
+    assert!(
+        !world.cognition()["cognition_journal"]["events"]
+            .as_array()
+            .expect("journal")
+            .iter()
+            .any(|event| event["event_kind"] == "RequestDispatched")
+    );
+}
+
+#[test]
+fn exact_response_prefix_dispatch_replay_is_idempotent() {
+    let mut world = World::new();
+    world
+        .bind_cognition_runtime(WORLD_ID, "main", 0, None, "pending", 0)
+        .expect("bind World authority");
+    let decision = envelope(&world);
+    world
+        .start_cognition_turn(
+            &decision.agent_id,
+            &decision.agent_session_id,
+            &decision.agent_turn_id,
+            &decision.decision_request_id,
+            &decision.request_digest,
+        )
+        .expect("register cognition turn");
+    world
+        .capture_cognition_context(
+            &decision.agent_id,
+            &decision.agent_session_id,
+            &decision.agent_turn_id,
+            &decision.decision_request_id,
+            &decision.request_digest,
+            &decision.context_digest,
+        )
+        .expect("capture context");
+    world
+        .dispatch_cognition_request(
+            &decision.agent_id,
+            &decision.agent_session_id,
+            &decision.agent_turn_id,
+            &decision.decision_request_id,
+            &decision.request_digest,
+            &decision.provider_invocation_key,
+            decision.retry_seq,
+            1,
+        )
+        .expect("record initial dispatch");
+
+    world
+        .prepare_cognition_envelope(
+            decision.clone(),
+            Some(response_artifact_for_envelope(&decision)),
+        )
+        .expect("exact prefix replay must be idempotent");
+    let dispatch_count = world.cognition()["cognition_journal"]["events"]
+        .as_array()
+        .expect("journal")
+        .iter()
+        .filter(|event| event["event_kind"] == "RequestDispatched")
+        .count();
+    assert_eq!(dispatch_count, 1);
+}
+
+#[test]
 fn reorg_invalidates_response_artifacts_and_rejects_stale_epoch_requests() {
     let mut world = World::new()
         .try_with_cognition_scheduler(policy(), 1)

@@ -1,11 +1,25 @@
+use super::recovery_ledger::{
+    RECOVERY_METRIC_SCHEMA_VERSION, RecoveryActionEvidence, RecoveryErrorEvidence, RecoveryEvent,
+    RecoveryLedger, RecoveryLineage, assess_recovery_events, metric_summary,
+};
 use super::*;
 use oasis7::simulator::{
-    COGNITION_RESPONSE_DIGEST_DOMAIN, DecisionProvider, DecisionResponse, FeedbackEnvelopeV1,
-    golden_decision_provider_fixtures, h_v1,
+    Action, COGNITION_RESPONSE_DIGEST_DOMAIN, ContinuousAgentResponseContextV1, DecisionProvider,
+    DecisionResponse, FeedbackEnvelopeV1, golden_decision_provider_fixtures, h_v1,
 };
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
+
+#[path = "provider_info_tests.rs"]
+mod provider_info_tests;
+
+const ORIGIN_DIGEST: &str =
+    "blake3:0000000000000000000000000000000000000000000000000000000000000000";
+const SECOND_ORIGIN_DIGEST: &str =
+    "blake3:1111111111111111111111111111111111111111111111111111111111111111";
+const RECOVERY_DIGEST: &str =
+    "blake3:2222222222222222222222222222222222222222222222222222222222222222";
 
 #[test]
 fn parse_options_accepts_provider_loopback_http() {
@@ -210,6 +224,99 @@ fn parity_target_context_is_production_valid() {
 }
 
 #[test]
+fn parity_target_context_starts_each_logical_turn_at_transport_attempt_one() {
+    let fixture = golden_decision_provider_fixtures()
+        .into_iter()
+        .next()
+        .expect("golden parity fixture");
+    let observation = sample_patrol_observation();
+    let (_, request_context) = build_target_context(
+        fixture.request,
+        &observation,
+        fixture.fixture_id.as_str(),
+        "parity-session-transport-attempt-test",
+        7,
+    );
+
+    assert_eq!(request_context.retry_seq, 1);
+    assert_eq!(
+        request_context.transport_attempt, 1,
+        "a fresh logical turn must not inherit the previous turn's transport attempt"
+    );
+}
+
+#[test]
+fn blocked_or_failed_summary_returns_nonzero_exit_code() {
+    assert_eq!(exit_code_for_status("passed"), 0);
+    assert_ne!(exit_code_for_status("blocked"), 0);
+    assert_ne!(exit_code_for_status("failed"), 0);
+}
+
+#[test]
+fn simulator_smoke_never_claims_runtime_certification() {
+    assert_eq!(LOCAL_EXECUTION_AUTHORITY, "simulator_world_kernel");
+    assert_eq!(RUNTIME_CERTIFICATION_STATUS, "not_certified");
+    assert!(RUNTIME_CERTIFICATION_REASON.contains("local simulator smoke"));
+}
+
+#[test]
+fn parity_target_context_semantic_retry_increments_and_binds_origin() {
+    let fixture = golden_decision_provider_fixtures()
+        .into_iter()
+        .next()
+        .expect("golden parity fixture");
+    let observation = sample_patrol_observation();
+    let (_, first_request) = build_target_context(
+        fixture.request.clone(),
+        &observation,
+        fixture.fixture_id.as_str(),
+        "parity-session-retry-test",
+        0,
+    );
+    let origin = RecoveryLineage {
+        agent_id: first_request.agent_subject.clone(),
+        agent_session_id: first_request.agent_session_id.clone(),
+        recovery_chain_id: "parity-recovery-chain:retry-test".to_string(),
+        agent_turn_id: first_request.agent_turn_id.clone(),
+        decision_request_id: first_request.decision_request_id.clone(),
+        request_digest: first_request.request_digest.to_string(),
+    };
+    let (retry_turn, retry_request) = target_context::build_target_context_for_retry(
+        fixture.request,
+        &observation,
+        fixture.fixture_id.as_str(),
+        "parity-session-retry-test",
+        1,
+        2,
+        &origin,
+    );
+
+    assert_eq!(retry_request.retry_seq, 2);
+    assert_ne!(retry_request.agent_turn_id, origin.agent_turn_id);
+    assert_ne!(
+        retry_request.decision_request_id,
+        origin.decision_request_id
+    );
+    assert_ne!(
+        retry_request.continuation_digest,
+        first_request.continuation_digest
+    );
+    assert_ne!(retry_request.request_digest, first_request.request_digest);
+    let continuation = retry_turn
+        .continuation
+        .as_ref()
+        .expect("semantic retry must carry a continuation proposal");
+    assert_eq!(continuation.origin_turn_id, origin.agent_turn_id);
+    assert_eq!(continuation.origin_request_digest, origin.request_digest);
+    retry_request
+        .validate_production_lane()
+        .expect("semantic retry request must remain production-valid");
+    retry_turn
+        .validate_for_agent("agent-1")
+        .expect("semantic retry turn must remain agent-valid");
+}
+
+#[test]
 fn parity_target_route_round_trip_uses_outer_context_endpoints() {
     let fixture = golden_decision_provider_fixtures()
         .into_iter()
@@ -284,6 +391,8 @@ fn parity_target_route_round_trip_uses_outer_context_endpoints() {
         .expect("target decision-context request");
     assert_eq!(response.request_digest, request_context.request_digest);
     adapter
+        // This is a route-only smoke probe. A local simulator run has no
+        // Runtime receipt, so it must use a non-committed disposition here.
         .push_continuous_feedback(&FeedbackEnvelopeV1 {
             feedback_id: "parity-route-test-feedback".to_string(),
             feedback_seq: 1,
@@ -291,11 +400,11 @@ fn parity_target_route_round_trip_uses_outer_context_endpoints() {
             agent_session_id: request_context.agent_session_id.clone(),
             agent_turn_id: request_context.agent_turn_id.clone(),
             decision_request_id: request_context.decision_request_id.clone(),
-            candidate_action_id: Some(1),
-            runtime_receipt_id: Some("parity-route-test-receipt".to_string()),
-            status: "committed".to_string(),
+            candidate_action_id: None,
+            runtime_receipt_id: None,
+            status: "failed".to_string(),
             request_digest: request_context.request_digest.clone(),
-            reject_reason: None,
+            reject_reason: Some("local_simulator_smoke_not_runtime_certified".to_string()),
             provenance: "runtime_authoritative".to_string(),
         })
         .expect("target feedback-context request");
@@ -308,6 +417,57 @@ fn parity_target_route_round_trip_uses_outer_context_endpoints() {
             "/v1/world-simulator/feedback-context".to_string(),
         ]
     );
+}
+
+fn read_http_json(stream: &mut std::net::TcpStream) -> (String, serde_json::Value) {
+    let mut bytes = Vec::new();
+    let header_end = loop {
+        let mut chunk = [0_u8; 4096];
+        let read = stream.read(&mut chunk).expect("read HTTP request");
+        assert!(read > 0, "HTTP request closed before headers");
+        bytes.extend_from_slice(&chunk[..read]);
+        if let Some(index) = bytes.windows(4).position(|window| window == b"\r\n\r\n") {
+            break index;
+        }
+    };
+    let header_len = header_end + 4;
+    let headers = String::from_utf8_lossy(&bytes[..header_end]);
+    let path = headers
+        .lines()
+        .next()
+        .and_then(|line| line.split_whitespace().nth(1))
+        .unwrap_or_default()
+        .to_string();
+    let content_length = headers
+        .lines()
+        .find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            (name.eq_ignore_ascii_case("content-length"))
+                .then(|| value.trim().parse::<usize>().ok())
+        })
+        .flatten()
+        .expect("HTTP request content length");
+    while bytes.len() < header_len + content_length {
+        let mut chunk = [0_u8; 4096];
+        let read = stream.read(&mut chunk).expect("read HTTP request body");
+        assert!(read > 0, "HTTP request closed before body");
+        bytes.extend_from_slice(&chunk[..read]);
+    }
+    let value = serde_json::from_slice(&bytes[header_len..header_len + content_length])
+        .expect("decode HTTP request JSON");
+    (path, value)
+}
+
+fn write_http_json(stream: &mut std::net::TcpStream, value: &serde_json::Value) {
+    let body = serde_json::to_vec(value).expect("encode HTTP response JSON");
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    stream
+        .write_all(response.as_bytes())
+        .expect("write HTTP response headers");
+    stream.write_all(&body).expect("write HTTP response body");
 }
 
 #[test]
@@ -355,6 +515,7 @@ fn scenario_goal_completed_uses_p0_rules() {
         &action_kind_counts,
         &BTreeMap::new(),
         0,
+        &metric_summary(0, 0),
     ));
 
     action_kind_counts.clear();
@@ -364,13 +525,622 @@ fn scenario_goal_completed_uses_p0_rules() {
         &action_kind_counts,
         &BTreeMap::new(),
         0,
+        &metric_summary(0, 0),
     ));
     assert!(!scenario_goal_completed(
         "P0-004",
         &action_kind_counts,
         &BTreeMap::new(),
         1,
+        &metric_summary(0, 0),
     ));
+}
+
+fn recovery_lineage(
+    agent_id: &str,
+    session_id: &str,
+    chain_id: &str,
+    turn_id: &str,
+    request_id: &str,
+    request_digest: &str,
+) -> RecoveryLineage {
+    RecoveryLineage {
+        agent_id: agent_id.to_string(),
+        agent_session_id: session_id.to_string(),
+        recovery_chain_id: chain_id.to_string(),
+        agent_turn_id: turn_id.to_string(),
+        decision_request_id: request_id.to_string(),
+        request_digest: request_digest.to_string(),
+    }
+}
+
+fn recovery_error(lineage: RecoveryLineage) -> RecoveryErrorEvidence {
+    RecoveryErrorEvidence {
+        error_code: "timeout".to_string(),
+        lineage,
+    }
+}
+
+fn recovery_action(
+    origin: RecoveryLineage,
+    recovery_turn: &str,
+    recovery_request: &str,
+    recovery_digest: &str,
+    action_id: u64,
+) -> RecoveryActionEvidence {
+    let lineage = recovery_lineage(
+        &origin.agent_id,
+        &origin.agent_session_id,
+        &origin.recovery_chain_id,
+        recovery_turn,
+        recovery_request,
+        recovery_digest,
+    );
+    RecoveryActionEvidence {
+        lineage,
+        origin,
+        action_id,
+        authority_ref: format!("fixture-action://action-{action_id}"),
+        retry_seq: 2,
+    }
+}
+
+fn recovery_ledger_with_error_and_resolution(resolution_count: usize) -> RecoveryLedger {
+    let mut ledger = RecoveryLedger::new("sample-recovery");
+    let origin = recovery_lineage(
+        "agent-1",
+        "session-1",
+        "chain-1",
+        "turn-1",
+        "request-1",
+        ORIGIN_DIGEST,
+    );
+    ledger.record_recoverable_error(recovery_error(origin.clone()));
+    for index in 0..resolution_count {
+        let _ = ledger.record_action_committed(recovery_action(
+            origin.clone(),
+            &format!("turn-{}", index + 2),
+            &format!("request-{}", index + 2),
+            RECOVERY_DIGEST,
+            index as u64 + 1,
+        ));
+    }
+    ledger
+}
+
+#[test]
+fn recovery_ledger_happy_path_records_ordered_host_resolution() {
+    let assessment = recovery_ledger_with_error_and_resolution(1).assess();
+    assert_eq!(assessment.trace_validity.as_str(), "valid");
+    assert_eq!(assessment.metric.numerator, 1);
+    assert_eq!(assessment.metric.denominator, 1);
+    assert_eq!(assessment.metric.value, Some(1.0));
+    assert_eq!(assessment.metric.gate_status, "evaluable");
+    assert_eq!(assessment.recovery_events.len(), 2);
+    assert_eq!(assessment.recovery_events[0].event_seq, 1);
+    assert_eq!(assessment.recovery_events[1].event_seq, 2);
+    assert_eq!(
+        assessment.recovery_events[0].request_digest.as_deref(),
+        Some(ORIGIN_DIGEST)
+    );
+    assert_eq!(
+        assessment.recovery_events[1].authority.as_deref(),
+        Some("runtime_or_fixture_host")
+    );
+    assert_eq!(
+        assessment.recovery_events[1].origin_turn_id.as_deref(),
+        Some("turn-1")
+    );
+    assert_eq!(
+        assessment.recovery_events[1]
+            .origin_request_digest
+            .as_deref(),
+        Some(ORIGIN_DIGEST)
+    );
+    assert_eq!(
+        assessment.recovery_events[1].sample_id.as_deref(),
+        Some("sample-recovery")
+    );
+    assert_eq!(
+        assessment.recovery_events[1].decision_request_id.as_deref(),
+        Some("request-2")
+    );
+    assert_eq!(
+        assessment.recovery_events[1].request_digest.as_deref(),
+        Some(RECOVERY_DIGEST)
+    );
+    assert_eq!(assessment.recovery_events[1].retry_seq, Some(2));
+}
+
+#[test]
+fn recovery_ledger_rejects_resolution_before_semantic_retry() {
+    let mut ledger = RecoveryLedger::new("sample-retry");
+    let origin = recovery_lineage(
+        "agent-1",
+        "session-1",
+        "chain-1",
+        "turn-1",
+        "request-1",
+        ORIGIN_DIGEST,
+    );
+    ledger.record_recoverable_error(recovery_error(origin.clone()));
+    let mut evidence = recovery_action(origin, "turn-2", "request-2", RECOVERY_DIGEST, 1);
+    evidence.retry_seq = 1;
+    assert!(ledger.record_action_committed(evidence).is_none());
+    assert_eq!(ledger.assess().recovery_events.len(), 1);
+
+    let mut events = recovery_ledger_with_error_and_resolution(1)
+        .assess()
+        .recovery_events;
+    events[1].retry_seq = Some(1);
+    let assessment = assess_recovery_events(events);
+    assert_eq!(assessment.trace_validity.as_str(), "blocked");
+    assert_eq!(assessment.metric.value, None);
+    assert!(assessment.errors.iter().any(|error| {
+        error.contains("recovery_resolved") && error.contains("retry_seq must be at least 2")
+    }));
+}
+
+#[test]
+fn recovery_ledger_rejects_resolved_event_without_sample_identity() {
+    let error = RecoveryEvent {
+        event_kind: "recoverable_error".to_string(),
+        event_seq: 1,
+        error_id: "error-1".to_string(),
+        error_code: Some("timeout".to_string()),
+        sample_id: Some("sample-recovery".to_string()),
+        agent_id: "agent-1".to_string(),
+        agent_session_id: "session-1".to_string(),
+        recovery_chain_id: "chain-1".to_string(),
+        agent_turn_id: "turn-1".to_string(),
+        decision_request_id: Some("request-1".to_string()),
+        request_digest: Some(ORIGIN_DIGEST.to_string()),
+        retry_seq: Some(1),
+        origin_turn_id: None,
+        origin_request_digest: None,
+        authority: None,
+        runtime_outcome: None,
+        authority_ref: None,
+    };
+    let resolved = RecoveryEvent {
+        event_kind: "recovery_resolved".to_string(),
+        event_seq: 2,
+        error_id: "error-1".to_string(),
+        error_code: None,
+        sample_id: None,
+        agent_id: "agent-1".to_string(),
+        agent_session_id: "session-1".to_string(),
+        recovery_chain_id: "chain-1".to_string(),
+        agent_turn_id: "turn-2".to_string(),
+        decision_request_id: Some("request-2".to_string()),
+        request_digest: Some(RECOVERY_DIGEST.to_string()),
+        retry_seq: Some(2),
+        origin_turn_id: Some("turn-1".to_string()),
+        origin_request_digest: Some(ORIGIN_DIGEST.to_string()),
+        authority: Some("runtime_or_fixture_host".to_string()),
+        runtime_outcome: Some("action_committed".to_string()),
+        authority_ref: Some("fixture-action://action-1".to_string()),
+    };
+    let assessment = assess_recovery_events(vec![error, resolved]);
+    assert_eq!(assessment.trace_validity.as_str(), "blocked");
+    assert!(
+        assessment
+            .errors
+            .iter()
+            .any(|error| { error.contains("recovery_resolved") && error.contains("sample_id") })
+    );
+}
+
+#[test]
+fn recovery_ledger_timeout_only_is_unresolved() {
+    let assessment = recovery_ledger_with_error_and_resolution(0).assess();
+    assert_eq!(assessment.metric.numerator, 0);
+    assert_eq!(assessment.metric.denominator, 1);
+    assert_eq!(assessment.metric.value, Some(0.0));
+    assert_eq!(assessment.metric.gate_status, "evaluable");
+}
+
+#[test]
+fn p0_005_goal_flag_cannot_replace_recovery_resolution() {
+    let mut actions = BTreeMap::new();
+    actions.insert("wait".to_string(), 1);
+    let assessment = recovery_ledger_with_error_and_resolution(0).assess();
+    let mut errors = BTreeMap::new();
+    errors.insert("timeout".to_string(), 1);
+    assert!(!scenario_goal_completed(
+        "P0-005",
+        &actions,
+        &errors,
+        0,
+        &assessment.metric,
+    ));
+}
+
+#[test]
+fn recovery_ledger_partial_resolution_counts_occurrences() {
+    let mut ledger = RecoveryLedger::new("sample-partial");
+    let origin_one = recovery_lineage(
+        "agent-1",
+        "session-1",
+        "chain-1",
+        "turn-1",
+        "request-1",
+        ORIGIN_DIGEST,
+    );
+    let origin_two = recovery_lineage(
+        "agent-1",
+        "session-1",
+        "chain-2",
+        "turn-2",
+        "request-2",
+        SECOND_ORIGIN_DIGEST,
+    );
+    ledger.record_recoverable_error(recovery_error(origin_one.clone()));
+    ledger.record_recoverable_error(recovery_error(origin_two));
+    let _ = ledger.record_action_committed(recovery_action(
+        origin_one,
+        "turn-3",
+        "request-3",
+        RECOVERY_DIGEST,
+        1,
+    ));
+    let assessment = ledger.assess();
+    assert_eq!(assessment.metric.numerator, 1);
+    assert_eq!(assessment.metric.denominator, 2);
+    assert_eq!(assessment.metric.value, Some(0.5));
+}
+
+#[test]
+fn recovery_ledger_unrelated_success_does_not_resolve_pending_error() {
+    let mut ledger = RecoveryLedger::new("sample-unrelated");
+    let origin = recovery_lineage(
+        "agent-1",
+        "session-1",
+        "chain-1",
+        "turn-1",
+        "request-1",
+        ORIGIN_DIGEST,
+    );
+    ledger.record_recoverable_error(recovery_error(origin.clone()));
+    let unrelated_origin = recovery_lineage(
+        "agent-1",
+        "session-1",
+        "chain-1",
+        "turn-unrelated",
+        "request-unrelated",
+        SECOND_ORIGIN_DIGEST,
+    );
+    assert!(
+        ledger
+            .record_action_committed(recovery_action(
+                unrelated_origin,
+                "turn-2",
+                "request-2",
+                RECOVERY_DIGEST,
+                1,
+            ))
+            .is_none()
+    );
+    let assessment = ledger.assess();
+    assert_eq!(assessment.metric.numerator, 0);
+    assert_eq!(assessment.metric.denominator, 1);
+}
+
+#[test]
+fn recovery_ledger_wrong_chain_does_not_resolve_pending_error() {
+    let mut ledger = RecoveryLedger::new("sample-wrong-chain");
+    let origin = recovery_lineage(
+        "agent-1",
+        "session-1",
+        "chain-1",
+        "turn-1",
+        "request-1",
+        ORIGIN_DIGEST,
+    );
+    ledger.record_recoverable_error(recovery_error(origin));
+    let wrong_chain = recovery_lineage(
+        "agent-1",
+        "session-1",
+        "chain-2",
+        "turn-1",
+        "request-1",
+        ORIGIN_DIGEST,
+    );
+    assert!(
+        ledger
+            .record_action_committed(recovery_action(
+                wrong_chain,
+                "turn-2",
+                "request-2",
+                RECOVERY_DIGEST,
+                1,
+            ))
+            .is_none()
+    );
+    assert_eq!(ledger.assess().metric.numerator, 0);
+}
+
+#[test]
+fn recovery_ledger_cross_agent_success_does_not_resolve_pending_error() {
+    let mut ledger = RecoveryLedger::new("sample-cross-agent");
+    let origin = recovery_lineage(
+        "agent-1",
+        "session-1",
+        "chain-1",
+        "turn-1",
+        "request-1",
+        ORIGIN_DIGEST,
+    );
+    ledger.record_recoverable_error(recovery_error(origin));
+    let other_agent = recovery_lineage(
+        "agent-2",
+        "session-2",
+        "chain-1",
+        "turn-1",
+        "request-1",
+        ORIGIN_DIGEST,
+    );
+    assert!(
+        ledger
+            .record_action_committed(recovery_action(
+                other_agent,
+                "turn-2",
+                "request-2",
+                RECOVERY_DIGEST,
+                1,
+            ))
+            .is_none()
+    );
+    assert_eq!(ledger.assess().metric.numerator, 0);
+}
+
+#[test]
+fn recovery_ledger_missing_chain_evidence_stays_unresolved() {
+    let mut ledger = RecoveryLedger::new("sample-missing-chain");
+    let origin = recovery_lineage(
+        "agent-1",
+        "session-1",
+        "chain-1",
+        "turn-1",
+        "request-1",
+        ORIGIN_DIGEST,
+    );
+    ledger.record_recoverable_error(recovery_error(origin));
+    let missing_chain = recovery_lineage(
+        "agent-1",
+        "session-1",
+        "",
+        "turn-1",
+        "request-1",
+        ORIGIN_DIGEST,
+    );
+    assert!(
+        ledger
+            .record_action_committed(recovery_action(
+                missing_chain.clone(),
+                "turn-2",
+                "request-2",
+                RECOVERY_DIGEST,
+                1,
+            ))
+            .is_none()
+    );
+    assert!(missing_chain.recovery_chain_id.is_empty());
+    assert_eq!(ledger.assess().metric.numerator, 0);
+}
+
+#[test]
+fn recovery_ledger_duplicate_resolution_is_counted_once() {
+    let mut ledger = RecoveryLedger::new("sample-duplicate");
+    let origin = recovery_lineage(
+        "agent-1",
+        "session-1",
+        "chain-1",
+        "turn-1",
+        "request-1",
+        ORIGIN_DIGEST,
+    );
+    ledger.record_recoverable_error(recovery_error(origin.clone()));
+    let evidence = recovery_action(origin, "turn-2", "request-2", RECOVERY_DIGEST, 1);
+    assert!(ledger.record_action_committed(evidence.clone()).is_some());
+    assert!(ledger.record_action_committed(evidence).is_none());
+    let assessment = ledger.assess();
+    assert_eq!(assessment.metric.numerator, 1);
+    assert_eq!(assessment.metric.denominator, 1);
+    assert_eq!(assessment.recovery_events.len(), 2);
+}
+
+#[test]
+fn recovery_ledger_action_authority_must_bind_to_action_id() {
+    let mut ledger = RecoveryLedger::new("sample-authority-binding");
+    let origin = recovery_lineage(
+        "agent-1",
+        "session-1",
+        "chain-1",
+        "turn-1",
+        "request-1",
+        ORIGIN_DIGEST,
+    );
+    ledger.record_recoverable_error(recovery_error(origin.clone()));
+    let mut mismatched = recovery_action(origin.clone(), "turn-2", "request-2", RECOVERY_DIGEST, 7);
+    mismatched.authority_ref = "fixture-action://action-8".to_string();
+    assert!(ledger.record_action_committed(mismatched).is_none());
+    assert_eq!(ledger.assess().metric.numerator, 0);
+    assert!(
+        ledger
+            .record_action_committed(recovery_action(
+                origin,
+                "turn-2",
+                "request-2",
+                RECOVERY_DIGEST,
+                7,
+            ))
+            .is_some()
+    );
+    assert_eq!(ledger.assess().metric.numerator, 1);
+}
+
+#[test]
+fn recovery_ledger_zero_case_is_not_evaluable() {
+    let assessment = RecoveryLedger::new("sample-zero").assess();
+    assert_eq!(assessment.metric.numerator, 0);
+    assert_eq!(assessment.metric.denominator, 0);
+    assert_eq!(assessment.metric.value, None);
+    assert_eq!(
+        assessment.metric.zero_case.as_deref(),
+        Some("not_applicable")
+    );
+    assert_eq!(assessment.metric.gate_status, "not_evaluable");
+}
+
+#[test]
+fn recovery_ledger_malformed_or_out_of_order_is_blocked() {
+    let malformed = RecoveryEvent {
+        event_kind: "recovery_resolved".to_string(),
+        event_seq: 1,
+        error_id: "error-1".to_string(),
+        error_code: None,
+        sample_id: None,
+        agent_id: "agent-1".to_string(),
+        agent_session_id: "session-1".to_string(),
+        recovery_chain_id: "chain-1".to_string(),
+        agent_turn_id: "turn-1".to_string(),
+        decision_request_id: None,
+        request_digest: None,
+        retry_seq: None,
+        origin_turn_id: Some("turn-0".to_string()),
+        origin_request_digest: Some("blake3:origin".to_string()),
+        authority: Some("runtime_or_fixture_host".to_string()),
+        runtime_outcome: Some("action_committed".to_string()),
+        authority_ref: None,
+    };
+    let error = RecoveryEvent {
+        event_kind: "recoverable_error".to_string(),
+        event_seq: 2,
+        error_id: "error-1".to_string(),
+        error_code: Some("timeout".to_string()),
+        sample_id: Some("sample-recovery".to_string()),
+        agent_id: "agent-1".to_string(),
+        agent_session_id: "session-1".to_string(),
+        recovery_chain_id: "chain-1".to_string(),
+        agent_turn_id: "turn-0".to_string(),
+        decision_request_id: Some("request-1".to_string()),
+        request_digest: Some(ORIGIN_DIGEST.to_string()),
+        retry_seq: Some(1),
+        origin_turn_id: None,
+        origin_request_digest: None,
+        authority: None,
+        runtime_outcome: None,
+        authority_ref: None,
+    };
+    let assessment = assess_recovery_events(vec![malformed, error]);
+    assert_eq!(assessment.trace_validity.as_str(), "blocked");
+    assert_eq!(assessment.metric.gate_status, "blocked");
+    assert_eq!(assessment.metric.value, None);
+    assert_eq!(assessment.metric.denominator, 1);
+    assert_eq!(
+        RECOVERY_METRIC_SCHEMA_VERSION,
+        "recoverable_error_resolution_rate.v1"
+    );
+}
+
+#[test]
+fn recovery_ledger_binds_resolved_origin_digest_to_original_error() {
+    let error = RecoveryEvent {
+        event_kind: "recoverable_error".to_string(),
+        event_seq: 1,
+        error_id: "error-1".to_string(),
+        error_code: Some("timeout".to_string()),
+        sample_id: Some("sample-recovery".to_string()),
+        agent_id: "agent-1".to_string(),
+        agent_session_id: "session-1".to_string(),
+        recovery_chain_id: "chain-1".to_string(),
+        agent_turn_id: "turn-1".to_string(),
+        decision_request_id: Some("request-1".to_string()),
+        request_digest: Some(ORIGIN_DIGEST.to_string()),
+        retry_seq: Some(1),
+        origin_turn_id: None,
+        origin_request_digest: None,
+        authority: None,
+        runtime_outcome: None,
+        authority_ref: None,
+    };
+    let resolved = RecoveryEvent {
+        event_kind: "recovery_resolved".to_string(),
+        event_seq: 2,
+        error_id: "error-1".to_string(),
+        error_code: None,
+        sample_id: Some("sample-recovery".to_string()),
+        agent_id: "agent-1".to_string(),
+        agent_session_id: "session-1".to_string(),
+        recovery_chain_id: "chain-1".to_string(),
+        agent_turn_id: "turn-2".to_string(),
+        decision_request_id: Some("request-2".to_string()),
+        request_digest: Some(RECOVERY_DIGEST.to_string()),
+        retry_seq: Some(2),
+        origin_turn_id: Some("turn-1".to_string()),
+        origin_request_digest: Some(SECOND_ORIGIN_DIGEST.to_string()),
+        authority: Some("runtime_or_fixture_host".to_string()),
+        runtime_outcome: Some("action_committed".to_string()),
+        authority_ref: Some("fixture-action://action-1".to_string()),
+    };
+    let assessment = assess_recovery_events(vec![error, resolved]);
+    assert_eq!(assessment.trace_validity.as_str(), "blocked");
+    assert_eq!(assessment.metric.gate_status, "blocked");
+    assert_eq!(assessment.metric.value, None);
+    assert!(assessment.errors.iter().any(|error| {
+        error.contains("origin_request_digest") && error.contains("does not match")
+    }));
+}
+
+#[test]
+fn recovery_ledger_rejects_malformed_origin_request_digest() {
+    let error = RecoveryEvent {
+        event_kind: "recoverable_error".to_string(),
+        event_seq: 1,
+        error_id: "error-1".to_string(),
+        error_code: Some("timeout".to_string()),
+        sample_id: Some("sample-recovery".to_string()),
+        agent_id: "agent-1".to_string(),
+        agent_session_id: "session-1".to_string(),
+        recovery_chain_id: "chain-1".to_string(),
+        agent_turn_id: "turn-1".to_string(),
+        decision_request_id: Some("request-1".to_string()),
+        request_digest: Some(ORIGIN_DIGEST.to_string()),
+        retry_seq: Some(1),
+        origin_turn_id: None,
+        origin_request_digest: None,
+        authority: None,
+        runtime_outcome: None,
+        authority_ref: None,
+    };
+    let resolved = RecoveryEvent {
+        event_kind: "recovery_resolved".to_string(),
+        event_seq: 2,
+        error_id: "error-1".to_string(),
+        error_code: None,
+        sample_id: Some("sample-recovery".to_string()),
+        agent_id: "agent-1".to_string(),
+        agent_session_id: "session-1".to_string(),
+        recovery_chain_id: "chain-1".to_string(),
+        agent_turn_id: "turn-2".to_string(),
+        decision_request_id: Some("request-2".to_string()),
+        request_digest: Some(RECOVERY_DIGEST.to_string()),
+        retry_seq: Some(2),
+        origin_turn_id: Some("turn-1".to_string()),
+        origin_request_digest: Some("blake3:origin".to_string()),
+        authority: Some("runtime_or_fixture_host".to_string()),
+        runtime_outcome: Some("action_committed".to_string()),
+        authority_ref: Some("fixture-action://action-1".to_string()),
+    };
+    let assessment = assess_recovery_events(vec![error, resolved]);
+    assert_eq!(assessment.trace_validity.as_str(), "blocked");
+    assert_eq!(assessment.metric.gate_status, "blocked");
+    assert!(
+        assessment.errors.iter().any(|error| {
+            error.contains("origin_request_digest") && error.contains("canonical")
+        })
+    );
 }
 
 #[test]
@@ -394,120 +1164,4 @@ fn classify_trace_error_detects_timeout() {
         classify_trace_error(Some(&trace), None).as_deref(),
         Some("timeout")
     );
-}
-
-#[test]
-fn prepare_provider_info_captures_provider_compatibility_status() {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
-    let bind = listener.local_addr().expect("listener addr");
-    let serve = std::thread::spawn(move || {
-        for _ in 0..2 {
-            let (mut stream, _) = listener.accept().expect("accept probe connection");
-            let mut request = [0_u8; 1024];
-            let bytes = stream.read(&mut request).expect("read request");
-            let request_text = String::from_utf8_lossy(&request[..bytes]);
-            let body = if request_text.contains("GET /v1/provider/info") {
-                r#"{"provider_id":"provider_local_bridge","name":"Provider Local Bridge","version":"0.1.0","protocol_version":"world-simulator-provider-loopback-http-v1","chain_resource_manifest_schema_version":"oasis7.world_resource_manifest.v1","chain_resource_delta_schema_version":"oasis7.world_resource_delta.v1","capabilities":["decision","feedback"],"supported_action_sets":["wait","wait_ticks","move_agent","speak_to_nearby","inspect_target","simple_interact"]}"#
-            } else {
-                r#"{"ok":true,"status":"ready","uptime_ms":42,"last_error":null,"queue_depth":0}"#
-            };
-            let response = format!(
-                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                body.len(),
-                body
-            );
-            let _ = stream.write_all(response.as_bytes());
-        }
-    });
-
-    let options = CliOptions {
-        provider: BenchProviderKind::ProviderLoopbackHttp,
-        provider_base_url: Some(format!("http://{bind}")),
-        ..CliOptions::default()
-    };
-    let provider = prepare_provider_info(&options).expect("prepare provider");
-    assert_eq!(provider.compatibility_status, "ready");
-    assert_eq!(provider.fallback_reason, None);
-    assert_eq!(
-        provider.capabilities,
-        vec!["decision".to_string(), "feedback".to_string()]
-    );
-    assert_eq!(provider.supported_action_sets.len(), 6);
-    serve.join().expect("server thread should finish");
-}
-
-#[test]
-fn prepare_provider_info_marks_incompatible_supported_actions() {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
-    let bind = listener.local_addr().expect("listener addr");
-    let serve = std::thread::spawn(move || {
-        for _ in 0..2 {
-            let (mut stream, _) = listener.accept().expect("accept probe connection");
-            let mut request = [0_u8; 1024];
-            let bytes = stream.read(&mut request).expect("read request");
-            let request_text = String::from_utf8_lossy(&request[..bytes]);
-            let body = if request_text.contains("GET /v1/provider/info") {
-                r#"{"provider_id":"provider_local_bridge","name":"Provider Local Bridge","version":"0.1.0","protocol_version":"world-simulator-provider-loopback-http-v1","chain_resource_manifest_schema_version":"oasis7.world_resource_manifest.v1","chain_resource_delta_schema_version":"oasis7.world_resource_delta.v1","capabilities":["decision","feedback"],"supported_action_sets":["wait","move_agent"]}"#
-            } else {
-                r#"{"ok":true,"status":"ready","uptime_ms":42,"last_error":null,"queue_depth":0}"#
-            };
-            let response = format!(
-                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                body.len(),
-                body
-            );
-            let _ = stream.write_all(response.as_bytes());
-        }
-    });
-
-    let options = CliOptions {
-        provider: BenchProviderKind::ProviderLoopbackHttp,
-        provider_base_url: Some(format!("http://{bind}")),
-        ..CliOptions::default()
-    };
-    let provider = prepare_provider_info(&options).expect("prepare provider");
-    assert_eq!(provider.compatibility_status, "incompatible");
-    assert_eq!(
-        provider.fallback_reason.as_deref(),
-        Some("missing_supported_actions:wait_ticks,speak_to_nearby,inspect_target,simple_interact")
-    );
-    serve.join().expect("server thread should finish");
-}
-
-#[test]
-fn prepare_provider_info_marks_missing_capabilities_as_incompatible() {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
-    let bind = listener.local_addr().expect("listener addr");
-    let serve = std::thread::spawn(move || {
-        for _ in 0..2 {
-            let (mut stream, _) = listener.accept().expect("accept probe connection");
-            let mut request = [0_u8; 1024];
-            let bytes = stream.read(&mut request).expect("read request");
-            let request_text = String::from_utf8_lossy(&request[..bytes]);
-            let body = if request_text.contains("GET /v1/provider/info") {
-                r#"{"provider_id":"provider_local_bridge","name":"Provider Local Bridge","version":"0.1.0","protocol_version":"world-simulator-provider-loopback-http-v1","chain_resource_manifest_schema_version":"oasis7.world_resource_manifest.v1","chain_resource_delta_schema_version":"oasis7.world_resource_delta.v1","capabilities":["decision"],"supported_action_sets":["phase1_low_frequency"]}"#
-            } else {
-                r#"{"ok":true,"status":"ready","uptime_ms":42,"last_error":null,"queue_depth":0}"#
-            };
-            let response = format!(
-                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                body.len(),
-                body
-            );
-            let _ = stream.write_all(response.as_bytes());
-        }
-    });
-
-    let options = CliOptions {
-        provider: BenchProviderKind::ProviderLoopbackHttp,
-        provider_base_url: Some(format!("http://{bind}")),
-        ..CliOptions::default()
-    };
-    let provider = prepare_provider_info(&options).expect("prepare provider");
-    assert_eq!(provider.compatibility_status, "incompatible");
-    assert_eq!(
-        provider.fallback_reason.as_deref(),
-        Some("missing_provider_capabilities:feedback")
-    );
-    serve.join().expect("server thread should finish");
 }

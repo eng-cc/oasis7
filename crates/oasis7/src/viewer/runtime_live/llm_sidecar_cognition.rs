@@ -11,6 +11,9 @@ use oasis7_wasm_abi::{CapabilityCatalogSnapshot, CapabilityPresenter, Capability
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+#[path = "llm_sidecar_cognition_wait.rs"]
+mod wait_admission;
+
 const PROVIDER_ADAPTER_PROTOCOL_VERSION: &str = "world-simulator-provider-loopback-http-v1";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -65,14 +68,12 @@ impl RuntimeLlmSidecar {
         // keep durable provider notifications retryable on both lanes.
         self.flush_pending_provider_world_events();
         self.hydrate_provider_lineage(world);
-        let settings = provider_settings_from_env()?.ok_or_else(|| {
-            "provider settings disappeared before context preparation".to_string()
-        })?;
+        let provider_settings = provider_settings_from_env()?;
         let runtime_binding = world.current_runtime_binding(world_id)?;
         self.provider_lineage_binding = Some(runtime_binding.clone());
         let recent_event_summary = recent_runtime_event_summaries(world);
         self.release_due_provider_waits(world)?;
-        if !matches!(self.runner, Some(RuntimeDecisionRunner::ProviderBacked(_))) {
+        if self.runner.is_none() {
             return Ok(());
         }
         let agent_ids = self
@@ -89,9 +90,25 @@ impl RuntimeLlmSidecar {
             .collect::<Vec<_>>();
 
         for agent_id in agent_ids {
-            let observation = kernel
-                .observe(agent_id.as_str())
-                .map_err(|error| format!("provider context observation failed: {error:?}"))?;
+            let settings = match provider_settings.as_ref() {
+                Some(settings) => settings.clone(),
+                None => builtin_cognition_settings(agent_id.as_str())?,
+            };
+            if !provider_actor_exists(self, agent_id.as_str()) {
+                self.quarantine_missing_provider_agent(world, agent_id.as_str());
+                continue;
+            }
+            let observation = kernel.observe(agent_id.as_str());
+            let observation = match observation {
+                Ok(observation) => observation,
+                Err(crate::simulator::RejectReason::AgentNotFound { .. }) => {
+                    self.quarantine_missing_provider_agent(world, agent_id.as_str());
+                    continue;
+                }
+                Err(error) => {
+                    return Err(format!("provider context observation failed: {error:?}"));
+                }
+            };
             let replan_cause = self.provider_stale_replan_cause(agent_id.as_str());
             let runtime_wake = self
                 .pending_runtime_wakes
@@ -132,6 +149,8 @@ impl RuntimeLlmSidecar {
                     agent_id.as_str(),
                     current_sequence,
                 )?;
+                let goal_snapshot =
+                    trusted_provider_goal_snapshot(self.prompt_profiles.get(agent_id.as_str()))?;
                 let session_id = runtime_wake
                     .as_ref()
                     .map(|_| {
@@ -160,17 +179,20 @@ impl RuntimeLlmSidecar {
                     .map_or((None, None), |(simulator, runtime)| {
                         (Some(simulator), Some(runtime))
                     });
+                let observation_for_context = observation.clone();
                 let (turn_context, request_context) = build_provider_context(
                     session_id.as_str(),
                     current_sequence,
                     agent_id.as_str(),
-                    observation,
+                    observation.clone(),
                     &settings,
                     runtime_binding.clone(),
                     recent_event_summary.as_slice(),
                     capability_context,
                     replan_cause.as_ref(),
                     runtime_continuation.as_ref(),
+                    &self.provider_memory_store,
+                    goal_snapshot,
                 )?;
                 if let (Some(wake), Some(proposal)) =
                     (runtime_wake.as_ref(), runtime_resume_proposal)
@@ -184,14 +206,93 @@ impl RuntimeLlmSidecar {
                             &request_context,
                         ),
                     };
-                    world
-                        .resume_cognition_wake(&wake.wake_id, proposal, 1, resume)
-                        .map_err(|error| {
-                            format!(
+                    let current_context =
+                        crate::simulator::ContinuationCurrentContextV1::from_observation(
+                            observation_for_context,
+                            &turn_context.goal_snapshot,
+                            provider_policy_context_digest(&request_context),
+                            provider_wait_precondition_digest(&observation),
+                        );
+                    let resumed = match world.resume_cognition_wake_with_context(
+                        &wake.wake_id,
+                        proposal,
+                        1,
+                        resume,
+                        crate::runtime::CognitionContextDigestsV1 {
+                            baseline_observation_digest: current_context
+                                .authority
+                                .baseline_observation_digest
+                                .clone(),
+                            goal_digest: current_context.authority.goal_digest.clone(),
+                            policy_digest: current_context.authority.policy_digest.clone(),
+                            precondition_digest: current_context
+                                .authority
+                                .precondition_digest
+                                .clone(),
+                        },
+                    ) {
+                        Ok(result) => result,
+                        Err(error) => {
+                            // A stale wake must not remain leased just
+                            // because the current-context gate rejected it.
+                            // Runtime's terminal handoff is scoped to this
+                            // exact wake; local mirrors are then removed for
+                            // this Agent only.
+                            let _ = world.handoff_cognition_wake_with_context(
+                                &wake.wake_id,
+                                crate::runtime::CognitionWakeDispositionV1::Terminal {
+                                    status: crate::runtime::ContinuationStatusV1::Rejected,
+                                    reason: "provider_wake_resume_failed".to_string(),
+                                },
+                                crate::runtime::CognitionContextDigestsV1 {
+                                    baseline_observation_digest: current_context
+                                        .authority
+                                        .baseline_observation_digest
+                                        .clone(),
+                                    goal_digest: current_context.authority.goal_digest.clone(),
+                                    policy_digest: current_context.authority.policy_digest.clone(),
+                                    precondition_digest: current_context
+                                        .authority
+                                        .precondition_digest
+                                        .clone(),
+                                },
+                            );
+                            self.pending_runtime_wakes.remove(&wake.wake_id);
+                            self.provider_contexts.remove(agent_id.as_str());
+                            self.provider_active_turns.remove(agent_id.as_str());
+                            self.provider_retry_contexts.remove(agent_id.as_str());
+                            self.provider_wait_until.remove(agent_id.as_str());
+                            self.persist_provider_lineage_best_effort();
+                            return Err(format!(
                                 "Runtime cognition wake resume rejected {}: {error:?}",
                                 wake.wake_id
+                            ));
+                        }
+                    };
+                    #[cfg(not(target_arch = "wasm32"))]
+                    if let Some(runner) = self
+                        .runner
+                        .as_mut()
+                        .and_then(RuntimeDecisionRunner::async_runner_mut)
+                    {
+                        runner
+                            .reconcile_runtime_wake_with_current_context(
+                                agent_id.as_str(),
+                                &current_context,
+                                &resumed.continuation,
+                                resumed
+                                    .replanned_continuation
+                                    .as_ref()
+                                    .map(|_| runtime_continuation.clone())
+                                    .flatten(),
                             )
-                        })?;
+                            .map_err(|error| {
+                                format!(
+                                    "Harness wake reconciliation failed {}: {error}",
+                                    wake.wake_id
+                                )
+                            })?;
+                    }
                     // The selected wake has been consumed. Its re-planned
                     // continuation is now Runtime-active and will be selected
                     // by the normal scheduler on a later tick; never retain
@@ -213,6 +314,109 @@ impl RuntimeLlmSidecar {
     }
 }
 
+fn provider_wait_precondition_digest(observation: &Observation) -> String {
+    crate::simulator::h_v1("oasis7.cognition.provider-wait-precondition.v1", &{
+        let mut stable = observation.clone();
+        stable.time = 0;
+        stable
+    })
+    .to_string()
+}
+
+fn provider_policy_context_digest(
+    request: &crate::simulator::ContinuousAgentRequestContextV1,
+) -> String {
+    let policy_hash = request
+        .base_decision_request
+        .capability_catalog
+        .as_ref()
+        .map(|catalog| catalog.policy_hash.as_str())
+        .unwrap_or("missing-provider-policy");
+    crate::simulator::h_v1("oasis7.cognition.provider-policy.v1", &policy_hash).to_string()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn builtin_cognition_settings(agent_id: &str) -> Result<ProviderDecisionSettings, String> {
+    let config = LlmAgentConfig::from_default_sources_for_agent(agent_id)
+        .map_err(|error| format!("builtin cognition config failed for {agent_id}: {error}"))?;
+    Ok(ProviderDecisionSettings {
+        requested_provider_mode: "builtin_llm".to_string(),
+        provider_transport: "builtin_openai".to_string(),
+        base_url: config.base_url,
+        auth_token: None,
+        connect_timeout_ms: config.timeout_ms.max(1),
+        decision_timeout_ms: config.timeout_ms.max(1),
+        agent_profile: config.prompt_profile.as_str().to_string(),
+        execution_mode: ProviderExecutionMode::HeadlessAgent,
+        fallback_reason: None,
+    })
+}
+
+fn provider_actor_exists(sidecar: &RuntimeLlmSidecar, agent_id: &str) -> bool {
+    match sidecar.runner.as_ref() {
+        #[cfg(not(target_arch = "wasm32"))]
+        Some(RuntimeDecisionRunner::Builtin(runner))
+        | Some(RuntimeDecisionRunner::ProviderBacked(runner)) => runner.has_agent(agent_id),
+        #[cfg(target_arch = "wasm32")]
+        Some(RuntimeDecisionRunner::ProviderBacked(runner)) => runner.get(agent_id).is_some(),
+        _ => false,
+    }
+}
+
+impl RuntimeLlmSidecar {
+    fn quarantine_missing_provider_agent(&mut self, world: &mut RuntimeWorld, agent_id: &str) {
+        self.provider_agent_ids.remove(agent_id);
+        self.provider_session_ids.remove(agent_id);
+        self.provider_context_seq.remove(agent_id);
+        self.provider_contexts.remove(agent_id);
+        self.provider_retry_contexts.remove(agent_id);
+        self.provider_active_turns.remove(agent_id);
+        self.provider_recovery_pending.remove(agent_id);
+        self.provider_wait_until.remove(agent_id);
+        self.provider_stale_replans.remove(agent_id);
+        self.provider_transport_exhausted.remove(agent_id);
+        self.provider_held_decisions.remove(agent_id);
+
+        let wake_ids = self
+            .pending_runtime_wakes
+            .values()
+            .filter(|wake| wake.agent_id == agent_id)
+            .map(|wake| wake.wake_id.clone())
+            .collect::<Vec<_>>();
+        for wake_id in wake_ids {
+            // Close only this missing Agent's lease.  A sibling Agent's wake
+            // must remain schedulable and must not be consumed as cleanup.
+            if let Err(error) = world.handoff_cognition_wake(
+                wake_id.as_str(),
+                crate::runtime::CognitionWakeDispositionV1::Terminal {
+                    status: crate::runtime::ContinuationStatusV1::Rejected,
+                    reason: "provider_actor_missing".to_string(),
+                },
+            ) {
+                tracing::warn!(
+                    agent_id,
+                    wake_id,
+                    error = ?error,
+                    "missing provider actor wake cleanup failed"
+                );
+            }
+            self.pending_runtime_wakes.remove(wake_id.as_str());
+        }
+        let event_keys = self
+            .pending_provider_world_events
+            .iter()
+            .filter(|(_, pending)| pending.agent_id == agent_id)
+            .map(|(key, _)| key.clone())
+            .collect::<Vec<_>>();
+        for key in event_keys {
+            self.pending_provider_world_events.remove(key.as_str());
+            self.provider_world_event_quarantine
+                .insert(key, format!("provider_actor_missing:{agent_id}"));
+        }
+        self.persist_provider_lineage_best_effort();
+    }
+}
+
 fn build_provider_context(
     session_id: &str,
     sequence: u64,
@@ -224,6 +428,8 @@ fn build_provider_context(
     capability_context: ProviderCapabilityContext,
     replan_cause: Option<&ProviderStaleReplanCause>,
     continuation: Option<&SimulatorContinuationProposalV1>,
+    memory_store: &MemoryWriteStore,
+    goal_snapshot: crate::simulator::GoalSnapshotV1,
 ) -> Result<
     (
         ContinuousAgentTurnContextV1,
@@ -232,7 +438,9 @@ fn build_provider_context(
     String,
 > {
     let action_catalog = provider_phase1_action_catalog();
-    let memory_summary = provider_phase1_memory_summary();
+    let memory_snapshot = memory_store.context_snapshot(agent_id, session_id, "session_private", 8);
+    let memory_summary =
+        provider_memory_summary_with_snapshot(provider_phase1_memory_summary(), &memory_snapshot);
     let mut recent_event_summary = recent_event_summary.to_vec();
     if let Some(cause) = replan_cause {
         recent_event_summary.push(format!(
@@ -287,9 +495,6 @@ fn build_provider_context(
         capability_invocation_context: Some(capability_context.invocation),
         timeout_budget_ms: settings.decision_timeout_ms,
     };
-    let memory_snapshot =
-        crate::simulator::MemoryContextSnapshotV1::empty(format!("agent:{agent_id}"));
-    let goal_snapshot = crate::simulator::GoalSnapshotV1::empty();
     let agent_turn_id = continuation
         .map(|value| value.agent_turn_id.clone())
         .unwrap_or_else(|| format!("{session_id}-turn-{sequence}"));
@@ -347,6 +552,61 @@ fn build_provider_context(
         .validate_for_agent(agent_id)
         .map_err(|error| format!("provider turn context invalid: {error}"))?;
     Ok((turn_context, request_context))
+}
+
+fn trusted_provider_goal_snapshot(
+    profile: Option<&AgentPromptProfile>,
+) -> Result<crate::simulator::GoalSnapshotV1, String> {
+    let revision = profile.map(|profile| profile.version).unwrap_or(0).max(1);
+    let short_term_summary = profile
+        .and_then(|profile| profile.short_term_goal_override.clone())
+        .unwrap_or_else(runtime_live_phase1_short_term_goal);
+    let long_term_summary = profile
+        .and_then(|profile| profile.long_term_goal_override.clone())
+        .unwrap_or_default();
+    crate::simulator::GoalSnapshotProjector::project(
+        Some(crate::simulator::GoalSnapshotInputV1 {
+            revision,
+            short_term_summary,
+            long_term_summary,
+            blocked_reason: None,
+            // The Viewer only supplies the host-owned projection. Provider
+            // output is never accepted as a goal source.
+            provenance: "harness_projection".to_string(),
+        }),
+        None,
+    )
+    .map_err(|error| format!("trusted provider goal snapshot invalid: {error}"))
+}
+
+fn provider_memory_summary_with_snapshot(
+    mut base: String,
+    snapshot: &crate::simulator::MemoryContextSnapshotV1,
+) -> String {
+    if snapshot.entries.is_empty() {
+        return base;
+    }
+    base.push_str("\ncommitted_memory_snapshot:");
+    for entry in &snapshot.entries {
+        base.push_str("\n- ");
+        base.push_str(entry.summary.as_str());
+        if !entry.tags.is_empty() {
+            base.push_str(" [");
+            base.push_str(entry.tags.join(",").as_str());
+            base.push(']');
+        }
+    }
+    // Keep the legacy provider request bounded even when all individual
+    // memory intents satisfy their per-entry limits.
+    const MAX_SUMMARY_BYTES: usize = 4096;
+    if base.len() > MAX_SUMMARY_BYTES {
+        let mut end = MAX_SUMMARY_BYTES;
+        while !base.is_char_boundary(end) {
+            end -= 1;
+        }
+        base.truncate(end);
+    }
+    base
 }
 
 pub(super) fn active_runtime_continuation_for_wake(

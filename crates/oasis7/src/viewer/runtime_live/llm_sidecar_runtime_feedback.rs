@@ -123,18 +123,13 @@ impl RuntimeLlmSidecar {
             success,
             event: event.clone(),
         };
-        if let Some(runner) = self.runner.as_mut() {
-            match runner {
-                RuntimeDecisionRunner::Builtin(runner) => {
-                    let _ = runner.notify_action_result(pending.agent_id.as_str(), &action_result);
-                }
-                RuntimeDecisionRunner::ProviderBacked(_) => {
-                    // Production provider turns use the typed Runtime
-                    // feedback seam below. Do not also send the legacy
-                    // feedback envelope, which lacks turn/receipt identity.
-                }
-            }
+        #[cfg(target_arch = "wasm32")]
+        if let Some(RuntimeDecisionRunner::Builtin(runner)) = self.runner.as_mut() {
+            let _ = runner.notify_action_result(pending.agent_id.as_str(), &action_result);
         }
+        // Native Builtin and ProviderBacked actors both use the typed Runtime
+        // feedback seam. Sending the legacy action result here would bypass
+        // receipt identity and make the two production lanes diverge.
         pending.feedback_emitted = true;
         if rejected {
             self.clear_provider_stale_replans(pending.agent_id.as_str());
@@ -215,37 +210,125 @@ impl RuntimeLlmSidecar {
         Some(feedback)
     }
 
-    /// Apply intents captured by a ProviderBacked actor only after the Runtime
-    /// has read back and verified the committed receipt lineage.  Rejected or
-    /// pending dispositions never enter the MemoryWriteStore.
-    #[cfg(not(target_arch = "wasm32"))]
+    /// Apply intents captured by an actor only after the Runtime has read back
+    /// and verified the committed receipt lineage. Rejected or pending
+    /// dispositions never enter the MemoryWriteStore. Native actors retain
+    /// their awaiting outcome in AsyncAgentRunner, while the WASM synchronous
+    /// lane projects the same bounded intent policy here.
     pub(in crate::viewer::runtime_live) fn consume_provider_memory_after_receipt(
         &mut self,
         agent_id: &str,
         feedback: FeedbackEnvelopeV1,
         receipt: &crate::runtime::RuntimeReceiptLineageV1,
+        memory_write_intents: &[crate::simulator::MemoryWriteIntent],
     ) -> Result<(), String> {
-        let Some(RuntimeDecisionRunner::ProviderBacked(runner)) = self.runner.as_mut() else {
-            return Ok(());
-        };
-        runner
-            .consume_runtime_feedback_with_lineage(
-                agent_id,
-                feedback,
-                Some(receipt),
-                &mut self.provider_memory_store,
-            )
-            .map_err(|error| format!("provider memory receipt gate rejected intents: {error}"))
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    pub(in crate::viewer::runtime_live) fn consume_provider_memory_after_receipt(
-        &mut self,
-        _agent_id: &str,
-        _feedback: FeedbackEnvelopeV1,
-        _receipt: &crate::runtime::RuntimeReceiptLineageV1,
-    ) -> Result<(), String> {
-        Ok(())
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let Some(runner) = self
+                .runner
+                .as_mut()
+                .and_then(RuntimeDecisionRunner::async_runner_mut)
+            else {
+                return Ok(());
+            };
+            runner
+                .consume_runtime_feedback_with_lineage(
+                    agent_id,
+                    feedback,
+                    Some(receipt),
+                    &mut self.provider_memory_store,
+                )
+                .map_err(|error| format!("provider memory receipt gate rejected intents: {error}"))
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            if feedback.status != "committed" {
+                return Ok(());
+            }
+            let Some(context) = self.provider_contexts.get(agent_id) else {
+                return Err("WASM memory receipt gate has no active cognition context".to_string());
+            };
+            if feedback.agent_subject != agent_id
+                || feedback.agent_session_id != context.request_context.agent_session_id
+                || feedback.agent_turn_id != context.request_context.agent_turn_id
+                || feedback.decision_request_id != context.request_context.decision_request_id
+                || feedback.request_digest != context.request_context.request_digest
+                || feedback.runtime_receipt_id.as_deref() != Some(receipt.receipt_id.as_str())
+            {
+                return Err("WASM memory receipt gate context mismatch".to_string());
+            }
+            receipt
+                .validate()
+                .map_err(|error| format!("WASM memory receipt lineage invalid: {error}"))?;
+            let source = match self.runner.as_ref() {
+                Some(RuntimeDecisionRunner::Builtin(_)) => "builtin",
+                Some(RuntimeDecisionRunner::ProviderBacked(_)) => "provider",
+                None => return Err("WASM memory runner is unavailable".to_string()),
+            };
+            let policy_context = MemoryWritePolicyContextV1 {
+                agent_id: context.request_context.agent_subject.clone(),
+                agent_session_id: context.request_context.agent_session_id.clone(),
+                agent_turn_id: context.request_context.agent_turn_id.clone(),
+                request_digest: context.request_context.request_digest.to_string(),
+                source: source.to_string(),
+                provenance: if source == "provider" {
+                    "provider_unverified".to_string()
+                } else {
+                    "builtin_unverified".to_string()
+                },
+            };
+            let policy = MemoryWriteIntentPolicyV1::default();
+            for intent in memory_write_intents {
+                let intent = MemoryWriteIntentV1 {
+                    schema_version: 1,
+                    scope: intent.scope.clone(),
+                    summary: Some(intent.summary.clone()),
+                    tags: intent.tags.clone(),
+                    compatibility_reason: None,
+                };
+                let normalized = match policy.normalize(intent, &policy_context) {
+                    Ok(intent) => intent,
+                    Err(error) => {
+                        tracing::warn!(
+                            agent_id,
+                            code = error.code(),
+                            error = %error,
+                            "WASM memory intent rejected after Runtime commit"
+                        );
+                        continue;
+                    }
+                };
+                let digest = match policy.intent_digest(&normalized, &policy_context) {
+                    Ok(digest) => digest,
+                    Err(error) => {
+                        tracing::warn!(
+                            agent_id,
+                            code = error.code(),
+                            error = %error,
+                            "WASM memory intent digest rejected after Runtime commit"
+                        );
+                        continue;
+                    }
+                };
+                if let Err(error) = self
+                    .provider_memory_store
+                    .apply_runtime_receipt_with_context(
+                        normalized,
+                        digest,
+                        receipt,
+                        Some(&policy_context),
+                    )
+                {
+                    tracing::warn!(
+                        agent_id,
+                        code = error.code(),
+                        error = %error,
+                        "WASM memory projection rejected after Runtime commit"
+                    );
+                }
+            }
+            Ok(())
+        }
     }
 
     /// Close a provider response that did not produce a Runtime action (for
@@ -408,6 +491,12 @@ impl RuntimeLlmSidecar {
         &self,
         payload: &JsonValue,
     ) -> Result<(), String> {
+        if matches!(self.runner, Some(RuntimeDecisionRunner::Builtin(_))) {
+            // Builtin responses are already inside the host Harness. Runtime
+            // feedback is still allocated/acked for one shared lifecycle, but
+            // there is no external provider endpoint to call.
+            return Ok(());
+        }
         let settings = provider_settings_from_env()?
             .ok_or_else(|| "provider settings disappeared before feedback delivery".to_string())?;
         let client = ProviderLoopbackHttpClient::new_with_transport(
@@ -447,7 +536,11 @@ impl RuntimeLlmSidecar {
         &mut self,
         context: &cognition_context::ProviderContextState,
     ) {
-        if let Some(RuntimeDecisionRunner::ProviderBacked(runner)) = self.runner.as_mut() {
+        if let Some(runner) = self
+            .runner
+            .as_mut()
+            .and_then(RuntimeDecisionRunner::async_runner_mut)
+        {
             let _ = runner.expire_runtime_turn(
                 context.request_context.agent_subject.as_str(),
                 context.request_context.agent_session_id.as_str(),

@@ -78,6 +78,22 @@ pub trait AgentBehavior {
     ) {
     }
 
+    /// Install a host-owned prompt projection before the next turn.  The
+    /// async Harness uses this hook for both Builtin and ProviderBacked
+    /// adapters; legacy behaviors may ignore it.
+    fn set_prompt_overrides(
+        &mut self,
+        _system_prompt: Option<String>,
+        _short_term_goal: Option<String>,
+        _long_term_goal: Option<String>,
+    ) {
+    }
+
+    /// Deliver a player message through the actor boundary.  This keeps the
+    /// Builtin adapter from requiring a world-thread mutable behavior handle
+    /// when it uses the same async Harness as ProviderBacked.
+    fn on_player_message(&mut self, _world_time: WorldTime, _message: &str) {}
+
     /// Take the provider's response envelope, including its content digest,
     /// for Runtime replay/artifact binding.
     fn take_continuous_response_context(&mut self) -> Option<ContinuousAgentResponseContextV1> {

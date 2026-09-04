@@ -18,7 +18,7 @@ use crate::simulator::{
     MemoryContextSnapshotV1, MemoryWriteIntent, MemoryWriteStore, MockDecisionProvider,
     ProviderBackedAgentBehavior, ProviderDecision, ProviderDiagnostics, ProviderExecutionMode,
     ProviderTraceEnvelope, ProviderTranscriptEntry, ResponseArtifactIdentityV1,
-    RuntimeReceiptReadbackHandleV1, RuntimeReceiptReadbackVerifier, h_v1,
+    RuntimeReceiptReadbackHandleV1, RuntimeReceiptReadbackVerifier,
 };
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
@@ -541,6 +541,32 @@ fn target_actor_memory_intents_require_matching_committed_runtime_receipt_exactl
     );
 }
 
+#[test]
+fn invalid_memory_after_committed_receipt_preserves_runtime_commit_disposition() {
+    let mut response = wait_response_with_memory_intent();
+    response.memory_write_intents[0].scope = "global_shared".to_string();
+    let mut runner = provider_backed_runner_with_response(response);
+    runner
+        .start_turn_with_context(AGENT_ID, host_context())
+        .expect("open provider-backed target turn");
+    let outcome = completed_turn(&mut runner);
+    let mut committed = outcome
+        .feedback_for_runtime_status("committed", Some("receipt-invalid-memory-1"))
+        .expect("build committed feedback for invalid memory projection");
+    committed.candidate_action_id = Some(7);
+    committed.provenance = "runtime_authoritative".to_string();
+    let receipt = runtime_receipt_for_feedback(&committed);
+    let mut store = MemoryWriteStore::default();
+
+    runner
+        .consume_runtime_feedback_with_lineage(AGENT_ID, committed, Some(&receipt), &mut store)
+        .expect("invalid provider memory must not rewrite committed Runtime feedback");
+    assert!(
+        store.entries().is_empty(),
+        "invalid post-commit memory intent must be skipped without a write"
+    );
+}
+
 struct VerifiedWorldReadback;
 
 impl RuntimeReceiptReadbackVerifier for VerifiedWorldReadback {
@@ -829,14 +855,14 @@ fn continuation_proposal() -> ContinuationProposalV1 {
         "source": "harness",
         "proposal_digest": null
     });
-    let mut digest_input = value.clone();
-    digest_input
-        .as_object_mut()
-        .expect("continuation proposal object")
-        .remove("proposal_digest");
-    value["proposal_digest"] = json!(h_v1(
-        "oasis7.cognition.continuation-proposal.v1",
-        &digest_input
-    ));
-    serde_json::from_value(value).expect("decode continuation proposal")
+    let mut proposal: ContinuationProposalV1 = serde_json::from_value({
+        value["proposal_digest"] = json!("");
+        value
+    })
+    .expect("decode continuation proposal");
+    proposal.proposal_digest = proposal
+        .proposal_digest()
+        .expect("canonical continuation proposal digest")
+        .to_string();
+    proposal
 }
