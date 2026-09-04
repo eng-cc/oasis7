@@ -48,8 +48,24 @@ printf 'changed\n' >> "$TEST_REPO/README.md"
 git -C "$TEST_REPO" add README.md
 git -C "$TEST_REPO" -c user.name="oasis7 smoke" -c user.email="smoke@example.invalid" commit -q -m "change"
 mkdir -p "$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111"
-printf 'review return\n' >"$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111/review-return.md"
+ARTIFACT_PATH="$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111/review-return.md"
 HEAD_SHA="$(git -C "$TEST_REPO" rev-parse HEAD)"
+python3 - "$ARTIFACT_PATH" "$HEAD_SHA" <<'PY'
+import json, sys
+json.dump({
+    "task_uid": "task_11111111111111111111111111111111",
+    "role": "repository_health_engineer",
+    "status": "completed",
+    "head": sys.argv[2],
+    "slice_id": "11111111-1111-4111-8111-111111111111",
+    "epoch": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "disposition": "no_findings",
+    "findings": [],
+    "residual_risk": "fixture risk",
+}, open(sys.argv[1], "w"))
+with open(sys.argv[1], "a") as handle:
+    handle.write("\n")
+PY
 ARTIFACT_SHA="$(shasum -a 256 "$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111/review-return.md" | awk '{print $1}')"
 python3 - "$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111/slice-ledger.jsonl" "$HEAD_SHA" "$ARTIFACT_SHA" <<'PY'
 import json, sys
@@ -222,6 +238,90 @@ done
 grep -q "Reviewed Changed Paths: README.md" "$TMPDIR/frozen-plan.out"
 grep -q "Review Plan: .pm/scratch/task_11111111111111111111111111111111/review-plans/frozen-plan.json" "$TMPDIR/frozen-plan.out"
 grep -q "Slice Ledger: .pm/scratch/task_11111111111111111111111111111111/slice-ledger.jsonl" "$TMPDIR/frozen-plan.out"
+
+# The direct recorder must reject a completed role return with unresolved
+# findings instead of defaulting the packet disposition to no_findings.
+FIX2_FAILURES=0
+python3 - "$ARTIFACT_PATH" "$TEST_REPO/$LEDGER_REL" <<'PY'
+import hashlib, json, sys
+artifact_path, ledger_path = sys.argv[1:]
+rows = [json.loads(line) for line in open(ledger_path, encoding="utf-8") if line.strip()]
+artifact = json.load(open(artifact_path, encoding="utf-8"))
+artifact.update({"disposition": "findings", "findings": [{"id": "FIX2-UNRESOLVED", "summary": "fixture unresolved finding"}]})
+with open(artifact_path, "w", encoding="utf-8") as handle:
+    json.dump(artifact, handle, sort_keys=True)
+    handle.write("\n")
+artifact_digest = hashlib.sha256(open(artifact_path, "rb").read()).hexdigest()
+for row in rows:
+    row["findings"] = "findings"
+    row["artifact_digest"] = artifact_digest
+with open(ledger_path, "w", encoding="utf-8") as handle:
+    handle.write("".join(json.dumps(row) + "\n" for row in rows))
+PY
+if "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
+  --task-uid task_11111111111111111111111111111111 \
+  --review-plan "$PLAN" \
+  --review-evidence "repository_health_engineer: findings; unresolved fixture" \
+  --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=blocked" \
+  --finding-disposition addressed \
+  --finding-disposition-evidence "arbitrary text" \
+  --verification "helper -> smoke -> observed" \
+  --residual-risk "unresolved fixture risk" \
+  --slice-ledger "$LEDGER_REL" \
+  --print-only >"$TMPDIR/unresolved-findings.out" 2>"$TMPDIR/unresolved-findings.err"; then
+  echo "record-pre-pr-review accepted unresolved role findings" >&2
+  FIX2_FAILURES=1
+else
+  grep -Eiq 'unresolved|findings|blocked' "$TMPDIR/unresolved-findings.err"
+  [[ ! -s "$TMPDIR/unresolved-findings.out" ]] || {
+    echo "unresolved findings produced a review packet" >&2
+    FIX2_FAILURES=1
+  }
+fi
+
+# Artifact and ledger dispositions are a semantic pair. A caller must not be
+# able to rewrite only the ledger field while retaining an artifact that says
+# findings (or vice versa) and still obtain a passed packet.
+python3 - "$ARTIFACT_PATH" "$TEST_REPO/$LEDGER_REL" <<'PY'
+import hashlib, json, sys
+artifact_path, ledger_path = sys.argv[1:]
+rows = [json.loads(line) for line in open(ledger_path, encoding="utf-8") if line.strip()]
+artifact = json.load(open(artifact_path, encoding="utf-8"))
+artifact.update({"disposition": "findings", "findings": [{"id": "FIX2-MISMATCH", "summary": "fixture artifact finding"}]})
+with open(artifact_path, "w", encoding="utf-8") as handle:
+    json.dump(artifact, handle, sort_keys=True)
+    handle.write("\n")
+artifact_digest = hashlib.sha256(open(artifact_path, "rb").read()).hexdigest()
+for row in rows:
+    row["findings"] = "no_findings"
+    row["artifact_digest"] = artifact_digest
+with open(ledger_path, "w", encoding="utf-8") as handle:
+    handle.write("".join(json.dumps(row) + "\n" for row in rows))
+PY
+if "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
+  --task-uid task_11111111111111111111111111111111 \
+  --review-plan "$PLAN" \
+  --review-evidence "repository_health_engineer: no_findings; semantic mismatch fixture" \
+  --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" \
+  --finding-disposition-evidence "smoke evidence" \
+  --verification "helper -> smoke -> observed" \
+  --residual-risk "semantic mismatch fixture risk" \
+  --slice-ledger "$LEDGER_REL" \
+  --print-only >"$TMPDIR/artifact-ledger-mismatch.out" 2>"$TMPDIR/artifact-ledger-mismatch.err"; then
+  echo "record-pre-pr-review accepted artifact-ledger disposition mismatch" >&2
+  FIX2_FAILURES=1
+else
+  grep -Eiq 'mismatch|findings|disposition' "$TMPDIR/artifact-ledger-mismatch.err"
+  [[ ! -s "$TMPDIR/artifact-ledger-mismatch.out" ]] || {
+    echo "artifact-ledger mismatch produced a review packet" >&2
+    FIX2_FAILURES=1
+  }
+fi
+
+if (( FIX2_FAILURES != 0 )); then
+  exit 1
+fi
+
 python3 - "$PLAN" <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1])); p["comparison_oid"]="0"*40; json.dump(p,open(sys.argv[1],"w"))

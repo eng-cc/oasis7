@@ -160,9 +160,6 @@ if [[ "$COLLECTION_STATE" == "absent" ]]; then
   python3 "$SCRIPT_DIR/review-batch-epoch.py" --root "$ROOT_DIR" reconcile \
     --batch "$BATCH_PATH" --ledger "$ROLE_RETURNS" >/dev/null
 fi
-python3 "$SCRIPT_DIR/review-batch-epoch.py" --root "$ROOT_DIR" collect \
-  --batch "$BATCH_PATH" --ledger "$ROLE_RETURNS" >/dev/null
-
 SUMMARIES="$(python3 - "$ROLE_RETURNS" "$EXTRA_RISK" "$REVIEW_PLAN" <<'PY'
 import json, pathlib, sys
 rows=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines() if x.strip()]
@@ -175,6 +172,9 @@ by_role={r.get("role"): r for r in rows}
 if len(by_role) != len(rows) or set(by_role) != set(planned_roles):
  raise SystemExit("review-closeout: role-return ledger roles mismatch review plan")
 rows=[by_role[role] for role in planned_roles]
+unresolved=[f'{r["role"]}: {r.get("findings")}' for r in rows if r.get("findings") != "no_findings"]
+if unresolved:
+ raise SystemExit("review-closeout: unresolved role findings block packet publication: " + "; ".join(unresolved))
 roles=",".join(str(r["role"]) for r in rows)
 evidence="; ".join(f'{r["role"]}: {r["findings"]}' for r in rows)
 verdicts="; ".join(f'{r["role"]} scope={r["scope_verdict"]} risk={r["risk_verdict"]}' for r in rows)
@@ -184,6 +184,8 @@ if sys.argv[2]: risks.append(sys.argv[2])
 print(roles); print(evidence); print(verdicts); print(disposition); print("; ".join(risks))
 PY
 )"
+python3 "$SCRIPT_DIR/review-batch-epoch.py" --root "$ROOT_DIR" collect \
+  --batch "$BATCH_PATH" --ledger "$ROLE_RETURNS" >/dev/null
 [[ -n "$VERIFICATION" ]] || VERIFICATION="immutable review plan evidence digest $(printf '%s\n' "$PLAN_FIELDS" | sed -n '6p')"
 ARGS=(--task-uid "$TASK_UID" --review-plan "$REVIEW_PLAN" --roles "$(printf '%s\n' "$SUMMARIES" | sed -n '1p')"
   --review-evidence "$(printf '%s\n' "$SUMMARIES" | sed -n '2p')" --review-verdicts "$(printf '%s\n' "$SUMMARIES" | sed -n '3p')"

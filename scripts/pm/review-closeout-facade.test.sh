@@ -130,6 +130,8 @@ cmp -s "$LEDGER" "$TMPDIR/pre-malformed-ledger.jsonl" || {
 }
 cp "$TMPDIR/valid-plan.json" "$PLAN"
 
+COLLECTION="${BATCH%.json}.collection.json"
+
 VALID_OUT="$TMPDIR/valid.out"
 VALID_ERR="$TMPDIR/valid.err"
 if ! (cd "$TMPDIR" && "$REPO/scripts/pm/review-closeout.sh" \
@@ -143,6 +145,54 @@ grep -F 'Review Plan: .pm/scratch/' "$VALID_OUT" >/dev/null
 [[ ! -s "$VALID_ERR" ]] || { cat "$VALID_ERR" >&2; exit 1; }
 cp "$LEDGER" "$TMPDIR/complete-ledger.jsonl"
 
+# Unresolved role findings must fail closed before collection or packet
+# publication. Keep the earlier no-findings success above as the positive
+# control for the same facade.
+rm -f "$COLLECTION"
+python3 - "$ARTIFACT" <<'PY'
+import json, sys
+path = sys.argv[1]
+payload = json.load(open(path, encoding="utf-8"))
+payload.update({"disposition": "findings", "findings": [{"id": "FIX1-UNRESOLVED", "summary": "fixture unresolved finding"}]})
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(payload, handle, sort_keys=True)
+    handle.write("\n")
+PY
+if (cd "$TMPDIR" && "$REPO/scripts/pm/review-closeout.sh" \
+  --task-uid "$UID_VALUE" --review-plan "$PLAN" --role-returns "$LEDGER" --print-only \
+  >"$TMPDIR/unresolved-findings.out" 2>"$TMPDIR/unresolved-findings.err"); then
+  echo "review-closeout accepted unresolved role findings" >&2
+  exit 1
+fi
+grep -Eiq 'unresolved|findings|blocked' "$TMPDIR/unresolved-findings.err"
+[[ ! -s "$TMPDIR/unresolved-findings.out" ]] || {
+  echo "unresolved findings produced a review packet" >&2
+  exit 1
+}
+[[ ! -e "$COLLECTION" ]] || {
+  echo "unresolved findings published a collection receipt" >&2
+  exit 1
+}
+
+# Restore the no-findings fixture so the remaining immutable-plan checks keep
+# their original positive-control collection.
+python3 - "$ARTIFACT" <<'PY'
+import json, sys
+path = sys.argv[1]
+payload = json.load(open(path, encoding="utf-8"))
+payload.update({"disposition": "no_findings", "findings": []})
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(payload, handle, sort_keys=True)
+    handle.write("\n")
+PY
+if ! (cd "$TMPDIR" && "$REPO/scripts/pm/review-closeout.sh" \
+  --task-uid "$UID_VALUE" --review-plan "$PLAN" --role-returns "$LEDGER" --print-only \
+  >"$TMPDIR/restored-valid.out" 2>"$TMPDIR/restored-valid.err"); then
+  cat "$TMPDIR/restored-valid.err" >&2
+  exit 1
+fi
+grep -F 'Pre-PR Local Role Review: passed' "$TMPDIR/restored-valid.out" >/dev/null
+
 # An empty role-return ledger must be rejected before packet generation.
 : >"$LEDGER"
 if (cd "$TMPDIR" && "$REPO/scripts/pm/review-closeout.sh" \
@@ -155,7 +205,6 @@ grep -Eiq 'identity mismatch|missing expected|ledger digest|role' "$TMPDIR/missi
 
 # A changed working HEAD must invalidate the immutable review plan.
 cp "$TMPDIR/complete-ledger.jsonl" "$LEDGER"
-COLLECTION="${BATCH%.json}.collection.json"
 test -f "$COLLECTION"
 cp "$LEDGER" "$TMPDIR/stale-ledger-before.jsonl"
 cp "$COLLECTION" "$TMPDIR/stale-collection-before.json"

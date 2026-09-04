@@ -331,6 +331,56 @@ for line_number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(),
     artifact = resolve_repo_path(str(artifacts[0]), path)
     if not artifact.is_file() or hashlib.sha256(artifact.read_bytes()).hexdigest() != digest:
         raise SystemExit(f"error: Slice Ledger artifact digest mismatch for {role}")
+    try:
+        artifact_payload = json.loads(artifact.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        if str(item.get("findings") or "") != "no_findings":
+            raise SystemExit(
+                f"error: unresolved role findings for {role}; "
+                f"artifact has no structured disposition: {exc}"
+            )
+        # Human-operated legacy returns may bind opaque, digest-checked
+        # evidence. They can preserve the no-findings path, but cannot assert
+        # a resolved finding without a structured artifact disposition.
+        seen[role] = item
+        continue
+    if not isinstance(artifact_payload, dict):
+        raise SystemExit(f"error: review artifact is not an object for {role}")
+    artifact_identity = {
+        "task_uid": str(item.get("task_uid") or ""),
+        "role": role,
+        "status": str(item.get("status") or ""),
+        "head": source_head,
+        "slice_id": str(item.get("slice_id") or ""),
+    }
+    for field, expected in artifact_identity.items():
+        if artifact_payload.get(field) != expected:
+            raise SystemExit(f"error: review artifact {field} mismatch for {role}")
+    if item.get("epoch") and artifact_payload.get("epoch") != item["epoch"]:
+        raise SystemExit(f"error: review artifact epoch mismatch for {role}")
+    if review_plan and artifact_payload.get("epoch") != plan_epoch:
+        raise SystemExit(f"error: review artifact epoch mismatch for {role}")
+    artifact_disposition = artifact_payload.get("disposition")
+    artifact_findings = artifact_payload.get("findings")
+    if artifact_disposition not in {"findings", "no_findings"}:
+        raise SystemExit(f"error: review artifact disposition is invalid for {role}")
+    if not isinstance(artifact_findings, list):
+        raise SystemExit(f"error: review artifact findings are invalid for {role}")
+    if artifact_disposition == "findings" and not artifact_findings:
+        raise SystemExit(f"error: review artifact findings are invalid for {role}")
+    if artifact_disposition == "no_findings" and artifact_findings:
+        raise SystemExit(f"error: no_findings artifact contains findings for {role}")
+    ledger_disposition = str(item.get("findings") or "")
+    if ledger_disposition != artifact_disposition:
+        raise SystemExit(
+            f"error: Slice Ledger/artifact disposition mismatch for {role}: "
+            f"ledger={ledger_disposition}, artifact={artifact_disposition}"
+        )
+    if artifact_disposition == "findings":
+        raise SystemExit(
+            f"error: unresolved role findings for {role}; "
+            "no repository-owned resolution authority is present"
+        )
     seen[role] = item
 missing_roles = sorted(required - set(seen))
 if missing_roles:
