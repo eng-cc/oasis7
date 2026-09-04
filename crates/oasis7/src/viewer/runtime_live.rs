@@ -35,6 +35,13 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
 use tracing::Level;
+
+#[cfg(test)]
+pub(super) fn canonical_runtime_provider_env_lock() -> &'static Mutex<()> {
+    static LOCK: std::sync::OnceLock<Mutex<()>> = std::sync::OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
 mod authoritative;
 mod auto_play;
 mod branch_commitment;

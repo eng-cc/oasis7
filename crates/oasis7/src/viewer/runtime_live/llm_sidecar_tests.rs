@@ -1,5 +1,40 @@
 use super::*;
 
+struct ProviderEnvSnapshot {
+    previous: Vec<(&'static str, Option<std::ffi::OsString>)>,
+}
+
+impl ProviderEnvSnapshot {
+    fn capture(keys: &[&'static str]) -> Self {
+        let previous = keys
+            .iter()
+            .map(|key| (*key, std::env::var_os(key)))
+            .collect();
+        for key in keys {
+            // SAFETY: The caller holds the canonical provider env mutex.
+            unsafe {
+                oasis7::env_mut::remove_var(key);
+            }
+        }
+        Self { previous }
+    }
+}
+
+impl Drop for ProviderEnvSnapshot {
+    fn drop(&mut self) {
+        for (key, value) in self.previous.drain(..) {
+            // SAFETY: The snapshot outlives the test and the caller still holds
+            // the canonical provider env mutex while it is being dropped.
+            unsafe {
+                match value {
+                    Some(value) => oasis7::env_mut::set_var(key, value),
+                    None => oasis7::env_mut::remove_var(key),
+                }
+            }
+        }
+    }
+}
+
 fn test_provider_context(
     agent_id: &str,
     agent_turn_id: &str,
@@ -237,12 +272,22 @@ fn sync_shadow_kernel_preserves_generated_seed_locations() {
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn runtime_provider_continuation_recovery_fence_blocks_retained_context_after_restart() {
-    static PROVIDER_ENV_LOCK: std::sync::OnceLock<std::sync::Mutex<()>> =
-        std::sync::OnceLock::new();
-    let _env_guard = PROVIDER_ENV_LOCK
-        .get_or_init(|| std::sync::Mutex::new(()))
+    let _env_guard = super::super::canonical_runtime_provider_env_lock()
         .lock()
         .expect("provider env lock");
+    let _provider_env_snapshot = ProviderEnvSnapshot::capture(&[
+        VIEWER_AGENT_DECISION_SOURCE_ENV,
+        VIEWER_AGENT_PROVIDER_BACKEND_ENV,
+        VIEWER_AGENT_PROVIDER_CONTRACT_ENV,
+        VIEWER_AGENT_PROVIDER_TRANSPORT_ENV,
+        VIEWER_AGENT_PROVIDER_URL_ENV,
+        VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV,
+        VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV,
+        VIEWER_AGENT_PROVIDER_DECISION_TIMEOUT_MS_ENV,
+        VIEWER_AGENT_PROVIDER_PROFILE_ENV,
+        VIEWER_AGENT_EXECUTION_LANE_ENV,
+        VIEWER_AGENT_PROVIDER_MODE_ENV,
+    ]);
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
         oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
@@ -263,8 +308,8 @@ fn runtime_provider_continuation_recovery_fence_blocks_retained_context_after_re
     }
     world.step().expect("register sibling Runtime agents");
     world
-        .install_test_provider_capability_fixture("agent-a")
-        .expect("install Runtime provider capability fixture");
+        .install_test_provider_capability_fixture("agent-b")
+        .expect("install serviceable sibling Runtime provider capability fixture");
 
     let provider_runner = || {
         let mut runner = crate::simulator::AsyncAgentRunner::with_default_capacity();
@@ -302,15 +347,11 @@ fn runtime_provider_continuation_recovery_fence_blocks_retained_context_after_re
     first
         .sync_shadow_kernel(&world, &WorldConfig::default())
         .expect("sync provider shadow kernel");
-    let runtime_binding = world
-        .current_cognition_runtime_binding()
-        .expect("Runtime cognition binding");
-    let mut sibling_context = test_provider_context("agent-b", "turn-b", "request-b", 1);
-    sibling_context.request_context.runtime_binding = runtime_binding;
-    first
-        .provider_contexts
-        .insert("agent-b".to_string(), sibling_context);
     let mut kernel = first.shadow_kernel.take().expect("provider shadow kernel");
+    first.provider_contexts.insert(
+        "agent-a".to_string(),
+        test_provider_context("agent-a", "turn-a", "request-a", 1),
+    );
     first
         .prepare_provider_request_contexts(&mut world, &mut kernel, world_id)
         .expect("prepare retained provider contexts");
@@ -321,9 +362,6 @@ fn runtime_provider_continuation_recovery_fence_blocks_retained_context_after_re
         "agent-a".to_string(),
         "continuation_hydration_failed".to_string(),
     );
-    first
-        .provider_wait_until
-        .insert("agent-b".to_string(), u64::MAX);
     first
         .persist_provider_lineage()
         .expect("persist continuation recovery fence");
@@ -340,10 +378,6 @@ fn runtime_provider_continuation_recovery_fence_blocks_retained_context_after_re
     );
     assert!(restarted.provider_contexts.contains_key("agent-a"));
     assert!(restarted.provider_contexts.contains_key("agent-b"));
-    assert_eq!(
-        restarted.provider_wait_until.get("agent-b"),
-        Some(&u64::MAX)
-    );
     let (provider_runner, provider_states) = provider_runner();
     restarted.runner = Some(provider_runner);
     restarted
@@ -359,17 +393,83 @@ fn runtime_provider_continuation_recovery_fence_blocks_retained_context_after_re
         decision.is_none(),
         "fenced agents must not surface a decision: {decision:?}"
     );
-    assert_eq!(
-        world.cognition(),
-        &cognition_before,
-        "continuation-recovery fence must not append a Runtime lifecycle prefix or provider request"
+    let cognition_events_before = cognition_before["cognition_journal"]["events"]
+        .as_array()
+        .expect("cognition journal events before dispatch")
+        .len();
+    let cognition_events = world.cognition()["cognition_journal"]["events"]
+        .as_array()
+        .expect("cognition journal events after dispatch");
+    let dispatched_events = cognition_events
+        .get(cognition_events_before..)
+        .expect("new cognition lifecycle events");
+    for event_kind in ["TurnStarted", "ContextCaptured", "RequestDispatched"] {
+        assert!(
+            dispatched_events.iter().any(|event| {
+                event["event_kind"] == event_kind && event["agent_id"] == "agent-b"
+            }),
+            "serviceable sibling B must append {event_kind} while A remains fenced: {dispatched_events:?}"
+        );
+    }
+    assert!(
+        dispatched_events
+            .iter()
+            .all(|event| event["agent_id"] != "agent-a"),
+        "fenced agent A must not append a Runtime lifecycle prefix: {dispatched_events:?}"
+    );
+
+    let sibling_b_dispatched = (0..1_000).any(|_| {
+        let state = provider_states[1].lock().expect("provider B state lock");
+        let dispatched = !state.recorded_requests.is_empty()
+            && !state.recorded_turn_contexts.is_empty()
+            && !state.recorded_request_contexts.is_empty();
+        drop(state);
+        if !dispatched {
+            std::thread::yield_now();
+        }
+        dispatched
+    });
+    assert!(
+        sibling_b_dispatched,
+        "serviceable sibling B must dispatch one provider request"
     );
     assert!(
-        provider_states.iter().all(|state| {
-            let state = state.lock().expect("provider state lock");
-            state.recorded_requests.is_empty() && state.recorded_turn_contexts.is_empty()
-        }),
-        "continuation-recovery fence must issue zero provider requests"
+        provider_states[0]
+            .lock()
+            .expect("provider A state lock")
+            .recorded_requests
+            .is_empty(),
+        "fenced agent A must issue zero provider requests"
+    );
+    assert!(
+        provider_states[0]
+            .lock()
+            .expect("provider A turn state lock")
+            .recorded_turn_contexts
+            .is_empty(),
+        "fenced agent A must issue zero provider turn contexts"
+    );
+    assert!(
+        provider_states[0]
+            .lock()
+            .expect("provider A request context state lock")
+            .recorded_request_contexts
+            .is_empty(),
+        "fenced agent A must issue zero provider request contexts"
+    );
+    {
+        let state = provider_states[1].lock().expect("provider B state lock");
+        assert_eq!(state.recorded_requests.len(), 1);
+        assert_eq!(state.recorded_turn_contexts.len(), 1);
+        assert_eq!(state.recorded_request_contexts.len(), 1);
+        assert_eq!(state.recorded_requests[0].observation.agent_id, "agent-b");
+        assert_eq!(state.recorded_turn_contexts[0].agent_id, "agent-b");
+        assert_eq!(state.recorded_request_contexts[0].agent_subject, "agent-b");
+    }
+    assert_eq!(
+        restarted.provider_wait_until.get("agent-b"),
+        None,
+        "serviceable sibling B must not retain an artificial wait fence"
     );
     assert!(restarted.provider_contexts.contains_key("agent-a"));
     assert!(restarted.provider_contexts.contains_key("agent-b"));
@@ -378,18 +478,7 @@ fn runtime_provider_continuation_recovery_fence_blocks_retained_context_after_re
             .provider_continuation_recovery_pending
             .contains_key("agent-a")
     );
-    assert_eq!(
-        restarted.provider_wait_until.get("agent-b"),
-        Some(&u64::MAX)
-    );
     let _ = std::fs::remove_file(lineage_path);
-    // SAFETY: This test/setup code restores the process environment it owns.
-    unsafe {
-        oasis7::env_mut::remove_var(VIEWER_AGENT_PROVIDER_MODE_ENV);
-        oasis7::env_mut::remove_var(VIEWER_AGENT_PROVIDER_URL_ENV);
-        oasis7::env_mut::remove_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV);
-        oasis7::env_mut::remove_var(VIEWER_AGENT_EXECUTION_LANE_ENV);
-    }
 }
 
 #[test]
