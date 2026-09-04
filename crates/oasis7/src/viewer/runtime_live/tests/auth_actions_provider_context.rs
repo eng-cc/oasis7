@@ -29,9 +29,11 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
     clear_runtime_provider_env();
     let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
     let decision_count = Arc::new(Mutex::new(0_usize));
-    let base_url = spawn_runtime_live_mock_http_server(7, {
+    let step_provider_gate = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let base_url = spawn_runtime_live_mock_http_server(6, {
         let recorded = Arc::clone(&recorded);
         let decision_count = Arc::clone(&decision_count);
+        let step_provider_gate = Arc::clone(&step_provider_gate);
         move |request| {
             {
                 let mut recorded = recorded.lock().expect("recorded lock");
@@ -82,6 +84,11 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
                             })
                             .to_string(),
                         };
+                    }
+                    if request_number == 4 {
+                        while !step_provider_gate.load(std::sync::atomic::Ordering::Acquire) {
+                            std::thread::yield_now();
+                        }
                     }
                     let decision = if request_number > 3 {
                         crate::simulator::ProviderDecision::Wait
@@ -277,9 +284,8 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
                     })
             })
     };
-    // Keep process-global provider configuration scoped to the polling phase.
-    // All phase assertions happen after this guard is released, so a timeout
-    // cannot poison the mutex and cascade into unrelated fixtures.
+    step_provider_gate.store(true, std::sync::atomic::Ordering::Release);
+    // Keep provider configuration scoped to polling; release it before assertions.
     clear_runtime_provider_env();
     drop(_guard);
     phase_result.expect("provider context phases should complete");
