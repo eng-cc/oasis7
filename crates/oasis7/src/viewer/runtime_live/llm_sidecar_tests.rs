@@ -234,6 +234,164 @@ fn sync_shadow_kernel_preserves_generated_seed_locations() {
     );
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn runtime_provider_continuation_recovery_fence_blocks_retained_context_after_restart() {
+    static PROVIDER_ENV_LOCK: std::sync::OnceLock<std::sync::Mutex<()>> =
+        std::sync::OnceLock::new();
+    let _env_guard = PROVIDER_ENV_LOCK
+        .get_or_init(|| std::sync::Mutex::new(()))
+        .lock()
+        .expect("provider env lock");
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:9");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+        oasis7::env_mut::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
+    }
+    let world_id = "fenced-continuation-world";
+    let mut world = RuntimeWorld::new();
+    world
+        .bind_cognition_runtime(world_id, "continuation-fence-branch", 0, None, "pending", 0)
+        .expect("Runtime cognition binding");
+    for agent_id in ["agent-a", "agent-b"] {
+        world.submit_action(RuntimeAction::RegisterAgent {
+            agent_id: agent_id.to_string(),
+            pos: GeoPos::new(0, 0, 0),
+        });
+    }
+    world.step().expect("register sibling Runtime agents");
+    world
+        .install_test_provider_capability_fixture("agent-a")
+        .expect("install Runtime provider capability fixture");
+
+    let provider_runner = || {
+        let mut runner = crate::simulator::AsyncAgentRunner::with_default_capacity();
+        let mut provider_states = Vec::new();
+        for agent_id in ["agent-a", "agent-b"] {
+            let provider =
+                crate::simulator::MockDecisionProvider::new("continuation-fence-provider");
+            provider_states.push(provider.shared_state());
+            let behavior = crate::simulator::ProviderBackedAgentBehavior::new_legacy_compatibility(
+                agent_id,
+                provider,
+                vec![crate::simulator::ActionCatalogEntry::new("wait", "wait")],
+            );
+            runner.register(behavior).expect("register provider actor");
+        }
+        (
+            RuntimeDecisionRunner::ProviderBacked(runner),
+            provider_states,
+        )
+    };
+    let lineage_path = std::env::temp_dir().join(format!(
+        "oasis7-runtime-live-provider-continuation-fence-{}-{}.json",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos()
+    ));
+    let mut first = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    first.configure_provider_lineage_store(lineage_path.clone());
+    first.runner = Some(provider_runner().0);
+    first
+        .provider_agent_ids
+        .extend(["agent-a".to_string(), "agent-b".to_string()]);
+    first
+        .sync_shadow_kernel(&world, &WorldConfig::default())
+        .expect("sync provider shadow kernel");
+    let runtime_binding = world
+        .current_cognition_runtime_binding()
+        .expect("Runtime cognition binding");
+    let mut sibling_context = test_provider_context("agent-b", "turn-b", "request-b", 1);
+    sibling_context.request_context.runtime_binding = runtime_binding;
+    first
+        .provider_contexts
+        .insert("agent-b".to_string(), sibling_context);
+    let mut kernel = first.shadow_kernel.take().expect("provider shadow kernel");
+    first
+        .prepare_provider_request_contexts(&mut world, &mut kernel, world_id)
+        .expect("prepare retained provider contexts");
+    first.shadow_kernel = Some(kernel);
+    assert!(first.provider_contexts.contains_key("agent-a"));
+    assert!(first.provider_contexts.contains_key("agent-b"));
+    first.provider_continuation_recovery_pending.insert(
+        "agent-a".to_string(),
+        "continuation_hydration_failed".to_string(),
+    );
+    first
+        .provider_wait_until
+        .insert("agent-b".to_string(), u64::MAX);
+    first
+        .persist_provider_lineage()
+        .expect("persist continuation recovery fence");
+
+    let mut restarted = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    restarted.configure_provider_lineage_store(lineage_path.clone());
+    restarted
+        .restore_provider_lineage(&world)
+        .expect("restore provider lineage after restart");
+    assert!(
+        restarted
+            .provider_continuation_recovery_pending
+            .contains_key("agent-a")
+    );
+    assert!(restarted.provider_contexts.contains_key("agent-a"));
+    assert!(restarted.provider_contexts.contains_key("agent-b"));
+    assert_eq!(
+        restarted.provider_wait_until.get("agent-b"),
+        Some(&u64::MAX)
+    );
+    let (provider_runner, provider_states) = provider_runner();
+    restarted.runner = Some(provider_runner);
+    restarted
+        .sync_shadow_kernel(&world, &WorldConfig::default())
+        .expect("sync restarted provider shadow kernel");
+    let cognition_before = world.cognition().clone();
+    let mut kernel = restarted
+        .shadow_kernel
+        .take()
+        .expect("restarted shadow kernel");
+    let decision = restarted.next_async_provider_decision(&mut world, &mut kernel, world_id);
+    assert!(
+        decision.is_none(),
+        "fenced agents must not surface a decision: {decision:?}"
+    );
+    assert_eq!(
+        world.cognition(),
+        &cognition_before,
+        "continuation-recovery fence must not append a Runtime lifecycle prefix or provider request"
+    );
+    assert!(
+        provider_states.iter().all(|state| {
+            let state = state.lock().expect("provider state lock");
+            state.recorded_requests.is_empty() && state.recorded_turn_contexts.is_empty()
+        }),
+        "continuation-recovery fence must issue zero provider requests"
+    );
+    assert!(restarted.provider_contexts.contains_key("agent-a"));
+    assert!(restarted.provider_contexts.contains_key("agent-b"));
+    assert!(
+        restarted
+            .provider_continuation_recovery_pending
+            .contains_key("agent-a")
+    );
+    assert_eq!(
+        restarted.provider_wait_until.get("agent-b"),
+        Some(&u64::MAX)
+    );
+    let _ = std::fs::remove_file(lineage_path);
+    // SAFETY: This test/setup code restores the process environment it owns.
+    unsafe {
+        oasis7::env_mut::remove_var(VIEWER_AGENT_PROVIDER_MODE_ENV);
+        oasis7::env_mut::remove_var(VIEWER_AGENT_PROVIDER_URL_ENV);
+        oasis7::env_mut::remove_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV);
+        oasis7::env_mut::remove_var(VIEWER_AGENT_EXECUTION_LANE_ENV);
+    }
+}
+
 #[test]
 fn provider_lineage_persists_and_restores_pending_lifecycle_markers() {
     let path = std::env::temp_dir().join(format!(

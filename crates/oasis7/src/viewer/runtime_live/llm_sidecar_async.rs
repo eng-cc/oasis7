@@ -170,6 +170,9 @@ impl RuntimeLlmSidecar {
         let candidates = self.provider_agent_ids.iter().cloned().collect::<Vec<_>>();
         for agent_id in candidates {
             if self.provider_recovery_pending.contains_key(&agent_id)
+                || self
+                    .provider_continuation_recovery_pending
+                    .contains_key(&agent_id)
                 || self.provider_active_turns.contains_key(&agent_id)
                 || self
                     .provider_wait_until
