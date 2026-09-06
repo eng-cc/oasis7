@@ -34,6 +34,8 @@ Options:
   --comparison-ref <ref>       Comparison Ref value (default: refs/remotes/origin/main).
   --comparison-oid <oid>       Optional assertion for the resolved comparison ref OID.
   --review-plan <path>         Immutable review plan; derives task/head/ref/OID/roles and preflight ledger.
+  --finding-resolution <path>  Admin-authorized exact-head finding resolution manifest.
+  --review-resolution <path>   Alias for --finding-resolution.
   --source-head <sha>          Source Head value (default: HEAD).
   --source-branch <branch>     Source Branch value (default: current branch).
   --allow-dirty                Allow dirty working tree only when --reviewed-paths
@@ -113,6 +115,7 @@ VERIFICATION=""
 RESIDUAL_RISK=""
 FINDING_DISPOSITION="no_findings"
 FINDING_DISPOSITION_EVIDENCE=""
+FINDING_RESOLUTION=""
 REVIEWED_PATHS=""
 REVIEW_PACKAGE="n/a; small docs/workflow diff"
 SLICE_LEDGER="n/a; small docs/workflow diff"
@@ -143,6 +146,7 @@ while [[ $# -gt 0 ]]; do
     --verification) VERIFICATION="${2:-}"; shift 2 ;;
     --residual-risk) RESIDUAL_RISK="${2:-}"; shift 2 ;;
     --finding-disposition) FINDING_DISPOSITION="${2:-}"; shift 2 ;;
+    --finding-resolution|--review-resolution) FINDING_RESOLUTION="${2:-}"; shift 2 ;;
     --reviewed-paths) REVIEWED_PATHS="${2:-}"; shift 2 ;;
     --review-package) REVIEW_PACKAGE="${2:-}"; shift 2 ;;
     --slice-ledger) SLICE_LEDGER="${2:-}"; shift 2 ;;
@@ -207,6 +211,10 @@ if (not isinstance(expected_slices, list) or len(expected_slices) != len(roles)
         or [item.get("role") if isinstance(item, dict) else None for item in expected_slices] != roles
         or any(not isinstance(item, dict) or not isinstance(item.get("slice_id"), str) or not item["slice_id"] for item in expected_slices)):
     raise SystemExit("error: --review-plan expected slices are invalid")
+preflight = plan.get("preflight")
+if (not isinstance(preflight, dict) or not isinstance(preflight.get("ledger_path"), str)
+        or not preflight["ledger_path"].strip()):
+    raise SystemExit("error: --review-plan has no persisted preflight ledger")
 canonical_roles = ",".join(roles)
 if supplied_roles and supplied_roles != canonical_roles:
     raise SystemExit(f"error: --review-plan roles mismatch: expected {canonical_roles}, actual {supplied_roles}")
@@ -225,8 +233,7 @@ print(plan["comparison_ref"])
 print(plan["comparison_oid"])
 print(plan["epoch"])
 print(plan["relevant_evidence_digest"])
-preflight = plan.get("preflight") or {}
-print(preflight.get("ledger_path") if isinstance(preflight, dict) else "")
+print(preflight["ledger_path"])
 PY
 )" || exit 1
   ROLES="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '1p')"
@@ -239,6 +246,7 @@ PY
 fi
 if [[ -z "$REVIEW_PLAN" ]]; then
   [[ -n "$ROLES" ]] || die "--roles is required when --review-plan is not supplied"
+  [[ -z "$FINDING_RESOLUTION" ]] || die "--finding-resolution requires --review-plan"
 fi
 CURRENT_HEAD="$(git rev-parse HEAD)"
 [[ "$SOURCE_HEAD" == "$CURRENT_HEAD" ]] || die "source head must be the current frozen HEAD: expected $CURRENT_HEAD, actual $SOURCE_HEAD"
@@ -254,20 +262,57 @@ if [[ -z "$ROLE_BASIS" ]]; then
   ROLE_BASIS="changed paths, task history, verification claim, and explicit adjacent-role skips"
 fi
 REVIEW_PLAN_DISPLAY="$(sanitize_evidence_path_field "Review Plan" "$REVIEW_PLAN")"
-if [[ -n "${REVIEW_PLAN_LEDGER:-}" && "$SLICE_LEDGER" == n/a* ]]; then
-  SLICE_LEDGER="$REVIEW_PLAN_LEDGER"
+if [[ -n "$REVIEW_PLAN" ]]; then
+  REVIEW_PLAN_LEDGER="$(resolve_repo_owned_path "Review Plan preflight ledger" "$REVIEW_PLAN_LEDGER")" || exit 1
+  if [[ "$SLICE_LEDGER" == n/a* ]]; then
+    SLICE_LEDGER="$REVIEW_PLAN_LEDGER"
+  else
+    SUPPLIED_SLICE_LEDGER="$(resolve_repo_owned_path "Slice Ledger" "$SLICE_LEDGER")" || exit 1
+    [[ "$SUPPLIED_SLICE_LEDGER" == "$REVIEW_PLAN_LEDGER" ]] \
+      || die "--slice-ledger must match immutable review plan preflight ledger path"
+    SLICE_LEDGER="$SUPPLIED_SLICE_LEDGER"
+  fi
 fi
-if [[ -n "$REVIEW_PLAN" && "$SLICE_LEDGER" == n/a* ]]; then
-  die "--review-plan has no persisted preflight ledger; regenerate it with ./scripts/pm/review-plan.py --root . --task-uid $TASK_UID --head $SOURCE_HEAD --comparison-ref $COMPARISON_REF --comparison-oid $COMPARISON_OID --evidence-digest <sha256> --change-class <change-class> --preflight-dir .pm/scratch/$TASK_UID/review-preflight, then rerun record-pre-pr-review"
+if [[ -n "$FINDING_RESOLUTION" ]]; then
+  if [[ -n "$REPO" && "$REPO" != "eng-cc/oasis7" ]]; then
+    die "--repo must match canonical repository eng-cc/oasis7 when --finding-resolution is used"
+  fi
+  FINDING_RESOLUTION="$(resolve_repo_owned_path "Finding Resolution" "$FINDING_RESOLUTION")" || exit 1
+  RESOLUTION_COMMAND=(python3 "$SCRIPT_DIR/review-findings-resolution.py" validate
+    --root "$ROOT_DIR" --task-uid "$TASK_UID" --head "$SOURCE_HEAD"
+    --ledger "$SLICE_LEDGER" --manifest "$FINDING_RESOLUTION")
+  if [[ -n "$ISSUE_NUMBER" ]]; then
+    RESOLUTION_COMMAND+=(--issue-number "$ISSUE_NUMBER")
+  elif [[ -f "$ROOT_DIR/.pm/github-project-sync/tasks.json" ]]; then
+    MAPPED_RESOLUTION_ISSUE="$(python3 - "$ROOT_DIR/.pm/github-project-sync/tasks.json" "$TASK_UID" <<'PY'
+import json, sys
+try:
+    payload = json.loads(open(sys.argv[1], encoding="utf-8").read())
+    issue = (payload.get("tasks") or {}).get(sys.argv[2], {}).get("issue_number")
+except (OSError, TypeError, ValueError, json.JSONDecodeError):
+    issue = None
+if issue is not None:
+    print(issue)
+PY
+)"
+    if [[ -n "$MAPPED_RESOLUTION_ISSUE" ]]; then
+      RESOLUTION_COMMAND+=(--issue-number "$MAPPED_RESOLUTION_ISSUE")
+    fi
+  fi
+  RESOLUTION_RESULT="$("${RESOLUTION_COMMAND[@]}")" \
+    || die "finding-resolution validation failed"
+else
+  RESOLUTION_RESULT=""
 fi
 REVIEW_PACKAGE="$(sanitize_evidence_path_field "Review Package" "$REVIEW_PACKAGE")"
 SLICE_LEDGER="$(sanitize_evidence_path_field "Slice Ledger" "$SLICE_LEDGER")"
-python3 - "$ROOT_DIR" "$SLICE_LEDGER" "$ROLES" "$SOURCE_HEAD" "$REVIEW_PLAN" <<'PY'
+python3 - "$ROOT_DIR" "$SLICE_LEDGER" "$ROLES" "$SOURCE_HEAD" "$REVIEW_PLAN" "$([[ -n "$RESOLUTION_RESULT" ]] && echo 1 || echo 0)" <<'PY'
 from __future__ import annotations
 import hashlib, json, re, sys
 from pathlib import Path
 
 root, relative, roles_csv, source_head, review_plan = Path(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
+resolution_validated = sys.argv[6] == "1"
 def resolve_repo_path(raw: str, base: Path | None = None) -> Path:
     candidate = Path(raw).expanduser()
     options = [candidate] if candidate.is_absolute() else [root / candidate]
@@ -331,6 +376,66 @@ for line_number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(),
     artifact = resolve_repo_path(str(artifacts[0]), path)
     if not artifact.is_file() or hashlib.sha256(artifact.read_bytes()).hexdigest() != digest:
         raise SystemExit(f"error: Slice Ledger artifact digest mismatch for {role}")
+    try:
+        artifact_payload = json.loads(artifact.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        if str(item.get("findings") or "") != "no_findings":
+            raise SystemExit(
+                f"error: unresolved role findings for {role}; "
+                f"artifact has no structured disposition: {exc}"
+            )
+        if review_plan:
+            raise SystemExit(
+                f"error: plan-backed no_findings return for {role} must use a structured JSON artifact: {exc}"
+            )
+        # Human-operated legacy returns may bind opaque, digest-checked
+        # evidence. They can preserve the no-findings path, but cannot assert
+        # a resolved finding without a structured artifact disposition.
+        seen[role] = item
+        continue
+    ledger_disposition = str(item.get("findings") or "")
+    if not review_plan and ledger_disposition == "no_findings" and not (
+        isinstance(artifact_payload, dict)
+        and artifact_payload.get("schema") == "oasis7-review-return/v1"
+    ):
+        seen[role] = item
+        continue
+    if not isinstance(artifact_payload, dict):
+        raise SystemExit(f"error: review artifact is not an object for {role}")
+    artifact_identity = {
+        "task_uid": str(item.get("task_uid") or ""),
+        "role": role,
+        "status": str(item.get("status") or ""),
+        "head": source_head,
+        "slice_id": str(item.get("slice_id") or ""),
+    }
+    for field, expected in artifact_identity.items():
+        if artifact_payload.get(field) != expected:
+            raise SystemExit(f"error: review artifact {field} mismatch for {role}")
+    if item.get("epoch") and artifact_payload.get("epoch") != item["epoch"]:
+        raise SystemExit(f"error: review artifact epoch mismatch for {role}")
+    if review_plan and artifact_payload.get("epoch") != plan_epoch:
+        raise SystemExit(f"error: review artifact epoch mismatch for {role}")
+    artifact_disposition = artifact_payload.get("disposition")
+    artifact_findings = artifact_payload.get("findings")
+    if artifact_disposition not in {"findings", "no_findings"}:
+        raise SystemExit(f"error: review artifact disposition is invalid for {role}")
+    if not isinstance(artifact_findings, list):
+        raise SystemExit(f"error: review artifact findings are invalid for {role}")
+    if artifact_disposition == "findings" and not artifact_findings:
+        raise SystemExit(f"error: review artifact findings are invalid for {role}")
+    if artifact_disposition == "no_findings" and artifact_findings:
+        raise SystemExit(f"error: no_findings artifact contains findings for {role}")
+    if ledger_disposition != artifact_disposition:
+        raise SystemExit(
+            f"error: Slice Ledger/artifact disposition mismatch for {role}: "
+            f"ledger={ledger_disposition}, artifact={artifact_disposition}"
+        )
+    if artifact_disposition == "findings" and not resolution_validated:
+        raise SystemExit(
+            f"error: unresolved role findings for {role}; "
+            "no repository-owned resolution authority is present"
+        )
     seen[role] = item
 missing_roles = sorted(required - set(seen))
 if missing_roles:
@@ -339,6 +444,12 @@ PY
 python3 "$SCRIPT_DIR/validate-review-provenance.py" \
   --root "$ROOT_DIR" --task-uid "$TASK_UID" --ledger "$SLICE_LEDGER" --roles "$ROLES" --source-head "$SOURCE_HEAD" >/dev/null \
   || die "Slice Ledger role-return validation failed"
+if [[ -n "$RESOLUTION_RESULT" ]]; then
+  FINDING_DISPOSITION="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["aggregate"])' "$RESOLUTION_RESULT")"
+  FINDING_DISPOSITION_EVIDENCE="admin-authorized exact-head/finding resolution read back by $(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["resolver"])' "$RESOLUTION_RESULT")"
+else
+  FINDING_DISPOSITION="no_findings"
+fi
 if [[ -z "$ISSUE_NUMBER" || -z "$REPO" ]]; then
   eval "$(python3 - "$TASK_UID" <<'PY'
 from __future__ import annotations
