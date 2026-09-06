@@ -85,15 +85,15 @@ with open(path, "w", encoding="utf-8") as handle:
 PY
 PLAN="$TASK_ROOT/review-plans/fixture.json"
 mkdir -p "$(dirname "$PLAN")"
-python3 - "$PLAN" "$BATCH" "$HEAD_OID" "$BASE_OID" "$EVIDENCE_DIGEST" "$EPOCH" <<'PY'
+python3 - "$PLAN" "$BATCH" "$HEAD_OID" "$BASE_OID" "$EVIDENCE_DIGEST" "$EPOCH" "$LEDGER" <<'PY'
 import json, sys
-plan, batch, head, comparison, evidence, epoch = sys.argv[1:]
+plan, batch, head, comparison, evidence, epoch, ledger = sys.argv[1:]
 payload = {
     "schema": "oasis7-review-plan/v1", "task_uid": "task_11111111111111111111111111111111",
     "frozen_head": head, "comparison_ref": "refs/heads/review-base", "comparison_oid": comparison,
     "relevant_evidence_digest": evidence, "roles": ["repository_health_engineer"],
     "expected_slices": [{"role": "repository_health_engineer", "slice_id": "11111111-1111-4111-8111-111111111111"}],
-    "epoch": epoch, "batch_path": batch, "preflight": {"status": "incomplete", "ledger_path": ""},
+    "epoch": epoch, "batch_path": batch, "preflight": {"status": "incomplete", "ledger_path": ledger},
 }
 with open(plan, "w", encoding="utf-8") as handle:
     json.dump(payload, handle, sort_keys=True)
@@ -176,6 +176,30 @@ grep -F 'Pre-PR Local Role Review: passed' "$VALID_OUT" >/dev/null
 grep -F 'Review Plan: .pm/scratch/' "$VALID_OUT" >/dev/null
 [[ ! -s "$VALID_ERR" ]] || { cat "$VALID_ERR" >&2; exit 1; }
 cp "$LEDGER" "$TMPDIR/complete-ledger.jsonl"
+
+# The immutable plan owns the preflight ledger identity. A caller-provided
+# repository-owned alternate ledger must fail before collection or packet
+# publication, even when it has matching task/head/slice contents.
+ALTERNATE_LEDGER="$TASK_ROOT/alternate-slice-ledger.jsonl"
+cp "$LEDGER" "$ALTERNATE_LEDGER"
+cp "$LEDGER" "$TMPDIR/canonical-before-alternate.jsonl"
+cp "$ALTERNATE_LEDGER" "$TMPDIR/alternate-before.jsonl"
+if (cd "$TMPDIR" && "$REPO/scripts/pm/review-closeout.sh" \
+  --task-uid "$UID_VALUE" --review-plan "$PLAN" --role-returns "$ALTERNATE_LEDGER" --print-only \
+  >"$TMPDIR/alternate-ledger.out" 2>"$TMPDIR/alternate-ledger.err"); then
+  echo "review-closeout accepted a role-return ledger outside the plan preflight path" >&2
+  exit 1
+fi
+grep -Eqi 'preflight ledger|immutable|role-return ledger|ledger path' "$TMPDIR/alternate-ledger.err"
+cmp -s "$LEDGER" "$TMPDIR/canonical-before-alternate.jsonl" || {
+  echo "alternate ledger changed the canonical preflight ledger" >&2
+  exit 1
+}
+cmp -s "$ALTERNATE_LEDGER" "$TMPDIR/alternate-before.jsonl" || {
+  echo "alternate ledger was mutated before rejection" >&2
+  exit 1
+}
+test -f "$COLLECTION"
 
 # Unresolved role findings must fail closed before collection or packet
 # publication. Keep the earlier no-findings success above as the positive

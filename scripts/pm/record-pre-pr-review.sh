@@ -211,6 +211,10 @@ if (not isinstance(expected_slices, list) or len(expected_slices) != len(roles)
         or [item.get("role") if isinstance(item, dict) else None for item in expected_slices] != roles
         or any(not isinstance(item, dict) or not isinstance(item.get("slice_id"), str) or not item["slice_id"] for item in expected_slices)):
     raise SystemExit("error: --review-plan expected slices are invalid")
+preflight = plan.get("preflight")
+if (not isinstance(preflight, dict) or not isinstance(preflight.get("ledger_path"), str)
+        or not preflight["ledger_path"].strip()):
+    raise SystemExit("error: --review-plan has no persisted preflight ledger")
 canonical_roles = ",".join(roles)
 if supplied_roles and supplied_roles != canonical_roles:
     raise SystemExit(f"error: --review-plan roles mismatch: expected {canonical_roles}, actual {supplied_roles}")
@@ -229,8 +233,7 @@ print(plan["comparison_ref"])
 print(plan["comparison_oid"])
 print(plan["epoch"])
 print(plan["relevant_evidence_digest"])
-preflight = plan.get("preflight") or {}
-print(preflight.get("ledger_path") if isinstance(preflight, dict) else "")
+print(preflight["ledger_path"])
 PY
 )" || exit 1
   ROLES="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '1p')"
@@ -259,11 +262,16 @@ if [[ -z "$ROLE_BASIS" ]]; then
   ROLE_BASIS="changed paths, task history, verification claim, and explicit adjacent-role skips"
 fi
 REVIEW_PLAN_DISPLAY="$(sanitize_evidence_path_field "Review Plan" "$REVIEW_PLAN")"
-if [[ -n "${REVIEW_PLAN_LEDGER:-}" && "$SLICE_LEDGER" == n/a* ]]; then
-  SLICE_LEDGER="$REVIEW_PLAN_LEDGER"
-fi
-if [[ -n "$REVIEW_PLAN" && "$SLICE_LEDGER" == n/a* ]]; then
-  die "--review-plan has no persisted preflight ledger; regenerate it with ./scripts/pm/review-plan.py --root . --task-uid $TASK_UID --head $SOURCE_HEAD --comparison-ref $COMPARISON_REF --comparison-oid $COMPARISON_OID --evidence-digest <sha256> --change-class <change-class> --preflight-dir .pm/scratch/$TASK_UID/review-preflight, then rerun record-pre-pr-review"
+if [[ -n "$REVIEW_PLAN" ]]; then
+  REVIEW_PLAN_LEDGER="$(resolve_repo_owned_path "Review Plan preflight ledger" "$REVIEW_PLAN_LEDGER")" || exit 1
+  if [[ "$SLICE_LEDGER" == n/a* ]]; then
+    SLICE_LEDGER="$REVIEW_PLAN_LEDGER"
+  else
+    SUPPLIED_SLICE_LEDGER="$(resolve_repo_owned_path "Slice Ledger" "$SLICE_LEDGER")" || exit 1
+    [[ "$SUPPLIED_SLICE_LEDGER" == "$REVIEW_PLAN_LEDGER" ]] \
+      || die "--slice-ledger must match immutable review plan preflight ledger path"
+    SLICE_LEDGER="$SUPPLIED_SLICE_LEDGER"
+  fi
 fi
 if [[ -n "$FINDING_RESOLUTION" ]]; then
   if [[ -n "$REPO" && "$REPO" != "eng-cc/oasis7" ]]; then

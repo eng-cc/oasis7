@@ -83,13 +83,20 @@ if p.get("schema")!="oasis7-review-plan/v1" or p.get("task_uid")!=sys.argv[3]:
  raise SystemExit("review-closeout: review plan identity mismatch")
 for key in ("batch_path","frozen_head","comparison_ref","comparison_oid","epoch","relevant_evidence_digest"):
  if not p.get(key): raise SystemExit(f"review-closeout: review plan is missing {key}")
+preflight = p.get("preflight")
+if not isinstance(preflight, dict) or not isinstance(preflight.get("ledger_path"), str) or not preflight["ledger_path"].strip():
+ raise SystemExit("review-closeout: review plan has no persisted preflight ledger")
 print(p["batch_path"]); print(p["frozen_head"]); print(p["comparison_ref"]); print(p["comparison_oid"]); print(p["epoch"]); print(p["relevant_evidence_digest"])
+print(preflight["ledger_path"])
 PY
 )"
 BATCH_PATH="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '1p')"
 BATCH_PATH="$(resolve_repo_file "review batch" "$BATCH_PATH")" || exit 1
 FROZEN_HEAD="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '2p')"
 PLAN_EPOCH="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '5p')"
+PLAN_LEDGER="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '7p')"
+PLAN_LEDGER="$(resolve_repo_file "review plan preflight ledger" "$PLAN_LEDGER")" || exit 1
+[[ "$ROLE_RETURNS" == "$PLAN_LEDGER" ]] || die "role-return ledger must match immutable review plan preflight ledger path"
 CURRENT_HEAD="$(git -C "$ROOT_DIR" rev-parse HEAD)" || die "cannot resolve current HEAD"
 [[ "$CURRENT_HEAD" == "$FROZEN_HEAD" ]] || die "review-closeout: frozen HEAD mismatch: expected $FROZEN_HEAD, actual $CURRENT_HEAD"
 

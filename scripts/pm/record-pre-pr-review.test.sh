@@ -240,6 +240,28 @@ grep -q "Reviewed Changed Paths: README.md" "$TMPDIR/frozen-plan.out"
 grep -q "Review Plan: .pm/scratch/task_11111111111111111111111111111111/review-plans/frozen-plan.json" "$TMPDIR/frozen-plan.out"
 grep -q "Slice Ledger: .pm/scratch/task_11111111111111111111111111111111/slice-ledger.jsonl" "$TMPDIR/frozen-plan.out"
 
+# The immutable plan owns the preflight ledger identity. A caller-provided
+# repository-owned alternate ledger must fail before packet publication.
+ALTERNATE_LEDGER="$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111/alternate-slice-ledger.jsonl"
+cp "$TEST_REPO/$LEDGER_REL" "$ALTERNATE_LEDGER"
+cp "$TEST_REPO/$LEDGER_REL" "$TMPDIR/canonical-before-alternate.jsonl"
+cp "$ALTERNATE_LEDGER" "$TMPDIR/alternate-before.jsonl"
+if "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
+  --task-uid task_11111111111111111111111111111111 \
+  --review-plan "$PLAN" \
+  --review-evidence "repository_health_engineer: no_findings; alternate ledger" \
+  --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" \
+  --finding-disposition-evidence "alternate ledger" \
+  --verification "alternate ledger" --residual-risk "fixture risk" \
+  --slice-ledger "$ALTERNATE_LEDGER" --print-only \
+  >"$TMPDIR/alternate-ledger.out" 2>"$TMPDIR/alternate-ledger.err"; then
+  echo "record-pre-pr-review accepted a role-return ledger outside the plan preflight path" >&2
+  exit 1
+fi
+grep -Eqi 'preflight ledger|immutable|slice ledger|ledger path' "$TMPDIR/alternate-ledger.err"
+cmp -s "$TEST_REPO/$LEDGER_REL" "$TMPDIR/canonical-before-alternate.jsonl"
+cmp -s "$ALTERNATE_LEDGER" "$TMPDIR/alternate-before.jsonl"
+
 # The direct recorder must reject a completed role return with unresolved
 # findings instead of defaulting the packet disposition to no_findings.
 FIX2_FAILURES=0
