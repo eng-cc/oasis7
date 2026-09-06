@@ -1,6 +1,32 @@
 use super::*;
 
 impl World {
+    /// Persist the current Runtime transaction before returning a receipt,
+    /// lease or continuation. The indexed distfs generation is the durable
+    /// pair boundary; canonical JSON files remain compatibility mirrors.
+    pub(in crate::runtime::world) fn persist_runtime_transaction_if_configured(
+        &self,
+    ) -> Result<(), WorldError> {
+        let Some(dir) = self.persistence_dir.borrow().clone() else {
+            return Ok(());
+        };
+        let snapshot = self.snapshot();
+        let (persisted_snapshot, tick_consensus_archive) =
+            split_tick_consensus_snapshot_for_persistence(&snapshot);
+        self.journal.save_json(dir.join(JOURNAL_FILE))?;
+        persisted_snapshot.save_json(dir.join(SNAPSHOT_FILE))?;
+        let archive_bytes = tick_consensus_archive
+            .as_ref()
+            .map(serde_json::to_vec)
+            .transpose()
+            .map_err(|err| WorldError::DistributedValidationFailed {
+                reason: format!("serialize tick consensus generation archive failed: {err}"),
+            })?;
+        persist_tick_consensus_archive(&dir, &persisted_snapshot, tick_consensus_archive.as_ref())?;
+        self.save_distfs_sidecar(&dir, &persisted_snapshot, archive_bytes.as_deref(), None)?;
+        Ok(())
+    }
+
     pub(super) fn try_load_from_distfs_sidecar(
         dir: &Path,
     ) -> Result<Option<(Snapshot, Journal)>, WorldError> {
@@ -112,5 +138,30 @@ impl World {
         let events: Vec<WorldEvent> =
             assemble_journal(&journal_segments, &store, |event: &WorldEvent| event.id)?;
         Ok((snapshot, Journal { events }))
+    }
+
+    pub fn load_tick_consensus_records_from_dir(
+        dir: impl AsRef<Path>,
+        tick_from: Option<WorldTime>,
+        tick_to: Option<WorldTime>,
+    ) -> Result<Vec<TickConsensusRecord>, WorldError> {
+        let snapshot = load_persisted_tick_consensus_snapshot_from_dir(dir.as_ref())?;
+        Ok(snapshot
+            .tick_consensus_records
+            .into_iter()
+            .filter(|record| {
+                tick_from
+                    .map(|from_tick| record.block.header.tick >= from_tick)
+                    .unwrap_or(true)
+                    && tick_to
+                        .map(|to_tick| record.block.header.tick <= to_tick)
+                        .unwrap_or(true)
+            })
+            .collect())
+    }
+
+    pub fn verify_tick_consensus_archive_from_dir(dir: impl AsRef<Path>) -> Result<(), WorldError> {
+        let snapshot = load_persisted_tick_consensus_snapshot_from_dir(dir.as_ref())?;
+        verify_tick_consensus_record_slice(snapshot.tick_consensus_records.as_slice())
     }
 }

@@ -1,129 +1,12 @@
+use super::super::continuous_agent_harness::{
+    COGNITION_RESPONSE_DIGEST_DOMAIN, CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR,
+    CONTINUOUS_AGENT_CONTEXT_VERSION, ContinuousAgentRequestContextV1,
+    ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1, h_v1,
+};
+use super::super::decision_provider::{DecisionResponse, ProviderDiagnostics};
+use super::behavior_context::builtin_provider_decision;
 use super::*;
 use std::time::Instant;
-
-impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
-    fn collapse_multi_turn_payloads(
-        parsed_turns: Vec<ParsedLlmTurn>,
-    ) -> (Vec<ParsedLlmTurn>, Option<String>) {
-        if parsed_turns.len() <= 1 {
-            return (parsed_turns, None);
-        }
-
-        let observed_turns = parsed_turns.len();
-        let mut fallback_turn: Option<ParsedLlmTurn> = None;
-        let mut selected_turn: Option<ParsedLlmTurn> = None;
-        for parsed_turn in parsed_turns.into_iter().rev() {
-            if matches!(
-                &parsed_turn,
-                ParsedLlmTurn::Decision { .. }
-                    | ParsedLlmTurn::ExecuteUntil { .. }
-                    | ParsedLlmTurn::DecisionDraft { .. }
-            ) {
-                selected_turn = Some(parsed_turn);
-                break;
-            }
-            if fallback_turn.is_none() {
-                fallback_turn = Some(parsed_turn);
-            }
-        }
-
-        let Some(selected_turn) = selected_turn.or(fallback_turn) else {
-            return (
-                Vec::new(),
-                Some(format!(
-                    "multi-turn output collapsed by guardrail: observed_turns={} kept_turn=none",
-                    observed_turns
-                )),
-            );
-        };
-
-        let kept_turn_kind = Self::parsed_turn_kind_name(&selected_turn);
-        (
-            vec![selected_turn],
-            Some(format!(
-                "multi-turn output collapsed by guardrail: observed_turns={} kept_turn={}",
-                observed_turns, kept_turn_kind
-            )),
-        )
-    }
-
-    fn parsed_turn_kind_name(parsed_turn: &ParsedLlmTurn) -> &'static str {
-        match parsed_turn {
-            ParsedLlmTurn::Plan { .. } => "plan",
-            ParsedLlmTurn::DecisionDraft { .. } => "decision_draft",
-            ParsedLlmTurn::Decision { .. } => "decision",
-            ParsedLlmTurn::ExecuteUntil { .. } => "execute_until",
-            ParsedLlmTurn::ModuleCall { .. } => "module_call",
-            ParsedLlmTurn::Invalid(_) => "invalid",
-        }
-    }
-}
-
-impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
-    /// Keep a deterministic, bounded identity window for completion replays.
-    /// ActionIds are allocated globally, so numeric or circular ordering is
-    /// not a reliable age signal when unrelated actions make the IDs sparse.
-    /// The serialized insertion order is the sole eviction authority.
-    fn remember_recipe_completion_receipt(&mut self, job_id: u64) -> bool {
-        if self
-            .recipe_coverage
-            .completion_receipt_ids
-            .contains(&job_id)
-        {
-            return false;
-        }
-        self.recipe_coverage.completion_receipt_ids.insert(job_id);
-        self.recipe_coverage
-            .completion_receipt_order
-            .push_back(job_id);
-        while self.recipe_coverage.completion_receipt_order.len() > RECIPE_COMPLETION_REPLAY_WINDOW
-        {
-            if let Some(job_id) = self.recipe_coverage.completion_receipt_order.pop_front() {
-                self.recipe_coverage.completion_receipt_ids.remove(&job_id);
-            }
-        }
-        true
-    }
-
-    /// Consume authoritative completion feedback for this agent. Runtime-backed
-    /// execution must reach `RecipeCompleted`; the pure simulator applies the
-    /// recipe resource transformation atomically, so its successful
-    /// `RecipeScheduled` event is also a completion receipt. Event/job identity
-    /// keeps replay or duplicate delivery idempotent.
-    fn consume_recipe_completion_feedback(&mut self, event: &WorldEvent) -> Option<bool> {
-        let (receipt_id, requester_agent_id, recipe_id) =
-            if let Some(runtime_event) = event.runtime_event.as_ref() {
-                let RuntimeWorldEventBody::Domain(RuntimeDomainEvent::RecipeCompleted {
-                    job_id,
-                    requester_agent_id,
-                    recipe_id,
-                    ..
-                }) = &runtime_event.body
-                else {
-                    return None;
-                };
-                (*job_id, requester_agent_id.as_str(), recipe_id.as_str())
-            } else {
-                let WorldEventKind::RecipeScheduled {
-                    owner: ResourceOwner::Agent { agent_id },
-                    recipe_id,
-                    ..
-                } = &event.kind
-                else {
-                    return None;
-                };
-                (event.id, agent_id.as_str(), recipe_id.as_str())
-            };
-        if requester_agent_id != self.agent_id || !RecipeCoverageProgress::is_tracked(recipe_id) {
-            return None;
-        }
-        if !self.remember_recipe_completion_receipt(receipt_id) {
-            return Some(false);
-        }
-        self.recipe_coverage.mark_completed(recipe_id);
-        Some(true)
-    }
-}
 
 impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
     fn agent_id(&self) -> &str {
@@ -132,6 +15,7 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
 
     fn decide(&mut self, observation: &Observation) -> AgentDecision {
         self.pending_decision_rewrite = None;
+        self.continuous_context.pending_response_context = None;
         self.memory
             .record_observation(observation.time, Self::observe_memory_summary(observation));
         let trace_chat_start = self
@@ -924,6 +808,37 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
             llm_chat_messages: trace_chat_messages,
         });
 
+        // Builtin uses the same outer cognition contract as ProviderBacked
+        // when it is hosted by the production async Harness. The LLM trace
+        // remains the Builtin adapter diagnostic payload; this response is
+        // the typed candidate/identity artifact consumed by Runtime.
+        if let Some(request_context) = self.continuous_context.request_context.as_ref() {
+            let response = DecisionResponse {
+                decision: builtin_provider_decision(&decision),
+                module_command: None,
+                provider_error: None,
+                diagnostics: ProviderDiagnostics {
+                    provider_id: Some("builtin_llm".to_string()),
+                    ..ProviderDiagnostics::default()
+                },
+                trace_payload: Default::default(),
+                memory_write_intents: Vec::new(),
+            };
+            self.continuous_context.pending_response_context =
+                Some(ContinuousAgentResponseContextV1 {
+                    response_digest: h_v1(COGNITION_RESPONSE_DIGEST_DOMAIN, &response),
+                    base_decision_response: response,
+                    context_discriminator: CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR.to_string(),
+                    context_version: CONTINUOUS_AGENT_CONTEXT_VERSION,
+                    agent_session_id: request_context.agent_session_id.clone(),
+                    agent_turn_id: request_context.agent_turn_id.clone(),
+                    decision_request_id: request_context.decision_request_id.clone(),
+                    retry_seq: request_context.retry_seq,
+                    transport_attempt: request_context.transport_attempt,
+                    request_digest: request_context.request_digest.clone(),
+                });
+        }
+
         decision
     }
 
@@ -1143,6 +1058,34 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
             self.memory
                 .record_event(event.time, format!("event: {:?}", event.kind));
         }
+    }
+
+    fn set_continuous_turn_context(&mut self, context: Option<&ContinuousAgentTurnContextV1>) {
+        self.continuous_context.turn_context = context.cloned();
+    }
+
+    fn set_continuous_request_context(
+        &mut self,
+        context: Option<&ContinuousAgentRequestContextV1>,
+    ) {
+        self.continuous_context.request_context = context.cloned();
+    }
+
+    fn take_continuous_response_context(&mut self) -> Option<ContinuousAgentResponseContextV1> {
+        self.continuous_context.pending_response_context.take()
+    }
+
+    fn set_prompt_overrides(
+        &mut self,
+        system_prompt: Option<String>,
+        short_term_goal: Option<String>,
+        long_term_goal: Option<String>,
+    ) {
+        self.apply_prompt_overrides(system_prompt, short_term_goal, long_term_goal);
+    }
+
+    fn on_player_message(&mut self, world_time: u64, message: &str) {
+        let _ = self.push_player_message(world_time, message);
     }
 
     fn take_decision_trace(&mut self) -> Option<AgentDecisionTrace> {

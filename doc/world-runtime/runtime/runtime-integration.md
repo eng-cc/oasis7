@@ -32,6 +32,13 @@
 
 ## LLM 驱动与 Agent 内部模块（设计补充）
 
+连续世界 Agent 的异步 scheduler、MVCC decision envelope、durable cognition
+journal、recovery 与 continuation 权威合同见
+`doc/world-runtime/runtime/agent-cognition-lifecycle.prd.md` 及同名 design；
+Agent-owned session/turn/provider/context/memory/goal 合同见
+`doc/world-simulator/llm/continuous-agent-harness.prd.md`。本节保留集成摘要，
+不重复定义上述专题的 identity、状态机或恢复语义。
+
 - **LLM 驱动**：Agent 决策由 LLM 执行，推理服务采用 OpenAI 兼容 API（endpoint/model/auth/超时/重试/预算可配置）。
 - **确定性与回放**：LLM 调用视为外部效应；运行时需记录输入/输出或最终决策事件以保证回放一致性（回放时不再次调用 LLM）。
 - **Memory Module**：Agent 记忆策略封装为独立 WASM 模块 + 受限存储配额；由 Agent runtime 触发调用，负责写入 observation/event/action_result 并生成上下文摘要。

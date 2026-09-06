@@ -418,6 +418,7 @@ fn build_demo_behavior(
                 adapter,
                 provider_phase1_action_catalog(),
             )
+            .legacy_compatibility()
             .with_provider_config_ref(format!(
                 "provider://loopback-http/llm-agent-demo/pid-{}/{}",
                 process::id(),

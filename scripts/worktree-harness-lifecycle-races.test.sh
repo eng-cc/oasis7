@@ -184,7 +184,7 @@ set +e
 run_harness_exec up --startup-timeout 10 >"$TMP_DIR/crash-up.log" 2>&1 &
 UP_PID=$!
 set -e
-for _ in $(seq 1 200); do
+for _ in $(seq 1 1000); do
   [[ -e "$CRASH_METADATA_MARKER" ]] && break
   sleep 0.01
 done

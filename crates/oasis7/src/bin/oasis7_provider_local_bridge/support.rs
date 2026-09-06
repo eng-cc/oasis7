@@ -1,5 +1,19 @@
 use super::*;
 
+/// Derive the legacy bridge key from the target Harness' domain-separated
+/// digest contract without treating the legacy DTO as cognition proof.
+/// Timeout changes and transport retries do not create a new invocation.
+pub(super) fn legacy_provider_invocation_key(request: &DecisionRequest) -> String {
+    let mut value = serde_json::to_value(request).expect("legacy request is serializable");
+    if let Some(object) = value.as_object_mut() {
+        object.remove("timeout_budget_ms");
+    }
+    let canonical = oasis7_wasm_abi::encode_canonical_cbor(&value)
+        .expect("legacy request is canonical-CBOR encodable");
+    let request_digest = h_v1("oasis7.cognition.request.v1", &canonical);
+    h_v1("oasis7.cognition.provider-invocation.v1", &request_digest).to_string()
+}
+
 pub(super) fn should_fallback_to_local_agent(error: &str) -> bool {
     let normalized = error.to_ascii_lowercase();
     normalized.contains("gateway timeout")

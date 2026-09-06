@@ -112,6 +112,7 @@ Options:
   --allow-trusted-local-playtest
                            Allow trusted_local_only for local-only playtest stacks
   --viewer-static-dir <p>  Override viewer static dir; source mode defaults to fresh `web`, bundle mode only uses this as an advanced override
+                           Provider lineage checkpoint is stored at <output-dir>/viewer-provider-lineage.json
   --allow-stale-bundle    Skip workspace freshness guard for --bundle-dir (advanced / explicit override)
   --chain-enable           Enable chain runtime (default; requires execution-world persistence ready)
   --chain-disable          Disable chain runtime (Viewer/page-play mitigation only)
@@ -817,6 +818,7 @@ write_session_meta() {
     printf 'LLM_PROVIDER_PREFLIGHT_SKIPPED=%s\n' "$SKIP_LLM_PROVIDER_PREFLIGHT"
     printf 'LLM_PROVIDER_PROBE_JSON=%s\n' "$LLM_PROVIDER_PROBE_JSON"
     printf 'LLM_PROVIDER_PROBE_LOG=%s\n' "$LLM_PROVIDER_PROBE_LOG"
+    printf 'PROVIDER_LINEAGE_STORE_PATH=%s\n' "$OUTPUT_DIR/viewer-provider-lineage.json"
     printf 'HOSTED_ACCOUNT_STORE_PATH=%s\n' "$HOSTED_ACCOUNT_STORE_PATH"
     printf 'STACK_READY=%s\n' "$stack_ready"
     if [[ "$stack_ready" == "1" ]]; then
@@ -854,6 +856,7 @@ WORLD_ARGS=(
   --web-bind "$WEB_BRIDGE_ADDR"
   --viewer-host "$VIEWER_HOST"
   --viewer-port "$VIEWER_PORT"
+  --provider-lineage-store "$OUTPUT_DIR/viewer-provider-lineage.json"
   --no-open-browser
 )
 if [[ -n "$SCENARIO" ]]; then

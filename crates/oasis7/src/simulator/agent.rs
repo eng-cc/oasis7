@@ -6,6 +6,10 @@ use std::collections::BTreeMap;
 
 use oasis7_wasm_abi::AgentCommandResponse;
 
+use super::continuous_agent_harness::{
+    ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1,
+};
+use super::decision_provider::MemoryWriteIntent;
 use super::kernel::{
     MicroDepotActionKind, MicroDepotInstallQuote, MicroDepotPressureClass, MicroDepotQuotePreview,
     Observation, RejectReason, WorldEvent, WorldEventKind,
@@ -58,6 +62,49 @@ pub trait AgentBehavior {
     /// (e.g. LLM prompt/completion I/O).
     fn take_decision_trace(&mut self) -> Option<AgentDecisionTrace> {
         None
+    }
+
+    /// Install the host-owned cognition projection before a turn executes.
+    /// Legacy behaviors ignore it; continuous Builtin/ProviderBacked
+    /// behaviors consume the same typed context.
+    fn set_continuous_turn_context(&mut self, _context: Option<&ContinuousAgentTurnContextV1>) {}
+
+    /// Install the complete trusted outer V1 request for a production
+    /// provider lane. Legacy behaviors ignore this additive hook and remain
+    /// explicitly fenced to the reduced compatibility lane.
+    fn set_continuous_request_context(
+        &mut self,
+        _context: Option<&ContinuousAgentRequestContextV1>,
+    ) {
+    }
+
+    /// Install a host-owned prompt projection before the next turn.  The
+    /// async Harness uses this hook for both Builtin and ProviderBacked
+    /// adapters; legacy behaviors may ignore it.
+    fn set_prompt_overrides(
+        &mut self,
+        _system_prompt: Option<String>,
+        _short_term_goal: Option<String>,
+        _long_term_goal: Option<String>,
+    ) {
+    }
+
+    /// Deliver a player message through the actor boundary.  This keeps the
+    /// Builtin adapter from requiring a world-thread mutable behavior handle
+    /// when it uses the same async Harness as ProviderBacked.
+    fn on_player_message(&mut self, _world_time: WorldTime, _message: &str) {}
+
+    /// Take the provider's response envelope, including its content digest,
+    /// for Runtime replay/artifact binding.
+    fn take_continuous_response_context(&mut self) -> Option<ContinuousAgentResponseContextV1> {
+        None
+    }
+
+    /// Return provider memory candidates produced by the latest decision.
+    /// Candidates remain non-authoritative until Runtime feedback commits the
+    /// matching receipt.
+    fn take_memory_write_intents(&mut self) -> Vec<MemoryWriteIntent> {
+        Vec::new()
     }
 }
 

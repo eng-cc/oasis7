@@ -1,13 +1,14 @@
 use oasis7::simulator::{
-    Action, ActionCatalogEntry, AgentQuery, DecisionRequest, MicroDepotQuoteRequest,
-    ProviderDecision, ProviderModuleCommand,
+    Action, ActionCatalogEntry, AgentQuery, DecisionRequest, DecisionResponse,
+    MicroDepotQuoteRequest, ProviderDecision, ProviderDiagnostics, ProviderErrorEnvelope,
+    ProviderModuleCommand, ProviderTokenUsage, ProviderTraceEnvelope, ProviderTranscriptEntry,
 };
 use oasis7_wasm_abi::AgentCommandResponse;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::support::{estimated_current_location_id, nearest_reachable_non_current_location_id};
-use super::{AgentInvocation, DEFAULT_PROVIDER_AGENT_PROFILE};
+use super::{AgentInvocation, AgentInvocationOutput, DEFAULT_PROVIDER_AGENT_PROFILE};
 
 pub(super) fn deterministic_mock_decision(request: &DecisionRequest) -> ProviderDecision {
     let agent_id = request.observation.agent_id.clone();
@@ -287,6 +288,25 @@ pub(super) fn build_session_key(request: &DecisionRequest, provider_agent_id: &s
         .collect()
 }
 
+pub(super) fn build_continuous_session_key(
+    provider_agent_id: &str,
+    agent_subject: &str,
+    agent_session_id: &str,
+) -> String {
+    let raw = format!(
+        "agent:{provider_agent_id}:subagent:world-simulator:continuous:{agent_subject}:{agent_session_id}"
+    );
+    raw.chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' || ch == ':' {
+                ch
+            } else {
+                '-'
+            }
+        })
+        .collect()
+}
+
 #[derive(Debug, Deserialize)]
 struct ModelDecisionEnvelope {
     decision: String,
@@ -300,6 +320,38 @@ struct ModelDecisionEnvelope {
     module_command: Option<ProviderModuleCommand>,
     #[serde(default)]
     agent_command_response: Option<AgentCommandResponse>,
+}
+
+/// The target cognition lane has a strict wire contract.  Keep this separate
+/// from `ModelDecisionEnvelope`: the legacy route intentionally retains its
+/// permissive parsing and repair behavior for compatibility.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StrictModelDecisionEnvelope {
+    decision: String,
+    #[serde(default)]
+    ticks: Option<u64>,
+    #[serde(default)]
+    action_ref: Option<String>,
+    #[serde(default)]
+    args: Option<Value>,
+    #[serde(default)]
+    module_command: Option<ProviderModuleCommand>,
+    #[serde(default)]
+    agent_command_response: Option<AgentCommandResponse>,
+}
+
+impl From<StrictModelDecisionEnvelope> for ModelDecisionEnvelope {
+    fn from(value: StrictModelDecisionEnvelope) -> Self {
+        Self {
+            decision: value.decision,
+            ticks: value.ticks,
+            action_ref: value.action_ref,
+            args: value.args,
+            module_command: value.module_command,
+            agent_command_response: value.agent_command_response,
+        }
+    }
 }
 
 pub(super) fn parse_model_decision(
@@ -331,6 +383,148 @@ pub(super) fn parse_model_decision(
             })?
         }
     };
+    Ok((
+        build_decision(agent_id, request, envelope)?,
+        schema_repair_count,
+    ))
+}
+
+/// Parse the target provider output without repair or heuristic extraction.
+/// Whitespace around the one JSON object is harmless, but markdown fences,
+/// prose wrappers, and any unknown envelope key are contract violations.
+pub(super) fn parse_model_decision_strict(
+    agent_id: &str,
+    request: &DecisionRequest,
+    raw_text: &str,
+) -> Result<(ProviderDecision, u32), String> {
+    let envelope: StrictModelDecisionEnvelope =
+        serde_json::from_str(raw_text.trim()).map_err(|err| {
+            format!(
+                "strict target model output must be one JSON object: {err}; raw={}",
+                summarize_text(raw_text, 240)
+            )
+        })?;
+    Ok((build_decision(agent_id, request, envelope.into())?, 0))
+}
+
+pub(super) fn parse_provider_output(
+    agent_id: &str,
+    request: &DecisionRequest,
+    raw_text: &str,
+    strict_target: bool,
+) -> Result<(ProviderDecision, u32), String> {
+    if strict_target {
+        parse_model_decision_strict(agent_id, request, raw_text)
+    } else {
+        parse_model_decision(agent_id, request, raw_text)
+    }
+}
+
+pub(super) fn strict_model_output_error_response(
+    provider_id: &str,
+    output: &AgentInvocationOutput,
+    latency_ms: u64,
+    detail: String,
+) -> DecisionResponse {
+    DecisionResponse {
+        decision: ProviderDecision::Wait,
+        module_command: None,
+        provider_error: Some(ProviderErrorEnvelope {
+            code: "invalid_action_schema".to_string(),
+            message: detail,
+            retryable: false,
+        }),
+        diagnostics: ProviderDiagnostics {
+            provider_id: Some(provider_id.to_string()),
+            provider_version: output.provider_version.clone(),
+            latency_ms: Some(latency_ms.max(output.duration_ms.unwrap_or(0))),
+            retry_count: 0,
+        },
+        trace_payload: ProviderTraceEnvelope {
+            provider_id: Some(provider_id.to_string()),
+            output_summary: Some(
+                "strict target model output rejected without schema repair".to_string(),
+            ),
+            latency_ms: Some(latency_ms.max(output.duration_ms.unwrap_or(0))),
+            upstream_trace: output.upstream_trace.clone(),
+            ..ProviderTraceEnvelope::default()
+        },
+        memory_write_intents: Vec::new(),
+    }
+}
+
+pub(super) fn legacy_model_output_error_response(
+    provider_id: &str,
+    request: &DecisionRequest,
+    output: &AgentInvocationOutput,
+    latency_ms: u64,
+    detail: String,
+) -> DecisionResponse {
+    let (decision, guardrail_note) = apply_profile_guardrails(request, ProviderDecision::Wait);
+    let mut tool_trace = Vec::new();
+    if let Some(route_note) = output.route_note.clone() {
+        tool_trace.push(route_note);
+    }
+    tool_trace.push(detail.clone());
+    if let Some(note) = guardrail_note.clone() {
+        tool_trace.push(note);
+    }
+    DecisionResponse {
+        decision,
+        module_command: None,
+        provider_error: None,
+        diagnostics: ProviderDiagnostics {
+            provider_id: Some(provider_id.to_string()),
+            provider_version: output.provider_version.clone(),
+            latency_ms: Some(latency_ms.max(output.duration_ms.unwrap_or(0))),
+            retry_count: 0,
+        },
+        trace_payload: ProviderTraceEnvelope {
+            provider_id: Some(provider_id.to_string()),
+            input_summary: Some(summarize_text(output.prompt.as_str(), 512)),
+            output_summary: Some(match guardrail_note {
+                Some(note) => format!(
+                    "invalid_model_output: {}; {}; raw={}",
+                    detail,
+                    note,
+                    summarize_text(output.text.as_str(), 512)
+                ),
+                None => format!(
+                    "invalid_model_output: {}; raw={}",
+                    detail,
+                    summarize_text(output.text.as_str(), 512)
+                ),
+            }),
+            latency_ms: Some(latency_ms.max(output.duration_ms.unwrap_or(0))),
+            transcript: vec![
+                ProviderTranscriptEntry {
+                    role: "user".to_string(),
+                    content: summarize_text(output.prompt.as_str(), 4000),
+                },
+                ProviderTranscriptEntry {
+                    role: "assistant".to_string(),
+                    content: summarize_text(output.text.as_str(), 4000),
+                },
+            ],
+            tool_trace,
+            token_usage: Some(ProviderTokenUsage {
+                prompt_tokens: output.prompt_tokens,
+                completion_tokens: output.completion_tokens,
+                total_tokens: output.total_tokens,
+            }),
+            cost_cents: None,
+            upstream_trace: output.upstream_trace.clone(),
+            schema_repair_count: 1,
+        },
+        memory_write_intents: Vec::new(),
+    }
+}
+
+fn build_decision(
+    agent_id: &str,
+    request: &DecisionRequest,
+    envelope: ModelDecisionEnvelope,
+) -> Result<ProviderDecision, String> {
     let decision = match envelope.decision.as_str() {
         "wait" => ProviderDecision::Wait,
         "wait_ticks" => ProviderDecision::WaitTicks {
@@ -403,7 +597,7 @@ pub(super) fn parse_model_decision(
         },
         other => return Err(format!("unsupported decision `{other}`")),
     };
-    Ok((decision, schema_repair_count))
+    Ok(decision)
 }
 
 fn build_query_from_args(

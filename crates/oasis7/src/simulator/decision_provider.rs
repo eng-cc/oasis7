@@ -5,20 +5,34 @@ use std::time::Instant;
 
 use oasis7_wasm_abi::{AgentCommandResponse, CapabilityCatalogSnapshot, ModuleCommandCatalogEntry};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::capability_invocation_context::CapabilityInvocationContext;
 
+use super::continuous_agent_harness::{
+    COGNITION_RESPONSE_DIGEST_DOMAIN, CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR,
+    CONTINUOUS_AGENT_CONTEXT_VERSION, ContinuousAgentRequestContextV1,
+    ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1, FeedbackEnvelopeV1, h_v1,
+};
 use super::{
     Action, ActionId, ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, AgentQuery,
-    AgentQueryResult, LlmChatMessageTrace, LlmChatRole, LlmDecisionDiagnostics,
-    LlmPromptSectionTrace, LlmStepTrace, Observation, WorldEvent, WorldTime,
+    AgentQueryResult, Observation, WorldEvent, WorldTime,
 };
 
 #[path = "decision_provider_capability.rs"]
 mod decision_provider_capability;
+#[path = "decision_provider_cognition.rs"]
+mod decision_provider_cognition;
+#[path = "decision_provider_observation.rs"]
+mod decision_provider_observation;
 #[path = "decision_provider_support.rs"]
 mod decision_provider_support;
+#[path = "decision_provider_trace.rs"]
+mod decision_provider_trace;
+use self::decision_provider_observation::{
+    provider_observation_from_runtime_observation,
+    provider_observation_from_runtime_observation_with_goal,
+};
 
 const DEFAULT_PROVIDER_TIMEOUT_BUDGET_MS: u64 = 3_000;
 const MAX_RECENT_EVENT_SUMMARIES: usize = 8;
@@ -412,13 +426,192 @@ pub trait DecisionProvider {
         request: &DecisionRequest,
     ) -> Result<DecisionResponse, DecisionProviderError>;
 
+    /// Versioned additive adapter for the continuous-agent host projection.
+    ///
+    /// Existing providers implement the legacy `decide` method and therefore
+    /// continue to work unchanged.  Providers that understand the continuous
+    /// cognition lane can override this hook to consume the frozen context and
+    /// return the outer response envelope.  The default implementation keeps
+    /// legacy provider semantics while making the response lineage explicit at
+    /// the host boundary.
+    fn decide_with_continuous_context(
+        &mut self,
+        request: &DecisionRequest,
+        context: &ContinuousAgentTurnContextV1,
+    ) -> Result<ContinuousAgentResponseContextV1, DecisionProviderError> {
+        Ok(wrap_continuous_response(self.decide(request)?, context))
+    }
+
+    /// Production-target additive lane. The full outer request is validated
+    /// and carried through retries; the default adapter is a fenced legacy
+    /// compatibility bridge for providers that only understand the reduced
+    /// turn context.
+    fn decide_with_continuous_request_context(
+        &mut self,
+        request: &DecisionRequest,
+        turn_context: &ContinuousAgentTurnContextV1,
+        request_context: &ContinuousAgentRequestContextV1,
+    ) -> Result<ContinuousAgentResponseContextV1, DecisionProviderError> {
+        validate_request_context_pair(request, turn_context, request_context)?;
+        let mut response = self.decide_with_continuous_context(request, turn_context)?;
+        response.context_discriminator = CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR.to_string();
+        response.context_version = CONTINUOUS_AGENT_CONTEXT_VERSION;
+        response.agent_session_id = request_context.agent_session_id.clone();
+        response.agent_turn_id = request_context.agent_turn_id.clone();
+        response.decision_request_id = request_context.decision_request_id.clone();
+        response.retry_seq = request_context.retry_seq;
+        response.transport_attempt = request_context.transport_attempt;
+        response.request_digest = request_context.request_digest.clone();
+        Ok(response)
+    }
+
     fn push_feedback(&mut self, _feedback: &FeedbackEnvelope) -> Result<(), DecisionProviderError> {
+        Ok(())
+    }
+
+    /// Runtime feedback lane carrying complete subject/session sequencing.
+    /// The legacy hook above is intentionally retained as a compatibility
+    /// lane and cannot establish authoritative cognition lineage.
+    fn push_continuous_feedback(
+        &mut self,
+        _feedback: &FeedbackEnvelopeV1,
+    ) -> Result<(), DecisionProviderError> {
         Ok(())
     }
 
     fn on_world_event(&mut self, _event: &WorldEvent) -> Result<(), DecisionProviderError> {
         Ok(())
     }
+}
+
+fn wrap_continuous_response(
+    response: DecisionResponse,
+    context: &ContinuousAgentTurnContextV1,
+) -> ContinuousAgentResponseContextV1 {
+    let response_digest = h_v1(COGNITION_RESPONSE_DIGEST_DOMAIN, &response);
+    ContinuousAgentResponseContextV1 {
+        base_decision_response: response,
+        context_discriminator: CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR.to_string(),
+        context_version: CONTINUOUS_AGENT_CONTEXT_VERSION,
+        agent_session_id: context.agent_session_id.clone(),
+        agent_turn_id: context.agent_turn_id.clone(),
+        decision_request_id: context.decision_request_id.clone(),
+        retry_seq: 0,
+        transport_attempt: 0,
+        request_digest: context.request_digest.clone(),
+        response_digest,
+    }
+}
+
+fn validate_continuous_response_lineage(
+    response: &ContinuousAgentResponseContextV1,
+    context: &ContinuousAgentTurnContextV1,
+    agent_id: &str,
+) -> Result<(), DecisionProviderError> {
+    context
+        .validate_for_agent(agent_id)
+        .map_err(|error| DecisionProviderError::new(error.code(), error.message(), false))?;
+    if response.context_discriminator != CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR
+        || response.context_version != CONTINUOUS_AGENT_CONTEXT_VERSION
+        || response.agent_session_id != context.agent_session_id
+        || response.agent_turn_id != context.agent_turn_id
+        || response.decision_request_id != context.decision_request_id
+        || response.retry_seq != 0
+        || response.transport_attempt != 0
+        || response.request_digest != context.request_digest
+    {
+        return Err(DecisionProviderError::new(
+            "response_identity_mismatch",
+            "provider response does not match the host-bound cognition request",
+            false,
+        ));
+    }
+    if response.response_digest
+        != h_v1(
+            COGNITION_RESPONSE_DIGEST_DOMAIN,
+            &response.base_decision_response,
+        )
+    {
+        return Err(DecisionProviderError::new(
+            "response_digest_mismatch",
+            "provider response digest does not match its content",
+            false,
+        ));
+    }
+    let artifact_identity = response.response_artifact_identity();
+    response
+        .validate_response_artifact_identity(&artifact_identity)
+        .map_err(|error| DecisionProviderError::new(error.code(), error.message(), false))?;
+    Ok(())
+}
+
+fn validate_request_context_pair(
+    request: &DecisionRequest,
+    turn_context: &ContinuousAgentTurnContextV1,
+    request_context: &ContinuousAgentRequestContextV1,
+) -> Result<(), DecisionProviderError> {
+    request_context
+        .validate_production_lane()
+        .map_err(|error| DecisionProviderError::new(error.code(), error.message(), false))?;
+    turn_context
+        .validate_for_agent(&request_context.agent_subject)
+        .map_err(|error| DecisionProviderError::new(error.code(), error.message(), false))?;
+    if request_context.base_decision_request != *request
+        || request_context.agent_session_id != turn_context.agent_session_id
+        || request_context.agent_turn_id != turn_context.agent_turn_id
+        || request_context.decision_request_id != turn_context.decision_request_id
+        || request_context.request_digest != turn_context.request_digest
+        || request.observation.agent_id != request_context.agent_subject
+    {
+        return Err(DecisionProviderError::new(
+            "request_context_identity_mismatch",
+            "outer request, reduced context, and provider request are not the same turn",
+            false,
+        ));
+    }
+    Ok(())
+}
+
+fn validate_continuous_request_response_lineage(
+    response: &ContinuousAgentResponseContextV1,
+    request_context: &ContinuousAgentRequestContextV1,
+    agent_id: &str,
+) -> Result<(), DecisionProviderError> {
+    if response.context_discriminator != CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR
+        || response.context_version != CONTINUOUS_AGENT_CONTEXT_VERSION
+        || response.agent_session_id != request_context.agent_session_id
+        || response.agent_turn_id != request_context.agent_turn_id
+        || response.decision_request_id != request_context.decision_request_id
+        || response.retry_seq != request_context.retry_seq
+        || response.transport_attempt != request_context.transport_attempt
+        || response.request_digest != request_context.request_digest
+    {
+        return Err(DecisionProviderError::new(
+            "response_identity_mismatch",
+            "provider response does not preserve the complete outer request lineage",
+            false,
+        ));
+    }
+    if response.response_digest
+        != h_v1(
+            COGNITION_RESPONSE_DIGEST_DOMAIN,
+            &response.base_decision_response,
+        )
+    {
+        return Err(DecisionProviderError::new(
+            "response_digest_mismatch",
+            "provider response digest does not match its content",
+            false,
+        ));
+    }
+    if request_context.agent_subject != agent_id {
+        return Err(DecisionProviderError::new(
+            "agent_identity_mismatch",
+            "provider response request subject does not match actor",
+            false,
+        ));
+    }
+    Ok(())
 }
 
 pub struct ProviderBackedAgentBehavior<P: DecisionProvider> {
@@ -441,6 +634,11 @@ pub struct ProviderBackedAgentBehavior<P: DecisionProvider> {
     memory_summary: Option<String>,
     recent_event_summary: VecDeque<String>,
     pending_trace: Option<AgentDecisionTrace>,
+    continuous_turn_context: Option<ContinuousAgentTurnContextV1>,
+    continuous_request_context: Option<ContinuousAgentRequestContextV1>,
+    require_continuous_request_context: bool,
+    pending_response_context: Option<ContinuousAgentResponseContextV1>,
+    pending_memory_write_intents: Vec<MemoryWriteIntent>,
 }
 
 impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
@@ -469,11 +667,39 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
             memory_summary: None,
             recent_event_summary: VecDeque::new(),
             pending_trace: None,
+            continuous_turn_context: None,
+            continuous_request_context: None,
+            require_continuous_request_context: true,
+            pending_response_context: None,
+            pending_memory_write_intents: Vec::new(),
         }
     }
 
     pub fn with_provider_config_ref(mut self, provider_config_ref: impl Into<String>) -> Self {
         self.provider_config_ref = Some(provider_config_ref.into());
+        self
+    }
+
+    /// Explicit compatibility-only constructor for reduced `/decision` and
+    /// `/feedback` adapters. Production callers use the target outer-context
+    /// lane by default and must provide a complete request context.
+    pub fn new_legacy_compatibility(
+        agent_id: impl Into<String>,
+        provider: P,
+        action_catalog: Vec<ActionCatalogEntry>,
+    ) -> Self {
+        Self::new(agent_id, provider, action_catalog).legacy_compatibility()
+    }
+
+    /// Mark this behavior as an explicit legacy compatibility fixture.
+    pub fn legacy_compatibility(mut self) -> Self {
+        self.require_continuous_request_context = false;
+        self
+    }
+
+    /// Reassert the production outer-context lane after configuration.
+    pub fn require_continuous_request_context(mut self) -> Self {
+        self.require_continuous_request_context = true;
         self
     }
 
@@ -622,83 +848,8 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
         })
     }
 
-    fn build_request(&self, observation: &Observation) -> DecisionRequest {
-        let memory_summary = self.composed_memory_summary();
-        DecisionRequest {
-            observation: ObservationEnvelope {
-                agent_id: self.agent_id.clone(),
-                world_time: observation.time,
-                mode: self.execution_mode,
-                observation_schema_version: self.observation_schema_version.clone(),
-                action_schema_version: self.action_schema_version.clone(),
-                environment_class: self.environment_class.clone(),
-                fallback_reason: self.fallback_reason.clone(),
-                observation: provider_observation_from_runtime_observation(
-                    self.execution_mode,
-                    observation,
-                    memory_summary.as_deref(),
-                    &self
-                        .recent_event_summary
-                        .iter()
-                        .cloned()
-                        .collect::<Vec<_>>(),
-                    &self.action_catalog,
-                ),
-                recent_event_summary: self.recent_event_summary.iter().cloned().collect(),
-                memory_summary: memory_summary.clone(),
-                action_catalog: self.action_catalog.clone(),
-                module_command_catalog: self.module_command_catalog.clone(),
-                timeout_budget_ms: self.timeout_budget_ms,
-            },
-            provider_config_ref: self.provider_config_ref.clone(),
-            agent_profile: self.agent_profile.clone(),
-            fixture_id: self.fixture_id.clone(),
-            replay_id: self.replay_id.clone(),
-            capability_catalog: self
-                .capability_context
-                .as_ref()
-                .map(|context| context.catalog.clone()),
-            capability_invocation_context: self
-                .capability_context
-                .as_ref()
-                .map(|context| context.invocation.clone()),
-            timeout_budget_ms: self.timeout_budget_ms,
-        }
-    }
-
     fn provider_error_to_trace(error: &DecisionProviderError) -> AgentDecisionTrace {
-        let mut llm_output = json!({
-            "provider_error": {
-                "code": error.code,
-                "message": error.message,
-                "retryable": error.retryable,
-            },
-        });
-        if let Some(upstream_trace) = error.upstream_trace.as_ref() {
-            llm_output["upstream_trace"] = upstream_trace.clone();
-        }
-        AgentDecisionTrace {
-            agent_id: String::new(),
-            time: 0,
-            decision: AgentDecision::Wait,
-            llm_input: None,
-            llm_output: Some(llm_output.to_string()),
-            llm_error: Some(error.as_trace_message()),
-            parse_error: None,
-            llm_diagnostics: Some(LlmDecisionDiagnostics {
-                model: None,
-                latency_ms: None,
-                prompt_tokens: None,
-                completion_tokens: None,
-                total_tokens: None,
-                retry_count: 0,
-            }),
-            llm_effect_intents: vec![],
-            llm_effect_receipts: vec![],
-            llm_step_trace: vec![],
-            llm_prompt_section_trace: vec![],
-            llm_chat_messages: vec![],
-        }
+        decision_provider_trace::provider_error_to_trace(error)
     }
 
     fn response_to_trace(
@@ -706,90 +857,21 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
         observation: &Observation,
         request: &DecisionRequest,
         response: &DecisionResponse,
+        outer_response: Option<&ContinuousAgentResponseContextV1>,
         decision: &AgentDecision,
         parse_error: Option<String>,
         provider_error: Option<String>,
     ) -> AgentDecisionTrace {
-        let input_summary = response
-            .trace_payload
-            .input_summary
-            .clone()
-            .or_else(|| serde_json::to_string(request).ok());
-        let output_summary = response
-            .trace_payload
-            .output_summary
-            .clone()
-            .or_else(|| serde_json::to_string(response).ok());
-        let transcript = response
-            .trace_payload
-            .transcript
-            .iter()
-            .map(|entry| LlmChatMessageTrace {
-                time: observation.time,
-                agent_id: self.agent_id.clone(),
-                role: match entry.role.as_str() {
-                    "player" => LlmChatRole::Player,
-                    "tool" => LlmChatRole::Tool,
-                    "system" => LlmChatRole::System,
-                    _ => LlmChatRole::Agent,
-                },
-                content: entry.content.clone(),
-            })
-            .collect();
-        let step_trace = response
-            .trace_payload
-            .tool_trace
-            .iter()
-            .enumerate()
-            .map(|(index, summary)| LlmStepTrace {
-                step_index: index,
-                step_type: "provider_tool_trace".to_string(),
-                input_summary: summary.clone(),
-                output_summary: summary.clone(),
-                status: "ok".to_string(),
-            })
-            .collect();
-        AgentDecisionTrace {
-            agent_id: self.agent_id.clone(),
-            time: observation.time,
-            decision: decision.clone(),
-            llm_input: input_summary,
-            llm_output: output_summary,
-            llm_error: provider_error,
+        decision_provider_trace::response_to_trace(
+            &self.agent_id,
+            observation,
+            request,
+            response,
+            outer_response,
+            decision,
             parse_error,
-            llm_diagnostics: Some(LlmDecisionDiagnostics {
-                model: response
-                    .diagnostics
-                    .provider_id
-                    .clone()
-                    .or_else(|| response.trace_payload.provider_id.clone()),
-                latency_ms: response
-                    .diagnostics
-                    .latency_ms
-                    .or(response.trace_payload.latency_ms),
-                prompt_tokens: response
-                    .trace_payload
-                    .token_usage
-                    .as_ref()
-                    .and_then(|usage| usage.prompt_tokens),
-                completion_tokens: response
-                    .trace_payload
-                    .token_usage
-                    .as_ref()
-                    .and_then(|usage| usage.completion_tokens),
-                total_tokens: response
-                    .trace_payload
-                    .token_usage
-                    .as_ref()
-                    .and_then(|usage| usage.total_tokens),
-                retry_count: response.diagnostics.retry_count,
-            }),
-            llm_effect_intents: vec![],
-            llm_effect_receipts: vec![],
-            llm_step_trace: step_trace,
-            llm_prompt_section_trace: Vec::<LlmPromptSectionTrace>::new(),
-            llm_chat_messages: transcript,
-        }
+            provider_error,
+        )
     }
 
     fn feedback_from_action_result(result: &ActionResult) -> FeedbackEnvelope {
@@ -806,238 +888,113 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
     }
 }
 
-fn provider_observation_from_runtime_observation(
-    mode: ProviderExecutionMode,
-    observation: &Observation,
-    memory_summary: Option<&str>,
-    recent_event_summary: &[String],
-    action_catalog: &[ActionCatalogEntry],
-) -> ProviderObservation {
-    let mut sorted_visible_locations = observation.visible_locations.clone();
-    sorted_visible_locations.sort_by(|left, right| {
-        left.distance_cm
-            .cmp(&right.distance_cm)
-            .then_with(|| left.location_id.cmp(&right.location_id))
-    });
-    let mut sorted_visible_agents = observation.visible_agents.clone();
-    sorted_visible_agents.sort_by(|left, right| {
-        left.distance_cm
-            .cmp(&right.distance_cm)
-            .then_with(|| left.agent_id.cmp(&right.agent_id))
-    });
-    let current_location_ref = current_location_ref(observation)
-        .unwrap_or_else(|| format!("agent:{}:position", observation.agent_id));
-    let move_available = action_catalog
-        .iter()
-        .any(|entry| entry.action_ref == "move_agent");
-    let inspect_available = action_catalog
-        .iter()
-        .any(|entry| entry.action_ref == "inspect_target");
-    let speak_available = action_catalog
-        .iter()
-        .any(|entry| entry.action_ref == "speak_to_nearby");
-
-    let mut nearby_entities = sorted_visible_locations
-        .iter()
-        .enumerate()
-        .map(|(index, location)| {
-            let relation = if location.distance_cm == 0 {
-                "current_location"
-            } else {
-                "reachable_location"
-            };
-            let relative_hint = match mode {
-                ProviderExecutionMode::PlayerParity => {
-                    if location.distance_cm == 0 {
-                        "current visible location".to_string()
-                    } else if index == 1 {
-                        "nearest visible reachable location".to_string()
-                    } else {
-                        "visible reachable location".to_string()
-                    }
-                }
-                ProviderExecutionMode::HeadlessAgent => {
-                    format!(
-                        "reachable location distance_cm={}",
-                        location.distance_cm.max(0)
-                    )
-                }
-            };
-            ProviderNearbyEntity {
-                entity_ref: location.location_id.clone(),
-                kind: "location".to_string(),
-                relation: relation.to_string(),
-                relative_hint,
-                interaction_hint: if location.distance_cm > 0 && move_available {
-                    Some("move_agent".to_string())
-                } else {
-                    None
-                },
-            }
-        })
-        .collect::<Vec<_>>();
-    nearby_entities.extend(
-        sorted_visible_agents
-            .iter()
-            .map(|agent| ProviderNearbyEntity {
-                entity_ref: agent.agent_id.clone(),
-                kind: "agent".to_string(),
-                relation: "nearby_agent".to_string(),
-                relative_hint: match mode {
-                    ProviderExecutionMode::PlayerParity => "nearby visible agent".to_string(),
-                    ProviderExecutionMode::HeadlessAgent => {
-                        format!("nearby agent distance_cm={}", agent.distance_cm.max(0))
-                    }
-                },
-                interaction_hint: if speak_available {
-                    Some("speak_to_nearby".to_string())
-                } else if inspect_available {
-                    Some("inspect_target".to_string())
-                } else {
-                    None
-                },
-            }),
-    );
-
-    let recent_events = recent_event_summary
-        .iter()
-        .rev()
-        .enumerate()
-        .map(|(index, summary)| ProviderRecentEvent {
-            event_ref: format!("recent_event_{index}"),
-            kind: "event_summary".to_string(),
-            summary: summary.clone(),
-            age_ticks: index as u64,
-        })
-        .collect::<Vec<_>>();
-
-    let local_navigation_graph = if matches!(mode, ProviderExecutionMode::HeadlessAgent) {
-        sorted_visible_locations
-            .iter()
-            .map(|location| ProviderNavigationNode {
-                node_ref: location.location_id.clone(),
-                relation: if location.distance_cm == 0 {
-                    "current_location".to_string()
-                } else {
-                    "reachable_location".to_string()
-                },
-                relative_hint: format!(
-                    "distance_cm={} visible_name={}",
-                    location.distance_cm.max(0),
-                    location.name
-                ),
-                traversable: location.distance_cm >= 0,
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
-
-    let interaction_targets =
-        if matches!(mode, ProviderExecutionMode::HeadlessAgent) {
-            let mut targets = Vec::new();
-            if move_available {
-                targets.extend(
-                    sorted_visible_locations
-                        .iter()
-                        .filter(|location| location.distance_cm > 0)
-                        .map(|location| ProviderInteractionTarget {
-                            target_ref: location.location_id.clone(),
-                            target_kind: "location".to_string(),
-                            interaction_hint: "move_agent".to_string(),
-                        }),
-                );
-            }
-            if inspect_available {
-                targets.extend(sorted_visible_agents.iter().map(|agent| {
-                    ProviderInteractionTarget {
-                        target_ref: agent.agent_id.clone(),
-                        target_kind: "agent".to_string(),
-                        interaction_hint: "inspect_target".to_string(),
-                    }
-                }));
-            }
-            targets
-        } else {
-            Vec::new()
-        };
-
-    ProviderObservation {
-        self_state: ProviderSelfState {
-            location_ref: current_location_ref.clone(),
-            pose_hint: match mode {
-                ProviderExecutionMode::PlayerParity => {
-                    format!("player_visible_pose@{current_location_ref}")
-                }
-                ProviderExecutionMode::HeadlessAgent => format!(
-                    "grid_pose=({}, {}, {}) visibility_range_cm={}",
-                    observation.pos.x_cm,
-                    observation.pos.y_cm,
-                    observation.pos.z_cm,
-                    observation.visibility_range_cm
-                ),
-            },
-            status_flags: Vec::new(),
-            resource_summary: observation
-                .self_resources
-                .amounts
-                .iter()
-                .map(|(kind, amount)| (format!("{kind:?}"), *amount))
-                .collect(),
-        },
-        mission_context: ProviderMissionContext {
-            goal_summary: memory_summary
-                .map(str::to_string)
-                .unwrap_or_else(|| match mode {
-                    ProviderExecutionMode::PlayerParity => {
-                        "preserve player-visible forward progress".to_string()
-                    }
-                    ProviderExecutionMode::HeadlessAgent => {
-                        "preserve deterministic local progress with structured hints".to_string()
-                    }
-                }),
-            blocked_reason: None,
-        },
-        nearby_entities,
-        recent_events,
-        local_navigation_graph,
-        hazard_summary: Vec::new(),
-        interaction_targets,
-    }
-}
-
-fn current_location_ref(observation: &Observation) -> Option<String> {
-    observation
-        .visible_locations
-        .iter()
-        .find(|location| location.distance_cm == 0)
-        .or_else(|| {
-            observation
-                .visible_locations
-                .iter()
-                .min_by_key(|location| location.distance_cm)
-        })
-        .map(|location| location.location_id.clone())
-}
-
 impl<P: DecisionProvider> AgentBehavior for ProviderBackedAgentBehavior<P> {
     fn agent_id(&self) -> &str {
         self.agent_id.as_str()
     }
 
     fn decide(&mut self, observation: &Observation) -> AgentDecision {
-        let request = self.build_request(observation);
+        self.pending_memory_write_intents.clear();
+        self.pending_response_context = None;
+        if self.require_continuous_request_context && self.continuous_request_context.is_none() {
+            let mut trace = Self::provider_error_to_trace(&DecisionProviderError::new(
+                "continuous_context_required",
+                "production ProviderBacked turns require the complete outer V1 context",
+                false,
+            ));
+            trace.agent_id = self.agent_id.clone();
+            trace.time = observation.time;
+            self.pending_trace = Some(trace);
+            return AgentDecision::Wait;
+        }
+        let request = self
+            .continuous_request_context
+            .as_ref()
+            .map(|context| context.base_decision_request.clone())
+            .unwrap_or_else(|| self.build_request(observation));
         let started_at = Instant::now();
-        let response = match self.provider.decide(&request) {
-            Ok(response) => response,
-            Err(error) => {
+        let mut outer_response = None;
+        let response = if let (Some(turn_context), Some(request_context)) = (
+            self.continuous_turn_context.as_ref(),
+            self.continuous_request_context.as_ref(),
+        ) {
+            let response = self.provider.decide_with_continuous_request_context(
+                &request,
+                turn_context,
+                request_context,
+            );
+            let response = match response {
+                Ok(response) => response,
+                Err(error) => {
+                    let mut trace = Self::provider_error_to_trace(&error);
+                    trace.agent_id = self.agent_id.clone();
+                    trace.time = observation.time;
+                    self.pending_trace = Some(trace);
+                    return AgentDecision::Wait;
+                }
+            };
+            if let Err(error) = validate_continuous_request_response_lineage(
+                &response,
+                request_context,
+                &self.agent_id,
+            ) {
                 let mut trace = Self::provider_error_to_trace(&error);
                 trace.agent_id = self.agent_id.clone();
                 trace.time = observation.time;
                 self.pending_trace = Some(trace);
                 return AgentDecision::Wait;
             }
+            let inner_response = response.base_decision_response.clone();
+            self.pending_response_context = Some(response.clone());
+            outer_response = Some(response);
+            inner_response
+        } else if let Some(context) = self.continuous_turn_context.as_ref() {
+            let response = match context.validate_for_agent(&self.agent_id) {
+                Ok(()) => self
+                    .provider
+                    .decide_with_continuous_context(&request, context),
+                Err(error) => Err(DecisionProviderError::new(
+                    error.code(),
+                    error.message(),
+                    false,
+                )),
+            };
+            let response = match response {
+                Ok(response) => response,
+                Err(error) => {
+                    let mut trace = Self::provider_error_to_trace(&error);
+                    trace.agent_id = self.agent_id.clone();
+                    trace.time = observation.time;
+                    self.pending_trace = Some(trace);
+                    return AgentDecision::Wait;
+                }
+            };
+            if let Err(error) =
+                validate_continuous_response_lineage(&response, context, &self.agent_id)
+            {
+                let mut trace = Self::provider_error_to_trace(&error);
+                trace.agent_id = self.agent_id.clone();
+                trace.time = observation.time;
+                self.pending_trace = Some(trace);
+                return AgentDecision::Wait;
+            }
+            let inner_response = response.base_decision_response.clone();
+            self.pending_response_context = Some(response.clone());
+            outer_response = Some(response);
+            inner_response
+        } else {
+            match self.provider.decide(&request) {
+                Ok(response) => response,
+                Err(error) => {
+                    let mut trace = Self::provider_error_to_trace(&error);
+                    trace.agent_id = self.agent_id.clone();
+                    trace.time = observation.time;
+                    self.pending_trace = Some(trace);
+                    return AgentDecision::Wait;
+                }
+            }
         };
+        self.pending_memory_write_intents = response.memory_write_intents.clone();
         let latency_ms = started_at.elapsed().as_millis() as u64;
         let mut provider_error = response
             .provider_error
@@ -1156,6 +1113,7 @@ impl<P: DecisionProvider> AgentBehavior for ProviderBackedAgentBehavior<P> {
             observation,
             &request,
             &response,
+            outer_response.as_ref(),
             &decision,
             parse_error,
             provider_error,
@@ -1189,5 +1147,24 @@ impl<P: DecisionProvider> AgentBehavior for ProviderBackedAgentBehavior<P> {
 
     fn take_decision_trace(&mut self) -> Option<AgentDecisionTrace> {
         self.pending_trace.take()
+    }
+
+    fn set_continuous_turn_context(&mut self, context: Option<&ContinuousAgentTurnContextV1>) {
+        self.continuous_turn_context = context.cloned();
+    }
+
+    fn set_continuous_request_context(
+        &mut self,
+        context: Option<&ContinuousAgentRequestContextV1>,
+    ) {
+        self.continuous_request_context = context.cloned();
+    }
+
+    fn take_continuous_response_context(&mut self) -> Option<ContinuousAgentResponseContextV1> {
+        self.pending_response_context.take()
+    }
+
+    fn take_memory_write_intents(&mut self) -> Vec<MemoryWriteIntent> {
+        std::mem::take(&mut self.pending_memory_write_intents)
     }
 }

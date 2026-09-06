@@ -355,7 +355,15 @@ fn send_letai_chat_completion(
         "stream": config.stream,
         "max_tokens": config.max_output_tokens,
         "user": format!("oasis7-provider:{}", invocation.agent_id),
+        "idempotency_key": invocation.idempotency_key,
+        "session_key": invocation.session_key,
     });
+    if let Some(provider_invocation_key) = invocation.provider_invocation_key.as_deref() {
+        body["provider_invocation_key"] = json!(provider_invocation_key);
+    }
+    if let Some(agent_session_id) = invocation.agent_session_id.as_deref() {
+        body["agent_session_id"] = json!(agent_session_id);
+    }
     if config.response_format_json_object {
         body["response_format"] = json!({"type": "json_object"});
     }
@@ -384,8 +392,22 @@ fn send_letai_chat_completion(
         .header("Content-Type", "application/json")
         .header("User-Agent", config.user_agent.as_str());
     for (name, value) in &config.extra_headers {
+        if is_reserved_identity_header(name.as_str()) {
+            continue;
+        }
         response = response.header(name.as_str(), value.as_str());
     }
+    response = response.header("Idempotency-Key", invocation.idempotency_key.as_str());
+    if let Some(provider_invocation_key) = invocation.provider_invocation_key.as_deref() {
+        response = response.header("X-Oasis7-Provider-Invocation-Key", provider_invocation_key);
+    }
+    if let Some(agent_session_id) = invocation.agent_session_id.as_deref() {
+        response = response.header("X-Oasis7-Agent-Session-Id", agent_session_id);
+    }
+    response = response.header(
+        "X-Oasis7-Provider-Session-Key",
+        invocation.session_key.as_str(),
+    );
     let mut response = response
         .json(&body)
         .send()
@@ -413,6 +435,18 @@ fn send_letai_chat_completion(
     result.duration_ms = started.elapsed().as_millis() as u64;
     Ok(result)
 }
+
+fn is_reserved_identity_header(name: &str) -> bool {
+    [
+        "idempotency-key",
+        "x-oasis7-provider-invocation-key",
+        "x-oasis7-agent-session-id",
+        "x-oasis7-provider-session-key",
+    ]
+    .iter()
+    .any(|reserved| name.eq_ignore_ascii_case(reserved))
+}
+
 pub(super) fn decode_letai_completion_payload(
     payload: &str,
     status_code: Option<u16>,
@@ -988,4 +1022,150 @@ pub(super) fn error_diagnostics_json(error: &str) -> Value {
         return Value::Null;
     };
     serde_json::from_str::<Value>(diagnostics.trim()).unwrap_or(Value::Null)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::AgentInvocation;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::{Arc, Mutex};
+    use std::thread;
+
+    fn invocation() -> AgentInvocation {
+        AgentInvocation {
+            provider_cli_bin: "provider-cli".to_string(),
+            agent_id: "main".to_string(),
+            thinking: "off".to_string(),
+            session_key: "agent:main:subagent:world-simulator:continuous:agent-1:session-1"
+                .to_string(),
+            timeout_seconds: 5,
+            prompt: "{\"decision\":\"wait\"}".to_string(),
+            idempotency_key:
+                "blake3:1111111111111111111111111111111111111111111111111111111111111111"
+                    .to_string(),
+            provider_invocation_key: Some(
+                "blake3:2222222222222222222222222222222222222222222222222222222222222222"
+                    .to_string(),
+            ),
+            agent_session_id: Some("session-1".to_string()),
+            chat_request_key: None,
+            route_label: None,
+        }
+    }
+
+    #[test]
+    fn direct_letai_retries_preserve_outer_identity_in_body_and_headers() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock LetAI server");
+        let base_url = format!("http://{}", listener.local_addr().expect("server address"));
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let request_sink = Arc::clone(&requests);
+        let server = thread::spawn(move || {
+            for status in [503, 200] {
+                let (mut stream, _) = listener.accept().expect("accept LetAI request");
+                let mut request = Vec::new();
+                let mut buffer = [0_u8; 8192];
+                let bytes = stream.read(&mut buffer).expect("read LetAI request");
+                request.extend_from_slice(&buffer[..bytes]);
+                request_sink
+                    .lock()
+                    .expect("request sink lock")
+                    .push(String::from_utf8(request).expect("request utf8"));
+                let body = if status == 200 {
+                    r#"{"model":"test-model","choices":[{"message":{"content":"{\"decision\":\"wait\"}"}}]}"#
+                } else {
+                    "temporary upstream failure"
+                };
+                let response = format!(
+                    "HTTP/1.1 {status} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                stream
+                    .write_all(response.as_bytes())
+                    .expect("write LetAI response");
+            }
+        });
+        let config = LetaiChatConfig {
+            base_url,
+            api_key: "test-key".to_string(),
+            model: "test-model".to_string(),
+            system_prompt: None,
+            max_output_tokens: 32,
+            temperature: 0.0,
+            stream: false,
+            response_format_json_object: false,
+            user_agent: "test-agent".to_string(),
+            extra_headers: vec![
+                (
+                    "Idempotency-Key".to_string(),
+                    "wrong-idempotency".to_string(),
+                ),
+                (
+                    "X-Oasis7-Provider-Invocation-Key".to_string(),
+                    "wrong-provider-key".to_string(),
+                ),
+                (
+                    "X-Oasis7-Agent-Session-Id".to_string(),
+                    "wrong-session".to_string(),
+                ),
+                (
+                    "X-Oasis7-Provider-Session-Key".to_string(),
+                    "wrong-session-key".to_string(),
+                ),
+            ],
+            retry_count: 2,
+            retry_delay_ms: 0,
+            auto_topup_usd: None,
+            platform_base_url: "http://127.0.0.1:1".to_string(),
+            platform_key: None,
+            platform_user_id: None,
+            platform_project_id: None,
+            auto_topup_retry_count: 1,
+            auto_topup_retry_delay_ms: 0,
+        };
+        let expected = invocation();
+        let result = send_letai_chat_completion_with_retries(&config, &expected)
+            .expect("retry should succeed");
+        server.join().expect("LetAI server thread");
+        assert_eq!(result.content, r#"{"decision":"wait"}"#);
+        let requests = requests.lock().expect("request sink lock");
+        assert_eq!(requests.len(), 2);
+        for request in requests.iter() {
+            let body = request.split("\r\n\r\n").nth(1).expect("request body");
+            let body: Value = serde_json::from_str(body).expect("request JSON");
+            assert_eq!(
+                body["provider_invocation_key"],
+                expected.provider_invocation_key.as_deref().unwrap()
+            );
+            assert_eq!(
+                body["agent_session_id"],
+                expected.agent_session_id.as_deref().unwrap()
+            );
+            assert_eq!(body["idempotency_key"], expected.idempotency_key);
+            assert_eq!(body["session_key"], expected.session_key);
+            let request_lower = request.to_ascii_lowercase();
+            assert!(request_lower.contains("idempotency-key: "));
+            assert!(request_lower.contains("x-oasis7-provider-invocation-key: "));
+            assert!(request_lower.contains("x-oasis7-agent-session-id: session-1"));
+            assert!(request_lower.contains("x-oasis7-provider-session-key: agent:main:subagent"));
+            assert_eq!(request_lower.matches("idempotency-key: ").count(), 1);
+            assert_eq!(
+                request_lower
+                    .matches("x-oasis7-provider-invocation-key: ")
+                    .count(),
+                1
+            );
+            assert_eq!(
+                request_lower.matches("x-oasis7-agent-session-id: ").count(),
+                1
+            );
+            assert_eq!(
+                request_lower
+                    .matches("x-oasis7-provider-session-key: ")
+                    .count(),
+                1
+            );
+        }
+    }
 }

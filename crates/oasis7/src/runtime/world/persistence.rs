@@ -28,7 +28,6 @@ mod persistence_tail;
 use self::persistence_support::{
     distfs_world_id, now_unix_ms, persist_sidecar_generation_index, write_distfs_recovery_audit,
 };
-
 const JOURNAL_FILE: &str = "journal.json";
 const SNAPSHOT_FILE: &str = "snapshot.json";
 const DISTFS_STATE_DIR: &str = ".distfs-state";
@@ -52,7 +51,6 @@ const SIDECAR_GENERATION_KEEP_LATEST: usize = 2;
 const SIDECAR_GENERATION_SNAPSHOT_MANIFEST_FILE: &str = "snapshot.manifest.json";
 const SIDECAR_GENERATION_JOURNAL_SEGMENTS_FILE: &str = "journal.segments.json";
 const SIDECAR_GENERATION_RECOVERY_METADATA_FILE: &str = "viewer-recovery.bin";
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct SidecarGcResult {
     status: String,
@@ -62,7 +60,6 @@ struct SidecarGcResult {
     error: Option<String>,
     updated_at_ms: i64,
 }
-
 impl SidecarGcResult {
     fn not_run() -> Self {
         Self {
@@ -685,7 +682,6 @@ impl World {
     // ---------------------------------------------------------------------
     // Persistence
     // ---------------------------------------------------------------------
-
     pub fn snapshot(&self) -> Snapshot {
         let manifest_hash = super::super::util::hash_json(&self.manifest).unwrap_or_default();
         let mut snapshot = self.snapshot_with_chain_resource_context(
@@ -709,7 +705,6 @@ impl World {
         }
         snapshot
     }
-
     pub fn snapshot_with_chain_resource_context(
         &self,
         chain_resource_context: super::super::ChainResourceDerivationContext<'_>,
@@ -738,6 +733,7 @@ impl World {
         Snapshot {
             snapshot_catalog: self.snapshot_catalog.clone(),
             manifest: self.manifest.clone(),
+            cognition: self.cognition.clone(),
             chain_resource_manifest,
             latest_chain_resource_delta,
             module_registry: self.module_registry.clone(),
@@ -817,7 +813,9 @@ impl World {
         let dir = dir.as_ref();
         fs::create_dir_all(dir)?;
         let snapshot = self.snapshot();
-        self.persist_snapshot_files_to_dir(dir, snapshot)
+        self.persist_snapshot_files_to_dir(dir, snapshot)?;
+        self.attach_persistence_dir(dir);
+        Ok(())
     }
 
     pub fn save_to_dir_with_chain_resource_context(
@@ -834,7 +832,9 @@ impl World {
             world_config_hash,
             generation_algorithm_hash,
         );
-        self.persist_snapshot_files_to_dir(dir, snapshot)
+        self.persist_snapshot_files_to_dir(dir, snapshot)?;
+        self.attach_persistence_dir(dir);
+        Ok(())
     }
 
     fn persist_snapshot_files_to_dir(
@@ -859,6 +859,10 @@ impl World {
         self.save_distfs_sidecar(dir, &persisted_snapshot, archive_bytes.as_deref(), None)?;
         self.save_module_store_to_dir(dir)?;
         Ok(())
+    }
+
+    fn attach_persistence_dir(&self, dir: &Path) {
+        *self.persistence_dir.borrow_mut() = Some(dir.to_path_buf());
     }
 
     pub fn save_to_dir_with_modules(&self, dir: impl AsRef<Path>) -> Result<(), WorldError> {
@@ -896,14 +900,16 @@ impl World {
                 );
                 let journal = Journal::load_json(dir.join(JOURNAL_FILE))?;
                 hydrate_tick_consensus_snapshot_from_archive(dir, &mut json_snapshot)?;
-                let mut world = Self::from_snapshot(json_snapshot, journal)?;
+                let world = Self::from_snapshot(json_snapshot, journal)?;
+                let mut world = Self::recover_loaded_runtime_world(world, dir)?;
                 world.load_module_store_from_dir(dir)?;
                 return Ok(world);
             }
             if !has_indexed_generation {
                 hydrate_tick_consensus_snapshot_from_archive(dir, &mut snapshot)?;
             }
-            let mut world = Self::from_snapshot(snapshot, journal)?;
+            let world = Self::from_snapshot(snapshot, journal)?;
+            let mut world = Self::recover_loaded_runtime_world(world, dir)?;
             if has_indexed_generation {
                 world.load_selected_generation_module_artifacts_from_dir(dir)?;
             } else {
@@ -916,7 +922,8 @@ impl World {
         let journal = Journal::load_json(journal_path)?;
         let mut snapshot = Snapshot::load_json(snapshot_path)?;
         hydrate_tick_consensus_snapshot_from_archive(dir, &mut snapshot)?;
-        let mut world = Self::from_snapshot(snapshot, journal)?;
+        let world = Self::from_snapshot(snapshot, journal)?;
+        let mut world = Self::recover_loaded_runtime_world(world, dir)?;
         world.load_module_store_from_dir(dir)?;
         Ok(world)
     }
@@ -925,30 +932,14 @@ impl World {
         Self::load_from_dir(dir)
     }
 
-    pub fn load_tick_consensus_records_from_dir(
-        dir: impl AsRef<Path>,
-        tick_from: Option<WorldTime>,
-        tick_to: Option<WorldTime>,
-    ) -> Result<Vec<TickConsensusRecord>, WorldError> {
-        let snapshot = load_persisted_tick_consensus_snapshot_from_dir(dir.as_ref())?;
-        Ok(snapshot
-            .tick_consensus_records
-            .into_iter()
-            .filter(|record| {
-                tick_from
-                    .map(|from_tick| record.block.header.tick >= from_tick)
-                    .unwrap_or(true)
-                    && tick_to
-                        .map(|to_tick| record.block.header.tick <= to_tick)
-                        .unwrap_or(true)
-            })
-            .collect())
-    }
-
-    pub fn verify_tick_consensus_archive_from_dir(dir: impl AsRef<Path>) -> Result<(), WorldError> {
-        let dir = dir.as_ref();
-        let snapshot = load_persisted_tick_consensus_snapshot_from_dir(dir)?;
-        verify_tick_consensus_record_slice(snapshot.tick_consensus_records.as_slice())
+    fn recover_loaded_runtime_world(mut world: Self, dir: &Path) -> Result<Self, WorldError> {
+        world.attach_persistence_dir(dir);
+        let cognition_before = world.cognition.clone();
+        world.recover_cognition()?;
+        if world.cognition != cognition_before {
+            world.persist_runtime_transaction_if_configured()?;
+        }
+        Ok(world)
     }
 
     pub fn load_module_store_from_dir(&mut self, dir: impl AsRef<Path>) -> Result<(), WorldError> {
@@ -1034,6 +1025,7 @@ impl World {
         world.rollback_nonce_outcomes = snapshot.rollback_nonce_outcomes;
         world.journal = journal;
         world.manifest = snapshot.manifest;
+        world.cognition = snapshot.cognition;
         world.module_registry = snapshot.module_registry;
         world.module_artifacts = snapshot.module_artifacts;
         world.module_artifact_bytes = BTreeMap::new();

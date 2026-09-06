@@ -116,6 +116,7 @@ fn provider_backed_agent_behavior_executes_mocked_move_and_records_feedback() {
     );
     let shared_state = provider.shared_state();
     let behavior = ProviderBackedAgentBehavior::new("agent-1", provider, provider_action_catalog())
+        .legacy_compatibility()
         .with_provider_config_ref("mock://provider-loopback-http")
         .with_agent_profile("oasis7_p0_low_freq_npc")
         .with_execution_mode(ProviderExecutionMode::PlayerParity)
@@ -222,7 +223,8 @@ fn provider_backed_agent_behavior_downgrades_provider_error_to_wait() {
             true,
         ))],
     );
-    let behavior = ProviderBackedAgentBehavior::new("agent-1", provider, provider_action_catalog());
+    let behavior = ProviderBackedAgentBehavior::new("agent-1", provider, provider_action_catalog())
+        .legacy_compatibility();
     let mut runner: AgentRunner<ProviderBackedAgentBehavior<MockDecisionProvider>> =
         AgentRunner::new();
     runner.register(behavior);
@@ -270,7 +272,8 @@ fn provider_backed_agent_behavior_rejects_unknown_action_ref() {
         "mock-provider-local-bridge",
         vec![Ok(response)],
     );
-    let behavior = ProviderBackedAgentBehavior::new("agent-1", provider, provider_action_catalog());
+    let behavior = ProviderBackedAgentBehavior::new("agent-1", provider, provider_action_catalog())
+        .legacy_compatibility();
     let mut runner: AgentRunner<ProviderBackedAgentBehavior<MockDecisionProvider>> =
         AgentRunner::new();
     runner.register(behavior);
@@ -298,6 +301,7 @@ fn provider_backed_agent_behavior_builds_mode_differentiated_observation_payload
     let parity_state = parity_provider.shared_state();
     let parity_behavior =
         ProviderBackedAgentBehavior::new("agent-1", parity_provider, provider_action_catalog())
+            .legacy_compatibility()
             .with_execution_mode(ProviderExecutionMode::PlayerParity)
             .with_memory_summary("goal=patrol");
     let mut parity_runner: AgentRunner<ProviderBackedAgentBehavior<MockDecisionProvider>> =
@@ -313,6 +317,7 @@ fn provider_backed_agent_behavior_builds_mode_differentiated_observation_payload
     let headless_state = headless_provider.shared_state();
     let headless_behavior =
         ProviderBackedAgentBehavior::new("agent-1", headless_provider, provider_action_catalog())
+            .legacy_compatibility()
             .with_execution_mode(ProviderExecutionMode::HeadlessAgent)
             .with_memory_summary("goal=patrol");
     let mut headless_runner: AgentRunner<ProviderBackedAgentBehavior<MockDecisionProvider>> =

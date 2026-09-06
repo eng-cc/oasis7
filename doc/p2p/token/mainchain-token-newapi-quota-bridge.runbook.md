@@ -43,6 +43,12 @@
   - 监听地址 `--bind-addr`
   - 自动 reconcile 间隔 `--reconcile-interval-seconds`
   - route TTL `--route-ttl-seconds`
+- target cognition/live gate 输入（仅在执行 target provider smoke/live gate 时需要）
+  - `OASIS7_PROVIDER_LIVE_TARGET_CONTEXT_PAYLOAD_FILE=<private-path>/runtime-issued-context-pairs.json`
+  - 文件必须是 Runtime-issued 的 `decision_context`/`feedback_context` 配对 wrapper artifact；缺失、不可读或自行伪造时，target lane 必须失败关闭。
+- provider-local feedback continuity（可选）
+  - `OASIS7_PROVIDER_FEEDBACK_STATE_PATH=<private-state-dir>/provider-feedback-state.json`
+  - 配置后可跨 provider bridge 进程重启保留有界的 request/feedback lineage；这是 provider-local persistence，不是 Runtime journal/recovery certification，也不构成 release 或 default enablement 证明。
 - 值班 owner
   - `runtime_engineer`
   - `qa_engineer`
@@ -188,6 +194,36 @@ curl -sS -X POST http://127.0.0.1:5852/v1/bridge/bind \
 - remote provider bridge 必须从受控 `bridge-state.json` 自动解析到对应 project `token_key`。
 - 游戏 runtime / launcher 只接收 bearer selector，不接收 raw `token_key`。
 - 完成一次 `play/step`、`agent_chat` 或 provider decision smoke 后，验证 trace 中出现同一用户路径下的 token usage / provider decision 证据。
+
+#### target feedback 的当前桥接边界
+
+`/v1/world-simulator/feedback-context` 是 target lane 的 feedback route，必须与
+`/v1/world-simulator/decision-context` 的同一对 Runtime-issued context 配对。当前
+bridge 只验证已接受 decision response 的 `agent_subject`、session/turn/request id
+和 `request_digest`，只接受 bounded diagnostic feedback：
+
+- `pending` 只能不带 reason，或使用 `recovery_pending`、`retry_scheduled`、
+  `scheduler_backpressure`。
+- `rejected` 必须使用已登记的拒绝 reason；`failed` 必须使用
+  `failed_provider`、`failed_persist`、`cognition_failed` 或
+  `provider_unavailable`。
+- 这些记录仅表示 provider-local diagnostic，不能创建 Runtime authority、committed
+  action、receipt、world projection，也不能据此声称本地/remote 异步恢复或发布就绪。
+
+当前 bridge 没有 Runtime receipt/projection verifier，因此以下输入必须显式失败关闭：
+
+- `status=committed`，或任意 status 携带 `candidate_action_id` / `runtime_receipt_id`：
+  HTTP `409`，`error_code=feedback_disposition_unverifiable`。
+- 携带当前 `FeedbackEnvelopeV1` 未定义的 `projection` 或其他 outer field：HTTP
+  `400`，`error_code=unknown_context_field`；不得把它当成已验证投影。
+- 未见过对应 decision、session/turn 不一致或 digest 不一致：HTTP `409`，分别为
+  `unknown_feedback`、`feedback_correlation_mismatch` 或 `feedback_digest_mismatch`。
+- reason 缺失、超界或不在当前 status allowlist：HTTP `409`，
+  `error_code=feedback_disposition_reason_invalid`。
+
+只有同一 request lineage 的 bounded diagnostic 返回 `{"ok":true}` 才能记为
+feedback accepted；该结果仍不是 Runtime committed receipt。上述错误码应原样写入
+测试报告，不能改写成“反馈已提交”或“动作已执行”。
 
 ### 6.7 全链路测试步骤矩阵
 
@@ -370,9 +406,18 @@ happy path 期望：
 - 本次 `route_id` / `bridge_deposit_id` 对应 ledger row 进入 `manual_review` 并记录 review reason；`manual_review_count` 只作辅助摘要。
 - 后续 operator review 只能显式 `mark_resolved` 或 `close`，不能口头判成功。
 
-#### Step F: provider smoke 与消耗证据
+#### Step F: provider compatibility audit、target smoke 与消耗证据
+
+以下第一条请求使用旧 `DecisionRequest` DTO，只能作为显式的 legacy compatibility-only
+审计，不计入 target readiness 或完整链路通过。它不能证明 Continuous Harness target
+cognition、Runtime receipt 或 production async 闭环。target lane 必须改用
+`/v1/world-simulator/decision-context` 的
+`ContinuousAgentRequestContextV1`，并以 `/v1/world-simulator/feedback-context` 的
+`FeedbackEnvelopeV1` 完成配对验证；当前 HTTP body 不定义 `compatibility_lane` 字段，路由
+本身是 lane 选择依据。
 
 ```bash
+# Explicit legacy compatibility audit only; this route is not target cognition proof.
 curl -sS -X POST "${PROVIDER_BASE_URL}/v1/world-simulator/decision" \
   -H "Authorization: Bearer ${TEST_PROVIDER_AUTH_TOKEN}" \
   -H 'Content-Type: application/json' \
@@ -420,22 +465,37 @@ curl -sS -X POST "${PROVIDER_BASE_URL}/v1/world-simulator/decision" \
 可重复执行的自动化 smoke:
 
 ```bash
+# Required for the target lane; this file must be a Runtime-issued pair artifact.
+# Do not fabricate it. The same variable is consumed by the live-gate wrapper.
+export OASIS7_PROVIDER_LIVE_TARGET_CONTEXT_PAYLOAD_FILE="/secure/path/runtime-issued-context-pairs.json"
+TARGET_CONTEXT_PAYLOAD_FILE="${OASIS7_PROVIDER_LIVE_TARGET_CONTEXT_PAYLOAD_FILE:?set a Runtime-issued target context pair artifact}"
 ./scripts/provider-remote-https/provider-bridge-contract-smoke.sh \
   --base-url "${PROVIDER_BASE_URL}" \
   --auth-token "${TEST_PROVIDER_AUTH_TOKEN}" \
+  --target-context-payload-file "${TARGET_CONTEXT_PAYLOAD_FILE}" \
   --decision-count 1 \
   --min-successes 1
 ```
 
-正式环境/测试环境验收不得只看 mock。需要发现真实 ECS、nginx ingress、LetAI
+正式环境/测试环境验收不得只看 mock 或 legacy compatibility smoke。需要发现真实 ECS、nginx ingress、LetAI
 额度和 state 映射问题时，必须跑 live gate。live gate 会从真实 204/205 ECS
-读取 active `newapi_user_ref:<ref>` selector，不打印 raw `token_key`：
+读取 active `newapi_user_ref:<ref>` selector，不打印 raw `token_key`；target lane 必须使用上面
+的 `OASIS7_PROVIDER_LIVE_TARGET_CONTEXT_PAYLOAD_FILE`，不能用 `--legacy-compatibility-only`
+替代：
 
 ```bash
-./scripts/provider-remote-https/provider-bridge-live-gate.sh --decision-count 1
-./scripts/provider-remote-https/provider-bridge-live-gate.sh --decision-count 1 --loopback-target 204 --skip-public
-./scripts/provider-remote-https/provider-bridge-live-gate.sh --decision-count 1 --loopback-target 205 --skip-public
-./scripts/provider-remote-https/provider-bridge-live-gate.sh --decision-count 1 --skip-loopback
+./scripts/provider-remote-https/provider-bridge-live-gate.sh \
+  --target-context-payload-file "${TARGET_CONTEXT_PAYLOAD_FILE}" \
+  --decision-count 1
+./scripts/provider-remote-https/provider-bridge-live-gate.sh \
+  --target-context-payload-file "${TARGET_CONTEXT_PAYLOAD_FILE}" \
+  --decision-count 1 --loopback-target 204 --skip-public
+./scripts/provider-remote-https/provider-bridge-live-gate.sh \
+  --target-context-payload-file "${TARGET_CONTEXT_PAYLOAD_FILE}" \
+  --decision-count 1 --loopback-target 205 --skip-public
+./scripts/provider-remote-https/provider-bridge-live-gate.sh \
+  --target-context-payload-file "${TARGET_CONTEXT_PAYLOAD_FILE}" \
+  --decision-count 1 --skip-loopback
 ```
 
 CI 默认只运行无副作用 harness 回归；真实环境门禁需显式启用：
@@ -451,6 +511,7 @@ OASIS7_CI_RUN_PROVIDER_LIVE_GATE=true ./scripts/ci-tests.sh --required
 ./scripts/provider-remote-https/provider-bridge-contract-smoke.sh \
   --base-url "${PROVIDER_BASE_URL}" \
   --auth-token "${TEST_PROVIDER_AUTH_TOKEN}" \
+  --target-context-payload-file "${TARGET_CONTEXT_PAYLOAD_FILE}" \
   --decision-count 20 \
   --min-successes 1 \
   --expect-provider-error-code-substr quota
@@ -460,12 +521,14 @@ OASIS7_CI_RUN_PROVIDER_LIVE_GATE=true ./scripts/ci-tests.sh --required
 
 ```bash
 ./scripts/provider-remote-https/provider-bridge-live-gate.sh \
+  --target-context-payload-file "${TARGET_CONTEXT_PAYLOAD_FILE}" \
   --skip-public \
   --loopback-target 204 \
   --lowquota-target 204 \
   --lowquota-decision-count 20
 
 ./scripts/provider-remote-https/provider-bridge-live-gate.sh \
+  --target-context-payload-file "${TARGET_CONTEXT_PAYLOAD_FILE}" \
   --skip-loopback \
   --lowquota-target public205 \
   --lowquota-decision-count 20
@@ -489,6 +552,14 @@ OASIS7_CI_RUN_PROVIDER_LIVE_GATE=true ./scripts/ci-tests.sh --required
 - chain `action_id` / tx id / explorer link，以及实际 `from_account_id`。
 - reconcile response 摘要和本次 route/ledger row 状态。
 - provider smoke response 摘要。
+- `lane`：`target_cognition` 或 `legacy_compatibility_only`。
+- `decision_route`：实际使用的决策路由；target 必须为
+  `/v1/world-simulator/decision-context`，legacy 才能为 `/v1/world-simulator/decision`。
+- `feedback_route`：实际使用的反馈路由；target 必须为
+  `/v1/world-simulator/feedback-context`，legacy compatibility audit 记为 `null` / `not_run`。
+- target feedback 的 HTTP status、`ok`、`feedback_id`/request correlation 摘要及
+  `error_code`（若失败）；禁止把 `feedback_disposition_unverifiable`、
+  `unknown_context_field` 或 correlation error 记为 Runtime receipt。
 - LetAI/NewAPI usage 摘要。
 - 对失败 path，记录 `manual_review` reason 和 operator review resolution。
 
@@ -554,7 +625,16 @@ OASIS7_CI_RUN_PROVIDER_LIVE_GATE=true ./scripts/ci-tests.sh --required
   - 定向测试命令与结果
   - `bridge_deposit_id -> external_order_id -> review_reason/resolution` 证据
 
+provider target evidence 还必须保留 `lane`、`decision_route`、`feedback_route` 三个
+字段。contract smoke 当前输出中的 `decision_path` / `feedback_path` 应在归档报告中
+规范化为上述 route 字段；legacy lane 的 feedback route 不得留空后被解释成 target
+feedback 已通过。
+
 ## 11. 当前缺口
 - richer operator runbook automation 还未脚本化。
 - dashboard / replay / re-credit UI 仍未实现。
 - 当前 runbook 仍默认 operator 手工持有 deployment 输入，不含 secret rotation / KMS / HSM 闭环。
+- `OASIS7_PROVIDER_FEEDBACK_STATE_PATH` 持久化仍是可选的 provider-local continuity；
+  即使配置，也不构成 Runtime journal/recovery、remote recovery、release 或 default
+  enablement 证明。managed/packaged/remote/systemd wiring 延后到另行授权的运维切片，
+  本 runbook 不新增其拓扑或部署要求。

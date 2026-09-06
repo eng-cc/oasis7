@@ -8,7 +8,8 @@
 
 ## 2. 设计结构
 - 场景层：按 `P0 低频单 NPC`、`P1 多轮记忆`、`P2 多 agent 并发` 分层。
-- 指标层：采集完成率、无效动作率、超时率、额外等待时间、trace 完整度、恢复率。
+- 指标层：采集完成率、无效动作率、非法 schema 率、超时率、额外等待时间、trace 完整度、恢复率。
+- 非法 schema 率独立统计 `invalid_action_schema`：sample 级 `illegal_schema_count / decision_steps`，并在聚合 summary 与 `combined.csv` 保留 `illegal_schema_rate` object。门禁为不高于 3% 且不超过 builtin 的 2 倍；计数、分母或 metric object 缺失/不一致时标记 `blocked`，不得按缺失为零。
 - 评分层：组合自动 benchmark 与 QA/producer 主观评分卡。
 - 准入层：基于通过线/阻断线判定 `experimental`、`gated`、`default_ready`。
 - 追溯层：记录 provider 版本、adapter 版本、协议版本与场景结果。

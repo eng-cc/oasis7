@@ -6,7 +6,8 @@ use serde::Serialize;
 use serde_json::json;
 
 use super::{
-    AgentInvoker, DecisionRequest, FeedbackEnvelope, ProviderAgentChatRequest, ProviderState,
+    AgentInvoker, ContinuousAgentRequestContextV1, DecisionRequest, FeedbackEnvelope,
+    FeedbackEnvelopeV1, ProviderAgentChatRequest, ProviderState,
 };
 
 pub(super) fn handle_connection(
@@ -30,11 +31,85 @@ pub(super) fn handle_connection(
             let response = state.handle_decision(decoded, route_label.as_deref(), invoker);
             write_json_response(stream, 200, &response)
         }
+        ("POST", "/v1/world-simulator/decision-context") => {
+            let value: serde_json::Value = match serde_json::from_slice(request.body.as_slice()) {
+                Ok(value) => value,
+                Err(error) => {
+                    return write_json_response(
+                        stream,
+                        400,
+                        &serde_json::json!({
+                            "ok": false,
+                            "error_code": "continuous_context_invalid",
+                            "error": format!("decode continuous decision request failed: {error}"),
+                        }),
+                    );
+                }
+            };
+            if let Err(error) = ContinuousAgentRequestContextV1::validate_value(&value) {
+                return write_json_response(
+                    stream,
+                    400,
+                    &serde_json::json!({
+                        "ok": false,
+                        "error_code": error.code(),
+                        "error": error.message(),
+                    }),
+                );
+            }
+            let decoded: ContinuousAgentRequestContextV1 = match serde_json::from_value(value) {
+                Ok(decoded) => decoded,
+                Err(error) => {
+                    return write_json_response(
+                        stream,
+                        400,
+                        &serde_json::json!({
+                            "ok": false,
+                            "error_code": "continuous_context_invalid",
+                            "error": format!("decode continuous decision request failed: {error}"),
+                        }),
+                    );
+                }
+            };
+            match state.handle_continuous_decision(decoded, route_label.as_deref(), invoker) {
+                Ok(response) => write_json_response(stream, 200, &response),
+                Err(error) => write_json_response(
+                    stream,
+                    400,
+                    &serde_json::json!({"error_code": "continuous_context_invalid", "error": error}),
+                ),
+            }
+        }
         ("POST", "/v1/world-simulator/feedback") => {
             let decoded: FeedbackEnvelope = serde_json::from_slice(request.body.as_slice())
                 .map_err(|err| format!("decode feedback request failed: {err}"))?;
             state.record_feedback(decoded);
             write_json_response(stream, 200, &json!({"ok": true}))
+        }
+        ("POST", "/v1/world-simulator/feedback-context") => {
+            let value: serde_json::Value = serde_json::from_slice(request.body.as_slice())
+                .map_err(|err| format!("decode continuous feedback request failed: {err}"))?;
+            if let Err(error) = FeedbackEnvelopeV1::validate_value(&value) {
+                return write_json_response(
+                    stream,
+                    400,
+                    &serde_json::json!({
+                        "ok": false,
+                        "error_code": error.code(),
+                        "error": error.message(),
+                    }),
+                );
+            }
+            let decoded: FeedbackEnvelopeV1 = serde_json::from_value(value)
+                .map_err(|err| format!("decode continuous feedback request failed: {err}"))?;
+            match state.record_continuous_feedback(decoded) {
+                Ok(()) => write_json_response(stream, 200, &json!({"ok": true})),
+                Err(error_code) => write_json_response(
+                    stream,
+                    409,
+                    &json!({"ok": false, "error_code": error_code}),
+                ),
+            }
         }
         ("POST", "/v1/world-simulator/agent-chat") => {
             let decoded: ProviderAgentChatRequest = serde_json::from_slice(request.body.as_slice())

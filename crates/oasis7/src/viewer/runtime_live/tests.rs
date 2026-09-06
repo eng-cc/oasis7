@@ -15,9 +15,15 @@ mod auth_actions;
 mod auth_actions_collect_data;
 mod auth_actions_feedback;
 mod auth_actions_fragment_replenishment;
+#[path = "tests/auth_actions_provider_context.rs"]
+mod auth_actions_provider_context;
+#[path = "tests/auth_actions_provider_continuation_restart.rs"]
+mod auth_actions_provider_continuation_restart;
 mod authoritative;
 mod background_play;
 mod chain_sync;
+#[path = "tests/provider_continuation_drains.rs"]
+mod provider_continuation_drains;
 pub(super) use chain_sync::TestChainStatusServer;
 mod chain_sync_feedback;
 mod claim_choice;

@@ -6,7 +6,7 @@
 - 适用范围: `Local Provider(Local HTTP)` 首期 `P0` 单低频 NPC parity、mock regression、experimental 试点
 
 ## 1. 定义
-- `oasis7_p0_low_freq_npc` 是当前默认发给 `Local Provider` 的 provider-side 玩法 profile / skill 标识；旧 `oasis7_p0_low_freq_npc` 已移除，不再作为兼容别名保留。
+- `oasis7_p0_low_freq_npc` 是当前默认发给 `Local Provider` 的 provider-side 玩法 profile / skill 标识；旧 `legacy_p0_low_freq_npc` 已移除，不再作为兼容别名保留。
 - provider 收到该标识后，应加载与 `oasis7` 首期 `P0` 低频 NPC 相匹配的系统提示、动作偏好、恢复策略与禁行动作约束。
 - 首期通过 `DecisionRequest.agent_profile` 传输；若 provider 不识别该 profile，必须返回结构化失败，而不是静默退回通用 profile。
 
