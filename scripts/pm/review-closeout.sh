@@ -16,6 +16,8 @@ Options:
   --task-uid <uid>          Bound GitHub-backed task UID
   --review-plan <json>      Immutable oasis7 review plan
   --role-returns <jsonl>    Preflight slice ledger whose artifacts contain completed returns
+  --finding-resolution <json>  Admin-authorized exact-head finding resolution manifest
+  --review-resolution <json>   Alias for --finding-resolution
   --verification <text>     Verification matrix summary (default: derived from immutable plan)
   --residual-risk <text>    Optional additional residual-risk context
   --print-only              Print the packet instead of posting it to the task issue
@@ -49,12 +51,13 @@ if not resolved.is_file():
 print(resolved)
 PY
 }
-TASK_UID="" REVIEW_PLAN="" ROLE_RETURNS="" VERIFICATION="" EXTRA_RISK="" PRINT_ONLY=0 OUTPUT_JSON=0
+TASK_UID="" REVIEW_PLAN="" ROLE_RETURNS="" FINDING_RESOLUTION="" VERIFICATION="" EXTRA_RISK="" PRINT_ONLY=0 OUTPUT_JSON=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --task-uid) TASK_UID="${2:-}"; shift 2 ;;
     --review-plan) REVIEW_PLAN="${2:-}"; shift 2 ;;
     --role-returns) ROLE_RETURNS="${2:-}"; shift 2 ;;
+    --finding-resolution|--review-resolution) FINDING_RESOLUTION="${2:-}"; shift 2 ;;
     --verification) VERIFICATION="${2:-}"; shift 2 ;;
     --residual-risk) EXTRA_RISK="${2:-}"; shift 2 ;;
     --print-only) PRINT_ONLY=1; shift ;;
@@ -66,6 +69,9 @@ done
 [[ -n "$TASK_UID" ]] || die "--task-uid is required"
 REVIEW_PLAN="$(resolve_repo_file "review plan" "$REVIEW_PLAN")" || exit 1
 ROLE_RETURNS="$(resolve_repo_file "role-return ledger" "$ROLE_RETURNS")" || exit 1
+if [[ -n "$FINDING_RESOLUTION" ]]; then
+  FINDING_RESOLUTION="$(resolve_repo_file "finding resolution manifest" "$FINDING_RESOLUTION")" || exit 1
+fi
 
 PLAN_FIELDS="$(python3 - "$ROOT_DIR" "$REVIEW_PLAN" "$TASK_UID" <<'PY'
 import json, pathlib, sys
@@ -86,6 +92,49 @@ FROZEN_HEAD="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '2p')"
 PLAN_EPOCH="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '5p')"
 CURRENT_HEAD="$(git -C "$ROOT_DIR" rev-parse HEAD)" || die "cannot resolve current HEAD"
 [[ "$CURRENT_HEAD" == "$FROZEN_HEAD" ]] || die "review-closeout: frozen HEAD mismatch: expected $FROZEN_HEAD, actual $CURRENT_HEAD"
+
+# Validate every role-return artifact path before any reconcile or collection
+# operation. review-batch-epoch.py historically accepted absolute paths, so
+# this guard must resolve symlinks under the repository root first.
+python3 - "$ROOT_DIR" "$ROLE_RETURNS" <<'PY' || die "role-return artifact path validation failed"
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1]).resolve()
+ledger = pathlib.Path(sys.argv[2]).resolve()
+try:
+    lines = ledger.read_text(encoding="utf-8").splitlines()
+except (OSError, UnicodeDecodeError) as exc:
+    raise SystemExit(f"review-closeout: cannot read role-return ledger: {exc}")
+for line_number, raw in enumerate(lines, 1):
+    if not raw.strip():
+        continue
+    try:
+        item = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"review-closeout: invalid role-return ledger JSON on line {line_number}: {exc}")
+    if not isinstance(item, dict):
+        raise SystemExit(f"review-closeout: role-return ledger line {line_number} is not an object")
+    artifacts = item.get("artifacts")
+    if not isinstance(artifacts, list) or len(artifacts) != 1 or not isinstance(artifacts[0], str):
+        continue
+    raw_artifact = pathlib.Path(artifacts[0]).expanduser()
+    candidates = [raw_artifact] if raw_artifact.is_absolute() else [root / raw_artifact, ledger.parent / raw_artifact]
+    resolved = None
+    for candidate in candidates:
+        if candidate.exists():
+            resolved = candidate.resolve(strict=True)
+            break
+    if resolved is None:
+        raise SystemExit(f"review-closeout: role-return artifact cannot be resolved on line {line_number}: {artifacts[0]}")
+    try:
+        resolved.relative_to(root)
+    except ValueError:
+        raise SystemExit(f"review-closeout: role-return artifact escapes repository root: {artifacts[0]}")
+    if not resolved.is_file():
+        raise SystemExit(f"review-closeout: role-return artifact is not a file: {artifacts[0]}")
+PY
 
 # Validate the immutable plan/batch/collection identity before reconcile or
 # collect can rewrite the role ledger or publish a collection receipt.
@@ -156,11 +205,66 @@ else:
 PY
 )" || exit 1
 
+# Validate finding-bearing returns before reconcile/collection can rewrite the
+# preflight ledger.  A missing resolution is itself a fail-closed condition;
+# it must not leave behind a collection receipt or a rewritten ledger.
+if [[ -n "$FINDING_RESOLUTION" ]]; then
+  RESOLUTION_COMMAND=(python3 "$SCRIPT_DIR/review-findings-resolution.py" validate
+    --root "$ROOT_DIR" --task-uid "$TASK_UID" --head "$FROZEN_HEAD"
+    --ledger "$ROLE_RETURNS" --manifest "$FINDING_RESOLUTION")
+  if [[ -f "$ROOT_DIR/.pm/github-project-sync/tasks.json" ]]; then
+    MAPPED_RESOLUTION_ISSUE="$(python3 - "$ROOT_DIR/.pm/github-project-sync/tasks.json" "$TASK_UID" <<'PY'
+import json, sys
+try:
+    payload = json.loads(open(sys.argv[1], encoding="utf-8").read())
+    issue = (payload.get("tasks") or {}).get(sys.argv[2], {}).get("issue_number")
+except (OSError, TypeError, ValueError, json.JSONDecodeError):
+    issue = None
+if issue is not None:
+    print(issue)
+PY
+)"
+    if [[ -n "$MAPPED_RESOLUTION_ISSUE" ]]; then
+      RESOLUTION_COMMAND+=(--issue-number "$MAPPED_RESOLUTION_ISSUE")
+    fi
+  fi
+  RESOLUTION_RESULT="$("${RESOLUTION_COMMAND[@]}")" \
+    || die "finding-resolution validation failed"
+else
+  python3 - "$ROOT_DIR" "$ROLE_RETURNS" <<'PY' || die "unresolved role findings require an admin-authorized finding resolution manifest"
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1]).resolve()
+ledger = pathlib.Path(sys.argv[2]).resolve()
+for line_number, raw in enumerate(ledger.read_text(encoding="utf-8").splitlines(), 1):
+    if not raw.strip():
+        continue
+    item = json.loads(raw)
+    artifact_values = item.get("artifacts") or []
+    if len(artifact_values) != 1:
+        continue
+    artifact = pathlib.Path(str(artifact_values[0]))
+    if not artifact.is_absolute():
+        artifact = root / artifact
+    try:
+        artifact = artifact.resolve(strict=True)
+        artifact.relative_to(root)
+        payload = json.loads(artifact.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        continue
+    if isinstance(payload, dict) and payload.get("disposition") == "findings":
+        raise SystemExit(f"finding-bearing role return on ledger line {line_number}")
+PY
+  RESOLUTION_RESULT=""
+fi
+
 if [[ "$COLLECTION_STATE" == "absent" ]]; then
   python3 "$SCRIPT_DIR/review-batch-epoch.py" --root "$ROOT_DIR" reconcile \
     --batch "$BATCH_PATH" --ledger "$ROLE_RETURNS" >/dev/null
 fi
-SUMMARIES="$(python3 - "$ROLE_RETURNS" "$EXTRA_RISK" "$REVIEW_PLAN" <<'PY'
+SUMMARIES="$(python3 - "$ROLE_RETURNS" "$EXTRA_RISK" "$REVIEW_PLAN" "$RESOLUTION_RESULT" <<'PY'
 import json, pathlib, sys
 rows=[json.loads(x) for x in pathlib.Path(sys.argv[1]).read_text().splitlines() if x.strip()]
 if not rows: raise SystemExit("review-closeout: role-return ledger is empty")
@@ -173,12 +277,17 @@ if len(by_role) != len(rows) or set(by_role) != set(planned_roles):
  raise SystemExit("review-closeout: role-return ledger roles mismatch review plan")
 rows=[by_role[role] for role in planned_roles]
 unresolved=[f'{r["role"]}: {r.get("findings")}' for r in rows if r.get("findings") != "no_findings"]
-if unresolved:
+resolution = json.loads(sys.argv[4]) if sys.argv[4] else None
+if unresolved and not resolution:
  raise SystemExit("review-closeout: unresolved role findings block packet publication: " + "; ".join(unresolved))
 roles=",".join(str(r["role"]) for r in rows)
 evidence="; ".join(f'{r["role"]}: {r["findings"]}' for r in rows)
 verdicts="; ".join(f'{r["role"]} scope={r["scope_verdict"]} risk={r["risk_verdict"]}' for r in rows)
-disposition="; ".join(f'{r["role"]}: {r["findings"]}' for r in rows)
+disposition = ("addressed via admin-authorized exact-head resolution"
+               if resolution and resolution.get("aggregate") == "addressed"
+               else "; ".join(f'{r["role"]}: {r["findings"]}' for r in rows))
+if resolution:
+    evidence += f'; resolution manifest {resolution["manifest_digest"]} read back by {resolution["resolver"]}'
 risks=[f'{r["role"]}: {r["residual_risk"]}' for r in rows]
 if sys.argv[2]: risks.append(sys.argv[2])
 print(roles); print(evidence); print(verdicts); print(disposition); print("; ".join(risks))
@@ -191,6 +300,9 @@ ARGS=(--task-uid "$TASK_UID" --review-plan "$REVIEW_PLAN" --roles "$(printf '%s\
   --review-evidence "$(printf '%s\n' "$SUMMARIES" | sed -n '2p')" --review-verdicts "$(printf '%s\n' "$SUMMARIES" | sed -n '3p')"
   --finding-disposition-evidence "$(printf '%s\n' "$SUMMARIES" | sed -n '4p')" --verification "$VERIFICATION"
   --residual-risk "$(printf '%s\n' "$SUMMARIES" | sed -n '5p')" --slice-ledger "$ROLE_RETURNS")
+if [[ -n "$FINDING_RESOLUTION" ]]; then
+  ARGS+=(--finding-resolution "$FINDING_RESOLUTION" --finding-disposition addressed)
+fi
 [[ "$PRINT_ONLY" == 0 ]] || ARGS+=(--print-only)
 PACKET="$("$SCRIPT_DIR/record-pre-pr-review.sh" "${ARGS[@]}")"
 if [[ "$OUTPUT_JSON" == 1 ]]; then

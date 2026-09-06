@@ -39,7 +39,7 @@ UID_VALUE="task_11111111111111111111111111111111"
 ROLE="repository_health_engineer"
 SLICE="11111111-1111-4111-8111-111111111111"
 mkdir -p "$REPO/scripts/pm" "$REPO/.pm/github-project-sync"
-for helper in review-closeout.sh review-batch-epoch.py record-pre-pr-review.sh validate-review-provenance.py; do
+for helper in review-closeout.sh review-batch-epoch.py record-pre-pr-review.sh validate-review-provenance.py review-findings-resolution.py; do
   cp "$ROOT_DIR/scripts/pm/$helper" "$REPO/scripts/pm/$helper"
 done
 chmod +x "$REPO/scripts/pm/review-closeout.sh" "$REPO/scripts/pm/record-pre-pr-review.sh"
@@ -129,6 +129,38 @@ cmp -s "$LEDGER" "$TMPDIR/pre-malformed-ledger.jsonl" || {
   exit 1
 }
 cp "$TMPDIR/valid-plan.json" "$PLAN"
+
+# Repository-owned artifacts are required before reconcile/collection. An
+# absolute artifact outside the repository must fail without rewriting the
+# preflight ledger or creating a collection receipt.
+OUTSIDE_ARTIFACT="$TMPDIR/outside-review-return.json"
+cp "$ARTIFACT" "$OUTSIDE_ARTIFACT"
+cp "$LEDGER" "$TMPDIR/original-outside-ledger.jsonl"
+python3 - "$LEDGER" "$OUTSIDE_ARTIFACT" <<'PY'
+import hashlib, json, sys
+ledger_path, outside = sys.argv[1:]
+row = json.loads(open(ledger_path, encoding="utf-8").readline())
+row["artifacts"] = [outside]
+row["artifact_digest"] = hashlib.sha256(open(outside, "rb").read()).hexdigest()
+open(ledger_path, "w", encoding="utf-8").write(json.dumps(row, sort_keys=True) + "\n")
+PY
+cp "$LEDGER" "$TMPDIR/pre-outside-ledger.jsonl"
+if (cd "$TMPDIR" && "$REPO/scripts/pm/review-closeout.sh" \
+  --task-uid "$UID_VALUE" --review-plan "$PLAN" --role-returns "$LEDGER" --print-only \
+  >"$TMPDIR/outside-artifact.out" 2>"$TMPDIR/outside-artifact.err"); then
+  echo "review-closeout accepted an artifact outside the repository root" >&2
+  exit 1
+fi
+grep -Eqi 'escapes|repository root|artifact' "$TMPDIR/outside-artifact.err"
+cmp -s "$LEDGER" "$TMPDIR/pre-outside-ledger.jsonl" || {
+  echo "outside-root artifact mutated the preflight ledger" >&2
+  exit 1
+}
+[[ ! -e "${BATCH%.json}.collection.json" ]] || {
+  echo "outside-root artifact published a collection receipt" >&2
+  exit 1
+}
+cp "$TMPDIR/original-outside-ledger.jsonl" "$LEDGER"
 
 COLLECTION="${BATCH%.json}.collection.json"
 

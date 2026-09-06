@@ -15,6 +15,7 @@ TEST_REPO="$TMPDIR/repo"
 mkdir -p "$TEST_REPO/scripts/pm" "$TMPDIR/bin"
 cp "$ROOT_DIR/scripts/pm/record-pre-pr-review.sh" "$TEST_REPO/scripts/pm/record-pre-pr-review.sh"
 cp "$ROOT_DIR/scripts/pm/validate-review-provenance.py" "$TEST_REPO/scripts/pm/validate-review-provenance.py"
+cp "$ROOT_DIR/scripts/pm/review-findings-resolution.py" "$TEST_REPO/scripts/pm/review-findings-resolution.py"
 chmod +x "$TEST_REPO/scripts/pm/record-pre-pr-review.sh"
 
 cat > "$TMPDIR/bin/gh" <<'EOF'
@@ -40,7 +41,7 @@ git -C "$TEST_REPO" init -q -b main
 printf 'base\n' > "$TEST_REPO/README.md"
 mkdir -p "$TEST_REPO/.pm"
 printf 'scratch/\n' >"$TEST_REPO/.pm/.gitignore"
-git -C "$TEST_REPO" add README.md .pm/.gitignore scripts/pm/record-pre-pr-review.sh scripts/pm/validate-review-provenance.py
+git -C "$TEST_REPO" add README.md .pm/.gitignore scripts/pm/record-pre-pr-review.sh scripts/pm/validate-review-provenance.py scripts/pm/review-findings-resolution.py
 git -C "$TEST_REPO" -c user.name="oasis7 smoke" -c user.email="smoke@example.invalid" commit -q -m "base"
 git -C "$TEST_REPO" branch base
 
@@ -321,6 +322,69 @@ fi
 if (( FIX2_FAILURES != 0 )); then
   exit 1
 fi
+
+# Without a review plan, no_findings returns retain the legacy opaque path:
+# arbitrary JSON objects and arrays are accepted, while the reserved schema
+# opts into structured validation and must fail without the required fields.
+set_opaque_artifact() {
+  local content="$1"
+  printf '%s\n' "$content" >"$ARTIFACT_PATH"
+  python3 - "$ARTIFACT_PATH" "$TEST_REPO/$LEDGER_REL" <<'PY'
+import hashlib, json, sys
+artifact_path, ledger_path = sys.argv[1:]
+digest = hashlib.sha256(open(artifact_path, "rb").read()).hexdigest()
+rows = [json.loads(line) for line in open(ledger_path, encoding="utf-8") if line.strip()]
+for row in rows:
+    row["findings"] = "no_findings"
+    row["artifact_digest"] = digest
+open(ledger_path, "w", encoding="utf-8").write("".join(json.dumps(row) + "\n" for row in rows))
+PY
+}
+
+set_opaque_artifact '{"arbitrary":"json object"}'
+if ! "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
+  --task-uid task_11111111111111111111111111111111 \
+  --roles repository_health_engineer \
+  --review-evidence "repository_health_engineer: no_findings; opaque object" \
+  --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" \
+  --finding-disposition-evidence "opaque object" \
+  --verification "opaque object" --residual-risk "fixture risk" \
+  --slice-ledger "$LEDGER_REL" --comparison-ref refs/heads/base --print-only \
+  >"$TMPDIR/opaque-object.out" 2>"$TMPDIR/opaque-object.err"; then
+  cat "$TMPDIR/opaque-object.err" >&2
+  exit 1
+fi
+grep -F 'Pre-PR Local Role Review: passed' "$TMPDIR/opaque-object.out" >/dev/null
+
+set_opaque_artifact '["opaque", 1, false]'
+if ! "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
+  --task-uid task_11111111111111111111111111111111 \
+  --roles repository_health_engineer \
+  --review-evidence "repository_health_engineer: no_findings; opaque array" \
+  --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" \
+  --finding-disposition-evidence "opaque array" \
+  --verification "opaque array" --residual-risk "fixture risk" \
+  --slice-ledger "$LEDGER_REL" --comparison-ref refs/heads/base --print-only \
+  >"$TMPDIR/opaque-array.out" 2>"$TMPDIR/opaque-array.err"; then
+  cat "$TMPDIR/opaque-array.err" >&2
+  exit 1
+fi
+grep -F 'Pre-PR Local Role Review: passed' "$TMPDIR/opaque-array.out" >/dev/null
+
+set_opaque_artifact '{"schema":"oasis7-review-return/v1","arbitrary":"reserved"}'
+if "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
+  --task-uid task_11111111111111111111111111111111 \
+  --roles repository_health_engineer \
+  --review-evidence "repository_health_engineer: no_findings; reserved" \
+  --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" \
+  --finding-disposition-evidence "reserved" \
+  --verification "reserved" --residual-risk "fixture risk" \
+  --slice-ledger "$LEDGER_REL" --comparison-ref refs/heads/base --print-only \
+  >"$TMPDIR/reserved-schema.out" 2>"$TMPDIR/reserved-schema.err"; then
+  echo "record-pre-pr-review accepted malformed reserved structured artifact" >&2
+  exit 1
+fi
+grep -Eiq 'structured|identity|task_uid|disposition|findings' "$TMPDIR/reserved-schema.err"
 
 python3 - "$PLAN" <<'PY'
 import json,sys
