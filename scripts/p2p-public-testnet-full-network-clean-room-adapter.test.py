@@ -309,10 +309,29 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         self.fixture_module = load_module("full_network_clean_room_fixture", PLANNER_TEST_PATH)
         self.fixture = self.fixture_module.FullNetworkCleanRoomPlanTests()
         self.fixture.setUp()
+        self._planner_anchor_patch = mock.patch.multiple(
+            self.planner,
+            _independently_verify_identity_v2_entries=mock.Mock(return_value={}),
+        )
+        self._planner_anchor_patch.start()
+        # Adapter admission loads the canonical planner lazily; point that
+        # loader at this fixture module. The independent verifier itself is
+        # covered by the process-level bridge suite; unit tests stay focused
+        # on adapter ordering and side-effect boundaries.
+        self.adapter._PLANNER_MODULE = self.planner
         self._test_directory = tempfile.TemporaryDirectory()
         self.ledger_path = Path(self._test_directory.name) / "nonce.jsonl"
         self._write_ledger(self.ledger_path)
-        self.plan = self._bind_test_ledger(self.planner.build_plan(self.fixture._input()))
+        evidence_root = Path(self._test_directory.name) / "identity-v2-evidence"
+        evidence_root.mkdir(mode=0o700)
+        evidence, _ = self.fixture._network_binding_evidence_fixture(
+            evidence_root,
+            context_network_id=self.planner.CANONICAL_NETWORK_ID,
+        )
+        self.identity_v2_evidence = evidence
+        self.plan = self._bind_test_ledger(
+            self.planner.build_plan(self.fixture._input(), identity_v2_evidence=evidence)
+        )
         self.live_trust_root_patcher = mock.patch.object(
             self.adapter,
             "validate_live_trust_root_file",
@@ -330,7 +349,179 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.live_trust_root_patcher.stop()
+        self._planner_anchor_patch.stop()
+        self.adapter._PLANNER_MODULE = None
         self._test_directory.cleanup()
+        self.fixture.tearDown()
+
+    def test_identity_v2_evidence_schema_matches_planner_v2(self) -> None:
+        self.assertEqual(
+            self.adapter.IDENTITY_V2_EVIDENCE_SCHEMA,
+            self.planner.IDENTITY_V2_EVIDENCE_SCHEMA,
+        )
+        self.assertEqual(
+            self.adapter.IDENTITY_V2_EVIDENCE_SCHEMA,
+            "oasis7.identity_v2_evidence_map.v2",
+        )
+
+    def test_validate_plan_rejects_missing_identity_v2_evidence_map(self) -> None:
+        """The adapter must not validate a legacy receipt-only plan."""
+        legacy_plan = copy.deepcopy(self.plan)
+        legacy_plan.pop("identity_v2_evidence", None)
+        legacy_plan["plan_digest"] = self.adapter.canonical_plan_digest(legacy_plan)
+        with self.assertRaises(self.adapter.AdapterError) as raised:
+            self.adapter.validate_plan(legacy_plan)
+        self.assertRegex(str(raised.exception), r"(?i)identity.?v2|evidence|map|admission")
+
+    def test_validate_authority_rejects_missing_identity_v2_evidence_map(self) -> None:
+        """Authority validation must fail before any provider boundary on a legacy plan."""
+        legacy_plan = copy.deepcopy(self.plan)
+        legacy_plan.pop("identity_v2_evidence", None)
+        legacy_plan["plan_digest"] = self.adapter.canonical_plan_digest(legacy_plan)
+        with self.assertRaises(self.adapter.AdapterError) as raised:
+            self.adapter.validate_authority(legacy_plan, self._authority(plan=legacy_plan))
+        self.assertRegex(str(raised.exception), r"(?i)identity.?v2|evidence|map|admission")
+
+    def test_execute_and_resume_reject_noncurrent_maps_before_persistence_or_transport(self) -> None:
+        """Every mutating entry point must fence absent, stale, or tampered maps."""
+        cases = ("missing", "stale", "tampered")
+        for case in cases:
+            with self.subTest(map_state=case), tempfile.TemporaryDirectory() as directory:
+                plan = copy.deepcopy(self.plan)
+                evidence = plan.get("identity_v2_evidence")
+                self.assertIsInstance(evidence, dict)
+                if case == "missing":
+                    plan.pop("identity_v2_evidence", None)
+                elif case == "stale":
+                    assert isinstance(evidence, dict)
+                    evidence["task_uid"] = "task-stale-map"
+                else:
+                    assert isinstance(evidence, dict)
+                    evidence["entries"][0]["provider_attestation"]["sha256"] = "0" * 64
+                plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
+                authority = self._authority(plan=plan)
+                journal = Path(directory) / "journal.jsonl"
+                before = self.ledger_path.read_bytes()
+                transport = mock.Mock()
+                with self.assertRaises(self.adapter.AdapterError):
+                    self.adapter.execute(
+                        plan,
+                        authority,
+                        journal_path=journal,
+                        ledger_path=self.ledger_path,
+                        transport=transport,
+                        dry_run=False,
+                    )
+                self.assertEqual(self.ledger_path.read_bytes(), before)
+                self.assertFalse(journal.exists())
+                self.assertEqual(transport.mock_calls, [])
+
+                resume_journal = Path(directory) / "resume-journal.jsonl"
+                with self.assertRaises(self.adapter.AdapterError):
+                    self.adapter.resume_transaction(
+                        plan,
+                        authority,
+                        resume_journal,
+                        ledger_path=self.ledger_path,
+                        transport=transport,
+                        dry_run=False,
+                    )
+                self.assertEqual(self.ledger_path.read_bytes(), before)
+                self.assertFalse(resume_journal.exists())
+                self.assertEqual(transport.mock_calls, [])
+
+    def test_cli_apply_requires_current_identity_map_before_execute(self) -> None:
+        """CLI apply must not enter execute/provenance without its exact map and mode."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            plan_path = root / "plan.json"
+            authority_path = root / "authority.json"
+            journal_path = root / "journal.jsonl"
+            ledger_path = root / "ledger.jsonl"
+            plan_path.write_text(json.dumps(self.plan, sort_keys=True), encoding="utf-8")
+            authority_path.write_text(
+                json.dumps(self._authority(plan=self.plan), sort_keys=True), encoding="utf-8"
+            )
+            before_ledger = self.ledger_path.read_bytes()
+            with mock.patch.object(
+                self.adapter,
+                "execute",
+                side_effect=self.adapter.AdapterError("identity-v2 CLI gate missing"),
+            ) as execute:
+                with self.assertRaises(self.adapter.AdapterError) as raised:
+                    self.adapter.main(
+                        [
+                            "--plan",
+                            str(plan_path),
+                            "--authority",
+                            str(authority_path),
+                            "--journal",
+                            str(journal_path),
+                            "--ledger",
+                            str(ledger_path),
+                            "--apply",
+                        ]
+                    )
+            self.assertRegex(str(raised.exception), r"(?i)identity.?v2|evidence|map|current|apply")
+            execute.assert_not_called()
+            self.assertFalse(journal_path.exists())
+            self.assertFalse(ledger_path.exists())
+            self.assertEqual(self.ledger_path.read_bytes(), before_ledger)
+
+    def test_cli_apply_rejects_mismatched_or_historical_map_before_execute(self) -> None:
+        """CLI apply must fence a non-retained or audit-only map before execution."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            plan_path = root / "plan.json"
+            authority_path = root / "authority.json"
+            plan_path.write_text(json.dumps(self.plan, sort_keys=True), encoding="utf-8")
+            authority_path.write_text(
+                json.dumps(self._authority(plan=self.plan), sort_keys=True), encoding="utf-8"
+            )
+            for label, mode, evidence in (
+                (
+                    "mismatched",
+                    "current_admission",
+                    {**self.identity_v2_evidence, "network_id": "attacker-network"},
+                ),
+                (
+                    "historical",
+                    "historical_audit",
+                    copy.deepcopy(self.identity_v2_evidence),
+                ),
+            ):
+                with self.subTest(map_state=label):
+                    evidence_path = root / f"{label}-evidence-map.json"
+                    evidence_path.write_text(json.dumps(evidence, sort_keys=True), encoding="utf-8")
+                    journal_path = root / f"{label}-journal.jsonl"
+                    ledger_path = root / f"{label}-ledger.jsonl"
+                    with mock.patch.object(
+                        self.adapter,
+                        "execute",
+                        side_effect=self.adapter.AdapterError("identity-v2 CLI gate missing"),
+                    ) as execute:
+                        with self.assertRaises(self.adapter.AdapterError) as raised:
+                            self.adapter.main(
+                                [
+                                    "--plan",
+                                    str(plan_path),
+                                    "--authority",
+                                    str(authority_path),
+                                    "--journal",
+                                    str(journal_path),
+                                    "--ledger",
+                                    str(ledger_path),
+                                    "--identity-v2-evidence-map",
+                                    str(evidence_path),
+                                    "--identity-v2-mode",
+                                    mode,
+                                    "--apply",
+                                ]
+                            )
+                    self.assertRegex(str(raised.exception), r"(?i)identity.?v2|evidence|map|current|historical|audit")
+                    execute.assert_not_called()
+                    self.assertFalse(journal_path.exists())
+                    self.assertFalse(ledger_path.exists())
 
     def _bind_test_ledger(self, plan: dict[str, object]) -> dict[str, object]:
         plan["credential_nonce_ledger"]["path"] = str(self.ledger_path)
@@ -429,7 +620,9 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
                 request, "2099-01-01T00:00:00Z"
             ),
         }
-        return self._bind_test_ledger(self.planner.build_plan(request))
+        return self._bind_test_ledger(
+            self.planner.build_plan(request, identity_v2_evidence=copy.deepcopy(self.identity_v2_evidence))
+        )
 
     @staticmethod
     def _write_ledger(path: Path, rows: list[dict[str, object]] | None = None) -> None:
@@ -448,7 +641,9 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
             self.planner._canonical_deployment_inventory_payload_digest(inventory)
         )
         request["deployment_inventory"] = inventory
-        return self._bind_test_ledger(self.planner.build_plan(request))
+        return self._bind_test_ledger(
+            self.planner.build_plan(request, identity_v2_evidence=copy.deepcopy(self.identity_v2_evidence))
+        )
 
     def _bind_current_receipt_freshness(
         self,
@@ -477,9 +672,6 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
             identity_receipt = node["identity_receipt"]
             identity_receipt.update(
                 {"schema_version": "oasis7.identity_receipt.v2", **freshness}
-            )
-            identity_receipt["canonical_digest"] = self.adapter._canonical_receipt_digest(
-                identity_receipt, excluded_fields=frozenset({"peer_id"})
             )
         # The inventory payload digest excludes its self-referential receipt,
         # so receipt freshness can be changed without rewriting the payload.
@@ -2334,14 +2526,20 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         request["deployment_inventory"]["receipt"]["extensions"] = extension
         planner_error = None
         try:
-            self.planner.build_plan(request)
+            self.planner.build_plan(
+                request, identity_v2_evidence=copy.deepcopy(self.identity_v2_evidence)
+            )
         except SystemExit as error:
             planner_error = error
         self.assertIsNotNone(planner_error, "planner accepted an unmodeled receipt extension")
         if planner_error is not None:
             self.assertRegex(str(planner_error), r"(?i)receipt|extension|unsafe|schema")
 
-        plan = self._bind_test_ledger(self.planner.build_plan(base_request))
+        plan = self._bind_test_ledger(
+            self.planner.build_plan(
+                base_request, identity_v2_evidence=copy.deepcopy(self.identity_v2_evidence)
+            )
+        )
         plan["deployment_inventory"]["receipt"]["extensions"] = extension
         plan["plan_digest"] = self.adapter.canonical_plan_digest(plan)
         adapter_error = None
@@ -2369,7 +2567,20 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
             identity["canonical_digest"] = self.adapter._canonical_receipt_digest(
                 identity, excluded_fields=frozenset({"peer_id"})
             )
-        plan = self._bind_test_ledger(self.planner.build_plan(request))
+        evidence_root = Path(self._test_directory.name) / "uid-gid-identity-v2-evidence"
+        evidence_root.mkdir(mode=0o700)
+        evidence, _ = self.fixture._network_binding_evidence_fixture(
+            evidence_root,
+            context_network_id=self.planner.CANONICAL_NETWORK_ID,
+            request=request,
+            expected_uid=1001,
+            expected_gid=1002,
+        )
+        plan = self._bind_test_ledger(
+            self.planner.build_plan(
+                request, identity_v2_evidence=evidence
+            )
+        )
         self.adapter.validate_plan(plan)
 
     def test_adapter_requires_explicit_peer_id_on_every_inventory_node(self) -> None:
@@ -2637,8 +2848,8 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
                     r"(?i)receipt|verifier|trust.?root|authenticated|canonical|binding",
                 )
 
-    def test_adapter_uses_authenticated_inventory_for_peer_rotation(self) -> None:
-        """Peer rotation must follow authenticated inventory, while unbound caller IDs fail."""
+    def test_adapter_rejects_unbound_peer_rotation(self) -> None:
+        """The retained current map fixes peer IDs; caller-side rotation is not admissible."""
         def inventory_payload_digest(inventory: dict[str, object]) -> str:
             payload = {
                 key: copy.deepcopy(value)
@@ -2666,12 +2877,14 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
             inventory_payload_digest(rotated["deployment_inventory"])
         )
         rotated["plan_digest"] = self.adapter.canonical_plan_digest(rotated)
-        try:
+        with self.assertRaises(self.adapter.AdapterError) as rotated_raised:
             self.adapter.validate_plan(rotated)
-        except self.adapter.AdapterError as error:
-            self.fail(f"authenticated deployment peer rotation was rejected: {error}")
+        self.assertRegex(
+            str(rotated_raised.exception),
+            r"(?i)evidence|map|peer|identity|canonical|binding",
+        )
 
-        stale_receipt = copy.deepcopy(rotated)
+        stale_receipt = copy.deepcopy(self.plan)
         stale_inventory_peer = "12D3KooWrotated-stale-receipt"
         stale_receipt["deployment_inventory"]["nodes"]["storage-205"]["peer_id"] = (
             stale_inventory_peer

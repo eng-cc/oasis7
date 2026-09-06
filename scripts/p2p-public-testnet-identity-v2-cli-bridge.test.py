@@ -63,6 +63,17 @@ def descriptor(path: Path) -> dict[str, Any]:
     return {"path": str(path), "sha256": digest_bytes(payload), "size_bytes": len(payload)}
 
 
+V2_ARTIFACT_FIELDS = (
+    "raw_v1",
+    "prepare_manifest",
+    "payload",
+    "provider_attestation",
+    "unsigned_envelope",
+    "signed_envelope",
+    "verification",
+)
+
+
 def clean_env() -> dict[str, str]:
     return {"PATH": os.environ.get("PATH", ""), "PYTHONIOENCODING": "utf-8"}
 
@@ -154,6 +165,7 @@ class IdentityV2CliBridgeTests(unittest.TestCase):
             "signer_id": "identity-v2-ephemeral-test-signer",
             "verifier_id": "governed-receipt-verifier",
             "trust_root_id": "oasis7-public-testnet-governance-root-v1",
+            "network_id": self.planner.module.CANONICAL_NETWORK_ID,
             "task_uid": context["task_uid"],
             "head_oid": context["head_oid"],
             "frozen_head_oid": context["head_oid"],
@@ -180,7 +192,7 @@ class IdentityV2CliBridgeTests(unittest.TestCase):
             name = str(node["name"])
             self._write_node_raw_and_template(node)
             stem = "bridge-" + name
-            _, _, _, _, envelope = self.signing._prepare_sign_assemble(stem)
+            payload, manifest, _, attestation, envelope = self.signing._prepare_sign_assemble(stem)
             verified, verification = self.signing._verify(envelope)
             # The S2 fixture reuses its raw and verification output paths for
             # each case. Preserve node-specific bytes before the next case can
@@ -188,48 +200,37 @@ class IdentityV2CliBridgeTests(unittest.TestCase):
             # shared inputs for the whole managed-node capture.
             raw_v1 = self.root / f"{name}.identity-receipt.v1.raw"
             template = self.root / f"{name}.identity-v2.unsigned-template.json"
+            prepare_manifest = self.root / f"{name}.identity-v2.prepare.json"
+            payload_copy = self.root / f"{name}.identity-v2.payload.bin"
+            provider_attestation = self.root / f"{name}.identity-v2.provider-attestation.json"
+            unsigned_envelope = self.root / f"{name}.identity-v2.unsigned.json"
+            signed_envelope = self.root / f"{name}.identity-v2.signed.json"
             verified_envelope = self.root / f"{name}.identity-v2.verified.json"
             verification_receipt = self.root / f"{name}.identity-v2.verification.json"
             shutil.copyfile(self.signing.raw, raw_v1)
             shutil.copyfile(self.signing.template, template)
+            shutil.copyfile(manifest, prepare_manifest)
+            shutil.copyfile(payload, payload_copy)
+            shutil.copyfile(attestation, provider_attestation)
+            shutil.copyfile(envelope, unsigned_envelope)
+            shutil.copyfile(verified, signed_envelope)
             shutil.copyfile(verified, verified_envelope)
             shutil.copyfile(verification, verification_receipt)
             artifacts[name] = {
                 "raw_v1": raw_v1,
                 "template": template,
-                "signed_envelope": envelope,
+                "prepare_manifest": prepare_manifest,
+                "payload": payload_copy,
+                "provider_attestation": provider_attestation,
+                "unsigned_envelope": unsigned_envelope,
+                "signed_envelope": signed_envelope,
                 "verified_envelope": verified_envelope,
                 "verification": verification_receipt,
             }
         return artifacts
 
     def _write_evidence_map(self) -> Path:
-        context = self.signing.context
-        intent = self.signing.intent
-        evidence = {
-            "schema_version": "oasis7.identity_v2_evidence_map.v1",
-            "task_uid": self.request["task_uid"],
-            "head_oid": self.request["head_oid"],
-            "context": descriptor(context),
-            "plan_intent": descriptor(intent),
-            "entries": [],
-        }
-        for node in self.request["nodes"]:
-            name = str(node["name"])
-            item = self.artifacts[name]
-            evidence["entries"].append(
-                {
-                    "node_name": name,
-                    "node_id": str(node["node_id"]),
-                    "peer_id": self.planner.module.CANONICAL_PEER_REGISTRY[name],
-                    "raw_v1": descriptor(item["raw_v1"]),
-                    "signed_envelope": descriptor(item["signed_envelope"]),
-                    "verification": descriptor(item["verification"]),
-                }
-            )
-        path = self.root / "identity-v2-evidence-map.json"
-        write_json(path, evidence)
-        return path
+        return self._write_v2_evidence_map_fixture()
 
     def _forged_evidence_map(self) -> tuple[Path, dict[str, Any]]:
         """Forge one signature while recomputing every recorded byte digest."""
@@ -247,21 +248,62 @@ class IdentityV2CliBridgeTests(unittest.TestCase):
         )
 
         forged_dir = self.root / "forged-identity-v2"
-        forged_dir.mkdir()
+        forged_dir.mkdir(mode=0o700)
         forged_envelope = forged_dir / "storage-205.envelope.json"
         write_json(forged_envelope, envelope)
+        forged_envelope.chmod(0o600)
 
         original_verification = Path(target["verification"]["path"])
         verification = json.loads(original_verification.read_text(encoding="utf-8"))
         verification["envelope_sha256"] = digest_bytes(forged_envelope.read_bytes())
         forged_verification = forged_dir / "storage-205.verification.json"
         write_json(forged_verification, verification)
+        forged_verification.chmod(0o600)
 
         target["signed_envelope"] = descriptor(forged_envelope)
         target["verification"] = descriptor(forged_verification)
         forged_map = self.root / "forged-identity-v2-evidence-map.json"
         write_json(forged_map, value)
         return forged_map, value
+
+    def _write_v2_evidence_map_fixture(self) -> Path:
+        """Build a private, complete v2 retention map from real fixture artifacts."""
+        existing = sorted(self.root.glob("retained-identity-v2-*"))
+        retention = self.root / f"retained-identity-v2-{len(existing)}"
+        retention.mkdir(mode=0o700)
+        context = retention / "context.json"
+        intent = retention / "plan-intent.json"
+        shutil.copyfile(self.signing.context, context)
+        shutil.copyfile(self.signing.intent, intent)
+        context.chmod(0o600)
+        intent.chmod(0o600)
+        evidence: dict[str, Any] = {
+            "schema_version": "oasis7.identity_v2_evidence_map.v2",
+            "network_id": self.planner.module.CANONICAL_NETWORK_ID,
+            "task_uid": self.request["task_uid"],
+            "head_oid": self.request["head_oid"],
+            "context": descriptor(context),
+            "plan_intent": descriptor(intent),
+            "entries": [],
+        }
+        for node in self.request["nodes"]:
+            name = str(node["name"])
+            source = self.artifacts[name]
+            entry: dict[str, Any] = {
+                "node_name": name,
+                "node_id": str(node["node_id"]),
+                "peer_id": self.planner.module.CANONICAL_PEER_REGISTRY[name],
+            }
+            for field in V2_ARTIFACT_FIELDS:
+                retained = retention / f"{name}.{field}"
+                shutil.copyfile(source[field], retained)
+                retained.chmod(0o600)
+                entry[field] = descriptor(retained)
+            evidence["entries"].append(entry)
+        path = retention / "identity-v2-evidence-map.json"
+        write_json(path, evidence)
+        path.chmod(0o600)
+        return path
 
     def _tool_wrapper(self, marker: Path | None = None) -> Path:
         log = self.root / "signing-tool-commands.log"
@@ -339,8 +381,8 @@ def load(name, path):
 sidecar = load("identity_v2_bridge_sidecar", {str(SIDECAR)!r})
 sidecar.IDENTITY_V2_SIGNER_TOOL_PATH = Path({str(trusted_wrapper)!r})
 sidecar.IDENTITY_V2_SIGNER_TOOL_SHA256 = {trusted_digest!r}
-sidecar.IDENTITY_V2_VERIFIER_TOOL_PATH = Path({str(trusted_wrapper)!r})
-sidecar.IDENTITY_V2_VERIFIER_TOOL_SHA256 = {trusted_digest!r}
+sidecar.IDENTITY_V2_VERIFIER_TOOL_PATH = Path({str(self.signing.verifier)!r})
+sidecar.IDENTITY_V2_VERIFIER_TOOL_SHA256 = {digest_bytes(self.signing.verifier.read_bytes())!r}
 raise SystemExit(sidecar.main())
 '''
         harness.write_text(source, encoding="utf-8")
@@ -427,8 +469,10 @@ raise SystemExit(adapter.main(sys.argv[1:]))
         *,
         signer_tool: Path | None = None,
         verifier_tool: Path | None = None,
+        evidence_dir: Path | None = None,
     ) -> list[str]:
         item = self.artifacts["sequencer-204"]
+        evidence_dir = evidence_dir or self.root / "sidecar-evidence-root"
         return [
             "--raw-v1", str(item["raw_v1"]),
             "--template", str(item["template"]),
@@ -439,27 +483,142 @@ raise SystemExit(adapter.main(sys.argv[1:]))
             "--provider-registry", str(self.signing.registry),
             "--provider-ref", "ephemeral-test-custody",
             "--signer-tool", str(signer_tool or wrapper),
-            "--verifier-tool", str(verifier_tool or wrapper),
+            "--verifier-tool", str(verifier_tool or self.signing.verifier),
             "--evidence-map-out", str(evidence_map_out),
+            "--evidence-dir", str(evidence_dir),
         ]
+
+    def test_sidecar_retains_transaction_unique_v2_evidence_bundle(self) -> None:
+        wrapper = self._tool_wrapper()
+        evidence_root = self.root / "evidence-root"
+        first_output = self.root / "first-verified-envelope.json"
+        first_map = self.root / "first-evidence-map.json"
+        first = self._run(
+            SIDECAR,
+            *self._sidecar_args(
+                first_output,
+                first_map,
+                wrapper,
+                evidence_dir=evidence_root,
+            ),
+        )
+        self.assertEqual(first.returncode, 0, first.stderr)
+        first_value = json.loads(first_map.read_text(encoding="utf-8"))
+        self.assertEqual(first_value["schema_version"], "oasis7.identity_v2_evidence_map.v2")
+        self.assertEqual(first_value["network_id"], self.planner.module.CANONICAL_NETWORK_ID)
+        first_entry = first_value["entries"][0]
+        self.assertEqual(
+            set(first_entry) - {"node_name", "node_id", "peer_id"},
+            set(V2_ARTIFACT_FIELDS),
+        )
+        first_paths = [Path(first_entry[field]["path"]) for field in V2_ARTIFACT_FIELDS]
+        self.assertEqual(len({path.parent for path in first_paths}), 1)
+        first_transaction_dir = first_paths[0].parent
+        self.assertTrue(first_transaction_dir.is_dir())
+        self.assertEqual(stat.S_IMODE(first_transaction_dir.stat().st_mode), 0o700)
+        self.assertEqual(first_transaction_dir.stat().st_uid, os.getuid())
+        for path in first_paths:
+            self.assertTrue(path.is_file() and not path.is_symlink())
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+            self.assertEqual(path.stat().st_uid, os.getuid())
+            field = next(field for field in V2_ARTIFACT_FIELDS if Path(first_entry[field]["path"]) == path)
+            self.assertEqual(descriptor(path), first_entry[field])
+
+        second_output = self.root / "second-verified-envelope.json"
+        second_map = self.root / "second-evidence-map.json"
+        second = self._run(
+            SIDECAR,
+            *self._sidecar_args(
+                second_output,
+                second_map,
+                wrapper,
+                evidence_dir=evidence_root,
+            ),
+        )
+        self.assertEqual(second.returncode, 0, second.stderr)
+        second_value = json.loads(second_map.read_text(encoding="utf-8"))
+        second_transaction_dir = Path(second_value["entries"][0][V2_ARTIFACT_FIELDS[0]]["path"]).parent
+        self.assertNotEqual(first_transaction_dir, second_transaction_dir)
+
+    def test_planner_rejects_missing_v2_retained_artifact(self) -> None:
+        map_path = self._write_v2_evidence_map_fixture()
+        baseline = self._run(
+            PLANNER,
+            "--input", str(self.input_path),
+            "--identity-v2-evidence-map", str(map_path),
+            "--out", str(self.root / "valid-v2-plan.json"),
+            "--json",
+        )
+        self.assertEqual(baseline.returncode, 0, baseline.stderr)
+        value = json.loads(map_path.read_text(encoding="utf-8"))
+        missing = Path(value["entries"][0]["prepare_manifest"]["path"])
+        missing.unlink()
+        write_json(map_path, value)
+        output = self.root / "missing-v2-plan.json"
+        result = self._run(
+            PLANNER,
+            "--input", str(self.input_path),
+            "--identity-v2-evidence-map", str(map_path),
+            "--out", str(output),
+            "--json",
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr.lower(), r"prepare|missing|artifact|evidence")
+        self.assertFalse(output.exists())
+
+    def test_planner_rejects_tampered_v2_retained_artifact_digest(self) -> None:
+        map_path = self._write_v2_evidence_map_fixture()
+        baseline = self._run(
+            PLANNER,
+            "--input", str(self.input_path),
+            "--identity-v2-evidence-map", str(map_path),
+            "--out", str(self.root / "valid-v2-plan.json"),
+            "--json",
+        )
+        self.assertEqual(baseline.returncode, 0, baseline.stderr)
+        value = json.loads(map_path.read_text(encoding="utf-8"))
+        tampered = Path(value["entries"][0]["provider_attestation"]["path"])
+        tampered.write_bytes(tampered.read_bytes() + b"tampered\n")
+        output = self.root / "tampered-v2-plan.json"
+        result = self._run(
+            PLANNER,
+            "--input", str(self.input_path),
+            "--identity-v2-evidence-map", str(map_path),
+            "--out", str(output),
+            "--json",
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr.lower(), r"digest|tamper|artifact|evidence")
+        self.assertFalse(output.exists())
 
     def test_sidecar_orchestrates_four_commands_and_retains_exact_evidence(self) -> None:
         wrapper = self._tool_wrapper()
         output = self.root / "sidecar-verified-envelope.json"
         evidence_map_out = self.root / "sidecar-evidence-map.json"
+        self.signing.verifier_invocation_marker.unlink(missing_ok=True)
+        self.assertFalse(self.signing.verifier_invocation_marker.exists())
         result = self._run(SIDECAR, *self._sidecar_args(output, evidence_map_out, wrapper))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
             self.command_log.read_text(encoding="utf-8").splitlines(),
-            ["prepare", "sign", "assemble", "verify"],
+            ["prepare", "sign", "assemble"],
+        )
+        self.assertTrue(
+            self.signing.verifier_invocation_marker.exists(),
+            "sidecar did not invoke the registry-selected verifier",
         )
         produced = json.loads(evidence_map_out.read_text(encoding="utf-8"))
-        self.assertEqual(produced["schema_version"], "oasis7.identity_v2_evidence_map.v1")
+        self.assertEqual(produced["schema_version"], "oasis7.identity_v2_evidence_map.v2")
+        self.assertEqual(produced["network_id"], self.planner.module.CANONICAL_NETWORK_ID)
         for field, path in (("context", self.signing.context), ("plan_intent", self.signing.intent)):
-            self.assertEqual(produced[field], descriptor(path))
+            self.assertEqual(produced[field]["sha256"], digest_bytes(path.read_bytes()))
+            self.assertEqual(produced[field]["size_bytes"], path.stat().st_size)
         entry = produced["entries"][0]
-        self.assertEqual(entry["raw_v1"], descriptor(self.artifacts["sequencer-204"]["raw_v1"]))
-        self.assertEqual(entry["signed_envelope"], descriptor(output))
+        for field in V2_ARTIFACT_FIELDS:
+            retained = Path(entry[field]["path"])
+            self.assertEqual(entry[field], descriptor(retained))
+            if field == "signed_envelope":
+                self.assertEqual(retained.read_bytes(), output.read_bytes())
         self.assertTrue(json.loads(output.read_text(encoding="utf-8"))["verified"])
 
     def test_planner_ingests_explicit_map_and_emits_verified_legacy_projection(self) -> None:
@@ -473,8 +632,12 @@ raise SystemExit(adapter.main(sys.argv[1:]))
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         plan = json.loads(output.read_text(encoding="utf-8"))
-        self.assertEqual(plan["identity_v2_evidence"]["schema_version"], "oasis7.identity_v2_evidence_map.v1")
-        self.assertEqual(plan["identity_v2_evidence"]["context"], descriptor(self.signing.context))
+        self.assertEqual(plan["identity_v2_evidence"]["schema_version"], "oasis7.identity_v2_evidence_map.v2")
+        self.assertEqual(plan["identity_v2_evidence"]["network_id"], self.planner.module.CANONICAL_NETWORK_ID)
+        self.assertEqual(
+            plan["identity_v2_evidence"]["context"]["sha256"],
+            digest_bytes(self.signing.context.read_bytes()),
+        )
         self.assertEqual(len(plan["identity_v2_evidence"]["entries"]), 5)
         for node in plan["nodes"]:
             receipt = node["identity_receipt"]
@@ -530,7 +693,10 @@ raise SystemExit(adapter.main(sys.argv[1:]))
         response = json.loads(result.stdout)
         self.assertEqual(response["identity_v2_mode"], "current_admission")
         self.assertFalse(response["provider_mutation_performed"])
-        self.assertEqual(response["identity_v2_evidence"]["context"], descriptor(self.signing.context))
+        self.assertEqual(
+            response["identity_v2_evidence"]["context"]["sha256"],
+            digest_bytes(self.signing.context.read_bytes()),
+        )
         self.assertFalse(journal.exists(), "dry-run must not create a durable mutation journal")
 
     def test_forged_signature_is_rejected_by_planner_and_adapter_before_artifacts(self) -> None:
@@ -546,7 +712,7 @@ raise SystemExit(adapter.main(sys.argv[1:]))
         )
         with self.subTest(boundary="planner"):
             self.assertNotEqual(planner_result.returncode, 0, "forged signature unexpectedly passed planner")
-            self.assertRegex(planner_result.stderr.lower(), r"signature|crypto|verif|auth")
+            self.assertRegex(planner_result.stderr.lower(), r"signature|crypto|verif|auth|binding")
             self.assertFalse(planner_output.exists())
 
         valid_plan_path = self.root / "valid-plan-for-adapter.json"

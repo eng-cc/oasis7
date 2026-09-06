@@ -17,10 +17,11 @@ import importlib.util
 import json
 import os
 import re
+import secrets
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -34,6 +35,13 @@ CONTEXT_SCHEMA = "oasis7.identity_v2_context.v1"
 INTENT_SCHEMA = "oasis7.clean_room_plan_intent.v1"
 ALGORITHM = "ed25519"
 DOMAIN = "oasis7.identity_receipt.v2/signature/v1"
+PROVIDER_ATTESTATION_SCHEMA_V2 = "oasis7.identity_v2_provider_attestation.v2"
+PROVIDER_AUTHENTICATION_PROOF_SCHEMA_V1 = "oasis7.identity_v2_provider_authentication_proof.v1"
+PROVIDER_AUTHENTICATION_CLAIMS_SCHEMA_V1 = "oasis7.identity_v2_provider_authentication_claims.v1"
+PROVIDER_AUTHENTICATION_DOMAIN_V1 = "oasis7.identity-v2-provider-authentication/v1"
+PROVIDER_AUTHENTICATION_PREFIX = b"OASIS7-IDENTITY-V2-PROVIDER-AUTH\0"
+CANONICAL_NETWORK_ID = "oasis7-public-testnet-governed-20260606"
+MAX_CLOCK_SKEW_SECONDS = 5
 DEPLOYED_TRUST_CONFIG = Path("/operator/truth/identity-v2-trust-config.json")
 DEPLOYED_PROVIDER_REGISTRY = Path("/operator/truth/identity-v2-provider-registry.json")
 DEPLOYED_GOVERNANCE_ROOT = Path("/operator/truth/governance-root.json")
@@ -51,6 +59,7 @@ PAYLOAD_FIELDS = frozenset(
         "signer_id",
         "verifier_id",
         "trust_root_id",
+        "network_id",
         "task_uid",
         "head_oid",
         "frozen_head_oid",
@@ -102,6 +111,7 @@ NODE_FIELDS = frozenset({"node_name", "node_id", "peer_id", "role", "reset_surfa
 ATTESTATION_FIELDS = frozenset(
     {
         "schema_version",
+        "network_id",
         "provider_id",
         "request_id",
         "signer_id",
@@ -113,11 +123,39 @@ ATTESTATION_FIELDS = frozenset(
         "rotation_epoch",
         "capture_window_id",
         "issued_at",
-        "detached_provider_authentication_proof",
+        "expires_at",
+        "task_uid",
+        "head_oid",
+        "proof_ref",
+        "proof",
+    }
+)
+PROOF_FIELDS = frozenset({"schema_version", "algorithm", "claims_sha256", "signature_hex"})
+AUTHENTICATION_CLAIMS_FIELDS = frozenset(
+    {
+        "schema_version",
+        "domain_separator",
+        "network_id",
+        "provider_id",
+        "request_id",
+        "signer_id",
+        "public_key_sha256",
+        "canonical_payload_sha256",
+        "signature_sha256",
+        "context_digest",
+        "task_uid",
+        "head_oid",
+        "rotation_epoch",
+        "capture_window_id",
+        "issued_at",
+        "expires_at",
+        "proof_ref",
     }
 )
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 OID = re.compile(r"^[0-9a-f]{40}$")
+REQUEST_ID = re.compile(r"^req-v2:[0-9a-f]{64}$")
+PROOF_REF = re.compile(r"^proof-v1:[0-9a-f]{64}$")
 SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{1,127}$")
 UTC = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
@@ -282,6 +320,8 @@ def validate_trust(trust: dict[str, Any], label: str = "trust-config") -> dict[s
     )
     if trust["schema_version"] != TRUST_SCHEMA or trust["algorithm"] != ALGORITHM:
         fail(f"{label} schema or algorithm is unsupported")
+    if trust.get("network_id") != CANONICAL_NETWORK_ID:
+        fail(f"{label}.network_id is not the governed deployment network")
     for field in ("network_id", "trust_root_id", "verifier_id", "rotation_epoch"):
         require_string(trust.get(field), f"{label}.{field}", safe=(field == "rotation_epoch"))
     allowlist = trust["allowlist"]
@@ -351,6 +391,7 @@ def validate_registry(
     if not isinstance(providers, list) or not providers:
         fail(f"{label}.providers must be a non-empty array")
     ids: set[str] = set()
+    provider_adapter_paths: list[Path] = []
     for index, provider in enumerate(providers):
         item_label = f"{label}.providers[{index}]"
         if not isinstance(provider, dict):
@@ -368,6 +409,7 @@ def validate_registry(
         adapter = _regular(provider["adapter_path"], f"{item_label}.adapter_path")
         if not os.access(adapter, os.X_OK):
             fail(f"{item_label}.adapter_path is not executable")
+        provider_adapter_paths.append(adapter)
         require_hex(provider.get("adapter_sha256"), f"{item_label}.adapter_sha256")
         if provider["adapter_sha256"] != sha256_bytes(read_bytes(adapter, f"{item_label}.adapter_path")):
             fail(f"{item_label}.adapter_sha256 mismatch")
@@ -393,6 +435,17 @@ def validate_registry(
     require_exact_fields(verifier, frozenset({"executable_path", "executable_sha256"}), f"{label}.verifier")
     require_string(verifier.get("executable_path"), f"{label}.verifier.executable_path")
     verifier_path = _regular(verifier["executable_path"], f"{label}.verifier.executable_path")
+    if not os.access(verifier_path, os.X_OK):
+        fail(f"{label}.verifier.executable_path is not executable")
+    forbidden_paths = (
+        Path(__file__),
+        Path(__file__).with_name("p2p-public-testnet-identity-receipt-v2.py"),
+        Path(__file__).with_name("p2p-public-testnet-full-network-clean-room.py"),
+        Path(__file__).with_name("p2p-public-testnet-full-network-clean-room-adapter.py"),
+        *provider_adapter_paths,
+    )
+    if any(resolved_equal(verifier_path, forbidden) for forbidden in forbidden_paths):
+        fail(f"{label}.verifier executable is not an independent verifier")
     require_hex(verifier.get("executable_sha256"), f"{label}.verifier.executable_sha256")
     if verifier["executable_sha256"] != sha256_bytes(read_bytes(verifier_path, f"{label}.verifier.executable_path")):
         fail(f"{label}.verifier.executable_sha256 mismatch")
@@ -466,6 +519,8 @@ def validate_context(context: dict[str, Any], *, now: datetime | None = None) ->
         fail("context schema is unsupported")
     for field in ("network_id", "task_uid", "capture_window_id", "rotation_epoch"):
         require_string(context.get(field), f"context.{field}", safe=(field in {"task_uid", "capture_window_id", "rotation_epoch"}))
+    if context["network_id"] != CANONICAL_NETWORK_ID:
+        fail("context.network_id is not the governed deployment network")
     head = require_string(context.get("head_oid"), "context.head_oid")
     if OID.fullmatch(head) is None:
         fail("context.head_oid must be 40 lowercase hexadecimal characters")
@@ -476,6 +531,8 @@ def validate_context(context: dict[str, Any], *, now: datetime | None = None) ->
     if not start <= issued < expires <= end:
         fail("context capture/freshness ordering is invalid")
     current = now or datetime.now(timezone.utc)
+    if issued > current + timedelta(seconds=MAX_CLOCK_SKEW_SECONDS):
+        fail("context issued_at is in the future")
     if expires <= current:
         fail("context freshness window is stale")
     return context
@@ -540,6 +597,8 @@ def validate_template(template: dict[str, Any], raw: dict[str, Any], context: di
         fail("template head binding mismatch")
     if template["task_uid"] != context["task_uid"] or template["capture_window_id"] != context["capture_window_id"] or template["rotation_epoch"] != context["rotation_epoch"]:
         fail("template context binding mismatch")
+    if template["network_id"] != context["network_id"] or template["network_id"] != trust["network_id"]:
+        fail("template network binding mismatch")
     if template["plan_digest"] != plan_digest or template["context_digest"] != sha256_bytes(canonical(context)):
         fail("template plan/context digest mismatch")
     issued = parse_timestamp(template.get("issued_at"), "template.issued_at")
@@ -697,6 +756,7 @@ def _manifest_check(manifest: dict[str, Any], payload_path: Path, registry_path:
     require_string(manifest.get("provider_registry_path"), "prepare-manifest.provider_registry_path")
     require_string(manifest.get("trust_config_path"), "prepare-manifest.trust_config_path")
     require_string(manifest.get("provider_ref"), "prepare-manifest.provider_ref", safe=True)
+    require_string(manifest.get("network_id"), "prepare-manifest.network_id")
     exact = read_bytes(payload_path, "payload")
     if len(exact) != manifest["payload_size_bytes"] or sha256_bytes(exact) != manifest["canonical_payload_sha256"]:
         fail("payload bytes do not match prepare manifest")
@@ -709,17 +769,93 @@ def _manifest_check(manifest: dict[str, Any], payload_path: Path, registry_path:
         fail("provider registry bytes do not match prepare manifest")
 
 
-def _provider_attestation(attestation: dict[str, Any], request: dict[str, Any], signature: bytes, payload: bytes) -> None:
+def _provider_authentication_claims(attestation: dict[str, Any], payload: bytes, signature: bytes) -> dict[str, Any]:
+    """Build the exact canonical claims covered by the provider proof."""
+
+    return {
+        "schema_version": PROVIDER_AUTHENTICATION_CLAIMS_SCHEMA_V1,
+        "domain_separator": PROVIDER_AUTHENTICATION_DOMAIN_V1,
+        "network_id": attestation["network_id"],
+        "provider_id": attestation["provider_id"],
+        "request_id": attestation["request_id"],
+        "signer_id": attestation["signer_id"],
+        "public_key_sha256": attestation["public_key_sha256"],
+        "canonical_payload_sha256": sha256_bytes(payload),
+        "signature_sha256": sha256_bytes(signature),
+        "context_digest": attestation["context_digest"],
+        "task_uid": attestation["task_uid"],
+        "head_oid": attestation["head_oid"],
+        "rotation_epoch": attestation["rotation_epoch"],
+        "capture_window_id": attestation["capture_window_id"],
+        "issued_at": attestation["issued_at"],
+        "expires_at": attestation["expires_at"],
+        "proof_ref": attestation["proof_ref"],
+    }
+
+
+def _provider_attestation(
+    attestation: dict[str, Any],
+    request: dict[str, Any],
+    signature: bytes,
+    payload: bytes,
+    public_key: bytes,
+) -> None:
+    """Validate v2 proof shape, bindings, and the same-key auth signature."""
+
     require_exact_fields(attestation, ATTESTATION_FIELDS, "provider-attestation")
-    if attestation.get("schema_version") != "oasis7.identity_v2_provider_attestation.v1":
+    if attestation.get("schema_version") != PROVIDER_ATTESTATION_SCHEMA_V2:
         fail("provider attestation schema is unsupported")
-    for field in ("provider_id", "request_id", "signer_id", "context_digest", "rotation_epoch", "capture_window_id", "issued_at"):
-        require_string(attestation.get(field), f"provider-attestation.{field}")
-    if attestation["provider_id"] != request["provider_id"] or attestation["request_id"] != request["request_id"] or attestation["signer_id"] != request["signer_id"] or attestation["public_key_sha256"] != request["public_key_sha256"] or attestation["context_digest"] != request["context_digest"] or attestation["rotation_epoch"] != request["rotation_epoch"] or attestation["capture_window_id"] != request["capture_window_id"] or attestation["issued_at"] != request["issued_at"]:
-        fail("provider attestation context mismatch")
-    if attestation.get("algorithm") != ALGORITHM or attestation.get("canonical_payload_sha256") != sha256_bytes(payload) or attestation.get("signature_sha256") != sha256_bytes(signature):
-        fail("provider attestation digest or algorithm mismatch")
-    require_string(attestation.get("detached_provider_authentication_proof"), "provider-attestation.detached_provider_authentication_proof")
+    for field in ("provider_id", "signer_id", "task_uid", "rotation_epoch", "capture_window_id"):
+        require_string(attestation.get(field), f"provider-attestation.{field}", safe=True)
+    require_string(attestation.get("network_id"), "provider-attestation.network_id")
+    require_string(attestation.get("context_digest"), "provider-attestation.context_digest")
+    require_string(attestation.get("request_id"), "provider-attestation.request_id")
+    if REQUEST_ID.fullmatch(attestation["request_id"]) is None:
+        fail("provider-attestation.request_id must be a v2 CSPRNG challenge")
+    require_string(attestation.get("proof_ref"), "provider-attestation.proof_ref")
+    if PROOF_REF.fullmatch(attestation["proof_ref"]) is None:
+        fail("provider-attestation.proof_ref is not a bounded reference")
+    if OID.fullmatch(require_string(attestation.get("head_oid"), "provider-attestation.head_oid")) is None:
+        fail("provider-attestation.head_oid must be a lowercase commit OID")
+    parse_timestamp(attestation.get("issued_at"), "provider-attestation.issued_at")
+    parse_timestamp(attestation.get("expires_at"), "provider-attestation.expires_at")
+    if parse_timestamp(attestation["issued_at"], "provider-attestation.issued_at") >= parse_timestamp(
+        attestation["expires_at"], "provider-attestation.expires_at"
+    ):
+        fail("provider-attestation freshness is inverted")
+    require_hex(attestation.get("public_key_sha256"), "provider-attestation.public_key_sha256")
+    require_hex(attestation.get("canonical_payload_sha256"), "provider-attestation.canonical_payload_sha256")
+    require_hex(attestation.get("signature_sha256"), "provider-attestation.signature_sha256")
+    if attestation.get("algorithm") != ALGORITHM:
+        fail("provider attestation algorithm is unsupported")
+    if len(public_key) != 32 or sha256_bytes(public_key) != attestation["public_key_sha256"]:
+        fail("provider attestation public key binding mismatch")
+    for field in (
+        "network_id", "provider_id", "request_id", "signer_id", "public_key_sha256",
+        "context_digest", "task_uid", "head_oid", "rotation_epoch", "capture_window_id",
+        "issued_at", "expires_at",
+    ):
+        if attestation[field] != request[field]:
+            fail("provider attestation context mismatch")
+    if attestation["network_id"] != CANONICAL_NETWORK_ID:
+        fail("provider attestation network is not the governed deployment network")
+    if attestation["canonical_payload_sha256"] != sha256_bytes(payload) or attestation["signature_sha256"] != sha256_bytes(signature):
+        fail("provider attestation digest mismatch")
+    proof = attestation.get("proof")
+    if not isinstance(proof, dict):
+        fail("provider attestation proof must be an object")
+    require_exact_fields(proof, PROOF_FIELDS, "provider-attestation.proof")
+    if proof.get("schema_version") != PROVIDER_AUTHENTICATION_PROOF_SCHEMA_V1 or proof.get("algorithm") != ALGORITHM:
+        fail("provider attestation proof schema or algorithm is unsupported")
+    require_hex(proof.get("claims_sha256"), "provider-attestation.proof.claims_sha256")
+    require_hex(proof.get("signature_hex"), "provider-attestation.proof.signature_hex", re.compile(r"^[0-9a-f]{128}$"))
+    claims = _provider_authentication_claims(attestation, payload, signature)
+    require_exact_fields(claims, AUTHENTICATION_CLAIMS_FIELDS, "provider-authentication-claims")
+    claims_bytes = canonical(claims)
+    if proof["claims_sha256"] != sha256_bytes(claims_bytes):
+        fail("provider attestation proof claims digest mismatch")
+    if not verify_ed25519(public_key, PROVIDER_AUTHENTICATION_PREFIX + claims_bytes, bytes.fromhex(proof["signature_hex"])):
+        fail("provider attestation authentication proof signature is invalid")
 
 
 def command_prepare(args: argparse.Namespace) -> None:
@@ -771,6 +907,7 @@ def command_prepare(args: argparse.Namespace) -> None:
         "provider_ref": matching_provider["provider_id"],
         "public_key_sha256": matching_provider["public_key_sha256"],
         "verifier_executable_sha256": registry["verifier"]["executable_sha256"],
+        "network_id": template["network_id"],
     }
     _atomic_write(args.payload_out, payload, "payload")
     _atomic_write(args.manifest_out, canonical(manifest), "prepare manifest")
@@ -790,16 +927,20 @@ def command_sign(args: argparse.Namespace) -> None:
     provider = find_provider(registry, args.provider_ref)
     payload = read_bytes(payload_path, "payload")
     request = {
+        "network_id": manifest["network_id"],
         "provider_id": provider["provider_id"],
-        "request_id": sha256_bytes(payload + canonical(manifest)),
+        "request_id": "req-v2:" + secrets.token_hex(32),
         "signer_id": provider["signer_id"],
         "public_key_sha256": provider["public_key_sha256"],
         "payload_path": str(payload_path.resolve()),
         "canonical_payload_sha256": sha256_bytes(payload),
         "context_digest": manifest["context_digest"],
+        "task_uid": manifest["task_uid"],
+        "head_oid": manifest["head_oid"],
         "rotation_epoch": manifest["rotation_epoch"],
         "capture_window_id": manifest["capture_window_id"],
         "issued_at": manifest.get("issued_at", ""),
+        "expires_at": manifest.get("expires_at", ""),
     }
     with tempfile.TemporaryDirectory(prefix="oasis7-identity-v2-provider-") as directory:
         temp = Path(directory)
@@ -824,8 +965,8 @@ def command_sign(args: argparse.Namespace) -> None:
         if len(signature) != 64:
             fail("provider signature must be exactly 64 bytes")
         attestation = read_json(attestation_path, "provider attestation")
-        _provider_attestation(attestation, request, signature, payload)
         public_key = read_bytes(provider["public_key_ref"], "provider public key")
+        _provider_attestation(attestation, request, signature, payload, public_key)
         if not verify_ed25519(public_key, payload, signature):
             fail("provider signature failed independent Ed25519 verification")
         _atomic_write(args.signature_out, signature.hex().encode("ascii"), "signature")
@@ -846,6 +987,8 @@ def _payload_from_file(payload_path: Path, manifest: dict[str, Any]) -> dict[str
     require_exact_fields(value, PAYLOAD_FIELDS, "payload")
     if sha256_bytes(payload) != manifest["canonical_payload_sha256"]:
         fail("payload digest mismatch")
+    if value.get("network_id") != manifest.get("network_id") or value.get("network_id") != CANONICAL_NETWORK_ID:
+        fail("payload network binding mismatch")
     return value
 
 
@@ -869,17 +1012,21 @@ def command_assemble(args: argparse.Namespace) -> None:
     if manifest.get("provider_ref") != provider["provider_id"]:
         fail("provider attestation does not match the pinned prepare provider")
     request = {
+        "network_id": manifest["network_id"],
         "provider_id": provider["provider_id"],
-        "request_id": sha256_bytes(payload + canonical(manifest)),
+        "request_id": attestation.get("request_id"),
         "signer_id": provider["signer_id"],
         "public_key_sha256": provider["public_key_sha256"],
         "context_digest": manifest["context_digest"],
+        "task_uid": manifest["task_uid"],
+        "head_oid": manifest["head_oid"],
         "rotation_epoch": manifest["rotation_epoch"],
         "capture_window_id": manifest["capture_window_id"],
         "issued_at": manifest.get("issued_at", ""),
+        "expires_at": manifest.get("expires_at", ""),
     }
-    _provider_attestation(attestation, request, signature, payload)
     public_key = read_bytes(provider["public_key_ref"], "provider public key")
+    _provider_attestation(attestation, request, signature, payload, public_key)
     if not verify_ed25519(public_key, payload, signature):
         fail("detached signature failed independent Ed25519 verification")
     envelope = dict(fields)
@@ -915,6 +1062,8 @@ def _validate_bindings(
         fail("envelope head binding mismatch")
     if envelope["task_uid"] != context["task_uid"] or envelope["capture_window_id"] != context["capture_window_id"] or envelope["rotation_epoch"] != context["rotation_epoch"]:
         fail("envelope context binding mismatch")
+    if envelope["network_id"] != context["network_id"] or envelope["network_id"] != trust["network_id"]:
+        fail("envelope network binding mismatch")
     if envelope["issued_at"] != context["issued_at"] or envelope["expires_at"] != context["expires_at"]:
         fail("envelope freshness binding mismatch")
     issued = parse_timestamp(envelope["issued_at"], "envelope.issued_at")
@@ -943,6 +1092,83 @@ def _validate_bindings(
     return signer_matches[0], exact_payload, signed
 
 
+def _verifier_command(
+    verifier_path: Path, args: argparse.Namespace, out: Path, verification_out: Path
+) -> list[str]:
+    """Build the fixed file-oriented command for the registry verifier."""
+    return [
+        str(verifier_path),
+        "verify",
+        "--mode",
+        args.mode,
+        "--envelope",
+        str(Path(args.envelope).resolve()),
+        "--attestation",
+        str(Path(args.attestation).resolve()),
+        "--raw-v1",
+        str(Path(args.raw_v1).resolve()),
+        "--context",
+        str(Path(args.context).resolve()),
+        "--plan-intent",
+        str(Path(args.plan_intent).resolve()),
+        "--trust-config",
+        str(Path(args.trust_config).resolve()),
+        "--provider-registry",
+        str(Path(args.provider_registry).resolve()),
+        "--out",
+        str(out),
+        "--verification-out",
+        str(verification_out),
+    ]
+
+
+def _invoke_registry_verifier(
+    args: argparse.Namespace, verifier_path: Path
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Run the pinned verifier and return its canonical output pair."""
+    with tempfile.TemporaryDirectory(prefix="oasis7-identity-v2-verifier-") as directory:
+        temporary_root = Path(directory)
+        verified_path = temporary_root / "verified-envelope.json"
+        receipt_path = temporary_root / "verification.json"
+        environment = {"PATH": os.environ.get("PATH", ""), "PYTHONIOENCODING": "utf-8"}
+        try:
+            completed = subprocess.run(
+                _verifier_command(verifier_path, args, verified_path, receipt_path),
+                capture_output=True,
+                env=environment,
+                cwd=str(temporary_root),
+                timeout=30,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            fail(f"registry-selected verifier failed: {error.__class__.__name__}")
+        if completed.returncode != 0:
+            fail("registry-selected verifier failed")
+        return (
+            read_json(verified_path, "registry verifier output"),
+            read_json(receipt_path, "registry verifier receipt"),
+        )
+
+
+def _assert_registry_verification(
+    expected_output: dict[str, Any],
+    expected_receipt: dict[str, Any],
+    actual_output: dict[str, Any],
+    actual_receipt: dict[str, Any],
+) -> None:
+    """Require the independent receipt to describe this exact verification."""
+    if actual_output != expected_output:
+        fail("registry verifier output does not match independently recomputed bindings")
+    if set(actual_receipt) != set(expected_receipt):
+        fail("registry verifier receipt fields are not exact")
+    for field, expected in expected_receipt.items():
+        if field != "evaluation_time" and actual_receipt.get(field) != expected:
+            fail(f"registry verifier receipt binding mismatch: {field}")
+    evaluated_at = parse_timestamp(actual_receipt.get("evaluation_time"), "registry verifier evaluation_time")
+    now = datetime.now(timezone.utc)
+    if evaluated_at > now + timedelta(seconds=MAX_CLOCK_SKEW_SECONDS) or evaluated_at < now - timedelta(seconds=30):
+        fail("registry verifier receipt is not fresh")
+
+
 def command_verify(args: argparse.Namespace) -> None:
     if args.mode not in {"current_admission", "historical_audit"}:
         fail("verification mode is unsupported")
@@ -954,9 +1180,11 @@ def command_verify(args: argparse.Namespace) -> None:
     raw = validate_raw(raw_bytes)
     context = validate_context(read_json(args.context, "context"))
     intent = validate_intent(read_json(args.plan_intent, "plan-intent"), context)
+    attestation = read_json(args.attestation, "provider attestation")
     trust_path = _regular(args.trust_config, "trust-config")
     registry_path = _regular(args.provider_registry, "provider-registry")
     trust, registry = validate_registry(read_json(registry_path, "provider-registry"), registry_path, trust_path)
+    verifier_path = _regular(registry["verifier"]["executable_path"], "provider-registry.verifier.executable_path").resolve()
     authority_scope = _authority_scope(trust_path, registry_path, registry)
     signer, exact_payload, signed = _validate_bindings(envelope, raw, raw_bytes, context, intent, trust)
     provider = [entry for entry in registry["providers"] if entry["signer_id"] == signer["signer_id"]]
@@ -966,6 +1194,23 @@ def command_verify(args: argparse.Namespace) -> None:
     signature = bytes.fromhex(envelope["signature_hex"])
     if not verify_ed25519(public_key, exact_payload, signature):
         fail("identity envelope signature is invalid")
+    if attestation.get("provider_id") != provider[0]["provider_id"]:
+        fail("provider attestation is not bound to the envelope signer")
+    request = {
+        "network_id": envelope["network_id"],
+        "provider_id": provider[0]["provider_id"],
+        "request_id": attestation.get("request_id"),
+        "signer_id": envelope["signer_id"],
+        "public_key_sha256": provider[0]["public_key_sha256"],
+        "context_digest": envelope["context_digest"],
+        "task_uid": envelope["task_uid"],
+        "head_oid": envelope["head_oid"],
+        "rotation_epoch": envelope["rotation_epoch"],
+        "capture_window_id": envelope["capture_window_id"],
+        "issued_at": envelope["issued_at"],
+        "expires_at": envelope["expires_at"],
+    }
+    _provider_attestation(attestation, request, signature, exact_payload, public_key)
     issued = parse_timestamp(envelope["issued_at"], "envelope.issued_at")
     expires = parse_timestamp(envelope["expires_at"], "envelope.expires_at")
     valid_from = parse_timestamp(signer["valid_from"], "trust allowlist.valid_from")
@@ -1009,6 +1254,9 @@ def command_verify(args: argparse.Namespace) -> None:
         "trust_config_sha256": sha256_bytes(read_bytes(trust_path, "trust-config")),
         "provider_registry_sha256": sha256_bytes(read_bytes(registry_path, "provider-registry")),
         "verifier_executable_sha256": registry["verifier"]["executable_sha256"],
+        "network_id": envelope["network_id"],
+        "proof_ref": attestation["proof_ref"],
+        "proof_claims_sha256": attestation["proof"]["claims_sha256"],
         "task_uid": envelope["task_uid"],
         "head_oid": envelope["head_oid"],
         "node_id": envelope["node_id"],
@@ -1020,8 +1268,10 @@ def command_verify(args: argparse.Namespace) -> None:
         "authority_scope": authority_scope,
         "verified": True,
     }
-    _atomic_write(args.out, canonical(output), "verified identity envelope")
-    _atomic_write(args.verification_out, canonical(receipt), "verification receipt")
+    external_output, external_receipt = _invoke_registry_verifier(args, verifier_path)
+    _assert_registry_verification(output, receipt, external_output, external_receipt)
+    _atomic_write(args.out, canonical(external_output), "verified identity envelope")
+    _atomic_write(args.verification_out, canonical(external_receipt), "verification receipt")
 
 
 def parser() -> argparse.ArgumentParser:
@@ -1041,7 +1291,7 @@ def parser() -> argparse.ArgumentParser:
     assemble.set_defaults(handler=command_assemble)
     verify = commands.add_parser("verify")
     verify.add_argument("--mode", required=True, choices=("current_admission", "historical_audit"))
-    for option, dest in (("--envelope", "envelope"), ("--raw-v1", "raw_v1"), ("--context", "context"), ("--plan-intent", "plan_intent"), ("--trust-config", "trust_config"), ("--provider-registry", "provider_registry"), ("--out", "out"), ("--verification-out", "verification_out")):
+    for option, dest in (("--envelope", "envelope"), ("--attestation", "attestation"), ("--raw-v1", "raw_v1"), ("--context", "context"), ("--plan-intent", "plan_intent"), ("--trust-config", "trust_config"), ("--provider-registry", "provider_registry"), ("--out", "out"), ("--verification-out", "verification_out")):
         verify.add_argument(option, dest=dest, required=True)
     verify.set_defaults(handler=command_verify)
     return root

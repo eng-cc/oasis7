@@ -4,12 +4,17 @@
 from __future__ import annotations
 
 import importlib.util
+import copy
 import hashlib
 import json
+import os
+import shutil
+import stat
 import subprocess
+import sys
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -17,6 +22,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 MODULE_PATH = ROOT / "scripts" / "p2p-public-testnet-full-network-clean-room.py"
 SIDECAR_PATH = ROOT / "scripts" / "p2p-public-testnet-identity-receipt-v2.py"
+SIGNING_TEST_PATH = ROOT / "scripts" / "p2p-public-testnet-identity-v2-signing-tool.test.py"
 
 
 def load_module():
@@ -37,14 +43,324 @@ def load_sidecar_module():
     return module
 
 
+def load_signing_test_module():
+    spec = importlib.util.spec_from_file_location(
+        "identity_v2_signing_tool_fixture", SIGNING_TEST_PATH
+    )
+    if spec is None or spec.loader is None:
+        raise AssertionError(f"cannot load signing fixture: {SIGNING_TEST_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _fixture_digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _write_fixture_json(path: Path, value: object) -> None:
+    path.write_bytes(json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+
+
+def _fixture_descriptor(path: Path) -> dict[str, object]:
+    payload = path.read_bytes()
+    return {"path": str(path), "sha256": hashlib.sha256(payload).hexdigest(), "size_bytes": len(payload)}
+
+
 class FullNetworkCleanRoomPlanTests(unittest.TestCase):
+    _baseline_fixture_ready = False
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Create one independent, real-crypto v2 map before request mutations."""
+        if cls._baseline_fixture_ready:
+            return
+        cls._baseline_module = load_module()
+        cls._baseline_signing_module = load_signing_test_module()
+        cls._baseline_signing = cls._baseline_signing_module.IdentityV2SigningToolContractTests(
+            "runTest"
+        )
+        cls._baseline_signing.setUp()
+        cls._baseline_impact_directory = tempfile.TemporaryDirectory(
+            prefix="oasis7-planner-baseline-"
+        )
+        builder = cls("runTest")
+        builder.module = cls._baseline_module
+        builder.signing = cls._baseline_signing
+        builder._impact_path = Path(cls._baseline_impact_directory.name) / "consumer-impact.json"
+        builder._baseline_request = builder._input()
+        builder._align_signing_context()
+        builder._baseline_artifacts = builder._make_baseline_signed_artifacts(label="baseline")
+        cls._baseline_evidence = builder._write_baseline_evidence_map(
+            builder._baseline_artifacts, label="baseline"
+        )
+        distinct_artifacts = builder._make_baseline_signed_artifacts(
+            expected_uid=1001, expected_gid=1002, label="distinct-uid-gid"
+        )
+        cls._baseline_distinct_evidence = builder._write_baseline_evidence_map(
+            distinct_artifacts, label="distinct-uid-gid"
+        )
+        cls._baseline_request = builder._baseline_request
+        cls._baseline_builder = builder
+        cls._baseline_fixture_ready = True
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        if not cls._baseline_fixture_ready:
+            return
+        cls._baseline_signing.tearDown()
+        cls._baseline_impact_directory.cleanup()
+        cls._baseline_fixture_ready = False
+
     def setUp(self) -> None:
+        type(self).setUpClass()
         self.module = load_module()
         self._impact_directory = tempfile.TemporaryDirectory()
         self._impact_path = Path(self._impact_directory.name) / "consumer-impact.json"
+        baseline = type(self)
+        self._baseline_identity_v2_evidence = copy.deepcopy(baseline._baseline_evidence)
+        self._build_plan_without_evidence = self.module.build_plan
+        self.module.IDENTITY_V2_VERIFY_TOOL_PATH = baseline._baseline_signing.verifier
+        self.module.IDENTITY_V2_VERIFY_TOOL_SHA256 = hashlib.sha256(
+            baseline._baseline_signing.verifier.read_bytes()
+        ).hexdigest()
+        self.module.IDENTITY_V2_TRUST_CONFIG_PATH = baseline._baseline_signing.trust
+        self.module.IDENTITY_V2_TRUST_CONFIG_SHA256 = hashlib.sha256(
+            baseline._baseline_signing.trust.read_bytes()
+        ).hexdigest()
+        self.module.IDENTITY_V2_PROVIDER_REGISTRY_PATH = baseline._baseline_signing.registry
+        self.module.IDENTITY_V2_PROVIDER_REGISTRY_SHA256 = hashlib.sha256(
+            baseline._baseline_signing.registry.read_bytes()
+        ).hexdigest()
+
+        original_build_plan = self.module.build_plan
+
+        def build_plan_with_baseline_evidence(
+            request: dict[str, object], **kwargs: object
+        ) -> dict[str, object]:
+            kwargs.setdefault(
+                "identity_v2_evidence", copy.deepcopy(self._baseline_identity_v2_evidence)
+            )
+            return original_build_plan(request, **kwargs)
+
+        # Keep the legacy test bodies focused on their request mutation while
+        # routing every normal admission through the immutable baseline map.
+        # The missing-map test calls _build_plan_without_evidence explicitly.
+        self.module.build_plan = build_plan_with_baseline_evidence
 
     def tearDown(self) -> None:
         self._impact_directory.cleanup()
+
+    def _build_plan_with_evidence(
+        self, request: dict[str, object], evidence: dict[str, object]
+    ) -> dict[str, object]:
+        return self._build_plan_without_evidence(
+            request, identity_v2_evidence=copy.deepcopy(evidence)
+        )
+
+    def _tampered_evidence_artifact(
+        self,
+        evidence: dict[str, object],
+        *,
+        node_name: str = "storage-205",
+        artifact: str = "signed_envelope",
+        mutate=None,
+    ) -> dict[str, object]:
+        """Return a map copy whose retained bytes, not request, are tampered."""
+        mutated = copy.deepcopy(evidence)
+        entry = next(item for item in mutated["entries"] if item["node_name"] == node_name)
+        source = Path(entry[artifact]["path"])
+        payload = json.loads(source.read_text(encoding="utf-8"))
+        if mutate is not None:
+            mutate(payload)
+        target = Path(self._impact_directory.name) / f"tampered-{node_name}-{artifact}.json"
+        _write_fixture_json(target, payload)
+        target.chmod(0o600)
+        entry[artifact] = _fixture_descriptor(target)
+        return mutated
+
+    def _align_signing_context(self) -> None:
+        """Bind the one class-level signing fixture to the baseline request."""
+        context = json.loads(self.signing.context.read_text(encoding="utf-8"))
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        context.update(
+            {
+                "task_uid": self._baseline_request["task_uid"],
+                "head_oid": self._baseline_request["head_oid"],
+                "capture_window_id": self._baseline_request["capture_window_id"],
+                "network_id": self.module.CANONICAL_NETWORK_ID,
+                "rotation_epoch": self.module.CANONICAL_ROTATION_EPOCH,
+                "capture_start": (now - timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
+                "capture_end": (now + timedelta(days=1)).isoformat().replace("+00:00", "Z"),
+                "issued_at": (now - timedelta(seconds=10)).isoformat().replace("+00:00", "Z"),
+                "expires_at": (now + timedelta(days=1)).isoformat().replace("+00:00", "Z"),
+            }
+        )
+        _write_fixture_json(self.signing.context, context)
+        self.signing.context_digest = _fixture_digest(self.signing.context)
+        trust = json.loads(self.signing.trust.read_text(encoding="utf-8"))
+        for signer in trust["allowlist"]:
+            signer["valid_from"] = context["capture_start"]
+            signer["valid_until"] = context["expires_at"]
+        _write_fixture_json(self.signing.trust, trust)
+        registry = json.loads(self.signing.registry.read_text(encoding="utf-8"))
+        registry["trust_config_sha256"] = _fixture_digest(self.signing.trust)
+        _write_fixture_json(self.signing.registry, registry)
+
+        intent_nodes = []
+        for node in sorted(self._baseline_request["nodes"], key=lambda item: str(item["name"])):
+            name = str(node["name"])
+            intent_nodes.append(
+                {
+                    "node_name": name,
+                    "node_id": str(node["node_id"]),
+                    "peer_id": self.module.CANONICAL_PEER_REGISTRY[name],
+                    "role": str(node["role"]),
+                    "reset_surface_ids": ["config", "execution", "world"],
+                }
+            )
+        _write_fixture_json(
+            self.signing.intent,
+            {
+                "schema_version": "oasis7.clean_room_plan_intent.v1",
+                "context_digest": self.signing.context_digest,
+                "adapter_action": "public-testnet-governed-rebuild",
+                "nodes": intent_nodes,
+            },
+        )
+        self.signing.plan_digest = _fixture_digest(self.signing.intent)
+
+    def _write_baseline_node_raw_and_template(
+        self,
+        node: dict[str, object],
+        *,
+        expected_uid: int,
+        expected_gid: int,
+    ) -> None:
+        name = str(node["name"])
+        node_id = str(node["node_id"])
+        peer_id = self.module.CANONICAL_PEER_REGISTRY[name]
+        raw = {
+            "schema_version": "oasis7.identity_receipt.v1",
+            "node_id": node_id,
+            "peer_id": peer_id,
+            "key_path": f"config/{node_id}-node-keypair.toml",
+            "key_sha256": "7" * 64,
+            "key_size_bytes": 128,
+            "key_mode": 0o600,
+            "key_uid": expected_uid,
+            "key_gid": expected_gid,
+        }
+        self.signing.raw.write_bytes((json.dumps(raw, indent=2) + "\n").encode("utf-8"))
+        self.signing.raw_digest = _fixture_digest(self.signing.raw)
+        context = json.loads(self.signing.context.read_text(encoding="utf-8"))
+        _write_fixture_json(
+            self.signing.template,
+            {
+                "domain_separator": "oasis7.identity_receipt.v2/signature/v1",
+                "schema_version": "oasis7.identity_receipt.v2",
+                "signer_id": "identity-v2-ephemeral-test-signer",
+                "verifier_id": "governed-receipt-verifier",
+                "trust_root_id": "oasis7-public-testnet-governance-root-v1",
+                "network_id": self.module.CANONICAL_NETWORK_ID,
+                "task_uid": context["task_uid"],
+                "head_oid": context["head_oid"],
+                "frozen_head_oid": context["head_oid"],
+                "plan_digest": self.signing.plan_digest,
+                "context_digest": self.signing.context_digest,
+                "capture_window_id": context["capture_window_id"],
+                "rotation_epoch": context["rotation_epoch"],
+                "issued_at": context["issued_at"],
+                "expires_at": context["expires_at"],
+                "node_id": node_id,
+                "peer_id": peer_id,
+                "key_sha256": raw["key_sha256"],
+                "key_size_bytes": raw["key_size_bytes"],
+                "key_mode": "0600",
+                "key_uid": raw["key_uid"],
+                "key_gid": raw["key_gid"],
+                "signed_payload_sha256": self.signing.raw_digest,
+            },
+        )
+
+    def _make_baseline_signed_artifacts(
+        self, *, expected_uid: int = 0, expected_gid: int = 0, label: str
+    ) -> dict[str, dict[str, Path]]:
+        artifacts: dict[str, dict[str, Path]] = {}
+        for node in self._baseline_request["nodes"]:
+            name = str(node["name"])
+            self._write_baseline_node_raw_and_template(
+                node, expected_uid=expected_uid, expected_gid=expected_gid
+            )
+            stem = "planner-baseline-" + name
+            payload, manifest, _, attestation, unsigned = self.signing._prepare_sign_assemble(stem)
+            verified, verification = self.signing._verify(unsigned)
+            node_dir = self.signing.root / "planner-baseline-artifacts"
+            node_dir.mkdir(mode=0o700, exist_ok=True)
+            copied: dict[str, Path] = {}
+            source_paths = {
+                "raw_v1": self.signing.raw,
+                "prepare_manifest": manifest,
+                "payload": payload,
+                "provider_attestation": attestation,
+                "unsigned_envelope": unsigned,
+                "signed_envelope": verified,
+                "verification": verification,
+            }
+            for field, source in source_paths.items():
+                destination = node_dir / f"{label}-{name}.{field}"
+                shutil.copyfile(source, destination)
+                destination.chmod(0o600)
+                copied[field] = destination
+            artifacts[name] = copied
+        return artifacts
+
+    def _write_baseline_evidence_map(
+        self, artifacts: dict[str, dict[str, Path]], *, label: str
+    ) -> dict[str, object]:
+        retention = self.signing.root / f"planner-baseline-retention-{label}"
+        retention.mkdir(mode=0o700, exist_ok=True)
+        context = retention / "context.json"
+        intent = retention / "plan-intent.json"
+        shutil.copyfile(self.signing.context, context)
+        shutil.copyfile(self.signing.intent, intent)
+        context.chmod(0o600)
+        intent.chmod(0o600)
+        evidence: dict[str, object] = {
+            "schema_version": self.module.IDENTITY_V2_EVIDENCE_SCHEMA,
+            "network_id": self.module.CANONICAL_NETWORK_ID,
+            "task_uid": self._baseline_request["task_uid"],
+            "head_oid": self._baseline_request["head_oid"],
+            "context": _fixture_descriptor(context),
+            "plan_intent": _fixture_descriptor(intent),
+            "entries": [],
+        }
+        artifact_fields = (
+            "raw_v1",
+            "prepare_manifest",
+            "payload",
+            "provider_attestation",
+            "unsigned_envelope",
+            "signed_envelope",
+            "verification",
+        )
+        entries: list[dict[str, object]] = []
+        for node_name in self.module.NODE_ORDER:
+            node = next(item for item in self._baseline_request["nodes"] if item["name"] == node_name)
+            source = artifacts[node_name]
+            entry: dict[str, object] = {
+                "node_name": node_name,
+                "node_id": str(node["node_id"]),
+                "peer_id": self.module.CANONICAL_PEER_REGISTRY[node_name],
+            }
+            for field in artifact_fields:
+                retained = retention / f"{node_name}.{field}"
+                shutil.copyfile(source[field], retained)
+                retained.chmod(0o600)
+                entry[field] = _fixture_descriptor(retained)
+            entries.append(entry)
+        evidence["entries"] = entries
+        return evidence
 
     def _consumer_impact_reference(
         self, authority_instant: datetime | None = None
@@ -843,7 +1159,9 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 identity, excluded_fields=frozenset({"peer_id"})
             )
 
-        plan = self.module.build_plan(request)
+        plan = self._build_plan_with_evidence(
+            request, type(self)._baseline_distinct_evidence
+        )
         for node in plan["nodes"]:
             inventory_node = plan["deployment_inventory"]["nodes"][node["name"]]
             self.assertEqual(inventory_node["expected_key_uid"], 1001)
@@ -909,24 +1227,26 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
         self.module.build_plan(self._input())
 
     def test_plan_rejects_duplicate_authenticated_peer_ids(self) -> None:
-        """Distinct managed nodes cannot share one authenticated peer identity."""
+        """Distinct retained v2 entries cannot share one authenticated peer identity."""
         request = self._input()
-        request["nodes"][1]["identity_receipt"]["peer_id"] = request["nodes"][0]["identity_receipt"]["peer_id"]
+        evidence = copy.deepcopy(self._baseline_identity_v2_evidence)
+        evidence["entries"][1]["peer_id"] = evidence["entries"][0]["peer_id"]
         with self.assertRaises(SystemExit) as raised:
-            self.module.build_plan(request)
+            self._build_plan_with_evidence(request, evidence)
         self.assertRegex(str(raised.exception), r"(?i)peer|identity|duplicate|unique")
 
     def test_plan_rejects_unique_peer_ids_outside_authenticated_registry(self) -> None:
-        """Peer uniqueness alone cannot authorize a caller-supplied identity."""
+        """Peer uniqueness alone cannot authorize a caller-supplied retained identity."""
         for node in self._input()["nodes"]:
             with self.subTest(node=node["name"]):
                 request = self._input()
-                target = next(item for item in request["nodes"] if item["name"] == node["name"])
-                target["identity_receipt"]["peer_id"] = (
-                    f"12D3KooWcaller-supplied-{node['name']}"
+                evidence = copy.deepcopy(self._baseline_identity_v2_evidence)
+                target = next(
+                    item for item in evidence["entries"] if item["node_name"] == node["name"]
                 )
+                target["peer_id"] = f"12D3KooWcaller-supplied-{node['name']}"
                 with self.assertRaises(SystemExit) as raised:
-                    self.module.build_plan(request)
+                    self._build_plan_with_evidence(request, evidence)
                 self.assertRegex(str(raised.exception), r"(?i)peer|identity|registry|canonical|binding")
 
     def test_plan_requires_fresh_bound_consumer_impact_record(self) -> None:
@@ -997,6 +1317,301 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             self.module.build_plan(request)
         self.assertRegex(str(raised.exception), r"(?i)network|genesis|trust|code-owned")
 
+    def _network_binding_evidence_fixture(
+        self,
+        root: Path,
+        *,
+        context_network_id: str,
+        request: dict[str, object] | None = None,
+        expected_uid: int = 0,
+        expected_gid: int = 0,
+    ) -> tuple[dict[str, object], dict[str, object]]:
+        """Make a shape-valid five-node map for network-binding admission tests."""
+        request = request or self._input()
+        context = {
+            "schema_version": "oasis7.identity_v2_context.v1",
+            "network_id": context_network_id,
+            "task_uid": request["task_uid"],
+            "head_oid": request["head_oid"],
+            "capture_window_id": request["capture_window_id"],
+            "capture_start": "2026-09-01T00:00:00Z",
+            "capture_end": "2099-01-01T00:00:00Z",
+            "rotation_epoch": self.module.CANONICAL_ROTATION_EPOCH,
+            "issued_at": "2026-09-01T00:00:00Z",
+            "expires_at": "2099-01-01T00:00:00Z",
+        }
+        context_path = root / "context.json"
+        context_path.write_bytes(json.dumps(context, sort_keys=True, separators=(",", ":")).encode())
+        context_path.chmod(0o600)
+        context_digest = hashlib.sha256(context_path.read_bytes()).hexdigest()
+        intent = {
+            "schema_version": "oasis7.clean_room_plan_intent.v1",
+            "context_digest": context_digest,
+            "adapter_action": "public-testnet-governed-rebuild",
+            "nodes": [],
+        }
+        intent_path = root / "plan-intent.json"
+        intent_path.write_bytes(json.dumps(intent, sort_keys=True, separators=(",", ":")).encode())
+        intent_path.chmod(0o600)
+        plan_digest = hashlib.sha256(intent_path.read_bytes()).hexdigest()
+        entries: list[dict[str, object]] = []
+        for node_name in self.module.NODE_ORDER:
+            expected = self.module.EXPECTED_NODES[node_name]
+            # This fixture is code-owned test truth, not a projection of the
+            # caller request.  In particular, request mutations must not be
+            # able to manufacture an admission map that follows them.
+            node_id = expected["node_id"]
+            peer_id = self.module.CANONICAL_PEER_REGISTRY[node_name]
+            key_sha256 = "1" * 64
+            key_size_bytes = 1
+            key_mode = "0600"
+            raw_key_mode = int(key_mode, 8)
+            key_uid = expected_uid
+            key_gid = expected_gid
+            signature_hex = "a" * 128
+            raw_bytes = json.dumps(
+                {
+                    "schema_version": "oasis7.identity_receipt.v1",
+                    "node_id": node_id,
+                    "peer_id": peer_id,
+                    "key_path": f"config/{node_id}-node-keypair.toml",
+                    "key_sha256": key_sha256,
+                    "key_size_bytes": key_size_bytes,
+                    "key_mode": raw_key_mode,
+                    "key_uid": key_uid,
+                    "key_gid": key_gid,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+            raw_path = root / f"{node_name}.raw-v1"
+            raw_path.write_bytes(raw_bytes)
+            envelope = {
+                field: "placeholder"
+                for field in self.module.IDENTITY_V2_ENVELOPE_FIELDS
+            }
+            envelope.update(
+                {
+                    "domain_separator": "oasis7.identity_receipt.v2/signature/v1",
+                    "schema_version": "oasis7.identity_receipt.v2",
+                    "signer_id": "governance-signer",
+                    "verifier_id": self.module.CANONICAL_VERIFIER_ID,
+                    "trust_root_id": self.module.CANONICAL_TRUST_ROOT_ID,
+                    "network_id": context_network_id,
+                    "task_uid": request["task_uid"],
+                    "head_oid": request["head_oid"],
+                    "frozen_head_oid": request["head_oid"],
+                    "plan_digest": plan_digest,
+                    "context_digest": context_digest,
+                    "capture_window_id": request["capture_window_id"],
+                    "rotation_epoch": self.module.CANONICAL_ROTATION_EPOCH,
+                    "issued_at": "2026-09-01T00:00:00Z",
+                    "expires_at": "2099-01-01T00:00:00Z",
+                    "node_id": node_id,
+                    "peer_id": peer_id,
+                    "key_sha256": key_sha256,
+                    "key_size_bytes": key_size_bytes,
+                    "key_mode": key_mode,
+                    "key_uid": key_uid,
+                    "key_gid": key_gid,
+                    "signed_payload_sha256": hashlib.sha256(raw_bytes).hexdigest(),
+                    "signature_hex": signature_hex,
+                    "authenticated": True,
+                    "verified": True,
+                    "historical_only": False,
+                    "apply_authorized": True,
+                }
+            )
+            envelope["canonical_digest"] = hashlib.sha256(
+                json.dumps(
+                    {
+                        **{field: envelope[field] for field in self.module.IDENTITY_V2_SIGNED_FIELDS},
+                        "signature_hex": envelope["signature_hex"],
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode()
+            ).hexdigest()
+            envelope_path = root / f"{node_name}.envelope.json"
+            envelope_path.write_bytes(json.dumps(envelope, sort_keys=True, separators=(",", ":")).encode())
+            unsigned_envelope = dict(envelope)
+            unsigned_envelope["authenticated"] = False
+            unsigned_envelope["verified"] = False
+            unsigned_path = root / f"{node_name}.unsigned-envelope.json"
+            unsigned_path.write_bytes(
+                json.dumps(unsigned_envelope, sort_keys=True, separators=(",", ":")).encode()
+            )
+            payload_value = {
+                field: envelope[field] for field in self.module.IDENTITY_V2_SIGNED_FIELDS
+            }
+            payload_bytes = b"OASIS7-IDENTITY-RECEIPT-V2\0" + json.dumps(
+                payload_value, sort_keys=True, separators=(",", ":")
+            ).encode()
+            payload_path = root / f"{node_name}.payload.bin"
+            payload_path.write_bytes(payload_bytes)
+            manifest = {
+                "schema_version": "oasis7.identity_v2_prepare_manifest.v1",
+                "network_id": self.module.CANONICAL_NETWORK_ID,
+                "raw_v1_sha256": hashlib.sha256(raw_bytes).hexdigest(),
+                "canonical_payload_sha256": hashlib.sha256(payload_bytes).hexdigest(),
+                "payload_size_bytes": len(payload_bytes),
+            }
+            manifest_path = root / f"{node_name}.prepare-manifest.json"
+            manifest_path.write_bytes(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode())
+            request_id = "req-v2:" + format(self.module.NODE_ORDER.index(node_name) + 1, "064x")
+            proof_ref = "proof-v1:" + hashlib.sha256(("provider-proof:" + request_id).encode()).hexdigest()
+            attestation = {
+                "schema_version": "oasis7.identity_v2_provider_attestation.v2",
+                "network_id": context_network_id,
+                "provider_id": "ephemeral-test-provider",
+                "request_id": request_id,
+                "signer_id": "governance-signer",
+                "public_key_sha256": "1" * 64,
+                "algorithm": "ed25519",
+                "canonical_payload_sha256": hashlib.sha256(payload_bytes).hexdigest(),
+                "signature_sha256": hashlib.sha256(bytes.fromhex(signature_hex)).hexdigest()
+                if isinstance(signature_hex, str) and len(signature_hex) == 128
+                else "0" * 64,
+                "context_digest": context_digest,
+                "rotation_epoch": self.module.CANONICAL_ROTATION_EPOCH,
+                "capture_window_id": request["capture_window_id"],
+                "issued_at": "2026-09-01T00:00:00Z",
+                "expires_at": "2099-01-01T00:00:00Z",
+                "task_uid": request["task_uid"],
+                "head_oid": request["head_oid"],
+                "proof_ref": proof_ref,
+            }
+            claims = {
+                "schema_version": "oasis7.identity_v2_provider_authentication_claims.v1",
+                "domain_separator": "oasis7.identity-v2-provider-authentication/v1",
+                "network_id": attestation["network_id"],
+                "provider_id": attestation["provider_id"],
+                "request_id": attestation["request_id"],
+                "signer_id": attestation["signer_id"],
+                "public_key_sha256": attestation["public_key_sha256"],
+                "canonical_payload_sha256": attestation["canonical_payload_sha256"],
+                "signature_sha256": attestation["signature_sha256"],
+                "context_digest": attestation["context_digest"],
+                "task_uid": attestation["task_uid"],
+                "head_oid": attestation["head_oid"],
+                "rotation_epoch": attestation["rotation_epoch"],
+                "capture_window_id": attestation["capture_window_id"],
+                "issued_at": attestation["issued_at"],
+                "expires_at": attestation["expires_at"],
+                "proof_ref": attestation["proof_ref"],
+            }
+            claims_bytes = json.dumps(claims, sort_keys=True, separators=(",", ":")).encode()
+            attestation["proof"] = {
+                "schema_version": "oasis7.identity_v2_provider_authentication_proof.v1",
+                "algorithm": "ed25519",
+                "claims_sha256": hashlib.sha256(claims_bytes).hexdigest(),
+                "signature_hex": "a" * 128,
+            }
+            attestation_path = root / f"{node_name}.provider-attestation.json"
+            attestation_path.write_bytes(
+                json.dumps(attestation, sort_keys=True, separators=(",", ":")).encode()
+            )
+            signed_payload = b"OASIS7-IDENTITY-RECEIPT-V2\0" + json.dumps(
+                {field: envelope[field] for field in self.module.IDENTITY_V2_SIGNED_FIELDS},
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+            verification = {
+                field: "0" * 64
+                for field in self.module.IDENTITY_V2_VERIFICATION_FIELDS
+                if field.endswith("sha256")
+            }
+            verification.update(
+                {
+                    "schema_version": "oasis7.identity_v2_verification_receipt.v1",
+                    "mode": "current_admission",
+                    "evaluation_time": "2026-09-01T00:00:00Z",
+                    "canonical_payload_sha256": hashlib.sha256(signed_payload).hexdigest(),
+                    "envelope_sha256": hashlib.sha256(unsigned_path.read_bytes()).hexdigest(),
+                    "signer_id": "governance-signer",
+                    "task_uid": request["task_uid"],
+                    "head_oid": request["head_oid"],
+                    "node_id": expected["node_id"],
+                    "peer_id": peer_id,
+                    "capture_window_id": request["capture_window_id"],
+                    "rotation_epoch": self.module.CANONICAL_ROTATION_EPOCH,
+                    "network_id": context_network_id,
+                    "proof_ref": attestation["proof_ref"],
+                    "proof_claims_sha256": attestation["proof"]["claims_sha256"],
+                    "historical_only": False,
+                    "apply_authorized": True,
+                    "authority_scope": "deployed-governance-root",
+                    "verified": True,
+                }
+            )
+            verification["raw_v1_sha256"] = hashlib.sha256(raw_bytes).hexdigest()
+            verification_path = root / f"{node_name}.verification.json"
+            verification_path.write_bytes(json.dumps(verification, sort_keys=True, separators=(",", ":")).encode())
+            for artifact_path in (
+                raw_path, envelope_path, unsigned_path, payload_path,
+                manifest_path, attestation_path, verification_path,
+            ):
+                artifact_path.chmod(0o600)
+            descriptor = lambda path: {
+                "path": str(path),
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                "size_bytes": path.stat().st_size,
+            }
+            entries.append(
+                {
+                    "node_name": node_name,
+                    "node_id": expected["node_id"],
+                    "peer_id": peer_id,
+                    "raw_v1": descriptor(raw_path),
+                    "prepare_manifest": descriptor(manifest_path),
+                    "payload": descriptor(payload_path),
+                    "provider_attestation": descriptor(attestation_path),
+                    "unsigned_envelope": descriptor(unsigned_path),
+                    "signed_envelope": descriptor(envelope_path),
+                    "verification": descriptor(verification_path),
+                }
+            )
+        evidence = {
+            "schema_version": self.module.IDENTITY_V2_EVIDENCE_SCHEMA,
+            "network_id": self.module.CANONICAL_NETWORK_ID,
+            "task_uid": request["task_uid"],
+            "head_oid": request["head_oid"],
+            "context": {
+                "path": str(context_path),
+                "sha256": hashlib.sha256(context_path.read_bytes()).hexdigest(),
+                "size_bytes": context_path.stat().st_size,
+            },
+            "plan_intent": {
+                "path": str(intent_path),
+                "sha256": hashlib.sha256(intent_path.read_bytes()).hexdigest(),
+                "size_bytes": intent_path.stat().st_size,
+            },
+            "entries": entries,
+        }
+        return evidence, request
+
+    def test_identity_v2_evidence_map_rejects_context_network_mismatch(self) -> None:
+        """A five-node map cannot bind an attacker-selected context network."""
+        with tempfile.TemporaryDirectory() as directory:
+            evidence, request = self._network_binding_evidence_fixture(
+                Path(directory), context_network_id="attacker-network"
+            )
+            with self.assertRaises(SystemExit) as raised:
+                self.module._identity_v2_evidence_map(evidence, request)
+        self.assertRegex(str(raised.exception), r"(?i)network|context|binding")
+
+    def test_identity_v2_evidence_map_accepts_governed_context_network(self) -> None:
+        """The canonical deployment network remains a valid map binding."""
+        with tempfile.TemporaryDirectory() as directory:
+            evidence, request = self._network_binding_evidence_fixture(
+                Path(directory), context_network_id=self.module.CANONICAL_NETWORK_ID
+            )
+            validated, raw_by_node, envelopes = self.module._identity_v2_evidence_map(
+                evidence, request
+            )
+        self.assertEqual(set(raw_by_node), set(self.module.NODE_ORDER))
+        self.assertEqual(set(envelopes), set(self.module.NODE_ORDER))
+
     def test_plan_requires_adapter_live_receipt_and_never_treats_plan_as_apply_proof(self) -> None:
         request = self._input()
         request.pop("adapter_verification")
@@ -1009,6 +1624,12 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as raised:
             self.module.build_plan(request)
         self.assertRegex(str(raised.exception), r"(?i)apply|proof|adapter|authority")
+
+    def test_build_plan_rejects_missing_identity_v2_evidence_map(self) -> None:
+        """Legacy receipt-only input must not bypass v2 map admission."""
+        with self.assertRaises(SystemExit) as raised:
+            self._build_plan_without_evidence(self._input())
+        self.assertRegex(str(raised.exception), r"(?i)identity.?v2|evidence|map|admission")
 
     def test_plan_marks_operation_journal_non_authoritative_and_adapter_owned(self) -> None:
         plan = self.module.build_plan(self._input())
@@ -1062,12 +1683,24 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
         for label, mutate in mutations:
             with self.subTest(receipt=label):
                 request = self._input()
-                mutate(request)
+                evidence = self._baseline_identity_v2_evidence
+                if label == "identity-signature":
+                    evidence = self._tampered_evidence_artifact(
+                        evidence,
+                        mutate=lambda envelope: envelope.__setitem__("signature_hex", "0" * 128),
+                    )
+                elif label == "identity-digest":
+                    evidence = self._tampered_evidence_artifact(
+                        evidence,
+                        mutate=lambda envelope: envelope.__setitem__("canonical_digest", "0" * 64),
+                    )
+                else:
+                    mutate(request)
                 with self.assertRaises(SystemExit) as raised:
-                    self.module.build_plan(request)
+                    self._build_plan_with_evidence(request, evidence)
                 self.assertRegex(
                     str(raised.exception),
-                    r"(?i)receipt|signature|digest|verified|authenticated|verifier",
+                    r"(?i)receipt|signature|digest|verified|authenticated|verifier|binding|envelope|identity",
                 )
 
     def test_plan_rejects_authority_binding_context_drift_and_stale_or_future_receipts(self) -> None:
@@ -1160,10 +1793,13 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
         self.assertRegex(str(raised.exception), r"(?i)surface|persistent|state")
 
         request = self._input()
-        request["nodes"][4]["identity_receipt"]["key_mode"] = "0644"
+        evidence = self._tampered_evidence_artifact(
+            self._baseline_identity_v2_evidence,
+            mutate=lambda envelope: envelope.__setitem__("key_mode", "0644"),
+        )
         with self.assertRaises(SystemExit) as raised:
-            self.module.build_plan(request)
-        self.assertRegex(str(raised.exception), r"(?i)key_mode|0600|identity")
+            self._build_plan_with_evidence(request, evidence)
+        self.assertRegex(str(raised.exception), r"(?i)key_mode|0600|identity|evidence|binding")
 
     def test_plan_rejects_unbound_frozen_head_signer_or_verifier(self) -> None:
         request = self._input()
@@ -1477,6 +2113,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 with self.subTest(scope=scope, node=node_name, mutation=label):
                     request = self._input()
                     self._bind_current_receipt_freshness(request)
+                    evidence = self._baseline_identity_v2_evidence
                     if scope == "inventory":
                         receipt = request["deployment_inventory"]["receipt"]
                     else:
@@ -1485,6 +2122,36 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                             for node in request["nodes"]
                             if node["name"] == node_name
                         )
+                        if value is None:
+                            evidence = self._tampered_evidence_artifact(
+                                evidence,
+                                node_name=node_name,
+                                mutate=lambda envelope, field=field: envelope.pop(field, None),
+                            )
+                        else:
+                            evidence = self._tampered_evidence_artifact(
+                                evidence,
+                                node_name=node_name,
+                                mutate=lambda envelope, field=field, value=value: envelope.__setitem__(
+                                    field, value
+                                ),
+                            )
+                            if label == "stale-window":
+                                evidence = self._tampered_evidence_artifact(
+                                    evidence,
+                                    node_name=node_name,
+                                    mutate=lambda envelope: envelope.__setitem__(
+                                        "expires_at", "2020-01-02T00:00:00Z"
+                                    ),
+                                )
+                            elif label == "future-window":
+                                evidence = self._tampered_evidence_artifact(
+                                    evidence,
+                                    node_name=node_name,
+                                    mutate=lambda envelope: envelope.__setitem__(
+                                        "expires_at", "2100-01-01T00:00:00Z"
+                                    ),
+                                )
                     if value is None:
                         receipt.pop(field)
                     else:
@@ -1502,8 +2169,11 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                         ),
                     )
                     with self.assertRaises(SystemExit) as raised:
-                        self.module.build_plan(request)
-                    self.assertRegex(str(raised.exception), expected_error)
+                        self._build_plan_with_evidence(request, evidence)
+                    self.assertRegex(
+                        str(raised.exception),
+                        expected_error + r"|identity|evidence|binding|envelope|verif",
+                    )
 
     def test_plan_rejects_receipt_freshness_outside_plan_capture_window(self) -> None:
         """Current-looking v2 receipts cannot escape the plan's bounded capture interval."""
@@ -1529,6 +2199,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 with self.subTest(scope=scope, node=node_name, mutation=label):
                     request = self._input()
                     self._bind_current_receipt_freshness(request, **freshness)
+                    evidence = self._baseline_identity_v2_evidence
                     if scope == "inventory":
                         receipt = request["deployment_inventory"]["receipt"]
                     else:
@@ -1536,6 +2207,11 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                             node["identity_receipt"]
                             for node in request["nodes"]
                             if node["name"] == node_name
+                        )
+                        evidence = self._tampered_evidence_artifact(
+                            evidence,
+                            node_name=node_name,
+                            mutate=lambda envelope, freshness=freshness: envelope.update(freshness),
                         )
                     receipt.update(freshness)
                     receipt["canonical_digest"] = self.module._canonical_receipt_digest(
@@ -1547,22 +2223,24 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                         ),
                     )
                     with self.assertRaises(SystemExit) as raised:
-                        self.module.build_plan(request)
+                        self._build_plan_with_evidence(request, evidence)
                     self.assertRegex(
                         str(raised.exception),
-                        r"(?i)capture|issued|expires|fresh|window|stale|inverted",
+                        r"(?i)capture|issued|expires|fresh|window|stale|inverted|identity|evidence|binding|envelope|verif",
                     )
 
-    def test_plan_rejects_direct_runtime_identity_v1_admission(self) -> None:
-        """The raw runtime identity receipt remains input material, never an admission envelope."""
+    def test_plan_ignores_direct_runtime_identity_v1_in_favor_of_retained_v2(self) -> None:
+        """Caller-supplied raw v1 identity cannot replace retained v2 evidence."""
         request = self._input()
         raw_identity = self._raw_runtime_identity_receipt_v1_bytes(
             request["nodes"][0]["identity_receipt"]
         )
         request["nodes"][0]["identity_receipt"] = json.loads(raw_identity)
-        with self.assertRaises(SystemExit) as raised:
-            self.module.build_plan(request)
-        self.assertRegex(str(raised.exception), r"(?i)identity.*schema|unsupported|v1|receipt")
+        plan = self.module.build_plan(request)
+        self.assertTrue(
+            all(node["identity_receipt"]["schema_version"] == self.module.IDENTITY_RECEIPT_SCHEMA
+                for node in plan["nodes"])
+        )
 
     @staticmethod
     def _raw_runtime_identity_receipt_v1_bytes(
@@ -1583,21 +2261,18 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
         return json.dumps(raw, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
 
     def test_plan_rejects_identity_metadata_rebound_without_new_raw_v1_digest(self) -> None:
-        """Changing key metadata cannot reuse a digest over the prior raw v1 bytes."""
+        """Changing retained raw key metadata cannot reuse the prior v2 bindings."""
         request = self._input()
-        identity = request["nodes"][0]["identity_receipt"]
-        raw_v1 = self._raw_runtime_identity_receipt_v1_bytes(identity)
-        identity["signed_payload_sha256"] = hashlib.sha256(raw_v1).hexdigest()
-        identity["key_sha256"] = "8" * 64
-        identity["key_size_bytes"] = 256
-        identity["canonical_digest"] = self.module._canonical_receipt_digest(
-            identity, excluded_fields=frozenset({"peer_id"})
+        evidence = self._tampered_evidence_artifact(
+            self._baseline_identity_v2_evidence,
+            artifact="raw_v1",
+            mutate=lambda raw: raw.update(key_sha256="8" * 64, key_size_bytes=256),
         )
         with self.assertRaises(SystemExit) as raised:
-            self.module.build_plan(request)
+            self._build_plan_with_evidence(request, evidence)
         self.assertRegex(
             str(raised.exception),
-            r"(?i)identity|payload|digest|signature|binding|key",
+            r"(?i)identity|payload|digest|signature|binding|key|evidence|raw",
         )
 
     def test_executable_v2_sidecar_binds_exact_runtime_raw_v1_bytes(self) -> None:
@@ -1811,8 +2486,8 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
         self.assertRegex(result.stderr, r"(?i)issued|expires|timestamp|fresh|time")
         self.assertFalse(output_path.exists())
 
-    def test_sidecar_to_plan_rejects_template_carried_signature_without_verification(self) -> None:
-        """A shape-valid sidecar output is not admission evidence without verification."""
+    def test_sidecar_output_cannot_replace_retained_v2_evidence(self) -> None:
+        """An unverified sidecar output cannot replace retained v2 evidence."""
         request = self._input()
         identity = request["nodes"][0]["identity_receipt"]
         raw_v1 = self._raw_runtime_identity_receipt_v1_bytes(identity)
@@ -1851,9 +2526,14 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
                 output_path.read_text(encoding="utf-8")
             )
 
-        with self.assertRaises(SystemExit) as raised:
-            self.module.build_plan(request)
-        self.assertRegex(str(raised.exception), r"(?i)signature|verif|auth|trust|receipt")
+        plan = self.module.build_plan(request)
+        self.assertEqual(
+            plan["identity_v2_evidence"], self._baseline_identity_v2_evidence
+        )
+        self.assertTrue(
+            all(node["identity_receipt"]["schema_version"] == self.module.IDENTITY_RECEIPT_SCHEMA
+                for node in plan["nodes"])
+        )
 
     def test_plan_projects_identity_commands_through_governed_v2_sidecar(self) -> None:
         """Every authoritative identity command must use the executable v2 sidecar."""
@@ -1867,17 +2547,19 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
         self.assertNotIn("oasis7_chain_runtime identity-receipt --config-dir", runbook)
 
     def test_plan_rejects_synthetic_identity_digest_and_signature_pair(self) -> None:
-        """The all-a/all-b fixture pair must never become an apply-ready identity."""
+        """A synthetic retained envelope cannot become an apply-ready identity."""
         request = self._input()
-        identity = request["nodes"][0]["identity_receipt"]
-        identity["signed_payload_sha256"] = "a" * 64
-        identity["signature_hex"] = "b" * 128
-        identity["canonical_digest"] = self.module._canonical_receipt_digest(
-            identity, excluded_fields=frozenset({"peer_id"})
+        evidence = self._tampered_evidence_artifact(
+            self._baseline_identity_v2_evidence,
+            mutate=lambda envelope: envelope.update(
+                signed_payload_sha256="a" * 64,
+                signature_hex="b" * 128,
+                canonical_digest="c" * 64,
+            ),
         )
         with self.assertRaises(SystemExit) as raised:
-            self.module.build_plan(request)
-        self.assertRegex(str(raised.exception), r"(?i)identity|payload|digest|placeholder")
+            self._build_plan_with_evidence(request, evidence)
+        self.assertRegex(str(raised.exception), r"(?i)identity|payload|digest|placeholder|evidence|binding")
 
     def test_governed_bootstrap_runbook_describes_v2_identity_envelope_boundary(self) -> None:
         """The authoritative runbook must retire raw v1 direct admission and specify v2."""

@@ -51,7 +51,7 @@ PROVIDER_RECEIPT_SCHEMA = "oasis7.clean_room_provider_receipt.v1"
 NO_BACKUP_AUTHORITY_SCHEMA = "oasis7.no_backup_authority.v1"
 RECOVERY_RECEIPT_SCHEMA = "oasis7.recovery_receipt.v1"
 IDENTITY_RECEIPT_SCHEMA = "oasis7.identity_receipt.v2"
-IDENTITY_V2_EVIDENCE_SCHEMA = "oasis7.identity_v2_evidence_map.v1"
+IDENTITY_V2_EVIDENCE_SCHEMA = "oasis7.identity_v2_evidence_map.v2"
 IDENTITY_RECEIPT_FIELDS = frozenset(
     {
         "schema_version",
@@ -929,32 +929,34 @@ def validate_plan(
     if authority_plan.get("consumer_impact_record") != plan["consumer_impact_record"]:
         _fail("plan authority is not bound to the consumer impact record")
     _validate_planner_authority(plan)
-    identity_v2_evidence: dict[str, Any] | None = None
+    identity_v2_evidence: dict[str, Any]
     evidence_raw_v1: Mapping[str, bytes] | None = None
-    if plan.get("identity_v2_evidence") is not None:
-        identity_v2_evidence = _object(plan.get("identity_v2_evidence"), "identity-v2 evidence map")
-        try:
-            validated_evidence, evidence_raw_v1, _ = planner._identity_v2_evidence_map(
-                identity_v2_evidence,
-                {
-                    "authority": authority_plan,
-                    "capture_window_id": plan.get("capture_window_id"),
-                },
-            )
-            context_path, _ = planner._evidence_descriptor(
-                validated_evidence.get("context"), "identity-v2 context"
-            )
-            intent_path, _ = planner._evidence_descriptor(
-                validated_evidence.get("plan_intent"), "identity-v2 plan intent"
-            )
-            planner._independently_verify_identity_v2_entries(
-                validated_evidence, context_path, intent_path
-            )
-        except (SystemExit, KeyError, TypeError) as error:
-            _fail(f"identity-v2 evidence map validation failed: {error}")
-        if raw_v1_bytes_by_node is not None:
-            _fail("identity-v2 evidence map cannot be combined with caller raw-v1 mapping")
-        raw_v1_bytes_by_node = evidence_raw_v1
+    if plan.get("identity_v2_evidence") is None:
+        _fail("identity-v2 evidence map is required for adapter admission")
+    identity_v2_evidence = _object(plan.get("identity_v2_evidence"), "identity-v2 evidence map")
+    evidence_envelopes: Mapping[str, dict[str, Any]]
+    try:
+        validated_evidence, evidence_raw_v1, evidence_envelopes = planner._identity_v2_evidence_map(
+            identity_v2_evidence,
+            {
+                "authority": authority_plan,
+                "capture_window_id": plan.get("capture_window_id"),
+            },
+        )
+        context_path, _ = planner._evidence_descriptor(
+            validated_evidence.get("context"), "identity-v2 context"
+        )
+        intent_path, _ = planner._evidence_descriptor(
+            validated_evidence.get("plan_intent"), "identity-v2 plan intent"
+        )
+        planner._independently_verify_identity_v2_entries(
+            validated_evidence, context_path, intent_path
+        )
+    except (SystemExit, KeyError, TypeError) as error:
+        _fail(f"identity-v2 evidence map validation failed: {error}")
+    if raw_v1_bytes_by_node is not None:
+        _fail("identity-v2 evidence map cannot be combined with caller raw-v1 mapping")
+    raw_v1_bytes_by_node = evidence_raw_v1
     if plan.get("node_order") != list(planner.NODE_ORDER):
         _fail("plan node order is not the code-owned five-node order")
     if plan.get("canonical_host_inventory") != planner.CANONICAL_HOST_INVENTORY:
@@ -1046,10 +1048,6 @@ def validate_plan(
             identity.get("schema_version") != IDENTITY_RECEIPT_SCHEMA
             or identity.get("authenticated") is not True
             or identity.get("verified") is not True
-            or (
-                identity_v2_evidence is None
-                and identity.get("signer_id") not in CANONICAL_SIGNER_ALLOWLIST
-            )
             or identity.get("verifier_id") != CANONICAL_VERIFIER_ID
             or identity.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID
             or identity.get("node_id") != node["node_id"]
@@ -1060,18 +1058,28 @@ def validate_plan(
             f"{name} identity receipt",
             plan["capture_window_id"],
             capture_window_bounds=capture_window_bounds,
-            expected_rotation_epoch=(
-                None if identity_v2_evidence is not None else CANONICAL_ROTATION_EPOCH
-            ),
+            expected_rotation_epoch=None,
         )
+        retained_envelope = evidence_envelopes.get(name)
+        if not isinstance(retained_envelope, dict):
+            _fail(f"{name} identity receipt is missing from the retained v2 evidence map")
+        expected_identity = {
+            field: retained_envelope[field] for field in IDENTITY_RECEIPT_FIELDS
+        }
+        if identity != expected_identity:
+            mismatched_fields = sorted(
+                field
+                for field in IDENTITY_RECEIPT_FIELDS
+                if identity.get(field) != expected_identity.get(field)
+            )
+            _fail(
+                f"{name} identity receipt does not match the retained v2 evidence map: "
+                + ", ".join(mismatched_fields)
+            )
         _reject_secret_fields(identity, f"{name} identity receipt")
         _nonzero_hex(identity.get("signed_payload_sha256"), HEX64_RE, f"{name} identity payload")
         _nonzero_hex(identity.get("signature_hex"), SIGNATURE_RE, f"{name} identity signature")
         _nonzero_hex(identity.get("canonical_digest"), HEX64_RE, f"{name} identity digest")
-        if identity_v2_evidence is None and identity.get("canonical_digest") != _canonical_receipt_digest(
-            identity, excluded_fields=frozenset({"peer_id"})
-        ):
-            _fail(f"{name} identity receipt canonical digest is not independently bound")
         key_size = identity.get("key_size_bytes")
         if not isinstance(key_size, int) or isinstance(key_size, bool) or key_size <= 0:
             _fail(f"{name} identity key size is malformed")
@@ -4210,6 +4218,13 @@ def main(argv: list[str] | None = None) -> int:
         help="require an injected provider transport; otherwise fail closed",
     )
     args = parser.parse_args(argv)
+    # Never let an apply request reach execute(), provenance verification, or
+    # transaction locking without the exact current identity-v2 admission
+    # inputs.  The non-apply path retains its plan-only behavior below.
+    if args.apply and args.identity_v2_evidence_map is None:
+        _fail("--apply requires the identity-v2 evidence map and current admission mode")
+    if args.apply and args.identity_v2_mode != "current_admission":
+        _fail("--apply requires identity-v2 current_admission mode")
     if (args.identity_v2_evidence_map is None) != (args.identity_v2_mode is None):
         _fail("identity-v2 evidence-map and mode must be supplied together")
     plan = _load_json(args.plan, "plan")

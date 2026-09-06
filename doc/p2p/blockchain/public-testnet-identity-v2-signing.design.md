@@ -1,12 +1,17 @@
 # Public-testnet identity-receipt v2 signing design
 
-Status: **PROPOSED / NOT IMPLEMENTED**
+Status: **OFFLINE IMPLEMENTED / LIVE ADMISSION NOT PROVISIONED**
 
 - Task: GitHub Issue `3607`, UID `task_174f0a5a87394012b071171cc4a52372`
-- Frozen design context: HEAD `3fc05dec53312617a1d7c795c10548c22784b4f8`
+- Frozen design context (historical): HEAD `3fc05dec53312617a1d7c795c10548c22784b4f8`
+- Implementation state: the offline signing tool, four-command sidecar bridge,
+  v2 evidence-map planner gate, and five-map aggregator are implemented in the
+  current task overlay. They are not production provisioning or release
+  evidence.
 - Scope: define the dedicated identity-v2 signing, assembly, verification, and
-  trust-config contract; this document does not create keys, call a provider,
-  or change the sidecar/planner/adapter.
+  trust-config contract and its implemented file/CLI bridge; this document does
+  not create keys, call a provider, provision trust anchors, or authorize live
+  deployment.
 - Authority: [`public-testnet-governed-bootstrap.runbook.md`](public-testnet-governed-bootstrap.runbook.md)
   and [`public-testnet-governance-trust-root-provisioning.md`](public-testnet-governance-trust-root-provisioning.md).
 
@@ -25,9 +30,11 @@ signers, and rollback signer are not identity-v2 signers. The current fixture
 keys in `scripts/fixtures/oasis7-governance-root.v1.json` remain fixture-only
 and must never be selected as production custody.
 
-No live provider is configured. Until the approved provider, trust configuration,
-and independent verifier exist, the executable path is `capability_blocked`; a
-callback, copied signature, or `verified: true` field cannot satisfy admission.
+The offline executable path is implemented, but no live provider is configured.
+Until the approved provider, trust configuration, independently pinned registry,
+and independent verifier exist, production `current_admission` remains
+`capability_blocked`; a callback, copied signature, or `verified: true` field
+cannot satisfy admission.
 
 This proposal does not supersede the active runbook's existing-root requirement.
 The preferred authority migration is a dedicated identity-v2 profile authorized
@@ -120,15 +127,29 @@ not an endpoint or command. A pinned registry maps it to the permitted signer,
 public-key digest, algorithm, authenticated transport and custody adapter digest.
 Credentials are supplied exclusively by the operator's external custody runtime;
 no CLI argument can override endpoint, command, trust anchor or authentication.
-The authenticated provider receipt has the exact fields `schema_version`,
-`provider_id`, `request_id`, `signer_id`, `public_key_sha256`, `algorithm`,
-`canonical_payload_sha256`, `signature_sha256`, `context_digest`,
-`rotation_epoch`, `capture_window_id`, and `issued_at`, plus a detached
-provider-authentication proof. The independently pinned provider identity must
-authenticate this receipt; exact payload, signature and request bindings are
-checked again by the independent verifier. A self-reported JSON claim is not
-custody attestation. Concrete registry/transport/proof profiles remain subject
-to the authority migration above; absence blocks production signing.
+The authenticated provider receipt is `oasis7.identity_v2_provider_attestation.v2`
+with the exact fields `schema_version`, `network_id`, `provider_id`, `request_id`,
+`signer_id`, `public_key_sha256`, `algorithm`, `canonical_payload_sha256`,
+`signature_sha256`, `context_digest`, `rotation_epoch`, `capture_window_id`,
+`issued_at`, `expires_at`, `task_uid`, `head_oid`, `proof_ref`, and `proof`.
+The nested proof is exactly
+`oasis7.identity_v2_provider_authentication_proof.v1` with only
+`schema_version`, `algorithm`, `claims_sha256`, and `signature_hex`. Its
+domain-separated canonical claims are
+`oasis7.identity_v2_provider_authentication_claims.v1` under
+`oasis7.identity-v2-provider-authentication/v1`; they bind the provider,
+request, signer/key, payload/signature digests, context, task/HEAD, rotation,
+window, issue/expiry times, and proof reference. The provider signs
+`OASIS7-IDENTITY-V2-PROVIDER-AUTH\0` plus those claims with the same public key
+resolved from the pinned registry. The independently pinned provider identity
+must authenticate this receipt; exact payload, signature, proof, and request
+bindings are checked again by the independent verifier. `req-v2:<64 lowercase
+hex>` is generated as a CSPRNG request challenge and `proof-v1:<64 lowercase
+hex>` is a bounded reference; format checks do not prove entropy or prevent
+covert data. The offline implementation has no provider-side durable one-shot
+replay authority, so freshness/uniqueness are binding checks rather than proof
+of provider consumption. A self-reported JSON claim is not custody attestation;
+absence of the external authority still blocks production signing.
 
 ## 4. Canonical payload and context
 
@@ -239,34 +260,40 @@ and regenerate them; it may not copy them into the final receipt.
   independently verify Ed25519 over exact bytes. Recompute every digest and
   binding before setting either verdict true; never trust copied flags/signature.
 
-## 6. Proposed executable contract (not present today)
+## 6. Executable contract (offline implementation; live authority not provisioned)
 
-The future dedicated executable is provisionally named
-`scripts/p2p-public-testnet-identity-v2-signing-tool.py`. The path is a design
-target, not an existing command. It has four subcommands and uses only regular
-files plus an operator-approved provider bridge:
+The implemented dedicated executable is
+`scripts/p2p-public-testnet-identity-v2-signing-tool.py`. It has four
+file-oriented subcommands and uses only regular files plus an
+operator-approved provider bridge. The exact parser contract is:
 
 ```bash
-<identity-v2-tool> prepare \
+python3 scripts/p2p-public-testnet-identity-v2-signing-tool.py prepare \
   --raw-v1 <raw-v1.bin> --template <unsigned-template.json> \
   --context <context.json> --plan-intent <plan-intent.json> \
   --trust-config /operator/truth/identity-v2-trust-config.json \
+  --provider-registry /operator/truth/identity-v2-provider-registry.json \
   --payload-out <payload.bin> --manifest-out <prepare.json>
 
-<identity-v2-tool> sign \
+python3 scripts/p2p-public-testnet-identity-v2-signing-tool.py sign \
   --payload <payload.bin> --manifest <prepare.json> \
+  --provider-registry /operator/truth/identity-v2-provider-registry.json \
   --provider-ref <approved-custody-ref> \
   --signature-out <signature.hex> --attestation-out <sign-attestation.json>
 
-<identity-v2-tool> assemble \
+python3 scripts/p2p-public-testnet-identity-v2-signing-tool.py assemble \
   --payload <payload.bin> --manifest <prepare.json> --signature <signature.hex> \
-  --attestation <sign-attestation.json> --out <unsigned-envelope.json>
+  --attestation <sign-attestation.json> \
+  --provider-registry /operator/truth/identity-v2-provider-registry.json \
+  --out <unsigned-envelope.json>
 
-<identity-v2-tool> verify \
+python3 scripts/p2p-public-testnet-identity-v2-signing-tool.py verify \
   --mode current_admission \
-  --envelope <unsigned-envelope.json> --raw-v1 <raw-v1.bin> \
+  --envelope <unsigned-envelope.json> \
+  --attestation <provider-attestation-v2.json> --raw-v1 <raw-v1.bin> \
   --context <context.json> --plan-intent <plan-intent.json> \
   --trust-config /operator/truth/identity-v2-trust-config.json \
+  --provider-registry /operator/truth/identity-v2-provider-registry.json \
   --out <verified-envelope.json> --verification-out <verification.json>
 ```
 
@@ -280,6 +307,18 @@ reconstructs and byte-compares the payload, verifies trust and Ed25519, then
 writes freshly computed verdicts and an independent receipt. Only unsigned
 verdict/digest fields may change after `prepare`.
 
+The provider registry's `verifier.executable_path` is the authoritative
+independent verifier selection; it must be a distinct executable from this
+signing tool, the sidecar, planner, adapter, and provider adapters. `verify`
+invokes that exact executable with the fixed file-oriented `verify` argument
+shape in a private temporary output directory, after validating the pinned
+registry and local bindings. A non-zero exit, missing/noncanonical output, stale
+receipt, or any mismatch between the verifier's output pair and the local
+recomputation fails closed before either caller output is written. Only the
+canonical output pair returned by the pinned registry verifier is promoted to
+the requested paths. The sidecar's `--verifier-tool` is an assertion of this
+registry-selected path, never an alternate verifier choice.
+
 `assemble` opens the payload as a regular non-symlink file and requires its
 exact bytes, size and SHA-256 to match the prepare manifest, canonical payload
 reconstruction and authenticated provider receipt. It verifies the detached
@@ -287,45 +326,83 @@ signature against these same bytes before emitting an envelope. Any mismatch
 aborts without an output; a manifest alone cannot stand in for the payload.
 
 The verification receipt records raw-v1, canonical-payload, and envelope
-digests, signer/public-key and trust-config digests, verifier executable digest,
-capture context, and result. It contains no private provider output.
+digests, signer/public-key and trust-config/registry digests, verifier executable
+digest, provider `proof_ref` and `proof_claims_sha256`, capture context, and
+result. It contains no private provider output.
 
-## 7. Context and raw-byte executable bridging
+## 7. Context, retention, and raw-byte executable bridging
 
-The single-node sidecar should eventually receive explicit `--context`,
-`--plan-intent`, `--trust-config`, `--signer-tool`, and `--verifier-tool`
-arguments and orchestrate the four commands in a private temporary directory.
-It passes the original `--raw-v1` unchanged. Missing tool, provider, trust
-config, or verifier receipt is a capability blocker.
+The single-node sidecar now accepts explicit `--context`, `--plan-intent`,
+`--trust-config`, `--provider-registry`, `--provider-ref`, `--signer-tool`,
+`--verifier-tool`, `--evidence-map-out`, and `--evidence-dir` arguments. In
+bridge mode these seams are all required, the sidecar passes the
+original `--raw-v1` unchanged, and it orchestrates the four fixed commands in a
+private temporary directory. Missing tool, provider, trust config, registry,
+or verifier receipt remains a capability blocker.
 
-The adapter should eventually accept one exact raw-byte manifest:
+When `--evidence-dir` is supplied, the sidecar atomically promotes a
+transaction-unique directory containing the exact context and plan-intent
+files plus these seven per-node artifacts: `raw_v1`, `prepare_manifest`,
+`payload`, `provider_attestation`, `unsigned_envelope`, `signed_envelope`, and
+`verification`. The evidence root and transaction directory are mode `0700`;
+retained files are owner-only mode `0600`, regular non-symlink files with
+symlink-free ancestors. Each descriptor records only `path`, `sha256`, and
+`size_bytes`; staging writes and parent-directory fsync precede promotion, and
+an incomplete private stage is cleaned up on failure. The provider-attestation
+object has an exact field allowlist, but the value/content sensitivity of its
+detached authentication proof remains a provider/runtime diagnosis. Credentials,
+private keys, and raw command output must not be placed in retained evidence.
+
+The planner and adapter consume one exact v2 evidence map. A sidecar emits a
+one-node map; `scripts/p2p-public-testnet-identity-v2-evidence-aggregate.py`
+accepts exactly five such maps, requires one entry for each canonical node in
+the fixed order `storage-205`, `sequencer-204`, `linux-lan-observer`,
+`windows-observer`, `macos-observer`, and re-runs the canonical planner
+validation before atomically writing the aggregate. The map shape is:
 
 ```json
 {
-  "schema_version": "oasis7.identity_receipt.v2_raw_map.v1",
+  "schema_version": "oasis7.identity_v2_evidence_map.v2",
+  "network_id": "oasis7-public-testnet-governed-20260606",
+  "task_uid": "<task-uid>",
+  "head_oid": "<frozen-head-oid>",
+  "context": {"path": "<context.json>", "sha256": "<64-lower-hex>", "size_bytes": 1},
+  "plan_intent": {"path": "<plan-intent.json>", "sha256": "<64-lower-hex>", "size_bytes": 1},
   "entries": [
     {
       "node_name": "<managed-node-name>",
       "node_id": "<governed-node-id>",
       "peer_id": "<expected-peer-id>",
-      "raw_v1_path": "<operator-captured-regular-file>",
-      "sha256": "<64-lower-hex>",
-      "size_bytes": 1
+      "raw_v1": {"path": "<raw-v1>", "sha256": "<64-lower-hex>", "size_bytes": 1},
+      "prepare_manifest": {"path": "<prepare.json>", "sha256": "<64-lower-hex>", "size_bytes": 1},
+      "payload": {"path": "<payload.bin>", "sha256": "<64-lower-hex>", "size_bytes": 1},
+      "provider_attestation": {"path": "<provider-attestation.json>", "sha256": "<64-lower-hex>", "size_bytes": 1},
+      "unsigned_envelope": {"path": "<unsigned-envelope.json>", "sha256": "<64-lower-hex>", "size_bytes": 1},
+      "signed_envelope": {"path": "<verified-envelope.json>", "sha256": "<64-lower-hex>", "size_bytes": 1},
+      "verification": {"path": "<verification.json>", "sha256": "<64-lower-hex>", "size_bytes": 1}
     }
   ]
 }
 ```
 
-The manifest contains the exact managed node set once. The adapter passes bytes
-from this map to each prepare/verify subprocess and retains the same association
-in its transaction input. It never derives bytes from `key_path`, synthesizes
-JSON, or pairs a receipt by list position. The map path is transport-only; the
-verifier hashes and validates the opened bytes first.
+The map contains the exact managed node set once. The planner validates every
+descriptor, context/intent binding, seven-artifact closure, node/peer registry
+binding, and current-admission envelope/verification receipt. It never derives
+bytes from `key_path`, synthesizes JSON, or pairs a receipt by list position.
+The map path is transport-only; the verifier hashes and validates the opened
+bytes first. The canonical network binding is
+`oasis7-public-testnet-governed-20260606`; it is not caller-selectable.
 
-The current sidecar CLI and adapter CLI do not expose these executable seams.
-Their current callback-only/plan-only behavior must remain fail-closed until
-this contract is implemented and approved; adding another mock callback is not
-an implementation of this bridge.
+The planner CLI requires `--identity-v2-evidence-map <verified-map.json>`.
+Every adapter invocation carrying identity-v2 inputs, including an `--apply`
+invocation, must carry the exact frozen map with
+`--identity-v2-mode current_admission`; the gate checks both before execute,
+provenance verification, transaction locking, or provider transport. This
+current map path remains validation-only and does not grant apply authority. A
+`historical_audit` map is forensic only and is rejected at this boundary.
+Current offline implementation does not provision the deployment anchors or
+grant pair-executor production v2 input; the existing legacy
+`--identity-receipts` path must not be repurposed.
 
 ## 8. Test and evidence contract
 
@@ -342,6 +419,12 @@ public-key, signer/verifier executable, and exact raw-v1 digests; prepare/sign/
 verify manifests; independent verification receipt; all context bindings; and
 an audit showing no secret emission. The final plan may reference these
 digests, but cannot alter the signed payload or pre-receipt plan-intent digest.
+
+Synthetic fixtures, fake transport, test-only module-cache wrappers, and
+temporary harness receipts are orphan/harness evidence only. They demonstrate
+validation behavior but do not prove provider custody, trust-config/registry/
+verifier pinning, node health, deployment, or release readiness and must not be
+promoted into production evidence.
 
 This design has no tick, replay, checkpoint, or recovery-state mutation. Its
 determinism guarantee is limited to canonical byte production and exact

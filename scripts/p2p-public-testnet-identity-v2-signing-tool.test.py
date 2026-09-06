@@ -71,6 +71,7 @@ def resolve_openssl() -> Path:
 
 OPENSSL = resolve_openssl()
 PREFIX = b"OASIS7-IDENTITY-RECEIPT-V2\0"
+AUTH_PREFIX = b"OASIS7-IDENTITY-V2-PROVIDER-AUTH\0"
 NETWORK_ID = "oasis7-public-testnet-governed-20260606"
 TRUST_ROOT_ID = "oasis7-public-testnet-governance-root-v1"
 VERIFIER_ID = "governed-receipt-verifier"
@@ -156,6 +157,10 @@ from pathlib import Path
 
 OPENSSL = {str(OPENSSL)!r}
 PRIVATE_KEY = {str(private_key)!r}
+AUTH_PREFIX = b"OASIS7-IDENTITY-V2-PROVIDER-AUTH\\0"
+
+def canonical(value):
+    return json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--request", required=True)
@@ -173,8 +178,39 @@ subprocess.run(
 signature = signature_path.read_bytes()
 if len(signature) != 64:
     raise SystemExit("test provider produced a non-Ed25519 signature")
+proof_ref = "proof-v1:" + hashlib.sha256(("provider-proof:" + request["request_id"]).encode()).hexdigest()
+claims = {{
+    "schema_version": "oasis7.identity_v2_provider_authentication_claims.v1",
+    "domain_separator": "oasis7.identity-v2-provider-authentication/v1",
+    "network_id": request["network_id"],
+    "provider_id": request["provider_id"],
+    "request_id": request["request_id"],
+    "signer_id": request["signer_id"],
+    "public_key_sha256": request["public_key_sha256"],
+    "canonical_payload_sha256": hashlib.sha256(payload).hexdigest(),
+    "signature_sha256": hashlib.sha256(signature).hexdigest(),
+    "context_digest": request["context_digest"],
+    "task_uid": request["task_uid"],
+    "head_oid": request["head_oid"],
+    "rotation_epoch": request["rotation_epoch"],
+    "capture_window_id": request["capture_window_id"],
+    "issued_at": request["issued_at"],
+    "expires_at": request["expires_at"],
+    "proof_ref": proof_ref,
+}}
+claims_path = signature_path.with_name("provider-auth-claims.bin")
+claims_path.write_bytes(AUTH_PREFIX + canonical(claims))
+proof_signature_path = signature_path.with_name("provider-auth-signature.raw")
+subprocess.run(
+    [OPENSSL, "pkeyutl", "-sign", "-inkey", PRIVATE_KEY, "-rawin", "-in", str(claims_path), "-out", str(proof_signature_path)],
+    check=True,
+)
+proof_signature = proof_signature_path.read_bytes()
+if len(proof_signature) != 64:
+    raise SystemExit("test provider produced a non-Ed25519 authentication signature")
 attestation = {{
-    "schema_version": "oasis7.identity_v2_provider_attestation.v1",
+    "schema_version": "oasis7.identity_v2_provider_attestation.v2",
+    "network_id": request["network_id"],
     "provider_id": request["provider_id"],
     "request_id": request["request_id"],
     "signer_id": request["signer_id"],
@@ -183,12 +219,127 @@ attestation = {{
     "canonical_payload_sha256": hashlib.sha256(payload).hexdigest(),
     "signature_sha256": hashlib.sha256(signature).hexdigest(),
     "context_digest": request["context_digest"],
+    "task_uid": request["task_uid"],
+    "head_oid": request["head_oid"],
     "rotation_epoch": request["rotation_epoch"],
     "capture_window_id": request["capture_window_id"],
     "issued_at": request["issued_at"],
-    "detached_provider_authentication_proof": "test-only-openssl:" + hashlib.sha256(signature).hexdigest(),
+    "expires_at": request["expires_at"],
+    "proof_ref": proof_ref,
+    "proof": {{
+        "schema_version": "oasis7.identity_v2_provider_authentication_proof.v1",
+        "algorithm": "ed25519",
+        "claims_sha256": hashlib.sha256(canonical(claims)).hexdigest(),
+        "signature_hex": proof_signature.hex(),
+    }},
 }}
 Path(args.attestation_out).write_bytes(json.dumps(attestation, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+'''
+
+
+def verifier_source(
+    invocation_marker: Path,
+    tool: Path,
+    governance_root: Path,
+    trust_config: Path,
+    provider_registry: Path,
+) -> str:
+    """Return a test-only independently invoked verifier process."""
+
+    return f'''#!/usr/bin/env python3
+import argparse
+import hashlib
+import json
+import subprocess
+from datetime import datetime, timezone
+from pathlib import Path
+
+MARKER = {str(invocation_marker)!r}
+OPENSSL = {str(OPENSSL)!r}
+PREFIX = b"OASIS7-IDENTITY-RECEIPT-V2\\0"
+
+parser = argparse.ArgumentParser()
+parser.add_argument("command", choices=("verify",))
+parser.add_argument("--mode", required=True, choices=("current_admission", "historical_audit"))
+parser.add_argument("--envelope", required=True)
+parser.add_argument("--attestation", required=True)
+parser.add_argument("--raw-v1", required=True)
+parser.add_argument("--context", required=True)
+parser.add_argument("--plan-intent", required=True)
+parser.add_argument("--trust-config", required=True)
+parser.add_argument("--provider-registry", required=True)
+parser.add_argument("--out", required=True)
+parser.add_argument("--verification-out", required=True)
+args = parser.parse_args()
+Path(MARKER).write_text("invoked\\n", encoding="utf-8")
+
+def canonical(value):
+    return json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+def digest(value):
+    return hashlib.sha256(value).hexdigest()
+
+envelope_path = Path(args.envelope)
+raw_path = Path(args.raw_v1)
+context = json.loads(Path(args.context).read_text(encoding="utf-8"))
+intent = json.loads(Path(args.plan_intent).read_text(encoding="utf-8"))
+trust = json.loads(Path(args.trust_config).read_text(encoding="utf-8"))
+registry_path = Path(args.provider_registry)
+registry = json.loads(registry_path.read_text(encoding="utf-8"))
+envelope = json.loads(envelope_path.read_text(encoding="utf-8"))
+attestation = json.loads(Path(args.attestation).read_text(encoding="utf-8"))
+signed = dict((key, envelope[key]) for key in envelope if key not in set(("signature_hex", "canonical_digest", "authenticated", "verified", "historical_only", "apply_authorized")))
+payload = PREFIX + canonical(signed)
+provider = next(item for item in registry["providers"] if item["signer_id"] == envelope["signer_id"])
+public_key_der = Path(args.out).with_name("independent-public-key.der")
+public_key_der.write_bytes(b"\\x30\\x2a\\x30\\x05\\x06\\x03\\x2b\\x65\\x70\\x03\\x21\\x00" + Path(provider["public_key_ref"]).read_bytes())
+signature_path = Path(args.out).with_name("independent-signature.raw")
+signature_path.write_bytes(bytes.fromhex(envelope["signature_hex"]))
+payload_path = Path(args.out).with_name("independent-payload.bin")
+payload_path.write_bytes(payload)
+subprocess.run(
+    [OPENSSL, "pkeyutl", "-verify", "-pubin", "-inkey", str(public_key_der), "-keyform", "DER", "-rawin", "-in", str(payload_path), "-sigfile", str(signature_path)],
+    check=True,
+    capture_output=True,
+)
+
+output = dict(signed)
+output["signature_hex"] = envelope["signature_hex"]
+output["canonical_digest"] = envelope["canonical_digest"]
+output["authenticated"] = True
+output["verified"] = True
+historical_only = args.mode == "historical_audit"
+output["historical_only"] = historical_only
+output["apply_authorized"] = not historical_only
+now = datetime.now(timezone.utc).replace(microsecond=0)
+receipt = dict(
+    schema_version="oasis7.identity_v2_verification_receipt.v1",
+    mode=args.mode,
+    evaluation_time=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    raw_v1_sha256=digest(raw_path.read_bytes()),
+    canonical_payload_sha256=digest(payload),
+    envelope_sha256=digest(envelope_path.read_bytes()),
+    signer_id=envelope["signer_id"],
+    public_key_sha256=provider["public_key_sha256"],
+    trust_config_sha256=digest(Path(args.trust_config).read_bytes()),
+    provider_registry_sha256=digest(registry_path.read_bytes()),
+    verifier_executable_sha256=registry["verifier"]["executable_sha256"],
+    network_id=envelope["network_id"],
+    proof_ref=attestation["proof_ref"],
+    proof_claims_sha256=attestation["proof"]["claims_sha256"],
+    task_uid=envelope["task_uid"],
+    head_oid=envelope["head_oid"],
+    node_id=envelope["node_id"],
+    peer_id=envelope["peer_id"],
+    capture_window_id=envelope["capture_window_id"],
+    rotation_epoch=envelope["rotation_epoch"],
+    historical_only=historical_only,
+    apply_authorized=not historical_only,
+    authority_scope="deployed-governance-root",
+    verified=True,
+)
+Path(args.out).write_bytes(canonical(output))
+Path(args.verification_out).write_bytes(canonical(receipt))
 '''
 
 
@@ -208,7 +359,8 @@ class IdentityV2SigningToolContractTests(unittest.TestCase):
         self.public_key_pem = self.root / "public-key.pem"
         self.private_key = self.root / "ephemeral-custody-key.pem"
         self.provider = self.root / "ephemeral-provider.py"
-        self.verifier = self.root / "pinned-verifier-marker"
+        self.verifier = self.root / "pinned-verifier.py"
+        self.verifier_invocation_marker = self.root / "verifier-invoked.marker"
         self.governance_root = self.root / "governance-root.json"
         self.now = datetime.now(timezone.utc).replace(microsecond=0)
         self.capture_start = (self.now - timedelta(seconds=10)).isoformat().replace("+00:00", "Z")
@@ -254,7 +406,16 @@ class IdentityV2SigningToolContractTests(unittest.TestCase):
     def _write_provider(self) -> None:
         self.provider.write_text(provider_source(self.private_key), encoding="utf-8")
         self.provider.chmod(self.provider.stat().st_mode | stat.S_IXUSR)
-        self.verifier.write_text("test-only verifier marker\n", encoding="utf-8")
+        self.verifier.write_text(
+            verifier_source(
+                self.verifier_invocation_marker,
+                TOOL,
+                self.governance_root,
+                self.trust,
+                self.registry,
+            ),
+            encoding="utf-8",
+        )
         self.verifier.chmod(self.verifier.stat().st_mode | stat.S_IXUSR)
 
     def _write_context_and_intent(self) -> None:
@@ -359,6 +520,7 @@ class IdentityV2SigningToolContractTests(unittest.TestCase):
                 "signer_id": SIGNER_ID,
                 "verifier_id": VERIFIER_ID,
                 "trust_root_id": TRUST_ROOT_ID,
+                "network_id": NETWORK_ID,
                 "task_uid": TASK_UID,
                 "head_oid": "e" * 40,
                 "frozen_head_oid": "e" * 40,
@@ -490,7 +652,13 @@ class IdentityV2SigningToolContractTests(unittest.TestCase):
         self._assert_success(result)
         return envelope
 
-    def _verify(self, envelope: Path, raw: Path | None = None, mode: str = "current_admission") -> tuple[Path, Path]:
+    def _verify(
+        self,
+        envelope: Path,
+        raw: Path | None = None,
+        mode: str = "current_admission",
+        attestation: Path | None = None,
+    ) -> tuple[Path, Path]:
         verified = self.root / f"{mode}.verified.json"
         receipt = self.root / f"{mode}.verification.json"
         result = self._run(
@@ -499,6 +667,8 @@ class IdentityV2SigningToolContractTests(unittest.TestCase):
             mode,
             "--envelope",
             str(envelope),
+            "--attestation",
+            str(attestation or self.root / envelope.name.replace(".envelope.json", ".attestation.json")),
             "--raw-v1",
             str(raw or self.raw),
             "--context",
@@ -562,6 +732,94 @@ class IdentityV2SigningToolContractTests(unittest.TestCase):
         self.assertEqual(first["context_digest"], self.context_digest)
         self.assertEqual(first["plan_digest"], self.plan_digest)
 
+    def test_prepare_rejects_context_network_different_from_governed_network(self) -> None:
+        """A self-consistent context cannot select a different deployment network."""
+        context = json.loads(self.context.read_text(encoding="utf-8"))
+        context["network_id"] = "attacker-network"
+        write_json(self.context, context)
+        self.context_digest = digest_file(self.context)
+        intent = json.loads(self.intent.read_text(encoding="utf-8"))
+        intent["context_digest"] = self.context_digest
+        write_json(self.intent, intent)
+        self.plan_digest = digest_file(self.intent)
+        self._write_template()
+
+        payload = self.root / "network-mismatch.payload.bin"
+        manifest = self.root / "network-mismatch.prepare.json"
+        result = self._run(*self._prepare_args(payload, manifest))
+        self._assert_rejected_no_output(result, payload, manifest)
+
+    def test_verify_rejects_forged_context_network_even_with_recalculated_signature(self) -> None:
+        """Verification must bind the signed envelope to the governed network."""
+        _, _, _, baseline_attestation, _ = self._prepare_sign_assemble("forged-network-baseline")
+        context = json.loads(self.context.read_text(encoding="utf-8"))
+        context["network_id"] = "attacker-network"
+        write_json(self.context, context)
+        self.context_digest = digest_file(self.context)
+        intent = json.loads(self.intent.read_text(encoding="utf-8"))
+        intent["context_digest"] = self.context_digest
+        write_json(self.intent, intent)
+        self.plan_digest = digest_file(self.intent)
+        self._write_template()
+
+        # Build a self-consistent forged payload directly so this regression
+        # reaches verify even after prepare is correctly fenced.
+        forged_payload = PREFIX + canonical(json.loads(self.template.read_text(encoding="utf-8")))
+        payload_path = self.root / "forged-network.payload.bin"
+        payload_path.write_bytes(forged_payload)
+        signature_path = self.root / "forged-network.signature.bin"
+        subprocess.run(
+            [
+                str(OPENSSL),
+                "pkeyutl",
+                "-sign",
+                "-inkey",
+                str(self.private_key),
+                "-rawin",
+                "-in",
+                str(payload_path),
+                "-out",
+                str(signature_path),
+            ],
+            check=True,
+            capture_output=True,
+        )
+        envelope = json.loads(self.template.read_text(encoding="utf-8"))
+        envelope["signature_hex"] = signature_path.read_bytes().hex()
+        envelope["canonical_digest"] = digest_bytes(
+            canonical({**envelope, "signature_hex": envelope["signature_hex"]})
+        )
+        envelope["authenticated"] = False
+        envelope["verified"] = False
+        envelope_path = self.root / "forged-network.envelope.json"
+        write_json(envelope_path, envelope)
+        verified_path = self.root / "forged-network.verified.json"
+        receipt_path = self.root / "forged-network.verification.json"
+        result = self._run(
+            "verify",
+            "--mode",
+            "current_admission",
+            "--envelope",
+            str(envelope_path),
+            "--attestation",
+            str(baseline_attestation),
+            "--raw-v1",
+            str(self.raw),
+            "--context",
+            str(self.context),
+            "--plan-intent",
+            str(self.intent),
+            "--trust-config",
+            str(self.trust),
+            "--provider-registry",
+            str(self.registry),
+            "--out",
+            str(verified_path),
+            "--verification-out",
+            str(receipt_path),
+        )
+        self._assert_rejected_no_output(result, verified_path, receipt_path)
+
     def test_openssl_selection_supports_host_ed25519_operations(self) -> None:
         """The selected host binary must support the real Ed25519 fixture."""
         self.assertTrue(OPENSSL.is_file())
@@ -582,8 +840,85 @@ class IdentityV2SigningToolContractTests(unittest.TestCase):
         receipt = json.loads(verification.read_text(encoding="utf-8"))
         self.assertTrue(output["authenticated"])
         self.assertTrue(output["verified"])
+        self.assertEqual(output["network_id"], NETWORK_ID)
         self.assertTrue(receipt["apply_authorized"])
+        self.assertEqual(receipt["network_id"], NETWORK_ID)
         self.assertEqual(receipt["canonical_payload_sha256"], digest_bytes(payload_bytes))
+
+    def test_v2_attestation_has_bound_proof_and_fresh_request_challenge(self) -> None:
+        _, _, _, attestation_a, _ = self._prepare_sign_assemble("proof-a")
+        _, _, _, attestation_b, _ = self._prepare_sign_assemble("proof-b")
+        first = json.loads(attestation_a.read_text(encoding="utf-8"))
+        second = json.loads(attestation_b.read_text(encoding="utf-8"))
+        self.assertEqual(first["schema_version"], "oasis7.identity_v2_provider_attestation.v2")
+        self.assertEqual(first["network_id"], NETWORK_ID)
+        self.assertRegex(first["request_id"], r"^req-v2:[0-9a-f]{64}$")
+        self.assertRegex(first["proof_ref"], r"^proof-v1:[0-9a-f]{64}$")
+        self.assertEqual(
+            set(first["proof"]),
+            {"schema_version", "algorithm", "claims_sha256", "signature_hex"},
+        )
+        self.assertEqual(
+            first["proof"]["schema_version"],
+            "oasis7.identity_v2_provider_authentication_proof.v1",
+        )
+        self.assertEqual(first["proof"]["algorithm"], "ed25519")
+        self.assertRegex(first["proof"]["claims_sha256"], r"^[0-9a-f]{64}$")
+        self.assertRegex(first["proof"]["signature_hex"], r"^[0-9a-f]{128}$")
+        self.assertNotEqual(first["request_id"], second["request_id"])
+
+    def test_attestation_proof_signature_tamper_rejects_assemble(self) -> None:
+        payload, manifest, signature, attestation, _ = self._prepare_sign_assemble("proof-tamper")
+        value = json.loads(attestation.read_text(encoding="utf-8"))
+        original = value["proof"]["signature_hex"]
+        value["proof"]["signature_hex"] = ("0" if original[0] != "0" else "1") + original[1:]
+        write_json(attestation, value)
+        envelope = self.root / "proof-tamper-rejected.envelope.json"
+        result = self._run(
+            "assemble",
+            "--payload", str(payload),
+            "--manifest", str(manifest),
+            "--signature", str(signature),
+            "--attestation", str(attestation),
+            "--provider-registry", str(self.registry),
+            "--out", str(envelope),
+        )
+        self._assert_rejected_no_output(result, envelope)
+
+    def test_verify_requires_authenticated_attestation_input(self) -> None:
+        _, _, _, _, envelope = self._prepare_sign_assemble("mandatory-attestation")
+        verified = self.root / "missing-attestation.verified.json"
+        receipt = self.root / "missing-attestation.verification.json"
+        result = self._run(
+            "verify",
+            "--mode", "current_admission",
+            "--envelope", str(envelope),
+            "--raw-v1", str(self.raw),
+            "--context", str(self.context),
+            "--plan-intent", str(self.intent),
+            "--trust-config", str(self.trust),
+            "--provider-registry", str(self.registry),
+            "--out", str(verified),
+            "--verification-out", str(receipt),
+        )
+        self._assert_rejected_no_output(result, verified, receipt)
+
+    def test_v1_attestation_schema_cannot_be_silently_reused(self) -> None:
+        payload, manifest, signature, attestation, _ = self._prepare_sign_assemble("v1-reject")
+        value = json.loads(attestation.read_text(encoding="utf-8"))
+        value["schema_version"] = "oasis7.identity_v2_provider_attestation.v1"
+        envelope = self.root / "v1-reject.envelope.json"
+        write_json(attestation, value)
+        result = self._run(
+            "assemble",
+            "--payload", str(payload),
+            "--manifest", str(manifest),
+            "--signature", str(signature),
+            "--attestation", str(attestation),
+            "--provider-registry", str(self.registry),
+            "--out", str(envelope),
+        )
+        self._assert_rejected_no_output(result, envelope)
 
     def _openssl_verify(self, payload: Path, signature_bytes: bytes) -> None:
         signature = self.root / "independent-check.signature"
@@ -645,6 +980,8 @@ class IdentityV2SigningToolContractTests(unittest.TestCase):
             "current_admission",
             "--envelope",
             str(envelope),
+            "--attestation",
+            str(self.root / "retired.attestation.json"),
             "--raw-v1",
             str(self.raw),
             "--context",
@@ -692,6 +1029,8 @@ class IdentityV2SigningToolContractTests(unittest.TestCase):
             "current_admission",
             "--envelope",
             str(envelope),
+            "--attestation",
+            str(self.root / "revoked.attestation.json"),
             "--raw-v1",
             str(self.raw),
             "--context",
@@ -749,6 +1088,8 @@ class IdentityV2SigningToolContractTests(unittest.TestCase):
             "current_admission",
             "--envelope",
             str(envelope),
+            "--attestation",
+            str(self.root / "pins.attestation.json"),
             "--raw-v1",
             str(self.raw),
             "--context",
@@ -765,6 +1106,182 @@ class IdentityV2SigningToolContractTests(unittest.TestCase):
             str(receipt),
         )
         self._assert_rejected_no_output(result, verified, receipt)
+
+    def test_verifier_pin_rejects_nonexec_and_substituted_paths_before_output(self) -> None:
+        _, _, _, _, envelope = self._prepare_sign_assemble("verifier-path")
+        original_mode = self.verifier.stat().st_mode
+        self.verifier.chmod(original_mode & ~stat.S_IXUSR)
+        nonexec_verified = self.root / "nonexec-verifier.verified.json"
+        nonexec_receipt = self.root / "nonexec-verifier.verification.json"
+        result = self._run(
+            "verify",
+            "--mode", "current_admission",
+            "--envelope", str(envelope),
+            "--attestation", str(self.root / "verifier-path.attestation.json"),
+            "--raw-v1", str(self.raw),
+            "--context", str(self.context),
+            "--plan-intent", str(self.intent),
+            "--trust-config", str(self.trust),
+            "--provider-registry", str(self.registry),
+            "--out", str(nonexec_verified),
+            "--verification-out", str(nonexec_receipt),
+        )
+        self._assert_rejected_no_output(result, nonexec_verified, nonexec_receipt)
+
+        self.verifier.chmod(original_mode)
+        trusted_config_sha256 = digest_file(self.trust)
+        trusted_registry_sha256 = digest_file(self.registry)
+        substituted = self.root / "substituted-verifier.py"
+        substituted.write_bytes(self.verifier.read_bytes())
+        substituted.chmod(substituted.stat().st_mode | stat.S_IXUSR)
+        registry = json.loads(self.registry.read_text(encoding="utf-8"))
+        registry["verifier"] = {
+            "executable_path": str(substituted),
+            "executable_sha256": digest_file(substituted),
+        }
+        write_json(self.registry, registry)
+        substituted_verified = self.root / "substituted-verifier.verified.json"
+        substituted_receipt = self.root / "substituted-verifier.verification.json"
+        result = self._run(
+            "verify",
+            "--mode", "current_admission",
+            "--envelope", str(envelope),
+            "--attestation", str(self.root / "verifier-path.attestation.json"),
+            "--raw-v1", str(self.raw),
+            "--context", str(self.context),
+            "--plan-intent", str(self.intent),
+            "--trust-config", str(self.trust),
+            "--provider-registry", str(self.registry),
+            "--out", str(substituted_verified),
+            "--verification-out", str(substituted_receipt),
+            authority_pins=(trusted_config_sha256, trusted_registry_sha256),
+        )
+        self._assert_rejected_no_output(result, substituted_verified, substituted_receipt)
+
+    def test_verify_invokes_registry_selected_verifier_before_admission_output(self) -> None:
+        """Verification must execute the registry-selected independent verifier."""
+        _, _, _, _, envelope = self._prepare_sign_assemble("verifier-invocation")
+        self.verifier_invocation_marker.unlink(missing_ok=True)
+
+        verified, receipt = self._verify(envelope, mode="current_admission")
+
+        self.assertTrue(self.verifier_invocation_marker.exists())
+        self.assertTrue(verified.is_file())
+        self.assertTrue(receipt.is_file())
+
+    def test_verify_rejects_registry_verifier_failure_without_outputs(self) -> None:
+        """A failed registry verifier cannot be replaced by local verification."""
+        _, _, _, _, envelope = self._prepare_sign_assemble("verifier-failure")
+        self.verifier.write_text("#!/usr/bin/env python3\nimport sys\nsys.exit(17)\n", encoding="utf-8")
+        self.verifier.chmod(self.verifier.stat().st_mode | stat.S_IXUSR)
+        registry = json.loads(self.registry.read_text(encoding="utf-8"))
+        registry["verifier"]["executable_sha256"] = digest_file(self.verifier)
+        write_json(self.registry, registry)
+        verified = self.root / "verifier-failure.verified.json"
+        receipt = self.root / "verifier-failure.verification.json"
+
+        result = self._run(
+            "verify",
+            "--mode", "current_admission",
+            "--envelope", str(envelope),
+            "--attestation", str(self.root / "verifier-failure.attestation.json"),
+            "--raw-v1", str(self.raw),
+            "--context", str(self.context),
+            "--plan-intent", str(self.intent),
+            "--trust-config", str(self.trust),
+            "--provider-registry", str(self.registry),
+            "--out", str(verified),
+            "--verification-out", str(receipt),
+            authority_pins=(digest_file(self.trust), digest_file(self.registry)),
+        )
+
+        self._assert_rejected_no_output(result, verified, receipt)
+
+    def test_verify_rejects_registry_verifier_output_mismatch_without_outputs(self) -> None:
+        """A successful verifier cannot submit a receipt for another envelope."""
+        _, _, _, _, envelope = self._prepare_sign_assemble("verifier-output-mismatch")
+        self.verifier.write_text(
+            self.verifier.read_text(encoding="utf-8")
+            + '\nvalue = json.loads(Path(args.out).read_text(encoding="utf-8"))\n'
+            + 'value["network_id"] = "attacker-network"\n'
+            + 'Path(args.out).write_bytes(canonical(value))\n',
+            encoding="utf-8",
+        )
+        self.verifier.chmod(self.verifier.stat().st_mode | stat.S_IXUSR)
+        registry = json.loads(self.registry.read_text(encoding="utf-8"))
+        registry["verifier"]["executable_sha256"] = digest_file(self.verifier)
+        write_json(self.registry, registry)
+        verified = self.root / "verifier-output-mismatch.verified.json"
+        receipt = self.root / "verifier-output-mismatch.verification.json"
+
+        result = self._run(
+            "verify",
+            "--mode", "current_admission",
+            "--envelope", str(envelope),
+            "--attestation", str(self.root / "verifier-output-mismatch.attestation.json"),
+            "--raw-v1", str(self.raw),
+            "--context", str(self.context),
+            "--plan-intent", str(self.intent),
+            "--trust-config", str(self.trust),
+            "--provider-registry", str(self.registry),
+            "--out", str(verified),
+            "--verification-out", str(receipt),
+            authority_pins=(digest_file(self.trust), digest_file(self.registry)),
+        )
+
+        self._assert_rejected_no_output(result, verified, receipt)
+
+    def test_prepare_rejects_future_issued_at_before_any_output(self) -> None:
+        """A receipt issued more than the five-second skew window is never prepared."""
+        future = (datetime.now(timezone.utc) + timedelta(seconds=10)).replace(microsecond=0)
+        context = json.loads(self.context.read_text(encoding="utf-8"))
+        context["issued_at"] = future.isoformat().replace("+00:00", "Z")
+        context["expires_at"] = (future + timedelta(minutes=5)).isoformat().replace("+00:00", "Z")
+        context["capture_end"] = (future + timedelta(minutes=10)).isoformat().replace("+00:00", "Z")
+        self.issued_at = context["issued_at"]
+        self.expires_at = context["expires_at"]
+        write_json(self.context, context)
+        self.context_digest = digest_file(self.context)
+        intent = json.loads(self.intent.read_text(encoding="utf-8"))
+        intent["context_digest"] = self.context_digest
+        write_json(self.intent, intent)
+        self.plan_digest = digest_file(self.intent)
+        self._write_template()
+
+        payload = self.root / "future-issued.payload.bin"
+        manifest = self.root / "future-issued.prepare.json"
+        result = self._run(*self._prepare_args(payload, manifest))
+        self._assert_rejected_no_output(result, payload, manifest)
+        self.assertIn(b"future", result.stderr.lower())
+
+    def test_verify_rejects_future_issued_at_for_current_and_historical_modes(self) -> None:
+        """Verification never admits a receipt issued beyond the skew window."""
+        _, _, _, _, envelope = self._prepare_sign_assemble("future-verify")
+        future = (datetime.now(timezone.utc) + timedelta(seconds=10)).replace(microsecond=0)
+        context = json.loads(self.context.read_text(encoding="utf-8"))
+        context["issued_at"] = future.isoformat().replace("+00:00", "Z")
+        context["expires_at"] = (future + timedelta(minutes=5)).isoformat().replace("+00:00", "Z")
+        context["capture_end"] = (future + timedelta(minutes=10)).isoformat().replace("+00:00", "Z")
+        write_json(self.context, context)
+        for mode in ("current_admission", "historical_audit"):
+            verified = self.root / f"future-{mode}.verified.json"
+            receipt = self.root / f"future-{mode}.verification.json"
+            result = self._run(
+                "verify",
+                "--mode", mode,
+                "--envelope", str(envelope),
+                "--attestation", str(self.root / "future-verify.attestation.json"),
+                "--raw-v1", str(self.raw),
+                "--context", str(self.context),
+                "--plan-intent", str(self.intent),
+                "--trust-config", str(self.trust),
+                "--provider-registry", str(self.registry),
+                "--out", str(verified),
+                "--verification-out", str(receipt),
+            )
+            with self.subTest(mode=mode):
+                self._assert_rejected_no_output(result, verified, receipt)
+                self.assertIn(b"future", result.stderr.lower())
 
     def test_no_caller_selected_provider_command_or_endpoint(self) -> None:
         payload, manifest = self._prepare("provider-selection")
@@ -869,6 +1386,8 @@ class IdentityV2SigningToolContractTests(unittest.TestCase):
             "current_admission",
             "--envelope",
             str(envelope),
+            "--attestation",
+            str(self.root / "cross-pair.attestation.json"),
             "--raw-v1",
             str(other_raw),
             "--context",
@@ -920,6 +1439,8 @@ class IdentityV2SigningToolContractTests(unittest.TestCase):
             "current_admission",
             "--envelope",
             str(tampered_envelope),
+            "--attestation",
+            str(self.root / "tamper.attestation.json"),
             "--raw-v1",
             str(self.raw),
             "--context",
@@ -990,6 +1511,8 @@ class IdentityV2SigningToolContractTests(unittest.TestCase):
                     mode,
                     "--envelope",
                     str(envelope),
+                    "--attestation",
+                    str(self.root / "validity-at-issuance.attestation.json"),
                     "--raw-v1",
                     str(self.raw),
                     "--context",

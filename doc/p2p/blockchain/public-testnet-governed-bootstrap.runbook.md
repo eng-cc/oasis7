@@ -88,11 +88,9 @@ nodes with convenient receipts.
 2. For every managed node, retain exact raw `oasis7.identity_receipt.v1` bytes and run section 7. The raw object is never admitted; its byte SHA-256 and exact
    key tuple (`node_id`, `peer_id`, `key_sha256`, `key_size_bytes`, `key_mode=0600`, `key_uid`, `key_gid`) remain authoritative in the v2 envelope beside
    `signature_hex` and `canonical_digest`; `key_path` remains raw-only. The payload binds these fields to task/HEAD, pre-receipt plan-intent digest, context digest, capture window, rotation, and freshness.
-3. One exact `oasis7.identity_receipt.v2_raw_map.v1` manifest must contain only
-   `node_name`, `node_id`, `peer_id`, `raw_v1_path`, `sha256`, and `size_bytes`
-   per managed node. The adapter checks regular non-symlink paths and exact
-   bytes; it never derives `key_path`, synthesizes JSON, or pairs by position.
-4. Context is exact `oasis7.identity_v2_context.v1` with
+3. The sidecar emits one exact `oasis7.identity_v2_evidence_map.v2` map per node. Its top-level fields are `schema_version`, `network_id`, `task_uid`, `head_oid`, `context`, `plan_intent`, and `entries`; context/plan-intent are `{path, sha256, size_bytes}` descriptors. Each entry has `node_name`, `node_id`, `peer_id`, and exactly seven descriptors: `raw_v1`, `prepare_manifest`, `payload`, `provider_attestation`, `unsigned_envelope`, `signed_envelope`, and `verification`. The adapter/planner check regular non-symlink paths, owner-only file/parent modes, and exact bytes; they never derive `key_path`, synthesize JSON, or pair by position.
+4. Aggregate exactly five one-node maps with `scripts/p2p-public-testnet-identity-v2-evidence-aggregate.py`, one each for `storage-205`, `sequencer-204`, `linux-lan-observer`, `windows-observer`, and `macos-observer`. It requires common network/task/HEAD/context/plan-intent bindings and invokes canonical planner validation before atomically writing the five-node map; it never rewrites or deletes an input artifact.
+5. Context is exact `oasis7.identity_v2_context.v1` with
    `schema_version`, `network_id`, `task_uid`, `head_oid`, `capture_window_id`,
    `capture_start`, `capture_end`, `rotation_epoch`, `issued_at`, and
    `expires_at`. Plan intent is exact `oasis7.clean_room_plan_intent.v1` with
@@ -100,19 +98,21 @@ nodes with convenient receipts.
    The order is context -> context digest -> plan intent -> plan digest ->
    payload -> signature -> verification receipt -> final plan; final-plan
    digest never flows upstream.
-5. Only `oasis7.identity_v2_verification_receipt.v1` with
+6. Only `oasis7.identity_v2_verification_receipt.v1` with
    `mode=current_admission`, `verified=true`, and `apply_authorized=true` may
    enter a destructive plan or adapter transaction. `historical_audit` is
    forensic only (`historical_only=true`, `apply_authorized=false`), including
    when a retired key was valid at issuance. Its raw, payload, envelope,
    trust-config, registry, verifier, task/HEAD, node/peer, window, rotation,
    and authorization digests must be retained and independently checked.
-6. Identity-v2 trust config, provider registry, public-key pin, and verifier
+7. Identity-v2 trust config, provider registry, public-key pin, and verifier
    executable pin must be independently installed under the existing governed
    root authority described in
    `public-testnet-governance-trust-root-provisioning.md`. Caller/plan/template
    supplied digests are not anchors. Until those pins and the verifier exist,
-   the four-command path remains capability blocked.
+   the four-command path remains capability blocked; req-v2/proof-v1 freshness and map uniqueness do not prove provider-side one-shot replay, whose external authority is not provisioned.
+   Synthetic fake-provider, fake-transport, or test-only module-cache harness receipts are orphan evidence and cannot satisfy this
+   production provisioning gate.
 The nested proof envelope is exactly `oasis7.rebuild_proof.v1`:
 `signer_id`, `signer_public_key_hex`, `signed_payload_sha256`, and `signature_hex`.
 Before projection into any legacy capture shape, an independent verifier must
@@ -274,21 +274,26 @@ phase、rollback/recovery、readiness 或 release 判断。
 
 ### Identity-v2 evidence preparation (capability-gated)
 
-The executor must first produce exact raw-v1 bytes, an unsigned deployment-truth template, context, and plan intent for each of the five managed nodes. Context and intent precede the payload and contain no receipt, signature, verdict, or final-plan digest. The governed sidecar is `scripts/p2p-public-testnet-identity-receipt-v2.py`; bridge mode accepts `--raw-v1`, `--template`, `--out`, `--context`, `--plan-intent`, `--trust-config`, `--provider-registry`, `--provider-ref`, `--signer-tool`, `--verifier-tool`, and `--evidence-map-out`, invokes the four fixed commands below, and retains exact evidence. Its legacy shape-only mode is not admission. The sequence below is the only approved argument shape; repeat it in one capture window. `<identity-v2-tool>` is a deployment-provided, independently pinned executable. Until the trust config, registry, provider, and verifier pins exist, this sequence is capability blocked.
+The executor must first produce exact raw-v1 bytes, an unsigned deployment-truth template, context, and plan intent for each of the five managed nodes. Context and intent precede the payload and contain no receipt, signature, verdict, or final-plan digest. The governed sidecar is `scripts/p2p-public-testnet-identity-receipt-v2.py`; bridge mode accepts `--raw-v1`, `--template`, `--out`, `--context`, `--plan-intent`, `--trust-config`, `--provider-registry`, `--provider-ref`, `--signer-tool`, `--verifier-tool`, `--evidence-map-out`, and `--evidence-dir`, invokes the four fixed commands below, and retains exact evidence. Its legacy shape-only mode is not admission. The sequence below is the only approved argument shape; repeat it in one capture window. `<identity-v2-tool>` is a deployment-provided, independently pinned executable. Until the trust config, registry, provider, and verifier pins exist, this sequence is capability blocked.
 
-The planner handoff must include its exact `--identity-v2-evidence-map <verified-map.json>` option: `python3 scripts/p2p-public-testnet-full-network-clean-room.py --input <authenticated-five-node-truth-envelope> --identity-v2-evidence-map <verified-map.json> --out <plan.json> --json`. The adapter validation-only handoff must include the same map and `--identity-v2-mode current_admission`, while omitting `--apply`: `python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.py --plan <plan.json> --authority <authority.json> --journal <journal.jsonl> --ledger <ledger.jsonl> --identity-v2-evidence-map <verified-map.json> --identity-v2-mode current_admission`. These placeholders are operator-bound artifacts, not live paths; the pair executor remains blocked until it consumes this retained map.
+The planner handoff must include its exact `--identity-v2-evidence-map <verified-map.json>` option: `python3 scripts/p2p-public-testnet-full-network-clean-room.py --input <authenticated-five-node-truth-envelope> --identity-v2-evidence-map <verified-map.json> --out <plan.json> --json`. Every adapter invocation carrying identity-v2 inputs, including an `--apply` validation request, must include that exact map and `--identity-v2-mode current_admission`: `python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.py --plan <plan.json> --authority <authority.json> --journal <journal.jsonl> --ledger <ledger.jsonl> --identity-v2-evidence-map <verified-map.json> --identity-v2-mode current_admission`. The current map path is validation-only and does not authorize execution; these placeholders are operator-bound artifacts, not live paths; the pair executor remains blocked until it consumes this retained map.
 
 ```bash
 <identity-v2-tool> prepare --raw-v1 <node>.identity-receipt.v1.raw --template <node>.identity-v2.unsigned-template.json --context <node>.identity-v2.context.json --plan-intent <managed-five-node.plan-intent.json> --trust-config /operator/truth/identity-v2-trust-config.json --provider-registry /operator/truth/identity-v2-provider-registry.json --payload-out <node>.identity-v2.payload.bin --manifest-out <node>.identity-v2.prepare.json
 <identity-v2-tool> sign --payload <node>.identity-v2.payload.bin --manifest <node>.identity-v2.prepare.json --provider-registry /operator/truth/identity-v2-provider-registry.json --provider-ref <approved-custody-provider-id> --signature-out <node>.identity-v2.signature.hex --attestation-out <node>.identity-v2.provider-attestation.json
 <identity-v2-tool> assemble --payload <node>.identity-v2.payload.bin --manifest <node>.identity-v2.prepare.json --signature <node>.identity-v2.signature.hex --attestation <node>.identity-v2.provider-attestation.json --provider-registry /operator/truth/identity-v2-provider-registry.json --out <node>.identity-v2.envelope.json
-<identity-v2-tool> verify --mode current_admission --envelope <node>.identity-v2.envelope.json --raw-v1 <node>.identity-receipt.v1.raw --context <node>.identity-v2.context.json --plan-intent <managed-five-node.plan-intent.json> --trust-config /operator/truth/identity-v2-trust-config.json --provider-registry /operator/truth/identity-v2-provider-registry.json --out <node>.identity-v2.verified.json --verification-out <node>.identity-v2.verification.json
+<identity-v2-tool> verify --mode current_admission --envelope <node>.identity-v2.envelope.json --attestation <node>.identity-v2.provider-attestation.json --raw-v1 <node>.identity-receipt.v1.raw --context <node>.identity-v2.context.json --plan-intent <managed-five-node.plan-intent.json> --trust-config /operator/truth/identity-v2-trust-config.json --provider-registry /operator/truth/identity-v2-provider-registry.json --out <node>.identity-v2.verified.json --verification-out <node>.identity-v2.verification.json
 ```
 
 `assemble` must receive and byte-check the explicit payload before writing an envelope. `verify` must independently reconstruct the prefixed payload, check
-current trust/revocation, and emit a fresh receipt. The independently pinned/governed verifier must run before any provider request, mutation, or admission
-decision; only its fresh receipt can authorize current evidence. A historical-audit receipt is forensic only. Planner, adapter, and validator-pair integration
-remains a prerequisite; this block does not invent bridge flags.
+current trust/revocation, and emit a fresh receipt. The bridge validates the
+code-owned registry/trust inputs before the provider request; the independently
+pinned/governed verifier must run before any mutation or admission decision, and
+only its fresh receipt can authorize current evidence. A historical-audit receipt
+is forensic only. Planner, adapter, and validator-pair integration
+remains a prerequisite for pair-executor production admission; the bridge,
+planner, and adapter map flags above are the implemented file contract and must
+not be replaced with guessed alternatives.
 
 ### Required checks
 1. 优先使用标准 truth capture 脚本：
@@ -455,7 +460,7 @@ any additional signing requirements.
 
 ### C0.5 Canonical pair transaction (task #3324; predecessor task #3318)
 
-新的受治理入口是 `scripts/p2p-public-testnet-rebuild-validators.sh plan|apply|resume|rollback`，它将请求转发到 local-first 执行器 `scripts/p2p-public-testnet-validator-pair-rebuild.py`。它必须先以 `plan` 模式验证签名的 `oasis7.validator_pair_rebuild_provenance.v1`、package `BUILDINFO`/`SHA256SUMS`、deployment manifest、genesis、registry、bootstrap 和 world 的 hash/size 绑定，以及每台 host 的同文件系统容量/inode receipt；plan 同时执行 live GitHub/SSH bounded read-only re-observation，但不调用 systemd 或修改节点。可复核的证据模板位于 `doc/testing/templates/public-testnet-validator-pair-rebuild-evidence-v1.json`。下面的 invocation 保留当前 legacy `--identity-receipts` 形状，仅供接口迁移参考；在 identity-v2 bridge 发布前不得执行 admission 或 destructive apply。
+新的受治理入口是 `scripts/p2p-public-testnet-rebuild-validators.sh plan|apply|resume|rollback`，它将请求转发到 local-first 执行器 `scripts/p2p-public-testnet-validator-pair-rebuild.py`。它必须先以 `plan` 模式验证签名的 `oasis7.validator_pair_rebuild_provenance.v1`、package `BUILDINFO`/`SHA256SUMS`、deployment manifest、genesis、registry、bootstrap 和 world 的 hash/size 绑定，以及每台 host 的同文件系统容量/inode receipt；plan 同时执行 live GitHub/SSH bounded read-only re-observation，但不调用 systemd 或修改节点。可复核的证据模板位于 `doc/testing/templates/public-testnet-validator-pair-rebuild-evidence-v1.json`。下面的 invocation 保留当前 legacy `--identity-receipts` 形状，仅供接口迁移参考；identity-v2 bridge、planner、adapter map validation 已实现，但在 pair-executor v2 admission integration and provisioned anchors 之前不得执行 identity-v2 admission 或 destructive apply。
 
 每个 governed tree 在进入容量预算前都必须先完成无跟随 symlink 的完整 inventory：`entry_count` 必须等于 `link_count + dir_count + file_count`，并同时绑定 `total_bytes`。world tree 的任何嵌套 symlink（包括目录或 broken link）都直接拒绝；inode 预算覆盖备份、package、governed entries 以及允许复制的目录、文件和 symlink。apply 阶段重新采集并比对同一 inventory，staged governed receipt 也必须逐项一致。
 
@@ -532,11 +537,12 @@ evidence. The observer gate remains `hold` until provider closure is
 independently verified; without this evidence the executor cannot mark
 `applied`.
 The current pair-executor CLI still exposes the legacy `--identity-receipts`
-input and has no published identity-v2/raw-map admission option. Do not invent
-a replacement flag or pass a v2 file through the legacy shape. Runtime and
-identity integration must first publish the exact accepted v2 input schema,
-including the five-node raw map and per-node verification receipts; until then
-this pair-executor path remains capability blocked for identity-v2 admission.
+input and has no identity-v2/raw-map admission option. Do not invent a
+replacement flag or pass a v2 file through the legacy shape. The exact v2 map
+schema and planner/adapter validation bridge are published in Phase A, but the
+pair executor has not integrated that input; this path remains capability
+blocked for identity-v2 admission until its own reviewed integration and the
+provisioned anchors exist.
 Every mutation callback receipt (`backup`/`apply`/`rollback`) must explicitly include `observer_mutation=false`, a non-empty executor-bound `transaction_id`, and the strict current-window binding; human direct observations are not callbacks. `--quiescence-transaction-id` binds only the in-memory observation/audit reference and never substitutes for a callback ID/file/field (`--quiescence-id` is its CLI alias).
 The deterministic `plan` has no runtime `transaction_id`; `apply` assigns it after journaling and later receipts echo it exactly. Before each mutation callback, persist `oasis7.validator_pair_rebuild_adapter_binding.v1` fixing immutable `plan_digest`, transaction, phase, the five-node identity-v2 evidence paths/digests with role/node/peer IDs, the exact raw map, raw 204 proof, and current-admission verification receipts; the adapter must echo these bindings plus `captured_at` in-window, or fail closed on omission, substitution, alternate proof, or staleness.
 Any failed identity, capacity, health, restart, OOM, panic or segfault gate invokes the recorded same-filesystem rollback and retains its receipt. The pair executor never mutates an observer. A sequencer/204 proof uses a bounded endpoint; full `/v1/chain/status` on 204 is forbidden.

@@ -15,8 +15,10 @@ import importlib.util
 import json
 import os
 import re
+import stat
 import subprocess
 import tempfile
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, NoReturn
@@ -26,8 +28,6 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PLANNER_PATH = SCRIPT_DIR / "p2p-public-testnet-full-network-clean-room.py"
 IDENTITY_V2_SIGNER_TOOL_PATH = SCRIPT_DIR / "p2p-public-testnet-identity-v2-signing-tool.py"
 IDENTITY_V2_SIGNER_TOOL_SHA256: str | None = None
-IDENTITY_V2_VERIFIER_TOOL_PATH = SCRIPT_DIR / "p2p-public-testnet-identity-v2-signing-tool.py"
-IDENTITY_V2_VERIFIER_TOOL_SHA256: str | None = None
 RAW_V1_SCHEMA = "oasis7.identity_receipt.v1"
 SYNTHETIC_DIGEST = "a" * 64
 SYNTHETIC_SIGNATURE = "b" * 128
@@ -36,6 +36,7 @@ SIGNATURE_RE = re.compile(r"^[0-9a-fA-F]{128}$")
 OID_RE = re.compile(r"^[0-9a-fA-F]{40,64}$")
 SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{1,127}$")
 MAX_CLOCK_SKEW_SECONDS = 5
+CANONICAL_NETWORK_ID = "oasis7-public-testnet-governed-20260606"
 RAW_V1_FIELDS = frozenset(
     {
         "schema_version",
@@ -255,14 +256,42 @@ def _write_atomically(path: Path, value: dict[str, Any]) -> None:
             temporary.write("\n")
             temporary.flush()
             os.fsync(temporary.fileno())
+            temporary_path.chmod(0o600)
+            os.fsync(temporary.fileno())
         temporary_path.chmod(0o600)
         os.replace(temporary_path, path)
+        _fsync_directory(path.parent)
     except OSError as error:
         try:
             temporary_path.unlink(missing_ok=True)
         except (NameError, OSError):
             pass
         die(f"cannot atomically write output: {error.__class__.__name__}")
+
+
+def _write_bytes_atomically(path: Path, value: bytes, label: str) -> None:
+    """Atomically write a private derived byte output and persist its directory."""
+    if path.exists() and path.is_symlink():
+        die(f"{label} must not be a symlink: {path}")
+    temporary_path: Path | None = None
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=path.parent, prefix=f".{path.name}.", delete=False) as temporary:
+            temporary_path = Path(temporary.name)
+            temporary.write(value)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+            temporary_path.chmod(0o600)
+            os.fsync(temporary.fileno())
+        os.replace(temporary_path, path)
+        _fsync_directory(path.parent)
+    except OSError as error:
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        die(f"cannot atomically write {label}: {error.__class__.__name__}")
 
 
 def _regular_executable(path_value: str | Path, label: str) -> Path:
@@ -294,6 +323,199 @@ def _pinned_tool(
     if actual != expected_sha256.lower():
         die(f"{label} digest pin does not match its bytes")
     return path
+
+
+def _registry_verifier_assertion(registry: dict[str, Any], verifier_tool: Path) -> Path:
+    """Require ``--verifier-tool`` to assert the registry-selected verifier."""
+
+    verifier = registry.get("verifier")
+    if not isinstance(verifier, dict) or set(verifier) != {"executable_path", "executable_sha256"}:
+        die("provider registry verifier binding is not exact")
+    configured_path = verifier.get("executable_path")
+    if not isinstance(configured_path, str) or not configured_path.strip():
+        die("provider registry verifier path is malformed")
+    configured = _regular_file(Path(configured_path), "provider registry verifier")
+    if not os.access(configured, os.X_OK):
+        die(f"provider registry verifier must be executable: {configured}")
+    digest = verifier.get("executable_sha256")
+    if not isinstance(digest, str) or HEX64_RE.fullmatch(digest) is None:
+        die("provider registry verifier digest is malformed")
+    try:
+        actual = hashlib.sha256(configured.read_bytes()).hexdigest()
+    except OSError as error:
+        die(f"cannot read provider registry verifier: {error.__class__.__name__}")
+    if actual != digest.lower():
+        die("provider registry verifier digest does not match its bytes")
+    if configured.resolve() != verifier_tool.resolve():
+        die("--verifier-tool is not the registry-selected pinned verifier")
+    return configured
+
+
+def _fsync_directory(path: Path) -> None:
+    """Persist a directory entry where the host exposes directory fsync."""
+    if os.name == "nt":
+        return
+    try:
+        descriptor = os.open(path, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    except OSError as error:
+        die(f"cannot fsync evidence directory: {error.__class__.__name__}")
+
+
+def _current_uid() -> int | None:
+    """Return the local owner id where the platform exposes one."""
+    getuid = getattr(os, "getuid", None)
+    return getuid() if callable(getuid) else None
+
+
+def _reject_symlink_ancestors(path: Path, label: str) -> None:
+    """Reject attacker-controlled path components while allowing OS temp aliases."""
+    current = path
+    while True:
+        if current.is_symlink() and current not in {Path("/var"), Path("/tmp")}:
+            die(f"{label} has a symlinked ancestor: {path}")
+        if current.parent == current:
+            return
+        current = current.parent
+
+
+def _secure_directory(path: Path, label: str) -> Path:
+    """Require a process-owned private evidence directory."""
+    if path.is_symlink() or not path.is_dir():
+        die(f"{label} must be a regular non-symlink directory: {path}")
+    _reject_symlink_ancestors(path, label)
+    metadata = path.stat()
+    current_uid = _current_uid()
+    if current_uid is not None and hasattr(metadata, "st_uid") and metadata.st_uid != current_uid:
+        die(f"{label} is not owned by the current user: {path}")
+    if os.name != "nt" and stat.S_IMODE(metadata.st_mode) != 0o700:
+        die(f"{label} must have mode 0700: {path}")
+    return path
+
+
+def _create_evidence_directory(root: Path) -> tuple[Path, Path, str]:
+    """Create a transaction-unique staging directory under a private root."""
+    if not root.is_absolute():
+        die("evidence root must be an absolute path")
+    _reject_symlink_ancestors(root, "evidence root")
+    if root.exists():
+        _secure_directory(root, "evidence root")
+    else:
+        try:
+            root.mkdir(mode=0o700, parents=True)
+        except OSError as error:
+            die(f"cannot create evidence root: {error.__class__.__name__}")
+        _secure_directory(root, "evidence root")
+    for _ in range(8):
+        transaction_id = f"identity-v2-{uuid.uuid4().hex}"
+        staging = root / f".{transaction_id}.partial"
+        try:
+            staging.mkdir(mode=0o700)
+        except FileExistsError:
+            continue
+        except OSError as error:
+            die(f"cannot create evidence staging directory: {error.__class__.__name__}")
+        return staging, root / transaction_id, transaction_id
+    die("could not allocate a transaction-unique evidence directory")
+
+
+def _secure_file(path: Path, label: str) -> Path:
+    """Require a process-owned private evidence file and symlink-free ancestors."""
+    if path.is_symlink() or not path.is_file():
+        die(f"{label} must be a regular non-symlink file: {path}")
+    current = path.parent
+    while True:
+        if current.is_symlink() and current not in {Path("/var"), Path("/tmp")}:
+            die(f"{label} has a symlinked ancestor: {path}")
+        if current.parent == current:
+            break
+        current = current.parent
+    metadata = path.stat()
+    current_uid = _current_uid()
+    if current_uid is not None and hasattr(metadata, "st_uid") and metadata.st_uid != current_uid:
+        die(f"{label} is not owned by the current user: {path}")
+    if os.name != "nt" and stat.S_IMODE(metadata.st_mode) != 0o600:
+        die(f"{label} must have mode 0600: {path}")
+    _secure_directory(path.parent, f"{label} parent directory")
+    return path
+
+
+def _stage_bytes(path: Path, value: bytes, label: str) -> Path:
+    """Write one retained artifact atomically into a private staging directory."""
+    if path.exists() or path.is_symlink():
+        die(f"{label} staging path already exists: {path}")
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=path.parent, prefix=f".{path.name}.", delete=False) as temporary:
+            temporary_path = Path(temporary.name)
+            temporary.write(value)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+            temporary_path.chmod(0o600)
+            os.fsync(temporary.fileno())
+        os.replace(temporary_path, path)
+        _fsync_directory(path.parent)
+    except OSError as error:
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        die(f"cannot stage {label}: {error.__class__.__name__}")
+    return _secure_file(path, label)
+
+
+def _stage_copy(path: Path, source: Path, label: str) -> Path:
+    """Copy exact bytes from a validated input into the private evidence stage."""
+    _regular_file(source, f"{label} source")
+    try:
+        value = source.read_bytes()
+    except OSError as error:
+        die(f"cannot read {label} source: {error.__class__.__name__}")
+    return _stage_bytes(path, value, label)
+
+
+def _promote_evidence_directory(staging: Path, promoted: Path, root: Path) -> Path:
+    """Atomically promote a complete stage and persist its parent directory."""
+    _secure_directory(staging, "evidence staging directory")
+    if promoted.exists() or promoted.is_symlink():
+        die(f"evidence transaction directory already exists: {promoted}")
+    try:
+        os.replace(staging, promoted)
+    except OSError as error:
+        die(f"cannot promote evidence directory: {error.__class__.__name__}")
+    _fsync_directory(root)
+    return _secure_directory(promoted, "evidence transaction directory")
+
+
+def _cleanup_owned_partial(staging: Path, root: Path) -> None:
+    """Remove only this invocation's private partial directory."""
+    if staging.parent != root or not staging.name.startswith(".identity-v2-") or not staging.name.endswith(".partial"):
+        return
+    if staging.is_symlink() or not staging.is_dir():
+        return
+    try:
+        for child in staging.iterdir():
+            if child.is_symlink() or child.is_dir():
+                continue
+            child.unlink(missing_ok=True)
+        staging.rmdir()
+        _fsync_directory(root)
+    except OSError:
+        # Best effort only: never broaden cleanup beyond the owned partial.
+        return
+
+
+def _retained_descriptor(path: Path, label: str) -> dict[str, Any]:
+    _secure_file(path, label)
+    try:
+        value = path.read_bytes()
+    except OSError as error:
+        die(f"cannot read retained {label}: {error.__class__.__name__}")
+    return {"path": str(path), "sha256": hashlib.sha256(value).hexdigest(), "size_bytes": len(value)}
 
 
 def _descriptor(path: Path, label: str) -> dict[str, Any]:
@@ -332,6 +554,7 @@ def _run_signing_command(tool: Path, command: str, arguments: list[str]) -> None
             env={"PATH": os.environ.get("PATH", ""), "PYTHONIOENCODING": "utf-8"},
             capture_output=True,
             text=True,
+            shell=False,
             timeout=60,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
@@ -343,132 +566,144 @@ def _run_signing_command(tool: Path, command: str, arguments: list[str]) -> None
 
 def _bridge_create(args: argparse.Namespace) -> dict[str, Any]:
     """Execute prepare/sign/assemble/verify and retain the complete evidence map."""
-    # Pin both executables before clearing or creating any derived output.  A
-    # caller may assert the configured path, but cannot choose a tool or hash.
+    # Pin the signer before clearing or creating any derived output.  The
+    # verifier is selected only by the independently pinned provider registry.
     signer_tool = _pinned_tool(
         args.signer_tool,
         IDENTITY_V2_SIGNER_TOOL_PATH,
         IDENTITY_V2_SIGNER_TOOL_SHA256,
         "signer tool",
     )
-    verifier_tool = _pinned_tool(
-        args.verifier_tool,
-        IDENTITY_V2_VERIFIER_TOOL_PATH,
-        IDENTITY_V2_VERIFIER_TOOL_SHA256,
-        "verifier tool",
-    )
+    verifier_tool = _regular_executable(args.verifier_tool, "verifier tool")
     raw_path = _regular_file(args.raw_v1, "raw-v1")
     template_path = _regular_file(args.template, "v2 template")
     context_path = _regular_file(args.context, "signing context")
     intent_path = _regular_file(args.plan_intent, "plan intent")
     trust_path = _regular_file(args.trust_config, "trust config")
     registry_path = _regular_file(args.provider_registry, "provider registry")
+    registry = _read_json(registry_path, "provider registry")
+    verifier_tool = _registry_verifier_assertion(registry, verifier_tool)
     output_path = Path(args.out)
     evidence_path = Path(args.evidence_map_out)
     _clear_derived_output(output_path, "verified envelope output")
     _clear_derived_output(evidence_path, "evidence-map output")
-    # All intermediate files are disposable and private to this transaction.
-    with tempfile.TemporaryDirectory(prefix="oasis7-identity-v2-sidecar-") as directory:
-        work = Path(directory)
-        payload = work / "payload.bin"
-        manifest = work / "prepare-manifest.json"
-        signature = work / "signature.hex"
-        attestation = work / "provider-attestation.json"
-        envelope = work / "unsigned-envelope.json"
-        verified = work / "verified-envelope.json"
-        verification = work / "verification.json"
-        common = [
-            "--raw-v1", str(raw_path), "--template", str(template_path),
-            "--context", str(context_path), "--plan-intent", str(intent_path),
-            "--trust-config", str(trust_path), "--provider-registry", str(registry_path),
-        ]
-        _run_signing_command(
-            signer_tool,
-            "prepare",
-            [*common, "--payload-out", str(payload), "--manifest-out", str(manifest)],
-        )
-        _run_signing_command(
-            signer_tool,
-            "sign",
-            [
-                "--payload", str(payload), "--manifest", str(manifest),
-                "--provider-registry", str(registry_path), "--provider-ref", args.provider_ref,
-                "--signature-out", str(signature), "--attestation-out", str(attestation),
-            ],
-        )
-        _run_signing_command(
-            signer_tool,
-            "assemble",
-            [
-                "--payload", str(payload), "--manifest", str(manifest),
-                "--signature", str(signature), "--attestation", str(attestation),
-                "--provider-registry", str(registry_path), "--out", str(envelope),
-            ],
-        )
-        _run_signing_command(
-            verifier_tool,
-            "verify",
-            [
-                "--mode", "current_admission", "--envelope", str(envelope),
-                "--raw-v1", str(raw_path), "--context", str(context_path),
-                "--plan-intent", str(intent_path), "--trust-config", str(trust_path),
-                "--provider-registry", str(registry_path), "--out", str(verified),
-                "--verification-out", str(verification),
-            ],
-        )
-        final_bytes = verified.read_bytes()
-        try:
-            final_value = json.loads(final_bytes.decode("utf-8"))
-        except (UnicodeError, json.JSONDecodeError):
-            die("signing-tool verify did not produce a JSON envelope")
-        if not isinstance(final_value, dict) or final_value.get("verified") is not True:
-            die("signing-tool verify did not produce an authenticated envelope")
-        node_name = next(
-            (
-                name
-                for name, expected in _load_planner().EXPECTED_NODES.items()
-                if expected.get("node_id") == final_value.get("node_id")
-            ),
-            None,
-        )
-        if node_name is None:
-            die("verified envelope node is outside the governed fleet")
-        # Use the same atomic boundary as the legacy sidecar, but preserve the
-        # verifier's exact canonical bytes for evidence-map hashing.
-        if output_path.exists() and output_path.is_symlink():
-            die(f"output must not be a symlink: {output_path}")
-        try:
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            with tempfile.NamedTemporaryFile(dir=output_path.parent, prefix=f".{output_path.name}.", delete=False) as temporary:
-                temporary_path = Path(temporary.name)
-                temporary.write(final_bytes)
-                temporary.flush()
-                os.fsync(temporary.fileno())
-            temporary_path.chmod(0o600)
-            os.replace(temporary_path, output_path)
-        except OSError as error:
+    staging, promoted, _ = _create_evidence_directory(args.evidence_dir)
+    promoted_ready = False
+    try:
+        # All intermediate files are disposable and private to this transaction.
+        with tempfile.TemporaryDirectory(prefix="oasis7-identity-v2-sidecar-") as directory:
+            work = Path(directory)
+            payload = work / "payload.bin"
+            manifest = work / "prepare-manifest.json"
+            signature = work / "signature.hex"
+            attestation = work / "provider-attestation.json"
+            envelope = work / "unsigned-envelope.json"
+            verified = work / "verified-envelope.json"
+            verification = work / "verification.json"
+            common = [
+                "--raw-v1", str(raw_path), "--template", str(template_path),
+                "--context", str(context_path), "--plan-intent", str(intent_path),
+                "--trust-config", str(trust_path), "--provider-registry", str(registry_path),
+            ]
+            _run_signing_command(
+                signer_tool,
+                "prepare",
+                [*common, "--payload-out", str(payload), "--manifest-out", str(manifest)],
+            )
+            _run_signing_command(
+                signer_tool,
+                "sign",
+                [
+                    "--payload", str(payload), "--manifest", str(manifest),
+                    "--provider-registry", str(registry_path), "--provider-ref", args.provider_ref,
+                    "--signature-out", str(signature), "--attestation-out", str(attestation),
+                ],
+            )
+            _run_signing_command(
+                signer_tool,
+                "assemble",
+                [
+                    "--payload", str(payload), "--manifest", str(manifest),
+                    "--signature", str(signature), "--attestation", str(attestation),
+                    "--provider-registry", str(registry_path), "--out", str(envelope),
+                ],
+            )
+            _run_signing_command(
+                verifier_tool,
+                "verify",
+                [
+                    "--mode", "current_admission", "--envelope", str(envelope),
+                    "--attestation", str(attestation),
+                    "--raw-v1", str(raw_path), "--context", str(context_path),
+                    "--plan-intent", str(intent_path), "--trust-config", str(trust_path),
+                    "--provider-registry", str(registry_path), "--out", str(verified),
+                    "--verification-out", str(verification),
+                ],
+            )
+            final_bytes = verified.read_bytes()
             try:
-                temporary_path.unlink(missing_ok=True)
-            except (NameError, OSError):
-                pass
-            die(f"cannot atomically write verified envelope: {error.__class__.__name__}")
+                final_value = json.loads(final_bytes.decode("utf-8"))
+            except (UnicodeError, json.JSONDecodeError):
+                die("signing-tool verify did not produce a JSON envelope")
+            if (
+                not isinstance(final_value, dict)
+                or final_value.get("authenticated") is not True
+                or final_value.get("verified") is not True
+                or final_value.get("network_id") != CANONICAL_NETWORK_ID
+            ):
+                die("signing-tool verify did not produce a governed authenticated envelope")
+            node_name = next(
+                (
+                    name
+                    for name, expected in _load_planner().EXPECTED_NODES.items()
+                    if expected.get("node_id") == final_value.get("node_id")
+                ),
+                None,
+            )
+            if node_name is None:
+                die("verified envelope node is outside the governed fleet")
+
+            staged: dict[str, Path] = {}
+            staged["context"] = _stage_copy(staging / "context.json", context_path, "signing context")
+            staged["plan_intent"] = _stage_copy(staging / "plan-intent.json", intent_path, "plan intent")
+            sources = {
+                "raw_v1": raw_path,
+                "prepare_manifest": manifest,
+                "payload": payload,
+                "provider_attestation": attestation,
+                "unsigned_envelope": envelope,
+                "verification": verification,
+            }
+            for field, source in sources.items():
+                staged[field] = _stage_copy(staging / f"{node_name}.{field}", source, field)
+            staged["signed_envelope"] = _stage_bytes(
+                staging / f"{node_name}.signed_envelope", final_bytes, "signed envelope"
+            )
+        _promote_evidence_directory(staging, promoted, args.evidence_dir)
+        promoted_ready = True
+        retained = {
+            field: _retained_descriptor(promoted / path.name, field)
+            for field, path in staged.items()
+        }
         evidence = {
-            "schema_version": "oasis7.identity_v2_evidence_map.v1",
+            "schema_version": "oasis7.identity_v2_evidence_map.v2",
+            "network_id": final_value["network_id"],
             "task_uid": final_value.get("task_uid"),
             "head_oid": final_value.get("head_oid"),
-            "context": _descriptor(context_path, "signing context"),
-            "plan_intent": _descriptor(intent_path, "plan intent"),
+            "context": retained["context"],
+            "plan_intent": retained["plan_intent"],
             "entries": [
                 {
                     "node_name": node_name,
                     "node_id": final_value.get("node_id"),
                     "peer_id": final_value.get("peer_id"),
-                    "raw_v1": _descriptor(raw_path, "raw-v1"),
-                    "signed_envelope": _descriptor(output_path, "verified envelope"),
-                    "verification": _descriptor(verification, "verification receipt"),
+                    **{field: retained[field] for field in sources},
+                    "signed_envelope": retained["signed_envelope"],
+                    "verification": retained["verification"],
                 }
             ],
         }
+        _write_bytes_atomically(output_path, final_bytes, "verified envelope output")
         try:
             _write_atomically(evidence_path, evidence)
         except SystemExit:
@@ -476,6 +711,10 @@ def _bridge_create(args: argparse.Namespace) -> dict[str, Any]:
             _clear_derived_output(output_path, "verified envelope output")
             raise
         return final_value
+    except BaseException:
+        if not promoted_ready:
+            _cleanup_owned_partial(staging, args.evidence_dir)
+        raise
 
 
 def create(
@@ -550,6 +789,7 @@ def parser() -> argparse.ArgumentParser:
     root.add_argument("--signer-tool", type=Path)
     root.add_argument("--verifier-tool", type=Path)
     root.add_argument("--evidence-map-out", type=Path)
+    root.add_argument("--evidence-dir", type=Path)
     return root
 
 
@@ -564,6 +804,7 @@ def main() -> int:
         args.signer_tool,
         args.verifier_tool,
         args.evidence_map_out,
+        args.evidence_dir,
     )
     if any(value is not None for value in bridge_values):
         if not all(value is not None for value in bridge_values):
