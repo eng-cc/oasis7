@@ -81,8 +81,16 @@ pub(super) fn build_first_smelter_via_gameplay_action(
         .expect("seed iron ore for repeated recipes");
     server
         .world
-        .set_ledger_material_balance(site_ledger, "carbon_fuel", 120)
+        .set_ledger_material_balance(site_ledger.clone(), "carbon_fuel", 120)
         .expect("seed carbon fuel for repeated recipes");
+    server
+        .world
+        .set_ledger_material_balance(site_ledger.clone(), "copper_ore", 60)
+        .expect("seed copper ore for smelter recipes");
+    server
+        .world
+        .set_ledger_material_balance(site_ledger, "silicate_ore", 20)
+        .expect("seed silicate ore for smelter recipes");
     server
         .world
         .set_material_balance("hardware_part", 200)
@@ -96,7 +104,7 @@ pub(super) fn build_first_smelter_via_gameplay_action(
         .expect("seed factory-builder electricity for repeated recipes");
 }
 
-fn build_first_assembler_via_gameplay_action(
+pub(super) fn build_first_assembler_via_gameplay_action(
     server: &mut ViewerRuntimeLiveServer,
     agent_id: &str,
     public_key: &str,
@@ -236,7 +244,7 @@ fn complete_smelter_iron_ingot_jobs(
     }
 }
 
-pub(super) fn setup_industrial_gameplay_with_completed_jobs(
+pub(crate) fn setup_industrial_gameplay_with_completed_jobs(
     signer_seed: u8,
     jobs: u64,
 ) -> ViewerRuntimeLiveServer {
@@ -302,8 +310,8 @@ fn runtime_gameplay_snapshot_gates_every_smelter_schedule_by_authoritative_resou
     ];
 
     for (electricity, data, expected_reason) in [
-        (0, i64::MAX, Some("insufficient electricity")),
-        (i64::MAX, 0, Some("insufficient data")),
+        (0, i64::MAX, Some("insufficient factory-owner electricity")),
+        (i64::MAX, 0, None),
         (i64::MAX, i64::MAX, None),
     ] {
         server
@@ -326,7 +334,15 @@ fn runtime_gameplay_snapshot_gates_every_smelter_schedule_by_authoritative_resou
                     assert!(disabled_reason.contains(expected_reason));
                     assert!(disabled_reason.contains("replenish"));
                 }
-                None => assert_eq!(action.disabled_reason, None, "{action_id}"),
+                None => {
+                    assert_eq!(action.disabled_reason, None, "{action_id}");
+                    assert!(
+                        action.label.contains("Data estimate only")
+                            && action.label.contains("non-authoritative"),
+                        "{action_id} should retain Data only as an advisory label: {}",
+                        action.label
+                    );
+                }
             }
         }
         assert_eq!(
@@ -391,17 +407,27 @@ fn runtime_gameplay_snapshot_gates_every_smelter_schedule_by_authoritative_resou
         scale_out_server.world.state().industry_progress.stage,
         IndustryStage::ScaleOut
     );
+    let scale_out_site_ledger = MaterialLedgerId::site(
+        scale_out_server
+            .world
+            .state()
+            .factories
+            .get(FACTORY_SMELTER_MK1)
+            .expect("scale-out smelter")
+            .site_id
+            .as_str(),
+    );
     scale_out_server
         .world
-        .set_material_balance("iron_ingot", 200)
+        .set_ledger_material_balance(scale_out_site_ledger.clone(), "iron_ingot", 200)
         .expect("seed alloy iron ingot");
     scale_out_server
         .world
-        .set_material_balance("copper_wire", 200)
+        .set_ledger_material_balance(scale_out_site_ledger, "copper_wire", 200)
         .expect("seed alloy copper wire");
     for (electricity, data, expected_reason) in [
-        (0, i64::MAX, Some("insufficient electricity")),
-        (i64::MAX, 0, Some("insufficient data")),
+        (0, i64::MAX, Some("insufficient factory-owner electricity")),
+        (i64::MAX, 0, None),
         (i64::MAX, i64::MAX, None),
     ] {
         scale_out_server
@@ -430,7 +456,15 @@ fn runtime_gameplay_snapshot_gates_every_smelter_schedule_by_authoritative_resou
                 assert!(disabled_reason.contains(expected_reason));
                 assert!(disabled_reason.contains("replenish"));
             }
-            None => assert_eq!(alloy.disabled_reason, None),
+            None => {
+                assert_eq!(alloy.disabled_reason, None);
+                assert!(
+                    alloy.label.contains("Data estimate only")
+                        && alloy.label.contains("non-authoritative"),
+                    "alloy schedule should retain Data only as an advisory label: {}",
+                    alloy.label
+                );
+            }
         }
         assert_eq!(
             scale_out_server
@@ -566,83 +600,6 @@ fn runtime_gameplay_snapshot_marks_forced_major_power_dependency_when_no_local_r
 }
 
 #[test]
-fn runtime_gameplay_actions_allow_assembler_build_from_agent_ledger_fallback() {
-    let _guard = lock_test_llm_env();
-    let (mut server, agent_id, public_key, private_key) =
-        setup_runtime_industrial_gameplay_session(35);
-    build_first_smelter_via_gameplay_action(
-        &mut server,
-        agent_id.as_str(),
-        public_key.as_str(),
-        private_key.as_str(),
-        35,
-    );
-    let agent_ledger = crate::runtime::MaterialLedgerId::agent(agent_id.as_str());
-    server
-        .world
-        .set_ledger_material_balance(agent_ledger.clone(), "iron_ingot", 10)
-        .expect("seed agent iron ingot");
-    server
-        .world
-        .set_ledger_material_balance(agent_ledger.clone(), "copper_wire", 8)
-        .expect("seed agent copper wire");
-    server
-        .world
-        .set_ledger_material_balance(agent_ledger, "structural_frame", 8)
-        .expect("seed agent structural frame");
-
-    let gameplay = expect_player_gameplay(
-        &mut server,
-        "player gameplay after seeding assembler build materials on agent ledger",
-    );
-    let assembler_action = gameplay
-        .available_actions
-        .iter()
-        .find(|action| action.action_id == "build_factory_assembler_mk1")
-        .expect("assembler build action");
-    assert_eq!(assembler_action.disabled_reason, None);
-}
-
-#[test]
-fn runtime_gameplay_actions_keep_assembler_build_disabled_when_cost_is_split_across_ledgers() {
-    let _guard = lock_test_llm_env();
-    let (mut server, agent_id, public_key, private_key) =
-        setup_runtime_industrial_gameplay_session(36);
-    build_first_smelter_via_gameplay_action(
-        &mut server,
-        agent_id.as_str(),
-        public_key.as_str(),
-        private_key.as_str(),
-        36,
-    );
-    let agent_ledger = crate::runtime::MaterialLedgerId::agent(agent_id.as_str());
-    server
-        .world
-        .set_ledger_material_balance(agent_ledger.clone(), "iron_ingot", 10)
-        .expect("seed agent iron ingot");
-    server
-        .world
-        .set_ledger_material_balance(agent_ledger, "copper_wire", 8)
-        .expect("seed agent copper wire");
-
-    let gameplay = expect_player_gameplay(
-        &mut server,
-        "player gameplay with split assembler build materials across ledgers",
-    );
-    let assembler_action = gameplay
-        .available_actions
-        .iter()
-        .find(|action| action.action_id == "build_factory_assembler_mk1")
-        .expect("assembler build action");
-    let disabled_reason = assembler_action
-        .disabled_reason
-        .as_deref()
-        .expect("split ledger cost should keep assembler action disabled");
-    assert!(disabled_reason.contains("requires one ledger with"));
-    assert!(disabled_reason.contains("structural_frame>=8"));
-}
-
-#[test]
 fn runtime_gameplay_snapshot_publishes_complete_distinguishable_recovery_options() {
     let _guard = lock_test_llm_env();
     let mut server = setup_industrial_gameplay_with_completed_jobs(42, 4);
@@ -695,7 +652,7 @@ fn runtime_gameplay_snapshot_publishes_complete_distinguishable_recovery_options
 }
 
 #[test]
-fn runtime_gameplay_snapshot_blocks_branch_ready_when_no_commitment_is_executable() {
+fn runtime_gameplay_snapshot_does_not_borrow_retired_agent_factory_for_branch_progress() {
     let mut state = WorldState::default();
     state.industry_progress.stage = IndustryStage::ScaleOut;
     state.industry_progress.completed_recipe_jobs = 4;
@@ -715,6 +672,11 @@ fn runtime_gameplay_snapshot_blocks_branch_ready_when_no_commitment_is_executabl
                 last_completed_recipe_id: Some("recipe.smelter.iron_ingot".to_string()),
                 ..FactoryProductionState::default()
             },
+            location_anchor_revision: None,
+            site_authority_revision: None,
+            site_location_id: None,
+            construction_power_profile_key: None,
+            construction_power_profile_revision: None,
             built_at: 1,
         },
     );
@@ -731,20 +693,16 @@ fn runtime_gameplay_snapshot_blocks_branch_ready_when_no_commitment_is_executabl
         true,
         None,
     );
-    assert_eq!(gameplay.stage_status, PlayerGameplayStageStatus::Blocked);
+    assert_eq!(gameplay.stage_status, PlayerGameplayStageStatus::Active);
     assert_eq!(
         gameplay.execution_state,
-        crate::simulator::PlayerGameplayExecutionState::Blocked
+        crate::simulator::PlayerGameplayExecutionState::Executing
     );
     assert!(gameplay.branch_recommendations.is_empty());
+    assert_eq!(gameplay.blocker_kind, None);
     assert_eq!(
-        gameplay.blocker_kind.as_deref(),
-        Some("branch_commitment_unavailable")
-    );
-    assert!(
-        gameplay
-            .next_step_hint
-            .contains("Restore the inputs or capability")
+        gameplay.goal_kind,
+        PlayerGameplayGoalKind::EstablishFirstCapability
     );
     assert_eq!(gameplay.branch_hint, None);
 }
@@ -769,13 +727,23 @@ fn runtime_gameplay_action_promotes_to_generic_midloop_after_governance_ready() 
         .world
         .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Data, i64::MAX)
         .expect("fund governance-ready agent data");
+    let smelter_site_ledger = MaterialLedgerId::site(
+        server
+            .world
+            .state()
+            .factories
+            .get(FACTORY_SMELTER_MK1)
+            .expect("governance-ready smelter")
+            .site_id
+            .as_str(),
+    );
     server
         .world
-        .set_material_balance("iron_ingot", 200)
+        .set_ledger_material_balance(smelter_site_ledger.clone(), "iron_ingot", 200)
         .expect("seed governance alloy iron ingot");
     server
         .world
-        .set_material_balance("copper_wire", 200)
+        .set_ledger_material_balance(smelter_site_ledger, "copper_wire", 200)
         .expect("seed governance alloy copper wire");
     server
         .world
@@ -895,6 +863,29 @@ fn runtime_gameplay_actions_expose_scale_out_and_governance_recipes_once_assembl
         private_key.as_str(),
         build_nonce + 10,
     );
+    let assembler_site_ledger = crate::runtime::MaterialLedgerId::site(
+        server
+            .world
+            .state()
+            .factories
+            .get("factory.assembler.mk1")
+            .expect("governance-ready assembler")
+            .site_id
+            .as_str(),
+    );
+    for (kind, amount) in [
+        ("control_chip", 20),
+        ("copper_wire", 20),
+        ("sensor_pack", 10),
+        ("module_rack", 4),
+        ("alloy_plate", 10),
+        ("hardware_part", 20),
+    ] {
+        server
+            .world
+            .set_ledger_material_balance(assembler_site_ledger.clone(), kind, amount)
+            .expect("seed governance-ready assembler site ledger");
+    }
 
     let gameplay = expect_player_gameplay(
         &mut server,

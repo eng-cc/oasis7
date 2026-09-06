@@ -4,6 +4,7 @@ mod actions;
 mod agent_claims;
 mod agent_intent;
 mod agent_intent_terminal;
+pub(crate) use agent_intent::derive_agent_chat_request_digest;
 pub use agent_intent::{AgentIntentProviderFailureDisposition, AgentIntentRecordOutcome};
 mod audit;
 mod base_layer;
@@ -15,10 +16,22 @@ mod capability_authorization;
 mod capability_authorization_admin;
 mod capability_authorization_events;
 mod capability_authorization_state;
+mod capability_authorization_transaction;
 mod capability_authorization_validation;
+mod capability_catalog;
+#[cfg(test)]
+mod capability_test_fixture;
+mod cognition_command;
+mod cognition_feedback;
+mod cognition_gpd;
+mod cognition_orchestration;
+mod cognition_persistence;
+mod cognition_persistence_validation;
 mod economy;
+mod economy_product_validation;
 mod effects;
 mod event_processing;
+mod factory_authority;
 mod gameplay_layer;
 mod gameplay_loop;
 mod governance;
@@ -68,7 +81,9 @@ pub use module_tick_runtime::{
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use oasis7_wasm_router::PreparedSubscription;
@@ -79,6 +94,7 @@ use super::capability_authorization::{
     CapabilityBudgetAccount, CapabilityEffectReceiptLink, CapabilityInvocationContext,
     CapabilityRevocationState,
 };
+use super::cognition_recovery::default_cognition_persistence_projection;
 use super::consensus::{TickConsensusRecord, TickConsensusRejectionAuditEvent};
 use super::effect::{CapabilityGrant, EffectIntent};
 use super::error::WorldError;
@@ -275,6 +291,12 @@ fn default_allow_runtime_source_compile() -> bool {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct World {
     manifest: Manifest,
+    /// Additive durable cognition state.  Kept as JSON at the World boundary
+    /// so old snapshots and forward-compatible scheduler/continuation
+    /// projections survive without coupling the core world schema to the
+    /// provider wire format.
+    #[serde(default = "super::cognition_recovery::default_cognition_persistence_projection")]
+    cognition: JsonValue,
     module_registry: ModuleRegistry,
     module_artifacts: BTreeSet<String>,
     #[serde(skip)]
@@ -337,6 +359,12 @@ pub struct World {
     scheduler_cursor: Option<String>,
     #[serde(skip)]
     receipt_signer: Option<ReceiptSigner>,
+    /// The last World store attached to this runtime. This is process-local
+    /// metadata and is never part of the serialized authority projection.
+    /// Cognition transactions use it to persist their committed snapshot
+    /// before returning a delivery/receipt to a caller.
+    #[serde(skip, default)]
+    persistence_dir: RefCell<Option<PathBuf>>,
     #[serde(default)]
     runtime_memory_limits: WorldRuntimeMemoryLimits,
     #[serde(default)]
@@ -383,6 +411,28 @@ impl World {
 
     pub fn new_production_hardened() -> Self {
         Self::new_with_release_security_policy(ReleaseSecurityPolicy::production_hardened())
+    }
+
+    /// Production bootstrap seam: install the World-owned cognition
+    /// authority before any provider turn or scheduler wake is admitted.
+    pub fn new_production_hardened_with_cognition_binding(
+        world_id: impl Into<String>,
+        branch_id: impl Into<String>,
+        finality_epoch: u64,
+        finality_block_hash: Option<String>,
+        finality_status: impl Into<String>,
+        reorg_epoch: u64,
+    ) -> Result<Self, WorldError> {
+        let mut world = Self::new_production_hardened();
+        world.bind_cognition_runtime(
+            world_id,
+            branch_id,
+            finality_epoch,
+            finality_block_hash,
+            finality_status,
+            reorg_epoch,
+        )?;
+        Ok(world)
     }
 
     pub fn new_with_state(mut state: WorldState) -> Self {
@@ -435,6 +485,7 @@ impl World {
         }
         let mut world = Self {
             manifest: Manifest::default(),
+            cognition: default_cognition_persistence_projection(),
             module_registry: ModuleRegistry::default(),
             module_artifacts: BTreeSet::new(),
             module_artifact_bytes: BTreeMap::new(),
@@ -472,6 +523,7 @@ impl World {
             proposals: BTreeMap::new(),
             scheduler_cursor: None,
             receipt_signer: None,
+            persistence_dir: RefCell::new(None),
             runtime_memory_limits: WorldRuntimeMemoryLimits::default(),
             runtime_backpressure_stats: WorldRuntimeBackpressureStats::default(),
             logistics_sla_metrics: LogisticsSlaMetrics::default(),
@@ -547,6 +599,13 @@ impl World {
 
     pub fn capability_revocation_state(&self) -> &CapabilityRevocationState {
         &self.capability_revocation_state
+    }
+
+    /// The chain-side world identity is the runtime's only persisted world
+    /// binding.  Cognition admission uses it when the manifest is bound;
+    /// `unbound` is retained for the explicitly legacy/bootstrap world.
+    pub fn chain_resource_manifest(&self) -> &ChainResourceManifest {
+        &self.chain_resource_manifest
     }
 
     pub fn capability_nonce_records(

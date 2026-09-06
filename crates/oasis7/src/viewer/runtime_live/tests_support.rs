@@ -101,8 +101,7 @@ pub(super) fn clear_runtime_provider_env() {
 }
 
 pub(super) fn runtime_provider_env_lock() -> &'static Mutex<()> {
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
+    super::super::canonical_runtime_provider_env_lock()
 }
 
 pub(super) fn clear_hosted_strong_auth_env() {

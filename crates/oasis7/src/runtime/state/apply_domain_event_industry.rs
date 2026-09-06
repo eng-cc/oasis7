@@ -1,9 +1,11 @@
+use super::apply_domain_event_industry_helpers::recipe_completion_receipt;
 use super::apply_domain_event_industry_helpers::{
     aggregate_recipe_material_stacks, validate_recipe_material_stacks,
     validate_recipe_output_capacity,
 };
 use super::*;
 use crate::runtime::AgentActivityV1;
+use crate::runtime::IndustryStage;
 
 impl WorldState {
     pub(super) fn apply_domain_event_industry(
@@ -298,6 +300,14 @@ impl WorldState {
                         ),
                     });
                 };
+                if now < pending.ready_at {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "material transit completion is early: job_id={job_id} ready_at={} now={now}",
+                            pending.ready_at
+                        ),
+                    });
+                }
                 let expected_loss = {
                     let amount = pending.amount.max(0);
                     ((amount as i128)
@@ -500,6 +510,11 @@ impl WorldState {
                 spec,
                 consume_ledger,
                 ready_at,
+                contract_version,
+                site_authority_revision,
+                site_location_id,
+                location_anchor_revision,
+                construction_power_obligation,
             } => {
                 self.apply_factory_build_started(
                     now,
@@ -509,6 +524,11 @@ impl WorldState {
                     spec,
                     consume_ledger,
                     ready_at,
+                    *contract_version,
+                    site_authority_revision.as_ref(),
+                    site_location_id.as_deref(),
+                    location_anchor_revision.as_ref(),
+                    construction_power_obligation.as_ref(),
                 )?;
             }
             DomainEvent::FactoryBuilt {
@@ -549,7 +569,7 @@ impl WorldState {
                 factory_id,
                 recycle_ledger,
                 recovered,
-                ..
+                durability_ppm,
             } => {
                 self.apply_factory_recycled(
                     now,
@@ -557,6 +577,7 @@ impl WorldState {
                     factory_id,
                     recycle_ledger,
                     recovered,
+                    durability_ppm,
                 )?;
             }
             DomainEvent::RecipeStarted {
@@ -660,6 +681,10 @@ impl WorldState {
                         ),
                     });
                 }
+                // Direct ScheduleRecipe actions are site-bound before they
+                // produce this event. Keep accepting the historical world
+                // ledger shape here so module-resolved legacy events can be
+                // replayed without rewriting their journal payloads.
                 let expected_output_ledger = if *consume_ledger == MaterialLedgerId::world() {
                     MaterialLedgerId::world()
                 } else if *consume_ledger == factory.input_ledger {
@@ -667,7 +692,7 @@ impl WorldState {
                 } else {
                     return Err(WorldError::ResourceBalanceInvalid {
                         reason: format!(
-                            "recipe consume ledger does not match factory input or world fallback: factory_id={factory_id} consume_ledger={consume_ledger} input_ledger={}",
+                            "recipe consume ledger does not match factory input or world compatibility ledger: factory_id={factory_id} consume_ledger={consume_ledger} input_ledger={}",
                             factory.input_ledger
                         ),
                     });
@@ -849,7 +874,33 @@ impl WorldState {
                 logistics_path_ids,
                 ..
             } => {
+                let completion_receipt = recipe_completion_receipt(
+                    job_id,
+                    requester_agent_id,
+                    factory_id,
+                    recipe_id,
+                    *accepted_batches,
+                    produce,
+                    byproducts,
+                    output_ledger,
+                    bottleneck_tags,
+                    logistics_route_ids,
+                    logistics_path_ids,
+                );
+                if let Some(existing) = self.recipe_completion_receipts.get(job_id) {
+                    if existing == &completion_receipt {
+                        return Ok(());
+                    }
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "recipe completion conflicts with persisted receipt: job_id={job_id}"
+                        ),
+                    });
+                }
                 if self.settled_recipe_job_ids.contains(job_id) {
+                    // Pre-receipt snapshots only have the terminal ID. Keep
+                    // their historical replay behavior while all new
+                    // settlements below persist the full payload.
                     return Ok(());
                 }
                 let Some(pending) = self.pending_recipe_jobs.get(job_id).cloned() else {
@@ -891,6 +942,7 @@ impl WorldState {
                 .map_err(|reason| WorldError::ResourceBalanceInvalid {
                     reason: format!("recipe output preflight failed: {reason}"),
                 })?;
+                self.allocate_industry_settlement_order(*job_id)?;
                 let completed_snapshot = FactoryProductionSnapshot::from_recipe_job(&pending);
                 self.pending_recipe_jobs.remove(job_id);
                 for stack in produce {
@@ -916,10 +968,22 @@ impl WorldState {
                     })?;
                 }
                 self.settled_recipe_job_ids.insert(*job_id);
+                self.recipe_completion_receipts
+                    .insert(*job_id, completion_receipt);
+                self.compact_settled_industry_history();
                 self.industry_progress.completed_recipe_jobs = self
                     .industry_progress
                     .completed_recipe_jobs
                     .saturating_add(1);
+                self.record_starter_industrial_milestone_if_match(
+                    *job_id,
+                    factory_id,
+                    recipe_id,
+                    *accepted_batches,
+                    produce,
+                    output_ledger,
+                    now,
+                );
                 if let Some(factory) = self.factories.get_mut(factory_id) {
                     factory.production.active_jobs =
                         factory.production.active_jobs.saturating_sub(1);
@@ -973,20 +1037,15 @@ impl WorldState {
             } => {
                 let product_validation_failure = blocker_kind == "product_validation";
                 if product_validation_failure {
-                    let Some(pending) = self.pending_recipe_jobs.get(action_id) else {
-                        // A validation disposition already applied is a
-                        // terminal replay and must remain byte-stable.
+                    if !self.prepare_product_validation_blocker(
+                        action_id,
+                        requester_agent_id,
+                        factory_id,
+                        recipe_id,
+                        blocker_kind,
+                        blocker_detail,
+                    )? {
                         return Ok(());
-                    };
-                    if pending.requester_agent_id != *requester_agent_id
-                        || pending.factory_id != *factory_id
-                        || pending.recipe_id != *recipe_id
-                    {
-                        return Err(WorldError::ResourceBalanceInvalid {
-                            reason: format!(
-                                "product-validation blocker does not match pending commitment: job_id={action_id}"
-                            ),
-                        });
                     }
                 }
                 let terminated_job = if product_validation_failure {
@@ -1000,6 +1059,7 @@ impl WorldState {
                     return Ok(());
                 }
                 if product_validation_failure {
+                    self.allocate_industry_settlement_order(*action_id)?;
                     self.settled_recipe_job_ids.insert(*action_id);
                 }
                 if let Some(factory) = self.factories.get_mut(factory_id) {
@@ -1015,13 +1075,15 @@ impl WorldState {
                     factory.production.last_blocked_at = Some(now);
                     factory.production.current_blocker_kind = Some(blocker_kind.clone());
                     factory.production.current_blocker_detail = Some(blocker_detail.clone());
+                    factory.production.current_blocker_action_id = Some(*action_id);
                     factory.production.current_job_id = None;
                     factory.production.current_recipe_id = None;
-                    if !product_validation_failure {
-                        factory.production.last_completed_recipe_id = None;
-                        factory.production.same_recipe_repeat_count = 0;
-                        factory.production.last_completed_canonical_snapshot = None;
-                    }
+                    factory.production.last_completed_recipe_id = None;
+                    factory.production.same_recipe_repeat_count = 0;
+                    factory.production.last_completed_canonical_snapshot = None;
+                }
+                if product_validation_failure {
+                    self.compact_settled_industry_history();
                 }
                 if !product_validation_failure {
                     self.refresh_industry_progress_stage(now);
@@ -1052,6 +1114,7 @@ impl WorldState {
                     factory.production.last_resumed_at = Some(now);
                     factory.production.current_blocker_kind = None;
                     factory.production.current_blocker_detail = None;
+                    factory.production.current_blocker_action_id = None;
                 }
                 if let Some(cell) = self.agents.get_mut(requester_agent_id) {
                     cell.last_active = now;
@@ -1068,6 +1131,7 @@ impl WorldState {
                     factory.production.current_recipe_id = None;
                     factory.production.current_blocker_kind = None;
                     factory.production.current_blocker_detail = None;
+                    factory.production.current_blocker_action_id = None;
                     factory.production.last_completed_recipe_id = None;
                     factory.production.same_recipe_repeat_count = 0;
                     factory.production.last_completed_canonical_snapshot = None;
@@ -1091,10 +1155,20 @@ impl WorldState {
             .sum::<u64>();
         let mut next = IndustryStage::Bootstrap;
 
-        let stable_canonical_line_ready = self
-            .factories
-            .values()
-            .any(|factory| factory.production.same_recipe_repeat_count >= 3);
+        let stable_canonical_line_ready = self.factories.values().any(|factory| {
+            let production = &factory.production;
+            let Some(snapshot) = production.last_completed_canonical_snapshot.as_ref() else {
+                return false;
+            };
+            let Some(last_completed_recipe_id) = production.last_completed_recipe_id.as_ref()
+            else {
+                return false;
+            };
+            production.same_recipe_repeat_count >= 3
+                && !snapshot.recipe_id.is_empty()
+                && !last_completed_recipe_id.is_empty()
+                && snapshot.recipe_id == *last_completed_recipe_id
+        });
         if stable_canonical_line_ready {
             next = IndustryStage::ScaleOut;
         }

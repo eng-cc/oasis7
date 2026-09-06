@@ -46,6 +46,10 @@ pub(super) fn default_factory_production_state() -> FactoryProductionState {
     FactoryProductionState::default()
 }
 
+pub(super) fn default_next_industry_settlement_order() -> u64 {
+    1
+}
+
 pub(super) fn default_module_release_required_roles() -> Vec<String> {
     vec![
         "security".to_string(),
@@ -69,17 +73,30 @@ impl Default for WorldState {
             completed_logistics_paths: BTreeMap::new(),
             settled_logistics_transit_ids: BTreeSet::new(),
             logistics_settlement_receipts: BTreeMap::new(),
+            factory_production_failure_dispositions: BTreeMap::new(),
             direct_material_transfer_receipts: BTreeMap::new(),
+            product_validation_receipts: BTreeMap::new(),
+            product_validation_attempts: BTreeMap::new(),
+            product_validation_delivery_cursor: ProductValidationDeliveryCursor::default(),
             product_profiles: BTreeMap::new(),
             latest_product_validation: None,
             recipe_profiles: BTreeMap::new(),
             factory_profiles: BTreeMap::new(),
+            agent_location_authorities: BTreeMap::new(),
+            location_anchors: BTreeMap::new(),
+            factory_site_authorities: BTreeMap::new(),
+            factory_construction_power_profiles: BTreeMap::new(),
             factories: BTreeMap::new(),
             retired_factory_ids: BTreeSet::new(),
             settled_factory_build_ids: BTreeSet::new(),
+            factory_construction_receipts: BTreeMap::new(),
             pending_factory_builds: BTreeMap::new(),
             pending_recipe_jobs: BTreeMap::new(),
             settled_recipe_job_ids: BTreeSet::new(),
+            next_industry_settlement_order: default_next_industry_settlement_order(),
+            industry_settlement_orders: BTreeMap::new(),
+            recipe_completion_receipts: BTreeMap::new(),
+            factory_recycle_receipts: BTreeMap::new(),
             pending_material_transits: BTreeMap::new(),
             industry_progress: IndustryProgressState::default(),
             alliances: BTreeMap::new(),

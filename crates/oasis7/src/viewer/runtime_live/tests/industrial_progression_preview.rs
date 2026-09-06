@@ -24,13 +24,23 @@ fn runtime_gameplay_snapshot_binds_a_deterministic_first_delivery_preview_to_eac
         .world
         .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Data, i64::MAX)
         .expect("fund mid-loop agent data");
+    let smelter_site_ledger = crate::runtime::MaterialLedgerId::site(
+        server
+            .world
+            .state()
+            .factories
+            .get(crate::viewer::FACTORY_SMELTER_MK1)
+            .expect("mid-loop smelter")
+            .site_id
+            .as_str(),
+    );
     server
         .world
-        .set_material_balance("iron_ingot", 200)
+        .set_ledger_material_balance(smelter_site_ledger.clone(), "iron_ingot", 200)
         .expect("seed mid-loop iron ingot");
     server
         .world
-        .set_material_balance("copper_wire", 200)
+        .set_ledger_material_balance(smelter_site_ledger, "copper_wire", 200)
         .expect("seed mid-loop copper wire");
     server
         .world

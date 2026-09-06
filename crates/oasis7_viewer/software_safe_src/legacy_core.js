@@ -42,7 +42,7 @@ import {
   VIEWER_RENDER_MODE,
   isHostedPublicJoinDeploymentMode,
 } from "./software_safe_constants.js";
-import { createSoftwareSafeState } from "./software_safe_state.js"; import { createWorldFeedTransport } from "./world_feed_transport.js";
+import { createSoftwareSafeState } from "./software_safe_state.js"; import { createWorldFeedTransport } from "./world_feed_transport.js"; import { isWorldScopedCrisisRuntimeEvent } from "./world_event_attention_policy.js";
 import {
   buildAuthEnvelope,
   generateEphemeralEd25519Keypair,
@@ -1340,29 +1340,17 @@ function setMode() {
   };
 }
 
-function updateControlFeedbackFromProgress() {
-  const feedback = state.lastControlFeedback;
-  if (!feedback || !feedback.accepted) return;
-  const deltaLogicalTime = Math.max(0, state.logicalTime - feedback.baselineLogicalTime);
-  const deltaEventSeq = Math.max(0, state.eventSeq - feedback.baselineEventSeq);
-  feedback.deltaLogicalTime = deltaLogicalTime;
-  feedback.deltaEventSeq = deltaEventSeq;
-  if (deltaLogicalTime > 0 || deltaEventSeq > 0) {
-    feedback.stage = "completed_advanced";
-    feedback.effect = `world advanced: logicalTime +${deltaLogicalTime}, eventSeq +${deltaEventSeq}`;
-  }
-}
-
 function summarizeEventTitle(event) {
   const kind = event?.kind?.type || "unknown";
   return kind.replace(/_/g, " ");
 }
 
 function addRecentEvent(event) {
+  state.eventSeq = Math.max(state.eventSeq, Number(event?.id || 0));
+  if (isWorldScopedCrisisRuntimeEvent(event)) { return; }
   state.recentEvents.unshift(event);
   state.recentEvents = state.recentEvents.slice(0, MAX_EVENTS);
   state.eventCount = state.recentEvents.length;
-  state.eventSeq = Math.max(state.eventSeq, Number(event?.id || 0));
 }
 
 function handleSnapshot(snapshot) {
@@ -3453,7 +3441,7 @@ function handleAuthoritativeRecoveryError(error) {
   void recoverHostedSessionFromError(error);
 }
 
-function handleViewerMessage(message) {
+function handleViewerMessage(message, sourceSocket = null) { if (sourceSocket && socket !== sourceSocket) return;
   if (quoteProtocolFacade.handleQuoteViewerMessage(message)) return;
   switch (message?.type) {
     case "hello_ack":
@@ -3476,7 +3464,7 @@ function handleViewerMessage(message) {
     case "snapshot":
       handleSnapshot(message.snapshot);
       break;
-    case "world_feed": worldFeedTransport.handleWorldFeed(message.feed); break;
+    case "world_feed": worldFeedTransport.handleWorldFeed(message.feed, sourceSocket); break;
     case "event": {
       addRecentEvent(message.event);
       const chatEntry = extractAgentSpokeEntry(message.event);
@@ -3526,12 +3514,11 @@ function handleViewerMessage(message) {
     default:
       break;
   }
-  updateControlFeedbackFromProgress();
   render();
 }
 
 function attachSocket(ws) {
-  ws.addEventListener("open", () => { worldFeedTransport.resetGeneration(ws);
+  ws.addEventListener("open", () => { if (socket !== ws) return; worldFeedTransport.resetGeneration(ws);
     state.connectionStatus = "connected";
     state.lastError = null;
     state.server = null;
@@ -3546,20 +3533,20 @@ function attachSocket(ws) {
     render();
   });
 
-  ws.addEventListener("message", (event) => {
+  ws.addEventListener("message", (event) => { if (socket !== ws) return;
     try {
       const message = JSON.parse(String(event.data || "null"));
-      handleViewerMessage(message);
+      handleViewerMessage(message, ws);
     } catch (error) {
       reportFatalError(String(error), "viewer.parse");
     }
   });
 
-  ws.addEventListener("error", () => {
+  ws.addEventListener("error", () => { if (socket !== ws) return;
     reportFatalError("websocket error", "viewer.ws");
   });
 
-  ws.addEventListener("close", () => { worldFeedTransport.resetGeneration(ws);
+  ws.addEventListener("close", () => { if (socket !== ws) return; worldFeedTransport.markDisconnected(ws);
     state.connectionStatus = "connecting";
     clearHostedRuntimeSyncTimer();
     if (state.auth.available && state.auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {

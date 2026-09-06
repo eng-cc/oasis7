@@ -27,6 +27,7 @@
 | --- | --- | --- | --- | --- |
 | completion_rate |  |  |  | [ ] |
 | invalid_action_rate |  |  |  | [ ] |
+| illegal_schema_rate |  |  | `illegal_schema_count / decision_steps`; missing or inconsistent => blocked | [ ] |
 | timeout_rate |  |  |  | [ ] |
 | median_extra_wait_ms |  |  |  | [ ] |
 | p95_extra_wait_ms |  |  |  | [ ] |
@@ -36,6 +37,11 @@
 | trace_completeness |  |  |  | [ ] |
 | recoverable_error_resolution_rate |  |  |  | [ ] |
 | context_drift_count |  |  |  | [ ] |
+
+`illegal_schema_rate` 必须从每个 sample 的 `illegal_schema_count / decision_steps` 聚合，且
+仅对应 `invalid_action_schema`。sample 与聚合 summary 必须保留
+`numerator/denominator/value/zero_case/gate_status` object；缺少字段、计数超过
+`decision_steps`、或与 `error_counts.invalid_action_schema` 不一致时标记为 `blocked`，不得按缺失为零。
 
 ## 四、失败签名汇总
 | error_code | builtin count | Local Provider count | 是否阻断 | 备注 |
@@ -55,7 +61,7 @@
 ## 六、行为等价结论
 - [ ] 行为等价硬门禁全部通过
 - [ ] completion gap 超线
-- [ ] invalid_action_rate / timeout_rate 超线
+- [ ] invalid_action_rate / illegal_schema_rate / timeout_rate 超线
 - [ ] `relative_wait_gap` 超线
 - [ ] trace 不完整导致无法诊断
 - [ ] 记忆连续性明显漂移

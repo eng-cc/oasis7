@@ -11,10 +11,12 @@ fn recipe_route_fixture(factory_id: &str) -> World {
     world
         .set_material_balance("circuit_board", 4)
         .expect("seed factory circuits");
+    let spec = factory_spec(factory_id, 1, 1);
+    prepare_factory_build(&mut world, "builder-a", "site-1", &spec);
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
-        spec: factory_spec(factory_id, 1, 1),
+        spec,
     });
     world.step().expect("start recipe route factory");
     world.step().expect("finish recipe route factory");
@@ -450,6 +452,7 @@ fn schedule_recipe_rejects_when_profile_stage_gate_exceeds_current_stage() {
     world
         .set_material_balance("circuit_board", 4)
         .expect("seed build circuits");
+    prepare_factory_build_id(&mut world, "builder-a", "site-1", "factory.stage_gate");
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
@@ -511,6 +514,7 @@ fn schedule_recipe_rejects_when_product_unlock_stage_exceeds_current_stage() {
     world
         .set_material_balance("circuit_board", 4)
         .expect("seed build circuits");
+    prepare_factory_build_id(&mut world, "builder-a", "site-1", "factory.unlock_stage");
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
@@ -591,6 +595,12 @@ fn schedule_recipe_rejects_when_factory_tags_conflict_with_recipe_profile() {
     world
         .set_material_balance("circuit_board", 4)
         .expect("seed build circuits");
+    prepare_factory_build_id(
+        &mut world,
+        "builder-a",
+        "site-1",
+        "factory.preferred_tag",
+    );
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
@@ -652,6 +662,7 @@ fn schedule_recipe_uses_profile_bottleneck_tags_before_inference() {
     world
         .set_material_balance("circuit_board", 4)
         .expect("seed build circuits");
+    prepare_factory_build_id(&mut world, "builder-a", "site-1", "factory.bottleneck.profile");
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
@@ -725,6 +736,20 @@ fn due_recipe_jobs_prioritize_by_product_role_tag_before_keyword_fallback() {
     world
         .set_material_balance("circuit_board", 4)
         .expect("seed build circuits");
+    prepare_factory_build_id(
+        &mut world,
+        "builder-a",
+        "site-1",
+        "factory.role_tag",
+    );
+    world
+        .upsert_factory_profile(FactoryProfileV1 {
+            factory_id: "factory.role_tag".to_string(),
+            tier: 1,
+            recipe_slots: 2,
+            tags: vec!["assembly".to_string()],
+        })
+        .expect("set two-slot role-tag factory profile");
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
@@ -833,6 +858,7 @@ fn schedule_recipe_applies_product_maintenance_sink_to_consume() {
     world
         .set_material_balance("circuit_board", 4)
         .expect("seed build circuits");
+    prepare_factory_build_id(&mut world, "builder-a", "site-1", "factory.maintenance_sink");
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
@@ -925,6 +951,12 @@ fn recipe_started_market_quote_reflects_governance_tax_change() {
     world
         .set_material_balance("circuit_board", 4)
         .expect("seed build circuits");
+    prepare_factory_build_id(
+        &mut world,
+        "builder-a",
+        "site-1",
+        "factory.quote",
+    );
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),
@@ -1038,6 +1070,12 @@ fn recipe_started_market_quote_uses_material_profile_transport_loss() {
     world
         .set_material_balance("circuit_board", 4)
         .expect("seed build circuits");
+    prepare_factory_build_id(
+        &mut world,
+        "builder-a",
+        "site-1",
+        "factory.quote.profile_loss",
+    );
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-1".to_string(),

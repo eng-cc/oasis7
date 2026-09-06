@@ -35,6 +35,11 @@ fn recipe_fixture() -> WorldState {
             output_ledger: MaterialLedgerId::world(),
             durability_ppm: 1_000_000,
             production: FactoryProductionState::default(),
+            location_anchor_revision: None,
+            site_authority_revision: None,
+            site_location_id: None,
+            construction_power_profile_key: None,
+            construction_power_profile_revision: None,
             built_at: 0,
         },
     );

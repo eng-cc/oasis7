@@ -3,27 +3,8 @@ use crate::runtime::{
     FactoryBuildJobState, FactoryModuleSpec, MaterialLedgerId, MaterialStack, World as RuntimeWorld,
 };
 
-#[test]
-fn kernel_snapshot_roundtrip() {
-    let mut kernel = WorldKernel::new();
-    kernel.submit_action(Action::RegisterLocation {
-        location_id: "loc-1".to_string(),
-        name: "base".to_string(),
-        pos: pos(0, 0),
-        profile: LocationProfile::default(),
-    });
-    kernel.submit_action(Action::RegisterAgent {
-        agent_id: "agent-1".to_string(),
-        location_id: "loc-1".to_string(),
-    });
-    kernel.step_until_empty();
-
-    let snapshot = kernel.snapshot();
-    let journal = kernel.journal_snapshot();
-    let restored = WorldKernel::from_snapshot(snapshot, journal).unwrap();
-    assert_eq!(restored.time(), kernel.time());
-    assert_eq!(restored.model(), kernel.model());
-}
+#[path = "persist/kernel_roundtrip.rs"]
+mod kernel_roundtrip;
 
 #[test]
 fn kernel_snapshot_roundtrip_preserves_agent_long_term_memories() {
@@ -455,6 +436,11 @@ fn snapshot_runtime_snapshot_accepts_stringified_numeric_map_keys() {
             },
             consume_ledger: MaterialLedgerId::world(),
             ready_at: 2,
+            contract_version: 0,
+            site_authority_revision: None,
+            site_location_id: None,
+            location_anchor_revision: None,
+            construction_power_obligation: None,
         },
     );
     snapshot.runtime_snapshot = Some(runtime_snapshot);
@@ -567,6 +553,8 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         rebuild_available: None,
         pivot_available: None,
         validation_unlock_preview: None,
+        starter_industrial_feasibility: None,
+        factory_production_failure_disposition: None,
         recovery_options: Vec::new(),
         fine_grain_action_translation: None,
     });
@@ -641,6 +629,10 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         Some("unverified")
     );
     assert_eq!(gameplay.recovery_path_kind.as_deref(), Some("unverified"));
+    assert!(
+        gameplay.starter_industrial_feasibility.is_none(),
+        "legacy snapshots without the optional starter feasibility field remain readable"
+    );
     assert!(gameplay.fallback_tradeoff_preview.is_none());
     assert!(gameplay.no_safe_fallback_reason.is_none());
     assert!(gameplay.required_next_decision_action_id.is_none());

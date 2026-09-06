@@ -364,6 +364,252 @@ describe("viewer feedback module", () => {
     }));
   });
 
+  it("normalizes the factory production failure disposition for player display", () => {
+    const summary = createFeedbackModule({
+      lastGameplayActionFeedback: null,
+      snapshot: {
+        model: { agents: { "agent-0": { id: "agent-0" } }, locations: { base: { id: "base" } } },
+        player_gameplay: {
+          available_actions: [
+            {
+              action_id: "schedule_recipe_smelter_iron_ingot",
+              label: "Queue iron ingot run",
+              protocol_action: "gameplay_action.submit",
+              target_agent_id: "agent-0",
+              disabled_reason: "insufficient iron_ore in site ledger",
+            },
+            {
+              action_id: "request_snapshot",
+              label: "Refresh gameplay snapshot",
+              protocol_action: "request_snapshot",
+            },
+          ],
+          factory_production_failure_disposition: {
+            action_id: 19,
+            requester_agent_id: "agent-0",
+            factory_id: "factory.target",
+            recipe_id: "recipe.smelter.iron_ingot",
+            blocker_kind: "product_validation_rejected",
+            blocker_detail: "product profile rejected the committed output",
+            disposition_kind: "consumed_lost",
+            consumed_inputs: [{ kind: "iron_ore", amount: 3 }],
+            lost_inputs: [{ kind: "iron_ore", amount: 3 }],
+            consumed_power: 7,
+            lost_power: 7,
+            next_action: "inspect_product_validation_and_reschedule",
+            next_recheck: null,
+          },
+          wait_resolution_quote: {
+            safe_to_wait: true,
+            resolution_trigger: "synthetic wait should be hidden",
+          },
+          fallback_tradeoff_preview: [{ value_class: "safe_wait", available: true }],
+        },
+      },
+      uiLocale: "en",
+    }).buildGameplaySummary();
+
+    expect(summary.factoryProductionFailureDisposition).toEqual({
+      actionId: "19",
+      requesterAgentId: "agent-0",
+      factoryId: "factory.target",
+      recipeId: "recipe.smelter.iron_ingot",
+      blockerKind: "Product validation failed",
+      blockerDetail: "product profile rejected the committed output",
+      dispositionKind: "Inputs consumed and lost",
+      consumedInputs: [{ kind: "iron_ore", amount: 3 }],
+      lostInputs: [{ kind: "iron_ore", amount: 3 }],
+      consumedPower: 7,
+      lostPower: 7,
+      nextAction: "Refresh gameplay snapshot",
+      recoveryAction: {
+        actionId: "request_snapshot",
+        label: "Refresh gameplay snapshot",
+        protocolAction: "request_snapshot",
+        targetAgentId: null,
+        disabledReason: null,
+        executeKind: "request_snapshot",
+      },
+      recoveryActionId: "request_snapshot",
+      recoveryActionLabel: "Refresh gameplay snapshot",
+      recoveryActionDisabledReason: null,
+      nextRecheckBoundary: "next committed snapshot",
+      nextRecheck: null,
+    });
+    expect(summary.waitResolutionQuote).toBeNull();
+    expect(summary.fallbackTradeoffPreview).toEqual([]);
+    expect(JSON.stringify(summary.factoryProductionFailureDisposition)).not.toMatch(
+      /product_validation_rejected|consumed_lost|inspect_product_validation_and_reschedule/,
+    );
+  });
+
+  it("accepts camelCase failure receipts and keeps old snapshots receipt-free", () => {
+    const summaryFor = (playerGameplay) => createFeedbackModule({
+      lastGameplayActionFeedback: null,
+      snapshot: {
+        model: { agents: { "agent-0": { id: "agent-0" } }, locations: { base: { id: "base" } } },
+        player_gameplay: playerGameplay,
+      },
+      uiLocale: "zh",
+    }).buildGameplaySummary();
+
+    const summary = summaryFor({
+      factoryProductionFailureDisposition: {
+        actionId: "20",
+        requesterAgentId: "agent-0",
+        factoryId: "factory.camel",
+        recipeId: "recipe.camel",
+        blockerKind: "product_validation",
+        blockerDetail: "需要检查产品验证",
+        dispositionKind: "consumed_lost",
+        consumedInputs: [{ kind: "copper_ore", amount: 2 }],
+        lostInputs: [],
+        consumedPower: 4,
+        lostPower: 0,
+        nextAction: "inspect_product_validation_and_reschedule",
+        nextRecheck: 12,
+      },
+    });
+
+    expect(summary.factoryProductionFailureDisposition).toEqual(expect.objectContaining({
+      actionId: "20",
+      blockerKind: "产品验证失败",
+      dispositionKind: "投入已消费且损失",
+      nextAction: "暂无安全恢复路径",
+      recoveryAction: expect.objectContaining({ actionId: "no_safe_path", executeKind: "none" }),
+      recoveryActionId: "no_safe_path",
+      recoveryActionLabel: "暂无安全恢复路径",
+      recoveryActionDisabledReason: "当前 committed 快照没有可执行的排程、修复、补给或刷新动作；等待下一次复查。",
+      nextRecheckBoundary: "世界时刻 12",
+      nextRecheck: 12,
+    }));
+    expect(summaryFor({}).factoryProductionFailureDisposition).toBeNull();
+  });
+
+  it("lets a fresh matching schedule recovery own the hero recommendation", () => {
+    const summary = createFeedbackModule({
+      lastGameplayActionFeedback: null,
+      snapshot: {
+        model: { agents: { "agent-0": { id: "agent-0" } }, locations: { base: { id: "base" } } },
+        player_gameplay: {
+          available_actions: [
+            {
+              action_id: "schedule_recipe_smelter_iron_ingot",
+              label: "Queue iron ingot run",
+              protocol_action: "gameplay_action.submit",
+              target_agent_id: "agent-0",
+            },
+            {
+              action_id: "request_snapshot",
+              label: "Refresh gameplay snapshot",
+              protocol_action: "request_snapshot",
+            },
+            {
+              action_id: "advance_step",
+              label: "Advance 1 step",
+              protocol_action: "live_control.step",
+            },
+            {
+              action_id: "resume_play",
+              label: "Resume play",
+              protocol_action: "live_control.play",
+            },
+          ],
+          factory_production_failure_disposition: {
+            action_id: 22,
+            requester_agent_id: "agent-0",
+            factory_id: "factory.target",
+            recipe_id: "recipe.smelter.iron_ingot",
+            blocker_kind: "product_validation_rejected",
+            blocker_detail: "product profile rejected the committed output",
+            disposition_kind: "consumed_lost",
+            next_action: "inspect_product_validation_and_reschedule",
+          },
+        },
+      },
+      uiLocale: "en",
+    }).buildGameplaySummary();
+
+    expect(summary.factoryProductionFailureDisposition.recoveryAction).toEqual(expect.objectContaining({
+      actionId: "schedule_recipe_smelter_iron_ingot",
+      executeKind: "gameplay_action",
+    }));
+    expect(summary.recommendedAction).toEqual(expect.objectContaining({
+      actionId: "schedule_recipe_smelter_iron_ingot",
+      executeKind: "gameplay_action",
+    }));
+  });
+
+  it("does not treat live step or play controls as factory failure recovery", () => {
+    const failureDisposition = {
+      action_id: 21,
+      requester_agent_id: "agent-0",
+      factory_id: "factory.target",
+      recipe_id: "recipe.smelter.iron_ingot",
+      blocker_kind: "product_validation_rejected",
+      blocker_detail: "product profile rejected the committed output",
+      disposition_kind: "consumed_lost",
+      next_action: "inspect_product_validation_and_reschedule",
+    };
+    const summaryFor = (availableActions) => createFeedbackModule({
+      lastGameplayActionFeedback: null,
+      snapshot: {
+        model: { agents: { "agent-0": { id: "agent-0" } }, locations: { base: { id: "base" } } },
+        player_gameplay: {
+          available_actions: availableActions,
+          factory_production_failure_disposition: failureDisposition,
+        },
+      },
+      uiLocale: "en",
+    }).buildGameplaySummary();
+    const disabledReschedule = {
+      action_id: "schedule_recipe_smelter_iron_ingot",
+      label: "Queue iron ingot run",
+      protocol_action: "gameplay_action.submit",
+      target_agent_id: "agent-0",
+      disabled_reason: "insufficient iron_ore in site ledger",
+    };
+    const snapshot = {
+      action_id: "request_snapshot",
+      label: "Refresh gameplay snapshot",
+      protocol_action: "request_snapshot",
+    };
+    const advanceStep = {
+      action_id: "advance_step",
+      label: "Advance 1 step",
+      protocol_action: "live_control.step",
+    };
+    const resumePlay = {
+      action_id: "resume_play",
+      label: "Resume play",
+      protocol_action: "live_control.play",
+    };
+
+    const snapshotSummary = summaryFor([disabledReschedule, snapshot, advanceStep, resumePlay]);
+    expect(snapshotSummary.factoryProductionFailureDisposition).toEqual(
+      expect.objectContaining({
+        recoveryAction: expect.objectContaining({
+          actionId: "request_snapshot",
+          executeKind: "request_snapshot",
+        }),
+        recoveryActionId: "request_snapshot",
+      }),
+    );
+    expect(snapshotSummary.recommendedAction).toEqual(expect.objectContaining({
+      actionId: "request_snapshot",
+      executeKind: "request_snapshot",
+    }));
+
+    const noSafePathSummary = summaryFor([disabledReschedule, advanceStep, resumePlay]);
+    expect(noSafePathSummary.factoryProductionFailureDisposition).toEqual(
+      expect.objectContaining({
+        recoveryAction: expect.objectContaining({ actionId: "no_safe_path", executeKind: "none" }),
+        recoveryActionId: "no_safe_path",
+      }),
+    );
+    expect(noSafePathSummary.recommendedAction).toBeNull();
+  });
+
   it("projects canonical micro depot facilities without inventing quote or ROI fields", () => {
     const state = {
       lastGameplayActionFeedback: null,

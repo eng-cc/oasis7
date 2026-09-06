@@ -60,6 +60,7 @@ fn sample_render_state_for_camera(selection_kind: &str) -> RenderState {
         }),
         receipt_target: None,
         recommended_target: None,
+        active_intent_target: None,
     }
 }
 
@@ -551,6 +552,56 @@ fn assert_label_only_render_update_reconciles_without_resetting_camera_or_follow
     );
 }
 
+fn assert_active_intent_only_update_preserves_manual_camera_and_focus() {
+    let mut original = sample_render_state_for_camera("agent");
+    original.active_intent_target = Some(ActiveIntentTarget {
+        agent_id: "agent-0".to_string(),
+        status: "accepted".to_string(),
+    });
+    let mut runtime = BevyRuntimeState {
+        mounted: true,
+        render_state: Some(original.clone()),
+        render_content_signature: render_content_signature(Some(&original)),
+        camera: CameraState {
+            zoom: 2.0,
+            pan_x_px: 12.0,
+            pan_y_px: -8.0,
+        },
+        camera_fit_version: 7,
+        camera_user_override: true,
+        active_follow_target: Some(FocusTarget {
+            kind: "agent".to_string(),
+            id: "agent-0".to_string(),
+        }),
+        hit_regions_dirty: false,
+        ..Default::default()
+    };
+    let mut next = original;
+    next.active_intent_target.as_mut().unwrap().status = "blocked".to_string();
+
+    apply_external_render_snapshot(
+        &mut runtime,
+        true,
+        RenderSnapshot::Changed {
+            version: 2,
+            state: Some(next),
+        },
+    );
+
+    assert!(runtime.needs_reconcile);
+    assert!(runtime.camera_user_override);
+    assert_eq!(runtime.camera_fit_version, 7);
+    assert!(!runtime.hit_regions_dirty);
+    assert_eq!(runtime.pending_focus_target, None);
+    assert_eq!(
+        runtime.active_follow_target,
+        Some(FocusTarget {
+            kind: "agent".to_string(),
+            id: "agent-0".to_string()
+        })
+    );
+}
+
 fn assert_selection_change_sets_pending_focus_target() {
     let mut runtime = BevyRuntimeState {
         mounted: true,
@@ -772,6 +823,12 @@ fn content_render_update_clears_manual_camera_override() {
 #[test]
 fn label_only_render_update_reconciles_without_resetting_camera_or_follow() {
     assert_label_only_render_update_reconciles_without_resetting_camera_or_follow();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn active_intent_only_update_preserves_manual_camera_and_focus() {
+    assert_active_intent_only_update_preserves_manual_camera_and_focus();
 }
 
 #[cfg(not(target_arch = "wasm32"))]

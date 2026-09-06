@@ -11,6 +11,36 @@ and Project for the active task.
   agnostic decision boundary: providers propose structured decisions, while the
   runtime validates and executes actions, owns world facts, and returns ordered
   feedback.
+- `continuous-agent-harness.prd.md` and `.design.md` define the Agent-owned
+  cognition lifecycle above that provider boundary: session/turn/request
+  identity, provider-neutral context and feedback isolation, memory-write
+  policy, bounded continuation, and one Harness shared by Builtin and
+  ProviderBacked implementations. Runtime scheduling, action MVCC, durable
+  cognition journal, recovery, and receipts remain owned by the paired
+  `doc/world-runtime/runtime/agent-cognition-lifecycle.*` contract.
+- The Continuous Harness target uses a non-recursive V1 `request_digest`
+  (canonical outer context without its output digest or `transport_attempt`) and a global per-agent
+  active-session/turn mutex; session IDs partition state but do not permit
+  concurrent turns for one Agent. `committed/rejected/failed/pending` are the
+  only feedback statuses; cancellation and scheduler backpressure map through
+  explicit terminal/pending reasons and late-response cleanup.
+- Loopback target decision traffic uses
+  `POST /v1/world-simulator/decision-context` with the
+  `ContinuousAgentRequestContextV1` / `ContinuousAgentResponseContextV1` outer wrappers;
+  target feedback uses `POST /v1/world-simulator/feedback-context` with `FeedbackEnvelopeV1`.
+  Bare `/v1/world-simulator/decision` and `/v1/world-simulator/feedback` are
+  legacy compatibility-only routes for the old DTO bodies. The current HTTP body does not carry
+  a `compatibility_lane` field; route/adapter selection is the explicit lane boundary.
+- The target response wrapper preserves tagged `wait/wait_ticks/act/query/module_command/
+  module_command_response` variants; Query is read-only, and typed module responses require host
+  validation before Runtime handling.
+- Target memory writes use `MemoryWriteIntentV1`; omitted summary is explicit `present=false`
+  (present summaries are non-empty after normalization); tags may be an empty list, but empty tag
+  elements are invalid. The legacy inner DTO is compatibility-lane only.
+- P0 memory write scope is limited to `turn_private` and `session_private`; the reserved
+  `agent_private_long_term` scope is disabled by default and deferred to P2 authority.
+- Continuation proposals remain Harness policy inputs; Runtime projections carry the shared
+  `FinalityBindingV1`/world bindings, and proposal/context digests use the paired `H_v1` registry.
 - `provider-loopback-http-contract.prd.md` and `.design.md` define the local
   HTTP adapter and its explicit failure/fallback contract.
 - `provider-agent-experience-parity.prd.md` and `.design.md` define parity
@@ -34,6 +64,15 @@ and Project for the active task.
   latency, and retries are diagnostic or evaluation inputs.  They do not by
   themselves prove parity, cost, replay closure, release readiness, or default
   enablement.
+- Legacy DTOs and heuristic fallback are compatibility-only lanes: they require
+  an explicitly selected legacy route or fixture/profile, and cannot satisfy production async,
+  target parity, or automatic memory/continuation proof. The current HTTP wire does not define a
+  `compatibility_lane` marker; absence of the target outer context remains non-proof. Target traces and feedback use fixed byte/count
+  bounds, deterministic redaction, and negative overflow fixtures.
+- Provider `info.capabilities` and `supported_action_sets` are provider metadata only. They are not
+  a complete Runtime subject-bound capability discovery result; target requests must carry the
+  Runtime-generated capability catalog and invocation context, and no standalone provider
+  endpoint grants or discovers world authority.
 - Evaluation evidence must retain a fixed scenario/fixture/profile/provider/
   adapter/protocol/timeout epoch, per-scenario artifacts, and repeated samples
   for nondeterministic providers.  Aggregate counts or historical samples do

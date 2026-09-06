@@ -160,6 +160,41 @@ describe("fullscreen map shell contract", () => {
     }
   });
 
+  it("keeps Agent Context decision fields compact, readable, and non-disclosed on narrow screens", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    const decisionRule = findRule(
+      terminalShellCss,
+      /\.agent-context-lite__decision\s+\.agent-context-lite__gameplay/,
+    );
+    expect(decisionRule).not.toBeNull();
+    expect(hasDeclaration(decisionRule, "grid-template-columns", /repeat\(2\s*,\s*minmax\(0\s*,\s*1fr\)/i)).toBe(true);
+
+    const fieldRule = findRule(terminalShellCss, /\.agent-context-lite__field/);
+    expect(fieldRule).not.toBeNull();
+    expect(hasDeclaration(fieldRule, "min-width", /0/)).toBe(true);
+    expect(hasDeclaration(fieldRule, "overflow-wrap", /anywhere/)).toBe(true);
+
+    const mobileBlock = terminalShellCss.match(/@media\s*\(max-width:\s*640px\)[\s\S]*$/i)?.[0] || "";
+    expect(mobileBlock).toMatch(
+      /\.agent-context-lite__decision\s+\.agent-context-lite__gameplay\s*\{[^}]*grid-template-columns\s*:\s*minmax\(0\s*,\s*1fr\)/i,
+    );
+    expect(mobileBlock).toMatch(
+      /\.agent-context-lite__truth\s+\.agent-activity__field\s*\{[^}]*display\s*:\s*none/i,
+    );
+    expect(mobileBlock).not.toMatch(
+      /\.agent-context-lite__truth\s+\.agent-activity__state\s*\{[^}]*display\s*:\s*none/i,
+    );
+    expect(mobileBlock).toMatch(
+      /\.agent-context-lite__decision\s+\.agent-context-lite__gameplay\s*\{[^}]*gap\s*:\s*5px/i,
+    );
+    expect(mobileBlock).not.toMatch(
+      /\.agent-context-lite__field(?:[^{}]*)\{[^}]*display\s*:\s*none/i,
+    );
+    expect(mobileBlock).not.toMatch(
+      /\.agent-context-lite__decision(?:[^{}]*)\{[^}]*display\s*:\s*none/i,
+    );
+  });
+
   it("keeps the compact authoritative world readout visible outside Cinematic View", async () => {
     const { viewerHtml, terminalShellCss } = await readViewerHtml();
     expect(viewerHtml).toMatch(/data-viewer-shell="player-fullscreen"/);
@@ -269,7 +304,49 @@ describe("fullscreen map shell contract", () => {
       /#viewer-details-panel\s+\.command-surface__target-row\s*\{[^}]*position:\s*sticky/i,
     );
     expect(mobileBlock).toMatch(
-      /#viewer-details-panel\s+\.command-surface__target-row\s*\{[^}]*top:\s*0/i,
+      /#viewer-details-panel\s+\.command-surface__target-row\s*\{[^}]*top:\s*var\(--command-route-chrome-height/i,
+    );
+    expect(mobileBlock).toMatch(
+      /#viewer-details-panel\s*\{[^}]*max-height:\s*min\(80dvh,\s*660px\)/i,
+    );
+  });
+
+  it("keeps the Command route chrome and truthful context available at scroll bottom", async () => {
+    const [{ terminalShellCss }, mainSource] = await Promise.all([
+      readViewerHtml(),
+      readFile("software_safe_src/main.jsx", "utf8"),
+    ]);
+    expect(mainSource).toMatch(
+      /id="viewer-details-panel"[\s\S]*?class="panel__header panel__header--stack command-route-chrome"[\s\S]*?href="#viewer-stage-panel"/i,
+    );
+
+    const chromeRule = findRule(
+      terminalShellCss,
+      /#viewer-details-panel\s*>\s*\.command-route-chrome/,
+    );
+    expect(chromeRule, "Command route chrome must stay visible while the drawer scrolls").not.toBeNull();
+    expect(hasDeclaration(chromeRule, "position", /sticky/)).toBe(true);
+    expect(hasDeclaration(chromeRule, "top", /0/)).toBe(true);
+    expect(hasDeclaration(chromeRule, "z-index", /[1-9]/)).toBe(true);
+    expect(hasDeclaration(chromeRule, "background", /var\(--panel-bg/)).toBe(true);
+
+    const responsiveChrome = terminalShellCss.match(
+      /@media\s*\(max-width:\s*1240px\)[\s\S]*?(?=@media|$)/i,
+    )?.[0] || "";
+    expect(responsiveChrome).toMatch(
+      /#viewer-details-panel\s+\.command-surface__target-row\s*\{[^}]*top:\s*var\(--command-route-chrome-height/i,
+    );
+    expect(responsiveChrome).toMatch(
+      /#viewer-details-panel\s+\.command-surface__target-row\s*\{[^}]*position:\s*sticky/i,
+    );
+    expect(mainSource).toMatch(
+      /class="badge-row command-surface__target-row"[^>]*data-command-continuity="target"/i,
+    );
+    expect(mainSource).toMatch(
+      /data-command-continuity="target"[\s\S]*?data-command-continuity="summary"[\s\S]*?Freshness[\s\S]*?Objective/i,
+    );
+    expect(mainSource).toMatch(
+      /<AgentContextLite\s+model=\{selectedAgentContextModel\(\)\}/,
     );
   });
 

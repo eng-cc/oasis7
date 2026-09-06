@@ -740,6 +740,11 @@ mod tests {
                 output_ledger: MaterialLedgerId::site("site-smelter"),
                 durability_ppm: 1_000_000,
                 production: FactoryProductionState::default(),
+                site_authority_revision: None,
+                site_location_id: None,
+                location_anchor_revision: None,
+                construction_power_profile_key: None,
+                construction_power_profile_revision: None,
                 built_at: 1,
             },
         );

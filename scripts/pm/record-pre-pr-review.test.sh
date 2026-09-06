@@ -15,6 +15,7 @@ TEST_REPO="$TMPDIR/repo"
 mkdir -p "$TEST_REPO/scripts/pm" "$TMPDIR/bin"
 cp "$ROOT_DIR/scripts/pm/record-pre-pr-review.sh" "$TEST_REPO/scripts/pm/record-pre-pr-review.sh"
 cp "$ROOT_DIR/scripts/pm/validate-review-provenance.py" "$TEST_REPO/scripts/pm/validate-review-provenance.py"
+cp "$ROOT_DIR/scripts/pm/review-findings-resolution.py" "$TEST_REPO/scripts/pm/review-findings-resolution.py"
 chmod +x "$TEST_REPO/scripts/pm/record-pre-pr-review.sh"
 
 cat > "$TMPDIR/bin/gh" <<'EOF'
@@ -40,7 +41,7 @@ git -C "$TEST_REPO" init -q -b main
 printf 'base\n' > "$TEST_REPO/README.md"
 mkdir -p "$TEST_REPO/.pm"
 printf 'scratch/\n' >"$TEST_REPO/.pm/.gitignore"
-git -C "$TEST_REPO" add README.md .pm/.gitignore scripts/pm/record-pre-pr-review.sh scripts/pm/validate-review-provenance.py
+git -C "$TEST_REPO" add README.md .pm/.gitignore scripts/pm/record-pre-pr-review.sh scripts/pm/validate-review-provenance.py scripts/pm/review-findings-resolution.py
 git -C "$TEST_REPO" -c user.name="oasis7 smoke" -c user.email="smoke@example.invalid" commit -q -m "base"
 git -C "$TEST_REPO" branch base
 
@@ -48,8 +49,24 @@ printf 'changed\n' >> "$TEST_REPO/README.md"
 git -C "$TEST_REPO" add README.md
 git -C "$TEST_REPO" -c user.name="oasis7 smoke" -c user.email="smoke@example.invalid" commit -q -m "change"
 mkdir -p "$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111"
-printf 'review return\n' >"$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111/review-return.md"
+ARTIFACT_PATH="$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111/review-return.md"
 HEAD_SHA="$(git -C "$TEST_REPO" rev-parse HEAD)"
+python3 - "$ARTIFACT_PATH" "$HEAD_SHA" <<'PY'
+import json, sys
+json.dump({
+    "task_uid": "task_11111111111111111111111111111111",
+    "role": "repository_health_engineer",
+    "status": "completed",
+    "head": sys.argv[2],
+    "slice_id": "11111111-1111-4111-8111-111111111111",
+    "epoch": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "disposition": "no_findings",
+    "findings": [],
+    "residual_risk": "fixture risk",
+}, open(sys.argv[1], "w"))
+with open(sys.argv[1], "a") as handle:
+    handle.write("\n")
+PY
 ARTIFACT_SHA="$(shasum -a 256 "$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111/review-return.md" | awk '{print $1}')"
 python3 - "$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111/slice-ledger.jsonl" "$HEAD_SHA" "$ARTIFACT_SHA" <<'PY'
 import json, sys
@@ -222,6 +239,209 @@ done
 grep -q "Reviewed Changed Paths: README.md" "$TMPDIR/frozen-plan.out"
 grep -q "Review Plan: .pm/scratch/task_11111111111111111111111111111111/review-plans/frozen-plan.json" "$TMPDIR/frozen-plan.out"
 grep -q "Slice Ledger: .pm/scratch/task_11111111111111111111111111111111/slice-ledger.jsonl" "$TMPDIR/frozen-plan.out"
+
+# The immutable plan owns the preflight ledger identity. A caller-provided
+# repository-owned alternate ledger must fail before packet publication.
+ALTERNATE_LEDGER="$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111/alternate-slice-ledger.jsonl"
+cp "$TEST_REPO/$LEDGER_REL" "$ALTERNATE_LEDGER"
+cp "$TEST_REPO/$LEDGER_REL" "$TMPDIR/canonical-before-alternate.jsonl"
+cp "$ALTERNATE_LEDGER" "$TMPDIR/alternate-before.jsonl"
+if "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
+  --task-uid task_11111111111111111111111111111111 \
+  --review-plan "$PLAN" \
+  --review-evidence "repository_health_engineer: no_findings; alternate ledger" \
+  --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" \
+  --finding-disposition-evidence "alternate ledger" \
+  --verification "alternate ledger" --residual-risk "fixture risk" \
+  --slice-ledger "$ALTERNATE_LEDGER" --print-only \
+  >"$TMPDIR/alternate-ledger.out" 2>"$TMPDIR/alternate-ledger.err"; then
+  echo "record-pre-pr-review accepted a role-return ledger outside the plan preflight path" >&2
+  exit 1
+fi
+grep -Eqi 'preflight ledger|immutable|slice ledger|ledger path' "$TMPDIR/alternate-ledger.err"
+cmp -s "$TEST_REPO/$LEDGER_REL" "$TMPDIR/canonical-before-alternate.jsonl"
+cmp -s "$ALTERNATE_LEDGER" "$TMPDIR/alternate-before.jsonl"
+
+# The direct recorder must reject a completed role return with unresolved
+# findings instead of defaulting the packet disposition to no_findings.
+FIX2_FAILURES=0
+python3 - "$ARTIFACT_PATH" "$TEST_REPO/$LEDGER_REL" <<'PY'
+import hashlib, json, sys
+artifact_path, ledger_path = sys.argv[1:]
+rows = [json.loads(line) for line in open(ledger_path, encoding="utf-8") if line.strip()]
+artifact = json.load(open(artifact_path, encoding="utf-8"))
+artifact.update({"disposition": "findings", "findings": [{"id": "FIX2-UNRESOLVED", "summary": "fixture unresolved finding"}]})
+with open(artifact_path, "w", encoding="utf-8") as handle:
+    json.dump(artifact, handle, sort_keys=True)
+    handle.write("\n")
+artifact_digest = hashlib.sha256(open(artifact_path, "rb").read()).hexdigest()
+for row in rows:
+    row["findings"] = "findings"
+    row["artifact_digest"] = artifact_digest
+with open(ledger_path, "w", encoding="utf-8") as handle:
+    handle.write("".join(json.dumps(row) + "\n" for row in rows))
+PY
+if "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
+  --task-uid task_11111111111111111111111111111111 \
+  --review-plan "$PLAN" \
+  --review-evidence "repository_health_engineer: findings; unresolved fixture" \
+  --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=blocked" \
+  --finding-disposition addressed \
+  --finding-disposition-evidence "arbitrary text" \
+  --verification "helper -> smoke -> observed" \
+  --residual-risk "unresolved fixture risk" \
+  --slice-ledger "$LEDGER_REL" \
+  --print-only >"$TMPDIR/unresolved-findings.out" 2>"$TMPDIR/unresolved-findings.err"; then
+  echo "record-pre-pr-review accepted unresolved role findings" >&2
+  FIX2_FAILURES=1
+else
+  grep -Eiq 'unresolved|findings|blocked' "$TMPDIR/unresolved-findings.err"
+  [[ ! -s "$TMPDIR/unresolved-findings.out" ]] || {
+    echo "unresolved findings produced a review packet" >&2
+    FIX2_FAILURES=1
+  }
+fi
+
+# Artifact and ledger dispositions are a semantic pair. A caller must not be
+# able to rewrite only the ledger field while retaining an artifact that says
+# findings (or vice versa) and still obtain a passed packet.
+python3 - "$ARTIFACT_PATH" "$TEST_REPO/$LEDGER_REL" <<'PY'
+import hashlib, json, sys
+artifact_path, ledger_path = sys.argv[1:]
+rows = [json.loads(line) for line in open(ledger_path, encoding="utf-8") if line.strip()]
+artifact = json.load(open(artifact_path, encoding="utf-8"))
+artifact.update({"disposition": "findings", "findings": [{"id": "FIX2-MISMATCH", "summary": "fixture artifact finding"}]})
+with open(artifact_path, "w", encoding="utf-8") as handle:
+    json.dump(artifact, handle, sort_keys=True)
+    handle.write("\n")
+artifact_digest = hashlib.sha256(open(artifact_path, "rb").read()).hexdigest()
+for row in rows:
+    row["findings"] = "no_findings"
+    row["artifact_digest"] = artifact_digest
+with open(ledger_path, "w", encoding="utf-8") as handle:
+    handle.write("".join(json.dumps(row) + "\n" for row in rows))
+PY
+if "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
+  --task-uid task_11111111111111111111111111111111 \
+  --review-plan "$PLAN" \
+  --review-evidence "repository_health_engineer: no_findings; semantic mismatch fixture" \
+  --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" \
+  --finding-disposition-evidence "smoke evidence" \
+  --verification "helper -> smoke -> observed" \
+  --residual-risk "semantic mismatch fixture risk" \
+  --slice-ledger "$LEDGER_REL" \
+  --print-only >"$TMPDIR/artifact-ledger-mismatch.out" 2>"$TMPDIR/artifact-ledger-mismatch.err"; then
+  echo "record-pre-pr-review accepted artifact-ledger disposition mismatch" >&2
+  FIX2_FAILURES=1
+else
+  grep -Eiq 'mismatch|findings|disposition' "$TMPDIR/artifact-ledger-mismatch.err"
+  [[ ! -s "$TMPDIR/artifact-ledger-mismatch.out" ]] || {
+    echo "artifact-ledger mismatch produced a review packet" >&2
+    FIX2_FAILURES=1
+  }
+fi
+
+if (( FIX2_FAILURES != 0 )); then
+  exit 1
+fi
+
+# Without a review plan, no_findings returns retain the legacy opaque path:
+# arbitrary JSON objects and arrays are accepted, while the reserved schema
+# opts into structured validation and must fail without the required fields.
+set_opaque_artifact() {
+  local content="$1"
+  printf '%s\n' "$content" >"$ARTIFACT_PATH"
+  python3 - "$ARTIFACT_PATH" "$TEST_REPO/$LEDGER_REL" <<'PY'
+import hashlib, json, sys
+artifact_path, ledger_path = sys.argv[1:]
+digest = hashlib.sha256(open(artifact_path, "rb").read()).hexdigest()
+rows = [json.loads(line) for line in open(ledger_path, encoding="utf-8") if line.strip()]
+for row in rows:
+    row["findings"] = "no_findings"
+    row["artifact_digest"] = digest
+open(ledger_path, "w", encoding="utf-8").write("".join(json.dumps(row) + "\n" for row in rows))
+PY
+}
+
+# A plan-backed return must be structured even when the ledger says no_findings;
+# malformed or opaque bytes are only valid on the legacy no-plan path.
+for plan_opaque_content in 'not-json' '{"arbitrary":"plan-backed"}' '["opaque"]'; do
+  set_opaque_artifact "$plan_opaque_content"
+  if "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
+    --task-uid task_11111111111111111111111111111111 \
+    --review-plan "$PLAN" \
+    --review-evidence "repository_health_engineer: no_findings; plan opaque" \
+    --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" \
+    --finding-disposition-evidence "plan opaque" \
+    --verification "plan opaque" --residual-risk "fixture risk" \
+    --slice-ledger "$LEDGER_REL" --print-only \
+    >"$TMPDIR/plan-opaque.out" 2>"$TMPDIR/plan-opaque.err"; then
+    echo "record-pre-pr-review accepted plan-backed opaque artifact: $plan_opaque_content" >&2
+    exit 1
+  fi
+  grep -Eiq 'structured|json|identity|disposition|findings|artifact' "$TMPDIR/plan-opaque.err"
+done
+
+set_opaque_artifact '{"arbitrary":"json object"}'
+if ! "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
+  --task-uid task_11111111111111111111111111111111 \
+  --roles repository_health_engineer \
+  --review-evidence "repository_health_engineer: no_findings; opaque object" \
+  --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" \
+  --finding-disposition-evidence "opaque object" \
+  --verification "opaque object" --residual-risk "fixture risk" \
+  --slice-ledger "$LEDGER_REL" --comparison-ref refs/heads/base --print-only \
+  >"$TMPDIR/opaque-object.out" 2>"$TMPDIR/opaque-object.err"; then
+  cat "$TMPDIR/opaque-object.err" >&2
+  exit 1
+fi
+grep -F 'Pre-PR Local Role Review: passed' "$TMPDIR/opaque-object.out" >/dev/null
+
+set_opaque_artifact '["opaque", 1, false]'
+if ! "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
+  --task-uid task_11111111111111111111111111111111 \
+  --roles repository_health_engineer \
+  --review-evidence "repository_health_engineer: no_findings; opaque array" \
+  --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" \
+  --finding-disposition-evidence "opaque array" \
+  --verification "opaque array" --residual-risk "fixture risk" \
+  --slice-ledger "$LEDGER_REL" --comparison-ref refs/heads/base --print-only \
+  >"$TMPDIR/opaque-array.out" 2>"$TMPDIR/opaque-array.err"; then
+  cat "$TMPDIR/opaque-array.err" >&2
+  exit 1
+fi
+grep -F 'Pre-PR Local Role Review: passed' "$TMPDIR/opaque-array.out" >/dev/null
+
+set_opaque_artifact 'not-json'
+if ! "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
+  --task-uid task_11111111111111111111111111111111 \
+  --roles repository_health_engineer \
+  --review-evidence "repository_health_engineer: no_findings; opaque bytes" \
+  --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" \
+  --finding-disposition-evidence "opaque bytes" \
+  --verification "opaque bytes" --residual-risk "fixture risk" \
+  --slice-ledger "$LEDGER_REL" --comparison-ref refs/heads/base --print-only \
+  >"$TMPDIR/opaque-bytes.out" 2>"$TMPDIR/opaque-bytes.err"; then
+  cat "$TMPDIR/opaque-bytes.err" >&2
+  exit 1
+fi
+grep -F 'Pre-PR Local Role Review: passed' "$TMPDIR/opaque-bytes.out" >/dev/null
+
+set_opaque_artifact '{"schema":"oasis7-review-return/v1","arbitrary":"reserved"}'
+if "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
+  --task-uid task_11111111111111111111111111111111 \
+  --roles repository_health_engineer \
+  --review-evidence "repository_health_engineer: no_findings; reserved" \
+  --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" \
+  --finding-disposition-evidence "reserved" \
+  --verification "reserved" --residual-risk "fixture risk" \
+  --slice-ledger "$LEDGER_REL" --comparison-ref refs/heads/base --print-only \
+  >"$TMPDIR/reserved-schema.out" 2>"$TMPDIR/reserved-schema.err"; then
+  echo "record-pre-pr-review accepted malformed reserved structured artifact" >&2
+  exit 1
+fi
+grep -Eiq 'structured|identity|task_uid|disposition|findings' "$TMPDIR/reserved-schema.err"
+
 python3 - "$PLAN" <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1])); p["comparison_oid"]="0"*40; json.dump(p,open(sys.argv[1],"w"))

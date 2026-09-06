@@ -330,6 +330,7 @@ fn provider_backed_behavior_executes_provider_loopback_adapter_move_and_records_
     let adapter = ProviderLoopbackAdapter::new(base_url.as_str(), None, 200).expect("adapter");
     let behavior =
         ProviderBackedAgentBehavior::new("agent-1", adapter, provider_phase1_action_catalog())
+            .legacy_compatibility()
             .with_provider_config_ref("provider://loopback-http")
             .with_agent_profile("oasis7_p0_low_freq_npc")
             .with_environment_class("adapter_test")
@@ -400,7 +401,8 @@ fn provider_backed_behavior_executes_provider_loopback_adapter_speak_action() {
 
     let adapter = ProviderLoopbackAdapter::new(base_url.as_str(), None, 200).expect("adapter");
     let behavior =
-        ProviderBackedAgentBehavior::new("agent-1", adapter, provider_phase1_action_catalog());
+        ProviderBackedAgentBehavior::new("agent-1", adapter, provider_phase1_action_catalog())
+            .legacy_compatibility();
     let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> =
         AgentRunner::new();
     runner.register(behavior);
@@ -451,7 +453,8 @@ fn provider_backed_behavior_executes_provider_loopback_adapter_inspect_action() 
 
     let adapter = ProviderLoopbackAdapter::new(base_url.as_str(), None, 200).expect("adapter");
     let behavior =
-        ProviderBackedAgentBehavior::new("agent-1", adapter, provider_phase1_action_catalog());
+        ProviderBackedAgentBehavior::new("agent-1", adapter, provider_phase1_action_catalog())
+            .legacy_compatibility();
     let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> =
         AgentRunner::new();
     runner.register(behavior);
@@ -503,7 +506,8 @@ fn provider_backed_behavior_executes_provider_loopback_adapter_simple_interact_a
 
     let adapter = ProviderLoopbackAdapter::new(base_url.as_str(), None, 200).expect("adapter");
     let behavior =
-        ProviderBackedAgentBehavior::new("agent-1", adapter, provider_phase1_action_catalog());
+        ProviderBackedAgentBehavior::new("agent-1", adapter, provider_phase1_action_catalog())
+            .legacy_compatibility();
     let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> =
         AgentRunner::new();
     runner.register(behavior);
@@ -541,7 +545,8 @@ fn provider_backed_behavior_downgrades_provider_loopback_adapter_unsupported_sem
 
     let adapter = ProviderLoopbackAdapter::new(base_url.as_str(), None, 200).expect("adapter");
     let behavior =
-        ProviderBackedAgentBehavior::new("agent-1", adapter, provider_phase1_action_catalog());
+        ProviderBackedAgentBehavior::new("agent-1", adapter, provider_phase1_action_catalog())
+            .legacy_compatibility();
     let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> =
         AgentRunner::new();
     runner.register(behavior);
@@ -897,6 +902,7 @@ fn provider_backed_behavior_returns_typed_module_command_decision_without_core_a
     );
     let mut behavior =
         ProviderBackedAgentBehavior::new("agent-1", provider, provider_phase1_action_catalog())
+            .legacy_compatibility()
             .with_capability_context(context);
     let mut kernel = setup_kernel_with_provider_agent("agent-1");
     let observation = kernel.observe("agent-1").expect("observation");

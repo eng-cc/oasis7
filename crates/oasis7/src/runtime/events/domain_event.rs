@@ -20,6 +20,22 @@ pub enum DomainEvent {
         from: GeoPos,
         to: GeoPos,
     },
+    /// Replayable authority update for an agent's canonical location.
+    AgentLocationAuthorityUpdated {
+        authority: AgentLocationAuthorityV1,
+    },
+    /// Replayable exact location identity update.
+    LocationAnchorUpdated {
+        anchor: LocationAnchorV1,
+    },
+    /// Replayable site registration/access/readiness update.
+    FactorySiteAuthorityUpdated {
+        authority: FactorySiteAuthorityV1,
+    },
+    /// Replayable M4 construction electricity profile update.
+    FactoryConstructionPowerProfileUpdated {
+        profile: FactoryConstructionPowerProfileV1,
+    },
     ActionAccepted {
         action_id: ActionId,
         action_kind: String,
@@ -611,6 +627,24 @@ pub enum DomainEvent {
         #[serde(default = "default_world_material_ledger")]
         consume_ledger: MaterialLedgerId,
         ready_at: WorldTime,
+        /// An omitted version is distinct from an explicitly classified
+        /// historical (`Some(0)`) event. Current producers must emit
+        /// `Some(1)` with complete admission facts; this distinction prevents
+        /// serde omission from silently downgrading a modern event.
+        #[serde(default)]
+        contract_version: Option<u8>,
+        /// Optional for backward-compatible replay of pre-authority events.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        site_authority_revision: Option<u64>,
+        /// Optional for backward-compatible replay of pre-authority events.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        site_location_id: Option<String>,
+        /// Optional for backward-compatible replay of pre-location-anchor events.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        location_anchor_revision: Option<u64>,
+        /// Optional for backward-compatible replay of pre-power-obligation events.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        construction_power_obligation: Option<FactoryBuildPowerObligationV1>,
     },
     FactoryBuilt {
         job_id: ActionId,
@@ -860,6 +894,18 @@ pub enum DomainEvent {
         quality_levels: Vec<String>,
         notes: Vec<String>,
     },
+    /// Durable product-module decision for a rejected output. The generic
+    /// ActionRejected event remains in the journal for the caller, while this
+    /// runtime event makes crash/retry reuse the settled module decision.
+    ProductValidationRecorded {
+        receipt: ProductValidationReceiptV1,
+    },
+    /// Durable pre-call intent for job-scoped product validation. A retry
+    /// seeing this without a receipt must fail closed instead of invoking the
+    /// validator twice.
+    ProductValidationAttemptStarted {
+        attempt: ProductValidationAttemptV1,
+    },
     MaterialProfileGoverned {
         operator_agent_id: String,
         proposal_id: ProposalId,
@@ -887,6 +933,14 @@ impl DomainEvent {
         match self {
             DomainEvent::AgentRegistered { agent_id, .. } => Some(agent_id.as_str()),
             DomainEvent::AgentMoved { agent_id, .. } => Some(agent_id.as_str()),
+            DomainEvent::AgentLocationAuthorityUpdated { authority } => {
+                Some(authority.agent_id.as_str())
+            }
+            DomainEvent::LocationAnchorUpdated { .. } => None,
+            DomainEvent::FactorySiteAuthorityUpdated { authority } => {
+                Some(authority.owner_agent_id.as_str())
+            }
+            DomainEvent::FactoryConstructionPowerProfileUpdated { .. } => None,
             DomainEvent::ActionAccepted { actor_id, .. } => Some(actor_id.as_str()),
             DomainEvent::AgentIntentProposed { intent }
             | DomainEvent::AgentIntentSubmitted { intent }
@@ -1099,6 +1153,12 @@ impl DomainEvent {
             DomainEvent::ProductValidated {
                 requester_agent_id, ..
             } => Some(requester_agent_id.as_str()),
+            DomainEvent::ProductValidationRecorded { receipt } => {
+                Some(receipt.requester_agent_id.as_str())
+            }
+            DomainEvent::ProductValidationAttemptStarted { attempt } => {
+                Some(attempt.requester_agent_id.as_str())
+            }
             DomainEvent::MaterialProfileGoverned {
                 operator_agent_id, ..
             } => Some(operator_agent_id.as_str()),
@@ -1115,62 +1175,6 @@ impl DomainEvent {
     }
 }
 
-/// Reasons why an action was rejected.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "data")]
-pub enum RejectReason {
-    AgentAlreadyExists {
-        agent_id: String,
-    },
-    AgentNotFound {
-        agent_id: String,
-    },
-    AgentsNotCoLocated {
-        agent_id: String,
-        other_agent_id: String,
-    },
-    InvalidAmount {
-        amount: i64,
-    },
-    InsufficientResource {
-        agent_id: String,
-        kind: ResourceKind,
-        requested: i64,
-        available: i64,
-    },
-    InsufficientResources {
-        deficits: BTreeMap<ResourceKind, i64>,
-    },
-    InsufficientMaterial {
-        material_kind: String,
-        requested: i64,
-        available: i64,
-    },
-    MaterialTransferDistanceExceeded {
-        distance_km: i64,
-        max_distance_km: i64,
-    },
-    MaterialTransitCapacityExceeded {
-        in_flight: usize,
-        max_in_flight: usize,
-    },
-    FactoryNotFound {
-        factory_id: String,
-    },
-    FactoryBusy {
-        factory_id: String,
-        active_jobs: usize,
-        recipe_slots: u16,
-    },
-    RuleDenied {
-        notes: Vec<String>,
-    },
-}
-
-/// The cause of an event, for audit purposes.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "data")]
-pub enum CausedBy {
-    Action(ActionId),
-    Effect { intent_id: String },
-}
+#[path = "domain_event_rejections.rs"]
+mod domain_event_rejections;
+pub use domain_event_rejections::{CausedBy, RejectReason};

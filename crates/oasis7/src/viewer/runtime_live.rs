@@ -35,6 +35,13 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
 use tracing::Level;
+
+#[cfg(test)]
+pub(super) fn canonical_runtime_provider_env_lock() -> &'static Mutex<()> {
+    static LOCK: std::sync::OnceLock<Mutex<()>> = std::sync::OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
 mod authoritative;
 mod auto_play;
 mod branch_commitment;
@@ -48,6 +55,8 @@ mod constants;
 mod control_blocking;
 #[path = "runtime_live/control_feedback.rs"]
 mod control_feedback;
+#[path = "runtime_live/control_mode.rs"]
+mod control_mode;
 #[path = "runtime_live/control_plane.rs"]
 mod control_plane;
 #[path = "runtime_live/control_utils.rs"]
@@ -75,6 +84,7 @@ mod recovery_persistence;
 mod recovery_receipt;
 mod recovery_rollback_v2;
 mod recovery_session;
+mod runtime_script;
 mod schedule_recipe_quote;
 mod session_policy;
 #[path = "runtime_live/smelter_affordability_debug.rs"]
@@ -85,6 +95,8 @@ mod support;
 #[cfg(test)]
 mod tests;
 mod transfer_material_quote;
+#[path = "runtime_live/wake_dispatch.rs"]
+mod wake_dispatch;
 #[path = "runtime_live/war_declaration_quote.rs"]
 mod war_declaration_quote;
 mod world_feed;
@@ -108,6 +120,7 @@ use gameplay_snapshot::{
     player_gameplay_feedback_from_control_ack,
 };
 use mapping::{map_runtime_event, runtime_state_to_simulator_model};
+use runtime_script::RuntimeLiveScript;
 use session_policy::{
     RuntimeSessionPolicy, RuntimeSessionRevokeMetadata, location_id_for_pos,
     map_session_policy_error_code, normalize_optional_string, session_revoke_metadata_key,
@@ -115,9 +128,9 @@ use session_policy::{
 pub use support::bootstrap_formal_release_runtime_world as viewer_bootstrap_formal_release_runtime_world;
 pub use support::bootstrap_generated_sidecar_runtime_world as viewer_bootstrap_generated_sidecar_runtime_world;
 use support::{
-    FORMAL_RELEASE_DEFAULT_WORLD_ID, RuntimeLiveScript, RuntimeLiveSession,
-    bootstrap_runtime_live_world, is_expected_disconnect_error, is_timeout_error,
-    latest_runtime_event_seq, lock_shared_server, runtime_metrics, send_response,
+    FORMAL_RELEASE_DEFAULT_WORLD_ID, RuntimeLiveSession, bootstrap_runtime_live_world,
+    is_expected_disconnect_error, is_timeout_error, latest_runtime_event_seq, lock_shared_server,
+    runtime_metrics, send_response,
 };
 pub const VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID: &str = FORMAL_RELEASE_DEFAULT_WORLD_ID;
 pub struct ViewerRuntimeLiveServer {
@@ -231,6 +244,7 @@ impl ViewerRuntimeLiveServer {
                 recovered_generation = Some(generation);
             }
         }
+        wake_dispatch::ensure_viewer_runtime_binding(&mut world, &config)?;
         let initial_world_time = world.state().time;
         let mut llm_sidecar = match seed_model.as_ref() {
             Some(model) => {
@@ -238,6 +252,12 @@ impl ViewerRuntimeLiveServer {
             }
             None => RuntimeLlmSidecar::new(config.decision_mode),
         };
+        if let Some(provider_lineage_store) = config.provider_lineage_store_path() {
+            llm_sidecar.configure_provider_lineage_store(provider_lineage_store);
+            llm_sidecar
+                .restore_provider_lineage(&world)
+                .map_err(ViewerRuntimeLiveServerError::Init)?;
+        }
         llm_sidecar.chunk_runtime = chunk_runtime;
         if let Some(generation) = recovered_generation.as_ref() {
             Self::restore_persisted_session_side_effects(
@@ -695,8 +715,10 @@ impl ViewerRuntimeLiveServer {
                     &self.config.world_id,
                     self.reorg_epoch,
                     self.world.journal(),
+                    &self.world.state().crises,
                     cursor.as_deref(),
                     limit,
+                    self.config.major_world_event_visibility,
                 );
                 send_response(writer, &ViewerResponse::WorldFeed { feed })?;
             }
@@ -853,58 +875,6 @@ impl ViewerRuntimeLiveServer {
         Ok(())
     }
 
-    fn apply_control_mode(
-        &mut self,
-        mode: ViewerControl,
-        request_id: Option<u64>,
-        session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
-    ) -> Result<(), ViewerRuntimeLiveServerError> {
-        if let Err(reason) = self.ensure_gameplay_ready_for_control(&mode) {
-            return self.block_gameplay_control(
-                session,
-                writer,
-                control_mode_label(&mode),
-                "gameplay control rejected before world advance",
-                reason,
-                request_id,
-                0,
-                0,
-                false,
-            );
-        }
-        match mode {
-            ViewerControl::Pause => {
-                self.pause_auto_play(session);
-                session.next_play_step_at = None;
-                session.transient_play_failures = 0;
-            }
-            ViewerControl::Play => {
-                self.resume_auto_play(session);
-            }
-            ViewerControl::Step { count } => {
-                self.pause_auto_play(session);
-                session.next_play_step_at = None;
-                session.transient_play_failures = 0;
-                self.advance_runtime(session, writer, "step", count.max(1), request_id, true)?;
-            }
-            ViewerControl::Seek { tick } => {
-                self.pause_auto_play(session);
-                session.next_play_step_at = None;
-                session.transient_play_failures = 0;
-                emit_stderr_or_event(
-                    Level::INFO,
-                    format!(
-                        "viewer runtime live: ignore seek control in live mode (target_tick={tick})"
-                    )
-                    .as_str(),
-                    "viewer runtime live ignored seek control in live mode",
-                );
-            }
-        }
-        Ok(())
-    }
-
     fn advance_runtime(
         &mut self,
         session: &mut RuntimeLiveSession,
@@ -919,6 +889,12 @@ impl ViewerRuntimeLiveServer {
         let mut runtime_events_for_feedback = Vec::new();
 
         for _ in 0..step_count.max(1) {
+            // A provider commit may advance the world during this iteration.
+            // Keep a per-iteration baseline so a later item in Step { count }
+            // still advances instead of comparing against the method-wide
+            // starting time.
+            let iteration_logical_time = self.world.state().time;
+            self.sync_runtime_wake_projection()?;
             if let Err(reason) = self
                 .llm_sidecar
                 .ensure_gameplay_ready(&self.world, &self.snapshot_config)
@@ -950,6 +926,11 @@ impl ViewerRuntimeLiveServer {
                 );
             }
             let mut decision_trace: Option<AgentDecisionTrace> = None;
+            // Provider-backed cognition commits are Runtime-atomic and may
+            // append their terminal action event before the compatibility
+            // tick below runs. Capture the complete journal delta so the
+            // viewer still presents that authoritative event.
+            let journal_start = self.world.journal().events.len();
             match self.config.decision_mode {
                 ViewerLiveDecisionMode::Script => self.script.enqueue(&mut self.world),
                 ViewerLiveDecisionMode::Llm => {
@@ -1006,22 +987,26 @@ impl ViewerRuntimeLiveServer {
                     }
                 }
             }
-            let journal_start = self.world.journal().events.len();
-            if let Err(error) = self.world.step() {
-                let (delta_logical_time, delta_event_seq) =
-                    self.control_completion_delta(baseline_logical_time, baseline_event_seq);
-                return self.block_runtime_control(
-                    session,
-                    writer,
-                    action,
-                    "runtime step aborted because world advance failed",
-                    ViewerRuntimeLiveServerError::Runtime(error),
-                    request_id,
-                    delta_logical_time,
-                    delta_event_seq,
-                    true,
-                );
+            // Runtime cognition finalization already advances the World once;
+            // avoid a second logical tick for the same provider action.
+            if self.world.state().time == iteration_logical_time {
+                if let Err(error) = self.world.step() {
+                    let (delta_logical_time, delta_event_seq) =
+                        self.control_completion_delta(baseline_logical_time, baseline_event_seq);
+                    return self.block_runtime_control(
+                        session,
+                        writer,
+                        action,
+                        "runtime step aborted because world advance failed",
+                        ViewerRuntimeLiveServerError::Runtime(error),
+                        request_id,
+                        delta_logical_time,
+                        delta_event_seq,
+                        true,
+                    );
+                }
             }
+            self.sync_runtime_wake_projection()?;
             session.transient_play_failures = 0;
             if self.world.state().time > baseline_logical_time
                 || latest_runtime_event_seq(&self.world) > baseline_event_seq
@@ -1041,6 +1026,11 @@ impl ViewerRuntimeLiveServer {
                     self.llm_sidecar
                         .notify_action_result_if_needed(runtime_event, event.clone());
                 }
+                self.llm_sidecar.notify_recipe_completion_with_binding(
+                    runtime_event,
+                    event.clone(),
+                    self.world.current_cognition_runtime_binding().ok(),
+                );
                 mapped_events.push(event);
             }
             mapped_events.extend(self.pending_virtual_events.drain(..));

@@ -30,6 +30,8 @@
 - completion rate gap(pp):
 - builtin invalid action rate:
 - Local Provider invalid action rate:
+- builtin illegal schema rate (`illegal_schema_count / decision_steps`):
+- Local Provider illegal schema rate (`illegal_schema_count / decision_steps`):
 - timeout rate:
 - builtin median extra wait(ms):
 - Local Provider median extra wait(ms):
@@ -47,6 +49,7 @@
 ### 4.1 行为等价硬门禁
 - [ ] `completion_rate_gap` 满足当前层通过线
 - [ ] `invalid_action_rate` 满足当前层通过线
+- [ ] `illegal_schema_rate` 可评估，且满足 `<= 3%` 与不超过 builtin `2` 倍；缺失/不一致时为 `blocked`
 - [ ] `timeout_rate` 满足当前层通过线
 - [ ] `relative_wait_gap_median/p95` 满足当前层通过线
 - [ ] `trace_completeness` 满足当前层通过线
@@ -78,6 +81,7 @@
 - [ ] 出现无法恢复且无清晰错误提示的失败
 - [ ] 出现会话串线 / trace 归因错误
 - [ ] 出现明显上下文漂移且 trace 无法解释
+- [ ] `illegal_schema_count`/`illegal_schema_rate` 缺失或不一致，或非法 schema 率超出绝对/相对阻断线
 - [ ] `latency_class = C`
 - [ ] 无阻断项
 

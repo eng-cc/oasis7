@@ -9,6 +9,7 @@ use super::capability_authorization::{
     CapabilityBudgetAccount, CapabilityEffectReceiptLink, CapabilityInvocationContext,
     CapabilityRevocationState,
 };
+use super::cognition_recovery::default_cognition_persistence_projection;
 use super::consensus::{TickConsensusRecord, TickConsensusRejectionAuditEvent};
 use super::effect::{CapabilityGrant, EffectIntent};
 use super::error::WorldError;
@@ -22,7 +23,7 @@ use super::modules::{ModuleLimits, ModuleRegistry};
 use super::policy::PolicySet;
 use super::state::WorldState;
 use super::types::{ActionId, IntentSeq, ProposalId, WorldEventId, WorldTime};
-use super::util::{deserialize_btreemap_u64_keys, read_json_from_path, write_json_to_path};
+use super::util::{atomic_write_json_to_path, deserialize_btreemap_u64_keys, read_json_from_path};
 use super::world::{
     ModuleTickRoutingDeterministicSnapshot, WorldRuntimeBackpressureStats, WorldRuntimeMemoryLimits,
 };
@@ -71,6 +72,11 @@ impl Default for SnapshotCatalog {
 pub struct Snapshot {
     pub snapshot_catalog: SnapshotCatalog,
     pub manifest: Manifest,
+    /// Additive durable cognition projection.  `default` keeps snapshots
+    /// written before the cognition protocol readable while making the
+    /// compatibility state explicit on the next save.
+    #[serde(default = "default_cognition_persistence_projection")]
+    pub cognition: serde_json::Value,
     #[serde(default)]
     pub chain_resource_manifest: ChainResourceManifest,
     #[serde(default)]
@@ -188,7 +194,7 @@ impl Snapshot {
     }
 
     pub fn save_json(&self, path: impl AsRef<Path>) -> Result<(), WorldError> {
-        write_json_to_path(self, path.as_ref())
+        atomic_write_json_to_path(self, path.as_ref())
     }
 
     pub fn load_json(path: impl AsRef<Path>) -> Result<Self, WorldError> {
@@ -243,7 +249,7 @@ impl Journal {
     }
 
     pub fn save_json(&self, path: impl AsRef<Path>) -> Result<(), WorldError> {
-        write_json_to_path(self, path.as_ref())
+        atomic_write_json_to_path(self, path.as_ref())
     }
 
     pub fn load_json(path: impl AsRef<Path>) -> Result<Self, WorldError> {

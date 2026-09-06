@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
-Version: **v1.14.0**
-Last Updated: **2026-08-25**
+Version: **v1.14.1**
+Last Updated: **2026-09-04**
 
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -389,7 +389,7 @@ Deterministic script contract:
   reconciliation. A foreign repository's same-name head is never a match.
 - `scripts/prepare-task-pr.sh` must read passed local role review packets from
   GitHub task issue evidence comments and mapping-backed task truth.
-- `record-pre-pr-review.sh --review-plan <plan>` treats the immutable plan as authoritative for role/slice identity; optional `--roles` is validated, persisted preflight derives the ledger, evidence/artifact paths normalize repo-relatively, and missing artifacts return an exact review-plan regeneration command while preserving the immutable epoch.
+- `record-pre-pr-review.sh --review-plan <plan>` treats the immutable plan as authoritative for role/slice identity; optional `--roles` is validated, the persisted preflight `ledger_path` is authoritative and any supplied `--slice-ledger` must resolve to that exact repository-owned file, evidence/artifact paths normalize repo-relatively, and missing artifacts return an exact review-plan regeneration command while preserving the immutable epoch.
 - `scripts/prepare-task-pr.sh --create` must include a non-closing GitHub task
   reference in the PR body and reject explicit bodies that contain an
   auto-close keyword for the task. The generated linkage is
@@ -752,39 +752,30 @@ A passed packet in GitHub task issue evidence comments contains:
   and `LiveOps Evidence`, each with evidence or a reasoned exemption
 - `Residual Risk` and `Slice Ledger`
 
-The immutable ledger matches `Review Roles` and `Source Head`, with one return
-per required role. Each human-operated return binds its slice ID, role,
-activation/context mode, actual runtime or unverifiable reason, artifact digest,
-both verdicts, disposition, and residual risk. The repository validates role
-coverage, head binding, and artifact integrity; the GitHub task issue remains
-the evidence sink. `n/a` ledgers and fixtures fail closed for live tasks.
-After role artifacts complete, `./scripts/pm/review-closeout.sh --task-uid <uid> --review-plan <plan> --role-returns <ledger>` reconciles/collects them and delegates the packet to `record-pre-pr-review.sh`; lower helpers remain recovery entrypoints.
+The immutable ledger matches `Review Roles` and `Source Head`, with one return per required role; each human-operated return binds slice ID, role, activation/context mode, actual runtime or unverifiable reason, artifact digest, both verdicts, disposition, and residual risk.
+The repository validates role coverage, head binding, and artifact integrity; the GitHub task issue remains the evidence sink. `n/a` ledgers and fixtures fail closed for live tasks.
 
-Before publishing a plan-backed packet, `record-pre-pr-review.sh --review-plan`
-derives or exactly validates the task/head/comparison ref+OID/roles from the
-immutable plan and verifies that the recorded comparison OID remains an available
-commit. The successful CI receipt's base/head pair owns the review range; symbolic-ref
-movement after that receipt does not change or invalidate the immutable reviewed
-range. `prepare-task-pr.sh` repeats the task/head/OID and ledger checks before a PR
-mutation, while the live PR lifecycle gate owns current-base mergeability.
+##### Role-finding resolution contract
 
-An unattended supervisor additionally requires runtime-issued dispatch and
-return attestation. Caller-authored receipts, issuer text, local fixtures, and
-self-signed evidence cannot satisfy that target mode; missing attestation is
-`capability_blocked` only for unattended automation.
+A role return is immutable: its `disposition=findings` and findings list are never rewritten to `no_findings`; one repository-owned role-resolution manifest, with one role record per finding-bearing return, is required before reconcile/collection, packet generation, or publication.
+The closeout facade and direct recorder consume that manifest through the same validator before either path emits output; invalid input must not rewrite the ledger. The schema is `oasis7-review-resolution/v1` at `.pm/scratch/<TASK-UID>/review-resolutions/<EPOCH>.json`, created once with no replacement; changes require a new epoch.
+Construction is acyclic: build payload `P` without `manifest_digest`, server readback, or comment fields; hash `P` to obtain `manifest_digest`; then write `P` plus that digest once. `P` binds `task_uid`, frozen `head`, `epoch`, and one role record per finding-bearing return; the corresponding bound role-return artifact is required to have `status=completed`.
+Each role record binds `role`, `slice_id`, and `findings_digest` (SHA-256 of canonical JSON bytes for the exact artifact array of typed JSON-object findings). For each finding, `finding_digest` is SHA-256 of its canonical JSON bytes; for each resolution entry, hash its complete preimage `E0` (status, contiguous index, finding digest, disposition, evidence descriptor, and verification result) to obtain `entry_digest` before adding that digest to `P`.
+A concrete fixture is `F={"id":"F1","summary":"fixture"}`; `f=sha256(J(F))`; `E0={status:"completed",index:0,finding_digest:f,disposition:"rejected_with_evidence",evidence_kind:"repository_verification",evidence_ref:"verify.txt",verification_result:{status:"passed",output_digest:sha256(output)}}`; then `entry_digest=sha256(J(E0))`, `P={schema,task_uid,head,epoch,role_record(entries:[E0+entry_digest])}`, and `manifest_digest=sha256(J(P))`.
+Entries are keyed by role, slice, status, index, finding digest, and entry digest; they exactly cover every finding across all role returns, with no missing, duplicate, unexpected, or cross-role entry and none for `no_findings` returns.
+Each entry has `addressed`, `rejected_with_evidence`, or `non_actionable` and uses `repository_verification` evidence binding exact supporting bytes/digest; task-issue authorization/readback is carried only by the post-creation envelope below and is not a per-finding evidence kind. Verification status is `passed` or `not_applicable` with a required output digest.
+Canonical `J` means UTF-8 JSON with `ensure_ascii=false`, sorted keys, and compact separators; payload/findings/entry digests use those bytes. Role records are sorted by `(role,slice_id)`, and each role's entries remain in contiguous ascending `index` order. Publish body `B=J({marker,schema,task_uid,head,epoch,manifest_digest})`, where `marker` is the literal `oasis7-review-resolution`; after the server creates B, readback envelope R is written to `.pm/scratch/<TASK-UID>/review-resolutions/<EPOCH>.readback.json` and records `schema`, `marker`, `task_uid`, `head`, `epoch`, `manifest_digest`, canonical `repository`, `issue_number`, `comment_id`, `comment_url`, server `author`, `created_at`, `observed_at`, and `body_digest=sha256(exact UTF-8 B)`. R is never part of P, E0, or either digest.
+The validator loads the immutable manifest, recomputes all preimages, fixes the canonical repository to `eng-cc/oasis7`, uses the local task map only to select a candidate issue, then fetches that issue live and requires its server body to contain the exact `<!-- oasis7-pm-task -->` marker and exact `task_uid: <TASK-UID>` binding before fetching the resolution comment. The eventual packet publication repository and issue must equal that same live-verified canonical identity. It checks B/R marker, task/head/epoch/manifest and every entry digest; absent mapping or live issue, task marker/UID mismatch, publication-target mismatch, caller-supplied body, URL, author, time, or digest fails closed. The only entry evidence kind is `repository_verification` (content integrity only, never authority alone); the exact task-issue comment is the sole authorization/readback envelope source.
+Existing `record-pr-disposition.sh` is reusable only as a server-comment roundtrip pattern: its authority is PR-node/head-bound and `pr-lifecycle-gate.py` has no local role/slice/finding binding or resolver-permission check. It cannot authorize this manifest, and arbitrary prose, CLI overrides, caller issuer/runtime claims, or role self-resolution are forbidden.
+Only an account verified live by GitHub as having repository `admin` permission may authorize an exact-head, exact-finding `addressed`, `rejected_with_evidence`, or `non_actionable` resolution. The validator fetches the resolution comment's server author and that author's current permission for the canonical repository; absent lookup, non-`admin` permission, author mismatch, or stale/cached identity fails closed. Ambient `gh` identity, workflow role, task/issue authorship, local snapshots, and caller-supplied identity or permission claims never confer resolver authority and must not rewrite identity truth. Human-operated readback proves provenance/content integrity and admin authorization, not reviewer correctness or unattended runtime attestation.
+The packet aggregate is derived from structured returns, ignoring prose: `no_findings` only when every return is `no_findings`, and `addressed` only after exact all-findings coverage with every entry terminal and evidenced.
 
-For non-trivial diffs, `review-package.sh` writes under
-`.pm/scratch/<TASK-UID>/review-packages/`. `record-pre-pr-review.sh` may
-format a small workflow/docs packet but cannot replace role returns.
-`slice-ledger.sh` is a resumable local index; GitHub task issue evidence
-comments remain the formal sink.
+Without `--review-plan`, a ledger `no_findings` return retains the legacy opaque-artifact path, including arbitrary bytes (plain text or JSON), with existing digest/path provenance checks. Only a parseable JSON object with `schema: "oasis7-review-return/v1"` invokes structured artifact checks in that mode; every other artifact remains opaque, while plan-backed/preflight returns are always structured.
+A no-plan `findings` return, or a reserved structured artifact without a valid epoch-bound manifest, remains blocked. Any invalid or missing manifest fails closed before facade reconcile/collection or either packet emission path and leaves the ledger unchanged. `review-closeout.sh --task-uid <uid> --review-plan <plan> --role-returns <ledger>` then reconciles/collects and delegates to `record-pre-pr-review.sh`; the recorder validates plan task/head/comparison ref+OID/roles and available comparison commit before publication.
+
+An unattended supervisor additionally requires runtime-issued dispatch and return attestation. Caller-authored receipts, issuer text, local fixtures, and self-signed evidence cannot satisfy that target mode; missing attestation is `capability_blocked` only for unattended automation. `review-package.sh` writes non-trivial packets under `.pm/scratch/<TASK-UID>/review-packages/`; `slice-ledger.sh` is a local index and task-issue comments remain the formal sink.
 
 <a id="appendix-a-target-supervisor-contract"></a>
 ### Appendix A: Unattended automation invariants
 
-Future unattended automation does not change the current human-operated path:
-it preserves canonical task/worktree/head/PR identity and lifecycle order;
-derives remote facts and mutation success from trusted readback; never
-manufactures professional judgment or accepts caller-authored, self-signed, or
-fixture evidence as runtime authority; and treats missing required machinery as
-`capability_blocked`.
+Future unattended automation does not change the current human-operated path: it preserves canonical task/worktree/head/PR identity and lifecycle order; derives remote facts and mutation success from trusted readback; never manufactures professional judgment or accepts caller-authored, self-signed, or fixture evidence as runtime authority; and treats missing required machinery as `capability_blocked`.

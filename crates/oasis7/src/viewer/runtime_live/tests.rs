@@ -15,9 +15,15 @@ mod auth_actions;
 mod auth_actions_collect_data;
 mod auth_actions_feedback;
 mod auth_actions_fragment_replenishment;
+#[path = "tests/auth_actions_provider_context.rs"]
+mod auth_actions_provider_context;
+#[path = "tests/auth_actions_provider_continuation_restart.rs"]
+mod auth_actions_provider_continuation_restart;
 mod authoritative;
 mod background_play;
 mod chain_sync;
+#[path = "tests/provider_continuation_drains.rs"]
+mod provider_continuation_drains;
 pub(super) use chain_sync::TestChainStatusServer;
 mod chain_sync_feedback;
 mod claim_choice;
@@ -27,6 +33,7 @@ mod fine_grain_translation;
 mod governance_vote_quote;
 mod governance_vote_quote_debug;
 mod industrial_progression;
+pub(super) use industrial_progression::setup_industrial_gameplay_with_completed_jobs;
 mod industrial_progression_grind;
 mod industrial_progression_preview;
 mod industrial_progression_readiness;
@@ -35,6 +42,7 @@ mod power_projection;
 mod power_sale_quote;
 mod prompt_control;
 mod provider_settings;
+mod runtime_live_server_config;
 mod schedule_recipe_quote;
 mod smelter_affordability_debug;
 mod snapshot_fallback;
@@ -826,15 +834,6 @@ fn runtime_simulator_action_mapping_equivalence_covers_core_gameplay_and_economy
             description: "trade".to_string(),
         },
     );
-}
-
-#[test]
-fn runtime_live_server_config_play_interval_defaults_and_clamps() {
-    let config = ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal);
-    assert_eq!(config.play_step_interval, Duration::from_millis(800));
-
-    let clamped = config.with_play_step_interval(Duration::from_millis(10));
-    assert_eq!(clamped.play_step_interval, Duration::from_millis(50));
 }
 
 #[test]

@@ -14,18 +14,15 @@ vi.mock("./pixel_world_host.jsx", () => ({
     </div>
   ),
 }));
-
 function viewerUrl() {
   return "/software_safe.html?test_api=1&connect=0&hosted_bootstrap=0&locale=en";
 }
-
 let activeCleanup = null;
 const HEAVY_UI_TEST_TIMEOUT_MS = 60000;
 const TEST_ED25519_PKCS8_PREFIX = new Uint8Array([
   0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06,
   0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20,
 ]);
-
 function createTestCrypto() {
   const privateBytes = new Uint8Array(32).fill(7);
   const publicBytes = new Uint8Array(32).fill(9);
@@ -58,7 +55,6 @@ function createTestCrypto() {
     },
   };
 }
-
 function installMockWebSocket() {
   const sentMessages = [];
   const sockets = [];
@@ -67,38 +63,31 @@ function installMockWebSocket() {
     static OPEN = 1;
     static CLOSING = 2;
     static CLOSED = 3;
-
     constructor(url) {
       this.url = url;
       this.readyState = MockWebSocket.CONNECTING;
       this.listeners = new Map();
       sockets.push(this);
     }
-
     addEventListener(type, listener) {
       const listeners = this.listeners.get(type) || [];
       listeners.push(listener);
       this.listeners.set(type, listeners);
     }
-
     send(payload) {
       sentMessages.push(JSON.parse(payload));
     }
-
     close() {
       this.readyState = MockWebSocket.CLOSED;
       this.emit("close", {});
     }
-
     open() {
       this.readyState = MockWebSocket.OPEN;
       this.emit("open", {});
     }
-
     receive(message) {
       this.emit("message", { data: JSON.stringify(message) });
     }
-
     emit(type, event) {
       for (const listener of this.listeners.get(type) || []) {
         listener(event);
@@ -111,11 +100,9 @@ function installMockWebSocket() {
   });
   return { MockWebSocket, sockets, sentMessages };
 }
-
 function elementPrecedes(first, second) {
   return Boolean(first?.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
 }
-
 function sampleSnapshot(overrides = {}) {
   const base = buildTaskGame076ScenarioSnapshot();
   return {
@@ -141,7 +128,6 @@ function sampleSnapshot(overrides = {}) {
     },
   };
 }
-
 function sampleAgentClaimSnapshot() {
   const base = sampleSnapshot();
   return sampleSnapshot({
@@ -193,7 +179,6 @@ function sampleAgentClaimSnapshot() {
     },
   });
 }
-
 function bindLocalTestAgent(core, agentId = "agent-0", playerId = "local-test-player-bound") {
   core.state.auth = {
     ...core.state.auth,
@@ -207,7 +192,6 @@ function bindLocalTestAgent(core, agentId = "agent-0", playerId = "local-test-pl
     boundAgentId: agentId,
   };
 }
-
 function bindFirstSnapshotAgentForTest(core, snapshot) {
   const agentId = Object.keys(snapshot?.model?.agents || {})[0];
   const playerId = snapshot?.model?.agent_player_bindings?.[agentId];
@@ -216,7 +200,6 @@ function bindFirstSnapshotAgentForTest(core, snapshot) {
   }
   bindLocalTestAgent(core, agentId, playerId);
 }
-
 function sampleHostedPublicJoinAccess(overrides = {}) {
   return {
     deployment_mode: HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE,
@@ -237,7 +220,6 @@ function sampleHostedPublicJoinAccess(overrides = {}) {
     ...overrides,
   };
 }
-
 async function renderViewerApp({
   snapshot = sampleSnapshot(),
   selection = null,
@@ -253,14 +235,12 @@ async function renderViewerApp({
   window.history.replaceState({}, "", search);
   window.localStorage.clear();
   document.body.innerHTML = "";
-
   const core = await import("./legacy_core.js");
   const main = await import("./main.jsx");
   const { mountViewerApp } = main;
   const appRoot = document.createElement("div");
   appRoot.id = "app";
   document.body.appendChild(appRoot);
-
   core.initializeSoftwareSafeCore();
   core.setViewerLocale("en");
   if (snapshot) {
@@ -284,7 +264,6 @@ async function renderViewerApp({
   if (starterOcOnboardingComplete) {
     main.__markStarterOcOnboardingCompleteForTest(core.state.auth.boundAgentId);
   }
-
   const dispose = mountViewerApp(appRoot);
   const cleanup = () => {
     dispose();
@@ -299,7 +278,6 @@ async function renderViewerApp({
     container: appRoot,
   };
 }
-
 async function renderViewerAppThroughAutoMount({ snapshot = sampleSnapshot(), search }) {
   activeCleanup?.();
   activeCleanup = null;
@@ -307,7 +285,6 @@ async function renderViewerAppThroughAutoMount({ snapshot = sampleSnapshot(), se
   window.history.replaceState({}, "", search);
   window.localStorage.clear();
   document.body.innerHTML = "";
-
   const core = await import("./legacy_core.js");
   core.initializeSoftwareSafeCore();
   core.setViewerLocale("en");
@@ -315,12 +292,10 @@ async function renderViewerAppThroughAutoMount({ snapshot = sampleSnapshot(), se
     core.injectSnapshot(snapshot);
     bindFirstSnapshotAgentForTest(core, snapshot);
   }
-
   const appRoot = document.createElement("div");
   appRoot.id = "app";
   document.body.appendChild(appRoot);
   await import("./main.jsx");
-
   const cleanup = () => {
     appRoot.textContent = "";
     if (activeCleanup === cleanup) {
@@ -334,7 +309,6 @@ async function renderViewerAppThroughAutoMount({ snapshot = sampleSnapshot(), se
     container: appRoot,
   };
 }
-
 async function setupConnectedSemanticCore({
   snapshot = sampleSnapshot(),
   agentId = "agent-0",
@@ -355,14 +329,12 @@ async function setupConnectedSemanticCore({
   document.body.innerHTML = "";
   const { sockets, sentMessages } = installMockWebSocket();
   const core = await import("./legacy_core.js");
-
   core.initializeSoftwareSafeCore();
   sockets[0].open();
   sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
   core.injectSnapshot(snapshot);
   core.applySelection({ kind: "agent", id: agentId });
   bindLocalTestAgent(core, agentId);
-
   activeCleanup = () => {
     for (const socket of sockets) {
       if (socket.readyState !== socket.CLOSED) {
@@ -1587,6 +1559,45 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getByText("Build alloy factory core: missing structural frames")).toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("renders the factory production failure disposition before generic wait and recovery choices", async () => {
+    const { container } = await renderViewerApp({ snapshot: sampleSnapshot({ player_gameplay: {
+      ...sampleSnapshot().player_gameplay,
+      available_actions: [
+        { action_id: "schedule_recipe_smelter_iron_ingot", label: "Queue iron ingot run", protocol_action: "gameplay_action.submit", target_agent_id: "agent-0", disabled_reason: "insufficient iron_ore in site ledger" },
+        { action_id: "request_snapshot", label: "Refresh gameplay snapshot", protocol_action: "request_snapshot" },
+      ],
+      factory_production_failure_disposition: {
+        action_id: "19",
+        requester_agent_id: "agent-0",
+        factory_id: "factory.target",
+        recipe_id: "recipe.smelter.iron_ingot",
+        blocker_kind: "product_validation_rejected",
+        blocker_detail: "product profile rejected the committed output",
+        disposition_kind: "consumed_lost",
+        consumed_inputs: [{ kind: "iron_ore", amount: 3 }],
+        lost_inputs: [{ kind: "iron_ore", amount: 3 }],
+        consumed_power: 7,
+        lost_power: 7,
+        next_action: "inspect_product_validation_and_reschedule",
+        next_recheck: null,
+      },
+      wait_resolution_quote: {
+        safe_to_wait: true,
+        resolution_trigger: "synthetic wait should be hidden",
+      },
+      fallback_tradeoff_preview: [{ value_class: "safe_wait", available: true }],
+    } }) });
+
+    const details = container.querySelector("#viewer-gameplay-details");
+    const card = within(details).getByTestId("viewer-factory-production-failure-disposition");
+    const cardText = card.textContent;
+    for (const text of ["factory.target", "recipe.smelter.iron_ingot", "Detail: product profile rejected the committed output", "Refresh gameplay snapshot", "Recovery action: request_snapshot", "Next recheck: next committed snapshot"]) expect(cardText).toContain(text);
+    expect(within(card).getAllByText(/iron_ore × 3/)).toHaveLength(2); expect(within(card).getAllByText("7").length).toBeGreaterThanOrEqual(2);
+    expect(card.querySelector("button")).toBeEnabled();
+    expect(card.textContent).not.toMatch(/product_validation_rejected|consumed_lost|inspect_product_validation_and_reschedule/);
+    expect(within(details).queryByText("synthetic wait should be hidden")).not.toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("marks branch-hint-only guidance as legacy and incomplete", async () => {
     const { container } = await renderViewerApp({ snapshot: sampleSnapshot({ player_gameplay: {
       ...sampleSnapshot().player_gameplay, goal_kind: "ChooseFirstExpansionTradeoff",
@@ -1655,6 +1666,57 @@ describe("viewer web ui automation baseline", () => {
     fireEvent.pointerDown(document.body);
     await waitFor(() => expect(helpButton).toHaveAttribute("aria-expanded", "false"));
   });
+
+  it("renders a selected Location as readable identity with explicit context unavailability", async () => {
+    const { container, core } = await renderViewerApp({
+      selection: { kind: "location", id: "loc-0" },
+    });
+
+    const detailsPanel = container.querySelector("#viewer-details-panel");
+    const context = within(detailsPanel).getByRole("region", { name: "Entity Context" });
+    expect(core.state.selectedKind).toBe("location");
+    expect(context).toHaveAttribute("data-agent-context-kind", "location");
+    expect(within(context).getByText("Factory Anchor")).toBeInTheDocument();
+    expect(context).toHaveTextContent(/Context unavailable: this entity has no published context projection yet/i);
+    expect(context).not.toHaveTextContent("Agent Context");
+    expect(context).not.toHaveTextContent("Executing");
+    expect(context.querySelectorAll('[data-agent-context-group="truth"], [data-agent-context-group="decision"], [data-agent-context-group="intent"]')).toHaveLength(0);
+    expect(context).toHaveAttribute("data-agent-context-intent", "unavailable");
+    expect(context).toHaveAttribute("data-agent-context-receipt", "none");
+    expect(detailsPanel.querySelector("[data-command-agent]")).toBeNull();
+    expect(within(detailsPanel).queryByText("Agent Chat")).not.toBeInTheDocument();
+    expect(within(detailsPanel).queryByLabelText("Message")).not.toBeInTheDocument();
+    expect(within(detailsPanel).queryByText("Advanced Prompt Settings")).not.toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+  it("switches Command context between Agent and Location without leaking Agent controls or context", async () => {
+    const { container, core } = await renderViewerApp({
+      selection: { kind: "agent", id: "agent-0" },
+    });
+
+    const detailsPanel = container.querySelector("#viewer-details-panel");
+    expect(within(detailsPanel).getByRole("region", { name: "Agent Context" })).toBeInTheDocument();
+    expect(within(detailsPanel).getByText("Agent Chat")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("viewer-select-location-loc-0"));
+    await waitFor(() => {
+      expect(core.state.selectedKind).toBe("location");
+      expect(within(detailsPanel).getByRole("region", { name: "Entity Context" })).toBeInTheDocument();
+    });
+    const locationContext = within(detailsPanel).getByRole("region", { name: "Entity Context" });
+    expect(within(locationContext).getByText("Factory Anchor")).toBeInTheDocument();
+    expect(within(detailsPanel).queryByText("Agent Chat")).not.toBeInTheDocument();
+    expect(within(detailsPanel).queryByLabelText("Message")).not.toBeInTheDocument();
+    expect(within(detailsPanel).queryByText("Advanced Prompt Settings")).not.toBeInTheDocument();
+    expect(within(detailsPanel).queryByRole("region", { name: "Agent Context" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("viewer-playthrough-select-agent"));
+    await waitFor(() => {
+      expect(core.state.selectedKind).toBe("agent");
+      expect(within(detailsPanel).getByRole("region", { name: "Agent Context" })).toBeInTheDocument();
+    });
+    expect(within(detailsPanel).getByText("Agent Chat")).toBeInTheDocument();
+    expect(within(detailsPanel).queryByRole("region", { name: "Entity Context" })).not.toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("unlocks agent chat and prompt override surfaces for the current bound agent", async () => {
     const { core } = await renderViewerApp({
@@ -3237,8 +3299,10 @@ describe("viewer web ui automation baseline", () => {
       "shell_selected_blocker",
       "agent_chat_history",
       "gameplay_diagnostics_expanded",
+      "factory_production_failure_disposition",
       "hosted_login_gate",
       "empty_world_recovery",
+      "major_world_event_crisis",
     ];
 
     for (const fixtureName of states) {
@@ -3250,6 +3314,28 @@ describe("viewer web ui automation baseline", () => {
       expect(window.__OASIS7_VIEWER_VISUAL_FIXTURES__).toBeTruthy();
       expect(container).toHaveAttribute("data-viewer-visual-fixture", fixtureName);
       expect(document.body).toHaveAttribute("data-viewer-visual-fixture", fixtureName);
+
+      if (fixtureName === "factory_production_failure_disposition") {
+        const card = within(container).getByTestId("viewer-factory-production-failure-disposition");
+        expect(within(card).getByText("Production result failed validation")).toBeInTheDocument();
+        expect(card).toHaveAttribute("role", "status");
+        expect(card).toHaveAttribute("aria-live", "polite");
+        expect(card).toHaveTextContent("Factory: factory.target · Recipe: recipe.smelter.iron_ingot");
+        expect(card).toHaveTextContent("Consumed inputs");
+        expect(card).toHaveTextContent("iron_ore × 3");
+        expect(card).toHaveTextContent("Consumed power");
+        expect(card).toHaveTextContent("Refresh gameplay snapshot");
+        expect(card).toHaveTextContent("Recovery action: request_snapshot");
+        expect(card).toHaveTextContent("Next recheck: next committed snapshot");
+        expect(card.textContent).not.toMatch(
+          /product_validation_rejected|consumed_lost|inspect_product_validation_and_reschedule/,
+        );
+        expect(container.querySelector("#viewer-gameplay-details")).toHaveAttribute("open");
+        expect(elementPrecedes(
+          card,
+          within(container.querySelector("#viewer-gameplay-details")).getByText("Control Proof").closest(".event-card"),
+        )).toBe(true);
+      }
 
       cleanup();
     }
@@ -3271,31 +3357,6 @@ describe("viewer web ui automation baseline", () => {
       container.querySelector(".stage-hero"),
       container.querySelector("#viewer-gameplay-details"),
     )).toBe(true);
-  }, HEAVY_UI_TEST_TIMEOUT_MS);
-
-  it("renders the shell selected-blocker fixture as a populated command desk", async () => {
-    const { container } = await renderViewerApp({
-      snapshot: null,
-      search: `${viewerUrl()}&viewer_visual_fixture=shell_selected_blocker`,
-    });
-
-    const state = window.__AW_TEST__.getState();
-    expect(state.selectedKind).toBe("agent");
-    expect(state.selectedId).toBe("agent-0");
-    const targetsPanel = container.querySelector("#viewer-targets-panel");
-    const agentButton = within(targetsPanel).getByTestId("viewer-playthrough-select-agent");
-    const locationButton = within(targetsPanel).getByTestId("viewer-select-location-loc-1");
-    expect(within(targetsPanel).getByText("agent-0")).toBeInTheDocument();
-    expect(within(agentButton).getByText("Selected")).toBeInTheDocument();
-    expect(within(targetsPanel).getByText("Assembly Nexus")).toBeInTheDocument();
-    expect(within(container.querySelector("#viewer-details-panel")).getByText("Agent Chat")).toBeInTheDocument();
-    fireEvent.click(locationButton);
-    await waitFor(() => {
-      expect(locationButton).toHaveAttribute("data-selected", "true");
-    });
-    expect(within(locationButton).getByText("Selected")).toBeInTheDocument();
-    expect(within(agentButton).queryByText("Selected")).not.toBeInTheDocument();
-    expect(within(container.querySelector("#viewer-stage-panel")).getAllByText("Recover sustainable capability").length).toBeGreaterThan(0);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("renders the agent chat fixture with history and collapsed prompt controls", async () => {
@@ -3379,4 +3440,5 @@ describe("viewer web ui automation baseline", () => {
     expect(within(container.querySelector("#viewer-details-panel")).getByText("Claim Your First Agent")).toBeInTheDocument();
     expect(container.querySelector("[data-callout-kind='empty_world_recovery']")).toBeTruthy();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
+
 });

@@ -32,6 +32,9 @@ use oasis7::simulator::{WorldConfig, WorldModel, WorldSnapshot};
 use oasis7::viewer::{VIEWER_PROTOCOL_VERSION, ViewerRequest, ViewerResponse};
 use oasis7_proto::storage_profile::StorageProfile;
 
+#[path = "provider_lineage_tests.rs"]
+mod provider_lineage_tests;
+
 #[path = "viewer_static_dir_tests.rs"]
 mod viewer_static_dir_tests;
 use viewer_static_dir_tests::make_temp_dir;
@@ -76,6 +79,7 @@ fn parse_options_defaults() {
     assert!(options.auto_play);
     assert!(!options.allow_debug_scenario);
     assert_eq!(options.generated_world_dir, "");
+    assert_eq!(options.provider_lineage_store, "");
     assert_eq!(
         options.agent_decision_source,
         PROVIDER_BACKED_DECISION_SOURCE

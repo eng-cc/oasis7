@@ -1,13 +1,27 @@
 use serde_json::{Map, Value, json};
 
+#[path = "host_action_receipt_support.rs"]
+mod action_receipt_support;
+#[path = "host_intent_projection.rs"]
+mod intent_projection;
 #[path = "host_micro_depot_projection.rs"]
 mod micro_depot_projection;
+#[path = "host_relation_projection.rs"]
+mod relation_projection;
 #[path = "host_resource_summary.rs"]
 mod resource_summary_projection;
 #[path = "host_social_links.rs"]
 mod social_links;
+#[path = "host_world_bounds.rs"]
+mod world_bounds;
 
+use action_receipt_support::{
+    action_receipt_title, has_enabled_first_agent_claim, is_authoritative_world_delta_stage,
+    is_non_advancing_receipt_stage, is_pending_receipt_stage, is_rejected_receipt_stage,
+    rejected_receipt_detail,
+};
 use resource_summary_projection::{count_resource_entries, resource_summary};
+use world_bounds::build_world_bounds;
 
 const FRAGMENT_TERRAIN_PALETTE: &[(&str, [u8; 3])] = &[
     ("silicate_matrix", [126, 144, 99]),
@@ -431,31 +445,10 @@ fn build_module_visual_entities(
     projected
 }
 
-fn build_pixel_world_links(agents: &[Value], location_by_id: &Map<String, Value>) -> Vec<Value> {
-    agents
-        .iter()
-        .filter_map(|agent| {
-            let location_id = str_key(agent, "location_id")?;
-            let location = location_by_id.get(location_id)?;
-            let agent_pos = obj(agent, "pos");
-            let location_pos = obj(location, "pos");
-            if !agent_pos.is_object() || !location_pos.is_object() {
-                return None;
-            }
-            Some(json!({
-                "id": format!("link:{}:{location_id}", str_key(agent, "id").unwrap_or("")),
-                "kind": "agent_assignment",
-                "from": agent_pos,
-                "to": location_pos,
-                "emphasis": 0.72,
-            }))
-        })
-        .collect()
-}
-
 fn build_recent_event_hotspots(events: &[Value]) -> Vec<Value> {
     events
         .iter()
+        .filter(|event| !is_world_scoped_crisis_recent_event(event))
         .take(4)
         .enumerate()
         .map(|(index, event)| {
@@ -473,6 +466,23 @@ fn build_recent_event_hotspots(events: &[Value]) -> Vec<Value> {
             })
         })
         .collect()
+}
+
+fn is_world_scoped_crisis_recent_event(event: &Value) -> bool {
+    if str_key(event.get("major_event").unwrap_or(&Value::Null), "category") == Some("crisis") {
+        return true;
+    }
+    let kind = event.get("kind").unwrap_or(&Value::Null);
+    let structured_kind = kind.get("data").and_then(|data| str_key(data, "kind"));
+    let kind = kind.as_str().or(structured_kind);
+    matches!(
+        kind,
+        Some(
+            "runtime.gameplay.crisis_spawned"
+                | "runtime.gameplay.crisis_resolved"
+                | "runtime.gameplay.crisis_timed_out"
+        )
+    )
 }
 
 fn offset_world_position(
@@ -561,51 +571,30 @@ fn pick_known_agent_id(candidate_ids: Vec<Option<String>>, agents: &[Value]) -> 
     })
 }
 
-fn action_receipt_title(locale: &str, state: &str, present: bool) -> String {
-    if !present {
-        return tr(locale, "暂无行动回执", "No action receipt yet");
-    }
-    match state {
-        "accepted" | "submitted" | "queued" | "ack" => tr(locale, "行动已接受", "Action accepted"),
-        "blocked" => tr(locale, "行动被阻塞", "Action blocked"),
-        "completed" => tr(locale, "世界已改变", "World changed"),
-        "rejected" => tr(locale, "行动被拒绝", "Action rejected"),
-        _ => tr(locale, "行动进行中", "Action in progress"),
-    }
-}
-
-fn has_enabled_first_agent_claim(gameplay: &Value) -> bool {
-    obj(gameplay, "availableActions")
-        .as_array()
-        .is_some_and(|actions| {
-            actions.iter().any(|action| {
-                str_key(action, "actionId") == Some("claim_first_agent")
-                    && str_key(action, "disabledReason").is_none()
-            })
-        })
-}
-
-fn has_positive_world_delta(recent_feedback: &Value) -> bool {
-    ["deltaLogicalTime", "deltaEventSeq"]
-        .into_iter()
-        .any(|key| number(obj(recent_feedback, key), 0.0) > 0.0)
-}
-
-fn is_pending_receipt_stage(stage: Option<&str>) -> bool {
-    matches!(
-        stage,
-        Some("accepted" | "submitted" | "queued" | "ack" | "registering" | "signing" | "sent")
-    )
-}
-
 fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<&str>) -> Value {
     let recent_feedback = obj(gameplay, "recentFeedback");
     let recent_feedback_action = str_key(recent_feedback, "action");
-    let receipt_stage =
-        str_key(gameplay, "executionState").or_else(|| str_key(recent_feedback, "stage"));
-    let has_world_delta = !is_pending_receipt_stage(receipt_stage)
-        && (str_key(gameplay, "lastWorldChange").is_some()
-            || has_positive_world_delta(recent_feedback));
+    let execution_stage = str_key(gameplay, "executionState");
+    let feedback_stage = str_key(recent_feedback, "stage");
+    let rejected =
+        is_rejected_receipt_stage(execution_stage) || is_rejected_receipt_stage(feedback_stage);
+    // Either canonical field may be omitted at compatibility boundaries, but an
+    // explicit rejection must win over a stale accepted/executing state.
+    let receipt_stage = rejected
+        .then_some("rejected")
+        .or(execution_stage)
+        .or(feedback_stage);
+    let has_non_advancing_stage = is_non_advancing_receipt_stage(execution_stage)
+        || is_non_advancing_receipt_stage(feedback_stage);
+    let has_world_delta = !rejected
+        && !has_non_advancing_stage
+        && !is_pending_receipt_stage(receipt_stage)
+        && (is_authoritative_world_delta_stage(execution_stage)
+            || is_authoritative_world_delta_stage(feedback_stage));
+    // Keep the established zero-delta shape for an in-flight receipt, while
+    // withholding deltas from rejected/non-advancing outcomes altogether.
+    let exposes_receipt_delta =
+        !rejected && (has_world_delta || is_pending_receipt_stage(receipt_stage));
     let has_player_intent = str_key(gameplay, "acceptedIntentId").is_some()
         || str_key(gameplay, "acceptedIntentScope").is_some()
         || str_key(gameplay, "acceptedIntentTarget").is_some()
@@ -635,8 +624,10 @@ fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<
             "delta_event_seq": Value::Null,
         });
     }
-    let present =
-        has_world_delta || has_player_intent || str_key(recent_feedback, "reason").is_some();
+    let present = rejected
+        || has_world_delta
+        || has_player_intent
+        || str_key(recent_feedback, "reason").is_some();
     let raw_state = receipt_stage.unwrap_or("waiting_for_intent");
     let state = if present {
         raw_state
@@ -645,19 +636,34 @@ fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<
     };
     let confidence = if has_world_delta {
         "world_delta"
-    } else if has_player_intent {
+    } else if has_player_intent && !rejected {
         "accepted_intent"
     } else {
         "none"
     };
     let summary = if present {
-        str_key(gameplay, "lastWorldChange")
-            .or_else(|| str_key(recent_feedback, "effect"))
-            .or_else(|| str_key(gameplay, "acceptedIntentSummary"))
-            .or_else(|| str_key(recent_feedback, "action"))
-            .or_else(|| str_key(gameplay, "executionSummary"))
-            .unwrap_or("")
-            .to_string()
+        if rejected {
+            tr(
+                locale,
+                "请求的玩法动作在执行前被拒绝。",
+                "The requested gameplay action was rejected before execution.",
+            )
+        } else if has_world_delta {
+            str_key(gameplay, "lastWorldChange")
+                .or_else(|| str_key(recent_feedback, "effect"))
+                .or_else(|| str_key(gameplay, "acceptedIntentSummary"))
+                .or_else(|| str_key(recent_feedback, "action"))
+                .or_else(|| str_key(gameplay, "executionSummary"))
+                .unwrap_or("")
+                .to_string()
+        } else {
+            str_key(recent_feedback, "effect")
+                .or_else(|| str_key(gameplay, "acceptedIntentSummary"))
+                .or_else(|| str_key(recent_feedback, "action"))
+                .or_else(|| str_key(gameplay, "executionSummary"))
+                .unwrap_or("")
+                .to_string()
+        }
     } else {
         tr(
             locale,
@@ -666,12 +672,16 @@ fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<
         )
     };
     let detail = if present {
-        str_key(gameplay, "executionCauseDetail")
-            .or_else(|| str_key(recent_feedback, "reason"))
-            .or_else(|| str_key(recent_feedback, "hint"))
-            .or_else(|| str_key(gameplay, "acceptedIntentDetail"))
-            .or_else(|| str_key(gameplay, "progressDetail"))
-            .map(ToString::to_string)
+        if rejected {
+            Some(rejected_receipt_detail(locale, gameplay, recent_feedback))
+        } else {
+            str_key(gameplay, "executionCauseDetail")
+                .or_else(|| str_key(recent_feedback, "reason"))
+                .or_else(|| str_key(recent_feedback, "hint"))
+                .or_else(|| str_key(gameplay, "acceptedIntentDetail"))
+                .or_else(|| str_key(gameplay, "progressDetail"))
+                .map(ToString::to_string)
+        }
     } else {
         Some(tr(
             locale,
@@ -709,8 +719,8 @@ fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<
         } else {
             Value::Null
         },
-        "delta_logical_time": if present { obj(recent_feedback, "deltaLogicalTime").clone() } else { Value::Null },
-        "delta_event_seq": if present { obj(recent_feedback, "deltaEventSeq").clone() } else { Value::Null },
+        "delta_logical_time": if present && exposes_receipt_delta { obj(recent_feedback, "deltaLogicalTime").clone() } else { Value::Null },
+        "delta_event_seq": if present && exposes_receipt_delta { obj(recent_feedback, "deltaEventSeq").clone() } else { Value::Null },
     })
 }
 
@@ -958,20 +968,6 @@ fn build_commercial_surface(
     })
 }
 
-fn build_world_bounds(input: &Value) -> Value {
-    let space = obj(obj(input, "snapshot"), "config")
-        .get("space")
-        .unwrap_or(&Value::Null);
-    if !space.is_object() {
-        return Value::Null;
-    }
-    json!({
-        "width_cm": number_key(space, "width_cm", 0.0),
-        "depth_cm": number_key(space, "depth_cm", 0.0),
-        "height_cm": number_key(space, "height_cm", 0.0),
-    })
-}
-
 pub(crate) fn build_render_state(input: &Value) -> Value {
     let locale = str_key(input, "locale").unwrap_or("en");
     let world_bounds = build_world_bounds(input);
@@ -1044,6 +1040,11 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
                 "location_id": string_key(agent, "location_id"),
                 "pos": pos,
                 "position_source": position_source,
+                // Preserve only the explicit authority envelopes. The link
+                // projector still validates every semantic field and never
+                // treats location/geometry as assignment authority.
+                "relation": obj(agent, "relation"),
+                "assignment": obj(agent, "assignment"),
                 "resource_summary": resource_summary,
                 "resource_score": resource_score,
                 "status_badges": status_badges,
@@ -1064,7 +1065,7 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
         (Some(kind), Some(id)) => json!({ "kind": kind, "id": id }),
         _ => Value::Null,
     };
-    let links = build_pixel_world_links(&agents, &location_by_id);
+    let links = relation_projection::build_pixel_world_links(&agents, &location_by_id);
     let social_links = social_links::build_pixel_world_social_links(input, &agents, &locations);
     let anchor = resolve_selection_position(&selection, &agents, &locations)
         .or_else(|| {
@@ -1141,6 +1142,8 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
             .map(|agent_id| json!({ "agent_id": agent_id }))
             .unwrap_or(Value::Null)
     };
+    let active_intent_target =
+        intent_projection::project_active_intent_target(input, &world_bounds, &agents);
     let presentation = obj(input, "presentation");
 
     json!({
@@ -1160,6 +1163,7 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
         "visual_hotspots": visual_hotspots,
         "receipt_target": receipt_target,
         "recommended_target": recommended_target,
+        "active_intent_target": active_intent_target,
         "commercial_surface": commercial_surface,
         "presentation": {
             "world_bounds_label": obj(presentation, "world_bounds_label").clone(),

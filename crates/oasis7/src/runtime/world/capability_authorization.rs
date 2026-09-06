@@ -787,7 +787,7 @@ impl World {
         Ok(())
     }
 
-    fn verify_catalog_freshness(
+    pub(super) fn verify_catalog_freshness(
         &self,
         catalog: &CapabilityCatalogSnapshot,
         manifest: &oasis7_wasm_abi::ModuleManifest,
@@ -798,7 +798,10 @@ impl World {
             .last()
             .map(|event| event.id)
             .unwrap_or(0);
-        if catalog.world_head != head || self.state.time > catalog.valid_until_tick {
+        if catalog.world_head != head
+            || catalog.logical_tick != self.state.time
+            || self.state.time > catalog.valid_until_tick
+        {
             return Err(deny("catalog is stale"));
         }
         let registry_hash = canonical_hash(&self.module_registry)

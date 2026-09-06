@@ -27,6 +27,25 @@ export function createWorldFeedTransport({ getSocket, getState, render, requestS
     }
   }
 
+  function markDisconnected(targetSocket = null) {
+    if (targetSocket && getSocket() !== targetSocket) {
+      return;
+    }
+    resetGeneration(targetSocket);
+    const state = getState();
+    state.worldFeed = {
+      ...state.worldFeed,
+      status: "unavailable",
+      events: [],
+      stale: true,
+      gapReason: null,
+      unavailableReason: "source_unavailable",
+      snapshotReloadRequired: false,
+      requestInFlight: false,
+      requestCursor: null,
+    };
+  }
+
   function requestWorldFeed({ cursor = getState().worldFeed?.cursor || null, limit = 50 } = {}) {
     const state = getState();
     if (state.worldFeed?.requestInFlight) {
@@ -49,7 +68,10 @@ export function createWorldFeedTransport({ getSocket, getState, render, requestS
     return true;
   }
 
-  function handleWorldFeed(feed) {
+  function handleWorldFeed(feed, sourceSocket = null) {
+    if (sourceSocket && getSocket() !== sourceSocket) {
+      return false;
+    }
     const state = getState();
     const previous = state.worldFeed;
     const responseGeneration = generation;
@@ -127,6 +149,7 @@ export function createWorldFeedTransport({ getSocket, getState, render, requestS
     refreshAfterWorldActivity,
     reloadWorldFeedFromAuthoritativeSnapshot,
     requestWorldFeed,
+    markDisconnected,
     resetGeneration,
   };
 }

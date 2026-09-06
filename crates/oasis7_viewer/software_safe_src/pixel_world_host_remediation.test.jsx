@@ -239,17 +239,12 @@ describe("pixel world host remediation contracts", () => {
     await waitFor(() => expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument());
     screen.getByRole("button", { name: "Cinematic View" }).click();
     await waitFor(() => expect(document.querySelector(".pixel-world-host")).toHaveAttribute("data-world-focus", "true"));
-    const visibleReceipts = [
-      ...document.querySelectorAll('[data-viewer-overlay="receipt"]'),
-      ...document.querySelectorAll(".pixel-world-focus-hud__cell--receipt"),
-    ].filter((element) => !element.closest("[hidden]"));
+    const visibleReceipts = [...document.querySelectorAll('[data-viewer-overlay="receipt"]')];
     expect(visibleReceipts).toHaveLength(1);
+    expect(document.querySelector(".pixel-world-focus-hud__cell--receipt")).toBeNull();
     screen.getByRole("button", { name: "Maximize" }).click();
     await waitFor(() => expect(document.querySelector(".pixel-world-host")).toHaveAttribute("data-world-focus-maximized", "true"));
-    const maximizedReceipts = [
-      ...document.querySelectorAll('[data-viewer-overlay="receipt"]'),
-      ...document.querySelectorAll(".pixel-world-focus-hud__cell--receipt"),
-    ].filter((element) => !element.closest("[hidden]"));
+    const maximizedReceipts = [...document.querySelectorAll('[data-viewer-overlay="receipt"]')];
     expect(maximizedReceipts).toHaveLength(1);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 

@@ -10,6 +10,8 @@ PROD_HOST="39.104.205.67"
 PUBLIC_BASE_URL="${OASIS7_PROVIDER_PUBLIC_BASE_URL:-https://t2t.oasis7.tech}"
 DECISION_COUNT="${OASIS7_PROVIDER_LIVE_DECISION_COUNT:-1}"
 TIMEOUT_MS="${OASIS7_PROVIDER_LIVE_TIMEOUT_MS:-15000}"
+TARGET_CONTEXT_PAYLOAD_FILE="${OASIS7_PROVIDER_LIVE_TARGET_CONTEXT_PAYLOAD_FILE:-}"
+LEGACY_COMPATIBILITY_ONLY="${OASIS7_PROVIDER_LIVE_LEGACY_COMPATIBILITY_ONLY:-0}"
 RUN_PUBLIC="1"
 RUN_LOOPBACK="1"
 LOOPBACK_TARGET="${OASIS7_PROVIDER_LIVE_LOOPBACK_TARGET:-both}"
@@ -35,15 +37,23 @@ Default checks:
   - SSH to 39.104.204.172 and 39.104.205.67.
   - Derive active newapi_user_ref bearer selectors from each host's real
     /etc/oasis7/newapi-bridge/bridge-state.json.
-  - POST real provider decision smoke through each host's loopback provider.
-  - POST real provider decision smoke through https://t2t.oasis7.tech using
-    the 205 production selector.
+  - POST a Runtime-issued target cognition wrapper to each host's loopback
+    provider, then POST its paired Runtime-authoritative feedback wrapper.
+  - POST the same target decision/feedback pair through
+    https://t2t.oasis7.tech using the 205 production selector.
+  - Bare /v1/world-simulator/decision is never part of the default gate; use
+    --legacy-compatibility-only only for an explicit legacy compatibility audit.
 
 Options:
   --credentials-file <path>       SSH credential file; can also be set with
                                   OASIS7_PROVIDER_LIVE_CREDENTIALS_FILE
   --decision-count <n>            default: 1
   --timeout-ms <n>                default: 15000
+  --target-context-payload-file <path>
+                                  Runtime-issued JSON containing paired target
+                                  decision_context and feedback_context wrappers
+  --legacy-compatibility-only    explicitly run the bare legacy decision route;
+                                  not target cognition proof
   --skip-public                   skip https://t2t.oasis7.tech check
   --skip-loopback                 skip ECS loopback checks
   --loopback-target <204|205|both>
@@ -81,6 +91,14 @@ while [[ $# -gt 0 ]]; do
     --timeout-ms)
       TIMEOUT_MS="${2:-}"
       shift 2
+      ;;
+    --target-context-payload-file)
+      TARGET_CONTEXT_PAYLOAD_FILE="${2:-}"
+      shift 2
+      ;;
+    --legacy-compatibility-only)
+      LEGACY_COMPATIBILITY_ONLY="1"
+      shift
       ;;
     --skip-public)
       RUN_PUBLIC="0"
@@ -146,6 +164,40 @@ done
 [[ "$DECISION_COUNT" =~ ^[0-9]+$ && "$DECISION_COUNT" -gt 0 ]] || { echo "error: --decision-count must be positive" >&2; exit 2; }
 [[ "$TIMEOUT_MS" =~ ^[0-9]+$ && "$TIMEOUT_MS" -gt 0 ]] || { echo "error: --timeout-ms must be positive" >&2; exit 2; }
 [[ "$LOWQUOTA_DECISION_COUNT" =~ ^[0-9]+$ && "$LOWQUOTA_DECISION_COUNT" -gt 0 ]] || { echo "error: --lowquota-decision-count must be positive" >&2; exit 2; }
+case "$LEGACY_COMPATIBILITY_ONLY" in
+  0|1) ;;
+  *) echo "error: --legacy-compatibility-only must be boolean" >&2; exit 2 ;;
+esac
+if [[ "$LEGACY_COMPATIBILITY_ONLY" == "0" ]]; then
+  [[ -n "$TARGET_CONTEXT_PAYLOAD_FILE" ]] || {
+    echo "error: target cognition gate requires --target-context-payload-file (Runtime-issued paired wrappers)" >&2
+    exit 2
+  }
+  [[ -f "$TARGET_CONTEXT_PAYLOAD_FILE" ]] || {
+    echo "error: target context payload file not found: $TARGET_CONTEXT_PAYLOAD_FILE" >&2
+    exit 2
+  }
+  target_required_count="$DECISION_COUNT"
+  if [[ -n "$LOWQUOTA_TARGET" && "$LOWQUOTA_DECISION_COUNT" -gt "$target_required_count" ]]; then
+    target_required_count="$LOWQUOTA_DECISION_COUNT"
+  fi
+  python3 - "$TARGET_CONTEXT_PAYLOAD_FILE" "$target_required_count" <<'PY'
+import importlib.util
+import sys
+from pathlib import Path
+
+script = Path("scripts/provider-remote-https/provider_bridge_contract_smoke.py")
+spec = importlib.util.spec_from_file_location("provider_bridge_contract_smoke", script)
+module = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+module.load_target_context_pairs(sys.argv[1], int(sys.argv[2]))
+PY
+elif [[ -n "$TARGET_CONTEXT_PAYLOAD_FILE" ]]; then
+  echo "error: --legacy-compatibility-only cannot be combined with --target-context-payload-file" >&2
+  exit 2
+fi
 case "$LOOPBACK_TARGET" in
   204|205|both) ;;
   *) echo "error: --loopback-target must be 204, 205, or both" >&2; exit 2 ;;
@@ -209,17 +261,28 @@ run_contract_smoke() {
   local decision_count="$4"
   local min_successes="$5"
   shift 5
-  echo "== ${label} =="
+  if [[ "$LEGACY_COMPATIBILITY_ONLY" == "1" ]]; then
+    echo "== ${label} (legacy compatibility-only) =="
+  else
+    echo "== ${label} =="
+  fi
+  local lane_args=()
+  if [[ "$LEGACY_COMPATIBILITY_ONLY" == "1" ]]; then
+    lane_args+=(--legacy-compatibility-only)
+  else
+    lane_args+=(--target-context-payload-file "$TARGET_CONTEXT_PAYLOAD_FILE")
+  fi
   python3 scripts/provider-remote-https/provider_bridge_contract_smoke.py \
     --base-url "$base_url" \
     --auth-token "$token" \
     --timeout-ms "$TIMEOUT_MS" \
     --decision-count "$decision_count" \
     --min-successes "$min_successes" \
+    "${lane_args[@]}" \
     "$@"
 }
 
-run_loopback_host_smoke() {
+run_loopback_legacy_smoke() {
   local host="$1"
   local selector="$2"
   local label="$3"
@@ -311,6 +374,135 @@ PY"
   ssh_capture "$host" "$remote_command"
 }
 
+run_loopback_target_smoke() {
+  local host="$1"
+  local selector="$2"
+  local label="$3"
+  local decision_count="$4"
+  local min_successes="$5"
+  local expected_error_substr="${6:-}"
+  local target_payload_json
+  target_payload_json="$(python3 - "$TARGET_CONTEXT_PAYLOAD_FILE" <<'PY'
+import json
+import sys
+with open(sys.argv[1], encoding="utf-8") as handle:
+    print(json.dumps(json.load(handle), separators=(",", ":")))
+PY
+)"
+  local response_validator_source
+  response_validator_source="$(<"$ROOT_DIR/scripts/provider-remote-https/provider_response_validator.py")"
+  local remote_script
+  remote_script="$(cat <<PY
+import json, os, subprocess, tempfile
+
+# Embedded from provider_response_validator.py so the remote host uses the
+# same strict target-response boundary as the local contract smoke.
+${response_validator_source}
+
+auth = os.environ['AUTH_TOKEN']
+payload_file = os.environ['TARGET_CONTEXT_PAYLOAD']
+count = int(os.environ['DECISION_COUNT'])
+min_successes = int(os.environ['MIN_SUCCESSES'])
+expected_error_substr = os.environ.get('EXPECTED_ERROR_SUBSTR') or ''
+timeout = os.environ['TIMEOUT_SECONDS']
+payload = json.loads(payload_file)
+pairs = payload.get('requests') if isinstance(payload, dict) else None
+if not isinstance(pairs, list) or len(pairs) < count:
+    raise SystemExit('target context payload does not contain enough paired requests')
+
+def curl_json(path, value):
+    with tempfile.NamedTemporaryFile('w', delete=False) as handle:
+        json.dump(value, handle, separators=(',', ':'))
+        request_path = handle.name
+    try:
+        result = subprocess.run([
+            'curl', '-sS', '--max-time', timeout, '-X', 'POST',
+            'http://127.0.0.1:5841' + path,
+            '-H', 'Authorization: Bearer ' + auth,
+            '-H', 'Content-Type: application/json',
+            '--data-binary', '@' + request_path,
+        ], text=True, capture_output=True)
+    finally:
+        os.unlink(request_path)
+    if result.returncode != 0:
+        raise SystemExit('curl:%s:%s' % (result.returncode, result.stderr.strip() or 'curl failed'))
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError:
+        raise SystemExit('provider returned non-JSON target response')
+
+successes = 0
+feedback_successes = 0
+versions = []
+errors = []
+error_messages = []
+for index, pair in enumerate(pairs[:count], start=1):
+    if not isinstance(pair, dict):
+        raise SystemExit('target context pair %d is not an object' % index)
+    request = pair.get('decision_context')
+    feedback = pair.get('feedback_context')
+    if not isinstance(request, dict) or not isinstance(feedback, dict):
+        raise SystemExit('target context pair %d is not a strict decision/feedback pair' % index)
+    response = curl_json('/v1/world-simulator/decision-context', request)
+    if not isinstance(response, dict):
+        raise SystemExit('target response must be a JSON object')
+    try:
+        base = validate_target_context_response(response, request)
+    except RuntimeError as exc:
+        raise SystemExit(str(exc))
+    error = base.get('provider_error')
+    diagnostics = base.get('diagnostics') or {}
+    if error is None:
+        successes += 1
+    else:
+        errors.append(str(error.get('code') or ''))
+        error_messages.append(str(error.get('message') or '')[:500])
+    if diagnostics.get('provider_version'):
+        versions.append(diagnostics['provider_version'])
+    feedback_response = curl_json('/v1/world-simulator/feedback-context', feedback)
+    if feedback_response.get('ok') is not True:
+        raise SystemExit('target feedback was not acknowledged: %s' % feedback_response)
+    feedback_successes += 1
+
+matched_expected_error = bool(expected_error_substr) and any(
+    expected_error_substr.lower() in text.lower()
+    for text in errors + error_messages
+)
+status = 'pass' if successes >= min_successes and (not expected_error_substr or matched_expected_error) else 'fail'
+print(json.dumps({
+    'status': status,
+    'lane': 'target_cognition',
+    'decision_count': count,
+    'decision_successes': successes,
+    'feedback_successes': feedback_successes,
+    'provider_versions': sorted(set(versions)),
+    'provider_error_codes': errors,
+    'provider_error_messages': error_messages,
+}, sort_keys=True))
+if status != 'pass':
+    raise SystemExit(1)
+PY
+)"
+  local remote_command
+  remote_command="AUTH_TOKEN=$(printf '%q' "$selector") TARGET_CONTEXT_PAYLOAD=$(printf '%q' "$target_payload_json") DECISION_COUNT=$(printf '%q' "$decision_count") MIN_SUCCESSES=$(printf '%q' "$min_successes") EXPECTED_ERROR_SUBSTR=$(printf '%q' "$expected_error_substr") TIMEOUT_SECONDS=$(printf '%q' "$(( (TIMEOUT_MS + 999) / 1000 ))") python3 - <<'PY'
+${remote_script}
+PY"
+  echo "== ${label} =="
+  ssh_capture "$host" "$remote_command"
+}
+
+run_loopback_host_smoke() {
+  if [[ "$LEGACY_COMPATIBILITY_ONLY" == "1" ]]; then
+    local host="$1"
+    local selector="$2"
+    local label="$3"
+    shift 3
+    run_loopback_legacy_smoke "$host" "$selector" "${label} (legacy compatibility-only)" "$@"
+  else
+    run_loopback_target_smoke "$@"
+  fi
+}
+
 test_selector=""
 prod_selector=""
 if [[ "$RUN_LOOPBACK" == "1" && ( "$LOOPBACK_TARGET" == "204" || "$LOOPBACK_TARGET" == "both" ) || "$LOWQUOTA_TARGET" == "204" ]]; then
@@ -322,28 +514,28 @@ fi
 
 if [[ "$RUN_LOOPBACK" == "1" ]]; then
   if [[ "$LOOPBACK_TARGET" == "204" || "$LOOPBACK_TARGET" == "both" ]]; then
-    run_loopback_host_smoke "$TEST_HOST" "$test_selector" "204 loopback provider decision" "$DECISION_COUNT" "$DECISION_COUNT"
+    run_loopback_host_smoke "$TEST_HOST" "$test_selector" "204 target cognition decision+feedback" "$DECISION_COUNT" "$DECISION_COUNT"
   fi
   if [[ "$LOOPBACK_TARGET" == "205" || "$LOOPBACK_TARGET" == "both" ]]; then
-    run_loopback_host_smoke "$PROD_HOST" "$prod_selector" "205 loopback provider decision" "$DECISION_COUNT" "$DECISION_COUNT"
+    run_loopback_host_smoke "$PROD_HOST" "$prod_selector" "205 target cognition decision+feedback" "$DECISION_COUNT" "$DECISION_COUNT"
   fi
 fi
 
 if [[ "$RUN_PUBLIC" == "1" ]]; then
-  run_contract_smoke "205 public nginx provider decision" "$PUBLIC_BASE_URL" "$prod_selector" "$DECISION_COUNT" "$DECISION_COUNT"
+  run_contract_smoke "205 public nginx target cognition decision+feedback" "$PUBLIC_BASE_URL" "$prod_selector" "$DECISION_COUNT" "$DECISION_COUNT"
 fi
 
 case "$LOWQUOTA_TARGET" in
   "")
     ;;
   204)
-    run_loopback_host_smoke "$TEST_HOST" "$test_selector" "204 lowquota loopback provider decision" "$LOWQUOTA_DECISION_COUNT" 1 "$LOWQUOTA_EXPECT_SUBSTR"
+    run_loopback_host_smoke "$TEST_HOST" "$test_selector" "204 lowquota target cognition decision+feedback" "$LOWQUOTA_DECISION_COUNT" 1 "$LOWQUOTA_EXPECT_SUBSTR"
     ;;
   205)
-    run_loopback_host_smoke "$PROD_HOST" "$prod_selector" "205 lowquota loopback provider decision" "$LOWQUOTA_DECISION_COUNT" 1 "$LOWQUOTA_EXPECT_SUBSTR"
+    run_loopback_host_smoke "$PROD_HOST" "$prod_selector" "205 lowquota target cognition decision+feedback" "$LOWQUOTA_DECISION_COUNT" 1 "$LOWQUOTA_EXPECT_SUBSTR"
     ;;
   public205)
-    run_contract_smoke "205 public lowquota provider decision" "$PUBLIC_BASE_URL" "$prod_selector" "$LOWQUOTA_DECISION_COUNT" 1 --expect-provider-error-code-substr "$LOWQUOTA_EXPECT_SUBSTR"
+    run_contract_smoke "205 public lowquota target cognition decision+feedback" "$PUBLIC_BASE_URL" "$prod_selector" "$LOWQUOTA_DECISION_COUNT" 1 --expect-provider-error-code-substr "$LOWQUOTA_EXPECT_SUBSTR"
     ;;
   *)
     echo "error: --lowquota-target must be 204, 205, or public205" >&2

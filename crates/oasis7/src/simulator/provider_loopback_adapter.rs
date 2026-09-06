@@ -1,7 +1,9 @@
 use super::{
-    Action, AgentQuery, DecisionProvider, DecisionProviderError, DecisionRequest, DecisionResponse,
-    FeedbackEnvelope, ProviderDecision, ProviderFeedbackAck, ProviderLoopbackHttpClient,
-    ProviderLoopbackHttpError,
+    Action, AgentQuery, COGNITION_RESPONSE_DIGEST_DOMAIN, ContinuousAgentRequestContextV1,
+    ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1, DecisionProvider,
+    DecisionProviderError, DecisionRequest, DecisionResponse, FeedbackEnvelope, FeedbackEnvelopeV1,
+    ProviderDecision, ProviderFeedbackAck, ProviderLoopbackHttpClient, ProviderLoopbackHttpError,
+    h_v1,
 };
 use oasis7_wasm_abi::{
     AgentCommandResponse, CapabilityCatalogSnapshot, CapabilityGrantV2, ModuleCommandDeclaration,
@@ -478,10 +480,81 @@ impl DecisionProvider for ProviderLoopbackAdapter {
         Ok(response)
     }
 
+    fn decide_with_continuous_request_context(
+        &mut self,
+        request: &DecisionRequest,
+        turn_context: &ContinuousAgentTurnContextV1,
+        request_context: &ContinuousAgentRequestContextV1,
+    ) -> Result<ContinuousAgentResponseContextV1, DecisionProviderError> {
+        request_context
+            .validate_production_lane()
+            .map_err(|error| DecisionProviderError::new(error.code(), error.message(), false))?;
+        if request_context.base_decision_request != *request
+            || request_context.agent_session_id != turn_context.agent_session_id
+            || request_context.agent_turn_id != turn_context.agent_turn_id
+            || request_context.decision_request_id != turn_context.decision_request_id
+            || request_context.request_digest != turn_context.request_digest
+        {
+            return Err(DecisionProviderError::new(
+                "request_context_identity_mismatch",
+                "loopback request and outer context do not describe one turn",
+                false,
+            ));
+        }
+        let response = self
+            .client
+            .request_decision_with_context(request_context)
+            .map_err(Self::map_http_error)?;
+        if response.context_discriminator != super::CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR
+            || response.context_version != super::CONTINUOUS_AGENT_CONTEXT_VERSION
+            || response.agent_session_id != request_context.agent_session_id
+            || response.agent_turn_id != request_context.agent_turn_id
+            || response.decision_request_id != request_context.decision_request_id
+            || response.retry_seq != request_context.retry_seq
+            || response.transport_attempt != request_context.transport_attempt
+            || response.request_digest != request_context.request_digest
+        {
+            return Err(DecisionProviderError::new(
+                "response_identity_mismatch",
+                "loopback response dropped outer request lineage",
+                false,
+            ));
+        }
+        if response.response_digest
+            != h_v1(
+                COGNITION_RESPONSE_DIGEST_DOMAIN,
+                &response.base_decision_response,
+            )
+        {
+            return Err(DecisionProviderError::new(
+                "response_digest_mismatch",
+                "loopback response digest does not match its content",
+                false,
+            ));
+        }
+        let artifact_identity = response.response_artifact_identity();
+        response
+            .validate_response_artifact_identity(&artifact_identity)
+            .map_err(|error| DecisionProviderError::new(error.code(), error.message(), false))?;
+        self.validate_response(request, &response.base_decision_response)?;
+        Ok(response)
+    }
+
     fn push_feedback(&mut self, feedback: &FeedbackEnvelope) -> Result<(), DecisionProviderError> {
         let ack = self
             .client
             .submit_feedback(feedback)
+            .map_err(Self::map_http_error)?;
+        Self::map_feedback_ack_error(ack)
+    }
+
+    fn push_continuous_feedback(
+        &mut self,
+        feedback: &FeedbackEnvelopeV1,
+    ) -> Result<(), DecisionProviderError> {
+        let ack = self
+            .client
+            .submit_feedback_context(feedback)
             .map_err(Self::map_http_error)?;
         Self::map_feedback_ack_error(ack)
     }

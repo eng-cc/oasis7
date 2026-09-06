@@ -1,10 +1,12 @@
 use super::*;
+use crate::agent_decision::parse_model_decision;
 use crate::letai_direct::{format_auto_topup_retry_failure, is_retryable_letai_error};
 use oasis7::simulator::{
     Action, ActionCatalogEntry, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
     DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION, ObservationEnvelope, ProviderExecutionMode,
     ProviderInteractionTarget, ProviderMissionContext, ProviderNavigationNode,
     ProviderNearbyEntity, ProviderObservation, ProviderRecentEvent, ProviderSelfState,
+    RuntimeBindingV1,
 };
 use std::collections::BTreeMap;
 use std::fs;
@@ -12,9 +14,10 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::thread;
-
 #[path = "tests_agent_chat.rs"]
 mod tests_agent_chat;
+#[path = "tests_continuous_identity.rs"]
+mod tests_continuous_identity;
 #[path = "tests_newapi_bridge_state.rs"]
 mod tests_newapi_bridge_state;
 #[path = "tests_options.rs"]
@@ -51,6 +54,103 @@ fn timeout_env_guard() -> MutexGuard<'static, ()> {
 
 fn letai_env_guard() -> MutexGuard<'static, ()> {
     newapi_bridge_state_env_guard()
+}
+
+#[test]
+fn decision_identity_uses_the_shared_v1_domain_hash() {
+    let digest = oasis7::simulator::h_v1("oasis7.cognition.request.v1", b"bridge-fixture");
+    assert_eq!(
+        digest,
+        oasis7::simulator::h_v1("oasis7.cognition.request.v1", b"bridge-fixture")
+    );
+    assert_ne!(
+        digest,
+        oasis7::simulator::h_v1("oasis7.cognition.provider-invocation.v1", b"bridge-fixture")
+    );
+}
+
+#[test]
+fn continuous_feedback_partitions_interleaved_agents_and_sessions() {
+    let state = ProviderState::new(CliOptions {
+        mode: ProviderMode::Mock,
+        ..CliOptions::default()
+    })
+    .expect("build mock provider state");
+    let feedback = |subject: &str, session: &str, seq: u64| FeedbackEnvelopeV1 {
+        feedback_id: format!("feedback-{subject}-{session}-{seq}"),
+        feedback_seq: seq,
+        agent_subject: subject.to_string(),
+        agent_session_id: session.to_string(),
+        agent_turn_id: format!("turn-{subject}-{seq}"),
+        decision_request_id: format!("request-{subject}-{seq}"),
+        candidate_action_id: None,
+        runtime_receipt_id: None,
+        status: "pending".to_string(),
+        request_digest: Digest32::from(
+            "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ),
+        reject_reason: None,
+        provenance: "runtime_authoritative".to_string(),
+    };
+    let agent_a_first = feedback("agent-a", "session-a", 1);
+    seed_accepted_feedback_lineage(&state, &agent_a_first);
+    state
+        .record_continuous_feedback(agent_a_first)
+        .expect("agent A feedback");
+    let agent_b_first = feedback("agent-b", "session-b", 1);
+    seed_accepted_feedback_lineage(&state, &agent_b_first);
+    state
+        .record_continuous_feedback(agent_b_first)
+        .expect("agent B feedback");
+    let agent_a_second = feedback("agent-a", "session-a", 2);
+    seed_accepted_feedback_lineage(&state, &agent_a_second);
+    state
+        .record_continuous_feedback(agent_a_second)
+        .expect("agent A second feedback");
+    let mut id_collision = feedback("agent-a", "session-a", 3);
+    seed_accepted_feedback_lineage(&state, &id_collision);
+    id_collision.feedback_id = "feedback-agent-a-session-a-1".to_string();
+    assert_eq!(
+        state
+            .record_continuous_feedback(id_collision)
+            .expect_err("feedback identity cannot move to another sequence"),
+        "feedback_id_conflict"
+    );
+
+    let partitions = state.recent_feedback.lock().expect("feedback lock");
+    assert_eq!(
+        partitions[&("agent-a".to_string(), "session-a".to_string())]
+            .recent
+            .len(),
+        2
+    );
+    assert_eq!(
+        partitions[&("agent-b".to_string(), "session-b".to_string())]
+            .recent
+            .len(),
+        1
+    );
+}
+
+fn seed_accepted_feedback_lineage(state: &ProviderState, feedback: &FeedbackEnvelopeV1) {
+    state
+        .accepted_requests
+        .lock()
+        .expect("accepted request lock")
+        .insert(
+            feedback.decision_request_id.clone(),
+            AcceptedRequestIdentity {
+                agent_subject: feedback.agent_subject.clone(),
+                agent_session_id: feedback.agent_session_id.clone(),
+                agent_turn_id: feedback.agent_turn_id.clone(),
+                decision_request_id: feedback.decision_request_id.clone(),
+                request_digest: feedback.request_digest.clone(),
+                response_digest: Digest32::from(
+                    "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                ),
+                accepted_order: 0,
+            },
+        );
 }
 
 #[test]
@@ -298,6 +398,8 @@ fn build_gateway_agent_params_uses_session_key_and_timeout() {
         timeout_seconds: 15,
         prompt: "{\"action\":\"wait\"}".to_string(),
         idempotency_key: "idem-1".to_string(),
+        provider_invocation_key: None,
+        agent_session_id: None,
         chat_request_key: None,
         route_label: None,
     };
@@ -990,93 +1092,6 @@ fn maybe_auto_topup_letai_user_reports_missing_amount_as_skipped() {
         outcome.trace.get("reason").and_then(Value::as_str),
         Some("auto_topup_usd_missing")
     );
-}
-
-#[test]
-fn resolve_newapi_bridge_route_label_requires_active_binding() {
-    let _guard = newapi_bridge_state_env_guard();
-    let state_path = std::env::temp_dir().join(format!(
-        "oasis7-provider-bridge-state-{}.json",
-        std::process::id()
-    ));
-    fs::write(
-        state_path.as_path(),
-        serde_json::to_vec(&serde_json::json!({
-            "bindings": [
-                {
-                    "bridge_user_id": "bridge-user-000001",
-                    "newapi_user_ref": "user-1",
-                    "status": "disabled"
-                }
-            ]
-        }))
-        .expect("encode bridge state"),
-    )
-    .expect("write bridge state");
-    // SAFETY: This test/setup code mutates process environment in a controlled scope.
-    unsafe {
-        oasis7::env_mut::set_var(
-            "OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH",
-            state_path.as_os_str(),
-        );
-    }
-    let state = ProviderState::new(CliOptions::default()).expect("provider state");
-    assert_eq!(state.resolve_newapi_bridge_route_label("user-1"), None);
-    // SAFETY: This test/setup code mutates process environment in a controlled scope.
-    unsafe {
-        oasis7::env_mut::remove_var("OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH");
-    }
-    let _ = fs::remove_file(state_path);
-}
-
-#[test]
-fn resolve_newapi_bridge_route_label_accepts_active_binding_with_token_key() {
-    let _guard = newapi_bridge_state_env_guard();
-    let state_path = std::env::temp_dir().join(format!(
-        "oasis7-provider-bridge-active-state-{}.json",
-        std::process::id()
-    ));
-    fs::write(
-        state_path.as_path(),
-        serde_json::to_vec(&serde_json::json!({
-            "bindings": [
-                {
-                    "bridge_user_id": "bridge-user-000001",
-                    "newapi_user_ref": "user-1",
-                    "status": "active"
-                }
-            ],
-            "project_bindings": [
-                {
-                    "bridge_user_id": "bridge-user-000001",
-                    "token_key": "token-key-000001"
-                }
-            ]
-        }))
-        .expect("encode bridge state"),
-    )
-    .expect("write bridge state");
-    // SAFETY: This test/setup code mutates process environment in a controlled scope.
-    unsafe {
-        oasis7::env_mut::set_var(
-            "OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH",
-            state_path.as_os_str(),
-        );
-    }
-    let state = ProviderState::new(CliOptions::default()).expect("provider state");
-    assert_eq!(
-        state.resolve_newapi_bridge_route_label("newapi_user_ref:user-1"),
-        Some("newapi_user_ref:user-1".to_string())
-    );
-    assert_eq!(
-        state.resolve_newapi_bridge_route_label("bridge_user_id:bridge-user-000001"),
-        Some("bridge_user_id:bridge-user-000001".to_string())
-    );
-    // SAFETY: This test/setup code mutates process environment in a controlled scope.
-    unsafe {
-        oasis7::env_mut::remove_var("OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH");
-    }
-    let _ = fs::remove_file(state_path);
 }
 
 #[test]

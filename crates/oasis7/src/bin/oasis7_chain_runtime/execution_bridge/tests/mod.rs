@@ -9,15 +9,28 @@ use super::checkpoint::{
     persist_execution_bridge_record, persist_execution_bridge_record_only,
     persist_execution_checkpoint_manifest, run_execution_bridge_retention_maintenance,
 };
-use super::driver::{load_execution_bridge_state, persist_execution_bridge_state};
+use super::driver::{
+    NodeRuntimeExecutionDriver, load_execution_bridge_state, persist_execution_bridge_state,
+    persist_execution_world,
+};
 use super::external_effect::{
-    execution_committed_actions_hash, execution_module_anchor_hash,
+    build_execution_external_effect_materialization_with_pre_step_root,
+    execution_committed_actions_hash, execution_module_anchor_hash, execution_world_snapshot_root,
+    load_execution_external_effect_materialization,
     persist_execution_external_effect_materialization,
+    validate_execution_external_effect_for_context,
+};
+use super::product_validation_intent::{
+    ProductValidationIntentMarkerV1, load_product_validation_intent,
+    persist_product_validation_intent, world_is_staged_for_product_validation_intent,
 };
 use super::*;
 use ed25519_dalek::{Signer, SigningKey};
 use oasis7::runtime::{BlobStore, LocalCasStore, ModuleArtifactIdentity, World as RuntimeWorld};
-use oasis7_node::{NodeConsensusSnapshot, NodeRole, NodeSnapshot};
+use oasis7_node::{
+    NodeConsensusSnapshot, NodeExecutionCommitContext, NodeRole, NodeSnapshot,
+    compute_consensus_action_root,
+};
 use oasis7_wasm_abi::ModuleOutput;
 use oasis7_wasm_executor::FixedSandbox;
 use sha2::{Digest, Sha256};
@@ -121,6 +134,154 @@ fn sample_snapshot(committed_height: u64, block_hash: Option<&str>) -> NodeSnaps
         consensus_progress_observer_error: None,
         last_error: None,
     }
+}
+
+#[test]
+fn product_validation_intent_marker_first_crash_window_reconciles_predecessor() {
+    let dir = temp_dir("product-validation-intent-marker-first");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let world = RuntimeWorld::new();
+    persist_execution_world(world_dir.as_path(), &world).expect("persist predecessor world");
+    let action_root = "action-root-1".to_string();
+    let context = NodeExecutionCommitContext {
+        world_id: "w1".to_string(),
+        node_id: "node-a".to_string(),
+        proposer_id: "node-a".to_string(),
+        height: 1,
+        slot: 0,
+        epoch: 0,
+        node_block_hash: "node-h1".to_string(),
+        action_root: action_root.clone(),
+        committed_actions: Vec::new(),
+        committed_at_unix_ms: 1_000,
+    };
+    let effect =
+        build_execution_external_effect_materialization_with_pre_step_root(&world, &context, None)
+            .expect("build pre-step effect");
+    let marker = ProductValidationIntentMarkerV1 {
+        schema_version: super::product_validation_intent::PRODUCT_VALIDATION_INTENT_SCHEMA_V1,
+        world_id: "w1".to_string(),
+        height: 1,
+        action_root,
+        // The staged world would contain the attempt journal entry. It is
+        // intentionally absent here: this models a crash after marker write
+        // and before world publication.
+        journal_len: 1,
+        pre_step_execution_state_root: execution_world_snapshot_root(&world)
+            .expect("predecessor root"),
+        pre_step_external_effect: Some(effect.clone()),
+        staged_execution_state_root: String::new(),
+        previous_staged_execution_state_root: None,
+        previous_staged_journal_len: None,
+    };
+    persist_product_validation_intent(records_dir.as_path(), &marker)
+        .expect("persist marker before staged world");
+    let loaded_marker = load_product_validation_intent(records_dir.as_path())
+        .expect("load marker")
+        .expect("marker exists");
+    assert_eq!(loaded_marker.pre_step_external_effect, Some(effect));
+
+    let driver =
+        NodeRuntimeExecutionDriver::new(state_path, world_dir, records_dir.clone(), storage_root)
+            .expect("restart reconciles marker-only crash window");
+    assert!(driver.pending_product_validation_intent.is_none());
+    assert!(!records_dir.join("product-validation-intent.json").exists());
+    assert_eq!(driver.execution_world.state().time, 0);
+    assert_eq!(driver.execution_world.journal().len(), 0);
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn product_validation_intent_roundtrip_preserves_external_effect_cas_bytes() {
+    let dir = temp_dir("product-validation-intent-evidence");
+    let world = RuntimeWorld::new();
+    let action_root = compute_consensus_action_root(&[]).expect("empty action root");
+    let context = NodeExecutionCommitContext {
+        world_id: "w1".to_string(),
+        node_id: "node-a".to_string(),
+        proposer_id: "node-a".to_string(),
+        height: 1,
+        slot: 0,
+        epoch: 0,
+        node_block_hash: "node-h1".to_string(),
+        action_root,
+        committed_actions: Vec::new(),
+        committed_at_unix_ms: 1_000,
+    };
+    let uninterrupted =
+        build_execution_external_effect_materialization_with_pre_step_root(&world, &context, None)
+            .expect("build uninterrupted effect");
+    validate_execution_external_effect_for_context(&uninterrupted, &context)
+        .expect("validate uninterrupted effect");
+
+    let records_dir = dir.join("records");
+    let marker = ProductValidationIntentMarkerV1 {
+        schema_version: super::product_validation_intent::PRODUCT_VALIDATION_INTENT_SCHEMA_V1,
+        world_id: context.world_id.clone(),
+        height: context.height,
+        action_root: context.action_root.clone(),
+        journal_len: 1,
+        pre_step_execution_state_root: uninterrupted.pre_step_execution_state_root.clone(),
+        pre_step_external_effect: Some(uninterrupted.clone()),
+        staged_execution_state_root: String::new(),
+        previous_staged_execution_state_root: None,
+        previous_staged_journal_len: None,
+    };
+    persist_product_validation_intent(records_dir.as_path(), &marker)
+        .expect("persist complete intent");
+    let recovered = load_product_validation_intent(records_dir.as_path())
+        .expect("load complete intent")
+        .expect("complete marker")
+        .pre_step_external_effect
+        .expect("pre-step effect");
+    validate_execution_external_effect_for_context(&recovered, &context)
+        .expect("validate recovered effect");
+    assert_eq!(recovered, uninterrupted);
+
+    let uninterrupted_store = LocalCasStore::new(dir.join("uninterrupted-store"));
+    let recovered_store = LocalCasStore::new(dir.join("recovered-store"));
+    let uninterrupted_ref =
+        persist_execution_external_effect_materialization(&uninterrupted_store, &uninterrupted)
+            .expect("persist uninterrupted effect");
+    let recovered_ref =
+        persist_execution_external_effect_materialization(&recovered_store, &recovered)
+            .expect("persist recovered effect");
+    assert_eq!(recovered_ref, uninterrupted_ref);
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn product_validation_intent_recognizes_previous_same_height_generation() {
+    let predecessor = RuntimeWorld::new();
+    let mut previous_generation = predecessor.clone();
+    previous_generation
+        .step()
+        .expect("stage first validation generation");
+    let previous_root = execution_world_snapshot_root(&previous_generation)
+        .expect("hash previous same-height generation");
+    let marker = ProductValidationIntentMarkerV1 {
+        schema_version: super::product_validation_intent::PRODUCT_VALIDATION_INTENT_SCHEMA_V1,
+        world_id: "w1".to_string(),
+        height: 1,
+        action_root: "action-root-1".to_string(),
+        journal_len: previous_generation.journal().len().saturating_add(1),
+        pre_step_execution_state_root: execution_world_snapshot_root(&predecessor)
+            .expect("predecessor root"),
+        pre_step_external_effect: None,
+        staged_execution_state_root: "newer-generation-root".to_string(),
+        previous_staged_execution_state_root: Some(previous_root),
+        previous_staged_journal_len: Some(previous_generation.journal().len()),
+    };
+
+    assert!(
+        world_is_staged_for_product_validation_intent(&previous_generation, &marker, 0)
+            .expect("recognize prior same-height generation")
+    );
 }
 
 #[test]

@@ -2,6 +2,8 @@
 
 - 对应设计文档: `doc/world-simulator/llm/decision-provider-contract.design.md`
 - 专题入口与权威边界: `doc/world-simulator/llm/README.md`
+- 连续认知上层合同: `doc/world-simulator/llm/continuous-agent-harness.prd.md`
+- 异步调度、MVCC 与恢复合同: `doc/world-runtime/runtime/agent-cognition-lifecycle.prd.md`
 
 审计轮次: 1
 
@@ -100,6 +102,12 @@
 | typed args 编码 | `TypedCommandIntent -> canonical ModuleCommandEnvelope` | Agent 返回绑定 command 的 typed args；trusted host 校验并以 descriptor 编码 payload | `typed_intent -> host_encoded -> runtime_revalidated` | 编码必须 deterministic；字段缺失、类型/范围/枚举错误不得产生 payload | provider 不得注入 raw payload 或伪造 caller/grant |
 | Provider 评估 | `valid_action_rate/timeout_rate/p95_latency/trace_completeness` | 使用固定 fixture 对比 provider 表现 | `bench_pending -> bench_done` | 按场景/agent 类型分层统计 | QA 可复核 |
 | runtime-live 决策桥 | `AgentRunner/AgentBehavior/DecisionProvider/AgentDecisionTrace` | provider 只提出候选；runtime 校验并执行 | `observed -> proposed/wait -> validated -> executed/rejected` | trace、action、result 与事件保持因果关联 | provider 失败或未知动作不得触发替代启发式动作 |
+
+上述 `executed/rejected` 与 `feedback_pushed` 是流程阶段名，不是新版
+`FeedbackEnvelope.status` 枚举。兼容映射固定为：具有 canonical committed receipt 的
+`executed -> committed`；runtime deny、stale、no-effect failure 等 `rejected -> rejected` 并
+保留稳定 `reject_reason`；`feedback_pushed` 只表示反馈投影已投递，不产生新的状态或世界
+事实。provider/transport failure 与恢复未决分别映射为 `failed` 与 `pending`。
 - Acceptance Criteria:
   - AC-1: 建立 `Decision Provider` 标准层专题文档，明确数据契约、边界、风险与验证口径。
   - AC-2: 明确 `Local Provider` 的角色定位为“外部 provider / adapter”，而非 runtime / kernel 替代物。
@@ -153,10 +161,46 @@
 - Standard Contracts:
   - `ObservationEnvelope`: `agent_id`、`world_time`、局部可见世界状态、近期事件摘要、记忆摘要、预算与动作白名单。
   - `DecisionRequest`: `observation + action_catalog + provider_config_ref + timeout_budget`。
-  - `DecisionResponse`: `decision(wait/act) + action_ref + args + provider_error? + diagnostics + trace_payload`；`act` 仍只是候选 intent。
-  - `FeedbackEnvelope`: `action_id + success/failure + reject_reason + emitted_events + world_delta_summary`。
+  - `DecisionResponse`: tagged `decision(wait/wait_ticks/act/query/module_command/module_command_response)` + variant fields + `module_command?` + `provider_error?` + diagnostics + trace_payload；`act/module_command/module_command_response` 仍只是候选 intent/response，必须由 host/runtime 验证，`query` 只能读取 frozen snapshot。
+  - `FeedbackEnvelope` legacy v1 DTO: `action_id + success/failure + reject_reason + emitted_events + world_delta_summary`；target outer contract 使用 canonical `status=committed|rejected|failed|pending` 与 identity/receipt correlation，legacy 字段只经显式 adapter 映射。
+
+### Continuous Harness compatibility boundary
+
+The legacy DTOs remain additive inner payloads for the Continuous Agent Harness. A target request
+uses `context_discriminator=oasis7.continuous-agent-context`, `context_version=1`, and computes
+`request_digest` from the canonical outer context excluding its output digest field and
+transport-only `transport_attempt`. The adapter
+must map `module_command` through the same typed-schema/Runtime validation path as `action_ref`;
+it must not treat a provider tool call as committed execution. Legacy `FeedbackEnvelope` maps
+`action_id -> candidate_action_id`; `success=true` requires a Runtime committed receipt, while
+`success=false` requires an explicit Runtime disposition or fails as
+`legacy_feedback_ambiguous`. Missing cognition correlation is `legacy_no_cognition_proof` and
+cannot enter the production async lane. Any heuristic fallback is restricted to an explicitly
+selected legacy fixture/profile and is excluded from target parity/proven evidence and automatic
+memory/continuation semantics; the current HTTP bridge does not define a
+`compatibility_lane` wire field.
+
+The canonical status vocabulary is only `committed/rejected/failed/pending`; a no-effect outcome
+is `rejected` with `reject_reason=no_effect`, never a fifth status. P0 scope compatibility may map
+legacy `short_term` to `turn_private` only in an explicit legacy lane, recording
+`memory_scope_alias_used`; the target enum remains strict.
+P0 memory writes allow only `turn_private | session_private`; the reserved
+`agent_private_long_term` enum value is disabled by default and deferred to P2/independent memory
+authority.
+An empty memory retrieval is an explicit schema-defined snapshot (`revision=0`, empty entries,
+explicit scope and canonical digest), not omitted/null/empty-string input; it does not block a
+decision, but writes still require policy validation and a committed Runtime outcome.
+Target `MemoryWriteIntentPolicyV1` encodes an omitted `summary` as explicit `present=false`; a
+present summary must be non-empty after NFC/trim. The legacy inner DTO must carry a non-empty
+summary string. Tags may be an empty list, while empty tag elements are rejected; omitted tags use
+the explicit canonical empty-list encoding.
+Target `DecisionResponse.memory_write_intents` uses `MemoryWriteIntentV1` with
+`schema_version/scope/summary?/tags`; the existing `MemoryWriteIntent` DTO remains unchanged and
+is accepted only through the explicitly selected legacy route/adapter mapping. The current HTTP
+bridge does not define a `compatibility_lane` wire field.
 - `CapabilitySnapshot`: 本轮 catalog 的 identity/digest；每个动态 capability 绑定 namespace、version、schema ref、manifest/artifact/interface hash、caps 与 runtime `cost_quote`。
-- `TraceEnvelope`: provider transcript、tool trace、latency、token/cost、schema repair 记录。
+  - `TraceEnvelope`: provider transcript、tool trace、latency、token/cost、schema repair 记录。
+- target trace bounds：每 turn 最多 64 条 transcript、64 条 tool trace；单条分别最多 2 KiB、1 KiB；input/output summary 各最多 1 KiB；upstream trace 最多 4 KiB；canonical trace 总计最多 32 KiB。超限不得静默截断，非-authority diagnostics 以 `trace_payload_too_large` 丢弃，authority-bearing overflow fail closed；credential/token/authorization/private-key/path 统一替换为 `<redacted>`。
 - `SemanticCommandSchema`（target）：content-addressed descriptor，至少包含 `schema_ref/schema_hash/schema_version`、command summary、typed input fields（type/required/bounds/enums）、result/error shape、declared side effects 和 bounded cost hint；它是 Agent 理解输入的语义来源，不授予调用权限。
 - `TypedCommandIntent`（target）：`catalog_snapshot_id + selected_entry + typed_args + response_nonce + trace_id`；其中 `selected_entry` 必须精确匹配 module/version/instance-target/namespace/command/schema，`typed_args` 不包含 caller、grant、authority proof 或 host-only provenance。module-instance audience 的 target 必须是稳定 `(world_id,module_id,instance_id)`；world/institution scoped command 使用显式非实例 variant，缺失值不得回退为全局 module。
 - `CapabilityInvocationContext`：由 trusted host 为单次 turn 生成的 `grant_id/subject/presenter/audience/catalog_snapshot_id/module_id/module_version/instance_target/response_nonce`；provider 只能回显，不能自行构造为授权。

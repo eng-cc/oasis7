@@ -905,6 +905,7 @@ if [[ "$PROVIDER_SMOKE_MODE" == "strict" || "$PROVIDER_SMOKE_MODE" == "degraded"
     if "$ROOT_DIR/scripts/provider-remote-https/provider-bridge-contract-smoke.sh" \
       --base-url "http://$BIND_ADDR" \
       --timeout-ms "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS" \
+      --legacy-compatibility-only \
       --decision-count 1 \
       --min-successes 1; then
       smoke_status=0
@@ -917,6 +918,7 @@ if [[ "$PROVIDER_SMOKE_MODE" == "strict" || "$PROVIDER_SMOKE_MODE" == "degraded"
     "$ROOT_DIR/scripts/provider-remote-https/provider-bridge-contract-smoke.sh" \
       --base-url "http://$BIND_ADDR" \
       --timeout-ms "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS" \
+      --legacy-compatibility-only \
       --decision-count 1 \
       --min-successes 0 >&2 || true
     if [[ "$PROVIDER_SMOKE_MODE" == "degraded" ]]; then

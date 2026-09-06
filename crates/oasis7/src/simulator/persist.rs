@@ -16,6 +16,7 @@ use super::world_model::{WorldConfig, WorldModel};
 use crate::chain_resource_schema::{ChainResourceDelta, ChainResourceManifest};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::runtime::Snapshot as RuntimeSnapshot;
+use oasis7_wasm_abi::MaterialStack;
 #[cfg(target_arch = "wasm32")]
 use serde_json::Value as RuntimeSnapshot;
 
@@ -491,6 +492,34 @@ pub struct PlayerGameplaySnapshot {
     pub pivot_available: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validation_unlock_preview: Option<ProductValidationUnlockPreview>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub starter_industrial_feasibility: Option<PlayerStarterIndustrialFeasibility>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub factory_production_failure_disposition:
+        Option<PlayerGameplayFactoryProductionFailureDisposition>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlayerStarterIndustrialFeasibilityStatus {
+    CandidateAvailable,
+    NoSafeStarterChain,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerStarterIndustrialFeasibility {
+    pub profile_id: String,
+    pub profile_revision: u64,
+    pub authority_snapshot: String,
+    pub status: PlayerStarterIndustrialFeasibilityStatus,
+    pub evidence_class: String,
+    pub completion_boundary: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocker: Option<String>,
+    pub next_action: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_recheck: Option<WorldTime>,
+    pub progression_effect: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -503,6 +532,24 @@ pub struct ProductValidationUnlockPreview {
     pub stage_status: String,
     pub value_summary: String,
     pub next_step_hint: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerGameplayFactoryProductionFailureDisposition {
+    pub action_id: String,
+    pub requester_agent_id: String,
+    pub factory_id: String,
+    pub recipe_id: String,
+    pub blocker_kind: String,
+    pub blocker_detail: String,
+    pub disposition_kind: String,
+    pub consumed_inputs: Vec<MaterialStack>,
+    pub lost_inputs: Vec<MaterialStack>,
+    pub consumed_power: i64,
+    pub lost_power: i64,
+    pub next_action: String,
+    #[serde(default)]
+    pub next_recheck: Option<WorldTime>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -620,6 +667,11 @@ struct PlayerGameplaySnapshotSerde {
     pivot_available: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     validation_unlock_preview: Option<ProductValidationUnlockPreview>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    starter_industrial_feasibility: Option<PlayerStarterIndustrialFeasibility>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    factory_production_failure_disposition:
+        Option<PlayerGameplayFactoryProductionFailureDisposition>,
 }
 
 fn derive_legacy_execution_state(
@@ -720,6 +772,8 @@ impl<'de> Deserialize<'de> for PlayerGameplaySnapshot {
             rebuild_available: legacy.rebuild_available,
             pivot_available: legacy.pivot_available,
             validation_unlock_preview: legacy.validation_unlock_preview,
+            starter_industrial_feasibility: legacy.starter_industrial_feasibility,
+            factory_production_failure_disposition: legacy.factory_production_failure_disposition,
         })
     }
 }

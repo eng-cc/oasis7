@@ -15,6 +15,13 @@ mod blob_store;
 mod builtin_wasm_identity_manifest;
 mod builtin_wasm_materializer;
 mod capability_authorization;
+mod cognition;
+mod cognition_feedback_contract;
+mod cognition_recovery;
+mod cognition_retention;
+mod cognition_scheduler;
+mod cognition_validation;
+mod cognition_wake;
 mod consensus;
 mod effect;
 mod error;
@@ -26,6 +33,7 @@ mod m1_builtin_wasm_artifact;
 mod m4_builtin_wasm_artifact;
 mod m5_builtin_wasm_artifact;
 mod main_token;
+mod major_world_event;
 mod manifest;
 mod module_source_compiler;
 mod module_store;
@@ -95,6 +103,41 @@ pub use consensus::{
     RuntimeCommittedTickContext, TICK_BLOCK_HEADER_SCHEMA_V1, TICK_BLOCK_HEADER_SCHEMA_V2,
     TickBlock, TickBlockHeader, TickCertificate, TickConsensusDriftReport, TickConsensusRecord,
     TickConsensusRejectionAuditEvent, TickConsensusSubmissionRole, TickExecutionDigest,
+};
+
+// Agent cognition admission boundary
+pub use cognition::{
+    AGENT_DECISION_ENVELOPE_V1_SCHEMA, AgentCognitionDisposition, AgentCognitionMailbox,
+    AgentDecisionEnvelopeV1, CognitionCommitRejectReasonV1, CognitionValidationError,
+    MvccValidator, PreconditionSubjectV1, PreconditionV1, classify_cognition_commit_error,
+};
+
+// Durable cognition commit/recovery boundary
+pub use cognition_recovery::{
+    CognitionCrashPrefix, CognitionReceiptViewV1, CognitionRecovery, CognitionRecoveryError,
+    CognitionRecoveryFixture, CognitionRecoveryProbe, CognitionRecoveryReport,
+    CognitionResponseRecordV1, CognitionSnapshotV1, RuntimeCognitionBaseBindingV1,
+    RuntimeCognitionCommitRequestV1, RuntimeCognitionResponseArtifactV1,
+    RuntimeFeedbackOutboxRecordV1, RuntimeFeedbackProjectionV1, RuntimeFeedbackRequestV1,
+    RuntimeReceiptLineageV1, WorldCommitRecordV1, WorldRootViewV1,
+};
+
+// Durable cognition scheduler, wake and continuation projections
+pub use cognition_retention::{
+    CognitionRetentionStore, RetentionError, RetentionExecutionProbe, RetentionGcReport,
+    RetentionRecordV1, RetentionReplayRequestV1, RetentionReplayResult,
+};
+pub use cognition_scheduler::{
+    CognitionScheduler, SchedulerCrashPoint, SchedulerCursorRecoveryFixture,
+    SchedulerCursorRecoveryReport, SchedulerCursorV1, SchedulerEnqueueOutcome, SchedulerError,
+    SchedulerExecutionMetrics, SchedulerPolicyV1, SchedulerWakeV1,
+};
+pub use cognition_wake::{
+    AgentContinuation, CognitionBudgetConsumptionV1, CognitionContextDigestsV1,
+    CognitionContinuationProposalV1, CognitionContinuationResumeRequestV1,
+    CognitionWakeDispositionV1, CognitionWakeHandoffResultV1, ContinuationBudgetV1,
+    ContinuationReorgReport, ContinuationStatusV1, ContinuationTransition, WakeConditionError,
+    WakeConditionV1, WakeConditionValidator, WakeEvaluation, WakeEvaluationContext,
 };
 
 // Events
@@ -267,10 +310,18 @@ pub use snapshot::{
 
 // State
 pub use state::{
-    FactoryBuildJobState, FactoryProductionState, FactoryProductionStatus, FactoryState,
-    IndustryProgressState, LogisticsRouteV1, MaterialTransferReceiptV1, MaterialTransitJobState,
+    AgentLocationAuthorityV1, FACTORY_BUILD_STARTED_MODERN_VERSION, FactoryBuildJobState,
+    FactoryBuildPowerObligationV1, FactoryConstructionPowerMode, FactoryConstructionPowerProfileV1,
+    FactoryProductionFailureDispositionV1, FactoryProductionState, FactoryProductionStatus,
+    FactoryRecycleReceiptV1, FactorySiteAuthorityV1, FactoryState, IndustryProgressState,
+    LocationAnchorV1, LogisticsRouteV1, MaterialTransferReceiptV1, MaterialTransitJobState,
     ModuleInstanceState, ModuleReleaseAttestationState, ModuleReleaseManifestMappingState,
-    RecipeJobState, WorldState,
+    ProductValidationAttemptV1, ProductValidationDeliveryCursor, ProductValidationReceiptV1,
+    RecipeCompletionReceiptV1, RecipeJobState, STARTER_ASSEMBLER_FACTORY_ID,
+    STARTER_INDUSTRIAL_COMPLETION_BOUNDARY, STARTER_INDUSTRIAL_PROFILE_ID,
+    STARTER_INDUSTRIAL_PROFILE_REVISION, STARTER_SMELTER_FACTORY_ID, STARTER_SMELTER_RECIPE_ID,
+    StarterIndustrialFeasibilityResult, StarterIndustrialFeasibilityStatus,
+    StarterIndustrialMilestoneV1, WorldState,
 };
 
 // World
@@ -287,6 +338,16 @@ pub use world::{
 pub use world::{rollback_affected_census_digest, rollback_journal_commitment};
 
 // World event
+#[cfg(test)]
+pub(crate) use major_world_event::project_major_world_events;
+pub use major_world_event::{
+    MAJOR_WORLD_EVENT_PROJECTION_SCHEMA_VERSION, MajorWorldEventAnchor, MajorWorldEventAnchorScope,
+    MajorWorldEventCategory, MajorWorldEventCausalReference, MajorWorldEventFreshness,
+    MajorWorldEventIdentity, MajorWorldEventLifecycle, MajorWorldEventProjection,
+    MajorWorldEventProjectionContext, MajorWorldEventSource, MajorWorldEventSourceAuthority,
+    MajorWorldEventStreamState, MajorWorldEventVisibilityPermission,
+    project_major_world_events_with_canonical_state,
+};
 pub use world_event::{
     CapabilityAuthorizationEvent, ModuleRuntimeChargeEvent, WorldEvent, WorldEventBody,
 };

@@ -14,6 +14,9 @@ impl World {
         action_id: ActionId,
         action: &Action,
     ) -> Result<WorldEventBody, WorldError> {
+        if let Some(event) = self.profile_governance_event(action_id, action) {
+            return Ok(WorldEventBody::Domain(event));
+        }
         match action {
             Action::EmitResourceTransfer {
                 from_agent_id,
@@ -234,98 +237,7 @@ impl World {
                 builder_agent_id,
                 site_id,
                 spec,
-            } => {
-                if !self.state.agents.contains_key(builder_agent_id) {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::AgentNotFound {
-                            agent_id: builder_agent_id.clone(),
-                        },
-                    }));
-                }
-                if spec.factory_id.trim().is_empty() {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec!["factory_id cannot be empty".to_string()],
-                        },
-                    }));
-                }
-                if self.state.retired_factory_ids.contains(&spec.factory_id) {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec![format!(
-                                "factory identity is retired: {}",
-                                spec.factory_id
-                            )],
-                        },
-                    }));
-                }
-                if self.state.factories.contains_key(&spec.factory_id)
-                    || self
-                        .state
-                        .pending_factory_builds
-                        .values()
-                        .any(|job| job.spec.factory_id == spec.factory_id)
-                {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec![format!("factory already exists: {}", spec.factory_id)],
-                        },
-                    }));
-                }
-                if spec.recipe_slots == 0 {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec!["recipe_slots must be > 0".to_string()],
-                        },
-                    }));
-                }
-                let preferred_consume_ledger = MaterialLedgerId::agent(builder_agent_id.clone());
-                let consume_ledger = self.select_material_consume_ledger_with_world_fallback(
-                    preferred_consume_ledger,
-                    &spec.build_cost,
-                );
-                for stack in &spec.build_cost {
-                    if stack.amount <= 0 {
-                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                            action_id,
-                            reason: RejectReason::RuleDenied {
-                                notes: vec![format!(
-                                    "factory build_cost must be > 0: {}={}",
-                                    stack.kind, stack.amount
-                                )],
-                            },
-                        }));
-                    }
-                    let available =
-                        self.ledger_material_balance(&consume_ledger, stack.kind.as_str());
-                    if available < stack.amount {
-                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                            action_id,
-                            reason: RejectReason::InsufficientMaterial {
-                                material_kind: stack.kind.clone(),
-                                requested: stack.amount,
-                                available,
-                            },
-                        }));
-                    }
-                }
-
-                let build_ticks = spec.build_time_ticks.max(1);
-                let ready_at = self.state.time.saturating_add(build_ticks as u64);
-                Ok(WorldEventBody::Domain(DomainEvent::FactoryBuildStarted {
-                    job_id: action_id,
-                    builder_agent_id: builder_agent_id.clone(),
-                    site_id: site_id.clone(),
-                    spec: spec.clone(),
-                    consume_ledger,
-                    ready_at,
-                }))
-            }
+            } => self.build_factory_to_event(action_id, builder_agent_id, site_id, spec, true),
             Action::BuildFactoryWithModule { .. } => {
                 Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                     action_id,
@@ -666,15 +578,11 @@ impl World {
                 let effective_consume =
                     merge_recipe_consume_with_maintenance_sink(self, &plan.consume, &plan.produce);
                 let preferred_consume_ledger = factory.input_ledger.clone();
-                let consume_ledger = self.select_material_consume_ledger_with_world_fallback(
-                    preferred_consume_ledger.clone(),
-                    &effective_consume,
-                );
-                let output_ledger = if consume_ledger == MaterialLedgerId::world() {
-                    MaterialLedgerId::world()
-                } else {
-                    factory.output_ledger.clone()
-                };
+                // Both direct and module-backed new submissions are
+                // site-bound. Historical RecipeStarted events remain
+                // reducer-compatible through their persisted ledgers.
+                let consume_ledger = preferred_consume_ledger.clone();
+                let output_ledger = factory.output_ledger.clone();
                 let mut resolved_logistics_route_ids = Vec::new();
                 let mut resolved_logistics_path_ids = logistics_path_ids.clone();
                 resolved_logistics_path_ids.sort();
@@ -788,26 +696,30 @@ impl World {
                         }));
                     }
                 }
-                for stack in &effective_consume {
-                    if stack.amount <= 0 {
-                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                            action_id,
-                            reason: RejectReason::RuleDenied {
-                                notes: vec![format!(
-                                    "recipe consume must be > 0: {}={}",
-                                    stack.kind, stack.amount
-                                )],
-                            },
-                        }));
-                    }
+                let required_materials =
+                    match action_to_event_economy_support::aggregate_material_stacks_for_admission(
+                        "recipe consume",
+                        &effective_consume,
+                    ) {
+                        Ok(required_materials) => required_materials,
+                        Err(reason) => {
+                            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                                action_id,
+                                reason: RejectReason::RuleDenied {
+                                    notes: vec![reason],
+                                },
+                            }));
+                        }
+                    };
+                for (material_kind, requested) in required_materials {
                     let available =
-                        self.ledger_material_balance(&consume_ledger, stack.kind.as_str());
-                    if available < stack.amount {
+                        self.ledger_material_balance(&consume_ledger, material_kind.as_str());
+                    if available < requested {
                         return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                             action_id,
                             reason: RejectReason::InsufficientMaterial {
-                                material_kind: stack.kind.clone(),
-                                requested: stack.amount,
+                                material_kind,
+                                requested,
                                 available,
                             },
                         }));
@@ -1040,59 +952,13 @@ impl World {
                     },
                 }))
             }
-            Action::GovernMaterialProfile {
-                operator_agent_id,
-                proposal_id,
-                profile,
-            } => Ok(WorldEventBody::Domain(
-                self.evaluate_govern_material_profile_action(
-                    action_id,
-                    operator_agent_id.as_str(),
-                    *proposal_id,
-                    profile,
-                ),
-            )),
-            Action::GovernProductProfile {
-                operator_agent_id,
-                proposal_id,
-                profile,
-            } => Ok(WorldEventBody::Domain(
-                self.evaluate_govern_product_profile_action(
-                    action_id,
-                    operator_agent_id.as_str(),
-                    *proposal_id,
-                    profile,
-                ),
-            )),
-            Action::GovernRecipeProfile {
-                operator_agent_id,
-                proposal_id,
-                profile,
-            } => Ok(WorldEventBody::Domain(
-                self.evaluate_govern_recipe_profile_action(
-                    action_id,
-                    operator_agent_id.as_str(),
-                    *proposal_id,
-                    profile,
-                ),
-            )),
-            Action::GovernFactoryProfile {
-                operator_agent_id,
-                proposal_id,
-                profile,
-            } => Ok(WorldEventBody::Domain(
-                self.evaluate_govern_factory_profile_action(
-                    action_id,
-                    operator_agent_id.as_str(),
-                    *proposal_id,
-                    profile,
-                ),
-            )),
             _ => unreachable!("action_to_event_economy received unsupported action variant"),
         }
     }
 }
 
+#[path = "action_to_event_economy_factory.rs"]
+mod action_to_event_economy_factory;
 #[path = "action_to_event_economy_profiles.rs"]
 mod action_to_event_economy_profiles;
 #[path = "action_to_event_economy_support.rs"]

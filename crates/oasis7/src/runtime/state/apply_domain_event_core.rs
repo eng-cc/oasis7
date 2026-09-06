@@ -24,6 +24,18 @@ impl WorldState {
                     cell.last_active = now;
                 }
             }
+            DomainEvent::AgentLocationAuthorityUpdated { authority } => {
+                self.apply_agent_location_authority_updated(authority, now)?;
+            }
+            DomainEvent::LocationAnchorUpdated { anchor } => {
+                self.apply_location_anchor_updated(anchor)?;
+            }
+            DomainEvent::FactorySiteAuthorityUpdated { authority } => {
+                self.apply_factory_site_authority_updated(authority, now)?;
+            }
+            DomainEvent::FactoryConstructionPowerProfileUpdated { profile } => {
+                self.apply_factory_construction_power_profile_updated(profile)?;
+            }
             DomainEvent::ActionAccepted { .. } => {}
             DomainEvent::ActionRejected { .. } => {}
             DomainEvent::AgentIntentProposed { .. }

@@ -405,6 +405,14 @@ impl<B: AgentBehavior> AgentRunner<B> {
         first_after_cursor.or(first_ready).map(str::to_owned)
     }
 
+    /// Preview the same deterministic scheduler choice used by
+    /// `tick_decide_only` without mutating cursor, quota, or Agent state.
+    /// Runtime adapters use this hook to persist their lifecycle prefix before
+    /// a ProviderBacked behavior performs synchronous I/O (the wasm lane).
+    pub fn next_ready_agent_id(&self, kernel: &WorldKernel) -> Option<String> {
+        self.select_next_ready_agent_id(kernel, kernel.time())
+    }
+
     /// Returns the total ticks executed.
     pub fn total_ticks(&self) -> u64 {
         self.total_ticks

@@ -5,6 +5,7 @@ use std::process;
 use std::thread;
 
 use oasis7::observability::init_tracing;
+use oasis7::runtime::MajorWorldEventVisibilityPermission;
 use oasis7::simulator::WorldScenario;
 use oasis7::viewer::{
     ChainLinkPolicy, ViewerLiveDecisionMode, ViewerRuntimeLiveServer,
@@ -33,7 +34,9 @@ struct CliOptions {
     auto_play: bool,
     allow_debug_scenario: bool,
     agent_chat_echo: bool,
+    major_world_event_visibility: MajorWorldEventVisibilityPermission,
     generated_world_dir: Option<PathBuf>,
+    provider_lineage_store: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,7 +69,9 @@ impl Default for CliOptions {
             auto_play: true,
             allow_debug_scenario: false,
             agent_chat_echo: oasis7::viewer::runtime_agent_chat_echo_enabled_from_env(),
+            major_world_event_visibility: MajorWorldEventVisibilityPermission::Unknown,
             generated_world_dir: None,
+            provider_lineage_store: None,
         }
     }
 }
@@ -108,7 +113,9 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
         auto_play = options.auto_play,
         allow_debug_scenario = options.allow_debug_scenario,
         agent_chat_echo = options.agent_chat_echo,
+        major_world_event_visibility = ?options.major_world_event_visibility,
         generated_world_dir = ?options.generated_world_dir,
+        provider_lineage_store = ?options.provider_lineage_store,
         scenario = %options
             .scenario
             .map(|value| value.as_str().to_string())
@@ -155,6 +162,7 @@ fn initialize_viewer_server(options: &CliOptions) -> Result<ViewerRuntimeLiveSer
         .with_hosted_public_join_mode(options.deployment_mode == "hosted_public_join")
         .with_auto_play_on_connect(options.auto_play)
         .with_agent_chat_echo_enabled(options.agent_chat_echo)
+        .with_major_world_event_visibility(options.major_world_event_visibility)
         .with_chain_link_policy(options.chain_link_policy)
         .with_decision_mode(if options.llm_mode {
             ViewerLiveDecisionMode::Llm
@@ -163,6 +171,11 @@ fn initialize_viewer_server(options: &CliOptions) -> Result<ViewerRuntimeLiveSer
         });
     let config = if let Some(generated_world_dir) = options.generated_world_dir.as_ref() {
         config.with_generated_world_dir(generated_world_dir.clone())
+    } else {
+        config
+    };
+    let config = if let Some(provider_lineage_store) = options.provider_lineage_store.as_ref() {
+        config.with_provider_lineage_store(provider_lineage_store.clone())
     } else {
         config
     };
@@ -261,10 +274,21 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
             "--agent-chat-echo" => {
                 options.agent_chat_echo = true;
             }
+            "--major-world-event-visibility" => {
+                let raw = parse_required_value(&mut iter, "--major-world-event-visibility")?;
+                options.major_world_event_visibility =
+                    parse_major_world_event_visibility(raw.as_str())?;
+            }
             "--generated-world-dir" => {
                 options.generated_world_dir = Some(PathBuf::from(parse_required_value(
                     &mut iter,
                     "--generated-world-dir",
+                )?));
+            }
+            "--provider-lineage-store" => {
+                options.provider_lineage_store = Some(PathBuf::from(parse_required_value(
+                    &mut iter,
+                    "--provider-lineage-store",
                 )?));
             }
             "--runtime-world" => {
@@ -368,6 +392,20 @@ fn parse_chain_link_policy(raw: &str) -> Result<ChainLinkPolicy, String> {
     })
 }
 
+fn parse_major_world_event_visibility(
+    raw: &str,
+) -> Result<MajorWorldEventVisibilityPermission, String> {
+    match raw.trim() {
+        "unknown" => Ok(MajorWorldEventVisibilityPermission::Unknown),
+        "public" => Ok(MajorWorldEventVisibilityPermission::Public),
+        "restricted" => Ok(MajorWorldEventVisibilityPermission::Restricted),
+        "denied" => Ok(MajorWorldEventVisibilityPermission::Denied),
+        value => Err(format!(
+            "--major-world-event-visibility must be one of unknown|public|restricted|denied, got `{value}`"
+        )),
+    }
+}
+
 fn parse_deployment_mode(raw: &str) -> Result<&'static str, String> {
     match raw.trim() {
         "trusted_local_only" => Ok("trusted_local_only"),
@@ -446,7 +484,9 @@ Options:\n\
   --no-auto-play            keep gameplay/world paused until explicit Play actions\n\
   --allow-debug-scenario    allow seeded debug scenarios such as llm_bootstrap, smelter_affordability, governance_vote_quote\n\
   --agent-chat-echo         accept provider-backed local QA chat with an echo event\n\
+  --major-world-event-visibility <policy> explicit audience policy: unknown|public|restricted|denied (default: unknown)\n\
   --generated-world-dir <dir> initialize viewer from generated-world/generated-scenario-world and provenance\n\
+  --provider-lineage-store <path> explicit durable provider lineage checkpoint (for formal/synthetic restart recovery)\n\
   -h, --help                show help\n\n\
 Removed:\n\
   --release-config, --runtime-world, all --node-*, --topology, --triad-*, --reward-runtime-*, --no-node, --viewer-no-consensus-gate\n\
@@ -479,9 +519,14 @@ mod tests {
         assert_eq!(options.chain_status_bind, None);
         assert_eq!(options.chain_submit_bind, None);
         assert_eq!(options.chain_link_policy, ChainLinkPolicy::Enforcing);
+        assert_eq!(
+            options.major_world_event_visibility,
+            MajorWorldEventVisibilityPermission::Unknown
+        );
         assert!(options.auto_play);
         assert!(!options.allow_debug_scenario);
         assert_eq!(options.generated_world_dir, None);
+        assert_eq!(options.provider_lineage_store, None);
     }
 
     #[test]
@@ -505,6 +550,8 @@ mod tests {
                 "--agent-chat-echo",
                 "--deployment-mode",
                 "hosted_public_join",
+                "--major-world-event-visibility",
+                "restricted",
             ]
             .into_iter(),
         )
@@ -523,7 +570,33 @@ mod tests {
         assert!(options.auto_play);
         assert!(options.allow_debug_scenario);
         assert!(options.agent_chat_echo);
+        assert_eq!(
+            options.major_world_event_visibility,
+            MajorWorldEventVisibilityPermission::Restricted
+        );
         assert_eq!(options.generated_world_dir, None);
+        assert_eq!(options.provider_lineage_store, None);
+    }
+
+    #[test]
+    fn parse_options_accepts_explicit_provider_lineage_store() {
+        let path = PathBuf::from("/var/lib/oasis7/provider-lineage.json");
+        let options = parse_options(
+            [
+                "--provider-lineage-store",
+                path.to_str().expect("utf8 provider lineage path"),
+            ]
+            .into_iter(),
+        )
+        .expect("provider lineage store");
+        assert_eq!(options.provider_lineage_store, Some(path));
+    }
+
+    #[test]
+    fn parse_options_rejects_unknown_major_world_event_visibility() {
+        let error = parse_options(["--major-world-event-visibility", "authenticated"].into_iter())
+            .expect_err("implicit audience policy must fail");
+        assert!(error.contains("unknown|public|restricted|denied"));
     }
 
     #[test]

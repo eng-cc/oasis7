@@ -13,7 +13,13 @@
 mod agent;
 mod agent_intent_summary;
 mod asteroid_fragment;
+#[cfg(not(target_arch = "wasm32"))]
+mod async_agent_pilot;
+#[cfg(not(target_arch = "wasm32"))]
+mod async_agent_runner;
 mod chunking;
+mod cognition_policy;
+mod continuous_agent_harness;
 mod decision_provider;
 mod frag_spawn;
 mod fragment_physics;
@@ -56,9 +62,33 @@ pub use agent_intent_summary::{
     AgentIntentSummaryV1, canonical_agent_intent_summary,
 };
 pub use asteroid_fragment::generate_fragments;
+#[cfg(not(target_arch = "wasm32"))]
+pub use async_agent_runner::{
+    AsyncAgentRunner, AsyncAgentRunnerError, AsyncAgentTurnOutcome, AsyncTurnFeedback, AsyncTurnId,
+    AsyncTurnLifecycle, AsyncWorldEffect, AsyncWorldProgress, RuntimeReceiptReadbackHandleV1,
+    RuntimeReceiptReadbackVerifier,
+};
 pub use chunking::{
     CHUNK_SIZE_X_CM, CHUNK_SIZE_Y_CM, CHUNK_SIZE_Z_CM, ChunkBounds, ChunkCoord, chunk_bounds,
     chunk_coord_of, chunk_coords, chunk_grid_dims, chunk_seed,
+};
+pub use cognition_policy::{
+    ContinuationAuthorityContextV1, ContinuationBudgetProgressV1, ContinuationBudgetV1,
+    ContinuationCurrentContextV1, ContinuationHandle, ContinuationHarness,
+    ContinuationInvalidationReason, ContinuationProjectionV1, ContinuationProposalV1,
+    GoalSnapshotInputV1, GoalSnapshotProjector, GoalSnapshotV1, MemoryContextEntryV1,
+    MemoryContextSnapshotV1, MemoryWriteIntentPolicyV1, MemoryWritePolicyContextV1,
+    MemoryWritePolicyOutcome, MemoryWriteStore, NormalizedMemoryWriteIntentV1,
+    RuntimeContinuationStatusV1, WakeConditionSubjectV1, WakeConditionV1,
+};
+pub use continuous_agent_harness::{
+    AgentCognitionStore, BudgetContractV1, COGNITION_CAPABILITY_CATALOG_DOMAIN,
+    COGNITION_CAPABILITY_INVOCATION_CONTEXT_DOMAIN, COGNITION_PROVIDER_INVOCATION_DOMAIN,
+    COGNITION_REQUEST_DIGEST_DOMAIN, COGNITION_RESPONSE_ARTIFACT_IDENTITY_DOMAIN,
+    COGNITION_RESPONSE_DIGEST_DOMAIN, CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR,
+    CONTINUOUS_AGENT_CONTEXT_VERSION, CognitionError, ContinuousAgentRequestContextV1,
+    ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1, Digest32, FeedbackEnvelopeV1,
+    FinalityBindingV1, MemoryWriteIntentV1, ResponseArtifactIdentityV1, RuntimeBindingV1, h_v1,
 };
 pub use decision_provider::{
     ActionCatalogEntry, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
@@ -149,9 +179,9 @@ pub use native_resolution::{
 pub use persist::{
     PersistError, PlayerAgentClaimOwnedSnapshot, PlayerAgentClaimQuoteSnapshot,
     PlayerAgentClaimSnapshot, PlayerGameplayAction, PlayerGameplayCausalityKind,
-    PlayerGameplayExecutionState, PlayerGameplayGoalKind, PlayerGameplayRecentFeedback,
-    PlayerGameplaySnapshot, PlayerGameplayStageId, PlayerGameplayStageStatus, WorldJournal,
-    WorldSnapshot,
+    PlayerGameplayExecutionState, PlayerGameplayFactoryProductionFailureDisposition,
+    PlayerGameplayGoalKind, PlayerGameplayRecentFeedback, PlayerGameplaySnapshot,
+    PlayerGameplayStageId, PlayerGameplayStageStatus, WorldJournal, WorldSnapshot,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use provider_loopback_adapter::ProviderLoopbackAdapter;
