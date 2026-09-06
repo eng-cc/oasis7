@@ -245,6 +245,43 @@ cmp -s "$LEDGER" "$TMPDIR/relative-finding-before.jsonl" || {
   exit 1
 }
 
+# An explicit ledger finding disposition must agree with the returned artifact
+# before reconcile. Otherwise reconcile downgrades the ledger to no_findings,
+# allowing collection and packet publication to proceed.
+rm -f "$COLLECTION"
+python3 - "$ARTIFACT" "$LEDGER" <<'PY'
+import hashlib, json, sys
+artifact_path, ledger_path = sys.argv[1:]
+artifact = json.load(open(artifact_path, encoding="utf-8"))
+artifact.update({"disposition": "no_findings", "findings": []})
+with open(artifact_path, "w", encoding="utf-8") as handle:
+    json.dump(artifact, handle, sort_keys=True)
+    handle.write("\n")
+rows = [json.loads(line) for line in open(ledger_path, encoding="utf-8") if line.strip()]
+digest = hashlib.sha256(open(artifact_path, "rb").read()).hexdigest()
+for row in rows:
+    row["findings"] = "findings"
+    row["artifact_digest"] = digest
+with open(ledger_path, "w", encoding="utf-8") as handle:
+    handle.write("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows))
+PY
+cp "$LEDGER" "$TMPDIR/ledger-artifact-mismatch-before.jsonl"
+if (cd "$TMPDIR" && "$REPO/scripts/pm/review-closeout.sh" \
+  --task-uid "$UID_VALUE" --review-plan "$PLAN" --role-returns "$LEDGER" --print-only \
+  >"$TMPDIR/ledger-artifact-mismatch.out" 2>"$TMPDIR/ledger-artifact-mismatch.err"); then
+  echo "review-closeout accepted a ledger finding/artifact no-findings mismatch" >&2
+  exit 1
+fi
+grep -Eiq 'mismatch|findings|disposition' "$TMPDIR/ledger-artifact-mismatch.err"
+cmp -s "$LEDGER" "$TMPDIR/ledger-artifact-mismatch-before.jsonl" || {
+  echo "ledger/artifact mismatch mutated the ledger before rejection" >&2
+  exit 1
+}
+[[ ! -e "$COLLECTION" ]] || {
+  echo "ledger/artifact mismatch published a collection receipt" >&2
+  exit 1
+}
+
 # Restore the no-findings fixture so the remaining immutable-plan checks keep
 # their original positive-control collection.
 python3 - "$ARTIFACT" <<'PY'
@@ -256,6 +293,7 @@ with open(path, "w", encoding="utf-8") as handle:
     json.dump(payload, handle, sort_keys=True)
     handle.write("\n")
 PY
+cp "$TMPDIR/complete-ledger.jsonl" "$LEDGER"
 if ! (cd "$TMPDIR" && "$REPO/scripts/pm/review-closeout.sh" \
   --task-uid "$UID_VALUE" --review-plan "$PLAN" --role-returns "$LEDGER" --print-only \
   >"$TMPDIR/restored-valid.out" 2>"$TMPDIR/restored-valid.err"); then

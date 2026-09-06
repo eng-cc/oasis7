@@ -264,8 +264,16 @@ for line_number, raw in enumerate(ledger.read_text(encoding="utf-8").splitlines(
         payload = json.loads(artifact.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
         continue
-    if isinstance(payload, dict) and payload.get("disposition") == "findings":
-        raise SystemExit(f"finding-bearing role return on ledger line {line_number}")
+    if isinstance(payload, dict):
+        artifact_disposition = payload.get("disposition")
+        ledger_disposition = item.get("findings")
+        if ledger_disposition is not None and ledger_disposition != artifact_disposition:
+            raise SystemExit(
+                f"ledger/artifact disposition mismatch on ledger line {line_number}: "
+                f"ledger={ledger_disposition!r}, artifact={artifact_disposition!r}"
+            )
+        if artifact_disposition == "findings":
+            raise SystemExit(f"finding-bearing role return on ledger line {line_number}")
 PY
   RESOLUTION_RESULT=""
 fi
