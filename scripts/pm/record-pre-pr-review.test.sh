@@ -341,6 +341,25 @@ open(ledger_path, "w", encoding="utf-8").write("".join(json.dumps(row) + "\n" fo
 PY
 }
 
+# A plan-backed return must be structured even when the ledger says no_findings;
+# malformed or opaque bytes are only valid on the legacy no-plan path.
+for plan_opaque_content in 'not-json' '{"arbitrary":"plan-backed"}' '["opaque"]'; do
+  set_opaque_artifact "$plan_opaque_content"
+  if "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
+    --task-uid task_11111111111111111111111111111111 \
+    --review-plan "$PLAN" \
+    --review-evidence "repository_health_engineer: no_findings; plan opaque" \
+    --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" \
+    --finding-disposition-evidence "plan opaque" \
+    --verification "plan opaque" --residual-risk "fixture risk" \
+    --slice-ledger "$LEDGER_REL" --print-only \
+    >"$TMPDIR/plan-opaque.out" 2>"$TMPDIR/plan-opaque.err"; then
+    echo "record-pre-pr-review accepted plan-backed opaque artifact: $plan_opaque_content" >&2
+    exit 1
+  fi
+  grep -Eiq 'structured|json|identity|disposition|findings|artifact' "$TMPDIR/plan-opaque.err"
+done
+
 set_opaque_artifact '{"arbitrary":"json object"}'
 if ! "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
   --task-uid task_11111111111111111111111111111111 \
@@ -370,6 +389,21 @@ if ! "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
   exit 1
 fi
 grep -F 'Pre-PR Local Role Review: passed' "$TMPDIR/opaque-array.out" >/dev/null
+
+set_opaque_artifact 'not-json'
+if ! "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
+  --task-uid task_11111111111111111111111111111111 \
+  --roles repository_health_engineer \
+  --review-evidence "repository_health_engineer: no_findings; opaque bytes" \
+  --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" \
+  --finding-disposition-evidence "opaque bytes" \
+  --verification "opaque bytes" --residual-risk "fixture risk" \
+  --slice-ledger "$LEDGER_REL" --comparison-ref refs/heads/base --print-only \
+  >"$TMPDIR/opaque-bytes.out" 2>"$TMPDIR/opaque-bytes.err"; then
+  cat "$TMPDIR/opaque-bytes.err" >&2
+  exit 1
+fi
+grep -F 'Pre-PR Local Role Review: passed' "$TMPDIR/opaque-bytes.out" >/dev/null
 
 set_opaque_artifact '{"schema":"oasis7-review-return/v1","arbitrary":"reserved"}'
 if "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \

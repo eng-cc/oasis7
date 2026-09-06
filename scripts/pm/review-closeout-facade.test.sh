@@ -206,6 +206,45 @@ grep -Eiq 'unresolved|findings|blocked' "$TMPDIR/unresolved-findings.err"
   exit 1
 }
 
+# A finding artifact may be ledger-parent-relative. The facade must resolve it
+# before reconcile; otherwise the no-resolution scan misses it and reconcile
+# mutates the preflight ledger before packet publication is rejected.
+rm -f "$COLLECTION"
+python3 - "$ARTIFACT" "$LEDGER" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+artifact_path, ledger_path = sys.argv[1:]
+artifact = json.load(open(artifact_path, encoding="utf-8"))
+artifact.update({"disposition": "findings", "findings": [{"id": "FIX7-RELATIVE", "summary": "relative unresolved finding"}]})
+with open(artifact_path, "w", encoding="utf-8") as handle:
+    json.dump(artifact, handle, sort_keys=True)
+    handle.write("\n")
+rows = [json.loads(line) for line in open(ledger_path, encoding="utf-8") if line.strip()]
+digest = hashlib.sha256(open(artifact_path, "rb").read()).hexdigest()
+for row in rows:
+    row["findings"] = "findings"
+    row["artifact_digest"] = digest
+    row["artifacts"] = [Path(artifact_path).name]
+with open(ledger_path, "w", encoding="utf-8") as handle:
+    handle.write("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows))
+PY
+cp "$LEDGER" "$TMPDIR/relative-finding-before.jsonl"
+if (cd "$TMPDIR" && "$REPO/scripts/pm/review-closeout.sh" \
+  --task-uid "$UID_VALUE" --review-plan "$PLAN" --role-returns "$LEDGER" --print-only \
+  >"$TMPDIR/relative-finding.out" 2>"$TMPDIR/relative-finding.err"); then
+  echo "review-closeout accepted an unresolved ledger-parent-relative finding" >&2
+  exit 1
+fi
+grep -Eqi 'unresolved|findings|blocked' "$TMPDIR/relative-finding.err"
+cmp -s "$LEDGER" "$TMPDIR/relative-finding-before.jsonl" || {
+  echo "ledger-parent-relative finding mutated the ledger before rejection" >&2
+  exit 1
+}
+[[ ! -e "$COLLECTION" ]] || {
+  echo "ledger-parent-relative finding published a collection receipt" >&2
+  exit 1
+}
+
 # Restore the no-findings fixture so the remaining immutable-plan checks keep
 # their original positive-control collection.
 python3 - "$ARTIFACT" <<'PY'

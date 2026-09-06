@@ -245,12 +245,22 @@ for line_number, raw in enumerate(ledger.read_text(encoding="utf-8").splitlines(
     artifact_values = item.get("artifacts") or []
     if len(artifact_values) != 1:
         continue
-    artifact = pathlib.Path(str(artifact_values[0]))
-    if not artifact.is_absolute():
-        artifact = root / artifact
+    raw_artifact = pathlib.Path(str(artifact_values[0])).expanduser()
+    candidates = ([raw_artifact] if raw_artifact.is_absolute()
+                  else [root / raw_artifact, ledger.parent / raw_artifact])
+    artifact = None
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve(strict=True)
+            resolved.relative_to(root)
+        except (OSError, ValueError):
+            continue
+        if resolved.is_file():
+            artifact = resolved
+            break
+    if artifact is None:
+        continue
     try:
-        artifact = artifact.resolve(strict=True)
-        artifact.relative_to(root)
         payload = json.loads(artifact.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
         continue

@@ -331,11 +331,11 @@ def validate_manifest(root: Path, manifest_path: Path, ledger_path: Path, task_u
             if finding_digest in seen_finding_digests:
                 raise ContractError(f"duplicate finding resolution for role {role}")
             seen_finding_digests.add(finding_digest)
-    readback_path = manifest_path.with_name(f"{manifest_path.stem}.readback.json")
-    try:
-        readback_path.relative_to(root)
-    except ValueError as exc:
-        raise ContractError("resolution readback must be repository-owned") from exc
+    readback_path = resolve_under_root(
+        root,
+        str(manifest_path.with_name(f"{manifest_path.stem}.readback.json")),
+        "resolution readback",
+    )
     readback_value = load_json(readback_path, "resolution readback")
     if not isinstance(readback_value, dict):
         raise ContractError("resolution readback must be an object")

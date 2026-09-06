@@ -254,6 +254,15 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
         self.assertIn("escapes", failure.stderr.lower())
         self.assertEqual(before, self.ledger.read_bytes())
 
+    def test_readback_symlink_outside_root_fails_closed(self) -> None:
+        outside = self.root.parent / f"{self.root.name}-outside-readback.json"
+        self.addCleanup(lambda: outside.unlink(missing_ok=True))
+        outside.write_bytes(self.readback.read_bytes())
+        self.readback.unlink()
+        self.readback.symlink_to(outside)
+        failure = self.run_script(ok=False)
+        self.assertRegex(failure.stderr.lower(), r"readback|escapes")
+
     def test_stale_local_task_map_requires_live_pm_task_body_before_comment_fetch(self) -> None:
         mapping_path = self.root / ".pm" / "github-project-sync" / "tasks.json"
         mapping = json.loads(mapping_path.read_text())

@@ -376,6 +376,10 @@ for line_number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(),
                 f"error: unresolved role findings for {role}; "
                 f"artifact has no structured disposition: {exc}"
             )
+        if review_plan:
+            raise SystemExit(
+                f"error: plan-backed no_findings return for {role} must use a structured JSON artifact: {exc}"
+            )
         # Human-operated legacy returns may bind opaque, digest-checked
         # evidence. They can preserve the no-findings path, but cannot assert
         # a resolved finding without a structured artifact disposition.
