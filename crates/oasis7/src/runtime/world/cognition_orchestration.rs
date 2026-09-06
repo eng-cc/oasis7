@@ -902,6 +902,7 @@ impl World {
     ) -> Result<crate::runtime::RetentionGcReport, WorldError> {
         let mut transaction = self.clone();
         let mut store = transaction.cognition_retention_store()?;
+        transaction.migrate_cognition_retention_and_pin_wake_events(&mut store)?;
         let report = store
             .gc(now_tick, gc_floor_tick)
             .map_err(|error| cognition_validation_error(error.code()))?;

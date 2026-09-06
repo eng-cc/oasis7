@@ -182,6 +182,131 @@ impl World {
         Ok(())
     }
 
+    /// Upgrade canonical terminal markers written before `retention_state`
+    /// existed and protect the dense journal while an active continuation
+    /// still addresses one of its event digests. Because every later event
+    /// digest includes its parent, retaining only the referenced lifecycle is
+    /// insufficient: compaction of any earlier lifecycle would invalidate the
+    /// reference. Pinning the terminal marker set preserves the whole chain
+    /// until the continuation becomes terminal.
+    pub(super) fn migrate_cognition_retention_and_pin_wake_events(
+        &self,
+        store: &mut CognitionRetentionStore,
+    ) -> Result<(), WorldError> {
+        let markers: Vec<WorldCommitRecordV1> = self
+            .cognition
+            .get("commit_records")
+            .and_then(JsonValue::as_array)
+            .into_iter()
+            .flatten()
+            .map(|record| {
+                serde_json::from_value(record.clone())
+                    .map_err(|_| super::cognition_validation_error("invalid_cognition_projection"))
+            })
+            .collect::<Result<_, _>>()?;
+        for marker in &markers {
+            if matches!(marker.status.as_str(), "committed" | "aborted")
+                && !store.contains_key(&marker.envelope_idempotency_key)
+            {
+                store.insert_commit_record(marker);
+            }
+        }
+        store.clear_references_with_prefix("continuation-event:");
+
+        let journal_events = self
+            .cognition
+            .get("cognition_journal")
+            .and_then(|journal| journal.get("events"))
+            .and_then(JsonValue::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let journal_sequences: std::collections::BTreeMap<&str, u64> = journal_events
+            .iter()
+            .filter_map(|event| {
+                Some((
+                    event.get("event_digest")?.as_str()?,
+                    event.get("journal_seq")?.as_u64()?,
+                ))
+            })
+            .collect();
+        let active_event_references: Vec<(String, u64)> = self
+            .cognition
+            .get("continuations")
+            .and_then(JsonValue::as_array)
+            .into_iter()
+            .flatten()
+            .filter(|continuation| {
+                !matches!(
+                    continuation.get("status").and_then(JsonValue::as_str),
+                    Some(
+                        "completed"
+                            | "cancelled"
+                            | "invalidated"
+                            | "expired"
+                            | "rejected"
+                            | "Completed"
+                            | "Cancelled"
+                            | "Invalidated"
+                            | "Expired"
+                            | "Rejected"
+                    )
+                )
+            })
+            .filter_map(|continuation| {
+                let referenced_seq = continuation
+                    .get("wake_conditions")
+                    .and_then(JsonValue::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|condition| {
+                        condition.get("event_digest").and_then(JsonValue::as_str)
+                    })
+                    .filter_map(|digest| journal_sequences.get(digest).copied())
+                    .max();
+                referenced_seq.map(|sequence| {
+                    let reference = continuation
+                        .get("continuation_id")
+                        .and_then(JsonValue::as_str)
+                        .unwrap_or("active-continuation")
+                        .to_string();
+                    (reference, sequence)
+                })
+            })
+            .collect();
+        for (reference, referenced_seq) in active_event_references {
+            for marker in &markers {
+                let marker_has_prefix_event = journal_events.iter().any(|event| {
+                    event
+                        .get("journal_seq")
+                        .and_then(JsonValue::as_u64)
+                        .is_some_and(|sequence| sequence <= referenced_seq)
+                        && (event
+                            .get("envelope_idempotency_key")
+                            .and_then(JsonValue::as_str)
+                            == Some(marker.envelope_idempotency_key.as_str())
+                            || (!marker.agent_id.is_empty()
+                                && event.get("agent_id").and_then(JsonValue::as_str)
+                                    == Some(marker.agent_id.as_str())
+                                && event.get("agent_session_id").and_then(JsonValue::as_str)
+                                    == Some(marker.agent_session_id.as_str())
+                                && event.get("agent_turn_id").and_then(JsonValue::as_str)
+                                    == Some(marker.agent_turn_id.as_str())
+                                && event.get("decision_request_id").and_then(JsonValue::as_str)
+                                    == Some(marker.decision_request_id.as_str())))
+                });
+                if matches!(marker.status.as_str(), "committed" | "aborted")
+                    && marker_has_prefix_event
+                {
+                    store.pin_reference(
+                        &marker.envelope_idempotency_key,
+                        &format!("continuation-event:{reference}"),
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Remove expired terminal cognition records from every canonical
     /// projection in one World transaction. The cognition journal is a dense
     /// chain, so retained events are re-linked after deleting complete

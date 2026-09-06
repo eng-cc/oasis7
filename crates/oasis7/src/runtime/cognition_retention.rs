@@ -218,6 +218,13 @@ impl CognitionRetentionStore {
             .insert(reference.to_string());
     }
 
+    pub(crate) fn clear_references_with_prefix(&mut self, prefix: &str) {
+        self.pins.retain(|_, references| {
+            references.retain(|reference| !reference.starts_with(prefix));
+            !references.is_empty()
+        });
+    }
+
     pub fn contains_key(&self, key: &str) -> bool {
         self.records.contains_key(key)
     }
