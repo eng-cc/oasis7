@@ -643,6 +643,55 @@ fn consumed_wake_dispatches_one_next_actor_turn_and_rejects_late_duplicate() {
 }
 
 #[test]
+fn failed_next_turn_dispatch_keeps_the_consumed_continuation_retryable() {
+    let current = current_context();
+    let proposal = proposal_for_current_context();
+    let mut runtime = runtime_projection(&proposal, ContinuationStatusV1::Consumed, None);
+    runtime.remaining_budget.value = 1;
+    runtime.refresh_status_digest();
+    let mut runner = AsyncAgentRunner::blocking_provider_fixture(AGENT_ID);
+    // Occupy the actor before admitting the continuation. The proposal lane
+    // is independent of actor availability, while the resumed dispatch must
+    // reject the busy actor after the Runtime wake is reconciled.
+    runner.start_turn(AGENT_ID).expect("occupy actor mailbox");
+    runner
+        .submit_continuation_proposal_with_current_context(AGENT_ID, proposal, &current)
+        .expect("admit current continuation");
+
+    // The resumed dispatch fails after the Runtime wake is reconciled. The
+    // continuation must be restored as one transaction, allowing a retry once
+    // the actor is available.
+    let turn_context = ContinuousAgentTurnContextV1 {
+        agent_id: AGENT_ID.to_string(),
+        agent_session_id: "session-continuation-1".to_string(),
+        agent_turn_id: "turn-continuation-next".to_string(),
+        decision_request_id: "request-continuation-next".to_string(),
+        request_digest: Digest32::from(
+            "blake3:7777777777777777777777777777777777777777777777777777777777777777",
+        ),
+        memory_snapshot: MemoryContextSnapshotV1::empty("continuation-test"),
+        goal_snapshot: GoalSnapshotV1::empty(),
+        continuation: None,
+    };
+
+    let error = runner
+        .resume_consumed_continuation(
+            AGENT_ID,
+            current.observation,
+            turn_context,
+            &current.authority,
+            runtime,
+        )
+        .expect_err("busy actor rejects the next turn dispatch");
+    assert_eq!(error.code(), "agent_busy");
+    assert_eq!(
+        runner.active_continuation_proposal_id(AGENT_ID),
+        Some("proposal-1"),
+        "failed dispatch must roll back Harness retirement"
+    );
+}
+
+#[test]
 fn legacy_runtime_projection_is_fenced_from_authoritative_state() {
     let proposal = proposal();
     let runtime = runtime_projection(&proposal, ContinuationStatusV1::Pending, None);

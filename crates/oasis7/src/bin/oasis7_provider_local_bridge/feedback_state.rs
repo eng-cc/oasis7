@@ -174,6 +174,12 @@ pub(super) fn remember_accepted_response(
     }
     let partitions = state.recent_feedback.lock().expect("recent_feedback lock");
     let previous_requests = accepted_requests.clone();
+    let accepted_order = accepted_requests
+        .values()
+        .map(|accepted| accepted.accepted_order)
+        .max()
+        .unwrap_or(0)
+        .saturating_add(1);
     accepted_requests.insert(
         context.decision_request_id.clone(),
         AcceptedRequestIdentity {
@@ -183,10 +189,19 @@ pub(super) fn remember_accepted_response(
             decision_request_id: context.decision_request_id.clone(),
             request_digest: context.request_digest.clone(),
             response_digest: response.response_digest.clone(),
+            accepted_order,
         },
     );
     while accepted_requests.len() > MAX_ACCEPTED_REQUESTS {
-        let Some(oldest_request_id) = accepted_requests.keys().next().cloned() else {
+        let Some(oldest_request_id) = accepted_requests
+            .iter()
+            .min_by(|(left_id, left), (right_id, right)| {
+                left.accepted_order
+                    .cmp(&right.accepted_order)
+                    .then_with(|| left_id.cmp(right_id))
+            })
+            .map(|(request_id, _)| request_id.clone())
+        else {
             break;
         };
         accepted_requests.remove(&oldest_request_id);

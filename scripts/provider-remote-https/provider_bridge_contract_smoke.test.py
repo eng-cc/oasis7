@@ -508,6 +508,14 @@ class ProviderBridgeContractSmokeTests(unittest.TestCase):
             live_gate,
         )
 
+    def test_live_gate_registers_dynamic_smoke_module_before_execution(self):
+        live_gate = LIVE_GATE_PATH.read_text(encoding="utf-8")
+        self.assertIn(
+            "sys.modules[spec.name] = module",
+            live_gate,
+            "dataclass decoration requires the dynamically loaded module to be registered",
+        )
+
     def test_target_lane_rejects_feedback_identity_drift(self):
         with tempfile.TemporaryDirectory() as directory:
             request = smoke.build_target_context_request(index=1, timeout_ms=5000)

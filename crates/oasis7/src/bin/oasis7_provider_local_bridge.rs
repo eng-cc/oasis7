@@ -174,6 +174,8 @@ struct AcceptedRequestIdentity {
     decision_request_id: String,
     request_digest: Digest32,
     response_digest: Digest32,
+    #[serde(default)]
+    accepted_order: u64,
 }
 
 struct ContinuousInvocationIdentity<'a> {
@@ -359,6 +361,9 @@ impl ProviderState {
         );
         let mut partitions = self.recent_feedback.lock().expect("recent_feedback lock");
         let previous_partitions = partitions.clone();
+        if !partitions.contains_key(&key) && partitions.len() >= MAX_ACCEPTED_REQUESTS {
+            Self::evict_feedback_partition(&mut partitions, &key);
+        }
         let partition = partitions.entry(key).or_default();
         let expected = partition.next_seq.saturating_add(1);
         let digest = h_v1("oasis7.cognition.feedback.v1", &feedback);
@@ -422,6 +427,22 @@ impl ProviderState {
             return Err(format!("feedback_state_persist_failed: {error}"));
         }
         Ok(())
+    }
+
+    fn evict_feedback_partition(
+        partitions: &mut BTreeMap<(String, String), FeedbackPartition>,
+        preserve_key: &(String, String),
+    ) {
+        // BTreeMap order gives a deterministic bounded fallback when a new
+        // subject/session partition arrives.  Preserve the active partition
+        // so its accepted feedback is not immediately discarded.
+        while partitions.len() >= MAX_ACCEPTED_REQUESTS {
+            let Some(evicted_key) = partitions.keys().find(|key| *key != preserve_key).cloned()
+            else {
+                break;
+            };
+            partitions.remove(&evicted_key);
+        }
     }
 
     fn remember_feedback(

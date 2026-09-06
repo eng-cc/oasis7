@@ -167,7 +167,11 @@ fn proposal(world: &World) -> CognitionContinuationProposalV1 {
 }
 
 fn world_with_scheduler() -> World {
-    let mut world = World::new().with_cognition_scheduler(policy(), 1);
+    world_with_scheduler_configured(policy(), 1)
+}
+
+fn world_with_scheduler_configured(policy: SchedulerPolicyV1, capacity: usize) -> World {
+    let mut world = World::new().with_cognition_scheduler(policy, capacity);
     world
         .bind_cognition_runtime(
             WORLD_ID,
@@ -506,6 +510,48 @@ fn world_scheduler_is_nonblocking_fair_and_restores_cursor_and_backpressure() {
 }
 
 #[test]
+fn selecting_another_wake_preserves_evaluation_for_the_existing_lease() {
+    let mut configured = policy();
+    configured.max_total_wakes_per_tick = 1;
+    let mut world = world_with_scheduler_configured(configured, 2);
+    enqueue_fixture_wake(
+        &mut world,
+        wake(AGENT_A, "wake-evaluation-a", "continuation-evaluation-a", 1),
+    );
+    enqueue_fixture_wake(
+        &mut world,
+        wake(AGENT_B, "wake-evaluation-b", "continuation-evaluation-b", 1),
+    );
+
+    assert_eq!(
+        world
+            .select_ready_cognition_wakes(1)
+            .expect("select first ready wake")
+            .iter()
+            .map(|wake| wake.wake_id.as_str())
+            .collect::<Vec<_>>(),
+        ["wake-evaluation-a"]
+    );
+    let first_evaluation =
+        world.cognition()["continuation_evaluations"]["continuation-evaluation-a"].clone();
+
+    assert_eq!(
+        world
+            .select_ready_cognition_wakes(1)
+            .expect("select second ready wake")
+            .iter()
+            .map(|wake| wake.wake_id.as_str())
+            .collect::<Vec<_>>(),
+        ["wake-evaluation-b"]
+    );
+    assert_eq!(
+        world.cognition()["continuation_evaluations"]["continuation-evaluation-a"],
+        first_evaluation,
+        "evaluation for the existing in-flight wake must survive a later lease"
+    );
+}
+
+#[test]
 fn scheduler_restore_rejects_active_and_inflight_capacity_overflow() {
     let world = world_with_scheduler();
     let mut state = world.cognition_scheduler_snapshot();
@@ -614,7 +660,9 @@ fn world_retention_gc_keeps_terminal_pins_and_replay_is_read_only_after_restore(
     world
         .record_cognition_terminal(terminal_record())
         .expect("record terminal cognition outcome through World ownership");
-    world.pin_cognition_reference("key:live-1", "pending_wake");
+    world
+        .pin_cognition_reference("key:live-1", "pending_wake")
+        .expect("persist cognition pin");
 
     let before = world.cognition_execution_metrics();
     let gc = world
@@ -685,7 +733,9 @@ fn world_terminal_replay_rejects_legacy_and_expired_proof_without_mutating_metri
     world
         .record_cognition_terminal(terminal_record())
         .expect("record terminal cognition outcome through World ownership");
-    world.pin_cognition_reference("key:live-1", "pending_wake");
+    world
+        .pin_cognition_reference("key:live-1", "pending_wake")
+        .expect("persist cognition pin");
     world
         .gc_cognition(2_000, 1_500)
         .expect("advance durable replay GC floor while pinned");

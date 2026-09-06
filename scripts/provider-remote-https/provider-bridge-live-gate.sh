@@ -190,6 +190,7 @@ script = Path("scripts/provider-remote-https/provider_bridge_contract_smoke.py")
 spec = importlib.util.spec_from_file_location("provider_bridge_contract_smoke", script)
 module = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
+sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 module.load_target_context_pairs(sys.argv[1], int(sys.argv[2]))
 PY

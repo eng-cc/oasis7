@@ -729,6 +729,9 @@ impl CognitionScheduler {
         let Some(start) = ids.iter().position(|id| *id == cursor) else {
             return ids.iter().position(|id| *id == agent_id).unwrap_or(0);
         };
+        // The cursor records the agent served by the previous selection. The
+        // next round starts at its successor, not at the same agent again.
+        let start = (start + 1) % ids.len();
         let target = ids.iter().position(|id| *id == agent_id).unwrap_or(start);
         (target + ids.len() - start) % ids.len().max(1)
     }

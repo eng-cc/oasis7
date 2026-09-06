@@ -138,6 +138,19 @@ fn parse_options_accepts_provider_loopback_http() {
 }
 
 #[test]
+fn provider_loopback_demo_selects_legacy_compatibility_lane() {
+    let source = include_str!("oasis7_llm_agent_demo_runtime.rs");
+    let provider_branch = source
+        .split_once("DecisionSource::ProviderLoopbackHttp")
+        .map(|(_, branch)| branch)
+        .expect("provider loopback demo branch");
+    assert!(
+        provider_branch.contains(".legacy_compatibility()"),
+        "the synchronous demo AgentRunner must opt into the compatibility lane"
+    );
+}
+
+#[test]
 fn provider_loopback_transport_timeout_preserves_decision_budget() {
     let options = parse_options(
         [

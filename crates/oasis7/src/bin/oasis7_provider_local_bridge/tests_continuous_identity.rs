@@ -283,6 +283,7 @@ fn held_feedback_rolls_back_when_configured_state_persistence_fails() {
                 decision_request_id: context.decision_request_id.clone(),
                 request_digest: context.request_digest.clone(),
                 response_digest: Digest32::from(format!("blake3:{}", "b".repeat(64))),
+                accepted_order: 0,
             },
         );
 
@@ -303,6 +304,97 @@ fn held_feedback_rolls_back_when_configured_state_persistence_fails() {
         "a failed persist must roll back the held successor"
     );
     let _ = std::fs::remove_dir_all(path.parent().expect("rollback parent"));
+}
+
+#[test]
+fn feedback_partitions_are_bounded_and_restartable_after_many_sessions() {
+    let path = std::env::temp_dir().join(format!(
+        "oasis7-provider-feedback-partitions-{}.json",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&path);
+    let state = ProviderState::new_with_feedback_state_path(
+        CliOptions {
+            mode: ProviderMode::Mock,
+            ..CliOptions::default()
+        },
+        Some(path.clone()),
+    )
+    .expect("bridge state");
+    let invoker = recording_invoker();
+
+    for index in 0..=MAX_ACCEPTED_REQUESTS {
+        let context = continuous_context(&format!("session-partition-{index:03}"), 1);
+        state
+            .handle_continuous_decision(context.clone(), None, &invoker)
+            .expect("register feedback lineage");
+        state
+            .record_continuous_feedback(feedback_for_context(
+                &context,
+                &format!("partition-feedback-{index:03}"),
+                1,
+            ))
+            .expect("first feedback is accepted");
+    }
+
+    let partitions = state.recent_feedback.lock().expect("feedback lock");
+    assert_eq!(partitions.len(), MAX_ACCEPTED_REQUESTS);
+    drop(partitions);
+    drop(state);
+
+    let restarted = ProviderState::new_with_feedback_state_path(
+        CliOptions {
+            mode: ProviderMode::Mock,
+            ..CliOptions::default()
+        },
+        Some(path.clone()),
+    )
+    .expect("bounded persisted state remains loadable");
+    assert_eq!(
+        restarted
+            .recent_feedback
+            .lock()
+            .expect("restarted feedback lock")
+            .len(),
+        MAX_ACCEPTED_REQUESTS
+    );
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn accepted_feedback_lineage_evicts_oldest_request_by_acceptance_age() {
+    let state = ProviderState::new(CliOptions {
+        mode: ProviderMode::Mock,
+        ..CliOptions::default()
+    })
+    .expect("bridge state");
+    let invoker = recording_invoker();
+    let oldest = continuous_context("session-z-oldest", 1);
+    state
+        .handle_continuous_decision(oldest.clone(), None, &invoker)
+        .expect("register oldest response");
+
+    for index in 0..(MAX_ACCEPTED_REQUESTS - 1) {
+        let context = continuous_context(&format!("session-middle-{index:03}"), 1);
+        state
+            .handle_continuous_decision(context, None, &invoker)
+            .expect("register middle response");
+    }
+    let newest = continuous_context("session-a-newest", 1);
+    state
+        .handle_continuous_decision(newest.clone(), None, &invoker)
+        .expect("register newest response");
+
+    let accepted_requests = state
+        .accepted_requests
+        .lock()
+        .expect("accepted request lock");
+    assert!(!accepted_requests.contains_key(&oldest.decision_request_id));
+    assert!(accepted_requests.contains_key(&newest.decision_request_id));
+    drop(accepted_requests);
+    state
+        .record_continuous_feedback(feedback_for_context(&newest, "newest-feedback", 1))
+        .expect("newest accepted response remains available for feedback");
 }
 
 #[test]

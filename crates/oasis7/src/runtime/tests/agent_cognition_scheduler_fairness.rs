@@ -200,6 +200,27 @@ fn cursor_crash_before_commit_keeps_old_cursor_and_after_commit_resumes_once() {
 }
 
 #[test]
+fn round_robin_starts_after_the_last_served_agent() {
+    let mut configured = policy();
+    configured.max_total_wakes_per_tick = 1;
+    let mut scheduler = CognitionScheduler::new(configured, 8);
+    scheduler.enqueue_for_test(wake("agent-a", "cont-a", "wake-a", 1, 0, 100, 1));
+    scheduler.enqueue_for_test(wake("agent-b", "cont-b", "wake-b", 1, 0, 100, 2));
+
+    assert_eq!(ids(&scheduler.select_ready(1)), vec!["wake-a"]);
+    scheduler
+        .release_in_flight("wake-a")
+        .expect("release first served wake");
+    scheduler.enqueue_for_test(wake("agent-a", "cont-a-2", "wake-a-2", 1, 0, 100, 3));
+
+    assert_eq!(
+        ids(&scheduler.select_ready(1)),
+        vec!["wake-b"],
+        "the next round must start with the agent after the cursor"
+    );
+}
+
+#[test]
 fn configured_per_agent_budget_allows_exactly_that_many_ready_wakes() {
     let mut configured = policy();
     configured.max_wakes_per_agent_per_tick = 2;

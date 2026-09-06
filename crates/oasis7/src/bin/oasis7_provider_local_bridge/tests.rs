@@ -14,7 +14,6 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::thread;
-
 #[path = "tests_agent_chat.rs"]
 mod tests_agent_chat;
 #[path = "tests_continuous_identity.rs"]
@@ -149,6 +148,7 @@ fn seed_accepted_feedback_lineage(state: &ProviderState, feedback: &FeedbackEnve
                 response_digest: Digest32::from(
                     "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                 ),
+                accepted_order: 0,
             },
         );
 }

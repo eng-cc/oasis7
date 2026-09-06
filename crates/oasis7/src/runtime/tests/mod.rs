@@ -72,6 +72,7 @@ mod agent_cognition_live_scheduler;
 mod agent_cognition_mvcc;
 mod agent_cognition_recovery;
 mod agent_cognition_retention_gc;
+mod agent_cognition_retention_s14;
 mod agent_cognition_runtime_feedback;
 mod agent_cognition_runtime_hardening;
 mod agent_cognition_runtime_hardening_followup;

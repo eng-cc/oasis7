@@ -9,6 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use super::cognition::is_canonical_identifier;
+use super::cognition_recovery::WorldCommitRecordV1;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RetentionError {
@@ -66,6 +67,11 @@ pub struct RetentionRecordV1 {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RetentionGcReport {
     pub deleted_count: usize,
+    /// Envelope keys whose terminal tombstones became eligible for deletion.
+    /// World uses these exact keys to compact the corresponding canonical
+    /// commit/response/receipt/journal projections in the same transaction.
+    #[serde(default)]
+    pub deleted_keys: Vec<String>,
     pub retained_terminal_count: usize,
     pub pinned_reference_count: usize,
 }
@@ -170,10 +176,39 @@ impl CognitionRetentionStore {
     }
 
     pub fn insert(&mut self, record: RetentionRecordV1) {
-        self.response_artifacts
-            .insert(record.response_artifact_id.clone());
+        if !record.response_artifact_id.is_empty() {
+            self.response_artifacts
+                .insert(record.response_artifact_id.clone());
+        }
         self.records
             .insert(record.envelope_idempotency_key.clone(), record);
+    }
+
+    /// Enroll a World-owned commit marker in the same retention index used by
+    /// explicit terminal records. This keeps canonical commit artifacts and
+    /// their tombstones on one GC horizon instead of allowing the JSON
+    /// projection to grow independently of `retention_state`.
+    pub fn insert_commit_record(&mut self, marker: &WorldCommitRecordV1) {
+        self.insert(RetentionRecordV1 {
+            schema_version: "cognition-retention-record.v1".to_string(),
+            world_id: marker.world_id.clone(),
+            envelope_idempotency_key: marker.envelope_idempotency_key.clone(),
+            envelope_digest: marker.envelope_digest.clone(),
+            agent_session_id: (!marker.agent_session_id.is_empty())
+                .then(|| marker.agent_session_id.clone()),
+            agent_turn_id: (!marker.agent_turn_id.is_empty()).then(|| marker.agent_turn_id.clone()),
+            decision_request_id: (!marker.decision_request_id.is_empty())
+                .then(|| marker.decision_request_id.clone()),
+            status: marker.status.clone(),
+            base_tick: marker.parent_tick,
+            issued_at_tick: marker.parent_tick,
+            terminal_disposition: marker.abort_reason.clone(),
+            receipt_id: (marker.status == "committed").then(|| marker.receipt_id.clone()),
+            receipt_digest: (marker.status == "committed").then(|| marker.receipt_digest.clone()),
+            response_artifact_id: marker.response_artifact_digest.clone(),
+            continuation_id: String::new(),
+            commit_record_id: Some(marker.commit_id.clone()),
+        });
     }
 
     pub fn pin_reference(&mut self, key: &str, reference: &str) {
@@ -202,6 +237,7 @@ impl CognitionRetentionStore {
     ) -> Result<RetentionGcReport, RetentionError> {
         self.gc_floor_tick = self.gc_floor_tick.max(gc_floor_tick);
         let mut deleted_count = 0usize;
+        let mut deleted_keys = Vec::new();
         let mut retained_terminal_count = 0usize;
         let pinned_reference_count = self.pins.values().map(BTreeSet::len).sum();
         let keys: Vec<String> = self.records.keys().cloned().collect();
@@ -211,7 +247,7 @@ impl CognitionRetentionStore {
             };
             let terminal = matches!(
                 record.status.as_str(),
-                "committed" | "rejected" | "failed" | "cancelled"
+                "committed" | "rejected" | "failed" | "cancelled" | "aborted"
             );
             let pinned = self.pins.get(&key).is_some_and(|refs| !refs.is_empty());
             let within_horizon = now_tick.saturating_sub(record.issued_at_tick) <= self.horizon;
@@ -226,11 +262,13 @@ impl CognitionRetentionStore {
                 self.records.remove(&key);
                 self.pins.remove(&key);
                 deleted_count = deleted_count.saturating_add(1);
+                deleted_keys.push(key);
             }
         }
         self.rebuild_artifact_index();
         Ok(RetentionGcReport {
             deleted_count,
+            deleted_keys,
             retained_terminal_count,
             pinned_reference_count,
         })
@@ -328,7 +366,10 @@ impl CognitionRetentionStore {
         self.response_artifacts = self
             .records
             .values()
-            .map(|record| record.response_artifact_id.clone())
+            .filter_map(|record| {
+                (!record.response_artifact_id.is_empty())
+                    .then(|| record.response_artifact_id.clone())
+            })
             .collect();
     }
 }

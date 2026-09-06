@@ -24,6 +24,7 @@ use crate::runtime::cognition_recovery::{
     WorldCommitRecordV1, WorldRootViewV1, cognition_digest_v1,
     default_cognition_persistence_projection, response_artifact_digest,
 };
+use crate::runtime::cognition_retention::CognitionRetentionStore;
 use crate::runtime::error::WorldError;
 use cognition_persistence_support::{stale_base_error, validate_marker};
 use serde::{Deserialize, Serialize};
@@ -34,6 +35,23 @@ const PROJECTION_SCHEMA: &str = "cognition-persistence.v1";
 const JOURNAL_SCHEMA: &str = "cognition-journal.v1";
 const WORLD_COMMIT_SCHEMA: &str = "world-commit-record.v1";
 const RUNTIME_BINDING_DIGEST_DOMAIN: &str = "oasis7.runtime.manifest.v1";
+
+fn enroll_cognition_commit_retention(
+    projection: &mut JsonValue,
+    marker: &WorldCommitRecordV1,
+) -> Result<(), WorldError> {
+    let mut retention = projection
+        .get("retention_state")
+        .cloned()
+        .map(serde_json::from_value::<CognitionRetentionStore>)
+        .transpose()
+        .map_err(|_| cognition_validation("invalid_retention_state"))?
+        .unwrap_or_default();
+    retention.insert_commit_record(marker);
+    projection["retention_state"] = serde_json::to_value(retention).map_err(WorldError::from)?;
+    Ok(())
+}
+
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 struct CognitionProjection {
     #[serde(default)]
@@ -833,6 +851,7 @@ impl World {
             "CognitionTurnCompleted",
             event_details,
         )?;
+        enroll_cognition_commit_retention(&mut transaction.cognition, &aborted)?;
         transaction.persist_runtime_transaction_if_configured()?;
         *self = transaction;
         Ok(aborted)
@@ -994,6 +1013,7 @@ impl World {
                 .ok_or_else(|| cognition_validation("receipt_lineage_registry_not_array"))?
                 .push(serde_json::to_value(lineage).map_err(WorldError::from)?);
         }
+        enroll_cognition_commit_retention(&mut next, &committed)?;
         let journal_head = next["cognition_journal"]["head_digest"]
             .as_str()
             .unwrap_or_default()

@@ -170,24 +170,32 @@ impl AsyncAgentRunner {
         current
             .validate_for_agent(agent_id)
             .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
-        let existing =
-            self.continuations.get(agent_id).cloned().ok_or_else(|| {
+        let previous_harness = self.continuation_harness.clone();
+        let previous_continuations = self.continuations.clone();
+        let result = (|| {
+            let existing = self.continuations.get(agent_id).cloned().ok_or_else(|| {
                 AsyncAgentRunnerError::Cognition("unknown continuation".to_string())
             })?;
-        let retired = self
-            .continuation_harness
-            .advance_ready_wake(existing, consumed_runtime, &current.authority)
-            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
-        self.continuations.remove(agent_id);
-        if let Some(next_proposal) = next_proposal {
-            let _ = self.submit_continuation_proposal_with_current_context(
-                agent_id,
-                next_proposal,
-                current,
-            )?;
+            let retired = self
+                .continuation_harness
+                .advance_ready_wake(existing, consumed_runtime, &current.authority)
+                .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+            self.continuations.remove(agent_id);
+            if let Some(next_proposal) = next_proposal {
+                self.submit_continuation_proposal_with_current_context(
+                    agent_id,
+                    next_proposal,
+                    current,
+                )?;
+            }
+            debug_assert!(!retired.active);
+            Ok(())
+        })();
+        if result.is_err() {
+            self.continuation_harness = previous_harness;
+            self.continuations = previous_continuations;
         }
-        debug_assert!(!retired.active);
-        Ok(())
+        result
     }
 
     /// Close a locally admitted proposal when Runtime rejects the paired
@@ -361,6 +369,49 @@ impl AsyncAgentRunner {
         ))
     }
 
+    /// Apply the Runtime wake transition and the next actor dispatch as one
+    /// local state transaction. The actor send path is fallible (for example
+    /// when its mailbox is full or the actor is unavailable), so a failed
+    /// dispatch must restore the Harness, continuation, feedback and turn
+    /// counters exactly as they were before the wake was retired.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn retire_and_dispatch_continuation<F>(
+        &mut self,
+        agent_id: &str,
+        turn_context: &ContinuousAgentTurnContextV1,
+        authority_context: &ContinuationAuthorityContextV1,
+        runtime: &RuntimeAgentContinuation,
+        dispatch: F,
+    ) -> Result<Result<AsyncTurnId, ContinuationHandle>, AsyncAgentRunnerError>
+    where
+        F: FnOnce(&mut Self) -> Result<AsyncTurnId, AsyncAgentRunnerError>,
+    {
+        let previous_harness = self.continuation_harness.clone();
+        let previous_continuations = self.continuations.clone();
+        let previous_feedback_store = self.feedback_store.clone();
+        let previous_next_turn_id = self.next_turn_id;
+        let previous_active_turns = self.active_turns;
+        let result = (|| {
+            let (consumed, projection) =
+                self.retire_ready_continuation(agent_id, turn_context, authority_context, runtime)?;
+            if !consumed {
+                return Ok(Err(projection));
+            }
+            dispatch(self).map(Ok)
+        })();
+        match result {
+            Ok(result) => Ok(result),
+            Err(error) => {
+                self.continuation_harness = previous_harness;
+                self.continuations = previous_continuations;
+                self.feedback_store = previous_feedback_store;
+                self.next_turn_id = previous_next_turn_id;
+                self.active_turns = previous_active_turns;
+                Err(error)
+            }
+        }
+    }
+
     /// Revalidate a consumed Runtime wake and dispatch exactly one new actor
     /// turn for replan/next action. A terminal Runtime projection returns its
     /// terminal handle and does not invoke the actor. A lease acknowledgement
@@ -375,18 +426,21 @@ impl AsyncAgentRunner {
         runtime: RuntimeAgentContinuation,
     ) -> Result<Result<AsyncTurnId, ContinuationHandle>, AsyncAgentRunnerError> {
         Self::validate_current_observation(&observation, authority_context, agent_id)?;
-        let (consumed, projection) =
-            self.retire_ready_continuation(agent_id, &turn_context, authority_context, &runtime)?;
-        if !consumed {
-            return Ok(Err(projection));
-        }
-        let next_turn = self.start_turn_with_context_and_observation_and_request(
+        let dispatch_turn_context = turn_context.clone();
+        self.retire_and_dispatch_continuation(
             agent_id,
-            observation,
-            Some(turn_context),
-            None,
-        )?;
-        Ok(Ok(next_turn))
+            &turn_context,
+            authority_context,
+            &runtime,
+            |runner| {
+                runner.start_turn_with_context_and_observation_and_request(
+                    agent_id,
+                    observation,
+                    Some(dispatch_turn_context),
+                    None,
+                )
+            },
+        )
     }
 
     fn validate_current_observation(
@@ -440,18 +494,21 @@ impl AsyncAgentRunner {
             ));
         }
         Self::validate_current_observation(&observation, authority_context, agent_id)?;
-        let (consumed, projection) =
-            self.retire_ready_continuation(agent_id, &turn_context, authority_context, &runtime)?;
-        if !consumed {
-            return Ok(Err(projection));
-        }
-        let next_turn = self.start_turn_with_context_and_observation_and_request(
+        let dispatch_turn_context = turn_context.clone();
+        self.retire_and_dispatch_continuation(
             agent_id,
-            observation,
-            Some(turn_context),
-            Some(request_context),
-        )?;
-        Ok(Ok(next_turn))
+            &turn_context,
+            authority_context,
+            &runtime,
+            |runner| {
+                runner.start_turn_with_context_and_observation_and_request(
+                    agent_id,
+                    observation,
+                    Some(dispatch_turn_context),
+                    Some(request_context),
+                )
+            },
+        )
     }
 
     /// Production wake consumer: one consumed Runtime wake yields one next

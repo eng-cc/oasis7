@@ -7,7 +7,7 @@ use crate::runtime::cognition::{
 };
 use crate::runtime::cognition_recovery::{RuntimeCognitionBaseBindingV1, cognition_digest_v1};
 use crate::runtime::cognition_retention::{
-    CognitionRetentionStore, RetentionExecutionProbe, RetentionRecordV1, RetentionReplayRequestV1,
+    RetentionExecutionProbe, RetentionRecordV1, RetentionReplayRequestV1,
 };
 use crate::runtime::cognition_scheduler::{
     CognitionScheduler, SchedulerEnqueueOutcome, SchedulerPolicyV1, SchedulerWakeV1,
@@ -315,7 +315,15 @@ impl World {
                         .is_some_and(Self::cognition_wake_has_committed_evidence_condition))
         });
         let mut transaction = self.clone();
-        let mut evaluations = serde_json::Map::new();
+        // Keep evaluations for every durable in-flight wake. A later lease
+        // must not erase the committed evidence needed to recover an earlier
+        // lease after a process restart.
+        let mut evaluations = transaction
+            .cognition
+            .get("continuation_evaluations")
+            .and_then(JsonValue::as_object)
+            .cloned()
+            .unwrap_or_default();
         for wake in &selected {
             if let Some(continuation) = continuations
                 .iter()
@@ -864,17 +872,27 @@ impl World {
         &mut self,
         record: RetentionRecordV1,
     ) -> Result<(), WorldError> {
-        let mut store = self.cognition_retention_store()?;
+        let mut transaction = self.clone();
+        let mut store = transaction.cognition_retention_store()?;
         store.insert(record);
-        self.cognition_set_retention_store(&store)
+        transaction.cognition_set_retention_store(&store)?;
+        transaction.persist_runtime_transaction_if_configured()?;
+        *self = transaction;
+        Ok(())
     }
 
-    pub fn pin_cognition_reference(&mut self, key: &str, reference: &str) {
-        let mut store = self
-            .cognition_retention_store()
-            .unwrap_or_else(|_| CognitionRetentionStore::with_horizon(0));
+    pub fn pin_cognition_reference(
+        &mut self,
+        key: &str,
+        reference: &str,
+    ) -> Result<(), WorldError> {
+        let mut transaction = self.clone();
+        let mut store = transaction.cognition_retention_store()?;
         store.pin_reference(key, reference);
-        let _ = self.cognition_set_retention_store(&store);
+        transaction.cognition_set_retention_store(&store)?;
+        transaction.persist_runtime_transaction_if_configured()?;
+        *self = transaction;
+        Ok(())
     }
 
     pub fn gc_cognition(
@@ -882,11 +900,15 @@ impl World {
         now_tick: u64,
         gc_floor_tick: u64,
     ) -> Result<crate::runtime::RetentionGcReport, WorldError> {
-        let mut store = self.cognition_retention_store()?;
+        let mut transaction = self.clone();
+        let mut store = transaction.cognition_retention_store()?;
         let report = store
             .gc(now_tick, gc_floor_tick)
             .map_err(|error| cognition_validation_error(error.code()))?;
-        self.cognition_set_retention_store(&store)?;
+        transaction.cognition_set_retention_store(&store)?;
+        transaction.compact_cognition_projection(&report.deleted_keys)?;
+        transaction.persist_runtime_transaction_if_configured()?;
+        *self = transaction;
         Ok(report)
     }
 
