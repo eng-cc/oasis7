@@ -1,0 +1,2677 @@
+#!/usr/bin/env python3
+"""Contract tests for the governed full-network clean-room plan."""
+
+from __future__ import annotations
+
+import importlib.util
+import copy
+import hashlib
+import json
+import os
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+import unittest
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from unittest.mock import patch
+
+
+ROOT = Path(__file__).resolve().parents[1]
+MODULE_PATH = ROOT / "scripts" / "p2p-public-testnet-full-network-clean-room.py"
+SIDECAR_PATH = ROOT / "scripts" / "p2p-public-testnet-identity-receipt-v2.py"
+SIGNING_TEST_PATH = ROOT / "scripts" / "p2p-public-testnet-identity-v2-signing-tool.test.py"
+
+
+def load_module():
+    spec = importlib.util.spec_from_file_location("full_network_clean_room", MODULE_PATH)
+    if spec is None or spec.loader is None:
+        raise AssertionError(f"cannot load clean-room module: {MODULE_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_sidecar_module():
+    spec = importlib.util.spec_from_file_location("identity_receipt_v2_sidecar", SIDECAR_PATH)
+    if spec is None or spec.loader is None:
+        raise AssertionError(f"cannot load identity receipt v2 sidecar: {SIDECAR_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_signing_test_module():
+    spec = importlib.util.spec_from_file_location(
+        "identity_v2_signing_tool_fixture", SIGNING_TEST_PATH
+    )
+    if spec is None or spec.loader is None:
+        raise AssertionError(f"cannot load signing fixture: {SIGNING_TEST_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _fixture_digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _write_fixture_json(path: Path, value: object) -> None:
+    path.write_bytes(json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+
+
+def _fixture_descriptor(path: Path) -> dict[str, object]:
+    payload = path.read_bytes()
+    return {"path": str(path), "sha256": hashlib.sha256(payload).hexdigest(), "size_bytes": len(payload)}
+
+
+class FullNetworkCleanRoomPlanTests(unittest.TestCase):
+    _baseline_fixture_ready = False
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Create one independent, real-crypto v2 map before request mutations."""
+        if cls._baseline_fixture_ready:
+            return
+        cls._baseline_module = load_module()
+        cls._baseline_signing_module = load_signing_test_module()
+        cls._baseline_signing = cls._baseline_signing_module.IdentityV2SigningToolContractTests(
+            "runTest"
+        )
+        cls._baseline_signing.setUp()
+        cls._baseline_impact_directory = tempfile.TemporaryDirectory(
+            prefix="oasis7-planner-baseline-"
+        )
+        builder = cls("runTest")
+        builder.module = cls._baseline_module
+        builder.signing = cls._baseline_signing
+        builder._impact_path = Path(cls._baseline_impact_directory.name) / "consumer-impact.json"
+        builder._baseline_request = builder._input()
+        builder._align_signing_context()
+        builder._baseline_artifacts = builder._make_baseline_signed_artifacts(label="baseline")
+        cls._baseline_evidence = builder._write_baseline_evidence_map(
+            builder._baseline_artifacts, label="baseline"
+        )
+        distinct_artifacts = builder._make_baseline_signed_artifacts(
+            expected_uid=1001, expected_gid=1002, label="distinct-uid-gid"
+        )
+        cls._baseline_distinct_evidence = builder._write_baseline_evidence_map(
+            distinct_artifacts, label="distinct-uid-gid"
+        )
+        cls._baseline_request = builder._baseline_request
+        cls._baseline_builder = builder
+        cls._baseline_fixture_ready = True
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        if not cls._baseline_fixture_ready:
+            return
+        cls._baseline_signing.tearDown()
+        cls._baseline_impact_directory.cleanup()
+        cls._baseline_fixture_ready = False
+
+    def setUp(self) -> None:
+        type(self).setUpClass()
+        self.module = load_module()
+        self._impact_directory = tempfile.TemporaryDirectory()
+        self._impact_path = Path(self._impact_directory.name) / "consumer-impact.json"
+        baseline = type(self)
+        self._baseline_identity_v2_evidence = copy.deepcopy(baseline._baseline_evidence)
+        self._build_plan_without_evidence = self.module.build_plan
+        self.module.IDENTITY_V2_VERIFY_TOOL_PATH = baseline._baseline_signing.verifier
+        self.module.IDENTITY_V2_VERIFY_TOOL_SHA256 = hashlib.sha256(
+            baseline._baseline_signing.verifier.read_bytes()
+        ).hexdigest()
+        self.module.IDENTITY_V2_TRUST_CONFIG_PATH = baseline._baseline_signing.trust
+        self.module.IDENTITY_V2_TRUST_CONFIG_SHA256 = hashlib.sha256(
+            baseline._baseline_signing.trust.read_bytes()
+        ).hexdigest()
+        self.module.IDENTITY_V2_PROVIDER_REGISTRY_PATH = baseline._baseline_signing.registry
+        self.module.IDENTITY_V2_PROVIDER_REGISTRY_SHA256 = hashlib.sha256(
+            baseline._baseline_signing.registry.read_bytes()
+        ).hexdigest()
+
+        original_build_plan = self.module.build_plan
+
+        def build_plan_with_baseline_evidence(
+            request: dict[str, object], **kwargs: object
+        ) -> dict[str, object]:
+            kwargs.setdefault(
+                "identity_v2_evidence", copy.deepcopy(self._baseline_identity_v2_evidence)
+            )
+            return original_build_plan(request, **kwargs)
+
+        # Keep the legacy test bodies focused on their request mutation while
+        # routing every normal admission through the immutable baseline map.
+        # The missing-map test calls _build_plan_without_evidence explicitly.
+        self.module.build_plan = build_plan_with_baseline_evidence
+
+    def tearDown(self) -> None:
+        self._impact_directory.cleanup()
+
+    def _build_plan_with_evidence(
+        self, request: dict[str, object], evidence: dict[str, object]
+    ) -> dict[str, object]:
+        return self._build_plan_without_evidence(
+            request, identity_v2_evidence=copy.deepcopy(evidence)
+        )
+
+    def _tampered_evidence_artifact(
+        self,
+        evidence: dict[str, object],
+        *,
+        node_name: str = "storage-205",
+        artifact: str = "signed_envelope",
+        mutate=None,
+    ) -> dict[str, object]:
+        """Return a map copy whose retained bytes, not request, are tampered."""
+        mutated = copy.deepcopy(evidence)
+        entry = next(item for item in mutated["entries"] if item["node_name"] == node_name)
+        source = Path(entry[artifact]["path"])
+        payload = json.loads(source.read_text(encoding="utf-8"))
+        if mutate is not None:
+            mutate(payload)
+        target = Path(self._impact_directory.name) / f"tampered-{node_name}-{artifact}.json"
+        _write_fixture_json(target, payload)
+        target.chmod(0o600)
+        entry[artifact] = _fixture_descriptor(target)
+        return mutated
+
+    def _align_signing_context(self) -> None:
+        """Bind the one class-level signing fixture to the baseline request."""
+        context = json.loads(self.signing.context.read_text(encoding="utf-8"))
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        context.update(
+            {
+                "task_uid": self._baseline_request["task_uid"],
+                "head_oid": self._baseline_request["head_oid"],
+                "capture_window_id": self._baseline_request["capture_window_id"],
+                "network_id": self.module.CANONICAL_NETWORK_ID,
+                "rotation_epoch": self.module.CANONICAL_ROTATION_EPOCH,
+                "capture_start": (now - timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
+                "capture_end": (now + timedelta(days=1)).isoformat().replace("+00:00", "Z"),
+                "issued_at": (now - timedelta(seconds=10)).isoformat().replace("+00:00", "Z"),
+                "expires_at": (now + timedelta(days=1)).isoformat().replace("+00:00", "Z"),
+            }
+        )
+        _write_fixture_json(self.signing.context, context)
+        self.signing.context_digest = _fixture_digest(self.signing.context)
+        trust = json.loads(self.signing.trust.read_text(encoding="utf-8"))
+        for signer in trust["allowlist"]:
+            signer["valid_from"] = context["capture_start"]
+            signer["valid_until"] = context["expires_at"]
+        _write_fixture_json(self.signing.trust, trust)
+        registry = json.loads(self.signing.registry.read_text(encoding="utf-8"))
+        registry["trust_config_sha256"] = _fixture_digest(self.signing.trust)
+        _write_fixture_json(self.signing.registry, registry)
+
+        intent_nodes = []
+        for node in sorted(self._baseline_request["nodes"], key=lambda item: str(item["name"])):
+            name = str(node["name"])
+            intent_nodes.append(
+                {
+                    "node_name": name,
+                    "node_id": str(node["node_id"]),
+                    "peer_id": self.module.CANONICAL_PEER_REGISTRY[name],
+                    "role": str(node["role"]),
+                    "reset_surface_ids": ["config", "execution", "world"],
+                }
+            )
+        _write_fixture_json(
+            self.signing.intent,
+            {
+                "schema_version": "oasis7.clean_room_plan_intent.v1",
+                "context_digest": self.signing.context_digest,
+                "adapter_action": "public-testnet-governed-rebuild",
+                "nodes": intent_nodes,
+            },
+        )
+        self.signing.plan_digest = _fixture_digest(self.signing.intent)
+
+    def _write_baseline_node_raw_and_template(
+        self,
+        node: dict[str, object],
+        *,
+        expected_uid: int,
+        expected_gid: int,
+    ) -> None:
+        name = str(node["name"])
+        node_id = str(node["node_id"])
+        peer_id = self.module.CANONICAL_PEER_REGISTRY[name]
+        raw = {
+            "schema_version": "oasis7.identity_receipt.v1",
+            "node_id": node_id,
+            "peer_id": peer_id,
+            "key_path": f"config/{node_id}-node-keypair.toml",
+            "key_sha256": "7" * 64,
+            "key_size_bytes": 128,
+            "key_mode": 0o600,
+            "key_uid": expected_uid,
+            "key_gid": expected_gid,
+        }
+        self.signing.raw.write_bytes((json.dumps(raw, indent=2) + "\n").encode("utf-8"))
+        self.signing.raw_digest = _fixture_digest(self.signing.raw)
+        context = json.loads(self.signing.context.read_text(encoding="utf-8"))
+        _write_fixture_json(
+            self.signing.template,
+            {
+                "domain_separator": "oasis7.identity_receipt.v2/signature/v1",
+                "schema_version": "oasis7.identity_receipt.v2",
+                "signer_id": "identity-v2-ephemeral-test-signer",
+                "verifier_id": "governed-receipt-verifier",
+                "trust_root_id": "oasis7-public-testnet-governance-root-v1",
+                "network_id": self.module.CANONICAL_NETWORK_ID,
+                "task_uid": context["task_uid"],
+                "head_oid": context["head_oid"],
+                "frozen_head_oid": context["head_oid"],
+                "plan_digest": self.signing.plan_digest,
+                "context_digest": self.signing.context_digest,
+                "capture_window_id": context["capture_window_id"],
+                "rotation_epoch": context["rotation_epoch"],
+                "issued_at": context["issued_at"],
+                "expires_at": context["expires_at"],
+                "node_id": node_id,
+                "peer_id": peer_id,
+                "key_sha256": raw["key_sha256"],
+                "key_size_bytes": raw["key_size_bytes"],
+                "key_mode": "0600",
+                "key_uid": raw["key_uid"],
+                "key_gid": raw["key_gid"],
+                "signed_payload_sha256": self.signing.raw_digest,
+            },
+        )
+
+    def _make_baseline_signed_artifacts(
+        self, *, expected_uid: int = 0, expected_gid: int = 0, label: str
+    ) -> dict[str, dict[str, Path]]:
+        artifacts: dict[str, dict[str, Path]] = {}
+        for node in self._baseline_request["nodes"]:
+            name = str(node["name"])
+            self._write_baseline_node_raw_and_template(
+                node, expected_uid=expected_uid, expected_gid=expected_gid
+            )
+            stem = "planner-baseline-" + name
+            payload, manifest, _, attestation, unsigned = self.signing._prepare_sign_assemble(stem)
+            verified, verification = self.signing._verify(unsigned)
+            node_dir = self.signing.root / "planner-baseline-artifacts"
+            node_dir.mkdir(mode=0o700, exist_ok=True)
+            copied: dict[str, Path] = {}
+            source_paths = {
+                "raw_v1": self.signing.raw,
+                "prepare_manifest": manifest,
+                "payload": payload,
+                "provider_attestation": attestation,
+                "unsigned_envelope": unsigned,
+                "signed_envelope": verified,
+                "verification": verification,
+            }
+            for field, source in source_paths.items():
+                destination = node_dir / f"{label}-{name}.{field}"
+                shutil.copyfile(source, destination)
+                destination.chmod(0o600)
+                copied[field] = destination
+            artifacts[name] = copied
+        return artifacts
+
+    def _write_baseline_evidence_map(
+        self, artifacts: dict[str, dict[str, Path]], *, label: str
+    ) -> dict[str, object]:
+        retention = self.signing.root / f"planner-baseline-retention-{label}"
+        retention.mkdir(mode=0o700, exist_ok=True)
+        context = retention / "context.json"
+        intent = retention / "plan-intent.json"
+        shutil.copyfile(self.signing.context, context)
+        shutil.copyfile(self.signing.intent, intent)
+        context.chmod(0o600)
+        intent.chmod(0o600)
+        evidence: dict[str, object] = {
+            "schema_version": self.module.IDENTITY_V2_EVIDENCE_SCHEMA,
+            "network_id": self.module.CANONICAL_NETWORK_ID,
+            "task_uid": self._baseline_request["task_uid"],
+            "head_oid": self._baseline_request["head_oid"],
+            "context": _fixture_descriptor(context),
+            "plan_intent": _fixture_descriptor(intent),
+            "entries": [],
+        }
+        artifact_fields = (
+            "raw_v1",
+            "prepare_manifest",
+            "payload",
+            "provider_attestation",
+            "unsigned_envelope",
+            "signed_envelope",
+            "verification",
+        )
+        entries: list[dict[str, object]] = []
+        for node_name in self.module.NODE_ORDER:
+            node = next(item for item in self._baseline_request["nodes"] if item["name"] == node_name)
+            source = artifacts[node_name]
+            entry: dict[str, object] = {
+                "node_name": node_name,
+                "node_id": str(node["node_id"]),
+                "peer_id": self.module.CANONICAL_PEER_REGISTRY[node_name],
+            }
+            for field in artifact_fields:
+                retained = retention / f"{node_name}.{field}"
+                shutil.copyfile(source[field], retained)
+                retained.chmod(0o600)
+                entry[field] = _fixture_descriptor(retained)
+            entries.append(entry)
+        evidence["entries"] = entries
+        return evidence
+
+    def _consumer_impact_reference(
+        self, authority_instant: datetime | None = None
+    ) -> dict[str, str]:
+        authority_instant = authority_instant or datetime.now(timezone.utc)
+        record = {
+            "impact": "none",
+            "evidence_source": "test-fixture-direct-observation",
+            "timestamp": authority_instant.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+            "validators_already_stopped": False,
+            "outage_update_channel": "n/a",
+            "recovery_update_checkpoint": "n/a",
+            "producer_wording_approval": "n/a",
+            "decision": "proceed",
+        }
+        payload = json.dumps(record, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        self._impact_path.write_bytes(payload)
+        return {"path": str(self._impact_path), "sha256": hashlib.sha256(payload).hexdigest()}
+
+    def _rewrite_consumer_impact(self, request: dict[str, object], **changes: object) -> None:
+        record = json.loads(self._impact_path.read_text(encoding="utf-8"))
+        record.update(changes)
+        payload = json.dumps(record, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        self._impact_path.write_bytes(payload)
+        reference = {"path": str(self._impact_path), "sha256": hashlib.sha256(payload).hexdigest()}
+        request["consumer_impact_record"] = reference
+        request["authority"]["consumer_impact_record"] = dict(reference)
+
+    @staticmethod
+    def _receipt(schema: str = "oasis7.authenticated_receipt.v1") -> dict[str, object]:
+        return {
+            "schema_version": schema,
+            "verified": True,
+            "authenticated": True,
+            "signer_id": "governance-signer",
+            "verifier_id": "governed-receipt-verifier",
+            "trust_root_id": "oasis7-public-testnet-governance-root-v1",
+            "signed_payload_sha256": "a" * 64,
+            "signature_hex": "b" * 128,
+            "canonical_digest": "c" * 64,
+        }
+
+    def _identity_receipt(
+        self,
+        node_id: str,
+        *,
+        capture_window_id: str = "capture-window-20260901-001",
+        rotation_epoch: str | None = None,
+        issued_at: str = "2026-09-01T00:00:00Z",
+        expires_at: str = "2099-01-01T00:00:00Z",
+    ) -> dict[str, object]:
+        receipt = self._receipt("oasis7.identity_receipt.v2")
+        receipt.update(
+            {
+                "node_id": node_id,
+                "peer_id": f"12D3KooW{node_id.replace('-', '')}",
+                "key_sha256": "7" * 64,
+                "key_size_bytes": 128,
+                "key_mode": "0600",
+                "key_uid": 0,
+                "key_gid": 0,
+                "capture_window_id": capture_window_id,
+                "rotation_epoch": rotation_epoch or self.module.CANONICAL_ROTATION_EPOCH,
+                "issued_at": issued_at,
+                "expires_at": expires_at,
+            }
+        )
+        raw_v1 = self._raw_runtime_identity_receipt_v1_bytes(receipt)
+        receipt["signed_payload_sha256"] = hashlib.sha256(raw_v1).hexdigest()
+        receipt["canonical_digest"] = self.module._canonical_receipt_digest(
+            receipt, excluded_fields=frozenset({"peer_id"})
+        )
+        return receipt
+
+    def _no_backup_receipt(self, request: dict[str, object], expires_at: str) -> dict[str, object]:
+        receipt = self._receipt("oasis7.no_backup_authority.v1")
+        receipt["bindings"] = {
+            "repository": "eng-cc/oasis7",
+            "action": "full-network-clean-room",
+            "targets": list(self.module.NODE_ORDER),
+            "task_uid": request["task_uid"],
+            "transaction_id": request["transaction_id"],
+            "capture_window_id": request["capture_window_id"],
+            "frozen_head_oid": request["head_oid"],
+            "actor": "ops-actor",
+            "issued_at": "2026-08-30T00:00:00Z",
+            "expires_at": expires_at,
+            "current_authorization": True,
+            "consumer_impact_record": {
+                "path": request["consumer_impact_record"]["path"],
+                "sha256": request["consumer_impact_record"]["sha256"],
+            },
+        }
+        return receipt
+
+    @staticmethod
+    def _windows_state_path(surface: str) -> str:
+        surface = surface.replace("{node_id}", "triad-testnet-windows-observer")
+        return rf"C:\\oasis7-deploy\\{surface.replace('/', chr(92))}"
+
+    def _deployment_inventory(
+        self,
+        nodes: list[dict[str, object]],
+        *,
+        expected_uid: int = 0,
+        expected_gid: int = 0,
+        include_layout: bool = True,
+        capture_window_id: str = "capture-window-20260901-001",
+        rotation_epoch: str | None = None,
+        issued_at: str = "2026-09-01T00:00:00Z",
+        expires_at: str = "2099-01-01T00:00:00Z",
+    ) -> dict[str, object]:
+        inventory_nodes: dict[str, dict[str, object]] = {}
+        for node in nodes:
+            entry: dict[str, object] = {
+                "node_id": node["node_id"],
+                "expected_key_uid": expected_uid,
+                "expected_key_gid": expected_gid,
+                "peer_id": self.module.CANONICAL_PEER_REGISTRY[str(node["name"])],
+            }
+            if include_layout:
+                entry.update(
+                    {
+                        "node_root": node["node_root"],
+                        "persistent_state_paths": list(node["persistent_state_paths"]),
+                    }
+                )
+                node_name = str(node["name"])
+                path_style = (
+                    "windows"
+                    if self.module.EXPECTED_NODES[node_name]["platform"] == "windows-x64"
+                    else "posix"
+                )
+                entry["node_root"] = self.module._normalized_path(
+                    entry["node_root"], path_style, f"{node['name']}.node_root"
+                )
+                entry["persistent_state_paths"] = [
+                    self.module._normalized_path(
+                        path,
+                        path_style,
+                        f"{node['name']}.persistent_state_paths[{index}]",
+                    )
+                    for index, path in enumerate(entry["persistent_state_paths"])
+                ]
+            inventory_nodes[str(node["name"])] = entry
+        inventory = {
+            "schema_version": "oasis7.deployment_inventory.v2",
+            "authenticated": True,
+            "verified": True,
+            "signer_id": "governance-signer",
+            "trust_root_id": "oasis7-public-testnet-governance-root-v1",
+            "nodes": inventory_nodes,
+            "receipt": self._receipt("oasis7.deployment_inventory_receipt.v2"),
+        }
+        inventory["receipt"].update(
+            {
+                "capture_window_id": capture_window_id,
+                "rotation_epoch": rotation_epoch or self.module.CANONICAL_ROTATION_EPOCH,
+                "issued_at": issued_at,
+                "expires_at": expires_at,
+            }
+        )
+        inventory["receipt"]["canonical_digest"] = self.module._canonical_receipt_digest(
+            inventory["receipt"], excluded_fields=frozenset({"signed_payload_sha256"})
+        )
+        inventory["receipt"]["signed_payload_sha256"] = (
+            self.module._canonical_deployment_inventory_payload_digest(inventory)
+        )
+        return inventory
+
+    def _bind_current_receipt_freshness(
+        self,
+        request: dict[str, object],
+        *,
+        capture_window_id: str | None = None,
+        rotation_epoch: str | None = None,
+        issued_at: str = "2026-09-01T00:00:00Z",
+        expires_at: str = "2099-01-01T00:00:00Z",
+    ) -> None:
+        """Build the v2 receipt envelope used by the freshness contract."""
+        freshness = {
+            "capture_window_id": capture_window_id or request["capture_window_id"],
+            "rotation_epoch": rotation_epoch or self.module.CANONICAL_ROTATION_EPOCH,
+            "issued_at": issued_at,
+            "expires_at": expires_at,
+        }
+        inventory_receipt = request["deployment_inventory"]["receipt"]
+        inventory_receipt.update(
+            {"schema_version": "oasis7.deployment_inventory_receipt.v2", **freshness}
+        )
+        inventory_receipt["canonical_digest"] = self.module._canonical_receipt_digest(
+            inventory_receipt, excluded_fields=frozenset({"signed_payload_sha256"})
+        )
+        for node in request["nodes"]:
+            identity_receipt = node["identity_receipt"]
+            identity_receipt.update(
+                {"schema_version": "oasis7.identity_receipt.v2", **freshness}
+            )
+            identity_receipt["canonical_digest"] = self.module._canonical_receipt_digest(
+                identity_receipt, excluded_fields=frozenset({"peer_id"})
+            )
+        # Receipt freshness is independent metadata; the inventory payload
+        # digest still covers the complete caller-supplied node inventory.
+        inventory_receipt["signed_payload_sha256"] = (
+            self.module._canonical_deployment_inventory_payload_digest(
+                request["deployment_inventory"]
+            )
+        )
+
+    def _input(self, *, authority_instant: datetime | None = None) -> dict[str, object]:
+        transaction_id = "txn-clean-room-001"
+        capture_window_id = "capture-window-20260901-001"
+        task_uid = "task_174f0a5a87394012b071171cc4a52372"
+        head_oid = "e" * 40
+        network_id = "oasis7-public-testnet-governed-20260606"
+        authority_bindings = {
+            "task_uid": task_uid,
+            "head_oid": head_oid,
+            "network_id": network_id,
+            "signer_allowlist": ["governance-signer"],
+            "trust_root_id": "oasis7-public-testnet-governance-root-v1",
+            "verifier_id": "governed-receipt-verifier",
+        }
+        consumer_impact_record = self._consumer_impact_reference(authority_instant)
+        authority_bindings["consumer_impact_record"] = dict(consumer_impact_record)
+        execution_bindings = {
+            "execution_records_root": {
+                "path": "/operator/truth/execution-records/root",
+                "sha256": "a" * 64,
+                "size_bytes": 16384,
+            },
+            "cas": {
+                "root": "/operator/truth/execution-cas",
+                "blake3": "b" * 64,
+                "size_bytes": 32768,
+            },
+            "world_head": {
+                "path": "/operator/truth/world-head.json",
+                "sha256": "c" * 64,
+                "size_bytes": 1024,
+                "height": 100,
+                "block_hash": "8" * 64,
+                "state_root": "9" * 64,
+            },
+            "generated_world_sidecar": {
+                "path": "/operator/truth/world/.distfs-state/sidecar-generations/index.json",
+                "sha256": "d" * 64,
+                "size_bytes": 4096,
+                "provenance_path": "/operator/truth/world/generated-world.provenance.json",
+                "provenance_sha256": "4" * 64,
+                "provenance_size_bytes": 256,
+            },
+            "json_index_consistency": {
+                "verified": True,
+                "snapshot_sha256": "e" * 64,
+                "snapshot_size_bytes": 8192,
+                "journal_sha256": "f" * 64,
+                "journal_size_bytes": 16384,
+                "index_sha256": "0" * 64,
+                "index_size_bytes": 4096,
+            },
+        }
+        truth = {
+            "package": {
+                "package_id": "testnet-package-linux-windows-macos-001",
+                "package_dir": "/operator/packages/testnet-package-linux-windows-macos-001",
+                "provenance_path": "/operator/packages/testnet-package-linux-windows-macos-001/provenance.json",
+                "provenance_sha256": "a" * 64,
+                "provenance_size_bytes": 256,
+                "commit": "d" * 40,
+                "package_version": "0.0.0+testnet.001",
+                "runtime_sha256": "1" * 64,
+                "runtime_size_bytes": 1024,
+                "genesis_sha256": "2" * 64,
+                "world_sha256": "3" * 64,
+                "platforms": {
+                    platform: {
+                        "package_sha256": "a" * 64,
+                        "package_size_bytes": 4096,
+                        "world_sha256": "3" * 64,
+                        "world_size_bytes": 8192,
+                        "world_provenance_sha256": "4" * 64,
+                        "world_provenance_size_bytes": 256,
+                        "commit": "d" * 40,
+                    }
+                    for platform in ("linux-x64", "windows-x64", "macos-arm64")
+                },
+                "receipt": self._receipt("oasis7.package_provenance.v1"),
+            },
+            "genesis": {
+                "network_id": network_id,
+                "chain_id": "oasis7-public-testnet-governed-20260606",
+                "world_id": "oasis7-public-testnet-governed-20260606",
+                "path": "/operator/truth/genesis.json",
+                "size_bytes": 2048,
+                "sha256": "2" * 64,
+                "receipt": self._receipt("oasis7.genesis_binding.v1"),
+            },
+            "world": {
+                "world_id": "oasis7-public-testnet-governed-20260606",
+                "generation": "gen-001",
+                "path": "/operator/truth/world",
+                "provenance_path": "/operator/truth/world-provenance.json",
+                "size_bytes": 8192,
+                "sha256": "3" * 64,
+                "provenance_sha256": "4" * 64,
+                "provenance_size_bytes": 256,
+                "receipt": self._receipt("oasis7.world_binding.v1"),
+            },
+            "execution": execution_bindings,
+            "checkpoint": {
+                "checkpoint_id": "checkpoint-001",
+                "manifest_hash": "5" * 64,
+                "height": 100,
+                "receipt_path": "/operator/truth/checkpoint-receipt.json",
+                "size_bytes": 512,
+                "execution_block_hash": "8" * 64,
+                "execution_state_root": "9" * 64,
+                "sha256": "6" * 64,
+                "receipt": self._receipt("oasis7.checkpoint_binding.v1"),
+            },
+        }
+        nodes = [
+            {
+                "name": "sequencer-204",
+                "node_id": "triad-testnet-sequencer",
+                "role": "validator",
+                "platform": "linux-x64",
+                "node_root": "/opt/oasis7/p2p-testnet",
+                "service_manager": "systemd",
+                "service": "oasis7-triad-sequencer.service",
+                "host_binding": {
+                    "target": "root@39.104.204.172",
+                    "known_host_fingerprint": "SHA256:7NkC2GehDCcN+IWPbaxh+0JuIVGCEtKpdK69S6fHZPU",
+                    "known_hosts_path": "/opt/oasis7/p2p-testnet/config/public-testnet-validator-pair-known-hosts",
+                },
+                "endpoints": {
+                    "healthz": "http://127.0.0.1:6631/healthz",
+                    "evidence": "http://127.0.0.1:6631/v1/chain/rebuild-proof",
+                },
+                "credential_seam": {
+                    "kind": "temporary-fd-or-environment",
+                    "environment_name": "PUBLIC_TESTNET_SEQUENCER_SSHPASS",
+                    "nonce": "sequencer-nonce-" + "x" * 32,
+                    "issued_at": "2026-08-30T00:00:00Z",
+                    "expires_at": "2099-01-01T00:00:00Z",
+                    "ledger_path": "/operator/credential-nonce-ledger.jsonl",
+                    "one_shot": True,
+                },
+                "persistent_state_paths": [
+                    f"/opt/oasis7/p2p-testnet/{surface}"
+                    for surface in self.module.VALIDATOR_RESET_SURFACES
+                ],
+                "identity_receipt": self._identity_receipt("triad-testnet-sequencer"),
+            },
+            {
+                "name": "storage-205",
+                "node_id": "triad-testnet-storage",
+                "role": "validator",
+                "platform": "linux-x64",
+                "node_root": "/opt/oasis7/p2p-testnet",
+                "service_manager": "systemd",
+                "service": "oasis7-triad-storage.service",
+                "host_binding": {
+                    "target": "root@39.104.205.67",
+                    "known_host_fingerprint": "SHA256:1SVgiaT5JLCw8PsPpVfLE9UyWNf82IJDZsiE7LAa1gI",
+                    "known_hosts_path": "/opt/oasis7/p2p-testnet/config/public-testnet-validator-pair-known-hosts",
+                },
+                "endpoints": {
+                    "healthz": "http://127.0.0.1:6632/healthz",
+                    "evidence": "http://127.0.0.1:6632/v1/chain/status",
+                },
+                "credential_seam": {
+                    "kind": "temporary-fd-or-environment",
+                    "environment_name": "PUBLIC_TESTNET_STORAGE_SSHPASS",
+                    "nonce": "storage-nonce-" + "x" * 32,
+                    "issued_at": "2026-08-30T00:00:00Z",
+                    "expires_at": "2099-01-01T00:00:00Z",
+                    "ledger_path": "/operator/credential-nonce-ledger.jsonl",
+                    "one_shot": True,
+                },
+                "persistent_state_paths": [
+                    f"/opt/oasis7/p2p-testnet/{surface}"
+                    for surface in self.module.VALIDATOR_RESET_SURFACES
+                ],
+                "identity_receipt": self._identity_receipt("triad-testnet-storage"),
+            },
+            {
+                "name": "linux-lan-observer",
+                "node_id": "triad-testnet-local",
+                "role": "observer",
+                "platform": "linux-x64",
+                "node_root": "/opt/oasis7/p2p-testnet-local",
+                "service_manager": "systemd",
+                "service": "oasis7-testnet-observer.service",
+                "host_binding": {
+                    "target": "observer@linux-lan",
+                    "known_host_fingerprint": "SHA256:2NkC2GehDCcN+IWPbaxh+0JuIVGCEtKpdK69S6fHZPU",
+                    "known_hosts_path": "/operator/known-hosts",
+                },
+                "endpoints": {
+                    "healthz": "http://127.0.0.1:6633/healthz",
+                    "evidence": "http://127.0.0.1:6633/v1/chain/status",
+                },
+                "credential_seam": {
+                    "kind": "temporary-fd-or-environment",
+                    "environment_name": "PUBLIC_TESTNET_LINUX_OBSERVER_SSHPASS",
+                    "nonce": "linux-observer-nonce-" + "x" * 32,
+                    "issued_at": "2026-08-30T00:00:00Z",
+                    "expires_at": "2099-01-01T00:00:00Z",
+                    "ledger_path": "/operator/credential-nonce-ledger.jsonl",
+                    "one_shot": True,
+                },
+                "persistent_state_paths": [
+                    f"/opt/oasis7/p2p-testnet-local/{surface.replace('{node_id}', 'triad-testnet-local')}"
+                    for surface in self.module.LINUX_OBSERVER_PERSISTENT_STATE_SURFACES
+                ],
+                "identity_receipt": self._identity_receipt("triad-testnet-local"),
+            },
+            {
+                "name": "windows-observer",
+                "node_id": "triad-testnet-windows-observer",
+                "role": "observer",
+                "platform": "windows-x64",
+                "node_root": r"C:\\oasis7-deploy",
+                "service_manager": "scheduled-task",
+                "service": "Oasis7Observer",
+                "host_binding": {
+                    "target": "observer@windows-lan",
+                    "known_host_fingerprint": "SHA256:3NkC2GehDCcN+IWPbaxh+0JuIVGCEtKpdK69S6fHZPU",
+                    "known_hosts_path": "/operator/known-hosts",
+                },
+                "endpoints": {
+                    "healthz": "http://127.0.0.1:5121/healthz",
+                    "evidence": "http://127.0.0.1:5121/v1/chain/status",
+                },
+                "credential_seam": {
+                    "kind": "temporary-fd-or-environment",
+                    "environment_name": "PUBLIC_TESTNET_WINDOWS_OBSERVER_SSHPASS",
+                    "nonce": "windows-observer-nonce-" + "x" * 32,
+                    "issued_at": "2026-08-30T00:00:00Z",
+                    "expires_at": "2099-01-01T00:00:00Z",
+                    "ledger_path": "/operator/credential-nonce-ledger.jsonl",
+                    "one_shot": True,
+                },
+                "persistent_state_paths": [
+                    self._windows_state_path(surface)
+                    for surface in self.module.OBSERVER_RESET_SURFACES
+                ],
+                "identity_receipt": self._identity_receipt("triad-testnet-windows-observer"),
+            },
+            {
+                "name": "macos-observer",
+                "node_id": "triad-testnet-fourth-local",
+                "role": "observer",
+                "platform": "macos-arm64",
+                "node_root": "/Applications/oasis7",
+                "service_manager": "launchd",
+                "service": "oasis7.testnet.fourth",
+                "host_binding": {
+                    "target": "observer@macos-lan",
+                    "known_host_fingerprint": "SHA256:4NkC2GehDCcN+IWPbaxh+0JuIVGCEtKpdK69S6fHZPU",
+                    "known_hosts_path": "/operator/known-hosts",
+                },
+                "endpoints": {
+                    "healthz": "http://127.0.0.1:19083/healthz",
+                    "evidence": "http://127.0.0.1:19083/v1/chain/status",
+                },
+                "credential_seam": {
+                    "kind": "temporary-fd-or-environment",
+                    "environment_name": "PUBLIC_TESTNET_MACOS_OBSERVER_SSHPASS",
+                    "nonce": "macos-observer-nonce-" + "x" * 32,
+                    "issued_at": "2026-08-30T00:00:00Z",
+                    "expires_at": "2099-01-01T00:00:00Z",
+                    "ledger_path": "/operator/credential-nonce-ledger.jsonl",
+                    "one_shot": True,
+                },
+                "persistent_state_paths": [
+                    f"/Applications/oasis7/{surface.replace('{node_id}', 'triad-testnet-fourth-local')}"
+                    for surface in self.module.OBSERVER_RESET_SURFACES
+                ],
+                "identity_receipt": self._identity_receipt("triad-testnet-fourth-local"),
+            },
+        ]
+        deployment_inventory = self._deployment_inventory(nodes)
+        return {
+            "schema_version": "oasis7.public_testnet_full_network_clean_room_input.v1",
+            "transaction_id": transaction_id,
+            "capture_window_id": capture_window_id,
+            "task_uid": task_uid,
+            "head_oid": head_oid,
+            "authority": {
+                "authorized": True,
+                "task_uid": task_uid,
+                "head_oid": head_oid,
+                "frozen_head_oid": head_oid,
+                "consumer_impact_record": consumer_impact_record,
+                "signer_allowlist": ["governance-signer"],
+                "crypto_verifier_receipt": {
+                    "schema_version": "oasis7.crypto_verifier_receipt.v1",
+                    "authenticated": True,
+                    "verified": True,
+                    "signer_id": "governance-signer",
+                    "signed_payload_sha256": "a" * 64,
+                    "signature_hex": "b" * 128,
+                    "canonical_digest": "c" * 64,
+                    "algorithm": "ed25519",
+                    "scope": "all-plan-receipts",
+                    "verifier_id": "governed-receipt-verifier",
+                    "executable_path": "/operator/bin/verify-receipt",
+                    "executable_sha256": "f" * 64,
+                    "bindings": json.loads(json.dumps(execution_bindings)),
+                },
+                "trust_root": {
+                    **self._receipt("oasis7.governed_trust_root_receipt.v1"),
+                    "trust_root_id": "oasis7-public-testnet-governance-root-v1",
+                    "verifier_id": "governed-receipt-verifier",
+                    "signer_allowlist": ["governance-signer"],
+                    "bindings": authority_bindings,
+                },
+                "receipt": {
+                    **self._receipt("oasis7.clean_room_authority.v1"),
+                    "bindings": authority_bindings,
+                },
+            },
+            "consumer_impact_record": consumer_impact_record,
+            "truth": truth,
+            "fresh_root_probe": {
+                "schema_version": "oasis7.fresh_root_probe.v1",
+                "verified": True,
+                "authenticated": True,
+                "package_commit": "d" * 40,
+                "checkpoint_id": "checkpoint-001",
+                "manifest_hash": "5" * 64,
+                "height": 100,
+                "transaction_id": transaction_id,
+                "capture_window_id": capture_window_id,
+                "replayed": False,
+                "post_validator_verify": True,
+                "validator_verify_outputs": {
+                    name: {
+                        "schema_version": "oasis7.validator_verify_output.v1",
+                        "authenticated": True,
+                        "verified": True,
+                        "signer_id": "governance-signer",
+                        "signed_payload_sha256": "a" * 64,
+                        "signature_hex": "b" * 128,
+                        "canonical_digest": "c" * 64,
+                        "node": name,
+                        "transaction_id": transaction_id,
+                        "capture_window_id": capture_window_id,
+                        "package_commit": "d" * 40,
+                        "checkpoint_id": "checkpoint-001",
+                        "manifest_hash": "5" * 64,
+                        "height": 100,
+                        "output_sha256": "6" * 64,
+                    }
+                    for name in ("sequencer-204", "storage-205")
+                },
+                "receipt": self._receipt("oasis7.fresh_root_probe_receipt.v1"),
+            },
+            "credential_nonce_ledger": {
+                "schema_version": "oasis7.credential_nonce_ledger.v1",
+                "path": "/operator/credential-nonce-ledger.jsonl",
+                "transaction_id": transaction_id,
+                "capture_window_id": capture_window_id,
+                "one_shot": True,
+                "replay": False,
+                "issued_at": "2026-08-30T00:00:00Z",
+                "expires_at": "2099-01-01T00:00:00Z",
+                "reserved_nonces": [
+                    "storage-nonce-" + "x" * 32,
+                    "sequencer-nonce-" + "x" * 32,
+                    "linux-observer-nonce-" + "x" * 32,
+                    "windows-observer-nonce-" + "x" * 32,
+                    "macos-observer-nonce-" + "x" * 32,
+                ],
+                "receipt": {
+                    **self._receipt("oasis7.credential_nonce_ledger_receipt.v1"),
+                    "bindings": {
+                        "path": "/operator/credential-nonce-ledger.jsonl",
+                        "transaction_id": transaction_id,
+                        "capture_window_id": capture_window_id,
+                        "one_shot": True,
+                        "replay": False,
+                        "issued_at": "2026-08-30T00:00:00Z",
+                        "expires_at": "2099-01-01T00:00:00Z",
+                        "reserved_nonces": [
+                            "storage-nonce-" + "x" * 32,
+                            "sequencer-nonce-" + "x" * 32,
+                            "linux-observer-nonce-" + "x" * 32,
+                            "windows-observer-nonce-" + "x" * 32,
+                            "macos-observer-nonce-" + "x" * 32,
+                        ],
+                    },
+                },
+            },
+            "adapter_verification": {
+                "schema_version": "oasis7.clean_room_adapter_verification.v1",
+                "authenticated": True,
+                "verified": True,
+                "signer_id": "governance-signer",
+                "signed_payload_sha256": "a" * 64,
+                "signature_hex": "b" * 128,
+                "canonical_digest": "c" * 64,
+                "adapter_id": "external-clean-room-adapter",
+                "transaction_id": transaction_id,
+                "capture_window_id": capture_window_id,
+                "live_receipts_verified": True,
+                "credential_nonce_ledger_verified": True,
+                "backup_or_no_backup_authority_verified": True,
+                "apply_authority_granted": False,
+                "durable_journal_authoritative": False,
+                "durable_journal_receipt_required": True,
+                "receipt": self._receipt("oasis7.clean_room_adapter_verification_receipt.v1"),
+            },
+            "deployment_inventory": deployment_inventory,
+            "nodes": nodes,
+        }
+
+    def test_plan_emits_fixed_five_node_order_and_8_7_surfaces(self) -> None:
+        plan = self.module.build_plan(self._input())
+
+        self.assertEqual(
+            plan["consumer_impact_record"]["path"], str(self._impact_path)
+        )
+        self.assertEqual(
+            plan["authority"]["consumer_impact_record"], plan["consumer_impact_record"]
+        )
+
+        self.assertEqual(
+            plan["node_order"],
+            [
+                "storage-205",
+                "sequencer-204",
+                "linux-lan-observer",
+                "windows-observer",
+                "macos-observer",
+            ],
+        )
+        self.assertEqual(len(plan["surfaces"]["validators"]), 8)
+        self.assertEqual(len(plan["surfaces"]["observers"]), 7)
+        self.assertEqual(plan["rollback"]["policy"], "clean-redeploy")
+        self.assertEqual(
+            plan["rollback"]["steps"],
+            [
+                "stop-started-nodes",
+                "preserve-failed-state-for-forensics",
+                "reinstall-exact-package-and-truth",
+                "rerun-fresh-root-probe",
+            ],
+        )
+        self.assertFalse(plan["rollback"]["restore_old_state"])
+        self.assertFalse(plan["rollback"]["cross_node_state_copy"])
+
+        self.assertEqual(plan["observer_gate"]["required_before"], ["windows-observer", "macos-observer"])
+        self.assertLess(
+            plan["global_order"].index("fresh-root-probe"),
+            plan["global_order"].index("start:windows-observer"),
+        )
+        self.assertLess(
+            plan["global_order"].index("start:windows-observer"),
+            plan["global_order"].index("start:macos-observer"),
+        )
+        phases = [entry["phase"] for entry in plan["operation_journal"]]
+        self.assertLess(phases.index("stop"), phases.index("delete"))
+        self.assertLess(phases.index("delete"), phases.index("rebuild"))
+        self.assertLess(phases.index("rebuild"), phases.index("start"))
+        self.assertEqual(
+            set(plan["truth"]["package"]["platforms"]),
+            {"linux-x64", "windows-x64", "macos-arm64"},
+        )
+        self.assertEqual(
+            plan["capture_window"],
+            {
+                "id": plan["capture_window_id"],
+                "starts_at": plan["credential_nonce_ledger"]["issued_at"],
+                "ends_at": plan["credential_nonce_ledger"]["expires_at"],
+            },
+        )
+
+    def test_linux_observer_surfaces_match_managed_reset_layout(self) -> None:
+        plan = self.module.build_plan(self._input())
+        observer = next(
+            node for node in plan["nodes"] if node["name"] == "linux-lan-observer"
+        )
+        root = "/opt/oasis7/p2p-testnet-local"
+        required_paths = {
+            f"{root}/world",
+            f"{root}/world-simulator-mirror",
+            f"{root}/execution-records",
+            f"{root}/store",
+            f"{root}/replication-root",
+            f"{root}/runtime-root",
+            f"{root}/output/chain-runtime/triad-testnet-local/reward-runtime-execution-bridge-state.json",
+            f"{root}/output/node-distfs/triad-testnet-local",
+        }
+        self.assertTrue(
+            required_paths.issubset(set(observer["persistent_state_paths"])),
+            observer["persistent_state_paths"],
+        )
+
+    def test_service_account_ownership_requires_independent_deployment_truth(self) -> None:
+        """An observed equal uid/gid pair cannot define its own expectation."""
+        request = self._input()
+        inventory_nodes = {
+            node["name"]: {
+                "expected_key_uid": 1001,
+                "expected_key_gid": 1001,
+            }
+            for node in request["nodes"]
+        }
+        request["deployment_inventory"] = {
+            "schema_version": "oasis7.deployment_inventory.v1",
+            "authenticated": True,
+            "verified": True,
+            "signer_id": "governance-signer",
+            "trust_root_id": "oasis7-public-testnet-governance-root-v1",
+            "nodes": inventory_nodes,
+            "receipt": self._receipt("oasis7.deployment_inventory_receipt.v1"),
+        }
+        for node in request["nodes"]:
+            node["identity_receipt"]["key_uid"] = 4242
+            node["identity_receipt"]["key_gid"] = 4242
+
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)(expected|deployment|uid|gid|owner)")
+
+    def test_macos_observer_uses_authenticated_inventory_root_and_surfaces(self) -> None:
+        """macOS reset targets must come from authenticated deployment inventory."""
+        request = self._input()
+        root = "/Users/operator/oasis7-fourth"
+        declared_paths = [
+            f"{root}/world",
+            f"{root}/world-simulator-mirror",
+            f"{root}/execution-records",
+            f"{root}/store",
+            f"{root}/replication-root",
+            f"{root}/runtime-root",
+            f"{root}/output/chain-runtime/triad-testnet-fourth-local/reward-runtime-execution-bridge-state.json",
+            f"{root}/output/node-distfs/triad-testnet-fourth-local",
+        ]
+        request["deployment_inventory"] = self._explicit_inventory(request)
+        request["deployment_inventory"]["nodes"]["macos-observer"].update(
+            {"node_root": root, "persistent_state_paths": declared_paths}
+        )
+        request["deployment_inventory"]["receipt"]["signed_payload_sha256"] = (
+            self.module._canonical_deployment_inventory_payload_digest(
+                request["deployment_inventory"]
+            )
+        )
+
+        plan = self.module.build_plan(request)
+        macos = next(node for node in plan["nodes"] if node["name"] == "macos-observer")
+        self.assertEqual(macos["node_root"], root)
+        self.assertEqual(macos["persistent_state_paths"], declared_paths)
+
+    def test_observer_surface_summary_matches_governed_node_inventory(self) -> None:
+        """The exported observer summary must include the governed eight paths."""
+        plan = self.module.build_plan(self._input())
+        linux = next(
+            node for node in plan["nodes"] if node["name"] == "linux-lan-observer"
+        )
+        summary = plan["surfaces"]
+        self.assertEqual(summary["observer_count"], len(linux["persistent_state_paths"]))
+        self.assertEqual(summary["observer_count"], 8)
+        self.assertIn("observers_by_node", summary)
+        self.assertEqual(
+            summary["observers_by_node"]["linux-lan-observer"],
+            linux["persistent_state_paths"],
+        )
+
+    def test_plan_requires_explicit_authenticated_deployment_inventory(self) -> None:
+        """Release admission cannot silently replace absent deployment truth."""
+        request = self._input()
+        request.pop("deployment_inventory")
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)deployment|inventory|missing|authenticated")
+
+    def test_plan_allows_independent_authenticated_uid_and_gid_truth(self) -> None:
+        """Deployment truth may authenticate distinct service UID and primary GID."""
+        request = self._input()
+        request["deployment_inventory"] = self._deployment_inventory(
+            request["nodes"], expected_uid=1001, expected_gid=1002
+        )
+        for node in request["nodes"]:
+            node["identity_receipt"]["key_uid"] = 1001
+            node["identity_receipt"]["key_gid"] = 1002
+            identity = node["identity_receipt"]
+            identity["signed_payload_sha256"] = hashlib.sha256(
+                self._raw_runtime_identity_receipt_v1_bytes(identity)
+            ).hexdigest()
+            identity["canonical_digest"] = self.module._canonical_receipt_digest(
+                identity, excluded_fields=frozenset({"peer_id"})
+            )
+
+        plan = self._build_plan_with_evidence(
+            request, type(self)._baseline_distinct_evidence
+        )
+        for node in plan["nodes"]:
+            inventory_node = plan["deployment_inventory"]["nodes"][node["name"]]
+            self.assertEqual(inventory_node["expected_key_uid"], 1001)
+            self.assertEqual(inventory_node["expected_key_gid"], 1002)
+            self.assertEqual(node["identity_receipt"]["key_uid"], 1001)
+            self.assertEqual(node["identity_receipt"]["key_gid"], 1002)
+
+    def test_plan_requires_authenticated_root_and_reset_surfaces_per_managed_node(self) -> None:
+        """Inventory layout is required per node; code-owned defaults are not evidence."""
+        for node_name in self.module.NODE_ORDER:
+            for field in ("node_root", "persistent_state_paths"):
+                with self.subTest(node=node_name, field=field):
+                    request = self._input()
+                    inventory = self._deployment_inventory(request["nodes"])
+                    inventory["nodes"][node_name].pop(field)
+                    request["deployment_inventory"] = inventory
+                    with self.assertRaises(SystemExit) as raised:
+                        self.module.build_plan(request)
+                    self.assertRegex(str(raised.exception), r"(?i)deployment|inventory|root|surface|path")
+
+    def test_plan_requires_complete_canonical_state_surfaces_per_managed_node(self) -> None:
+        """Authenticated state inventory must cover every role/platform surface."""
+        for node_name in self.module.NODE_ORDER:
+            for omission in ("sparse", "nested"):
+                with self.subTest(node=node_name, omission=omission):
+                    request = self._input()
+                    inventory = self._deployment_inventory(request["nodes"])
+                    node = next(item for item in request["nodes"] if item["name"] == node_name)
+                    full_paths = list(node["persistent_state_paths"])
+                    if omission == "sparse":
+                        incomplete_paths = [full_paths[0]]
+                    else:
+                        incomplete_paths = full_paths[:2] + full_paths[3:]
+                    inventory["nodes"][node_name]["persistent_state_paths"] = incomplete_paths
+                    node["persistent_state_paths"] = incomplete_paths
+                    request["deployment_inventory"] = inventory
+                    with self.assertRaises(SystemExit) as raised:
+                        self.module.build_plan(request)
+                    self.assertRegex(str(raised.exception), r"(?i)surface|canonical|complete|path")
+
+    def test_plan_enforces_component_aware_windows_state_containment(self) -> None:
+        """Windows roots are components: root and sibling-prefix paths are not surfaces."""
+        windows_name = "windows-observer"
+        windows_index = next(
+            index for index, node in enumerate(self._input()["nodes"])
+            if node["name"] == windows_name
+        )
+        for label, invalid_path in (
+            ("exact-root", "C:/oasis7-deploy"),
+            ("sibling-prefix", "C:/oasis7-deploy-evil/state"),
+        ):
+            with self.subTest(path=label):
+                request = self._input()
+                inventory = self._deployment_inventory(request["nodes"])
+                inventory["nodes"][windows_name]["persistent_state_paths"] = [invalid_path]
+                request["nodes"][windows_index]["persistent_state_paths"] = [invalid_path]
+                request["deployment_inventory"] = inventory
+                with self.assertRaises(SystemExit) as raised:
+                    self.module.build_plan(request)
+                self.assertRegex(str(raised.exception), r"(?i)root|surface|path|contain")
+
+        # Existing complete inventory paths are genuine descendants and remain accepted.
+        self.module.build_plan(self._input())
+
+    def test_plan_rejects_duplicate_authenticated_peer_ids(self) -> None:
+        """Distinct retained v2 entries cannot share one authenticated peer identity."""
+        request = self._input()
+        evidence = copy.deepcopy(self._baseline_identity_v2_evidence)
+        evidence["entries"][1]["peer_id"] = evidence["entries"][0]["peer_id"]
+        with self.assertRaises(SystemExit) as raised:
+            self._build_plan_with_evidence(request, evidence)
+        self.assertRegex(str(raised.exception), r"(?i)peer|identity|duplicate|unique")
+
+    def test_plan_rejects_unique_peer_ids_outside_authenticated_registry(self) -> None:
+        """Peer uniqueness alone cannot authorize a caller-supplied retained identity."""
+        for node in self._input()["nodes"]:
+            with self.subTest(node=node["name"]):
+                request = self._input()
+                evidence = copy.deepcopy(self._baseline_identity_v2_evidence)
+                target = next(
+                    item for item in evidence["entries"] if item["node_name"] == node["name"]
+                )
+                target["peer_id"] = f"12D3KooWcaller-supplied-{node['name']}"
+                with self.assertRaises(SystemExit) as raised:
+                    self._build_plan_with_evidence(request, evidence)
+                self.assertRegex(str(raised.exception), r"(?i)peer|identity|registry|canonical|binding")
+
+    def test_plan_requires_fresh_bound_consumer_impact_record(self) -> None:
+        request = self._input()
+        request.pop("consumer_impact_record")
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)consumer|impact|record|binding")
+
+        request = self._input()
+        self._rewrite_consumer_impact(request, timestamp="2020-01-01T00:00:00Z")
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)consumer|impact|stale|fresh|timestamp")
+
+        request = self._input()
+        self._rewrite_consumer_impact(request, impact="active", outage_update_channel="n/a")
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)consumer|impact|outage|channel|n/a")
+
+        request = self._input()
+        request["consumer_impact_record"]["sha256"] = "0" * 64
+        request["authority"]["consumer_impact_record"] = dict(request["consumer_impact_record"])
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)consumer|impact|sha|digest|binding")
+
+    def test_observer_destructive_phases_follow_fresh_root_probe(self) -> None:
+        plan = self.module.build_plan(self._input())
+        order = plan["global_order"]
+        probe_index = order.index("fresh-root-probe")
+        for name in ("linux-lan-observer", "windows-observer", "macos-observer"):
+            for phase in ("stop", "delete", "rebuild"):
+                self.assertGreater(order.index(f"{phase}:{name}"), probe_index)
+
+        invalid = list(order)
+        invalid.remove("stop:windows-observer")
+        invalid.insert(probe_index, "stop:windows-observer")
+        with patch.object(self.module, "_global_order", return_value=invalid):
+            with self.assertRaises(SystemExit) as raised:
+                self.module.build_plan(self._input())
+        self.assertRegex(str(raised.exception), r"(?i)order|probe|observer|destructive")
+
+    def test_plan_rejects_attacker_endpoint_host_port_or_path(self) -> None:
+        request = self._input()
+        request["nodes"][0]["endpoints"]["healthz"] = "http://attacker.invalid:6631/healthz"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)canonical|endpoint|host|port|binding")
+
+    def test_plan_requires_code_owned_external_trust_root_and_receipt_bindings(self) -> None:
+        request = self._input()
+        request["authority"]["trust_root"]["trust_root_id"] = "caller-owned-root"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)trust|root|authority|identity")
+
+        request = self._input()
+        request["authority"]["receipt"]["bindings"]["head_oid"] = "f" * 40
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)authority|head|receipt|binding")
+
+        request = self._input()
+        request["truth"]["genesis"]["network_id"] = "caller-owned-network"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)network|genesis|trust|code-owned")
+
+    def _network_binding_evidence_fixture(
+        self,
+        root: Path,
+        *,
+        context_network_id: str,
+        request: dict[str, object] | None = None,
+        expected_uid: int = 0,
+        expected_gid: int = 0,
+    ) -> tuple[dict[str, object], dict[str, object]]:
+        """Make a shape-valid five-node map for network-binding admission tests."""
+        request = request or self._input()
+        context = {
+            "schema_version": "oasis7.identity_v2_context.v1",
+            "network_id": context_network_id,
+            "task_uid": request["task_uid"],
+            "head_oid": request["head_oid"],
+            "capture_window_id": request["capture_window_id"],
+            "capture_start": "2026-09-01T00:00:00Z",
+            "capture_end": "2099-01-01T00:00:00Z",
+            "rotation_epoch": self.module.CANONICAL_ROTATION_EPOCH,
+            "issued_at": "2026-09-01T00:00:00Z",
+            "expires_at": "2099-01-01T00:00:00Z",
+        }
+        context_path = root / "context.json"
+        context_path.write_bytes(json.dumps(context, sort_keys=True, separators=(",", ":")).encode())
+        context_path.chmod(0o600)
+        context_digest = hashlib.sha256(context_path.read_bytes()).hexdigest()
+        intent = {
+            "schema_version": "oasis7.clean_room_plan_intent.v1",
+            "context_digest": context_digest,
+            "adapter_action": "public-testnet-governed-rebuild",
+            "nodes": [],
+        }
+        intent_path = root / "plan-intent.json"
+        intent_path.write_bytes(json.dumps(intent, sort_keys=True, separators=(",", ":")).encode())
+        intent_path.chmod(0o600)
+        plan_digest = hashlib.sha256(intent_path.read_bytes()).hexdigest()
+        entries: list[dict[str, object]] = []
+        for node_name in self.module.NODE_ORDER:
+            expected = self.module.EXPECTED_NODES[node_name]
+            # This fixture is code-owned test truth, not a projection of the
+            # caller request.  In particular, request mutations must not be
+            # able to manufacture an admission map that follows them.
+            node_id = expected["node_id"]
+            peer_id = self.module.CANONICAL_PEER_REGISTRY[node_name]
+            key_sha256 = "1" * 64
+            key_size_bytes = 1
+            key_mode = "0600"
+            raw_key_mode = int(key_mode, 8)
+            key_uid = expected_uid
+            key_gid = expected_gid
+            signature_hex = "a" * 128
+            raw_bytes = json.dumps(
+                {
+                    "schema_version": "oasis7.identity_receipt.v1",
+                    "node_id": node_id,
+                    "peer_id": peer_id,
+                    "key_path": f"config/{node_id}-node-keypair.toml",
+                    "key_sha256": key_sha256,
+                    "key_size_bytes": key_size_bytes,
+                    "key_mode": raw_key_mode,
+                    "key_uid": key_uid,
+                    "key_gid": key_gid,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+            raw_path = root / f"{node_name}.raw-v1"
+            raw_path.write_bytes(raw_bytes)
+            envelope = {
+                field: "placeholder"
+                for field in self.module.IDENTITY_V2_ENVELOPE_FIELDS
+            }
+            envelope.update(
+                {
+                    "domain_separator": "oasis7.identity_receipt.v2/signature/v1",
+                    "schema_version": "oasis7.identity_receipt.v2",
+                    "signer_id": "governance-signer",
+                    "verifier_id": self.module.CANONICAL_VERIFIER_ID,
+                    "trust_root_id": self.module.CANONICAL_TRUST_ROOT_ID,
+                    "network_id": context_network_id,
+                    "task_uid": request["task_uid"],
+                    "head_oid": request["head_oid"],
+                    "frozen_head_oid": request["head_oid"],
+                    "plan_digest": plan_digest,
+                    "context_digest": context_digest,
+                    "capture_window_id": request["capture_window_id"],
+                    "rotation_epoch": self.module.CANONICAL_ROTATION_EPOCH,
+                    "issued_at": "2026-09-01T00:00:00Z",
+                    "expires_at": "2099-01-01T00:00:00Z",
+                    "node_id": node_id,
+                    "peer_id": peer_id,
+                    "key_sha256": key_sha256,
+                    "key_size_bytes": key_size_bytes,
+                    "key_mode": key_mode,
+                    "key_uid": key_uid,
+                    "key_gid": key_gid,
+                    "signed_payload_sha256": hashlib.sha256(raw_bytes).hexdigest(),
+                    "signature_hex": signature_hex,
+                    "authenticated": True,
+                    "verified": True,
+                    "historical_only": False,
+                    "apply_authorized": True,
+                }
+            )
+            envelope["canonical_digest"] = hashlib.sha256(
+                json.dumps(
+                    {
+                        **{field: envelope[field] for field in self.module.IDENTITY_V2_SIGNED_FIELDS},
+                        "signature_hex": envelope["signature_hex"],
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode()
+            ).hexdigest()
+            envelope_path = root / f"{node_name}.envelope.json"
+            envelope_path.write_bytes(json.dumps(envelope, sort_keys=True, separators=(",", ":")).encode())
+            unsigned_envelope = dict(envelope)
+            unsigned_envelope["authenticated"] = False
+            unsigned_envelope["verified"] = False
+            unsigned_path = root / f"{node_name}.unsigned-envelope.json"
+            unsigned_path.write_bytes(
+                json.dumps(unsigned_envelope, sort_keys=True, separators=(",", ":")).encode()
+            )
+            payload_value = {
+                field: envelope[field] for field in self.module.IDENTITY_V2_SIGNED_FIELDS
+            }
+            payload_bytes = b"OASIS7-IDENTITY-RECEIPT-V2\0" + json.dumps(
+                payload_value, sort_keys=True, separators=(",", ":")
+            ).encode()
+            payload_path = root / f"{node_name}.payload.bin"
+            payload_path.write_bytes(payload_bytes)
+            manifest = {
+                "schema_version": "oasis7.identity_v2_prepare_manifest.v1",
+                "network_id": self.module.CANONICAL_NETWORK_ID,
+                "raw_v1_sha256": hashlib.sha256(raw_bytes).hexdigest(),
+                "canonical_payload_sha256": hashlib.sha256(payload_bytes).hexdigest(),
+                "payload_size_bytes": len(payload_bytes),
+            }
+            manifest_path = root / f"{node_name}.prepare-manifest.json"
+            manifest_path.write_bytes(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode())
+            request_id = "req-v2:" + format(self.module.NODE_ORDER.index(node_name) + 1, "064x")
+            proof_ref = "proof-v1:" + hashlib.sha256(("provider-proof:" + request_id).encode()).hexdigest()
+            attestation = {
+                "schema_version": "oasis7.identity_v2_provider_attestation.v2",
+                "network_id": context_network_id,
+                "provider_id": "ephemeral-test-provider",
+                "request_id": request_id,
+                "signer_id": "governance-signer",
+                "public_key_sha256": "1" * 64,
+                "algorithm": "ed25519",
+                "canonical_payload_sha256": hashlib.sha256(payload_bytes).hexdigest(),
+                "signature_sha256": hashlib.sha256(bytes.fromhex(signature_hex)).hexdigest()
+                if isinstance(signature_hex, str) and len(signature_hex) == 128
+                else "0" * 64,
+                "context_digest": context_digest,
+                "rotation_epoch": self.module.CANONICAL_ROTATION_EPOCH,
+                "capture_window_id": request["capture_window_id"],
+                "issued_at": "2026-09-01T00:00:00Z",
+                "expires_at": "2099-01-01T00:00:00Z",
+                "task_uid": request["task_uid"],
+                "head_oid": request["head_oid"],
+                "proof_ref": proof_ref,
+            }
+            claims = {
+                "schema_version": "oasis7.identity_v2_provider_authentication_claims.v1",
+                "domain_separator": "oasis7.identity-v2-provider-authentication/v1",
+                "network_id": attestation["network_id"],
+                "provider_id": attestation["provider_id"],
+                "request_id": attestation["request_id"],
+                "signer_id": attestation["signer_id"],
+                "public_key_sha256": attestation["public_key_sha256"],
+                "canonical_payload_sha256": attestation["canonical_payload_sha256"],
+                "signature_sha256": attestation["signature_sha256"],
+                "context_digest": attestation["context_digest"],
+                "task_uid": attestation["task_uid"],
+                "head_oid": attestation["head_oid"],
+                "rotation_epoch": attestation["rotation_epoch"],
+                "capture_window_id": attestation["capture_window_id"],
+                "issued_at": attestation["issued_at"],
+                "expires_at": attestation["expires_at"],
+                "proof_ref": attestation["proof_ref"],
+            }
+            claims_bytes = json.dumps(claims, sort_keys=True, separators=(",", ":")).encode()
+            attestation["proof"] = {
+                "schema_version": "oasis7.identity_v2_provider_authentication_proof.v1",
+                "algorithm": "ed25519",
+                "claims_sha256": hashlib.sha256(claims_bytes).hexdigest(),
+                "signature_hex": "a" * 128,
+            }
+            attestation_path = root / f"{node_name}.provider-attestation.json"
+            attestation_path.write_bytes(
+                json.dumps(attestation, sort_keys=True, separators=(",", ":")).encode()
+            )
+            signed_payload = b"OASIS7-IDENTITY-RECEIPT-V2\0" + json.dumps(
+                {field: envelope[field] for field in self.module.IDENTITY_V2_SIGNED_FIELDS},
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+            verification = {
+                field: "0" * 64
+                for field in self.module.IDENTITY_V2_VERIFICATION_FIELDS
+                if field.endswith("sha256")
+            }
+            verification.update(
+                {
+                    "schema_version": "oasis7.identity_v2_verification_receipt.v1",
+                    "mode": "current_admission",
+                    "evaluation_time": "2026-09-01T00:00:00Z",
+                    "canonical_payload_sha256": hashlib.sha256(signed_payload).hexdigest(),
+                    "envelope_sha256": hashlib.sha256(unsigned_path.read_bytes()).hexdigest(),
+                    "signer_id": "governance-signer",
+                    "task_uid": request["task_uid"],
+                    "head_oid": request["head_oid"],
+                    "node_id": expected["node_id"],
+                    "peer_id": peer_id,
+                    "capture_window_id": request["capture_window_id"],
+                    "rotation_epoch": self.module.CANONICAL_ROTATION_EPOCH,
+                    "network_id": context_network_id,
+                    "proof_ref": attestation["proof_ref"],
+                    "proof_claims_sha256": attestation["proof"]["claims_sha256"],
+                    "historical_only": False,
+                    "apply_authorized": True,
+                    "authority_scope": "deployed-governance-root",
+                    "verified": True,
+                }
+            )
+            verification["raw_v1_sha256"] = hashlib.sha256(raw_bytes).hexdigest()
+            verification_path = root / f"{node_name}.verification.json"
+            verification_path.write_bytes(json.dumps(verification, sort_keys=True, separators=(",", ":")).encode())
+            for artifact_path in (
+                raw_path, envelope_path, unsigned_path, payload_path,
+                manifest_path, attestation_path, verification_path,
+            ):
+                artifact_path.chmod(0o600)
+            descriptor = lambda path: {
+                "path": str(path),
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                "size_bytes": path.stat().st_size,
+            }
+            entries.append(
+                {
+                    "node_name": node_name,
+                    "node_id": expected["node_id"],
+                    "peer_id": peer_id,
+                    "raw_v1": descriptor(raw_path),
+                    "prepare_manifest": descriptor(manifest_path),
+                    "payload": descriptor(payload_path),
+                    "provider_attestation": descriptor(attestation_path),
+                    "unsigned_envelope": descriptor(unsigned_path),
+                    "signed_envelope": descriptor(envelope_path),
+                    "verification": descriptor(verification_path),
+                }
+            )
+        evidence = {
+            "schema_version": self.module.IDENTITY_V2_EVIDENCE_SCHEMA,
+            "network_id": self.module.CANONICAL_NETWORK_ID,
+            "task_uid": request["task_uid"],
+            "head_oid": request["head_oid"],
+            "context": {
+                "path": str(context_path),
+                "sha256": hashlib.sha256(context_path.read_bytes()).hexdigest(),
+                "size_bytes": context_path.stat().st_size,
+            },
+            "plan_intent": {
+                "path": str(intent_path),
+                "sha256": hashlib.sha256(intent_path.read_bytes()).hexdigest(),
+                "size_bytes": intent_path.stat().st_size,
+            },
+            "entries": entries,
+        }
+        return evidence, request
+
+    def test_identity_v2_evidence_map_rejects_context_network_mismatch(self) -> None:
+        """A five-node map cannot bind an attacker-selected context network."""
+        with tempfile.TemporaryDirectory() as directory:
+            evidence, request = self._network_binding_evidence_fixture(
+                Path(directory), context_network_id="attacker-network"
+            )
+            with self.assertRaises(SystemExit) as raised:
+                self.module._identity_v2_evidence_map(evidence, request)
+        self.assertRegex(str(raised.exception), r"(?i)network|context|binding")
+
+    def test_identity_v2_evidence_map_accepts_governed_context_network(self) -> None:
+        """The canonical deployment network remains a valid map binding."""
+        with tempfile.TemporaryDirectory() as directory:
+            evidence, request = self._network_binding_evidence_fixture(
+                Path(directory), context_network_id=self.module.CANONICAL_NETWORK_ID
+            )
+            validated, raw_by_node, envelopes = self.module._identity_v2_evidence_map(
+                evidence, request
+            )
+        self.assertEqual(set(raw_by_node), set(self.module.NODE_ORDER))
+        self.assertEqual(set(envelopes), set(self.module.NODE_ORDER))
+
+    def test_plan_requires_adapter_live_receipt_and_never_treats_plan_as_apply_proof(self) -> None:
+        request = self._input()
+        request.pop("adapter_verification")
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)adapter|live|receipt|ledger")
+
+        request = self._input()
+        request["adapter_verification"]["apply_authority_granted"] = True
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)apply|proof|adapter|authority")
+
+    def test_build_plan_rejects_missing_identity_v2_evidence_map(self) -> None:
+        """Legacy receipt-only input must not bypass v2 map admission."""
+        with self.assertRaises(SystemExit) as raised:
+            self._build_plan_without_evidence(self._input())
+        self.assertRegex(str(raised.exception), r"(?i)identity.?v2|evidence|map|admission")
+
+    def test_plan_marks_operation_journal_non_authoritative_and_adapter_owned(self) -> None:
+        plan = self.module.build_plan(self._input())
+        contract = plan["operation_journal_contract"]
+        self.assertFalse(contract["authoritative"])
+        self.assertFalse(contract["apply_usable"])
+        self.assertTrue(contract["adapter_owned"])
+        self.assertTrue(contract["durable_receipt_required"])
+
+    def test_plan_rejects_missing_fresh_root_probe_before_windows_or_macos(self) -> None:
+        request = self._input()
+        request.pop("fresh_root_probe")
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)fresh[_-]?root.*probe")
+
+    def test_plan_rejects_shaped_but_unverified_inventory_identity_and_authority_receipts(self) -> None:
+        """Receipt-shaped fields are not independent verification evidence."""
+        mutations = (
+            (
+                "deployment-inventory-signature",
+                lambda request: request["deployment_inventory"]["receipt"].__setitem__(
+                    "signature_hex", "0" * 128
+                ),
+            ),
+            (
+                "deployment-inventory-digest",
+                lambda request: request["deployment_inventory"]["receipt"].__setitem__(
+                    "canonical_digest", "0" * 64
+                ),
+            ),
+            (
+                "identity-signature",
+                lambda request: request["nodes"][0]["identity_receipt"].__setitem__(
+                    "signature_hex", "0" * 128
+                ),
+            ),
+            (
+                "identity-digest",
+                lambda request: request["nodes"][0]["identity_receipt"].__setitem__(
+                    "canonical_digest", "0" * 64
+                ),
+            ),
+            (
+                "authority-verifier-signature",
+                lambda request: request["authority"]["crypto_verifier_receipt"].__setitem__(
+                    "signature_hex", "0" * 128
+                ),
+            ),
+        )
+        for label, mutate in mutations:
+            with self.subTest(receipt=label):
+                request = self._input()
+                evidence = self._baseline_identity_v2_evidence
+                if label == "identity-signature":
+                    evidence = self._tampered_evidence_artifact(
+                        evidence,
+                        mutate=lambda envelope: envelope.__setitem__("signature_hex", "0" * 128),
+                    )
+                elif label == "identity-digest":
+                    evidence = self._tampered_evidence_artifact(
+                        evidence,
+                        mutate=lambda envelope: envelope.__setitem__("canonical_digest", "0" * 64),
+                    )
+                else:
+                    mutate(request)
+                with self.assertRaises(SystemExit) as raised:
+                    self._build_plan_with_evidence(request, evidence)
+                self.assertRegex(
+                    str(raised.exception),
+                    r"(?i)receipt|signature|digest|verified|authenticated|verifier|binding|envelope|identity",
+                )
+
+    def test_plan_rejects_authority_binding_context_drift_and_stale_or_future_receipts(self) -> None:
+        """Authority receipts bind task/head/window/rotation and a bounded issue window."""
+        valid = self._input()
+        valid_context = {
+            "capture_window_id": valid["capture_window_id"],
+            "rotation_epoch": "rotation-epoch-20260901-001",
+            "issued_at": "2026-08-30T00:00:00Z",
+            "expires_at": "2099-01-01T00:00:00Z",
+        }
+        for container in (
+            valid["authority"]["receipt"]["bindings"],
+            valid["authority"]["trust_root"]["bindings"],
+        ):
+            container.update(valid_context)
+        self.module.build_plan(valid)
+
+        mutations = (
+            ("task-mismatch", {"task_uid": "task-attacker"}),
+            ("head-mismatch", {"head_oid": "f" * 40}),
+            ("frozen-head-mismatch", {"frozen_head_oid": "f" * 40}),
+            ("capture-window-mismatch", {"capture_window_id": "other-window"}),
+            ("rotation-epoch-mismatch", {"rotation_epoch": "rotation-attacker"}),
+            (
+                "stale-authority",
+                {"issued_at": "2020-01-01T00:00:00Z", "expires_at": "2020-01-02T00:00:00Z"},
+            ),
+            (
+                "future-authority",
+                {"issued_at": "2099-01-01T00:00:00Z", "expires_at": "2100-01-01T00:00:00Z"},
+            ),
+        )
+        for label, updates in mutations:
+            with self.subTest(binding=label):
+                request = self._input()
+                for container in (
+                    request["authority"]["receipt"]["bindings"],
+                    request["authority"]["trust_root"]["bindings"],
+                ):
+                    container.update(valid_context)
+                    container.update(updates)
+                with self.assertRaises(SystemExit) as raised:
+                    self.module.build_plan(request)
+                self.assertRegex(
+                    str(raised.exception),
+                    r"(?i)authority|binding|capture|rotation|task|head|stale|future|expir",
+                )
+
+    def test_plan_rejects_old_state_restore_or_cross_node_copy(self) -> None:
+        request = self._input()
+        request["recovery"] = {"restore_old_state": True}
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)old.?state|seed|copy|forensic")
+
+        request = self._input()
+        request["recovery"] = {"source_node": "sequencer-204", "cross_node_state_copy": True}
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)cross.?node|copy|source")
+
+    def test_plan_rejects_binding_drift_and_unverified_receipt(self) -> None:
+        request = self._input()
+        request["truth"]["checkpoint"]["manifest_hash"] = "f" * 64
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)probe|checkpoint|manifest|binding")
+
+        request = self._input()
+        request["truth"]["package"]["receipt"]["verified"] = False
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)receipt|verified|authenticated")
+
+    def test_plan_rejects_service_path_or_identity_inventory_drift(self) -> None:
+        request = self._input()
+        request["nodes"][0]["service"] = "caller-owned.service"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)service|identity|contract")
+
+        request = self._input()
+        request["nodes"][2]["persistent_state_paths"] = request["nodes"][2]["persistent_state_paths"][:-1]
+        request["deployment_inventory"]["nodes"]["linux-lan-observer"]["persistent_state_paths"] = [
+            "/operator/not-the-authenticated-observer-root"
+        ]
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)surface|persistent|state")
+
+        request = self._input()
+        evidence = self._tampered_evidence_artifact(
+            self._baseline_identity_v2_evidence,
+            mutate=lambda envelope: envelope.__setitem__("key_mode", "0644"),
+        )
+        with self.assertRaises(SystemExit) as raised:
+            self._build_plan_with_evidence(request, evidence)
+        self.assertRegex(str(raised.exception), r"(?i)key_mode|0600|identity|evidence|binding")
+
+    def test_plan_rejects_unbound_frozen_head_signer_or_verifier(self) -> None:
+        request = self._input()
+        request["authority"]["frozen_head_oid"] = "f" * 40
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)frozen|head|binding")
+
+        request = self._input()
+        request["authority"]["signer_allowlist"] = ["different-signer"]
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)signer|allow")
+
+        request = self._input()
+        request["authority"]["crypto_verifier_receipt"]["verified"] = False
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)verifier|crypt|receipt")
+
+    def test_plan_rejects_endpoint_pin_or_nonce_drift(self) -> None:
+        request = self._input()
+        request["nodes"][0]["endpoints"]["evidence"] = "http://127.0.0.1:6631/v1/chain/status"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)endpoint|204|rebuild-proof|status")
+
+        request = self._input()
+        request["nodes"][1]["host_binding"]["known_host_fingerprint"] = "unbound-pin"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)host|fingerprint|pin")
+
+        request = self._input()
+        request["nodes"][2]["credential_seam"]["nonce"] = "too-short"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)nonce|credential|seam")
+
+    def test_operator_authorized_no_backup_mode_is_explicit(self) -> None:
+        request = self._input()
+        request["backup_policy"] = {
+            "mode": "operator-authorized-no-backup",
+            "operator_authorized": True,
+            "current_authorization": True,
+            "repository": "eng-cc/oasis7",
+            "action": "full-network-clean-room",
+            "targets": list(self.module.NODE_ORDER),
+            "transaction_id": request["transaction_id"],
+            "capture_window_id": request["capture_window_id"],
+            "actor": "ops-actor",
+            "issued_at": "2026-08-30T00:00:00Z",
+            "expires_at": "2099-01-01T00:00:00Z",
+            "task_uid": request["task_uid"],
+            "frozen_head_oid": request["head_oid"],
+            "reason": "immutable provider backup unavailable",
+            "authority": self._no_backup_receipt(request, "2099-01-01T00:00:00Z"),
+        }
+        plan = self.module.build_plan(request)
+        self.assertFalse(plan["forensic_backup"]["required_before_reset"])
+        self.assertEqual(plan["forensic_backup"]["mode"], "operator-authorized-no-backup")
+        self.assertFalse(plan["forensic_backup"]["immutable"])
+        self.assertFalse(plan["forensic_backup"]["receipt_required_per_node"])
+
+    def test_plan_rejects_caller_inventory_override(self) -> None:
+        request = self._input()
+        request["nodes"][0]["host_binding"]["known_hosts_path"] = "/operator/other-known-hosts"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)canonical|inventory|known.?hosts|host")
+
+    def test_verifier_receipt_binds_execution_world_and_json_index_evidence(self) -> None:
+        request = self._input()
+        request["authority"]["crypto_verifier_receipt"]["bindings"]["cas"]["blake3"] = "0" * 64
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)verifier|execution|cas|binding")
+
+        request = self._input()
+        request["truth"]["execution"]["json_index_consistency"]["verified"] = False
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)json|index|consistency|execution")
+
+    def test_probe_binds_transaction_capture_and_post_validator_outputs(self) -> None:
+        request = self._input()
+        request["fresh_root_probe"]["transaction_id"] = "different-transaction"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)transaction|capture|probe")
+
+        request = self._input()
+        request["fresh_root_probe"]["replayed"] = True
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)replay|probe")
+
+        request = self._input()
+        request["fresh_root_probe"]["validator_verify_outputs"].pop("storage-205")
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)validator|verify|output|probe")
+
+    def test_no_backup_authority_binds_full_context_and_expiry(self) -> None:
+        request = self._input()
+        request["backup_policy"] = {
+            "mode": "operator-authorized-no-backup",
+            "operator_authorized": True,
+            "current_authorization": True,
+            "repository": "eng-cc/oasis7",
+            "action": "full-network-clean-room",
+            "targets": list(self.module.NODE_ORDER),
+            "transaction_id": request["transaction_id"],
+            "capture_window_id": request["capture_window_id"],
+            "actor": "ops-actor",
+            "issued_at": "2026-08-30T00:00:00Z",
+            "expires_at": "2099-01-01T00:00:00Z",
+            "task_uid": request["task_uid"],
+            "frozen_head_oid": request["head_oid"],
+            "reason": "immutable provider backup unavailable",
+            "authority": self._no_backup_receipt(request, "2099-01-01T00:00:00Z"),
+        }
+        request["backup_policy"]["action"] = "other-action"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)backup|authority|action|binding")
+
+        request["backup_policy"]["action"] = "full-network-clean-room"
+        request["backup_policy"]["issued_at"] = "2099-01-01T00:00:00Z"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)expir|future|backup|authority")
+
+        request = self._input()
+        request["backup_policy"] = {
+            "mode": "operator-authorized-no-backup",
+            "operator_authorized": True,
+            "current_authorization": True,
+            "repository": "eng-cc/oasis7",
+            "action": "full-network-clean-room",
+            "targets": list(self.module.NODE_ORDER),
+            "transaction_id": request["transaction_id"],
+            "capture_window_id": request["capture_window_id"],
+            "actor": "ops-actor",
+            "issued_at": "2026-08-30T00:00:00Z",
+            "expires_at": "2020-01-01T00:00:00Z",
+            "task_uid": request["task_uid"],
+            "frozen_head_oid": request["head_oid"],
+            "reason": "immutable provider backup unavailable",
+            "authority": self._no_backup_receipt(request, "2020-01-01T00:00:00Z"),
+        }
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)expir|backup|authority")
+
+        request = self._input()
+        request["backup_policy"] = {
+            "mode": "operator-authorized-no-backup",
+            "operator_authorized": True,
+            "current_authorization": True,
+            "repository": "eng-cc/oasis7",
+            "action": "full-network-clean-room",
+            "targets": list(self.module.NODE_ORDER),
+            "transaction_id": request["transaction_id"],
+            "capture_window_id": request["capture_window_id"],
+            "actor": "ops-actor",
+            "issued_at": "2026-08-30T00:00:00Z",
+            "expires_at": "2099-01-01T00:00:00Z",
+            "task_uid": request["task_uid"],
+            "frozen_head_oid": request["head_oid"],
+            "reason": "immutable provider backup unavailable",
+            "authority": self._no_backup_receipt(request, "2099-01-01T00:00:00Z"),
+        }
+        request["backup_policy"]["authority"]["bindings"]["actor"] = "different-actor"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)authority|receipt|binding")
+
+    def test_credential_lease_rejects_future_issued_at(self) -> None:
+        request = self._input()
+        issued_at = "2099-01-01T00:00:00Z"
+        expires_at = "2100-01-01T00:00:00Z"
+        ledger = request["credential_nonce_ledger"]
+        ledger["issued_at"] = issued_at
+        ledger["expires_at"] = expires_at
+        ledger["receipt"]["bindings"]["issued_at"] = issued_at
+        ledger["receipt"]["bindings"]["expires_at"] = expires_at
+        for node in request["nodes"]:
+            node["credential_seam"]["issued_at"] = issued_at
+            node["credential_seam"]["expires_at"] = expires_at
+
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)future|issued|credential|lease")
+
+    def test_credential_nonce_ledger_is_unique_live_and_one_shot(self) -> None:
+        request = self._input()
+        request["credential_nonce_ledger"]["reserved_nonces"][1] = request[
+            "credential_nonce_ledger"
+        ]["reserved_nonces"][0]
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)nonce|ledger|unique|duplicate")
+
+        request = self._input()
+        request["nodes"][0]["credential_seam"]["expires_at"] = "2020-01-01T00:00:00Z"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)nonce|credential|expir")
+
+        request = self._input()
+        request["credential_nonce_ledger"]["replay"] = True
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)one.?shot|replay|ledger|nonce")
+
+        request = self._input()
+        request["credential_nonce_ledger"]["receipt"]["bindings"]["capture_window_id"] = "other-window"
+        with self.assertRaises(SystemExit) as raised:
+            self.module.build_plan(request)
+        self.assertRegex(str(raised.exception), r"(?i)receipt|ledger|binding")
+
+    def test_operation_journal_binds_transaction_capture_targets_and_truth(self) -> None:
+        plan = self.module.build_plan(self._input())
+        self.assertTrue(plan["operation_journal"])
+        for entry in plan["operation_journal"]:
+            self.assertEqual(entry["transaction_id"], "txn-clean-room-001")
+            self.assertEqual(entry["capture_window_id"], "capture-window-20260901-001")
+            if entry["node"] is not None:
+                self.assertIn("target_root", entry)
+                self.assertEqual(entry["package_commit"], "d" * 40)
+
+    def test_plan_is_deterministic_and_contains_no_secret_or_mutation_command(self) -> None:
+        request = self._input()
+        first = self.module.build_plan(request)
+        shuffled = json.loads(json.dumps(request))
+        shuffled["nodes"] = list(reversed(shuffled["nodes"]))
+        second = self.module.build_plan(shuffled)
+        self.assertEqual(first, second)
+        serialized = json.dumps(first, sort_keys=True)
+        self.assertNotRegex(serialized, r"(?i)(password=|secret-value|token-value|private.?key-bytes)")
+        self.assertEqual(first["execution"]["mode"], "plan-only")
+        self.assertFalse(first["execution"]["provider_mutation_performed"])
+
+    def test_cli_rejects_missing_identity_v2_evidence_map(self) -> None:
+        request = self._input()
+        with tempfile.TemporaryDirectory() as directory:
+            input_path = Path(directory) / "input.json"
+            output_path = Path(directory) / "plan.json"
+            input_path.write_text(json.dumps(request), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    "python3",
+                    str(MODULE_PATH),
+                    "--input",
+                    str(input_path),
+                    "--out",
+                    str(output_path),
+                    "--json",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0, "legacy input bypassed identity-v2 admission")
+            self.assertRegex(result.stderr, r"(?i)identity.?v2|evidence|admission|verification")
+            self.assertFalse(output_path.exists())
+            self.assertEqual(sorted(path.name for path in Path(directory).iterdir()), ["input.json"])
+
+    def test_plan_accepts_current_v2_inventory_and_identity_receipt_freshness(self) -> None:
+        """Current capture/rotation/time bindings are valid for every receipt."""
+        request = self._input()
+        self._bind_current_receipt_freshness(request)
+        plan = self.module.build_plan(request)
+        inventory_receipt = plan["deployment_inventory"]["receipt"]
+        self.assertEqual(
+            inventory_receipt["capture_window_id"], plan["capture_window_id"]
+        )
+        self.assertEqual(
+            inventory_receipt["rotation_epoch"], self.module.CANONICAL_ROTATION_EPOCH
+        )
+        for node in plan["nodes"]:
+            receipt = node["identity_receipt"]
+            self.assertEqual(receipt["capture_window_id"], plan["capture_window_id"])
+            self.assertEqual(receipt["rotation_epoch"], self.module.CANONICAL_ROTATION_EPOCH)
+
+    def test_plan_rejects_inventory_and_identity_receipt_freshness_drift(self) -> None:
+        """Shape-valid v2 receipts cannot rebind current capture authority."""
+        mutations = (
+            ("missing-capture-window", "capture_window_id", None, r"capture_window_id"),
+            ("capture-window-mismatch", "capture_window_id", "other-window", r"capture_window_id"),
+            ("missing-rotation-epoch", "rotation_epoch", None, r"rotation_epoch"),
+            ("rotation-epoch-mismatch", "rotation_epoch", "rotation-attacker", r"rotation_epoch"),
+            ("missing-issued-at", "issued_at", None, r"issued_at"),
+            ("missing-expires-at", "expires_at", None, r"expires_at"),
+            (
+                "stale-window",
+                "issued_at",
+                "2020-01-01T00:00:00Z",
+                r"issued_at|expires_at|stale|fresh",
+            ),
+            (
+                "future-window",
+                "issued_at",
+                "2099-01-01T00:00:00Z",
+                r"issued_at|future|fresh",
+            ),
+        )
+        for scope, node_name in (("inventory", None), *(('identity', name) for name in self.module.NODE_ORDER)):
+            for label, field, value, expected_error in mutations:
+                with self.subTest(scope=scope, node=node_name, mutation=label):
+                    request = self._input()
+                    self._bind_current_receipt_freshness(request)
+                    evidence = self._baseline_identity_v2_evidence
+                    if scope == "inventory":
+                        receipt = request["deployment_inventory"]["receipt"]
+                    else:
+                        receipt = next(
+                            node["identity_receipt"]
+                            for node in request["nodes"]
+                            if node["name"] == node_name
+                        )
+                        if value is None:
+                            evidence = self._tampered_evidence_artifact(
+                                evidence,
+                                node_name=node_name,
+                                mutate=lambda envelope, field=field: envelope.pop(field, None),
+                            )
+                        else:
+                            evidence = self._tampered_evidence_artifact(
+                                evidence,
+                                node_name=node_name,
+                                mutate=lambda envelope, field=field, value=value: envelope.__setitem__(
+                                    field, value
+                                ),
+                            )
+                            if label == "stale-window":
+                                evidence = self._tampered_evidence_artifact(
+                                    evidence,
+                                    node_name=node_name,
+                                    mutate=lambda envelope: envelope.__setitem__(
+                                        "expires_at", "2020-01-02T00:00:00Z"
+                                    ),
+                                )
+                            elif label == "future-window":
+                                evidence = self._tampered_evidence_artifact(
+                                    evidence,
+                                    node_name=node_name,
+                                    mutate=lambda envelope: envelope.__setitem__(
+                                        "expires_at", "2100-01-01T00:00:00Z"
+                                    ),
+                                )
+                    if value is None:
+                        receipt.pop(field)
+                    else:
+                        receipt[field] = value
+                        if label == "stale-window":
+                            receipt["expires_at"] = "2020-01-02T00:00:00Z"
+                        elif label == "future-window":
+                            receipt["expires_at"] = "2100-01-01T00:00:00Z"
+                    receipt["canonical_digest"] = self.module._canonical_receipt_digest(
+                        receipt,
+                        excluded_fields=frozenset(
+                            {"signed_payload_sha256"}
+                            if scope == "inventory"
+                            else {"peer_id"}
+                        ),
+                    )
+                    with self.assertRaises(SystemExit) as raised:
+                        self._build_plan_with_evidence(request, evidence)
+                    self.assertRegex(
+                        str(raised.exception),
+                        expected_error + r"|identity|evidence|binding|envelope|verif",
+                    )
+
+    def test_plan_rejects_receipt_freshness_outside_plan_capture_window(self) -> None:
+        """Current-looking v2 receipts cannot escape the plan's bounded capture interval."""
+        mutations = (
+            (
+                "issued-before-plan-start",
+                {"issued_at": "2026-08-29T23:59:59Z", "expires_at": "2099-01-01T00:00:00Z"},
+            ),
+            (
+                "expires-after-plan-end",
+                {"issued_at": "2026-09-01T00:00:00Z", "expires_at": "2100-01-01T00:00:00Z"},
+            ),
+            (
+                "inverted-inside-capture-window",
+                {"issued_at": "2026-08-31T00:00:00Z", "expires_at": "2026-08-30T12:00:00Z"},
+            ),
+        )
+        for scope, node_name in (
+            ("inventory", None),
+            *(('identity', name) for name in self.module.NODE_ORDER),
+        ):
+            for label, freshness in mutations:
+                with self.subTest(scope=scope, node=node_name, mutation=label):
+                    request = self._input()
+                    self._bind_current_receipt_freshness(request, **freshness)
+                    evidence = self._baseline_identity_v2_evidence
+                    if scope == "inventory":
+                        receipt = request["deployment_inventory"]["receipt"]
+                    else:
+                        receipt = next(
+                            node["identity_receipt"]
+                            for node in request["nodes"]
+                            if node["name"] == node_name
+                        )
+                        evidence = self._tampered_evidence_artifact(
+                            evidence,
+                            node_name=node_name,
+                            mutate=lambda envelope, freshness=freshness: envelope.update(freshness),
+                        )
+                    receipt.update(freshness)
+                    receipt["canonical_digest"] = self.module._canonical_receipt_digest(
+                        receipt,
+                        excluded_fields=frozenset(
+                            {"signed_payload_sha256"}
+                            if scope == "inventory"
+                            else {"peer_id"}
+                        ),
+                    )
+                    with self.assertRaises(SystemExit) as raised:
+                        self._build_plan_with_evidence(request, evidence)
+                    self.assertRegex(
+                        str(raised.exception),
+                        r"(?i)capture|issued|expires|fresh|window|stale|inverted|identity|evidence|binding|envelope|verif",
+                    )
+
+    def test_plan_ignores_direct_runtime_identity_v1_in_favor_of_retained_v2(self) -> None:
+        """Caller-supplied raw v1 identity cannot replace retained v2 evidence."""
+        request = self._input()
+        raw_identity = self._raw_runtime_identity_receipt_v1_bytes(
+            request["nodes"][0]["identity_receipt"]
+        )
+        request["nodes"][0]["identity_receipt"] = json.loads(raw_identity)
+        plan = self.module.build_plan(request)
+        self.assertTrue(
+            all(node["identity_receipt"]["schema_version"] == self.module.IDENTITY_RECEIPT_SCHEMA
+                for node in plan["nodes"])
+        )
+
+    @staticmethod
+    def _raw_runtime_identity_receipt_v1_bytes(
+        identity: dict[str, object], *, key_path: str = "/operator/keys/node-keypair.toml"
+    ) -> bytes:
+        """Return the runtime's compact, ordered v1 identity metadata bytes."""
+        raw = {
+            "schema_version": "oasis7.identity_receipt.v1",
+            "node_id": identity["node_id"],
+            "peer_id": identity["peer_id"],
+            "key_path": key_path,
+            "key_sha256": identity["key_sha256"],
+            "key_size_bytes": identity["key_size_bytes"],
+            "key_mode": int("0600", 8),
+            "key_uid": identity["key_uid"],
+            "key_gid": identity["key_gid"],
+        }
+        return json.dumps(raw, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+
+    def test_plan_rejects_identity_metadata_rebound_without_new_raw_v1_digest(self) -> None:
+        """Changing retained raw key metadata cannot reuse the prior v2 bindings."""
+        request = self._input()
+        evidence = self._tampered_evidence_artifact(
+            self._baseline_identity_v2_evidence,
+            artifact="raw_v1",
+            mutate=lambda raw: raw.update(key_sha256="8" * 64, key_size_bytes=256),
+        )
+        with self.assertRaises(SystemExit) as raised:
+            self._build_plan_with_evidence(request, evidence)
+        self.assertRegex(
+            str(raised.exception),
+            r"(?i)identity|payload|digest|signature|binding|key|evidence|raw",
+        )
+
+    def test_executable_v2_sidecar_binds_exact_runtime_raw_v1_bytes(self) -> None:
+        """The governed sidecar must hash the exact runtime bytes, including its key path."""
+        producer = ROOT / "scripts" / "p2p-public-testnet-identity-receipt-v2.py"
+        self.assertTrue(producer.is_file(), f"missing executable v2 producer: {producer}")
+        self.assertNotEqual(producer.stat().st_mode & 0o111, 0, producer)
+
+        request = self._input()
+        identity = request["nodes"][0]["identity_receipt"]
+        runtime_key_path = "/opt/oasis7/p2p-testnet/config/node-keypair.toml"
+        raw_v1 = self._raw_runtime_identity_receipt_v1_bytes(
+            identity, key_path=runtime_key_path
+        )
+        template = dict(identity)
+        template.update(
+            {
+                "signed_payload_sha256": "a" * 64,
+                "signature_hex": "d" * 128,
+                "canonical_digest": "c" * 64,
+            }
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw_path = root / "identity-receipt.v1.raw"
+            template_path = root / "identity-receipt.v2.template.json"
+            output_path = root / "identity-receipt.v2.json"
+            raw_path.write_bytes(raw_v1)
+            template_path.write_text(
+                json.dumps(template, sort_keys=True), encoding="utf-8"
+            )
+            result = subprocess.run(
+                [
+                    "python3",
+                    str(producer),
+                    "--raw-v1",
+                    str(raw_path),
+                    "--template",
+                    str(template_path),
+                    "--out",
+                    str(output_path),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            envelope = json.loads(output_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(envelope["schema_version"], self.module.IDENTITY_RECEIPT_SCHEMA)
+        self.assertEqual(set(envelope), self.module.IDENTITY_RECEIPT_FIELDS)
+        self.assertEqual(
+            envelope["signed_payload_sha256"], hashlib.sha256(raw_v1).hexdigest()
+        )
+        self.assertNotEqual(
+            envelope["signed_payload_sha256"],
+            hashlib.sha256(
+                self._raw_runtime_identity_receipt_v1_bytes(identity)
+            ).hexdigest(),
+        )
+        self.assertNotIn("key_path", envelope)
+        self.assertEqual(
+            envelope["canonical_digest"],
+            self.module._canonical_receipt_digest(
+                envelope, excluded_fields=frozenset({"peer_id"})
+            ),
+        )
+
+    def test_v2_sidecar_executes_signer_and_verifier_over_final_canonical_payload(self) -> None:
+        """The final v2 payload must pass the existing signer and verifier seam."""
+        sidecar = load_sidecar_module()
+        request = self._input()
+        identity = request["nodes"][0]["identity_receipt"]
+        context = {
+            "task_uid": request["task_uid"],
+            "frozen_head_oid": request["head_oid"],
+            "plan_digest": "p" * 64,
+            "node_id": identity["node_id"],
+            "peer_id": identity["peer_id"],
+        }
+        signer_calls: list[tuple[bytes, dict[str, object]]] = []
+        verifier_calls: list[tuple[bytes, dict[str, object], dict[str, object]]] = []
+
+        def signer(payload: bytes, received_context: dict[str, object]) -> str:
+            signer_calls.append((payload, dict(received_context)))
+            return "d" * 128
+
+        def verifier(
+            payload: bytes,
+            envelope: dict[str, object],
+            received_context: dict[str, object],
+        ) -> dict[str, object]:
+            verifier_calls.append((payload, dict(envelope), dict(received_context)))
+            return {"verified": True}
+
+        template = dict(identity)
+        template.update(
+            {
+                "signed_payload_sha256": "a" * 64,
+                "signature_hex": "d" * 128,
+                "canonical_digest": "c" * 64,
+            }
+        )
+        raw_v1 = self._raw_runtime_identity_receipt_v1_bytes(identity)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw_path = root / "identity-receipt.v1.raw"
+            template_path = root / "identity-receipt.v2.template.json"
+            output_path = root / "identity-receipt.v2.json"
+            raw_path.write_bytes(raw_v1)
+            template_path.write_text(json.dumps(template), encoding="utf-8")
+            envelope = sidecar.create(
+                raw_path,
+                template_path,
+                output_path,
+                context=context,
+                signer=signer,
+                verifier=verifier,
+            )
+
+        self.assertEqual(len(signer_calls), 1)
+        self.assertEqual(len(verifier_calls), 1)
+        self.assertEqual(signer_calls[0][1], context)
+        self.assertEqual(verifier_calls[0][2], context)
+        self.assertEqual(verifier_calls[0][0], signer_calls[0][0])
+        self.assertEqual(verifier_calls[0][1]["signature_hex"], "d" * 128)
+        self.assertEqual(envelope["signature_hex"], "d" * 128)
+        self.assertIn(request["task_uid"].encode(), signer_calls[0][0])
+        self.assertIn(request["head_oid"].encode(), signer_calls[0][0])
+        self.assertIn(context["plan_digest"].encode(), signer_calls[0][0])
+
+    def test_executable_v2_sidecar_rejects_raw_template_identity_cross_pair(self) -> None:
+        """A raw identity from one node cannot be wrapped with another node's template."""
+        request = self._input()
+        raw_identity = request["nodes"][0]["identity_receipt"]
+        template_identity = request["nodes"][1]["identity_receipt"]
+        raw_v1 = self._raw_runtime_identity_receipt_v1_bytes(
+            raw_identity, key_path="/opt/oasis7/p2p-testnet/config/node-keypair.toml"
+        )
+        template = dict(template_identity)
+        template.update(
+            {
+                "signed_payload_sha256": "a" * 64,
+                "signature_hex": "d" * 128,
+                "canonical_digest": "c" * 64,
+            }
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw_path = root / "identity-receipt.v1.raw"
+            template_path = root / "identity-receipt.v2.template.json"
+            output_path = root / "identity-receipt.v2.json"
+            raw_path.write_bytes(raw_v1)
+            template_path.write_text(json.dumps(template), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    "python3",
+                    str(SIDECAR_PATH),
+                    "--raw-v1",
+                    str(raw_path),
+                    "--template",
+                    str(template_path),
+                    "--out",
+                    str(output_path),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertRegex(result.stderr, r"(?i)node|peer|key|identity|match")
+        self.assertFalse(output_path.exists())
+
+    def test_executable_v2_sidecar_rejects_malformed_template_freshness(self) -> None:
+        """Malformed freshness metadata must never be emitted as a v2 envelope."""
+        request = self._input()
+        identity = request["nodes"][0]["identity_receipt"]
+        template = dict(identity)
+        template.update(
+            {
+                "issued_at": "not-an-rfc3339-timestamp",
+                "signed_payload_sha256": "a" * 64,
+                "signature_hex": "d" * 128,
+                "canonical_digest": "c" * 64,
+            }
+        )
+        raw_v1 = self._raw_runtime_identity_receipt_v1_bytes(identity)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw_path = root / "identity-receipt.v1.raw"
+            template_path = root / "identity-receipt.v2.template.json"
+            output_path = root / "identity-receipt.v2.json"
+            raw_path.write_bytes(raw_v1)
+            template_path.write_text(json.dumps(template), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    "python3",
+                    str(SIDECAR_PATH),
+                    "--raw-v1",
+                    str(raw_path),
+                    "--template",
+                    str(template_path),
+                    "--out",
+                    str(output_path),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertRegex(result.stderr, r"(?i)issued|expires|timestamp|fresh|time")
+        self.assertFalse(output_path.exists())
+
+    def test_sidecar_output_cannot_replace_retained_v2_evidence(self) -> None:
+        """An unverified sidecar output cannot replace retained v2 evidence."""
+        request = self._input()
+        identity = request["nodes"][0]["identity_receipt"]
+        raw_v1 = self._raw_runtime_identity_receipt_v1_bytes(identity)
+        template = dict(identity)
+        template.update(
+            {
+                "signed_payload_sha256": "a" * 64,
+                "signature_hex": "d" * 128,
+                "canonical_digest": "c" * 64,
+            }
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw_path = root / "identity-receipt.v1.raw"
+            template_path = root / "identity-receipt.v2.template.json"
+            output_path = root / "identity-receipt.v2.json"
+            raw_path.write_bytes(raw_v1)
+            template_path.write_text(json.dumps(template), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    "python3",
+                    str(SIDECAR_PATH),
+                    "--raw-v1",
+                    str(raw_path),
+                    "--template",
+                    str(template_path),
+                    "--out",
+                    str(output_path),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            request["nodes"][0]["identity_receipt"] = json.loads(
+                output_path.read_text(encoding="utf-8")
+            )
+
+        plan = self.module.build_plan(request)
+        self.assertEqual(
+            plan["identity_v2_evidence"], self._baseline_identity_v2_evidence
+        )
+        self.assertTrue(
+            all(node["identity_receipt"]["schema_version"] == self.module.IDENTITY_RECEIPT_SCHEMA
+                for node in plan["nodes"])
+        )
+
+    def test_plan_projects_identity_commands_through_governed_v2_sidecar(self) -> None:
+        """Every authoritative identity command must use the executable v2 sidecar."""
+        runbook = (
+            ROOT / "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("p2p-public-testnet-identity-receipt-v2.py", runbook)
+        self.assertIn("--raw-v1", runbook)
+        self.assertIn("--template", runbook)
+        self.assertIn("--out", runbook)
+        self.assertNotIn("oasis7_chain_runtime identity-receipt --config-dir", runbook)
+
+    def test_plan_rejects_synthetic_identity_digest_and_signature_pair(self) -> None:
+        """A synthetic retained envelope cannot become an apply-ready identity."""
+        request = self._input()
+        evidence = self._tampered_evidence_artifact(
+            self._baseline_identity_v2_evidence,
+            mutate=lambda envelope: envelope.update(
+                signed_payload_sha256="a" * 64,
+                signature_hex="b" * 128,
+                canonical_digest="c" * 64,
+            ),
+        )
+        with self.assertRaises(SystemExit) as raised:
+            self._build_plan_with_evidence(request, evidence)
+        self.assertRegex(str(raised.exception), r"(?i)identity|payload|digest|placeholder|evidence|binding")
+
+    def test_governed_bootstrap_runbook_describes_v2_identity_envelope_boundary(self) -> None:
+        """The authoritative runbook must retire raw v1 direct admission and specify v2."""
+        runbook = (ROOT / "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertRegex(
+            runbook,
+            r"(?is)oasis7\.identity_receipt\.v1.{0,800}(?:raw|原始).{0,800}(?:retir|退役).{0,800}(?:direct admission|直接.*(?:admission|准入))",
+        )
+        self.assertIn("oasis7.identity_receipt.v2", runbook)
+        for field in (
+            "signed_payload_sha256",
+            "signature_hex",
+            "canonical_digest",
+            "node_id",
+            "peer_id",
+            "key_sha256",
+            "key_size_bytes",
+            "key_mode",
+            "key_uid",
+            "key_gid",
+            "task_uid",
+            "head_oid",
+            "plan_digest",
+            "capture_window_id",
+            "rotation_epoch",
+            "issued_at",
+            "expires_at",
+        ):
+            with self.subTest(field=field):
+                self.assertIn(field, runbook)
+        self.assertRegex(
+            runbook,
+            r"(?is)(?:independent|governed).{0,500}verifier.{0,500}(?:before|prior to).{0,500}(?:provider|mutation|admission)",
+        )
+
+    def _explicit_inventory(self, request: dict[str, object]) -> dict[str, object]:
+        inventory = self._deployment_inventory(request["nodes"])
+        for node in request["nodes"]:
+            name = str(node["name"])
+            inventory["nodes"][name]["peer_id"] = self.module.CANONICAL_PEER_REGISTRY[name]
+        inventory["receipt"]["signed_payload_sha256"] = (
+            self.module._canonical_deployment_inventory_payload_digest(inventory)
+        )
+        return inventory
+
+    def test_plan_requires_explicit_peer_id_on_every_inventory_node(self) -> None:
+        """Legacy omitted/partial peer identities must not enter authenticated plans."""
+        for omission in ("all", "storage-205"):
+            with self.subTest(omission=omission):
+                request = self._input()
+                inventory = self._explicit_inventory(request)
+                if omission == "all":
+                    for node in inventory["nodes"].values():
+                        node.pop("peer_id")
+                else:
+                    inventory["nodes"][omission].pop("peer_id")
+                request["deployment_inventory"] = inventory
+                with self.assertRaises(SystemExit) as raised:
+                    self.module.build_plan(request)
+                self.assertRegex(str(raised.exception), r"(?i)peer|inventory|explicit|complete")
+
+    def test_plan_validates_inventory_digest_before_normalization(self) -> None:
+        """Inventory field mutations must fail against the incoming stale receipt."""
+        mutations = ("node_root", "persistent_state_paths", "expected_key_uid", "expected_key_gid", "peer_id")
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                request = self._input()
+                inventory = self._explicit_inventory(request)
+                request["deployment_inventory"] = inventory
+                name = "storage-205"
+                inventory_node = inventory["nodes"][name]
+                node = next(item for item in request["nodes"] if item["name"] == name)
+                if mutation in {"node_root", "persistent_state_paths"}:
+                    old_root = node["node_root"]
+                    new_root = "/opt/oasis7/attacker-root"
+                    node["node_root"] = new_root
+                    node["persistent_state_paths"] = [
+                        path.replace(old_root, new_root, 1)
+                        for path in node["persistent_state_paths"]
+                    ]
+                    inventory_node["node_root"] = new_root
+                    inventory_node["persistent_state_paths"] = list(node["persistent_state_paths"])
+                elif mutation == "expected_key_uid":
+                    inventory_node["expected_key_uid"] = 1001
+                    node["identity_receipt"]["key_uid"] = 1001
+                elif mutation == "expected_key_gid":
+                    inventory_node["expected_key_gid"] = 1002
+                    node["identity_receipt"]["key_gid"] = 1002
+                else:
+                    rotated_peer = "12D3KooWstale-inventory-peer"
+                    inventory_node["peer_id"] = rotated_peer
+                    node["identity_receipt"]["peer_id"] = rotated_peer
+                with self.assertRaises(SystemExit) as raised:
+                    self.module.build_plan(request)
+                self.assertRegex(str(raised.exception), r"(?i)inventory|receipt|digest|binding|peer|canonical")
+
+    def test_plan_accepts_fully_explicit_digest_bound_inventory(self) -> None:
+        """The governed explicit inventory schema remains a valid admission path."""
+        request = self._input()
+        request["deployment_inventory"] = self._explicit_inventory(request)
+        plan = self.module.build_plan(request)
+        for name in self.module.NODE_ORDER:
+            self.assertIn("peer_id", plan["deployment_inventory"]["nodes"][name])
+        self.assertEqual(
+            plan["deployment_inventory"]["receipt"]["signed_payload_sha256"],
+            self.module._canonical_deployment_inventory_payload_digest(
+                plan["deployment_inventory"]
+            ),
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
