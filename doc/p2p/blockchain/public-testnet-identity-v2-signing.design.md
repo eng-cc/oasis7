@@ -319,6 +319,17 @@ canonical output pair returned by the pinned registry verifier is promoted to
 the requested paths. The sidecar's `--verifier-tool` is an assertion of this
 registry-selected path, never an alternate verifier choice.
 
+All trust-config, provider-registry, public-key, custody-adapter, and
+independent-verifier files are deployment-owned regular non-symlink artifacts.
+The operator-local owner must be the account running admission, and neither
+the artifact nor any ancestor may be writable by group/other accounts. Public
+metadata and public keys are not secrets: owner-readable `0644` is permitted
+when those write bits are absent. Adapter/verifier artifacts additionally
+require owner execute. Authority reads use an `O_NOFOLLOW` descriptor with
+pre/post `fstat` identity checks; the adapter/verifier digest is rechecked
+around its subprocess before outputs are promoted. Thus the contract closes
+replacement/TOCTOU without imposing unsupported `0600` modes on public files.
+
 `assemble` opens the payload as a regular non-symlink file and requires its
 exact bytes, size and SHA-256 to match the prepare manifest, canonical payload
 reconstruction and authenticated provider receipt. It verifies the detached

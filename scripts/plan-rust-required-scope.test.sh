@@ -431,6 +431,8 @@ clean_room_scope_output="$(plan_for_paths \
   scripts/p2p-public-testnet-full-network-clean-room.test.py \
   scripts/p2p-public-testnet-full-network-clean-room-adapter.py \
   scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py \
+  scripts/p2p-public-testnet-identity-v2-evidence-aggregate.py \
+  scripts/p2p-public-testnet-identity-v2-evidence-aggregate.test.py \
   scripts/fixtures/oasis7-governance-root.v1.json)"
 assert_key_equals "$clean_room_scope_output" scope targeted
 assert_key_equals "$clean_room_scope_output" run_operational_contracts true
@@ -439,8 +441,20 @@ assert_key_equals "$clean_room_scope_output" selected_capabilities operational_c
 assert_reason_contains "$clean_room_scope_output" \
   "operational_contracts:scripts/p2p-public-testnet-full-network-clean-room.py"
 assert_reason_contains "$clean_room_scope_output" \
+  "operational_contracts:scripts/p2p-public-testnet-identity-v2-evidence-aggregate.py"
+assert_reason_contains "$clean_room_scope_output" \
+  "operational_contracts:scripts/p2p-public-testnet-identity-v2-evidence-aggregate.test.py"
+assert_reason_contains "$clean_room_scope_output" \
   "operational_contracts:scripts/fixtures/oasis7-governance-root.v1.json"
 assert_reason_absent "$clean_room_scope_output" "unclassified_or_unresolvable:"
+
+if ! sed -n '/^run_required_gate_checks() {$/,/^}$/p' \
+  "$ROOT_DIR/scripts/ci-tests.sh" \
+  | grep -Fq \
+    'run python3 ./scripts/p2p-public-testnet-identity-v2-evidence-aggregate.test.py'; then
+  echo "expected required gate to execute the aggregate evidence contract suite" >&2
+  exit 1
+fi
 
 compile_metrics_output="$(plan_for_paths \
   scripts/ci-compile-metrics.sh \

@@ -18,6 +18,7 @@ import json
 import os
 import re
 import secrets
+import stat
 import subprocess
 import sys
 import tempfile
@@ -50,6 +51,10 @@ DEPLOYED_GOVERNANCE_ROOT = Path("/operator/truth/governance-root.json")
 # run; caller/registry-provided digests are consistency checks only.
 PINNED_TRUST_CONFIG_SHA256: str | None = None
 PINNED_PROVIDER_REGISTRY_SHA256: str | None = None
+# Identity-v2 authority artifacts are operator-local regular files.  Public
+# readability is intentional for trust metadata and public keys; the safety
+# boundary is ownership plus the absence of group/other write access.
+AUTHORITY_UNAUTHORIZED_WRITE_BITS = 0o022
 ADAPTER_MODULE_NAME = "oasis7_identity_v2_adapter"
 ADAPTER_PATH = Path(__file__).with_name("p2p-public-testnet-full-network-clean-room-adapter.py")
 PAYLOAD_FIELDS = frozenset(
@@ -218,6 +223,104 @@ def _regular_ancestor(path: Path, label: str) -> None:
         current = current.parent
 
 
+def _authority_ancestors(path: Path, label: str) -> None:
+    """Reject replaceable authority directories while allowing sticky /tmp."""
+
+    current = path.parent
+    while True:
+        try:
+            directory = current.stat()
+        except OSError as error:
+            fail(f"cannot stat {label} ancestor: {error.__class__.__name__}")
+        if not stat.S_ISDIR(directory.st_mode):
+            fail(f"{label} has a non-directory ancestor")
+        mode = stat.S_IMODE(directory.st_mode)
+        sticky_safe = bool(mode & stat.S_ISVTX) and directory.st_uid == 0
+        if mode & AUTHORITY_UNAUTHORIZED_WRITE_BITS and not sticky_safe:
+            fail(f"{label} has an unauthorized-writable ancestor")
+        if current.parent == current:
+            break
+        current = current.parent
+
+
+def read_authority_bytes(path_value: str | Path, label: str, *, executable: bool = False) -> bytes:
+    """Read one authority artifact through a metadata-bound, no-follow FD.
+
+    The descriptor prevents a same-path replacement from changing the bytes
+    being hashed/parsed.  Pre/post metadata checks reject a mutation while the
+    descriptor is open; callers that execute an authority binary also compare
+    its digest around the subprocess boundary.
+    """
+
+    path = _regular(path_value, label)
+    _regular_ancestor(path, label)
+    _authority_ancestors(path, label)
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    if not nofollow:
+        fail(f"platform cannot enforce no-symlink authority reads for {label}")
+    try:
+        descriptor = os.open(path, os.O_RDONLY | nofollow)
+    except OSError as error:
+        fail(f"cannot open {label} as an authority artifact: {error.__class__.__name__}")
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode):
+            fail(f"{label} must be a regular authority file")
+        if before.st_uid != os.getuid():
+            fail(f"{label} is not owned by the operator account")
+        mode = stat.S_IMODE(before.st_mode)
+        if mode & AUTHORITY_UNAUTHORIZED_WRITE_BITS:
+            fail(f"{label} is writable by a non-owner account")
+        if executable and not mode & stat.S_IXUSR:
+            fail(f"{label} is not owner-executable")
+        stream = os.fdopen(descriptor, "rb", closefd=False)
+        try:
+            raw = stream.read()
+        finally:
+            stream.close()
+        after = os.fstat(descriptor)
+        identity = lambda value: (
+            value.st_dev,
+            value.st_ino,
+            value.st_size,
+            value.st_mode,
+            value.st_uid,
+            value.st_gid,
+            value.st_mtime_ns,
+            value.st_ctime_ns,
+        )
+        if identity(before) != identity(after):
+            fail(f"{label} changed while being read")
+        try:
+            path_after = os.stat(path, follow_symlinks=False)
+        except OSError as error:
+            fail(f"cannot restat {label} authority artifact: {error.__class__.__name__}")
+        if (path_after.st_dev, path_after.st_ino) != (before.st_dev, before.st_ino):
+            fail(f"{label} was replaced while being read")
+        return raw
+    except ToolError:
+        raise
+    except OSError as error:
+        fail(f"cannot read {label} authority artifact: {error.__class__.__name__}")
+    finally:
+        os.close(descriptor)
+
+
+def authority_digest(path_value: str | Path, label: str, *, executable: bool = False) -> str:
+    return sha256_bytes(read_authority_bytes(path_value, label, executable=executable))
+
+
+def require_authority_unchanged(
+    path_value: str | Path,
+    label: str,
+    expected_digest: str,
+    *,
+    executable: bool = False,
+) -> None:
+    if authority_digest(path_value, label, executable=executable) != expected_digest:
+        fail(f"{label} changed during use")
+
+
 def read_bytes(path_value: str | Path, label: str) -> bytes:
     path = _regular(path_value, label)
     _regular_ancestor(path, label)
@@ -227,8 +330,14 @@ def read_bytes(path_value: str | Path, label: str) -> bytes:
         fail(f"cannot read {label}: {error.__class__.__name__}")
 
 
-def read_json(path_value: str | Path, label: str, *, require_canonical: bool = True) -> dict[str, Any]:
-    raw = read_bytes(path_value, label)
+def read_json(
+    path_value: str | Path,
+    label: str,
+    *,
+    require_canonical: bool = True,
+    authority: bool = False,
+) -> dict[str, Any]:
+    raw = read_authority_bytes(path_value, label) if authority else read_bytes(path_value, label)
     if raw.startswith(b"\xef\xbb\xbf"):
         fail(f"{label} must not contain a BOM")
     try:
@@ -382,11 +491,11 @@ def validate_registry(
         fail(f"{label} schema is unsupported")
     if not resolved_equal(registry["trust_config_path"], trust_path):
         fail(f"{label} trust-config path is not the pinned path")
-    trust_bytes = read_bytes(trust_path, "trust-config")
+    trust_bytes = read_authority_bytes(trust_path, "trust-config")
     require_hex(registry.get("trust_config_sha256"), f"{label}.trust_config_sha256")
     if registry["trust_config_sha256"] != sha256_bytes(trust_bytes):
         fail(f"{label} trust-config digest mismatch")
-    trust = validate_trust(read_json(trust_path, "trust-config"))
+    trust = validate_trust(read_json(trust_path, "trust-config", authority=True))
     providers = registry["providers"]
     if not isinstance(providers, list) or not providers:
         fail(f"{label}.providers must be a non-empty array")
@@ -407,18 +516,17 @@ def validate_registry(
         ids.add(provider_id)
         require_string(provider.get("adapter_path"), f"{item_label}.adapter_path")
         adapter = _regular(provider["adapter_path"], f"{item_label}.adapter_path")
-        if not os.access(adapter, os.X_OK):
-            fail(f"{item_label}.adapter_path is not executable")
+        read_authority_bytes(adapter, f"{item_label}.adapter_path", executable=True)
         provider_adapter_paths.append(adapter)
         require_hex(provider.get("adapter_sha256"), f"{item_label}.adapter_sha256")
-        if provider["adapter_sha256"] != sha256_bytes(read_bytes(adapter, f"{item_label}.adapter_path")):
+        if provider["adapter_sha256"] != sha256_bytes(read_authority_bytes(adapter, f"{item_label}.adapter_path", executable=True)):
             fail(f"{item_label}.adapter_sha256 mismatch")
         if provider.get("algorithm") != ALGORITHM:
             fail(f"{item_label}.algorithm is unsupported")
         require_string(provider.get("signer_id"), f"{item_label}.signer_id", safe=True)
         require_string(provider.get("public_key_ref"), f"{item_label}.public_key_ref")
         public_key = _regular(provider["public_key_ref"], f"{item_label}.public_key_ref")
-        public_bytes = read_bytes(public_key, f"{item_label}.public_key_ref")
+        public_bytes = read_authority_bytes(public_key, f"{item_label}.public_key_ref")
         if len(public_bytes) != 32:
             fail(f"{item_label}.public_key_ref must contain a raw 32-byte Ed25519 key")
         require_hex(provider.get("public_key_sha256"), f"{item_label}.public_key_sha256")
@@ -435,8 +543,7 @@ def validate_registry(
     require_exact_fields(verifier, frozenset({"executable_path", "executable_sha256"}), f"{label}.verifier")
     require_string(verifier.get("executable_path"), f"{label}.verifier.executable_path")
     verifier_path = _regular(verifier["executable_path"], f"{label}.verifier.executable_path")
-    if not os.access(verifier_path, os.X_OK):
-        fail(f"{label}.verifier.executable_path is not executable")
+    read_authority_bytes(verifier_path, f"{label}.verifier.executable_path", executable=True)
     forbidden_paths = (
         Path(__file__),
         Path(__file__).with_name("p2p-public-testnet-identity-receipt-v2.py"),
@@ -447,7 +554,7 @@ def validate_registry(
     if any(resolved_equal(verifier_path, forbidden) for forbidden in forbidden_paths):
         fail(f"{label}.verifier executable is not an independent verifier")
     require_hex(verifier.get("executable_sha256"), f"{label}.verifier.executable_sha256")
-    if verifier["executable_sha256"] != sha256_bytes(read_bytes(verifier_path, f"{label}.verifier.executable_path")):
+    if verifier["executable_sha256"] != sha256_bytes(read_authority_bytes(verifier_path, f"{label}.verifier.executable_path", executable=True)):
         fail(f"{label}.verifier.executable_sha256 mismatch")
     return trust, registry
 
@@ -497,9 +604,9 @@ def _authority_scope(trust_path: Path, registry_path: Path, registry: dict[str, 
         fail("provider registry is not the canonical deployed authority path")
     if not PINNED_TRUST_CONFIG_SHA256 or not PINNED_PROVIDER_REGISTRY_SHA256:
         fail("identity-v2 trust-config/provider-registry anchors are not provisioned")
-    if sha256_bytes(read_bytes(trust_path, "trust-config")) != PINNED_TRUST_CONFIG_SHA256:
+    if sha256_bytes(read_authority_bytes(trust_path, "trust-config")) != PINNED_TRUST_CONFIG_SHA256:
         fail("identity-v2 trust-config content digest is not independently pinned")
-    if sha256_bytes(read_bytes(registry_path, "provider-registry")) != PINNED_PROVIDER_REGISTRY_SHA256:
+    if sha256_bytes(read_authority_bytes(registry_path, "provider-registry")) != PINNED_PROVIDER_REGISTRY_SHA256:
         fail("identity-v2 provider-registry content digest is not independently pinned")
     _validate_governance_root_pin()
     return "deployed-governance-root"
@@ -765,7 +872,7 @@ def _manifest_check(manifest: dict[str, Any], payload_path: Path, registry_path:
     if manifest.get("provider_registry_path") and not resolved_equal(manifest["provider_registry_path"], registry_path):
         fail("provider registry path is not the path frozen by prepare")
     require_hex(manifest.get("provider_registry_sha256"), "prepare-manifest.provider_registry_sha256")
-    if manifest["provider_registry_sha256"] != sha256_bytes(read_bytes(registry_path, "provider-registry")):
+    if manifest["provider_registry_sha256"] != sha256_bytes(read_authority_bytes(registry_path, "provider-registry")):
         fail("provider registry bytes do not match prepare manifest")
 
 
@@ -867,7 +974,7 @@ def command_prepare(args: argparse.Namespace) -> None:
     intent = validate_intent(read_json(args.plan_intent, "plan-intent"), context)
     trust_path = _regular(args.trust_config, "trust-config")
     registry_path = _regular(args.provider_registry, "provider-registry")
-    trust, registry = validate_registry(read_json(registry_path, "provider-registry"), registry_path, trust_path)
+    trust, registry = validate_registry(read_json(registry_path, "provider-registry", authority=True), registry_path, trust_path)
     _authority_scope(trust_path, registry_path, registry)
     template = validate_template(read_json(args.template, "template"), raw, context, sha256_bytes(canonical(intent)), trust)
     if template["signed_payload_sha256"] != sha256_bytes(raw_bytes):
@@ -901,9 +1008,9 @@ def command_prepare(args: argparse.Namespace) -> None:
         "trust_root_id": template["trust_root_id"],
         "algorithm": ALGORITHM,
         "trust_config_path": str(trust_path.resolve()),
-        "trust_config_sha256": sha256_bytes(read_bytes(trust_path, "trust-config")),
+        "trust_config_sha256": sha256_bytes(read_authority_bytes(trust_path, "trust-config")),
         "provider_registry_path": str(registry_path.resolve()),
-        "provider_registry_sha256": sha256_bytes(read_bytes(registry_path, "provider-registry")),
+        "provider_registry_sha256": sha256_bytes(read_authority_bytes(registry_path, "provider-registry")),
         "provider_ref": matching_provider["provider_id"],
         "public_key_sha256": matching_provider["public_key_sha256"],
         "verifier_executable_sha256": registry["verifier"]["executable_sha256"],
@@ -922,9 +1029,12 @@ def command_sign(args: argparse.Namespace) -> None:
     registry_path = _regular(args.provider_registry, "provider-registry")
     _manifest_check(manifest, payload_path, registry_path)
     trust_path = _regular(manifest["trust_config_path"], "trust-config")
-    _, registry = validate_registry(read_json(registry_path, "provider-registry"), registry_path, trust_path)
+    _, registry = validate_registry(read_json(registry_path, "provider-registry", authority=True), registry_path, trust_path)
     _authority_scope(trust_path, registry_path, registry)
     provider = find_provider(registry, args.provider_ref)
+    trust_digest_before = authority_digest(trust_path, "trust-config")
+    registry_digest_before = authority_digest(registry_path, "provider-registry")
+    provider_digest_before = authority_digest(provider["adapter_path"], "provider custody adapter", executable=True)
     payload = read_bytes(payload_path, "payload")
     request = {
         "network_id": manifest["network_id"],
@@ -959,13 +1069,21 @@ def command_sign(args: argparse.Namespace) -> None:
             )
         except (OSError, subprocess.TimeoutExpired):
             fail("provider custody adapter failed")
+        require_authority_unchanged(trust_path, "trust-config", trust_digest_before)
+        require_authority_unchanged(registry_path, "provider-registry", registry_digest_before)
+        require_authority_unchanged(
+            provider["adapter_path"],
+            "provider custody adapter",
+            provider_digest_before,
+            executable=True,
+        )
         if completed.returncode != 0:
             fail("provider custody adapter failed")
         signature = read_bytes(raw_signature_path, "provider signature")
         if len(signature) != 64:
             fail("provider signature must be exactly 64 bytes")
         attestation = read_json(attestation_path, "provider attestation")
-        public_key = read_bytes(provider["public_key_ref"], "provider public key")
+        public_key = read_authority_bytes(provider["public_key_ref"], "provider public key")
         _provider_attestation(attestation, request, signature, payload, public_key)
         if not verify_ed25519(public_key, payload, signature):
             fail("provider signature failed independent Ed25519 verification")
@@ -999,7 +1117,7 @@ def command_assemble(args: argparse.Namespace) -> None:
     registry_path = _regular(args.provider_registry, "provider-registry")
     _manifest_check(manifest, payload_path, registry_path)
     trust_path = _regular(manifest["trust_config_path"], "trust-config")
-    trust, registry = validate_registry(read_json(registry_path, "provider-registry"), registry_path, trust_path)
+    trust, registry = validate_registry(read_json(registry_path, "provider-registry", authority=True), registry_path, trust_path)
     authority_scope = _authority_scope(trust_path, registry_path, registry)
     payload = read_bytes(payload_path, "payload")
     fields = _payload_from_file(payload_path, manifest)
@@ -1025,7 +1143,7 @@ def command_assemble(args: argparse.Namespace) -> None:
         "issued_at": manifest.get("issued_at", ""),
         "expires_at": manifest.get("expires_at", ""),
     }
-    public_key = read_bytes(provider["public_key_ref"], "provider public key")
+    public_key = read_authority_bytes(provider["public_key_ref"], "provider public key")
     _provider_attestation(attestation, request, signature, payload, public_key)
     if not verify_ed25519(public_key, payload, signature):
         fail("detached signature failed independent Ed25519 verification")
@@ -1131,6 +1249,13 @@ def _invoke_registry_verifier(
         verified_path = temporary_root / "verified-envelope.json"
         receipt_path = temporary_root / "verification.json"
         environment = {"PATH": os.environ.get("PATH", ""), "PYTHONIOENCODING": "utf-8"}
+        trust_digest_before = authority_digest(args.trust_config, "trust-config")
+        registry_digest_before = authority_digest(args.provider_registry, "provider-registry")
+        verifier_digest_before = authority_digest(
+            verifier_path,
+            "registry-selected verifier",
+            executable=True,
+        )
         try:
             completed = subprocess.run(
                 _verifier_command(verifier_path, args, verified_path, receipt_path),
@@ -1141,6 +1266,14 @@ def _invoke_registry_verifier(
             )
         except (OSError, subprocess.TimeoutExpired) as error:
             fail(f"registry-selected verifier failed: {error.__class__.__name__}")
+        require_authority_unchanged(args.trust_config, "trust-config", trust_digest_before)
+        require_authority_unchanged(args.provider_registry, "provider-registry", registry_digest_before)
+        require_authority_unchanged(
+            verifier_path,
+            "registry-selected verifier",
+            verifier_digest_before,
+            executable=True,
+        )
         if completed.returncode != 0:
             fail("registry-selected verifier failed")
         return (
@@ -1183,14 +1316,14 @@ def command_verify(args: argparse.Namespace) -> None:
     attestation = read_json(args.attestation, "provider attestation")
     trust_path = _regular(args.trust_config, "trust-config")
     registry_path = _regular(args.provider_registry, "provider-registry")
-    trust, registry = validate_registry(read_json(registry_path, "provider-registry"), registry_path, trust_path)
+    trust, registry = validate_registry(read_json(registry_path, "provider-registry", authority=True), registry_path, trust_path)
     verifier_path = _regular(registry["verifier"]["executable_path"], "provider-registry.verifier.executable_path").resolve()
     authority_scope = _authority_scope(trust_path, registry_path, registry)
     signer, exact_payload, signed = _validate_bindings(envelope, raw, raw_bytes, context, intent, trust)
     provider = [entry for entry in registry["providers"] if entry["signer_id"] == signer["signer_id"]]
     if len(provider) != 1 or provider[0]["public_key_sha256"] != signer["public_key_sha256"]:
         fail("envelope signer has no matching pinned provider key")
-    public_key = read_bytes(provider[0]["public_key_ref"], "provider public key")
+    public_key = read_authority_bytes(provider[0]["public_key_ref"], "provider public key")
     signature = bytes.fromhex(envelope["signature_hex"])
     if not verify_ed25519(public_key, exact_payload, signature):
         fail("identity envelope signature is invalid")
@@ -1251,8 +1384,8 @@ def command_verify(args: argparse.Namespace) -> None:
         "envelope_sha256": envelope_sha,
         "signer_id": signer["signer_id"],
         "public_key_sha256": signer["public_key_sha256"],
-        "trust_config_sha256": sha256_bytes(read_bytes(trust_path, "trust-config")),
-        "provider_registry_sha256": sha256_bytes(read_bytes(registry_path, "provider-registry")),
+        "trust_config_sha256": sha256_bytes(read_authority_bytes(trust_path, "trust-config")),
+        "provider_registry_sha256": sha256_bytes(read_authority_bytes(registry_path, "provider-registry")),
         "verifier_executable_sha256": registry["verifier"]["executable_sha256"],
         "network_id": envelope["network_id"],
         "proof_ref": attestation["proof_ref"],

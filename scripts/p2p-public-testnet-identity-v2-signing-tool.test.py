@@ -732,6 +732,81 @@ class IdentityV2SigningToolContractTests(unittest.TestCase):
         self.assertEqual(first["context_digest"], self.context_digest)
         self.assertEqual(first["plan_digest"], self.plan_digest)
 
+    def test_prepare_rejects_group_writable_authority_without_outputs(self) -> None:
+        """Authority files cannot be replaceable by a non-owner account."""
+        self.trust.chmod(0o664)
+        payload = self.root / "unsafe-authority.payload.bin"
+        manifest = self.root / "unsafe-authority.prepare.json"
+        result = self._run(*self._prepare_args(payload, manifest))
+        self._assert_rejected_no_output(result, payload, manifest)
+
+    def test_prepare_rejects_group_writable_public_key_without_outputs(self) -> None:
+        """Public readability is valid; non-owner write access is not."""
+        self.public_key.chmod(0o664)
+        payload = self.root / "unsafe-public-key.payload.bin"
+        manifest = self.root / "unsafe-public-key.prepare.json"
+        result = self._run(*self._prepare_args(payload, manifest))
+        self._assert_rejected_no_output(result, payload, manifest)
+
+    def test_prepare_allows_owner_written_public_key_with_public_readability(self) -> None:
+        """The authority guard does not cargo-cult a 0600 mode onto public keys."""
+        self.public_key.chmod(0o644)
+        payload, manifest = self._prepare("public-readable")
+        self.assertTrue(payload.is_file())
+        self.assertTrue(manifest.is_file())
+
+    def test_prepare_rejects_group_writable_provider_or_verifier_without_outputs(self) -> None:
+        """Executable authority artifacts require an owner-only write boundary."""
+        for path, stem in ((self.provider, "unsafe-provider"), (self.verifier, "unsafe-verifier")):
+            with self.subTest(path=path.name):
+                path.chmod(0o766)
+                payload = self.root / f"{stem}.payload.bin"
+                manifest = self.root / f"{stem}.prepare.json"
+                result = self._run(*self._prepare_args(payload, manifest))
+                self._assert_rejected_no_output(result, payload, manifest)
+
+    def test_authority_descriptor_reader_rejects_writable_ancestor(self) -> None:
+        """Authority reads must bind metadata and the opened descriptor."""
+        import importlib.util
+        from unittest.mock import patch
+
+        spec = importlib.util.spec_from_file_location("identity_v2_tool_test", TOOL)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        unsafe_root = self.root / "unsafe-parent"
+        unsafe_root.mkdir()
+        unsafe_root.chmod(0o777)
+        target = unsafe_root / "authority.json"
+        target.write_bytes(b"{}")
+        target.chmod(0o644)
+        with self.assertRaises(module.ToolError):
+            module.read_authority_bytes(target, "authority")
+
+        unsafe_root.chmod(0o700)
+        replacement = unsafe_root / "replacement.json"
+        replacement.write_bytes(b'{"replacement":true}')
+        replacement.chmod(0o644)
+        calls = 0
+        real_fstat = module.os.fstat
+
+        def replace_after_open(descriptor: int) -> Any:
+            nonlocal calls
+            calls += 1
+            result = real_fstat(descriptor)
+            if calls == 1:
+                target.unlink()
+                replacement.rename(target)
+            return result
+
+        target.write_bytes(b'{"original":true}')
+        target.chmod(0o644)
+        with patch.object(module.os, "fstat", side_effect=replace_after_open):
+            with self.assertRaises(module.ToolError):
+                module.read_authority_bytes(target, "authority")
+        self.assertEqual(calls, 2)
+
     def test_prepare_rejects_context_network_different_from_governed_network(self) -> None:
         """A self-consistent context cannot select a different deployment network."""
         context = json.loads(self.context.read_text(encoding="utf-8"))

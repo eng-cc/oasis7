@@ -81,6 +81,19 @@ authority must pin the registry and trust-config bytes separately under the
 governance root. No registry entry may expose a private-key path, secret,
 endpoint, arbitrary command, or credential.
 
+The identity-v2 filesystem policy is intentionally narrower than an
+owner-only-secret policy. Every trust-config, registry, public-key, adapter,
+and verifier artifact must be a regular non-symlink file owned by the
+operator-local account that runs admission; group/other write bits are
+forbidden on the artifact and every ancestor. Public metadata and public keys
+may remain readable (for example, `0644` is valid when no non-owner write bit
+is present), while adapter and verifier files must have the owner execute bit.
+The tool reads these artifacts through `O_NOFOLLOW` descriptors and binds
+pre/post `fstat` metadata; provider/verifier executable digests are checked
+again after their subprocess returns before any caller output is promoted.
+This is the canonical replacement/TOCTOU boundary; applying `0600` to every
+public artifact is not required by this contract.
+
 The provider receipt must use the implemented v2 contract:
 `oasis7.identity_v2_provider_attestation.v2` has the exact top-level fields
 `schema_version`, `network_id`, `provider_id`, `request_id`, `signer_id`,
