@@ -15,7 +15,7 @@
 
 ### 1.1 代表性情境
 
-玩家第一次来到一个仍有资源、物流和生产约束的世界，想把一个可理解的工业目标推进到真正交付：先确认工厂和配方，再准备原料、等待或改道物流，观察多输入齐套，完成排程与生产，最后确认交付是否真的产生目的地后果。玩家需要在每一步知道系统是否接受、当前主要阻塞是什么、已经保留或消耗了什么，以及失败、重连或事实变化后还能安全地继续哪条路；首局结束后，他还应理解下一项可以持续运转的能力和真实分支，而不是只看到一次动作成功。
+玩家第一次来到一个仍有资源、物流和生产约束的世界，想把一个可理解的工业目标推进到当前 `starter_completion_profile` 声明的真实完成边界：先确认工厂和配方，再准备原料、等待或改道物流，观察多输入齐套，完成排程与生产；`production_only` 在匹配 production receipt 后完成首产物并保持 `produced/undelivered`，后续 `production-stable` 仍须满足另行声明的稳定条件；`terminal-admission` 才继续确认匹配 delivery/terminal settlement 是否产生目的地后果。玩家需要在每一步知道系统是否接受、当前主要阻塞是什么、已经保留或消耗了什么，以及失败、重连或事实变化后还能安全地继续哪条路；首局结束后，他还应理解下一项可以持续运转的能力和真实分支，而不是只看到一次动作成功。
 
 ### 1.2 事实、假设与未决问题
 
@@ -126,7 +126,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 
 `no_safe_starter_chain` 不是永久失败。卡片必须指出最早且可行动的 blocker、证据分类（`current-evidence-backed`、`target-contract` 或 `unknown/not_tracked`）、已保留/已消费的价值、真实可用的补料、补证、等待、修复、改道、改候选或重新定目标路径，以及下一次复查边界；该结果不产生工业成长奖励、`progression_effect` 或下一 beat，只有恢复后从 fresh authority snapshot 重新通过闸门，才能再次进入目标。没有安全恢复时，系统应安全停止并交回其他当前可达目标；不得无限等待、自动补料、后台改道、发放免费输入，或把 target/unknown 填成“可达”。
 
-闸门只负责接受前的可行性判断。玩家确认后仍须经过既有配方、排程、生产、交付与 receipt 边界；提交前工厂、配方、输入、路径、容量、电力或终端事实发生变化，或 starter-chain/candidate identity 绑定的 authority snapshot/version 失效时，必须重新判断或无副作用拒绝，不能保留旧 identity、静默切换候选或沿旧 identity 发放 `progression_effect`。`production-only` 的 starter 目标只能在匹配 production receipt 与稳定条件成立后完成生产目标，仍标记 `undelivered`；声明 terminal-admission/delivery 的目标必须等匹配 delivery/terminal settlement receipt，不能把生产、buffer 或准入当成交付。
+闸门只负责接受前的可行性判断。玩家确认后仍须经过既有配方、排程、生产、交付与 receipt 边界；提交前工厂、配方、输入、路径、容量、电力或终端事实发生变化，或 starter-chain/candidate identity 绑定的 authority snapshot/version 失效时，必须重新判断或无副作用拒绝，不能保留旧 identity、静默切换候选或沿旧 identity 发放 `progression_effect`。`production_only` 的 starter 目标在匹配 production receipt 后完成首产物，仍标记 `produced/undelivered`；另行声明的稳定条件只决定何时可标记 `production-stable`，不得延迟首产物完成。声明 terminal-admission/delivery 的目标必须等匹配 delivery/terminal settlement receipt，不能把生产、buffer 或准入当成交付。
 
 闸门的 current/target 切线是玩家承诺的证据边界，不是新的 runtime 状态：`current-evidence-backed` 可以进入候选但提交仍须 fresh revalidation；`target-contract` 只能作为未来能力或复查方向；`unknown/not_tracked` 必须进入 `no_safe_starter_chain`，并保留未知原因。相同 authority snapshot/version 应得到相同结果；重连、重复请求、Agent retry、snapshot restore 与 replay 只能重读同一 feasibility/receipt 结果，不复制资源效果、目标完成或奖励。在 fresh composite runtime + QA evidence 证明 Gate 与 starter chain 之前，`test_tier_required` 与 `test_tier_full` 只是验收目标，不是当前 pass；任何 surface 不得宣称 Gate/current starter chain 已实现或默认可用，缺证据必须返回 `no_safe_starter_chain`。
 
