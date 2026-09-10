@@ -14,6 +14,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,9 +46,17 @@ def descriptor(path: Path) -> dict[str, object]:
 
 
 class EvidenceAggregateTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        # Retain the planner fixture's real-crypto cache across aggregate tests;
+        # reimporting this module per test creates a fresh fixture class/cache.
+        cls.planner_tests = load_module(PLANNER_TEST, "aggregate_planner_tests")
+        fixture_class = cls.planner_tests.FullNetworkCleanRoomPlanTests
+        cls.addClassCleanup(fixture_class.tearDownClass)
+        fixture_class.setUpClass()
+
     def setUp(self) -> None:
         self.planner = load_module(PLANNER, "aggregate_planner")
-        self.planner_tests = load_module(PLANNER_TEST, "aggregate_planner_tests")
         self.adapter = load_module(ADAPTER, "aggregate_adapter")
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
@@ -205,6 +215,79 @@ class EvidenceAggregateTests(unittest.TestCase):
         value = copy.deepcopy(value)
         value.update(changes)
         return value
+
+
+class AggregateFixtureLifecycleTests(unittest.TestCase):
+    def test_two_setups_share_baseline_but_isolate_mutations_and_cleanup(self) -> None:
+        initializations = []
+        fixtures = []
+
+        def fake_load(path, name):
+            if path != PLANNER_TEST:
+                return SimpleNamespace(CANONICAL_NETWORK_ID="fixture-network")
+
+            class Fixture:
+                ready = False
+
+                @classmethod
+                def setUpClass(cls):
+                    if not cls.ready:
+                        initializations.append(cls)
+                        cls.ready = True
+
+                @classmethod
+                def tearDownClass(cls):
+                    cls.ready = False
+
+                def __init__(self, method):
+                    self.cleaned = False
+                    fixtures.append(self)
+
+                def setUp(self):
+                    type(self).setUpClass()
+
+                def tearDown(self):
+                    self.cleaned = True
+
+                def _network_binding_evidence_fixture(self, root, **kwargs):
+                    return {"entries": [{"node_name": str(i)} for i in range(5)]}, {}
+
+            return SimpleNamespace(FullNetworkCleanRoomPlanTests=Fixture)
+
+        class Lifecycle(EvidenceAggregateTests):
+            pass
+
+        with mock.patch.dict(globals(), load_module=fake_load):
+            Lifecycle.setUpClass()
+            self.addCleanup(Lifecycle.doClassCleanups)
+            first, second = Lifecycle("runTest"), Lifecycle("runTest")
+            self.addCleanup(first.doCleanups)
+            self.addCleanup(second.doCleanups)
+            first.setUp()
+            self.addCleanup(first.tearDown)
+            first.full_map["entries"][0]["node_name"] = "mutated"
+            first.planner.CANONICAL_NETWORK_ID = "mutated"
+            second.setUp()
+            self.addCleanup(second.tearDown)
+            self.assertEqual(len(initializations), 1, "crypto baseline must initialize once per aggregate class")
+            self.assertIs(first.planner_tests, second.planner_tests)
+            self.assertIsNot(first.planner, second.planner)
+            self.assertIsNot(first.adapter, second.adapter)
+            self.assertEqual(second.planner.CANONICAL_NETWORK_ID, "fixture-network")
+            self.assertEqual(second.full_map["entries"][0]["node_name"], "0")
+            self.assertNotEqual(first.root, second.root)
+            first.tearDown()
+            first.doCleanups()
+            self.assertFalse(first.root.exists())
+            self.assertTrue(second.input_paths[0].exists())
+            self.assertTrue(fixtures[0].cleaned)
+            self.assertFalse(fixtures[1].cleaned)
+            second.tearDown()
+            second.doCleanups()
+            self.assertFalse(second.root.exists())
+            self.assertTrue(fixtures[1].cleaned)
+            Lifecycle.doClassCleanups()
+            self.assertFalse(initializations[0].ready)
 
 
 if __name__ == "__main__":
