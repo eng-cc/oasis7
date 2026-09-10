@@ -1,0 +1,261 @@
+//! Focused Agent-side admission tests for Runtime-owned cognition leases.
+
+use super::*;
+use crate::runtime::{
+    CognitionLeaseQuoteV1, CognitionLeaseRequestV1, CognitionLeaseStatusV1, CognitionLeaseV1, World,
+};
+use crate::simulator::{
+    ActionCatalogEntry, AsyncAgentRunner, AsyncAgentTurnOutcome, DecisionResponse,
+    MockDecisionProvider, ProviderBackedAgentBehavior, ProviderExecutionMode,
+};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+const ACCOUNT_ID: &str = "account-agent-1";
+const RESOURCE: &str = "cognition_units";
+
+fn request_context() -> crate::simulator::ContinuousAgentRequestContextV1 {
+    let mut fixture = super::agent_cognition_identity::production_request_fixture(1, 60_000);
+    fixture["retry_seq"] = serde_json::json!(1);
+    super::agent_cognition_identity::request_from_value(fixture)
+}
+
+fn turn_context(
+    request: &crate::simulator::ContinuousAgentRequestContextV1,
+) -> crate::simulator::ContinuousAgentTurnContextV1 {
+    super::agent_cognition_identity::production_turn_context(request)
+}
+
+fn observation() -> crate::simulator::Observation {
+    super::agent_cognition_identity::production_observation("agent-1", 42)
+}
+
+fn runner_with_state() -> (
+    AsyncAgentRunner,
+    Arc<Mutex<crate::simulator::MockDecisionProviderState>>,
+) {
+    let provider = MockDecisionProvider::with_scripted_responses(
+        "lease-admission-provider",
+        vec![Ok(DecisionResponse::wait("lease-admission-provider"))],
+    );
+    let state = provider.shared_state();
+    let behavior = ProviderBackedAgentBehavior::new(
+        "agent-1",
+        provider,
+        vec![ActionCatalogEntry::new("wait", "wait without world effect")],
+    )
+    .legacy_compatibility()
+    .with_execution_mode(ProviderExecutionMode::HeadlessAgent);
+    let mut runner = AsyncAgentRunner::new(16).expect("create actor runner");
+    runner.register(behavior).expect("register actor");
+    (runner, state)
+}
+
+fn reserve_lease(
+    world: &mut World,
+    request: &crate::simulator::ContinuousAgentRequestContextV1,
+    idempotency_key: &str,
+    quote: CognitionLeaseQuoteV1,
+) -> CognitionLeaseV1 {
+    world
+        .set_cognition_resource_balance(ACCOUNT_ID, RESOURCE, 4)
+        .expect("seed Runtime cognition balance");
+    world
+        .reserve_cognition_lease(CognitionLeaseRequestV1::new(
+            idempotency_key,
+            ACCOUNT_ID,
+            request.agent_subject.clone(),
+            request.agent_session_id.clone(),
+            request.agent_turn_id.clone(),
+            request.decision_request_id.clone(),
+            request.request_digest.to_string(),
+            quote,
+        ))
+        .expect("reserve Runtime cognition lease")
+}
+
+fn completed_turn(
+    runner: &mut AsyncAgentRunner,
+    turn_id: crate::simulator::AsyncTurnId,
+) -> AsyncAgentTurnOutcome {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        if let Some(outcome) = runner
+            .poll_completed()
+            .expect("poll actor")
+            .into_iter()
+            .find(|outcome| outcome.turn_id == turn_id)
+        {
+            return outcome;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "actor did not complete before timeout"
+        );
+        std::thread::yield_now();
+    }
+}
+
+#[test]
+fn valid_runtime_lease_is_required_before_provider_dispatch_and_carried_to_outcome() {
+    let request = request_context();
+    let context = turn_context(&request);
+    let mut world = World::new();
+    let lease = reserve_lease(
+        &mut world,
+        &request,
+        "lease-admission-key",
+        CognitionLeaseQuoteV1::new("lease-admission-quote", RESOURCE, 1),
+    );
+    let (mut runner, state) = runner_with_state();
+
+    let turn_id = runner
+        .start_turn_with_request_context_and_observation_and_lease(
+            "agent-1",
+            observation(),
+            context,
+            request,
+            lease.clone(),
+        )
+        .expect("Runtime-reserved lease admits provider dispatch");
+    let outcome = completed_turn(&mut runner, turn_id);
+    assert_eq!(outcome.cognition_lease, Some(lease.clone()));
+    assert_eq!(
+        outcome.world_effect,
+        crate::simulator::AsyncWorldEffect::NoEffect
+    );
+    assert_eq!(
+        state
+            .lock()
+            .expect("provider state lock")
+            .recorded_requests
+            .len(),
+        1,
+        "a valid Runtime lease admits exactly one provider call"
+    );
+
+    let economy = world.cognition_economy().expect("read Runtime economy");
+    assert_eq!(economy.reserved_balance(ACCOUNT_ID, RESOURCE), 1);
+    assert!(
+        economy.receipts.is_empty(),
+        "Agent runner cannot settle a lease"
+    );
+    let receipt = world
+        .settle_cognition_lease(&lease.lease_id, 1)
+        .expect("Runtime settles the lease");
+    assert_eq!(receipt.status, CognitionLeaseStatusV1::Settled);
+}
+
+#[test]
+fn invalid_or_closed_lease_fences_dispatch_without_provider_call() {
+    let request = request_context();
+    let context = turn_context(&request);
+    let mut world = World::new();
+    let lease = reserve_lease(
+        &mut world,
+        &request,
+        "lease-closed-key",
+        CognitionLeaseQuoteV1::new("lease-closed-quote", RESOURCE, 1),
+    );
+    world
+        .release_cognition_lease(&lease.lease_id)
+        .expect("Runtime closes lease");
+    let closed_lease = world
+        .cognition_economy()
+        .expect("read closed lease")
+        .leases
+        .get(&lease.lease_id)
+        .cloned()
+        .expect("closed lease remains durable");
+    let (mut runner, state) = runner_with_state();
+
+    let error = runner
+        .start_turn_with_request_context_and_observation_and_lease(
+            "agent-1",
+            observation(),
+            context,
+            request,
+            closed_lease,
+        )
+        .expect_err("closed lease must not reach provider dispatch");
+    assert!(error.to_string().contains("cognition_lease_not_reserved"));
+    assert_eq!(runner.active_turn_count(), 0);
+    assert_eq!(
+        state
+            .lock()
+            .expect("provider state lock")
+            .recorded_requests
+            .len(),
+        0,
+        "invalid lease must prevent provider calls"
+    );
+}
+
+#[test]
+fn lease_identity_mismatch_and_expiry_fence_provider_without_world_effect() {
+    let request = request_context();
+    let context = turn_context(&request);
+
+    let mut world = World::new();
+    let mismatched = world
+        .set_cognition_resource_balance(ACCOUNT_ID, RESOURCE, 4)
+        .and_then(|_| {
+            world.reserve_cognition_lease(CognitionLeaseRequestV1::new(
+                "lease-mismatch-key",
+                ACCOUNT_ID,
+                "agent-1",
+                request.agent_session_id.clone(),
+                request.agent_turn_id.clone(),
+                request.decision_request_id.clone(),
+                "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                CognitionLeaseQuoteV1::new("lease-mismatch-quote", RESOURCE, 1),
+            ))
+        })
+        .expect("reserve mismatched Runtime lease");
+    let (mut runner, state) = runner_with_state();
+    let error = runner
+        .start_turn_with_request_context_and_observation_and_lease(
+            "agent-1",
+            observation(),
+            context.clone(),
+            request.clone(),
+            mismatched,
+        )
+        .expect_err("lease from another request must be fenced");
+    assert!(
+        error
+            .to_string()
+            .contains("cognition_lease_identity_mismatch")
+    );
+
+    let mut expiring_world = World::new();
+    let expiring = reserve_lease(
+        &mut expiring_world,
+        &request,
+        "lease-expiry-key",
+        CognitionLeaseQuoteV1::new("lease-expiry-quote", RESOURCE, 1).with_valid_until_tick(0),
+    );
+    runner
+        .step_world_without_waiting_for_provider()
+        .expect("advance runner clock");
+    let error = runner
+        .start_turn_with_request_context_and_observation_and_lease(
+            "agent-1",
+            observation(),
+            context,
+            request,
+            expiring,
+        )
+        .expect_err("expired lease must be fenced");
+    assert!(error.to_string().contains("cognition_lease_expired"));
+    assert_eq!(runner.active_turn_count(), 0);
+    assert_eq!(
+        state
+            .lock()
+            .expect("provider state lock")
+            .recorded_requests
+            .len(),
+        0,
+        "identity and expiry denial must not call provider"
+    );
+}

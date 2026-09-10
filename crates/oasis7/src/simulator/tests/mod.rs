@@ -51,6 +51,7 @@ fn seed_owner_resource(
 
 mod agent_cognition_budget;
 mod agent_cognition_continuation;
+mod agent_cognition_economy;
 mod agent_cognition_goal_snapshot;
 mod agent_cognition_identity;
 mod agent_cognition_live_actor;

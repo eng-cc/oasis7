@@ -23,7 +23,7 @@ use std::thread::{self, JoinHandle};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::runtime::RuntimeReceiptLineageV1;
+use crate::runtime::{CognitionLeaseStatusV1, CognitionLeaseV1, RuntimeReceiptLineageV1};
 
 use super::Observation;
 use super::agent::{ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace};
@@ -119,6 +119,11 @@ pub struct AsyncAgentTurnOutcome {
     pub prepared_request_context: Option<ContinuousAgentRequestContextV1>,
     #[serde(default)]
     pub prepared_response_context: Option<ContinuousAgentResponseContextV1>,
+    /// Runtime-issued reservation carried through the provider outcome. The
+    /// Agent runner may validate and retain this identity, but only Runtime
+    /// can settle, release, or refund the lease.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cognition_lease: Option<CognitionLeaseV1>,
     pub memory_write_intents: Vec<MemoryWriteIntent>,
 }
 
@@ -389,6 +394,9 @@ pub struct AsyncAgentRunner {
     /// world-facing completion queue must not release cognition single-flight.
     awaiting_runtime: BTreeMap<String, AsyncTurnId>,
     awaiting_outcomes: BTreeMap<AsyncTurnId, AsyncAgentTurnOutcome>,
+    /// Leases are staged by turn until the actor returns. They are moved into
+    /// the outcome before it is exposed to the world-facing queue.
+    cognition_leases: BTreeMap<AsyncTurnId, CognitionLeaseV1>,
     feedback_store: AgentCognitionStore,
     continuation_harness: ContinuationHarness,
     continuations: BTreeMap<String, ContinuationHandle>,
@@ -408,6 +416,7 @@ impl AsyncAgentRunner {
             completed: VecDeque::new(),
             awaiting_runtime: BTreeMap::new(),
             awaiting_outcomes: BTreeMap::new(),
+            cognition_leases: BTreeMap::new(),
             feedback_store: AgentCognitionStore::default(),
             continuation_harness: ContinuationHarness::default(),
             continuations: BTreeMap::new(),
@@ -537,6 +546,70 @@ impl AsyncAgentRunner {
             observation,
             Some(context),
             Some(request_context),
+            None,
+        )
+    }
+
+    /// Start a production provider turn only after Runtime has reserved a
+    /// cognition lease for this exact request identity. The runner validates
+    /// the returned lease before queueing the actor command; settlement,
+    /// release, refund, and receipt projection remain Runtime operations.
+    pub fn start_turn_with_request_context_and_lease(
+        &mut self,
+        agent_id: &str,
+        context: ContinuousAgentTurnContextV1,
+        request_context: ContinuousAgentRequestContextV1,
+        cognition_lease: CognitionLeaseV1,
+    ) -> Result<AsyncTurnId, AsyncAgentRunnerError> {
+        let observation = default_observation(agent_id, self.logical_tick);
+        self.start_turn_with_request_context_and_observation_and_lease(
+            agent_id,
+            observation,
+            context,
+            request_context,
+            cognition_lease,
+        )
+    }
+
+    /// Observation-preserving form of
+    /// [`Self::start_turn_with_request_context_and_lease`]. The observation is
+    /// captured by the same host admission that produced the request context.
+    pub fn start_turn_with_request_context_and_observation_and_lease(
+        &mut self,
+        agent_id: &str,
+        observation: Observation,
+        context: ContinuousAgentTurnContextV1,
+        request_context: ContinuousAgentRequestContextV1,
+        cognition_lease: CognitionLeaseV1,
+    ) -> Result<AsyncTurnId, AsyncAgentRunnerError> {
+        context
+            .validate_for_agent(agent_id)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        request_context
+            .validate_production_lane()
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        if request_context.agent_subject != agent_id
+            || request_context.agent_session_id != context.agent_session_id
+            || request_context.agent_turn_id != context.agent_turn_id
+            || request_context.decision_request_id != context.decision_request_id
+            || request_context.request_digest != context.request_digest
+        {
+            return Err(AsyncAgentRunnerError::Cognition(
+                "outer and reduced cognition contexts do not correlate".to_string(),
+            ));
+        }
+        validate_cognition_lease_for_request(
+            agent_id,
+            &request_context,
+            &cognition_lease,
+            self.logical_tick,
+        )?;
+        self.start_turn_with_context_and_observation_and_request(
+            agent_id,
+            observation,
+            Some(context),
+            Some(request_context),
+            Some(cognition_lease),
         )
     }
 
@@ -568,6 +641,7 @@ impl AsyncAgentRunner {
             observation,
             Some(context),
             Some(request_context),
+            None,
         )
     }
 
@@ -582,6 +656,7 @@ impl AsyncAgentRunner {
             observation,
             context,
             None,
+            None,
         )
     }
 
@@ -591,6 +666,7 @@ impl AsyncAgentRunner {
         observation: Observation,
         context: Option<ContinuousAgentTurnContextV1>,
         request_context: Option<ContinuousAgentRequestContextV1>,
+        cognition_lease: Option<CognitionLeaseV1>,
     ) -> Result<AsyncTurnId, AsyncAgentRunnerError> {
         if self
             .continuations
@@ -644,6 +720,9 @@ impl AsyncAgentRunner {
                 .begin_turn(context)
                 .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
         }
+        if let Some(lease) = cognition_lease {
+            self.cognition_leases.insert(turn_id, lease);
+        }
         actor.active_turn.store(true, Ordering::Release);
         if let Err(error) = actor.try_send(ActorCommand::Decide {
             turn_id,
@@ -652,6 +731,7 @@ impl AsyncAgentRunner {
             request_context,
         }) {
             actor.active_turn.store(false, Ordering::Release);
+            self.cognition_leases.remove(&turn_id);
             self.feedback_store.clear_agent(agent_id);
             return Err(error.with_agent(agent_id));
         }
@@ -671,7 +751,9 @@ impl AsyncAgentRunner {
             };
             actor.active_turn.store(false, Ordering::Release);
             self.active_turns = self.active_turns.saturating_sub(1);
-            let outcome = outcome_from_completion(completion);
+            let cognition_lease = self.cognition_leases.remove(&completion.turn_id);
+            let mut outcome = outcome_from_completion(completion);
+            outcome.cognition_lease = cognition_lease;
             if outcome.prepared_context.is_some() {
                 self.awaiting_runtime
                     .insert(outcome.agent_id.clone(), outcome.turn_id);
@@ -1114,6 +1196,7 @@ fn outcome_from_completion(completion: ActorCompletion) -> AsyncAgentTurnOutcome
             prepared_context: completion.prepared_context,
             prepared_request_context: completion.prepared_request_context,
             prepared_response_context: completion.prepared_response_context,
+            cognition_lease: None,
             memory_write_intents: completion.memory_write_intents,
         };
     }
@@ -1137,6 +1220,7 @@ fn outcome_from_completion(completion: ActorCompletion) -> AsyncAgentTurnOutcome
             prepared_context: completion.prepared_context,
             prepared_request_context: completion.prepared_request_context,
             prepared_response_context: completion.prepared_response_context,
+            cognition_lease: None,
             memory_write_intents: completion.memory_write_intents,
         };
     }
@@ -1177,6 +1261,7 @@ fn outcome_from_completion(completion: ActorCompletion) -> AsyncAgentTurnOutcome
         prepared_context: completion.prepared_context,
         prepared_request_context: completion.prepared_request_context,
         prepared_response_context: completion.prepared_response_context,
+        cognition_lease: None,
         memory_write_intents: completion.memory_write_intents,
     }
 }
@@ -1195,4 +1280,46 @@ fn default_observation(agent_id: &str, time: WorldTime) -> Observation {
         power_market: Default::default(),
         social_state: Default::default(),
     }
+}
+
+fn validate_cognition_lease_for_request(
+    agent_id: &str,
+    request_context: &ContinuousAgentRequestContextV1,
+    lease: &CognitionLeaseV1,
+    logical_tick: WorldTime,
+) -> Result<(), AsyncAgentRunnerError> {
+    lease.validate().map_err(|error| {
+        AsyncAgentRunnerError::Cognition(format!("cognition_lease_invalid: {error}"))
+    })?;
+    if lease.status != CognitionLeaseStatusV1::Reserved {
+        return Err(AsyncAgentRunnerError::Cognition(
+            "cognition_lease_not_reserved".to_string(),
+        ));
+    }
+    if lease.agent_id != agent_id
+        || request_context.agent_subject != agent_id
+        || lease.agent_session_id != request_context.agent_session_id
+        || lease.agent_turn_id != request_context.agent_turn_id
+        || lease.decision_request_id != request_context.decision_request_id
+        || lease.request_digest != request_context.request_digest.to_string()
+    {
+        return Err(AsyncAgentRunnerError::Cognition(
+            "cognition_lease_identity_mismatch".to_string(),
+        ));
+    }
+    if lease.reserved_at_tick > logical_tick {
+        return Err(AsyncAgentRunnerError::Cognition(
+            "cognition_lease_reserved_in_future".to_string(),
+        ));
+    }
+    if lease
+        .quote
+        .valid_until_tick
+        .is_some_and(|expires| logical_tick > expires)
+    {
+        return Err(AsyncAgentRunnerError::Cognition(
+            "cognition_lease_expired".to_string(),
+        ));
+    }
+    Ok(())
 }
