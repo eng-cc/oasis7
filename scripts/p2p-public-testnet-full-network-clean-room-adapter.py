@@ -4135,7 +4135,15 @@ def _execute_unlocked(
                     _fail("rollback requires a fresh independent provenance verification")
                 rollback_plan = _transport_plan(plan)
                 rollback_candidates_snapshot = list(rollback_candidates)
+                # External verification may consume the remaining lease.
+                # Historical receipt timestamps do not admit a new callback.
+                validate_authority(
+                    plan, authority, raw_v1_bytes_by_node=raw_v1_bytes_by_node
+                )
                 _consumer_impact_locator(plan)
+                capture_start, capture_end = _capture_window_bounds(plan)
+                if not capture_start <= dt.datetime.now(dt.timezone.utc) < capture_end:
+                    _fail("recovery capture lease is expired or not yet active")
                 rollback_reobservation_receipt = _guarded_callback(transport.reobserve_failed_state,
                     rollback_plan, rollback_candidates_snapshot, failed_operation
                 )
@@ -4152,7 +4160,15 @@ def _execute_unlocked(
                     _fail("rollback re-observation failed-operation binding drifted")
                 rollback_plan = _transport_plan(plan)
                 rollback_candidates_snapshot = list(rollback_candidates)
+                # Re-observation and its independent verifier are external
+                # work; re-admit authority immediately before destructive recovery.
+                validate_authority(
+                    plan, authority, raw_v1_bytes_by_node=raw_v1_bytes_by_node
+                )
                 _consumer_impact_locator(plan)
+                capture_start, capture_end = _capture_window_bounds(plan)
+                if not capture_start <= dt.datetime.now(dt.timezone.utc) < capture_end:
+                    _fail("recovery capture lease is expired or not yet active")
                 rollback_receipt = _guarded_callback(transport.rollback_clean_redeploy,
                     rollback_plan, rollback_candidates_snapshot, rollback_reobservation_receipt
                 )

@@ -349,6 +349,87 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
                 "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
                 "signer_id": "governance-signer"}
 
+    def _assert_recovery_expiry_boundary(self, boundary):
+        failed = "stop:storage-205"
+        original_plan = self.plan
+        real_datetime = self.adapter.dt.datetime
+        # Building the no-backup fixture refreshes its on-disk impact record;
+        # consume the original forensic plan before that fixture transition.
+        for mode in ("valid-window", "capture-expired", "no-backup-expired"):
+            with self.subTest(boundary=boundary, mode=mode):
+                self.plan = self._no_backup_plan() if mode == "no-backup-expired" else original_plan
+                self._write_ledger(self.ledger_path)
+                plan = self.plan
+                end = real_datetime.fromisoformat(
+                    (plan["forensic_backup"]["expires_at"] if mode == "no-backup-expired"
+                     else plan["capture_window"]["ends_at"]).replace("Z", "+00:00")
+                )
+                clock = [real_datetime(2026, 9, 11, tzinfo=timezone.utc)]
+                expired = mode != "valid-window"
+                triggered = []
+
+                class RecoveryClock(real_datetime):
+                    @classmethod
+                    def now(cls, tz=None):
+                        return clock[0] if tz is not None else clock[0].replace(tzinfo=None)
+
+                def advance():
+                    triggered.append(boundary)
+                    if expired:
+                        clock[0] = end
+
+                transport = ApplyTransport(self.adapter, plan, side_effect_operation=failed)
+                original_reobserve = transport.reobserve_failed_state
+                observed_receipts = []
+
+                def reobserve(*args):
+                    receipt = original_reobserve(*args)
+                    observed_receipts.append(copy.deepcopy(receipt))
+                    if boundary == "reobserve":
+                        advance()
+                    return receipt
+
+                def verifier(transport_plan, receipt):
+                    result = self._recovery_verifier(transport_plan, receipt)
+                    if boundary == "provenance" and transport.failed_operation == failed and not triggered:
+                        advance()
+                    elif boundary == "receipt-verifier" and receipt.get("operation") == "reobserve-failed-state":
+                        advance()
+                    return result
+
+                transport.reobserve_failed_state = reobserve
+                journal = Path(self._test_directory.name) / f"expiry-{boundary}-{mode}.json"
+                with mock.patch.object(self.adapter.dt, "datetime", RecoveryClock):
+                    with self.assertRaises(self.adapter.AdapterError) as failure:
+                        self.adapter.execute(plan, self._authority(True), journal_path=journal,
+                            ledger_path=self.ledger_path, transport=transport, dry_run=False,
+                            provenance_verifier=verifier)
+                self.assertTrue(journal.exists(), str(failure.exception))
+                record = json.loads(journal.read_text())
+                self.assertEqual(triggered, [boundary])
+                self.assertEqual(record["rollback_candidates"], [failed])
+                self.assertEqual(record["failed_operation"], failed)
+                self.assertTrue(record["provider_receipts"], "completed evidence must survive expiry")
+                self.assertTrue(record["preflight_evidence_receipts"])
+                if observed_receipts:
+                    self.assertEqual(record["rollback_reobservation_receipt"], observed_receipts[0])
+                self.assertEqual(transport.rollback_reobservations,
+                                 [] if expired and boundary == "provenance" else [failed])
+                self.assertEqual(transport.rollback_operations, [] if expired else ["rollback"])
+                self.assertEqual(record["rollback_status"], "reconciliation-blocked" if expired else "completed")
+                if expired:
+                    self.assertIsNone(record["rollback_receipt"])
+        self.plan = original_plan
+
+    def test_capture_expiry_during_recovery_provenance_blocks_reobserve(self):
+        self._assert_recovery_expiry_boundary("provenance")
+
+    def test_capture_expiry_during_reobserve_blocks_clean_redeploy(self):
+        self._assert_recovery_expiry_boundary("reobserve")
+
+    def test_capture_expiry_during_reobservation_verifier_blocks_clean_redeploy(self):
+        self._assert_recovery_expiry_boundary("receipt-verifier")
+
     def test_recovery_receipts_bind_exact_attempted_candidates(self):
         failed = "rebuild:storage-205"
         expected = [op for op in self.plan["global_order"][:self.plan["global_order"].index(failed) + 1]
