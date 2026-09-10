@@ -168,6 +168,54 @@ impl World {
         ) {
             return Ok(());
         }
+        if matches!(
+            event,
+            DomainEvent::GovernanceProposalOpened { .. }
+                | DomainEvent::GovernanceVoteCast { .. }
+                | DomainEvent::GovernanceProposalFinalized { .. }
+                | DomainEvent::CrisisSpawned { .. }
+                | DomainEvent::CrisisResolved { .. }
+                | DomainEvent::CrisisTimedOut { .. }
+                | DomainEvent::MetaProgressGranted { .. }
+                | DomainEvent::ProductValidated { .. }
+        ) {
+            super::governance_meta_publication::PreparedGovernanceMetaEvent::prepare(
+                &self.state,
+                event,
+                self.state.time,
+            )?;
+            return Ok(());
+        }
+        if matches!(
+            event,
+            DomainEvent::AllianceFormed { .. }
+                | DomainEvent::AllianceJoined { .. }
+                | DomainEvent::AllianceLeft { .. }
+                | DomainEvent::AllianceDissolved { .. }
+                | DomainEvent::WarDeclared { .. }
+                | DomainEvent::WarConcluded { .. }
+        ) {
+            super::alliance_war_publication::PreparedAllianceWarEvent::prepare(
+                &self.state,
+                event,
+                self.state.time,
+            )?;
+            return Ok(());
+        }
+        if matches!(
+            event,
+            DomainEvent::EconomicContractOpened { .. }
+                | DomainEvent::EconomicContractAccepted { .. }
+                | DomainEvent::EconomicContractSettled { .. }
+                | DomainEvent::EconomicContractExpired { .. }
+        ) {
+            super::economic_contract_publication::PreparedEconomicContractEvent::prepare(
+                &self.state,
+                event,
+                self.state.time,
+            )?;
+            return Ok(());
+        }
         let mut preview_state = self.state.clone();
         preview_state.apply_domain_event(event, self.state.time)
     }

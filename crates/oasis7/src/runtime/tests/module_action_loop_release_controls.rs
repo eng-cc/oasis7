@@ -3,6 +3,9 @@ use crate::runtime::state::ModuleReleaseRequestStatus;
 #[path = "module_action_loop_release_controls_tests.rs"]
 mod release_controls_tests;
 
+#[path = "module_release_raw_publication_transaction_regressions.rs"]
+mod raw_publication_transaction_regressions;
+
 const LOCAL_FINALITY_SIGNER_1: &str = "governance.local.finality.signer.1";
 const LOCAL_FINALITY_SIGNER_2: &str = "governance.local.finality.signer.2";
 const TEST_FINALITY_SIGNER_3: &str = "governance.test.finality.signer.3";

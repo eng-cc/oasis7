@@ -47,6 +47,8 @@ pub use self::feedback::{RuntimeReceiptReadbackHandleV1, RuntimeReceiptReadbackV
 use self::feedback::{validate_feedback, validate_runtime_receipt_lineage};
 #[path = "async_agent_runner_actor_controls.rs"]
 mod actor_controls;
+#[path = "async_agent_runner_budget.rs"]
+mod budget;
 #[path = "async_agent_runner_continuation.rs"]
 mod continuation;
 #[path = "async_agent_runner_retry.rs"]
@@ -1115,6 +1117,10 @@ fn outcome_from_completion(completion: ActorCompletion) -> AsyncAgentTurnOutcome
             memory_write_intents: completion.memory_write_intents,
         };
     }
+    let completion = match budget::normalize_completion(completion) {
+        Ok(completion) => completion,
+        Err(outcome) => return outcome,
+    };
     if let Some(code) = completion
         .decision_trace
         .as_ref()

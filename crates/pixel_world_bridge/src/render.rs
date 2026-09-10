@@ -3,6 +3,8 @@ use bevy::ecs::system::SystemParam;
 use std::collections::{HashMap, HashSet};
 #[path = "render_fragment_visuals.rs"]
 mod fragment_visuals;
+#[path = "render_grounding.rs"]
+mod grounding;
 use fragment_visuals::reconcile_fragments;
 #[path = "render_micro_depot_facilities.rs"]
 mod micro_depot_facilities;
@@ -141,6 +143,8 @@ pub(crate) struct GridLayoutKey {
     step_milli: i32,
     offset_x_milli: i32,
     offset_y_milli: i32,
+    major_phase_x: i32,
+    major_phase_y: i32,
 }
 #[derive(Component)]
 pub(crate) struct PixelWorldGridVisual;
@@ -259,6 +263,8 @@ pub(crate) fn build_grid_layout(camera: &CameraState, width: f64, height: f64) -
         step_milli: (grid_step * 1000.0).round() as i32,
         offset_x_milli: (offset_x * 1000.0).round() as i32,
         offset_y_milli: (offset_y * 1000.0).round() as i32,
+        major_phase_x: (camera.pan_x_px / grid_step).floor().rem_euclid(5.0) as i32,
+        major_phase_y: (camera.pan_y_px / grid_step).floor().rem_euclid(5.0) as i32,
     }
 }
 pub(crate) fn fragment_screen_size_px(
@@ -387,7 +393,7 @@ fn grid_geometry(layout: &GridLayoutKey) -> (f64, f64, f64, f64, Color) {
         layout.offset_x_milli as f64 / 1000.0,
         layout.offset_y_milli as f64 / 1000.0,
         layout.width as f64,
-        Color::srgba_u8(99, 179, 255, 26),
+        Color::srgba_u8(99, 179, 255, 12),
     )
 }
 fn reconcile_grid(
@@ -408,8 +414,14 @@ fn reconcile_grid(
     let layout_height = next_layout.height as f64;
     let mut x = offset_x;
     while x <= layout_width {
+        let color =
+            if (((x - runtime.camera.pan_x_px) / grid_step).round() as i64).rem_euclid(5) == 0 {
+                Color::srgba_u8(99, 179, 255, 20)
+            } else {
+                grid_color
+            };
         commands.spawn((
-            sprite_for_rect(grid_color, 1.0, layout_height as f32),
+            sprite_for_rect(color, 1.0, layout_height as f32),
             Transform::from_translation(to_bevy_translation(
                 x,
                 layout_height / 2.0,
@@ -423,8 +435,14 @@ fn reconcile_grid(
     }
     let mut y = offset_y;
     while y <= layout_height {
+        let color =
+            if (((y - runtime.camera.pan_y_px) / grid_step).round() as i64).rem_euclid(5) == 0 {
+                Color::srgba_u8(99, 179, 255, 20)
+            } else {
+                grid_color
+            };
         commands.spawn((
-            sprite_for_rect(grid_color, layout_width as f32, 1.0),
+            sprite_for_rect(color, layout_width as f32, 1.0),
             Transform::from_translation(to_bevy_translation(
                 layout_width / 2.0,
                 y,
@@ -490,9 +508,10 @@ fn reconcile_locations(
             height,
             style.layer_z,
         ));
-        let sprite = sprite_for_square(
+        let sprite = sprite_for_rect(
             Color::srgba_u8(110, 231, 183, (style.alpha * 255.0).round() as u8),
             style.size_px as f32,
+            style.size_px as f32 * 0.72,
         );
         if let Some(entity) = runtime.location_entities.get(&location.id).copied() {
             commands.entity(entity).insert((sprite, transform));
@@ -569,7 +588,7 @@ fn reconcile_agents(
             height,
             style.layer_z,
         ));
-        let sprite = sprite_for_square(color, style.size_px as f32);
+        let sprite = sprite_for_rect(color, style.size_px as f32 * 0.66, style.size_px as f32);
         if let Some(entity) = runtime.agent_entities.get(&agent.id).copied() {
             commands.entity(entity).insert((sprite, transform));
         } else {
@@ -701,6 +720,7 @@ fn clear_runtime_visuals(commands: &mut Commands, runtime: &mut BevyRuntimeState
 pub(crate) struct RenderSceneQueries<'w, 's> {
     windows: Query<'w, 's, &'static Window, With<PrimaryWindow>>,
     current_grid: Query<'w, 's, Entity, With<PixelWorldGridVisual>>,
+    grounding: Query<'w, 's, (Entity, &'static grounding::PixelWorldGroundingVisual)>,
     fragment_visuals: Query<'w, 's, (Entity, &'static PixelWorldFragmentVisual)>,
     fragment_shadows: Query<'w, 's, (Entity, &'static PixelWorldFragmentShadowVisual)>,
     fragment_insets: Query<'w, 's, (Entity, &'static PixelWorldFragmentInsetVisual)>,
@@ -740,6 +760,7 @@ pub(crate) fn render_scene(
     time: Res<Time>,
 ) {
     if !runtime.mounted {
+        grounding::clear(&mut commands, &queries.grounding);
         clear_runtime_visuals(&mut commands, &mut runtime);
         for (entity, _) in queries.selected_location_cues.iter() {
             commands.entity(entity).despawn();
@@ -840,6 +861,7 @@ pub(crate) fn render_scene(
         return;
     };
     let Some(_) = runtime.render_state.as_ref() else {
+        grounding::clear(&mut commands, &queries.grounding);
         clear_runtime_visuals(&mut commands, &mut runtime);
         for (entity, _) in queries.selected_location_cues.iter() {
             commands.entity(entity).despawn();
@@ -911,7 +933,11 @@ pub(crate) fn render_scene(
         runtime.needs_reconcile = false;
         runtime.animation_dirty = false;
     }
-    let animation_ms = time.elapsed_secs_f64() * 1000.0;
+    let animation_ms = if runtime.reduced_motion {
+        0.0
+    } else {
+        time.elapsed_secs_f64() * 1000.0
+    };
     let mut rebuild_hit_regions = false;
     if static_reconcile {
         canvas_resize::requeue_follow_target_after_resize(&mut runtime, width, height);
@@ -1025,6 +1051,14 @@ pub(crate) fn render_scene(
         height,
         animation_ms,
         rebuild_hit_regions,
+    );
+    grounding::reconcile(
+        &mut commands,
+        &runtime,
+        &queries.grounding,
+        width,
+        height,
+        animation_ms,
     );
     reconcile_agent_labels(
         &mut commands,

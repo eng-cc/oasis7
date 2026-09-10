@@ -2,6 +2,19 @@
   document.documentElement.setAttribute("data-js", "true");
   const LANGUAGE_REDIRECT_KEY = "oasis7_pages_lang_redirect_done_v1";
   const LANGUAGE_MANUAL_CHOICE_KEY = "oasis7_pages_lang_manual_choice_v1";
+  const RELEASE_ASSET_BASE = "https://github.com/eng-cc/oasis7/releases/download";
+  const releaseRefreshCallbacks = [];
+
+  const releaseAssetUrl = (fallbackUrl) => {
+    const tagNode = document.querySelector("[data-release-tag]");
+    const tagName = tagNode ? tagNode.textContent.trim() : "";
+    const fallback = String(fallbackUrl || "").trim();
+    const filename = fallback.split("/").pop() || "";
+    if (!tagName || !filename || tagName === "latest") {
+      return fallback;
+    }
+    return `${RELEASE_ASSET_BASE}/${encodeURIComponent(tagName)}/${filename}`;
+  };
 
   const safeGetStorage = (key) => {
     try {
@@ -1036,10 +1049,12 @@
         return response.json();
       })
       .then((release) => {
-        const tagName =
-          typeof release.tag_name === "string" && release.tag_name.trim().length > 0
-            ? release.tag_name.trim()
-            : "latest";
+        const tagName = typeof release.tag_name === "string" ? release.tag_name.trim() : "";
+        const publishedAt = Date.parse(String(release.published_at || ""));
+        if (!tagName || !Number.isFinite(publishedAt)) {
+          throw new Error("release metadata is incomplete");
+        }
+
         tagNodes.forEach((node) => {
           node.textContent = tagName;
         });
@@ -1047,15 +1062,10 @@
         const releaseUrl =
           typeof release.html_url === "string" && release.html_url.trim().length > 0
             ? release.html_url.trim()
-            : "https://github.com/eng-cc/oasis7/releases/latest";
+            : `${RELEASE_ASSET_BASE.replace("/download", "")}/tag/${encodeURIComponent(tagName)}`;
         notesLinks.forEach((node) => {
           node.setAttribute("href", releaseUrl);
         });
-
-        const publishedAt = Date.parse(String(release.published_at || ""));
-        if (!Number.isFinite(publishedAt)) {
-          return;
-        }
 
         const pageLang = String(document.documentElement.lang || "").toLowerCase();
         const locale = pageLang.startsWith("zh") ? "zh-CN" : "en-US";
@@ -1069,6 +1079,10 @@
           const prefix = String(node.getAttribute("data-release-date-prefix") || "").trim();
           node.textContent = prefix ? `${prefix}: ${formattedDate}` : formattedDate;
         });
+        document.querySelectorAll('a[href*="oasis7-checksums.txt"]').forEach((node) => {
+          node.setAttribute("href", releaseAssetUrl(node.getAttribute("href")));
+        });
+        releaseRefreshCallbacks.forEach((refresh) => refresh());
       })
       .catch(() => {
         // Keep static fallback text when request fails.
@@ -1233,7 +1247,7 @@
           copyNode.textContent = next.copy;
         }
         if (linkNode && next.url) {
-          linkNode.setAttribute("href", next.url);
+          linkNode.setAttribute("href", releaseAssetUrl(next.url));
         }
         if (linkNode && next.linkLabel) {
           linkNode.textContent = next.linkLabel;
@@ -1268,6 +1282,13 @@
           : "";
       const initialPlatform = sourceMap.has(detected) ? detected : fallback;
       const initialMode = detected && sourceMap.has(detected) ? "auto" : "neutral";
+      releaseRefreshCallbacks.push(() => {
+        const activePlatform = surface.getAttribute("data-download-active-platform");
+        const activeSource = sourceMap.get(activePlatform);
+        if (linkNode && activeSource && activeSource.url) {
+          linkNode.setAttribute("href", releaseAssetUrl(activeSource.url));
+        }
+      });
       applyPlatform(initialPlatform, initialMode);
     });
   };

@@ -408,7 +408,7 @@ for job in windows-package-rollout-behavior testnet-packages-macos-arm64-contrac
   if ! awk -v job="$job" '
     $0 ~ "^  " job ":" { active=1; next }
     active && /^  [A-Za-z0-9_-]+:/ { exit }
-    active && /if: github.event_name == .pull_request. && needs.required-gate.outputs.run_operational_contracts == .true./ { found=1 }
+    active && /if:.*github.event_name == .pull_request.*&& needs.required-gate.outputs.run_operational_contracts == .true./ { found=1 }
     END { exit(found ? 0 : 1) }
   ' "$workflow"; then
     echo "operational PR job is not planner-scoped: $job" >&2

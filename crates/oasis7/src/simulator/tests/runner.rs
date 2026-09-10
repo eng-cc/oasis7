@@ -256,6 +256,7 @@ impl AgentBehavior for LlmLatencyTraceAgent {
                 completion_tokens: None,
                 total_tokens: None,
                 retry_count: 0,
+                ..LlmDecisionDiagnostics::default()
             }),
             llm_effect_intents: vec![],
             llm_effect_receipts: vec![],

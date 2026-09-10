@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::agent_cell::{AgentCell, AgentIntentV2};
 use super::error::WorldError;
 use super::events::ModuleProfileChanges;
-use super::events::{DomainEvent, MaterialTransitPriority};
+use super::events::{DomainEvent, IndustryStage, MaterialTransitPriority};
 use super::gameplay_state::{
     AgentClaimState, AllianceState, CrisisState, CrisisStatus, EconomicContractState,
     EconomicContractStatus, GOVERNANCE_IDENTITY_DEFAULT_MAX_VOTE_WEIGHT, GameplayPolicyState,
@@ -50,14 +50,24 @@ mod apply_domain_event_industry_helpers;
 #[cfg(test)]
 mod apply_domain_event_industry_history_tests;
 mod apply_domain_event_intent;
-mod apply_domain_event_main_token;
+pub(crate) mod apply_domain_event_main_token;
+mod body_projection;
+mod command_projection;
+pub(crate) mod core_policy_transition;
 mod factory_authority;
+mod governance_identity_projection;
+pub(crate) mod industry_history_transition;
 mod industry_state;
+pub(crate) mod industry_transition;
 mod logistics_path_authority;
+pub(crate) mod module_instance_transition;
+pub(crate) mod module_marketplace_transition;
+pub(crate) mod module_release_transition;
+mod projection;
 mod starter_industrial;
 #[path = "state_defaults.rs"]
 mod state_defaults;
-mod support;
+pub(crate) mod support;
 
 pub use self::starter_industrial::{
     IndustryProgressState, STARTER_ASSEMBLER_FACTORY_ID, STARTER_INDUSTRIAL_COMPLETION_BOUNDARY,
@@ -66,7 +76,12 @@ pub use self::starter_industrial::{
     StarterIndustrialFeasibilityStatus, StarterIndustrialMilestoneV1,
 };
 use self::support::*;
+pub(crate) use command_projection::{
+    CommandAgentMapProjection, CommandModuleStateMapProjection, CommandResourceMapProjection,
+    CommandStateOverlay,
+};
 pub(super) use logistics_path_authority::LogisticsPathAuthorityV1;
+pub use projection::{BodyOverlay, WorldStateProjection};
 
 fn default_world_material_ledger() -> MaterialLedgerId {
     state_defaults::default_world_material_ledger()
@@ -488,7 +503,7 @@ pub struct ModuleReleaseManifestMappingState {
 }
 
 /// The mutable state of the world.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct WorldState {
     pub time: WorldTime,
     pub agents: BTreeMap<String, AgentCell>,
@@ -973,42 +988,6 @@ impl WorldState {
         raw_weight as u32
     }
 
-    fn settle_module_action_fee(
-        &mut self,
-        agent_id: &str,
-        fee_kind: ResourceKind,
-        fee_amount: i64,
-        now: WorldTime,
-    ) -> Result<(), WorldError> {
-        if fee_amount < 0 {
-            return Err(WorldError::ResourceBalanceInvalid {
-                reason: format!("module action fee must be >= 0, got {}", fee_amount),
-            });
-        }
-
-        let cell = self
-            .agents
-            .get_mut(agent_id)
-            .ok_or_else(|| WorldError::AgentNotFound {
-                agent_id: agent_id.to_string(),
-            })?;
-        if fee_amount > 0 {
-            cell.state
-                .resources
-                .remove(fee_kind, fee_amount)
-                .map_err(|err| WorldError::ResourceBalanceInvalid {
-                    reason: format!(
-                        "module action fee debit failed: agent={} kind={:?} amount={} err={:?}",
-                        agent_id, fee_kind, fee_amount, err
-                    ),
-                })?;
-            let treasury = self.resources.entry(fee_kind).or_insert(0);
-            *treasury = treasury.saturating_add(fee_amount);
-        }
-        cell.last_active = now;
-        Ok(())
-    }
-
     pub fn apply_domain_event(
         &mut self,
         event: &DomainEvent,
@@ -1024,7 +1003,6 @@ impl WorldState {
         envelope_event_seq: Option<WorldEventId>,
         committed_receipt_event_id: Option<WorldEventId>,
     ) -> Result<(), WorldError> {
-        self.migrate_compat_material_ledgers();
         match event {
             DomainEvent::AgentIntentProposed { .. }
             | DomainEvent::AgentIntentSubmitted { .. }
@@ -1038,10 +1016,6 @@ impl WorldState {
             )?,
             DomainEvent::AgentRegistered { .. }
             | DomainEvent::AgentMoved { .. }
-            | DomainEvent::AgentLocationAuthorityUpdated { .. }
-            | DomainEvent::LocationAnchorUpdated { .. }
-            | DomainEvent::FactorySiteAuthorityUpdated { .. }
-            | DomainEvent::FactoryConstructionPowerProfileUpdated { .. }
             | DomainEvent::ActionAccepted { .. }
             | DomainEvent::ActionRejected { .. }
             | DomainEvent::Observation { .. }
@@ -1109,8 +1083,10 @@ impl WorldState {
             | DomainEvent::RestrictedStarterClaimGrantRevoked { .. } => {
                 self.apply_domain_event_main_token(event, now)?
             }
-            DomainEvent::GameplayPolicyUpdated { .. }
-            | DomainEvent::EconomicContractOpened { .. }
+            DomainEvent::GameplayPolicyUpdated { .. } => {
+                self.apply_domain_event_core(event, now)?
+            }
+            DomainEvent::EconomicContractOpened { .. }
             | DomainEvent::EconomicContractAccepted { .. }
             | DomainEvent::EconomicContractSettled { .. }
             | DomainEvent::EconomicContractExpired { .. }
@@ -1135,13 +1111,22 @@ impl WorldState {
             | DomainEvent::CrisisResolved { .. }
             | DomainEvent::CrisisTimedOut { .. }
             | DomainEvent::MetaProgressGranted { .. }
-            | DomainEvent::ProductValidated { .. }
-            | DomainEvent::ProductValidationRecorded { .. }
-            | DomainEvent::ProductValidationAttemptStarted { .. } => {
+            | DomainEvent::ProductValidated { .. } => {
                 self.apply_domain_event_governance_meta(event, now)?
             }
+            DomainEvent::AgentLocationAuthorityUpdated { .. }
+            | DomainEvent::LocationAnchorUpdated { .. }
+            | DomainEvent::FactorySiteAuthorityUpdated { .. }
+            | DomainEvent::FactoryConstructionPowerProfileUpdated { .. }
+            | DomainEvent::ProductValidationRecorded { .. }
+            | DomainEvent::ProductValidationAttemptStarted { .. } => {
+                industry_history_transition::PreparedIndustryHistoryEvent::prepare(
+                    self, event, now,
+                )?
+                .install(self)
+            }
         }
-        sync_compat_world_materials(&self.material_ledgers, &mut self.materials);
+        self.migrate_compat_material_ledgers();
         Ok(())
     }
 

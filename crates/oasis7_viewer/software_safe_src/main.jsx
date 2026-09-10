@@ -28,6 +28,7 @@ import { AgentIntentSurface } from "./agent_intent_surface.jsx";
 import { FactoryProductionFailureDispositionCard } from "./factory_production_failure_disposition_card.jsx";
 import { AgentContextLite } from "./agent_context_lite.jsx";
 import { buildAgentContextDisplayModel } from "./viewer_agent_context_display_model.js";
+import { pixelWorldBlockerPresentation, pixelWorldConnectionPresentation } from "./pixel_world_presentation.js";
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
 const [viewerStateRevision, setViewerStateRevision] = createSignal(0);
 function observeViewerStateRevision() {
@@ -803,6 +804,7 @@ function HostedLoginGate() {
 function EmptyEntityRecoveryCard(props) {
   const locale = () => props.locale ?? uiLocale();
   const gameplay = () => (typeof props.gameplay === "function" ? props.gameplay() : props.gameplay);
+  const blockerPresentation = () => pixelWorldBlockerPresentation(gameplay()?.blockerKind, locale());
   const firstAgentClaimAction = () =>
     (gameplay()?.availableActions || []).find((action) => action.actionId === "claim_first_agent");
   const firstAgentClaimDisabledReason = () =>
@@ -813,29 +815,14 @@ function EmptyEntityRecoveryCard(props) {
       class="empty-entity-recovery"
       kind="empty_world_recovery"
       title={props.title ?? tr(locale(), "认领第一个 Agent", "Claim Your First Agent")}
-      badge={gameplay()?.blockerKind || "blocked"}
+      badge={blockerPresentation().label}
       badgeClass={firstAgentClaimAction() && !firstAgentClaimDisabledReason() ? "badge badge--good" : "badge badge--warn"}
       variant={firstAgentClaimAction() && !firstAgentClaimDisabledReason() ? null : "warn"}
     >
       <div class="feedback-summary">
-        {firstAgentClaimDisabledReason()
-          ? firstAgentClaimDisabledReason()
-          : firstAgentClaimAction()
-          ? tr(
-              locale(),
-              "这是新用户入口：当前还没有可玩实体，先用正式玩法动作认领你的第一个 Agent。",
-              "This is the new-user entry: there are no playable entities yet, so claim your first Agent through the canonical gameplay action.",
-            )
-          : gameplay()?.blockerDetail
-            || tr(
-              locale(),
-              "运行时已发布玩法摘要，但当前快照还没有可选行动体或地点。",
-              "Runtime published gameplay summary, but the current snapshot still has no selectable agents or locations.",
-            )}
+        {firstAgentClaimDisabledReason() || blockerPresentation().reason}
       </div>
-      <Show when={gameplay()?.nextStepHint}>
-        <div class="feedback-detail">{gameplay().nextStepHint}</div>
-      </Show>
+      <div class="feedback-detail">{gameplay()?.nextStepHint || blockerPresentation().nextAction}</div>
       <Show when={gameplay()?.entityCounts}>
         <div class="badge-row">
           <Badge>{`agents=${gameplay().entityCounts.agents}`}</Badge>
@@ -1940,16 +1927,7 @@ function chatEntryMessage(entry, locale) {
 }
 
 function connectionStatusLabel(status, locale) {
-  if (status === "connected") {
-    return tr(locale, "世界在线", "World Live");
-  }
-  if (status === "connecting") {
-    return tr(locale, "正在连入世界", "Connecting to World");
-  }
-  if (status === "closed") {
-    return tr(locale, "连接已关闭", "Connection Closed");
-  }
-  return tr(locale, `连接异常：${status || "unknown"}`, `Connection Issue: ${status || "unknown"}`);
+  return pixelWorldConnectionPresentation(status, locale).label;
 }
 
 function renderResourceSummary(resources) {
@@ -2100,35 +2078,37 @@ function WorldStageHero() {
       </div>
       <Show when={recommendedAction()}>
         {(action) => (
-          <CalloutCard
-            title={tr(locale(), "推荐动作", "Recommended Action")}
-            badge={action().executeKind || "ready"}
-            badgeClass="badge badge--good"
-          >
-            <div class="feedback-summary">
-              {action().label || action().actionId || tr(locale(), "当前存在一条更合适的推进动作。", "One action is currently the best next move.")}
-            </div>
-            <div
-              class="feedback-detail"
-              id={gameplayActionDisabledReason(action(), gameplaySummary(), locale()) ? gameplayActionBlockedReasonId(action()) : undefined}
+          <div class="stage-hero__secondary-action" data-hero-secondary-action="true">
+            <CalloutCard
+              title={tr(locale(), "推荐动作", "Recommended Action")}
+              badge={action().executeKind || "ready"}
+              badgeClass="badge badge--good"
             >
-              {gameplayActionDisabledReason(action(), gameplaySummary(), locale())
-                || gameplayActionDetail(action(), gameplaySummary(), locale())}
-            </div>
-            <div class="toolbar" aria-label={tr(locale(), "下一步动作", "Next Move action")}>
-              <button
-                type="button"
-                data-testid={gameplayActionTestId(action(), "recommended")}
-                class={gameplayActionButtonClass(action())}
-                aria-busy={gameplayActionButtonBusyAttrs(action())}
-                disabled={gameplayActionButtonDisabled(action(), gameplaySummary(), locale())}
-                aria-describedby={gameplayActionDisabledReason(action(), gameplaySummary(), locale()) ? gameplayActionBlockedReasonId(action()) : undefined}
-                onClick={() => renderGameplayAction(action())}
+              <div class="feedback-summary">
+                {action().label || action().actionId || tr(locale(), "当前存在一条更合适的推进动作。", "One action is currently the best next move.")}
+              </div>
+              <div
+                class="feedback-detail"
+                id={gameplayActionDisabledReason(action(), gameplaySummary(), locale()) ? gameplayActionBlockedReasonId(action()) : undefined}
               >
-                {gameplayActionDisplayLabel(action(), locale())}
-              </button>
-            </div>
-          </CalloutCard>
+                {gameplayActionDisabledReason(action(), gameplaySummary(), locale())
+                  || gameplayActionDetail(action(), gameplaySummary(), locale())}
+              </div>
+              <div class="toolbar" aria-label={tr(locale(), "下一步动作", "Next Move action")}>
+                <button
+                  type="button"
+                  data-testid={gameplayActionTestId(action(), "recommended")}
+                  class={gameplayActionButtonClass(action())}
+                  aria-busy={gameplayActionButtonBusyAttrs(action())}
+                  disabled={gameplayActionButtonDisabled(action(), gameplaySummary(), locale())}
+                  aria-describedby={gameplayActionDisabledReason(action(), gameplaySummary(), locale()) ? gameplayActionBlockedReasonId(action()) : undefined}
+                  onClick={() => renderGameplayAction(action())}
+                >
+                  {gameplayActionDisplayLabel(action(), locale())}
+                </button>
+              </div>
+            </CalloutCard>
+          </div>
         )}
       </Show>
       <Show when={gameplaySummary()?.blockerKind === "runtime_snapshot_empty_entities"}>
@@ -2644,7 +2624,7 @@ function WorldSummaryPanel(props = {}) {
                 <Show when={gameplay().blockerKind || gameplay().narrativeBlockerDetail}>
                   <div class="badge-row badge-row--spaced">
                     <Badge class="badge badge--warn">
-                      {gameplay().blockerLabel || gameplay().blockerKind || tr(locale(), "当前阻塞", "Current Blocker")}
+                      {pixelWorldBlockerPresentation(gameplay().blockerKind, locale()).label}
                     </Badge>
                   </div>
                   <div class="feedback-detail">

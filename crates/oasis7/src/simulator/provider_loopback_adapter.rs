@@ -1,9 +1,11 @@
+use super::cognition_response_identity::{
+    CognitionResponseDigestDisposition, classify_cognition_response_digest,
+};
 use super::{
-    Action, AgentQuery, COGNITION_RESPONSE_DIGEST_DOMAIN, ContinuousAgentRequestContextV1,
-    ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1, DecisionProvider,
-    DecisionProviderError, DecisionRequest, DecisionResponse, FeedbackEnvelope, FeedbackEnvelopeV1,
-    ProviderDecision, ProviderFeedbackAck, ProviderLoopbackHttpClient, ProviderLoopbackHttpError,
-    h_v1,
+    Action, AgentQuery, ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1,
+    ContinuousAgentTurnContextV1, DecisionProvider, DecisionProviderError, DecisionRequest,
+    DecisionResponse, FeedbackEnvelope, FeedbackEnvelopeV1, ProviderDecision, ProviderFeedbackAck,
+    ProviderLoopbackHttpClient, ProviderLoopbackHttpError,
 };
 use oasis7_wasm_abi::{
     AgentCommandResponse, CapabilityCatalogSnapshot, CapabilityGrantV2, ModuleCommandDeclaration,
@@ -520,17 +522,25 @@ impl DecisionProvider for ProviderLoopbackAdapter {
                 false,
             ));
         }
-        if response.response_digest
-            != h_v1(
-                COGNITION_RESPONSE_DIGEST_DOMAIN,
-                &response.base_decision_response,
-            )
-        {
-            return Err(DecisionProviderError::new(
-                "response_digest_mismatch",
-                "loopback response digest does not match its content",
-                false,
-            ));
+        match classify_cognition_response_digest(
+            &response.base_decision_response,
+            &response.response_digest,
+        ) {
+            CognitionResponseDigestDisposition::Current => {}
+            CognitionResponseDigestDisposition::Legacy => {
+                return Err(DecisionProviderError::new(
+                    "legacy_response_digest_unsupported",
+                    "legacy full-response digest requires an explicit compatibility migration",
+                    false,
+                ));
+            }
+            CognitionResponseDigestDisposition::Mismatch => {
+                return Err(DecisionProviderError::new(
+                    "response_digest_mismatch",
+                    "loopback response digest does not match its content",
+                    false,
+                ));
+            }
         }
         let artifact_identity = response.response_artifact_identity();
         response

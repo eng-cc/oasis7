@@ -14,6 +14,35 @@ function createFeedbackModule(state) {
 }
 
 describe("viewer feedback module", () => {
+  it.each([
+    ["en", "unknown_internal_code", "Current blocker"],
+    ["zh", "unknown_internal_code", "当前阻塞"],
+    ["en", "power_shortage", "Missing Power"],
+    ["zh", "power_shortage", "缺电"],
+    ["en", null, null],
+    ["zh", null, null],
+  ])("keeps the expanded Capability Economics blocker label safe in %s for %s", (locale, blockerKind, expectedLabel) => {
+    const summary = createFeedbackModule({
+      lastGameplayActionFeedback: null,
+      snapshot: {
+        model: { agents: { "agent-0": { id: "agent-0" } }, locations: { base: { id: "base" } } },
+        player_gameplay: {
+          goal_kind: "recover_capability",
+          stage_status: "blocked",
+          blocker_kind: blockerKind,
+          blocker_detail: "diagnostic only",
+          objective: "Restore production",
+        },
+      },
+      uiLocale: locale,
+    }).buildGameplaySummary();
+
+    // main.jsx renders this exact value in the expanded Capability Economics panel.
+    expect(summary.economicSurface.blockerLabel).toBe(expectedLabel);
+    expect(summary.blockerLabel).toBe(expectedLabel);
+    expect(summary.blockerKind).toBe(blockerKind);
+  });
+
   it("preserves camelCase runtime available actions in the gameplay summary", () => {
     const state = {
       lastGameplayActionFeedback: null,

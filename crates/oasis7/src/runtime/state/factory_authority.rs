@@ -1,5 +1,42 @@
 use super::*;
 
+pub(crate) fn canonical_factory_profile_matches_spec(
+    profile: &FactoryProfileV1,
+    spec: &FactoryModuleSpec,
+) -> Result<(), String> {
+    let normalize = |tags: &[String]| {
+        tags.iter()
+            .map(|tag| tag.trim().to_ascii_lowercase())
+            .filter(|tag| !tag.is_empty())
+            .collect::<BTreeSet<_>>()
+    };
+    if profile.factory_id != spec.factory_id {
+        return Err(format!(
+            "modern factory build canonical profile identity mismatch: profile={} spec={}",
+            profile.factory_id, spec.factory_id
+        ));
+    }
+    if profile.tier != spec.tier {
+        return Err(format!(
+            "modern factory build canonical profile tier mismatch: factory_id={} profile={} spec={}",
+            spec.factory_id, profile.tier, spec.tier
+        ));
+    }
+    if profile.recipe_slots != spec.recipe_slots {
+        return Err(format!(
+            "modern factory build canonical profile recipe_slots mismatch: factory_id={} profile={} spec={}",
+            spec.factory_id, profile.recipe_slots, spec.recipe_slots
+        ));
+    }
+    if normalize(&profile.tags) != normalize(&spec.tags) {
+        return Err(format!(
+            "modern factory build canonical profile tags mismatch: factory_id={}",
+            spec.factory_id
+        ));
+    }
+    Ok(())
+}
+
 fn require_nonempty(value: &str, field: &str) -> Result<(), WorldError> {
     if value.trim().is_empty() {
         return Err(WorldError::ResourceBalanceInvalid {
@@ -9,7 +46,11 @@ fn require_nonempty(value: &str, field: &str) -> Result<(), WorldError> {
     Ok(())
 }
 
-fn next_revision(current: Option<u64>, incoming: u64, subject: &str) -> Result<(), WorldError> {
+pub(crate) fn next_revision(
+    current: Option<u64>,
+    incoming: u64,
+    subject: &str,
+) -> Result<(), WorldError> {
     let expected = match current {
         None => 1,
         Some(revision) => {
@@ -28,7 +69,9 @@ fn next_revision(current: Option<u64>, incoming: u64, subject: &str) -> Result<(
     Ok(())
 }
 
-fn normalize_allowlist(authority: &mut FactorySiteAuthorityV1) -> Result<(), WorldError> {
+pub(crate) fn normalize_allowlist(
+    authority: &mut FactorySiteAuthorityV1,
+) -> Result<(), WorldError> {
     require_nonempty(authority.site_id.as_str(), "site_id")?;
     require_nonempty(authority.location_id.as_str(), "location_id")?;
     require_nonempty(authority.owner_agent_id.as_str(), "owner_agent_id")?;
@@ -46,7 +89,7 @@ fn normalize_allowlist(authority: &mut FactorySiteAuthorityV1) -> Result<(), Wor
     Ok(())
 }
 
-fn require_active_location_anchor(
+pub(crate) fn require_active_location_anchor(
     anchors: &BTreeMap<String, LocationAnchorV1>,
     location_id: &str,
     now: WorldTime,

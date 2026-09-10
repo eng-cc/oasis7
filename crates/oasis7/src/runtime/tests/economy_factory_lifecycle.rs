@@ -547,6 +547,44 @@ fn factory_depreciation_reduces_durability_each_tick() {
 }
 
 #[test]
+fn factory_depreciation_preparation_is_sorted_and_non_mutating() {
+    let mut world = World::new();
+    register_builder(&mut world, "builder-a");
+    build_factory_ready(
+        &mut world,
+        "builder-a",
+        "site-z",
+        factory_spec("factory.zeta", 1, 1, 3),
+    );
+    build_factory_ready(
+        &mut world,
+        "builder-a",
+        "site-a",
+        factory_spec("factory.alpha", 1, 1, 2),
+    );
+    world
+        .step()
+        .expect("advance both factories past their build tick");
+    let snapshot_before = world.snapshot();
+    let journal_before = world.journal().clone();
+
+    let prepared = world.prepare_factory_depreciation_event_bodies_for_test();
+
+    assert_eq!(world.snapshot(), snapshot_before);
+    assert_eq!(world.journal(), &journal_before);
+    let factory_ids = prepared
+        .iter()
+        .map(|body| match body {
+            WorldEventBody::Domain(DomainEvent::FactoryDurabilityChanged {
+                factory_id, ..
+            }) => factory_id.as_str(),
+            other => panic!("expected prepared depreciation event, got {other:?}"),
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(factory_ids, vec!["factory.alpha", "factory.zeta"]);
+}
+
+#[test]
 fn factory_depreciation_scales_with_active_recipe_load() {
     let mut world = World::new();
     register_builder(&mut world, "builder-a");

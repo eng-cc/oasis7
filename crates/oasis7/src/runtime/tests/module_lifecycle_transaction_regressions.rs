@@ -214,3 +214,241 @@ fn failed_deactivate_proposal_does_not_publish_partial_world() {
         assert!(!staged.module_registry().active.contains_key(module_id));
     });
 }
+
+#[test]
+fn governance_apply_post_prepare_failure_publishes_no_typed_projection() {
+    let mut world = World::new();
+    let module = lifecycle_manifest(
+        "m.lifecycle.post-prepare",
+        "1.0.0",
+        register_artifact(&mut world, "post-prepare"),
+    );
+    let module_key = ModuleRegistry::record_key(&module.module_id, &module.version);
+    let mut content = serde_json::Map::new();
+    content.insert(
+        "module_changes".to_string(),
+        serde_json::to_value(ModuleChangeSet {
+            register: vec![module],
+            ..ModuleChangeSet::default()
+        })
+        .unwrap(),
+    );
+    let proposal_id = world
+        .propose_manifest_update(
+            Manifest {
+                version: 2,
+                content: serde_json::Value::Object(content),
+            },
+            "alice",
+        )
+        .unwrap();
+    world.shadow_proposal(proposal_id).unwrap();
+    world
+        .approve_proposal(proposal_id, "bob", ProposalDecision::Approve)
+        .unwrap();
+    let certificate = world.build_local_finality_certificate(proposal_id).unwrap();
+
+    let snapshot_before = world.snapshot();
+    let journal_before = world.journal().clone();
+    let consensus_before = world.tick_consensus_records().to_vec();
+    let cache_len_before = world.module_cache_len();
+    world.fail_next_append_after_publication_prepare_for_test();
+
+    let error = world
+        .apply_proposal_with_finality(proposal_id, &certificate)
+        .expect_err("post-prepare failure must publish no proposal effects");
+    assert!(matches!(error, WorldError::ResourceBalanceInvalid { .. }));
+    assert_eq!(world.snapshot(), snapshot_before);
+    assert_eq!(world.journal(), &journal_before);
+    assert_eq!(world.tick_consensus_records(), consensus_before.as_slice());
+    assert_eq!(world.module_cache_len(), cache_len_before);
+    assert!(!world.module_registry().records.contains_key(&module_key));
+    assert!(matches!(
+        world
+            .proposals()
+            .get(&proposal_id)
+            .map(|proposal| &proposal.status),
+        Some(ProposalStatus::Approved { .. })
+    ));
+}
+
+#[test]
+fn governed_mixed_lifecycle_batch_publishes_one_complete_projection() {
+    let mut world = World::new();
+    let upgrade_id = "m.lifecycle.mixed-upgrade";
+    let deactivate_id = "m.lifecycle.mixed-deactivate";
+    let upgrade_old = lifecycle_manifest(
+        upgrade_id,
+        "1.0.0",
+        register_artifact(&mut world, "mixed-upgrade-old"),
+    );
+    let deactivate = lifecycle_manifest(
+        deactivate_id,
+        "1.0.0",
+        register_artifact(&mut world, "mixed-deactivate"),
+    );
+    apply_fixture_changes(
+        &mut world,
+        &ModuleChangeSet {
+            register: vec![upgrade_old.clone(), deactivate.clone()],
+            activate: vec![
+                ModuleActivation {
+                    module_id: upgrade_id.to_string(),
+                    version: upgrade_old.version.clone(),
+                },
+                ModuleActivation {
+                    module_id: deactivate_id.to_string(),
+                    version: deactivate.version.clone(),
+                },
+            ],
+            ..ModuleChangeSet::default()
+        },
+    );
+
+    let register_id = "m.lifecycle.mixed-register";
+    let mut register = lifecycle_manifest(
+        register_id,
+        "1.0.0",
+        register_artifact(&mut world, "mixed-register"),
+    );
+    register.subscriptions.push(ModuleSubscription {
+        event_kinds: Vec::new(),
+        action_kinds: Vec::new(),
+        stage: Some(ModuleSubscriptionStage::Tick),
+        filters: None,
+    });
+    let upgrade_new = lifecycle_manifest(
+        upgrade_id,
+        "2.0.0",
+        register_artifact(&mut world, "mixed-upgrade-new"),
+    );
+    let changes = ModuleChangeSet {
+        register: vec![register.clone()],
+        upgrade: vec![ModuleUpgrade {
+            module_id: upgrade_id.to_string(),
+            from_version: upgrade_old.version,
+            to_version: upgrade_new.version.clone(),
+            wasm_hash: upgrade_new.wasm_hash.clone(),
+            manifest: upgrade_new.clone(),
+        }],
+        activate: vec![ModuleActivation {
+            module_id: register_id.to_string(),
+            version: register.version.clone(),
+        }],
+        deactivate: vec![ModuleDeactivation {
+            module_id: deactivate_id.to_string(),
+            reason: "mixed-batch".to_string(),
+        }],
+    };
+    let mut content = serde_json::Map::new();
+    content.insert(
+        "module_changes".to_string(),
+        serde_json::to_value(&changes).unwrap(),
+    );
+    let proposal_id = world
+        .propose_manifest_update(
+            Manifest {
+                version: world.manifest().version.saturating_add(1),
+                content: serde_json::Value::Object(content),
+            },
+            "alice",
+        )
+        .unwrap();
+    world.shadow_proposal(proposal_id).unwrap();
+    world
+        .approve_proposal(proposal_id, "bob", ProposalDecision::Approve)
+        .unwrap();
+    let certificate = world.build_local_finality_certificate(proposal_id).unwrap();
+    let journal_len_before = world.journal().events.len();
+
+    let applied_hash = world
+        .apply_proposal_with_finality(proposal_id, &certificate)
+        .unwrap();
+
+    let published = &world.journal().events[journal_len_before..];
+    assert_eq!(published.len(), 6);
+    assert!(matches!(
+        &published[0].body,
+        WorldEventBody::ModuleEvent(ModuleEvent {
+            kind: ModuleEventKind::RegisterModule { module, .. },
+            ..
+        }) if module.module_id == register_id
+    ));
+    assert!(matches!(
+        &published[1].body,
+        WorldEventBody::ModuleEvent(ModuleEvent {
+            kind: ModuleEventKind::UpgradeModule { module_id, .. },
+            ..
+        }) if module_id == upgrade_id
+    ));
+    assert!(matches!(
+        &published[2].body,
+        WorldEventBody::ModuleEvent(ModuleEvent {
+            kind: ModuleEventKind::ActivateModule { module_id, .. },
+            ..
+        }) if module_id == register_id
+    ));
+    assert!(matches!(
+        &published[3].body,
+        WorldEventBody::ModuleEvent(ModuleEvent {
+            kind: ModuleEventKind::DeactivateModule { module_id, .. },
+            ..
+        }) if module_id == deactivate_id
+    ));
+    assert!(matches!(
+        &published[4].body,
+        WorldEventBody::ManifestUpdated(update) if update.manifest_hash == applied_hash
+    ));
+    assert!(matches!(
+        &published[5].body,
+        WorldEventBody::Governance(GovernanceEvent::Applied {
+            proposal_id: event_proposal_id,
+            manifest_hash: Some(manifest_hash),
+            ..
+        }) if *event_proposal_id == proposal_id && manifest_hash == &applied_hash
+    ));
+    assert!(
+        published
+            .windows(2)
+            .all(|pair| pair[1].id == pair[0].id.saturating_add(1))
+    );
+
+    let register_key = ModuleRegistry::record_key(register_id, "1.0.0");
+    let upgrade_key = ModuleRegistry::record_key(upgrade_id, "2.0.0");
+    assert_eq!(
+        world
+            .module_registry()
+            .records
+            .get(&register_key)
+            .map(|record| &record.manifest),
+        Some(&register)
+    );
+    assert_eq!(
+        world
+            .module_registry()
+            .records
+            .get(&upgrade_key)
+            .map(|record| &record.manifest),
+        Some(&upgrade_new)
+    );
+    assert_eq!(
+        world
+            .module_registry()
+            .active
+            .get(register_id)
+            .map(String::as_str),
+        Some("1.0.0")
+    );
+    assert!(!world.module_registry().active.contains_key(deactivate_id));
+    assert_eq!(
+        world.snapshot().module_tick_schedule.get(register_id),
+        Some(&world.state().time)
+    );
+    assert_eq!(
+        world
+            .tick_consensus_records()
+            .last()
+            .map(|record| record.block.header.tick),
+        Some(world.state().time)
+    );
+}

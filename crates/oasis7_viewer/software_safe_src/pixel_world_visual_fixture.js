@@ -4,6 +4,7 @@ import {
   pixelWorldRecommendedTargetVisualFixture,
   pixelWorldSelectedBlockerVisualFixture,
   pixelWorldModuleVisualEntitiesFixture,
+  pixelWorldRoutesAndEventsVisualFixture,
 } from "./pixel_world_visual_fixture_data.js";
 
 const PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL = "__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__";
@@ -39,6 +40,7 @@ export function installPixelWorldVisualFixtureHook() {
     selected_blocker: () => core.clone(pixelWorldSelectedBlockerVisualFixture()),
     hotspot_tooltip: () => core.clone(pixelWorldSelectedBlockerVisualFixture()),
     recent_event_glyphs: () => core.clone(pixelWorldSelectedBlockerVisualFixture()),
+    routes_and_events: () => core.clone(pixelWorldRoutesAndEventsVisualFixture()),
     recommended_target: () => core.clone(pixelWorldRecommendedTargetVisualFixture()),
     module_visual_entities: () => core.clone(pixelWorldModuleVisualEntitiesFixture()),
     micro_depot_stock_runway: () => core.clone(pixelWorldMicroDepotStockRunwayVisualFixture()),
@@ -67,7 +69,7 @@ export function installPixelWorldVisualFixtureHook() {
       },
     };
   }
-  if (fixtureName === "recent_event_glyphs") {
+  if (["recent_event_glyphs", "routes_and_events"].includes(fixtureName)) {
     // Test-only input for the real WASM renderer smoke. These event kinds are
     // projected by the bridge into two independent, hoverable visual hotspots.
     core.state.recentEvents = [
@@ -88,6 +90,10 @@ export function installPixelWorldVisualFixtureHook() {
       ...(model.agent_player_public_key_bindings || {}),
       "agent-0": publicKey,
     };
+    if (fixtureName === 'routes_and_events') {
+      model.agent_player_bindings['agent-1'] = playerId;
+      model.agent_player_public_key_bindings['agent-1'] = publicKey;
+    }
     core.state.auth = {
     ...core.state.auth,
     available: true,

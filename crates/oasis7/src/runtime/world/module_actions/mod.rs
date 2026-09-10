@@ -1,6 +1,4 @@
-use super::super::state::{
-    ModuleArtifactBidState, ModuleArtifactListingState, ModuleReleaseRequestStatus,
-};
+use super::super::state::ModuleReleaseRequestStatus;
 use super::super::{
     Action, ActionEnvelope, ActionId, CausedBy, DomainEvent, GovernanceFinalityCertificate,
     ModuleActivation, ModuleChangeSet, ModuleProfileChanges, ModuleUpgrade, ProposalDecision,

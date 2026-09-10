@@ -5,11 +5,133 @@ use super::super::continuous_agent_harness::{
 };
 use super::super::decision_provider::ProviderDecision;
 
+use super::super::continuous_agent_harness::BudgetContractV1;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum CognitionBudgetKind {
+    ModelCall,
+    ToolCall,
+}
+
+impl CognitionBudgetKind {
+    pub(super) const fn name(self) -> &'static str {
+        match self {
+            Self::ModelCall => "max_model_calls",
+            Self::ToolCall => "max_tool_calls",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct CognitionBudgetExhausted {
+    pub(super) kind: CognitionBudgetKind,
+    pub(super) used: u32,
+    pub(super) limit: u32,
+}
+
+impl CognitionBudgetExhausted {
+    pub(super) fn message(self) -> String {
+        format!(
+            "budget_exhausted: {} used={} max={}",
+            self.kind.name(),
+            self.used,
+            self.limit
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct CognitionBudgetSnapshot {
+    pub(super) max_model_calls: u32,
+    pub(super) model_calls_used: u32,
+    pub(super) max_tool_calls: u32,
+    pub(super) tool_calls_used: u32,
+}
+
+/// Per-behavior logical-request accounting.  The digest is the stable
+/// request identity, so transport retries with a different attempt number
+/// retain the same counters while a new request starts cleanly.
+#[derive(Debug, Default)]
+pub(super) struct CognitionBudgetLedger {
+    request_digest: Option<String>,
+    model_calls: u32,
+    tool_calls: u32,
+}
+
+impl CognitionBudgetLedger {
+    pub(super) fn bind_request(&mut self, request_digest: Option<&str>) {
+        let request_digest = request_digest.map(str::to_owned);
+        if self.request_digest != request_digest {
+            self.request_digest = request_digest;
+            self.model_calls = 0;
+            self.tool_calls = 0;
+        }
+    }
+
+    pub(super) fn admit_model_call(
+        &mut self,
+        budget: &BudgetContractV1,
+    ) -> Result<(), CognitionBudgetExhausted> {
+        Self::admit(
+            CognitionBudgetKind::ModelCall,
+            &mut self.model_calls,
+            budget.max_model_calls,
+        )
+    }
+
+    pub(super) fn admit_tool_call(
+        &mut self,
+        budget: &BudgetContractV1,
+    ) -> Result<(), CognitionBudgetExhausted> {
+        Self::admit(
+            CognitionBudgetKind::ToolCall,
+            &mut self.tool_calls,
+            budget.max_tool_calls,
+        )
+    }
+
+    pub(super) fn snapshot(&self, budget: &BudgetContractV1) -> CognitionBudgetSnapshot {
+        CognitionBudgetSnapshot {
+            max_model_calls: budget.max_model_calls,
+            model_calls_used: self.model_calls,
+            max_tool_calls: budget.max_tool_calls,
+            tool_calls_used: self.tool_calls,
+        }
+    }
+
+    fn admit(
+        kind: CognitionBudgetKind,
+        used: &mut u32,
+        limit: u32,
+    ) -> Result<(), CognitionBudgetExhausted> {
+        if *used >= limit {
+            return Err(CognitionBudgetExhausted {
+                kind,
+                used: *used,
+                limit,
+            });
+        }
+        *used = (*used).saturating_add(1);
+        Ok(())
+    }
+}
+
 #[derive(Debug, Default)]
 pub(super) struct ContinuousAgentContext {
     pub(super) turn_context: Option<ContinuousAgentTurnContextV1>,
     pub(super) request_context: Option<ContinuousAgentRequestContextV1>,
     pub(super) pending_response_context: Option<ContinuousAgentResponseContextV1>,
+    pub(super) budget_ledger: CognitionBudgetLedger,
+}
+
+impl ContinuousAgentContext {
+    pub(super) fn snapshot(&self) -> Option<CognitionBudgetSnapshot> {
+        let request_context = self.request_context.as_ref()?;
+        Some(
+            self.budget_ledger
+                .snapshot(&request_context.budget_contract),
+        )
+    }
 }
 
 impl<C: LlmCompletionClient> LlmAgentBehavior<C> {

@@ -145,6 +145,13 @@ def validate_packet(root: Path, packet: dict[str, object]) -> None:
     base_binding = str(identity.get("base_binding") or "live_ref")
     frozen_base_oid = str(identity.get("base_sha")) if base_binding == "immutable_oid" else None
     facts = current_facts(root, task, str(identity.get("base_ref") or ""), frozen_base_oid)
+    from loop_gate import admission
+    try:
+        admission(root, task, facts['base_sha'], facts['head'])
+    except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as exc:
+        fail(str(exc))
+    if packet.get('loop_binding') != task.get('loop_binding'):
+        fail('packet loop binding differs from canonical task')
     for field in ("worktree", "branch", "base_sha", "head"):
         if identity.get(field) != facts[field]:
             fail(f"stale or mismatched packet {field}: expected {facts[field]}, got {identity.get(field)}")
@@ -285,6 +292,11 @@ def review_admission(root: Path, packet_path: Path, plan_path: Path,
         if resolved_comparison != plan.get("comparison_oid"):
             fail("review plan comparison ref moved from its recorded OID")
 
+    integration_base = plan.get("integration_base_oid")
+    if integration_base is not None:
+        if git(root, "merge-base", str(integration_base), str(identity.get("head"))) != identity.get("base_sha"):
+            fail("review plan integration base does not derive packet scope base")
+
     expected_matches = [item for item in expected if isinstance(item, dict)
                         and item.get("role") == packet_role and item.get("slice_id") == packet_slice]
     ref_matches = [item for item in refs if isinstance(item, dict)
@@ -311,6 +323,7 @@ def review_admission(root: Path, packet_path: Path, plan_path: Path,
         "head": identity["head"],
         "comparison_ref": identity["base_ref"],
         "comparison_oid": identity["base_sha"],
+        "integration_base_oid": integration_base,
         "role": packet_role,
         "slice_id": packet_slice,
         "packet_digest": packet["packet_digest"],
@@ -384,6 +397,8 @@ def main() -> int:
 
     task = load_task(root, args.task_uid)
     facts = current_facts(root, task, args.base, args.frozen_base_oid)
+    from loop_gate import admission
+    loop_admission = admission(root, task, facts['base_sha'], facts['head'])
     governance = [repo_reference(root, item, "governance-ref") for item in args.governance_ref]
     scoped = [repo_reference(root, item, "scoped-ref") for item in args.scoped_ref]
     packet: dict[str, object] = {
@@ -417,6 +432,8 @@ def main() -> int:
         args.full_history_escalation_reason,
         "slice.full_history_escalation_reason",
     ) if args.context_delivery_mode == "full_history_escalation" else ""
+    if loop_admission['status'] != 'legacy':
+        packet['loop_binding'] = task['loop_binding']
     packet["packet_digest"] = canonical_digest(packet)
     validate_packet(root, packet)
     packet_dir = (root / f".pm/scratch/{args.task_uid}/slice-packets").resolve()

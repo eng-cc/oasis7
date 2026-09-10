@@ -15,16 +15,16 @@ pub(super) fn fragment_color(fragment: &FragmentTerrainPatch, lod: FragmentTerra
 pub(super) fn fragment_inset_color(fragment: &FragmentTerrainPatch) -> Color {
     let alpha = fragment_alpha(fragment, FragmentTerrainLod::Detail);
     Color::srgba_u8(
-        fragment.color[0].saturating_mul(3) / 5,
-        fragment.color[1].saturating_mul(3) / 5,
-        fragment.color[2].saturating_mul(3) / 5,
+        (u16::from(fragment.color[0]) * 3 / 5) as u8,
+        (u16::from(fragment.color[1]) * 3 / 5) as u8,
+        (u16::from(fragment.color[2]) * 3 / 5) as u8,
         (alpha.clamp(0.0, 1.0) * 255.0).round() as u8,
     )
 }
 
 pub(super) fn fragment_fleck_color(fragment: &FragmentTerrainPatch) -> Color {
     let alpha = fragment_alpha(fragment, FragmentTerrainLod::Detail);
-    let lighten = |channel: u8| channel.saturating_add((u8::MAX - channel) * 2 / 5);
+    let lighten = |channel: u8| (u16::from(channel) + u16::from(u8::MAX - channel) * 2 / 5) as u8;
     Color::srgba_u8(
         lighten(fragment.color[0]),
         lighten(fragment.color[1]),
@@ -39,9 +39,9 @@ pub(super) fn fragment_shadow_color(
 ) -> Color {
     let alpha = fragment_alpha(fragment, lod) * f64::from(FRAGMENT_SHADOW_ALPHA_CAP);
     Color::srgba_u8(
-        fragment.color[0].saturating_mul(2) / 5,
-        fragment.color[1].saturating_mul(2) / 5,
-        fragment.color[2].saturating_mul(2) / 5,
+        (u16::from(fragment.color[0]) * 2 / 5) as u8,
+        (u16::from(fragment.color[1]) * 2 / 5) as u8,
+        (u16::from(fragment.color[2]) * 2 / 5) as u8,
         (alpha.clamp(0.0, 1.0) * 255.0).round() as u8,
     )
 }
@@ -128,7 +128,7 @@ pub(super) fn reconcile_fragments(
         let mut shadow_transform = transform;
         shadow_transform.translation += Vec3::new(
             shadow_offset,
-            shadow_offset,
+            -shadow_offset,
             FRAGMENT_SHADOW_LAYER_Z - style.layer_z,
         );
         let shadow_sprite = sprite_for_square(
@@ -176,7 +176,16 @@ pub(super) fn reconcile_fragments(
                 inset_offset,
                 FRAGMENT_INSET_LAYER_Z - style.layer_z,
             );
-            let inset_sprite = sprite_for_square(fragment_inset_color(fragment), inset_size);
+            let compound_parity = fragment
+                .dominant_compound
+                .bytes()
+                .fold(0u8, u8::wrapping_add)
+                % 2;
+            let inset_sprite = sprite_for_rect(
+                fragment_inset_color(fragment),
+                inset_size,
+                inset_size * if compound_parity == 0 { 0.45 } else { 1.0 },
+            );
             if let Some(entity) = existing_insets_by_id.get(&fragment.id) {
                 commands
                     .entity(*entity)

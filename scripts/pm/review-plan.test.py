@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 SCRIPT = Path(__file__).with_name("review-plan.py")
@@ -19,6 +21,17 @@ class ReviewPlanTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
+        mapping = self.root / '.pm/github-project-sync'
+        mapping.mkdir(parents=True)
+        (mapping / 'tasks.json').write_text(json.dumps({'tasks': {TASK: {'task_uid': TASK, 'repository': 'fixture/repo', 'issue_number': 1}}}))
+        fakebin = self.root / 'fakebin'
+        fakebin.mkdir()
+        gh = fakebin / 'gh'
+        gh.write_text('#!/usr/bin/env python3\nimport json,sys\nprint(json.dumps([] if any("/comments" in arg for arg in sys.argv) else {"body": "task_uid: ' + TASK + '"}))\n')
+        gh.chmod(0o755)
+        environment = patch.dict(os.environ, {'PATH': str(fakebin) + os.pathsep + os.environ['PATH']})
+        environment.start()
+        self.addCleanup(environment.stop)
         self.git("init", "-b", "main")
         self.git("config", "user.email", "test@example.invalid")
         self.git("config", "user.name", "Test")
@@ -272,6 +285,19 @@ class ReviewPlanTests(unittest.TestCase):
 
         self.assertEqual(receipt_base, plan["comparison_oid"])
         self.assertEqual(self.head, plan["frozen_head"])
+
+    def test_divergent_integration_receipt_records_ancestor_scope(self) -> None:
+        self.git("commit", "--allow-empty", "-m", "task source")
+        self.head=self.git("rev-parse","HEAD")
+        integration = self.git("commit-tree", self.comparison_oid + "^{tree}", "-p", self.comparison_oid, "-m", "parallel main")
+        receipt = self.root / "parallel-receipt.json"
+        self.write_receipt(receipt, base_oid=integration, head_oid=self.head)
+        value=json.loads(receipt.read_text())
+        value.update(scope_base_oid=self.comparison_oid,integration_base_oid=integration)
+        receipt.write_text(json.dumps(value))
+        plan=self.receipt_plan(receipt,self.root / "parallel-plan.json")
+        self.assertEqual(self.comparison_oid,plan["comparison_oid"])
+        self.assertEqual(integration,plan["integration_base_oid"])
 
     def test_ci_receipt_head_must_match_frozen_head(self) -> None:
         receipt = self.root / "wrong-head-receipt.json"

@@ -636,6 +636,19 @@ def main() -> int:
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 1
     task = dict(task)
+    if task.get("loop_binding") is not None:
+        from loop_policy import validate_binding
+        binding = task["loop_binding"]
+        result = validate_binding(binding)
+        for reason in result.get("blockers", []):
+            add_blocker(blockers, f"stale identity: loop binding {reason}")
+        if isinstance(binding, dict):
+            for key, expected in (("task_uid", args.task_uid), ("owner_role", task.get("owner_role")),
+                                  ("bootstrap_epoch", task.get("bootstrap_epoch", 1))):
+                if binding.get(key) != expected:
+                    add_blocker(blockers, f"stale identity: loop binding {key} drift")
+        payload["loop_binding"] = binding
+        payload["continuation_mode"] = "manual_request_only"
     allow_retired_terminal = str(task.get("workflow_phase") or "") in {
         "closed_without_merge", "post_merge_done",
     }

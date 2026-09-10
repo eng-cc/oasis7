@@ -154,6 +154,37 @@ fn product_validation_delivery_cursor_replays_event_id_rollover_era() {
 }
 
 #[test]
+fn product_validation_delivery_cursor_replay_keeps_monotonic_high_water_mark() {
+    let world = World::new();
+    let mut snapshot = world.snapshot();
+    snapshot.state.product_validation_delivery_cursor = ProductValidationDeliveryCursor {
+        routed_through_event_id: 17,
+        event_id_era: 4,
+    };
+    let mut journal = Journal::new();
+    journal.append(WorldEvent {
+        id: 1,
+        time: 0,
+        caused_by: None,
+        body: WorldEventBody::ProductValidationDeliveryCursorUpdated(
+            ProductValidationDeliveryCursor {
+                routed_through_event_id: u64::MAX,
+                event_id_era: 3,
+            },
+        ),
+    });
+
+    let recovered = World::from_snapshot(snapshot, journal).expect("replay stale cursor");
+    assert_eq!(
+        recovered.state().product_validation_delivery_cursor,
+        ProductValidationDeliveryCursor {
+            routed_through_event_id: 17,
+            event_id_era: 4,
+        }
+    );
+}
+
+#[test]
 fn module_factory_rejects_world_invalid_submission_before_module_evaluation() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {

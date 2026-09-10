@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { pixelWorldReadableAgentLabel, pixelWorldReadableEntityText, pixelWorldSelectedEntityLabel } from "./pixel_world_identity.js";
+import {
+  pixelWorldEntityMarkerCode,
+  pixelWorldReadableAgentLabel,
+  pixelWorldReadableEntityText,
+  pixelWorldSelectedEntityLabel,
+} from "./pixel_world_identity.js";
 
 const visualState = {
   agents: [{ id: "agent-0", name: "Survey Agent" }],
@@ -31,5 +36,34 @@ describe("pixel world player-facing identity", () => {
     expect(pixelWorldSelectedEntityLabel(visualState, { kind: "location", id: "location-0" })).toBe("Location 0");
     expect(pixelWorldSelectedEntityLabel(visualState, { kind: "location", id: "location-0" }, true)).toBe("地点 0");
     expect(pixelWorldSelectedEntityLabel({ ...visualState, locations: [] }, { kind: "location", id: "loc-42" })).toBe("Location 42");
+  });
+
+  it("derives deterministic type-scoped marker codes from stable ids", () => {
+    const agents = [
+      { id: "agent-builder", name: "Shared Name" },
+      { id: "agent-factory", name: "Shared Name" },
+      { id: "agent-0", name: "Shared Name" },
+    ];
+    const reorderedCodes = agents
+      .slice()
+      .reverse()
+      .map((agent) => pixelWorldEntityMarkerCode(agent, "", "agent"));
+    const originalCodes = agents.map((agent) => pixelWorldEntityMarkerCode(agent, "", "agent"));
+
+    expect(new Set(originalCodes).size).toBe(originalCodes.length);
+    const originalById = new Map(agents.map((agent, index) => [agent.id, originalCodes[index]]));
+    agents.slice().reverse().forEach((agent, index) => {
+      expect(reorderedCodes[index]).toBe(originalById.get(agent.id));
+    });
+    expect(pixelWorldEntityMarkerCode({ id: "loc-0" }, "", "location")).not.toBe(
+      pixelWorldEntityMarkerCode({ id: "agent-0" }, "", "agent"),
+    );
+  });
+
+  it("keeps canonical id variants collision-free", () => {
+    const canonical = pixelWorldEntityMarkerCode({ id: "agent-0" }, "", "agent");
+    const underscoreVariant = pixelWorldEntityMarkerCode({ id: "agent_0" }, "", "agent");
+    expect(canonical).toBe("A0");
+    expect(underscoreVariant).not.toBe(canonical);
   });
 });

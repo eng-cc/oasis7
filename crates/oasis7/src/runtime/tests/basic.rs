@@ -154,6 +154,26 @@ fn event_id_rolls_over_into_next_era() {
 }
 
 #[test]
+fn persisted_max_event_id_does_not_double_advance_stored_era() {
+    let world = World::new();
+    let mut snapshot = world.snapshot();
+    snapshot.journal_len = 1;
+    snapshot.last_event_id = u64::MAX;
+    snapshot.event_id_era = 8;
+    snapshot.journal_commitment.clear();
+    let mut journal = Journal::new();
+    journal.append(WorldEvent {
+        id: u64::MAX,
+        time: 0,
+        caused_by: None,
+        body: WorldEventBody::SnapshotCreated(crate::runtime::SnapshotMeta { journal_len: 1 }),
+    });
+
+    let restored = World::from_snapshot(snapshot, journal).expect("restore max-id checkpoint");
+    assert_eq!(restored.snapshot().event_id_era, 8);
+}
+
+#[test]
 fn adjust_resource_balance_rejects_overflow() {
     let mut world = World::new();
     world.set_resource_balance(ResourceKind::Data, i64::MAX - 1);

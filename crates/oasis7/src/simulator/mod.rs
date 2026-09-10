@@ -19,6 +19,8 @@ mod async_agent_pilot;
 mod async_agent_runner;
 mod chunking;
 mod cognition_policy;
+mod cognition_response_identity;
+mod continuous_agent_budget;
 mod continuous_agent_harness;
 mod decision_provider;
 mod frag_spawn;
@@ -81,14 +83,20 @@ pub use cognition_policy::{
     MemoryWritePolicyOutcome, MemoryWriteStore, NormalizedMemoryWriteIntentV1,
     RuntimeContinuationStatusV1, WakeConditionSubjectV1, WakeConditionV1,
 };
+pub use cognition_response_identity::{
+    COGNITION_LEGACY_RESPONSE_DIGEST_DOMAIN, COGNITION_RESPONSE_DIGEST_DOMAIN,
+    CognitionResponseDigestDisposition, classify_cognition_response_digest,
+    cognition_legacy_response_digest, cognition_response_digest,
+};
+pub use continuous_agent_budget::BudgetContractV1;
 pub use continuous_agent_harness::{
-    AgentCognitionStore, BudgetContractV1, COGNITION_CAPABILITY_CATALOG_DOMAIN,
+    AgentCognitionStore, COGNITION_CAPABILITY_CATALOG_DOMAIN,
     COGNITION_CAPABILITY_INVOCATION_CONTEXT_DOMAIN, COGNITION_PROVIDER_INVOCATION_DOMAIN,
     COGNITION_REQUEST_DIGEST_DOMAIN, COGNITION_RESPONSE_ARTIFACT_IDENTITY_DOMAIN,
-    COGNITION_RESPONSE_DIGEST_DOMAIN, CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR,
-    CONTINUOUS_AGENT_CONTEXT_VERSION, CognitionError, ContinuousAgentRequestContextV1,
-    ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1, Digest32, FeedbackEnvelopeV1,
-    FinalityBindingV1, MemoryWriteIntentV1, ResponseArtifactIdentityV1, RuntimeBindingV1, h_v1,
+    CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR, CONTINUOUS_AGENT_CONTEXT_VERSION, CognitionError,
+    ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1,
+    ContinuousAgentTurnContextV1, Digest32, FeedbackEnvelopeV1, FinalityBindingV1,
+    MemoryWriteIntentV1, ResponseArtifactIdentityV1, RuntimeBindingV1, h_v1,
 };
 pub use decision_provider::{
     ActionCatalogEntry, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
@@ -156,6 +164,11 @@ pub use kernel::{
 pub use llm_agent::{
     LlmAgentBehavior, LlmAgentBuildError, LlmAgentConfig, LlmClientError,
     OpenAiChatCompletionClient,
+};
+#[cfg(all(test, not(target_arch = "wasm32")))]
+pub(crate) use llm_agent::{
+    LlmCompletionClient, LlmCompletionRequest, LlmCompletionResult, LlmCompletionTurn,
+    LlmPromptProfile,
 };
 pub use llm_defaults::{
     DEFAULT_CONFIG_FILE_NAME, DEFAULT_LLM_FORCE_REPLAN_AFTER_SAME_ACTION,

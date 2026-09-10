@@ -1,3 +1,5 @@
+import { toCanvasPoint } from "./pixel_world_hotspot_projection.js";
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -11,27 +13,6 @@ function createInitialCameraState() {
 }
 
 const AMBIENT_FRAME_INTERVAL_MS = 1000 / 12;
-
-function toCanvasPoint(position, worldBounds, width, height, cameraState) {
-  if (!position || !worldBounds) {
-    return null;
-  }
-  const safeWidth = Math.max(1, Number(worldBounds.width_cm) || 1);
-  const safeDepth = Math.max(1, Number(worldBounds.depth_cm) || 1);
-  const normalizedX = clamp(position.x_cm / safeWidth, 0, 1);
-  const normalizedY = clamp(position.y_cm / safeDepth, 0, 1);
-  const baseX = 20 + (normalizedX * Math.max(1, width - 40));
-  const baseY = 20 + (normalizedY * Math.max(1, height - 40));
-  const zoom = Math.max(0.5, Number(cameraState?.zoom) || 1);
-  const panX = Number(cameraState?.pan_x_px) || 0;
-  const panY = Number(cameraState?.pan_y_px) || 0;
-  const centeredX = baseX - (width / 2);
-  const centeredY = baseY - (height / 2);
-  return {
-    x: (width / 2) + (centeredX * zoom) + panX,
-    y: (height / 2) + (centeredY * zoom) + panY,
-  };
-}
 
 function fallbackPointForEntity(id, width, height, cameraState) {
   const baseX = 36 + ((Math.abs(id.length * 29) % Math.max(40, width - 72)));

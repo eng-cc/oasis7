@@ -6,6 +6,9 @@ use crate::runtime::{
 use crate::simulator::ResourceKind;
 use ed25519_dalek::SigningKey;
 
+#[path = "data_access_control/raw_resource_publication_transaction_regressions.rs"]
+mod raw_resource_publication_transaction_regressions;
+
 fn register_agent(world: &mut World, agent_id: &str) {
     world.submit_action(Action::RegisterAgent {
         agent_id: agent_id.to_string(),

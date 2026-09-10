@@ -1,4 +1,5 @@
 name: Rust
+run-name: oasis7-ci|${{ github.event_name }}|${{ inputs.run_mode }}|${{ inputs.task_uid }}|${{ inputs.pr_number }}|${{ inputs.integration_base }}|${{ inputs.expected_head }}
 
 on:
   push:
@@ -15,6 +16,7 @@ on:
         default: full_escalation
         type: choice
         options:
+          - integration_revalidation
           - full_escalation
           - newapi_bridge_package
       newapi_bridge_build_profile:
@@ -35,6 +37,10 @@ on:
         type: string
       expected_head:
         description: "Required for full_escalation: exact checked-out commit SHA"
+        required: false
+        type: string
+      integration_base:
+        description: "Exact current target OID for integration_revalidation"
         required: false
         type: string
       escalation_reason:
@@ -60,8 +66,12 @@ env:
 
 jobs:
   required-gate:
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
     outputs:
       run_operational_contracts: ${{ steps.scope.outputs.run_operational_contracts }}
       run_site_contract_tests: ${{ steps.scope.outputs.run_site_contract_tests }}
@@ -69,6 +79,93 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+      - id: integration
+        name: Prepare exact manual integration from trusted default workflow
+        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INTEGRATION_BASE: ${{ inputs.integration_base }}
+          INTEGRATION_HEAD: ${{ inputs.expected_head }}
+          INTEGRATION_UID: ${{ inputs.task_uid }}
+          INTEGRATION_PR: ${{ inputs.pr_number }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        shell: bash
+        run: |
+          mkdir -p "${RUNNER_TEMP}/integration-planner"
+          cp scripts/plan-rust-required-scope.py scripts/ci-required-scope.v2.json scripts/ci-tests.sh scripts/viewer-dependency-preflight.sh "${RUNNER_TEMP}/integration-planner/"
+          cp scripts/pm/integration_ci.py "${RUNNER_TEMP}/integration_ci.py"
+          python3 -I "${RUNNER_TEMP}/integration_ci.py" prepare --repository "${{ github.repository }}" \
+            --task-uid "${INTEGRATION_UID}" --pr-number "${INTEGRATION_PR}" \
+            --base "${INTEGRATION_BASE}" --head "${INTEGRATION_HEAD}" --output "${RUNNER_TEMP}/integration.json"
+          echo "identity=$(cat "${RUNNER_TEMP}/integration.json")" >>"${GITHUB_OUTPUT}"
+      - name: Validate trusted loop repository scope and content
+        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          base_ref=""
+          head_ref="${GITHUB_SHA}"
+          case "${GITHUB_EVENT_NAME}" in
+            pull_request|workflow_dispatch)
+              base_ref="${{ github.event.pull_request.base.sha || inputs.integration_base }}"
+              head_ref="${{ github.event.pull_request.head.sha || inputs.expected_head }}"
+              if git show "${base_ref}:scripts/pm/loop-ci.py" >"${RUNNER_TEMP}/oasis7-loop-ci.py"; then
+                python3 "${RUNNER_TEMP}/oasis7-loop-ci.py" --repository "${{ github.repository }}" \
+                  --pr-number "${{ github.event.pull_request.number || inputs.pr_number }}" \
+                  --base "${base_ref}" --head "${head_ref}"
+              else
+                # Bootstrap compatibility: old base has no loop admission. Only
+                # a reciprocal live legacy task may pass; never run candidate helpers.
+                python3 -I - "${{ github.repository }}" "${{ github.event.pull_request.number || inputs.pr_number }}" <<'PY'
+          import json,re,subprocess,sys
+          repo,number=sys.argv[1:]
+          pr=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/pulls/{number}'],text=True))
+          uids=set(re.findall(r'task_[0-9a-f]{32}',pr.get('body') or ''))
+          if len(uids)==1:
+              uid=next(iter(uids))
+              refs=set(re.findall(r'(?:Refs|Fixes|Closes)\s+#(\d+)',pr.get('body') or '',re.I))
+              if len(refs)>20: raise SystemExit('task reference discovery budget exhausted')
+              if refs:
+                  candidates=sorted(refs)
+              else:
+                  hits=json.loads(subprocess.check_output(['gh','issue','list','-R',repo,'--state','all','--search',uid+' in:body','--json','number','--limit','5'],text=True))
+                  if not isinstance(hits,list) or len(hits)>=5: raise SystemExit('task search discovery incomplete')
+                  candidates=[hit['number'] for hit in hits]
+              matches=[]
+              for candidate in candidates:
+                  item=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/issues/{candidate}'],text=True))
+                  candidate_body=(item.get('body') or '').replace('\r\n','\n')
+                  candidate_fields=re.findall(r'^task_uid:[^\n]*$',candidate_body,re.M)
+                  candidate_uids=re.findall(r'^task_uid: (task_[0-9a-f]{32})$',candidate_body,re.M)
+                  if uid in candidate_uids:
+                      if candidate_fields!=['task_uid: '+uid] or candidate_uids!=[uid]: raise SystemExit('ambiguous canonical Issue UID')
+                      matches.append(candidate)
+              if len(matches)!=1: raise SystemExit('live task Issue is ambiguous or missing')
+              issue_number=matches[0]
+          else:
+              refs=set(re.findall(r'(?:Refs|Fixes|Closes)\s+#(\d+)',pr.get('body') or '',re.I))
+              if uids or len(refs)!=1: raise SystemExit('missing unique live task Issue identity')
+              issue_number,uid=next(iter(refs)),None
+          issue=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/issues/{issue_number}'],text=True))
+          body=(issue.get('body') or '').replace('\r\n','\n')
+          issue_fields=re.findall(r'^task_uid:[^\n]*$',body,re.M)
+          issue_uids=re.findall(r'^task_uid: (task_[0-9a-f]{32})$',body,re.M)
+          if len(issue_fields)!=1 or len(issue_uids)!=1 or (uid is not None and issue_uids!=[uid]): raise SystemExit('task UID identity mismatch')
+          if re.findall(r'^- pr_number: `([0-9]+)`$',body,re.M)!=[number]: raise SystemExit('task PR identity mismatch')
+          if 'loop_binding_b64:' in body: raise SystemExit('effective base lacks loop admission; activation blocked')
+          pages=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/issues/{issue_number}/comments','--paginate','--slurp'],text=True))
+          if not isinstance(pages,list): raise SystemExit('lineage readback unavailable')
+          comments=[item for page in pages for item in (page if isinstance(page,list) else [page])]
+          if any('oasis7-loop-binding-history' in str(item.get('body','')) for item in comments if isinstance(item,dict)): raise SystemExit('loop binding deleted after history')
+          print('loop admission: live legacy bootstrap')
+          PY
+              fi
+              ;;
+            push)
+              base_ref="${{ github.event.before }}"
+              ;;
+          esac
+
       - id: scope
         name: Plan required gate scope
         run: |
@@ -79,12 +176,19 @@ jobs:
               base_ref="${{ github.event.pull_request.base.sha }}"
               head_ref="${{ github.event.pull_request.head.sha }}"
               ;;
+            workflow_dispatch)
+              base_ref="${{ inputs.integration_base }}"
+              head_ref="${{ inputs.expected_head }}"
+              ;;
             push)
               base_ref="${{ github.event.before }}"
               ;;
           esac
-
-          ./scripts/plan-rust-required-scope.sh \
+          planner=(./scripts/plan-rust-required-scope.sh)
+          if [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then
+            planner=(python3 -I "${RUNNER_TEMP}/integration-planner/plan-rust-required-scope.py")
+          fi
+          "${planner[@]}" \
             --event-name "${GITHUB_EVENT_NAME}" \
             --base-ref "${base_ref}" \
             --head-ref "${head_ref}" \
@@ -127,9 +231,10 @@ jobs:
           PLAN_JSON: ${{ toJSON(steps.scope.outputs) }}
           REPOSITORY: ${{ github.repository }}
           WORKFLOW_RUN_ID: ${{ github.run_id }}
+          INTEGRATION_JSON: ${{ steps.integration.outputs.identity }}
         run: |
           mkdir -p output/required-plan
-          python3 - <<'PY'
+          python3 -I - <<'PY'
           import json, os, pathlib
           source=json.loads(os.environ["PLAN_JSON"])
           fields=(
@@ -155,6 +260,8 @@ jobs:
               "check_name":"required-gate",
               "planner":planner,
           }
+          if os.environ.get("INTEGRATION_JSON"):
+              payload.update(json.loads(os.environ["INTEGRATION_JSON"]))
           pathlib.Path("output/required-plan/oasis7-required-plan-v1.json").write_text(
               json.dumps(payload,sort_keys=True,separators=(",",":"))+"\n",encoding="utf-8"
           )
@@ -235,6 +342,7 @@ jobs:
             libudev-dev
       - name: Run required test tier
         env:
+          INTEGRATION_MODE: ${{ inputs.run_mode }}
           OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS: ${{ steps.scope.outputs.run_oasis7_required_tests }}
           OASIS7_CI_RUN_CONSENSUS_TESTS: ${{ steps.scope.outputs.run_consensus_tests }}
           OASIS7_CI_RUN_DISTFS_TESTS: ${{ steps.scope.outputs.run_distfs_tests }}
@@ -254,7 +362,12 @@ jobs:
           OASIS7_CI_RUN_CODEX_AGENT_CONFIG_VALIDATION: ${{ steps.scope.outputs.run_codex_agent_config_validation }}
           OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS: ${{ steps.scope.outputs.run_compile_metrics_contract_tests }}
           OASIS7_CI_RUN_RUST_BASELINE: ${{ steps.scope.outputs.run_rust_baseline }}
-        run: CI_VERBOSE=1 ./scripts/ci-tests.sh required
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${INTEGRATION_MODE}" == "integration_revalidation" ]]; then
+            CI_VERBOSE=1 bash "${RUNNER_TEMP}/integration-planner/ci-tests.sh" required --repo-root "${GITHUB_WORKSPACE}"
+          else
+            CI_VERBOSE=1 ./scripts/ci-tests.sh required
+          fi
       - name: Upload selected Viewer performance evidence
         if: ${{ always() && steps.scope.outputs.run_viewer_perf_smoke == 'true' }}
         uses: actions/upload-artifact@v7
@@ -271,11 +384,36 @@ jobs:
           execution_bridge_real_tests::real_execution_bridge::tests
 
   windows-package-rollout-behavior:
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
     needs: required-gate
-    if: github.event_name == 'pull_request' && needs.required-gate.outputs.run_operational_contracts == 'true'
+    if: (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')) && needs.required-gate.outputs.run_operational_contracts == 'true'
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: integration
+        name: Prepare exact manual integration from trusted default workflow
+        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INTEGRATION_BASE: ${{ inputs.integration_base }}
+          INTEGRATION_HEAD: ${{ inputs.expected_head }}
+          INTEGRATION_UID: ${{ inputs.task_uid }}
+          INTEGRATION_PR: ${{ inputs.pr_number }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        shell: bash
+        run: |
+          mkdir -p "${RUNNER_TEMP}/integration-planner"
+          cp scripts/plan-rust-required-scope.py scripts/ci-required-scope.v2.json scripts/ci-tests.sh "${RUNNER_TEMP}/integration-planner/"
+          cp scripts/pm/integration_ci.py "${RUNNER_TEMP}/integration_ci.py"
+          python3 -I "${RUNNER_TEMP}/integration_ci.py" prepare --repository "${{ github.repository }}" \
+            --task-uid "${INTEGRATION_UID}" --pr-number "${INTEGRATION_PR}" \
+            --base "${INTEGRATION_BASE}" --head "${INTEGRATION_HEAD}" --output "${RUNNER_TEMP}/integration.json"
+          echo "identity=$(cat "${RUNNER_TEMP}/integration.json")" >>"${GITHUB_OUTPUT}"
       - name: Run disposable Windows PowerShell rollout behavior fixture
         shell: bash
         env:
@@ -285,18 +423,47 @@ jobs:
           bash ./scripts/p2p-public-testnet-package-rollout.test.sh
 
   testnet-packages-macos-arm64-contract:
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
     needs: required-gate
-    if: github.event_name == 'pull_request' && needs.required-gate.outputs.run_operational_contracts == 'true'
+    if: (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')) && needs.required-gate.outputs.run_operational_contracts == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: integration
+        name: Prepare exact manual integration from trusted default workflow
+        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INTEGRATION_BASE: ${{ inputs.integration_base }}
+          INTEGRATION_HEAD: ${{ inputs.expected_head }}
+          INTEGRATION_UID: ${{ inputs.task_uid }}
+          INTEGRATION_PR: ${{ inputs.pr_number }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        shell: bash
+        run: |
+          mkdir -p "${RUNNER_TEMP}/integration-planner"
+          cp scripts/plan-rust-required-scope.py scripts/ci-required-scope.v2.json scripts/ci-tests.sh "${RUNNER_TEMP}/integration-planner/"
+          cp scripts/pm/integration_ci.py "${RUNNER_TEMP}/integration_ci.py"
+          python3 -I "${RUNNER_TEMP}/integration_ci.py" prepare --repository "${{ github.repository }}" \
+            --task-uid "${INTEGRATION_UID}" --pr-number "${INTEGRATION_PR}" \
+            --base "${INTEGRATION_BASE}" --head "${INTEGRATION_HEAD}" --output "${RUNNER_TEMP}/integration.json"
+          echo "identity=$(cat "${RUNNER_TEMP}/integration.json")" >>"${GITHUB_OUTPUT}"
       - name: Verify additive macOS arm64 package contract
         shell: bash
         run: bash ./scripts/testnet-packages-macos-arm64-contract.test.sh
 
   public-testnet-fleet-health-contract:
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
     needs: required-gate
-    if: github.event_name == 'pull_request' && needs.required-gate.outputs.run_operational_contracts == 'true'
+    if: (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')) && needs.required-gate.outputs.run_operational_contracts == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -304,6 +471,27 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: integration
+        name: Prepare exact manual integration from trusted default workflow
+        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INTEGRATION_BASE: ${{ inputs.integration_base }}
+          INTEGRATION_HEAD: ${{ inputs.expected_head }}
+          INTEGRATION_UID: ${{ inputs.task_uid }}
+          INTEGRATION_PR: ${{ inputs.pr_number }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        shell: bash
+        run: |
+          mkdir -p "${RUNNER_TEMP}/integration-planner"
+          cp scripts/plan-rust-required-scope.py scripts/ci-required-scope.v2.json scripts/ci-tests.sh "${RUNNER_TEMP}/integration-planner/"
+          cp scripts/pm/integration_ci.py "${RUNNER_TEMP}/integration_ci.py"
+          python3 -I "${RUNNER_TEMP}/integration_ci.py" prepare --repository "${{ github.repository }}" \
+            --task-uid "${INTEGRATION_UID}" --pr-number "${INTEGRATION_PR}" \
+            --base "${INTEGRATION_BASE}" --head "${INTEGRATION_HEAD}" --output "${RUNNER_TEMP}/integration.json"
+          echo "identity=$(cat "${RUNNER_TEMP}/integration.json")" >>"${GITHUB_OUTPUT}"
       - name: Verify fleet-health collection contract
         run: python scripts/p2p-public-testnet-fleet-health.test.py
 

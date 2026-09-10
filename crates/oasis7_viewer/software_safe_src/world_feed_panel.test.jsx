@@ -41,7 +41,8 @@ describe("WorldFeedPanel", () => {
       />
     ));
     expect(container.querySelector("#viewer-world-feed")).toBeTruthy();
-    expect(screen.getByText("World activity is stale")).toBeInTheDocument();
+    expect(container.querySelector('[data-world-feed-summary-status="gap"]')).toHaveTextContent("GAP");
+    expect(screen.getByText("GAP", { selector: '[data-world-feed-summary-status]' })).toBeInTheDocument();
     const reloadButton = screen.getByRole("button", { name: /reload authoritative snapshot/i });
     expect(reloadButton).toBeInTheDocument();
     fireEvent.click(reloadButton);
@@ -69,7 +70,7 @@ describe("WorldFeedPanel", () => {
         onRetryFeed={onRetryFeed}
       />
     ));
-    expect(screen.getByText("World activity unavailable")).toBeInTheDocument();
+    expect(screen.getByText("UNAVAILABLE", { selector: '[data-world-feed-summary-status]' })).toBeInTheDocument();
     const retryButton = screen.getByRole("button", { name: /retry world feed/i });
     expect(retryButton).toBeInTheDocument();
     fireEvent.click(retryButton);
@@ -114,7 +115,7 @@ describe("WorldFeedPanel", () => {
       />
     ));
 
-    expect(screen.getByText("No world activity yet")).toBeInTheDocument();
+    expect(screen.getByText("NO EVENTS", { selector: '[data-world-feed-summary-status]' })).toBeInTheDocument();
     expect(screen.getByText(
       "No authoritative world update has published events yet. This feed is context only—continue your Player goal; the feed will update after the next authoritative world update.",
     )).toBeInTheDocument();
@@ -142,6 +143,27 @@ describe("WorldFeedPanel", () => {
     expect(screen.getByText("Ore changed")).toBeInTheDocument();
     expect(screen.getByText("Agent spoke")).toBeInTheDocument();
     expect(document.querySelectorAll("a[data-world-feed-receipt-ref]")).toHaveLength(1);
+  });
+
+  it("surfaces the highest event sequence in the collapsed summary while preserving feed status", () => {
+    render(() => (
+      <WorldFeedPanel
+        feed={() => ({
+          status: "ready",
+          events: [
+            { event_seq: 7, kind: "resource_change", summary: "Ore changed", detail: "ore +1", receipt_ref: null },
+            { event_seq: 8, kind: "weather_shift", summary: "Solar flare reached the belt", detail: "ambient", receipt_ref: null },
+          ],
+        })}
+        locale={() => "en"}
+        tr={tr}
+      />
+    ));
+
+    const summary = document.querySelector(".world-feed__summary");
+    expect(summary).toHaveAttribute("data-world-feed-latest", "8");
+    expect(summary).toHaveTextContent("LIVE");
+    expect(summary).toHaveTextContent("Latest: Solar flare reached the belt");
   });
 
   it("formats runtime kinds and keeps diagnostic JSON out of the player feed", () => {
@@ -235,6 +257,9 @@ describe("WorldFeedPanel", () => {
     expect(event).toHaveAttribute("data-major-event-category", "crisis");
     expect(event).toHaveAttribute("data-major-event-lifecycle", "active");
     expect(event).toHaveAttribute("data-major-event-severity", "4");
+    expect(event).toHaveClass("world-feed__event--severity-4");
+    expect(event).toHaveClass("world-feed__event--lifecycle-active");
+    expect(event).toHaveTextContent("Crisis active · severity 4");
     expect(event.querySelector("[data-major-event-stage-marker]")).toBeNull();
     expect(event.querySelector("[data-major-event-highlight]")).toBeNull();
     expect(event.querySelector("[data-world-feed-receipt-ref]")).toBeNull();
@@ -266,6 +291,7 @@ describe("WorldFeedPanel", () => {
     expect(document.querySelector('[data-world-feed-major-event="7"]')).toBeInTheDocument();
     expect(document.querySelector('[data-world-feed-major-event-toast="7"]')).toBeNull();
     expect(document.querySelector('[data-world-feed-major-event="7"] [role="status"]')).toBeNull();
+    expect(document.querySelector('[data-world-feed-major-event="7"]')).toHaveTextContent("Crisis active · severity 4");
   });
 
   it("provides a CJK-readable polite status for current crisis context without leaking raw protocol enums", () => {
@@ -309,7 +335,7 @@ describe("WorldFeedPanel", () => {
       />
     ));
 
-    expect(screen.getByText("World activity unavailable")).toBeInTheDocument();
+    expect(screen.getByText("UNAVAILABLE", { selector: '[data-world-feed-summary-status]' })).toBeInTheDocument();
     expect(document.querySelector("[data-world-feed-major-event]")).toBeNull();
     expect(document.querySelector("[data-world-feed-major-event-toast]")).toBeNull();
   });

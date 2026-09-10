@@ -3,6 +3,19 @@ use oasis7_wasm_abi::{ModuleCallErrorCode, ModuleCallFailure, ModuleOutput};
 use super::super::{ModuleManifest, ModuleRuntimeChargeEvent, WorldError, WorldEventBody};
 use super::World;
 use crate::simulator::ResourceKind;
+use std::collections::BTreeMap;
+
+pub(super) struct PreparedModuleRuntimeCharge {
+    pub(super) agents: BTreeMap<String, super::super::agent_cell::AgentCell>,
+    pub(super) resources: BTreeMap<ResourceKind, i64>,
+}
+
+impl PreparedModuleRuntimeCharge {
+    pub(super) fn install_infallible(self, world: &mut World) {
+        world.state.agents.extend(self.agents);
+        world.state.resources.extend(self.resources);
+    }
+}
 
 const MODULE_RUNTIME_FEE_BYTES_PER_UNIT: u64 = 1_024;
 
@@ -72,6 +85,16 @@ impl World {
         charge: &ModuleRuntimeChargeEvent,
         now: super::super::WorldTime,
     ) -> Result<(), WorldError> {
+        let prepared = self.prepare_module_runtime_charge_event(charge, now)?;
+        prepared.install_infallible(self);
+        Ok(())
+    }
+
+    pub(super) fn prepare_module_runtime_charge_event(
+        &self,
+        charge: &ModuleRuntimeChargeEvent,
+        now: super::super::WorldTime,
+    ) -> Result<PreparedModuleRuntimeCharge, WorldError> {
         if charge.compute_fee_amount < 0 || charge.electricity_fee_amount < 0 {
             return Err(WorldError::ResourceBalanceInvalid {
                 reason: format!(
@@ -80,13 +103,15 @@ impl World {
                 ),
             });
         }
-        let cell = self
+        let mut cell = self
             .state
             .agents
-            .get_mut(&charge.payer_agent_id)
+            .get(&charge.payer_agent_id)
             .ok_or_else(|| WorldError::AgentNotFound {
                 agent_id: charge.payer_agent_id.clone(),
-            })?;
+            })?
+            .clone();
+        let mut resources = BTreeMap::new();
         if charge.compute_fee_amount > 0 {
             cell.state
                 .resources
@@ -100,11 +125,13 @@ impl World {
                         err
                     ),
                 })?;
-            let treasury = self
-                .state
-                .resources
-                .entry(charge.compute_fee_kind)
-                .or_insert(0);
+            let treasury = resources.entry(charge.compute_fee_kind).or_insert_with(|| {
+                self.state
+                    .resources
+                    .get(&charge.compute_fee_kind)
+                    .copied()
+                    .unwrap_or(0)
+            });
             *treasury = treasury.saturating_add(charge.compute_fee_amount);
         }
         if charge.electricity_fee_amount > 0 {
@@ -120,15 +147,22 @@ impl World {
                         err
                     ),
                 })?;
-            let treasury = self
-                .state
-                .resources
+            let treasury = resources
                 .entry(charge.electricity_fee_kind)
-                .or_insert(0);
+                .or_insert_with(|| {
+                    self.state
+                        .resources
+                        .get(&charge.electricity_fee_kind)
+                        .copied()
+                        .unwrap_or(0)
+                });
             *treasury = treasury.saturating_add(charge.electricity_fee_amount);
         }
         cell.last_active = now;
-        Ok(())
+        Ok(PreparedModuleRuntimeCharge {
+            agents: BTreeMap::from([(charge.payer_agent_id.clone(), cell)]),
+            resources,
+        })
     }
 
     pub(super) fn try_charge_module_runtime(

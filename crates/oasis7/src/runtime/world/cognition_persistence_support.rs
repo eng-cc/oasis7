@@ -433,6 +433,7 @@ impl World {
         &self,
         scheduler_state: &JsonValue,
     ) -> Result<(), WorldError> {
+        let scheduler_state = self.hydrate_legacy_wake_request_digests(scheduler_state)?;
         let mut values = Vec::new();
         if let Some(active) = scheduler_state.get("active").and_then(JsonValue::as_array) {
             values.extend(active.iter().cloned());

@@ -310,18 +310,19 @@ pub use snapshot::{
 
 // State
 pub use state::{
-    AgentLocationAuthorityV1, FACTORY_BUILD_STARTED_MODERN_VERSION, FactoryBuildJobState,
-    FactoryBuildPowerObligationV1, FactoryConstructionPowerMode, FactoryConstructionPowerProfileV1,
-    FactoryProductionFailureDispositionV1, FactoryProductionState, FactoryProductionStatus,
-    FactoryRecycleReceiptV1, FactorySiteAuthorityV1, FactoryState, IndustryProgressState,
-    LocationAnchorV1, LogisticsRouteV1, MaterialTransferReceiptV1, MaterialTransitJobState,
-    ModuleInstanceState, ModuleReleaseAttestationState, ModuleReleaseManifestMappingState,
-    ProductValidationAttemptV1, ProductValidationDeliveryCursor, ProductValidationReceiptV1,
-    RecipeCompletionReceiptV1, RecipeJobState, STARTER_ASSEMBLER_FACTORY_ID,
-    STARTER_INDUSTRIAL_COMPLETION_BOUNDARY, STARTER_INDUSTRIAL_PROFILE_ID,
-    STARTER_INDUSTRIAL_PROFILE_REVISION, STARTER_SMELTER_FACTORY_ID, STARTER_SMELTER_RECIPE_ID,
-    StarterIndustrialFeasibilityResult, StarterIndustrialFeasibilityStatus,
-    StarterIndustrialMilestoneV1, WorldState,
+    AgentLocationAuthorityV1, BodyOverlay, FACTORY_BUILD_STARTED_MODERN_VERSION,
+    FactoryBuildJobState, FactoryBuildPowerObligationV1, FactoryConstructionPowerMode,
+    FactoryConstructionPowerProfileV1, FactoryProductionFailureDispositionV1,
+    FactoryProductionState, FactoryProductionStatus, FactoryRecycleReceiptV1,
+    FactorySiteAuthorityV1, FactoryState, IndustryProgressState, LocationAnchorV1,
+    LogisticsRouteV1, MaterialTransferReceiptV1, MaterialTransitJobState, ModuleInstanceState,
+    ModuleReleaseAttestationState, ModuleReleaseManifestMappingState, ProductValidationAttemptV1,
+    ProductValidationDeliveryCursor, ProductValidationReceiptV1, RecipeCompletionReceiptV1,
+    RecipeJobState, STARTER_ASSEMBLER_FACTORY_ID, STARTER_INDUSTRIAL_COMPLETION_BOUNDARY,
+    STARTER_INDUSTRIAL_PROFILE_ID, STARTER_INDUSTRIAL_PROFILE_REVISION, STARTER_SMELTER_FACTORY_ID,
+    STARTER_SMELTER_RECIPE_ID, StarterIndustrialFeasibilityResult,
+    StarterIndustrialFeasibilityStatus, StarterIndustrialMilestoneV1, WorldState,
+    WorldStateProjection,
 };
 
 // World
@@ -329,11 +330,14 @@ pub use world::{
     AgentIntentProviderFailureDisposition, AgentIntentRecordOutcome,
     AuthoritativeRecoveryCommitError, AuthoritativeRecoveryCommitStatus,
     BuiltinReleaseManifestEntry, BuiltinReleaseManifestState,
-    CommittedAuthoritativeRecoveryGeneration, LogisticsTransferQuote, M1ScenarioBootstrapConfig,
-    MarketQuoteDecisionPreview, MarketQuoteSupplyDelta, ModuleTickRoutingDeterministicSnapshot,
-    ModuleTickRoutingDurationBuckets, ModuleTickRoutingMetricsSnapshot, ProductValidationQuote,
-    ReleaseSecurityPolicy, WarDeclarationQuote, World, WorldRuntimeBackpressureStats,
-    WorldRuntimeMemoryLimits,
+    CommittedAuthoritativeRecoveryGeneration, ExecutionTransaction, LogisticsTransferQuote,
+    M1ScenarioBootstrapConfig, MarketQuoteDecisionPreview, MarketQuoteSupplyDelta,
+    ModuleTickRoutingDeterministicSnapshot, ModuleTickRoutingDurationBuckets,
+    ModuleTickRoutingMetricsSnapshot, PreparedCommit, ProductValidationQuote,
+    ReleaseSecurityPolicy, TransitionBaseHead, TransitionBuffer, TransitionCommitError,
+    TransitionKernelEntriesView, TransitionKernelState, TransitionKernelView,
+    TransitionPrepareError, TransitionRollbackError, TransitionSavepoint, WarDeclarationQuote,
+    World, WorldRuntimeBackpressureStats, WorldRuntimeMemoryLimits,
 };
 pub use world::{rollback_affected_census_digest, rollback_journal_commitment};
 

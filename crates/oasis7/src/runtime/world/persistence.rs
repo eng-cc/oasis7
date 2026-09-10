@@ -1,8 +1,9 @@
 use super::super::capability_authorization::CapabilityRevocationState;
 use super::super::util::{hash_json, read_json_from_path, write_json_to_path};
 use super::super::{
-    Journal, JournalSegmentRef, LocalCasStore, ModuleCache, ModuleStore, SegmentConfig, Snapshot,
-    TickConsensusRecord, WorldError, WorldEvent, WorldTime, segment_journal, segment_snapshot,
+    Journal, JournalSegmentRef, LocalCasStore, ModuleCache, ModuleRegistry, ModuleStore,
+    SegmentConfig, Snapshot, TickConsensusRecord, WorldError, WorldEvent, WorldTime,
+    segment_journal, segment_snapshot,
 };
 use super::World;
 use super::module_tick_runtime::ModuleTickRoutingMetrics;
@@ -14,6 +15,7 @@ use std::collections::BTreeSet;
 use std::collections::VecDeque;
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 #[path = "authoritative_recovery_generation.rs"]
 mod authoritative_recovery_generation;
@@ -25,9 +27,18 @@ pub use authoritative_recovery_generation::{
 mod persistence_support;
 #[path = "persistence_tail.rs"]
 mod persistence_tail;
+#[path = "persistence_tick_consensus.rs"]
+mod persistence_tick_consensus;
 use self::persistence_support::{
     distfs_world_id, now_unix_ms, persist_sidecar_generation_index, write_distfs_recovery_audit,
 };
+use persistence_tick_consensus::{
+    TickConsensusArchiveFile, hydrate_tick_consensus_snapshot_from_archive,
+    hydrate_tick_consensus_snapshot_from_archived_records,
+    load_persisted_tick_consensus_snapshot_from_dir, persist_tick_consensus_archive,
+    split_tick_consensus_snapshot_for_persistence,
+};
+
 const JOURNAL_FILE: &str = "journal.json";
 const SNAPSHOT_FILE: &str = "snapshot.json";
 const DISTFS_STATE_DIR: &str = ".distfs-state";
@@ -51,6 +62,21 @@ const SIDECAR_GENERATION_KEEP_LATEST: usize = 2;
 const SIDECAR_GENERATION_SNAPSHOT_MANIFEST_FILE: &str = "snapshot.manifest.json";
 const SIDECAR_GENERATION_JOURNAL_SEGMENTS_FILE: &str = "journal.segments.json";
 const SIDECAR_GENERATION_RECOVERY_METADATA_FILE: &str = "viewer-recovery.bin";
+
+struct PreparedModuleStoreLoad {
+    registry: ModuleRegistry,
+    artifacts: BTreeSet<String>,
+    artifact_bytes: BTreeMap<String, Arc<[u8]>>,
+}
+
+impl PreparedModuleStoreLoad {
+    fn install(self, world: &mut World) {
+        world.module_registry = self.registry;
+        world.module_artifacts = self.artifacts;
+        world.module_artifact_bytes = self.artifact_bytes;
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct SidecarGcResult {
     status: String,
@@ -60,6 +86,7 @@ struct SidecarGcResult {
     error: Option<String>,
     updated_at_ms: i64,
 }
+
 impl SidecarGcResult {
     fn not_run() -> Self {
         Self {
@@ -136,424 +163,12 @@ struct SidecarGenerationHashPayload<'a> {
     created_at_ms: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-struct TickConsensusArchiveFile {
-    archived_records: Vec<TickConsensusRecord>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-struct TickConsensusArchiveIndex {
-    hot_from_tick: Option<WorldTime>,
-    hot_to_tick: Option<WorldTime>,
-    archived_segments: Vec<TickConsensusArchiveSegment>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct TickConsensusArchiveSegment {
-    from_tick: WorldTime,
-    to_tick: WorldTime,
-    content_hash: String,
-    record_count: usize,
-    hash_chain_anchor: String,
-    relative_path: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-struct TickConsensusArchiveSegmentFile {
-    records: Vec<TickConsensusRecord>,
-}
-
 #[derive(Debug, Serialize)]
 struct DistfsRecoveryAuditRecord {
     timestamp_ms: i64,
     status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     reason: Option<String>,
-}
-fn tick_consensus_archive_path(dir: &Path) -> std::path::PathBuf {
-    dir.join(TICK_CONSENSUS_ARCHIVE_FILE)
-}
-fn tick_consensus_archive_index_path(dir: &Path) -> std::path::PathBuf {
-    dir.join(TICK_CONSENSUS_ARCHIVE_INDEX_FILE)
-}
-fn tick_consensus_archive_segments_dir(dir: &Path) -> std::path::PathBuf {
-    dir.join(TICK_CONSENSUS_ARCHIVE_SEGMENTS_DIR)
-}
-fn tick_consensus_archive_segment_relative_path(
-    from_tick: WorldTime,
-    to_tick: WorldTime,
-) -> String {
-    format!("{TICK_CONSENSUS_ARCHIVE_SEGMENTS_DIR}/segment-{from_tick:020}-{to_tick:020}.json")
-}
-fn tick_consensus_hot_tick_bounds(
-    records: &[TickConsensusRecord],
-) -> (Option<WorldTime>, Option<WorldTime>) {
-    (
-        records.first().map(|record| record.block.header.tick),
-        records.last().map(|record| record.block.header.tick),
-    )
-}
-fn split_tick_consensus_snapshot_for_persistence(
-    snapshot: &Snapshot,
-) -> (Snapshot, Option<TickConsensusArchiveFile>) {
-    let mut persisted_snapshot = snapshot.clone();
-    persisted_snapshot.tick_consensus_total_record_count = snapshot.tick_consensus_records.len();
-    if snapshot.tick_consensus_records.len() <= TICK_CONSENSUS_HOT_LIMIT {
-        persisted_snapshot.tick_consensus_archived_record_count = 0;
-        let (hot_from_tick, hot_to_tick) =
-            tick_consensus_hot_tick_bounds(persisted_snapshot.tick_consensus_records.as_slice());
-        persisted_snapshot.tick_consensus_hot_from_tick = hot_from_tick;
-        persisted_snapshot.tick_consensus_hot_to_tick = hot_to_tick;
-        return (persisted_snapshot, None);
-    }
-
-    let archived_record_count = snapshot
-        .tick_consensus_records
-        .len()
-        .saturating_sub(TICK_CONSENSUS_HOT_LIMIT);
-    let archived_records = snapshot.tick_consensus_records[..archived_record_count].to_vec();
-    persisted_snapshot.tick_consensus_records =
-        snapshot.tick_consensus_records[archived_record_count..].to_vec();
-    persisted_snapshot.tick_consensus_archived_record_count = archived_records.len();
-    let (hot_from_tick, hot_to_tick) =
-        tick_consensus_hot_tick_bounds(persisted_snapshot.tick_consensus_records.as_slice());
-    persisted_snapshot.tick_consensus_hot_from_tick = hot_from_tick;
-    persisted_snapshot.tick_consensus_hot_to_tick = hot_to_tick;
-    (
-        persisted_snapshot,
-        Some(TickConsensusArchiveFile { archived_records }),
-    )
-}
-fn build_tick_consensus_archive_index(
-    snapshot: &Snapshot,
-    archive: &TickConsensusArchiveFile,
-) -> Result<
-    (
-        TickConsensusArchiveIndex,
-        Vec<(String, TickConsensusArchiveSegmentFile)>,
-    ),
-    WorldError,
-> {
-    let mut archived_segments = Vec::new();
-    let mut segment_files = Vec::new();
-    for records_chunk in archive
-        .archived_records
-        .chunks(TICK_CONSENSUS_ARCHIVE_SEGMENT_LEN)
-    {
-        if records_chunk.is_empty() {
-            continue;
-        }
-        let segment_file = TickConsensusArchiveSegmentFile {
-            records: records_chunk.to_vec(),
-        };
-        let from_tick = segment_file
-            .records
-            .first()
-            .map(|record| record.block.header.tick)
-            .expect("segment records");
-        let to_tick = segment_file
-            .records
-            .last()
-            .map(|record| record.block.header.tick)
-            .expect("segment records");
-        let relative_path = tick_consensus_archive_segment_relative_path(from_tick, to_tick);
-        let content_hash = hash_json(&segment_file)?;
-        let hash_chain_anchor = segment_file
-            .records
-            .last()
-            .map(|record| record.certificate.block_hash.clone())
-            .expect("segment records");
-        archived_segments.push(TickConsensusArchiveSegment {
-            from_tick,
-            to_tick,
-            content_hash,
-            record_count: segment_file.records.len(),
-            hash_chain_anchor,
-            relative_path: relative_path.clone(),
-        });
-        segment_files.push((relative_path, segment_file));
-    }
-
-    Ok((
-        TickConsensusArchiveIndex {
-            hot_from_tick: snapshot.tick_consensus_hot_from_tick,
-            hot_to_tick: snapshot.tick_consensus_hot_to_tick,
-            archived_segments,
-        },
-        segment_files,
-    ))
-}
-fn persist_tick_consensus_archive(
-    dir: &Path,
-    snapshot: &Snapshot,
-    archive: Option<&TickConsensusArchiveFile>,
-) -> Result<(), WorldError> {
-    let legacy_archive_path = tick_consensus_archive_path(dir);
-    let archive_index_path = tick_consensus_archive_index_path(dir);
-    let archive_segments_dir = tick_consensus_archive_segments_dir(dir);
-    match archive {
-        Some(archive) if !archive.archived_records.is_empty() => {
-            let (archive_index, segment_files) =
-                build_tick_consensus_archive_index(snapshot, archive)?;
-            if archive_segments_dir.exists() {
-                fs::remove_dir_all(archive_segments_dir.as_path())?;
-            }
-            fs::create_dir_all(archive_segments_dir.as_path())?;
-            for (relative_path, segment_file) in segment_files {
-                write_json_to_path(&segment_file, dir.join(relative_path.as_str()).as_path())?;
-            }
-            write_json_to_path(&archive_index, archive_index_path.as_path())?;
-            write_json_to_path(archive, legacy_archive_path.as_path())?;
-            Ok(())
-        }
-        _ => {
-            if legacy_archive_path.exists() {
-                fs::remove_file(legacy_archive_path.as_path())?;
-            }
-            if archive_index_path.exists() {
-                fs::remove_file(archive_index_path.as_path())?;
-            }
-            if archive_segments_dir.exists() {
-                fs::remove_dir_all(archive_segments_dir.as_path())?;
-            }
-            Ok(())
-        }
-    }
-}
-fn load_tick_consensus_archive_records_from_index(
-    dir: &Path,
-    snapshot: &Snapshot,
-) -> Result<Option<Vec<TickConsensusRecord>>, WorldError> {
-    let archive_index_path = tick_consensus_archive_index_path(dir);
-    if !archive_index_path.exists() {
-        return Ok(None);
-    }
-    let archive_index: TickConsensusArchiveIndex =
-        read_json_from_path(archive_index_path.as_path())?;
-    if archive_index.hot_from_tick != snapshot.tick_consensus_hot_from_tick
-        || archive_index.hot_to_tick != snapshot.tick_consensus_hot_to_tick
-    {
-        return Err(WorldError::DistributedValidationFailed {
-            reason: format!(
-                "tick consensus archive index hot range mismatch: expected_from={:?} actual_from={:?} expected_to={:?} actual_to={:?}",
-                snapshot.tick_consensus_hot_from_tick,
-                archive_index.hot_from_tick,
-                snapshot.tick_consensus_hot_to_tick,
-                archive_index.hot_to_tick,
-            ),
-        });
-    }
-
-    let indexed_record_count = archive_index
-        .archived_segments
-        .iter()
-        .map(|segment| segment.record_count)
-        .sum::<usize>();
-    if indexed_record_count != snapshot.tick_consensus_archived_record_count {
-        return Err(WorldError::DistributedValidationFailed {
-            reason: format!(
-                "tick consensus archive index count mismatch: expected={} actual={}",
-                snapshot.tick_consensus_archived_record_count, indexed_record_count,
-            ),
-        });
-    }
-
-    let mut archived_records = Vec::with_capacity(indexed_record_count);
-    let mut previous_to_tick = None;
-    for segment in archive_index.archived_segments {
-        if let Some(previous_to_tick) = previous_to_tick {
-            if segment.from_tick <= previous_to_tick {
-                return Err(WorldError::DistributedValidationFailed {
-                    reason: format!(
-                        "tick consensus archive segment ordering invalid: previous_to_tick={} current_from_tick={}",
-                        previous_to_tick, segment.from_tick,
-                    ),
-                });
-            }
-        }
-        let segment_path = dir.join(segment.relative_path.as_str());
-        if !segment_path.exists() {
-            return Err(WorldError::DistributedValidationFailed {
-                reason: format!(
-                    "tick consensus archive segment missing: path={}",
-                    segment_path.display(),
-                ),
-            });
-        }
-        let segment_file: TickConsensusArchiveSegmentFile =
-            read_json_from_path(segment_path.as_path())?;
-        if segment_file.records.len() != segment.record_count {
-            return Err(WorldError::DistributedValidationFailed {
-                reason: format!(
-                    "tick consensus archive segment count mismatch: expected={} actual={} path={}",
-                    segment.record_count,
-                    segment_file.records.len(),
-                    segment_path.display(),
-                ),
-            });
-        }
-        if segment_file
-            .records
-            .first()
-            .map(|record| record.block.header.tick)
-            != Some(segment.from_tick)
-            || segment_file
-                .records
-                .last()
-                .map(|record| record.block.header.tick)
-                != Some(segment.to_tick)
-        {
-            return Err(WorldError::DistributedValidationFailed {
-                reason: format!(
-                    "tick consensus archive segment range mismatch: path={}",
-                    segment_path.display(),
-                ),
-            });
-        }
-        let content_hash = hash_json(&segment_file)?;
-        if content_hash != segment.content_hash {
-            return Err(WorldError::DistributedValidationFailed {
-                reason: format!(
-                    "tick consensus archive segment content hash mismatch: expected={} actual={} path={}",
-                    segment.content_hash,
-                    content_hash,
-                    segment_path.display(),
-                ),
-            });
-        }
-        let hash_chain_anchor = segment_file
-            .records
-            .last()
-            .map(|record| record.certificate.block_hash.clone())
-            .unwrap_or_default();
-        if hash_chain_anchor != segment.hash_chain_anchor {
-            return Err(WorldError::DistributedValidationFailed {
-                reason: format!(
-                    "tick consensus archive segment anchor mismatch: expected={} actual={} path={}",
-                    segment.hash_chain_anchor,
-                    hash_chain_anchor,
-                    segment_path.display(),
-                ),
-            });
-        }
-        previous_to_tick = Some(segment.to_tick);
-        archived_records.extend(segment_file.records);
-    }
-
-    Ok(Some(archived_records))
-}
-fn tick_consensus_archive_segment_missing(reason: &str) -> bool {
-    reason.starts_with("tick consensus archive segment missing:")
-}
-fn load_tick_consensus_legacy_archive_records(
-    dir: &Path,
-    snapshot: &Snapshot,
-) -> Result<Vec<TickConsensusRecord>, WorldError> {
-    let archive_path = tick_consensus_archive_path(dir);
-    if !archive_path.exists() {
-        return Err(WorldError::DistributedValidationFailed {
-            reason: format!(
-                "tick consensus archive missing: path={}",
-                archive_path.display()
-            ),
-        });
-    }
-    let archive: TickConsensusArchiveFile = read_json_from_path(archive_path.as_path())?;
-    if archive.archived_records.len() != snapshot.tick_consensus_archived_record_count {
-        return Err(WorldError::DistributedValidationFailed {
-            reason: format!(
-                "tick consensus archive count mismatch: expected={} actual={}",
-                snapshot.tick_consensus_archived_record_count,
-                archive.archived_records.len(),
-            ),
-        });
-    }
-    Ok(archive.archived_records)
-}
-fn hydrate_tick_consensus_snapshot_from_archive(
-    dir: &Path,
-    snapshot: &mut Snapshot,
-) -> Result<(), WorldError> {
-    let (actual_hot_from_tick, actual_hot_to_tick) =
-        tick_consensus_hot_tick_bounds(snapshot.tick_consensus_records.as_slice());
-    if snapshot.tick_consensus_hot_from_tick.is_some()
-        || snapshot.tick_consensus_hot_to_tick.is_some()
-    {
-        if snapshot.tick_consensus_hot_from_tick != actual_hot_from_tick
-            || snapshot.tick_consensus_hot_to_tick != actual_hot_to_tick
-        {
-            return Err(WorldError::DistributedValidationFailed {
-                reason: format!(
-                    "tick consensus hot summary mismatch: expected_from={:?} actual_from={:?} expected_to={:?} actual_to={:?}",
-                    snapshot.tick_consensus_hot_from_tick,
-                    actual_hot_from_tick,
-                    snapshot.tick_consensus_hot_to_tick,
-                    actual_hot_to_tick,
-                ),
-            });
-        }
-    }
-
-    if snapshot.tick_consensus_total_record_count == 0 {
-        snapshot.tick_consensus_total_record_count = snapshot.tick_consensus_records.len();
-    }
-    if snapshot.tick_consensus_archived_record_count == 0 {
-        return Ok(());
-    }
-
-    let archived_records = match load_tick_consensus_archive_records_from_index(dir, snapshot) {
-        Ok(Some(records)) => records,
-        Ok(None) => load_tick_consensus_legacy_archive_records(dir, snapshot)?,
-        Err(WorldError::DistributedValidationFailed { reason })
-            if tick_consensus_archive_segment_missing(reason.as_str()) =>
-        {
-            if tick_consensus_archive_path(dir).exists() {
-                load_tick_consensus_legacy_archive_records(dir, snapshot)?
-            } else {
-                return Err(WorldError::DistributedValidationFailed { reason });
-            }
-        }
-        Err(err) => return Err(err),
-    };
-    hydrate_tick_consensus_snapshot_from_archived_records(snapshot, archived_records)
-}
-fn hydrate_tick_consensus_snapshot_from_archived_records(
-    snapshot: &mut Snapshot,
-    archived_records: Vec<TickConsensusRecord>,
-) -> Result<(), WorldError> {
-    let mut records = archived_records;
-    records.extend(snapshot.tick_consensus_records.clone());
-    if records.len() != snapshot.tick_consensus_total_record_count {
-        return Err(WorldError::DistributedValidationFailed {
-            reason: format!(
-                "tick consensus total count mismatch: expected={} actual={}",
-                snapshot.tick_consensus_total_record_count,
-                records.len(),
-            ),
-        });
-    }
-    snapshot.tick_consensus_records = records;
-    // This counter describes the on-disk split only. Once the archive is
-    // materialized, the in-memory snapshot is complete and a second hydration
-    // pass must be a no-op.
-    snapshot.tick_consensus_archived_record_count = 0;
-    snapshot.tick_consensus_total_record_count = snapshot.tick_consensus_records.len();
-    let (hot_from_tick, hot_to_tick) =
-        tick_consensus_hot_tick_bounds(snapshot.tick_consensus_records.as_slice());
-    snapshot.tick_consensus_hot_from_tick = hot_from_tick;
-    snapshot.tick_consensus_hot_to_tick = hot_to_tick;
-    Ok(())
-}
-fn load_persisted_tick_consensus_snapshot_from_dir(dir: &Path) -> Result<Snapshot, WorldError> {
-    if let Some((mut snapshot, _)) = World::try_load_from_distfs_sidecar(dir)? {
-        if !World::has_indexed_sidecar_generation(dir)? {
-            hydrate_tick_consensus_snapshot_from_archive(dir, &mut snapshot)?;
-        }
-        return Ok(snapshot);
-    }
-    let mut snapshot = Snapshot::load_json(dir.join(SNAPSHOT_FILE))?;
-    hydrate_tick_consensus_snapshot_from_archive(dir, &mut snapshot)?;
-    Ok(snapshot)
 }
 fn validate_compatible_legacy_distfs_payloads(
     dir: &Path,
@@ -682,6 +297,7 @@ impl World {
     // ---------------------------------------------------------------------
     // Persistence
     // ---------------------------------------------------------------------
+
     pub fn snapshot(&self) -> Snapshot {
         let manifest_hash = super::super::util::hash_json(&self.manifest).unwrap_or_default();
         let mut snapshot = self.snapshot_with_chain_resource_context(
@@ -697,14 +313,13 @@ impl World {
             manifest_hash.clone(),
             manifest_hash,
         );
-        if self.chain_resource_manifest.is_schema_current()
-            && self.chain_resource_manifest.world_id != "unbound"
-        {
+        if chain_resource_manifest_has_external_context(&self.chain_resource_manifest) {
             snapshot.chain_resource_manifest = self.chain_resource_manifest.clone();
             snapshot.latest_chain_resource_delta = self.latest_chain_resource_delta.clone();
         }
         snapshot
     }
+
     pub fn snapshot_with_chain_resource_context(
         &self,
         chain_resource_context: super::super::ChainResourceDerivationContext<'_>,
@@ -741,7 +356,12 @@ impl World {
             module_limits_max: self.module_limits_max.clone(),
             state: self.state.clone(),
             journal_len: self.journal.len(),
-            last_event_id: self.next_event_id.saturating_sub(1),
+            last_event_id: self
+                .journal
+                .events
+                .last()
+                .map(|event| event.id)
+                .unwrap_or_else(|| self.next_event_id.saturating_sub(1)),
             journal_commitment: self.journal.commitment().unwrap_or_default(),
             event_id_era: self.next_event_id_era,
             next_action_id: self.next_action_id,
@@ -933,7 +553,7 @@ impl World {
     }
 
     fn recover_loaded_runtime_world(mut world: Self, dir: &Path) -> Result<Self, WorldError> {
-        world.attach_persistence_dir(dir);
+        *world.persistence_dir.borrow_mut() = Some(dir.to_path_buf());
         let cognition_before = world.cognition.clone();
         world.recover_cognition()?;
         if world.cognition != cognition_before {
@@ -947,12 +567,19 @@ impl World {
         if !store.registry_path().exists() {
             return Ok(());
         }
-        let registry = store.load_registry()?;
-        self.module_registry = registry;
-        self.module_artifacts.clear();
-        self.module_artifact_bytes.clear();
+        self.prepare_module_store_load(&store)?.install(self);
+        Ok(())
+    }
 
-        for record in self.module_registry.records.values() {
+    fn prepare_module_store_load(
+        &self,
+        store: &ModuleStore,
+    ) -> Result<PreparedModuleStoreLoad, WorldError> {
+        let registry = store.load_registry()?;
+        let mut artifacts = BTreeSet::new();
+        let mut artifact_bytes = BTreeMap::new();
+
+        for record in registry.records.values() {
             let wasm_hash = &record.manifest.wasm_hash;
             let meta = store.read_meta(wasm_hash)?;
             if meta != record.manifest {
@@ -968,11 +595,14 @@ impl World {
                 });
             }
             self.validate_module_artifact_identity(&record.manifest)?;
-            self.module_artifacts.insert(wasm_hash.clone());
-            self.module_artifact_bytes
-                .insert(wasm_hash.clone(), bytes.into());
+            artifacts.insert(wasm_hash.clone());
+            artifact_bytes.insert(wasm_hash.clone(), bytes.into());
         }
-        Ok(())
+        Ok(PreparedModuleStoreLoad {
+            registry,
+            artifacts,
+            artifact_bytes,
+        })
     }
 
     fn load_selected_generation_module_artifacts_from_dir(
@@ -1034,8 +664,17 @@ impl World {
         world.snapshot_catalog = snapshot.snapshot_catalog;
         world.chain_resource_manifest = snapshot.chain_resource_manifest;
         world.latest_chain_resource_delta = snapshot.latest_chain_resource_delta;
-        world.next_event_id = snapshot.last_event_id.saturating_add(1).max(1);
-        world.next_event_id_era = snapshot.event_id_era;
+        if snapshot.journal_len > 0 && snapshot.last_event_id == u64::MAX {
+            // A checkpoint whose retained prefix ends at the rolling maximum
+            // resumes in the next event-id era.  Keep the legacy synthetic
+            // empty-journal fixture behavior (first allocation is MAX), but
+            // make a real rollover tail replayable and deterministic.
+            world.next_event_id = 1;
+            world.next_event_id_era = snapshot.event_id_era;
+        } else {
+            world.next_event_id = snapshot.last_event_id.saturating_add(1).max(1);
+            world.next_event_id_era = snapshot.event_id_era;
+        }
         world.next_action_id = snapshot.next_action_id.max(1);
         world.next_action_id_era = snapshot.action_id_era;
         world.next_intent_id = snapshot.next_intent_id.max(1);

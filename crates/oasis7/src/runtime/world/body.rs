@@ -1,8 +1,72 @@
 use super::super::{
-    ActionId, CausedBy, DomainEvent, RejectReason, WorldError, WorldEventBody, WorldEventId,
+    ActionId, BodyOverlay, CausedBy, DomainEvent, RejectReason, WorldError, WorldEventBody,
+    WorldEventId, WorldTime,
 };
 use super::World;
 use crate::models::{BodyKernelView, BodySlotType, CargoEntityEntry};
+
+/// Typed reducer delta for a validated body attribute update.
+///
+/// The delta is derived entirely from the current canonical view and the
+/// candidate update.  Derivation does not touch canonical state; installation
+/// is kept at the append seam so future transition-buffer work can stage the
+/// same fields without changing the public operation contract.
+#[derive(Debug, Clone, PartialEq)]
+pub(super) struct PreparedBodyAttributesUpdate {
+    agent_id: String,
+    body_view: BodyKernelView,
+    last_active: WorldTime,
+}
+
+impl PreparedBodyAttributesUpdate {
+    fn new(agent_id: String, body_view: BodyKernelView, last_active: WorldTime) -> Self {
+        Self {
+            agent_id,
+            body_view,
+            last_active,
+        }
+    }
+
+    pub(super) fn install(self, world: &mut World) -> Result<(), WorldError> {
+        let cell = world.state.agents.get_mut(&self.agent_id).ok_or_else(|| {
+            WorldError::AgentNotFound {
+                agent_id: self.agent_id.clone(),
+            }
+        })?;
+        cell.state.body_view = self.body_view;
+        cell.last_active = self.last_active;
+        Ok(())
+    }
+
+    pub(super) fn install_infallible(self, world: &mut World) {
+        let cell = world
+            .state
+            .agents
+            .get_mut(&self.agent_id)
+            .expect("prepared body target was validated before publication");
+        cell.state.body_view = self.body_view;
+        cell.last_active = self.last_active;
+    }
+
+    pub(super) fn body_overlay(&self) -> BodyOverlay {
+        BodyOverlay::new(
+            self.agent_id.clone(),
+            self.body_view.clone(),
+            self.last_active,
+        )
+    }
+
+    pub(super) fn matches_event(&self, event: &DomainEvent) -> bool {
+        matches!(
+            event,
+            DomainEvent::BodyAttributesUpdated {
+                agent_id,
+                view,
+                ..
+            } if agent_id == &self.agent_id && view == &self.body_view
+        )
+    }
+}
 
 const BODY_MASS_KG_MIN: u64 = 1;
 const BODY_MASS_KG_MAX: u64 = 1_000_000_000;
@@ -41,14 +105,22 @@ impl World {
             return self.record_body_attributes_reject(agent_id, reason, caused_by);
         }
         let reason = reason.into();
-        self.append_event(
-            WorldEventBody::Domain(DomainEvent::BodyAttributesUpdated {
-                agent_id,
-                view,
-                reason,
-            }),
-            caused_by,
-        )
+        let body = WorldEventBody::Domain(DomainEvent::BodyAttributesUpdated {
+            agent_id: agent_id.clone(),
+            view: view.clone(),
+            reason,
+        });
+        let prepared = PreparedBodyAttributesUpdate::new(agent_id, view, self.state.time);
+
+        // This test seam is deliberately after typed delta preparation and
+        // before the append flow installs any canonical reducer state.
+        if self.take_fail_next_append_after_reducer_for_test() {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: "injected append_event failure after reducer delta preparation".to_string(),
+            });
+        }
+
+        self.append_event_with_prepared_body(body, caused_by, prepared)
     }
 
     pub fn record_body_attributes_reject(
@@ -59,9 +131,13 @@ impl World {
     ) -> Result<WorldEventId, WorldError> {
         let agent_id = agent_id.into();
         let reason = reason.into();
-        self.append_event(
-            WorldEventBody::Domain(DomainEvent::BodyAttributesRejected { agent_id, reason }),
+        self.append_body_attributes_rejected(
+            WorldEventBody::Domain(DomainEvent::BodyAttributesRejected {
+                agent_id: agent_id.clone(),
+                reason,
+            }),
             caused_by,
+            agent_id,
         )
     }
 

@@ -91,17 +91,21 @@ impl World {
                     return Ok(true);
                 }
 
-                match self.register_module_artifact(wasm_hash.clone(), compiled_bytes.as_slice()) {
-                    Ok(()) => {
-                        self.append_event(
-                            WorldEventBody::Domain(DomainEvent::ModuleArtifactDeployed {
+                match self.prepare_module_artifact_registration(
+                    wasm_hash.clone(),
+                    compiled_bytes.as_slice(),
+                ) {
+                    Ok(registration) => {
+                        self.append_module_artifact_deployment(
+                            DomainEvent::ModuleArtifactDeployed {
                                 publisher_agent_id: publisher_agent_id.clone(),
                                 wasm_hash,
                                 bytes_len: compiled_bytes.len() as u64,
                                 fee_kind,
                                 fee_amount,
-                            }),
+                            },
                             Some(CausedBy::Action(action_id)),
+                            registration,
                         )?;
                     }
                     Err(err) => {
@@ -166,17 +170,20 @@ impl World {
                     return Ok(true);
                 }
 
-                match self.register_module_artifact(wasm_hash.clone(), wasm_bytes.as_slice()) {
-                    Ok(()) => {
-                        self.append_event(
-                            WorldEventBody::Domain(DomainEvent::ModuleArtifactDeployed {
+                match self
+                    .prepare_module_artifact_registration(wasm_hash.clone(), wasm_bytes.as_slice())
+                {
+                    Ok(registration) => {
+                        self.append_module_artifact_deployment(
+                            DomainEvent::ModuleArtifactDeployed {
                                 publisher_agent_id: publisher_agent_id.clone(),
                                 wasm_hash: wasm_hash.clone(),
                                 bytes_len: wasm_bytes.len() as u64,
                                 fee_kind,
                                 fee_amount,
-                            }),
+                            },
                             Some(CausedBy::Action(action_id)),
+                            registration,
                         )?;
                     }
                     Err(err) => {
@@ -407,8 +414,8 @@ impl World {
                 }
                 let order_id = self.peek_next_module_market_order_id();
 
-                self.append_event(
-                    WorldEventBody::Domain(DomainEvent::ModuleArtifactListed {
+                self.append_module_marketplace_order(
+                    DomainEvent::ModuleArtifactListed {
                         seller_agent_id: seller_agent_id.clone(),
                         wasm_hash: wasm_hash.clone(),
                         price_kind: *price_kind,
@@ -416,10 +423,9 @@ impl World {
                         order_id,
                         fee_kind,
                         fee_amount,
-                    }),
+                    },
                     Some(CausedBy::Action(action_id)),
                 )?;
-                self.try_match_module_listing(wasm_hash.as_str(), action_id)?;
                 Ok(true)
             }
             Action::BuyModuleArtifact {
@@ -729,17 +735,16 @@ impl World {
                 }
 
                 let order_id = self.peek_next_module_market_order_id();
-                self.append_event(
-                    WorldEventBody::Domain(DomainEvent::ModuleArtifactBidPlaced {
+                self.append_module_marketplace_order(
+                    DomainEvent::ModuleArtifactBidPlaced {
                         bidder_agent_id: bidder_agent_id.clone(),
                         wasm_hash: wasm_hash.clone(),
                         order_id,
                         price_kind: *price_kind,
                         price_amount: *price_amount,
-                    }),
+                    },
                     Some(CausedBy::Action(action_id)),
                 )?;
-                self.try_match_module_listing(wasm_hash.as_str(), action_id)?;
                 Ok(true)
             }
             Action::CancelModuleArtifactBid {
@@ -907,20 +912,18 @@ impl World {
                     return Ok(true);
                 }
 
-                self.append_event(
-                    WorldEventBody::Domain(DomainEvent::ModuleArtifactDestroyed {
+                let retirement = self.prepare_module_artifact_retirement(wasm_hash.clone());
+                self.append_module_artifact_retirement(
+                    DomainEvent::ModuleArtifactDestroyed {
                         owner_agent_id: owner_agent_id.clone(),
                         wasm_hash: wasm_hash.clone(),
                         reason: reason.clone(),
                         fee_kind,
                         fee_amount,
-                    }),
+                    },
                     Some(CausedBy::Action(action_id)),
+                    retirement,
                 )?;
-                self.module_artifacts.remove(wasm_hash);
-                self.module_artifact_bytes.remove(wasm_hash);
-                let max_cached = self.module_cache.max_cached_modules();
-                self.module_cache = oasis7_wasm_abi::ModuleCache::new(max_cached);
                 Ok(true)
             }
             _ => Ok(false),

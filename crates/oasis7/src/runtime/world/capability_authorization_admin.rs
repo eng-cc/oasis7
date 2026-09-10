@@ -8,7 +8,7 @@ use super::super::capability_authorization::{
     CapabilityAgentIdentity, CapabilityAuthorityFinalityProof, CapabilityAuthorityRecord,
 };
 use super::super::governance::GovernanceFinalityCertificate;
-use super::super::{CapabilityAuthorizationEvent, WorldError, WorldEventBody};
+use super::super::{CapabilityAuthorizationEvent, WorldError};
 use super::World;
 use super::capability_authorization::{deny, validate_agent_identity, validate_authority_record};
 
@@ -45,12 +45,9 @@ impl World {
         {
             return Err(deny("authority record world does not match live world"));
         }
-        self.append_event(
-            WorldEventBody::CapabilityAuthorization(
-                CapabilityAuthorizationEvent::AuthorityInstalledWithProof { record, proof },
-            ),
-            None,
-        )?;
+        self.append_capability_authorization_event_batch(vec![
+            CapabilityAuthorizationEvent::AuthorityInstalledWithProof { record, proof },
+        ])?;
         Ok(())
     }
 
@@ -179,12 +176,9 @@ impl World {
         {
             return Ok(());
         }
-        self.append_event(
-            WorldEventBody::CapabilityAuthorization(
-                CapabilityAuthorizationEvent::AgentIdentityInstalled { agent_id, identity },
-            ),
-            None,
-        )?;
+        self.append_capability_authorization_event_batch(vec![
+            CapabilityAuthorizationEvent::AgentIdentityInstalled { agent_id, identity },
+        ])?;
         Ok(())
     }
 }

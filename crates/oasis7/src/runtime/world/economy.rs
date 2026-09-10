@@ -15,10 +15,11 @@ use super::super::{
     M4_PRODUCT_IRON_INGOT_MODULE_ID, M4_PRODUCT_LOGISTICS_DRONE_MODULE_ID,
     M4_PRODUCT_MODULE_RACK_MODULE_ID, M4_PRODUCT_MOTOR_MODULE_ID, M4_PRODUCT_SENSOR_PACK_MODULE_ID,
     MaterialLedgerId, ProductValidationReceiptV1, RejectReason, WorldError, WorldEvent,
-    WorldEventBody,
+    WorldEventBody, WorldTime,
 };
 use super::World;
 use crate::simulator::ResourceKind;
+
 const FACTORY_BUILD_DECISION_EMIT_KIND: &str = "economy.factory_build_decision";
 const RECIPE_EXECUTION_PLAN_EMIT_KIND: &str = "economy.recipe_execution_plan";
 const PRODUCT_VALIDATION_EMIT_KIND: &str = "economy.product_validation";
@@ -56,6 +57,7 @@ const BOTTLENECK_LOW_STOCK_THRESHOLDS: &[(&str, i64)] = &[
     ("control_chip", 4),
     ("motor_mk1", 4),
 ];
+
 pub(super) fn invalid_recipe_plan_stack_note(
     label: &str,
     stacks: &[MaterialStack],
@@ -89,6 +91,10 @@ pub(super) enum EconomyActionResolution {
 }
 
 impl World {
+    // ---------------------------------------------------------------------
+    // Economy runtime helpers
+    // ---------------------------------------------------------------------
+
     pub fn pending_factory_builds_len(&self) -> usize {
         self.state.pending_factory_builds.len()
     }
@@ -138,8 +144,6 @@ impl World {
                     return Ok(EconomyActionResolution::Rejected(reason));
                 }
                 let preferred_ledger = MaterialLedgerId::agent(builder_agent_id.clone());
-                // Module output may alter the candidate cost, but it may not
-                // make a new submission affordable from the world ledger.
                 let request_ledger = preferred_ledger;
                 let request = FactoryBuildRequest {
                     factory_id: spec.factory_id.clone(),
@@ -248,10 +252,6 @@ impl World {
                     ));
                 }
                 let preferred_ledger = factory.input_ledger.clone();
-                // New module-backed submissions are evaluated against the
-                // factory input ledger only. The ledger-aware view remains
-                // informational; admission below still consumes only the
-                // resolved factory ledger.
                 let available_inputs = self.ledger_material_stacks(&preferred_ledger);
 
                 let request = RecipeExecutionRequest {
@@ -334,23 +334,13 @@ impl World {
                     stack: stack.clone(),
                     deterministic_seed: *deterministic_seed,
                 };
-                let decision = if let Some(cached) = self.cached_product_validation_decision(
+                let decision = self.evaluate_product_with_module(
+                    module_id.as_str(),
                     envelope.id,
                     None,
-                    requester_agent_id,
-                    module_id,
-                    stack,
-                )? {
-                    cached
-                } else {
-                    self.evaluate_product_with_module(
-                        module_id.as_str(),
-                        envelope.id,
-                        None,
-                        &request,
-                        sandbox,
-                    )?
-                };
+                    &request,
+                    sandbox,
+                )?;
                 if !decision.accepted {
                     let notes = if decision.notes.is_empty() {
                         vec![format!("product module denied: {}", decision.product_id)]
@@ -376,9 +366,7 @@ impl World {
         }
     }
 
-    pub(super) fn process_due_economy_jobs(&mut self) -> Result<Vec<WorldEvent>, WorldError> {
-        let now = self.state.time;
-        let mut emitted = Vec::new();
+    fn prepare_due_economy_event_bodies_at(&self, now: WorldTime) -> Vec<WorldEventBody> {
         let mut due_builds: Vec<_> = self
             .state
             .pending_factory_builds
@@ -393,19 +381,15 @@ impl World {
                 job.job_id,
             )
         });
+
+        let mut bodies = Vec::with_capacity(due_builds.len());
         for job in due_builds {
-            self.append_event(
-                WorldEventBody::Domain(DomainEvent::FactoryBuilt {
-                    job_id: job.job_id,
-                    builder_agent_id: job.builder_agent_id,
-                    site_id: job.site_id,
-                    spec: job.spec,
-                }),
-                None,
-            )?;
-            if let Some(event) = self.journal.events.last() {
-                emitted.push(event.clone());
-            }
+            bodies.push(WorldEventBody::Domain(DomainEvent::FactoryBuilt {
+                job_id: job.job_id,
+                builder_agent_id: job.builder_agent_id,
+                site_id: job.site_id,
+                spec: job.spec,
+            }));
         }
 
         let mut due_recipes: Vec<_> = self
@@ -423,23 +407,38 @@ impl World {
             )
         });
 
+        bodies.reserve(due_recipes.len());
         for job in due_recipes {
-            self.append_event(
-                WorldEventBody::Domain(DomainEvent::RecipeCompleted {
-                    job_id: job.job_id,
-                    requester_agent_id: job.requester_agent_id,
-                    factory_id: job.factory_id,
-                    recipe_id: job.recipe_id,
-                    accepted_batches: job.accepted_batches,
-                    produce: job.produce,
-                    byproducts: job.byproducts,
-                    output_ledger: job.output_ledger,
-                    bottleneck_tags: job.bottleneck_tags,
-                    logistics_route_ids: job.logistics_route_ids,
-                    logistics_path_ids: job.logistics_path_ids,
-                }),
-                None,
-            )?;
+            bodies.push(WorldEventBody::Domain(DomainEvent::RecipeCompleted {
+                job_id: job.job_id,
+                requester_agent_id: job.requester_agent_id,
+                factory_id: job.factory_id,
+                recipe_id: job.recipe_id,
+                accepted_batches: job.accepted_batches,
+                produce: job.produce,
+                byproducts: job.byproducts,
+                output_ledger: job.output_ledger,
+                bottleneck_tags: job.bottleneck_tags,
+                logistics_route_ids: job.logistics_route_ids,
+                logistics_path_ids: job.logistics_path_ids,
+            }));
+        }
+        bodies
+    }
+
+    #[cfg(test)]
+    pub(crate) fn prepared_due_economy_event_bodies_for_test(
+        &self,
+        now: WorldTime,
+    ) -> Vec<WorldEventBody> {
+        self.prepare_due_economy_event_bodies_at(now)
+    }
+
+    pub(super) fn process_due_economy_jobs(&mut self) -> Result<Vec<WorldEvent>, WorldError> {
+        let bodies = self.prepare_due_economy_event_bodies_at(self.state.time);
+        let mut emitted = Vec::with_capacity(bodies.len());
+        for body in bodies {
+            self.append_event(body, None)?;
             if let Some(event) = self.journal.events.last() {
                 emitted.push(event.clone());
             }
@@ -698,9 +697,9 @@ impl World {
         Ok(emitted)
     }
 
-    pub(super) fn process_factory_depreciation(&mut self) -> Result<Vec<WorldEvent>, WorldError> {
+    fn prepare_factory_depreciation_event_bodies(&self) -> Vec<WorldEventBody> {
         let now = self.state.time;
-        let mut emitted = Vec::new();
+        let mut prepared = Vec::new();
         let mut factories: Vec<_> = self.state.factories.values().cloned().collect();
         factories.sort_by(|lhs, rhs| lhs.factory_id.cmp(&rhs.factory_id));
         let mut active_jobs_by_factory = BTreeMap::<String, i64>::new();
@@ -756,15 +755,28 @@ impl World {
                 continue;
             }
 
-            self.append_event(
-                WorldEventBody::Domain(DomainEvent::FactoryDurabilityChanged {
+            prepared.push(WorldEventBody::Domain(
+                DomainEvent::FactoryDurabilityChanged {
                     factory_id: factory.factory_id.clone(),
                     previous_durability_ppm: current,
                     durability_ppm,
                     reason: FACTORY_DEPRECIATION_REASON.to_string(),
-                }),
-                None,
-            )?;
+                },
+            ));
+        }
+        prepared
+    }
+
+    #[cfg(test)]
+    pub(crate) fn prepare_factory_depreciation_event_bodies_for_test(&self) -> Vec<WorldEventBody> {
+        self.prepare_factory_depreciation_event_bodies()
+    }
+
+    pub(super) fn process_factory_depreciation(&mut self) -> Result<Vec<WorldEvent>, WorldError> {
+        let prepared = self.prepare_factory_depreciation_event_bodies();
+        let mut emitted = Vec::with_capacity(prepared.len());
+        for body in prepared {
+            self.append_event(body, None)?;
             if let Some(event) = self.journal.events.last() {
                 emitted.push(event.clone());
             }
@@ -935,36 +947,6 @@ impl World {
         self.extract_economy_emit(module_id, &trace_id, &output, PRODUCT_VALIDATION_EMIT_KIND)
     }
 
-    fn cached_product_validation_decision(
-        &self,
-        job_id: ActionId,
-        validation_index: Option<u32>,
-        requester_agent_id: &str,
-        module_id: &str,
-        stack: &MaterialStack,
-    ) -> Result<Option<ProductValidationDecision>, WorldError> {
-        let Some(receipts) = self.state.product_validation_receipts.get(&job_id) else {
-            return Ok(None);
-        };
-        let Some(receipt) = receipts
-            .iter()
-            .find(|receipt| receipt.validation_index == validation_index)
-        else {
-            return Ok(None);
-        };
-        if receipt.requester_agent_id != requester_agent_id
-            || receipt.module_id != module_id
-            || receipt.stack != *stack
-        {
-            return Err(WorldError::ResourceBalanceInvalid {
-                reason: format!(
-                    "product validation retry conflicts with persisted receipt: job_id={job_id} index={validation_index:?}"
-                ),
-            });
-        }
-        Ok(Some(receipt.decision.clone()))
-    }
-
     fn resolve_product_module_for_stack(&self, product_kind: &str) -> Option<String> {
         if let Some(module_id) = Self::builtin_product_module_for_kind(product_kind) {
             if self.module_registry.active.contains_key(module_id) {
@@ -1122,6 +1104,10 @@ impl World {
         })
     }
 
+    fn material_stacks(&self) -> Vec<MaterialStack> {
+        self.ledger_material_stacks(&MaterialLedgerId::world())
+    }
+
     fn material_stacks_by_ledger(&self) -> BTreeMap<String, Vec<MaterialStack>> {
         self.state
             .material_ledgers
@@ -1133,6 +1119,18 @@ impl World {
                 )
             })
             .collect()
+    }
+
+    fn select_material_consume_ledger_for_module_request(
+        &self,
+        preferred_ledger: MaterialLedgerId,
+        consume: &[MaterialStack],
+    ) -> MaterialLedgerId {
+        if self.has_materials_in_ledger(&preferred_ledger, consume) {
+            preferred_ledger
+        } else {
+            MaterialLedgerId::world()
+        }
     }
 }
 

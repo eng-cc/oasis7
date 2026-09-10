@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import importlib.util
 import json
 import pathlib
@@ -33,6 +34,8 @@ FIELD_NAMES = {
     "pr": "PR",
     "test_tier_required": "Test Tier Required",
     "last_pm_update": "Last PM Update",
+    "loop": "Loop",
+    "change_id": "Change ID",
 }
 SINGLE_SELECT_FIELDS = {
     "Status",
@@ -42,6 +45,7 @@ SINGLE_SELECT_FIELDS = {
     "Workflow Phase",
     "Priority",
     "Test Tier Required",
+    "Loop",
 }
 TASK_UID_RE = re.compile(r"task_uid:\s*(task_[0-9a-f]{32})")
 ISSUE_URL_RE = re.compile(r"/issues/(\d+)(?:$|[?#])")
@@ -109,6 +113,9 @@ def load_archived_tasks(root: pathlib.Path, statuses: set[str]) -> list[OrderedD
             continue
         record = json.loads(line)
         task = OrderedDict(record.get("task") or {})
+        archived_mapping = record.get("github_project_mapping") or {}
+        if archived_mapping.get("loop_binding") is not None:
+            task["loop_binding"] = archived_mapping["loop_binding"]
         task_uid = str(task.get("task_uid") or record.get("task_uid") or "")
         status = str(task.get("status") or "")
         if not task_uid.startswith("task_") or status not in statuses:
@@ -542,6 +549,9 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
         lines.append("Source refs:")
         for ref in source_refs:
             lines.append(f"- `{ref}`")
+    if task.get("loop_binding") is not None:
+        encoded = base64.urlsafe_b64encode(json.dumps(task["loop_binding"], sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).decode().rstrip("=")
+        lines.append(f"- loop_binding_b64: `{encoded}`")
     acceptance = task.get("acceptance") or []
     if acceptance:
         lines.append("")
@@ -553,7 +563,7 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
 
 def project_field_values(task: OrderedDict[str, Any]) -> dict[str, str]:
     status = str(task.get("status") or "")
-    return {
+    result = {
         "Status": "In Progress" if status == "done" and task.get("workflow_phase") not in {"closed_without_merge", "post_merge_done"} else project_status_for(status),
         "Task UID": str(task.get("task_uid") or ""),
         "Owner Role": str(task.get("owner_role") or ""),
@@ -567,6 +577,10 @@ def project_field_values(task: OrderedDict[str, Any]) -> dict[str, str]:
         "Test Tier Required": "n/a",
         "Last PM Update": first_date(task.get("updated_at")),
     }
+    if task.get("loop_binding") is not None:
+        binding = task["loop_binding"]
+        result.update({"Loop": str(binding.get("loop") or ""), "Change ID": str(binding.get("change_id") or "")})
+    return result
 
 
 def create_issue(repo: str, task: OrderedDict[str, Any]) -> str:
@@ -882,6 +896,8 @@ def main(argv: list[str] | None = None) -> int:
                 live_record["project_field_values"] = confirmed_project_field_values(
                     dict(record.get("project_field_values") or {}), task, skipped, only_fields
                 )
+                if task.get("loop_binding") is not None:
+                    live_record["loop_binding"] = task["loop_binding"]
                 if content_id:
                     live_record["content_id"] = content_id
                 persist_mapping(mapping_path, mapping)
@@ -989,6 +1005,8 @@ def main(argv: list[str] | None = None) -> int:
         record["project_field_values"] = confirmed_project_field_values(
             current_values, task, skipped, only_fields
         )
+        if task.get("loop_binding") is not None:
+            record["loop_binding"] = task["loop_binding"]
         persist_mapping(mapping_path, mapping)
         summary["tasks"].append(
             {

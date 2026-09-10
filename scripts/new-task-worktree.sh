@@ -36,6 +36,11 @@ Options:
   --pm-owner-role <role>  Create the GitHub-backed task in the target worktree,
                           move it to committed, and record workflow start with this owner role
   --pm-title <title>      Required when using --pm-owner-role
+  --pm-task-uid <uid>     Resume the exact existing task; never creates a replacement
+  --pm-loop <loop>        Manual product/system/code binding (requires frozen binding)
+  --pm-loop-binding <file> Frozen oasis7.loop-task/v1 JSON binding
+  --pm-request-key <key>  Stable identity for this logical manual request
+  --pm-manual-request-ref <ref> Auditable current manual request
   --pm-priority <P0-P3>   Optional GitHub-backed task priority (default: P2)
   --pm-source-ref <ref>   Required when using --pm-owner-role; may be passed multiple times
   --pm-doc-ref <ref>      Optional task doc ref; may be passed multiple times
@@ -69,6 +74,11 @@ PM_BOOTSTRAP=0
 PM_OWNER_ROLE=""
 PM_TITLE=""
 PM_PRIORITY="P2"
+PM_EXISTING_UID=""
+PM_LOOP=""
+PM_LOOP_BINDING=""
+PM_REQUEST_KEY=""
+PM_MANUAL_REQUEST_REF=""
 declare -a PM_SOURCE_REFS=()
 declare -a PM_DOC_REFS=()
 declare -a PM_RELATED_PRD=()
@@ -78,6 +88,11 @@ POSITIONAL=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --pm-task-uid) PM_EXISTING_UID="${2:-}"; shift 2 ;;
+    --pm-loop) PM_BOOTSTRAP=1; PM_LOOP="${2:-}"; shift 2 ;;
+    --pm-loop-binding) PM_BOOTSTRAP=1; PM_LOOP_BINDING="${2:-}"; shift 2 ;;
+    --pm-request-key) PM_BOOTSTRAP=1; PM_REQUEST_KEY="${2:-}"; shift 2 ;;
+    --pm-manual-request-ref) PM_MANUAL_REQUEST_REF="${2:-}"; shift 2 ;;
     --base)
       BASE_REF="${2:-}"
       shift 2
@@ -160,6 +175,13 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -n "$PM_EXISTING_UID" ]]; then
+  RESUME_CMD=("$PYTHON_BIN" "$ROOT_DIR/scripts/pm/loop-bootstrap.py" resume --root "$ROOT_DIR" --task-uid "$PM_EXISTING_UID" --manual-request-ref "$PM_MANUAL_REQUEST_REF")
+  [[ -z "$PM_LOOP" ]] || RESUME_CMD+=(--loop "$PM_LOOP")
+  [[ -z "$PM_LOOP_BINDING" ]] || RESUME_CMD+=(--binding "$PM_LOOP_BINDING")
+  exec "${RESUME_CMD[@]}"
+fi
 
 if [[ "${#POSITIONAL[@]}" -ne 2 ]]; then
   echo "error: expected <module> and <task>" >&2
@@ -371,12 +393,24 @@ fi
 
 if [[ -z "$BRANCH_NAME" ]]; then
   BRANCH_NAME="task/${MODULE_SLUG}-${TASK_SLUG}"
+  [[ -z "$PM_LOOP" ]] || BRANCH_NAME="codex/${MODULE_SLUG}-${TASK_SLUG}"
 fi
 
 if [[ -n "$TARGET_PATH" ]]; then
   TARGET_PATH="$(resolve_abs_path "$TARGET_PATH")"
 else
   TARGET_PATH="$(resolve_abs_path "$WORKTREES_ROOT/$FAMILY_REPO_NAME-$MODULE_SLUG-$TASK_SLUG")"
+fi
+
+LOOP_RESUME=0
+if [[ -n "$PM_LOOP" || -n "$PM_LOOP_BINDING" || -n "$PM_REQUEST_KEY" ]]; then
+  PM_LOOP_BINDING="$(resolve_abs_path "$PM_LOOP_BINDING")"
+  BASE_REF="$("$PYTHON_BIN" "$ROOT_DIR/scripts/pm/loop-bootstrap.py" prepare --root "$ROOT_DIR" --binding "$PM_LOOP_BINDING" --loop "$PM_LOOP" --request-key "$PM_REQUEST_KEY" --manual-request-ref "$PM_MANUAL_REQUEST_REF" --worktree "$TARGET_PATH" --branch "$BRANCH_NAME")"
+  if [[ -e "$TARGET_PATH/.git" ]]; then
+    [[ "$(git -C "$TARGET_PATH" symbolic-ref --short HEAD)" == "$BRANCH_NAME" ]] || { echo 'error: manual bootstrap branch drift' >&2; exit 1; }
+    [[ "$(cd "$TARGET_PATH" && cd "$(git rev-parse --git-common-dir)" && pwd -P)" == "$COMMON_GIT_DIR" ]] || { echo 'error: manual bootstrap common-dir drift' >&2; exit 1; }
+    LOOP_RESUME=1
+  fi
 fi
 
 if [[ "$ALLOW_DIRTY_SOURCE" != "1" ]] && [[ -n "$(git status --short)" ]]; then
@@ -389,13 +423,13 @@ if ! git rev-parse --verify --quiet "$BASE_REF^{commit}" >/dev/null; then
   exit 1
 fi
 
-if [[ -e "$TARGET_PATH" ]]; then
+if [[ -e "$TARGET_PATH" && "$LOOP_RESUME" != "1" ]]; then
   echo "error: target worktree path already exists: $TARGET_PATH" >&2
   echo "hint: choose a different task slug/path or remove the old directory first" >&2
   exit 1
 fi
 
-if existing_branch_path="$(branch_checkout_path "$BRANCH_NAME" 2>/dev/null)"; then
+if [[ "$LOOP_RESUME" != "1" ]] && existing_branch_path="$(branch_checkout_path "$BRANCH_NAME" 2>/dev/null)"; then
   echo "error: branch is already checked out in another worktree: $BRANCH_NAME" >&2
   echo "hint: existing worktree path: $existing_branch_path" >&2
   exit 1
@@ -407,7 +441,9 @@ python3 "$CANONICAL_REPO_ROOT/scripts/pm/terminal-tombstone-guard.py" \
 mkdir -p "$(dirname "$TARGET_PATH")"
 
 MODE="create_new_branch"
-if git show-ref --verify --quiet "refs/heads/$BRANCH_NAME"; then
+if [[ "$LOOP_RESUME" == "1" ]]; then
+  MODE="resume_manual_bootstrap"
+elif git show-ref --verify --quiet "refs/heads/$BRANCH_NAME"; then
   MODE="attach_existing_branch"
   git worktree add --quiet "$TARGET_PATH" "$BRANCH_NAME"
 else
@@ -425,6 +461,8 @@ TARGET_CARGO_TARGET_PATH="$TARGET_PATH/target"
 CARGO_TARGET_LINKED=0
 
 cleanup_bootstrap_failure() {
+  # A resumed worktree may contain user work; never remove it on setup failure.
+  [[ "$LOOP_RESUME" != "1" ]] || return 0
   git worktree remove --force "$TARGET_PATH" >/dev/null 2>&1 || true
   if [[ "$MODE" == "create_new_branch" ]]; then
     git branch -D "$BRANCH_NAME" >/dev/null 2>&1 || true
@@ -433,6 +471,13 @@ cleanup_bootstrap_failure() {
 
 if [[ -f "$CANONICAL_CONFIG_SOURCE" ]]; then
   CANONICAL_CONFIG_EXISTS=1
+fi
+if [[ "$LOOP_RESUME" == "1" && ( -e "$TARGET_CONFIG_PATH" || -L "$TARGET_CONFIG_PATH" ) ]]; then
+  if [[ ! -f "$TARGET_CONFIG_PATH" || -L "$TARGET_CONFIG_PATH" ]]; then
+    echo "error: invalid existing config.toml in resumed worktree: $TARGET_CONFIG_PATH" >&2
+    exit 1
+  fi
+elif [[ "$CANONICAL_CONFIG_EXISTS" == "1" ]]; then
   if ! cp "$CANONICAL_CONFIG_SOURCE" "$TARGET_CONFIG_PATH"; then
     cleanup_bootstrap_failure
     echo "error: failed to copy canonical config.toml into target worktree; cleaned up created worktree" >&2
@@ -441,23 +486,31 @@ if [[ -f "$CANONICAL_CONFIG_SOURCE" ]]; then
   CANONICAL_CONFIG_COPIED=1
 fi
 
-if ! CARGO_SHARED_TARGET_DIR="$(cd "$TARGET_PATH" && ./scripts/cargo-dev.sh --print-target-dir)"; then
+if ! CARGO_SHARED_TARGET_DIR="$(cd "$TARGET_PATH" && "$ROOT_DIR/scripts/cargo-dev.sh" --print-target-dir)"; then
   cleanup_bootstrap_failure
   echo "error: failed to resolve shared cargo target dir from target worktree; cleaned up created worktree" >&2
   exit 1
 fi
 
 if [[ -e "$TARGET_CARGO_TARGET_PATH" || -L "$TARGET_CARGO_TARGET_PATH" ]]; then
-  cleanup_bootstrap_failure
-  echo "error: target worktree already has a target path before shared cargo cache bootstrap: $TARGET_CARGO_TARGET_PATH" >&2
-  exit 1
+  if [[ "$LOOP_RESUME" != "1" || ! -L "$TARGET_CARGO_TARGET_PATH" ]] || \
+    ! "$PYTHON_BIN" - "$TARGET_CARGO_TARGET_PATH" "$CARGO_SHARED_TARGET_DIR" <<'PY'
+import os,sys
+raise SystemExit(0 if os.path.realpath(sys.argv[1]) == os.path.realpath(sys.argv[2]) else 1)
+PY
+  then
+    cleanup_bootstrap_failure
+    echo "error: invalid existing target path before shared cargo cache bootstrap: $TARGET_CARGO_TARGET_PATH" >&2
+    exit 1
+  fi
+  CARGO_TARGET_LINKED=1
 fi
 if ! mkdir -p "$CARGO_SHARED_TARGET_DIR"; then
   cleanup_bootstrap_failure
   echo "error: failed to create shared cargo target dir; cleaned up created worktree: $CARGO_SHARED_TARGET_DIR" >&2
   exit 1
 fi
-if ! ln -s "$CARGO_SHARED_TARGET_DIR" "$TARGET_CARGO_TARGET_PATH"; then
+if [[ "$CARGO_TARGET_LINKED" != "1" ]] && ! ln -s "$CARGO_SHARED_TARGET_DIR" "$TARGET_CARGO_TARGET_PATH"; then
   cleanup_bootstrap_failure
   echo "error: failed to link target worktree cargo target to shared cache; cleaned up created worktree" >&2
   exit 1
@@ -502,7 +555,7 @@ PM_EXECUTION_LOG_PATH=""
 PM_BOOTSTRAP_SNAPSHOT_PATH=""
 PM_BOOTSTRAP_SNAPSHOT_DIGEST=""
 if [[ "$PM_BOOTSTRAP" == "1" ]]; then
-  NEW_TASK_CMD=(./scripts/pm/new-task.sh
+  NEW_TASK_CMD=(env "PM_ROOT_DIR=$TARGET_PATH" "$ROOT_DIR/scripts/pm/new-task.sh"
     --owner-role "$PM_OWNER_ROLE"
     --title "$PM_TITLE"
     --module "$MODULE_SLUG"
@@ -526,6 +579,9 @@ if [[ "$PM_BOOTSTRAP" == "1" ]]; then
     done
   fi
   NEW_TASK_CMD+=(--worktree-hint "$TARGET_PATH" --json)
+  if [[ -n "$PM_LOOP" ]]; then
+    NEW_TASK_CMD+=(--loop-binding "$PM_LOOP_BINDING" --request-key "$PM_REQUEST_KEY" --bootstrap-base-oid "$BASE_REF")
+  fi
 
   set +e
   PM_TASK_JSON="$(
@@ -545,22 +601,31 @@ if [[ "$PM_BOOTSTRAP" == "1" ]]; then
   PM_TASK_UID="$(extract_json_field task_uid "$PM_TASK_JSON")"
   PM_TASK_PATH="$(extract_json_field task_path "$PM_TASK_JSON")"
   PM_EXECUTION_LOG_PATH="$(extract_json_field execution_log_path "$PM_TASK_JSON")"
+  if [[ -n "$PM_LOOP" && "$(extract_json_field resumed_existing_task "$PM_TASK_JSON")" == "true" ]]; then
+    exec "$PYTHON_BIN" "$ROOT_DIR/scripts/pm/loop-bootstrap.py" resume --root "$ROOT_DIR" --task-uid "$PM_TASK_UID" --manual-request-ref "$PM_MANUAL_REQUEST_REF" --loop "$PM_LOOP" --binding "$PM_LOOP_BINDING"
+  fi
 
   set +e
   (
+    if [[ -n "$PM_LOOP" ]]; then
+      "$PYTHON_BIN" "$ROOT_DIR/scripts/pm/loop-bootstrap.py" resume --root "$ROOT_DIR" \
+        --task-uid "$PM_TASK_UID" --manual-request-ref "$PM_MANUAL_REQUEST_REF" \
+        --loop "$PM_LOOP" --binding "$PM_LOOP_BINDING" >/dev/null
+    else
     cd "$TARGET_PATH" &&
-    ./scripts/pm/move-task.sh --task-uid "$PM_TASK_UID" --to-status committed >/dev/null &&
-    ./scripts/pm/workflow-report.sh --phase start --role "$PM_OWNER_ROLE" --task-uid "$PM_TASK_UID" >/dev/null &&
-    ./scripts/pm/bootstrap-task-snapshot.py validate-or-create \
+    PM_ROOT_DIR="$TARGET_PATH" "$ROOT_DIR/scripts/pm/move-task.sh" --task-uid "$PM_TASK_UID" --to-status committed >/dev/null &&
+    PM_ROOT_DIR="$TARGET_PATH" "$ROOT_DIR/scripts/pm/workflow-report.sh" --phase start --role "$PM_OWNER_ROLE" --task-uid "$PM_TASK_UID" >/dev/null &&
+    "$ROOT_DIR/scripts/pm/bootstrap-task-snapshot.py" validate-or-create \
       --repo-root "$TARGET_PATH" \
       --task-uid "$PM_TASK_UID" \
       --producer scripts/new-task-worktree.sh >/dev/null
+    fi
   )
   BOOTSTRAP_STATUS=$?
   set -e
   if [[ "$BOOTSTRAP_STATUS" -ne 0 ]]; then
     echo "error: failed to move/start bootstrapped GitHub-backed PM task; preserved worktree/branch for recovery: $TARGET_PATH" >&2
-    echo "resume-bootstrap: cd '$TARGET_PATH' && ./scripts/pm/refresh-task-cache.sh --task-uid '$PM_TASK_UID' --json, then retry move-task/workflow-report/bootstrap-task-snapshot" >&2
+    echo "resume-bootstrap: PM_ROOT_DIR='$TARGET_PATH' '$ROOT_DIR/scripts/pm/refresh-task-cache.sh' --task-uid '$PM_TASK_UID' --json; continue lifecycle helpers from '$ROOT_DIR' with this explicit target" >&2
     exit "$BOOTSTRAP_STATUS"
   fi
   PM_BOOTSTRAP_SNAPSHOT_PATH="$TARGET_PATH/.pm/scratch/$PM_TASK_UID/bootstrap-task-snapshot.json"

@@ -116,6 +116,11 @@ pub struct SchedulerWakeV1 {
     pub agent_session_id: String,
     pub agent_turn_id: String,
     pub decision_request_id: String,
+    /// The request digest that originated this continuation wake. Legacy
+    /// scheduler snapshots may omit it; Runtime adapters must fail closed
+    /// until an authoritative migration supplies the digest.
+    #[serde(default)]
+    pub request_digest: String,
     pub next_wake_tick: u64,
     pub eligible_since_tick: u64,
     pub starvation_deadline_tick: u64,
@@ -147,6 +152,7 @@ impl SchedulerWakeV1 {
             || !bounded(&self.agent_session_id)
             || !bounded(&self.agent_turn_id)
             || !bounded(&self.decision_request_id)
+            || (!self.request_digest.is_empty() && !bounded(&self.request_digest))
             || !bounded(&self.status)
             || !bounded(&self.pending_reason)
             || self.status != "pending"

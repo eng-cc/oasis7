@@ -851,6 +851,43 @@ fn trusted_executor_receipt_world_head_includes_command_commit() {
 }
 
 #[test]
+fn trusted_executor_failure_after_prepare_publishes_no_observable_delta() {
+    let mut world = fixture_world();
+    let grant = signed_grant(grant_json(json!({})));
+    let (catalog, response) = prepared_invocation(
+        &world,
+        &grant,
+        catalog_json(json!({})),
+        response_json(json!({})),
+    );
+    install_invocation_context(&mut world, &grant, &catalog, &response);
+    let snapshot_before = world.snapshot();
+    let journal_before = world.journal().clone();
+    let consensus_before = world.tick_consensus_records().to_vec();
+    let mut sandbox = ConfiguredSandbox {
+        calls: 0,
+        output: ModuleOutput {
+            new_state: Some(vec![0x52]),
+            effects: Vec::new(),
+            emits: vec![oasis7_wasm_abi::ModuleEmit {
+                kind: "trusted.prepare.failure".to_string(),
+                payload: json!({"prepared": true}),
+            }],
+            tick_lifecycle: None,
+            output_bytes: 8,
+        },
+    };
+
+    world.fail_next_append_after_publication_prepare_for_test();
+    execute_without_invocation_context(&mut world, grant, catalog, response, &mut sandbox)
+        .expect_err("injected post-prepare failure must abort trusted command publication");
+
+    assert_eq!(world.snapshot(), snapshot_before);
+    assert_eq!(world.journal(), &journal_before);
+    assert_eq!(world.tick_consensus_records(), consensus_before.as_slice());
+}
+
+#[test]
 fn trusted_executor_rejects_linked_effect_queue_overflow_atomically() {
     let effect_grant = signed_effect_grant_with_selectors();
     let mut world = fixture_world_with_revocations_and_budget_and_effect_grant(

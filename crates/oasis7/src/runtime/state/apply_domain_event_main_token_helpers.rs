@@ -1,6 +1,11 @@
 use super::*;
+use crate::runtime::events::MainTokenFeeKind;
+use crate::runtime::main_token::{
+    MAIN_TOKEN_TREASURY_BUCKET_GAS_FEE, MAIN_TOKEN_TREASURY_BUCKET_MODULE_FEE,
+    MAIN_TOKEN_TREASURY_BUCKET_SLASH, RestrictedStarterClaimGrantStatus,
+};
 
-pub(super) fn add_main_token_treasury_balance(
+pub(crate) fn add_main_token_treasury_balance(
     balances: &mut BTreeMap<String, u64>,
     bucket_id: &str,
     amount: u64,
@@ -20,7 +25,7 @@ pub(super) fn add_main_token_treasury_balance(
     Ok(())
 }
 
-pub(in super::super) fn debit_main_token_treasury_balance(
+pub(crate) fn debit_main_token_treasury_balance(
     balances: &mut BTreeMap<String, u64>,
     bucket_id: &str,
     amount: u64,
@@ -38,7 +43,7 @@ pub(in super::super) fn debit_main_token_treasury_balance(
     Ok(())
 }
 
-pub(super) fn debit_main_token_restricted_starter_claim_balance(
+pub(crate) fn debit_main_token_restricted_starter_claim_balance(
     balances: &mut BTreeMap<String, MainTokenAccountBalance>,
     account_id: &str,
     amount: u64,
@@ -63,7 +68,7 @@ pub(super) fn debit_main_token_restricted_starter_claim_balance(
     Ok(())
 }
 
-pub(super) fn restricted_starter_claim_grant_can_be_inserted(
+pub(crate) fn restricted_starter_claim_grant_can_be_inserted(
     state: &WorldState,
     beneficiary_account_id: &str,
 ) -> bool {
@@ -91,7 +96,7 @@ pub(super) fn restricted_starter_claim_grant_can_be_inserted(
     restricted_balance == 0 && locked_restricted == 0
 }
 
-pub(super) fn main_token_fee_treasury_bucket(fee_kind: MainTokenFeeKind) -> &'static str {
+pub(crate) fn main_token_fee_treasury_bucket(fee_kind: MainTokenFeeKind) -> &'static str {
     match fee_kind {
         MainTokenFeeKind::GasBaseFee => MAIN_TOKEN_TREASURY_BUCKET_GAS_FEE,
         MainTokenFeeKind::SlashPenalty => MAIN_TOKEN_TREASURY_BUCKET_SLASH,
@@ -99,7 +104,7 @@ pub(super) fn main_token_fee_treasury_bucket(fee_kind: MainTokenFeeKind) -> &'st
     }
 }
 
-pub(super) fn resolve_main_token_effective_config_for_epoch(
+pub(crate) fn resolve_main_token_effective_config_for_epoch(
     state: &WorldState,
     epoch_index: u64,
 ) -> &MainTokenConfig {

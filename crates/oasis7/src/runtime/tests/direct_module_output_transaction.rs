@@ -104,6 +104,12 @@ fn world_with_active_module() -> World {
         .expect("register deterministic module artifact");
     activate_module_manifest(&mut world, active_manifest(&wasm_hash));
 
+    world
+}
+
+fn world_with_active_module_and_authority_drift() -> World {
+    let mut world = world_with_active_module();
+
     // The active module was installed under the builtin authority.  Changing
     // the authority for this same tick makes the next publication fail after
     // apply_event_body_at has already applied the module state update.
@@ -135,7 +141,7 @@ fn assert_no_partial_publication(
 
 #[test]
 fn direct_module_call_output_failure_does_not_publish_partial_world() {
-    let mut world = world_with_active_module();
+    let mut world = world_with_active_module_and_authority_drift();
     let snapshot_before = world.snapshot();
     let journal_before = world.journal().clone();
     let pending_effects_before = world.pending_effects_len();
@@ -177,8 +183,43 @@ fn direct_module_call_output_failure_does_not_publish_partial_world() {
 }
 
 #[test]
-fn direct_module_command_output_failure_does_not_publish_partial_world() {
+fn direct_module_call_failure_after_prepare_publishes_no_observable_delta() {
     let mut world = world_with_active_module();
+    let snapshot_before = world.snapshot();
+    let journal_before = world.journal().clone();
+    let consensus_before = world.tick_consensus_records().to_vec();
+    let pending_effects_before = world.pending_effects_len();
+    let backpressure_before = world.runtime_backpressure_stats().clone();
+    let mut sandbox = FixedOutputSandbox::state_writer();
+
+    world.fail_next_append_after_publication_prepare_for_test();
+    let error = world
+        .execute_module_call(
+            MODULE_ID,
+            "trace-direct-output-post-prepare",
+            vec![0x03],
+            &mut sandbox,
+        )
+        .expect_err("post-prepare failure must abort direct module publication");
+
+    assert!(matches!(error, WorldError::ResourceBalanceInvalid { .. }));
+    assert_eq!(
+        sandbox.calls, 1,
+        "the direct call must reach the sandbox once"
+    );
+    assert_no_partial_publication(
+        &world,
+        &snapshot_before,
+        &journal_before,
+        pending_effects_before,
+        &backpressure_before,
+    );
+    assert_eq!(world.tick_consensus_records(), consensus_before.as_slice());
+}
+
+#[test]
+fn direct_module_command_output_failure_does_not_publish_partial_world() {
+    let mut world = world_with_active_module_and_authority_drift();
     let snapshot_before = world.snapshot();
     let journal_before = world.journal().clone();
     let pending_effects_before = world.pending_effects_len();
@@ -218,7 +259,7 @@ fn direct_module_command_output_failure_does_not_publish_partial_world() {
 
 #[test]
 fn direct_module_failure_audit_publication_is_atomic() {
-    let mut world = world_with_active_module();
+    let mut world = world_with_active_module_and_authority_drift();
     let snapshot_before = world.snapshot();
     let journal_before = world.journal().clone();
     let pending_effects_before = world.pending_effects_len();

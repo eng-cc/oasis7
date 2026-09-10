@@ -43,6 +43,8 @@ Use `./scripts/pm/append-execution-log.sh` when a durable local execution ledger
 
 ## Guardrails
 
+For an explicitly bound manual loop task, use `scripts/pm/loop.py` with the effective trusted tool root before admission or continuation. Preserve the exact loop binding, immutable contracts, scope and user merge hold. At stable waits return resumable evidence without heartbeat or scheduled continuation; completion never starts another task. See [manual entry authority](../../../doc/engineering/workflow/source-of-truth.md#manual-three-loop-transition). Legacy tasks retain their existing route.
+
 Preserve declared write scopes and task truth; do not claim broader readiness than the evidence tier.
 
 ## Known Failure Modes

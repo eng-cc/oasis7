@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "oasis7.loop-contract/v1",
+  "type": "object",
+  "required": ["schema", "contract_id", "revision", "owner_loop", "source_head", "merged_head", "approval_ref", "content_refs", "upstream_contracts", "scope", "eligibility"],
+  "properties": {
+    "schema": {"const": "oasis7.loop-contract/v1"},
+    "contract_id": {"type": "string", "minLength": 1},
+    "revision": {"type": "integer", "minimum": 1},
+    "owner_loop": {"enum": ["product", "system"]},
+    "source_head": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "merged_head": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "approval_ref": {"type": "object", "required": ["repository", "pr_number"], "properties": {"repository": {"const": "eng-cc/oasis7"}, "pr_number": {"type": "integer", "minimum": 1}}},
+    "content_refs": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["path", "sha256", "clauses"], "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "clauses": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}}}},
+    "upstream_contracts": {"type": "array", "items": {"$ref": "loop-task.schema.json#/$defs/input"}},
+    "scope": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "eligibility": {"type": "object", "required": ["new_tasks", "in_flight", "release"], "properties": {"new_tasks": {"type": "boolean"}, "in_flight": {"type": "boolean"}, "release": {"type": "boolean"}}}
+  }
+}

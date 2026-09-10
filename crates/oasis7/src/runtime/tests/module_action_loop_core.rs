@@ -12,7 +12,7 @@ const SOURCE_COMPILER_ENV: &str = "OASIS7_MODULE_SOURCE_COMPILER";
 const SOURCE_MAX_FILES_ENV: &str = "OASIS7_MODULE_SOURCE_MAX_FILES";
 const SOURCE_COMPILE_TIMEOUT_MS_ENV: &str = "OASIS7_MODULE_SOURCE_COMPILE_TIMEOUT_MS";
 const SOURCE_SANDBOX_SECRET_ENV: &str = "OASIS7_SOURCE_SANDBOX_TEST_SECRET";
-static SOURCE_COMPILER_ENV_LOCK: Mutex<()> = Mutex::new(());
+pub(crate) static SOURCE_COMPILER_ENV_LOCK: Mutex<()> = Mutex::new(());
 const TEST_FINALITY_SIGNER_NODE_1: &str = "governance.local.finality.signer.1";
 const TEST_FINALITY_SIGNER_SEED_1: &str = "oasis7-governance-local-finality-signer-1-v1";
 const TEST_FINALITY_SIGNER_NODE_2: &str = "governance.local.finality.signer.2";
@@ -326,13 +326,13 @@ impl Drop for EnvVarGuard {
                 unsafe {
                     oasis7::env_mut::set_var(self.key.as_str(), value);
                 }
-            },
+            }
             None => {
                 // SAFETY: This test/setup code mutates process environment in a controlled scope.
                 unsafe {
                     oasis7::env_mut::remove_var(self.key.as_str());
                 }
-            },
+            }
         }
     }
 }
@@ -401,11 +401,11 @@ fn compile_module_artifact_from_source_registers_compiled_artifact() {
     write_fake_source_compiler(compiler_script.as_path(), produced_wasm_bytes);
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::set_var(SOURCE_COMPILER_ENV, compiler_script.as_os_str());
+        oasis7::env_mut::set_var(SOURCE_COMPILER_ENV, compiler_script.as_os_str());
     }
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::remove_var(removed_old_brand_compiler.as_str());
+        oasis7::env_mut::remove_var(removed_old_brand_compiler.as_str());
     }
 
     let mut world = World::new();
@@ -462,14 +462,14 @@ fn compile_module_artifact_from_source_rejects_removed_old_brand_compiler_env() 
     );
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::set_var(SOURCE_COMPILER_ENV, primary_script.as_os_str());
+        oasis7::env_mut::set_var(SOURCE_COMPILER_ENV, primary_script.as_os_str());
     }
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::set_var(
-                removed_old_brand_compiler.as_str(),
-                removed_old_brand_script.as_os_str(),
-            );
+        oasis7::env_mut::set_var(
+            removed_old_brand_compiler.as_str(),
+            removed_old_brand_script.as_os_str(),
+        );
     }
 
     let mut world = World::new();
@@ -510,11 +510,11 @@ fn compile_module_artifact_from_source_rejects_in_production_release_policy() {
     write_fake_source_compiler(compiler_script.as_path(), "compiled-in-production");
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::set_var(SOURCE_COMPILER_ENV, compiler_script.as_os_str());
+        oasis7::env_mut::set_var(SOURCE_COMPILER_ENV, compiler_script.as_os_str());
     }
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::remove_var(removed_old_brand_compiler.as_str());
+        oasis7::env_mut::remove_var(removed_old_brand_compiler.as_str());
     }
 
     let mut world = World::new();
@@ -568,11 +568,11 @@ fn compile_module_artifact_from_source_rejects_when_file_count_exceeds_limit() {
     let _removed_old_brand_env_guard = EnvVarGuard::capture(removed_old_brand_max_files.as_str());
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::set_var(SOURCE_MAX_FILES_ENV, "1");
+        oasis7::env_mut::set_var(SOURCE_MAX_FILES_ENV, "1");
     }
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::remove_var(removed_old_brand_max_files.as_str());
+        oasis7::env_mut::remove_var(removed_old_brand_max_files.as_str());
     }
 
     let mut world = World::new();
@@ -606,15 +606,15 @@ fn compile_module_artifact_from_source_rejects_when_compiler_times_out() {
     );
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::set_var(SOURCE_COMPILER_ENV, compiler_script.as_os_str());
+        oasis7::env_mut::set_var(SOURCE_COMPILER_ENV, compiler_script.as_os_str());
     }
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::remove_var(removed_old_brand_compiler.as_str());
+        oasis7::env_mut::remove_var(removed_old_brand_compiler.as_str());
     }
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::set_var(SOURCE_COMPILE_TIMEOUT_MS_ENV, "20");
+        oasis7::env_mut::set_var(SOURCE_COMPILE_TIMEOUT_MS_ENV, "20");
     }
 
     let mut world = World::new();
@@ -652,15 +652,15 @@ fn compile_module_artifact_from_source_sanitizes_env_and_isolates_tmpdir() {
     );
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::set_var(SOURCE_COMPILER_ENV, compiler_script.as_os_str());
+        oasis7::env_mut::set_var(SOURCE_COMPILER_ENV, compiler_script.as_os_str());
     }
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::remove_var(removed_old_brand_compiler.as_str());
+        oasis7::env_mut::remove_var(removed_old_brand_compiler.as_str());
     }
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::set_var(SOURCE_SANDBOX_SECRET_ENV, "must-not-leak");
+        oasis7::env_mut::set_var(SOURCE_SANDBOX_SECRET_ENV, "must-not-leak");
     }
 
     let mut world = World::new();
@@ -829,10 +829,12 @@ fn install_module_from_artifact_action_without_activate_keeps_module_inactive() 
 
     let key = ModuleRegistry::record_key(&manifest.module_id, &manifest.version);
     assert!(world.module_registry().records.contains_key(&key));
-    assert!(!world
-        .module_registry()
-        .active
-        .contains_key(&manifest.module_id));
+    assert!(
+        !world
+            .module_registry()
+            .active
+            .contains_key(&manifest.module_id)
+    );
 }
 
 #[test]

@@ -598,7 +598,7 @@ export function createViewerFeedbackModule({
         case "product_validation_rejected":
           return localeText(locale, "产品验证失败", "Product validation failed");
         default:
-          return resolvedBlockerKind || null;
+          return resolvedBlockerKind ? localeText(locale, "当前阻塞", "Current blocker") : null;
       }
     })();
     const factoryProductionFailureDisposition = normalizeFactoryProductionFailureDisposition(

@@ -638,6 +638,7 @@ fn committed_feedback_without_awaiting_outcome_cannot_use_compatibility_lineage(
             context.agent_session_id.as_str(),
             context.agent_turn_id.as_str(),
             context.decision_request_id.as_str(),
+            context.request_digest.to_string().as_str(),
         )
         .expect("explicit lease expiry removes the awaiting outcome");
     let receipt = runtime_receipt_for_feedback(&committed);

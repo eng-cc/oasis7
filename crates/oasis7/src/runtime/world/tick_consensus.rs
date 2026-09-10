@@ -1,10 +1,11 @@
+use super::super::state::CommandStateOverlay;
 use super::super::util::{hash_json, sha256_hex};
 use super::super::{
-    CausedBy, RuntimeCommittedTickContext, TICK_BLOCK_HEADER_SCHEMA_V1,
-    TICK_BLOCK_HEADER_SCHEMA_V2, TickBlock, TickBlockHeader, TickCertificate,
-    TickConsensusDriftReport, TickConsensusRecord, TickConsensusRejectionAuditEvent,
-    TickConsensusSubmissionRole, TickExecutionDigest, WorldError, WorldEvent, WorldEventBody,
-    WorldEventId, WorldTime,
+    BodyOverlay, CausedBy, ProductValidationDeliveryCursor, RuntimeCommittedTickContext,
+    TICK_BLOCK_HEADER_SCHEMA_V1, TICK_BLOCK_HEADER_SCHEMA_V2, TickBlock, TickBlockHeader,
+    TickCertificate, TickConsensusDriftReport, TickConsensusRecord,
+    TickConsensusRejectionAuditEvent, TickConsensusSubmissionRole, TickExecutionDigest, WorldError,
+    WorldEvent, WorldEventBody, WorldEventId, WorldStateProjection, WorldTime,
 };
 use super::World;
 use serde::Serialize;
@@ -23,10 +24,10 @@ struct TickEventHashInput<'a> {
 }
 
 #[derive(Serialize)]
-struct StateRootProjection<'a> {
-    state: &'a super::super::WorldState,
-    manifest_hash: &'a str,
-    policy_hash: &'a str,
+pub(super) struct StateRootProjection<'a, T: ?Sized> {
+    pub(super) state: &'a T,
+    pub(super) manifest_hash: &'a str,
+    pub(super) policy_hash: &'a str,
 }
 
 impl World {
@@ -244,11 +245,48 @@ impl World {
             .filter(|event| event.time == tick)
             .cloned()
             .collect();
+        let state_root = self.current_state_root_hash()?;
+        self.build_tick_consensus_record_from_events(
+            tick,
+            source_node_id,
+            submission_role,
+            committed_context,
+            &tick_events,
+            state_root,
+        )
+    }
+
+    pub(super) fn build_tick_consensus_record_for_prepared_events(
+        &self,
+        tick: WorldTime,
+        tick_events: &[WorldEvent],
+        state_root: String,
+    ) -> Result<TickConsensusRecord, WorldError> {
+        let source_node_id = self
+            .validate_tick_consensus_source_node(self.tick_consensus_authority_source.as_str())?;
+        self.build_tick_consensus_record_from_events(
+            tick,
+            source_node_id.as_str(),
+            TickConsensusSubmissionRole::Authority,
+            None,
+            tick_events,
+            state_root,
+        )
+    }
+
+    fn build_tick_consensus_record_from_events(
+        &self,
+        tick: WorldTime,
+        source_node_id: &str,
+        submission_role: TickConsensusSubmissionRole,
+        committed_context: Option<&RuntimeCommittedTickContext>,
+        tick_events: &[WorldEvent],
+        state_root: String,
+    ) -> Result<TickConsensusRecord, WorldError> {
         let ordered_event_ids: Vec<WorldEventId> =
             tick_events.iter().map(|event| event.id).collect();
         let ordered_action_ids = Self::extract_ordered_action_ids(&tick_events);
         let events_hash = self.hash_tick_events(&tick_events)?;
-        let state_root = self.current_state_root_hash()?;
         let parent_hash = self.parent_hash_for_tick(tick);
         let executor_version = env!("CARGO_PKG_VERSION").to_string();
         let randomness_seed = Self::derive_tick_randomness_seed(parent_hash.as_str(), tick);
@@ -309,6 +347,154 @@ impl World {
                 signatures,
             },
         })
+    }
+
+    pub(super) fn validate_tick_consensus_candidate_for_prepared_publication(
+        &self,
+        candidate: &TickConsensusRecord,
+        prepared_tick_events: &[WorldEvent],
+        prepared_state_root: &str,
+    ) -> Result<(), WorldError> {
+        // This candidate is an internal, authority-only publication assembled
+        // from the validated configured authority source.  It is never an
+        // externally submitted candidate, so a failed check aborts the
+        // prepared transaction instead of emitting the mutable rejection
+        // audit used by the propagation/submission path.  The source, role,
+        // signature, prepared journal, and projected root are all checked
+        // before the first canonical install below.
+        self.validate_tick_consensus_record_metadata(candidate)?;
+        let source = candidate.certificate.authority_source.trim();
+        if candidate.certificate.submission_role == TickConsensusSubmissionRole::Authority
+            && source != self.tick_consensus_authority_source
+        {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: format!(
+                    "authority submission source mismatch: expected={} found={source}",
+                    self.tick_consensus_authority_source
+                ),
+            });
+        }
+
+        let expected_event_ids: Vec<WorldEventId> =
+            prepared_tick_events.iter().map(|event| event.id).collect();
+        if candidate.block.ordered_event_ids != expected_event_ids {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: format!(
+                    "prepared tick event ids mismatch tick={}",
+                    candidate.block.header.tick
+                ),
+            });
+        }
+        let expected_action_ids = Self::extract_ordered_action_ids(prepared_tick_events);
+        if candidate.block.ordered_action_ids != expected_action_ids {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: format!(
+                    "prepared tick action ids mismatch tick={}",
+                    candidate.block.header.tick
+                ),
+            });
+        }
+        let expected_action_batch_hash = hash_json(&expected_action_ids)?;
+        if candidate.block.execution_digest.action_batch_hash != expected_action_batch_hash {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: format!(
+                    "prepared tick action batch hash mismatch tick={}",
+                    candidate.block.header.tick
+                ),
+            });
+        }
+        let expected_events_hash = self.hash_tick_events(prepared_tick_events)?;
+        if candidate.block.header.events_hash != expected_events_hash {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: format!(
+                    "prepared tick events hash mismatch tick={}",
+                    candidate.block.header.tick
+                ),
+            });
+        }
+        if candidate.block.header.state_root != prepared_state_root
+            || candidate.block.execution_digest.state_projection_hash != prepared_state_root
+        {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: format!(
+                    "prepared tick state root mismatch tick={}",
+                    candidate.block.header.tick
+                ),
+            });
+        }
+        let expected_domain_events_hash = Self::hash_tick_domain_events(prepared_tick_events)?;
+        if candidate.block.execution_digest.domain_events_hash != expected_domain_events_hash {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: format!(
+                    "prepared tick domain events hash mismatch tick={}",
+                    candidate.block.header.tick
+                ),
+            });
+        }
+        if candidate.block.event_count != expected_event_ids.len() as u32
+            || candidate.certificate.block_hash != candidate.block.block_hash()
+        {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: format!(
+                    "prepared tick block integrity mismatch tick={}",
+                    candidate.block.header.tick
+                ),
+            });
+        }
+
+        let Some(existing) = self
+            .tick_consensus_records
+            .iter()
+            .find(|record| record.block.header.tick == candidate.block.header.tick)
+        else {
+            return Ok(());
+        };
+        if existing.certificate.submission_role == TickConsensusSubmissionRole::Authority {
+            if candidate.certificate.submission_role != TickConsensusSubmissionRole::Authority {
+                return Err(WorldError::DistributedValidationFailed {
+                    reason: format!(
+                        "non-authoritative submission rejected at tick {} because authoritative commitment already exists",
+                        candidate.block.header.tick
+                    ),
+                });
+            }
+            if existing.certificate.authority_source != candidate.certificate.authority_source {
+                return Err(WorldError::DistributedValidationFailed {
+                    reason: format!(
+                        "conflicting authority sources at tick {}: existing={} attempted={}",
+                        candidate.block.header.tick,
+                        existing.certificate.authority_source,
+                        candidate.certificate.authority_source
+                    ),
+                });
+            }
+        } else if candidate.certificate.submission_role == TickConsensusSubmissionRole::Propagation
+            && existing.certificate.authority_source != candidate.certificate.authority_source
+            && existing.certificate.block_hash != candidate.certificate.block_hash
+        {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: format!(
+                    "propagation conflict at tick {} requires authoritative adjudication",
+                    candidate.block.header.tick
+                ),
+            });
+        }
+        Ok(())
+    }
+
+    pub(super) fn install_prepared_tick_consensus_record(
+        &mut self,
+        candidate: TickConsensusRecord,
+    ) {
+        if let Some(index) = self
+            .tick_consensus_records
+            .iter()
+            .position(|record| record.block.header.tick == candidate.block.header.tick)
+        {
+            self.tick_consensus_records[index] = candidate;
+        } else {
+            self.tick_consensus_records.push(candidate);
+        }
     }
 
     fn commit_tick_consensus_record_submission(
@@ -623,15 +809,335 @@ impl World {
         ordered
     }
 
-    pub(crate) fn current_state_root_hash(&self) -> Result<String, WorldError> {
+    pub(super) fn state_root_hash_with_body_overlay(
+        &self,
+        body_overlay: &BodyOverlay,
+    ) -> Result<String, WorldError> {
         let manifest_hash = self.current_manifest_hash()?;
         let policy_hash = hash_json(&self.policies)?;
+        let state_projection =
+            WorldStateProjection::borrowed(&self.state).with_body_overlay(body_overlay.clone());
         let projection = StateRootProjection {
-            state: &self.state,
+            state: &state_projection,
             manifest_hash: manifest_hash.as_str(),
             policy_hash: policy_hash.as_str(),
         };
         hash_json(&projection)
+    }
+
+    pub(super) fn state_root_hash_with_product_validation_delivery_cursor(
+        &self,
+        cursor: &ProductValidationDeliveryCursor,
+    ) -> Result<String, WorldError> {
+        let manifest_hash = self.current_manifest_hash()?;
+        let policy_hash = hash_json(&self.policies)?;
+        let state_projection = WorldStateProjection::borrowed(&self.state)
+            .with_product_validation_delivery_cursor(cursor);
+        hash_json(&StateRootProjection {
+            state: &state_projection,
+            manifest_hash: manifest_hash.as_str(),
+            policy_hash: policy_hash.as_str(),
+        })
+    }
+
+    pub(super) fn state_root_hash_with_command_overlay(
+        &self,
+        command_overlay: CommandStateOverlay<'_>,
+    ) -> Result<String, WorldError> {
+        let manifest_hash = self.current_manifest_hash()?;
+        let policy_hash = hash_json(&self.policies)?;
+        let state_projection =
+            WorldStateProjection::borrowed(&self.state).with_command_overlay(command_overlay);
+        let projection = StateRootProjection {
+            state: &state_projection,
+            manifest_hash: manifest_hash.as_str(),
+            policy_hash: policy_hash.as_str(),
+        };
+        hash_json(&projection)
+    }
+
+    pub(super) fn state_root_hash_with_module_instance_overlay(
+        &self,
+        prepared: &super::super::state::module_instance_transition::PreparedModuleInstance,
+    ) -> Result<String, WorldError> {
+        let manifest_hash = self.current_manifest_hash()?;
+        self.state_root_hash_with_module_instance_and_manifest_hash(prepared, &manifest_hash)
+    }
+
+    pub(super) fn state_root_hash_with_module_instance_and_manifest_hash(
+        &self,
+        prepared: &super::super::state::module_instance_transition::PreparedModuleInstance,
+        manifest_hash: &str,
+    ) -> Result<String, WorldError> {
+        let policy_hash = hash_json(&self.policies)?;
+        let agents = prepared.routed_agents();
+        let module_states = std::collections::BTreeMap::new();
+        let state_projection = WorldStateProjection::borrowed(&self.state)
+            .with_command_overlay(CommandStateOverlay {
+                module_states: &module_states,
+                resources: &prepared.resources,
+                agents: &agents,
+            })
+            .with_module_instance_overlay(prepared);
+        hash_json(&StateRootProjection {
+            state: &state_projection,
+            manifest_hash,
+            policy_hash: policy_hash.as_str(),
+        })
+    }
+
+    pub(super) fn state_root_hash_with_module_release_overlay(
+        &self,
+        instance: Option<&super::super::state::module_instance_transition::PreparedModuleInstance>,
+        release: &super::super::state::module_release_transition::PreparedModuleRelease,
+        manifest_hash: &str,
+    ) -> Result<String, WorldError> {
+        let policy_hash = hash_json(&self.policies)?;
+        let agents = release.routed_agents();
+        let empty_resources = std::collections::BTreeMap::new();
+        let module_states = std::collections::BTreeMap::new();
+        let mut projection = WorldStateProjection::borrowed(&self.state)
+            .with_command_overlay(CommandStateOverlay {
+                module_states: &module_states,
+                resources: instance
+                    .map(|delta| &delta.resources)
+                    .unwrap_or(&empty_resources),
+                agents: &agents,
+            })
+            .with_module_release_overlay(release);
+        if let Some(instance) = instance {
+            projection = projection.with_module_instance_overlay(instance);
+        }
+        hash_json(&StateRootProjection {
+            state: &projection,
+            manifest_hash,
+            policy_hash: &policy_hash,
+        })
+    }
+
+    pub(super) fn state_root_hash_with_agent_intent_overlay(
+        &self,
+        prepared: &super::agent_intent_publication::PreparedAgentIntent,
+    ) -> Result<String, WorldError> {
+        let policy_hash = hash_json(&self.policies)?;
+        let agents = prepared.routed_agents();
+        let empty_resources = std::collections::BTreeMap::new();
+        let empty_module_states = std::collections::BTreeMap::new();
+        let projection = WorldStateProjection::borrowed(&self.state)
+            .with_command_overlay(CommandStateOverlay {
+                module_states: &empty_module_states,
+                resources: &empty_resources,
+                agents: &agents,
+            })
+            .with_agent_intent_overlay(prepared);
+        hash_json(&StateRootProjection {
+            state: &projection,
+            manifest_hash: &self.current_manifest_hash()?,
+            policy_hash: &policy_hash,
+        })
+    }
+
+    pub(super) fn state_root_hash_with_economy_data_overlay(
+        &self,
+        prepared: &super::economy_data_publication::PreparedEconomyDataEvent,
+    ) -> Result<String, WorldError> {
+        let projection =
+            WorldStateProjection::borrowed(&self.state).with_economy_data_overlay(prepared);
+        hash_json(&StateRootProjection {
+            state: &projection,
+            manifest_hash: &self.current_manifest_hash()?,
+            policy_hash: &hash_json(&self.policies)?,
+        })
+    }
+
+    pub(super) fn state_root_hash_with_economic_contract_overlay(
+        &self,
+        prepared: &super::economic_contract_publication::PreparedEconomicContractEvent,
+    ) -> Result<String, WorldError> {
+        let projection =
+            WorldStateProjection::borrowed(&self.state).with_economic_contract_overlay(prepared);
+        hash_json(&StateRootProjection {
+            state: &projection,
+            manifest_hash: &self.current_manifest_hash()?,
+            policy_hash: &hash_json(&self.policies)?,
+        })
+    }
+
+    pub(super) fn state_root_hash_with_alliance_war_overlay(
+        &self,
+        prepared: &super::alliance_war_publication::PreparedAllianceWarEvent,
+    ) -> Result<String, WorldError> {
+        let projection =
+            WorldStateProjection::borrowed(&self.state).with_alliance_war_overlay(prepared);
+        hash_json(&StateRootProjection {
+            state: &projection,
+            manifest_hash: &self.current_manifest_hash()?,
+            policy_hash: &hash_json(&self.policies)?,
+        })
+    }
+
+    pub(super) fn state_root_hash_with_governance_meta_overlay(
+        &self,
+        prepared: &super::governance_meta_publication::PreparedGovernanceMetaEvent,
+    ) -> Result<String, WorldError> {
+        let projection =
+            WorldStateProjection::borrowed(&self.state).with_governance_meta_overlay(prepared);
+        hash_json(&StateRootProjection {
+            state: &projection,
+            manifest_hash: &self.current_manifest_hash()?,
+            policy_hash: &hash_json(&self.policies)?,
+        })
+    }
+
+    pub(super) fn state_root_hash_with_power_redemption_overlay(
+        &self,
+        prepared: &super::power_redemption_publication::PreparedPowerRedemptionEvent,
+    ) -> Result<String, WorldError> {
+        let projection =
+            WorldStateProjection::borrowed(&self.state).with_power_redemption_overlay(prepared);
+        hash_json(&StateRootProjection {
+            state: &projection,
+            manifest_hash: &self.current_manifest_hash()?,
+            policy_hash: &hash_json(&self.policies)?,
+        })
+    }
+
+    pub(super) fn state_root_hash_with_node_points_settlement_overlay(
+        &self,
+        prepared: &super::node_points_settlement_publication::PreparedNodePointsSettlement,
+    ) -> Result<String, WorldError> {
+        let projection = WorldStateProjection::borrowed(&self.state)
+            .with_node_points_settlement_overlay(prepared);
+        hash_json(&StateRootProjection {
+            state: &projection,
+            manifest_hash: &self.current_manifest_hash()?,
+            policy_hash: &hash_json(&self.policies)?,
+        })
+    }
+
+    pub(super) fn state_root_hash_with_main_token_monetary_overlay(
+        &self,
+        prepared: &super::main_token_monetary_publication::PreparedMainTokenMonetaryEvent,
+    ) -> Result<String, WorldError> {
+        let projection =
+            WorldStateProjection::borrowed(&self.state).with_main_token_monetary_overlay(prepared);
+        hash_json(&StateRootProjection {
+            state: &projection,
+            manifest_hash: &self.current_manifest_hash()?,
+            policy_hash: &hash_json(&self.policies)?,
+        })
+    }
+
+    pub(super) fn state_root_hash_with_main_token_governance_monetary_overlay(
+        &self,
+        prepared: &super::main_token_governance_monetary_publication::PreparedMainTokenGovernanceMonetaryEvent,
+    ) -> Result<String, WorldError> {
+        let projection = WorldStateProjection::borrowed(&self.state)
+            .with_main_token_governance_monetary_overlay(prepared);
+        hash_json(&StateRootProjection {
+            state: &projection,
+            manifest_hash: &self.current_manifest_hash()?,
+            policy_hash: &hash_json(&self.policies)?,
+        })
+    }
+
+    pub(super) fn state_root_hash_with_main_token_restricted_claim_overlay(
+        &self,
+        prepared: &super::main_token_restricted_claim_publication::PreparedMainTokenRestrictedClaimEvent,
+    ) -> Result<String, WorldError> {
+        let projection = WorldStateProjection::borrowed(&self.state)
+            .with_main_token_restricted_claim_overlay(prepared);
+        hash_json(&StateRootProjection {
+            state: &projection,
+            manifest_hash: &self.current_manifest_hash()?,
+            policy_hash: &hash_json(&self.policies)?,
+        })
+    }
+
+    pub(super) fn state_root_hash_with_starter_oc_claim_overlay(
+        &self,
+        prepared: &super::starter_oc_claim_publication::PreparedStarterOcClaimed,
+    ) -> Result<String, WorldError> {
+        let projection =
+            WorldStateProjection::borrowed(&self.state).with_starter_oc_claim_overlay(prepared);
+        hash_json(&StateRootProjection {
+            state: &projection,
+            manifest_hash: &self.current_manifest_hash()?,
+            policy_hash: &hash_json(&self.policies)?,
+        })
+    }
+
+    pub(super) fn state_root_hash_with_agent_claim_light_lifecycle_overlay(
+        &self,
+        prepared: &super::agent_claim_light_lifecycle_publication::PreparedAgentClaimLightLifecycle,
+    ) -> Result<String, WorldError> {
+        let projection = WorldStateProjection::borrowed(&self.state)
+            .with_agent_claim_light_lifecycle_overlay(prepared);
+        hash_json(&StateRootProjection {
+            state: &projection,
+            manifest_hash: &self.current_manifest_hash()?,
+            policy_hash: &hash_json(&self.policies)?,
+        })
+    }
+    pub(super) fn state_root_hash_with_agent_claim_economic_overlay(
+        &self,
+        prepared: &super::agent_claim_economic_publication::PreparedAgentClaimEconomic,
+    ) -> Result<String, WorldError> {
+        let projection =
+            WorldStateProjection::borrowed(&self.state).with_agent_claim_economic_overlay(prepared);
+        hash_json(&StateRootProjection {
+            state: &projection,
+            manifest_hash: &self.current_manifest_hash()?,
+            policy_hash: &hash_json(&self.policies)?,
+        })
+    }
+
+    pub(super) fn state_root_hash_with_agent_claim_terminal_overlay(
+        &self,
+        prepared: &super::agent_claim_terminal_publication::PreparedAgentClaimTerminal,
+    ) -> Result<String, WorldError> {
+        let projection =
+            WorldStateProjection::borrowed(&self.state).with_agent_claim_terminal_overlay(prepared);
+        hash_json(&StateRootProjection {
+            state: &projection,
+            manifest_hash: &self.current_manifest_hash()?,
+            policy_hash: &hash_json(&self.policies)?,
+        })
+    }
+
+    pub(super) fn state_root_hash_with_industry_overlay(
+        &self,
+        prepared: &super::super::state::industry_transition::PreparedIndustryEvent,
+    ) -> Result<String, WorldError> {
+        let projection =
+            WorldStateProjection::borrowed(&self.state).with_industry_overlay(prepared);
+        hash_json(&StateRootProjection {
+            state: &projection,
+            manifest_hash: &self.current_manifest_hash()?,
+            policy_hash: &hash_json(&self.policies)?,
+        })
+    }
+
+    pub(super) fn state_root_hash_with_module_marketplace_overlay(
+        &self,
+        market: &super::super::state::module_marketplace_transition::PreparedModuleMarketplace,
+    ) -> Result<String, WorldError> {
+        let policy_hash = hash_json(&self.policies)?;
+        let manifest_hash = self.current_manifest_hash()?;
+        let agents = market.routed_agents();
+        let module_states = std::collections::BTreeMap::new();
+        let projection = WorldStateProjection::borrowed(&self.state)
+            .with_command_overlay(CommandStateOverlay {
+                module_states: &module_states,
+                resources: &market.resources,
+                agents: &agents,
+            })
+            .with_module_marketplace_overlay(market);
+        hash_json(&StateRootProjection {
+            state: &projection,
+            manifest_hash: &manifest_hash,
+            policy_hash: &policy_hash,
+        })
     }
 
     fn consensus_height_for_tick(&self, tick: WorldTime) -> u64 {

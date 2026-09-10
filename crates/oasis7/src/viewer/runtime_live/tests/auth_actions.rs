@@ -712,10 +712,7 @@ pub(super) fn provider_context_response(
     response: crate::simulator::DecisionResponse,
 ) -> crate::simulator::ContinuousAgentResponseContextV1 {
     crate::simulator::ContinuousAgentResponseContextV1 {
-        response_digest: crate::simulator::h_v1(
-            crate::simulator::COGNITION_RESPONSE_DIGEST_DOMAIN,
-            &response,
-        ),
+        response_digest: crate::simulator::cognition_response_digest(&response),
         base_decision_response: response,
         context_discriminator: crate::simulator::CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR.to_string(),
         context_version: crate::simulator::CONTINUOUS_AGENT_CONTEXT_VERSION,

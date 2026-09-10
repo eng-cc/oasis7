@@ -71,8 +71,13 @@ impl World {
             asset_id: asset_id.map(ToOwned::to_owned),
             memo: memo.map(ToOwned::to_owned),
         };
-        let mut preview_state = self.state.clone();
-        if let Err(err) = preview_state.apply_domain_event(&event, self.state.time) {
+        if let Err(err) =
+            super::super::super::main_token_monetary_publication::PreparedMainTokenMonetaryEvent::prepare(
+                &self.state,
+                &event,
+                self.state.time,
+            )
+        {
             return DomainEvent::ActionRejected {
                 action_id,
                 reason: RejectReason::RuleDenied {
@@ -253,8 +258,11 @@ impl World {
             total_amount,
             distributions: normalized_distributions,
         };
-        let mut preview_state = self.state.clone();
-        if let Err(err) = preview_state.apply_domain_event(&event, self.state.time) {
+        if let Err(err) = super::super::super::main_token_governance_monetary_publication::PreparedMainTokenGovernanceMonetaryEvent::prepare(
+            &self.state,
+            &event,
+            self.state.time,
+        ) {
             return DomainEvent::ActionRejected {
                 action_id,
                 reason: RejectReason::RuleDenied {
@@ -380,8 +388,7 @@ impl World {
             amount,
             topped_up_at_epoch: self.current_governance_epoch(),
         };
-        let mut preview_state = self.state.clone();
-        if let Err(err) = preview_state.apply_domain_event(&event, self.state.time) {
+        if let Err(err) = super::super::super::main_token_restricted_claim_publication::PreparedMainTokenRestrictedClaimEvent::prepare(&self.state, &event) {
             return DomainEvent::ActionRejected {
                 action_id,
                 reason: RejectReason::RuleDenied {
@@ -500,8 +507,7 @@ impl World {
             issued_at_epoch: current_epoch,
             expires_at_epoch,
         };
-        let mut preview_state = self.state.clone();
-        if let Err(err) = preview_state.apply_domain_event(&event, self.state.time) {
+        if let Err(err) = super::super::super::main_token_restricted_claim_publication::PreparedMainTokenRestrictedClaimEvent::prepare(&self.state, &event) {
             return DomainEvent::ActionRejected {
                 action_id,
                 reason: RejectReason::RuleDenied {
@@ -606,8 +612,7 @@ impl World {
             configured_expires_at_epoch: grant.expires_at_epoch,
             revoke_reason: revoke_reason.to_string(),
         };
-        let mut preview_state = self.state.clone();
-        if let Err(err) = preview_state.apply_domain_event(&event, self.state.time) {
+        if let Err(err) = super::super::super::main_token_restricted_claim_publication::PreparedMainTokenRestrictedClaimEvent::prepare(&self.state, &event) {
             return DomainEvent::ActionRejected {
                 action_id,
                 reason: RejectReason::RuleDenied {

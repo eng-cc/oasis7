@@ -1,9 +1,11 @@
 ---
 name: receiving-code-review
-description: Use when a PR receives review comments or when a user asks to handle review feedback. Verifies each comment against code and repo truth, applies minimal valid fixes, and keeps thread resolution separate from merge readiness.
+description: Use when a PR receives review comments or when a user asks to handle review feedback.
 ---
 
 # Receiving Code Review
+
+Follow the canonical [review feedback triage](../../../doc/engineering/workflow/source-of-truth.md#review-feedback-triage), [merge gates](../../../doc/engineering/workflow/source-of-truth.md#ready-and-done) and [PM truth](../../../doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-contract).
 
 ## When to Use
 
@@ -23,10 +25,10 @@ Use this skill when:
    - missing test / evidence
    - style or preference
    - misunderstanding or stale assumption
-3. Verify the comment against repo truth before editing.
-4. Apply the smallest fix that resolves the real issue.
-5. Re-run the checks that prove the comment is addressed.
-6. Push only when a code change is needed; then resolve the thread after the relevant verification. For a stale or incorrect comment with no code change, record an evidence-backed disposition before resolving it.
+3. Verify the comment against the current diff, effective contract and actual consumers. Assess impact, confidence, regression risk, scope, benefit and verification cost; `P2` alone does not decide whether to change anything.
+4. Fix confirmed correctness defects, material regressions and actual contract violations before merge. For incorrect/stale premises, preferences or nonblocking improvements, apply the canonical triage rule and choose a minimal fix or an evidence-backed no-change decision. Cost or scope cannot excuse a real blocker.
+5. Run focused checks for a fix; for no change, record the supporting evidence, rationale and residual risk. Name a responsible role and revisit condition for material follow-up; do not create a task for every nit or start follow-up work without authorization.
+6. Push only when a code change is needed (including documentation edits); then resolve the thread after the relevant verification. For a stale or incorrect comment with no code change, record an evidence-backed disposition before resolving it. Use the same path for justified nonblocking no-change decisions. Formal role findings still require the canonical immutable return and authorized resolution manifest; a thread disposition does not replace them.
 7. Re-check overall PR state separately.
 8. For normal PRs, continue watching required checks, requested changes, comments/threads, and mergeability after the fix; `REVIEW_REQUIRED` is informational and does not block by itself. If everything passes, merge and clean up through the finishing branch workflow.
 
@@ -51,19 +53,20 @@ If the PR purpose decision is `manual_packaging_ci_hold`, do not convert packagi
 ## Response Rules
 
 - Do not auto-agree with every comment.
-- If the comment is valid, say what changed and what check passed.
-- If the comment is partially valid, fix the valid part and explain the rest.
-- If the comment is stale or incorrect, record the evidence-backed no-change disposition and answer with concrete code or doc evidence.
+- For an adopted comment, say what changed and what check passed.
+- If the comment is partially valid, address the valid concern proportionately and explain the rest.
+- For a stale/incorrect premise or a justified nonblocking no-change decision, explain the evidence and rationale. Follow canonical disposition authority; do not imply the suggestion was implemented or a real blocker was waived.
 
 ## Verification Rules
 
-- Comments about behavior need a rerun of the affected check.
+- Behavior fixes need a rerun of the affected check. No-change decisions need evidence sufficient to verify their premise and nonblocking conclusion; run a targeted check when needed to resolve uncertainty.
 - Comments about docs still need `./scripts/doc-governance-check.sh`.
 - Comments about PM flow still need `./scripts/pm/lint.sh`.
 
 ## Known Failure Modes
 
-- Accepting review comments without checking whether they are valid against the current diff and repo truth.
+- Accepting every comment or `P2` label without assessing the current diff, contract, impact and cost.
+- Using low benefit, scope or `non_actionable` to hide a confirmed merge blocker.
 - Resolving a thread before the targeted verification, required code push, or evidence-backed no-change disposition.
 - Treating thread resolution as proof that the whole PR is merge-ready.
 - Letting a review fix broaden into unrelated cleanup or silently revert sibling/user changes.

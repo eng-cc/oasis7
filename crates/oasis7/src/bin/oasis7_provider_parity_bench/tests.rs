@@ -4,12 +4,15 @@ use super::recovery_ledger::{
 };
 use super::*;
 use oasis7::simulator::{
-    Action, COGNITION_RESPONSE_DIGEST_DOMAIN, ContinuousAgentResponseContextV1, DecisionProvider,
-    DecisionResponse, FeedbackEnvelopeV1, golden_decision_provider_fixtures, h_v1,
+    Action, ContinuousAgentResponseContextV1, DecisionProvider, DecisionResponse,
+    FeedbackEnvelopeV1, cognition_response_digest, golden_decision_provider_fixtures,
 };
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
+
+#[path = "target_context_legacy_tests.rs"]
+mod target_context_legacy_tests;
 
 #[path = "provider_info_tests.rs"]
 mod provider_info_tests;
@@ -363,7 +366,7 @@ fn parity_target_route_round_trip_uses_outer_context_endpoints() {
                     retry_seq: response_context.retry_seq,
                     transport_attempt: response_context.transport_attempt,
                     request_digest: response_context.request_digest.clone(),
-                    response_digest: h_v1(COGNITION_RESPONSE_DIGEST_DOMAIN, &base_response),
+                    response_digest: cognition_response_digest(&base_response),
                 })
                 .expect("encode route test response")
             } else {

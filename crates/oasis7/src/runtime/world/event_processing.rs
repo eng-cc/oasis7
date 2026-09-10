@@ -1,15 +1,18 @@
-use super::super::FactoryBuildPowerObligationV1;
 use super::super::capability_authorization::CapabilityInvocationContext;
 use super::super::{
     Action, ActionEnvelope, ActionId, CausedBy, CrisisStatus, DomainEvent, EconomicContractStatus,
-    EpochSettlementReport, GovernanceEvent, GovernanceProposalStatus, MainTokenConfig,
-    MainTokenFeeKind, MainTokenGenesisAllocationBucketState, MainTokenGenesisAllocationPlan,
+    EpochSettlementReport, GovernanceEvent, GovernanceIdentityPenaltyRecord,
+    GovernanceIdentityProfileState, GovernanceProposalStatus, MainTokenConfig, MainTokenFeeKind,
+    MainTokenGenesisAllocationBucketState, MainTokenGenesisAllocationPlan,
     MainTokenNodePointsBridgeDistribution, MaterialLedgerId, MaterialStack, NodeRewardMintRecord,
-    NodeSettlement, ProposalId, ProposalStatus, RejectReason, WorldError, WorldEvent,
-    WorldEventBody, WorldEventId, WorldTime, main_token_bucket_unlocked_amount, util::hash_json,
+    NodeSettlement, ProposalId, ProposalStatus, RejectReason, TickConsensusRecord, WorldError,
+    WorldEvent, WorldEventBody, WorldEventId, WorldTime, main_token_bucket_unlocked_amount,
+    util::hash_json,
 };
 use super::World;
-use super::body::{evaluate_expand_body_interface, validate_body_kernel_view};
+use super::body::{
+    PreparedBodyAttributesUpdate, evaluate_expand_body_interface, validate_body_kernel_view,
+};
 use super::logistics::{
     MATERIAL_TRANSFER_MAX_DISTANCE_KM, MATERIAL_TRANSFER_MAX_INFLIGHT,
     material_transit_loss_bps_for_kind, material_transit_priority_for_kind, material_transit_ticks,
@@ -55,7 +58,12 @@ mod action_to_event_gameplay;
 mod action_to_event_gameplay_meta;
 mod action_to_event_policy_contract;
 mod action_to_event_policy_contract_rejection;
+mod core_policy_root;
 mod main_token;
+pub(super) mod prepared_governance_events;
+mod publication;
+
+use publication::PreparedEventStateDelta;
 
 impl World {
     // ---------------------------------------------------------------------
@@ -184,6 +192,7 @@ impl World {
             .collect();
         let mut capability_command_activity: BTreeSet<(String, String)> = BTreeSet::new();
         let mut capability_command_commits: BTreeSet<(String, String)> = BTreeSet::new();
+        let mut replayed_intent_sequences: BTreeSet<u64> = BTreeSet::new();
         for event in events {
             if event.time < previous_event_time {
                 return Err(WorldError::ResourceBalanceInvalid {
@@ -199,6 +208,12 @@ impl World {
                 }
             }
             match &event.body {
+                WorldEventBody::PolicyDecisionRecorded(record) => {
+                    self.reconcile_replayed_intent_allocator(
+                        record.intent_id.as_str(),
+                        &mut replayed_intent_sequences,
+                    );
+                }
                 WorldEventBody::ModuleStateUpdated(update) => {
                     // ModuleStateUpdated is also emitted by ordinary module
                     // ticks and commands.  Only a state update carrying the
@@ -235,6 +250,10 @@ impl World {
                     }
                 }
                 WorldEventBody::EffectQueued(intent) => {
+                    self.reconcile_replayed_intent_allocator(
+                        intent.intent_id.as_str(),
+                        &mut replayed_intent_sequences,
+                    );
                     // EffectIntent does not carry the command nonce, so use
                     // the durable v2 effect grant and its audience/subject
                     // binding to distinguish a trusted command effect from a
@@ -313,11 +332,20 @@ impl World {
             }
             self.apply_event_body_at(&event.body, event.time, Some(event.id))?;
             self.state.time = event.time;
-            if self.next_event_id == u64::MAX && event.id == u64::MAX {
-                self.next_event_id = 1;
-                self.next_event_id_era = self.next_event_id_era.saturating_add(1);
+            let (expected_event_id, next_event_id, next_event_id_era) =
+                Self::preview_next_event_id(self.next_event_id, self.next_event_id_era);
+            if expected_event_id == event.id {
+                self.next_event_id = next_event_id;
+                self.next_event_id_era = next_event_id_era;
             } else {
-                self.next_event_id = self.next_event_id.max(event.id.saturating_add(1));
+                // Legacy snapshots did not persist enough allocator context
+                // to prove the first event in a tail.  Preserve the old
+                // monotonic recovery fallback, while still advancing the era
+                // when a replayed event is the rolling maximum.
+                self.next_event_id = event.id.saturating_add(1).max(1);
+                if event.id == u64::MAX {
+                    self.next_event_id_era = self.next_event_id_era.saturating_add(1);
+                }
             }
             replaying_tick = Some(event.time);
             previous_event_time = event.time;
@@ -735,89 +763,56 @@ impl World {
         }
     }
 
-    pub(super) fn append_event(
-        &mut self,
-        body: WorldEventBody,
-        caused_by: Option<CausedBy>,
-    ) -> Result<WorldEventId, WorldError> {
-        // Domain intent payloads carry the journal position as part of their
-        // authority identity. Validate against the id before mutating state;
-        // this keeps the payload and its envelope inseparable on replay.
-        let expected_event_id = self.next_event_id.max(1);
-        self.apply_event_body_at(&body, self.state.time, Some(expected_event_id))?;
-        let event_id = self.allocate_next_event_id();
-        debug_assert_eq!(event_id, expected_event_id);
-        self.journal.append(WorldEvent {
-            id: event_id,
-            time: self.state.time,
-            caused_by,
-            body,
-        });
-        self.enforce_journal_event_limit();
-        self.record_tick_consensus_for_tick(self.state.time)?;
-        Ok(event_id)
-    }
-
     fn apply_event_body_at(
         &mut self,
         body: &WorldEventBody,
         time: WorldTime,
         envelope_event_seq: Option<WorldEventId>,
     ) -> Result<(), WorldError> {
+        self.apply_event_body_at_with_prepared_body(body, time, envelope_event_seq, None)
+    }
+
+    fn apply_event_body_at_with_prepared_body(
+        &mut self,
+        body: &WorldEventBody,
+        time: WorldTime,
+        envelope_event_seq: Option<WorldEventId>,
+        prepared_body: Option<&PreparedBodyAttributesUpdate>,
+    ) -> Result<(), WorldError> {
         match body {
             WorldEventBody::Domain(event) => {
                 let committed_receipt_event_id =
                     self.validate_agent_intent_receipt_reference(event, envelope_event_seq)?;
-                self.state.apply_domain_event_at(
+                if matches!(
                     event,
-                    time,
-                    envelope_event_seq,
-                    committed_receipt_event_id,
-                )?;
+                    DomainEvent::ModuleInstalled { .. }
+                        | DomainEvent::ModuleUpgraded { .. }
+                        | DomainEvent::ModuleRollbackApplied { .. }
+                ) {
+                    let prepared = self.state.prepare_module_instance_event(event, time)?;
+                    let schedule = self.prepare_module_instance_schedule(event, time)?;
+                    prepared.install_infallible(&mut self.state);
+                    self.install_prepared_module_instance_schedule(schedule);
+                    self.state.route_domain_event(event);
+                    self.state.time = time;
+                    return Ok(());
+                }
+                if let Some(prepared) = prepared_body {
+                    if !prepared.matches_event(event) {
+                        return Err(WorldError::ResourceBalanceInvalid {
+                            reason: "prepared body delta does not match body event".to_string(),
+                        });
+                    }
+                    prepared.clone().install(self)?;
+                } else {
+                    self.state.apply_domain_event_at(
+                        event,
+                        time,
+                        envelope_event_seq,
+                        committed_receipt_event_id,
+                    )?;
+                }
                 self.state.route_domain_event(event);
-                if let super::super::DomainEvent::ModuleInstalled {
-                    instance_id,
-                    module_id,
-                    module_version,
-                    active,
-                    ..
-                } = event
-                {
-                    let schedule_key = if instance_id.trim().is_empty() {
-                        module_id.as_str()
-                    } else {
-                        instance_id.as_str()
-                    };
-                    if *active {
-                        self.sync_tick_schedule_for_instance(
-                            schedule_key,
-                            module_id.as_str(),
-                            module_version.as_str(),
-                            time,
-                        )?;
-                    } else {
-                        self.remove_tick_schedule(schedule_key);
-                    }
-                }
-                if let super::super::DomainEvent::ModuleUpgraded {
-                    instance_id,
-                    module_id,
-                    to_module_version,
-                    active,
-                    ..
-                } = event
-                {
-                    if *active {
-                        self.sync_tick_schedule_for_instance(
-                            instance_id.as_str(),
-                            module_id.as_str(),
-                            to_module_version.as_str(),
-                            time,
-                        )?;
-                    } else {
-                        self.remove_tick_schedule(instance_id.as_str());
-                    }
-                }
             }
             WorldEventBody::EffectQueued(intent) => {
                 self.push_pending_effect_bounded(intent.clone())?;
@@ -861,22 +856,22 @@ impl World {
             WorldEventBody::ModuleRuntimeCharged(charge) => {
                 self.apply_module_runtime_charge_event(charge, time)?;
             }
-            WorldEventBody::ProductValidationDeliveryCursorUpdated(cursor) => {
-                self.state
-                    .product_validation_delivery_cursor
-                    .advance_to(cursor.event_id_era, cursor.routed_through_event_id);
-            }
             WorldEventBody::SnapshotCreated(_) => {}
             WorldEventBody::ManifestUpdated(update) => {
                 self.manifest = update.manifest.clone();
             }
             WorldEventBody::RollbackApplied(_) => {}
+            WorldEventBody::ProductValidationDeliveryCursorUpdated(cursor) => {
+                self.state
+                    .product_validation_delivery_cursor
+                    .advance_to(cursor.event_id_era, cursor.routed_through_event_id);
+            }
         }
         self.state.time = time;
         Ok(())
     }
 
-    fn validate_agent_intent_receipt_reference(
+    pub(super) fn validate_agent_intent_receipt_reference(
         &self,
         event: &DomainEvent,
         envelope_event_seq: Option<WorldEventId>,

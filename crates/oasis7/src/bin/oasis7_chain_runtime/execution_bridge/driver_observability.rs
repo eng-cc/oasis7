@@ -288,6 +288,33 @@ fn record_commit_timing_observation(observation: &CommitObservation<'_>, level: 
     state.record(observation, level);
 }
 
+#[cfg(test)]
+pub(super) fn snapshot_commit_observations_for_tests(
+    observations: &[CommitObservation<'_>],
+) -> ExecutionBridgeCommitTimingSnapshot {
+    let mut state = ExecutionBridgeCommitTimingState::default();
+    for observation in observations {
+        let level = level_for_execution_bridge_sample(
+            observation.total_ms,
+            &[
+                observation.decode_ms,
+                observation.runtime_step_ms,
+                observation.simulator_step_ms,
+                observation.serialize_ms,
+                observation.cas_put_ms,
+                observation.simulator_persist_ms,
+                observation.world_head_proof_ms,
+                observation.record_persist_ms,
+                observation.persist_world_ms,
+                observation.checkpoint_ms,
+                observation.retention_ms,
+            ],
+        );
+        state.record(observation, level);
+    }
+    state.snapshot()
+}
+
 fn commit_timing_state() -> &'static Mutex<ExecutionBridgeCommitTimingState> {
     static STATE: OnceLock<Mutex<ExecutionBridgeCommitTimingState>> = OnceLock::new();
     STATE.get_or_init(|| Mutex::new(ExecutionBridgeCommitTimingState::default()))

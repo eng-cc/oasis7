@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 import importlib.util, io, json, sys, tempfile, unittest, zipfile
-from contextlib import redirect_stdout
+from contextlib import redirect_stdout, ExitStack
 from pathlib import Path
 from unittest.mock import patch
+import integration_ci
 
 P=Path(__file__).with_name("ci-ready-receipt.py")
 S=importlib.util.spec_from_file_location("ci_ready_receipt",P); M=importlib.util.module_from_spec(S); S.loader.exec_module(M)
 UID="task_12345678901234567890123456789012"
 
-def pr(): return {"draft":True,"state":"open","merged":False,"body":f"Task: {UID}\n\nRefs #1","head":{"sha":"a"*40},"base":{"sha":"b"*40}}
+def pr(): return {"draft":True,"state":"open","merged":False,"body":f"Task: {UID}\n\nRefs #1","head":{"sha":"a"*40},"base":{"sha":"b"*40,"ref":"main"}}
 def plan():
   p={"scope":"targeted","selected_capabilities":"pixel_world_bridge;viewer_js_required","reason_summary":"fixture","changed_path_count":"1","planner_config_sha256":"sha256:" + "c"*64}; p.update({k:"false" for k in M.RUN_FIELDS}); p["run_rust_baseline"]="true"; p["run_pixel_world_bridge_lib_tests"]="true"; p["run_pixel_world_bridge_wasm_check"]="true"; return p
 def run(conclusion="success",app=42): return {"id":9,"name":"required-gate","status":"completed","conclusion":conclusion,"completed_at":"2026-07-14T00:00:00Z","head_sha":"a"*40,"pull_requests":[{"number":7,"base":{"sha":"b"*40},"head":{"sha":"a"*40}}],"app":{"id":app},"output":{"summary":f"<!-- {M.PLAN_MARKER} -->\n```json\n{json.dumps(plan())}\n```"}}
@@ -26,13 +27,52 @@ def artifact_zip(payload=None,filename="oasis7-required-plan-v1.json"):
 
 class ReceiptTest(unittest.TestCase):
   def api(self, r=None, runs=None):
-    return patch.object(M,"gh",side_effect=[r or pr(),{"check_runs":runs if runs is not None else [run()]}])
+    def read(*args):
+      path=args[-1]
+      if '/pulls/' in path:return r or pr()
+      if '/check-runs?' in path:return {"check_runs":runs if runs is not None else [run()]}
+      if '/runs?' in path:return {'workflow_runs':[]}
+      if '/compare/' in path:return {'merge_base_commit':{'sha':'b'*40}}
+      raise AssertionError(path)
+    stack=ExitStack();stack.enter_context(patch.object(M,'gh',side_effect=read));stack.enter_context(patch.object(integration_ci,'gh',side_effect=read));return stack
+  def test_scope_query_uses_gh_api_argv(self):
+    with patch.object(M.subprocess,"check_output",return_value=json.dumps({"merge_base_commit":{"sha":"d"*40}})) as call:
+      self.assertEqual(M.scope_base_for_run("eng-cc/oasis7","b"*40,"a"*40),"d"*40)
+      self.assertEqual(call.call_args.args[0][:2],["gh","api"])
+
+  def test_scope_base_is_bound_in_review_digest(self):
+    receipt=self.invoke_verify()
+    receipt.update(scope_base_oid=receipt["base_oid"],integration_base_oid=receipt["base_oid"])
+    original=M.review_evidence_digest(receipt)
+    receipt["scope_base_oid"]="d"*40
+    self.assertNotEqual(original,M.review_evidence_digest(receipt))
+    receipt["integration_base_oid"]="e"*40
+    with self.assertRaisesRegex(ValueError,"scope/integration"):
+      M.review_evidence_digest(receipt)
+
+  def test_new_receipt_records_both_bases(self):
+    planner=M.planner_from_run(run())
+    digest=M.hashlib.sha256(json.dumps(planner,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+    argv=[str(P),"--repository","eng-cc/oasis7","--task-uid",UID,"--task-issue-number","1","--pr-number","7","--check-app-id","42","--planner-digest",digest]
+    output=io.StringIO()
+    with self.api(),patch.object(sys,"argv",argv),redirect_stdout(output): M.main()
+    issued=json.loads(output.getvalue())
+    self.assertEqual(issued["scope_base_oid"],"b"*40)
+    self.assertEqual(issued["integration_base_oid"],issued["base_oid"])
+
   def test_success(self):
     with self.api(): self.assertEqual("a"*40,M.live("eng-cc/oasis7",UID,1,7,"required-gate","42")[3])
-  def test_live_receipt_uses_check_run_base_after_pr_base_moves(self):
+  def test_live_receipt_rejects_stale_integration_after_pr_base_moves(self):
     moved=pr(); moved["base"]["sha"]="c"*40
     with self.api(r=moved):
-      self.assertEqual("b"*40,M.live("eng-cc/oasis7",UID,1,7,"required-gate","42")[2])
+      with self.assertRaisesRegex(SystemExit,"integration.*rerun"):
+        M.live("eng-cc/oasis7",UID,1,7,"required-gate","42")
+  def test_expected_base_ref_rejects_same_oid_pr_retarget(self):
+    moved=pr(); moved["base"]["ref"]="release"
+    moved_run=run(); moved_run["pull_requests"][0]["base"]["ref"]="release"
+    with self.api(r=moved,runs=[moved_run]):
+      with self.assertRaisesRegex(SystemExit,"wrong_base_ref|base identity"):
+        M.live("eng-cc/oasis7",UID,1,7,"required-gate","42",expected_base_ref="main")
   def test_planner_config_digest_is_bound_into_the_issued_receipt(self):
     receipt=self.invoke_verify()
     self.assertIn("planner_config_sha256",receipt["planner"],

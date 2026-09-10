@@ -91,6 +91,7 @@ vi.mock("./pixel_world_bridge_bindgen.js", () => {
       this.wheel = vi.fn();
       this.click = vi.fn();
       this.tick = vi.fn();
+      this.set_reduced_motion = vi.fn();
       this.unmount = vi.fn(() => ({ status: "detached" }));
       this.update = vi.fn(() => ({ status: "ready" }));
       this.mount = vi.fn((canvas, renderState) => {
@@ -446,6 +447,18 @@ describe("pixel world wasm runtime bridge", () => {
     }
   });
 
+  it("clears DOM-origin hover on canvas leave even when the runtime has no hover transition", async () => {
+    animationHarness();
+    const { createPixelWorldBridge } = await import("./pixel_world_runtime_module_wasm.js");
+    const onEvent = vi.fn();
+    const bridge = await createPixelWorldBridge({ onEvent });
+    const canvas = document.createElement('canvas');
+    bridge.mount(canvas, {});
+    canvas.dispatchEvent(pointerEvent('pointerleave'));
+    expect(onEvent).toHaveBeenCalledWith({ type: 'hover_entity', selection: null });
+    bridge.unmount();
+  });
+
   it("caps WASM ambient ticks at 12Hz while leaving pointer input immediate", async () => {
     const animation = animationHarness();
     const { createPixelWorldBridge } = await import("./pixel_world_runtime_module_wasm.js");
@@ -483,8 +496,12 @@ describe("pixel world wasm runtime bridge", () => {
     bridge.mount(canvas, { selection: null });
     expect(mediaQuery.addEventListener).toHaveBeenCalledWith("change", expect.any(Function));
     mediaChange?.({ matches: true });
+    expect(runtimeState.instances[0].set_reduced_motion).toHaveBeenLastCalledWith(true);
     expect(runtimeState.instances[0].tick).toHaveBeenCalledTimes(1);
     expect(animation.runNext(100)).toBe(false);
+    mediaQuery.matches = false;
+    mediaChange?.({ matches: false });
+    expect(runtimeState.instances[0].set_reduced_motion).toHaveBeenLastCalledWith(false);
     bridge.unmount();
     expect(mediaQuery.removeEventListener).toHaveBeenCalledWith("change", expect.any(Function));
   });

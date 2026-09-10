@@ -21,7 +21,6 @@ pub const CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR: &str = "oasis7.continuous-agen
 pub const CONTINUOUS_AGENT_CONTEXT_VERSION: u16 = 1;
 pub const COGNITION_REQUEST_DIGEST_DOMAIN: &str = "oasis7.cognition.request.v1";
 pub const COGNITION_PROVIDER_INVOCATION_DOMAIN: &str = "oasis7.cognition.provider-invocation.v1";
-pub const COGNITION_RESPONSE_DIGEST_DOMAIN: &str = "oasis7.cognition.response.v1";
 pub const COGNITION_RESPONSE_ARTIFACT_IDENTITY_DOMAIN: &str =
     "oasis7.cognition.response-artifact-identity.v1";
 pub const COGNITION_CAPABILITY_CATALOG_DOMAIN: &str = "oasis7.cognition.capability-catalog.v1";
@@ -219,11 +218,7 @@ impl RuntimeBindingV1 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct BudgetContractV1 {
-    pub max_latency_ms: u64,
-    pub max_repair_attempts: u32,
-}
+pub use super::continuous_agent_budget::BudgetContractV1;
 
 /// The additive outer request wrapper.  `transport_attempt` is intentionally
 /// retained for observability but excluded from identity bytes.  The legacy
@@ -636,31 +631,6 @@ impl ContinuousAgentResponseContextV1 {
         serde_json::to_value(self.response_artifact_identity()).map_err(|e| {
             CognitionError::new("response_artifact_identity_encoding_failed", e.to_string())
         })
-    }
-
-    pub fn validate_response_artifact_identity(
-        &self,
-        identity: &ResponseArtifactIdentityV1,
-    ) -> Result<(), CognitionError> {
-        if self.response_digest
-            != h_v1(
-                COGNITION_RESPONSE_DIGEST_DOMAIN,
-                &self.base_decision_response,
-            )
-        {
-            return Err(CognitionError::new(
-                "response_digest_mismatch",
-                "provider response digest does not match its content",
-            ));
-        }
-        identity.validate()?;
-        if identity != &self.response_artifact_identity() {
-            return Err(CognitionError::new(
-                "response_artifact_identity_mismatch",
-                "response artifact identity does not match the response context",
-            ));
-        }
-        Ok(())
     }
 }
 

@@ -120,10 +120,10 @@ python3 ./scripts/pm/non-merge-finalize.py \
 
 Missing trusted runtime attestation is `capability_blocked` for unattended automation,
 not human-operated PRs. Never manufacture passed evidence or downgrade a blocker.
-
 ## Guardrails
 
-Do not bypass a canonical gate, mutate implementation after freeze without restarting review, or clean up before trusted merge evidence.
+For an explicitly bound manual loop task, use `scripts/pm/loop.py` with the effective trusted tool root before admission or continuation. Preserve the exact loop binding, immutable contracts, scope and user merge hold. At stable waits return resumable evidence without heartbeat or scheduled continuation; completion never starts another task. See [manual entry authority](../../../doc/engineering/workflow/source-of-truth.md#manual-three-loop-transition). Legacy tasks retain their existing route.
+Do not bypass a canonical gate, mutate implementation after freeze without restarting review, or clean up before trusted merge evidence. Hosted loop CI proves repository scope/content only; promotion and merge require fresh effective-helper admission using the existing local `gh` login, without exporting credentials or accepting caller-signed substitute receipts.
 
 ## Known Failure Modes
 

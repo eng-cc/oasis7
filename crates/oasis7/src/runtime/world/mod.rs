@@ -1,10 +1,15 @@
 //! The World struct - core runtime implementation.
 
 mod actions;
+pub(crate) mod agent_claim_economic_publication;
+pub(crate) mod agent_claim_light_lifecycle_publication;
+pub(crate) mod agent_claim_terminal_publication;
 mod agent_claims;
 mod agent_intent;
-mod agent_intent_terminal;
 pub(crate) use agent_intent::derive_agent_chat_request_digest;
+pub(crate) mod agent_intent_publication;
+mod agent_intent_terminal;
+pub(crate) mod alliance_war_publication;
 pub use agent_intent::{AgentIntentProviderFailureDisposition, AgentIntentRecordOutcome};
 mod audit;
 mod base_layer;
@@ -14,11 +19,16 @@ mod bootstrap_gameplay;
 mod bootstrap_power;
 mod capability_authorization;
 mod capability_authorization_admin;
+mod capability_authorization_command;
+mod capability_authorization_command_projection;
+mod capability_authorization_command_stage;
 mod capability_authorization_events;
+mod capability_authorization_publication;
 mod capability_authorization_state;
 mod capability_authorization_transaction;
 mod capability_authorization_validation;
 mod capability_catalog;
+mod capability_effect_receipt_projection;
 #[cfg(test)]
 mod capability_test_fixture;
 mod cognition_command;
@@ -27,8 +37,13 @@ mod cognition_gpd;
 mod cognition_orchestration;
 mod cognition_persistence;
 mod cognition_persistence_validation;
+pub(crate) mod economic_contract_publication;
 mod economy;
+pub(crate) mod economy_data_publication;
 mod economy_product_validation;
+mod effect_publication;
+#[cfg(test)]
+mod effect_publication_transaction_regressions;
 mod effects;
 mod event_processing;
 mod factory_authority;
@@ -36,7 +51,47 @@ mod gameplay_layer;
 mod gameplay_loop;
 mod governance;
 mod governance_identity_penalty;
+pub(crate) mod governance_meta_publication;
+#[cfg(test)]
+mod governance_proposal_status_publication_transaction_regressions;
+mod governance_publication;
 mod governance_quote;
+pub(crate) mod governance_registry_publication;
+#[cfg(test)]
+mod governance_registry_publication_transaction_regressions;
+#[cfg(test)]
+mod governed_module_lifecycle_transaction_regressions;
+pub(crate) mod main_token_governance_monetary_publication;
+pub(crate) mod main_token_monetary_publication;
+pub(crate) mod main_token_restricted_claim_publication;
+#[cfg(test)]
+mod module_artifact_deployment_transaction_regressions;
+#[cfg(test)]
+mod module_artifact_retirement_transaction_regressions;
+#[cfg(test)]
+mod module_change_batch_transaction_regressions;
+#[cfg(test)]
+mod module_instance_publication_transaction_regressions;
+#[cfg(test)]
+mod module_marketplace_transaction_regressions;
+#[cfg(test)]
+mod module_metadata_publication_transaction_regressions;
+#[cfg(test)]
+mod module_output_publication_transaction_regressions;
+#[cfg(test)]
+mod module_release_publication_transaction_regressions;
+#[cfg(test)]
+mod module_release_review_publication_transaction_regressions;
+#[cfg(test)]
+mod module_store_load_transaction_regressions;
+pub(crate) mod node_points_settlement_publication;
+#[cfg(test)]
+mod power_publication_transaction_regressions;
+pub(crate) mod power_redemption_publication;
+#[cfg(test)]
+#[path = "prepared_base_head_transaction_regressions.rs"]
+mod prepared_base_head_transaction_regressions;
+pub(crate) mod starter_oc_claim_publication;
 mod war_declaration_quote;
 pub use war_declaration_quote::WarDeclarationQuote;
 mod logistics;
@@ -45,6 +100,11 @@ mod market_quote_decision_preview;
 pub use market_quote_decision_preview::{MarketQuoteDecisionPreview, MarketQuoteSupplyDelta};
 mod main_token_economy_audit;
 mod module_actions;
+mod module_artifact_retirement;
+mod module_change_batch_publication;
+mod module_marketplace_publication;
+mod module_release_publication;
+mod module_routing_runtime;
 mod module_runtime;
 mod module_runtime_labels;
 mod module_runtime_metering;
@@ -52,6 +112,7 @@ mod module_runtime_publication;
 mod module_tick_runtime;
 mod operability_release_gate;
 mod persistence;
+mod prepared_base_head;
 pub use persistence::{
     AuthoritativeRecoveryCommitError, AuthoritativeRecoveryCommitStatus,
     CommittedAuthoritativeRecoveryGeneration,
@@ -69,6 +130,14 @@ mod scheduling;
 mod snapshot;
 mod step;
 mod tick_consensus;
+mod tick_consensus_state_root;
+mod transition;
+
+pub use transition::{
+    ExecutionTransaction, PreparedCommit, TransitionBaseHead, TransitionBuffer,
+    TransitionCommitError, TransitionKernelEntriesView, TransitionKernelState,
+    TransitionKernelView, TransitionPrepareError, TransitionRollbackError, TransitionSavepoint,
+};
 
 #[cfg(all(test, feature = "wasmtime", feature = "test_tier_full"))]
 pub(crate) use bootstrap_economy::m4_bootstrap_module_ids;
@@ -194,6 +263,32 @@ pub struct LogisticsSlaMetrics {
 }
 
 impl LogisticsSlaMetrics {
+    fn record_completion(
+        &mut self,
+        expected_ready_at: WorldTime,
+        completed_at: WorldTime,
+        priority: MaterialTransitPriority,
+    ) {
+        self.completed_transits = self.completed_transits.saturating_add(1);
+        if priority == MaterialTransitPriority::Urgent {
+            self.urgent_completed_transits = self.urgent_completed_transits.saturating_add(1);
+        }
+        if completed_at > expected_ready_at {
+            let delay = completed_at.saturating_sub(expected_ready_at);
+            self.breached_transits = self.breached_transits.saturating_add(1);
+            self.total_delay_ticks = self.total_delay_ticks.saturating_add(delay);
+            if priority == MaterialTransitPriority::Urgent {
+                self.urgent_breached_transits = self.urgent_breached_transits.saturating_add(1);
+                self.urgent_total_delay_ticks = self.urgent_total_delay_ticks.saturating_add(delay);
+            }
+        } else {
+            self.fulfilled_transits = self.fulfilled_transits.saturating_add(1);
+            if priority == MaterialTransitPriority::Urgent {
+                self.urgent_fulfilled_transits = self.urgent_fulfilled_transits.saturating_add(1);
+            }
+        }
+    }
+
     pub fn breach_rate(&self) -> f64 {
         if self.completed_transits == 0 {
             return 0.0;
@@ -291,10 +386,6 @@ fn default_allow_runtime_source_compile() -> bool {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct World {
     manifest: Manifest,
-    /// Additive durable cognition state.  Kept as JSON at the World boundary
-    /// so old snapshots and forward-compatible scheduler/continuation
-    /// projections survive without coupling the core world schema to the
-    /// provider wire format.
     #[serde(default = "super::cognition_recovery::default_cognition_persistence_projection")]
     cognition: JsonValue,
     module_registry: ModuleRegistry,
@@ -359,10 +450,6 @@ pub struct World {
     scheduler_cursor: Option<String>,
     #[serde(skip)]
     receipt_signer: Option<ReceiptSigner>,
-    /// The last World store attached to this runtime. This is process-local
-    /// metadata and is never part of the serialized authority projection.
-    /// Cognition transactions use it to persist their committed snapshot
-    /// before returning a delivery/receipt to a caller.
     #[serde(skip, default)]
     persistence_dir: RefCell<Option<PathBuf>>,
     #[serde(default)]
@@ -398,6 +485,12 @@ pub struct World {
     #[serde(default)]
     consumed_rollback_nonces: BTreeSet<String>,
     rollback_nonce_outcomes: BTreeMap<String, super::RollbackNonceOutcome>,
+    #[cfg(test)]
+    fail_next_append_after_reducer: bool,
+    #[cfg(test)]
+    fail_next_append_after_publication_prepare: bool,
+    #[cfg(test)]
+    fail_append_after_publication_prepare_countdown: Option<usize>,
 }
 
 impl World {
@@ -413,8 +506,6 @@ impl World {
         Self::new_with_release_security_policy(ReleaseSecurityPolicy::production_hardened())
     }
 
-    /// Production bootstrap seam: install the World-owned cognition
-    /// authority before any provider turn or scheduler wake is admitted.
     pub fn new_production_hardened_with_cognition_binding(
         world_id: impl Into<String>,
         branch_id: impl Into<String>,
@@ -541,6 +632,12 @@ impl World {
             rollback_authority_registry: super::RollbackAuthorityRegistry::default(),
             consumed_rollback_nonces: BTreeSet::new(),
             rollback_nonce_outcomes: BTreeMap::new(),
+            #[cfg(test)]
+            fail_next_append_after_reducer: false,
+            #[cfg(test)]
+            fail_next_append_after_publication_prepare: false,
+            #[cfg(test)]
+            fail_append_after_publication_prepare_countdown: None,
         };
         world
             .refresh_capability_authorization_root()
@@ -601,9 +698,6 @@ impl World {
         &self.capability_revocation_state
     }
 
-    /// The chain-side world identity is the runtime's only persisted world
-    /// binding.  Cognition admission uses it when the manifest is bound;
-    /// `unbound` is retained for the explicitly legacy/bootstrap world.
     pub fn chain_resource_manifest(&self) -> &ChainResourceManifest {
         &self.chain_resource_manifest
     }
@@ -754,14 +848,96 @@ impl World {
         self.release_security_policy = ReleaseSecurityPolicy::production_hardened();
     }
 
+    #[cfg(test)]
+    pub(crate) fn fail_next_append_after_reducer_for_test(&mut self) {
+        self.fail_next_append_after_reducer = true;
+    }
+
+    #[cfg(test)]
+    fn take_fail_next_append_after_reducer_for_test(&mut self) -> bool {
+        std::mem::take(&mut self.fail_next_append_after_reducer)
+    }
+
+    #[cfg(not(test))]
+    fn take_fail_next_append_after_reducer_for_test(&mut self) -> bool {
+        false
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fail_next_append_after_publication_prepare_for_test(&mut self) {
+        self.fail_next_append_after_publication_prepare = true;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fail_append_after_publication_prepare_on_nth_for_test(&mut self, nth: usize) {
+        assert!(nth > 0);
+        self.fail_append_after_publication_prepare_countdown = Some(nth);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn append_event_for_test(
+        &mut self,
+        body: crate::runtime::WorldEventBody,
+        caused_by: Option<crate::runtime::CausedBy>,
+    ) -> Result<WorldEventId, WorldError> {
+        self.append_event(body, caused_by)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn seed_capability_grant_for_test(&mut self, grant_id: String, encoded: JsonValue) {
+        self.capability_grants_v2.insert(grant_id, encoded);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn seed_capability_budget_account_for_test(
+        &mut self,
+        key: String,
+        account: crate::runtime::CapabilityBudgetAccount,
+    ) {
+        self.capability_budget_accounts.insert(key, account);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn remove_module_release_mapping_for_test(&mut self, request_id: u64) {
+        self.state
+            .module_release_manifest_mappings
+            .remove(&request_id);
+    }
+
+    #[cfg(test)]
+    fn take_fail_next_append_after_publication_prepare_for_test(&mut self) -> bool {
+        if std::mem::take(&mut self.fail_next_append_after_publication_prepare) {
+            return true;
+        }
+        match self.fail_append_after_publication_prepare_countdown {
+            Some(1) => {
+                self.fail_append_after_publication_prepare_countdown = None;
+                true
+            }
+            Some(remaining) => {
+                self.fail_append_after_publication_prepare_countdown = Some(remaining - 1);
+                false
+            }
+            None => false,
+        }
+    }
+
+    #[cfg(not(test))]
+    fn take_fail_next_append_after_publication_prepare_for_test(&mut self) -> bool {
+        false
+    }
+
     pub fn with_runtime_memory_limits(mut self, limits: WorldRuntimeMemoryLimits) -> Self {
         self.runtime_memory_limits = limits;
         self.enforce_runtime_memory_limits();
         self
     }
 
-    pub(super) fn allocate_next_event_id(&mut self) -> WorldEventId {
-        Self::allocate_rolling_sequence_id(&mut self.next_event_id, &mut self.next_event_id_era)
+    pub(super) fn preview_next_event_id(
+        next_id: WorldEventId,
+        era: u64,
+    ) -> (WorldEventId, WorldEventId, u64) {
+        Self::preview_rolling_sequence_id(next_id, era)
     }
 
     pub(super) fn allocate_next_action_id(&mut self) -> ActionId {
@@ -779,18 +955,35 @@ impl World {
         )
     }
 
+    pub(super) fn preview_next_intent_seq(
+        next_id: IntentSeq,
+        era: u64,
+    ) -> (IntentSeq, IntentSeq, u64) {
+        Self::preview_rolling_sequence_id(next_id, era)
+    }
+
+    pub(super) fn preview_next_proposal_id(
+        next_id: ProposalId,
+        era: u64,
+    ) -> (ProposalId, ProposalId, u64) {
+        Self::preview_rolling_sequence_id(next_id, era)
+    }
+
     fn allocate_rolling_sequence_id(next_id: &mut u64, era: &mut u64) -> u64 {
-        if *next_id == 0 {
-            *next_id = 1;
-        }
-        let allocated = *next_id;
-        if allocated == u64::MAX {
-            *next_id = 1;
-            *era = era.saturating_add(1);
-        } else {
-            *next_id = allocated + 1;
-        }
+        let (allocated, next_id_after, era_after) =
+            Self::preview_rolling_sequence_id(*next_id, *era);
+        *next_id = next_id_after;
+        *era = era_after;
         allocated
+    }
+
+    fn preview_rolling_sequence_id(next_id: u64, era: u64) -> (u64, u64, u64) {
+        let allocated = next_id.max(1);
+        if allocated == u64::MAX {
+            (allocated, 1, era.saturating_add(1))
+        } else {
+            (allocated, allocated + 1, era)
+        }
     }
 
     pub(super) fn enforce_pending_action_limit(&mut self) {
@@ -829,57 +1022,7 @@ impl World {
         Ok(())
     }
 
-    pub(super) fn record_logistics_sla_completion(
-        &mut self,
-        expected_ready_at: WorldTime,
-        completed_at: WorldTime,
-        priority: MaterialTransitPriority,
-    ) {
-        self.logistics_sla_metrics.completed_transits = self
-            .logistics_sla_metrics
-            .completed_transits
-            .saturating_add(1);
-        if priority == MaterialTransitPriority::Urgent {
-            self.logistics_sla_metrics.urgent_completed_transits = self
-                .logistics_sla_metrics
-                .urgent_completed_transits
-                .saturating_add(1);
-        }
-        if completed_at > expected_ready_at {
-            let delay = completed_at.saturating_sub(expected_ready_at);
-            self.logistics_sla_metrics.breached_transits = self
-                .logistics_sla_metrics
-                .breached_transits
-                .saturating_add(1);
-            self.logistics_sla_metrics.total_delay_ticks = self
-                .logistics_sla_metrics
-                .total_delay_ticks
-                .saturating_add(delay);
-            if priority == MaterialTransitPriority::Urgent {
-                self.logistics_sla_metrics.urgent_breached_transits = self
-                    .logistics_sla_metrics
-                    .urgent_breached_transits
-                    .saturating_add(1);
-                self.logistics_sla_metrics.urgent_total_delay_ticks = self
-                    .logistics_sla_metrics
-                    .urgent_total_delay_ticks
-                    .saturating_add(delay);
-            }
-        } else {
-            self.logistics_sla_metrics.fulfilled_transits = self
-                .logistics_sla_metrics
-                .fulfilled_transits
-                .saturating_add(1);
-            if priority == MaterialTransitPriority::Urgent {
-                self.logistics_sla_metrics.urgent_fulfilled_transits = self
-                    .logistics_sla_metrics
-                    .urgent_fulfilled_transits
-                    .saturating_add(1);
-            }
-        }
-    }
-
-    pub(super) fn refresh_threat_heatmap(&mut self) {
+    pub(super) fn prepare_threat_heatmap(&self) -> BTreeMap<String, i64> {
         let mut next = BTreeMap::new();
         for war in self.state.wars.values() {
             if !war.active {
@@ -902,7 +1045,11 @@ impl World {
             *next.entry(format!("crisis:{}", crisis.kind)).or_insert(0) += crisis_risk;
             *next.entry("global:crisis".to_string()).or_insert(0) += crisis_risk;
         }
-        self.threat_heatmap = next;
+        next
+    }
+
+    pub(super) fn refresh_threat_heatmap(&mut self) {
+        self.threat_heatmap = self.prepare_threat_heatmap();
     }
 
     pub(super) fn enforce_pending_effect_limit(&mut self) {

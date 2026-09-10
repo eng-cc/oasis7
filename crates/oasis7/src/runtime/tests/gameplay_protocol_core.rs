@@ -419,6 +419,7 @@ fn gameplay_protocol_actions_drive_persisted_state() {
 #[test]
 fn threat_heatmap_tracks_active_war_and_crisis_risk() {
     let mut world = World::new();
+    assert!(world.prepare_threat_heatmap().is_empty());
     register_agents(&mut world, &["a", "b", "c", "d"]);
 
     world.submit_action(Action::FormAlliance {
@@ -447,6 +448,15 @@ fn threat_heatmap_tracks_active_war_and_crisis_risk() {
     });
     world.step().expect("declare war");
 
+    let snapshot_before_prepare = world.snapshot();
+    let journal_before_prepare = world.journal().clone();
+    let heatmap_before_prepare = world.threat_heatmap().clone();
+    let prepared_heatmap = world.prepare_threat_heatmap();
+    assert_eq!(prepared_heatmap, heatmap_before_prepare);
+    assert_eq!(world.snapshot(), snapshot_before_prepare);
+    assert_eq!(world.journal(), &journal_before_prepare);
+    assert_eq!(world.threat_heatmap(), &heatmap_before_prepare);
+
     let heatmap = world.threat_heatmap();
     assert!(heatmap.get("alliance:alliance.red").copied().unwrap_or(0) > 0);
     assert!(heatmap.get("alliance:alliance.blue").copied().unwrap_or(0) > 0);
@@ -461,6 +471,7 @@ fn threat_heatmap_tracks_active_war_and_crisis_risk() {
         .kind
         .clone();
     let heatmap_after_crisis = world.threat_heatmap();
+    assert_eq!(&world.prepare_threat_heatmap(), heatmap_after_crisis);
     assert!(
         heatmap_after_crisis
             .get(format!("crisis:{crisis_kind}").as_str())
@@ -484,6 +495,7 @@ fn threat_heatmap_tracks_active_war_and_crisis_risk() {
     });
     world.step().expect("resolve crisis");
     let heatmap_after_resolution = world.threat_heatmap();
+    assert_eq!(&world.prepare_threat_heatmap(), heatmap_after_resolution);
     assert!(
         heatmap_after_resolution
             .get("global:crisis")
@@ -620,6 +632,24 @@ fn governance_proposal_finalizes_and_rejects_late_votes() {
         weight: 2,
     });
     world.step().expect("vote from a");
+
+    let snapshot_before_prepare = world.snapshot();
+    let journal_before_prepare = world.journal().clone();
+    let prepared = world
+        .prepared_governance_finalization_events_for_test(world.state().time.saturating_add(1));
+    assert_eq!(world.snapshot(), snapshot_before_prepare);
+    assert_eq!(world.journal(), &journal_before_prepare);
+    assert!(matches!(
+        prepared.as_slice(),
+        [DomainEvent::GovernanceProposalFinalized {
+            proposal_key,
+            winning_option,
+            winning_weight: 2,
+            total_weight: 2,
+            passed: false,
+        }] if proposal_key == "proposal.finalize"
+            && winning_option.as_deref() == Some("approve")
+    ));
 
     world.submit_action(Action::CastGovernanceVote {
         voter_agent_id: "b".to_string(),
@@ -791,6 +821,21 @@ fn governance_identity_penalty_and_appeal_drive_vote_rights() {
 #[test]
 fn crisis_cycle_spawns_and_times_out_if_unresolved() {
     let mut world = World::new();
+    let snapshot_before_spawn_prepare = world.snapshot();
+    let journal_before_spawn_prepare = world.journal().clone();
+    let prepared_spawn = world.prepared_crisis_auto_spawn_event_for_test(8);
+    assert_eq!(world.snapshot(), snapshot_before_spawn_prepare);
+    assert_eq!(world.journal(), &journal_before_spawn_prepare);
+    assert!(matches!(
+        prepared_spawn,
+        Some(DomainEvent::CrisisSpawned {
+            crisis_id,
+            kind,
+            severity: 2,
+            expires_at: 16,
+        }) if crisis_id == "crisis.auto.8" && kind == "solar_storm"
+    ));
+
     register_agents(&mut world, &["a"]);
     let crisis_id = advance_until_auto_crisis(&mut world);
 
@@ -800,6 +845,19 @@ fn crisis_cycle_spawns_and_times_out_if_unresolved() {
         .get(&crisis_id)
         .expect("active crisis")
         .expires_at;
+    let snapshot_before_timeout_prepare = world.snapshot();
+    let journal_before_timeout_prepare = world.journal().clone();
+    let prepared_timeouts = world.prepared_crisis_timeout_events_for_test(expires_at);
+    assert_eq!(world.snapshot(), snapshot_before_timeout_prepare);
+    assert_eq!(world.journal(), &journal_before_timeout_prepare);
+    assert!(matches!(
+        prepared_timeouts.as_slice(),
+        [DomainEvent::CrisisTimedOut {
+            crisis_id: prepared_crisis_id,
+            penalty_impact,
+        }] if prepared_crisis_id.as_str() == crisis_id.as_str() && *penalty_impact < 0
+    ));
+
     while world.state().time <= expires_at {
         world.step().expect("advance to crisis timeout");
     }
@@ -849,6 +907,29 @@ fn war_auto_concludes_after_duration() {
         intensity: 2,
     });
     world.step().expect("declare war");
+
+    let active_war = world.state().wars.get("war.auto").expect("active war");
+    let due_at = active_war
+        .declared_at
+        .saturating_add(active_war.max_duration_ticks.max(1));
+    let snapshot_before_prepare = world.snapshot();
+    let journal_before_prepare = world.journal().clone();
+    let prepared = world.prepared_next_due_war_event_for_test(due_at);
+    assert_eq!(world.snapshot(), snapshot_before_prepare);
+    assert_eq!(world.journal(), &journal_before_prepare);
+    assert!(matches!(
+        prepared,
+        Some(DomainEvent::WarConcluded {
+            war_id,
+            winner_alliance_id,
+            loser_alliance_id,
+            participant_outcomes,
+            ..
+        }) if war_id == "war.auto"
+            && winner_alliance_id == "alliance.red"
+            && loser_alliance_id == "alliance.blue"
+            && !participant_outcomes.is_empty()
+    ));
 
     for _ in 0..12 {
         world.step().expect("advance war lifecycle");

@@ -269,6 +269,17 @@ pub struct LlmDecisionDiagnostics {
     pub total_tokens: Option<u64>,
     #[serde(default)]
     pub retry_count: u32,
+    /// Native Harness request budget and consumed invocation counts. These
+    /// are absent for legacy unbudgeted traces and never imply opaque
+    /// ProviderBacked usage or billing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_model_calls: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_calls_used: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tool_calls: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_calls_used: Option<u32>,
 }
 
 /// Result of an action execution, providing feedback to the agent.

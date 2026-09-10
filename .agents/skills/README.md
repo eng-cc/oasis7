@@ -50,6 +50,8 @@ surface.
 
 ## Authoring Entry Points
 
+- Manual single-task entrypoints: [product](run-product-loop/SKILL.md), [system](run-system-loop/SKILL.md), [code](run-code-loop/SKILL.md). They share canonical task truth and effective helper gates; they do not schedule tasks or unlock the production supervisor.
+
 - 触发 skill：`.agents/skills/writing-repo-owned-skills/SKILL.md`
 - 模板：`.agents/skills/templates/SKILL.template.md`
 - 自检清单：`.agents/skills/checklists/skill-authoring-checklist.md`

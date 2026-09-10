@@ -51,6 +51,7 @@ mod snapshot_generated_world;
 mod snapshot_micro_depot;
 mod snapshot_progress;
 mod snapshot_progress_empty_world;
+mod snapshot_provider_probe;
 mod snapshot_reprioritize;
 mod social_quote;
 mod social_quote_capability;

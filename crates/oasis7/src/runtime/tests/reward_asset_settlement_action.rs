@@ -1,6 +1,9 @@
 use super::super::*;
 use ed25519_dalek::SigningKey;
 
+#[path = "reward_asset_settlement_action/node_points_settlement_publication_transaction_regressions.rs"]
+mod node_points_settlement_publication_transaction_regressions;
+
 fn settlement(node_id: &str, awarded_points: u64) -> NodeSettlement {
     NodeSettlement {
         node_id: node_id.to_string(),

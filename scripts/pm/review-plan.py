@@ -47,7 +47,7 @@ def load_json(path: Path) -> dict[str, Any]:
     return value
 
 
-def ci_receipt_authority(path: Path, task_uid: str, frozen_head: str) -> tuple[str, str]:
+def ci_receipt_authority(path: Path, task_uid: str, frozen_head: str) -> tuple[str, str, str | None]:
     receipt = load_json(path)
     module_path = Path(__file__).with_name("ci_ready_receipt_identity.py")
     spec = importlib.util.spec_from_file_location("ci_ready_receipt_identity", module_path)
@@ -74,7 +74,7 @@ def ci_receipt_authority(path: Path, task_uid: str, frozen_head: str) -> tuple[s
         raise ContractError(
             f"--ci-ready-receipt head mismatch: receipt={receipt_head}, frozen={frozen_head}"
         )
-    return actual, receipt_base
+    return actual, receipt.get("scope_base_oid", receipt_base), receipt_base if "scope_base_oid" in receipt else None
 
 
 def run_json(command: list[str]) -> dict[str, Any]:
@@ -336,8 +336,9 @@ def main() -> int:
         if not HEAD_RE.fullmatch(args.head):
             raise ContractError("--head must be a 40-64 character lowercase hex object id")
         receipt_comparison_oid: str | None = None
+        integration_base_oid: str | None = None
         if args.ci_ready_receipt:
-            evidence_digest, receipt_comparison_oid = ci_receipt_authority(
+            evidence_digest, receipt_comparison_oid, integration_base_oid = ci_receipt_authority(
                 Path(args.ci_ready_receipt).resolve(), args.task_uid, args.head
             )
         else:
@@ -356,13 +357,26 @@ def main() -> int:
             comparison_oid = receipt_comparison_oid
         else:
             comparison_oid = resolve_comparison_ref(root, comparison_ref, args.comparison_oid)
+        if integration_base_oid is not None:
+            actual_scope = subprocess.check_output(["git", "-C", str(root), "merge-base", integration_base_oid, args.head], text=True).strip()
+            if actual_scope != comparison_oid:
+                raise ContractError("CI receipt scope base does not match integration/head merge base")
         require_comparison_ancestor(root, comparison_oid, args.head)
+        from loop_gate import mapped_admission
+        try:
+            loop_admission = mapped_admission(root, args.task_uid, comparison_oid, args.head)
+        except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as exc:
+            raise ContractError(str(exc)) from exc
         roles = selector_roles(args)
         slices = expected_slices(args.task_uid, args.head, evidence_digest, comparison_ref, comparison_oid, roles)
         batch, batch_reused = ensure_batch(root, args.task_uid, args.head, evidence_digest, slices)
         epoch = str(batch["epoch"])
         identity = plan_identity(args.task_uid, args.head, evidence_digest,
                                  comparison_ref, comparison_oid, roles, slices)
+        if integration_base_oid is not None:
+            identity['integration_base_oid'] = integration_base_oid
+        if loop_admission['status'] != 'legacy':
+            identity['loop_binding'] = loop_admission['loop_binding']
         plan_path = (Path(args.out).resolve() if args.out else
                      root / ".pm" / "scratch" / args.task_uid / "review-plans" / f"{epoch}.json")
         preflight_result: dict[str, object] | None = None

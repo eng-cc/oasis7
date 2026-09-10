@@ -1,436 +1,19 @@
-import { render, screen, waitFor } from "@solidjs/testing-library";
+import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-const runtimeMock = vi.hoisted(() => ({
-  deriveRenderState: null,
-  mountError: null,
-  mountGates: [],
-  mountResults: [],
-  mountCalls: 0,
-  onEvent: null,
-}));
-vi.mock("./pixel_world_runtime_loader.js", async () => ({
-  ...(await vi.importActual("./pixel_world_runtime_loader.js")),
-  createPixelWorldRuntimeBridge: async ({ onEvent, onFatal }) => {
-    runtimeMock.onEvent = onEvent;
-    return {
-      source: runtimeMock.deriveRenderState ? "test_rust_runtime" : "wasm_import_failed",
-      moduleUrl: "http://127.0.0.1:4173/pixel-world-bridge/pixel_world_bridge.js",
-      deriveRenderState: runtimeMock.deriveRenderState,
-      bridge: {
-        mount() {
-          runtimeMock.mountCalls += 1;
-          if (runtimeMock.mountError) {
-            throw runtimeMock.mountError;
-          }
-          if (runtimeMock.mountGates.length) {
-            const gate = runtimeMock.mountGates.shift();
-            return gate.then(() => runtimeMock.mountResults.shift() || { status: "ready", fatal: null });
-          }
-          if (runtimeMock.deriveRenderState) {
-            return {
-              status: "ready",
-              fatal: null,
-            };
-          }
-          const fatal = {
-            code: "pixel_world_renderer_runtime_unavailable",
-            message: "pixel world wasm runtime is unavailable: missing wasm bridge",
-          };
-          onFatal?.(fatal);
-          return {
-            status: "fallback",
-            fatal,
-          };
-        },
-        update() {
-          if (runtimeMock.deriveRenderState) {
-            return {
-              status: "ready",
-              fatal: null,
-            };
-          }
-          return {
-            status: "fallback",
-          };
-        },
-        unmount() {
-          return {
-            status: "detached",
-          };
-        },
-      },
-    };
-  },
-}));
-let activeCleanup = null;
-let canvasContextSpy = null;
-const HEAVY_UI_TEST_TIMEOUT_MS = 60000;
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
-}
-function fieldValue(source, snake, camel, fallback = null) {
-  if (!source || typeof source !== "object") {
-    return fallback;
-  }
-  if (source[snake] != null) {
-    return source[snake];
-  }
-  if (source[camel] != null) {
-    return source[camel];
-  }
-  return fallback;
-}
-function dominantCompound(block) {
-  const ppm = block?.compounds?.ppm || {};
-  const entries = Object.entries(ppm);
-  if (!entries.length) {
-    return "unknown";
-  }
-  return entries.sort((left, right) => Number(right[1] || 0) - Number(left[1] || 0))[0][0];
-}
-function locationPos(location) {
-  return location?.pos || { x_cm: 0, y_cm: 0, z_cm: 0 };
-}
-function buildTestRustRenderState(input) {
-  const snapshot = input.snapshot || {};
-  const model = snapshot.model || {};
-  const gameplay = snapshot.player_gameplay || {};
-  const locations = Object.values(model.locations || {});
-  const agents = Object.values(model.agents || {});
-  const fragments = locations.flatMap((location) => {
-    const base = locationPos(location);
-    return (location.fragment_profile?.blocks?.blocks || []).map((block, index) => ({
-      id: `fragment:${location.id}:${index}`,
-      locationId: location.id,
-      pos: {
-        x_cm: base.x_cm + Number(block.origin_cm?.x_cm || 0),
-        y_cm: base.y_cm + Number(block.origin_cm?.z_cm || block.origin_cm?.y_cm || 0),
-        z_cm: base.z_cm + Number(block.origin_cm?.y_cm || 0),
-      },
-      dominantCompound: dominantCompound(block),
-      footprintCm: Math.max(Number(block.size_cm?.x_cm || 12_000), Number(block.size_cm?.z_cm || block.size_cm?.y_cm || 12_000)),
-    }));
-  });
-  const firstAction = (gameplay.available_actions || [])[0] || {};
-  const activeAgentId = gameplay.intent_target || agents[0]?.id || null;
-  const receiptPresent = Boolean(gameplay.recent_feedback || gameplay.last_world_change);
-  const blockerLabel = gameplay.blocker_kind === "material_shortage" ? "Missing Material" : gameplay.blocker_kind || null;
-  const renderState = {
-    locale: input.locale || "en",
-    worldBounds: snapshot.config?.space || { width_cm: 10_000_000, depth_cm: 5_000_000, height_cm: 1_000_000 },
-    world_bounds: snapshot.config?.space || { width_cm: 10_000_000, depth_cm: 5_000_000, height_cm: 1_000_000 },
-    locations: locations.map((location) => ({
-      id: location.id,
-      label: location.name || location.id,
-      pos: locationPos(location),
-      markerRole: "logic_anchor",
-      markerAlpha: 0.32,
-    })),
-    fragmentTerrain: fragments,
-    fragment_terrain: fragments,
-    agents: agents.map((agent, index) => {
-      const base = locationPos(model.locations?.[agent.location_id]);
-      return {
-        id: agent.id,
-        label: agent.name || agent.id,
-        pos: agent.pos || {
-          x_cm: base.x_cm + 20_000 + index * 15_000,
-          y_cm: base.y_cm + 10_000 + index * 12_000,
-          z_cm: base.z_cm,
-        },
-        positionSource: agent.pos ? "runtime_agent" : "location_derived",
-      };
-    }),
-    links: agents
-      .filter((agent) => agent.location_id && model.locations?.[agent.location_id])
-      .map((agent) => {
-        const from = agent.pos || {
-          x_cm: locationPos(model.locations[agent.location_id]).x_cm + 20_000,
-          y_cm: locationPos(model.locations[agent.location_id]).y_cm + 10_000,
-          z_cm: 0,
-        };
-        return {
-          id: `link:${agent.id}:${agent.location_id}`,
-          kind: "agent_assignment",
-          from,
-          to: locationPos(model.locations[agent.location_id]),
-          emphasis: 0.72,
-        };
-      }),
-    selection: activeAgentId ? { kind: "agent", id: activeAgentId } : null,
-    goalHighlight: {
-      title: gameplay.goal_title || "Current Objective",
-      objective: gameplay.objective || gameplay.progress_detail || "",
-    },
-    blockerHighlight: blockerLabel
-      ? { kind: gameplay.blocker_kind, label: blockerLabel, detail: gameplay.blocker_detail || null }
-      : null,
-    recentEventHotspots: [],
-    visualHotspots: [],
-    commercial_surface: {
-      objective: {
-        title: gameplay.goal_title || "Current Objective",
-        detail: gameplay.objective || gameplay.progress_detail || "No current objective.",
-        progress_percent: gameplay.progress_percent ?? null,
-      },
-      next_action: {
-        label: fieldValue(firstAction, "label", "label", "Unassigned"),
-        detail: gameplay.intent_summary || null,
-        target_agent_id: fieldValue(firstAction, "target_agent_id", "targetAgentId", activeAgentId),
-        execute_kind: fieldValue(firstAction, "execute_kind", "executeKind", "gameplay_action"),
-      },
-      active_agent_id: activeAgentId,
-      player_leverage: {
-        state: gameplay.stage_status || "waiting_for_intent",
-        label: receiptPresent ? "Blocked" : "Waiting for Intent",
-        summary: gameplay.progress_detail || "Waiting",
-        detail: gameplay.next_step_hint || null,
-      },
-      action_receipt: {
-        present: receiptPresent,
-        state: receiptPresent ? "blocked" : "waiting_for_intent",
-        confidence: receiptPresent ? "world_delta" : "none",
-        title: receiptPresent ? "Action blocked" : "No action receipt yet",
-        summary: receiptPresent ? "Action blocked" : "No receipt",
-        detail: gameplay.last_world_change || gameplay.recent_feedback?.effect || "No player-caused world change has been confirmed yet.",
-        target_agent_id: receiptPresent ? activeAgentId : null,
-        effect_kind: gameplay.causality_kind || null,
-        delta_logical_time: gameplay.recent_feedback?.delta_logical_time ?? null,
-        delta_event_seq: gameplay.recent_feedback?.delta_event_seq ?? null,
-      },
-      blocker: {
-        label: blockerLabel,
-        detail: gameplay.next_step_hint || gameplay.blocker_detail || null,
-      },
-      world_read: {
-        agents: agents.length,
-        routes: agents.filter((agent) => agent.location_id).length,
-        fragments: fragments.length,
-        hotspots: 0,
-      },
-    },
-    presentation: input.presentation || { world_bounds_label: "bounds", marker_truth_note: "truth" },
-  };
-  return renderState;
-}
-function useTestRustRenderState() {
-  runtimeMock.deriveRenderState = vi.fn((input) => buildTestRustRenderState(input));
-}
-function sampleSnapshot() {
-  return {
-    time: 12,
-    config: {
-      space: {
-        width_cm: 10_000_000,
-        depth_cm: 5_000_000,
-        height_cm: 1_000_000,
-      },
-    },
-    model: {
-      agents: {
-        "agent-0": {
-          id: "agent-0",
-          name: "Agent 0",
-          location_id: "loc-0",
-          resources: {},
-        },
-      },
-      locations: {
-        "loc-0": {
-          id: "loc-0",
-          name: "Factory Anchor",
-          pos: { x_cm: 5_000_000, y_cm: 2_500_000, z_cm: 0 },
-          profile: { radius_cm: 25_000, radiation_emission_per_tick: 0, material: "silicate" },
-          fragment_profile: {
-            blocks: {
-              blocks: [
-                {
-                  origin_cm: { x_cm: 0, y_cm: 0, z_cm: 0 },
-                  size_cm: { x_cm: 12_000, y_cm: 7_500, z_cm: 8_000 },
-                  density_kg_per_m3: 3200,
-                  compounds: {
-                    ppm: {
-                      silicate_matrix: 800_000,
-                      water_ice: 200_000,
-                    },
-                  },
-                },
-                {
-                  origin_cm: { x_cm: 20_000, y_cm: 1_000, z_cm: 18_000 },
-                  size_cm: { x_cm: 20_000, y_cm: 8_000, z_cm: 10_000 },
-                  density_kg_per_m3: 7800,
-                  compounds: {
-                    ppm: {
-                      iron_nickel_alloy: 900_000,
-                      sulfide_ore: 100_000,
-                    },
-                  },
-                },
-              ],
-            },
-          },
-          resources: {},
-        },
-      },
-      agent_prompt_profiles: {},
-      agent_execution_debug_contexts: {},
-      agent_player_bindings: {
-        "agent-0": "player-one",
-      },
-      agent_player_public_key_bindings: {
-        "agent-0": "abcdef0123456789abcdef0123456789",
-      },
-    },
-    player_gameplay: {
-      stage_id: "post_onboarding",
-      stage_status: "blocked",
-      execution_state: "blocked",
-      accepted_intent_id: "gameplay_action:build_factory_smelter_mk1",
-      intent_summary: "Queue build_factory_smelter_mk1 for agent-0",
-      intent_scope: "gameplay_action",
-      intent_target: "agent-0",
-      goal_id: "post_onboarding.recover_capability",
-      goal_kind: "RecoverCapability",
-      goal_title: "Recover sustainable capability",
-      objective: "Stabilize the first production line before expanding.",
-      progress_detail: "The primary line is blocked by missing material input.",
-      progress_percent: 68,
-      blocker_kind: "material_shortage",
-      blocker_detail: "iron input exhausted at factory-0",
-      causality_kind: "world_constraint",
-      causality_detail: "iron input exhausted at factory-0",
-      last_world_change: "Smelter build request reached factory-0; iron shortage blocks construction.",
-      blocker_supplemental_detail: null,
-      next_step_hint: "Replenish upstream materials, then advance again to confirm the line resumes.",
-      branch_hint: null,
-      available_actions: [
-        {
-          action_id: "build_factory_smelter_mk1",
-          target_agent_id: "agent-0",
-          label: "Build smelter mk1",
-          protocol_action: "gameplay_action.submit",
-          disabled_reason: null,
-        },
-      ],
-      recent_feedback: {
-        action: "build_factory_smelter_mk1",
-        stage: "completed_no_progress",
-        effect: "Smelter build request reached factory-0; iron shortage blocks construction.",
-        reason: "iron input exhausted at factory-0",
-        hint: "Replenish upstream materials, then advance again.",
-        delta_logical_time: 1,
-        delta_event_seq: 2,
-      },
-      agent_claim: null,
-    },
-  };
-}
-function acceptedOnlySnapshot() {
-  const snapshot = clone(sampleSnapshot());
-  const gameplay = snapshot.player_gameplay;
-  gameplay.stage_status = "executing";
-  gameplay.execution_state = "accepted";
-  gameplay.blocker_kind = null;
-  gameplay.blocker_detail = null;
-  gameplay.causality_kind = null;
-  gameplay.causality_detail = null;
-  gameplay.last_world_change = null;
-  gameplay.recent_feedback = {
-    action: "build_factory_smelter_mk1",
-    stage: "accepted",
-    effect: null,
-    reason: null,
-    hint: "Build request queued for agent-0.",
-    delta_logical_time: 0,
-    delta_event_seq: 1,
-  };
-  return snapshot;
-}
-function noReceiptSnapshot() {
-  const snapshot = clone(sampleSnapshot());
-  const gameplay = snapshot.player_gameplay;
-  gameplay.stage_status = "running";
-  delete gameplay.execution_state;
-  delete gameplay.accepted_intent_id;
-  delete gameplay.intent_summary;
-  delete gameplay.intent_scope;
-  delete gameplay.intent_target;
-  delete gameplay.blocker_kind;
-  delete gameplay.blocker_detail;
-  delete gameplay.causality_kind;
-  delete gameplay.causality_detail;
-  delete gameplay.last_world_change;
-  gameplay.progress_detail = "The first production line is waiting for a player command.";
-  gameplay.recent_feedback = null;
-  return snapshot;
-}
-function emptyWorldSnapshot() {
-  const snapshot = clone(noReceiptSnapshot());
-  snapshot.model.agents = {};
-  snapshot.model.locations = {};
-  snapshot.model.agent_prompt_profiles = {};
-  snapshot.model.agent_execution_debug_contexts = {};
-  snapshot.model.agent_player_bindings = {};
-  snapshot.model.agent_player_public_key_bindings = {};
-  return snapshot;
-}
-function bindFirstSnapshotAgentForTest(core, snapshot) {
-  const agentId = Object.keys(snapshot?.model?.agents || {})[0];
-  const playerId = snapshot?.model?.agent_player_bindings?.[agentId];
-  if (!agentId || !playerId) {
-    return;
-  }
-  core.state.auth = {
-    ...core.state.auth,
-    available: true,
-    playerId,
-    publicKey: snapshot?.model?.agent_player_public_key_bindings?.[agentId] || "abcdef0123456789abcdef0123456789",
-    privateKey: "private-key-must-stay-hidden",
-    source: "local_test_api_ephemeral",
-    registrationStatus: "registered",
-    runtimeStatus: "registered",
-    boundAgentId: agentId,
-  };
-}
-async function renderPixelWorldHost(snapshot = sampleSnapshot(), search = "?test_api=1&connect=0&locale=en") {
-  activeCleanup?.();
-  activeCleanup = null;
-  vi.resetModules();
-  window.history.replaceState({}, "", `/software_safe.html${search}`);
-  window.localStorage.clear();
-  document.body.innerHTML = "";
-  const core = await import("./legacy_core.js");
-  const { PixelWorldHost } = await import("./pixel_world_host.jsx");
-  core.setViewerLocale("en");
-  core.injectSnapshot(snapshot);
-  bindFirstSnapshotAgentForTest(core, snapshot);
-  const view = render(() => <PixelWorldHost locale="en" />);
-  activeCleanup = view.unmount;
-  return {
-    core,
-    ...view,
-  };
-}
-beforeEach(() => {
-  runtimeMock.deriveRenderState = null;
-  runtimeMock.mountError = null;
-  runtimeMock.mountGates = [];
-  runtimeMock.mountResults = [];
-  runtimeMock.mountCalls = 0;
-  runtimeMock.onEvent = null;
-  canvasContextSpy = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({});
-  window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
-  window.localStorage.clear();
-  document.body.innerHTML = "";
-});
-afterEach(() => {
-  activeCleanup?.();
-  activeCleanup = null;
-  canvasContextSpy?.mockRestore();
-  canvasContextSpy = null;
-  document.body.innerHTML = "";
-});
+import { verifyHotspotCameraAndFocus } from "./pixel_world_hotspot_test_helpers.js";
+import {
+  HEAVY_UI_TEST_TIMEOUT_MS,
+  buildTestRustRenderState,
+  cleanupMountedHost,
+  emptyWorldSnapshot,
+  noReceiptSnapshot,
+  renderPixelWorldHost,
+  runtimeMock,
+  sampleSnapshot,
+  testHarness,
+  useTestRustRenderState,
+} from "./pixel_world_host_test_support.jsx";
 describe("pixel world host", () => {
   it("keeps world focus stage resets scoped away from nested command panels", () => {
     const html = readFileSync("software_safe.html", "utf8");
@@ -453,6 +36,179 @@ describe("pixel world host", () => {
     expect(html).toMatch(/\.pixel-world-focus-minimap__node--selected\s*\{[^}]*border-color:\s*rgba\(208,\s*168,\s*91,\s*0\.58\);/s);
     expect(html).toMatch(/\.pixel-world-focus-minimap__node--selected::before\s*\{[^}]*width:\s*18px;[^}]*height:\s*18px;[^}]*border:\s*1px solid rgba\(208,\s*168,\s*91,\s*0\.78\);/s);
   });
+
+  it("exposes one decision area with one primary action, receipt, and canvas legend", async () => {
+    useTestRustRenderState();
+    await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_visual_fixture=selected_blocker",
+    );
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-viewer-decision-area="true"]')).toBeInTheDocument();
+    });
+
+    const decisionArea = document.querySelector('[data-viewer-decision-area="true"]');
+    expect(decisionArea).toHaveAttribute("id", "viewer-decision-area");
+    expect(decisionArea.querySelectorAll('[data-primary-action="true"]')).toHaveLength(1);
+    expect(decisionArea.querySelector("#viewer-action-receipt")).toBeInTheDocument();
+    expect(document.querySelectorAll('[data-pixel-world-legend="true"]')).toHaveLength(1);
+    expect(document.querySelector('[data-pixel-world-legend="true"]')).toHaveTextContent(/route/i);
+    expect(document.querySelector('[data-pixel-world-legend="true"]')).toHaveTextContent(/goal/i);
+    expect(document.querySelector('[data-pixel-world-legend="true"]')).toHaveTextContent(/blocker/i);
+    expect(document.querySelector('[data-pixel-world-legend="true"]')).toHaveTextContent(/resource/i);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("renders stable terse marker codes and exposes the selected full label in a safe callout", async () => {
+    const snapshot = sampleSnapshot();
+    snapshot.model.agents = {
+      "agent-builder": { id: "agent-builder", name: "Shared Name", location_id: "loc-0", resources: {} },
+      "agent-factory": { id: "agent-factory", name: "Shared Name", location_id: "loc-0", resources: {} },
+    };
+    snapshot.player_gameplay.intent_target = "agent-builder";
+    useTestRustRenderState();
+    await renderPixelWorldHost(snapshot);
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('[data-pixel-world-agent-marker="true"]').length).toBeGreaterThanOrEqual(2);
+    });
+    const markers = [...document.querySelectorAll('[data-pixel-world-agent-marker="true"]')];
+    const codes = markers.map((marker) => marker.querySelector(".pixel-world-entity__code")?.textContent);
+    expect(new Set(codes).size).toBe(codes.length);
+    expect(markers[0]).not.toHaveTextContent("Shared Name");
+    expect(markers[0].querySelector(".pixel-world-entity__label")).not.toBeInTheDocument();
+    expect(markers[0]).toHaveAttribute("title", "Shared Name");
+    expect(markers[0]).toHaveAttribute("aria-label", "Select Agent Shared Name");
+    expect(document.querySelector(".pixel-world-canvas__selection")).toHaveTextContent("Selected: Shared Name");
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("highlights only routes with explicit selected endpoint ids", async () => {
+    runtimeMock.deriveRenderState = vi.fn((input) => ({
+      ...buildTestRustRenderState(input),
+      selection: { kind: "agent", id: "agent-0" },
+      links: [
+        { id: "link-associated", kind: "agent_assignment", from: { x_cm: 1, y_cm: 1 }, to: { x_cm: 2, y_cm: 2 }, agent_id: "agent-0", location_id: "loc-0" },
+        { id: "link-unassociated", kind: "agent_assignment", from: { x_cm: 3, y_cm: 3 }, to: { x_cm: 4, y_cm: 4 } },
+      ],
+    }));
+    await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_visual_fixture=selected_blocker",
+    );
+
+    await waitFor(() => {
+      expect(document.querySelectorAll(".pixel-world-route")).toHaveLength(2);
+    });
+    const associated = document.querySelector('[data-route-id="link-associated"]');
+    const unassociated = document.querySelector('[data-route-id="link-unassociated"]');
+    expect(associated).toHaveAttribute("data-associated", "true");
+    expect(unassociated).toHaveAttribute("data-associated", "false");
+    expect(unassociated).toHaveClass("pixel-world-route--muted");
+    expect(document.querySelectorAll(".pixel-world-route[role='button'], .pixel-world-route button")).toHaveLength(0);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("associates authoritative host relation projections by their canonical link id", async () => {
+    runtimeMock.deriveRenderState = vi.fn((input) => {
+      const authoritative = { kind: "agent_assignment", status: "active", source_class: "runtime_projection", freshness: "current" };
+      const state = buildTestRustRenderState(input);
+      state.agents = [
+        { ...state.agents[0], location_id: "loc-0", relation: authoritative },
+        { id: "agent-1", location_id: "loc-1", pos: { x_cm: 3, y_cm: 3 }, relation: authoritative },
+      ];
+      return {
+      ...state,
+      selection: { kind: "agent", id: "agent-0" },
+      links: [
+        {
+          id: "link:agent-0:loc-0",
+          kind: "agent_assignment",
+          from: { x_cm: 1, y_cm: 1 },
+          to: { x_cm: 2, y_cm: 2 },
+          status: "active",
+          source_class: "runtime_projection",
+          freshness: "current",
+        },
+        {
+          id: "link:agent-1:loc-1",
+          kind: "agent_assignment",
+          from: { x_cm: 3, y_cm: 3 },
+          to: { x_cm: 4, y_cm: 4 },
+          status: "active",
+          source_class: "runtime_projection",
+          freshness: "current",
+        },
+      ],
+      };
+    });
+    const { core } = await renderPixelWorldHost(sampleSnapshot(), "?test_api=1&connect=0&locale=en");
+    document.body.setAttribute("data-viewer-visual-fixture", "authoritative-relation");
+    core.requestRender();
+
+    await waitFor(() => {
+      expect(document.querySelectorAll(".pixel-world-route")).toHaveLength(2);
+    });
+    expect(document.querySelector('[data-route-id="link:agent-0:loc-0"]')).toHaveAttribute("data-associated", "true");
+    expect(document.querySelector('[data-route-id="link:agent-1:loc-1"]')).toHaveAttribute("data-associated", "false");
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("keeps accepted intent wording out of a blocked receipt", async () => {
+    runtimeMock.deriveRenderState = vi.fn((input) => {
+      const state = buildTestRustRenderState(input);
+      state.commercial_surface.action_receipt = {
+        present: true,
+        state: "blocked",
+        confidence: "accepted_intent",
+        title: "Action blocked",
+        summary: "The action was blocked by a material shortage.",
+        detail: "No world change was confirmed.",
+        target_agent_id: "agent-0",
+      };
+      return state;
+    });
+    await renderPixelWorldHost(sampleSnapshot(), "?test_api=1&connect=0&locale=en");
+
+    await waitFor(() => {
+      expect(document.querySelector("#viewer-action-receipt")).toHaveTextContent("Action blocked");
+    });
+    const receipt = document.querySelector("#viewer-action-receipt");
+    expect(receipt).not.toHaveTextContent("Action accepted");
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("keeps marker codes unique across the first-screen agent and location caps", async () => {
+    const snapshot = sampleSnapshot();
+    snapshot.model.agents = Object.fromEntries(Array.from({ length: 10 }, (_, index) => [
+      `agent-${index}`,
+      { id: `agent-${index}`, name: index % 2 ? "Shared Long Agent Name" : "共享长名称行动体", location_id: `loc-${index % 8}`, resources: {} },
+    ]));
+    snapshot.model.locations = Object.fromEntries(Array.from({ length: 8 }, (_, index) => [
+      `loc-${index}`,
+      { id: `loc-${index}`, name: index % 2 ? "Shared Long Location Name" : "共享长名称地点", pos: { x_cm: 100_000 + index * 80_000, y_cm: 100_000 + index * 80_000, z_cm: 0 }, resources: {} },
+    ]));
+    snapshot.player_gameplay.intent_target = "agent-0";
+    useTestRustRenderState();
+    const { core } = await renderPixelWorldHost(snapshot, "?test_api=1&connect=0&locale=en");
+    document.body.setAttribute("data-viewer-visual-fixture", "long-identity");
+    core.requestRender();
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('[data-pixel-world-agent-marker="true"]:not(.pixel-world-entity--canvas-hit-target)')).toHaveLength(10);
+      expect(document.querySelectorAll('[data-pixel-world-location-marker="true"]')).toHaveLength(8);
+    });
+    const codes = [...document.querySelectorAll(".pixel-world-entity:not(.pixel-world-entity--canvas-hit-target) .pixel-world-entity__code")].map((node) => node.textContent);
+    expect(new Set(codes).size).toBe(codes.length);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("keeps the primary action hit area at least 44px on mobile and exposes pending state in place", async () => {
+    const css = readFileSync("viewer_terminal_shell.css", "utf8");
+    expect(css).toMatch(/@media\s*\(max-width:\s*1240px\)[\s\S]*?\.pixel-world-command-cell__action\s*\{[^}]*min-height:\s*44px;/);
+
+    useTestRustRenderState();
+    await renderPixelWorldHost(sampleSnapshot());
+    await waitFor(() => expect(document.querySelector('[data-primary-action="true"]')).toBeInTheDocument());
+    const primaryAction = document.querySelector('[data-primary-action="true"]');
+    expect(primaryAction).toHaveAttribute("aria-live", "polite");
+    expect(primaryAction.closest('[data-viewer-decision-area="true"]')).toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("resolves claim onboarding next moves to executable gameplay actions", async () => {
     const { resolvePixelWorldDirectNextMoveAction } = await import("./pixel_world_host.jsx");
@@ -520,6 +276,33 @@ describe("pixel world host", () => {
     const readout = worldHud.querySelector(".pixel-world-readout");
     expect(readout).toHaveTextContent("agents=7");
     expect(readout).not.toHaveTextContent(/routes=|fragments=|hotspots=|renderer=|runtime=/i);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("refreshes connection and feed badges across updates without remounting", async () => {
+    useTestRustRenderState();
+    const { core } = await renderPixelWorldHost(sampleSnapshot(), "?test_api=1&connect=0&locale=en");
+    await waitFor(() => expect(document.querySelector(".pixel-world-readout")).not.toBeNull());
+    const connection = document.querySelector("[data-world-connection-status]");
+    const feed = document.querySelector("[data-world-feed-readout-status]");
+    for (const [connectionStatus, status, stale, connectionLabel, feedLabel] of [
+      ["connecting", "loading", false, "CONNECTING", "SYNCING"],
+      ["connected", "ready", false, "ONLINE", "LIVE"],
+      ["closed", "ready", true, "CLOSED", "STALE"],
+    ]) {
+      core.state.connectionStatus = connectionStatus;
+      Object.assign(core.state.worldFeed, { status, stale });
+      core.requestRender();
+      await waitFor(() => {
+        expect(document.querySelector("[data-world-connection-status]")).toBe(connection);
+        expect(document.querySelector("[data-world-feed-readout-status]")).toBe(feed);
+        expect(connection).toHaveTextContent(`World connection: ${connectionLabel}`);
+        expect(feed).toHaveTextContent(`Feed freshness: ${feedLabel}`);
+        expect(connection).toHaveClass(`pixel-world-readout__connection--${connectionLabel.toLowerCase()}`);
+        expect(feed).toHaveClass(`pixel-world-readout__feed--${feedLabel.toLowerCase()}`);
+        expect(connection).toHaveAttribute("data-world-connection-status", connectionLabel.toLowerCase());
+        expect(feed).toHaveAttribute("data-world-feed-readout-status", status);
+      });
+    }
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("does not label a disconnected or stale world as LIVE", async () => {
@@ -608,7 +391,7 @@ describe("pixel world host", () => {
 
   it("fails closed before bridge mount when the canvas cannot create a WebGL2 surface", async () => {
     useTestRustRenderState();
-    canvasContextSpy.mockReturnValue(null);
+    testHarness.canvasContextSpy.mockReturnValue(null);
 
     try {
       const { core } = await renderPixelWorldHost();
@@ -625,13 +408,13 @@ describe("pixel world host", () => {
         code: "pixel_world_webgl2_unavailable",
       }));
     } finally {
-      canvasContextSpy.mockReturnValue({});
+      testHarness.canvasContextSpy.mockReturnValue({});
     }
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("keeps unavailable copy player-readable while raw fatal details stay folded", async () => {
     useTestRustRenderState();
-    canvasContextSpy.mockReturnValue(null);
+    testHarness.canvasContextSpy.mockReturnValue(null);
 
     const { container } = await renderPixelWorldHost();
 
@@ -842,6 +625,8 @@ describe("pixel world host", () => {
     expect(screen.getByText("Rust leverage summary")).toBeInTheDocument();
     expect(document.querySelector(".pixel-world-readout")).toHaveTextContent("tick=12");
     expect(document.querySelector(".pixel-world-readout [data-world-tick='12']")).toHaveTextContent("tick=12");
+    expect(document.querySelector(".pixel-world-readout [data-world-connection-status]")).toHaveTextContent(/World connection:/i);
+    expect(document.querySelector(".pixel-world-readout [data-world-feed-readout-status]")).toHaveTextContent(/Feed freshness:/i);
     await waitFor(() => {
       expect(document.querySelector(".pixel-world-canvas--rendered")).toBeInTheDocument();
     });
@@ -863,42 +648,88 @@ describe("pixel world host", () => {
     expect(runtimeMock.deriveRenderState).toHaveBeenCalled();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
-  it("shows the exact hotspot label only while its hover identity remains in render state", async () => {
+  it("keeps sparse-scene guidance honest and read-only", async () => {
+    runtimeMock.deriveRenderState = vi.fn((input) => ({
+      ...buildTestRustRenderState(input),
+      links: [],
+      fragmentTerrain: [],
+      fragment_terrain: [],
+      locations: [{ id: "loc-0", label: "Origin", pos: { x_cm: 1, y_cm: 2, z_cm: 0 } }],
+      agents: [{ id: "agent-0", label: "Agent 0", pos: { x_cm: 3, y_cm: 4, z_cm: 0 } }],
+    }));
+    await renderPixelWorldHost(sampleSnapshot(), "?test_api=1&connect=0&locale=en");
+    await waitFor(() => expect(document.querySelector("[data-pixel-world-sparse-guidance='true']")).toBeInTheDocument());
+    const guidance = document.querySelector("[data-pixel-world-sparse-guidance='true']");
+    expect(guidance).toHaveTextContent("No published routes in this snapshot");
+    expect(guidance).toHaveTextContent("No published terrain in this snapshot");
+    expect(guidance).toHaveTextContent("Published bounds:");
+    expect(guidance.querySelectorAll("button, a")).toHaveLength(0);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("uses a safe generic label when an unknown blocker reaches the host", async () => {
+    useTestRustRenderState();
+    const snapshot = sampleSnapshot();
+    snapshot.player_gameplay.blocker_kind = "unknown_internal_code";
+    snapshot.player_gameplay.blocker_detail = "diagnostic only";
+    await renderPixelWorldHost(snapshot, "?test_api=1&connect=0&locale=en");
+    await waitFor(() => expect(document.querySelector("[data-shell-region='next-move-primary']")).toBeInTheDocument());
+    const primary = document.querySelector("[data-shell-region='next-move-primary']");
+    expect(primary).toHaveTextContent("Current blocker");
+    expect(primary).not.toHaveTextContent("unknown_internal_code");
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("keeps unknown blocker codes out of the Cinematic command chip", async () => {
+    useTestRustRenderState();
+    const snapshot = sampleSnapshot();
+    snapshot.player_gameplay.blocker_kind = "unknown_internal_code";
+    snapshot.player_gameplay.blocker_detail = "diagnostic only";
+    await renderPixelWorldHost(snapshot, "?test_api=1&connect=0&locale=en");
+
+    await waitFor(() => expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument());
+    screen.getByRole("button", { name: "Cinematic View" }).click();
+    await waitFor(() => expect(document.querySelector(".pixel-world-host")).toHaveAttribute("data-world-focus", "true"));
+    screen.getByRole("button", { name: "Command & Target" }).click();
+
+    const commandChip = document.querySelector(".pixel-world-focus-command-chip--blocker");
+    expect(commandChip).toHaveTextContent("Current blocker");
+    expect(commandChip).not.toHaveTextContent("unknown_internal_code");
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("keeps read-only hotspot controls available in production and resolves tooltip locale", async () => {
     runtimeMock.deriveRenderState = vi.fn((input) => ({
       ...buildTestRustRenderState(input),
       visualHotspots: [{
         id: "hotspot-blocker",
-        label: "Blocked route",
         kind: "blocker",
-        pos: { x_cm: 5_000_000, y_cm: 2_500_000, z_cm: 0 },
-      }],
+        label: "缺料阻塞",
+        pos: { x_cm: 5_020_000, y_cm: 2_510_000, z_cm: 0 },
+        sizeHintPx: 20,
+      }, { id: "hotspot-goal", kind: "goal", label: "稳定生产", pos: { x_cm: 6_000_000, y_cm: 2_000_000, z_cm: 0 } }],
     }));
 
-    await renderPixelWorldHost();
-    await waitFor(() => {
-      expect(runtimeMock.onEvent).toEqual(expect.any(Function));
-    });
+    await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=zh-CN",
+      "zh-CN",
+    );
 
-    runtimeMock.onEvent({
-      type: "hover_entity",
-      selection: { kind: "hotspot", id: "hotspot-blocker" },
-    });
-    await waitFor(() => {
-      expect(document.querySelector("[data-hotspot-tooltip]")).toHaveTextContent("Blocked route");
-    });
+    const marker = await screen.findByRole("button", { name: /阻塞热点：缺料阻塞/ });
+    expect(marker).toHaveProperty("tabIndex", 0);
+    await verifyHotspotCameraAndFocus(marker, runtimeMock.onEvent);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
 
-    runtimeMock.onEvent({ type: "hover_entity", selection: null });
-    await waitFor(() => {
-      expect(document.querySelector("[data-hotspot-tooltip]")).toBeNull();
-    });
+  it("keeps hotspot controls painted above decorative route waypoints", async () => {
+    runtimeMock.deriveRenderState = vi.fn((input) => ({
+      ...buildTestRustRenderState(input),
+      visualHotspots: [{ id: "hotspot-goal", kind: "goal", label: "stabilize the first production line", pos: { x_cm: 5_020_000, y_cm: 2_510_000, z_cm: 0 } }],
+    }));
 
-    runtimeMock.onEvent({
-      type: "hover_entity",
-      selection: { kind: "hotspot", id: "removed-hotspot" },
-    });
-    await waitFor(() => {
-      expect(document.querySelector("[data-hotspot-tooltip]")).toBeNull();
-    });
+    await renderPixelWorldHost(sampleSnapshot(), "?test_api=1&connect=0&locale=en&pixel_world_visual_fixture=selected_blocker");
+
+    const marker = await screen.findByRole("button", { name: /Goal hotspot/ });
+    const waypoint = document.querySelector(".pixel-world-route-waypoint--target");
+    expect(waypoint).not.toBeNull();
+    expect(Boolean(waypoint.compareDocumentPosition(marker) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("makes the rendered canvas focusable with a read-only accessible world description", async () => {
@@ -1523,8 +1354,7 @@ describe("pixel world host", () => {
 
   it("preserves world focus UI state across host remounts", async () => {
     useTestRustRenderState();
-    activeCleanup?.();
-    activeCleanup = null;
+    cleanupMountedHost();
     vi.resetModules();
     window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
     window.localStorage.clear();
@@ -1536,7 +1366,7 @@ describe("pixel world host", () => {
     core.injectSnapshot(sampleSnapshot());
 
     const firstView = render(() => <PixelWorldHost locale="en" />);
-    activeCleanup = firstView.unmount;
+    testHarness.activeCleanup = firstView.unmount;
 
     await waitFor(() => {
       expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
@@ -1554,12 +1384,10 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-drawer--diagnostics")?.open).toBe(true);
 
     firstView.unmount();
-    if (activeCleanup === firstView.unmount) {
-      activeCleanup = null;
-    }
+    cleanupMountedHost();
 
     const secondView = render(() => <PixelWorldHost locale="en" />);
-    activeCleanup = secondView.unmount;
+    testHarness.activeCleanup = secondView.unmount;
 
     const secondHost = document.querySelector(".pixel-world-host");
     expect(secondHost).toHaveAttribute("data-world-focus", "true");

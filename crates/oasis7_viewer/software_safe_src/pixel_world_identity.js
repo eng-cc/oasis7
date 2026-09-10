@@ -20,6 +20,41 @@ function humanizeAgentId(id) {
   return words.length > 0 ? `Agent ${words.join(" ")}` : "";
 }
 
+function stableMarkerHash(value) {
+  let hash = 2166136261;
+  for (const character of String(value)) {
+    hash ^= character.codePointAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36).toUpperCase().padStart(4, "0").slice(-4);
+}
+
+/**
+ * Return a compact, deterministic marker code for a rendered entity.
+ *
+ * The visible token is deliberately short, while the stable hash keeps
+ * same-label entities distinguishable without depending on array order.
+ */
+export function pixelWorldEntityMarkerCode(entity, fallbackId = "", kind = "agent") {
+  const id = String(entity?.id || fallbackId || "unknown").trim() || "unknown";
+  const prefix = kind === "location" ? "L" : "A";
+  // The runtime entity domain uses `agent-<n>` and `loc-<n>`. Keep those
+  // compact codes, while preserving distinct codes for compatibility-shaped
+  // IDs such as `agent_0` that are not the canonical runtime spelling.
+  const numericId = kind === "location"
+    ? id.match(/^loc-(\d+)$/i)?.[1]
+    : id.match(/^agent-(\d+)$/i)?.[1];
+  if (numericId) {
+    return `${prefix}${numericId}`;
+  }
+  const token = id
+    .replace(/^(?:agent|location|loc)[-_]?/i, "")
+    .replace(/[^a-z0-9]+/gi, "")
+    .toUpperCase()
+    .slice(0, 4) || "X";
+  return `${prefix}${token}-${stableMarkerHash(`${kind}:${id}`)}`;
+}
+
 export function pixelWorldReadableAgentLabel(agent, fallbackId = "", isLocaleZh = false) {
   const { id, explicitLabel, hasExplicitLabel } = agentIdentityParts(agent, fallbackId);
   const numericAgentId = id.match(/^agent[-_](\d+)$/i);

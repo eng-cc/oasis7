@@ -125,7 +125,7 @@ pub(super) fn capability_issuer_signing_key() -> SigningKey {
         .expect("capability issuer signing seed is 32 bytes");
     SigningKey::from_bytes(&private_key_bytes)
 }
-fn capability_finality_signing_key_2() -> SigningKey {
+pub(super) fn capability_finality_signing_key_2() -> SigningKey {
     let seed = util::sha256_hex(b"oasis7-test-capability-finality-signer-2-v1");
     let seed_bytes = hex::decode(seed).expect("decode capability finality signing seed");
     let private_key_bytes: [u8; 32] = seed_bytes

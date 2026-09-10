@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "render_material_hierarchy_tests.rs"]
+mod material_hierarchy_tests;
+
 #[path = "render_agent_core_tests.rs"]
 mod agent_core_tests;
 

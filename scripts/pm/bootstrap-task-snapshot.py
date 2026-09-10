@@ -9,6 +9,7 @@ import datetime as dt
 import hashlib
 import json
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -115,6 +116,11 @@ def live_payload(
         raise SnapshotError(f"branch drift: mapping={task['task_branch']} live={branch}")
     head = git(root, "rev-parse", "HEAD")
     base_ref, base_oid = resolve_base(root, task["default_branch"])
+    if task.get("loop_binding") is not None:
+        pinned = task.get("bootstrap_base_oid")
+        if not isinstance(pinned, str) or not re.fullmatch(r"[0-9a-f]{40}", pinned):
+            raise SnapshotError("manual loop task requires fixed bootstrap_base_oid")
+        base_oid = git(root, "rev-parse", "--verify", pinned + "^{commit}")
 
     return {
         "schema": SCHEMA,
@@ -130,6 +136,7 @@ def live_payload(
             "owner_role": task["owner_role"],
             "acceptance": task["acceptance"],
             "bootstrap_epoch": bootstrap_epoch,
+            **({"loop_binding": task["loop_binding"]} if task.get("loop_binding") is not None else {}),
         },
         "repository": task["repository"],
         "git": {
@@ -249,6 +256,7 @@ def validate_epoch_identity(args: argparse.Namespace) -> pathlib.Path:
             "owner_role": task.get("owner_role") if isinstance(task, dict) else None,
             "acceptance": task.get("acceptance") if isinstance(task, dict) else None,
             "bootstrap_epoch": task.get("bootstrap_epoch") if isinstance(task, dict) else None,
+            "loop_binding": task.get("loop_binding") if isinstance(task, dict) else None,
         }
 
     for field in ("schema", "repository", "request"):
@@ -267,6 +275,8 @@ def validate_epoch_identity(args: argparse.Namespace) -> pathlib.Path:
     expected_base = expected_git["base"]
     if not isinstance(saved_base, dict) or saved_base.get("branch") != expected_base["branch"]:
         raise SnapshotError("snapshot default branch identity drift")
+    if expected.get("task", {}).get("loop_binding") is not None and saved_base.get("oid") != expected_base["oid"]:
+        raise SnapshotError("snapshot fixed manual base drift")
     if not isinstance(saved.get("producer"), str) or not saved["producer"]:
         raise SnapshotError("snapshot producer is missing")
     if not isinstance(saved.get("created_at"), str) or not saved["created_at"]:

@@ -364,7 +364,19 @@ def pr_number_from_url(pr_url: str) -> int | None:
 def issue_task_fields(body: str) -> dict[str, Any]:
     body = body.replace("\r\n", "\n")
     fields: dict[str, Any] = {}
-    for key in ("owner_role", "module", "status", "workflow_phase", "priority", "worktree_hint", "source_signal", "source_type", "severity", "completion_mode"):
+    binding_matches = re.findall(r"^- loop_binding_b64: `([^`]+)`$", body, re.MULTILINE)
+    if "loop_binding_b64:" in body:
+        if len(binding_matches) != 1:
+            die("loop binding is malformed or duplicated")
+        try:
+            encoded = binding_matches[0]
+            binding = json.loads(base64.b64decode(encoded + "=" * (-len(encoded) % 4), altchars=b"-_", validate=True))
+            if not isinstance(binding, dict):
+                raise ValueError("binding must be an object")
+        except (ValueError, UnicodeError) as exc:
+            die(f"invalid loop binding: {exc}")
+        fields["loop_binding"] = binding
+    for key in ("owner_role", "module", "status", "workflow_phase", "priority", "worktree_hint", "source_signal", "source_type", "severity", "completion_mode", "bootstrap_base_oid"):
         match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
         if match:
             fields[key] = match.group(1)
@@ -406,6 +418,35 @@ def issue_task_fields(body: str) -> dict[str, Any]:
     return fields
 
 
+def require_supplied_uid_absent(repo: str, task_uid: str) -> None:
+    """Search indexing cannot prove absence for a predetermined task identity."""
+    seen_ids, seen_numbers = set(), set()
+    for page in range(1, 101):
+        issues = json.loads(run_text(['gh', 'api',
+            f'repos/{repo}/issues?state=all&sort=created&direction=asc&per_page=100&page={page}']))
+        if not isinstance(issues, list) or len(issues) > 100:
+            die('repository Issue enumeration incomplete or malformed')
+        for issue in issues:
+            if (not isinstance(issue, dict) or type(issue.get('id')) is not int or issue['id'] < 1
+                    or type(issue.get('number')) is not int or issue['number'] < 1
+                    or 'body' not in issue or (issue['body'] is not None and not isinstance(issue['body'], str))):
+                die('repository Issue enumeration missing canonical identity/body')
+            if issue['id'] in seen_ids or issue['number'] in seen_numbers:
+                die('repository Issue enumeration pagination ambiguous')
+            seen_ids.add(issue['id']); seen_numbers.add(issue['number'])
+            if 'pull_request' in issue:
+                if not isinstance(issue['pull_request'], dict):
+                    die('repository Issue enumeration malformed pull request record')
+                continue
+            body = (issue['body'] or '').replace('\r\n', '\n')
+            uids = re.findall(r'^task_uid:\s*(task_[0-9a-f]{32})$', body, re.MULTILINE)
+            if task_uid in uids:
+                die('manual task UID already exists in repository Issues; use explicit existing-task resume')
+        if len(issues) < 100:
+            return
+    die('repository Issue enumeration limit exhausted; absence unproven')
+
+
 def github_issue_record(repo: str, task_uid: str) -> dict[str, Any] | None:
     search_payload = run_text(
         [
@@ -425,26 +466,33 @@ def github_issue_record(repo: str, task_uid: str) -> dict[str, Any] | None:
         ]
     )
     hits = json.loads(search_payload)
-    if not isinstance(hits, list) or len(hits) != 1:
+    if not isinstance(hits, list) or len(hits) >= 5:
+        die("task Issue discovery incomplete; cannot establish canonical identity")
+    matches = []
+    for hit in hits:
+        number = int(hit.get("number") or 0)
+        if not number:
+            die("task Issue discovery returned invalid identity")
+        candidate = json.loads(run_text(["gh", "issue", "view", str(number), "-R", repo,
+                                         "--json", "body,number,title,url,state,stateReason"]))
+        candidate_body = str(candidate.get("body") or "").replace("\r\n", "\n")
+        fields = re.findall(r"^task_uid:[^\n]*$", candidate_body, re.MULTILINE)
+        uids = re.findall(r"^task_uid:\s*(task_[0-9a-f]{32})$", candidate_body, re.MULTILINE)
+        if task_uid in uids:
+            if fields != ["task_uid: " + task_uid] or uids != [task_uid]:
+                die("task Issue has ambiguous canonical UID")
+            matches.append((hit, candidate))
+    if len(matches) > 1:
+        die("multiple canonical task Issues; reconcile before creation")
+    if not matches:
         return None
-    issue_number = int(hits[0].get("number") or 0)
+    hit, issue = matches[0]
+    hits = [hit]
+    issue_number = int(hit.get("number") or 0)
     if not issue_number:
         return None
-    issue_payload = run_text(
-        [
-            "gh",
-            "issue",
-            "view",
-            str(issue_number),
-            "-R",
-            repo,
-            "--json",
-            "body,number,title,url,state,stateReason",
-        ]
-    )
-    issue = json.loads(issue_payload)
     body = str(issue.get("body") or "").replace("\r\n", "\n")
-    if not re.search(rf"^task_uid:\s*{re.escape(task_uid)}$", body, re.MULTILINE):
+    if re.findall(r"^task_uid:[^\n]*$", body, re.MULTILINE) != ["task_uid: " + task_uid]:
         return None
     record = issue_task_fields(body)
     title = str(issue.get("title") or hits[0].get("title") or "")
@@ -481,6 +529,8 @@ def task_from_record(uid: str, record: dict[str, Any]) -> OrderedDict[str, Any]:
             ("pr_url", record.get("pr_url") or record.get("pull_request_url") or ""),
             ("pr_number", record.get("pr_number") or ""),
             ("merge_hold", record.get("merge_hold") or {}),
+            ("loop_binding", record.get("loop_binding")),
+            ("bootstrap_base_oid", record.get("bootstrap_base_oid")),
             ("completion_mode", record.get("completion_mode") or ""),
             ("non_pr_completion_evidence", record.get("non_pr_completion_evidence") or ""),
             ("source_refs", record.get("source_refs") or []),
@@ -513,6 +563,11 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
                 f"- severity: `{task.get('severity') or ''}`",
             ]
         )
+    if task.get("loop_binding") is not None:
+        encoded = base64.urlsafe_b64encode(json.dumps(task["loop_binding"], sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).decode().rstrip("=")
+        lines.append(f"- loop_binding_b64: `{encoded}`")
+        if task.get("bootstrap_base_oid"):
+            lines.append(f"- bootstrap_base_oid: `{task['bootstrap_base_oid']}`")
     if task.get("pr_url"):
         lines.append(f"- pr_url: `{task.get('pr_url')}`")
     if task.get("pr_number"):
@@ -542,11 +597,13 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def create_issue(repo: str, task: OrderedDict[str, Any]) -> str:
+def create_issue(repo: str, task: OrderedDict[str, Any], before_write=None) -> str:
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
         handle.write(issue_body(task))
         body_path = handle.name
     try:
+        if before_write is not None:
+            before_write()
         return run_text(["gh", "issue", "create", "-R", repo, "--title", f"[PM] {task['title']}", "--body-file", body_path])
     finally:
         pathlib.Path(body_path).unlink(missing_ok=True)
@@ -612,6 +669,12 @@ def update_project_fields(
 ) -> int:
     sync = load_sync_module()
     project_id, fields = sync.project_context(args.project_owner, args.project_number)
+    if task.get("loop_binding"):
+        values = sync.project_field_values(task)
+        for name in ("Loop", "Change ID"):
+            field = fields.get(name)
+            if not field or (name in sync.SINGLE_SELECT_FIELDS and values[name] not in field.get("options_by_name", {})):
+                die(f"loop Project projection unavailable: provision {name} field/options through the authorized Project setup path, then retry")
     if require_lifecycle_projection:
         values = sync.project_field_values(task)
         missing: list[str] = []
@@ -632,6 +695,8 @@ def update_project_fields(
                 + f"./scripts/pm/refresh-task-cache.sh --task-uid {args.task_uid} --json and the same lifecycle command"
             )
     updated, skipped = sync.update_fields(project_id, project_item_id, task, fields)
+    if task.get("loop_binding") and any(item.split(":", 1)[0] in {"Loop", "Change ID"} and not item.endswith(":unchanged") for item in skipped):
+        die("loop Project projection incomplete; reconcile before retry")
     if skipped:
         print(f"github-project-task: skipped fields: {', '.join(skipped)}", file=sys.stderr)
     if require_lifecycle_projection:
@@ -716,7 +781,239 @@ def add_project_item(args: argparse.Namespace, issue_url: str) -> str:
     return item_id
 
 
+def validate_loop_binding(binding: Any) -> dict[str, Any]:
+    path = pathlib.Path(__file__).with_name("loop_policy.py")
+    spec = importlib.util.spec_from_file_location("loop_policy", path)
+    if spec is None or spec.loader is None:
+        die("loop policy unavailable")
+    policy = importlib.util.module_from_spec(spec)
+    sys.path.insert(0, str(path.parent))
+    try:
+        spec.loader.exec_module(policy)
+        verdict = policy.validate_binding(binding)
+    finally:
+        sys.path.pop(0)
+    if verdict.get("status") != "passed":
+        die("invalid loop binding: " + str(verdict.get("blockers")))
+    return binding
+
+
+def loop_lineage_path(root: pathlib.Path, task_uid: str) -> pathlib.Path:
+    if not re.fullmatch(r"task_[0-9a-f]{32}", task_uid):
+        die("invalid task UID for loop lineage")
+    common = pathlib.Path(run_text(["git", "-C", str(root), "rev-parse", "--git-common-dir"]))
+    return (root / common).resolve() / "oasis7-loop-lineage" / (task_uid + ".json")
+
+
+def validate_loop_inputs(root: pathlib.Path, binding: dict[str, Any], repository: str, purpose: str) -> None:
+    """Admission of selected manual inputs; never scan unrelated tasks."""
+    tool_root = pathlib.Path(__file__).resolve().parents[2]
+    commit = binding.get("policy_commit", "")
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        die("manual admission requires immutable policy commit")
+    if run_text(["git", "-C", str(tool_root), "rev-parse", "HEAD"]) != commit:
+        die("manual admission helper is not running from pinned effective policy")
+    run_text(["git", "-C", str(tool_root), "diff", "--no-ext-diff", "--no-textconv", "--exit-code", commit, "--", "scripts/pm"])
+    shadows = run_text(["git", "-C", str(tool_root), "ls-files", "--others", "--", "scripts/pm"])
+    if any(path.endswith((".py", ".sh", ".json")) for path in shadows.splitlines()):
+        die("untracked executable authority in manual helper root")
+    sys.path.insert(0, str(pathlib.Path(__file__).parent))
+    try:
+        import loop_policy
+        import loop_contracts
+        for result in (loop_policy.validate_tool_root(tool_root, root, binding),
+                       loop_contracts.validate_contracts(tool_root, root, binding, purpose=purpose)):
+            if result.get("status") != "passed":
+                die("manual input admission blocked: " + str(result.get("blockers")))
+        bindings = {binding["task_uid"]: binding}
+        pending = list(binding["dependencies"])
+        while pending:
+            uid = pending.pop()
+            if uid in bindings:
+                continue
+            if len(bindings) >= 64:
+                die("selected dependency closure exceeds 64 tasks; narrow the dependency contract")
+            live = github_issue_record(repository, uid)
+            require_loop_dependency_ready(live or {}, uid, repository)
+            dependency = (live or {}).get("loop_binding")
+            if not isinstance(dependency, dict):
+                die("selected dependency binding unavailable: " + uid)
+            bindings[uid] = validate_loop_binding(dependency)
+            pending.extend(dependency["dependencies"])
+        result = loop_policy.validate_dependencies(binding, bindings)
+        if result.get("status") != "passed":
+            die("manual dependency admission blocked: " + str(result.get("blockers")))
+    finally:
+        sys.path.pop(0)
+
+
+def require_loop_dependency_ready(live: dict[str, Any], task_uid: str, repository: str = DEFAULT_REPO) -> None:
+    """A delivery dependency needs the canonical merged terminal, not mere closure."""
+    from loop_terminal import validate_terminal_delivery
+    result = validate_terminal_delivery(repository, task_uid, live.get("issue_number"))
+    if result.get("status") != "passed":
+        die("selected dependency has not completed merged delivery: " + task_uid + ": " + str(result.get("blockers")))
+
+
+def record_loop_lineage(root: pathlib.Path, binding: dict[str, Any], *, migrate: bool = False) -> None:
+    path = loop_lineage_path(root, binding["task_uid"])
+    with durable_store.locked_json(path, {}) as lineage:
+        previous = lineage.get("loop_binding")
+        if previous and previous != binding:
+            if not migrate or binding["bootstrap_epoch"] != previous["bootstrap_epoch"] + 1:
+                die("loop lineage drift; explicit epoch reconciliation required")
+            lineage.setdefault("previous_epochs", []).append(previous)
+        lineage["loop_binding"] = binding
+
+
+def ensure_loop_history(repository: str, issue_number: int, binding: dict[str, Any]) -> None:
+    digest = hashlib.sha256(json.dumps(binding, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    marker = f"<!-- oasis7-loop-binding-history task_uid={binding['task_uid']} epoch={binding['bootstrap_epoch']} digest={digest} -->"
+    body = marker + "\nImmutable loop binding history; removing current metadata does not restore legacy admission.\n"
+    pages = json.loads(run_text(["gh", "api", f"repos/{repository}/issues/{issue_number}/comments", "--paginate", "--slurp"]))
+    comments = [item for page in pages for item in (page if isinstance(page, list) else [page])]
+    matching = [item for item in comments if marker in str(item.get("body") or "")]
+    if matching:
+        if len(matching) != 1 or matching[0].get("body") != body:
+            die("loop binding history is ambiguous; reconcile selected task")
+        return
+    url = issue_comment(repository, issue_number, body)
+    match = re.search(r"#issuecomment-(\d+)$", url)
+    if not match:
+        die("loop binding history comment identity uncertain; reconcile before retry")
+    readback = json.loads(run_text(["gh", "api", f"repos/{repository}/issues/comments/{match.group(1)}"]))
+    if readback.get("body") != body:
+        die("loop binding history readback mismatch")
+
+
+def check_loop_binding_update(record: dict[str, Any], binding: dict[str, Any], migrate_epoch: int | None) -> None:
+    previous = record.get("loop_binding")
+    if previous == binding:
+        return
+    current_epoch = (previous or {}).get("bootstrap_epoch", record.get("bootstrap_epoch", 1))
+    if migrate_epoch != current_epoch + 1 or binding.get("bootstrap_epoch") != migrate_epoch:
+        die("loop/input/scope binding change requires explicit next --migrate-epoch")
+    if record.get("owner_role") and record["owner_role"] != binding.get("owner_role"):
+        die("loop binding owner must match the existing task owner")
+
+
+def command_bind_loop(args: argparse.Namespace) -> int:
+    mapping_path, _, record = require_record(args)
+    binding = json.loads(pathlib.Path(args.loop_binding).read_text())
+    if not isinstance(binding, dict):
+        die("loop binding must be an object")
+    if binding["task_uid"] != args.task_uid:
+        die("loop binding task UID mismatch")
+    if not args.manual_request_ref.strip():
+        die("manual request reference required")
+    live = github_issue_record(args.repo, args.task_uid)
+    if not live:
+        die("cannot bind without live task Issue readback")
+    for field in ("issue_number", "owner_role", "worktree_hint"):
+        if live.get(field) != record.get(field):
+            die(f"loop bind live identity drift: {field}")
+    check_loop_binding_update(live, binding, args.migrate_epoch)
+    validate_loop_inputs(args.root.resolve(), binding, args.repo, "in_flight" if live.get("loop_binding") == binding else "new_tasks")
+    if live.get("status") in {"done", "deferred"} or live.get("workflow_phase") in TERMINAL_WORKFLOW_PHASES:
+        die("terminal task cannot be rebound")
+    updated = {**record, **live, "loop_binding": binding, "bootstrap_epoch": binding["bootstrap_epoch"]}
+    if args.migrate_epoch:
+        snapshot_path = pathlib.Path(record["canonical_worktree"]) / ".pm/scratch" / args.task_uid / "bootstrap-task-snapshot.json"
+        source = pathlib.Path(__file__).with_name("bootstrap-task-snapshot.py")
+        spec = importlib.util.spec_from_file_location("bootstrap_snapshot", source)
+        snapshot = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(snapshot)
+        try:
+            saved = json.loads(snapshot_path.read_text())
+            if saved.get("digest") != snapshot.digest(saved):
+                die("cannot migrate corrupt bootstrap snapshot")
+            old_epoch = saved["task"].get("bootstrap_epoch", 1)
+            if old_epoch not in (binding["bootstrap_epoch"] - 1, binding["bootstrap_epoch"]):
+                die("bootstrap snapshot epoch gap; reconcile existing task")
+            if saved["task"]["uid"] != args.task_uid:
+                die("bootstrap snapshot task identity mismatch")
+            if old_epoch == binding["bootstrap_epoch"] and (live.get("loop_binding") != binding or saved["task"].get("loop_binding") != binding):
+                die("bootstrap snapshot binding does not match migrated live task")
+            saved["request"]["identity"]
+            snapshot_base = saved["git"]["base"]["oid"]
+            if updated.get("bootstrap_base_oid") and updated["bootstrap_base_oid"] != snapshot_base:
+                die("bootstrap snapshot base differs from cached immutable base")
+            archive = snapshot_path.with_name(f"bootstrap-task-snapshot.epoch-{old_epoch}.json")
+            if old_epoch != binding["bootstrap_epoch"] and archive.exists() and json.loads(archive.read_text()) != saved:
+                die("bootstrap snapshot epoch archive mismatch")
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            die("bootstrap snapshot migration preflight failed: " + str(error))
+    if not updated.get("bootstrap_base_oid"):
+        snapshot_path = pathlib.Path(record["canonical_worktree"]) / ".pm/scratch" / args.task_uid / "bootstrap-task-snapshot.json"
+        try:
+            updated["bootstrap_base_oid"] = json.loads(snapshot_path.read_text())["git"]["base"]["oid"]
+        except (OSError, ValueError, KeyError):
+            die("existing task binding needs its immutable bootstrap snapshot base")
+    task = task_from_record(args.task_uid, updated)
+    # The facade's inherited OS reservation covers preflight and this writer.
+    # Register only at the mutation boundary; a preflight error is not an
+    # uncertain remote operation. Recovery already has its original intent.
+    action_json = getattr(args, "loop_action_json", None)
+    action = json.loads(action_json) if action_json else None
+    if action is not None and (action.get("kind") != "bind_loop" or action.get("expected") != json.dumps(binding, sort_keys=True)):
+        die("bind mutation intent differs from the requested binding")
+    intent_written = False
+    def before_write():
+        nonlocal intent_written
+        if action is not None and not intent_written:
+            from loop_recovery import common_dir, record_action
+            record_action(common_dir(args.root.resolve()), args.task_uid, action)
+            intent_written = True
+    if live.get("loop_binding") != binding:
+        before_write()
+        update_issue_body(args.repo, int(record["issue_number"]), task)
+    readback = github_issue_record(args.repo, args.task_uid)
+    if not readback or readback.get("loop_binding") != binding:
+        die("loop binding Issue write/readback uncertain; reconcile before retry")
+    before_write()
+    update_project_fields(args, task, str(record["project_item_id"]))
+    ensure_loop_history(args.repo, int(record["issue_number"]), binding)
+    merge_task_mapping(mapping_path, args.task_uid, updated)
+    if args.migrate_epoch:
+        snapshot_path = pathlib.Path(record["canonical_worktree"]) / ".pm/scratch" / args.task_uid / "bootstrap-task-snapshot.json"
+        saved = json.loads(snapshot_path.read_text())
+        old_epoch = saved.get("task", {}).get("bootstrap_epoch", 1)
+        if old_epoch != binding["bootstrap_epoch"]:
+            if old_epoch + 1 != binding["bootstrap_epoch"]:
+                die("bootstrap snapshot epoch gap; reconcile existing task")
+            source = pathlib.Path(__file__).with_name("bootstrap-task-snapshot.py")
+            spec = importlib.util.spec_from_file_location("bootstrap_snapshot", source)
+            snapshot = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(snapshot)
+            if saved.get("digest") != snapshot.digest(saved):
+                die("cannot migrate corrupt bootstrap snapshot")
+            archive = snapshot_path.with_name(f"bootstrap-task-snapshot.epoch-{old_epoch}.json")
+            if archive.exists() and json.loads(archive.read_text()) != saved:
+                die("bootstrap snapshot epoch archive mismatch")
+            atomic_json(archive, saved)
+            replacement = snapshot.live_payload(pathlib.Path(record["canonical_worktree"]), mapping_path, args.task_uid, saved["request"]["identity"])
+            replacement.update(producer="scripts/pm/github-project-task.py bind-loop", created_at=now())
+            replacement["digest"] = snapshot.digest(replacement)
+            atomic_json(snapshot_path, replacement)
+    record_loop_lineage(args.root.resolve(), binding, migrate=bool(args.migrate_epoch))
+    payload = {"status": "bound", "task_uid": args.task_uid, "loop_binding": binding,
+               "manual_request_ref": args.manual_request_ref, "issue_url": record["issue_url"]}
+    print(json.dumps(payload, sort_keys=True) if args.json else f"bind-loop: {args.task_uid}")
+    return 0
+
+
 def command_new_task(args: argparse.Namespace) -> int:
+    request_key = getattr(args, "request_key", None)
+    if not request_key:
+        return _command_new_task(args)
+    common = pathlib.Path(run_text(["git", "-C", str(args.root), "rev-parse", "--git-common-dir"]))
+    common = (args.root / common).resolve()
+    key = hashlib.sha256(request_key.encode()).hexdigest()
+    with durable_store.locked_json(common / "oasis7-bootstrap-writers" / (key + ".json"), {}):
+        return _command_new_task(args)
+
+
+def _command_new_task(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     mapping_path = mapping_path_for(root, args.mapping)
     repository_identity = authoritative_repository_identity(root, args.repo, args.worktree_hint or str(root))
@@ -738,11 +1035,26 @@ def command_new_task(args: argparse.Namespace) -> int:
             ("handoff_to", sorted(args.handoff_to or [])),
         ]
     )
+    binding_path = getattr(args, "loop_binding", None)
+    binding = json.loads(pathlib.Path(binding_path).read_text()) if binding_path else None
+    if binding_path and (not isinstance(binding, dict) or not binding):
+        die("loop binding must be an object")
+    request_key = getattr(args, "request_key", None)
+    if binding:
+        if binding["owner_role"] != args.owner_role or binding["request_key"] != request_key:
+            die("loop binding owner/request key mismatch")
+        immutable_request["loop_binding"] = binding
+        immutable_request["request_key"] = request_key
+        base_oid = getattr(args, "bootstrap_base_oid", None)
+        if not base_oid or not re.fullmatch(r"[0-9a-f]{40}", base_oid):
+            die("manual loop bootstrap requires --bootstrap-base-oid fixed commit")
+        immutable_request["bootstrap_base_oid"] = base_oid
     immutable_digest = hashlib.sha256(
         json.dumps(immutable_request, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
     ).hexdigest()
     journal_key = hashlib.sha256(
-        "\0".join((args.repo, args.title, args.owner_role, args.worktree_hint or "")).encode()
+        ("\0".join((args.repo, "manual-request", request_key)) if request_key else
+         "\0".join((args.repo, args.title, args.owner_role, args.worktree_hint or ""))).encode()
     ).hexdigest()
     test_scratch = os.environ.get("OASIS7_PM_TEST_SCRATCH", "")
     if test_scratch:
@@ -752,6 +1064,9 @@ def command_new_task(args: argparse.Namespace) -> int:
         journal_root = scratch_root / "bootstrap-journal"
     else:
         journal_root = root / ".pm/scratch/bootstrap-journal"
+        if request_key:
+            common = pathlib.Path(run_text(["git", "-C", str(root), "rev-parse", "--git-common-dir"]))
+            journal_root = (common if common.is_absolute() else root / common).resolve() / "oasis7-bootstrap-journal"
     journal_path = journal_root / f"{journal_key}.json"
     journal_existed = journal_path.exists()
     journal = json.loads(journal_path.read_text(encoding="utf-8")) if journal_existed else {}
@@ -762,6 +1077,7 @@ def command_new_task(args: argparse.Namespace) -> int:
         normalized_recorded = OrderedDict(
             (key, sorted(recorded_request.get(key) or []) if key in {"source_refs", "doc_refs", "related_prd", "handoff_to"} else
              list(recorded_request.get(key) or []) if key == "acceptance" else
+             recorded_request.get(key) if key == "loop_binding" else
              str(recorded_request.get(key) or ""))
             for key in immutable_request
         )
@@ -771,9 +1087,24 @@ def command_new_task(args: argparse.Namespace) -> int:
         recorded_digest = str(journal.get("immutable_request_digest") or "")
         if recorded_digest and recorded_digest != immutable_digest:
             die("bootstrap immutable request digest mismatch; journal may be corrupt")
-    task_uid = str(journal.get("task_uid") or f"task_{uuid.uuid4().hex}")
+    task_uid = str(journal.get("task_uid") or (binding or {}).get("task_uid") or f"task_{uuid.uuid4().hex}")
+    if binding and journal.get("state") == "completed":
+        validate_loop_inputs(root, binding, args.repo, "in_flight")
+        live = github_issue_record(args.repo, task_uid)
+        if not live or live.get("loop_binding") != binding:
+            die("completed manual bootstrap live binding mismatch; reconcile selected task")
+        payload = {**live, "task_uid": task_uid, "task_path": live["issue_url"],
+                   "execution_log_path": live["issue_url"], "resumed_existing_task": True}
+        print(json.dumps(payload, sort_keys=True) if args.json else f"new-task: reused {task_uid}")
+        return 0
+    if binding and not journal:
+        existing_uid = github_issue_record(args.repo, task_uid)
+        if existing_uid:
+            die("manual task UID already exists; use explicit existing-task resume instead")
+    if binding:
+        validate_loop_inputs(root, binding, args.repo, "new_tasks")
     if not journal:
-        journal = {"version": 2, "task_uid": task_uid, "state": "planned", "next_action": "create_issue",
+        journal = {"version": 2, "task_uid": task_uid, "state": "planned", "creation_outcome": "never_attempted", "next_action": "create_issue",
                    "immutable_request": immutable_request, "immutable_request_digest": immutable_digest,
                    "updated_at": now()}
         atomic_json(journal_path, journal)
@@ -798,18 +1129,46 @@ def command_new_task(args: argparse.Namespace) -> int:
             ("updated_at", now()),
         ]
     )
+    if binding:
+        task["loop_binding"] = binding
+        task["bootstrap_base_oid"] = base_oid
     issue_url = str(journal.get("issue_url") or "")
     if not issue_url and journal_existed:
         try:
             recovered = github_issue_record(args.repo, task_uid)
         except (subprocess.CalledProcessError, json.JSONDecodeError, RuntimeError):
+            if binding:
+                die("manual bootstrap Issue reconciliation uncertain; retry the same request after readback recovers")
             recovered = None
         issue_url = str((recovered or {}).get("issue_url") or "")
+        if issue_url and binding and ((recovered or {}).get("loop_binding") != binding or
+                                      (recovered or {}).get("worktree_hint") != task["worktree_hint"]):
+            die("manual bootstrap recovered Issue binding/worktree mismatch")
     if not issue_url:
-        issue_url = create_issue(args.repo, task)
-    journal.update({"issue_url": issue_url, "state": "issue_created", "next_action": "add_project_item", "updated_at": now()})
+        if journal_existed and journal.get("creation_outcome") not in {"never_attempted", "confirmed_no_write"}:
+            die("bootstrap Issue creation outcome uncertain; retain pending intent and reconcile exact live identity before retry")
+        if binding:
+            require_supplied_uid_absent(args.repo, task_uid)
+        # Persist before the non-idempotent remote attempt. Neither an empty
+        # search nor an exception proves that GitHub rejected the write.
+        attempted = False
+        def before_create():
+            nonlocal attempted
+            journal.update({"creation_outcome": "uncertain", "next_action": "reconcile_issue", "updated_at": now()})
+            atomic_json(journal_path, journal)
+            attempted = True
+        try:
+            issue_url = create_issue(args.repo, task, before_write=before_create)
+        except Exception:
+            if not attempted:
+                journal.update({"creation_outcome": "confirmed_no_write", "next_action": "create_issue", "updated_at": now()})
+                atomic_json(journal_path, journal)
+            raise
+    journal.update({"issue_url": issue_url, "creation_outcome": "completed", "state": "issue_created", "next_action": "add_project_item", "updated_at": now()})
     atomic_json(journal_path, journal)
     issue_number = issue_number_from_url(issue_url)
+    if binding:
+        ensure_loop_history(args.repo, issue_number, binding)
     item_id = str(journal.get("project_item_id") or "")
     if not item_id:
         item_id = add_project_item(args, issue_url)
@@ -840,7 +1199,11 @@ def command_new_task(args: argparse.Namespace) -> int:
         "evidence_sink": issue_url,
         **repository_identity,
     }
+    if binding:
+        record.update(loop_binding=binding, bootstrap_epoch=binding["bootstrap_epoch"], bootstrap_base_oid=base_oid)
     merge_task_mapping(mapping_path, task_uid, record)
+    if binding:
+        record_loop_lineage(root, binding)
     merge_project_mapping(mapping_path, {"owner": args.project_owner, "number": args.project_number, "repo": args.repo})
     journal.update({"state": "completed", "next_action": "none", "mapping_path": str(mapping_path), "updated_at": now()})
     atomic_json(journal_path, journal)
@@ -852,6 +1215,7 @@ def command_new_task(args: argparse.Namespace) -> int:
             "updated_field_values": updated_fields,
             "mapping_path": str(mapping_path),
             "bootstrap_journal": str(journal_path),
+            "resumed_existing_task": False,
         }
     )
     if args.json:
@@ -1429,6 +1793,19 @@ def command_refresh_task(args: argparse.Namespace) -> int:
     live = github_issue_record(args.repo, args.task_uid)
     if not live:
         die(f"refresh-task: authoritative GitHub issue not found for {args.task_uid}")
+    if existing.get("loop_binding") is not None and live.get("loop_binding") is None:
+        die("refresh-task: live loop binding disappeared; explicit reconciliation required")
+    lineage_path = loop_lineage_path(root, args.task_uid)
+    if lineage_path.exists():
+        lineage = json.loads(lineage_path.read_text())
+        if lineage.get("loop_binding") != live.get("loop_binding"):
+            die("refresh-task: live loop binding differs from immutable lineage; reconcile explicitly")
+    snapshot_root = pathlib.Path(existing.get("canonical_worktree") or live.get("worktree_hint") or root)
+    snapshot_path = snapshot_root / ".pm/scratch" / args.task_uid / "bootstrap-task-snapshot.json"
+    if snapshot_path.exists():
+        snapshot_binding = json.loads(snapshot_path.read_text()).get("task", {}).get("loop_binding")
+        if snapshot_binding is not None and snapshot_binding != live.get("loop_binding"):
+            die("refresh-task: live loop binding differs from bootstrap snapshot; reconcile explicitly")
     # The command root is execution context, not task identity.  Terminal
     # refreshes intentionally run from the default worktree, so rebinding the
     # task to that root would destroy the canonical task-worktree/branch pair.
@@ -1567,6 +1944,7 @@ def command_refresh_task(args: argparse.Namespace) -> int:
         "task_uid", "title", "issue_number", "issue_url", "owner_role", "module",
         "status", "priority", "worktree_hint", "source_signal", "source_type",
         "severity", "pr_url", "pr_number", "merge_hold", "source_refs", "acceptance",
+        "loop_binding", "bootstrap_base_oid",
     }
     record: dict[str, Any] = {}
     for key in authoritative_keys:
@@ -1575,6 +1953,16 @@ def command_refresh_task(args: argparse.Namespace) -> int:
         elif key == "acceptance":
             record[key] = []
     record.update({key: value for key, value in recovered.items() if value not in (None, "")})
+    if record.get("loop_binding") is not None:
+        validate_loop_binding(record["loop_binding"])
+        if record["loop_binding"]["task_uid"] != args.task_uid:
+            die("live loop binding UID mismatch")
+        record["bootstrap_epoch"] = record["loop_binding"]["bootstrap_epoch"]
+        for name, expected in (("Loop", record["loop_binding"]["loop"]), ("Change ID", record["loop_binding"]["change_id"])):
+            if project_fields.get(name) != expected:
+                die(f"refresh-task: live Project {name} differs from frozen Issue binding")
+    elif project_fields.get("Loop") or project_fields.get("Change ID"):
+        die("refresh-task: live Project loop lineage exists but Issue binding is missing")
     project_status = project_fields.get("PM Status", "")
     lifecycle_rank = {
         "candidate": 0, "committed": 1, "blocked": 2, "ready": 3,
@@ -1633,6 +2021,7 @@ def command_refresh_task(args: argparse.Namespace) -> int:
         "task_status": committed.get("status"),
         "acceptance": committed.get("acceptance") or [],
         "cache_refreshed_at": committed["cache_refreshed_at"],
+        "loop_binding": committed.get("loop_binding"),
     }
     print(json.dumps(payload, indent=2, sort_keys=True) if args.json else f"refresh-task: refreshed {args.task_uid}")
     return 0
@@ -1787,8 +2176,21 @@ def build_parser() -> argparse.ArgumentParser:
     new_task.add_argument("--acceptance", action="append", default=[])
     new_task.add_argument("--handoff-to", action="append", default=[])
     new_task.add_argument("--worktree-hint")
+    new_task.add_argument("--loop-binding", help="Full frozen oasis7.loop-task/v1 JSON file")
+    new_task.add_argument("--request-key", help="Persisted logical manual request identity")
+    new_task.add_argument("--bootstrap-base-oid", help="Fetched immutable bootstrap base for manual tasks")
     new_task.add_argument("--json", action="store_true")
     new_task.set_defaults(func=command_new_task)
+
+    bind = subparsers.add_parser("bind-loop")
+    bind.add_argument("--loop-action-json", help=argparse.SUPPRESS)
+    add_common(bind)
+    bind.add_argument("--task-uid", required=True)
+    bind.add_argument("--loop-binding", required=True)
+    bind.add_argument("--manual-request-ref", required=True)
+    bind.add_argument("--migrate-epoch", type=int)
+    bind.add_argument("--json", action="store_true")
+    bind.set_defaults(func=command_bind_loop)
 
     append = subparsers.add_parser("append-execution-log")
     add_common(append)

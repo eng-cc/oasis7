@@ -34,7 +34,7 @@ impl World {
             .governance_execution_policy
             .emergency_veto_guardian_threshold;
         let signer_node_ids = self.validate_guardian_signers(&signer_node_ids, threshold)?;
-        let penalty_id = self.allocate_next_governance_identity_penalty_id();
+        let penalty_id = self.next_governance_identity_penalty_id.max(1);
         let event = GovernanceEvent::IdentityPenaltyApplied {
             penalty_id,
             target_agent_id,

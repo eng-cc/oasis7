@@ -46,7 +46,7 @@
 - 每个必须修复项都有文件/命令/证据定位，以及建议 owner 或下一步
 - 每个允许延后的债务都有记录位置、过期条件和重新触发验证的方式
 - 没有把本角色的健康度判断包装成 QA 放行、runtime 正确性、产品方向或对外口径结论
-- 结论已回写 GitHub task issue evidence comments，并按需补充到正式 docs / handoff / signal
+- 若本角色是 task owner，按既有 owner-role `workflow-report` 流程完成任务证据闭环；若作为 `tpm` 派生的 bounded subagent slice，则将结论与证据整理为 evidence packet 返回 TPM，由 TPM 按 canonical workflow 回写 GitHub task issue evidence comments，并按需补充到正式 docs / handoff / signal；仅在 slice contract 明确授权时由本角色直接回写
 
 ## Codex Adapter Projection
 ```toml
@@ -81,6 +81,6 @@ Return: role and slice outcome; categorized findings with severity, file/command
 - 是否检查命名、注释、错误信息、operator-facing 文档和 source-of-truth 语义是否清晰
 - 是否在涉及领域正确性时要求对应专业角色复核
 - 是否在涉及发布阻断/放行时回流给 `qa_engineer`
-- 若 `repository_health_engineer` 是 task owner，是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role repository_health_engineer --task-uid <TASK-UID>`；若作为 `tpm` 派生的 bounded subagent slice，是否把 start/close/finding 证据回写到 GitHub task issue evidence comments，而不是用非 owner role 调用 `workflow-report`
+- 若 `repository_health_engineer` 是 task owner，是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role repository_health_engineer --task-uid <TASK-UID>`；若作为 `tpm` 派生的 bounded subagent slice，是否把 start/close/finding 证据整理为 evidence packet 返回 TPM，由 TPM 回写 GitHub task issue evidence comments，仅在 slice contract 明确授权时由本角色直接回写，而不是用非 owner role 调用 `workflow-report`
 - 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只把结论停留在 GitHub task issue evidence 局部记录
-- 是否已回写 GitHub task issue evidence comments 与必要的正式治理文档
+- 若作为 `tpm` 派生的 bounded subagent slice，是否已将结论与证据整理为 evidence packet 返回 TPM，由 TPM 按 canonical workflow 回写 GitHub task issue evidence comments 与必要的正式治理文档；仅在 slice contract 明确授权时由本角色直接回写；若本角色为 task owner，是否按既有 owner-role `workflow-report` 路径完成所需回写

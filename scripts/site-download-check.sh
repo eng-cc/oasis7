@@ -25,10 +25,20 @@ REQUIRED_ENTRY_MARKERS=(
 )
 
 RELEASE_ASSET_URLS=(
-  "https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-windows-x64.exe"
-  "https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-macos-x64.dmg"
-  "https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-linux-x64.deb"
-  "https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-checksums.txt"
+  "https://github.com/eng-cc/oasis7/releases/download/2026-06-03_v2/oasis7-windows-x64.exe"
+  "https://github.com/eng-cc/oasis7/releases/download/2026-06-03_v2/oasis7-macos-x64.dmg"
+  "https://github.com/eng-cc/oasis7/releases/download/2026-06-03_v2/oasis7-linux-x64.deb"
+  "https://github.com/eng-cc/oasis7/releases/download/2026-06-03_v2/oasis7-checksums.txt"
+)
+
+STATIC_RELEASE_PATTERNS_ZH=(
+  "当前版本：<strong data-release-tag>2026-06-03_v2</strong>"
+  "<span data-release-date data-release-date-prefix=\"发布时间\">发布时间：2026-06-03</span>"
+)
+
+STATIC_RELEASE_PATTERNS_EN=(
+  "Current version: <strong data-release-tag>2026-06-03_v2</strong>"
+  "<span data-release-date data-release-date-prefix=\"Published\">Published: 2026-06-03</span>"
 )
 
 contains_fixed_pattern() {
@@ -59,9 +69,70 @@ for entry in "${SITE_ENTRIES[@]}"; do
   done
 done
 
+for pattern in "${STATIC_RELEASE_PATTERNS_ZH[@]}"; do
+  if ! contains_fixed_pattern "${pattern}" "${SITE_ENTRIES[0]}"; then
+    echo "error: missing accurate Chinese static release fallback: ${pattern}" >&2
+    exit 1
+  fi
+done
+
+for pattern in "${STATIC_RELEASE_PATTERNS_EN[@]}"; do
+  if ! contains_fixed_pattern "${pattern}" "${SITE_ENTRIES[1]}"; then
+    echo "error: missing accurate English static release fallback: ${pattern}" >&2
+    exit 1
+  fi
+done
+
+python3 - "${SITE_ENTRIES[0]}" "${SITE_ENTRIES[1]}" <<'PY'
+import sys
+from html.parser import HTMLParser
+
+
+class DownloadSectionParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.download_sections = []
+
+    def handle_starttag(self, tag, attrs):
+        values = {name.lower(): value or "" for name, value in attrs}
+        if tag.lower() == "section" and values.get("id") == "download":
+            self.download_sections.append(values)
+
+
+for path in sys.argv[1:]:
+    parser = DownloadSectionParser()
+    parser.feed(open(path, encoding="utf-8").read())
+    parser.close()
+    if len(parser.download_sections) != 1:
+        raise SystemExit(f"error: expected one download section in {path}")
+    attrs = parser.download_sections[0]
+    if "data-reveal" in attrs or "hidden" in attrs or attrs.get("aria-hidden") == "true":
+        raise SystemExit(f"error: download section must remain visible without JavaScript in {path}")
+PY
+
 if ! contains_fixed_pattern "https://api.github.com/repos/eng-cc/oasis7/releases/latest" "${REPO_ROOT}/site/assets/app.js"; then
   echo "error: missing latest release api endpoint in site/assets/app.js" >&2
   exit 1
 fi
+
+for forbidden in \
+  ': "latest";' \
+  'https://github.com/eng-cc/oasis7/releases/latest";' \
+  'publish time pending'; do
+  if contains_fixed_pattern "${forbidden}" "${REPO_ROOT}/site/assets/app.js"; then
+    echo "error: release API failure path must preserve static metadata, found fallback: ${forbidden}" >&2
+    exit 1
+  fi
+done
+
+for required in \
+  'if (!tagName || !Number.isFinite(publishedAt)) {' \
+  'releaseRefreshCallbacks.forEach((refresh) => refresh());' \
+  'return `${RELEASE_ASSET_BASE}/${encodeURIComponent(tagName)}/${filename}`;'; do
+  if ! contains_fixed_pattern "${required}" "${REPO_ROOT}/site/assets/app.js"; then
+    echo "error: missing release metadata/download fallback guard in site/assets/app.js: ${required}" >&2
+    exit 1
+  fi
+done
 
 echo "ok: site download entry and release links are present"

@@ -91,6 +91,25 @@ class BootstrapTaskSnapshotTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertIn(needle, result.stderr)
 
+    def test_manual_binding_and_base_are_immutable(self) -> None:
+        base = self.git("rev-parse", "HEAD")
+        binding = {"loop": "code", "bootstrap_epoch": 1, "write_scope": ["scripts/**"]}
+        self.write_mapping(loop_binding=binding, bootstrap_base_oid=base)
+        self.create()
+        saved = json.loads(self.snapshot.read_text())
+        self.assertEqual(saved["task"]["loop_binding"], binding)
+        self.assertEqual(saved["git"]["base"]["oid"], base)
+        self.write_mapping(loop_binding=dict(binding, write_scope=["src/**"]), bootstrap_base_oid=base)
+        result = self.run_helper("validate-epoch-identity")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("task identity drift", result.stderr)
+
+    def test_manual_binding_requires_pinned_base(self) -> None:
+        self.write_mapping(loop_binding={"loop": "code"})
+        result = self.run_helper("create")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("bootstrap_base_oid", result.stderr)
+
     def test_valid_snapshot_and_overwrite_rejected(self) -> None:
         self.create()
         result = self.run_helper("validate")

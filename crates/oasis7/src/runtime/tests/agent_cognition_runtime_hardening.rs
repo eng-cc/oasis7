@@ -372,12 +372,14 @@ fn typed_runtime_readback_returns_only_validated_continuation_and_wake_identity(
     let active = world
         .active_cognition_continuations()
         .expect("typed active continuation readback");
-    assert_eq!(active, vec![continuation]);
+    assert_eq!(active, vec![continuation.clone()]);
     let readback = world
         .cognition_wake_readback(&wake.wake_id)
         .expect("typed wake readback")
         .expect("wake present");
-    assert_eq!(readback, wake);
+    let mut expected = wake;
+    expected.request_digest = continuation.origin_request_digest;
+    assert_eq!(readback, expected);
 }
 
 #[test]

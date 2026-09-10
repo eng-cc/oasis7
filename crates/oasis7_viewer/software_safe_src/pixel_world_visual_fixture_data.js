@@ -1,4 +1,17 @@
 // Test-only snapshot fixtures for reproducible Pixel World visual evidence.
+export function pixelWorldRoutesAndEventsVisualFixture() {
+  const snapshot = pixelWorldSelectedBlockerVisualFixture();
+  const relation = { kind: 'agent_assignment', status: 'active', source_class: 'runtime_projection', freshness: 'current' };
+  snapshot.model.agents['agent-0'].relation = { ...relation };
+  snapshot.model.agents['agent-1'].relation = { ...relation };
+  snapshot.model.agents['agent-1'].pos = { x_cm: 3_700_000, y_cm: 2_300_000, z_cm: 0 };
+  snapshot.model.locations['loc-0'].pos = { x_cm: 4_300_000, y_cm: 3_100_000, z_cm: 0 };
+  snapshot.model.locations['loc-1'].pos = { x_cm: 5_200_000, y_cm: 2_650_000, z_cm: 0 };
+  snapshot.model.agent_player_bindings['agent-1'] = 'player-one';
+  snapshot.model.agent_player_public_key_bindings['agent-1'] = snapshot.model.agent_player_public_key_bindings['agent-0'];
+  return snapshot;
+}
+
 export function pixelWorldSelectedBlockerVisualFixture() {
   return {
     time: 12,

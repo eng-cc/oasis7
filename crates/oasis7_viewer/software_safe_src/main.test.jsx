@@ -3436,6 +3436,8 @@ describe("viewer web ui automation baseline", () => {
     expect(state.gameplaySummary.blockerKind).toBe("runtime_snapshot_empty_entities");
     expect(within(container.querySelector("#viewer-targets-panel")).getByText("No agents in current snapshot.")).toBeInTheDocument();
     expect(within(container.querySelector("#viewer-stage-panel")).getByText("Recover World Snapshot")).toBeInTheDocument();
+    expect(within(container.querySelector("#viewer-stage-panel")).getAllByText("No published entities yet").length).toBeGreaterThan(0);
+    expect(within(container.querySelector("#viewer-stage-panel")).getAllByText(/Request a fresh snapshot|Reload the authoritative snapshot|first published entity/i).length).toBeGreaterThan(0);
     expect(within(container.querySelector("#viewer-stage-panel")).getAllByText("Request snapshot").length).toBeGreaterThan(0);
     expect(within(container.querySelector("#viewer-details-panel")).getByText("Claim Your First Agent")).toBeInTheDocument();
     expect(container.querySelector("[data-callout-kind='empty_world_recovery']")).toBeTruthy();

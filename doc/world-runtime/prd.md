@@ -25,10 +25,151 @@
 | --- | --- | --- |
 | 共识执行绑定 | 已有 ordered action/root、`NodeExecutionCommitContext/Result`、execution record 与 committed replay 的局部绑定。 | 尚未将独立版本化协议和 in-process/IPC adapter conformance 固化为实现合同。 |
 | 复制执行与 finality | 当前是 stake-weighted proposal/attestation threshold prototype；正常默认不自动替所有 validator 生成 vote。 | 尚未提供每个 validator 重执行后的 signed >2/3-stake commit certificate、prevote/precommit round、lock、timeout/view-change 或可验证 partition recovery。 |
-| runtime 升级 | 模块 registry/manifest/artifact hash、兼容检查、顺序 lifecycle event 与 replay 已有基础合同；governed proposal apply 已在 cloned `World` 上暂存并仅在完整成功后发布，register/upgrade/activate/deactivate 的 authority-drift 回归覆盖 registry、journal 与 snapshot 回滚。 | 其他 lifecycle 入口、registry 与 instance state 的一致迁移、runtime manifest activation height、validator prefetch/readiness、持久化/replay、外部 effect 与 receipt/outbox 仍未收敛为端到端 transaction 合同。 |
+| runtime 升级 | 模块 registry/manifest/artifact hash、兼容检查、顺序 lifecycle event 与 replay 已有基础合同；governed proposal apply 已改为 borrowed-base typed prepared publication，在 registry/artifact/schedule/cache invalidation、manifest/proposal、event allocator、journal/backpressure 与 consensus 全部预演成功后一次安装，register/upgrade/activate/deactivate 的 authority-drift 与 post-prepare 回归覆盖零中间态发布。 | 其他 lifecycle 入口、registry 与 instance state 的一致迁移、runtime manifest activation height、validator prefetch/readiness、持久化/replay、外部 effect 与 receipt/outbox 仍未收敛为端到端 transaction 合同。 |
 | 消费者与不可用状态 | chain-linked consumers 已要求 committed-only visibility，replay/restore 不一致会阻断。 | 尚未完成 light companion proof verification、pending-intent durable queue、stale/unavailable projection，或 local/global `world_id` 隔离的完整实现与验证。 |
 | 恢复 | checkpoint + canonical log + state-root comparison 是现有 runtime recovery contract。 | 尚未完成 immutable identity manifest -> finalized checkpoint certificate -> hash-bound snapshot -> replay -> root verification 的全链路恢复/灾备证明。 |
 | 工业 operation identity | 当前 `ActionEnvelope.id` 是单次 action identity；部分异步过程把该 `ActionId` 复用为 `job_id`，`WorldEvent.caused_by` 只提供可选的 action/effect 审计原因。因此当前能追踪单个 action、job 与直接 cause，但不能表达跨 stage/join/bundle/branch/transit/buffer/terminal/window/checkpoint/receipt 的 immutable root、owning revision/segment、直接 parent/child role 或 terminal finality。 | 在 authoritative accepted outcome 边界原子签发一次 immutable root operation identity；atomic reject 且无 accepted intent 时不签发。所有 child effect/receipt 持久化 root、owning revision/segment 与直接 parent/child role，并在 first sink/credit/progress 前对缺失或冲突 identity fail closed；retry、recovery 与 replay 重读同一 identity 和 terminal disposition。 |
+
+Threat heatmap preparation is a pure runtime projection: `prepare_threat_heatmap(&self)` reads the immutable world view into a fresh `BTreeMap`, and `refresh_threat_heatmap()` installs it once. Its nonmutation/reuse behavior is a composability seam only; it does not claim root transaction atomicity or change product rule semantics.
+
+Emergency-brake activation/release use the canonical prepared publication seam for their World sidecar: existing guardian checks and activation-max/release-`None` behavior remain unchanged, and post-prepare failure publishes neither brake state nor event id/era, journal, backpressure, or tick consensus. The sidecar remains outside the canonical `WorldState` root hash schema; this is a bounded event-publication guarantee, not a new whole-World atomicity claim.
+
+Finality epoch snapshot set/remove use the prepared governance sidecar seam: predecessor, normalization, and removal-drift validation remains identical for live publication and replay, while a post-prepare failure publishes neither the persisted map entry nor event id/era, journal, backpressure, or tick consensus. The map remains outside the canonical `WorldState` root hash schema; this is a bounded direct-mutator guarantee, not whole-World atomicity.
+
+Emergency-veto proposal publication prepares the rejected proposal sidecar before one canonical install; guardian authorization, Approved-plus-queued eligibility, exact rejection reason, cleared queue fields, and replay semantics remain unchanged. Post-prepare failure publishes no proposal mutation or event/allocator/journal/backpressure/consensus change. This bounded guarantee does not claim whole-World root atomicity.
+
+Identity-penalty appeals prepare an immutable replacement record before one canonical install, with replay reusing the same helper. Appellant/reason validation, Applied-status and deadline checks, legacy detection-field backfill, exact appeal evidence hash, and evidence-chain extension remain unchanged. Post-prepare failure publishes no penalty-map mutation or event/allocator/journal/backpressure/consensus change; the sidecar remains outside the canonical `WorldState` root schema, so this is a bounded guarantee rather than whole-World root atomicity.
+
+Identity-penalty appeal resolution prepares the penalty replacement and target identity profile together, using the borrowed canonical profile-map projection for the next state root. Accepted refund/status restoration, rejected timestamp updates, legacy backfill, exact `resolve_accept`/`resolve_reject` evidence hashes, and replay semantics remain unchanged. Missing-profile and post-prepare failures publish no partial penalty/profile or event/allocator/journal/backpressure/consensus change; this is a bounded guarantee, not whole-World root atomicity.
+
+Identity-penalty application previews the next penalty id and prepares the penalty record, profile mutation, and allocator successor before publication. Its borrowed profile-map projection inserts a missing default profile in sorted order, and the prepared consensus header/digest commits the resulting root; invalid stake, duplicate, signer, and post-prepare failures consume no allocator or publication state. This is a bounded direct-mutator guarantee, not whole-World root atomicity.
+
+Governance proposal creation and shadowing now preview proposal allocation and prepare the replacement proposal sidecar before canonical publication. Existing public manifest/patch, module-change, proposal-status, and shadow-hash validation remains unchanged; post-prepare failure leaves proposal state, proposal id/era, event id/era, journal, backpressure, and tick consensus unchanged, and retry/replay preserve the original event payloads and rollover semantics. The proposal sidecar remains outside the canonical `WorldState` root schema; this is a bounded direct-mutator guarantee, not whole-World root atomicity.
+
+Approval and queueing now prepare the ordered `Approved`/`Queued` pair before one canonical install, while rejection keeps its single `Approved` event semantics. Post-prepare failure leaves the proposal, event allocator, bounded-journal retention/backpressure, and tick-consensus record unchanged; retry and replay preserve both event payloads and the final consensus counters. The proposal sidecar remains outside the canonical `WorldState` root schema, so this is a bounded guarantee rather than whole-World root atomicity.
+
+Module output event publication prepares `ModuleStateUpdated` and
+`ModuleRuntimeCharged` state before publishing the journal, event allocator/era,
+backpressure, and consensus record. Runtime charging validates both ordered
+debits on an owned payer cell and touched treasury entries; a failed second
+debit leaves canonical balances unchanged, including when both fees share a
+resource kind. Replay uses the same charge preparation. This is an event-level
+guarantee, not completion of the whole root transaction.
+
+Module instance install/upgrade events likewise prepare the payer fee, instance,
+module-keyed install target, install counter, and legacy world-material cache
+normalization before mutation. Active schedule lookup must succeed before state
+or publication changes. Invalid upgrades and post-prepare failures leave state,
+mailboxes, schedules, event allocators, journal/backpressure, and consensus intact.
+Successful retry/replay preserves the existing identity, fee/error ordering, and
+schedule semantics. Rollback uses the same prepared instance-state boundary,
+without introducing instance-key schedule synchronization.
+
+Governed install, upgrade, and rollback now compose proposal application with
+the final instance event before one canonical install. After the proposal is
+approved/queued, a lifecycle-tail failure publishes neither applied governance
+state nor the instance change, fees, cache invalidations, business journal batch,
+or consensus candidate. Proposal creation/shadow/approval audit remains outside
+this boundary. Governance-preparation errors keep their action-rejection handling;
+tail errors propagate. Release application extends that same boundary through
+the sorted product/recipe/factory profiles and final release request/mapping
+status. Already-registered modules use the same completion tail without a
+governance batch. Any tail error leaves installation, fees, profiles and release
+status unpublished; proposal/shadow/approval audit remains outside. The enclosing
+action/root transaction is still a separate boundary.
+
+Raw profile and final-release events also use prepared state/publication paths,
+including replay. Preparation preserves actor/proposal/field validation order
+and request/status/mapping error priority, and touches only affected map entries,
+agents and legacy world-material normalization. Installer/operator identity
+overlap preserves both the fee debit and exactly-once mailbox routing. A matching
+module with proposal id zero still rejects nonempty governed profiles; empty
+profile completion remains permitted.
+
+Shadowed, role-approved and rejected release-review events must prepare their
+request, optional or required mapping, affected actor and publication metadata
+before canonical installation. Failed validation or publication leaves review
+status, hash/reason/approvals, actor activity/mailbox, legacy material state,
+journal cursors/retention and consensus unchanged. Shadow requires its mapping;
+approval and rejection intentionally tolerate one being absent. Raw-event
+normalization and missing-actor behavior remain distinct from stricter action
+validation, and replay must reproduce the published root without cloning the
+world.
+
+Release request、attestation 与 role-binding 三类 precursor 也必须进入同一 sparse prepared release delta。request/mapping、request allocator、role-binding 增删、受影响 agent activity、requester/operator mailbox 与 legacy material normalization 必须先形成 borrowed root，再经过 publication failpoint 一次安装。attestation 的 late mapping 错误不得留下 request attestation；role binding 必须更新 operator 与不同 target 的 activity，但 mailbox 只投递 operator。raw reducer 的验证顺序与 action 层更严格的规范化/拒绝边界保持不变。
+
+Marketplace listed, bid-placed and sale-completed events now prepare affected
+state before publication, including replay. A listing/bid and its immediate
+matching sale commit together or leave fees, agents, owner, order book, market
+allocators, mailboxes, journal and consensus unchanged. Existing raw-event
+validation order and action policy remain distinct; sale price and bid ordering
+are unchanged. Sparse deletion-aware projections preserve published/replay root
+equality without cloning the world. This does not migrate other marketplace
+actions or alter module-instance ownership.
+
+Validated source or binary deployment bytes and the corresponding deployed
+event must install together. A publication failure preserves the artifact hash
+set and byte map as well as publisher fees, ownership, market orders, mailboxes,
+journal and consensus. Raw deployed events reuse sparse state preparation but
+do not validate or reconstruct artifact bytes. Standalone registration remains
+available, same-hash redeployment retains its fee and overwrite semantics, and
+the module cache is unchanged. Artifact-byte recovery remains the persistence
+sidecar contract because the event carries only hash and byte length.
+
+Module artifact delist, bid-cancel, and destroy events MUST validate their
+complete canonical transition before publishing state, journal, event
+allocation, retention, or consensus changes. Failed publication MUST preserve
+legacy material-ledger representation and all touched marketplace and agent
+state. Raw destroy events MUST retain their state-only compatibility and MUST
+NOT remove artifact membership, bytes, or cache entries.
+
+A successful `DestroyModuleArtifact` action MUST bind its retirement sidecar
+to a destroyed event for the identical hash. Canonical teardown and removal of
+artifact membership, bytes, and the complete module cache MUST either all
+become visible or all remain absent. Cache capacity, registry, instances, and
+tick schedules MUST remain unchanged; action validation priority and supplied
+reason bytes remain compatible.
+
+The standalone multi-module change API MUST commit its sorted register,
+upgrade, activate, and deactivate events as one failure boundary. A validation,
+publication, retention, allocator, schedule, cache-invalidation, or consensus
+failure in any event MUST preserve the complete pre-batch world. Equal module
+ids retain input order; proposal id, actor fields, exact upgrade/deactivation
+payloads, and `caused_by = None` remain compatible. Empty changesets MUST be
+strict no-ops, and raw single-module events and governed proposal behavior MUST
+remain unchanged.
+
+Standalone public action routing now stages the complete deterministically
+sorted module invocation set against a borrowed `World` base and installs one
+prepared result containing module state, effects, emits, runtime charges,
+cache-miss additions, allocators, journal, and tick consensus. A grouped
+durable base-head check rejects stale prepared installs before any write, while
+live process-local cache entries and wall-clock telemetry remain local. Module faults discard staged
+business output before retaining one existing `ModuleCallFailed` audit;
+post-prepare infrastructure failures install neither business output nor an
+audit. This is a bounded direct action-route guarantee, not a claim that
+`step()` or all nested event/tick paths already share the root transaction.
+
+Standalone public event routing now uses the same borrowed prepared stage for
+the sorted subscribed invocation set. Event bytes, post-event context,
+module state, effects, emits, runtime charges, cache-miss additions, allocators,
+journal, and tick consensus are installed once after preparation. The same
+durable base-head guard runs before publication. Module faults discard
+staged business output before retaining one existing `ModuleCallFailed` audit;
+post-prepare infrastructure failures install neither business output nor an
+audit. This closes only the direct event-route seam; tick scheduling and
+metrics remain a separate lifecycle boundary.
+
+Standalone public tick routing stages due schedule removals, wake directives,
+deterministic routing metrics, module output, cache-miss additions, allocators, journal, and
+backpressure together. Its prepared envelope deliberately carries no
+consensus candidate; `run_modules_for_current_tick()` owns the single final
+tick record. A snapshot taken after direct routing but before that finalization
+is therefore not a replayable canonical checkpoint, and a pre-route snapshot
+plus the later journal cannot reconstruct schedule/metric sidecars absent from
+that snapshot. Only a finalized-tick snapshot is a replay/restore boundary.
+Due-record preflight errors retain the compatibility exception of recording
+metrics directly while leaving the schedule unchanged.
 
 ### Kernel、governed physics 与 institution module 边界
 
@@ -62,7 +203,27 @@ L0 的物理不变量至少包括：时间只能按确定性逻辑推进；位�
 
 目标扩展由 module-owned namespace 中的 versioned command、event 与 state 组成。runtime 只负责校验 module identity/manifest、确定性排序、权限与资源预算、调用结果的结构化收集、Kernel apply、持久化及 replay；namespace 的 wire shape、schema 编码、capability/export 名称与 ABI 迁移规则由 WASM 专题定义。module state 必须随 module instance identity、artifact hash、schema/version 和 activation 状态持久化，不能只依赖全局 `module_id` 或进程内 cache。
 
-扩展事件与 native compatibility event 必须进入同一 canonical journal；任何 module effect 都必须经过 Kernel apply，失败不得留下半个 debit、credit、event 或 schedule。当前公开 `step()`、`step_with_modules()`、committed-context wrapper、direct module call/command，以及 governed module lifecycle proposal apply，均在 cloned `World` 上执行并只在完整成功后发布；direct module output 与 lifecycle proposal 均有 authority-drift 回归，证明失败不会发布 state/effect、registry、journal、sequence counter 或 snapshot 中间态。`ModuleCallFailed` 会在丢弃 staged 业务变化后以现有格式单独记录一次，其他 publication/infrastructure failure 不追加第二事件。但内部阶段仍是 legacy pipeline，其他 direct/trusted command 与 lifecycle 入口、instance-state 对齐、恢复/迁移写入、durable external effect 与 receipt/outbox 尚未统一，因此不能据此宣称已经提供完整 ExecutionReceipt 级别的原子提交。
+扩展事件与 native compatibility event 必须进入同一 canonical journal；任何 module effect 都必须经过 Kernel apply，失败不得留下半个 debit、credit、event 或 schedule。当前 public direct module call/command、trusted capability command 与 governed module lifecycle proposal apply 已使用 borrowed-base typed stage：前两者在 module state/resource fee/effect/emit、event/intent sequence、queue/backpressure、journal 与 consensus 全部 prepare 后才不可失败安装；governed proposal 额外预演 registry/artifact/schedule/cache invalidation、manifest/proposal、顺序 lifecycle events 与最终 consensus 后一次安装。authority-drift 与 post-prepare 回归证明失败不发布中间态，`ModuleCallFailed` 会在丢弃 staged 业务变化后以现有格式单独原子记录一次。公开 `step()`、`step_with_modules()` 与 committed-context wrapper 仍使用 cloned `World` 粗粒度边界；native tick 的 nested reducer 迁移已从 factory depreciation 开始，该处理器先基于 immutable world view 生成确定性排序的 event bodies，再进入 canonical `append_event`，并由 prepare 非变异回归约束，但尚未形成 root prepared batch。其他 publication/infrastructure failure 不追加第二事件。内部阶段、其他 lifecycle 入口、instance-state 对齐、恢复/迁移写入、durable external effect 与 receipt/outbox 尚未统一，因此不能据此宣称已经提供完整 ExecutionReceipt 级别的原子提交。
+
+restricted starter-grant expiry 也已采用相同 nested precursor：基于 immutable world view 固定 eligibility、余额派生的 expired amount、grant metadata 与 BTreeMap account 顺序，再逐条进入 canonical publication；它仍依赖外层 step rollback，不代表独立 batch commit。
+
+到期 material transit completion 也先在 immutable world view 上按 `(ready_at, priority, job_id)` 固定完成事件、loss/received 结果与 SLA metrics 投影；只有全部事件经 canonical `append_event` 成功后才安装 metrics 投影。该 seam 保留 urgent/standard 排序与 saturating counter 语义，但仍依赖外层 step rollback 来覆盖多事件 publication failure，不代表独立 root batch commit。
+
+单条 raw logistics topology、direct material transfer 与 material-transit start/completion publication 使用按组拆分的 typed sparse transition。Transit preparation 只拥有 touched pending/settled IDs、route reservations、completed path/route authority、settlement receipt、world/source/destination ledgers、compatibility material cache、payer/owner/requester cells 与 industry progress；借用其余 state 计算 canonical root。Exact duplicate completion 保持业务状态与 activity 不变但仍投递一次既有 raw actor mailbox。验证或 post-prepare failure 不得留下 reserve/debit、destination credit、path authority、owner payout、progress、event allocator、journal 或 consensus 半写；外层 tick 的多事件 rollback 边界不因此扩大。
+
+Factory build、completion、durability、maintenance 与 recycle 同样通过独立的 sparse factory-lifecycle transition 发布。它只暂存 touched build job、factory upsert/delete、settled/tombstone ID、相关 material ledger、compatibility cache、actor cell 与 progress；recycle 的 retired duplicate 保持业务状态和 activity 不变，但仍按 raw event 合同路由一次 actor mailbox。所有 owner、active-recipe、材料 preflight 与 completion identity/ready-time 校验均在 publication 前完成。
+
+Recipe start、completion、blocked、resume 与 pause 使用独立的 sparse recipe-lifecycle transition。它只暂存 touched pending/settled job、factory、material/power ledger、logistics path、actor cell、progress 与 quote sink；重复 completion 或 terminal product-validation block 保持业务状态和 activity 不变，但仍提交一次 raw actor mailbox。材料、power、path allocation、timing、payload 与 output-capacity 校验全部先于 publication，失败不会留下部分 debit、reservation、output、factory slot 或 progress。
+
+Core agent、body、observation、gameplay-policy 与 material-profile 的 raw publication 使用一个 full-event-bound sparse transition。该 transition 只暂存单个 touched agent、兼容 world material ledger、可选 policy/industry-progress 与单个 material profile；`ActionRejected` 保持 true no-state/no-route，缺失目标的 move/observation route 保持 no-op。Body interface consume 与 profile/policy 校验在 publication 前完成，所有成功 raw actor event 的 prospective root 恰好包含一次 mailbox route。
+
+Canonical publication 对每个 `WorldEventBody` 都要求显式 typed classification；无法分类的 body 在 reducer、allocator、journal 与 consensus 之前 fail closed，不再允许进入 legacy mutate-first fallback。Intentional no-state body 同样绑定完整 payload，route-only 仅保留 full-domain-event-bound 形式。已由 core-policy projector 覆盖的 agent/body/policy/profile legacy reducer branches 已删除，replay 与 live publication 共用同一 transition。
+
+native due-economy completion 先在 immutable world view 上固定全部 `FactoryBuilt` 与 `RecipeCompleted` event bodies：build phase 始终先于 recipe phase，两个 phase 内继续使用既有 production-priority、ready-time、job-id 排序和完整 payload。prepared bodies 仍逐条进入 canonical publication，因此跨事件失败原子性继续由外层 cloned-step rollback 提供，而不是由该 nested seam 独立提供。
+
+agent-claim epoch 不能从同一个 base snapshot 整轮预生成，因为同一 owner 的前一个 upkeep debit、claim removal、grace/release/reclaim 与 refund provenance 会改变后一个 claim 的合法分支。当前 nested seam 因此每次只准备一个 event body，发布后重读最新 claim 与余额，再决定 follow-up；BTreeMap target-agent 顺序与 `agent_claim_last_processed_epoch` 仅在整轮成功后推进的语义保持不变。整轮 publication failure 仍依赖外层 cloned-step rollback。
+
+gameplay cycle 采用 stage-scoped preparation，而不是从 tick 初始态生成一个跨阶段 vector。当前 economic-contract expiry stage 已从 immutable view 固定到期 atomic contracts、contract-id 顺序、status-derived reputation delta 与 event bodies；governance proposal finalization 随后从 immutable post-economic state 固定排序后的到期 proposal keys，以及由 votes、quorum 和 threshold 推导的 winner、weight、passed 与 event bodies。crisis lifecycle 再从 post-governance state 准备至多一个 deterministic auto-spawn event，发布后才从 resulting state 固定按 crisis-id 排序的 timeout event vector；不得让 timeout preparation 绕过 spawn 的顺序边界。war conclusion 使用更窄的 one-event decision：每次从当前 post-crisis state 准备 `war_id` 最小的到期 active war，发布后重读 resources/reputation，再准备下一场，以保证 contract expiry 与较早 war outcome 都进入后续 scoring/settlement。active gameplay-module lifecycle directive 在 envelope decode 后也逐条从当前 immutable state 转换为 zero-or-one domain event，发布后才处理下一条；`WarConclude` loser fallback 在该 preparation 时解析，zero-point `MetaGrant` 继续无事件，malformed envelope 继续走既有 module failure。这些 stage-local prepared decisions/vectors 的多事件失败仍由外层 cloned-step rollback 收口，不构成 whole-cycle 或 root transaction 原子性证明。
 
 目标实现必须以一个显式的 staged transition boundary（可称 `ExecutionTransaction` / `TransitionBuffer`，具体类型由 runtime 实现决定）承载 parent state、logical time、资源 reservation、module state、pending effect、tick schedule、journal/event 与 sequence counters 的暂存值。module call、Kernel preflight 和 output/schema/capability 校验只能读写这个暂存视图；不得在 commit 前直接修改 canonical `WorldState`、canonical journal 或外部 effect 队列。所有成功 event/effect/state 变更与 execution commitment 在一个 commit 点原子发布；任一 invariant、预算、artifact、receipt 或持久化失败都丢弃暂存值，并只留下一个稳定的 rejected/fault disposition（若需要审计记录，也必须与该 disposition 同一原子提交，不能留下半个业务效果）。
 
@@ -104,6 +265,22 @@ Migration Test 未通过前，native vertical slice 只能标为 `current`/`comp
 统一 `ExecutionTransaction` 是 runtime 架构 **P0**：这里的 P0 表示必须先确立统一状态转换边界，不等同于已经发生线上事故或要求一次性重写所有状态结构。它的范围包括 `step()`、`step_with_modules()`、native compatibility action、WASM/module command、tick directive、direct/trusted command、module install/upgrade 以及任何会改变 canonical world 的恢复/迁移写入。只读 quote/resolve 可以在 transaction 之前运行，但必须绑定 parent、manifest、input root 和 freshness，且不得产生 world effect。
 
 Transaction 的最小职责是暂存 parent state、logical time、resource reservation/debit、module instance state、pending effect、tick schedule、journal/event 和 sequence counters；module call、Kernel preflight、schema/capability/output 校验只读写暂存视图。成功路径在一个 commit point 原子发布 state/event/receipt 与 durable outbox records；失败路径丢弃暂存值，只发布稳定的 rejected/fault disposition。外部不可回滚副作用只能在 commit 后由 outbox 按 receipt 驱动；必须有持久幂等键、dispatch/ack 状态、crash-safe 重投和 replay 不重执行合同。该边界不要求本轮引入 ECS、shard、动态 World Database 或替换现有 snapshot shape。
+
+目标实现固定为显式 `ExecutionTransaction` + typed `TransitionBuffer`，而不是把 cloned `World` 固化为生产事务。每个 world-effecting public entrypoint 建立一个 root transaction；nested event、module routing 与 reducer 共享同一 buffer，只能用 savepoint 局部回滚，不能 inner commit。Buffer 至少覆盖 canonical state/runtime authority、所有 rolling sequence 与 era、journal batch、pending/inflight queue、receipt link、schedule、capability authorization/budget、commitment/consensus、replay-deterministic metrics、idempotency 与 durable outbox record。prepare 必须完成所有可能失败的校验、容量、commitment、serialization 与 persistence staging，并绑定当前 state/manifest/registry/journal/queue/consensus/authorization head；只有不可失败的 `PreparedCommit` install 可以越过 commit seam。失败不得产生 event-id 空洞、消费 pending action，或污染任何 deterministic projection。
+
+执行结果区分 `Accepted`、`Rejected` 与 `Faulted`。`Rejected` 只表示确定性输入、权限、预算、资源或 freshness 拒绝；`Faulted` 表示 trap、artifact/schema、invariant、serialization、persistence 或 commit uncertainty，不得伪装成可继续的业务拒绝。若协议要求审计拒绝或 fault，该 disposition 必须在丢弃业务 delta 后作为同一 root commit 的唯一无业务效果记录；若连稳定 disposition 也无法形成，则返回 infrastructure error，并保证 canonical state、journal、sequence、queue/schedule、receipt、commitment 与 deterministic metrics 完全不变。迁移不得改变现有入口在多错误同时存在时的对外错误优先级。
+
+Phase 1 的首个 stateful queue 切片固定 `emit_effect` 语义：capability missing/expired/kind-not-allowed 在 intent/event 分配前拒绝且不写 audit；确定性 policy deny 只原子提交一个 `PolicyDecisionRecorded(Deny)`，intent 与 event allocator 各前进一步，不产生 `EffectQueued`；policy allow 后的 hard queue-full 或 post-prepare infrastructure failure 必须整体丢弃 allow audit、effect event、intent/event sequence 与 era、queue/eviction metrics、journal 和 consensus。满队列仍保留既有的“可确定性驱逐未绑定 intent”兼容规则，authorization-linked intent 不可驱逐。通用 raw `append_event` 的 `EffectQueued` 与 `ReceiptAppended` 也已进入 typed sidecar replacement：pending/inflight queue 与 eviction counter 在 owned projection 上先完成，unknown-intent 仍先于 post-prepare failpoint，随后才与 event allocator、journal retention 和 consensus 一次安装；失败不消费或驱逐 live intent。该切片仍不代表 durable outbox 或 replay allocator 已迁移完成。
+
+后续 Phase 1 receipt 切片把 public `ingest_receipt` 从生产 `World` clone 迁移为 typed prepared delta：known-intent 校验、可选 `EffectReceiptCommitted`、authorization audit/link/root、签名锚点、pending/inflight 消费、`ReceiptAppended`、event sequence/era、journal/backpressure 与最终 consensus 必须一次 prepare、一次不可失败 install。任一签名、授权、consensus 或 post-prepare failure 均不得关闭 link、消费队列或写入 event。保持既有 receipt DTO、事件顺序、`CausedBy` 与 replay reducer 兼容。由于当前 DTO 尚无 `(world_id, execution_receipt_id, effect_id)` 及 descriptor-hash ledger，本切片不把 duplicate-same receipt 或 conflicting receipt 声称为已完成幂等；该 authority/schema 与 durable outbox ack 属 Phase 3。raw `EffectReceiptCommitted` 另以完整 event body 绑定两张 map 的 prepared delta，保持 blank/link/idempotent/auth/audit 顺序和任意非空 effect receipt id，并借用其余五张 authorization map 计算 full root；它不消费 queue、不签名或追加外部 receipt，不能替代 specialized `ingest_receipt`。
+
+首批 CapabilityAuthorization 有状态切片覆盖 public grant registration、invocation-context、budget-account、agent-identity installation 与 proof-bearing authority/revocation administration：System subject 所需的可选 `SystemIdentityInstalled` 与必需 `InvocationContextInstalled` 作为一个 typed prepared batch；`BudgetAccountInstalled` 复用该 batch 并增加 typed budget-map projection；`GrantRegistered` 同步预演 canonical grant JSON map；`AgentIdentityInstalled` 在同一 batch 内预演 revocation-state identity projection；`AuthorityInstalledWithProof` 复用 canonical reducer transition validator，并同时预演 authority record/proof、revocation、supersession 与 finalized-receipt projection，revoke/supersede/trust-root rotation 委托到该 seam。raw `CommandCommitted` 另以完整 event body 绑定 replay-equivalent prepared delta，在 current state、manifest、journal head、context、authority 与 durable effect queue 上维持 reducer 错误顺序，只拥有并预演 grant、nonce、authorization receipt、budget 与 effect-link 五张会修改的 map；revocation/context 两张 map 以借用方式透传 full authorization root，所有 late link 校验完成后才随 event 一次安装。该 raw 路径不执行 command，也不替代 live command 的 `TrustedCommandStage`。以上路径都必须预演授权 map、event id/era、journal/backpressure、最终 authorization root 与单个 tick-consensus candidate，再以不可失败步骤安装。post-prepare failure 不得留下 grant/system-or-agent identity/context/budget/authority 半写、event-id 空洞或 root/consensus/metric 污染；相同对象的重复安装继续保持既有语义，已提交事件继续使用既有 replay reducer 与顺序。trusted capability command 也已从整 `World` clone 迁移为 borrowed-base typed stage：只暂存 command 可触及的 module state、agent/resource、pending effect、intent/event allocator、journal/backpressure、cache 与 consensus，并在同一 prepare 中校验 budget、grant、nonce、receipt、effect link、state/authorization root；post-prepare failure 必须保持 sandbox output、扣费、receipt、effect、event id、journal 与 consensus 全部不可见。该切片仍不是所有 nested command/event 共享的 root transaction，也未闭合 durable receipt/outbox/idempotency、generation persistence 和 replay/restore，因此 CapabilityAuthorization 及整体 ExecutionTransaction 能力仍为 `partial`。
+
+每个可重试 root operation 必须用稳定 operation id 绑定 world、parent、canonical input/intent hash、manifest/activation 与 target。同 identity/同 binding 返回原 disposition，不再分配 event、扣费、入队或发出 outbox；同 identity/不同 binding 以 idempotency conflict fail closed。临时 event id 不是重试身份。外部 effect 仍以 `(world_id, execution_receipt_id, effect_id)` 去重，只承诺 durable outbox + at-least-once dispatch + stable idempotency，不承诺外部系统物理 exactly-once。
+
+Replay 使用同一 reducer 和 typed buffer，但只能应用 canonical event，必须整体校验并一次发布 journal suffix；它不得生成 event 或调用 sandbox、LLM、adapter、dispatcher，只能重建 ledger/outbox 状态。持久化以完整 immutable generation 为单位，在 snapshot、journal、module store、sidecars、outbox、manifest 和 hashes 全部 stage/fsync/validate 后原子切换 latest-generation pointer；该 pointer switch 是 durable commit point。切换前失败保留旧 generation，切换后崩溃以新 generation 恢复，禁止拼接 mixed generation。receipt ingestion 是独立 root transaction，必须原子完成 receipt 校验、authorization/intent link closure、queue/outbox 更新、业务 apply、receipt event 与 commitment/sequence 更新。
+
+实施按 Phase 0 加五个可独立验收的迁移阶段推进：Phase 0 冻结 typed delta/savepoint/disposition、deterministic projection、failpoint 与 test-only clone oracle；Phase 1 迁移通用 `append_event` 及 reducer/sequence/journal/schedule/queue/consensus；Phase 2 迁移 step/action/direct/trusted/lifecycle/module/tick/observation/capability；Phase 3 迁移 receipt/outbox/idempotency；Phase 4 迁移 replay/restore；Phase 5 建立 generation persistence/crash recovery。任何 public mutation surface 尚未迁移时能力仍为 `partial`；全部入口实现但完整 crash/replay/ABI 证据未闭合时只能称 `target-implemented`；只有执行、拒绝、fault、幂等、回放、恢复、outbox、持久化、legacy serde 与 WASM compatibility gate 全部通过后才能称 `proven`。
 
 #### Command-path module-instance completeness
 
@@ -241,8 +418,13 @@ Site registration、location anchor、Agent location assignment、ownership/acce
 
 - Default `World::save_to_dir` / `load_from_dir` persist the module registry, manifest metadata, and content-addressed artifact bytes together. Compatibility `*_with_modules` APIs remain directed callers, not a second persistence truth.
 - A legacy directory without a module store loads compatibly. Once registry/meta/artifact files exist, restore verifies their mutual consistency and artifact hash; missing or damaged data must return `ModuleStoreVersionMismatch`, `ModuleStoreArtifactMissing`, or `ModuleStoreManifestMismatch` (or governed recovery), never silently substitute bytes.
-- Persisted instances retain module identity/version/hash, owner, install target, activation state, and installation time so replay routes by stable instance identity rather than global `module_id` replacement. Governed proposal apply now stages ordered lifecycle events on a cloned `World` and publishes only on full success; atomically aligning registry with persisted instance state, recovery/replay, receipt/outbox, and every non-proposal lifecycle entrypoint remains a target transaction contract.
-- Evidence anchors: `crates/oasis7/src/runtime/module_store.rs`, `runtime/error.rs`, and `runtime/tests/persistence.rs` cover default roundtrip, tamper rejection, and legacy no-store load.
+- Direct module-store hydration prepares the complete registry, artifact-key set, and artifact-byte map in owned replacements before changing a live `World`. Failure on any sorted persisted record leaves the prior registry, bytes, artifact set, and process-local cache unchanged; successful hydration retains the established cache policy rather than silently resetting it.
+- Direct raw `ModuleEvent` and `ManifestUpdated` publication is also typed-prepared: register/upgrade/activate/deactivate project registry, artifact keys, tick schedule, and targeted subscription-cache invalidation into owned replacements, while manifest replacement computes consensus against the replacement manifest without trusting its informational hash field. Validation or post-prepare failure preserves registry/active state, artifacts and bytes, cache, schedule, manifest, allocator, journal/backpressure, and consensus; install is infallible and does not clone `World`.
+- Raw controller-registry and validator-admission governance publication prepares the complete event-bound replacement for controller registry, admissions, node identity bindings, and derived main-token account bindings. Its consensus root uses a borrowed projection, so validation and publication failure cannot expose admission or identity state before journal and consensus acceptance.
+- Direct raw governance proposal `Approved`, `Queued`, and `Applied` events prepare a full-event-bound proposal replacement before publication. They retain the raw reducer's rejection, queue-validation, and informational applied-hash behavior while keeping the specialized paired approval/queue and governed manifest-application batches unchanged.
+- Direct raw capability admission events with replayable authority proof, agent/system identity, invocation context, budget account, or grant now use a full-event-bound prepared sidecar projection. The four admission maps and derived authorization root publish atomically; legacy unbound authority shapes remain fail-closed, while command commits and effect-receipt closure retain their larger specialized transaction boundaries.
+- Persisted instances retain module identity/version/hash, owner, install target, activation state, and installation time so replay routes by stable instance identity rather than global `module_id` replacement. Governed proposal apply now stages ordered lifecycle events and every touched registry/artifact/schedule/cache/manifest/proposal/journal/consensus projection in a typed prepared batch and publishes only on full success; atomically aligning registry with persisted instance state, recovery/replay, receipt/outbox, and every non-proposal lifecycle entrypoint remains a target transaction contract.
+- Evidence anchors: `crates/oasis7/src/runtime/module_store.rs`, `runtime/error.rs`, `runtime/tests/persistence.rs`, and `runtime/world/module_store_load_transaction_regressions.rs` cover default roundtrip, tamper rejection, legacy no-store load, and late-record atomicity.
 
 ## 里程碑
 - M1 (2026-03-03): 完成模块设计 PRD 主体重写与任务改造。
@@ -544,4 +726,18 @@ Site registration、location anchor、Agent location assignment、ownership/acce
 - 模块调用计费由确定性输入/输出/effect/emit 计量产生审计事件；余额不足时在输出、状态与 emit 应用前结构化拒绝。费用只在成功路径生效，replay 应用已提交的计费事件，不重新推导价格。
 - 模块 artifact 的 listing、bid、purchase、delist、destroy 与 fee 是 runtime 权威动作/事件/状态：只允许当前 owner 操作，结算需资源充足，成交转移 ownership 并清理相关挂单，仍被 active instance 使用的 artifact 不得销毁。价格、玩家价值与恢复提示由 game 专业权威拥有。
 - live/viewer 只回放共识已提交的有序动作；空轮询不构成逻辑世界推进。共识 action root、payload 完整性与提交验证由 P2P 专业权威拥有，LLM/provider 只提交意图，不成为第二执行权威。
+- 五类 raw agent-intent lifecycle event 必须以完整 event body 绑定 sparse prepared delta：只拥有受影响 AgentCell 与至多一个 ledger replacement，completed transition 在 state projection 前绑定 prospective event id 与已提交 receipt witness；canonical root 必须包含 candidate intent/ledger 和恰好一次 mailbox route。失败不得消费 event id 或修改 ledger、slot、mailbox、journal、retention、consensus；provider advisory、historical no-op 与 public 多事件 chat workflow 的既有边界不变。
+- Raw resource transfer、data collection、authenticated collection 与 data-access grant/revoke 必须先生成完整 event-bound sparse delta，再进入 publication。Delta 只拥有受影响 AgentCell、单个 permission/nonce 子项和 compatibility world-material replacement；prospective root 包含恰好一次既有 mailbox routing。校验或 publication 失败不得修改资源、nonce、permission、activity、mailbox、journal、allocator 或 consensus，且不得把 action-only 限制引入 raw reducer。
+- Raw power redemption outcome 也必须先生成完整 event-bound sparse delta。成功 redemption 原子拥有 node credit balance、protocol reserve、redeem nonce、target electricity 与相关 activity；rejection 保持无校验且只触碰存在的 node/target activity。两者只向存在的 target mailbox 投递一次，不得把 action signature/policy 校验下沉到 raw reducer。
+- Raw node-points settlement 必须在 publication 前完成 full-event-bound preparation：node credit、mint records、epoch budget、node-service treasury、账户余额、token supply、bridge epoch record 与 compatibility material ledger 作为一个 compound delta 原子安装。Prospective root 只借用未触碰状态并序列化 sparse replacements；该事件不路由 mailbox，action preview 复用同一 pure preparation，replay 复用同一 reducer/projector。
+- Raw main-token genesis、vesting claim、transfer、epoch issuance 与 fee settlement 必须以完整事件绑定的 monetary delta 发布。该 delta 原子覆盖 supply、账户、genesis bucket、claim/transfer nonce、epoch issuance 与 treasury 的实际触碰项，并在 borrowed prospective root 中加入 vesting beneficiary 或 transfer 原始 source 的既有单路 mailbox；action preview 与 replay 复用 pure preparation，失败不得留下 supply 或 treasury 半写入。
+- Raw main-token policy scheduling 与 treasury distribution 必须以完整事件绑定的 governance-monetary delta 发布，原子覆盖 scheduled policy 或 treasury、账户、supply、distribution record 及 compatibility materials；两者均不路由 mailbox，action preview 与 replay 复用 pure preparation。
+- Restricted starter-claim 的 pool top-up、grant issue、expiry 与 revoke 必须以完整事件绑定的 sparse delta 发布，原子覆盖 treasury、beneficiary balance、supply、grant/top-up record、compatibility materials 与既有 controller/issuer mailbox；expiry 不路由，缺失路由 Agent 时保持 no-op。
+- Raw `StarterOcClaimed` 必须以完整事件绑定的独立 sparse delta 发布，原子覆盖 starter claim、目标账户与 activity、token supply、可选 treasury bucket 和 compatibility materials；prospective root 包含 raw agent 的单次既有路由。Raw 路径保留 treasury 与 mint 两种 funding 语义，不引入 action-only 的玩家、公钥或全局唯一性限制。
+- Raw claim release request、grace entry 与 idle warning 必须以完整事件绑定的轻量 lifecycle delta 发布，只替换目标 claim 与 compatibility materials；仅 release request 更新 claimer activity，三者均只向 raw claimer 路由一次，且不得修改 target activity、货币字段或全局 claim epoch cursor。
+- Raw `AgentClaimed` 与 `AgentClaimUpkeepSettled` 必须以完整事件绑定的 economic delta 发布，原子覆盖 claim、全局 processed-epoch cursor、claimer account、supply、实际触碰的 treasury entries、claimer activity 与 compatibility materials；prospective root 只加入一次 claimer 既有路由，target 保持不变，action preview 与 replay 复用 pure preparation。
+- Raw `AgentClaimReleased` 与 `AgentClaimReclaimed` 必须在删除 claim 前完成完整事件绑定的 terminal preparation，原子验证并安装 refund provenance/sink、upkeep/slash treasury、claimer account、circulating supply、processed-epoch cursor、claimer activity 与 compatibility materials；只路由 claimer 一次，target 不变，raw reclaim reason 保持 informational，tick 继续逐事件重读状态。
+- Raw economic-contract open、accept、settle 与 expire 必须以完整事件绑定的 sparse delta 发布，原子覆盖 contract、重叠参与者 AgentCell、world resource treasury、reputation、pair cooldown、reward windows 与 compatibility materials；只按既有 raw `agent_id` 路由一次，保留 open overwrite、expired payload parties、raw notes/deltas 等宽松语义，不下沉 action policy，tick expiry 继续按 contract ID 排序逐事件发布。
+- Raw alliance form/join/leave/dissolve 与 war declare/conclude 必须先形成完整事件绑定的 sparse delta。该 delta 原子覆盖 touched alliances、wars、participants、reputation 与 compatibility materials；prospective root 只加入既有 raw actor 的单次路由，conclusion 保持无路由。所有成员、资源和 outcome 的既有校验顺序必须在 publication 前完成，失败不得留下 alliance/war/resource/activity 半写入。
+- Raw governance proposal、crisis、meta-progress 与 product-validation publication 分别使用窄的 full-event projector：proposal 保留 duplicate-open votes 与 recast 语义，crisis 保留 legacy resolve/spawn/timeout payload authority，meta self-target 合并为一个 AgentCell，product requester 缺失仍提交 validation 且不路由。所有 prospective roots 仅覆盖对应 map 与既有单次 mailbox route。
 - 本节吸收已完成 README gap 专题中的仍有效 runtime 合同；历史里程碑、旧路径与完成状态从 Git history 和 GitHub task evidence 追溯。

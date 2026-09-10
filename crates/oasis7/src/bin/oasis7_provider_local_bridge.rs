@@ -14,7 +14,7 @@ use oasis7::simulator::{
     DecisionResponse, Digest32, FeedbackEnvelope, FeedbackEnvelopeV1, ProviderAgentChatRequest,
     ProviderAgentChatResponse, ProviderDecision, ProviderDiagnostics, ProviderErrorEnvelope,
     ProviderHealth, ProviderInfo, ProviderTokenUsage, ProviderTraceEnvelope,
-    ProviderTranscriptEntry, h_v1, provider_agent_chat_log_key,
+    ProviderTranscriptEntry, cognition_response_digest, h_v1, provider_agent_chat_log_key,
 };
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
@@ -30,7 +30,10 @@ const MOCK_PROVIDER_ID: &str = "provider_local_mock";
 const DEFAULT_PROTOCOL_VERSION: &str = "world-simulator-provider-loopback-http-v1";
 const MAX_RECENT_FEEDBACK: usize = 8;
 const MAX_ACCEPTED_REQUESTS: usize = 64;
-const FEEDBACK_STATE_SCHEMA_VERSION: u16 = 1;
+// Version 2 records the semantic response digest contract. State written by
+// the old full-DecisionResponse digest contract is intentionally not migrated
+// implicitly because its stored digest has no self-describing version.
+const FEEDBACK_STATE_SCHEMA_VERSION: u16 = 2;
 const FEEDBACK_STATE_PATH_ENV: &str = "OASIS7_PROVIDER_FEEDBACK_STATE_PATH";
 const DEFAULT_PROVIDER_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
 const TRACE_SESSION_PROCESS_LABEL: &str = "oasis7_provider_local_bridge";
@@ -683,7 +686,7 @@ impl ProviderState {
             }),
             true,
         );
-        let response_digest = h_v1("oasis7.cognition.response.v1", &base);
+        let response_digest = cognition_response_digest(&base);
         let response = ContinuousAgentResponseContextV1 {
             base_decision_response: base,
             context_discriminator: context.context_discriminator.clone(),

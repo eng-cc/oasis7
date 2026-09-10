@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-cd "$repo_root"
-source "$repo_root/scripts/viewer-dependency-preflight.sh"
+driver_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+repo_root=$(cd "$driver_dir/.." && pwd)
 
 tier="${1:-}"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/ci-tests.sh [commit|required|full|full-core|full-support]
+Usage: ./scripts/ci-tests.sh [commit|required|full|full-core|full-support] [--repo-root PATH]
 
   commit        Run the lightweight local commit gate used by pre-commit.
   required      Run the explicit heavier required gate for local validation and PR gate.
@@ -26,7 +25,7 @@ if [[ $# -eq 0 ]]; then
   exit 2
 fi
 
-if [[ $# -gt 1 ]]; then
+if [[ $# -ne 1 && !( $# -eq 3 && "$2" == "--repo-root" && -n "$3" ) ]]; then
   usage
   exit 1
 fi
@@ -38,6 +37,13 @@ case "$tier" in
     exit 1
     ;;
 esac
+
+if [[ $# -eq 3 ]]; then
+  repo_root=$(cd "$3" && pwd)
+fi
+cd "$repo_root"
+# Keep sourced driver definitions with the driver, even when the tested tree differs.
+source "$driver_dir/viewer-dependency-preflight.sh"
 
 run() {
   echo "+ $*"
@@ -182,6 +188,27 @@ run_packaging_contract_tests() {
 run_operational_contract_tests() {
   run_packaging_contract_tests
   run python3 ./scripts/pm/ci-ready-receipt.test.py
+  run python3 ./scripts/pm/review-plan.test.py
+  run python3 ./scripts/pm/subagent-task-packet.test.py
+  run python3 ./scripts/pm/bootstrap-task-snapshot.test.py
+  run python3 ./scripts/pm/integration-ci.test.py
+  run python3 ./scripts/pm/integration-selection-regression.test.py
+  run python3 ./scripts/pm/workflow-bootstrap-fallback.test.py
+  run python3 ./scripts/pm/loop-policy.test.py
+  run python3 ./scripts/pm/loop-contracts.test.py
+  run python3 ./scripts/pm/loop_terminal.test.py
+  run python3 ./scripts/pm/loop.test.py
+  run python3 ./scripts/pm/loop-gate.test.py
+  run python3 ./scripts/pm/loop-ci.test.py
+  run python3 ./scripts/pm/loop-ci-content.test.py
+  run python3 ./scripts/pm/pr-lifecycle-loop.test.py
+  run python3 ./scripts/pm/loop-ingress.test.py
+  run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/loop-publication.integration.test.py
+  run python3 ./scripts/pm/loop-recovery.test.py
+  run python3 ./scripts/pm/github-project-loop.test.py
+  run python3 ./scripts/pm/github-project-admission.test.py
+  run python3 ./scripts/pm/loop-bootstrap.test.py
+  run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/loop-bootstrap.integration.test.py
   run ./scripts/ci-required-scope-audit-contract.test.sh
   run ./scripts/game-world-state-sync-commit-module-required.test.sh
   run ./scripts/state-sync-closure-evidence-template.test.sh

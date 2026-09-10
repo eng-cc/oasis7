@@ -153,40 +153,41 @@ struct ModuleUpgrade { module_id: String, from_version: String, to_version: Stri
 **ModuleChangeSet 应用算法（当前 governed proposal 路径）**
 ```
 fn apply_governed_proposal(changes: ModuleChangeSet) -> Result<()> {
-  let mut staged = world.clone();
-  staged.validate_changes(changes)?;
-  staged.shadow_check(changes)?;
+  let mut prepared = PreparedGovernanceProposalApply::against(&world);
+  prepared.validate_changes(changes)?;
+  prepared.shadow_check(changes)?;
 
   // 1) register
   for m in sort_by_module_id(changes.register) {
-    write_event(RegisterModule { ..m });
-    registry.insert(m);
+    prepared.write_event(RegisterModule { ..m });
+    prepared.registry.insert(m);
   }
 
   // 2) upgrade
   for u in sort_by_module_id(changes.upgrade) {
-    write_event(UpgradeModule { ..u });
-    registry.update(u);
+    prepared.write_event(UpgradeModule { ..u });
+    prepared.registry.update(u);
   }
 
   // 3) activate
   for a in sort_by_module_id(changes.activate) {
-    write_event(ActivateModule { ..a });
-    registry.activate(a);
+    prepared.write_event(ActivateModule { ..a });
+    prepared.registry.activate(a);
   }
 
   // 4) deactivate
   for d in sort_by_module_id(changes.deactivate) {
-    write_event(DeactivateModule { ..d });
-    registry.deactivate(d);
+    prepared.write_event(DeactivateModule { ..d });
+    prepared.registry.deactivate(d);
   }
 
-  world = staged; // only after all lifecycle and manifest events succeed
+  prepared.prepare_manifest_governance_journal_and_consensus()?;
+  prepared.install_infallible(&mut world); // one publication seam
   Ok(())
 }
 ```
 
-当前粗粒度边界覆盖 governed proposal apply：任一 lifecycle event、后续 manifest event 或 consensus publication 失败都会丢弃 cloned `World`，register/upgrade/activate/deactivate 的 authority-drift 回归验证 registry、journal 与 snapshot 不发布中间态。它不等同于完整 lifecycle transaction；非 proposal 入口、persisted instance state 对齐、恢复/回放、durable external effect 与 receipt/outbox 仍是 `partial` / `target`。
+当前 typed prepared publication 覆盖 governed proposal apply：在 immutable base 上预演 registry、artifact、tick schedule、prepared-subscription cache invalidation、manifest、proposal status、event id/era、bounded journal/backpressure 与最终 tick consensus；排序后的 lifecycle events 之后固定追加 `ManifestUpdated`、`Governance::Applied`，全部成功后才通过单一不可失败 seam 安装。任一预演或 post-prepare failure 都不发布中间态，register/upgrade/activate/deactivate 的 authority-drift 回归与混合成功批次的连续 event、registry/active、Tick schedule、manifest/governance 顺序及最终 consensus 回归共同约束该合同。它不等同于完整 lifecycle transaction；非 proposal 入口、persisted instance state 对齐、恢复/回放、durable external effect 与 receipt/outbox 仍是 `partial` / `target`。
 
 **ModuleChangeSet 校验规则（示意）**
 - `module_id` 在 `register/activate/deactivate/upgrade` 内不得重复冲突。

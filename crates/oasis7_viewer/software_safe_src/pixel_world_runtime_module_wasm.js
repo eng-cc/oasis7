@@ -241,6 +241,7 @@ export async function createPixelWorldBridge({ onEvent, onFatal } = {}) {
   function startAnimationLoop() {
     stopAnimationLoop();
     reducedMotion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
+    runtime.set_reduced_motion(reducedMotion);
     if (reducedMotion || !canTick()) return;
     const generation = animationGeneration;
     const tick = (animationMs) => {
@@ -270,6 +271,7 @@ export async function createPixelWorldBridge({ onEvent, onFatal } = {}) {
     const mediaQuery = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)");
     const onMotionChange = (event) => {
       reducedMotion = event.matches === true;
+      runtime.set_reduced_motion(reducedMotion);
       if (reducedMotion) stopAnimationLoop(); else resume();
     };
     mediaQuery?.addEventListener?.("change", onMotionChange);
@@ -354,6 +356,9 @@ export async function createPixelWorldBridge({ onEvent, onFatal } = {}) {
       canvas.style.cursor = "default";
       runtime.pointer_move(0, 0, true, event.pointerId ?? -1);
       syncRuntime();
+      // Accessible DOM controls can set hover without changing Rust's hover
+      // key. Leaving the canvas clears that presentation state as well.
+      onEvent?.({ type: "hover_entity", selection: null });
     };
 
     const onPointerUp = (event) => {

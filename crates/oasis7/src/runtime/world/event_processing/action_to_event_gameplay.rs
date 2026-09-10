@@ -254,8 +254,7 @@ impl World {
                     forced_idle_reclaim_epochs: quote.forced_idle_reclaim_epochs,
                     forced_reclaim_penalty_bps: quote.forced_reclaim_penalty_bps,
                 };
-                let mut preview_state = self.state.clone();
-                if let Err(err) = preview_state.apply_domain_event(&event, self.state.time) {
+                if let Err(err) = super::super::agent_claim_economic_publication::PreparedAgentClaimEconomic::prepare(&self.state,&event,self.state.time) {
                     return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                         action_id,
                         reason: RejectReason::RuleDenied {
@@ -307,8 +306,11 @@ impl World {
                     requested_at_epoch,
                     ready_at_epoch,
                 };
-                let mut preview_state = self.state.clone();
-                if let Err(err) = preview_state.apply_domain_event(&event, self.state.time) {
+                if let Err(err) = super::super::agent_claim_light_lifecycle_publication::PreparedAgentClaimLightLifecycle::prepare(
+                    &self.state,
+                    &event,
+                    self.state.time,
+                ) {
                     return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                         action_id,
                         reason: RejectReason::RuleDenied {

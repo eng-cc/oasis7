@@ -35,6 +35,123 @@ fn depot_with_service_radius(id: &str, service_radius_cm: f64) -> MicroDepotFaci
     }
 }
 
+#[test]
+fn facility_only_snapshots_reconcile_added_glyph_and_grounding() {
+    assert_facility_snapshot_reconciles(false);
+}
+
+#[test]
+fn facility_visual_changes_invalidate_content_without_refitting_camera() {
+    let mut initial = sample_render_state(12_000.0);
+    initial
+        .micro_depot_facilities
+        .push(depot("snapshot", "active"));
+    let mutations: &[fn(&mut MicroDepotFacility)] = &[
+        |facility| facility.id.push_str("-new"),
+        |facility| facility.pos = sample_position(1_630_000.0, 1_010_000.0),
+        |facility| facility.status = "suspended".into(),
+        |facility| facility.service_radius_cm = 240_000.0,
+        |facility| {
+            facility.available_units_by_kind.insert("food".into(), 5);
+        },
+        |facility| facility.throughput_remaining_units = 10,
+        |facility| facility.throughput_limit_units_per_epoch = 20,
+    ];
+    for (index, mutate) in mutations.iter().enumerate() {
+        let mut changed = initial.clone();
+        mutate(&mut changed.micro_depot_facilities[0]);
+        assert_ne!(
+            render_content_signature(Some(&initial)),
+            render_content_signature(Some(&changed)),
+            "rendered facility field mutation {index} must invalidate content"
+        );
+        assert_eq!(
+            camera_content_signature(Some(&initial)),
+            camera_content_signature(Some(&changed))
+        );
+    }
+}
+
+#[test]
+fn facility_only_snapshots_reconcile_removed_glyph_and_grounding() {
+    assert_facility_snapshot_reconciles(true);
+}
+
+fn assert_facility_snapshot_reconciles(initially_present: bool) {
+    use crate::render::grounding::PixelWorldGroundingVisual;
+    let mut state = sample_render_state(12_000.0);
+    if initially_present {
+        state
+            .micro_depot_facilities
+            .push(depot("snapshot", "active"));
+    }
+    let mut app = render_test_app(state.clone());
+    let grounding_before = {
+        let world = app.world_mut();
+        world
+            .query::<&PixelWorldGroundingVisual>()
+            .iter(world)
+            .count()
+    };
+    if initially_present {
+        state.micro_depot_facilities.clear();
+    } else {
+        state
+            .micro_depot_facilities
+            .push(depot("snapshot", "active"));
+    }
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        runtime.reactive_scheduling = true;
+        runtime.animation_dirty = true;
+        runtime.needs_reconcile = false;
+        runtime.hit_regions_dirty = false;
+        runtime.camera_user_override = true;
+        runtime.render_content_signature = render_content_signature(runtime.render_state.as_ref());
+        let version = runtime.render_version + 1;
+        apply_external_render_snapshot(
+            &mut runtime,
+            true,
+            RenderSnapshot::Changed {
+                version,
+                state: Some(state),
+            },
+        );
+        assert!(!runtime.hit_regions_dirty);
+        assert!(runtime.camera_user_override);
+    }
+    app.update();
+    let world = app.world_mut();
+    let expected = usize::from(!initially_present);
+    assert_eq!(
+        world
+            .query::<&PixelWorldMicroDepotVisual>()
+            .iter(world)
+            .count(),
+        expected,
+        "facility-only snapshots must reconcile static glyphs"
+    );
+    assert_eq!(
+        world
+            .query::<&PixelWorldMicroDepotDetailVisual>()
+            .iter(world)
+            .count(),
+        expected
+    );
+    let grounding_after = world
+        .query::<&PixelWorldGroundingVisual>()
+        .iter(world)
+        .count();
+    assert_eq!(
+        grounding_after,
+        if initially_present {
+            grounding_before - 3
+        } else {
+            grounding_before + 3
+        }
+    );
+}
+
 fn render_state_with_stock(remaining_units: i64, limit_units: i64) -> RenderState {
     serde_json::from_value(json!({
         "world_bounds": {

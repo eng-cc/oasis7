@@ -562,7 +562,8 @@ local_role_review_status() {
   local source_branch="$2"
   local source_head="$3"
   local comparison_ref="$4"
-  python3 - "$source_worktree" "$source_branch" "$source_head" "$comparison_ref" <<'PY'
+  local expected_comparison_oid="${5:-}"
+  python3 - "$source_worktree" "$source_branch" "$source_head" "$comparison_ref" "$expected_comparison_oid" <<'PY'
 from __future__ import annotations
 
 from pathlib import Path
@@ -576,6 +577,7 @@ source_worktree = Path(sys.argv[1]).resolve()
 source_branch = sys.argv[2]
 source_head = sys.argv[3]
 comparison_ref = sys.argv[4]
+expected_comparison_oid = sys.argv[5] if len(sys.argv) > 5 else ""
 root = source_worktree
 tasks_dir = root / ".pm" / "tasks"
 
@@ -905,11 +907,32 @@ required = {
     "Pre-PR Local Role Review": "passed",
     "Task UID": task_uid,
     "Source Branch": source_branch,
-    "Comparison Ref": comparison_ref,
     "Comparison OID": comparison_oid,
 }
 
+# Promotion binds the packet to the immutable receipt base OID.  Keep the
+# packet field as the default authority for pre-promotion validation, then
+# override that expected value only when promotion supplies a receipt base.
+if expected_comparison_oid:
+    required["Comparison OID"] = expected_comparison_oid
+
+# The symbolic ref is audit context.  During promotion the receipt's base
+# OID is the immutable review-range authority, so a later move of the symbolic
+# base ref must not invalidate an otherwise exact packet.  Without a receipt,
+# retain the current comparison ref as the pre-PR validation authority.
+if not expected_comparison_oid:
+    required["Comparison Ref"] = comparison_ref
+
 missing: list[str] = []
+
+packet_comparison_ref = parse_field(selected_block, "Comparison Ref")
+if expected_comparison_oid:
+    if not packet_comparison_ref:
+        missing.append("Comparison Ref")
+    elif not re.fullmatch(
+        r"(?:refs/[A-Za-z0-9._/-]+|[0-9a-f]{40,64})", packet_comparison_ref
+    ):
+        missing.append("Comparison Ref canonical")
 
 for key, expected in required.items():
     if parse_field(selected_block, key) != expected:
@@ -1267,6 +1290,33 @@ if git_rev("rev-parse", "--verify", f"refs/heads/{source_branch}^{{commit}}") !=
 if git_rev("rev-parse", "--verify", f"{comparison_ref}^{{commit}}") != comparison_head:
     fail("comparison ref differs from the frozen comparison head")
 
+try:
+    import base64
+    live_issue = json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo_name}/issues/{issue_number}'], text=True))
+    live_body = live_issue.get('body', '')
+    matches = re.findall(r'^- loop_binding_b64: `([^`]+)`$', live_body, re.MULTILINE)
+    if 'loop_binding_b64:' in live_body:
+        if len(matches) != 1: fail('malformed live loop binding')
+        binding = json.loads(base64.b64decode(matches[0] + '=' * (-len(matches[0]) % 4), altchars=b'-_', validate=True))
+        if record.get('loop_binding') != binding: fail('loop cache differs from live Issue')
+        tool = Path(os.environ.get('OASIS7_LOOP_TOOL_ROOT', '')).resolve()
+        commit = binding.get('policy_commit', '')
+        if not re.fullmatch(r'[0-9a-f]{40}', commit): fail('missing immutable effective policy')
+        subprocess.run(['git', '-C', str(source_worktree), 'fetch', '--no-tags', 'origin', 'main:refs/remotes/origin/main'], check=True, capture_output=True)
+        subprocess.run(['git', '-C', str(source_worktree), 'merge-base', '--is-ancestor', commit, 'refs/remotes/origin/main'], check=True, capture_output=True)
+        if subprocess.check_output(['git', '-C', str(tool), 'rev-parse', 'HEAD'], text=True).strip() != commit: fail('trusted tool HEAD mismatch')
+        names = subprocess.check_output(['git', '-C', str(tool), 'ls-tree', '-r', '--name-only', commit, '--', 'scripts/pm'], text=True).splitlines()
+        for name in names:
+            if (tool / name).is_symlink() or (tool / name).read_bytes() != subprocess.check_output(['git', '-C', str(tool), 'show', commit + ':' + name]): fail('trusted helper bytes mismatch')
+        if subprocess.check_output(['git', '-C', str(tool), 'ls-files', '--others', '--', 'scripts/pm', ':(exclude)**/__pycache__/**'], text=True).strip(): fail('untracked trusted helper shadow')
+        subprocess.run([sys.executable, '-I', str(tool / 'scripts/pm/loop-local-gate.py'), '--root', str(source_worktree), '--tool-root', str(tool), '--task-uid', task_uid, '--base', comparison_head, '--head', source_head], check=True, stdout=subprocess.DEVNULL)
+    elif record.get('loop_binding') is not None:
+        fail('live binding disappeared')
+    elif any('oasis7-loop-binding-history' in str(item.get('body', '')) for item in comments):
+        fail('live binding deleted after immutable history')
+except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as exc:
+    fail(str(exc))
+
 print(task_uid)
 print(issue_url)
 print(issue_number)
@@ -1307,6 +1357,25 @@ fi
 
 COMPARISON_COMMIT_REF="${COMPARISON_REF}^{commit}"
 COMPARISON_HEAD="$(git rev-parse "$COMPARISON_COMMIT_REF")"
+
+# Promotion reviews the ancestor scope OID; live admission keeps the CI integration OID.
+# The live receipt validator below remains authoritative for the PR/check
+# identity; this early read only prevents a moving local symbolic ref from
+# shadowing the frozen review range during local role-review selection.
+REVIEW_COMPARISON_OID=""
+if [[ -n "$PROMOTE_DRAFT_RECEIPT" ]]; then
+  [[ -f "$PROMOTE_DRAFT_RECEIPT" ]] || die "promote_draft requires an existing ci_ready_receipt"
+  PROMOTE_DRAFT_RECEIPT_BASE_OID="$(python3 - "$PROMOTE_DRAFT_RECEIPT" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    print(json.load(handle).get("base_oid", ""))
+PY
+)" || die "promote_draft could not read ci_ready_receipt base identity"
+  [[ "$PROMOTE_DRAFT_RECEIPT_BASE_OID" =~ ^[0-9a-f]{40,64}$ ]] || die "promote_draft ci_ready_receipt has invalid base identity"
+  REVIEW_COMPARISON_OID="$(python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print(r.get("scope_base_oid",r["base_oid"]))' "$PROMOTE_DRAFT_RECEIPT")"
+fi
 BASE_WORKTREE=""
 if [[ -n "$LOCAL_BASE_REF" ]]; then
   BASE_WORKTREE="$(branch_checkout_path "$BASE_BRANCH" 2>/dev/null || true)"
@@ -1418,7 +1487,7 @@ if git show-ref --verify --quiet "refs/remotes/$REMOTE_NAME/$SOURCE_BRANCH"; the
   REMOTE_SOURCE_REF="refs/remotes/$REMOTE_NAME/$SOURCE_BRANCH"
 fi
 
-LOCAL_ROLE_REVIEW_OUTPUT="$(local_role_review_status "$SOURCE_WORKTREE" "$SOURCE_BRANCH" "$SOURCE_HEAD" "$COMPARISON_REF")"
+LOCAL_ROLE_REVIEW_OUTPUT="$(local_role_review_status "$SOURCE_WORKTREE" "$SOURCE_BRANCH" "$SOURCE_HEAD" "$COMPARISON_REF" "$REVIEW_COMPARISON_OID")"
 LOCAL_ROLE_REVIEW_STATUS="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "status")"
 LOCAL_ROLE_REVIEW_TASK_UID="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "task_uid")"
 LOCAL_ROLE_REVIEW_LOG_PATH="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "evidence_sink")"
@@ -1509,13 +1578,35 @@ print('true' if r.get('status')=='ready' and r.get('workflow_phase')=='pre_pr_re
 PY
 )"
   [[ "$TASK_READY" == true ]] || die "promote_draft requires task truth at ready/pre_pr_ready"
+  CANONICAL_DEFAULT_BRANCH="$(python3 - "$SOURCE_WORKTREE/.pm/github-project-sync/tasks.json" "$RT" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+task_uid = sys.argv[2]
+try:
+    mapping = json.loads(path.read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"cannot read canonical task mapping: {exc}")
+record = (mapping.get("tasks") or {}).get(task_uid) or {}
+default_branch = str(record.get("default_branch") or "").strip()
+if not default_branch:
+    raise SystemExit(f"canonical task default_branch is missing for {task_uid}")
+print(default_branch)
+PY
+)" || die "promote_draft could not read canonical task default_branch"
   command -v gh >/dev/null 2>&1 || die '`gh` not found in PATH'
+  CURRENT_DEFAULT_BRANCH="$(gh api "repos/$RR" --jq '.default_branch')" || die "promote_draft could not read live repository default_branch"
+  [[ -n "$CURRENT_DEFAULT_BRANCH" ]] || die "promote_draft live repository default_branch is missing"
+  [[ "$CANONICAL_DEFAULT_BRANCH" == "$CURRENT_DEFAULT_BRANCH" ]] || die "promote_draft canonical task default_branch $CANONICAL_DEFAULT_BRANCH differs from live repository default_branch $CURRENT_DEFAULT_BRANCH"
+  [[ "$BASE_BRANCH" == "$CANONICAL_DEFAULT_BRANCH" ]] || die "promote_draft --base $BASE_BRANCH differs from canonical task default_branch $CANONICAL_DEFAULT_BRANCH"
   PR_STATE_FIELDS="$(gh pr view "$PR_TO_PROMOTE" -R "$RR" --json isDraft,state,mergedAt --jq '[.isDraft,.state,(.mergedAt // "")] | @tsv')" || die "promote_draft could not read PR state"
   IFS=$'\t' read -r PR_IS_DRAFT PR_STATE PR_MERGED_AT <<<"$PR_STATE_FIELDS"
   [[ "$PR_STATE" == OPEN && -z "$PR_MERGED_AT" ]] || die "promote_draft requires an open, unmerged PR"
   case "$PR_IS_DRAFT" in true|false) ;; *) die "promote_draft received uncertain PR draft state: $PR_IS_DRAFT" ;; esac
   CI_READY_RECEIPT_HELPER="${PREPARE_TASK_PR_CI_READY_RECEIPT_PATH:-$ROOT_DIR/scripts/pm/ci-ready-receipt.py}"
-  RECEIPT_VERIFY_CMD=(python3 "$CI_READY_RECEIPT_HELPER" --repository "$RR" --task-uid "$RT" --task-issue-number "$RI" --pr-number "$RP" --check-name "$RC" --check-app-id "$RA" --planner-digest "$RD" --receipt "$PROMOTE_DRAFT_RECEIPT" --refresh-same-identity)
+  RECEIPT_VERIFY_CMD=(python3 "$CI_READY_RECEIPT_HELPER" --repository "$RR" --task-uid "$RT" --task-issue-number "$RI" --pr-number "$RP" --check-name "$RC" --check-app-id "$RA" --planner-digest "$RD" --receipt "$PROMOTE_DRAFT_RECEIPT" --refresh-same-identity --base-ref "$CANONICAL_DEFAULT_BRANCH")
   [[ "$PR_IS_DRAFT" == false ]] && RECEIPT_VERIFY_CMD+=(--allow-ready-pr)
   "${RECEIPT_VERIFY_CMD[@]}" >/dev/null \
     || die "promote_draft ci_ready_receipt live validation failed"
@@ -1525,6 +1616,42 @@ PY
     || die "promote_draft ci_ready_receipt lacks a canonical review evidence digest"
   [[ "$RECEIPT_REVIEW_EVIDENCE_DIGEST" == "$LOCAL_ROLE_REVIEW_EVIDENCE_DIGEST" ]] \
     || die "promote_draft ci_ready_receipt authority does not match reviewed evidence digest"
+  python3 -I - "$SOURCE_WORKTREE" "$RT" "$PROMOTE_DRAFT_RECEIPT_BASE_OID" "$SOURCE_HEAD" "$ROOT_DIR" <<'PY' \
+    || die "promote_draft fresh local loop/task admission failed"
+import base64,json,os,re,subprocess,sys
+from pathlib import Path
+root,uid,base,head,default_tool=sys.argv[1:]
+mapping=json.loads((Path(root)/'.pm/github-project-sync/tasks.json').read_text())
+task=mapping['tasks'][uid]
+repo=task.get('repository') or mapping.get('project',{}).get('repo')
+number=task['issue_number']
+issue=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/issues/{number}'],text=True))
+body=issue.get('body','').replace('\r\n','\n')
+if re.findall(r'^task_uid:[^\n]*$',body,re.M) != ['task_uid: '+uid]:
+    raise SystemExit('local task Issue identity mismatch')
+if 'loop_binding_b64:' in body:
+    matches=re.findall(r'^- loop_binding_b64: `([^`]+)`$',body,re.M)
+    if len(matches)!=1: raise SystemExit('malformed loop binding')
+    binding=json.loads(base64.b64decode(matches[0]+'='*(-len(matches[0])%4),altchars=b'-_',validate=True))
+    commit=binding.get('policy_commit','')
+    if not re.fullmatch(r'[0-9a-f]{40}',commit): raise SystemExit('missing effective policy')
+    tool=Path(os.environ.get('OASIS7_LOOP_TOOL_ROOT',default_tool)).resolve()
+    subprocess.run(['git','-C',root,'fetch','--no-tags','origin','main:refs/remotes/origin/main'],check=True,capture_output=True)
+    subprocess.run(['git','-C',root,'merge-base','--is-ancestor',commit,'refs/remotes/origin/main'],check=True,capture_output=True)
+    if subprocess.check_output(['git','-C',str(tool),'rev-parse','HEAD'],text=True).strip()!=commit: raise SystemExit('effective local helper HEAD mismatch')
+    common=lambda path: subprocess.check_output(['git','-C',str(path),'rev-parse','--path-format=absolute','--git-common-dir'],text=True).strip()
+    if common(root)!=common(tool): raise SystemExit('effective local helper repository mismatch')
+    helper=tool/'scripts/pm/loop-local-gate.py'
+    expected=subprocess.check_output(['git','-C',root,'show',commit+':scripts/pm/loop-local-gate.py'])
+    if helper.is_symlink() or helper.read_bytes()!=expected: raise SystemExit('local admission helper is not effective')
+    subprocess.run([sys.executable,'-I',str(helper),'--root',root,'--task-uid',uid,'--base',base,'--head',head,'--tool-root',str(tool),'--json'],check=True)
+else:
+    if task.get('loop_binding') is not None: raise SystemExit('live loop binding disappeared')
+    pages=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/issues/{number}/comments','--paginate','--slurp'],text=True))
+    if not isinstance(pages,list): raise SystemExit('loop lineage readback unavailable')
+    comments=[item for page in pages for item in (page if isinstance(page,list) else [page])]
+    if any('oasis7-loop-binding-history' in str(item.get('body','')) for item in comments): raise SystemExit('loop binding deleted after history')
+PY
   case "$PR_IS_DRAFT" in
     true) gh pr ready "$PR_TO_PROMOTE" -R "$RR" >/dev/null || die "promote_draft failed" ;;
     false) ;;

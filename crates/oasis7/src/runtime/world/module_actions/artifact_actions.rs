@@ -173,88 +173,32 @@ impl World {
         self.state.next_module_release_request_id.max(1)
     }
 
-    pub(super) fn best_bid_for_listing(
-        &self,
-        wasm_hash: &str,
-        listing: &ModuleArtifactListingState,
-    ) -> Option<ModuleArtifactBidState> {
-        let bids = self.state.module_artifact_bids.get(wasm_hash)?;
-        let mut best: Option<&ModuleArtifactBidState> = None;
-        for bid in bids {
-            if bid.price_kind != listing.price_kind {
-                continue;
-            }
-            if bid.price_amount < listing.price_amount {
-                continue;
-            }
-            if bid.bidder_agent_id == listing.seller_agent_id {
-                continue;
-            }
-            let available = self
-                .state
-                .agents
-                .get(&bid.bidder_agent_id)
-                .map(|cell| cell.state.resources.get(listing.price_kind))
-                .unwrap_or(0);
-            if available < listing.price_amount {
-                continue;
-            }
-            let replace = match &best {
-                Some(current) => {
-                    bid.price_amount > current.price_amount
-                        || (bid.price_amount == current.price_amount
-                            && bid.order_id < current.order_id)
-                }
-                None => true,
-            };
-            if replace {
-                best = Some(bid);
-            }
-        }
-        best.cloned()
-    }
-
-    pub(super) fn try_match_module_listing(
-        &mut self,
-        wasm_hash: &str,
-        action_id: u64,
-    ) -> Result<(), WorldError> {
-        let Some(listing) = self.state.module_artifact_listings.get(wasm_hash).cloned() else {
-            return Ok(());
-        };
-        let Some(best_bid) = self.best_bid_for_listing(wasm_hash, &listing) else {
-            return Ok(());
-        };
-        let sale_id = self.peek_next_module_market_sale_id();
-        self.append_event(
-            WorldEventBody::Domain(DomainEvent::ModuleArtifactSaleCompleted {
-                buyer_agent_id: best_bid.bidder_agent_id,
-                seller_agent_id: listing.seller_agent_id,
-                wasm_hash: wasm_hash.to_string(),
-                price_kind: listing.price_kind,
-                price_amount: listing.price_amount,
-                sale_id,
-                listing_order_id: if listing.order_id > 0 {
-                    Some(listing.order_id)
-                } else {
-                    None
-                },
-                bid_order_id: Some(best_bid.order_id),
-            }),
-            Some(CausedBy::Action(action_id)),
-        )?;
-        Ok(())
-    }
-
-    pub(super) fn apply_module_governance_proposal(
+    pub(super) fn prepare_module_governance_proposal(
         &mut self,
         proposal_id: ProposalId,
         finality_certificate: Option<&GovernanceFinalityCertificate>,
-    ) -> Result<String, WorldError> {
-        match finality_certificate {
-            Some(certificate) => self.apply_proposal_with_finality(proposal_id, certificate),
-            None => self.apply_proposal(proposal_id),
+    ) -> Result<super::super::governance_publication::PreparedGovernanceProposalApply, WorldError>
+    {
+        let prepared = match finality_certificate {
+            Some(certificate) => self.prepare_proposal_with_finality(proposal_id, certificate)?,
+            None => {
+                if !self.release_security_policy.allow_local_finality_signing {
+                    return Err(WorldError::GovernancePolicyInvalid {
+                        reason: format!(
+                            "apply_proposal local finality path is disabled by release policy proposal_id={proposal_id}"
+                        ),
+                    });
+                }
+                let certificate = self.build_local_finality_certificate(proposal_id)?;
+                self.prepare_proposal_with_finality(proposal_id, &certificate)?
+            }
+        };
+        if self.take_fail_next_append_after_publication_prepare_for_test() {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: "injected append_event failure after publication preparation".to_string(),
+            });
         }
+        Ok(prepared)
     }
 
     pub(super) fn apply_install_module_action(
@@ -265,6 +209,27 @@ impl World {
         activate: bool,
         install_target: ModuleInstallTarget,
         finality_certificate: Option<&GovernanceFinalityCertificate>,
+    ) -> Result<bool, WorldError> {
+        self.apply_install_module_action_with_release(
+            action_id,
+            installer_agent_id,
+            manifest,
+            activate,
+            install_target,
+            finality_certificate,
+            None,
+        )
+    }
+
+    pub(super) fn apply_install_module_action_with_release(
+        &mut self,
+        action_id: u64,
+        installer_agent_id: &str,
+        manifest: &oasis7_wasm_abi::ModuleManifest,
+        activate: bool,
+        install_target: ModuleInstallTarget,
+        finality_certificate: Option<&GovernanceFinalityCertificate>,
+        completion: Option<super::super::module_release_publication::ModuleReleaseCompletion>,
     ) -> Result<bool, WorldError> {
         if !self.state.agents.contains_key(installer_agent_id) {
             self.append_event(
@@ -345,8 +310,8 @@ impl World {
             }
         }
 
-        let (proposal_id, manifest_hash) = if changes.is_empty() {
-            (0, self.current_manifest_hash()?)
+        let (proposal_id, manifest_hash, governance) = if changes.is_empty() {
+            (0, self.current_manifest_hash()?, None)
         } else {
             let module_changes_value = match serde_json::to_value(&changes) {
                 Ok(value) => value,
@@ -428,9 +393,9 @@ impl World {
                 return Ok(true);
             }
 
-            let manifest_hash =
-                match self.apply_module_governance_proposal(proposal_id, finality_certificate) {
-                    Ok(hash) => hash,
+            let prepared =
+                match self.prepare_module_governance_proposal(proposal_id, finality_certificate) {
+                    Ok(prepared) => prepared,
                     Err(err) => {
                         self.append_event(
                             WorldEventBody::Domain(DomainEvent::ActionRejected {
@@ -444,27 +409,36 @@ impl World {
                         return Ok(true);
                     }
                 };
-            (proposal_id, manifest_hash)
+            (
+                proposal_id,
+                prepared.applied_hash().to_string(),
+                Some(prepared),
+            )
         };
 
         let instance_id = self.next_module_instance_id(manifest.module_id.as_str());
 
-        self.append_event(
-            WorldEventBody::Domain(DomainEvent::ModuleInstalled {
-                installer_agent_id: installer_agent_id.to_string(),
-                instance_id,
-                module_id: manifest.module_id.clone(),
-                module_version: manifest.version.clone(),
-                wasm_hash: manifest.wasm_hash.clone(),
-                install_target,
-                active: activate,
-                proposal_id,
-                manifest_hash,
-                fee_kind,
-                fee_amount,
-            }),
-            Some(CausedBy::Action(action_id)),
-        )?;
+        let event = DomainEvent::ModuleInstalled {
+            installer_agent_id: installer_agent_id.to_string(),
+            instance_id,
+            module_id: manifest.module_id.clone(),
+            module_version: manifest.version.clone(),
+            wasm_hash: manifest.wasm_hash.clone(),
+            install_target,
+            active: activate,
+            proposal_id,
+            manifest_hash,
+            fee_kind,
+            fee_amount,
+        };
+        let caused_by = Some(CausedBy::Action(action_id));
+        if let Some(prepared) = governance {
+            prepared.publish_lifecycle_tail_with_release(self, event, caused_by, completion)?;
+        } else if let Some(completion) = completion {
+            self.append_module_install_with_release(event, caused_by, completion)?;
+        } else {
+            self.append_event(WorldEventBody::Domain(event), caused_by)?;
+        }
         Ok(true)
     }
 
@@ -720,9 +694,9 @@ impl World {
             return Ok(true);
         }
 
-        let manifest_hash =
-            match self.apply_module_governance_proposal(proposal_id, finality_certificate) {
-                Ok(hash) => hash,
+        let prepared =
+            match self.prepare_module_governance_proposal(proposal_id, finality_certificate) {
+                Ok(prepared) => prepared,
                 Err(err) => {
                     self.append_event(
                         WorldEventBody::Domain(DomainEvent::ActionRejected {
@@ -737,8 +711,10 @@ impl World {
                 }
             };
 
-        self.append_event(
-            WorldEventBody::Domain(DomainEvent::ModuleUpgraded {
+        let manifest_hash = prepared.applied_hash().to_string();
+        prepared.publish_lifecycle_tail(
+            self,
+            DomainEvent::ModuleUpgraded {
                 upgrader_agent_id: upgrader_agent_id.to_string(),
                 instance_id: instance.instance_id,
                 module_id: instance.module_id,
@@ -751,7 +727,7 @@ impl World {
                 manifest_hash,
                 fee_kind,
                 fee_amount,
-            }),
+            },
             Some(CausedBy::Action(action_id)),
         )?;
         Ok(true)
@@ -981,9 +957,9 @@ impl World {
             )?;
             return Ok(true);
         }
-        let manifest_hash =
-            match self.apply_module_governance_proposal(proposal_id, finality_certificate) {
-                Ok(hash) => hash,
+        let prepared =
+            match self.prepare_module_governance_proposal(proposal_id, finality_certificate) {
+                Ok(prepared) => prepared,
                 Err(err) => {
                     self.append_event(
                         WorldEventBody::Domain(DomainEvent::ActionRejected {
@@ -997,8 +973,10 @@ impl World {
                     return Ok(true);
                 }
             };
-        self.append_event(
-            WorldEventBody::Domain(DomainEvent::ModuleRollbackApplied {
+        let manifest_hash = prepared.applied_hash().to_string();
+        prepared.publish_lifecycle_tail(
+            self,
+            DomainEvent::ModuleRollbackApplied {
                 operator_agent_id: operator_agent_id.to_string(),
                 instance_id: instance.instance_id.clone(),
                 module_id: instance.module_id.clone(),
@@ -1011,7 +989,7 @@ impl World {
                 manifest_hash,
                 fee_kind,
                 fee_amount,
-            }),
+            },
             Some(CausedBy::Action(action_id)),
         )?;
         Ok(true)

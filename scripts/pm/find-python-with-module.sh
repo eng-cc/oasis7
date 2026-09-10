@@ -39,10 +39,15 @@ for generic_name in python python3; do
   fi
 done
 
-codex_runtime_python="$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe"
-if [[ -x "$codex_runtime_python" ]]; then
-  emit_if_supported "$codex_runtime_python"
-fi
+codex_runtime_root="$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/python"
+for codex_runtime_python in \
+  "$codex_runtime_root/python.exe" \
+  "$codex_runtime_root/bin/python3" \
+  "$codex_runtime_root/bin/python"; do
+  if [[ -x "$codex_runtime_python" ]]; then
+    emit_if_supported "$codex_runtime_python"
+  fi
+done
 
 while IFS= read -r path_dir; do
   [[ -n "$path_dir" ]] || path_dir="."

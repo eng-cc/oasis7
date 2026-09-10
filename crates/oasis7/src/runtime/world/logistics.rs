@@ -9,7 +9,12 @@ use super::super::{
     DomainEvent, MaterialDefaultPriority, MaterialLedgerId, MaterialTransitPriority,
     MaterialTransportLossClass, RejectReason, WorldError, WorldEvent, WorldEventBody, WorldTime,
 };
-use super::World;
+use super::{LogisticsSlaMetrics, World};
+
+struct PreparedDueMaterialTransits {
+    bodies: Vec<WorldEventBody>,
+    logistics_sla_metrics: LogisticsSlaMetrics,
+}
 
 pub(super) const MATERIAL_TRANSFER_MAX_DISTANCE_KM: i64 = 10_000;
 pub(super) const MATERIAL_TRANSFER_LOSS_PER_KM_BPS: i64 = 5;
@@ -927,10 +932,7 @@ impl World {
         })
     }
 
-    pub(super) fn process_due_material_transits(&mut self) -> Result<Vec<WorldEvent>, WorldError> {
-        let now = self.state.time;
-        let mut emitted = Vec::new();
-
+    fn prepare_due_material_transits_at(&self, now: WorldTime) -> PreparedDueMaterialTransits {
         let mut due_jobs: Vec<_> = self
             .state
             .pending_material_transits
@@ -940,14 +942,15 @@ impl World {
             .collect();
         due_jobs.sort_by_key(|job| (job.ready_at, job.priority, job.job_id));
 
+        let mut logistics_sla_metrics = self.logistics_sla_metrics.clone();
+        let mut bodies = Vec::with_capacity(due_jobs.len());
         for job in due_jobs {
             let loss_amount =
                 material_transit_loss_amount(job.amount, job.distance_km, job.loss_bps);
             let received_amount = job.amount.saturating_sub(loss_amount);
-            self.record_logistics_sla_completion(job.ready_at, now, job.priority);
-
-            self.append_event(
-                WorldEventBody::Domain(DomainEvent::MaterialTransitCompleted {
+            logistics_sla_metrics.record_completion(job.ready_at, now, job.priority);
+            bodies.push(WorldEventBody::Domain(
+                DomainEvent::MaterialTransitCompleted {
                     job_id: job.job_id,
                     requester_agent_id: job.requester_agent_id,
                     from_ledger: job.from_ledger,
@@ -963,13 +966,46 @@ impl World {
                     route_ids: job.route_ids,
                     tariff_electricity_total: job.tariff_electricity_total,
                     reroute_count: job.reroute_count,
-                }),
-                None,
-            )?;
+                },
+            ));
+        }
+        PreparedDueMaterialTransits {
+            bodies,
+            logistics_sla_metrics,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn prepared_due_material_transits_for_test(
+        &self,
+        now: WorldTime,
+    ) -> (Vec<(u64, MaterialTransitPriority)>, LogisticsSlaMetrics) {
+        let prepared = self.prepare_due_material_transits_at(now);
+        let ordered = prepared
+            .bodies
+            .iter()
+            .filter_map(|body| match body {
+                WorldEventBody::Domain(DomainEvent::MaterialTransitCompleted {
+                    job_id,
+                    priority,
+                    ..
+                }) => Some((*job_id, *priority)),
+                _ => None,
+            })
+            .collect();
+        (ordered, prepared.logistics_sla_metrics)
+    }
+
+    pub(super) fn process_due_material_transits(&mut self) -> Result<Vec<WorldEvent>, WorldError> {
+        let prepared = self.prepare_due_material_transits_at(self.state.time);
+        let mut emitted = Vec::with_capacity(prepared.bodies.len());
+        for body in prepared.bodies {
+            self.append_event(body, None)?;
             if let Some(event) = self.journal.events.last() {
                 emitted.push(event.clone());
             }
         }
+        self.logistics_sla_metrics = prepared.logistics_sla_metrics;
 
         Ok(emitted)
     }

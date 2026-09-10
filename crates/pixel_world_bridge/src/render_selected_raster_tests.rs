@@ -4,6 +4,28 @@ use super::fixtures::{
 use super::*;
 
 #[test]
+fn reduced_motion_freezes_pixels_across_reconcile_and_resumes_on_preference_change() {
+    let mut app = render_test_app(sample_render_state(12_000.0));
+    app.world_mut()
+        .resource_mut::<BevyRuntimeState>()
+        .reduced_motion = true;
+    app.update();
+    let (first, _) = rasterize_pixel_regression(&mut app);
+    app.world_mut()
+        .resource_mut::<Time>()
+        .advance_by(std::time::Duration::from_millis(350));
+    app.update();
+    let (frozen, _) = rasterize_pixel_regression(&mut app);
+    assert_eq!(first, frozen, "static reconcile must not restart motion");
+    app.world_mut()
+        .resource_mut::<BevyRuntimeState>()
+        .reduced_motion = false;
+    app.update();
+    let (resumed, _) = rasterize_pixel_regression(&mut app);
+    assert_ne!(frozen, resumed, "normal motion must resume");
+}
+
+#[test]
 fn bevy_pixel_regression_exports_selected_location_ring_with_world_layers() {
     let mut app = render_test_app(sample_render_state_with_beacon_candidates(
         "location", "loc-0",

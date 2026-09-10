@@ -88,6 +88,24 @@ set -euo pipefail
 LOG_FILE="${TEST_GH_LOG:?}"
 printf '%s\n' "$*" >> "$LOG_FILE"
 
+if [[ "${1:-}" == "api" && "${2:-}" == repos/* && "$*" == *"--jq .default_branch"* ]]; then
+  printf '%s\n' "${TEST_GH_DEFAULT_BRANCH-main}"
+  exit 0
+fi
+
+if [[ "${1:-}" == "api" && "${2:-}" == repos/*/issues/*/comments ]]; then
+  python3 - "${TEST_GH_ISSUE_VIEW_JSON:?}" <<'PY'
+import json,sys
+print(json.dumps([json.load(open(sys.argv[1])).get('comments',[])]))
+PY
+  exit 0
+fi
+
+if [[ "${1:-}" == "api" && "${2:-}" == repos/*/issues/* ]]; then
+  cat "${TEST_GH_PROMOTION_ISSUE_JSON:-${TEST_GH_ISSUE_BODY_JSON:?}}"
+  exit 0
+fi
+
 if [[ "${1:-}" == "pr" && "${2:-}" == "create" ]]; then
   printf 'https://github.com/example/oasis7/pull/999\n'
   exit 0
@@ -438,6 +456,9 @@ run_prepare() {
     TEST_GH_ISSUE_BODY_JSON="${TEST_GH_ISSUE_BODY_JSON:-}" \
     TEST_GH_ISSUE_FULL_JSON="${TEST_GH_ISSUE_FULL_JSON:-}" \
     TEST_GH_ISSUE_VIEW_JSON="${TEST_GH_ISSUE_VIEW_JSON:-}" \
+    TEST_PR_STATE_TSV="${TEST_PR_STATE_TSV:-}" \
+    TEST_PR_BASE_REF="${TEST_PR_BASE_REF:-}" \
+    TEST_GH_DEFAULT_BRANCH="${TEST_GH_DEFAULT_BRANCH-main}" \
     "$ROOT_DIR/scripts/prepare-task-pr.sh" "$SMOKE_BRANCH" "$@"
 }
 
@@ -1128,7 +1149,6 @@ missing = set(review["missing_markers"])
 expected = {
     "Source Worktree: " + Path(expected_worktree).name + " or repo-relative worktree hint",
     f"Source Branch: {expected_branch}",
-    "Comparison Ref: refs/remotes/origin/main",
     "Comparison OID available as commit: 0000000000000000000000000000000000000000",
 }
 if review["status"] != "missing":
@@ -1136,6 +1156,85 @@ if review["status"] != "missing":
 if not expected.issubset(missing):
     raise SystemExit(f"expected exact field mismatch markers {expected}, got: {missing}")
 PY
+
+# Ordinary review validation must bind the packet's symbolic Comparison Ref.
+# The immutable receipt OID override is promotion-only; a non-promotion JSON
+# preflight must reject a packet whose ref does not match the active base ref.
+reset_smoke_branch_to_base
+write_task_binding
+write_project_trace
+printf '\n// prepare-task-pr comparison ref regression fixture\n' >> "$SMOKE_WORKTREE/scripts/prepare-task-pr.sh"
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add scripts/prepare-task-pr.sh .pm/tasks/"$TASK_UID.yaml" doc/engineering/project.md
+"$REAL_GIT" -C "$SMOKE_WORKTREE" \
+  -c user.name="oasis7 smoke" \
+  -c user.email="smoke@example.invalid" \
+  -c commit.gpgsign=false \
+  commit --no-verify -m "test: comparison ref regression fixture" >/dev/null
+SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+write_role_review_packet "$SOURCE_HEAD" "no_findings"
+commit_fixture_evidence
+python3 - "$SMOKE_WORKTREE/.pm/tasks/$TASK_UID.execution.md" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+body = path.read_text(encoding="utf-8")
+body = body.replace(
+    "- Comparison Ref: refs/remotes/origin/main",
+    "- Comparison Ref: refs/remotes/origin/not-main",
+)
+path.write_text(body, encoding="utf-8")
+PY
+commit_fixture_evidence
+comparison_ref_mismatch_json="$TMPDIR/comparison-ref-mismatch.json"
+run_prepare "$TMPDIR/gh-comparison-ref-mismatch.log" "$TMPDIR/git-comparison-ref-mismatch.log" --json >"$comparison_ref_mismatch_json"
+python3 - "$comparison_ref_mismatch_json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+review = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["pre_pr_local_role_review"]
+if review["status"] != "missing":
+    raise SystemExit(f"ordinary review must reject mismatched Comparison Ref, got: {review}")
+if "Comparison Ref: refs/remotes/origin/main" not in review["missing_markers"]:
+    raise SystemExit(f"expected exact Comparison Ref mismatch marker, got: {review}")
+PY
+
+# Promotion review identity is bound to the immutable receipt/plan base OID,
+# not to a symbolic base ref that may move after the review was frozen.
+reset_smoke_branch_to_base
+write_changed_path_fixture "scripts/prepare-task-pr.sh"
+python3 - "$SMOKE_WORKTREE/.pm/tasks/$TASK_UID.execution.md" "$COMPARISON_OID" <<'PY'
+from pathlib import Path
+import sys
+
+path, comparison_oid = sys.argv[1:]
+body = Path(path).read_text(encoding="utf-8")
+body = body.replace(
+    "- Comparison Ref: refs/remotes/origin/main",
+    f"- Comparison Ref: {comparison_oid}",
+)
+Path(path).write_text(body, encoding="utf-8")
+PY
+moved_main_oid="$("$REAL_GIT" -C "$ROOT_DIR" commit-tree "$COMPARISON_OID^{tree}" -p "$COMPARISON_OID" -m "test: move symbolic base after review freeze")"
+"$REAL_GIT" -C "$ROOT_DIR" update-ref refs/remotes/origin/main "$moved_main_oid"
+moved_main_review="$TMPDIR/moved-main-immutable-review.env"
+PREPARE_TASK_PR_ALLOW_RETIRED_PM_TASKS=1 \
+  local_role_review_status "$SMOKE_WORKTREE" "$SMOKE_BRANCH" "$SOURCE_HEAD" refs/remotes/origin/main "$COMPARISON_OID" >"$moved_main_review"
+python3 - "$moved_main_review" "$COMPARISON_OID" <<'PY'
+from pathlib import Path
+import sys
+
+fields = {}
+for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
+    key, _, value = line.partition("=")
+    fields[key] = value
+if fields.get("status") != "passed":
+    raise SystemExit(f"immutable comparison OID must survive moved symbolic ref, got: {fields}")
+if fields.get("comparison_oid") != sys.argv[2]:
+    raise SystemExit(f"review must retain immutable comparison OID, got: {fields}")
+PY
+"$REAL_GIT" -C "$ROOT_DIR" update-ref refs/remotes/origin/main "$COMPARISON_OID"
 
 reset_smoke_branch_to_base
 rm -f "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json"
@@ -1413,14 +1512,36 @@ if record.get("pr_url"):
 PY
 
 promotion_receipt="$TMPDIR/promotion-receipt.json"
+python3 - "$SMOKE_WORKTREE/.pm/tasks/$TASK_UID.execution.md" "$COMPARISON_OID" <<'PY'
+from pathlib import Path
+import sys
+
+path, comparison_oid = sys.argv[1:]
+body = Path(path).read_text(encoding="utf-8")
+body = body.replace(
+    "- Comparison Ref: refs/remotes/origin/main",
+    f"- Comparison Ref: {comparison_oid}",
+)
+Path(path).write_text(body, encoding="utf-8")
+PY
+commit_fixture_evidence
+refresh_current_issue_identity_fixture "$TMPDIR/current-issue-comments.json"
+moved_promotion_base_oid="$("$REAL_GIT" -C "$ROOT_DIR" commit-tree "$COMPARISON_OID^{tree}" -p "$COMPARISON_OID" -m "test: move promotion base after review freeze")"
+"$REAL_GIT" -C "$ROOT_DIR" update-ref refs/remotes/origin/main "$moved_promotion_base_oid"
 PROMOTION_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
 cat >"$promotion_receipt" <<EOF
-{"receipt_type":"oasis7_ci_ready_receipt","issuer":"github_live_query","repository":"example/oasis7","task_uid":"$TASK_UID","task_issue_number":123,"pr_number":999,"base_oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","head_oid":"$PROMOTION_HEAD","check_name":"required-gate","check_app_id":42,"check_run_id":9,"planner_digest":"fixture","planner_config_sha256":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","run_rust_baseline":true,"conclusion":"success","observed_at":"2000-01-01T00:00:00+00:00","review_evidence_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+{"receipt_type":"oasis7_ci_ready_receipt","issuer":"github_live_query","repository":"example/oasis7","task_uid":"$TASK_UID","task_issue_number":123,"pr_number":999,"base_oid":"$COMPARISON_OID","head_oid":"$PROMOTION_HEAD","check_name":"required-gate","check_app_id":42,"check_run_id":9,"planner_digest":"fixture","planner_config_sha256":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","run_rust_baseline":true,"conclusion":"success","observed_at":"2000-01-01T00:00:00+00:00","review_evidence_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
 EOF
 promotion_receipt_helper="$TMPDIR/promotion-receipt-helper.py"
 cat >"$promotion_receipt_helper" <<'PY'
 #!/usr/bin/env python3
 import os,sys
+if "--base-ref" in sys.argv:
+    expected=sys.argv[sys.argv.index("--base-ref") + 1]
+    observed=os.environ.get("TEST_PR_BASE_REF") or "main"
+    if expected != observed:
+        print(f"ci-ready-receipt: base ref mismatch: expected {expected}, observed {observed}", file=sys.stderr)
+        raise SystemExit(1)
 with open(os.environ["TEST_GH_LOG"],"a") as f: f.write("receipt "+" ".join(sys.argv[1:])+"\n")
 PY
 promotion_project_helper="$TMPDIR/promotion-project-helper.py"
@@ -1467,6 +1588,183 @@ receipt=next(x for x in lines if x.startswith("receipt "))
 assert "--allow-ready-pr" not in receipt,lines
 PY
 assert_promoted_truth
+"$REAL_GIT" -C "$ROOT_DIR" update-ref refs/remotes/origin/main "$COMPARISON_OID"
+
+# A stale UID mention is not canonical task identity at promotion.
+for identity_case in missing changed duplicate conflicting malformed; do
+  identity_issue="$TMPDIR/promotion-identity-$identity_case.json"
+  python3 - "$identity_issue" "$TASK_UID" "$identity_case" <<'PY'
+import json,sys
+path,uid,case=sys.argv[1:]
+canonical='task_uid: '+uid
+fields={'missing':'','changed':'task_uid: task_'+'f'*32,
+        'duplicate':canonical+'\n'+canonical,
+        'conflicting':canonical+'\ntask_uid: task_'+'f'*32,
+        'malformed':canonical+'\ntask_uid: malformed'}
+with open(path,'w') as f: json.dump({'number':123,'body':'<!-- oasis7-pm-task -->\n'+fields[case]+'\nHistorical mention '+uid},f)
+PY
+  set_promotion_ready_truth
+  identity_log="$TMPDIR/gh-promotion-identity-$identity_case.log"
+  identity_err="$TMPDIR/promotion-identity-$identity_case.err"
+  if TEST_GH_PROMOTION_ISSUE_JSON="$identity_issue" \
+    PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
+    PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'true\tOPEN\t' \
+      run_prepare "$identity_log" "$TMPDIR/git-promotion-identity-$identity_case.log" --promote-draft "$promotion_receipt" >/dev/null 2>"$identity_err"; then
+    echo "promotion accepted noncanonical Issue identity: $identity_case" >&2
+    exit 1
+  fi
+  grep -q 'local task Issue identity mismatch' "$identity_err" || { cat "$identity_err" >&2; exit 1; }
+  if grep -Eq '^record-pr ordinary$|^pr ready ' "$identity_log"; then
+    echo "invalid Issue identity reached promotion mutation: $identity_case" >&2
+    exit 1
+  fi
+done
+
+# A PR retargeted to another base branch at the same base OID must not pass
+# promotion.  The immutable receipt OID remains valid, but live PR base-ref
+# identity is part of the promotion gate.
+set_promotion_ready_truth
+retargeted_base_log="$TMPDIR/gh-promotion-retargeted-base.log"
+retargeted_base_err="$TMPDIR/retargeted-base.err"
+if PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
+  PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'true\tOPEN\t' TEST_PR_BASE_REF=release \
+    run_prepare "$retargeted_base_log" "$TMPDIR/git-promotion-retargeted-base.log" --promote-draft "$promotion_receipt" >/dev/null 2>"$retargeted_base_err"; then
+  echo "promotion must reject a PR retargeted to another base branch at the same base OID" >&2
+  exit 1
+fi
+if ! grep -Eq 'base branch|base ref' "$retargeted_base_err"; then
+  echo "retargeted-base promotion failed for an unrelated reason: $(cat "$retargeted_base_err")" >&2
+  exit 1
+fi
+if grep -Eq '^receipt |^record-pr ordinary$|^pr ready ' "$retargeted_base_log"; then
+  echo "retargeted-base promotion reached receipt, ready, or record: $(cat "$retargeted_base_log")" >&2
+  exit 1
+fi
+
+# A caller-supplied --base override must not redefine the task's canonical
+# target branch. Keep the alternate ref at the same immutable OID so only the
+# task default-branch authority distinguishes this attempt.
+"$REAL_GIT" -C "$ROOT_DIR" update-ref refs/remotes/origin/release "$COMPARISON_OID"
+set_promotion_ready_truth
+caller_override_log="$TMPDIR/gh-promotion-caller-base-override.log"
+caller_override_err="$TMPDIR/promotion-caller-base-override.err"
+if PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
+  PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'true\tOPEN\t' TEST_PR_BASE_REF=release \
+    run_prepare "$caller_override_log" "$TMPDIR/git-promotion-caller-base-override.log" --base release --promote-draft "$promotion_receipt" >/dev/null 2>"$caller_override_err"; then
+  echo "promotion must reject a caller base override that differs from task default_branch" >&2
+  exit 1
+fi
+if ! grep -Eq 'canonical task default branch|canonical task default_branch|default branch' "$caller_override_err"; then
+  echo "caller base override failed for an unrelated reason: $(cat "$caller_override_err")" >&2
+  exit 1
+fi
+if grep -Eq '^receipt |^record-pr ordinary$|^pr ready ' "$caller_override_log"; then
+  echo "caller base override reached receipt, ready, or record: $(cat "$caller_override_log")" >&2
+  exit 1
+fi
+"$REAL_GIT" -C "$ROOT_DIR" update-ref -d refs/remotes/origin/release
+
+# A stale local task mapping and drifted origin/HEAD must not authorize
+# promotion when the fresh repository default branch has changed. Keep the
+# recorded task base at main and the alternate branch at the same OID so this
+# exercises authority freshness rather than review-range resolution.
+"$REAL_GIT" -C "$ROOT_DIR" update-ref refs/remotes/origin/release "$COMPARISON_OID"
+"$REAL_GIT" -C "$ROOT_DIR" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/release
+set_promotion_ready_truth
+stale_default_log="$TMPDIR/gh-promotion-stale-default.log"
+stale_default_err="$TMPDIR/promotion-stale-default.err"
+if PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
+  PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'true\tOPEN\t' TEST_PR_BASE_REF=main TEST_GH_DEFAULT_BRANCH=release \
+    run_prepare "$stale_default_log" "$TMPDIR/git-promotion-stale-default.log" --promote-draft "$promotion_receipt" >/dev/null 2>"$stale_default_err"; then
+  echo "promotion must reject stale task default_branch after repository default drift" >&2
+  exit 1
+fi
+if ! grep -Eq 'live repository default_branch|repository default' "$stale_default_err"; then
+  echo "stale-default promotion failed for an unrelated reason: $(cat "$stale_default_err")" >&2
+  exit 1
+fi
+if ! grep -Fq 'api repos/example/oasis7 --jq .default_branch' "$stale_default_log"; then
+  echo "stale-default promotion did not perform the fresh repository default read: $(cat "$stale_default_log")" >&2
+  exit 1
+fi
+if grep -Eq '^receipt |^record-pr ordinary$|^pr ready ' "$stale_default_log"; then
+  echo "stale-default promotion reached receipt, ready, or record: $(cat "$stale_default_log")" >&2
+  exit 1
+fi
+"$REAL_GIT" -C "$ROOT_DIR" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+"$REAL_GIT" -C "$ROOT_DIR" update-ref -d refs/remotes/origin/release
+
+# Missing fresh repository default authority must also fail closed; the
+# recorded task base is not a substitute for a live readback.
+set_promotion_ready_truth
+missing_default_log="$TMPDIR/gh-promotion-missing-default.log"
+missing_default_err="$TMPDIR/promotion-missing-default.err"
+if PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
+  PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'true\tOPEN\t' TEST_PR_BASE_REF=main TEST_GH_DEFAULT_BRANCH= \
+    run_prepare "$missing_default_log" "$TMPDIR/git-promotion-missing-default.log" --promote-draft "$promotion_receipt" >/dev/null 2>"$missing_default_err"; then
+  echo "promotion must reject missing live repository default_branch authority" >&2
+  exit 1
+fi
+if ! grep -Eq 'live repository default_branch' "$missing_default_err"; then
+  echo "missing-default promotion failed for an unrelated reason: $(cat "$missing_default_err")" >&2
+  exit 1
+fi
+if ! grep -Fq 'api repos/example/oasis7 --jq .default_branch' "$missing_default_log"; then
+  echo "missing-default promotion did not perform the fresh repository default read: $(cat "$missing_default_log")" >&2
+  exit 1
+fi
+if grep -Eq '^receipt |^record-pr ordinary$|^pr ready ' "$missing_default_log"; then
+  echo "missing-default promotion reached receipt, ready, or record: $(cat "$missing_default_log")" >&2
+  exit 1
+fi
+
+# A receipt with a different base OID must fail before any promotion helper or
+# GitHub mutation, even when the local packet is otherwise complete.
+python3 - "$promotion_receipt" <<'PY'
+import json,sys
+p=sys.argv[1]; r=json.load(open(p)); r["base_oid"]="b"*40
+open(p,"w").write(json.dumps(r)+"\n")
+PY
+set_promotion_ready_truth
+wrong_base_promotion_log="$TMPDIR/gh-promotion-wrong-base.log"
+if PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
+  PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'true\tOPEN\t' \
+    run_prepare "$wrong_base_promotion_log" "$TMPDIR/git-promotion-wrong-base.log" --promote-draft "$promotion_receipt" >/dev/null 2>&1; then
+  echo "promotion must reject a receipt whose base OID differs from the reviewed packet" >&2
+  exit 1
+fi
+if grep -Eq '^receipt |^record-pr ordinary$|^pr ready ' "$wrong_base_promotion_log"; then
+  echo "wrong-base promotion reached receipt, ready, or record: $(cat "$wrong_base_promotion_log")" >&2
+  exit 1
+fi
+
+# Restore the valid base, then reject a receipt bound to another source head
+# before receipt validation or any promotion mutation.
+python3 - "$promotion_receipt" "$COMPARISON_OID" "$PROMOTION_HEAD" <<'PY'
+import json,sys
+p,base,head=sys.argv[1:]
+r=json.load(open(p)); r["base_oid"]=base; r["head_oid"]="0"*40
+open(p,"w").write(json.dumps(r)+"\n")
+PY
+set_promotion_ready_truth
+wrong_head_promotion_log="$TMPDIR/gh-promotion-wrong-head.log"
+if PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
+  PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'true\tOPEN\t' \
+    run_prepare "$wrong_head_promotion_log" "$TMPDIR/git-promotion-wrong-head.log" --promote-draft "$promotion_receipt" >/dev/null 2>&1; then
+  echo "promotion must reject a receipt bound to a different source head" >&2
+  exit 1
+fi
+if grep -Eq '^receipt |^record-pr ordinary$|^pr ready ' "$wrong_head_promotion_log"; then
+  echo "wrong-head promotion reached receipt, ready, or record: $(cat "$wrong_head_promotion_log")" >&2
+  exit 1
+fi
+
+python3 - "$promotion_receipt" "$COMPARISON_OID" "$PROMOTION_HEAD" <<'PY'
+import json,sys
+p,base,head=sys.argv[1:]
+r=json.load(open(p)); r["base_oid"]=base; r["head_oid"]=head
+open(p,"w").write(json.dumps(r)+"\n")
+PY
 
 python3 - "$promotion_receipt" <<'PY'
 import json,sys

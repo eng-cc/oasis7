@@ -539,6 +539,21 @@ fn economic_contract_expires_and_penalizes_reputation() {
     });
     world.step().expect("open contract");
 
+    let snapshot_before_prepare = world.snapshot();
+    let journal_before_prepare = world.journal().clone();
+    let prepared = world.prepared_economic_contract_expiry_events_for_test(expires_at);
+    assert_eq!(world.snapshot(), snapshot_before_prepare);
+    assert_eq!(world.journal(), &journal_before_prepare);
+    assert!(matches!(
+        prepared.as_slice(),
+        [DomainEvent::EconomicContractExpired {
+            contract_id,
+            creator_reputation_delta: -6,
+            counterparty_reputation_delta: 0,
+            ..
+        }] if contract_id == "contract.expire"
+    ));
+
     while world.state().time <= expires_at {
         world.submit_action(Action::QueryObservation {
             agent_id: "a".to_string(),

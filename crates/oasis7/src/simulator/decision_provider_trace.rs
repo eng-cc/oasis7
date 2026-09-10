@@ -269,6 +269,7 @@ pub(super) fn provider_error_to_trace(error: &DecisionProviderError) -> AgentDec
             completion_tokens: None,
             total_tokens: None,
             retry_count: 0,
+            ..LlmDecisionDiagnostics::default()
         }),
         llm_effect_intents: vec![],
         llm_effect_receipts: vec![],
@@ -403,6 +404,7 @@ pub(super) fn response_to_trace(
                 .as_ref()
                 .and_then(|usage| usage.total_tokens),
             retry_count: response.diagnostics.retry_count,
+            ..LlmDecisionDiagnostics::default()
         }),
         llm_effect_intents: vec![],
         llm_effect_receipts: vec![],

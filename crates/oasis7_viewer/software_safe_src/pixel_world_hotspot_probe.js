@@ -21,7 +21,7 @@ export function installPixelWorldHotspotPointerProbe({
   getHoverSelection,
   getHoveredHotspot,
 }) {
-  if (typeof window === "undefined" || !["hotspot_tooltip", "recent_event_glyphs"].includes(fixtureName)) {
+  if (typeof window === "undefined" || !["hotspot_tooltip", "recent_event_glyphs", "routes_and_events"].includes(fixtureName)) {
     return () => {};
   }
 
@@ -51,6 +51,10 @@ export function installPixelWorldHotspotPointerProbe({
       }));
       dispatchMove(point.clientX, point.clientY);
       await nextFrame();
+      for (let frame = 0; frame < 8 && getHoveredHotspot()?.id !== hotspot.id; frame += 1) {
+        dispatchMove(point.clientX, point.clientY);
+        await nextFrame();
+      }
       const visibleHotspot = getHoveredHotspot();
       return {
         ...receiptBase(),

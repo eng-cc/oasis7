@@ -6,354 +6,53 @@ import { applyPixelWorldRendererRoute, createPixelWorldRendererRouteSignals, res
 import { installPixelWorldRenderDtoProbe, installPixelWorldVisualFixtureHook, pixelWorldTestApiEnabled } from "./pixel_world_visual_fixture.js";
 import { pixelWorldSelectedBlockerVisualFixture } from "./pixel_world_visual_fixture_data.js";
 import { pixelWorldReadableAgentLabel, pixelWorldReadableEntityText, pixelWorldSelectedEntityLabel } from "./pixel_world_identity.js";
+import { PixelWorldCanvasAgentHitTargets, PixelWorldCanvasLegend, PixelWorldHostVisualLayer, PixelWorldSparseSceneGuidance, arrayField, fieldValue, pixelWorldVisualState } from "./pixel_world_visual_clarity.jsx";
 import { applyPixelWorldMobileSelectionSafeArea, installPixelWorldMobileSelectionSafeArea } from "./pixel_world_mobile_safe_area.js";
+import { createHotspotFocusRestoration, PixelWorldHotspot, PixelWorldHotspotTooltip } from "./pixel_world_hotspot.jsx";
+import { resolvePixelWorldReadoutStatus } from "./pixel_world_readout.js";
+import { pixelWorldBlockerPresentation, pixelWorldConnectionPresentation, pixelWorldFeedFreshnessPresentation } from "./pixel_world_presentation.js";
+import { pixelWorldHotspotGlyphSize, pixelWorldHotspotStyle } from "./pixel_world_hotspot_projection.js";
+import { PixelWorldRendererTargets } from './pixel_world_renderer_targets.jsx';
 export { pixelWorldSelectedBlockerVisualFixture };
-function tr(locale, zh, en) {
-  return core.isLocaleZh(locale) ? zh : en;
-}
-const PIXEL_WORLD_RUNTIME_CANVAS_ID = "pixel-world-embedded-runtime-canvas";
-const PIXEL_WORLD_RENDERER_UNAVAILABLE_MESSAGE_ID = "pixel-world-renderer-unavailable-message";
-const pixelWorldFocusUiSessionState = {
-  focusMode: false,
-  commandDrawerOpen: false,
-  diagnosticsDrawerOpen: false,
-  maximized: false,
-};
-const FRAGMENT_TERRAIN_PALETTE = {
-  silicate_matrix: [126, 144, 99],
-  iron_nickel_alloy: [176, 184, 196],
-  water_ice: [125, 211, 252],
-  hydrated_mineral: [96, 165, 250],
-  carbonaceous_organic: [120, 113, 108],
-  sulfide_ore: [202, 138, 4],
-  rare_earth_oxide: [167, 139, 250],
-  uranium_bearing_ore: [132, 204, 22],
-  thorium_bearing_ore: [244, 114, 182],
-  unknown: [148, 163, 184],
-};
+function tr(locale, zh, en) { return core.isLocaleZh(locale) ? zh : en; }
 async function waitForRuntimeCanvasAttachment(canvas) {
   for (let attempt = 0; attempt < 12; attempt += 1) {
-    if (
-      canvas?.isConnected
-      && document.getElementById(PIXEL_WORLD_RUNTIME_CANVAS_ID) === canvas
-    ) {
+    if (canvas?.isConnected && document.getElementById(PIXEL_WORLD_RUNTIME_CANVAS_ID) === canvas) {
       return true;
     }
-    await new Promise((resolve) => {
-      requestAnimationFrame(() => resolve());
-    });
+    await new Promise((resolve) => requestAnimationFrame(() => resolve()));
   }
   return false;
-}
-function safeNumber(value, fallback = 0) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : fallback;
-}
-function pixelWorldAgentIdentity(agent, fallbackId = "", isLocaleZh = false) {
-  return pixelWorldReadableAgentLabel(agent, fallbackId, isLocaleZh) || "Agent";
 }
 function snapshotTick(snapshot) {
   if (!snapshot || typeof snapshot !== "object") {
     return null;
   }
   const tick = Number(fieldValue(snapshot, "time", "time", null));
-  if (!Number.isFinite(tick)) {
-    return null;
-  }
-  return Math.max(0, Math.floor(tick));
+  return Number.isFinite(tick) ? Math.max(0, Math.floor(tick)) : null;
 }
-function colorToCss(color, alpha = 0.36) {
-  const [red, green, blue] = Array.isArray(color) ? color : FRAGMENT_TERRAIN_PALETTE.unknown;
-  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+function pixelWorldAgentIdentity(agent, fallbackId = "", isLocaleZh = false) {
+  return pixelWorldReadableAgentLabel(agent, fallbackId, isLocaleZh) || "Agent";
 }
-function clampRatio(value) {
-  return Math.min(1, Math.max(0, Number(value) || 0));
-}
-function toWorldPercentStyle(pos, worldBounds, fallbackStyle) {
-  if (!pos || !worldBounds) {
-    return fallbackStyle;
-  }
-  const point = worldPercentPoint(pos, worldBounds, 8, 10);
-  return {
-    left: `${point.x.toFixed(1)}%`,
-    top: `${point.y.toFixed(1)}%`,
-  };
-}
-function agentMarkerStyle(agent, index, worldBounds) {
-  const base = toWorldPercentStyle(agent.pos, worldBounds, {
-    left: `${18 + ((index % 5) * 15)}%`,
-    top: `${14 + (Math.floor(index / 5) * 22)}%`,
-  });
-  const offsets = [
-    [-18, -18],
-    [18, -18],
-    [-18, 18],
-    [18, 18],
-    [0, -30],
-    [0, 30],
-    [-30, 0],
-    [30, 0],
-    [-28, -28],
-    [28, 28],
-  ];
-  const [x, y] = offsets[index % offsets.length] || [0, 0];
-  return {
-    ...base,
-    transform: `translate(${x}px, ${y}px)`,
-  };
-}
-function worldPercentPoint(pos, worldBounds, fallbackX = 50, fallbackY = 50) {
-  if (!pos || !worldBounds) {
-    return { x: fallbackX, y: fallbackY };
-  }
-  return {
-    x: 8 + (clampRatio(pos.x_cm / Math.max(1, worldBounds.width_cm)) * 84),
-    y: 10 + (clampRatio(pos.y_cm / Math.max(1, worldBounds.depth_cm)) * 78),
-  };
-}
-const FALLBACK_ROUTE_HEIGHT_TO_WIDTH_RATIO = 9 / 16;
-function routeStyle(link, worldBounds, index) {
-  const fallbackFrom = {
-    x: 14 + ((index % 5) * 15),
-    y: 18 + (Math.floor(index / 5) * 14),
-  };
-  const fallbackTo = {
-    x: fallbackFrom.x + 14,
-    y: fallbackFrom.y + 8,
-  };
-  const from = worldPercentPoint(link.from, worldBounds, fallbackFrom.x, fallbackFrom.y);
-  const to = worldPercentPoint(link.to, worldBounds, fallbackTo.x, fallbackTo.y);
-  const deltaX = to.x - from.x;
-  const deltaY = to.y - from.y;
-  const scaledDeltaY = deltaY * FALLBACK_ROUTE_HEIGHT_TO_WIDTH_RATIO;
-  const length = Math.max(4, Math.hypot(deltaX, scaledDeltaY));
-  const angle = Math.atan2(scaledDeltaY, deltaX) * (180 / Math.PI);
-  return {
-    left: `${from.x.toFixed(1)}%`,
-    top: `${from.y.toFixed(1)}%`,
-    width: `${length.toFixed(1)}%`,
-    opacity: `${0.32 + (clampRatio(link.emphasis ?? 0.72) * 0.38)}`,
-    transform: `rotate(${angle.toFixed(1)}deg)`,
-    "transform-origin": "0 50%",
-  };
-}
-function fragmentTerrainStyle(patch, worldBounds, index) {
-  const sizePx = Math.max(12, Math.min(48, safeNumber(patch.footprint_cm, 1) / 840));
-  return {
-    ...toWorldPercentStyle(patch.pos, worldBounds, {
-      left: `${12 + ((index % 6) * 13)}%`,
-      top: `${16 + (Math.floor(index / 6) * 13)}%`,
-    }),
-    width: `${sizePx.toFixed(1)}px`,
-    height: `${sizePx.toFixed(1)}px`,
-    "background-color": colorToCss(patch.color),
-    transform: "translate(-50%, -50%)",
-  };
-}
-function routeWaypointStyle(link, worldBounds, index, stop) {
-  const fallbackFrom = {
-    x: 14 + ((index % 5) * 15),
-    y: 18 + (Math.floor(index / 5) * 14),
-  };
-  const fallbackTo = {
-    x: fallbackFrom.x + 14,
-    y: fallbackFrom.y + 8,
-  };
-  const from = worldPercentPoint(link.from, worldBounds, fallbackFrom.x, fallbackFrom.y);
-  const to = worldPercentPoint(link.to, worldBounds, fallbackTo.x, fallbackTo.y);
-  const ratio = stop === "to" ? 1 : 0.52;
-  return {
-    left: `${(from.x + ((to.x - from.x) * ratio)).toFixed(1)}%`,
-    top: `${(from.y + ((to.y - from.y) * ratio)).toFixed(1)}%`,
-  };
-}
-function hotspotStyle(hotspot, worldBounds, index) {
-  const sizePx = Math.max(14, Math.min(32, safeNumber(hotspot.size_hint_px, 16)));
-  return {
-    ...toWorldPercentStyle(hotspot.pos, worldBounds, {
-      left: `${20 + ((index % 4) * 16)}%`,
-      top: `${22 + (Math.floor(index / 4) * 16)}%`,
-    }),
-    width: `${sizePx}px`,
-    height: `${sizePx}px`,
-    transform: "translate(-50%, -50%)",
-  };
-}
-function fieldValue(value, snakeName, camelName, fallback = undefined) {
-  if (!value || typeof value !== "object") {
-    return fallback;
-  }
-  if (value[snakeName] !== undefined) {
-    return value[snakeName];
-  }
-  if (camelName && value[camelName] !== undefined) {
-    return value[camelName];
-  }
-  return fallback;
-}
-function arrayField(value, snakeName, camelName) {
-  const candidate = fieldValue(value, snakeName, camelName, []);
-  return Array.isArray(candidate) ? candidate : [];
-}
-function normalizeVisualEntity(entry) {
-  if (!entry || typeof entry !== "object") {
-    return entry;
-  }
-  return {
-    ...entry,
-    location_id: fieldValue(entry, "location_id", "locationId", null),
-    marker_role: fieldValue(entry, "marker_role", "markerRole", null),
-    marker_alpha: fieldValue(entry, "marker_alpha", "markerAlpha", undefined),
-    position_source: fieldValue(entry, "position_source", "positionSource", null),
-    dominant_compound: fieldValue(entry, "dominant_compound", "dominantCompound", undefined),
-    footprint_cm: fieldValue(entry, "footprint_cm", "footprintCm", undefined),
-  };
-}
-function pixelWorldVisualState(renderState) {
-  const state = renderState || {};
-  return {
-    worldBounds: fieldValue(state, "world_bounds", "worldBounds", null),
-    fragmentTerrain: arrayField(state, "fragment_terrain", "fragmentTerrain").map(normalizeVisualEntity),
-    links: arrayField(state, "links", "links"),
-    locations: arrayField(state, "locations", "locations").map(normalizeVisualEntity),
-    agents: arrayField(state, "agents", "agents").map(normalizeVisualEntity),
-    selection: fieldValue(state, "selection", "selection", null),
-    goalHighlight: fieldValue(state, "goal_highlight", "goalHighlight", null),
-    blockerHighlight: fieldValue(state, "blocker_highlight", "blockerHighlight", null),
-    visualHotspots: arrayField(state, "visual_hotspots", "visualHotspots").map(normalizeVisualEntity),
-  };
-}
-function PixelWorldHostVisualLayer(props) {
+const PIXEL_WORLD_RUNTIME_CANVAS_ID = "pixel-world-embedded-runtime-canvas"; const PIXEL_WORLD_RENDERER_UNAVAILABLE_MESSAGE_ID = "pixel-world-renderer-unavailable-message";
+const pixelWorldFocusUiSessionState = {
+  focusMode: false,
+  commandDrawerOpen: false,
+  diagnosticsDrawerOpen: false,
+  maximized: false,
+};
+function PixelWorldHostHotspotLayer(props) {
   const visualState = () => pixelWorldVisualState(props.renderState());
-  const selection = () => props.selection?.() || visualState().selection;
-  if (!props.enabled) {
-    return <></>;
-  }
-  return (
-    <>
-      <div class="pixel-world-canvas__grid" />
-      <div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--one" />
-      <div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--two" />
-      <For each={visualState().fragmentTerrain.slice(0, 96)}>
-        {(patch, index) => (
-          <div
-            class="pixel-world-fragment-terrain"
-            data-compound={patch.dominant_compound}
-            style={fragmentTerrainStyle(patch, visualState().worldBounds, index())}
-            title={`${patch.location_id}:${patch.dominant_compound}`}
-          />
-        )}
-      </For>
-      <For each={visualState().links.slice(0, 10)}>
-        {(link, index) => (
-          <>
-            <div
-              class="pixel-world-route"
-              data-route-kind={link.kind}
-              style={routeStyle(link, visualState().worldBounds, index())}
-              title={`${link.kind}:${link.id}`}
-            />
-            <div
-              class="pixel-world-route-waypoint pixel-world-route-waypoint--mid"
-              data-route-kind={link.kind}
-              style={routeWaypointStyle(link, visualState().worldBounds, index(), "mid")}
-              title={`${link.kind}:waypoint`}
-            />
-            <div
-              class="pixel-world-route-waypoint pixel-world-route-waypoint--target"
-              data-route-kind={link.kind}
-              style={routeWaypointStyle(link, visualState().worldBounds, index(), "to")}
-              title={`${link.kind}:target`}
-            />
-          </>
-        )}
-      </For>
-      <For each={visualState().visualHotspots.slice(0, 8)}>
-        {(hotspot, index) => (
-          <div
-            class="pixel-world-hotspot"
-            data-hotspot-kind={hotspot.kind}
-            style={hotspotStyle(hotspot, visualState().worldBounds, index())}
-            title={`${hotspot.kind}:${hotspot.label}`}
-          >
-            <span>{hotspot.kind === "blocker" ? "!" : hotspot.kind === "goal" ? "G" : "i"}</span>
-          </div>
-        )}
-      </For>
-      <Index each={visualState().locations.slice(0, 8)}>
-        {(location, index) => (
-          <button
-            class="pixel-world-entity pixel-world-entity--location"
-            data-pixel-world-location-marker="true"
-            data-location-id={location().id}
-            data-selected={selection()?.kind === "location" && selection()?.id === location().id ? "true" : "false"}
-            aria-pressed={selection()?.kind === "location" && selection()?.id === location().id ? "true" : "false"} aria-label={`${tr(props.locale(), "选择地点", "Select Location")} ${location().label || location().id}`}
-            data-marker-role={location().marker_role}
-            style={{
-              ...toWorldPercentStyle(location().pos, visualState().worldBounds, {
-                left: `${12 + ((index % 4) * 21)}%`,
-                top: `${18 + (Math.floor(index / 4) * 26)}%`,
-              }),
-              opacity: location().marker_alpha,
-            }}
-            title={location().label}
-            onMouseEnter={() => props.onHover({ kind: "location", id: location().id })}
-            onMouseLeave={() => props.onHover(null)}
-            onClick={() => props.onSelect({ kind: "location", id: location().id })}
-          >
-            <span>{location().label.slice(0, 2).toUpperCase()}</span>
-          </button>
-        )}
-      </Index>
-      <Index each={visualState().agents.slice(0, 10)}>
-        {(agent, index) => {
-            const label = () => pixelWorldReadableAgentLabel(agent(), agent().id, core.isLocaleZh(props.locale())); return (
-              <button
-                class="pixel-world-entity pixel-world-entity--agent"
-                data-pixel-world-agent-marker="true"
-                data-agent-id={agent().id}
-                data-selected={selection()?.kind === "agent" && selection()?.id === agent().id ? "true" : "false"}
-                data-position-source={agent().position_source}
-                aria-pressed={selection()?.kind === "agent" && selection()?.id === agent().id ? "true" : "false"} aria-label={`${tr(props.locale(), "选择 Agent", "Select Agent")} ${label()}`}
-                style={agentMarkerStyle(agent(), index, visualState().worldBounds)}
-                title={label()}
-                onMouseEnter={() => props.onHover({ kind: "agent", id: agent().id })}
-                onMouseLeave={() => props.onHover(null)}
-                onClick={() => props.onSelect({ kind: "agent", id: agent().id })}
-              >
-                <span>{label().slice(0, 1).toUpperCase()}</span>
-              </button>
-            );
-        }}
-      </Index>
-    </>
-  );
-}
-function PixelWorldCanvasAgentHitTargets(props) {
-  const visualState = () => pixelWorldVisualState(props.renderState());
-  return (
-    <For each={visualState().agents.slice(0, 10)}>
-      {(agent, index) => {
-          const label = pixelWorldReadableAgentLabel(agent, agent.id, core.isLocaleZh(props.locale())); return (
-            <button
-              type="button"
-              class="pixel-world-entity pixel-world-entity--agent pixel-world-entity--canvas-hit-target"
-              data-pixel-world-agent-marker="true"
-              data-agent-id={agent.id}
-              data-position-source={agent.position_source}
-              data-selected={props.selection()?.kind === "agent" && props.selection()?.id === agent.id ? "true" : "false"} aria-pressed={props.selection()?.kind === "agent" && props.selection()?.id === agent.id ? "true" : "false"} aria-label={`${tr(props.locale(), "选择 Agent", "Select Agent")} ${label}`}
-              style={agentMarkerStyle(agent, index(), visualState().worldBounds)}
-              title={label}
-              onMouseEnter={() => props.onHover({ kind: "agent", id: agent.id })}
-              onMouseLeave={() => props.onHover(null)}
-              onClick={() => props.onSelect({ kind: "agent", id: agent.id })}
-            >
-              <span>{label.slice(0, 1).toUpperCase()}</span>
-            </button>
-          );
-      }}
-    </For>
-  );
+  return <Index each={visualState().visualHotspots.slice(0, 8)}>{(hotspot, index) => (
+    <PixelWorldHotspot locale={props.locale()} hotspot={hotspot()}
+      style={pixelWorldHotspotStyle(hotspot(), visualState().worldBounds, index, props.cameraState?.(), props.stageSize?.())}
+      rendererProjection={props.rendererProjection?.()}
+      glyphSize={pixelWorldHotspotGlyphSize(hotspot())}
+      onHover={props.onHover}
+      onHotspotInspect={props.onHotspotInspect} onHotspotClear={props.onHotspotClear}
+      onHotspotHoverIntent={props.onHotspotHoverIntent}
+      onHotspotTrigger={props.onHotspotTrigger} onHotspotRestoreFocus={props.onHotspotRestoreFocus} />
+  )}</Index>;
 }
 function createPixelWorldHostAdapter({ onSelectEntity, onHoverEntity, onFatal }) {
   let bridge = null;
@@ -544,9 +243,36 @@ export function buildPixelWorldRenderInput(locale = core.state.uiLocale) {
 }
 function PixelWorldCanvasRenderer(props) {
   let canvasRef;
+  const [stageSize, setStageSize] = createSignal({ width: 960, height: 540 });
+  onMount(() => {
+    const update = () => {
+      const rect = canvasRef?.getBoundingClientRect();
+      if (rect?.width && rect?.height) setStageSize({ width: rect.width, height: rect.height });
+    };
+    update();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(update);
+    observer.observe(canvasRef);
+    onCleanup(() => observer.disconnect());
+  });
+  const hotspotFocus = createHotspotFocusRestoration();
   const visualState = () => pixelWorldVisualState(props.renderState());
+  const [inspectedHotspot, setInspectedHotspot] = createSignal(null);
+  const [hoverDismissed, setHoverDismissed] = createSignal(false);
+  const activeHotspot = () => {
+    const inspected = inspectedHotspot();
+    if (inspected?.kind === "hotspot") {
+      return visualState().visualHotspots.find((hotspot) => hotspot.id === inspected.id) || null;
+    }
+    return hoverDismissed() ? null : props.hoveredHotspot?.() || null;
+  };
   const selectedEntityLabel = () => pixelWorldSelectedEntityLabel(visualState(), visualState().selection, core.isLocaleZh(props.locale()));
   onMount(() => onCleanup(installPixelWorldMobileSelectionSafeArea(() => canvasRef?.closest(".pixel-world-canvas"))));
+  createEffect(() => {
+    props.cameraState?.();
+    stageSize();
+    requestAnimationFrame(() => applyPixelWorldMobileSelectionSafeArea(canvasRef?.closest('.pixel-world-canvas')));
+  });
   createEffect(() => {
     if (!canvasRef) {
       return;
@@ -562,7 +288,7 @@ function PixelWorldCanvasRenderer(props) {
     requestAnimationFrame(() => applyPixelWorldMobileSelectionSafeArea(canvasRef?.closest(".pixel-world-canvas")));
   });
   return (
-    <div class="pixel-world-canvas pixel-world-canvas--rendered" data-renderer-ready={props.rendererStatus?.() === "ready" ? "true" : undefined}>
+    <div class="pixel-world-canvas pixel-world-canvas--rendered" data-renderer-projection={props.rendererProjection?.() ? 'true' : undefined} data-renderer-ready={props.rendererStatus?.() === "ready" ? "true" : undefined}>
       <canvas
         ref={canvasRef}
         id={PIXEL_WORLD_RUNTIME_CANVAS_ID}
@@ -582,8 +308,10 @@ function PixelWorldCanvasRenderer(props) {
         )}
       </div>
       <div class="pixel-world-canvas__overlay">
+        <Show when={props.rendererProjection?.()} fallback={<>
         <PixelWorldCanvasAgentHitTargets
           locale={props.locale} renderState={props.renderState} selection={props.selection}
+          hovered={props.hoveredEntity}
           onSelect={props.onSelect}
           onHover={props.onHover}
         />
@@ -592,9 +320,19 @@ function PixelWorldCanvasRenderer(props) {
           locale={props.locale}
           renderState={props.renderState}
           selection={props.selection}
+          hovered={props.hoveredEntity}
           onSelect={props.onSelect}
           onHover={props.onHover}
         />
+        </>}>
+          <PixelWorldRendererTargets locale={props.locale} renderState={props.renderState} selection={props.selection} cameraState={props.cameraState} stageSize={stageSize} onSelect={props.onSelect} onHover={props.onHover} />
+        </Show>
+        <PixelWorldHostHotspotLayer locale={props.locale} renderState={props.renderState} cameraState={props.cameraState}
+          rendererProjection={props.rendererProjection} stageSize={() => props.rendererProjection?.() ? stageSize() : undefined}
+          onHover={props.onHover} onHotspotInspect={(selection) => { setHoverDismissed(false); setInspectedHotspot(selection); }}
+          onHotspotHoverIntent={() => setHoverDismissed(false)}
+          onHotspotClear={() => { setHoverDismissed(true); setInspectedHotspot(null); }}
+          onHotspotTrigger={hotspotFocus.remember} onHotspotRestoreFocus={hotspotFocus.restore} />
         <Show when={visualState().goalHighlight}>
           <div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">
             {`${tr(props.locale(), "目标", "Goal")}: ${visualState().goalHighlight.title}`}
@@ -602,13 +340,21 @@ function PixelWorldCanvasRenderer(props) {
         </Show>
         <Show when={visualState().blockerHighlight}>
           <div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">
-            {`${tr(props.locale(), "阻塞", "Blocker")}: ${visualState().blockerHighlight.label || visualState().blockerHighlight.kind}`}
+            {`${tr(props.locale(), "阻塞", "Blocker")}: ${pixelWorldBlockerPresentation(visualState().blockerHighlight.kind, props.locale()).label}`}
           </div>
         </Show>
-        <Show when={props.hoveredHotspot?.()}>
-          <div class="pixel-world-canvas__hotspot-tooltip" data-hotspot-tooltip role="status">
-            {props.hoveredHotspot().label}
-          </div>
+        <Show when={activeHotspot()}>
+            <PixelWorldHotspotTooltip
+              locale={props.locale()}
+              hotspot={activeHotspot()}
+              onHoverLeave={() => props.onHover(null)}
+              onClose={() => {
+                setHoverDismissed(true);
+                setInspectedHotspot(null);
+                props.onHover(null);
+                hotspotFocus.restore();
+              }}
+            />
         </Show>
       </div>
       <Show when={visualState().selection}>
@@ -621,10 +367,14 @@ function PixelWorldCanvasRenderer(props) {
 }
 function PixelWorldActionReceipt(props) {
   const receipt = () => props.surface().action_receipt;
+  const receiptChanges = () => [
+    receipt().delta_logical_time == null ? null : `${tr(props.locale(), "世界 Tick 变化", "World tick change")} ${receipt().delta_logical_time}`,
+    receipt().delta_event_seq == null ? null : `${tr(props.locale(), "事件序列变化", "Event sequence change")} ${receipt().delta_event_seq}`,
+  ].filter(Boolean);
   return (
     <div
       id={props.id}
-      class={`pixel-world-action-receipt ${props.class ?? ""}`} data-viewer-overlay="receipt"
+      class={`pixel-world-action-receipt pixel-world-action-receipt--${receipt().state || "unknown"} pixel-world-action-receipt--${receipt().confidence || "none"} ${props.class ?? ""}`} data-viewer-overlay="receipt"
       data-receipt-present={receipt().present ? "true" : "false"}
       data-receipt-state={receipt().state}
       data-receipt-confidence={receipt().confidence}
@@ -644,6 +394,11 @@ function PixelWorldActionReceipt(props) {
             {receipt().detail}
           </div>
         </Show>
+        <Show when={receiptChanges().length > 0}>
+          <div class="pixel-world-action-receipt__changes" data-receipt-changes="true">
+            {receiptChanges().join(" · ")}
+          </div>
+        </Show>
       </div>
       <Show when={receipt().present}>
         <div class="pixel-world-action-receipt__meta">
@@ -658,17 +413,13 @@ function PixelWorldActionReceipt(props) {
 }
 function receiptConfidenceLabel(confidence, locale, state) {
   const value = String(confidence || "").trim().toLowerCase(); const receiptState = String(state || "").trim().toLowerCase();
+  if (receiptState === "blocked") return tr(locale, "行动被阻塞", "Action blocked");
   if (receiptState === "rejected") return tr(locale, "行动已拒绝", "Action rejected");
   return value === "world_delta" ? tr(locale, "世界变化已确认", "World change confirmed") : value === "accepted_intent" ? tr(locale, "行动已接受", "Action accepted") : value === "none" ? tr(locale, "等待确认", "Waiting for confirmation") : tr(locale, "状态已记录", "Status recorded");
 }
 function worldReadoutStatus(locale, renderState) {
-  renderState?.(); const status = String(core.state.connectionStatus || "").toLowerCase(); const feed = core.state.worldFeed || {};
-  const warn = (label) => ({ label, className: "badge badge--warn" });
-  if (String(feed.status || "").toLowerCase() === "unavailable") return warn(tr(locale, "不可用", "UNAVAILABLE"));
-  if (feed.stale) return warn(tr(locale, "陈旧", "STALE"));
-  if (status === "connecting" || status === "reconnecting") return warn(tr(locale, "正在重连", "RECONNECTING"));
-  if (status !== "connected") return warn(tr(locale, "离线", "OFFLINE"));
-  return ["ready", "replay", "empty"].includes(String(feed.status || "").toLowerCase()) ? { label: "LIVE", className: "badge badge--good" } : warn(tr(locale, "同步中", "SYNCING"));
+  renderState?.();
+  return resolvePixelWorldReadoutStatus(locale, core.state.connectionStatus, core.state.worldFeed);
 }
 const DIRECT_PIXEL_WORLD_NEXT_MOVE_KINDS = new Set(["claim_first_agent", "claim_starter_oc"]);
 const PIXEL_WORLD_PENDING_GAMEPLAY_STAGES = new Set(["accepted", "submitted", "queued", "ack", "registering", "signing", "sent"]);
@@ -699,6 +450,15 @@ export function resolvePixelWorldDirectNextMoveAction(gameplay, executeKind) {
 }
 function PixelWorldCommercialHud(props) {
   const surface = () => props.renderState().commercial_surface; const readoutStatus = () => worldReadoutStatus(props.locale(), props.renderState);
+  const readoutFeedStatus = () => String(core.state.worldFeed?.status || "loading").trim().toLowerCase() || "loading";
+  const worldConnection = () => pixelWorldConnectionPresentation(core.state.connectionStatus, props.locale());
+  const feedFreshness = () => pixelWorldFeedFreshnessPresentation(readoutFeedStatus(), core.state.worldFeed?.stale, props.locale());
+  const playerBlockerLabel = () => {
+    const candidate = String(surface().blocker?.label || "").trim();
+    const kind = String(gameplay()?.blockerKind || "").trim();
+    if (kind) return pixelWorldBlockerPresentation(kind, props.locale()).label;
+    return candidate || null;
+  };
   const activeAgentId = () => String(surface()?.active_agent_id || "").trim(); const activeAgent = () => props.renderState().agents.find((agent) => agent.id === activeAgentId()); const activeAgentLabel = () => pixelWorldReadableAgentLabel(activeAgent(), activeAgentId(), core.isLocaleZh(props.locale())) || tr(props.locale(), "未选择 Agent", "No Agent selected");
   const executableNextMoveKinds = new Set([
     "gameplay_action",
@@ -749,25 +509,26 @@ function PixelWorldCommercialHud(props) {
   };
   return (
     <Show when={surface()}>
-      <div
-        class="pixel-world-command-strip" data-viewer-overlay="next-move"
-        data-active-agent={activeAgentId()}
-        data-leverage-state={surface().player_leverage.state}
-      >
+      <div id="viewer-decision-area" class="pixel-world-decision-area" data-viewer-decision-area="true">
+        <div
+          class="pixel-world-command-strip" data-viewer-overlay="next-move"
+          data-active-agent={activeAgentId()}
+          data-leverage-state={surface().player_leverage.state}
+        >
         <div
           class="pixel-world-command-cell pixel-world-command-cell--next pixel-world-shell-region pixel-world-shell-region--primary"
           data-shell-region="next-move-primary"
           data-next-move-route={nextMoveRoute()}
           data-execute-kind={surface().next_action.execute_kind || "none"}
-          data-blocker-present={surface().blocker.label ? "true" : "false"}
+          data-blocker-present={playerBlockerLabel() ? "true" : "false"}
         >
           <div class="pixel-world-command-cell__header">
             <div class="pixel-world-command-cell__label">
               {tr(props.locale(), "下一步", "Next Move")}
             </div>
-            <Show when={surface().blocker.label}>
+            <Show when={playerBlockerLabel()}>
               <span class="pixel-world-command-cell__blocker-chip">
-                {`${tr(props.locale(), "阻塞", "Blocker")}: ${surface().blocker.label}`}
+                {`${tr(props.locale(), "阻塞", "Blocker")}: ${playerBlockerLabel()}`}
               </span>
             </Show>
           </div>
@@ -777,10 +538,12 @@ function PixelWorldCommercialHud(props) {
           </Show>
           <a
             class="pixel-world-command-cell__action"
+            data-primary-action="true"
             href={nextMoveHref()}
             aria-label={`${tr(props.locale(), "下一步", "Next Move")}: ${surface().next_action.label}`}
             aria-disabled={nextMoveDisabledReason() ? "true" : undefined}
             aria-busy={nextMovePending() ? "true" : "false"}
+            aria-live="polite"
             tabIndex={nextMoveDisabledReason() ? -1 : undefined}
             onClick={activateNextMove}
           >
@@ -790,6 +553,13 @@ function PixelWorldCommercialHud(props) {
                 ? tr(props.locale(), "打开玩法明细", "Open Gameplay Details")
               : tr(props.locale(), "去指挥面板", "Go to Command")}
           </a>
+          <Show when={nextMovePending() || surface().action_receipt?.present}>
+            <div class="pixel-world-command-cell__feedback" data-primary-action-feedback="true" aria-live="polite">
+              {nextMovePending()
+                ? tr(props.locale(), "动作已提交，等待世界确认。", "Action submitted; waiting for world confirmation.")
+                : surface().action_receipt?.title}
+            </div>
+          </Show>
         </div>
         <div class="pixel-world-command-cell pixel-world-shell-region pixel-world-shell-region--supporting" data-shell-region="supporting-context">
           <div class="pixel-world-shell-context-group pixel-world-shell-context-group--objective">
@@ -802,14 +572,18 @@ function PixelWorldCommercialHud(props) {
             <div class="pixel-world-shell-context-group__agent" data-selected-agent-label={activeAgentLabel()}><span class="pixel-world-command-cell__label">{tr(props.locale(), "当前 Agent", "Selected Agent")}</span><strong>{activeAgentLabel()}</strong></div>
           </div>
         </div>
-      </div>
-      <Show when={!props.focusMode?.()}><PixelWorldActionReceipt id="viewer-action-receipt" locale={props.locale} surface={surface} /></Show>
-      <div class="pixel-world-readout badge-row">
-        <span class={readoutStatus().className}>{readoutStatus().label}</span>
-        <Show when={surface().world_read.tick !== null && surface().world_read.tick !== undefined}>
-          <span class="badge badge--accent" data-world-tick={String(surface().world_read.tick)}>{`tick=${surface().world_read.tick}`}</span>
-        </Show>
-        <span class="badge badge--accent">{`agents=${surface().world_read.agents}`}</span>
+        </div>
+        <Show when={!props.focusMode?.()}><PixelWorldActionReceipt id="viewer-action-receipt" locale={props.locale} surface={surface} /></Show>
+        <div class="pixel-world-readout badge-row" aria-label={tr(props.locale(), "世界连接与动态新鲜度", "World connection and feed freshness")}>
+          <span class={worldConnection().className} data-world-connection-status={worldConnection().state}>{worldConnection().label}</span>
+          <span class={feedFreshness().className} data-world-feed-readout-status={readoutFeedStatus()}>{feedFreshness().label}</span>
+          <Show when={surface().world_read.tick !== null && surface().world_read.tick !== undefined}>
+            <span class="badge badge--accent" data-world-tick={String(surface().world_read.tick)}>{`tick=${surface().world_read.tick}`}</span>
+          </Show>
+          <span class="badge badge--accent">{`agents=${surface().world_read.agents}`}</span>
+        </div>
+        <PixelWorldSparseSceneGuidance locale={props.locale} renderState={props.renderState} />
+        <PixelWorldCanvasLegend locale={props.locale} />
       </div>
     </Show>
   );
@@ -1063,8 +837,11 @@ function PixelWorldFocusCommandSurface(props) {
   const chatFeedbackDisplay = () => core.describeSemanticFeedback(chatFeedback(), locale());
   const chatControlsEnabled = () => chatCapability().enabled && !core.isAgentChatInFlight();
   const gameplaySummary = () => core.buildGameplaySummary(locale());
-  const blockerLabel = () =>
-    gameplaySummary()?.blockerLabel || gameplaySummary()?.blockerKind || tr(locale(), "无阻塞", "No blocker");
+  const blockerLabel = () => {
+    const kind = gameplaySummary()?.blockerKind;
+    if (!kind) return tr(locale(), "无阻塞", "No blocker");
+    return pixelWorldBlockerPresentation(kind, locale()).label;
+  };
   const receiptLabel = () =>
     gameplaySummary()?.executionStateLabel
       || gameplaySummary()?.recentFeedback?.stage
@@ -1514,9 +1291,12 @@ export function PixelWorldHost(props) {
         <PixelWorldCanvasRenderer
           locale={locale}
           rendererStatus={rendererStatus}
+          rendererProjection={() => runtimeSource() === 'wasm_bindgen_runtime' && cameraState() !== null}
+          cameraState={cameraState}
           renderInput={renderInput}
           renderState={renderState}
           selection={selectedEntity}
+          hoveredEntity={hoverSelection}
           visualOverlayEnabled={visualOverlayEnabled}
           onSelect={(selection) => adapter().simulateSelect(selection)}
           onHover={(selection) => adapter().simulateHover(selection)}

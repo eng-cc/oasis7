@@ -19,6 +19,23 @@ const TERMINAL_STATUSES: &[&str] = &[
     STATUS_SUPERSEDED,
 ];
 
+struct IntentLedgerProjection<'a> {
+    base: &'a BTreeMap<String, AgentIntentV2>,
+    updates: BTreeMap<String, AgentIntentV2>,
+}
+
+impl IntentLedgerProjection<'_> {
+    fn get(&self, intent_id: &str) -> Option<&AgentIntentV2> {
+        self.updates
+            .get(intent_id)
+            .or_else(|| self.base.get(intent_id))
+    }
+
+    fn insert(&mut self, intent_id: String, intent: AgentIntentV2) {
+        self.updates.insert(intent_id, intent);
+    }
+}
+
 fn invalid_intent(reason: impl Into<String>) -> WorldError {
     WorldError::ResourceBalanceInvalid {
         reason: format!("invalid AgentIntentV2: {}", reason.into()),
@@ -252,13 +269,14 @@ fn immutable_payload_matches(current: &AgentIntentV2, incoming: &AgentIntentV2) 
 }
 
 impl WorldState {
-    pub(super) fn apply_domain_event_intent(
-        &mut self,
+    pub(crate) fn prepare_agent_intent_event(
+        &self,
         event: &DomainEvent,
         now: WorldTime,
         envelope_event_seq: Option<u64>,
         committed_receipt_event_id: Option<u64>,
-    ) -> Result<(), WorldError> {
+    ) -> Result<crate::runtime::world::agent_intent_publication::PreparedAgentIntent, WorldError>
+    {
         let intent = match event {
             DomainEvent::AgentIntentProposed { intent }
             | DomainEvent::AgentIntentSubmitted { intent }
@@ -286,11 +304,26 @@ impl WorldState {
             });
         }
 
-        let cell = self
+        let mut cell = self
             .agents
-            .get_mut(&intent.agent_id)
-            .expect("agent existence checked immediately above");
+            .get(&intent.agent_id)
+            .expect("agent existence checked immediately above")
+            .clone();
         let existing = cell.intent.clone();
+        let mut ledger = IntentLedgerProjection {
+            base: &self.agent_intent_ledger,
+            updates: BTreeMap::new(),
+        };
+        macro_rules! finish {
+            () => {
+                crate::runtime::world::agent_intent_publication::PreparedAgentIntent {
+                    event: event.clone(),
+                    agent_id: intent.agent_id.clone(),
+                    agent: cell,
+                    ledger_updates: ledger.updates,
+                }
+            };
+        }
 
         match event {
             DomainEvent::AgentIntentProposed { .. } => {
@@ -307,23 +340,22 @@ impl WorldState {
                 // independently while preserving the proposal in the ledger.
                 if intent.source == SOURCE_PROVIDER_ADVISORY {
                     validate_transition_time(intent, now)?;
-                    if let Some(recorded) = self.agent_intent_ledger.get(&intent.intent_id) {
+                    if let Some(recorded) = ledger.get(&intent.intent_id) {
                         if recorded == intent {
-                            return Ok(());
+                            return Ok(finish!());
                         }
                         return Err(invalid_intent(format!(
                             "intent_id {} conflicts with its durable provider advisory payload",
                             intent.intent_id
                         )));
                     }
-                    self.agent_intent_ledger
-                        .insert(intent.intent_id.clone(), intent.clone());
-                    return Ok(());
+                    ledger.insert(intent.intent_id.clone(), intent.clone());
+                    return Ok(finish!());
                 }
 
-                if let Some(recorded) = self.agent_intent_ledger.get(&intent.intent_id) {
+                if let Some(recorded) = ledger.get(&intent.intent_id) {
                     if recorded == intent {
-                        return Ok(());
+                        return Ok(finish!());
                     }
                     if !immutable_payload_matches(recorded, intent)
                         || !matches!(recorded.status.as_str(), STATUS_SUBMITTED | STATUS_ACCEPTED)
@@ -335,7 +367,7 @@ impl WorldState {
                     }
                     // A replay of the original proposal after submission or
                     // acceptance is a historical no-op.
-                    return Ok(());
+                    return Ok(finish!());
                 }
 
                 match existing {
@@ -361,8 +393,7 @@ impl WorldState {
                         )));
                     }
                 }
-                self.agent_intent_ledger
-                    .insert(intent.intent_id.clone(), intent.clone());
+                ledger.insert(intent.intent_id.clone(), intent.clone());
             }
             DomainEvent::AgentIntentSubmitted { .. } => {
                 if intent.status != STATUS_SUBMITTED {
@@ -371,9 +402,9 @@ impl WorldState {
                         intent.status
                     )));
                 }
-                if let Some(recorded) = self.agent_intent_ledger.get(&intent.intent_id) {
+                if let Some(recorded) = ledger.get(&intent.intent_id) {
                     if recorded == intent {
-                        return Ok(());
+                        return Ok(finish!());
                     }
                     if !immutable_payload_matches(recorded, intent) {
                         return Err(invalid_intent(format!(
@@ -388,7 +419,7 @@ impl WorldState {
                     {
                         // A replay of the original submission after a later
                         // lifecycle disposition is a historical no-op.
-                        return Ok(());
+                        return Ok(finish!());
                     }
                 }
 
@@ -422,8 +453,7 @@ impl WorldState {
                 }
                 validate_transition_time_after_current(intent, now, &current)?;
                 cell.intent = Some(intent.clone());
-                self.agent_intent_ledger
-                    .insert(intent.intent_id.clone(), intent.clone());
+                ledger.insert(intent.intent_id.clone(), intent.clone());
             }
             DomainEvent::AgentIntentAccepted { .. } => {
                 if intent.status != STATUS_ACCEPTED {
@@ -433,9 +463,9 @@ impl WorldState {
                     )));
                 }
 
-                if let Some(recorded) = self.agent_intent_ledger.get(&intent.intent_id) {
+                if let Some(recorded) = ledger.get(&intent.intent_id) {
                     if recorded == intent {
-                        return Ok(());
+                        return Ok(finish!());
                     }
                     let promoting_pending_intent = existing.as_ref().is_some_and(|current| {
                         current.intent_id == intent.intent_id
@@ -451,7 +481,7 @@ impl WorldState {
                     if recorded.status != STATUS_ACCEPTED && !promoting_pending_intent {
                         // A replay of the original accepted event after a later
                         // disposition is a historical no-op.
-                        return Ok(());
+                        return Ok(finish!());
                     }
                     if !promoting_pending_intent {
                         return Err(invalid_intent(format!(
@@ -496,8 +526,7 @@ impl WorldState {
                         )));
                     }
                 }
-                self.agent_intent_ledger
-                    .insert(intent.intent_id.clone(), intent.clone());
+                ledger.insert(intent.intent_id.clone(), intent.clone());
             }
             DomainEvent::AgentIntentReplaced { .. } => {
                 if intent.status != STATUS_SUPERSEDED {
@@ -517,9 +546,9 @@ impl WorldState {
                     ));
                 }
 
-                if let Some(recorded) = self.agent_intent_ledger.get(&intent.intent_id) {
+                if let Some(recorded) = ledger.get(&intent.intent_id) {
                     if recorded == intent {
-                        return Ok(());
+                        return Ok(finish!());
                     }
                     if !immutable_payload_matches(recorded, intent) {
                         return Err(invalid_intent(format!(
@@ -566,8 +595,7 @@ impl WorldState {
                         )));
                     }
                 }
-                self.agent_intent_ledger
-                    .insert(intent.intent_id.clone(), intent.clone());
+                ledger.insert(intent.intent_id.clone(), intent.clone());
             }
             DomainEvent::AgentIntentTransitioned { .. } => {
                 if intent.status == STATUS_SUPERSEDED {
@@ -582,9 +610,9 @@ impl WorldState {
                         ));
                     }
                 }
-                if let Some(recorded) = self.agent_intent_ledger.get(&intent.intent_id) {
+                if let Some(recorded) = ledger.get(&intent.intent_id) {
                     if recorded == intent {
-                        return Ok(());
+                        return Ok(finish!());
                     }
                     if !immutable_payload_matches(recorded, intent) {
                         return Err(invalid_intent(
@@ -599,7 +627,7 @@ impl WorldState {
                     )));
                 };
                 if current == *intent {
-                    return Ok(());
+                    return Ok(finish!());
                 }
                 if current.intent_id != intent.intent_id {
                     return Err(invalid_intent(format!(
@@ -660,12 +688,28 @@ impl WorldState {
                 }
                 validate_transition_time_after_current(intent, now, &current)?;
                 cell.intent = Some(intent.clone());
-                self.agent_intent_ledger
-                    .insert(intent.intent_id.clone(), intent.clone());
+                ledger.insert(intent.intent_id.clone(), intent.clone());
             }
             _ => unreachable!("apply_domain_event_intent received unsupported event"),
         }
 
+        Ok(finish!())
+    }
+
+    pub(super) fn apply_domain_event_intent(
+        &mut self,
+        event: &DomainEvent,
+        now: WorldTime,
+        envelope_event_seq: Option<u64>,
+        committed_receipt_event_id: Option<u64>,
+    ) -> Result<(), WorldError> {
+        self.prepare_agent_intent_event(
+            event,
+            now,
+            envelope_event_seq,
+            committed_receipt_event_id,
+        )?
+        .install_infallible(self);
         Ok(())
     }
 }

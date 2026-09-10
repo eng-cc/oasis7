@@ -2,7 +2,7 @@ use super::*;
 use bevy::ecs::system::SystemParam;
 use std::collections::{HashMap, HashSet};
 
-const HOTSPOT_CUE_LAYER_Z_OFFSET: f32 = 0.005;
+const HOTSPOT_CUE_LAYER_Z_OFFSET: f32 = 0.02;
 const HOTSPOT_CUE_COLOR: Color = Color::srgba_u8(226, 232, 240, 220);
 const HOTSPOT_CUE_THICKNESS_PX: f32 = 1.5;
 
@@ -97,23 +97,23 @@ pub(crate) fn reconcile_hotspot_cues(
                 (HotspotCuePart::GoalCornerRight, 0.22, 0.22, 1.0, 0.44, 0.0),
             ],
             "resource_transfer" => &[
-                // Offset twin strokes suggest directed movement while retaining the
-                // neutral, low-density event hierarchy of the shared hotspot base.
+                // A right-facing chevron stays legible without color. It denotes
+                // transfer, not the direction of any world route.
                 (
                     HotspotCuePart::ResourceTransferLead,
-                    0.18,
+                    0.08,
                     -0.20,
-                    0.64,
+                    0.60,
                     1.34,
-                    0.0,
+                    -std::f32::consts::FRAC_PI_4,
                 ),
                 (
                     HotspotCuePart::ResourceTransferTrail,
-                    -0.18,
+                    0.08,
                     0.20,
-                    0.64,
+                    0.60,
                     1.34,
-                    0.0,
+                    std::f32::consts::FRAC_PI_4,
                 ),
             ],
             "build_queue" => &[
@@ -121,13 +121,13 @@ pub(crate) fn reconcile_hotspot_cues(
                 // from the diagonal progression of resource movement.
                 (
                     HotspotCuePart::BuildQueueUpper,
-                    -0.16,
+                    -0.10,
                     -0.24,
-                    0.48,
+                    0.62,
                     1.34,
                     0.0,
                 ),
-                (HotspotCuePart::BuildQueueLower, 0.13, 0.24, 0.82, 1.34, 0.0),
+                (HotspotCuePart::BuildQueueLower, 0.0, 0.24, 0.82, 1.34, 0.0),
             ],
             _ => &[(HotspotCuePart::RecentEventTick, 0.0, -0.26, 0.48, 1.0, 0.0)],
         };

@@ -246,14 +246,18 @@ fn pixel_layer(kind: &'static str, sprite: &Sprite, transform: &Transform) -> Pi
         center_x: (VIEWPORT_WIDTH as f32 / 2.0) + transform.translation.x,
         center_y: (VIEWPORT_HEIGHT as f32 / 2.0) - transform.translation.y,
         size: sprite.custom_size.unwrap_or(Vec2::splat(size_px)),
-        rotation: transform.rotation.to_euler(EulerRot::XYZ).2,
+        // Canvas Y points down; both position and rotation must change basis.
+        rotation: -transform.rotation.to_euler(EulerRot::XYZ).2,
         z: transform.translation.z,
         rgba: [color.red, color.green, color.blue, color.alpha],
     }
 }
+#[path = "render_material_pixel_layers.rs"]
+mod material_pixel_layers;
 fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
     let world = app.world_mut();
     let mut layers = Vec::new();
+    material_pixel_layers::collect(world, &mut layers);
     let mut grid_query = world.query::<(&PixelWorldGridVisual, &Sprite, &Transform)>();
     layers.extend(
         grid_query

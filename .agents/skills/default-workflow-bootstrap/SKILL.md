@@ -48,6 +48,8 @@ Already-bound micro-loop caveat: use the canonical `Learning Intake / Loop Close
 
 ## Guardrails
 
+For an explicitly bound manual loop task, use `scripts/pm/loop.py` with the effective trusted tool root before admission or continuation. Preserve the exact loop binding, immutable contracts, scope and user merge hold. At stable waits return resumable evidence without heartbeat or scheduled continuation; completion never starts another task. See [manual entry authority](../../../doc/engineering/workflow/source-of-truth.md#manual-three-loop-transition). Legacy tasks retain their existing route.
+
 Do not edit, answer substantively, or dispatch before binding task truth.
 
 ## Known Failure Modes

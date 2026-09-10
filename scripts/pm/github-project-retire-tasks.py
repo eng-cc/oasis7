@@ -112,6 +112,9 @@ def build_archive(root: pathlib.Path, mapping_path: pathlib.Path, archive_path: 
             errors.append(f"{task_uid}: unexpected status {status!r}")
             continue
         record = mapped_tasks.get(task_uid) or {}
+        if record.get("loop_binding") is not None:
+            task["loop_binding"] = record["loop_binding"]
+            task["bootstrap_base_oid"] = record.get("bootstrap_base_oid")
         for key in ("issue_url", "issue_number", "project_item_id"):
             if not record.get(key):
                 errors.append(f"{task_uid}: mapping missing {key}")

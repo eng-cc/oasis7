@@ -1186,3 +1186,5 @@ fn canonical_world_replay_accepts_completion_only_after_matching_receipt_commit(
 
 #[path = "agent_intent_v2/lifecycle.rs"]
 mod lifecycle;
+#[path = "agent_intent_v2/raw_publication_transaction_regressions.rs"]
+mod raw_publication_transaction_regressions;

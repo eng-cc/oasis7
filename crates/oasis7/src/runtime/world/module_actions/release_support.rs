@@ -323,52 +323,20 @@ impl World {
         }
 
         let installer_agent_id = request.requester_agent_id.clone();
-        self.apply_install_module_action(
+        self.apply_install_module_action_with_release(
             action_id,
             installer_agent_id.as_str(),
             &request.manifest,
             request.activate,
             request.install_target.clone(),
             finality_certificate,
-        )?;
-
-        let (instance_id, module_id, module_version, proposal_id, manifest_hash) =
-            match self.journal.events.last().map(|event| &event.body) {
-                Some(WorldEventBody::Domain(DomainEvent::ModuleInstalled {
-                    instance_id,
-                    module_id,
-                    module_version,
-                    proposal_id,
-                    manifest_hash,
-                    ..
-                })) => (
-                    instance_id.clone(),
-                    module_id.clone(),
-                    module_version.clone(),
-                    *proposal_id,
-                    manifest_hash.clone(),
-                ),
-                _ => return Ok(true),
-            };
-
-        self.apply_module_release_profile_changes(
-            action_id,
-            operator_agent_id,
-            proposal_id,
-            &request.profile_changes,
-        )?;
-        self.append_event(
-            WorldEventBody::Domain(DomainEvent::ModuleReleaseApplied {
-                request_id,
-                operator_agent_id: operator_agent_id.to_string(),
-                installer_agent_id,
-                instance_id,
-                module_id,
-                module_version,
-                proposal_id,
-                manifest_hash,
-            }),
-            Some(CausedBy::Action(action_id)),
+            Some(
+                super::super::module_release_publication::ModuleReleaseCompletion {
+                    request_id,
+                    operator_agent_id: operator_agent_id.to_string(),
+                    profile_changes: request.profile_changes.clone(),
+                },
+            ),
         )?;
         Ok(true)
     }
@@ -493,59 +461,6 @@ impl World {
                     profile.factory_id
                 ));
             }
-        }
-
-        Ok(())
-    }
-
-    fn apply_module_release_profile_changes(
-        &mut self,
-        action_id: ActionId,
-        operator_agent_id: &str,
-        proposal_id: ProposalId,
-        changes: &ModuleProfileChanges,
-    ) -> Result<(), WorldError> {
-        if changes.is_empty() {
-            return Ok(());
-        }
-
-        let mut product_profiles = changes.product_profiles.clone();
-        product_profiles.sort_by(|left, right| left.product_id.cmp(&right.product_id));
-        for profile in product_profiles {
-            self.append_event(
-                WorldEventBody::Domain(DomainEvent::ProductProfileGoverned {
-                    operator_agent_id: operator_agent_id.to_string(),
-                    proposal_id,
-                    profile,
-                }),
-                Some(CausedBy::Action(action_id)),
-            )?;
-        }
-
-        let mut recipe_profiles = changes.recipe_profiles.clone();
-        recipe_profiles.sort_by(|left, right| left.recipe_id.cmp(&right.recipe_id));
-        for profile in recipe_profiles {
-            self.append_event(
-                WorldEventBody::Domain(DomainEvent::RecipeProfileGoverned {
-                    operator_agent_id: operator_agent_id.to_string(),
-                    proposal_id,
-                    profile,
-                }),
-                Some(CausedBy::Action(action_id)),
-            )?;
-        }
-
-        let mut factory_profiles = changes.factory_profiles.clone();
-        factory_profiles.sort_by(|left, right| left.factory_id.cmp(&right.factory_id));
-        for profile in factory_profiles {
-            self.append_event(
-                WorldEventBody::Domain(DomainEvent::FactoryProfileGoverned {
-                    operator_agent_id: operator_agent_id.to_string(),
-                    proposal_id,
-                    profile,
-                }),
-                Some(CausedBy::Action(action_id)),
-            )?;
         }
 
         Ok(())

@@ -40,8 +40,12 @@ impl World {
             main_token_bridge_total_amount,
             main_token_bridge_distributions,
         };
-        let mut preview_state = self.state.clone();
-        if let Err(err) = preview_state.apply_domain_event(&event, self.state.time) {
+        if let Err(err) =
+            super::super::node_points_settlement_publication::PreparedNodePointsSettlement::prepare(
+                &self.state,
+                &event,
+            )
+        {
             return DomainEvent::ActionRejected {
                 action_id,
                 reason: RejectReason::RuleDenied {
@@ -268,8 +272,13 @@ impl World {
             total_supply: self.state.main_token_config.initial_supply,
             allocations: resolved_allocations,
         };
-        let mut preview_state = self.state.clone();
-        if let Err(err) = preview_state.apply_domain_event(&event, self.state.time) {
+        if let Err(err) =
+            super::super::main_token_monetary_publication::PreparedMainTokenMonetaryEvent::prepare(
+                &self.state,
+                &event,
+                self.state.time,
+            )
+        {
             return DomainEvent::ActionRejected {
                 action_id,
                 reason: RejectReason::RuleDenied {
@@ -350,8 +359,13 @@ impl World {
             amount: releasable,
             nonce,
         };
-        let mut preview_state = self.state.clone();
-        if let Err(err) = preview_state.apply_domain_event(&event, self.state.time) {
+        if let Err(err) =
+            super::super::main_token_monetary_publication::PreparedMainTokenMonetaryEvent::prepare(
+                &self.state,
+                &event,
+                self.state.time,
+            )
+        {
             return DomainEvent::ActionRejected {
                 action_id,
                 reason: RejectReason::RuleDenied {
@@ -578,8 +592,13 @@ impl World {
             ecosystem_pool_amount,
             security_reserve_amount,
         };
-        let mut preview_state = self.state.clone();
-        if let Err(err) = preview_state.apply_domain_event(&event, self.state.time) {
+        if let Err(err) =
+            super::super::main_token_monetary_publication::PreparedMainTokenMonetaryEvent::prepare(
+                &self.state,
+                &event,
+                self.state.time,
+            )
+        {
             return DomainEvent::ActionRejected {
                 action_id,
                 reason: RejectReason::RuleDenied {
@@ -648,8 +667,13 @@ impl World {
             burn_amount,
             treasury_amount,
         };
-        let mut preview_state = self.state.clone();
-        if let Err(err) = preview_state.apply_domain_event(&event, self.state.time) {
+        if let Err(err) =
+            super::super::main_token_monetary_publication::PreparedMainTokenMonetaryEvent::prepare(
+                &self.state,
+                &event,
+                self.state.time,
+            )
+        {
             return DomainEvent::ActionRejected {
                 action_id,
                 reason: RejectReason::RuleDenied {
@@ -769,8 +793,11 @@ impl World {
             effective_epoch,
             next: next.clone(),
         };
-        let mut preview_state = self.state.clone();
-        if let Err(err) = preview_state.apply_domain_event(&event, self.state.time) {
+        if let Err(err) = super::super::main_token_governance_monetary_publication::PreparedMainTokenGovernanceMonetaryEvent::prepare(
+            &self.state,
+            &event,
+            self.state.time,
+        ) {
             return DomainEvent::ActionRejected {
                 action_id,
                 reason: RejectReason::RuleDenied {

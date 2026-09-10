@@ -41,7 +41,7 @@ fn location_corner_frame_raster_exports_mint_pixels_without_changing_location_ba
     );
     assert_eq!(
         summary.location_sample_rgba,
-        [83, 171, 139, 255],
+        [82, 170, 138, 255],
         "the display-only frame must not obscure the terrain-composited mint base-location sample"
     );
     assert_eq!(

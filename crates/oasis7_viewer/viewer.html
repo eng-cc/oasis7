@@ -2131,27 +2131,42 @@
       }
       .pixel-world-hotspot {
         position: absolute;
-        z-index: 4;
+        z-index: 7;
+        width: 44px;
+        height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 0;
+        appearance: none;
+        padding: 0;
+        pointer-events: auto;
+        cursor: pointer;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 800;
+        color: transparent;
+        background: transparent;
+        border: 0;
+        box-shadow: none;
+      }
+      .pixel-world-hotspot__glyph {
         display: inline-flex;
         align-items: center;
         justify-content: center;
         border-radius: 999px;
-        pointer-events: none;
-        font-family: var(--font-mono);
-        font-size: 10px;
-        font-weight: 800;
         color: var(--bg-deep);
         background: rgba(208, 168, 91, 0.88);
         border: 1px solid rgba(255, 230, 180, 0.8);
         box-shadow: 0 0 18px rgba(208, 168, 91, 0.35);
       }
-      .pixel-world-hotspot[data-hotspot-kind="blocker"] {
+      .pixel-world-hotspot[data-hotspot-kind="blocker"] .pixel-world-hotspot__glyph {
         color: #250b06;
         background: rgba(229, 143, 118, 0.95);
         border-color: rgba(255, 190, 170, 0.9);
         box-shadow: 0 0 24px rgba(229, 143, 118, 0.52), 0 0 0 5px rgba(229, 143, 118, 0.08);
       }
-      .pixel-world-hotspot[data-hotspot-kind="goal"] {
+      .pixel-world-hotspot[data-hotspot-kind="goal"] .pixel-world-hotspot__glyph {
         color: #1d1200;
         background: rgba(208, 168, 91, 0.96);
         border-color: rgba(255, 230, 180, 0.95);
@@ -2228,7 +2243,9 @@
         border-color: rgba(248, 113, 113, 0.4);
         color: var(--bad);
       }
-      .pixel-world-canvas__hotspot-tooltip { position: absolute; z-index: 7; right: 10px; top: 52px; width: min(42vw, 320px); max-width: calc(100% - 20px); padding: 7px 9px; border: 1px solid rgba(237, 241, 230, 0.88); border-radius: 7px; color: #f8fafc; background: rgba(7, 12, 18, 0.94); box-shadow: var(--shadow-inset-stage), 0 8px 20px rgba(0, 0, 0, 0.28); font-size: 12px; font-weight: 700; line-height: 1.25; pointer-events: none; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+      .pixel-world-canvas__hotspot-tooltip { position: absolute; z-index: 45; right: 10px; top: 52px; width: min(42vw, 320px); max-width: calc(100% - 20px); display: flex; align-items: flex-start; gap: 8px; padding: 7px 9px; border: 1px solid rgba(237, 241, 230, 0.88); border-radius: 7px; color: #f8fafc; background: rgba(7, 12, 18, 0.94); box-shadow: var(--shadow-inset-stage), 0 8px 20px rgba(0, 0, 0, 0.28); font-size: 12px; font-weight: 700; line-height: 1.25; pointer-events: auto; overflow-wrap: anywhere; }
+      .pixel-world-canvas__hotspot-tooltip > span { min-width: 0; overflow-wrap: anywhere; max-height: calc(var(--hotspot-tooltip-max-height, 100dvh - 20px) - 12px); overflow-y: auto; }
+      .pixel-world-canvas__hotspot-tooltip-close { flex: 0 0 44px; width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0; border: 1px solid rgba(237, 241, 230, 0.42); border-radius: 0; color: #f8fafc; background: rgba(237, 241, 230, 0.1); cursor: pointer; line-height: 1; }
       .pixel-world-canvas__selection {
         position: absolute;
         z-index: 6;
@@ -2762,7 +2779,7 @@
           width: 20px;
           height: 20px;
         }
-        .pixel-world-hotspot {
+        .pixel-world-hotspot__glyph {
           font-size: 11px;
           box-shadow: 0 0 24px rgba(208, 168, 91, 0.54), 0 0 0 5px rgba(208, 168, 91, 0.08);
         }

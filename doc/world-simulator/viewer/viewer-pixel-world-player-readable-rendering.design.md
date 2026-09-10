@@ -100,6 +100,21 @@ JavaScript `Number`.
 | `gap`/reorg | warning state | reload cursor/snapshot; never splice unknown events |
 | `unavailable` | honest unavailable state | explain next recovery action |
 
+### Player visual feedback invariants (2026-09)
+
+- The mobile board keeps a wrapped `Selected` chip in the upper safe area so a
+  touch or keyboard selection remains tied to the visible entity.
+- The compact world readout uses `LIVE` only for a connected `ready` feed;
+  `REPLAY`, `NO EVENTS`, `GAP`, and `UNAVAILABLE` retain their own labels and
+  status marks. None of these ambient states is a player action receipt.
+- An expanded World Feed remains a bounded, scrollable context panel above the
+  Next Move and Action Receipt safe area at tablet and mobile widths.
+- Hotspots are read-only inspection controls. They expose their kind and label
+  to keyboard and touch users, keep a short explanation open until Escape or
+  an explicit close, and never submit or select a gameplay action.
+- Long Next Move, blocker, and recovery copy wraps within the mobile command
+  surface; secondary detail scrolls inside the reserved command area.
+
 Current Recent Events/Feedback retain their names; they are not silently renamed by
 the new projection. `#viewer-world-feed` is a source and generated-output anchor.
 Runtime currently emits `receipt_ref=null`; a receipt link is rendered only for an

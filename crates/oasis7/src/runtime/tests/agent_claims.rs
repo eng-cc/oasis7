@@ -2,6 +2,15 @@ use super::super::*;
 use super::pos;
 use std::collections::{BTreeMap, BTreeSet};
 
+#[path = "agent_claims/basic_claim_regressions.rs"]
+mod basic_claim_regressions;
+#[path = "agent_claims/raw_claim_monetary_publication_transaction_regressions.rs"]
+mod raw_claim_monetary_publication_transaction_regressions;
+#[path = "agent_claims/raw_claim_terminal_publication_transaction_regressions.rs"]
+mod raw_claim_terminal_publication_transaction_regressions;
+#[path = "agent_claims/raw_light_lifecycle_publication_transaction_regressions.rs"]
+mod raw_light_lifecycle_publication_transaction_regressions;
+
 fn register_agent(world: &mut World, agent_id: &str) {
     world.submit_action(Action::RegisterAgent {
         agent_id: agent_id.to_string(),
@@ -173,43 +182,6 @@ fn upkeep_settlement_total(world: &World, target_agent_id: &str) -> u64 {
             _ => None,
         })
         .sum()
-}
-
-#[test]
-fn first_agent_claim_is_non_free_and_locks_bond() {
-    let mut world = setup_claim_world(1_000, 0);
-
-    world.submit_action(Action::ClaimAgent {
-        claimer_agent_id: "alice".to_string(),
-        target_agent_id: "bob".to_string(),
-    });
-    world.step().expect("claim first agent");
-
-    let claim = world.agent_claim("bob").expect("claim persisted");
-    assert_eq!(claim.claim_owner_id, "alice");
-    assert_eq!(claim.slot_index, 1);
-    assert_eq!(claim.reputation_tier, 0);
-    assert!(claim.activation_fee_amount > 0);
-    assert!(claim.claim_bond_amount > 0);
-    assert!(claim.upkeep_per_epoch > 0);
-    assert_eq!(claim.locked_bond_amount, claim.claim_bond_amount);
-    let upfront_amount = claim_upfront_amount(claim);
-    assert_eq!(
-        world.main_token_liquid_balance("alice"),
-        1_000 - upfront_amount
-    );
-    assert_eq!(
-        world.main_token_treasury_balance("ecosystem_pool"),
-        claim.activation_fee_treasury_amount + claim.upkeep_per_epoch
-    );
-    assert_eq!(
-        world.main_token_supply().total_supply,
-        1_000 - claim.activation_fee_burn_amount
-    );
-    assert_eq!(
-        world.main_token_supply().circulating_supply,
-        1_000 - upfront_amount
-    );
 }
 
 #[test]
@@ -913,6 +885,13 @@ fn expired_restricted_grants_follow_btreemap_account_order() {
         });
         world.step().expect("issue restricted grant");
     }
+
+    let snapshot_before_prepare = world.snapshot();
+    let journal_before_prepare = world.journal().clone();
+    let prepared = world.prepared_restricted_starter_claim_grant_expiry_accounts_for_test(12);
+    assert_eq!(world.snapshot(), snapshot_before_prepare);
+    assert_eq!(world.journal(), &journal_before_prepare);
+    assert_eq!(prepared, ["alice", "mike", "zara"]);
 
     let journal_len_before_expiry = world.journal().events.len();
     for _ in 0..12 {

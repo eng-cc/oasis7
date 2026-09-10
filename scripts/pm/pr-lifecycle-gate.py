@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import os
 import datetime as dt
 import hashlib
 import json
@@ -281,7 +283,7 @@ def discover_required_policy(repo: str, branch: str) -> dict[str, Any]:
 
 
 def load_live(selector: str) -> dict[str, Any]:
-    fields = "number,url,state,mergeable,mergeStateStatus,reviewDecision,headRefName,headRefOid,baseRefName"
+    fields = "number,url,state,isDraft,body,mergeable,mergeStateStatus,reviewDecision,headRefName,headRefOid,baseRefName,baseRefOid"
     raw = subprocess.check_output(["gh", "pr", "view", selector, "--json", fields], text=True)
     payload = json.loads(raw)
     repo = json.loads(subprocess.check_output(["gh", "repo", "view", "--json", "nameWithOwner"], text=True))["nameWithOwner"]
@@ -390,6 +392,8 @@ def decision(data: dict[str, Any], admin_authorized: bool, *, evidence_mode: str
         blockers.append(f"blocking merge state: {merge_state}")
     observed_at = dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
     epoch_input = {"repository": data.get("repository") or "fixture", "pr_number": data.get("number"), "head_oid": head_oid or "fixture-head", "blockers": blockers, "policy":policy, "hold":hold}
+    if data.get('integration_ci') is not None:
+        epoch_input['integration_ci'] = data['integration_ci']
     gate_epoch = hashlib.sha256(json.dumps(epoch_input, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     result = {
         "ready_for_merge": not blockers,
@@ -412,12 +416,144 @@ def decision(data: dict[str, Any], admin_authorized: bool, *, evidence_mode: str
     return result
 
 
+def read_pr_identity(repository, number):
+    return json.loads(subprocess.check_output([
+        'gh', 'pr', 'view', str(number), '--repo', repository,
+        '--json', 'number,state,isDraft,body,baseRefName,headRefName,baseRefOid,headRefOid'], text=True))
+
+
+def local_loop_admission(root, uid, base, head, tool_root):
+    """Verify the effective ingress bytes before executing any loop helper."""
+    root = Path(root).resolve()
+    task = json.loads((root / '.pm/github-project-sync/tasks.json').read_text())['tasks'][uid]
+    issue = json.loads(subprocess.check_output([
+        'gh', 'api', f"repos/{task['repository']}/issues/{task['issue_number']}"], text=True))
+    body = issue.get('body', '')
+    matches = re.findall(r'^- loop_binding_b64: `([^`]+)`$', body, re.MULTILINE)
+    binding = task.get('loop_binding')
+    if matches:
+        if len(matches) != 1: raise ValueError('ambiguous live loop binding')
+        binding = json.loads(base64.urlsafe_b64decode(matches[0] + '=' * (-len(matches[0]) % 4)))
+    effective = Path(tool_root or os.environ.get('OASIS7_LOOP_TOOL_ROOT') or Path(__file__).resolve().parents[2]).resolve()
+    relative = 'scripts/pm/loop-local-gate.py'
+    helper = effective / relative
+    if binding is not None:
+        commit = binding.get('policy_commit', '')
+        if not re.fullmatch(r'[0-9a-f]{40}', commit): raise ValueError('invalid effective policy commit')
+        def git(checkout, *arguments):
+            return subprocess.check_output(['git', '-C', str(checkout), *arguments], text=True).strip()
+        if git(effective, 'rev-parse', 'HEAD') != commit:
+            raise ValueError('effective tool root HEAD differs from policy commit')
+        if git(effective, 'rev-parse', '--path-format=absolute', '--git-common-dir') != git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir'):
+            raise ValueError('effective helper belongs to a different repository')
+        subprocess.run(['git', '-C', str(root), 'fetch', '--no-tags', 'origin', 'main:refs/remotes/origin/main'], check=True, capture_output=True)
+        subprocess.run(['git', '-C', str(root), 'merge-base', '--is-ancestor', commit, 'refs/remotes/origin/main'], check=True, capture_output=True)
+        expected = subprocess.check_output(['git', '-C', str(effective), 'show', f'{commit}:{relative}'])
+        if helper.read_bytes() != expected: raise ValueError('effective local gate bytes differ from policy commit')
+        if subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip() != head:
+            raise ValueError('canonical worktree HEAD differs from current PR head')
+    command = [sys.executable, '-I', str(helper), '--root', str(root), '--task-uid', uid,
+               '--base', base, '--head', head, '--tool-root', str(effective), '--json']
+    completed = subprocess.run(command, text=True, capture_output=True)
+    if completed.returncode:
+        raise ValueError((completed.stdout or completed.stderr).strip() or 'live loop admission failed')
+    result = json.loads(completed.stdout)
+    if result.get('status') not in ('passed', 'legacy'):
+        raise ValueError('live loop admission did not pass')
+    return {'status': result['status'], 'tool_root': str(effective),
+            'policy_commit': (binding or {}).get('policy_commit'), 'task': task}
+
+
+def live_integration_admission(data, root, uid, tool_root, admission, integration_run_id=None):
+    """Read selected CI and its frozen planner artifact; never trust a local receipt."""
+    policy = data.get('policy_discovery') or {}
+    required = policy.get('required_status_checks')
+    legacy = isinstance(admission, dict) and admission.get('status') == 'legacy'
+    if legacy and policy.get('status') == 'resolved' and required == []:
+        return None
+    pins = {str(item['app_id']) for item in (required or [])
+            if isinstance(item, dict) and item.get('context') == 'required-gate' and item.get('app_id') is not None}
+    if len(pins) != 1 or not next(iter(pins), '').isdigit():
+        raise ValueError('required-gate needs one unambiguous app pin in live required-check policy; restore the policy binding and rerun')
+    if not isinstance(admission, dict) or not isinstance(admission.get('task'), dict):
+        raise ValueError('trusted local task admission context missing')
+    effective = Path(admission['tool_root'])
+    commit = admission.get('policy_commit')
+    if not commit:
+        # Legacy tasks still use immutable main helper bytes, not candidate
+        # helpers or a caller-authored receipt as CI authority.
+        subprocess.run(['git','-C',str(root),'fetch','--no-tags','origin','main:refs/remotes/origin/main'],check=True,capture_output=True)
+        commit = subprocess.check_output(['git','-C',str(root),'rev-parse','refs/remotes/origin/main'],text=True).strip()
+    for name in ('ci-ready-receipt.py', 'ci_ready_receipt_identity.py', 'integration_ci.py'):
+        relative = 'scripts/pm/' + name
+        expected = subprocess.check_output(['git','-C',str(root),'show',commit + ':' + relative])
+        path = effective / relative
+        if path.is_symlink() or path.read_bytes() != expected:
+            raise ValueError('effective CI authority helper bytes differ: ' + name)
+    task = admission['task']
+    if task.get('repository') != data['repository']:
+        raise ValueError('CI task repository identity mismatch')
+    request = {'root': str(effective), 'repository': data['repository'], 'uid': uid,
+               'issue': task['issue_number'], 'pr': data['number'], 'app': next(iter(pins)),
+               'base_ref': data['baseRefName'], 'integration_run_id': integration_run_id}
+    # Isolated stdlib loader installs only the two byte-verified modules. No
+    # candidate directory/PYTHONPATH is added to the import search path.
+    program = """import importlib.util,json,sys
+from pathlib import Path
+request=json.loads(sys.argv[1]); directory=Path(request['root'])/'scripts/pm'
+for name,filename in [('integration_ci','integration_ci.py'),('ci_ready_receipt_identity','ci_ready_receipt_identity.py'),('ci_live','ci-ready-receipt.py')]:
+ spec=importlib.util.spec_from_file_location(name,directory/filename); module=importlib.util.module_from_spec(spec); sys.modules[name]=module; spec.loader.exec_module(module)
+pr,run,base,head=module.selected_live(request['repository'],request['uid'],request['issue'],request['pr'],'required-gate',request['app'],allow_ready_pr=True,base_ref=request['base_ref'],integration_run_id=request.get('integration_run_id'))
+planner=module.planner_for_run(request['repository'],run,base_oid=base,head_oid=head)
+proof={'integration_base_oid':base,'head_oid':head,'check_run_id':run['id'],'check_app_id':run['app']['id'],'planner_digest':module.hashlib.sha256(json.dumps(planner,sort_keys=True,separators=(',',':')).encode()).hexdigest()}
+if run.get('_integration'):
+ proof.update({key:run['_integration'][key] for key in ('workflow_run_id','workflow_sha','tested_tree_oid','tested_commit_oid')})
+print(json.dumps(proof))
+"""
+    completed = subprocess.run([sys.executable,'-I','-c',program,json.dumps(request)],text=True,capture_output=True)
+    if completed.returncode:
+        raise ValueError((completed.stderr or completed.stdout).strip() or 'fresh integration CI unavailable')
+    proof = json.loads(completed.stdout)
+    if proof.get('integration_base_oid') != data['baseRefOid'] or proof.get('head_oid') != data['headRefOid']:
+        raise ValueError('stale integration CI base/head; rerun required CI against current target without rebasing source')
+    return proof
+
+
+def production_decision(data, admin_authorized, root, uid, tool_root, integration_run_id=None):
+    # Never create a production receipt before fresh local authority admission.
+    result = decision(data, admin_authorized, evidence_mode='pending_live_loop')
+    if not result['ready_for_merge']: return result
+    try:
+        base, head = data.get('baseRefOid', ''), data.get('headRefOid', '')
+        if not all(re.fullmatch(r'[0-9a-f]{40}', value) for value in (base, head)):
+            raise ValueError('current PR base/head OIDs unavailable')
+        admission = local_loop_admission(root, uid, base, head, tool_root)
+        integration = live_integration_admission(data, root, uid, tool_root, admission, integration_run_id) if integration_run_id is not None else live_integration_admission(data, root, uid, tool_root, admission)
+        fresh = read_pr_identity(data['repository'], data['number'])
+        # Admission may involve slow remote reads. Even unchanged commit OIDs
+        # cannot preserve authority after a draft, body or branch transition.
+        fields = ('number', 'state', 'isDraft', 'body', 'baseRefName', 'headRefName', 'baseRefOid', 'headRefOid')
+        if (not isinstance(fresh, dict) or any(key not in fresh or key not in data or fresh[key] != data[key] for key in fields)
+                or fresh['state'] != 'OPEN' or fresh['isDraft'] is not False):
+            raise ValueError('PR admission identity or state changed during live loop admission; rerun gate')
+    except (ValueError, KeyError, OSError, subprocess.SubprocessError) as exc:
+        result.update(ready_for_merge=False, status='blocked', use_admin_merge=False)
+        result['blockers'].append('live loop admission: ' + str(exc))
+        return result
+    result = decision({**data, 'integration_ci': integration}, admin_authorized, evidence_mode='production')
+    if integration is not None:
+        result['readiness_receipt']['integration_ci'] = integration
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("pr", nargs="?", default="")
     parser.add_argument("--fixture")
     parser.add_argument("--root", default=".")
     parser.add_argument("--task-uid")
+    parser.add_argument("--integration-run-id", type=int, help="manual run locator; latest matching request still revalidated live")
+    parser.add_argument("--tool-root", help="effective loop helper checkout (default: OASIS7_LOOP_TOOL_ROOT or this script checkout)")
     parser.add_argument("--merge-hold", choices=["normal_pr_ci_watch", *sorted(HOLDS)])
     parser.add_argument("--admin-merge-authorized", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--json", action="store_true")
@@ -457,7 +593,8 @@ def main() -> int:
         evidence_mode = "production"
         if args.merge_hold:
             parser.error("--merge-hold is fixture-only; live hold truth is rebuilt from the GitHub task issue")
-    result = decision(data, args.admin_merge_authorized, evidence_mode=evidence_mode)
+    result = (decision(data, args.admin_merge_authorized, evidence_mode=evidence_mode) if args.fixture else
+              production_decision(data, args.admin_merge_authorized, Path(args.root), args.task_uid, args.tool_root, args.integration_run_id))
     print(json.dumps(result, indent=2, sort_keys=True) if args.json else ("ready_for_merge" if result["ready_for_merge"] else "\n".join(result["blockers"])))
     return 0 if result["ready_for_merge"] else 3
 

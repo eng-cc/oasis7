@@ -7,6 +7,36 @@ use super::World;
 use oasis7_wasm_abi::ModuleSandbox;
 
 impl World {
+    pub(super) fn cached_product_validation_decision(
+        &self,
+        job_id: ActionId,
+        validation_index: Option<u32>,
+        requester_agent_id: &str,
+        module_id: &str,
+        stack: &MaterialStack,
+    ) -> Result<Option<ProductValidationDecision>, WorldError> {
+        let Some(receipts) = self.state.product_validation_receipts.get(&job_id) else {
+            return Ok(None);
+        };
+        let Some(receipt) = receipts
+            .iter()
+            .find(|receipt| receipt.validation_index == validation_index)
+        else {
+            return Ok(None);
+        };
+        if receipt.requester_agent_id != requester_agent_id
+            || receipt.module_id != module_id
+            || receipt.stack != *stack
+        {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "product validation retry conflicts with persisted receipt: job_id={job_id} index={validation_index:?}"
+                ),
+            });
+        }
+        Ok(Some(receipt.decision.clone()))
+    }
+
     pub(super) fn product_validation_receipt_for_output(
         &self,
         job_id: ActionId,

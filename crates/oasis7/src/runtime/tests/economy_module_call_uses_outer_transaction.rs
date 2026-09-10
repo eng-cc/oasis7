@@ -1,8 +1,8 @@
 //! Regression contract for module-backed economy evaluation inside a staged action.
 //!
 //! Economy evaluation is already called on the outer action's staged `World`.
-//! Runtime clone count is intentionally not observable from `ModuleSandbox`, so
-//! this test guards the narrow source-level call-boundary contract until a
+//! Runtime stage ownership is intentionally not observable from `ModuleSandbox`,
+//! so this test guards the narrow source-level call-boundary contract until a
 //! production-neutral instrumentation seam exists.
 
 #[test]
@@ -41,11 +41,15 @@ fn economy_module_call_uses_outer_transaction() {
         .expect("public module call entrypoint body is delimited");
 
     assert!(
-        public_call.contains("let mut staged = self.clone();"),
-        "public module calls must retain the clone-and-publish boundary"
+        public_call.contains("TrustedCommandStage::new(self)"),
+        "public module calls must use the borrowed typed staging boundary"
     );
     assert!(
-        public_call.contains("self.publish_staged_module_output(staged, result)"),
-        "public module calls must publish only after the staged result completes"
+        public_call.contains("staged.prepare(state_root)?"),
+        "public module calls must prepare the typed stage before publication"
+    );
+    assert!(
+        !public_call.contains("self.clone()"),
+        "public module calls must not clone the full World"
     );
 }

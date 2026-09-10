@@ -20,7 +20,9 @@ SH
   chmod +x "$TMP_DIR/broken-python-bin/$name"
 done
 ln -s "$TOML_PYTHON" "$TMP_DIR/future-python-bin/python42"
-future_python="$(PATH="$TMP_DIR/broken-python-bin:$TMP_DIR/future-python-bin:/usr/bin:/bin" \
+generic_home="$TMP_DIR/no-bundled-home"
+mkdir -p "$generic_home"
+future_python="$(HOME="$generic_home" PATH="$TMP_DIR/broken-python-bin:$TMP_DIR/future-python-bin:/usr/bin:/bin" \
   "$ROOT_DIR/scripts/pm/find-python-with-module.sh" tomllib)"
 if [[ "$(basename "$future_python")" != "python42" ]]; then
   echo "validate-codex-agent-config.test: generic future Python discovery failed: $future_python" >&2
@@ -83,7 +85,7 @@ printf 'positive case passed: baseline\n'
 # repository's generic interpreter finder can discover a compatible runtime.
 # Hosts whose conventional Python already provides tomllib need not re-exec;
 # the controlled broken-python-bin above separately proves fallback discovery.
-if ! PATH="/usr/bin:/bin:$TMP_DIR/future-python-bin" \
+if ! HOME="$generic_home" PATH="/usr/bin:/bin:$TMP_DIR/future-python-bin" \
   "$ROOT_DIR/scripts/pm/validate-codex-agent-config.py" \
     --root "$fixture" --skip-native-probe >"$TMP_DIR/direct-entrypoint.out" \
     2>"$TMP_DIR/direct-entrypoint.err"; then

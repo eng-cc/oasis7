@@ -1,6 +1,15 @@
 use super::super::*;
 use std::collections::{BTreeMap, BTreeSet};
 
+#[path = "main_token/raw_monetary_core_publication_transaction_regressions.rs"]
+mod raw_monetary_core_publication_transaction_regressions;
+#[path = "main_token/raw_monetary_governance_publication_transaction_regressions.rs"]
+mod raw_monetary_governance_publication_transaction_regressions;
+#[path = "main_token/raw_policy_treasury_publication_transaction_regressions.rs"]
+mod raw_policy_treasury_publication_transaction_regressions;
+#[path = "main_token/raw_starter_oc_publication_transaction_regressions.rs"]
+mod raw_starter_oc_publication_transaction_regressions;
+
 fn set_main_token_controller_registry_for_tests(world: &mut World, ecosystem_controller: &str) {
     world
         .set_governance_main_token_controller_registry(GovernanceMainTokenControllerRegistry {

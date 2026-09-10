@@ -5,6 +5,7 @@ use oasis7_wasm_abi::{
 
 use super::super::{WorldError, WorldEventBody};
 use super::World;
+use super::capability_authorization_command_stage::{PreparedTrustedCommand, TrustedCommandStage};
 
 impl World {
     pub fn execute_module_call(
@@ -14,19 +15,27 @@ impl World {
         input: Vec<u8>,
         sandbox: &mut dyn ModuleSandbox,
     ) -> Result<ModuleOutput, WorldError> {
-        let mut staged = self.clone();
-        let result = (|| {
-            let manifest = staged.active_module_manifest(module_id)?.clone();
-            staged.execute_module_call_with_manifest_and_state_key(
-                module_id,
-                module_id,
-                &manifest,
-                trace_id.into(),
-                input,
-                sandbox,
-            )
-        })();
-        self.publish_staged_module_output(staged, result)
+        let manifest = self.active_module_manifest(module_id)?.clone();
+        let mut staged = TrustedCommandStage::new(self)?;
+        let result = staged.execute_module_call_with_manifest_and_state_key(
+            module_id,
+            module_id,
+            &manifest,
+            trace_id.into(),
+            input,
+            sandbox,
+        );
+        let prepared = match result {
+            Ok(output) => {
+                let state_root = staged.consensus_state_root_hash()?;
+                Ok((staged.prepare(state_root)?, output))
+            }
+            Err(error) => {
+                drop(staged);
+                Err(error)
+            }
+        };
+        self.publish_prepared_module_output(prepared)
     }
 
     /// Execute a declared module command through the existing metered call path.
@@ -65,21 +74,41 @@ impl World {
         provenance: ModuleInvocationProvenance,
         sandbox: &mut dyn ModuleSandbox,
     ) -> Result<ModuleOutput, WorldError> {
-        let mut staged = self.clone();
-        let result = staged.execute_module_command_with_provenance_inner(
-            module_id, trace_id, envelope, provenance, sandbox,
+        let mut staged = TrustedCommandStage::new(self)?;
+        let result = self.execute_module_command_with_provenance_inner(
+            &mut staged,
+            module_id,
+            trace_id,
+            envelope,
+            provenance,
+            sandbox,
         );
-        self.publish_staged_module_output(staged, result)
+        let prepared = match result {
+            Ok(output) => {
+                let state_root = staged.consensus_state_root_hash()?;
+                Ok((staged.prepare(state_root)?, output))
+            }
+            Err(error) => {
+                drop(staged);
+                Err(error)
+            }
+        };
+        self.publish_prepared_module_output(prepared)
     }
 
-    fn publish_staged_module_output(
+    fn publish_prepared_module_output(
         &mut self,
-        staged: Self,
-        result: Result<ModuleOutput, WorldError>,
+        prepared: Result<(PreparedTrustedCommand, ModuleOutput), WorldError>,
     ) -> Result<ModuleOutput, WorldError> {
-        match result {
-            Ok(output) => {
-                *self = staged;
+        match prepared {
+            Ok((prepared, output)) => {
+                if self.take_fail_next_append_after_publication_prepare_for_test() {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: "injected append_event failure after publication preparation"
+                            .to_string(),
+                    });
+                }
+                prepared.install(self)?;
                 Ok(output)
             }
             Err(error @ WorldError::ModuleCallFailed { .. }) => {

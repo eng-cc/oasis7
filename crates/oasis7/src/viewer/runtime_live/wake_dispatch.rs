@@ -57,13 +57,36 @@ impl ViewerRuntimeLiveServer {
         status: ContinuationStatusV1,
         reason: &str,
     ) -> Result<bool, String> {
-        let Some(wake_id) = self
+        let wake_id = self
             .llm_sidecar
-            .pending_runtime_wake_id_for_agent(agent_id)
-            .map(str::to_string)
-        else {
+            .provider_recovery_context(agent_id)
+            .and_then(|context| {
+                self.llm_sidecar
+                    .pending_runtime_wake_id_for_context(agent_id, &context)
+                    .map(str::to_string)
+            })
+            .or_else(|| {
+                self.llm_sidecar
+                    .pending_runtime_wake_id_for_terminal(agent_id)
+                    .map(str::to_string)
+            });
+        let Some(wake_id) = wake_id else {
+            if self
+                .llm_sidecar
+                .has_pending_runtime_wake_for_agent(agent_id)
+            {
+                return Err(format!(
+                    "Runtime cognition wake identity unavailable for agent {agent_id}"
+                ));
+            }
             return Ok(false);
         };
+        let had_recovery = self
+            .llm_sidecar
+            .provider_wake_recovery_pending(agent_id)
+            .is_some();
+        self.llm_sidecar
+            .update_provider_wake_recovery(agent_id, status, reason)?;
         self.world
             .consume_cognition_wake(&wake_id, |_wake| {
                 Ok(CognitionWakeDispositionV1::Terminal {
@@ -73,7 +96,40 @@ impl ViewerRuntimeLiveServer {
             })
             .map_err(|error| format!("Runtime cognition wake handoff failed: {error:?}"))?;
         self.llm_sidecar.clear_runtime_wake(&wake_id);
+        if had_recovery {
+            self.llm_sidecar.complete_provider_wake_recovery(agent_id)?;
+        }
         Ok(true)
+    }
+
+    /// Retry a wake whose provider identity was already terminalized but whose
+    /// Runtime handoff failed. The retry is exact and agent-scoped; no fresh
+    /// provider decision may be selected while the marker remains.
+    pub(super) fn retry_provider_wake_recovery(&mut self) -> Result<(), String> {
+        let Some(agent_id) = self.llm_sidecar.provider_wake_recovery_pending_agent() else {
+            return Ok(());
+        };
+        let Some(recovery) = self.llm_sidecar.provider_wake_recovery_pending(&agent_id) else {
+            return Ok(());
+        };
+        // A previous pass may have failed while expiring the actor-local
+        // Runtime turn. Retry that authority step before terminalizing the
+        // scheduler wake; both operations remain tied to this exact identity.
+        self.llm_sidecar
+            .release_provider_turn_checked(agent_id.as_str())
+            .map_err(|error| format!("provider wake actor release remains pending: {error}"))?;
+        if self.handoff_runtime_wake_for_agent(
+            agent_id.as_str(),
+            recovery.status,
+            recovery.reason.as_str(),
+        )? || !self
+            .llm_sidecar
+            .has_pending_runtime_wake_for_agent(&agent_id)
+        {
+            self.llm_sidecar
+                .complete_provider_wake_recovery(agent_id.as_str())?;
+        }
+        Ok(())
     }
 
     pub(super) fn sync_runtime_wake_projection(

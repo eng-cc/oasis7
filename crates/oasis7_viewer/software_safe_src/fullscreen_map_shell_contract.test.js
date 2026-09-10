@@ -21,6 +21,11 @@ function hasDeclaration(rule, property, valuePattern) {
   return Boolean(match && (!valuePattern || valuePattern.test(match[1])));
 }
 
+function numericDeclaration(rule, property) {
+  const declarationPattern = new RegExp(`(?:^|[;\\s])${property}\\s*:\\s*([0-9]+)`, "i");
+  return Number(rule?.declarations?.match(declarationPattern)?.[1]);
+}
+
 function findRule(source, selectorPattern) {
   return cssRules(source, selectorPattern)[0] || null;
 }
@@ -137,6 +142,80 @@ describe("fullscreen map shell contract", () => {
         expect(/bottom\s*:|inset\s*:[^;]*\d/i.test(sheetDeclarations), routePanel).toBe(true);
         expect(/max-height\s*:/i.test(sheetDeclarations), routePanel).toBe(true);
       }
+    }
+  });
+
+  it("keeps expanded Feed usable in short landscape viewports", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    expect(terminalShellCss).toMatch(
+      /@media\s*\(max-width:\s*1240px\)\s*and\s*\(max-height:\s*640px\)[\s\S]*?\[data-viewer-overlay="feed"\]\[open\][\s\S]*?top:\s*\d+px;[\s\S]*?bottom:\s*calc\([^;]+\);[\s\S]*?max-height:\s*calc\(100dvh[^;]*\)/i,
+    );
+  });
+
+  it("compacts short-landscape Feed chrome while preserving its title and status", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    expect(terminalShellCss).toMatch(
+      /@media\s*\(max-width:\s*1240px\)\s*and\s*\(max-height:\s*640px\)[\s\S]*?\[data-viewer-overlay="feed"\]\[open\]\s+\.panel__eyebrow,[\s\S]*?\[data-viewer-overlay="feed"\]\[open\]\s+\.panel__meta-copy\s*\{[\s\S]*?display:\s*none/i,
+    );
+  });
+
+  it("keeps the mobile Feed band below top chrome and outside the decision band", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    expect(terminalShellCss).toMatch(
+      /@media\s*\(max-width:\s*640px\)[\s\S]*?\.stack\s*>\s*\[data-viewer-overlay="feed"\]\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?top:\s*132px;[\s\S]*?bottom:\s*auto;[\s\S]*?max-height:\s*min\(20dvh,\s*128px\)/i,
+    );
+    expect(terminalShellCss).toMatch(
+      /@media\s*\(max-width:\s*640px\)[\s\S]*?\.pixel-world-decision-area\s*\{[\s\S]*?max-height:\s*calc\(100dvh\s*-\s*276px\);[\s\S]*?align-content:\s*start;/i,
+    );
+  });
+
+  it("leaves a mobile gap between navigation, Cinematic, and Feed", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    expect(terminalShellCss).toMatch(
+      /@media\s*\(max-width:\s*640px\)[\s\S]*?\.secondary-viewer-nav\s*\{[\s\S]*?top:\s*56px;[\s\S]*?\[data-viewer-overlay="cinematic-entry"\]\s*\{[\s\S]*?top:\s*80px;/i,
+    );
+    expect(terminalShellCss).toMatch(
+      /@media\s*\(max-width:\s*640px\)[\s\S]*?\.stack\s*>\s*\[data-viewer-overlay="feed"\]\s*\{[\s\S]*?top:\s*132px;/i,
+    );
+  });
+
+  it("bounds short-landscape Next Move content inside its receipt-safe band", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    expect(terminalShellCss).toMatch(
+      /@media\s*\(max-width:\s*1240px\)\s*and\s*\(max-height:\s*640px\)[\s\S]*?\[data-viewer-overlay="next-move"\][\s\S]*?height:\s*min\(42dvh,\s*calc\(100dvh\s*-\s*72px\s*-\s*min\(12dvh,\s*48px\)\s*-\s*16px\s*-\s*8px\s*-\s*96px\)\);[\s\S]*?max-height:\s*none;[\s\S]*?overflow-y:\s*auto[\s\S]*?\[data-viewer-overlay="next-move"\]\s+\[data-shell-region="next-move-primary"\][\s\S]*?overflow-y:\s*auto/i,
+    );
+  });
+
+  it("reserves a meaningful Feed body at both supported short-landscape heights", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    expect(terminalShellCss).toMatch(
+      /height:\s*min\(42dvh,\s*calc\(100dvh\s*-\s*72px\s*-\s*min\(12dvh,\s*48px\)\s*-\s*16px\s*-\s*8px\s*-\s*96px\)\)/i,
+    );
+    const feedSummaryHeight = 64;
+    const feedBodyMinimum = 32;
+    for (const viewportHeight of [390, 360]) {
+      const receiptHeight = Math.min(viewportHeight * 0.12, 48);
+      const nextMoveHeight = Math.min(
+        viewportHeight * 0.42,
+        viewportHeight - 72 - receiptHeight - 16 - 8 - feedSummaryHeight - feedBodyMinimum,
+      );
+      const feedHeight = viewportHeight - 72 - receiptHeight - 16 - 8 - nextMoveHeight;
+      expect(feedHeight - feedSummaryHeight, `${viewportHeight}px`).toBeGreaterThanOrEqual(feedBodyMinimum);
+    }
+  });
+
+  it("keeps hotspots above selected entity markers for pointer inspection", async () => {
+    const { viewerHtml, compatHtml } = await readViewerHtml();
+    for (const html of [viewerHtml, compatHtml]) {
+      const hotspot = findRule(html, /\.pixel-world-hotspot(?:\s|$)/);
+      expect(numericDeclaration(hotspot, "border-radius")).toBe(0);
+      const close = findRule(html, /\.pixel-world-canvas__hotspot-tooltip-close(?:\s|$)/);
+      expect(numericDeclaration(close, "min-width")).toBe(44);
+      expect(numericDeclaration(close, "min-height")).toBe(44);
+      expect(html).not.toMatch(/\.pixel-world-hotspot\s*\{[^}]*box-shadow:\s*0/);
+      expect(numericDeclaration(findRule(html, /\.pixel-world-hotspot__glyph(?:\s|$)/), "border-radius")).toBe(999);
+      const selectedEntity = findRule(html, /\.pixel-world-entity\[data-selected="true"\],/);
+      expect(numericDeclaration(hotspot, "z-index")).toBeGreaterThan(numericDeclaration(selectedEntity, "z-index"));
     }
   });
 
@@ -258,10 +337,11 @@ describe("fullscreen map shell contract", () => {
     const { terminalShellCss } = await readViewerHtml();
     const mobileBlock = terminalShellCss.match(/@media\s*\(max-width:\s*640px\)[\s\S]*$/i)?.[0] || "";
     const entryTop = Number(mobileBlock.match(/\[data-viewer-overlay=["']cinematic-entry["']\][^{]*\{[^}]*top:\s*(\d+)px/i)?.[1]);
-    const readoutTop = Number(mobileBlock.match(/\[data-viewer-shell=["']player-fullscreen["']\] \.pixel-world-readout[^{}]*\{[^}]*top:\s*(\d+)px/i)?.[1]);
+    const readoutRule = findRule(mobileBlock, /\[data-viewer-shell=["']player-fullscreen["']\]\s+\.pixel-world-readout/);
+    const readoutTop = Number(readoutRule?.declarations.match(/top\s*:\s*(\d+)px/i)?.[1]);
     expect(Number.isFinite(entryTop)).toBe(true);
-    expect(Number.isFinite(readoutTop)).toBe(true);
-    expect(readoutTop).toBeGreaterThanOrEqual(entryTop + 44);
+    expect(Number.isFinite(readoutTop) || hasDeclaration(readoutRule, "position", /static/)).toBe(true);
+    if (Number.isFinite(readoutTop)) expect(readoutTop).toBeGreaterThanOrEqual(entryTop + 44);
   });
 
   it("does not leave the low-priority mobile readout under the Feed overlay", async () => {
@@ -276,6 +356,7 @@ describe("fullscreen map shell contract", () => {
     expect(feedRule, "mobile Feed must have an explicit safe-area policy").not.toBeNull();
 
     const readoutIsHidden = hasDeclaration(readoutRule, "display", /none/);
+    const readoutIsStatic = hasDeclaration(readoutRule, "position", /static/);
     const readoutTop = Number(readoutRule?.declarations.match(/top\s*:\s*(\d+)px/i)?.[1]);
     const feedTop = Number(feedRule?.declarations.match(/top\s*:\s*(\d+)px/i)?.[1]);
     const bandsAreSeparated = Number.isFinite(readoutTop)
@@ -283,7 +364,7 @@ describe("fullscreen map shell contract", () => {
       && feedTop >= readoutTop + 44;
 
     expect(
-      readoutIsHidden || bandsAreSeparated,
+      readoutIsHidden || readoutIsStatic || bandsAreSeparated,
       "mobile Feed and the low-priority world readout must be hidden or occupy disjoint vertical bands",
     ).toBe(true);
   });
@@ -294,6 +375,28 @@ describe("fullscreen map shell contract", () => {
     const safeAreaSource = await readFile("software_safe_src/pixel_world_mobile_safe_area.js", "utf8");
     expect(safeAreaSource).toContain("commandTop - SAFE_AREA_GAP_PX - markerBottom");
     expect(safeAreaSource).toContain("feedBottom + SAFE_AREA_GAP_PX - markerTop");
+  });
+
+  it("keeps mobile selection, Feed, legend, and status surfaces in distinct presentation bands", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    const mobileBlock = terminalShellCss.match(/@media\s*\(max-width:\s*640px\)[\s\S]*$/i)?.[0] || "";
+    expect(mobileBlock).toMatch(
+      /\[data-viewer-overlay=["']world-hud["']\]\s+\.pixel-world-canvas__selection\s*\{[^}]*top:\s*264px/i,
+    );
+    expect(mobileBlock).toMatch(
+      /\.pixel-world-decision-area\s+\.pixel-world-canvas__legend\s*\{[^}]*margin:\s*0\s+0\s+0\s+auto/i,
+    );
+    expect(mobileBlock).toMatch(
+      /\[data-viewer-shell=["']player-fullscreen["']\]\s+\.pixel-world-readout\s*\{[^}]*position:\s*static[^}]*display:\s*flex/i,
+    );
+    expect(terminalShellCss).toMatch(/\.pixel-world-canvas__sparse-guidance\s*\{/i);
+  });
+
+  it("uses severity width and lifecycle line styles as truthful crisis shape cues", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    expect(terminalShellCss).toMatch(/\.world-feed__event--severity-4\s*\{[^}]*border-left-color/i);
+    expect(terminalShellCss).toMatch(/\.world-feed__event--lifecycle-resolved\s*\{[^}]*border-left-style:\s*dashed/i);
+    expect(terminalShellCss).toMatch(/\.world-feed__event--lifecycle-timed_out\s*\{[^}]*border-left-style:\s*dotted/i);
   });
 
   it("keeps the narrow Command context row sticky while the route panel scrolls independently", async () => {
@@ -371,8 +474,8 @@ describe("fullscreen map shell contract", () => {
     const { terminalShellCss } = await readViewerHtml();
     const mobileBlock = terminalShellCss.match(/@media\s*\(max-width:\s*640px\)[\s\S]*$/i)?.[0] || "";
     expect(mobileBlock).toMatch(/\[data-viewer-overlay=["']feed["']\][^{]*\{[^}]*top:\s*104px/i);
-    expect(mobileBlock).toMatch(/\[data-viewer-overlay=["']renderer-unavailable["']\][^{]*\{[^}]*top:\s*158px/i);
-    expect(mobileBlock).toMatch(/\.pixel-world-render-diagnostics\[data-renderer-state=["']unavailable["']\][^{]*\{[^}]*top:\s*232px/i);
+    expect(mobileBlock).toMatch(/\[data-viewer-overlay=["']renderer-unavailable["']\][^{]*\{[^}]*top:\s*calc\(132px \+ min\(20dvh, 128px\) \+ 8px\)/i);
+    expect(mobileBlock).toMatch(/\.pixel-world-render-diagnostics\[data-renderer-state=["']unavailable["']\][^{]*\{[^}]*top:\s*calc\(132px \+ min\(20dvh, 128px\) \+ 120px\)/i);
   });
 
   it("keeps a mobile More route for secondary Diagnostics without a narrow-screen hide rule", async () => {
@@ -400,12 +503,61 @@ describe("fullscreen map shell contract", () => {
     expect(mobileBlock).toMatch(/\.pixel-world-command-cell--next[^{]*\{[^}]*grid-column\s*:\s*1\s*\/\s*-1/i);
     expect(mobileBlock).not.toMatch(/\[data-viewer-overlay=["']next-move["']\][^{]*\{[^}]*overflow\s*:\s*auto/i);
   });
+
+  it("keeps an expanded World Feed inside the safe area above Next Move and Action Receipt", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    const tabletBlock = terminalShellCss.match(/@media\s*\(max-width:\s*1240px\)[\s\S]*?(?=@media\s*\(max-width:\s*640px\))/i)?.[0] || "";
+    const mobileBlock = terminalShellCss.match(/@media\s*\(max-width:\s*640px\)[\s\S]*$/i)?.[0] || "";
+    expect(tabletBlock).toMatch(/\[data-viewer-overlay=["']feed["']\]\[open\][^{]*\{[^}]*position\s*:\s*fixed/i);
+    expect(tabletBlock).toMatch(/\[data-viewer-overlay=["']feed["']\]\[open\][^{]*\{[^}]*bottom\s*:\s*300px/i);
+    expect(tabletBlock).toMatch(/\[data-viewer-overlay=["']feed["']\]\[open\][^{]*\{[^}]*overflow-y\s*:\s*auto/i);
+    expect(mobileBlock).toMatch(/\[data-viewer-overlay=["']feed["']\]\[open\][^{]*\{[^}]*top\s*:\s*160px/i);
+    expect(mobileBlock).toMatch(/\[data-viewer-overlay=["']feed["']\]\[open\][^{]*\{[^}]*bottom\s*:\s*calc\(144px\s*\+\s*min\(38dvh,\s*280px\)\s*\+\s*8px\)/i);
+  });
+
+  it("moves the selected chip when normal AppShell places World Summary between Host and Feed", async () => {
+    const [{ terminalShellCss }, mainSource] = await Promise.all([
+      readViewerHtml(),
+      readFile("software_safe_src/main.jsx", "utf8"),
+    ]);
+    expect(mainSource).toMatch(/<PixelWorldHost[\s\S]*<WorldSummaryPanel[\s\S]*<WorldFeedSurface/);
+    const tabletBlock = terminalShellCss.match(/@media\s*\(max-width:\s*1240px\)[\s\S]*?(?=@media\s*\(max-width:\s*640px\))/i)?.[0] || "";
+    expect(tabletBlock).toMatch(/\.stack:has\(>\s*\[data-viewer-overlay=["']feed["']\]:not\(\[open\]\)\)\s*>\s*\[data-viewer-overlay=["']world-hud["']\][^{]*\{[^}]*top:\s*160px/i);
+  });
+
+  it("allows long Next Move and blocker copy to wrap and remain scrollable on mobile", async () => {
+    const { terminalShellCss } = await readViewerHtml();
+    const mobileBlock = terminalShellCss.match(/@media\s*\(max-width:\s*640px\)[\s\S]*$/i)?.[0] || "";
+    expect(mobileBlock).toMatch(/\.pixel-world-command-cell--next\s+\.pixel-world-command-cell__detail[^{]*\{[^}]*display\s*:\s*block/i);
+    expect(mobileBlock).toMatch(/\.pixel-world-command-cell--next\s+\.pixel-world-command-cell__detail[^{]*\{[^}]*overflow-y\s*:\s*auto/i);
+    expect(mobileBlock).toMatch(/\.pixel-world-command-cell--next\s+\.pixel-world-command-cell__value[^{]*\{[^}]*display\s*:\s*block/i);
+    expect(mobileBlock).toMatch(/\.pixel-world-command-cell--next\s+\.pixel-world-command-cell__value[^{]*\{[^}]*-webkit-line-clamp\s*:\s*unset/i);
+    expect(mobileBlock).toMatch(/\.pixel-world-command-cell--next\s+\.pixel-world-command-cell__value[^{]*\{[^}]*overflow-wrap\s*:\s*anywhere/i);
+  });
 });
 
 describe("headed visual smoke serving contract", () => {
   it("serves viewer CSS with text/css so fullscreen geometry is applied in the browser", async () => {
     const smokeSource = await readFile("scripts/pixel-world-fragment-visual-smoke.mjs", "utf8");
     expect(/case\s+["']\.css["']\s*:\s*return\s+["']text\/css(?:;\s*charset=utf-8)?["']/i.test(smokeSource)).toBe(true);
+  });
+});
+
+describe("hotspot overlay contract", () => {
+  it("renders hotspot explanations in a top-level overlay above expanded Feed", async () => {
+    const [hotspotSource, hostSource, terminalShellCss] = await Promise.all([
+      readFile("software_safe_src/pixel_world_hotspot.jsx", "utf8"),
+      readFile("software_safe_src/pixel_world_host.jsx", "utf8"),
+      readFile("viewer_terminal_shell.css", "utf8"),
+    ]);
+    expect(hostSource).toMatch(/PixelWorldHotspotTooltip/);
+    expect(hotspotSource).toMatch(/<Portal>/);
+    expect(hotspotSource).toMatch(/data-hotspot-tooltip/);
+
+    const tooltipRule = findRule(terminalShellCss, /\.pixel-world-canvas__hotspot-tooltip/);
+    expect(tooltipRule).not.toBeNull();
+    expect(hasDeclaration(tooltipRule, "position", /fixed/)).toBe(true);
+    expect(numericDeclaration(tooltipRule, "z-index")).toBeGreaterThan(60);
   });
 });
 

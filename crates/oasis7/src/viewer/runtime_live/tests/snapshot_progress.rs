@@ -1,71 +1,9 @@
+use super::snapshot_provider_probe::spawn_runtime_provider_probe_server;
 use super::*;
-use std::io::{ErrorKind, Read, Write};
-use std::net::{TcpListener, TcpStream};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 pub(super) const SNAPSHOT_PLAYER_ID: &str = "player-snapshot";
-
-fn read_probe_request(stream: &mut TcpStream) -> Vec<u8> {
-    let started_at = Instant::now();
-    let mut request = vec![0_u8; 1024];
-    loop {
-        match stream.read(&mut request) {
-            Ok(bytes) => {
-                request.truncate(bytes);
-                return request;
-            }
-            Err(err)
-                if err.kind() == ErrorKind::WouldBlock
-                    && started_at.elapsed() < Duration::from_millis(500) =>
-            {
-                thread::sleep(Duration::from_millis(5));
-            }
-            Err(err) => panic!("read request: {err}"),
-        }
-    }
-}
-
-fn spawn_runtime_provider_probe_server() -> (String, thread::JoinHandle<()>) {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
-    listener
-        .set_nonblocking(true)
-        .expect("set test listener nonblocking");
-    let bind = listener.local_addr().expect("listener addr");
-    let serve = thread::spawn(move || {
-        let started_at = Instant::now();
-        let mut last_served_at = started_at;
-        let mut served = 0_usize;
-        while started_at.elapsed() < Duration::from_secs(2)
-            && (served < 2 || last_served_at.elapsed() < Duration::from_millis(100))
-        {
-            match listener.accept() {
-                Ok((mut stream, _)) => {
-                    let request = read_probe_request(&mut stream);
-                    let request_text = String::from_utf8_lossy(&request);
-                    let body = if request_text.contains("GET /v1/provider/info") {
-                        r#"{"provider_id":"provider_local_bridge","name":"Provider Local Bridge","version":"0.1.0","protocol_version":"world-simulator-provider-loopback-http-v1","chain_resource_manifest_schema_version":"oasis7.world_resource_manifest.v1","chain_resource_delta_schema_version":"oasis7.world_resource_delta.v1","capabilities":["decision","feedback"],"supported_action_sets":["wait","wait_ticks","move_agent","speak_to_nearby","inspect_target","simple_interact"]}"#
-                    } else {
-                        r#"{"ok":true,"status":"ready","uptime_ms":42,"last_error":null,"queue_depth":0}"#
-                    };
-                    let response = format!(
-                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                        body.len(),
-                        body
-                    );
-                    let _ = stream.write_all(response.as_bytes());
-                    served += 1;
-                    last_served_at = Instant::now();
-                }
-                Err(err) if err.kind() == ErrorKind::WouldBlock => {
-                    thread::sleep(Duration::from_millis(5));
-                }
-                Err(err) => panic!("accept probe connection: {err}"),
-            }
-        }
-    });
-    (format!("http://{bind}"), serve)
-}
 
 pub(super) fn bind_agent_for_snapshot(server: &mut ViewerRuntimeLiveServer, agent_id: &str) {
     server
@@ -175,11 +113,23 @@ fn runtime_provider_compat_snapshot_exposes_agent_execution_debug_contexts() {
 
 #[test]
 fn runtime_provider_compat_snapshot_tracks_alias_fallback_reason() {
+    assert_runtime_provider_alias_snapshot(Duration::ZERO);
+}
+
+#[test]
+fn runtime_provider_alias_snapshot_survives_delayed_initialization() {
+    // Model CI scheduling/runtime setup taking longer than the fixture's
+    // former two-second lifetime without relaxing provider readiness.
+    assert_runtime_provider_alias_snapshot(Duration::from_millis(2100));
+}
+
+fn assert_runtime_provider_alias_snapshot(initialization_delay: Duration) {
     let _guard = runtime_provider_env_lock()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     clear_runtime_provider_env();
     let (base_url, serve) = spawn_runtime_provider_probe_server();
+    thread::sleep(initialization_delay);
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
         oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "agent_direct_connect");
@@ -217,7 +167,12 @@ fn runtime_provider_compat_snapshot_tracks_alias_fallback_reason() {
         context.fallback_reason.as_deref(),
         Some("provider_mode_alias:agent_direct_connect")
     );
-    assert_eq!(context.provider_check_status.as_deref(), Some("ready"));
+    assert_eq!(
+        context.provider_check_status.as_deref(),
+        Some("ready"),
+        "provider probe failed: {:?}",
+        context.provider_check_error
+    );
     assert_eq!(
         context.provider_check_source.as_deref(),
         Some("runtime_live_probe")

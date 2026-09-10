@@ -4259,6 +4259,12 @@ function installTestApi() {
     togglePromptOverridesVisible,
     setStrongAuthApprovalCode,
     injectSnapshot,
+    injectWorldFeedForTest(feed) {
+      if (!isTestApiEnabled() || getSearchParams().get('connect') !== '0') throw new Error('feed fixture requires test_api=1&connect=0');
+      worldFeedTransport.handleWorldFeed(clone(feed));
+      render();
+      return clone(state.worldFeed);
+    },
     injectRefineQuotePreflightForTest,
     injectProductValidationQuoteForTest,
     injectPowerSaleQuoteForTest, injectPowerSurvivalQuoteForTest, injectWarDeclarationQuoteForTest, injectScheduleRecipeQuoteForTest, injectTransferMaterialQuoteForTest,
