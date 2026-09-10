@@ -504,6 +504,16 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Resolve product-document gate range
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_oid="$(git rev-parse --verify 'HEAD^1')"
+          head_oid="$(git rev-parse --verify 'HEAD^{commit}')"
+          printf 'OASIS7_PRODUCT_DOC_BASE=%s\n' "$base_oid" >>"$GITHUB_ENV"
+          printf 'OASIS7_PRODUCT_DOC_HEAD=%s\n' "$head_oid" >>"$GITHUB_ENV"
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
@@ -571,6 +581,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - id: preflight
         name: Validate human-authorized full escalation
         env:
@@ -592,6 +604,14 @@ jobs:
             --finished-at "${started_at}" --conclusion skipped
           echo "actual_head=${actual_head}" >>"${GITHUB_OUTPUT}"
           echo "started_at=${started_at}" >>"${GITHUB_OUTPUT}"
+      - name: Resolve product-document gate range
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_oid="$(git rev-parse --verify 'HEAD^1')"
+          head_oid="$(git rev-parse --verify 'HEAD^{commit}')"
+          printf 'OASIS7_PRODUCT_DOC_BASE=%s\n' "$base_oid" >>"$GITHUB_ENV"
+          printf 'OASIS7_PRODUCT_DOC_HEAD=%s\n' "$head_oid" >>"$GITHUB_ENV"
       - uses: actions/setup-node@v6
       - name: Install viewer web dependencies
         run: npm ci --prefix crates/oasis7_viewer

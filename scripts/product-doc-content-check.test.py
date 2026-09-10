@@ -292,6 +292,55 @@ def main() -> None:
         assert "product-doc-content: OK (checked 1" in output, output
     finally:
         shutil.rmtree(root)
+
+    root, base, _head = make_repo()
+    try:
+        run_git(root, "switch", "-c", "target", base)
+        (root / TOPIC).write_text(
+            TOPIC_TEXT.replace("- Owner role：`producer_system_designer`\n", ""),
+            encoding="utf-8",
+        )
+        run_git(root, "add", ".")
+        run_git(root, "commit", "-qm", "target-only invalid document")
+        target = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+        run_git(root, "switch", "-c", "source", base)
+        (root / DESIGN).write_text(DESIGN_TEXT + "\n补充当前设计验证边界。\n", encoding="utf-8")
+        run_git(root, "add", ".")
+        run_git(root, "commit", "-qm", "source document change")
+        source = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+        run_git(root, "merge", "--no-ff", "-m", "synthetic merge", "target")
+        result = invoke(root, target, source, worktree=True)
+        output = result.stdout + result.stderr
+        assert result.returncode == 0, output
+        assert "product-doc-content: OK (checked 1" in output, output
+    finally:
+        shutil.rmtree(root)
+
+    root, base, _head = make_repo()
+    try:
+        run_git(root, "switch", "-c", "target", base)
+        (root / TOPIC).write_text(TOPIC_TEXT + "\n目标分支的合法背景补充。\n", encoding="utf-8")
+        run_git(root, "add", ".")
+        run_git(root, "commit", "-qm", "target-only valid document")
+        target = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+        run_git(root, "switch", "-c", "source", base)
+        (root / DESIGN).write_text(DESIGN_TEXT + "\n补充当前设计验证边界。\n", encoding="utf-8")
+        run_git(root, "add", ".")
+        run_git(root, "commit", "-qm", "source document change")
+        source = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+        run_git(root, "merge", "--no-ff", "-m", "synthetic merge", "target")
+        (root / TOPIC).write_text(
+            TOPIC_TEXT.replace("- Owner role：`producer_system_designer`\n", ""),
+            encoding="utf-8",
+        )
+        run_git(root, "add", TOPIC)
+        result = invoke(root, target, source, worktree=True)
+        output = result.stdout + result.stderr
+        assert result.returncode != 0, output
+        assert "missing-metadata" in output and "Owner role" in output, output
+    finally:
+        shutil.rmtree(root)
+
     print("product-doc-content-check.test: OK")
 
 

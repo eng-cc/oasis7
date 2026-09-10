@@ -48,6 +48,20 @@ if (unset OASIS7_PRODUCT_DOC_BASE OASIS7_PRODUCT_DOC_HEAD; GITHUB_EVENT_PATH="$t
 fi
 grep -Fq "did not provide both base/head OIDs" "$tmp_dir/push.out"
 
+printf '{}\n' >"$tmp_dir/schedule.json"
+if (unset OASIS7_PRODUCT_DOC_BASE OASIS7_PRODUCT_DOC_HEAD; GITHUB_EVENT_PATH="$tmp_dir/schedule.json" GITHUB_EVENT_NAME=schedule GITHUB_SHA="$head_oid" product_doc_range) >"$tmp_dir/schedule.out" 2>&1; then
+  echo "product-doc-content-callers.test: schedule event unexpectedly supplied a range" >&2
+  exit 1
+fi
+grep -Fq "unsupported CI event range: schedule" "$tmp_dir/schedule.out"
+
+printf '{"inputs":{"run_mode":"full_escalation","expected_head":"%s"}}\n' "$head_oid" >"$tmp_dir/full-escalation-missing-base.json"
+if (unset OASIS7_PRODUCT_DOC_BASE OASIS7_PRODUCT_DOC_HEAD; GITHUB_EVENT_PATH="$tmp_dir/full-escalation-missing-base.json" GITHUB_EVENT_NAME=workflow_dispatch GITHUB_SHA="$head_oid" product_doc_range) >"$tmp_dir/full-escalation-missing-base.out" 2>&1; then
+  echo "product-doc-content-callers.test: full escalation without integration base unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq "did not provide both base/head OIDs" "$tmp_dir/full-escalation-missing-base.out"
+
 if (unset OASIS7_PRODUCT_DOC_BASE OASIS7_PRODUCT_DOC_HEAD; CI=true GITHUB_ACTIONS=true GITHUB_EVENT_PATH="" GITHUB_EVENT_NAME="" product_doc_range) >"$tmp_dir/no-event.out" 2>&1; then
   echo "product-doc-content-callers.test: CI without event/range unexpectedly fell back" >&2
   exit 1
@@ -55,4 +69,16 @@ fi
 grep -Fq "CI requires explicit base/head OIDs" "$tmp_dir/no-event.out"
 
 grep -Fq -- '--head "$SOURCE_HEAD" --worktree' ./scripts/prepare-task-pr.sh
+
+sed -n '/^  full-regression:/,/^  full-escalation:/p' .github/workflows/rust.yml >"$tmp_dir/full-regression.yml"
+sed -n '/^  full-escalation:/,$p' .github/workflows/rust.yml >"$tmp_dir/full-escalation.yml"
+for full_workflow in "$tmp_dir/full-regression.yml" "$tmp_dir/full-escalation.yml"; do
+  grep -Fq 'fetch-depth: 0' "$full_workflow"
+  grep -Fq 'name: Resolve product-document gate range' "$full_workflow"
+  grep -Fq "git rev-parse --verify 'HEAD^1'" "$full_workflow"
+  grep -Fq "git rev-parse --verify 'HEAD^{commit}'" "$full_workflow"
+  grep -Fq 'OASIS7_PRODUCT_DOC_BASE=' "$full_workflow"
+  grep -Fq 'OASIS7_PRODUCT_DOC_HEAD=' "$full_workflow"
+  grep -Fq 'GITHUB_ENV' "$full_workflow"
+done
 echo "product-doc-content-callers.test: OK"

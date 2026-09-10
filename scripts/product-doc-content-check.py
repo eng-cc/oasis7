@@ -97,8 +97,15 @@ def diff_paths(root: Path, base: str, head: str, worktree: bool) -> dict[str, st
     changed = parse_name_status(run_git(root, "diff", "--name-status", "-M", source_base, head, "--", "doc/product"))
     if not worktree:
         return changed
-    changed.update(parse_name_status(run_git(root, "diff", "--name-status", "-M", head, "--", "doc/product")))
-    changed.update(parse_name_status(run_git(root, "diff", "--cached", "--name-status", "-M", head, "--", "doc/product")))
+    checkout_head = run_git(root, "rev-parse", "--verify", "HEAD^{commit}").strip()
+    changed.update(
+        parse_name_status(run_git(root, "diff", "--name-status", "-M", checkout_head, "--", "doc/product"))
+    )
+    changed.update(
+        parse_name_status(
+            run_git(root, "diff", "--cached", "--name-status", "-M", checkout_head, "--", "doc/product")
+        )
+    )
     for path in run_git(root, "ls-files", "--others", "--exclude-standard", "--", "doc/product").splitlines():
         if path.strip():
             changed[path.strip()] = "??"
