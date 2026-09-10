@@ -12,6 +12,16 @@
 
 ## 1. 产品目标
 
+### 1.1 代表性情境
+
+玩家第一次来到一个仍有资源、物流和生产约束的世界，想把一个可理解的工业目标推进到真正交付：先确认工厂和配方，再准备原料、等待或改道物流，观察多输入齐套，完成排程与生产，最后确认交付是否真的产生目的地后果。玩家需要在每一步知道系统是否接受、当前主要阻塞是什么、已经保留或消耗了什么，以及失败、重连或事实变化后还能安全地继续哪条路；首局结束后，他还应理解下一项可以持续运转的能力和真实分支，而不是只看到一次动作成功。
+
+### 1.2 事实、假设与未决问题
+
+- 已验证产品事实：本分册已有首局闭环、首次持续能力、Viewer/pure API 入口、工业 walkthrough、receipt 分层和恢复边界的首个工业闭环需求/验收追踪；专业规则仍由 `doc/game`、gameplay、runtime、M4 和 Viewer authority 承担。
+- 设计假设：在首局早期先让玩家理解一条安全、可归因的因果链，再展开持续能力分支，更有助于形成继续游玩的判断；该假设需要适用体验证据验证，不能由结构或局部绿色检查代替。
+- 产品级未决问题：无未决的产品行为义务；具体 starter chain、配方/资源可达性、receipt 和入口支持范围必须在被推荐或声称当前能力前由现行专业 authority 与 fresh 证据决定。接收 owner 为对应 gameplay/runtime/viewer/QA role，触发条件是某条链路进入当前首局承诺；当前任务 evidence 保留未覆盖窗口和 residual risk。
+
 玩家从第一次发出有效意图开始，就能持续回答五个问题：我正在追求什么、系统是否接受、世界发生了什么、为什么被阻塞、下一步怎样继续。首局结束不是体验终点，而是进入可恢复、有阶段成果且能展开中循环选择的持续游玩链路。阶段成果不是世界的通关条件，而是具有完成边界、可归因后果和下一阶段方向的有限进展。
 
 首局信任与首次持续能力是两个相邻但独立的产品结果。前者证明玩家能够可靠地控制、理解并愿意继续当前体验；后者证明玩家已经获得能持续运转、经受阻塞并展开新选择的世界能力。世界仍在推进、进度数值变化或单次动作成功，均不能单独证明玩家被吸引而愿意继续，也不能替代其中任一结果的组合证据。
@@ -131,7 +141,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 - 适用条件：系统准备把预设工业目标作为首局引导脊柱或当前主推荐。
 - 要求：系统必须先以同一份 fresh authority snapshot 通过 `Starter Industrial Feasibility Gate`，并只返回 `candidate_available` 或 `no_safe_starter_chain`；闸门不得扣资源、锁定库存/容量、排程或发放成长奖励。
 - 上位承诺：2.2.2、FS-7、FS-15。
-- 专业权威：产品根 PRD 的 starter feasibility 合同及 `doc/game` / M4 专业 authority。
+- 专业权威：[`世界规则与核心玩法 PRD`](prd.md) 的 starter feasibility 合同、[`gameplay` 专业设计](../../game/gameplay/gameplay-top-level-design.prd.md) 与 [`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)。
 - 验收：AC-FIRST-INDUSTRIAL-001。
 
 <a id="req-first-industrial-002"></a>
@@ -140,7 +150,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 - 适用条件：玩家选择一个可行的首局工业目标。
 - 要求：玩家必须能沿“工厂就绪 → 配方比较 → 原料获取/精炼 → 物流抵达 → 多输入齐套 → 排程 → 生产 receipt → 交付 receipt”理解当前动作、完成边界、主 blocker、投入状态和下一步；中间阶段不得被合并成单一成功。
 - 上位承诺：2.2.1、FS-1、FS-15。
-- 专业权威：`doc/game/gameplay/gameplay-top-level-design.prd.md` 与 M4 工业资源流转合同。
+- 专业权威：[`gameplay` 专业设计](../../game/gameplay/gameplay-top-level-design.prd.md) 与 [`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)。
 - 验收：AC-FIRST-INDUSTRIAL-001。
 
 <a id="req-first-industrial-003"></a>
@@ -149,7 +159,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 - 适用条件：玩家为选定配方准备原料。
 - 要求：只有 source/refinement 结算形成带 lineage 的 `ready_for_logistics` material batch 后，原料准备才算完成；`preview` 不产生世界效果，`transfer submit`、`in-transit` 和 `destination arrival` 必须由后续物流节点独立表达并重新校验。
 - 上位承诺：2.2.1 原材料准备子循环、FS-15。
-- 专业权威：M4 工业资源流转合同和 gameplay 工业引导合同。
+- 专业权威：[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md) 和 [`gameplay` 专业设计](../../game/gameplay/gameplay-top-level-design.prd.md)。
 - 验收：AC-FIRST-INDUSTRIAL-001、AC-FIRST-INDUSTRIAL-002。
 
 <a id="req-first-industrial-004"></a>
@@ -158,7 +168,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 - 适用条件：工业链路处于接受、执行、生产或终端阶段。
 - 要求：入口必须区分“已接受但未开始”“正在执行/在途”“已生产但未交付”和“已交付并产生目的地后果”；生产 receipt 不得代替 delivery/terminal settlement receipt。
 - 上位承诺：2.2.1 walkthrough、FS-3、FS-4、FS-15。
-- 专业权威：`doc/gameplay` 专业规则与 M4/runtime 结算合同。
+- 专业权威：[`gameplay` 工业引导成就闭环专业规则](../../game/gameplay/gameplay-top-level-design.prd.md#25-前期工业引导成就闭环)、[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md) 与 [`world-runtime` 专业 PRD](../../world-runtime/prd.md)。
 - 验收：AC-FIRST-INDUSTRIAL-003。
 
 <a id="req-first-industrial-005"></a>
@@ -167,7 +177,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 - 适用条件：报价后事实变化，或玩家重连、重复提交、乱序、Agent retry、snapshot restore 或 replay。
 - 要求：提交必须按当前 authority 重新校验；过期事实只能重新评估或无副作用拒绝，重复/回放只能重读同一 disposition，不得复制材料、资格、receipt、齐套进度、资源效果或奖励。
 - 上位承诺：2.2.1 子循环、2.2.2 Gate、FS-13、FS-15。
-- 专业权威：runtime、Agent 和 Viewer/pure API 专业 authority。
+- 专业权威：[`world-runtime` 专业 PRD](../../world-runtime/prd.md)、[`world-simulator` 专业 PRD](../../world-simulator/prd.md) 和 [`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md)。
 - 验收：AC-FIRST-INDUSTRIAL-003。
 
 <a id="req-first-industrial-006"></a>
@@ -176,7 +186,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 - 适用条件：工业链路出现来源、规格、权限、电力、物流、容量、输入齐套、产出接收或终端阻塞。
 - 要求：入口必须指出当前最早且可行动的 blocker、已保留/已消费价值、下一复查边界和真实可用的等待、补充、减量、改源、改配方、改道、延期、恢复或重新定目标路径；没有安全路径时必须停止并返还决策面。
 - 上位承诺：2.2.1、2.2.2、5、FS-2、FS-7、FS-15。
-- 专业权威：gameplay、M4/runtime 与 Viewer/pure API authority。
+- 专业权威：[`gameplay` 专业设计](../../game/gameplay/gameplay-top-level-design.prd.md)、[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)、[`world-runtime` 专业 PRD](../../world-runtime/prd.md) 与 [`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md)。
 - 验收：AC-FIRST-INDUSTRIAL-002。
 
 <a id="req-first-industrial-007"></a>
@@ -185,7 +195,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 - 适用条件：Viewer 与 pure API 表达同一工业链路或恢复状态。
 - 要求：两入口必须消费同一权威事实，并对动作、主 blocker、完成边界、下一步和复查点保持同义；允许布局和操作方式不同，但不得让玩家猜测不同的世界结果。
 - 上位承诺：2.2.1、FS-6、FS-9、FS-15。
-- 专业权威：`doc/world-simulator/prd.md`、Viewer/pure API authority 与 testing evidence。
+- 专业权威：[`world-simulator` 专业 PRD](../../world-simulator/prd.md)、[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md) 与 [`testing` 专业 PRD](../../testing/prd.md)。
 - 验收：AC-FIRST-INDUSTRIAL-004。
 
 <a id="req-first-industrial-008"></a>
@@ -194,7 +204,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 - 适用条件：玩家完成代表性首局工业阶段成果或安全结束不可达目标。
 - 要求：入口必须呈现已形成的能力或世界后果、当前主目标、主要 blocker 与可执行下一步；首次持续能力必须与一次动作成功、首局信任和后续分支分别判定，不得用静态总结或无限等待代替承接。
 - 上位承诺：1、3、4、FS-3、FS-4、FS-5、FS-8、FS-12。
-- 专业权威：`doc/game/prd.md`、本分册后引导章节和 playability evidence authority。
+- 专业权威：[`世界规则与核心玩法 PRD`](prd.md)、本分册后引导章节和 [`可玩性证据与 claim 边界`](playability-evidence-and-claim-boundaries.prd.md)。
 - 验收：AC-FIRST-INDUSTRIAL-004。
 
 ### 2.2.4 首个工业闭环验收场景

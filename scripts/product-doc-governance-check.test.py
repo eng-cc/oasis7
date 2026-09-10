@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -66,6 +67,24 @@ def replace(path: Path, before: str, after: str) -> None:
     text = path.read_text(encoding="utf-8")
     assert before in text, f"fixture source missing {before!r} in {path}"
     path.write_text(text.replace(before, after, 1), encoding="utf-8")
+
+
+def remove_paired_design_links(root: Path, *, fence: str | None = None) -> None:
+    """Remove every live paired-PRD target while preserving a fenced negative case."""
+    path = root / "doc/product/agents-world-simulation/agent-conversation-and-prompt-control.design.md"
+    text = path.read_text(encoding="utf-8")
+    text = re.sub(
+        r"\[([^\]]+)\]\(agent-conversation-and-prompt-control\.prd\.md(?:#[^)]+)?\)",
+        r"`\1`",
+        text,
+    )
+    if fence:
+        text += (
+            f"\n{fence}markdown\n"
+            "[paired PRD](agent-conversation-and-prompt-control.prd.md)\n"
+            f"{fence}\n"
+        )
+    path.write_text(text, encoding="utf-8")
 
 
 def scenario(expected: str | None, mutation) -> None:
@@ -245,27 +264,15 @@ def main() -> None:
     )
     scenario(
         "topic-pair-backlink",
-        lambda root: replace(
-            root / "doc/product/agents-world-simulation/agent-conversation-and-prompt-control.design.md",
-            "[`doc/product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md`](agent-conversation-and-prompt-control.prd.md)",
-            "`doc/product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md`",
-        ),
+        lambda root: remove_paired_design_links(root),
     )
     scenario(
         "topic-pair-backlink",
-        lambda root: replace(
-            root / "doc/product/agents-world-simulation/agent-conversation-and-prompt-control.design.md",
-            "- 配对产品 PRD：[`doc/product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md`](agent-conversation-and-prompt-control.prd.md)",
-            "```markdown\n[`doc/product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md`](agent-conversation-and-prompt-control.prd.md)\n```",
-        ),
+        lambda root: remove_paired_design_links(root, fence="```"),
     )
     scenario(
         "topic-pair-backlink",
-        lambda root: replace(
-            root / "doc/product/agents-world-simulation/agent-conversation-and-prompt-control.design.md",
-            "- 配对产品 PRD：[`doc/product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md`](agent-conversation-and-prompt-control.prd.md)",
-            "~~~markdown\n[`doc/product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md`](agent-conversation-and-prompt-control.prd.md)\n~~~",
-        ),
+        lambda root: remove_paired_design_links(root, fence="~~~"),
     )
     scenario(
         "topic-missing",

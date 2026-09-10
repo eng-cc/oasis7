@@ -38,6 +38,8 @@
 4. 对异步、持久化、外部变化和多入口体验区分草稿、接受、应用、保存、历史和可重试授权等玩家语义。
 5. 对经济和持续玩法说明资源来源、用途、持有、流转、取舍与损失边界；精确公式和参数只引用专业权威。
 6. 将规则/能力正确性与玩家体验有效性分开，按适用入口、版本/范围和证据窗口描述可以证明与不能证明的结论。
+7. 对 `doc/product/**/*.prd.md` 与 `doc/product/**/*.design.md` 的新建和实质变更执行明确 `base`/`head`/worktree 的机械准入：`base` 是集成目标、`head` 是待集成源，范围按 `merge-base(base, head)...head` 计算，worktree 另纳入 staged/unstaged/untracked；target-only、部分/格式错误输入不得进入或静默替代源范围。metadata、适用文档最低内容、真实 authority/fragment、显式 REQ/AC/anchor 唯一性与可达性必须通过；仅空白行、行尾空白和 HTML 注释变化排除，行首缩进变化算实质内容，不能用作者标签或 allowlist 任意绕过。
+8. 检查先移除 fenced code block；其中的 metadata、路径、REQ/AC 和 trace 示例既不能满足也不能触发门禁。配对 design 可以通过带路径和 fragment 的 Markdown 链接承接 paired PRD 的 REQ/AC，不要求复制；REQ/AC 块和追踪表单元格中的每个关联都必须解析，`REQ-X → AC-TYPO` 等未声明关联必须失败。自动门禁不判断趣味性、策略深度、数值合理性或玩家留存。
 
 ## 4. 三类代表性试点
 
@@ -71,4 +73,6 @@
 
 ## 7. 变更与后续
 
-后续产品主题应在同一产品模块内按稳定语义逐文件迁移。只有语义完整接收、专业权威仍可达、活跃引用修复后，才可删除来源。新的自动规则必须先由 canonical 规范明确，再由 repository_health_engineer 提案并实现对应 checker/test；人工产品质量不得伪装成机械 gate。
+后续产品主题应在同一产品模块内按稳定语义逐文件迁移：只有新建或实质修改该文件时才触发本规范的内容准入；未触碰的旧文档不因本任务被要求全面重写。只有语义完整接收、专业权威仍可达、活跃引用修复后，才可删除来源。跨文件语义迁移必须记录旧条款到新叶子的映射、接收 owner、未接收语义和删除条件；该迁移记录属于 GitHub task truth，不在产品目录另建任务台账。产品输入按“产品意图 → system design → 代码/专业实现合同”传递，并在受影响条款处保留回链。
+
+新的自动规则必须先由 canonical 规范明确，再由 `repository_health_engineer` 提案并实现对应 checker/test，并接入作者本地检查、`doc-governance-check.sh`、required CI 和 `prepare-task-pr.sh`。作者按 [`documentation-governance.manual.md`](documentation-governance.manual.md) 以明确 base/head/worktree 运行准入；人工产品质量不得伪装成机械 gate。

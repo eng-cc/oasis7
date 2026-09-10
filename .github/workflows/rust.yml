@@ -343,6 +343,8 @@ jobs:
       - name: Run required test tier
         env:
           INTEGRATION_MODE: ${{ inputs.run_mode }}
+          OASIS7_PRODUCT_DOC_BASE: ${{ steps.scope.outputs.base_oid }}
+          OASIS7_PRODUCT_DOC_HEAD: ${{ steps.scope.outputs.head_oid }}
           OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS: ${{ steps.scope.outputs.run_oasis7_required_tests }}
           OASIS7_CI_RUN_CONSENSUS_TESTS: ${{ steps.scope.outputs.run_consensus_tests }}
           OASIS7_CI_RUN_DISTFS_TESTS: ${{ steps.scope.outputs.run_distfs_tests }}

@@ -8,12 +8,39 @@
 2. 产品承诺、跨域组合和端到端成功标准，进入既有 `doc/product/` 四模块之一；实现合同、指标、测试、运维与历史证据留在专业域。
 3. 不确定时暂停建档，记录候选目录、冲突的权威和需要裁定的问题，交由对应 domain owner 与 `repository_health_engineer` 复核；不要以新根级目录或双写规避判断。
 
+### 1.1 新建与实质变更产品文档的作者步骤
+
+适用路径是 `doc/product/**/*.prd.md` 与 `doc/product/**/*.design.md`。作者在写作前先确认所属四模块、上位 PRD、产品语义 owner、专业 authority 和是否需要同名配对 design，然后按 canonical 规范和模板填写。根 PRD 保留既有身份、SC、章节顺序与六列追踪；专题 PRD 写代表性情境、正常路径、关键选择、代价/风险、失败与恢复、REQ/AC、证据边界和未决问题；design 可以用带路径与 fragment 的 Markdown 链接承接 paired PRD 的 REQ/AC，不复制一份需求。
+
+提交前必须用实际比较范围运行产品内容准入。`base`、`head` 和工作树路径必须显式提供，命令不得用作者标签、评论或 allowlist 跳过：
+
+```bash
+OASIS7_PRODUCT_DOC_BASE=<base-ref> \
+OASIS7_PRODUCT_DOC_HEAD=<head-ref> \
+./scripts/doc-governance-check.sh
+
+# 需要单独观察 changed-product 内容门禁时：
+python3 scripts/product-doc-content-check.py \
+  --repo-root <worktree-path> \
+  --base <base-ref> \
+  --head <head-ref> \
+  --worktree
+```
+
+上面的显式参数是作者提交、CI 和 PR-prep 的准入合同。普通本地维护若完全没有这些 env 且没有 CI 事件输入，旧的 `doc-governance-check.sh` 可以为兼容性推导 `base=merge-base(HEAD, main)`、`head=HEAD`；显式参数只缺一项，或 CI 事件缺失/部分/格式错误，必须失败，不能借此回退到本地推导。
+
+准入会对新增、复制、重命名和去除空白行/行尾空白/HTML 注释后仍有内容差异的修改运行检查；纯空白/HTML 注释差异按同一机械规则排除，行首缩进变化仍是实质内容，其他修改没有格式豁免。比较范围是 `merge-base(base, head)...head`：`base` 为集成目标、`head` 为待集成源，target-only 变化不进入源范围；`--worktree` 还纳入 staged、unstaged 和 untracked 产品文档。作者/CI/PR-prep 合同中的 base/head/event 缺失、部分存在或格式错误时必须失败，不得静默退回另一个范围。作者必须修复所有失败项：文档类 metadata 与最低内容、真实 authority 路径及 fragment、显式 REQ/AC 引用、局部 ID/HTML anchor 唯一性与可达性。fenced code block 会先从正文剔除，仅作示例，不计入声明或引用；REQ/AC 块和追踪表格的每个关联必须解析到本地声明/anchor 或带路径和 fragment 的真实跨文件 Markdown 链接，不能用其他位置偶然出现的 token 替代。通过门禁后仍需按对应专业 role 完成产品、规则、交互和证据评审。
+
+若变更只涉及产品文档，仍应运行 `./scripts/doc-governance-check.sh`、`python3 scripts/product-doc-governance-check.test.py`、`./scripts/readme-link-check.sh` 和 `git diff --check`；PR-prep/CI 会用同一 base/head 合同再次执行，不能把本地通过外推成实现或发行结论。
+
 ## 2. 产品语义迁移
 
 1. 逐文件清点待迁移源中的产品语义、专业语义与活跃引用。
 2. 先将稳定产品语义回填到正确产品模块，再保留或更新专业域权威。
 3. 修复活跃引用并运行治理检查；只有产品回填完整、专业权威未丢失时才删除已吸收的源。
 4. 源仍须保留时，记录剩余语义、目标权威和删除条件；不得把同一产品承诺长期双写。
+5. 每次触达式迁移都按模板的“语义迁移账目卡”把源条款、目标锚点、语义分类、未迁移部分、当前 authority、接收 owner、活跃引用、删除条件和验证结果写回当前 GitHub task evidence；产品目录不新增执行台账。
+6. `world-rule.md` 或旧附件只能作为背景来源。未核对的旧名称、路径、资源或规则值必须标记为历史/待核对，并链接当前专业 authority，不得写成当前事实。
 
 ## 3. 顶层目录与例外
 

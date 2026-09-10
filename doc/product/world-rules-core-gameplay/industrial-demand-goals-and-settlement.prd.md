@@ -24,8 +24,14 @@
 ### 1.3 依据与假设
 
 - 已采纳产品承诺：根 PRD 的 SC-31 要求比较需求、数量分层、批量与资源占用，区分生产和匹配结算，处理盈余、缺口、漂移、重复执行并保持多入口同义。
-- 专业约束：`PRD-GAME-012` / `PRD-GAME-014` 负责玩家决策和间接控制语义；`PRD-WORLD_RUNTIME-019` / `PRD-WORLD_RUNTIME-043` 负责工业状态、root/revision、receipt、持久化和幂等目标；`PRD-WORLD_SIMULATOR-047` 负责批次、路径、终端和守恒合同；`PRD-TESTING-003` 负责组合证据。
+- 专业约束：[`PRD-GAME-012`](../../game/prd.md) / [`PRD-GAME-014`](../../game/prd.md) 负责玩家决策和间接控制语义；[`PRD-WORLD_RUNTIME-019`](../../world-runtime/prd.md) / [`PRD-WORLD_RUNTIME-043`](../../world-runtime/prd.md) 负责工业状态、root/revision、receipt、持久化和幂等目标；[`PRD-WORLD_SIMULATOR-047`](../../world-simulator/prd.md) 负责批次、路径、终端和守恒合同；[`PRD-TESTING-003`](../../testing/prd.md) 负责组合证据。
 - 设计假设：把“生产中”“已生产”“已匹配交付”和“终端已结算”分开，会让玩家能把投入与目的地结果归因到具体选择。该假设需要适用入口的玩法证据验证；本专题采纳不等于实现或可玩性结论。
+
+### 1.4 未决问题与决策条件
+
+- 产品级未决问题：无未决的工业需求目标行为义务；本专题的 REQ/AC 已表达当前产品边界。
+- 仍需专业 authority 决定的条件：正式配方、批量、产率、价格、物流、电力、容量、receipt、runtime schema、队列和入口支持范围，在具体能力进入当前 claim 或实现输入前必须由文档身份中列出的 authority 与 fresh 证据确认；缺失、冲突或过期时保持 `unknown/blocked`。
+- 接收 owner 与触发条件：对应 gameplay、runtime、world-simulator、Viewer 和 QA owner 在该能力进入本专题承诺范围或发生专业合同变化时更新 task evidence；产品正文保留语义回链，不复制执行台账。
 
 ## 2. 范围与 Non-Goals
 
@@ -83,7 +89,7 @@
 - 要求：产品读面必须（MUST）从同一份当前权威快照分别显示 target、committed、produced、delivery-settled、terminal-settled、remaining 数量，canonical batch quantum，预计 shortage/matched/surplus，输入/电力/物流/buffer/terminal 占用，机会成本和 `next_recheck`；任何缺失、过期或冲突 authority 必须显示为 `unknown/blocked`，不得补成安全或零成本。
 - 理由：玩家需要知道一次计划消耗了什么、已推进到哪里以及还有什么选择。
 - 上位承诺：SC-31。
-- 专业权威：`PRD-GAME-012`、`PRD-WORLD_RUNTIME-019`、`PRD-WORLD_SIMULATOR-047`。
+- 专业权威：[PRD-GAME-012](../../game/prd.md)、[PRD-WORLD_RUNTIME-019](../../world-runtime/prd.md)、[PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md)。
 - 验收：AC-SC31-001。
 
 <a id="req-sc31-002"></a>
@@ -94,7 +100,7 @@
 - 要求：产品读面必须（MUST）只呈现专业合同真实支持的 full、reduced、补料/调运、hold surplus、stop/defer 或 parent-linked supplemental 路径，并为每个可选路径说明作用范围、追加成本或仍占用价值、预计结果/复查点、主要风险和 opportunity cost；preview 与 recommendation 不得创建世界效果。
 - 理由：不同批量和恢复路径应当是有代价的玩家决策，而不是后台自动选择。
 - 上位承诺：SC-31。
-- 专业权威：`PRD-GAME-012`、`PRD-GAME-014`、`PRD-WORLD_SIMULATOR-047`。
+- 专业权威：[PRD-GAME-012](../../game/prd.md)、[PRD-GAME-014](../../game/prd.md)、[PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md)。
 - 验收：AC-SC31-002。
 
 <a id="req-sc31-003"></a>
@@ -105,7 +111,7 @@
 - 要求：产品读面必须（MUST）把 production receipt 表达为生产结果，而只让 profile 声明的 matching delivery 或 terminal settlement receipt 更新目标满足量和交付奖励；非 matching settlement 不得减少目标，亦不得二次减少同一需求。
 - 理由：玩家需要知道“做出来了”与“交到正确目的地并结算了”是两个不同结果。
 - 上位承诺：SC-31。
-- 专业权威：`PRD-GAME-014`、`PRD-WORLD_RUNTIME-019`、`PRD-WORLD_RUNTIME-043`、`PRD-WORLD_SIMULATOR-047`。
+- 专业权威：[PRD-GAME-014](../../game/prd.md)、[PRD-WORLD_RUNTIME-019](../../world-runtime/prd.md)、[PRD-WORLD_RUNTIME-043](../../world-runtime/prd.md)、[PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md)。
 - 验收：AC-SC31-003。
 
 <a id="req-sc31-004"></a>
@@ -116,7 +122,7 @@
 - 要求：产品读面必须（MUST）在目标满足后把旧 schedule、后台循环和 Agent retry 解释为停止追加该目标；对合法 batch 产生的 surplus，系统不得自动倾销、销毁、伪造成交或计为成长，玩家只能看到其真实状态和专业合同支持的后续处置。
 - 理由：完成目标应关闭该目标的追加生产动机，同时保留批量造成的真实机会成本和资产结果。
 - 上位承诺：SC-31。
-- 专业权威：`PRD-GAME-012`、`PRD-WORLD_RUNTIME-019`、`PRD-WORLD_SIMULATOR-047`。
+- 专业权威：[PRD-GAME-012](../../game/prd.md)、[PRD-WORLD_RUNTIME-019](../../world-runtime/prd.md)、[PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md)。
 - 验收：AC-SC31-004、AC-SC31-005。
 
 <a id="req-sc31-005"></a>
@@ -127,7 +133,7 @@
 - 要求：产品读面必须（MUST）允许玩家在专业合同支持时选择一次 parent-linked supplemental revision，并保留原 baseline、actual、实际损耗、已满足量和 remaining shortage；若玩家选择 stop/defer，必须保留 shortage 且不得创建 supplemental revision。
 - 理由：补产应是明确的新因果选择，停止或延期应保留真实缺口而不是伪造完成。
 - 上位承诺：SC-31。
-- 专业权威：`PRD-GAME-014`、`PRD-WORLD_RUNTIME-043`、`PRD-WORLD_SIMULATOR-047`。
+- 专业权威：[PRD-GAME-014](../../game/prd.md)、[PRD-WORLD_RUNTIME-043](../../world-runtime/prd.md)、[PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md)。
 - 验收：AC-SC31-006。
 
 <a id="req-sc31-006"></a>
@@ -138,7 +144,7 @@
 - 要求：产品读面必须（MUST）把漂移导向当前条件重报价、无副作用原子拒绝或 profile 明示的有界 pending；不得静默沿用旧数量、旧容量、旧风险或旧目标承诺，也不得在拒绝时产生新的 sink、义务或奖励。
 - 理由：玩家应能分辨“条件改变”与“计划失败”，并获得真实的重规划入口。
 - 上位承诺：SC-31。
-- 专业权威：`PRD-GAME-012`、`PRD-WORLD_RUNTIME-001`、`PRD-WORLD_RUNTIME-019`、`PRD-WORLD_SIMULATOR-047`。
+- 专业权威：[PRD-GAME-012](../../game/prd.md)、[PRD-WORLD_RUNTIME-001](../../world-runtime/prd.md)、[PRD-WORLD_RUNTIME-019](../../world-runtime/prd.md)、[PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md)。
 - 验收：AC-SC31-007。
 
 <a id="req-sc31-007"></a>
@@ -149,7 +155,7 @@
 - 要求：产品读面必须（MUST）保持同一 root/revision 的一次性世界结果：重复操作不得复制 production、delivery、需求减少、surplus 处置、奖励或容量释放；历史实际损耗和已占用价值必须继续可追溯。
 - 理由：重试和回流是恢复手段，不应成为复制进度或奖励的套利手段。
 - 上位承诺：SC-31。
-- 专业权威：`PRD-WORLD_RUNTIME-043`、`PRD-WORLD_SIMULATOR-047`、`PRD-TESTING-003`。
+- 专业权威：[PRD-WORLD_RUNTIME-043](../../world-runtime/prd.md)、[PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md)、[PRD-TESTING-003](../../testing/prd.md)。
 - 验收：AC-SC31-008。
 
 <a id="req-sc31-008"></a>
@@ -160,7 +166,7 @@
 - 要求：三类入口必须（MUST）对 demand 状态、target/committed/produced/delivery-settled/terminal-settled/remaining 分层、shortage/matched/surplus/unknown、primary blocker、允许动作和 `next_recheck` 保持同义；入口形式可以不同，但不得制造不同的目标满足、奖励或恢复真值。
 - 理由：玩家切换入口或授权 Agent 代办时仍应拥有同一条世界因果链。
 - 上位承诺：SC-31。
-- 专业权威：`PRD-GAME-014`、`PRD-WORLD_RUNTIME-019`、`PRD-WORLD_SIMULATOR-047`、`PRD-TESTING-003`。
+- 专业权威：[PRD-GAME-014](../../game/prd.md)、[PRD-WORLD_RUNTIME-019](../../world-runtime/prd.md)、[PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md)、[PRD-TESTING-003](../../testing/prd.md)。
 - 验收：AC-SC31-009。
 
 ## 5. 验收与证据
@@ -250,14 +256,14 @@
 
 | 叶子要求 | 上位承诺 | 专业权威 / PRD-ID | 验收场景 | 验证入口 |
 | --- | --- | --- | --- | --- |
-| REQ-SC31-001 | SC-31 | `doc/game/prd.md` / PRD-GAME-012；`doc/world-runtime/prd.md` / PRD-WORLD_RUNTIME-019；M4 / PRD-WORLD_SIMULATOR-047 | AC-SC31-001 | `test_tier_required`：同一快照、数量分层、unknown/blocked、preview 无效果 |
-| REQ-SC31-002 | SC-31 | `doc/game/prd.md` / PRD-GAME-012、PRD-GAME-014；M4 / PRD-WORLD_SIMULATOR-047 | AC-SC31-002 | `test_tier_required`：候选支持边界与确认前无效果 |
-| REQ-SC31-003 | SC-31 | `doc/game/prd.md` / PRD-GAME-014；`doc/world-runtime/prd.md` / PRD-WORLD_RUNTIME-019、PRD-WORLD_RUNTIME-043；M4 / PRD-WORLD_SIMULATOR-047 | AC-SC31-003 | `test_tier_required`：production/delivery/terminal settlement 分层与单次需求减少 |
-| REQ-SC31-004 | SC-31 | `doc/game/prd.md` / PRD-GAME-012；runtime/M4 结算与幂等合同 | AC-SC31-004、AC-SC31-005 | `test_tier_required`：满足后停止、surplus 无自动处置 |
-| REQ-SC31-005 | SC-31 | `doc/game/prd.md` / PRD-GAME-014；`doc/world-runtime/prd.md` / PRD-WORLD_RUNTIME-043；M4 / PRD-WORLD_SIMULATOR-047 | AC-SC31-006 | `test_tier_required`；`test_tier_full` 覆盖 revision 链、部分匹配和持久化 |
-| REQ-SC31-006 | SC-31 | `doc/world-runtime/prd.md` / PRD-WORLD_RUNTIME-001、PRD-WORLD_RUNTIME-019；M4 / PRD-WORLD_SIMULATOR-047 | AC-SC31-007 | `test_tier_required`：drift 重报价/拒绝/pending |
-| REQ-SC31-007 | SC-31 | `doc/world-runtime/prd.md` / PRD-WORLD_RUNTIME-043；M4 / PRD-WORLD_SIMULATOR-047；`doc/testing/prd.md` / PRD-TESTING-003 | AC-SC31-008 | `test_tier_required`；`test_tier_full` 覆盖并发、跨窗口、恢复/replay/补偿 |
-| REQ-SC31-008 | SC-31 | `doc/game/prd.md` / PRD-GAME-014；runtime/M4；`doc/testing/prd.md` / PRD-TESTING-003 | AC-SC31-009 | `test_tier_required`：Viewer/pure API/Agent parity |
+| REQ-SC31-001 | SC-31 | [`doc/game/prd.md`](../../game/prd.md) / [PRD-GAME-012](../../game/prd.md)；[`doc/world-runtime/prd.md`](../../world-runtime/prd.md) / [PRD-WORLD_RUNTIME-019](../../world-runtime/prd.md)；[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md) / [PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md) | AC-SC31-001 | `test_tier_required`：同一快照、数量分层、unknown/blocked、preview 无效果 |
+| REQ-SC31-002 | SC-31 | [`doc/game/prd.md`](../../game/prd.md) / [PRD-GAME-012](../../game/prd.md)、[PRD-GAME-014](../../game/prd.md)；[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md) / [PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md) | AC-SC31-002 | `test_tier_required`：候选支持边界与确认前无效果 |
+| REQ-SC31-003 | SC-31 | [`doc/game/prd.md`](../../game/prd.md) / [PRD-GAME-014](../../game/prd.md)；[`doc/world-runtime/prd.md`](../../world-runtime/prd.md) / [PRD-WORLD_RUNTIME-019](../../world-runtime/prd.md)、[PRD-WORLD_RUNTIME-043](../../world-runtime/prd.md)；[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md) / [PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md) | AC-SC31-003 | `test_tier_required`：production/delivery/terminal settlement 分层与单次需求减少 |
+| REQ-SC31-004 | SC-31 | [`doc/game/prd.md`](../../game/prd.md) / [PRD-GAME-012](../../game/prd.md)；[`world-runtime` 专业 PRD](../../world-runtime/prd.md) 与 [`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md) | AC-SC31-004、AC-SC31-005 | `test_tier_required`：满足后停止、surplus 无自动处置 |
+| REQ-SC31-005 | SC-31 | [`doc/game/prd.md`](../../game/prd.md) / [PRD-GAME-014](../../game/prd.md)；[`doc/world-runtime/prd.md`](../../world-runtime/prd.md) / [PRD-WORLD_RUNTIME-043](../../world-runtime/prd.md)；[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md) / [PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md) | AC-SC31-006 | `test_tier_required`；`test_tier_full` 覆盖 revision 链、部分匹配和持久化 |
+| REQ-SC31-006 | SC-31 | [`doc/world-runtime/prd.md`](../../world-runtime/prd.md) / [PRD-WORLD_RUNTIME-001](../../world-runtime/prd.md)、[PRD-WORLD_RUNTIME-019](../../world-runtime/prd.md)；[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md) / [PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md) | AC-SC31-007 | `test_tier_required`：drift 重报价/拒绝/pending |
+| REQ-SC31-007 | SC-31 | [`doc/world-runtime/prd.md`](../../world-runtime/prd.md) / [PRD-WORLD_RUNTIME-043](../../world-runtime/prd.md)；[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md) / [PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md)；[`doc/testing/prd.md`](../../testing/prd.md) / [PRD-TESTING-003](../../testing/prd.md) | AC-SC31-008 | `test_tier_required`；`test_tier_full` 覆盖并发、跨窗口、恢复/replay/补偿 |
+| REQ-SC31-008 | SC-31 | [`doc/game/prd.md`](../../game/prd.md) / [PRD-GAME-014](../../game/prd.md)；[`world-runtime` 专业 PRD](../../world-runtime/prd.md) 与 [`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)；[`doc/testing/prd.md`](../../testing/prd.md) / [PRD-TESTING-003](../../testing/prd.md) | AC-SC31-009 | `test_tier_required`：Viewer/pure API/Agent parity |
 
 ### 5.2 产品效果与证据范围
 

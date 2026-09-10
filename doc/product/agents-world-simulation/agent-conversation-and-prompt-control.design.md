@@ -6,6 +6,7 @@
 - 上位产品 PRD：[`doc/product/agents-world-simulation/prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- 专业域权威：[`world-simulator` 专业 PRD](../../world-simulator/prd.md)、[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md)
 
 本文定义跨 surface 的产品交互设计，不冻结历史 EGUI 布局或实现字段。当前可用入口、鉴权、协议和操作步骤以 [`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md) 与 [`world-simulator` 专业 PRD](../../world-simulator/prd.md) 为准。
 
@@ -93,11 +94,11 @@
 
 | 设计内容 | 配对 PRD 叶子要求 | 验收场景 |
 | --- | --- | --- |
-| 对象确认、控制资格、对话/配置分层 | REQ-PROMPT-001 / REQ-PROMPT-002 | AC-PROMPT-001 / AC-PROMPT-002 |
-| 预设、草稿、默认、override、清除默认 | REQ-PROMPT-002 / REQ-PROMPT-003 | AC-PROMPT-002 / AC-PROMPT-003 |
-| accepted/applied、失败原因与下一步 | REQ-PROMPT-004 / REQ-PROMPT-010 | AC-PROMPT-004 / AC-PROMPT-010 |
-| 过期草稿、控制权丢失优先和信息可见性 | REQ-PROMPT-007 / REQ-PROMPT-008 | AC-PROMPT-007 / AC-PROMPT-008 |
-| 提交时重新校验、竞态与单一结果 | REQ-PROMPT-009 | AC-PROMPT-009 |
-| 响应式、IME、焦点和历史布局边界 | REQ-PROMPT-005 / REQ-PROMPT-006 | AC-PROMPT-005 / AC-PROMPT-006 |
+| 对象确认、控制资格、对话/配置分层 | [REQ-PROMPT-001](agent-conversation-and-prompt-control.prd.md#req-prompt-001) / [REQ-PROMPT-002](agent-conversation-and-prompt-control.prd.md#req-prompt-002) | [AC-PROMPT-001](agent-conversation-and-prompt-control.prd.md#ac-prompt-001) / [AC-PROMPT-002](agent-conversation-and-prompt-control.prd.md#ac-prompt-002) |
+| 预设、草稿、默认、override、清除默认 | [REQ-PROMPT-002](agent-conversation-and-prompt-control.prd.md#req-prompt-002) / [REQ-PROMPT-003](agent-conversation-and-prompt-control.prd.md#req-prompt-003) | [AC-PROMPT-002](agent-conversation-and-prompt-control.prd.md#ac-prompt-002) / [AC-PROMPT-003](agent-conversation-and-prompt-control.prd.md#ac-prompt-003) |
+| accepted/applied、失败原因与下一步 | [REQ-PROMPT-004](agent-conversation-and-prompt-control.prd.md#req-prompt-004) / [REQ-PROMPT-010](agent-conversation-and-prompt-control.prd.md#req-prompt-010) | [AC-PROMPT-004](agent-conversation-and-prompt-control.prd.md#ac-prompt-004) / [AC-PROMPT-010](agent-conversation-and-prompt-control.prd.md#ac-prompt-010) |
+| 过期草稿、控制权丢失优先和信息可见性 | [REQ-PROMPT-007](agent-conversation-and-prompt-control.prd.md#req-prompt-007) / [REQ-PROMPT-008](agent-conversation-and-prompt-control.prd.md#req-prompt-008) | [AC-PROMPT-007](agent-conversation-and-prompt-control.prd.md#ac-prompt-007) / [AC-PROMPT-008](agent-conversation-and-prompt-control.prd.md#ac-prompt-008) |
+| 提交时重新校验、竞态与单一结果 | [REQ-PROMPT-009](agent-conversation-and-prompt-control.prd.md#req-prompt-009) | [AC-PROMPT-009](agent-conversation-and-prompt-control.prd.md#ac-prompt-009) |
+| 响应式、IME、焦点和历史布局边界 | [REQ-PROMPT-005](agent-conversation-and-prompt-control.prd.md#req-prompt-005) / [REQ-PROMPT-006](agent-conversation-and-prompt-control.prd.md#req-prompt-006) | [AC-PROMPT-005](agent-conversation-and-prompt-control.prd.md#ac-prompt-005) / [AC-PROMPT-006](agent-conversation-and-prompt-control.prd.md#ac-prompt-006) |
 
 这些链接只表达产品语义和验收追踪；profile schema、协议枚举、patch、鉴权和组件实现仍由本设计开头所列专业 authority 拥有。

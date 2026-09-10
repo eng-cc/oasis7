@@ -1416,6 +1416,17 @@ LOCAL_REQUIRED_COMMAND=""
 CLAIM_READY_COMMAND=""
 LOCAL_REQUIRED_EXTRA_COMMANDS=()
 
+PRODUCT_DOC_CONTENT_CHECKER="$SOURCE_WORKTREE/scripts/product-doc-content-check.py"
+[[ -x "$PRODUCT_DOC_CONTENT_CHECKER" ]] || die "product document content checker is missing: $PRODUCT_DOC_CONTENT_CHECKER"
+PRODUCT_DOC_CONTENT_COMMAND="$(render_cmd python3 "$PRODUCT_DOC_CONTENT_CHECKER" \
+  --repo-root "$SOURCE_WORKTREE" --base "$COMPARISON_HEAD" --head "$SOURCE_HEAD" --worktree)"
+if ! PRODUCT_DOC_CONTENT_OUTPUT="$(cd "$SOURCE_WORKTREE" && python3 "$PRODUCT_DOC_CONTENT_CHECKER" \
+  --repo-root "$SOURCE_WORKTREE" --base "$COMPARISON_HEAD" --head "$SOURCE_HEAD" --worktree 2>&1)"; then
+  printf '%s\n' "$PRODUCT_DOC_CONTENT_OUTPUT" >&2
+  die "product document content gate failed for $COMPARISON_HEAD..$SOURCE_HEAD"
+fi
+LOCAL_REQUIRED_EXTRA_COMMANDS+=("$PRODUCT_DOC_CONTENT_COMMAND")
+
 PLANNER_SCRIPT="$SOURCE_WORKTREE/scripts/plan-rust-required-scope.sh"
 if [[ -x "$PLANNER_SCRIPT" ]]; then
   if RUST_SCOPE_OUTPUT="$(cd "$SOURCE_WORKTREE" && "$PLANNER_SCRIPT" --event-name pull_request --base-ref "$COMPARISON_REF" --head-ref "$SOURCE_BRANCH" 2>/dev/null)"; then

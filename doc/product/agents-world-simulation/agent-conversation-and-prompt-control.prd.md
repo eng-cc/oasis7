@@ -13,6 +13,16 @@
 
 ## 1. 目标
 
+### 1.1 代表性情境
+
+玩家正在与一个自己有权控制的 Agent 协作：他想先发送一条消息确认当前状态，再把一项持续目标调整为更合适的方向。玩家需要在提交前看懂对象、权限、草稿来源和影响范围，在提交后分辨请求只是被接受、已经应用、被拒绝还是因控制权变化而停止；如果另一入口先改了内容或玩家失去资格，他需要保留安全的本地草稿并知道下一步，而不是猜测旧内容是否已经生效。
+
+### 1.2 事实、假设与未决问题
+
+- 已验证产品事实：本专题已有稳定 `REQ-PROMPT-*` / `AC-PROMPT-*` 追踪，且产品语义与配对 design、`world-simulator` authority 分开维护。
+- 设计假设：在受支持的入口中，明确区分对象、权限、草稿、接受和应用会帮助玩家作出可归因的下一次决策；该假设不能由结构检查或一次提交成功代替。
+- 产品级未决问题：无未决的产品行为义务；各入口是否支持预设、preview、rollback、持久化和完整回执，仍须由当前 Viewer 手册、`world-simulator`/runtime authority 和适用证据在声称该能力前决定。接收 owner 为对应专业 role，触发条件是该入口进入本专题承诺范围；当前任务证据保留所用范围与 residual risk。
+
 玩家应能在同一条清晰的 Agent 交互路径中区分“发送一次对话”和“调整持续影响 Agent 的 Prompt/目标”，明确当前操作针对哪个 Agent、会产生什么范围的影响，并在提交前后获得与当前 authority 一致的反馈。该入口只面向当前账号已经绑定或按权威规则认领且当前可控制的 Agent；选中、可见或共享世界中的其他 Agent 不因此获得控制权。
 
 预设和草稿用于降低重复输入成本，不是独立决策权威。它们不能绕过身份、Agent 绑定、世界规则、runtime 校验或 provider 边界，也不能把本地填充、请求已发送或表面可达误写为 Agent 配置已经生效。
@@ -66,7 +76,7 @@
 - 适用条件：玩家进入对话或 Prompt/目标调整入口。
 - 要求：入口必须明确当前目标 Agent 和玩家当前控制/授权结果；选中、可见或共享世界中的 Agent 不得被呈现为因此可控制。
 - 上位承诺：2.1 单一、可辨识的交互路径。
-- 专业权威：`doc/world-simulator/prd.md` 的 Agent/鉴权合同。
+- 专业权威：[`world-simulator` Agent/鉴权合同](../../world-simulator/prd.md)。
 - 验收：AC-PROMPT-001。
 
 <a id="req-prompt-002"></a>
@@ -75,7 +85,7 @@
 - 适用条件：玩家查看、填充、编辑或发送内容。
 - 要求：入口必须区分一次对话、预设填充、本地草稿和持续 Prompt/目标调整；填充或编辑不得被呈现为已发送或已应用。
 - 上位承诺：2.1、2.2。
-- 专业权威：配对产品 design 的信息架构与状态模型。
+- 专业权威：[配对产品 design 的信息架构与状态模型](agent-conversation-and-prompt-control.design.md#2-信息架构)。
 - 验收：AC-PROMPT-002。
 
 <a id="req-prompt-003"></a>
@@ -84,7 +94,7 @@
 - 适用条件：当前内容来自默认值、当前生效值、override、草稿或预设。
 - 要求：入口必须让玩家分辨这些来源；恢复默认或清除 override 必须在提交前表达真实含义，清空输入不得无说明地同时表示空值和恢复默认。
 - 上位承诺：2.2、2.3。
-- 专业权威：当前 surface authority 与 Viewer 手册。
+- 专业权威：[`world-simulator` 专业 PRD](../../world-simulator/prd.md) 与 [`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md)。
 - 验收：AC-PROMPT-003。
 
 <a id="req-prompt-004"></a>
@@ -93,7 +103,7 @@
 - 适用条件：入口或 authority 返回请求接受，但没有实际应用结果。
 - 要求：入口必须保持 `accepted/pending` 或等价语义；只有 authority 确认实际应用时才可以显示 `applied`，且 applied 不得外推为永久保存或跨入口同步。
 - 上位承诺：2.3、4 接口/数据。
-- 专业权威：`doc/world-simulator/prd.md` 与 runtime/provider authority。
+- 专业权威：[`world-simulator` 专业 PRD](../../world-simulator/prd.md) 与 [`world-runtime` 专业 PRD](../../world-runtime/prd.md)。
 - 验收：AC-PROMPT-004。
 
 <a id="req-prompt-005"></a>
@@ -102,7 +112,7 @@
 - 适用条件：某 surface 不支持 preview、rollback、持久化或完整回执。
 - 要求：该 surface 必须明确收窄能力，不得以加载配置、请求已发送或表面成功暗示未被 authority 支持的恢复或持久性保证。
 - 上位承诺：2.3、3 范围。
-- 专业权威：Viewer 手册和当前 surface authority。
+- 专业权威：[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md) 与 [`world-simulator` 专业 PRD](../../world-simulator/prd.md)。
 - 验收：AC-PROMPT-005。
 
 <a id="req-prompt-006"></a>
@@ -111,7 +121,7 @@
 - 适用条件：受支持的窗口、设备尺寸和文本输入场景。
 - 要求：目标 Agent、草稿、主动作、结果和恢复路径必须可达；输入法、焦点、换行、发送和高影响配置动作不得互相误触。未验证的历史快捷键或布局不得被写成当前保证。
 - 上位承诺：2.4。
-- 专业权威：Viewer 视觉/交互规范、手册和当前实现 authority。
+- 专业权威：[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md) 与 [`world-simulator` 专业 PRD](../../world-simulator/prd.md)。
 - 验收：AC-PROMPT-006。
 
 <a id="req-prompt-007"></a>
@@ -120,7 +130,7 @@
 - 适用条件：编辑期间 Agent 绑定、转让、撤销、owner/组织授权或玩家控制资格发生变化。
 - 要求：入口必须先按 `blocked/control-lost` 或等价语义处理；草稿只能保持未提交并显示 authority-safe 原因，不得展示最新权威值/差异，也不得提供提交、重放或转移旧草稿的路径。
 - 上位承诺：2.5 并发变更与过期草稿。
-- 专业权威：Agent ownership/鉴权与 runtime authority。
+- 专业权威：[`world-simulator` Agent/鉴权合同](../../world-simulator/prd.md) 与 [`world-runtime` 专业 PRD](../../world-runtime/prd.md)。
 - 验收：AC-PROMPT-007。
 
 <a id="req-prompt-008"></a>
@@ -129,7 +139,7 @@
 - 适用条件：控制/授权仍有效，但当前生效 Prompt/目标被其他合法 authority 改变。
 - 要求：入口必须保留本地草稿并明确 stale/needs-refresh，展示允许披露的最新值和变化原因，提供受支持的差异、刷新/重载、重新编辑或放弃路径；不得静默合并、覆盖、自动重试或把草稿表示为 applied。
 - 上位承诺：2.5。
-- 专业权威：`doc/world-simulator/prd.md`、`doc/world-runtime/prd.md`。
+- 专业权威：[`world-simulator` 专业 PRD](../../world-simulator/prd.md)、[`world-runtime` 专业 PRD](../../world-runtime/prd.md)。
 - 验收：AC-PROMPT-008。
 
 <a id="req-prompt-009"></a>
@@ -138,7 +148,7 @@
 - 适用条件：玩家提交编辑草稿，或提交期间再次发生竞态。
 - 要求：提交必须重新校验目标、控制资格、当前生效值和适用授权；竞态只能呈现 authority 的一个真实 accepted/applied/rejected/blocked/stale 结果，不得乐观显示成功、静默重试或重复提交。
 - 上位承诺：2.5。
-- 专业权威：runtime/provider authority 与测试专业文档。
+- 专业权威：[`world-runtime` 专业 PRD](../../world-runtime/prd.md) 与 [`testing` 专业 PRD](../../testing/prd.md)。
 - 验收：AC-PROMPT-009。
 
 <a id="req-prompt-010"></a>
@@ -147,7 +157,7 @@
 - 适用条件：出现非 `control-lost` 的 rejected/blocked 或受支持恢复失败。
 - 要求：入口必须保留玩家可理解的原因摘要和真实下一步，例如重新鉴权、刷新、修正输入、选择受支持模式或稍后重试；不得用静默 fallback、假成功或无边界等待代替恢复。
 - 上位承诺：2.3、2.5。
-- 专业权威：当前 surface、runtime 与 Viewer 手册。
+- 专业权威：[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md)、[`world-runtime` 专业 PRD](../../world-runtime/prd.md) 与 [`world-simulator` 专业 PRD](../../world-simulator/prd.md)。
 - 验收：AC-PROMPT-010。
 
 ## 3. 范围
