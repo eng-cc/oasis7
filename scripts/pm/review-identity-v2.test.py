@@ -20,7 +20,7 @@ TREE = "d" * 40
 def source_fields():
     return {
         "task_uid": UID,
-        "bootstrap_epoch": "e" * 64,
+        "bootstrap_epoch": 1,
         "repository": "eng-cc/oasis7",
         "pr_number": 7,
         "source_head_oid": HEAD,
@@ -61,6 +61,13 @@ def integration_receipt(**changes):
 
 
 class ReviewIdentityV2Test(unittest.TestCase):
+    def test_bootstrap_epoch_uses_positive_integer_snapshot_identity(self):
+        identity = MODULE.source_review_identity(**source_fields())
+        self.assertEqual(identity["bootstrap_epoch"], 1)
+        for invalid in (True, 0, "1"):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                MODULE.source_review_identity(**dict(source_fields(), bootstrap_epoch=invalid))
+
     def test_source_identity_has_fixed_scope_and_digest(self):
         identity = MODULE.source_review_identity(**source_fields())
         self.assertEqual(identity["source_scope_oid"], SOURCE_SCOPE)

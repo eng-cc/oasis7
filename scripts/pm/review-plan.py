@@ -400,7 +400,7 @@ def main() -> int:
     parser.add_argument("--preflight-dir")
     parser.add_argument("--out")
     parser.add_argument("--review-schema", choices=(SCHEMA, V2_SCHEMA), default=SCHEMA)
-    parser.add_argument("--bootstrap-epoch")
+    parser.add_argument("--bootstrap-epoch", type=int)
     parser.add_argument("--source-scope-oid")
     parser.add_argument("--changed-paths-digest")
     parser.add_argument("--role-contract-digest")

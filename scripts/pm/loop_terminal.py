@@ -73,6 +73,8 @@ def _receipt_comment_matches(comment, issue_url, repository, task_uid, issue_num
     comment_url = str(comment.get('html_url') or '')
     if not re.fullmatch(re.escape(issue_url)+r'#issuecomment-\d+', comment_url):
         return False
+    if '<!-- oasis7-pm-evidence -->' not in body:
+        return False
     if (comment.get('user') or {}).get('login') != repository.split('/')[0]:
         raise ValueError('terminal evidence comment author is not the repository owner')
     expected = {
@@ -84,8 +86,6 @@ def _receipt_comment_matches(comment, issue_url, repository, task_uid, issue_num
         'PR Number': str(pr_number),
         'PR URL': pr_url,
     }
-    if '<!-- oasis7-pm-evidence -->' not in body:
-        return False
     for key, value in expected.items():
         if _single_plain_field(body, key) != value:
             return False

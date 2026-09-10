@@ -49,7 +49,7 @@ def _require_digest(value: Any, field: str) -> str:
 
 
 def source_review_identity(
-    *, task_uid: str, bootstrap_epoch: str, repository: str, pr_number: int,
+    *, task_uid: str, bootstrap_epoch: int, repository: str, pr_number: int,
     source_head_oid: str, source_scope_oid: str, changed_paths_digest: str,
     ordered_role_ids: list[str], role_contract_digest: str,
     review_policy_digest: str, input_contract_digest: str,
@@ -62,8 +62,8 @@ def source_review_identity(
     """
     if not isinstance(task_uid, str) or not re.fullmatch(r"task_[0-9a-f]{32}", task_uid):
         raise ValueError("task_uid must be a canonical task UID")
-    if not isinstance(bootstrap_epoch, str) or not re.fullmatch(r"[0-9a-f]{64}", bootstrap_epoch):
-        raise ValueError("bootstrap_epoch must be a lowercase SHA-256 digest")
+    if type(bootstrap_epoch) is not int or bootstrap_epoch <= 0:
+        raise ValueError("bootstrap_epoch must be a positive integer")
     if not isinstance(repository, str) or not repository.strip():
         raise ValueError("repository must be non-empty")
     if type(pr_number) is not int or pr_number <= 0:

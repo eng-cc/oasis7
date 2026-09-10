@@ -112,7 +112,7 @@ print(json.dumps(receipt))
         identity = load_identity_module(self.root / "scripts/pm/ci_ready_receipt_identity.py")
         source = identity.source_review_identity(
             task_uid=UID,
-            bootstrap_epoch="1" * 64,
+            bootstrap_epoch=1,
             repository="eng-cc/oasis7",
             pr_number=7,
             source_head_oid=self.head,

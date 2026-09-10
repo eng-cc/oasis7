@@ -159,6 +159,11 @@ class TerminalDelivery(unittest.TestCase):
     def test_duplicate_or_foreign_terminal_comment_blocks(self):
         self.assertEqual(self.check(comments=[COMMENT,COMMENT])['status'],'blocked')
         self.assertEqual(self.check(comments=[dict(COMMENT,html_url='https://github.com/other/repo/issues/11#issuecomment-7')])['status'],'blocked')
+    def test_unrelated_foreign_discussion_does_not_abort_valid_terminal_scan(self):
+        discussion={'html_url':URL+'#issuecomment-6',
+                    'user':{'login':'reviewer'},
+                    'body':'A normal discussion comment without terminal evidence.'}
+        self.assertEqual(self.check(comments=[discussion,COMMENT])['status'],'passed')
 
     def check_release(self, issue, project):
         def canonical(value):
