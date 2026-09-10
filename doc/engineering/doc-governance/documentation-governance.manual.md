@@ -14,6 +14,8 @@
 
 提交前必须用实际比较范围运行产品内容准入。`base`、`head` 和工作树路径必须显式提供，命令不得用作者标签、评论或 allowlist 跳过：
 
+内容门禁使用固定版本的 `markdown-it-py` 解析真实 CommonMark link nodes；作者环境先运行 `python3 -m pip install -r scripts/doc-governance-requirements.txt`。CI 在 required/full test tier 前安装同一依赖，缺少解析器时门禁失败，不回退到正则伪解析。
+
 ```bash
 OASIS7_PRODUCT_DOC_BASE=<base-ref> \
 OASIS7_PRODUCT_DOC_HEAD=<head-ref> \

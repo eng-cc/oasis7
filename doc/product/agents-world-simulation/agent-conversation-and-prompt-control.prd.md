@@ -101,7 +101,7 @@
 #### REQ-PROMPT-004：接受不等于应用
 
 - 适用条件：入口或 authority 返回请求接受，但没有实际应用结果。
-- 要求：入口必须保持 `accepted/pending` 或等价语义；只有 authority 确认实际应用时才可以显示 `applied`，且 applied 不得外推为永久保存或跨入口同步。
+- 要求：入口必须保持 `accepted/pending` 或等价语义；只有 authority 确认实际应用时才可以显示 `applied`。
 - 上位承诺：2.3、4 接口/数据。
 - 专业权威：[`world-simulator` 专业 PRD](../../world-simulator/prd.md) 与 [`world-runtime` 专业 PRD](../../world-runtime/prd.md)。
 - 验收：AC-PROMPT-004。
@@ -160,6 +160,15 @@
 - 专业权威：[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md)、[`world-runtime` 专业 PRD](../../world-runtime/prd.md) 与 [`world-simulator` 专业 PRD](../../world-simulator/prd.md)。
 - 验收：AC-PROMPT-010。
 
+<a id="req-prompt-011"></a>
+#### REQ-PROMPT-011：applied 的范围边界
+
+- 适用条件：专业 authority 已确认本次 Prompt/目标变更实际应用，但没有另行确认永久保存或其他入口同步。
+- 要求：入口可以显示 `applied`，但必须把它限定为当前 authority 声明的本次应用范围；除非有对应 authority 证据，不得把 applied 外推为永久保存、跨会话持久化或跨入口同步。
+- 上位承诺：2.3、3 范围。
+- 专业权威：[`world-simulator` 专业 PRD](../../world-simulator/prd.md)、[`world-runtime` 专业 PRD](../../world-runtime/prd.md)。
+- 验收：AC-PROMPT-011。
+
 ## 3. 范围
 
 覆盖正式玩家 surface 中的 Agent 目标确认、一次对话、预设/草稿、受控 Prompt/目标调整、结果反馈和响应式可达性。不覆盖专业协议、鉴权实现、profile schema、持久化机制、具体 Viewer 组件或测试执行。
@@ -194,7 +203,7 @@
 
 - AC-1：玩家能在受支持 surface 中辨认当前目标 Agent，并区分一次对话、草稿填充与持续 Prompt/目标调整。
 - AC-2：预设填充不会被呈现为已发送或已应用；本地草稿、默认值、当前生效值和 override 不会被混成同一状态。
-- AC-3：适用的 Prompt 控制明确呈现影响范围、目标 Agent、提交结果和失败恢复；请求 acceptance 不会被外推为 applied。
+- AC-3：适用的 Prompt 控制明确呈现影响范围、目标 Agent、提交结果和失败恢复；请求 acceptance 不会被外推为 applied，单次 applied 也不会被外推为永久保存或跨入口同步。
 - AC-4：恢复默认或清除 override 的语义在提交前可理解，未修改默认值不会制造无意义变更。
 - AC-5：不支持 preview、rollback、持久化或完整回执的 surface 明确收窄，不暗示完整恢复闭环。
 - AC-6：窄屏或低高度下仍可到达草稿、主要动作、结果与恢复路径，且输入法、发送与高影响配置动作不会互相误触。
@@ -278,27 +287,36 @@
 <a id="ac-prompt-009"></a>
 #### AC-PROMPT-009：竞态只产生一个真实结果
 
-给定：目标、权限或当前值在提交期间发生竞态。
+给定：玩家提交一个编辑草稿；可以是目标、权限和当前值在提交前后均未变化的普通提交，也可以是提交期间发生目标、权限或当前值竞态的提交。
 当：入口提交并收到 authority 结果。
-则：按当前状态重新校验并呈现一个真实结果；不会先显示 applied 再回滚、静默重试或复制提交。
+则：两种分支都必须按当前状态重新校验目标、控制资格、当前生效值和适用授权；无竞态分支在校验通过后呈现一个 authority 真实结果，竞态分支也只呈现一个 authority 真实结果；两者都不会先显示 applied 再回滚、静默重试或复制提交。
 
 覆盖：REQ-PROMPT-009。
 
 <a id="ac-prompt-010"></a>
 #### AC-PROMPT-010：失败有真实下一步
 
-给定：请求被非 control-lost 的 rejected/blocked。
-当：入口呈现失败。
-则：展示可理解原因和至少一个 authority 支持的下一步；无法安全恢复时明确停止和边界。
+给定：请求被非 control-lost 的 rejected/blocked，或玩家执行一个 authority 支持的恢复动作后该恢复动作失败。
+当：入口呈现原始请求或恢复动作的失败结果。
+则：展示可理解原因和至少一个 authority 支持的下一步；无法安全恢复时明确停止和边界，不以无限等待或静默 fallback 掩盖恢复失败。
 
 覆盖：REQ-PROMPT-010。
+
+<a id="ac-prompt-011"></a>
+#### AC-PROMPT-011：applied 不扩大为持久化或同步
+
+给定：authority 已确认本次变更实际应用，但没有确认永久保存、跨会话持久化或其他入口同步。
+当：入口呈现 applied 结果并说明影响范围。
+则：入口可以显示 applied，但同时保留当前 authority 声明的范围；不得显示永久保存、跨会话持久化或跨入口同步已经成立。只有取得相应 authority 证据，才可以增加这些后续语义。
+
+覆盖：REQ-PROMPT-011。
 
 ## 9. 验收追踪
 
 | 成功标准 | 专业 owner | 权威文档 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- |
 | AC-1 / AC-2 | producer_system_designer / viewer_engineer | `doc/world-simulator/prd.md`; Viewer 手册 | 当前正式 surface 的 Agent 选择、对话、草稿与状态来源对账 | test_tier_required |
-| AC-3 / AC-4 / AC-5 | agent_engineer / viewer_engineer / qa_engineer | `doc/world-simulator/prd.md`; 对应 PromptControl/runtime authority | accepted/applied/rejected/blocked、默认/override 与缺失能力负例 | test_tier_required |
+| AC-3 / AC-4 / AC-5 | agent_engineer / viewer_engineer / qa_engineer | `doc/world-simulator/prd.md`; 对应 PromptControl/runtime authority | accepted/applied/rejected/blocked、applied 范围、持久化/同步外推负例、默认/override 与缺失能力负例 | test_tier_required |
 | AC-6 | game_visual_interaction_designer / viewer_engineer / qa_engineer | Viewer 视觉规范、手册与当前实现 authority | desktop、窄屏、低高度及输入法/焦点交互证据 | test_tier_required |
 | AC-8 | producer_system_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 外部值/授权变化、目标转让或撤销、过期草稿的 stale/blocked 可读性、显式刷新/重编辑与竞态提交至多一个真实 authority 结果的组合证据 | test_tier_full |
 
@@ -316,6 +334,7 @@
 | REQ-PROMPT-008 | 2.5；AC-8 | AC-PROMPT-008 | design §3.3、§5 |
 | REQ-PROMPT-009 | 2.5、4；AC-8 | AC-PROMPT-009 | design §3.3、§6 |
 | REQ-PROMPT-010 | 2.3、6；AC-3/AC-8 | AC-PROMPT-010 | design §3.4、§5 |
+| REQ-PROMPT-011 | 2.3、3；AC-3 | AC-PROMPT-011 | design §3.4、§5 |
 
 ## 10. Non-Goals
 

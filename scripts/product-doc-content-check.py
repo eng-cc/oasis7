@@ -12,12 +12,17 @@ import subprocess
 import sys
 from urllib.parse import unquote
 
+try:
+    from product_doc_markdown import parse_markdown_links
+except RuntimeError as exc:
+    print(f"product-doc-content: error: {exc}", file=sys.stderr)
+    raise SystemExit(2) from exc
+
 
 PRODUCT_ROOT = Path("doc/product")
 PRODUCT_SUFFIXES = (".prd.md", ".design.md")
 HTML_COMMENT_RE = re.compile(r"<!--[\s\S]*?-->")
 FENCE_RE = re.compile(r"^ {0,3}([`~])\1{2,}")
-LINK_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 ID_RE = re.compile(r"\b((?:REQ|AC)-[A-Z0-9][A-Z0-9_*-]*)", re.IGNORECASE)
 HEADING_PREFIX_RE = re.compile(r"^ {0,3}#{2,6}\s+")
 DECLARATION_PREFIX_RE = re.compile(r"^\s*(?:[-+*]\s+|\|\s*)")
@@ -133,7 +138,7 @@ def normalized_for_change(text: str | None) -> str:
 
 
 def visible_lines(text: str) -> list[tuple[int, str]]:
-    """Return line-numbered prose, excluding HTML comments and fenced examples."""
+    """Return line-numbered prose, excluding comments and code blocks."""
     text = without_html_comments(text)
     visible: list[tuple[int, str]] = []
     fence: tuple[str, int] | None = None
@@ -146,6 +151,8 @@ def visible_lines(text: str) -> list[tuple[int, str]]:
         opener = FENCE_RE.match(line)
         if opener:
             fence = (opener.group(1), len(opener.group(0).lstrip()))
+            continue
+        if line.startswith("\t") or line.startswith("    "):
             continue
         visible.append((number, line))
     return visible
@@ -214,14 +221,8 @@ def validate_link(root: Path, source: Path, raw_target: str, source_text: str, e
     return target_path, fragment
 
 
-def markdown_links(lines: list[tuple[int, str]]) -> list[tuple[int, str, str]]:
-    return [
-        (number, raw, target)
-        for number, line in lines
-        for match in LINK_RE.finditer(line)
-        for raw in [match.group(1)]
-        for target in [raw.strip().split(None, 1)[0].strip("<>")]
-    ]
+def markdown_links(text: str) -> list[tuple[int, str, str]]:
+    return [(link.line, link.target, link.target) for link in parse_markdown_links(text)]
 
 
 def authority_lines(lines: list[tuple[int, str]]) -> list[tuple[int, str]]:
@@ -374,7 +375,7 @@ def check_requirements(path: str, text: str, errors: list[str]) -> None:
 
     all_tokens = id_tokens(prose)
     local_tokens = set(declarations)
-    links = markdown_links(lines)
+    links = markdown_links(text)
     linked_fragments: list[tuple[int, str]] = []
     for number, _raw, target in links:
         _link_path, fragment = split_link_target(target)
@@ -387,7 +388,7 @@ def check_requirements(path: str, text: str, errors: list[str]) -> None:
             continue
         line_fragments = {
             fragment.upper()
-            for link_number, _raw, target in markdown_links([(number, line)])
+            for link_number, _raw, target in links
             if link_number == number
             for _link_path, fragment in [split_link_target(target)]
             if fragment
@@ -443,7 +444,8 @@ def check_document(root: Path, path: str, text: str, errors: list[str]) -> None:
         check_minimum_design_content(path, text, errors)
         expected_prd = path.removesuffix(".design.md") + ".prd.md"
         pair_targets = []
-        for _number, _raw, target in markdown_links(lines):
+        links = markdown_links(text)
+        for _number, _raw, target in links:
             target_path, _fragment = split_link_target(target)
             if target_path:
                 resolved = (source.parent / target_path).resolve()
@@ -453,17 +455,18 @@ def check_document(root: Path, path: str, text: str, errors: list[str]) -> None:
                     pass
         if expected_prd not in pair_targets:
             fail(errors, "missing-paired-prd-link", path, expected_prd)
+    links = markdown_links(text)
     for number, line in authority_lines(lines):
-        links = [target for line_number, _raw, target in markdown_links([(number, line)]) if line_number == number]
-        if not links:
+        authority_targets = [target for line_number, _raw, target in links if line_number == number]
+        if not authority_targets:
             fail(errors, "authority-not-link", path, f"line {number} must use a Markdown path target")
-        for target in links:
+        for target in authority_targets:
             target_path, _fragment = split_link_target(target)
             if "://" in target_path or target_path.startswith(("mailto:", "//")):
                 fail(errors, "authority-external-link", path, f"line {number} must resolve inside the repository: {target}")
                 continue
             validate_link(root, source, target, text, errors, f"{path}:{number}", "authority-link")
-    for number, _raw, target in markdown_links(lines):
+    for number, _raw, target in links:
         validate_link(root, source, target, text, errors, f"{path}:{number}", "markdown-link")
     check_requirements(path, text, errors)
 

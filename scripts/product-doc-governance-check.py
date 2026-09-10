@@ -9,6 +9,12 @@ from pathlib import Path
 import re
 import sys
 
+try:
+    from product_doc_markdown import parse_markdown_links
+except RuntimeError as exc:
+    print(f"product-doc-governance: error: {exc}", file=sys.stderr)
+    raise SystemExit(2) from exc
+
 
 @dataclass(frozen=True)
 class ProductModule:
@@ -60,8 +66,6 @@ REQUIRED_HEADINGS = (
     "### 5.1 验收追踪",
     "## 6. Non-Goals",
 )
-
-
 def metadata(text: str, label: str) -> str | None:
     match = re.search(rf"^- {re.escape(label)}：(?:`([^`]+)`|(.+))$", text, re.MULTILINE)
     if not match:
@@ -96,9 +100,10 @@ def fail(errors: list[str], code: str, detail: str) -> None:
 
 
 def markdown_targets(root: Path, source: Path, text: str) -> set[str]:
+    """Resolve repository targets from actual CommonMark link nodes."""
     targets: set[str] = set()
-    for raw_target in re.findall(r"\[[^]]+\]\(([^)]+)\)", text):
-        target = raw_target.split("#", 1)[0].strip()
+    for link in parse_markdown_links(text):
+        target = link.target.split("#", 1)[0].strip()
         if not target or "://" in target:
             continue
         resolved = (source.parent / target).resolve()
@@ -110,21 +115,8 @@ def markdown_targets(root: Path, source: Path, text: str) -> set[str]:
 
 
 def markdown_targets_outside_fenced_code(root: Path, source: Path, text: str) -> set[str]:
-    """Return Markdown targets from prose, excluding fenced code examples."""
-    visible_lines: list[str] = []
-    fence: tuple[str, int] | None = None
-    for line in text.splitlines():
-        if fence:
-            character, length = fence
-            if re.fullmatch(rf" {{0,3}}{re.escape(character)}{{{length},}}[ \t]*", line):
-                fence = None
-            continue
-        opener = re.match(r" {0,3}([`~])\1{2,}", line)
-        if opener:
-            fence = (opener.group(1), len(opener.group(0).lstrip()))
-            continue
-        visible_lines.append(line)
-    return markdown_targets(root, source, "\n".join(visible_lines))
+    """Compatibility wrapper for the prose-only Markdown target scanner."""
+    return markdown_targets(root, source, text)
 
 
 def topic_targets_for_section(

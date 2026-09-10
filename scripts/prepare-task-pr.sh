@@ -1418,9 +1418,12 @@ LOCAL_REQUIRED_EXTRA_COMMANDS=()
 
 PRODUCT_DOC_CONTENT_CHECKER="$SOURCE_WORKTREE/scripts/product-doc-content-check.py"
 [[ -x "$PRODUCT_DOC_CONTENT_CHECKER" ]] || die "product document content checker is missing: $PRODUCT_DOC_CONTENT_CHECKER"
-PRODUCT_DOC_CONTENT_COMMAND="$(render_cmd python3 "$PRODUCT_DOC_CONTENT_CHECKER" \
+if ! PRODUCT_DOC_PYTHON="$("$ROOT_DIR/scripts/pm/find-python-with-module.sh" markdown_it)"; then
+  die "product document content gate requires markdown-it-py; install $SOURCE_WORKTREE/scripts/doc-governance-requirements.txt"
+fi
+PRODUCT_DOC_CONTENT_COMMAND="$(render_cmd "$PRODUCT_DOC_PYTHON" "$PRODUCT_DOC_CONTENT_CHECKER" \
   --repo-root "$SOURCE_WORKTREE" --base "$COMPARISON_HEAD" --head "$SOURCE_HEAD" --worktree)"
-if ! PRODUCT_DOC_CONTENT_OUTPUT="$(cd "$SOURCE_WORKTREE" && python3 "$PRODUCT_DOC_CONTENT_CHECKER" \
+if ! PRODUCT_DOC_CONTENT_OUTPUT="$(cd "$SOURCE_WORKTREE" && "$PRODUCT_DOC_PYTHON" "$PRODUCT_DOC_CONTENT_CHECKER" \
   --repo-root "$SOURCE_WORKTREE" --base "$COMPARISON_HEAD" --head "$SOURCE_HEAD" --worktree 2>&1)"; then
   printf '%s\n' "$PRODUCT_DOC_CONTENT_OUTPUT" >&2
   die "product document content gate failed for $COMPARISON_HEAD..$SOURCE_HEAD"

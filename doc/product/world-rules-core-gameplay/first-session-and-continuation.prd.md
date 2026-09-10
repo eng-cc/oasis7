@@ -142,7 +142,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 - 要求：系统必须先以同一份 fresh authority snapshot 通过 `Starter Industrial Feasibility Gate`，并只返回 `candidate_available` 或 `no_safe_starter_chain`；闸门不得扣资源、锁定库存/容量、排程或发放成长奖励。
 - 上位承诺：2.2.2、FS-7、FS-15。
 - 专业权威：[`世界规则与核心玩法 PRD`](prd.md) 的 starter feasibility 合同、[`gameplay` 专业设计](../../game/gameplay/gameplay-top-level-design.prd.md) 与 [`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)。
-- 验收：AC-FIRST-INDUSTRIAL-001。
+- 验收：AC-FIRST-INDUSTRIAL-001、AC-FIRST-INDUSTRIAL-002。
 
 <a id="req-first-industrial-002"></a>
 #### REQ-FIRST-INDUSTRIAL-002：完整工业因果链
@@ -169,7 +169,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 - 要求：入口必须区分“已接受但未开始”“正在执行/在途”“已生产但未交付”和“已交付并产生目的地后果”；生产 receipt 不得代替 delivery/terminal settlement receipt。
 - 上位承诺：2.2.1 walkthrough、FS-3、FS-4、FS-15。
 - 专业权威：[`gameplay` 工业引导成就闭环专业规则](../../game/gameplay/gameplay-top-level-design.prd.md#25-前期工业引导成就闭环)、[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md) 与 [`world-runtime` 专业 PRD](../../world-runtime/prd.md)。
-- 验收：AC-FIRST-INDUSTRIAL-003。
+- 验收：AC-FIRST-INDUSTRIAL-001、AC-FIRST-INDUSTRIAL-005。
 
 <a id="req-first-industrial-005"></a>
 #### REQ-FIRST-INDUSTRIAL-005：事实漂移与重复无副作用
@@ -245,6 +245,15 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 则：两入口对同一事实、完成边界、主 blocker、恢复路径和复查点保持同义；玩家能看到可达的持续主目标或 2 至 3 个实质不同方向，首局信任、持续能力和继续动机分别可判定。
 
 覆盖：REQ-FIRST-INDUSTRIAL-007、008；对应 FS-3、FS-4、FS-5、FS-6、FS-8、FS-9、FS-10、FS-12。
+
+<a id="ac-first-industrial-005"></a>
+#### AC-FIRST-INDUSTRIAL-005：生产完成但交付未完成
+
+给定：本次工业候选已有匹配的 production receipt，但尚未取得匹配的 delivery/terminal settlement receipt；交付可能仍在等待、失败或尚未确认。
+当：玩家重连、重新打开该候选，或尝试使用产物的目的地用途。
+则：系统必须保持 `produced/undelivered`，继续显示交付 blocker 与真实可用的等待、改道、持有、重报价或延期路径；不得表现为已交付，不得产生目的地后果、交付/终端奖励、需求减少或 terminal-admission 用途解锁。只有匹配的 delivery/terminal settlement receipt 才能推进到交付完成，重读 production receipt 不得复制生产效果。
+
+覆盖：REQ-FIRST-INDUSTRIAL-004；对应 FS-3、FS-4、FS-15。
 
 ### 2.3 早期 quote/preview 的信息仲裁
 
@@ -357,7 +366,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 | REQ-FIRST-INDUSTRIAL-001 | 2.2.2、FS-7、FS-15 | AC-FIRST-INDUSTRIAL-001/002 | 根 PRD starter feasibility、`doc/game`、M4 |
 | REQ-FIRST-INDUSTRIAL-002 | 2.2.1、FS-1、FS-15 | AC-FIRST-INDUSTRIAL-001 | gameplay industrial walkthrough |
 | REQ-FIRST-INDUSTRIAL-003 | 原料准备子循环、FS-15 | AC-FIRST-INDUSTRIAL-001/002 | M4 工业资源流转合同 |
-| REQ-FIRST-INDUSTRIAL-004 | walkthrough 四类阶段、FS-3/4/15 | AC-FIRST-INDUSTRIAL-003 | gameplay/runtime 结算合同 |
+| REQ-FIRST-INDUSTRIAL-004 | walkthrough 四类阶段、FS-3/4/15 | AC-FIRST-INDUSTRIAL-001/005 | gameplay/runtime 结算合同 |
 | REQ-FIRST-INDUSTRIAL-005 | 子循环、Gate、FS-13/15 | AC-FIRST-INDUSTRIAL-003 | runtime/Agent/Viewer authority |
 | REQ-FIRST-INDUSTRIAL-006 | 2.2.1/2.2.2、FS-2/7/15 | AC-FIRST-INDUSTRIAL-002 | gameplay/M4/runtime authority |
 | REQ-FIRST-INDUSTRIAL-007 | FS-6/9/15 | AC-FIRST-INDUSTRIAL-004 | Viewer/pure API/testing authority |

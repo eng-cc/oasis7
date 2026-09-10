@@ -5,8 +5,8 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
-if ! PYTHON_BIN="$("$repo_root/scripts/pm/find-python-with-module.sh" ast)"; then
-  echo "doc-governance-check: cannot find a functional Python interpreter" >&2
+if ! PYTHON_BIN="$("$repo_root/scripts/pm/find-python-with-module.sh" markdown_it)"; then
+  echo "doc-governance-check: markdown-it-py is required; install scripts/doc-governance-requirements.txt" >&2
   exit 1
 fi
 

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -152,6 +153,45 @@ def fenced_authority_target(root: Path) -> None:
     (root / TOPIC).write_text(TOPIC_TEXT + "\n补充当前 authority 证据边界。\n", encoding="utf-8")
 
 
+def pseudo_paired_design_link(root: Path, form: str) -> None:
+    path = root / DESIGN
+    text = re.sub(
+        r"\[([^\]]+)\]\((sample\.prd\.md(?:#[^)]+)?)\)",
+        r"`[\1](\2)`",
+        DESIGN_TEXT,
+    )
+    target = "[paired PRD](sample.prd.md)"
+    if form == "inline":
+        target = f"`{target}`"
+    elif form == "indented":
+        target = f"    {target}"
+    elif form == "comment":
+        target = f"<!-- {target} -->"
+    elif form == "escaped":
+        target = f"\\{target}"
+    elif form == "even-escaped":
+        target = f"\\\\{target}"
+    elif form == "image":
+        target = f"!{target}"
+    elif form == "quote-fence":
+        target = "> ```markdown\n> " + target + "\n> ```"
+    elif form == "list-fence":
+        target = "- ```markdown\n  " + target + "\n  ```"
+    elif form == "quote-indent":
+        target = ">     " + target
+    elif form == "list-indent":
+        target = "-     " + target
+    else:
+        raise AssertionError(form)
+    path.write_text(text + f"\n{target}\n", encoding="utf-8")
+
+def even_escaped_paired_design_link(root: Path) -> None:
+    path = root / DESIGN
+    target = "[" + chr(96) + "Sample topic" + chr(96) + "](sample.prd.md)"
+    text = DESIGN_TEXT.replace(target, r"\\[Sample topic](sample.prd.md)", 1)
+    path.write_text(text, encoding="utf-8")
+
+
 def main() -> None:
     scenario(None, lambda _root: None)
     scenario("missing-metadata", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("- Owner role：`producer_system_designer`\n", ""), encoding="utf-8"))
@@ -179,6 +219,22 @@ def main() -> None:
     scenario(None, lambda root: (root / TOPIC).write_text(
         TOPIC_TEXT + "\n普通背景链接：[external reference](https://example.invalid/reference)。\n", encoding="utf-8"
     ))
+    for pseudo_form in (
+        "inline",
+        "indented",
+        "comment",
+        "escaped",
+        "image",
+        "quote-fence",
+        "list-fence",
+        "quote-indent",
+        "list-indent",
+    ):
+        scenario(
+            "missing-paired-prd-link",
+            lambda root, pseudo_form=pseudo_form: pseudo_paired_design_link(root, pseudo_form),
+        )
+    scenario(None, even_escaped_paired_design_link)
     scenario_checked(lambda root: (root / TOPIC).write_text(
         TOPIC_TEXT.replace("玩家需要知道当前目标", "  玩家需要知道当前目标"), encoding="utf-8"
     ))

@@ -340,6 +340,8 @@ jobs:
             libxinerama-dev \
             libasound2-dev \
             libudev-dev
+      - name: Install product-document Markdown parser
+        run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
       - name: Run required test tier
         env:
           INTEGRATION_MODE: ${{ inputs.run_mode }}
@@ -543,6 +545,8 @@ jobs:
         run: |
           set -euo pipefail
           trunk --version | grep -Fqx "trunk ${TRUNK_VERSION}"
+      - name: Install product-document Markdown parser
+        run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
       - name: Run full test tier
         run: CI_VERBOSE=1 ./scripts/ci-tests.sh full
 
@@ -616,6 +620,8 @@ jobs:
         run: |
           set -euo pipefail
           trunk --version | grep -Fqx "trunk ${TRUNK_VERSION}"
+      - name: Install product-document Markdown parser
+        run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
       - id: full
         name: Run human-authorized full test tier
         run: CI_VERBOSE=1 ./scripts/ci-tests.sh full

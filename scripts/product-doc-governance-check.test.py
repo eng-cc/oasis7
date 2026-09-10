@@ -87,6 +87,35 @@ def remove_paired_design_links(root: Path, *, fence: str | None = None) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def pseudo_paired_design_link(root: Path, form: str) -> None:
+    path = root / "doc/product/agents-world-simulation/agent-conversation-and-prompt-control.design.md"
+    remove_paired_design_links(root)
+    target = "[paired PRD](agent-conversation-and-prompt-control.prd.md)"
+    if form == "inline":
+        target = f"`{target}`"
+    elif form == "indented":
+        target = f"    {target}"
+    elif form == "comment":
+        target = f"<!-- {target} -->"
+    elif form == "escaped":
+        target = f"\\{target}"
+    elif form == "even-escaped":
+        target = f"\\\\{target}"
+    elif form == "image":
+        target = f"!{target}"
+    elif form == "quote-fence":
+        target = "> ```markdown\n> " + target + "\n> ```"
+    elif form == "list-fence":
+        target = "- ```markdown\n  " + target + "\n  ```"
+    elif form == "quote-indent":
+        target = ">     " + target
+    elif form == "list-indent":
+        target = "-     " + target
+    else:
+        raise AssertionError(form)
+    path.write_text(path.read_text(encoding="utf-8") + f"\n{target}\n", encoding="utf-8")
+
+
 def scenario(expected: str | None, mutation) -> None:
     root = make_fixture()
     try:
@@ -273,6 +302,25 @@ def main() -> None:
     scenario(
         "topic-pair-backlink",
         lambda root: remove_paired_design_links(root, fence="~~~"),
+    )
+    for pseudo_form in (
+        "inline",
+        "indented",
+        "comment",
+        "escaped",
+        "image",
+        "quote-fence",
+        "list-fence",
+        "quote-indent",
+        "list-indent",
+    ):
+        scenario(
+            "topic-pair-backlink",
+            lambda root, pseudo_form=pseudo_form: pseudo_paired_design_link(root, pseudo_form),
+        )
+    scenario(
+        None,
+        lambda root: pseudo_paired_design_link(root, "even-escaped"),
     )
     scenario(
         "topic-missing",
