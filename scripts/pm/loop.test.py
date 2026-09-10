@@ -26,9 +26,11 @@ def receipt_fixture(task_uid, repository, issue_number, pr_number, pr_url):
         return {'bytes': raw, 'digest': hashlib.sha256(raw).hexdigest(), 'record': record}
     merge = entry({'receipt_type': 'oasis7_pr_merge', 'issuer': 'github_live_query', 'evidence_mode': 'production',
                    'repository': repository, 'default_branch': 'main', 'pr_number': pr_number, 'pr_url': pr_url,
-                   'state': 'MERGED', 'merged_at': '2026-09-10T00:00:00Z', 'head_oid': 'a' * 40, 'base_ref': 'main'})
+                   'state': 'MERGED', 'merged_at': '2026-09-10T00:00:00Z', 'head_oid': 'a' * 40,
+                   'base_ref': 'main', 'observed_at': '2026-09-10T00:00:00Z'})
     main_sync = entry({'receipt_type': 'oasis7_main_sync', 'issuer': 'post-merge-main-sync', 'task_uid': task_uid,
                        'repository': repository, 'default_branch': 'main', 'merge_receipt_sha256': merge['digest'],
+                       'main_commit': 'c' * 40, 'remote_main_commit': 'c' * 40,
                        'integration_mode': 'ancestry', 'observed_at': '2026-09-10T00:01:00Z'})
     terminal = entry({'receipt_type': 'oasis7_terminal_cleanup', 'issuer': 'post-merge-cleanup', 'task_uid': task_uid,
                       'repository': repository, 'issue_number': issue_number, 'pr_number': pr_number,

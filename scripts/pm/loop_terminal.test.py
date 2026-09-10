@@ -39,9 +39,11 @@ def _receipts(repository):
     pr_url=f'https://github.com/{repository}/pull/{PR_NUMBER}'
     merge=_receipt({'receipt_type':'oasis7_pr_merge','issuer':'github_live_query','evidence_mode':'production',
                     'repository':repository,'default_branch':'main','pr_number':PR_NUMBER,'pr_url':pr_url,
-                    'state':'MERGED','merged_at':PR['merged_at'],'head_oid':'a'*40,'base_ref':'main'})
+                    'state':'MERGED','merged_at':PR['merged_at'],'head_oid':'a'*40,'base_ref':'main',
+                    'observed_at':'2026-09-10T00:00:00Z'})
     main_sync=_receipt({'receipt_type':'oasis7_main_sync','issuer':'post-merge-main-sync','task_uid':UID,
                         'repository':repository,'default_branch':'main','merge_receipt_sha256':merge['digest'],
+                        'main_commit':'c'*40,'remote_main_commit':'c'*40,
                         'integration_mode':'ancestry','observed_at':'2026-09-10T00:01:00Z'})
     terminal=_receipt({'receipt_type':'oasis7_terminal_cleanup','issuer':'post-merge-cleanup','task_uid':UID,
                        'repository':repository,'issue_number':11,'pr_number':PR_NUMBER,
@@ -104,6 +106,15 @@ class TerminalDelivery(unittest.TestCase):
         for receipts in (wrong_head,wrong_link):
             with self.subTest(receipts=receipts):
                 self.assertEqual(self.check(receipts=receipts)['status'],'blocked')
+    def test_main_sync_requires_producer_commit_binding(self):
+        for field in ('main_commit', 'remote_main_commit'):
+            receipts=copy.deepcopy(RECEIPTS)
+            receipts['main_sync']['record'].pop(field)
+            with self.subTest(field=field):
+                self.assertEqual(self.check(receipts=receipts)['status'],'blocked')
+        mismatched=copy.deepcopy(RECEIPTS)
+        mismatched['main_sync']['record']['remote_main_commit']='d'*40
+        self.assertEqual(self.check(receipts=mismatched)['status'],'blocked')
     def test_wrong_author_or_missing_or_mismatched_receipt_blocks(self):
         wrong_author=copy.deepcopy(COMMENT); wrong_author['user']['login']='attacker'
         missing=copy.deepcopy(COMMENT); missing['body']=missing['body'].replace(f'Main Sync Receipt SHA256: {RECEIPTS["main_sync"]["digest"]}\n','')

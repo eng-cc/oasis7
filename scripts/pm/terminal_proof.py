@@ -60,13 +60,16 @@ def read_receipt_chain(repo_root: pathlib.Path, task_uid: str) -> dict:
         root = pathlib.Path(json.loads(raw)["receipt_root"])
     except (OSError, subprocess.SubprocessError, KeyError, TypeError, json.JSONDecodeError) as exc:
         raise ValueError("canonical terminal receipt root unavailable") from exc
-    return {
+    receipts = {
         "merge": _receipt(root, "merge-receipt.json"),
         "main_sync": _receipt(root, "main-sync-receipt.json"),
         "terminal": _receipt(root, "terminal-cleanup-receipt.json"),
         "ledger": _receipt(root, "finalizer-ledger.json"),
         "tombstone": _receipt(root, "terminal-tombstone.json"),
     }
+    if receipts["main_sync"]["record"].get("integration_mode") == "patch_equivalence":
+        receipts["patch_equivalence"] = _receipt(root, "patch-equivalence-receipt.json")
+    return receipts
 
 
 def validate_receipt_chain(
@@ -102,9 +105,11 @@ def validate_receipt_chain(
     }.items():
         if merge.get(key) != expected:
             raise ValueError("canonical merge receipt provenance mismatch")
-    if not isinstance(merge.get("default_branch"), str) or not isinstance(merge.get("base_ref"), str):
+    if (not isinstance(merge.get("default_branch"), str) or not merge.get("default_branch")
+            or not isinstance(merge.get("base_ref"), str) or not merge.get("base_ref")):
         raise ValueError("canonical merge receipt branch provenance missing")
-    if not merge.get("merged_at") or not re_fullmatch_oid(merge.get("head_oid")):
+    if (not merge.get("merged_at") or not merge.get("observed_at")
+            or not re_fullmatch_oid(merge.get("head_oid"))):
         raise ValueError("canonical merge receipt lacks merged version")
     if merge.get("base_ref") != merge.get("default_branch"):
         raise ValueError("canonical merge receipt targets a non-default branch")
@@ -120,8 +125,50 @@ def validate_receipt_chain(
             "oasis7_main_sync", "post-merge-main-sync", task_uid, repository,
             merge.get("default_branch"), merge_digest):
         raise ValueError("canonical main-sync receipt provenance mismatch")
-    if main_sync.get("integration_mode") not in ("ancestry", "patch_equivalence") or not main_sync.get("observed_at"):
+    integration_mode = main_sync.get("integration_mode")
+    if integration_mode not in ("ancestry", "patch_equivalence") or not main_sync.get("observed_at"):
         raise ValueError("canonical main-sync receipt integration mode is invalid")
+    if not re_fullmatch_oid(main_sync.get("main_commit")) or not re_fullmatch_oid(main_sync.get("remote_main_commit")):
+        raise ValueError("canonical main-sync receipt lacks synchronized producer commits")
+    if main_sync.get("main_commit") != main_sync.get("remote_main_commit"):
+        raise ValueError("canonical main-sync receipt local/remote commits disagree")
+    patch_fields = (
+        "patch_equivalence_receipt_sha256", "patch_id", "projected_tree_oid",
+        "main_tree_oid", "integration_commit", "integration_parent",
+    )
+    if integration_mode == "ancestry":
+        if any(field in main_sync for field in patch_fields):
+            raise ValueError("canonical ancestry main-sync receipt contains patch-equivalence fields")
+    else:
+        if not re_fullmatch_sha256(main_sync.get("patch_equivalence_receipt_sha256")):
+            raise ValueError("canonical patch-equivalence main-sync receipt lacks patch receipt digest")
+        if not re_fullmatch_oid(main_sync.get("patch_id")):
+            raise ValueError("canonical patch-equivalence main-sync receipt lacks patch identity")
+        if not re_fullmatch_oid(main_sync.get("projected_tree_oid")) or not re_fullmatch_oid(main_sync.get("main_tree_oid")):
+            raise ValueError("canonical patch-equivalence main-sync receipt lacks tree identity")
+        if not re_fullmatch_oid(main_sync.get("integration_commit")) or not re_fullmatch_oid(main_sync.get("integration_parent")):
+            raise ValueError("canonical patch-equivalence main-sync receipt lacks integration commit identity")
+        if main_sync.get("projected_tree_oid") != main_sync.get("main_tree_oid"):
+            raise ValueError("canonical patch-equivalence main-sync trees disagree")
+        patch = receipts.get("patch_equivalence")
+        if not isinstance(patch, dict) or not isinstance(patch.get("record"), dict):
+            raise ValueError("canonical patch-equivalence receipt is unavailable")
+        patch_record = patch["record"]
+        if patch.get("digest") != main_sync.get("patch_equivalence_receipt_sha256"):
+            raise ValueError("canonical patch-equivalence receipt digest disagrees with main-sync")
+        expected_patch = {
+            "receipt_type": "oasis7_patch_equivalence",
+            "schema_version": 2,
+            "issuer": "oasis7_patch_equivalence_helper",
+            "branch_tip": merge.get("head_oid"),
+            "main_commit": main_sync.get("integration_commit"),
+            "main_parent": main_sync.get("integration_parent"),
+            "patch_id": main_sync.get("patch_id"),
+            "projected_tree_oid": main_sync.get("projected_tree_oid"),
+            "main_tree_oid": main_sync.get("main_tree_oid"),
+        }
+        if any(patch_record.get(key) != value for key, value in expected_patch.items()):
+            raise ValueError("canonical patch-equivalence receipt provenance mismatch")
     if (terminal.get("receipt_type"), terminal.get("issuer"), terminal.get("task_uid"),
             terminal.get("repository"), terminal.get("issue_number"), terminal.get("pr_number"),
             terminal.get("merge_receipt_sha256"), terminal.get("main_sync_receipt_sha256")) != (
@@ -157,3 +204,7 @@ def validate_receipt_chain(
 
 def re_fullmatch_oid(value: object) -> bool:
     return isinstance(value, str) and len(value) == 40 and all(c in "0123456789abcdef" for c in value)
+
+
+def re_fullmatch_sha256(value: object) -> bool:
+    return isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdef" for c in value)

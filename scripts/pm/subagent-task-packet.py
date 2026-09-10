@@ -247,6 +247,16 @@ def review_admission(root: Path, packet_path: Path, plan_path: Path,
         except (TypeError, ValueError) as exc:
             fail(f"invalid v2 review identity: {exc}")
     snapshot = validate_bootstrap_snapshot(root, snapshot_path, task_uid)
+    if plan_schema == "oasis7-review-plan/v2":
+        source_identity = plan.get("source_review_identity")
+        snapshot_task = snapshot.get("task")
+        if not isinstance(source_identity, dict) or not isinstance(snapshot_task, dict):
+            fail("v2 review identity and bootstrap snapshot task must be objects")
+        snapshot_epoch = snapshot_task.get("bootstrap_epoch")
+        if type(snapshot_epoch) is not int or snapshot_epoch < 1:
+            fail("bootstrap snapshot has an invalid bootstrap epoch")
+        if source_identity.get("bootstrap_epoch") != snapshot_epoch:
+            fail("v2 source review bootstrap epoch does not match bootstrap snapshot")
 
     canonical_packet_dir = (root / ".pm" / "scratch" / task_uid / "slice-packets").resolve()
     if packet_path.parent != canonical_packet_dir:

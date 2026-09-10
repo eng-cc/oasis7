@@ -161,10 +161,10 @@ PY
   REVIEW_PLAN_SCHEMA="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^plan_schema=//p')"
   REVIEW_EVIDENCE_DIGEST="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^evidence_digest=//p')"
   if [[ -n "$REVIEW_PLAN" && "$REVIEW_PLAN" != n/a* ]]; then
-    PLAN_FIELDS="$(python3 - "$ROOT_DIR" "$REVIEW_PLAN" <<'PY'
+    PLAN_FIELDS="$(python3 - "$ROOT_DIR" "$REVIEW_PLAN" "$TASK_UID" <<'PY'
 import json, sys
 from pathlib import Path
-root, raw = Path(sys.argv[1]).resolve(), Path(sys.argv[2]).expanduser()
+root, raw, task_uid = Path(sys.argv[1]).resolve(), Path(sys.argv[2]).expanduser(), sys.argv[3]
 candidate = raw if raw.is_absolute() else root / raw
 try:
     path = candidate.resolve(strict=True)
@@ -189,6 +189,10 @@ if plan.get('schema') == 'oasis7-review-plan/v2':
     helper=importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
     if plan.get('source_review_digest') != helper.source_review_digest(plan.get('source_review_identity')): raise SystemExit('v2 source review digest mismatch')
     if plan.get('integration_ci_digest') != helper.integration_ci_digest(plan.get('integration_ci_identity')): raise SystemExit('v2 integration CI digest mismatch')
+    try:
+        helper.validate_source_review_epoch(plan, root=root, task_uid=task_uid)
+    except (OSError, TypeError, ValueError) as exc:
+        raise SystemExit(f'v2 canonical bootstrap epoch validation failed: {exc}')
 preflight = plan.get('preflight') or {}
 ledger = preflight.get('ledger_path') if isinstance(preflight, dict) else ''
 print(','.join(str(role) for role in plan['roles']))

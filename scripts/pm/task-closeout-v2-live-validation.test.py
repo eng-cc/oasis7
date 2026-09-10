@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -33,14 +34,56 @@ class TaskCloseoutV2LiveValidationTest(unittest.TestCase):
         (self.root / ".pm/github-project-sync").mkdir(parents=True)
         shutil.copy2(PM / "task-closeout.sh", self.root / "scripts/pm/task-closeout.sh")
         shutil.copy2(PM / "ci_ready_receipt_identity.py", self.root / "scripts/pm/ci_ready_receipt_identity.py")
-        subprocess.run(["git", "-C", str(self.root), "init", "-q"], check=True)
+        shutil.copy2(PM / "bootstrap-task-snapshot.py", self.root / "scripts/pm/bootstrap-task-snapshot.py")
+        subprocess.run(["git", "-C", str(self.root), "init", "-q", "-b", "main"], check=True)
         subprocess.run(["git", "-C", str(self.root), "config", "user.email", "fixture@example.invalid"], check=True)
         subprocess.run(["git", "-C", str(self.root), "config", "user.name", "Fixture"], check=True)
         (self.root / "tracked").write_text("fixture\n", encoding="utf-8")
         subprocess.run(["git", "-C", str(self.root), "add", "tracked"], check=True)
         subprocess.run(["git", "-C", str(self.root), "commit", "-qm", "fixture"], check=True)
         self.head = subprocess.check_output(["git", "-C", str(self.root), "rev-parse", "HEAD"], text=True).strip()
-        (self.root / ".pm/github-project-sync/tasks.json").write_text("{}\n", encoding="utf-8")
+        mapping = {
+            "version": 1,
+            "project": {"owner": "eng-cc", "number": 1},
+            "tasks": {
+                UID: {
+                    "task_uid": UID,
+                    "title": "fixture request",
+                    "issue_number": 1,
+                    "issue_url": "https://example.invalid/1",
+                    "project_item_id": "PVTI_fixture",
+                    "status": "ready",
+                    "owner_role": "tpm",
+                    "repository": "eng-cc/oasis7",
+                    "canonical_worktree": str(self.root.resolve()),
+                    "task_branch": "main",
+                    "default_branch": "main",
+                    "acceptance": ["fixture closeout"],
+                    "bootstrap_epoch": 1,
+                }
+            },
+        }
+        (self.root / ".pm/github-project-sync/tasks.json").write_text(
+            json.dumps(mapping) + "\n", encoding="utf-8"
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(self.root / "scripts/pm/bootstrap-task-snapshot.py"),
+                "create",
+                "--repo-root",
+                str(self.root),
+                "--task-uid",
+                UID,
+                "--request-identity",
+                "fixture request",
+                "--producer",
+                "tpm",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
         self.events = self.root / "events.log"
         self._write_helpers()
         self.plan, self.receipt = self._write_v2_inputs()
@@ -223,6 +266,61 @@ print(json.dumps(receipt))
         result = self._run_closeout("changed-tree")
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual((self.root / "ci-calls.log").read_text(), "called\n")
+        self.assertEqual((self.root / "events.log").read_text(), "")
+
+    def test_current_generation_allows_v2_closeout(self):
+        result = self._run_closeout("same")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual((self.root / "events.log").read_text(), "claim\ntransition\n")
+
+    def test_old_plan_is_rejected_after_bootstrap_epoch_migration(self):
+        mapping_path = self.root / ".pm/github-project-sync/tasks.json"
+        mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+        mapping["tasks"][UID]["bootstrap_epoch"] = 2
+        mapping_path.write_text(json.dumps(mapping) + "\n", encoding="utf-8")
+        snapshot = self.root / ".pm/scratch" / UID / "bootstrap-task-snapshot.json"
+        snapshot.unlink()
+        subprocess.run(
+            [
+                sys.executable,
+                str(self.root / "scripts/pm/bootstrap-task-snapshot.py"),
+                "create",
+                "--repo-root",
+                str(self.root),
+                "--task-uid",
+                UID,
+                "--request-identity",
+                "fixture request",
+                "--producer",
+                "tpm",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        result = self._run_closeout("same")
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("bootstrap snapshot", result.stderr.lower())
+        self.assertEqual((self.root / "ci-calls.log").read_text(), "")
+        self.assertEqual((self.root / "events.log").read_text(), "")
+
+    def test_missing_current_generation_snapshot_is_rejected(self):
+        (self.root / ".pm/scratch" / UID / "bootstrap-task-snapshot.json").unlink()
+        result = self._run_closeout("same")
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("bootstrap snapshot", result.stderr.lower())
+        self.assertEqual((self.root / "ci-calls.log").read_text(), "")
+        self.assertEqual((self.root / "events.log").read_text(), "")
+
+    def test_stale_current_snapshot_digest_is_rejected(self):
+        snapshot = self.root / ".pm/scratch" / UID / "bootstrap-task-snapshot.json"
+        saved = json.loads(snapshot.read_text(encoding="utf-8"))
+        saved["task"]["bootstrap_epoch"] = 99
+        snapshot.write_text(json.dumps(saved) + "\n", encoding="utf-8")
+        result = self._run_closeout("same")
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("bootstrap snapshot", result.stderr.lower())
+        self.assertEqual((self.root / "ci-calls.log").read_text(), "")
         self.assertEqual((self.root / "events.log").read_text(), "")
 
 

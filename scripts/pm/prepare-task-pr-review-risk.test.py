@@ -70,6 +70,13 @@ class PrepareTaskPrReviewRiskTests(unittest.TestCase):
         self.assertTrue('"Comparison OID",' in source,
                         "prepare helper does not validate packet comparison OID")
 
+    def test_v2_promotion_rechecks_canonical_bootstrap_generation_before_reuse(self):
+        source = PREPARE.read_text(encoding="utf-8")
+        promotion = source[source.index('promote_draft v2 source review reuse'):]
+        guard = "helper.validate_source_review_epoch(plan, root=root, task_uid=task_uid)"
+        self.assertIn(guard, promotion)
+        self.assertLess(promotion.index(guard), promotion.index("helper.can_reuse_source_review"))
+
     def test_prepare_task_pr_quotes_the_terminal_finalizer_command(self):
         source = PREPARE.read_text(encoding="utf-8")
         self.assertIn('CLEANUP_CMD_1="$(render_cmd', source)

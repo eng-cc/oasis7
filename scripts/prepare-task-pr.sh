@@ -1643,7 +1643,7 @@ PY
   if [[ "$LOCAL_ROLE_REVIEW_PLAN_SCHEMA" == "oasis7-review-plan/v2" ]]; then
     [[ -n "$LOCAL_ROLE_REVIEW_PLAN" && "$LOCAL_ROLE_REVIEW_PLAN" != n/a* ]] \
       || die "promote_draft v2 review requires its immutable review plan path"
-    python3 - "$SOURCE_WORKTREE" "$LOCAL_ROLE_REVIEW_PLAN" "$PROMOTE_DRAFT_RECEIPT" <<'PY' \
+    python3 - "$SOURCE_WORKTREE" "$LOCAL_ROLE_REVIEW_PLAN" "$PROMOTE_DRAFT_RECEIPT" "$RT" <<'PY' \
       || die "promote_draft v2 source review reuse is not proven by the fresh integration receipt"
 import importlib.util
 import json
@@ -1654,9 +1654,11 @@ plan_path=Path(sys.argv[2])
 if not plan_path.is_absolute(): plan_path=root/plan_path
 plan=json.loads(plan_path.read_text(encoding="utf-8"))
 receipt=json.loads(Path(sys.argv[3]).read_text(encoding="utf-8"))
+task_uid=sys.argv[4]
 spec=importlib.util.spec_from_file_location("ci_ready_receipt_identity_v2", root/"scripts/pm/ci_ready_receipt_identity.py")
 if spec is None or spec.loader is None: raise SystemExit("v2 identity helper unavailable")
 helper=importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
+helper.validate_source_review_epoch(plan, root=root, task_uid=task_uid)
 if not helper.can_reuse_source_review(plan, receipt):
     raise SystemExit("changed tested tree or integration authority requires full review")
 PY

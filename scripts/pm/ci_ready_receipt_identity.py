@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import pathlib
 import re
+import subprocess
+import sys
 from typing import Any
 
 AUTHORITY_FIELDS = (
@@ -108,6 +111,67 @@ def _validate_source_identity(identity: Any) -> dict[str, Any]:
 def source_review_digest(identity: dict[str, Any]) -> str:
     canonical = json.dumps(_validate_source_identity(identity), sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(canonical).hexdigest()
+
+
+def validate_source_review_epoch(
+    plan: dict[str, Any], *, root: pathlib.Path | str, task_uid: str,
+) -> int:
+    """Bind a v2 source review to the live canonical bootstrap epoch.
+
+    The snapshot is only a locator for the request identity.  The repository's
+    bootstrap validator rechecks its digest and immutable task identity against
+    the current mapping, so a deleted, stale, or cross-generation snapshot
+    cannot be accepted merely because it contains a plausible epoch integer.
+    """
+    if plan.get("schema") != SOURCE_REVIEW_SCHEMA:
+        raise ValueError("canonical bootstrap epoch validation requires a v2 review plan")
+    source = _validate_source_identity(plan.get("source_review_identity"))
+    if source["task_uid"] != task_uid:
+        raise ValueError("v2 source review task UID does not match the closeout task")
+
+    root_path = pathlib.Path(root).resolve()
+    snapshot_path = root_path / ".pm" / "scratch" / task_uid / "bootstrap-task-snapshot.json"
+    try:
+        snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"canonical bootstrap snapshot cannot be read: {exc}") from exc
+    if not isinstance(snapshot, dict):
+        raise ValueError("canonical bootstrap snapshot must be an object")
+    request = snapshot.get("request")
+    request_identity = request.get("identity") if isinstance(request, dict) else None
+    if not isinstance(request_identity, str) or not request_identity:
+        raise ValueError("canonical bootstrap snapshot request identity is missing")
+
+    validator = pathlib.Path(__file__).with_name("bootstrap-task-snapshot.py")
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(validator),
+            "validate-epoch-identity",
+            "--repo-root",
+            str(root_path),
+            "--task-uid",
+            task_uid,
+            "--request-identity",
+            request_identity,
+            "--snapshot",
+            str(snapshot_path),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        detail = result.stderr.strip() or result.stdout.strip() or "validator rejected snapshot"
+        raise ValueError(f"canonical bootstrap snapshot validation failed: {detail}")
+
+    snapshot_task = snapshot.get("task")
+    snapshot_epoch = snapshot_task.get("bootstrap_epoch") if isinstance(snapshot_task, dict) else None
+    if type(snapshot_epoch) is not int or snapshot_epoch < 1:
+        raise ValueError("canonical bootstrap snapshot has an invalid bootstrap epoch")
+    if source["bootstrap_epoch"] != snapshot_epoch:
+        raise ValueError("v2 source review bootstrap epoch does not match canonical bootstrap snapshot")
+    return snapshot_epoch
 
 
 def integration_ci_identity(receipt: dict[str, Any]) -> dict[str, Any]:
