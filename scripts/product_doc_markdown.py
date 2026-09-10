@@ -31,6 +31,32 @@ class MarkdownLink:
     target: str
 
 
+@dataclass(frozen=True)
+class MarkdownBlock:
+    """A parsed Markdown block and its inclusive one-based source lines."""
+
+    kind: str
+    start_line: int
+    end_line: int
+
+
+def parse_markdown_blocks(text: str) -> tuple[MarkdownBlock, ...]:
+    """Return parsed block spans with source-map line positions.
+
+    The CommonMark parser owns recognition of fenced and indented code blocks,
+    including blocks nested in lists and blockquotes.  Consumers can use the
+    returned source spans to exclude code without maintaining a second fence
+    grammar.
+    """
+    blocks: list[MarkdownBlock] = []
+    for token in _MARKDOWN.parse(text):
+        if token.type not in {"fence", "code_block"} or not token.map:
+            continue
+        start, end = token.map
+        blocks.append(MarkdownBlock(token.type, start + 1, end))
+    return tuple(blocks)
+
+
 def parse_markdown_links(text: str) -> tuple[MarkdownLink, ...]:
     """Return clickable Markdown link nodes, excluding images and code nodes.
 

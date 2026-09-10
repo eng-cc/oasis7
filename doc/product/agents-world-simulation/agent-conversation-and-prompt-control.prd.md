@@ -324,17 +324,17 @@
 
 | 叶子要求 | 原有承诺/来源 | 验收场景 | 配对 design 锚点 |
 | --- | --- | --- | --- |
-| REQ-PROMPT-001 | 2.1；1 设计原则 | AC-PROMPT-001 | design §1、§2 |
-| REQ-PROMPT-002 | 2.1–2.2；AC-1/AC-2 | AC-PROMPT-002 | design §1、§2、§3.1 |
-| REQ-PROMPT-003 | 2.2–2.3；AC-2/AC-4 | AC-PROMPT-003 | design §3.2、§6 |
-| REQ-PROMPT-004 | 2.3；AC-3 | AC-PROMPT-004 | design §3.4、§5 |
-| REQ-PROMPT-005 | 2.3、3；AC-5 | AC-PROMPT-005 | design §1、§6 |
-| REQ-PROMPT-006 | 2.4；AC-6/AC-7 | AC-PROMPT-006 | design §4 |
-| REQ-PROMPT-007 | 2.5；AC-8 | AC-PROMPT-007 | design §3.3、§5 |
-| REQ-PROMPT-008 | 2.5；AC-8 | AC-PROMPT-008 | design §3.3、§5 |
-| REQ-PROMPT-009 | 2.5、4；AC-8 | AC-PROMPT-009 | design §3.3、§6 |
-| REQ-PROMPT-010 | 2.3、6；AC-3/AC-8 | AC-PROMPT-010 | design §3.4、§5 |
-| REQ-PROMPT-011 | 2.3、3；AC-3 | AC-PROMPT-011 | design §3.4、§5 |
+| REQ-PROMPT-001 | 2.1；1 设计原则 | AC-PROMPT-001 | [design §1](agent-conversation-and-prompt-control.design.md#1-设计原则)、[design §2](agent-conversation-and-prompt-control.design.md#2-信息架构) |
+| REQ-PROMPT-002 | 2.1–2.2；AC-1/AC-2 | AC-PROMPT-002 | [design §1](agent-conversation-and-prompt-control.design.md#1-设计原则)、[design §2](agent-conversation-and-prompt-control.design.md#2-信息架构)、[design §3.1](agent-conversation-and-prompt-control.design.md#31-预设填充) |
+| REQ-PROMPT-003 | 2.2–2.3；AC-2/AC-4 | AC-PROMPT-003 | [design §3.2](agent-conversation-and-prompt-control.design.md#32-加载与编辑-agent-prompt)、[design §6](agent-conversation-and-prompt-control.design.md#6-设计边界) |
+| REQ-PROMPT-004 | 2.3；AC-3 | AC-PROMPT-004 | [design §3.4](agent-conversation-and-prompt-control.design.md#34-提交与反馈)、[design §5](agent-conversation-and-prompt-control.design.md#5-状态模型) |
+| REQ-PROMPT-005 | 2.3、3；AC-5 | AC-PROMPT-005 | [design §1](agent-conversation-and-prompt-control.design.md#1-设计原则)、[design §6](agent-conversation-and-prompt-control.design.md#6-设计边界) |
+| REQ-PROMPT-006 | 2.4；AC-6/AC-7 | AC-PROMPT-006 | [design §4](agent-conversation-and-prompt-control.design.md#4-响应式与输入设计) |
+| REQ-PROMPT-007 | 2.5；AC-8 | AC-PROMPT-007 | [design §3.3](agent-conversation-and-prompt-control.design.md#33-外部变更与过期草稿)、[design §5](agent-conversation-and-prompt-control.design.md#5-状态模型) |
+| REQ-PROMPT-008 | 2.5；AC-8 | AC-PROMPT-008 | [design §3.3](agent-conversation-and-prompt-control.design.md#33-外部变更与过期草稿)、[design §5](agent-conversation-and-prompt-control.design.md#5-状态模型) |
+| REQ-PROMPT-009 | 2.5、4；AC-8 | AC-PROMPT-009 | [design §3.3](agent-conversation-and-prompt-control.design.md#33-外部变更与过期草稿)、[design §6](agent-conversation-and-prompt-control.design.md#6-设计边界) |
+| REQ-PROMPT-010 | 2.3、6；AC-3/AC-8 | AC-PROMPT-010 | [design §3.4](agent-conversation-and-prompt-control.design.md#34-提交与反馈)、[design §5](agent-conversation-and-prompt-control.design.md#5-状态模型) |
+| REQ-PROMPT-011 | 2.3、3；AC-3 | AC-PROMPT-011 | [design §3.4](agent-conversation-and-prompt-control.design.md#34-提交与反馈)、[design §5](agent-conversation-and-prompt-control.design.md#5-状态模型) |
 
 ## 10. Non-Goals
 

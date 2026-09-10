@@ -13,7 +13,7 @@ import sys
 from urllib.parse import unquote
 
 try:
-    from product_doc_markdown import parse_markdown_links
+    from product_doc_markdown import parse_markdown_blocks, parse_markdown_links
 except RuntimeError as exc:
     print(f"product-doc-content: error: {exc}", file=sys.stderr)
     raise SystemExit(2) from exc
@@ -22,7 +22,6 @@ except RuntimeError as exc:
 PRODUCT_ROOT = Path("doc/product")
 PRODUCT_SUFFIXES = (".prd.md", ".design.md")
 HTML_COMMENT_RE = re.compile(r"<!--[\s\S]*?-->")
-FENCE_RE = re.compile(r"^ {0,3}([`~])\1{2,}")
 ID_RE = re.compile(r"\b((?:REQ|AC)-[A-Z0-9][A-Z0-9_*-]*)", re.IGNORECASE)
 HEADING_PREFIX_RE = re.compile(r"^ {0,3}#{2,6}\s+")
 DECLARATION_PREFIX_RE = re.compile(r"^\s*(?:[-+*]\s+|\|\s*)")
@@ -134,7 +133,10 @@ def current_text(root: Path, head: str, path: str, worktree: bool) -> str | None
 
 
 def without_html_comments(text: str) -> str:
-    return HTML_COMMENT_RE.sub("", text)
+    def preserve_newlines(match: re.Match[str]) -> str:
+        return "".join(character for character in match.group(0) if character in "\r\n")
+
+    return HTML_COMMENT_RE.sub(preserve_newlines, text)
 
 
 def normalized_for_change(text: str | None) -> str:
@@ -147,17 +149,14 @@ def normalized_for_change(text: str | None) -> str:
 def visible_lines(text: str) -> list[tuple[int, str]]:
     """Return line-numbered prose, excluding comments and code blocks."""
     text = without_html_comments(text)
+    excluded_lines = {
+        number
+        for block in parse_markdown_blocks(text)
+        for number in range(block.start_line, block.end_line + 1)
+    }
     visible: list[tuple[int, str]] = []
-    fence: tuple[str, int] | None = None
     for number, line in enumerate(text.splitlines(), start=1):
-        if fence:
-            character, length = fence
-            if re.fullmatch(rf" {{0,3}}{re.escape(character)}{{{length},}}[ \t]*", line):
-                fence = None
-            continue
-        opener = FENCE_RE.match(line)
-        if opener:
-            fence = (opener.group(1), len(opener.group(0).lstrip()))
+        if number in excluded_lines:
             continue
         if line.startswith("\t") or line.startswith("    "):
             continue

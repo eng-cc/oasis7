@@ -101,7 +101,7 @@
 - 要求：产品读面必须（MUST）只呈现专业合同真实支持的 full、reduced、补料/调运、hold surplus、stop/defer 或 parent-linked supplemental 路径，并为每个可选路径说明作用范围、追加成本或仍占用价值、预计结果/复查点、主要风险和 opportunity cost；preview 与 recommendation 不得创建世界效果。
 - 理由：不同批量和恢复路径应当是有代价的玩家决策，而不是后台自动选择。
 - 上位承诺：SC-31。
-- 专业权威：[PRD-GAME-012](../../game/prd.md)、[PRD-GAME-014](../../game/prd.md)、[PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md)。
+- 专业权威：[`gameplay` 需求目标计划规则](../../game/gameplay/gameplay-top-level-design.prd.md#25-前期工业引导成就闭环)；[PRD-GAME-012](../../game/prd.md)、[PRD-GAME-014](../../game/prd.md)（玩家决策与间接控制支持）；[PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md)。
 - 验收：AC-SC31-002。
 
 <a id="req-sc31-003"></a>
@@ -258,7 +258,7 @@
 | 叶子要求 | 上位承诺 | 专业权威 / PRD-ID | 验收场景 | 验证入口 |
 | --- | --- | --- | --- | --- |
 | REQ-SC31-001 | SC-31 | [`doc/game/prd.md`](../../game/prd.md) / [PRD-GAME-012](../../game/prd.md)；[`doc/world-runtime/prd.md`](../../world-runtime/prd.md) / [PRD-WORLD_RUNTIME-019](../../world-runtime/prd.md)；[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md) / [PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md) | AC-SC31-001 | `test_tier_required`：同一快照、数量分层、unknown/blocked、preview 无效果 |
-| REQ-SC31-002 | SC-31 | [`doc/game/prd.md`](../../game/prd.md) / [PRD-GAME-012](../../game/prd.md)、[PRD-GAME-014](../../game/prd.md)；[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md) / [PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md) | AC-SC31-002 | `test_tier_required`：候选支持边界与确认前无效果 |
+| REQ-SC31-002 | SC-31 | [`gameplay` 需求目标计划规则](../../game/gameplay/gameplay-top-level-design.prd.md#25-前期工业引导成就闭环) / [PRD-GAME-012](../../game/prd.md)、[PRD-GAME-014](../../game/prd.md)（玩家决策与间接控制支持）；[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md) / [PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md) | AC-SC31-002 | `test_tier_required`：候选支持边界与确认前无效果 |
 | REQ-SC31-003 | SC-31 | [`doc/game/prd.md`](../../game/prd.md) / [PRD-GAME-014](../../game/prd.md)；[`doc/world-runtime/prd.md`](../../world-runtime/prd.md) / [PRD-WORLD_RUNTIME-019](../../world-runtime/prd.md)、[PRD-WORLD_RUNTIME-043](../../world-runtime/prd.md)；[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md) / [PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md) | AC-SC31-003 | `test_tier_required`：production/delivery/terminal settlement 分层与单次需求减少 |
 | REQ-SC31-004 | SC-31 | [`doc/game/prd.md`](../../game/prd.md) / [PRD-GAME-012](../../game/prd.md)；[`world-runtime` 专业 PRD](../../world-runtime/prd.md) 与 [`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md) | AC-SC31-004、AC-SC31-005 | `test_tier_required`：满足后停止、surplus 无自动处置 |
 | REQ-SC31-005 | SC-31 | [`doc/game/prd.md`](../../game/prd.md) / [PRD-GAME-014](../../game/prd.md)；[`doc/world-runtime/prd.md`](../../world-runtime/prd.md) / [PRD-WORLD_RUNTIME-043](../../world-runtime/prd.md)；[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md) / [PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md) | AC-SC31-006 | `test_tier_required`；`test_tier_full` 覆盖 revision 链、部分匹配和持久化 |

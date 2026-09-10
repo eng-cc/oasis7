@@ -192,6 +192,33 @@ def even_escaped_paired_design_link(root: Path) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def multiline_comment_before_authority(root: Path) -> None:
+    marker = "- 专业域权威：[`gameplay authority`](../../game/prd.md#authority)"
+    comment = "<!-- removed from the rendered document\nthis comment spans multiple source lines\n-->\n"
+    updated = TOPIC_TEXT.replace(marker, comment + marker, 1)
+    (root / TOPIC).write_text(updated + "\n补充当前入口的证据边界。\n", encoding="utf-8")
+
+
+def multiline_comment_before_cross_file_refs(root: Path) -> None:
+    marker = "| [`REQ-SAMPLE-001`](sample.prd.md#req-sample-001) | [`AC-SAMPLE-001`](sample.prd.md#ac-sample-001) |"
+    comment = "<!-- trace note\nkept out of the rendered document\n-->\n"
+    updated = DESIGN_TEXT.replace(marker, comment + marker, 1)
+    (root / DESIGN).write_text(updated + "\n补充当前 trace 的验证边界。\n", encoding="utf-8")
+
+
+def nested_fenced_examples(root: Path) -> None:
+    examples = """
+- ```markdown
+  REQ-EXAMPLE-001 AC-EXAMPLE-001 [missing](missing.md)
+  ```
+
+> ```text
+> REQ-EXAMPLE-002 AC-EXAMPLE-002 [also missing](also-missing.md)
+> ```
+"""
+    (root / TOPIC).write_text(TOPIC_TEXT + examples, encoding="utf-8")
+
+
 def main() -> None:
     scenario(None, lambda _root: None)
     scenario("missing-metadata", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("- Owner role：`producer_system_designer`\n", ""), encoding="utf-8"))
@@ -209,6 +236,9 @@ def main() -> None:
         encoding="utf-8",
     ))
     scenario("invalid-fragment", fenced_authority_target)
+    scenario(None, multiline_comment_before_authority)
+    scenario(None, multiline_comment_before_cross_file_refs)
+    scenario(None, nested_fenced_examples)
     scenario("duplicate-anchor", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("<a id=\"ac-sample-001\"></a>", "<a id=\"req-sample-001\"></a>\n<a id=\"ac-sample-001\"></a>"), encoding="utf-8"))
     scenario("unresolved-cross-file-id", lambda root: (root / DESIGN).write_text(DESIGN_TEXT.replace("sample.prd.md#req-sample-001", "sample.prd.md#req-missing"), encoding="utf-8"))
     scenario("req-missing-acceptance", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("- 验收：AC-SAMPLE-001\n", ""), encoding="utf-8"))
