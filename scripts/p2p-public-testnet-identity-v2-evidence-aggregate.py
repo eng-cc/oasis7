@@ -217,6 +217,11 @@ def _canonical_path(path: Path) -> Path:
 
 def _check_output_collisions(output: Path, retained_paths: Sequence[Path]) -> None:
     """Reject path and inode aliases before atomically publishing aggregate bytes."""
+    # Static authority locations are protected even when not provisioned.
+    # Reuse the planner's code-owned inventory, not caller map assertions.
+    PLANNER._reject_plan_output_aliases(
+        output, PLANNER._plan_output_inputs(Path(__file__), PLANNER_PATH, {})
+    )
     canonical_output = _canonical_path(output)
     identities: dict[tuple[int, int], Path] = {}
     canonical_retained: dict[Path, Path] = {}
@@ -328,6 +333,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--out must not replace an input map")
     retained_paths: list[Path] = []
     aggregate = _aggregate(input_paths, retained_paths=retained_paths)
+    _check_output_collisions(output, retained_paths)
+    # Publication must not replace the pinned anchors or their typed key,
+    # provider, and verifier references. Missing or invalid authority blocks.
+    retained_paths.extend(PLANNER._plan_authority_output_inputs())
     _write_atomic(aggregate, output, retained_paths=retained_paths)
     return 0
 

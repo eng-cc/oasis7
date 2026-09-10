@@ -86,14 +86,94 @@ class EvidenceAggregateTests(unittest.TestCase):
             check=False,
         )
 
+    def _aggregate_authority_fixture(self, root):
+        aggregate = load_module(AGGREGATOR, "aggregate_authority_regression")
+        names = ("trust.json", "registry.json", "verifier", "trust-key", "provider-key", "provider-adapter")
+        paths = {name: root / name for name in names}
+        for path in paths.values():
+            path.write_bytes(b"synthetic authority anchor")
+            path.chmod(0o600)
+        write_json(paths["trust.json"], {"allowlist": [{"public_key_ref": str(paths["trust-key"])}]})
+        write_json(paths["registry.json"], {
+            "trust_config_path": str(paths["trust.json"]),
+            "providers": [{"public_key_ref": str(paths["provider-key"]), "adapter_path": str(paths["provider-adapter"])}],
+            "verifier": {"executable_path": str(paths["verifier"])},
+        })
+        tool = root / "pinned-tool"
+        tool.write_bytes(b"#!/bin/sh\nexit 0\n")
+        tool.chmod(0o700)
+        for stem, path in (("VERIFY_TOOL", tool), ("TRUST_CONFIG", paths["trust.json"]),
+                           ("PROVIDER_REGISTRY", paths["registry.json"])):
+            setattr(aggregate.PLANNER, f"IDENTITY_V2_{stem}_PATH", path)
+            setattr(aggregate.PLANNER, f"IDENTITY_V2_{stem}_SHA256", hashlib.sha256(path.read_bytes()).hexdigest())
+        return aggregate, paths
+
+    def _aggregate_main(self, aggregate, output):
+        return aggregate.main([*(arg for path in self.input_paths for arg in ("--input-map", str(path))),
+                               "--out", str(output)])
+
+    def test_authority_output_aliases_preserve_anchors(self):
+        for index, name in enumerate(("trust.json", "registry.json", "verifier", "trust-key", "provider-key", "provider-adapter")):
+            for alias in ("direct", "hardlink", "symlink"):
+                with self.subTest(anchor=name, alias=alias):
+                    root = self.root / f"authority-{index}-{alias}"
+                    root.mkdir(mode=0o700)
+                    aggregate, paths = self._aggregate_authority_fixture(root)
+                    output = paths[name] if alias == "direct" else root / "output-alias"
+                    if alias == "hardlink":
+                        os.link(paths[name], output)
+                    elif alias == "symlink":
+                        output.symlink_to(paths[name])
+                    before = {path: (path.read_bytes(), stat.S_IMODE(path.stat().st_mode)) for path in paths.values()}
+                    entries = set(root.iterdir())
+                    with self.assertRaisesRegex(SystemExit, r"alias|output|authority"):
+                        self._aggregate_main(aggregate, output)
+                    self.assertEqual(before, {path: (path.read_bytes(), stat.S_IMODE(path.stat().st_mode)) for path in paths.values()})
+                    self.assertEqual(set(root.iterdir()), entries, "rejection must leave no publication residue")
+
+    def test_authority_closure_failure_blocks_publication(self):
+        for failure in ("valid", "missing", "malformed", "pin-mismatch", "relative-reference"):
+            with self.subTest(closure=failure):
+                root = self.root / f"closure-{failure}"
+                root.mkdir(mode=0o700)
+                aggregate, paths = self._aggregate_authority_fixture(root)
+                registry = paths["registry.json"]
+                if failure == "missing":
+                    registry.unlink()
+                elif failure in ("malformed", "pin-mismatch"):
+                    registry.write_bytes(b"not JSON")
+                    if failure == "malformed":
+                        aggregate.PLANNER.IDENTITY_V2_PROVIDER_REGISTRY_SHA256 = hashlib.sha256(registry.read_bytes()).hexdigest()
+                elif failure == "relative-reference":
+                    value = json.loads(registry.read_text())
+                    value["verifier"]["executable_path"] = "relative-verifier"
+                    write_json(registry, value)
+                    aggregate.PLANNER.IDENTITY_V2_PROVIDER_REGISTRY_SHA256 = hashlib.sha256(registry.read_bytes()).hexdigest()
+                output = root / "aggregate.json"
+                output.write_bytes(b"existing output")
+                output.chmod(0o600)
+                before = {path: (path.read_bytes(), stat.S_IMODE(path.stat().st_mode)) for path in root.iterdir()}
+                if failure == "valid":
+                    self.assertEqual(self._aggregate_main(aggregate, output), 0)
+                    self.assertEqual(json.loads(output.read_text())["schema_version"], aggregate.IDENTITY_V2_EVIDENCE_SCHEMA)
+                    self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o600)
+                else:
+                    with self.assertRaises(SystemExit):
+                        self._aggregate_main(aggregate, output)
+                    self.assertEqual(before, {path: (path.read_bytes(), stat.S_IMODE(path.stat().st_mode)) for path in root.iterdir()})
+
     def test_aggregate_five_maps_is_canonical_repeatable_and_preserves_inputs(self) -> None:
+        authority_root = self.root / "happy-path-authority"
+        authority_root.mkdir(mode=0o700)
+        module, _ = self._aggregate_authority_fixture(authority_root)
         before = {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in self.input_paths}
         output_a = self.root / "out-a.json"
         output_b = self.root / "out-b.json"
-        first = self.run_aggregate(list(reversed(self.input_paths)), output_a)
-        self.assertEqual(first.returncode, 0, first.stderr)
-        second = self.run_aggregate(self.input_paths, output_b)
-        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertEqual(module.main([
+            *(arg for path in reversed(self.input_paths) for arg in ("--input-map", str(path))),
+            "--out", str(output_a),
+        ]), 0)
+        self.assertEqual(self._aggregate_main(module, output_b), 0)
         self.assertEqual(output_a.read_bytes(), output_b.read_bytes())
         aggregate = json.loads(output_a.read_text(encoding="utf-8"))
         self.assertEqual([entry["node_name"] for entry in aggregate["entries"]], list(self.planner.NODE_ORDER))
