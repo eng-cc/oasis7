@@ -74,5 +74,5 @@ Return: role and slice outcome; verification verdict and scope; evidence command
 - 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只把结论停留在 GitHub task issue evidence 局部记录
 - 是否记录失败签名、影响范围、回滚/绕行建议
 - 高价值失败签名是否已通过 `./scripts/pm/promote-signal.sh` / `promote-memory.sh` 回流到 `.pm/`
-- 是否回写 `doc/playability_test_result/*` 或 `doc/testing/*`
-- 是否已回写 GitHub task issue evidence comments 与对应 `doc/testing/*` / `doc/playability_test_result/*` 正式文档
+- 当前 task 的 `write_scope`、slice permission 与 QA authority 是否明确允许回写 `doc/playability_test_result/*` 或 `doc/testing/*`；否则只返回 evidence packet 给 TPM
+- 是否已按 task evidence sink 回写 GitHub task issue evidence comments；正式 testing/playability 文档仅在同一验证 loop 且显式授权时写入

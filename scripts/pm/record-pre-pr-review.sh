@@ -127,6 +127,9 @@ COMPARISON_REF="refs/remotes/origin/main"
 COMPARISON_OID=""
 REVIEW_PLAN=""
 REVIEW_EVIDENCE_DIGEST=""
+REVIEW_PLAN_SCHEMA=""
+SOURCE_REVIEW_DIGEST=""
+INTEGRATION_CI_DIGEST=""
 SOURCE_HEAD=""
 SOURCE_BRANCH=""
 PRINT_ONLY="0"
@@ -197,10 +200,26 @@ try:
     plan = json.loads(Path(plan_path).read_text(encoding="utf-8"))
 except (OSError, json.JSONDecodeError) as exc:
     raise SystemExit(f"error: cannot read review plan {plan_path}: {exc}")
-required = ("task_uid", "frozen_head", "comparison_ref", "comparison_oid", "roles", "expected_slices", "epoch", "batch_path", "relevant_evidence_digest")
+required = ("task_uid", "frozen_head", "comparison_ref", "comparison_oid", "roles", "expected_slices", "epoch", "batch_path")
 missing = [key for key in required if not plan.get(key)]
-if plan.get("schema") != "oasis7-review-plan/v1" or missing:
-    raise SystemExit("error: --review-plan is not a complete oasis7-review-plan/v1: " + ",".join(missing))
+schema = plan.get("schema")
+if schema not in ("oasis7-review-plan/v1", "oasis7-review-plan/v2") or missing:
+    raise SystemExit("error: --review-plan is not a complete supported review plan: " + ",".join(missing))
+if schema == "oasis7-review-plan/v1":
+    evidence_digest = plan.get("relevant_evidence_digest")
+else:
+    evidence_digest = plan.get("source_review_digest")
+    if not evidence_digest or not isinstance(plan.get("source_review_identity"), dict) or not isinstance(plan.get("integration_ci_identity"), dict):
+        raise SystemExit("error: v2 review plan is missing source/integration identity")
+    import importlib.util
+    helper_spec = importlib.util.spec_from_file_location("ci_ready_receipt_identity_v2", Path(root) / "scripts/pm/ci_ready_receipt_identity.py")
+    if helper_spec is None or helper_spec.loader is None:
+        raise SystemExit("error: cannot load v2 review identity helper")
+    helper = importlib.util.module_from_spec(helper_spec); helper_spec.loader.exec_module(helper)
+    if evidence_digest != helper.source_review_digest(plan["source_review_identity"]):
+        raise SystemExit("error: v2 source review digest mismatch")
+    if plan.get("integration_ci_digest") != helper.integration_ci_digest(plan["integration_ci_identity"]):
+        raise SystemExit("error: v2 integration CI digest mismatch")
 if plan["task_uid"] != task_uid:
     raise SystemExit(f"error: --review-plan task UID mismatch: expected {task_uid}, actual {plan['task_uid']}")
 roles = plan["roles"]
@@ -232,8 +251,11 @@ print(plan["frozen_head"])
 print(plan["comparison_ref"])
 print(plan["comparison_oid"])
 print(plan["epoch"])
-print(plan["relevant_evidence_digest"])
+print(evidence_digest)
 print(preflight["ledger_path"])
+print(schema)
+print(plan.get("source_review_digest", ""))
+print(plan.get("integration_ci_digest", ""))
 PY
 )" || exit 1
   ROLES="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '1p')"
@@ -243,6 +265,9 @@ PY
   REVIEW_PLAN_EPOCH="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '5p')"
   REVIEW_EVIDENCE_DIGEST="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '6p')"
   REVIEW_PLAN_LEDGER="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '7p')"
+  REVIEW_PLAN_SCHEMA="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '8p')"
+  SOURCE_REVIEW_DIGEST="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '9p')"
+  INTEGRATION_CI_DIGEST="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '10p')"
 fi
 if [[ -z "$REVIEW_PLAN" ]]; then
   [[ -n "$ROLES" ]] || die "--roles is required when --review-plan is not supplied"
@@ -517,6 +542,9 @@ PACKET="$(cat <<EOF
 - Reviewed Changed Paths: $REVIEWED_PATHS
 - Review Package: $REVIEW_PACKAGE
 - Review Plan: ${REVIEW_PLAN_DISPLAY:-n/a; no immutable plan supplied}
+- Review Plan Schema: ${REVIEW_PLAN_SCHEMA:-legacy packet without immutable plan}
+- Source Review Digest: ${SOURCE_REVIEW_DIGEST:-n/a; v1 combined review identity}
+- Integration CI Digest: ${INTEGRATION_CI_DIGEST:-n/a; latest receipt checked at promotion}
 - Review Evidence Digest: $REVIEW_EVIDENCE_DIGEST
 - Role Selection Basis: $ROLE_BASIS
 - Review Roles: $ROLES

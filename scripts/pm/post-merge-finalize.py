@@ -3,6 +3,7 @@
 from __future__ import annotations
 import argparse, hashlib, importlib.util, json, os, pathlib, re, subprocess, sys, tempfile, urllib.parse
 from portable_file_lock import ensure_lock_byte, fcntl
+from terminal_proof import receipt_chain_digest
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 CANONICAL_ROOT_HELPER = SCRIPT_DIR/"canonical-receipt-root.py"
@@ -34,7 +35,7 @@ def _ledger_transition(path: pathlib.Path, task_uid: str, effect: str, state: st
 def _ledger_entry(path: pathlib.Path, effect: str) -> dict:
     return ((durable_store.recover_atomic_journal(path).get("operations") or {}).get(effect) or {})
 
-def _reconcile_comment(record: dict, operation_id: str) -> str:
+def _reconcile_comment(record: dict, operation_id: str, expected_body: str) -> str:
     """Read back a unique canonical evidence marker after an uncertain action."""
     repo=str(record["repository"]); issue=str(record["issue_number"])
     raw=subprocess.check_output(["gh","api",f"repos/{repo}/issues/{issue}/comments","--paginate","--slurp"],text=True)
@@ -44,13 +45,18 @@ def _reconcile_comment(record: dict, operation_id: str) -> str:
         comments.extend(page if isinstance(page,list) else [page])
     marker=f"Operation-ID: {operation_id}"; task_marker=f"Task UID: {record.get('task_uid')}"
     issue_marker=f"/issues/{issue}#issuecomment-"
-    matches=[]
+    matches=[]; legacy=[]
     for comment in comments:
         body=str(comment.get("body") or "")
         url=str(comment.get("html_url") or comment.get("url") or "")
         if (marker in body and task_marker in body and "<!-- oasis7-pm-evidence -->" in body
                 and issue_marker in url):
-            matches.append(comment)
+            if body == expected_body:
+                matches.append(comment)
+            else:
+                legacy.append(comment)
+    if legacy:
+        fail("existing terminal evidence comment lacks receipt-chain fields; replace it before resuming finalizer")
     if len(matches)!=1: return ""
     return str(matches[0].get("html_url") or matches[0].get("url") or "")
 
@@ -205,7 +211,15 @@ def _write_terminal_locked(root: pathlib.Path, task_uid: str, terminal_receipt_p
     record.setdefault("phase_receipt_sha256",{})[phase]=digest
     _ensure_terminal_project(mapping,record,ledger_path,task_uid)
     comment_operation_id=hashlib.sha256(f"{task_uid}:post_merge_done:evidence_comment".encode()).hexdigest()
+    merge_receipt_digest = terminal.get("merge_receipt_sha256") or record.get("merge_receipt_sha256") or ""
+    main_sync_receipt_digest = terminal.get("main_sync_receipt_sha256") or (record.get("phase_receipt_sha256") or {}).get("main_sync") or ""
     body=("<!-- oasis7-pm-evidence -->\n"+f"Operation-ID: {comment_operation_id}\nTask UID: {task_uid}\nEvidence Phase: {phase}\n"
+          "Receipt Chain Version: 1\nReceipt Type: oasis7_terminal_cleanup\nReceipt Issuer: post-merge-cleanup\n"
+          f"PR Number: {record.get('pr_number')}\nPR URL: {record.get('pr_url')}\n"
+          f"Merge Receipt SHA256: {merge_receipt_digest}\n"
+          f"Main Sync Receipt SHA256: {main_sync_receipt_digest}\n"
+          f"Terminal Receipt SHA256: {terminal_digest}\n"
+          f"Receipt Chain Digest: {receipt_chain_digest(task_uid, record.get('repository'), record.get('issue_number'), record.get('pr_number'), record.get('pr_url'), merge_receipt_digest, main_sync_receipt_digest, terminal_digest)}\n"
           "Role: tpm\nCompleted: receipt-bound terminal finalization.\n")
     with tempfile.NamedTemporaryFile("w",encoding="utf-8",delete=False,dir="/tmp") as evidence:
         evidence.write(body); evidence_path=evidence.name
@@ -213,7 +227,7 @@ def _write_terminal_locked(root: pathlib.Path, task_uid: str, terminal_receipt_p
         entry=_ledger_entry(ledger_path,"evidence_comment")
         comment=str(entry.get("result") or "") if entry.get("committed") else ""
         if not comment and entry.get("action"):
-            comment=_reconcile_comment(record,comment_operation_id)
+            comment=_reconcile_comment(record,comment_operation_id,body)
         if not comment:
             _ledger_transition(ledger_path,task_uid,"evidence_comment","intent")
             _ledger_transition(ledger_path,task_uid,"evidence_comment","action")
@@ -221,7 +235,7 @@ def _write_terminal_locked(root: pathlib.Path, task_uid: str, terminal_receipt_p
             # authority.  Reconcile the live paginated body unconditionally.
             subprocess.check_output(["gh","issue","comment",str(record["issue_number"]),"-R",record["repository"],
                                      "--body-file",evidence_path],text=True)
-            comment=_reconcile_comment(record,comment_operation_id)
+            comment=_reconcile_comment(record,comment_operation_id,body)
             if not comment: fail("evidence comment live readback has no unique matching issue/body/Operation-ID")
         _ledger_transition(ledger_path,task_uid,"evidence_comment","readback",comment)
         record.setdefault("evidence_comments",[]).append(comment)
