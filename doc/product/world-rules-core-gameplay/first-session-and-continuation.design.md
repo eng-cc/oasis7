@@ -12,7 +12,7 @@
 
 ## 1. 设计命题
 
-目标体验是让第一次进入世界的玩家从一个可解释的工业目标走到真实交付，并在阻塞、重连或完成后仍保有下一次选择。玩家需要知道目标、当前权威状态、已保留或消耗的价值、主要 blocker、完成边界和下一步。
+目标体验是让第一次进入世界的玩家从一个可解释的工业目标走到当前 `starter_completion_profile` 声明的真实完成边界，并在阻塞、重连或完成后仍保有下一次选择。`production_only` 在匹配 production receipt 后完成首产物并进入 `produced/undelivered`；`terminal-admission` 才继续到匹配 delivery/terminal settlement。玩家需要知道目标、当前权威状态、已保留或消耗的价值、主要 blocker、完成边界和下一步。
 
 核心决策是：在 feasibility card 与当前事实支持的范围内，选择等待、补足、改源、改配方、改道、延期或继续推进哪一条路径。选择必须有可读的机会成本；预览和推荐只提供比较信息，不产生世界效果。
 
@@ -20,15 +20,15 @@
 
 ## 2. 代表性片段与阶段信息
 
-首局的代表性片段是：玩家查看工厂、比较配方、准备原料、等待或改道物流、确认多输入齐套、排程、观察生产 receipt，再等待独立的交付 receipt。任何缺少关键 authority 的环节都保持 unknown/blocked，并返回补证、修复、等待或重新定目标的路径。
+首局的代表性片段是：玩家查看工厂、比较配方、准备原料、等待或改道物流、确认多输入齐套、排程、观察 production receipt，再按 profile 进入 `produced/undelivered` 的下一用途，或等待独立的 delivery receipt。任何缺少关键 authority 的环节都保持 unknown/blocked，并返回补证、修复、等待或重新定目标的路径。
 
 | 阶段 | 玩家知道什么 | 可以选择什么 | 成本与承诺 | 反馈与下一步 |
 | --- | --- | --- | --- | --- |
 | Gate 与目标 | candidate 是否由同一份 fresh authority snapshot 支持，以及完成边界、主要风险和复查点 | 接受候选、查看阻塞、改候选或回到其他目标 | Gate 不扣资源、不锁容量、不排程；unknown 不被填成可达 | `candidate_available` 或 `no_safe_starter_chain`；后者给出最早 blocker、保留价值与复查点 |
 | 工厂与配方 | 工厂能力、配方适用性、原料来源和运输风险 | 比较可用配方、处理前置或延期 | 比较不占库存；提交后仍须按当前 authority 重验 | 接受、拒绝或重新报价；下一步是准备真实输入 |
-| 原料与物流 | source/refinement 是否形成带 lineage 的 `ready_for_logistics` 批次；在途和到达是否已结算 | 获取、精炼、补充、减量、等待容量或改道 | 消耗、占用、损耗和未满足量保持可见；source 结果不等于到达 | `ready_for_logistics`、in-transit、arrival、applicable 各自独立；下一步是齐套或恢复 |
+| 原料与物流 | source/refinement receipt 是否已结算，以及是否已完成 source/owner ledger handoff 并形成带 lineage 的 `ready_for_logistics` 批次；在途和到达是否已结算 | 获取、精炼、补充、减量、等待容量或改道 | 消耗、占用、损耗和未满足量保持可见；`source-settled` 不等于 `ready_for_logistics` 或到达 | `ready_for_logistics`、in-transit、arrival、applicable 各自独立；下一步是齐套或恢复 |
 | 齐套与排程 | 所有独立输入是否已 settlement、到达且适用；排程是否只是接受 | 等待缺失输入、补齐、重排、换候选或结束意图 | 先到输入可保持有界等待；排程接受不等于生产开始 | 主 blocker、已保留价值和下一复查点可读 |
-| 生产与交付 | `accepted/scheduled`、执行、`produced/undelivered`、delivery/terminal settled 的差别 | 等待、处理输出去向、交付或延期 | production receipt 只证明生产结果；交付用途等待匹配 settlement | 独立 receipt 可回指同一因果链；交付完成才打开目的地后果 |
+| 生产与交付 | `accepted/scheduled`、执行、`produced/undelivered`、delivery/terminal settled 的差别，以及当前 profile 的完成边界 | 等待、处理输出去向、交付或延期 | `production_only` 在 matching production receipt 后完成首产物；`terminal-admission` 才等待匹配 delivery/terminal settlement；production receipt 不能自动产生交付用途或终端奖励 | 独立 receipt 可回指同一因果链；只有适用 profile 的交付完成才打开目的地后果 |
 | 阶段承接 | 已形成的能力、仍在的约束和当前主目标 | 选择扩张、稳定/恢复、专业化/服务或主动换向 | 新方向承担新的资源、容量、风险和机会成本 | 下一 session 有明确第一动作；旧目标的义务和结果仍可追踪 |
 
 状态优先级先保护安全、权利和授权，再保护不可逆损失、资源扣减和锁定，再处理可恢复前置与可选信息。状态不一致时只能给出复核、恢复、安全停止或重新定目标；状态变化后旧动作必须重新判断。
@@ -44,7 +44,7 @@
 
 ## 4. 循环与成长
 
-首局循环采用“目标 → 接受/拒绝 → 推进/阻塞 → 权威后果 → 下一决策或恢复”。原材料准备是来源评估、获取/精炼结算、`ready_for_logistics`、运输、到达重验和齐套的子循环；它不能被一个“获取原料”动作掩盖。
+首局循环采用“目标 → 接受/拒绝 → 推进/阻塞 → 权威后果 → 下一决策或恢复”。原材料准备是来源评估、获取/精炼结算、source/owner ledger handoff、`ready_for_logistics`、运输、到达重验和齐套的子循环；`source-settled` 不等于 `ready_for_logistics`，它不能被一个“获取原料”动作掩盖，也不能把 source receipt 直接当作下游输入。
 
 首次持续能力必须表现为可继续运转、可恢复并能打开新选择的能力。扩张增加覆盖或产出并引入吞吐压力；稳定/恢复保住能力并放弃一部分即时扩张；专业化/服务把能力转成对本地需求或协作的用途。每个方向都要说明即时收益、后续两个 beat、风险或锁定和下次会话第一动作；适用时还要说明回退窗口、代价、保留和失去的价值。
 
@@ -68,11 +68,11 @@ Viewer 与 pure API 共享权威事实和玩家语义；每个入口分别证明
 
 ## 9. 取舍、验证与证据边界
 
-选择“先通过可行性 Gate、再逐节点推进、最后独立结算交付”，牺牲了一步完成的表面顺滑，但保留资源守恒、失败恢复和玩家归因；选择保留生产与交付的双 receipt，牺牲了自动化简化，但避免把中间结果伪装成目的地成果。
+选择“先通过可行性 Gate、再逐节点推进、最后按 profile 独立结算 production 或 delivery”，保留资源守恒、失败恢复和玩家归因；`production_only` 的交付后置与 `terminal-admission` 的交付前置都必须在结果和下一动力中可读，且生产与交付仍由独立 receipt 表达。
 
 设计覆盖的产品要求和场景见：[`工业因果链要求`](first-session-and-continuation.prd.md#req-first-industrial-002)、[`原料与物流边界`](first-session-and-continuation.prd.md#req-first-industrial-003)、[`生产与交付边界`](first-session-and-continuation.prd.md#req-first-industrial-004)、[`漂移与重复`](first-session-and-continuation.prd.md#req-first-industrial-005)、[`阻塞恢复`](first-session-and-continuation.prd.md#req-first-industrial-006)、[`持续承接`](first-session-and-continuation.prd.md#req-first-industrial-008)、[`正向链路验收`](first-session-and-continuation.prd.md#ac-first-industrial-001)、[`安全恢复验收`](first-session-and-continuation.prd.md#ac-first-industrial-002) 和 [`生产未交付验收`](first-session-and-continuation.prd.md#ac-first-industrial-005)。跨入口与回流的证据边界见 [`回流与入口验收`](first-session-and-continuation.prd.md#ac-first-industrial-004)。
 
-`test_tier_required` 应覆盖正向链、各主要 blocker、arrival order、多输入齐套、生产未交付和重复/重连无副作用；`test_tier_full` 再覆盖跨窗口、争用、损耗、终端故障、持久化恢复及多入口 parity。产品文档通过、自动化检查或合成/Agent 样例只能证明结构和合同可判定性，不能证明当前 runtime、Viewer、Agent、玩家留存、可玩性或发行就绪。
+`test_tier_required` 应覆盖 `production_only` 在 production settlement 的正向完成、`terminal-admission` 在 delivery/terminal settlement 的正向完成、`terminal-admission` 下 production 成功但 delivery 未完成的 `produced/undelivered` 情形、handoff 前 `source-settled` 不可直接进入物流、各主要 blocker、arrival order、多输入齐套和重复/重连无副作用；`test_tier_full` 再覆盖跨窗口、争用、损耗、终端故障、持久化恢复及多入口 parity。产品文档通过、自动化检查或合成/Agent 样例只能证明结构和合同可判定性，不能证明当前 runtime、Viewer、Agent、玩家留存、可玩性或发行就绪。
 
 ## 10. 相邻权威与未决边界
 

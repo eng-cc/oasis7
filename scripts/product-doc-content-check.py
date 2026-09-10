@@ -89,26 +89,28 @@ def parse_name_status(output: str) -> dict[str, str]:
     return changed
 
 
-def diff_paths(root: Path, base: str, head: str, worktree: bool) -> dict[str, str]:
+def diff_paths(root: Path, base: str, head: str, worktree: bool) -> tuple[dict[str, str], set[str]]:
     source_base = run_git(root, "merge-base", base, head).strip()
     if not source_base:
         raise ValueError(f"base/head have no merge-base: {base} {head}")
     changed = parse_name_status(run_git(root, "diff", "--name-status", "-M", source_base, head, "--", "doc/product"))
     if not worktree:
-        return changed
+        return changed, set()
     checkout_head = run_git(root, "rev-parse", "--verify", "HEAD^{commit}").strip()
-    changed.update(
-        parse_name_status(run_git(root, "diff", "--name-status", "-M", checkout_head, "--", "doc/product"))
+    overlay = parse_name_status(
+        run_git(root, "diff", "--name-status", "-M", checkout_head, "--", "doc/product")
     )
-    changed.update(
+    overlay.update(
         parse_name_status(
             run_git(root, "diff", "--cached", "--name-status", "-M", checkout_head, "--", "doc/product")
         )
     )
     for path in run_git(root, "ls-files", "--others", "--exclude-standard", "--", "doc/product").splitlines():
         if path.strip():
-            changed[path.strip()] = "??"
-    return changed
+            overlay[path.strip()] = "??"
+    for path, status in overlay.items():
+        changed[path] = status
+    return changed, set(overlay)
 
 
 def git_text(root: Path, commit: str, path: str) -> str | None:
@@ -123,8 +125,8 @@ def git_text(root: Path, commit: str, path: str) -> str | None:
     return result.stdout
 
 
-def current_text(root: Path, head: str, path: str, worktree: bool) -> str | None:
-    if worktree:
+def current_text(root: Path, head: str, path: str, use_worktree_content: bool) -> str | None:
+    if use_worktree_content:
         target = root / path
         if not target.is_file():
             return None
@@ -183,6 +185,10 @@ def split_link_target(raw: str) -> tuple[str, str | None]:
         return target, None
     path, fragment = target.split("#", 1)
     return path, unquote(fragment)
+
+
+def is_external_link_target(target: str) -> bool:
+    return "://" in target or target.startswith(("mailto:", "//"))
 
 
 def github_heading_slug(value: str) -> str:
@@ -383,10 +389,14 @@ def check_requirements(path: str, text: str, errors: list[str]) -> None:
     local_tokens = set(declarations)
     links = markdown_links(text)
     linked_fragments: list[tuple[int, str]] = []
+    external_fragments: set[tuple[int, str]] = set()
     for number, _raw, target in links:
-        _link_path, fragment = split_link_target(target)
+        link_path, fragment = split_link_target(target)
         if fragment:
-            linked_fragments.append((number, fragment.upper()))
+            if is_external_link_target(link_path):
+                external_fragments.add((number, fragment.upper()))
+            else:
+                linked_fragments.append((number, fragment.upper()))
 
     for number, line in lines:
         tokens = id_tokens(line) - local_tokens
@@ -394,13 +404,19 @@ def check_requirements(path: str, text: str, errors: list[str]) -> None:
             continue
         line_fragments = {
             fragment.upper()
-            for link_number, _raw, target in links
+            for link_number, fragment in linked_fragments
             if link_number == number
-            for _link_path, fragment in [split_link_target(target)]
-            if fragment
+        }
+        external_line_fragments = {
+            fragment
+            for link_number, fragment in external_fragments
+            if link_number == number
         }
         for token in sorted(tokens):
             if token in line_fragments:
+                continue
+            if token in external_line_fragments:
+                fail(errors, "external-cross-file-id", path, f"{token} must use a repository-relative Markdown path#{token.lower()} link")
                 continue
             if path.endswith(".design.md"):
                 fail(errors, "unresolved-cross-file-id", path, f"{token} must use a Markdown path#{token.lower()} link")
@@ -478,7 +494,7 @@ def check_document(root: Path, path: str, text: str, errors: list[str]) -> None:
 
 
 def collect_documents(root: Path, base: str, head: str, worktree: bool) -> tuple[list[ChangedDocument], str | None]:
-    changed = diff_paths(root, base, head, worktree)
+    changed, worktree_paths = diff_paths(root, base, head, worktree)
     source_base = run_git(root, "merge-base", base, head).strip()
     if not source_base:
         raise ValueError(f"base/head have no merge-base: {base} {head}")
@@ -487,7 +503,7 @@ def collect_documents(root: Path, base: str, head: str, worktree: bool) -> tuple
         if not is_product_doc(path) or status.startswith("D"):
             continue
         old_text = git_text(root, source_base, path)
-        new_text = current_text(root, head, path, worktree)
+        new_text = current_text(root, head, path, path in worktree_paths)
         if new_text is None:
             continue
         if status.startswith(("A", "R", "C", "??")) or normalized_for_change(old_text) != normalized_for_change(new_text):

@@ -192,6 +192,80 @@ def even_escaped_paired_design_link(root: Path) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def external_requirement_links(root: Path) -> None:
+    path = root / DESIGN
+    text = DESIGN_TEXT.replace(
+        "sample.prd.md#req-sample-001",
+        "https://example.invalid/req#req-sample-001",
+    ).replace(
+        "sample.prd.md#ac-sample-001",
+        "https://example.invalid/ac#ac-sample-001",
+    )
+    path.write_text(text, encoding="utf-8")
+
+
+def scenario_worktree_overlapping_target_change() -> None:
+    root, base, _head = make_repo()
+    try:
+        run_git(root, "switch", "-c", "target", base)
+        (root / DESIGN).write_text(
+            DESIGN_TEXT.replace("- Owner role：`producer_system_designer`\n", ""),
+            encoding="utf-8",
+        )
+        run_git(root, "add", ".")
+        run_git(root, "commit", "-qm", "target-only invalid design")
+        target = subprocess.check_output(
+            ["git", "-C", str(root), "rev-parse", "HEAD"], text=True
+        ).strip()
+
+        run_git(root, "switch", "-c", "source", base)
+        (root / DESIGN).write_text(
+            DESIGN_TEXT + "\nsource change\n",
+            encoding="utf-8",
+        )
+        run_git(root, "add", ".")
+        run_git(root, "commit", "-qm", "source valid design")
+        source = subprocess.check_output(
+            ["git", "-C", str(root), "rev-parse", "HEAD"], text=True
+        ).strip()
+
+        run_git(root, "merge", "--no-ff", "-m", "synthetic merge", "target")
+        result = invoke(root, target, source, worktree=True)
+        output = result.stdout + result.stderr
+        assert result.returncode == 0, output
+        assert "product-doc-content: OK (checked 1" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_worktree_local_overlay_wins() -> None:
+    root, base, _head = make_repo()
+    try:
+        (root / DESIGN).write_text(DESIGN_TEXT + "\nsource change\n", encoding="utf-8")
+        run_git(root, "add", ".")
+        run_git(root, "commit", "-qm", "source valid design")
+        source = subprocess.check_output(
+            ["git", "-C", str(root), "rev-parse", "HEAD"], text=True
+        ).strip()
+
+        (root / DESIGN).write_text(
+            DESIGN_TEXT.replace("- Owner role：`producer_system_designer`\n", ""),
+            encoding="utf-8",
+        )
+        result = invoke(root, base, source, worktree=True)
+        output = result.stdout + result.stderr
+        assert result.returncode != 0, output
+        assert "missing-metadata" in output and "Owner role" in output, output
+
+        run_git(root, "add", DESIGN)
+        result = invoke(root, base, source, worktree=True)
+        output = result.stdout + result.stderr
+        assert result.returncode != 0, output
+        assert "missing-metadata" in output and "Owner role" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
 def multiline_comment_before_authority(root: Path) -> None:
     marker = "- 专业域权威：[`gameplay authority`](../../game/prd.md#authority)"
     comment = "<!-- removed from the rendered document\nthis comment spans multiple source lines\n-->\n"
@@ -241,6 +315,7 @@ def main() -> None:
     scenario(None, nested_fenced_examples)
     scenario("duplicate-anchor", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("<a id=\"ac-sample-001\"></a>", "<a id=\"req-sample-001\"></a>\n<a id=\"ac-sample-001\"></a>"), encoding="utf-8"))
     scenario("unresolved-cross-file-id", lambda root: (root / DESIGN).write_text(DESIGN_TEXT.replace("sample.prd.md#req-sample-001", "sample.prd.md#req-missing"), encoding="utf-8"))
+    scenario("external-cross-file-id", external_requirement_links)
     scenario("req-missing-acceptance", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("- 验收：AC-SAMPLE-001\n", ""), encoding="utf-8"))
     scenario("ac-missing-requirement", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("- 覆盖要求：REQ-SAMPLE-001\n", ""), encoding="utf-8"))
     scenario("unresolved-id-reference", lambda root: (root / TOPIC).write_text(
@@ -265,6 +340,8 @@ def main() -> None:
             lambda root, pseudo_form=pseudo_form: pseudo_paired_design_link(root, pseudo_form),
         )
     scenario(None, even_escaped_paired_design_link)
+    scenario_worktree_overlapping_target_change()
+    scenario_worktree_local_overlay_wins()
     scenario_checked(lambda root: (root / TOPIC).write_text(
         TOPIC_TEXT.replace("玩家需要知道当前目标", "  玩家需要知道当前目标"), encoding="utf-8"
     ))
