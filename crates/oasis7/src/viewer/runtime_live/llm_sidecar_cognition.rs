@@ -68,6 +68,15 @@ impl RuntimeLlmSidecar {
         // keep durable provider notifications retryable on both lanes.
         self.flush_pending_provider_world_events();
         self.hydrate_provider_lineage(world);
+        if let Some(error) = self.provider_lineage_recovery_pending.as_deref() {
+            return Err(format!(
+                "provider lineage recovery fenced; durable checkpoint must be repaired before dispatch: {error}"
+            ));
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Err(error) = self.recover_pending_provider_wait(world) {
+            tracing::warn!(error, "provider Wait recovery remains pending");
+        }
         let provider_settings = provider_settings_from_env()?;
         let runtime_binding = world.current_runtime_binding(world_id)?;
         self.provider_lineage_binding = Some(runtime_binding.clone());
@@ -84,6 +93,8 @@ impl RuntimeLlmSidecar {
                     && !self
                         .provider_continuation_recovery_pending
                         .contains_key(*agent_id)
+                    && !self.provider_transport_exhausted.contains(*agent_id)
+                    && !self.provider_wake_recovery_pending.contains_key(*agent_id)
                     && !self.provider_active_turns.contains_key(*agent_id)
                     && (self.has_pending_runtime_wake_for_agent(agent_id.as_str())
                         || !self.provider_contexts.contains_key(*agent_id)
@@ -356,38 +367,16 @@ impl RuntimeLlmSidecar {
                             // Runtime's terminal handoff is scoped to this
                             // exact wake; local mirrors are then removed for
                             // this Agent only.
-                            let _ = world.handoff_cognition_wake_with_context(
-                                &wake.wake_id,
-                                crate::runtime::CognitionWakeDispositionV1::Terminal {
-                                    status: crate::runtime::ContinuationStatusV1::Rejected,
-                                    reason: "provider_wake_resume_failed".to_string(),
-                                },
-                                crate::runtime::CognitionContextDigestsV1 {
-                                    baseline_observation_digest: current_context
-                                        .authority
-                                        .baseline_observation_digest
-                                        .clone(),
-                                    goal_digest: current_context.authority.goal_digest.clone(),
-                                    policy_digest: current_context.authority.policy_digest.clone(),
-                                    precondition_digest: current_context
-                                        .authority
-                                        .precondition_digest
-                                        .clone(),
-                                },
-                            );
-                            self.pending_runtime_wakes.remove(&wake.wake_id);
-                            self.provider_continuation_proposals
-                                .remove(predecessor_proposal_id.as_str());
-                            self.provider_continuation_proposals
-                                .remove(next_proposal.continuation_proposal_id.as_str());
-                            self.provider_contexts.remove(agent_id.as_str());
-                            self.provider_active_turns.remove(agent_id.as_str());
-                            self.provider_retry_contexts.remove(agent_id.as_str());
-                            self.provider_wait_until.remove(agent_id.as_str());
-                            self.persist_provider_lineage_best_effort();
-                            return Err(format!(
-                                "Runtime cognition wake resume rejected {}: {error:?}",
-                                wake.wake_id
+                            return Err(self.handle_provider_wake_resume_failure(
+                                world,
+                                wake,
+                                &current_context,
+                                &turn_context,
+                                &request_context,
+                                predecessor_proposal_id.as_str(),
+                                next_proposal.continuation_proposal_id.as_str(),
+                                agent_id.as_str(),
+                                &error,
                             ));
                         }
                     };
@@ -626,6 +615,8 @@ fn build_provider_context(
         budget_contract: BudgetContractV1 {
             max_latency_ms: settings.decision_timeout_ms,
             max_repair_attempts: 0,
+            max_model_calls: 4,
+            max_tool_calls: 3,
         },
         request_digest: Digest32::default(),
     };

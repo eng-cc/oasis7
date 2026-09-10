@@ -147,6 +147,172 @@ fn llm_agent_limits_module_call_rounds() {
     assert_eq!(trace.llm_effect_receipts.len(), 1);
 }
 
+fn cognition_request_context_with_budget(
+    max_model_calls: u32,
+    max_tool_calls: u32,
+) -> crate::simulator::ContinuousAgentRequestContextV1 {
+    let request = serde_json::json!({
+        "observation": {
+            "agent_id": "agent-1",
+            "world_time": 7,
+            "observation": {
+                "self_state": {"location_ref": "loc-1", "pose_hint": "origin"},
+                "mission_context": {"goal_summary": "test"}
+            },
+            "action_catalog": [],
+            "timeout_budget_ms": 1_000
+        },
+        "timeout_budget_ms": 1_000
+    });
+    serde_json::from_value(serde_json::json!({
+        "base_decision_request": request,
+        "context_discriminator": "oasis7.continuous-agent-context",
+        "context_version": 1,
+        "protocol_version": "continuous-agent-v1",
+        "agent_session_id": "session.agent-1.v1",
+        "agent_turn_id": "turn.agent-1.1",
+        "decision_request_id": "request.agent-1.1",
+        "retry_seq": 1,
+        "transport_attempt": 1,
+        "agent_subject": "agent-1",
+        "runtime_binding": {
+            "world_id": "world-1",
+            "branch_id": "main",
+            "finality_epoch": 1,
+            "finality_block_hash": format!("blake3:{}", "a".repeat(64)),
+            "finality_status": "verified",
+            "base_tick": 7,
+            "base_world_hash": format!("blake3:{}", "b".repeat(64)),
+            "reorg_epoch": 1,
+            "runtime_manifest_hash": format!("blake3:{}", "c".repeat(64))
+        },
+        "observation_digest": format!("blake3:{}", "d".repeat(64)),
+        "capability_catalog_digest": format!("blake3:{}", "e".repeat(64)),
+        "capability_invocation_context_digest": format!("blake3:{}", "f".repeat(64)),
+        "memory_snapshot_digest": format!("blake3:{}", "1".repeat(64)),
+        "goal_snapshot_digest": format!("blake3:{}", "2".repeat(64)),
+        "continuation_digest": format!("blake3:{}", "3".repeat(64)),
+        "adapter_protocol_version": "loopback-http-v1",
+        "budget_contract": {
+            "max_latency_ms": 60_000,
+            "max_repair_attempts": 1,
+            "max_model_calls": max_model_calls,
+            "max_tool_calls": max_tool_calls
+        },
+        "request_digest": format!("blake3:{}", "4".repeat(64))
+    }))
+    .expect("decode cognition request budget context")
+}
+
+#[test]
+fn cognition_budget_zero_model_calls_denies_before_provider_and_effects() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let client = CountingSequenceMockClient::new(
+        vec![r#"{"decision":"move_agent","to":"loc-2"}"#.to_string()],
+        Arc::clone(&calls),
+    );
+    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), client);
+    let context = cognition_request_context_with_budget(0, 1);
+    AgentBehavior::set_continuous_request_context(&mut behavior, Some(&context));
+
+    assert_eq!(behavior.decide(&make_observation()), AgentDecision::Wait);
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    let trace = behavior.take_decision_trace().expect("budget trace exists");
+    assert!(trace
+        .llm_error
+        .as_deref()
+        .is_some_and(|error| error.starts_with("budget_exhausted:")));
+    assert!(trace.llm_effect_intents.is_empty());
+    assert!(trace.llm_effect_receipts.is_empty());
+    assert!(behavior.take_memory_write_intents().is_empty());
+}
+
+#[test]
+fn cognition_budget_zero_tool_calls_denies_module_before_execution() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let client = CountingSequenceMockClient::new(
+        vec![
+            r#"{"type":"module_call","module":"agent.modules.list","args":{}}"#
+                .to_string(),
+            r#"{"decision":"move_agent","to":"loc-2"}"#.to_string(),
+        ],
+        Arc::clone(&calls),
+    );
+    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), client);
+    let context = cognition_request_context_with_budget(2, 0);
+    AgentBehavior::set_continuous_request_context(&mut behavior, Some(&context));
+
+    assert_eq!(behavior.decide(&make_observation()), AgentDecision::Wait);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    let trace = behavior.take_decision_trace().expect("budget trace exists");
+    assert!(trace
+        .llm_error
+        .as_deref()
+        .is_some_and(|error| error.starts_with("budget_exhausted:")));
+    assert!(trace.llm_effect_intents.is_empty());
+    assert!(trace.llm_effect_receipts.is_empty());
+    assert!(behavior.take_memory_write_intents().is_empty());
+}
+
+#[test]
+fn cognition_budget_counts_repair_calls_before_reentering_provider() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let client = CountingSequenceMockClient::new(
+        vec![
+            "not-json".to_string(),
+            r#"{"decision":"move_agent","to":"loc-2"}"#.to_string(),
+        ],
+        Arc::clone(&calls),
+    );
+    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), client);
+    let context = cognition_request_context_with_budget(1, 1);
+    AgentBehavior::set_continuous_request_context(&mut behavior, Some(&context));
+
+    assert_eq!(behavior.decide(&make_observation()), AgentDecision::Wait);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    let trace = behavior.take_decision_trace().expect("budget trace exists");
+    assert!(trace
+        .llm_error
+        .as_deref()
+        .is_some_and(|error| error.starts_with("budget_exhausted:")));
+    assert!(trace.llm_effect_intents.is_empty());
+    assert!(trace.llm_effect_receipts.is_empty());
+}
+
+#[test]
+fn cognition_budget_does_not_charge_execute_until_fast_path() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let client = CountingSequenceMockClient::new(
+        vec![
+            r#"{"decision":"execute_until","action":{"decision":"harvest_radiation","max_amount":9},"until":{"event":"new_visible_agent|new_visible_location"},"max_ticks":3}"#.to_string(),
+            r#"{"decision":"move_agent","to":"loc-2"}"#.to_string(),
+        ],
+        Arc::clone(&calls),
+    );
+    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), client);
+    let context = cognition_request_context_with_budget(1, 1);
+    AgentBehavior::set_continuous_request_context(&mut behavior, Some(&context));
+
+    let mut observation = make_observation();
+    observation.time = 20;
+    assert!(matches!(
+        behavior.decide(&observation),
+        AgentDecision::Act(Action::HarvestRadiation { .. })
+    ));
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+    observation.time = 21;
+    assert!(matches!(
+        behavior.decide(&observation),
+        AgentDecision::Act(Action::HarvestRadiation { .. })
+    ));
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        1,
+        "continuation fast path did not invoke the model"
+    );
+}
+
 #[test]
 fn llm_agent_system_prompt_contains_configured_goals() {
     let behavior = LlmAgentBehavior::new("agent-1", base_config(), MockClient::default());

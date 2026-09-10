@@ -79,14 +79,23 @@ root=pathlib.Path(sys.argv[1]).resolve(); plan_path=pathlib.Path(sys.argv[2]).re
 try: plan_path.relative_to(root)
 except ValueError: raise SystemExit("review-closeout: review plan escapes repository root")
 p=json.loads(plan_path.read_text())
-if p.get("schema")!="oasis7-review-plan/v1" or p.get("task_uid")!=sys.argv[3]:
+if p.get("schema") not in ("oasis7-review-plan/v1", "oasis7-review-plan/v2") or p.get("task_uid")!=sys.argv[3]:
  raise SystemExit("review-closeout: review plan identity mismatch")
-for key in ("batch_path","frozen_head","comparison_ref","comparison_oid","epoch","relevant_evidence_digest"):
+for key in ("batch_path","frozen_head","comparison_ref","comparison_oid","epoch"):
  if not p.get(key): raise SystemExit(f"review-closeout: review plan is missing {key}")
+evidence_digest = p.get("relevant_evidence_digest") or p.get("source_review_digest")
+if not evidence_digest: raise SystemExit("review-closeout: review plan is missing review evidence digest")
+if p.get("schema") == "oasis7-review-plan/v2":
+ import importlib.util
+ spec=importlib.util.spec_from_file_location("ci_ready_receipt_identity_v2", root / "scripts/pm/ci_ready_receipt_identity.py")
+ if spec is None or spec.loader is None: raise SystemExit("review-closeout: cannot load v2 review identity helper")
+ helper=importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
+ if evidence_digest != helper.source_review_digest(p.get("source_review_identity")): raise SystemExit("review-closeout: v2 source review digest mismatch")
+ if p.get("integration_ci_digest") != helper.integration_ci_digest(p.get("integration_ci_identity")): raise SystemExit("review-closeout: v2 integration CI digest mismatch")
 preflight = p.get("preflight")
 if not isinstance(preflight, dict) or not isinstance(preflight.get("ledger_path"), str) or not preflight["ledger_path"].strip():
  raise SystemExit("review-closeout: review plan has no persisted preflight ledger")
-print(p["batch_path"]); print(p["frozen_head"]); print(p["comparison_ref"]); print(p["comparison_oid"]); print(p["epoch"]); print(p["relevant_evidence_digest"])
+print(p["batch_path"]); print(p["frozen_head"]); print(p["comparison_ref"]); print(p["comparison_oid"]); print(p["epoch"]); print(evidence_digest)
 print(preflight["ledger_path"])
 PY
 )"

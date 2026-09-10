@@ -9,10 +9,14 @@ use serde_json::Value;
 
 use crate::capability_invocation_context::CapabilityInvocationContext;
 
+use super::cognition_response_identity::{
+    CognitionResponseDigestDisposition, classify_cognition_response_digest,
+    cognition_response_digest,
+};
 use super::continuous_agent_harness::{
-    COGNITION_RESPONSE_DIGEST_DOMAIN, CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR,
-    CONTINUOUS_AGENT_CONTEXT_VERSION, ContinuousAgentRequestContextV1,
-    ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1, FeedbackEnvelopeV1, h_v1,
+    CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR, CONTINUOUS_AGENT_CONTEXT_VERSION,
+    ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1,
+    ContinuousAgentTurnContextV1, FeedbackEnvelopeV1,
 };
 use super::{
     Action, ActionId, ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, AgentQuery,
@@ -488,7 +492,7 @@ fn wrap_continuous_response(
     response: DecisionResponse,
     context: &ContinuousAgentTurnContextV1,
 ) -> ContinuousAgentResponseContextV1 {
-    let response_digest = h_v1(COGNITION_RESPONSE_DIGEST_DOMAIN, &response);
+    let response_digest = cognition_response_digest(&response);
     ContinuousAgentResponseContextV1 {
         base_decision_response: response,
         context_discriminator: CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR.to_string(),
@@ -526,17 +530,25 @@ fn validate_continuous_response_lineage(
             false,
         ));
     }
-    if response.response_digest
-        != h_v1(
-            COGNITION_RESPONSE_DIGEST_DOMAIN,
-            &response.base_decision_response,
-        )
-    {
-        return Err(DecisionProviderError::new(
-            "response_digest_mismatch",
-            "provider response digest does not match its content",
-            false,
-        ));
+    match classify_cognition_response_digest(
+        &response.base_decision_response,
+        &response.response_digest,
+    ) {
+        CognitionResponseDigestDisposition::Current => {}
+        CognitionResponseDigestDisposition::Legacy => {
+            return Err(DecisionProviderError::new(
+                "legacy_response_digest_unsupported",
+                "legacy full-response digest requires an explicit compatibility migration",
+                false,
+            ));
+        }
+        CognitionResponseDigestDisposition::Mismatch => {
+            return Err(DecisionProviderError::new(
+                "response_digest_mismatch",
+                "provider response digest does not match its content",
+                false,
+            ));
+        }
     }
     let artifact_identity = response.response_artifact_identity();
     response
@@ -592,17 +604,25 @@ fn validate_continuous_request_response_lineage(
             false,
         ));
     }
-    if response.response_digest
-        != h_v1(
-            COGNITION_RESPONSE_DIGEST_DOMAIN,
-            &response.base_decision_response,
-        )
-    {
-        return Err(DecisionProviderError::new(
-            "response_digest_mismatch",
-            "provider response digest does not match its content",
-            false,
-        ));
+    match classify_cognition_response_digest(
+        &response.base_decision_response,
+        &response.response_digest,
+    ) {
+        CognitionResponseDigestDisposition::Current => {}
+        CognitionResponseDigestDisposition::Legacy => {
+            return Err(DecisionProviderError::new(
+                "legacy_response_digest_unsupported",
+                "legacy full-response digest requires an explicit compatibility migration",
+                false,
+            ));
+        }
+        CognitionResponseDigestDisposition::Mismatch => {
+            return Err(DecisionProviderError::new(
+                "response_digest_mismatch",
+                "provider response digest does not match its content",
+                false,
+            ));
+        }
     }
     if request_context.agent_subject != agent_id {
         return Err(DecisionProviderError::new(

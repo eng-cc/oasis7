@@ -5,6 +5,7 @@ fn build_responses_request_payload_includes_tools_and_required_choice() {
         system_prompt: "system".to_string(),
         user_prompt: "user".to_string(),
         debug_mode: false,
+        max_model_calls: None,
     };
 
     let payload = build_responses_request_payload(&request).expect("payload");
@@ -270,6 +271,7 @@ fn build_responses_request_payload_includes_debug_tool_when_enabled() {
         system_prompt: "system".to_string(),
         user_prompt: "user".to_string(),
         debug_mode: true,
+        max_model_calls: None,
     };
 
     let payload = build_responses_request_payload(&request).expect("payload");

@@ -290,6 +290,8 @@ fn build_target_context_inner(
         budget_contract: BudgetContractV1 {
             max_latency_ms: 15_000,
             max_repair_attempts: 1,
+            max_model_calls: 4,
+            max_tool_calls: 3,
         },
         request_digest: Digest32::default(),
     };

@@ -30,6 +30,7 @@ use super::types::{
     ResourceOwner,
 };
 
+mod behavior_budget;
 mod behavior_context;
 mod behavior_guardrails;
 mod behavior_loop;
@@ -41,6 +42,7 @@ mod decision_flow;
 mod execution_controls;
 mod memory_selector;
 mod openai_payload;
+mod openai_retry;
 mod prompt_assembly;
 mod recipe_coverage;
 use recipe_coverage::RecipeCoverageProgress;
@@ -73,6 +75,7 @@ use openai_payload::{
 use openai_payload::{
     output_item_to_completion_turn, responses_tools, responses_tools_with_debug_mode,
 };
+use openai_retry::{RATE_LIMIT_RETRY_DELAY_MS, is_concurrency_limit_error, retry_attempts};
 
 pub const ENV_LLM_MODEL: &str = "OASIS7_LLM_MODEL";
 pub const ENV_LLM_BASE_URL: &str = "OASIS7_LLM_BASE_URL";
@@ -738,6 +741,11 @@ pub struct LlmCompletionRequest {
     pub system_prompt: String,
     pub user_prompt: String,
     pub debug_mode: bool,
+    /// Native request budgets count physical provider invocations.  When set,
+    /// the completion client must not hide another provider call inside its
+    /// transport retry loop.  `None` preserves the legacy unbudgeted client
+    /// behavior, including the bounded OpenAI concurrency retry.
+    pub max_model_calls: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -773,9 +781,6 @@ pub struct OpenAiChatCompletionClient {
     client: AsyncOpenAiClient<OpenAIConfig>,
     request_timeout_ms: u64,
 }
-
-const OPENAI_RATE_LIMIT_RETRY_DELAY_MS: u64 = 250;
-const OPENAI_RATE_LIMIT_RETRY_ATTEMPTS: u32 = 1;
 
 impl OpenAiChatCompletionClient {
     pub fn from_config(config: &LlmAgentConfig) -> Result<Self, LlmClientError> {
@@ -1011,17 +1016,16 @@ impl LlmCompletionClient for OpenAiChatCompletionClient {
         request: &LlmCompletionRequest,
     ) -> Result<LlmCompletionResult, LlmClientError> {
         let payload = build_responses_request_payload(request)?;
-        for attempt in 0..=OPENAI_RATE_LIMIT_RETRY_ATTEMPTS {
+        let retry_attempts = retry_attempts(request.max_model_calls);
+        for attempt in 0..=retry_attempts {
             match self.send_responses_request(&self.client, payload.clone()) {
                 Ok(result) => return Ok(result),
                 Err(OpenAiRequestError::ParseBody(raw_body))
-                    if attempt < OPENAI_RATE_LIMIT_RETRY_ATTEMPTS
-                        && is_openai_concurrency_limit_error(raw_body.as_str()) =>
+                    if attempt < retry_attempts
+                        && is_concurrency_limit_error(raw_body.as_str()) =>
                 {
                     #[cfg(not(target_arch = "wasm32"))]
-                    std::thread::sleep(std::time::Duration::from_millis(
-                        OPENAI_RATE_LIMIT_RETRY_DELAY_MS,
-                    ));
+                    std::thread::sleep(std::time::Duration::from_millis(RATE_LIMIT_RETRY_DELAY_MS));
                     continue;
                 }
                 Err(OpenAiRequestError::ParseBody(raw_body)) => {
@@ -1053,12 +1057,6 @@ impl LlmCompletionClient for OpenAiChatCompletionClient {
             message: "responses request exhausted retry budget".to_string(),
         })
     }
-}
-
-fn is_openai_concurrency_limit_error(raw_body: &str) -> bool {
-    let lowered = raw_body.to_ascii_lowercase();
-    lowered.contains("\"type\":\"rate_limit_error\"")
-        && lowered.contains("concurrency limit exceeded")
 }
 
 #[derive(Debug)]

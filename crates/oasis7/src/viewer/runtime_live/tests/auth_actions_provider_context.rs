@@ -544,6 +544,204 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
 }
 
 #[test]
+fn runtime_provider_action_receipt_recovers_after_sidecar_finalization_checkpoint_failure() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
+    let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
+    let base_url = spawn_runtime_live_mock_http_server(8, {
+        let recorded = Arc::clone(&recorded);
+        move |request| {
+            recorded
+                .lock()
+                .expect("recorded lock")
+                .push(request.clone());
+            if request.path == "/v1/world-simulator/feedback-context" {
+                return MockHttpResponse {
+                    status_code: 200,
+                    body: serde_json::json!({"ok": true}).to_string(),
+                };
+            }
+            let decoded: crate::simulator::ContinuousAgentRequestContextV1 =
+                serde_json::from_slice(request.body.as_slice())
+                    .expect("decode provider action request");
+            let response = crate::simulator::DecisionResponse {
+                decision: crate::simulator::ProviderDecision::Act {
+                    action_ref: "move_agent".to_string(),
+                    action: crate::simulator::Action::MoveAgent {
+                        agent_id: decoded.base_decision_request.observation.agent_id.clone(),
+                        to: "runtime:7:0:0".to_string(),
+                    },
+                },
+                module_command: None,
+                provider_error: None,
+                diagnostics: crate::simulator::ProviderDiagnostics::default(),
+                trace_payload: crate::simulator::ProviderTraceEnvelope::default(),
+                memory_write_intents: Vec::new(),
+            };
+            MockHttpResponse {
+                status_code: 200,
+                body: serde_json::to_string(&provider_context_response(&decoded, response))
+                    .expect("encode provider action response"),
+            }
+        }
+    });
+    // SAFETY: This test holds the canonical provider environment lock.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+        oasis7::env_mut::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
+        oasis7::env_mut::set_var("OASIS7_TEST_PROVIDER_ACTION_FAULT", "persistence");
+    }
+    let world_id = "provider-action-receipt-recovery";
+    let finality_block_hash =
+        crate::simulator::h_v1("oasis7.viewer.test.finality-block.v1", &world_id).to_string();
+    let lineage_path = std::env::temp_dir().join(format!(
+        "oasis7-runtime-live-provider-action-recovery-{}-{}.json",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos()
+    ));
+    let blocked_backup =
+        lineage_path.with_extension(format!("blocked-backup-{}", std::process::id()));
+    let runtime_config = || {
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm)
+            .with_provider_lineage_store(lineage_path.clone())
+            .with_test_cognition_runtime_binding(
+                "receipt-recovery-branch",
+                0,
+                Some(finality_block_hash.clone()),
+                "verified",
+                0,
+            )
+    };
+    let mut server = ViewerRuntimeLiveServer::new(runtime_config()).expect("runtime server");
+    super::provider_continuation_drains::install_cognition_scheduler(&mut server);
+    server
+        .world
+        .install_test_provider_capability_fixture("agent-0")
+        .expect("install Runtime provider capability fixture");
+    wait_for_provider_phase(
+        "receipt recovery checkpoint failure",
+        Duration::from_secs(5),
+        || {
+            server.llm_sidecar.request_decision();
+            match server.enqueue_llm_action_from_sidecar() {
+                Err(trace)
+                    if trace.llm_error.as_deref().is_some_and(|error| {
+                        error.contains("receipt finalization remains pending")
+                    }) =>
+                {
+                    Ok(true)
+                }
+                Ok(Some(trace)) => {
+                    Err(format!("provider action unexpectedly finalized: {trace:?}"))
+                }
+                Ok(None) => Ok(false),
+                Err(trace) => Err(format!(
+                    "unexpected provider action recovery trace: {trace:?}"
+                )),
+            }
+        },
+    )
+    .expect("checkpoint failure must occur after Runtime receipt commit");
+    let requests = || {
+        recorded
+            .lock()
+            .expect("recorded requests")
+            .iter()
+            .filter(|request| request.path == "/v1/world-simulator/decision-context")
+            .count()
+    };
+    assert_eq!(
+        requests(),
+        1,
+        "checkpoint failure must not retry provider work"
+    );
+    assert!(
+        lineage_path.is_dir(),
+        "checkpoint failure must retain blocker"
+    );
+    assert!(
+        blocked_backup.is_file(),
+        "checkpoint failure must retain old checkpoint"
+    );
+    assert_eq!(
+        server.world.cognition()["commit_records"]
+            .as_array()
+            .expect("Runtime commit records")
+            .iter()
+            .filter(|record| record["status"] == "committed")
+            .count(),
+        1,
+        "Runtime must retain exactly one committed receipt"
+    );
+    assert_eq!(
+        server
+            .world
+            .runtime_feedback_outbox()
+            .expect("feedback outbox")
+            .len(),
+        1,
+        "Runtime must retain exactly one committed feedback envelope"
+    );
+
+    // SAFETY: This test holds the canonical provider environment lock.
+    unsafe {
+        oasis7::env_mut::remove_var("OASIS7_TEST_PROVIDER_ACTION_FAULT");
+    }
+    std::fs::remove_dir(&lineage_path).expect("remove checkpoint blocker");
+    std::fs::rename(&blocked_backup, &lineage_path).expect("restore pre-fault checkpoint");
+
+    let committed_world = server.world.clone();
+    let mut restarted = ViewerRuntimeLiveServer::new(runtime_config()).expect("restarted server");
+    restarted.world = committed_world;
+    restarted
+        .llm_sidecar
+        .restore_provider_lineage(&restarted.world)
+        .expect("receipt-driven sidecar restore");
+    wait_for_provider_phase(
+        "receipt recovery feedback acknowledgement",
+        Duration::from_secs(5),
+        || {
+            let _ = restarted.enqueue_llm_action_from_sidecar();
+            Ok(restarted
+                .world
+                .pending_runtime_feedback()
+                .expect("pending Runtime feedback")
+                .is_empty())
+        },
+    )
+    .expect("committed feedback must close after reload");
+    assert_eq!(requests(), 1, "reload must not invoke the provider again");
+    assert!(restarted.llm_sidecar.pending_actions_empty());
+    assert!(restarted.llm_sidecar.provider_contexts_empty());
+    assert!(
+        restarted
+            .llm_sidecar
+            .provider_has_terminal_status("committed")
+    );
+    let events = restarted.world.cognition()["cognition_journal"]["events"]
+        .as_array()
+        .expect("Runtime cognition journal events");
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event["event_kind"] == "CognitionTurnCompleted"
+                && event["status"] == "committed")
+            .count(),
+        1,
+        "receipt recovery must close the Runtime turn once"
+    );
+
+    let _ = std::fs::remove_file(&lineage_path);
+    clear_runtime_provider_env();
+}
+
+#[test]
 fn runtime_builtin_wait_enters_the_shared_harness_lifecycle() {
     let _guard = lock_test_llm_env();
     let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));

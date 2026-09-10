@@ -1,4 +1,4 @@
-use super::super::decision_trace::is_trace_only_overflow;
+use super::super::decision_trace::{is_budget_exhausted_wait, is_trace_only_overflow};
 use super::*;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -130,17 +130,11 @@ impl RuntimeLlmSidecar {
             let _ = runner.take_completed();
         }
         for outcome in completed {
-            if self
-                .provider_terminal_states
-                .get(outcome.agent_id.as_str())
-                .is_some_and(|terminal| {
-                    outcome
-                        .prepared_request_context
-                        .as_ref()
-                        .is_some_and(|request| {
-                            request.agent_turn_id == terminal.agent_turn_id
-                                && request.decision_request_id == terminal.decision_request_id
-                        })
+            if outcome
+                .prepared_request_context
+                .as_ref()
+                .is_some_and(|request| {
+                    self.provider_terminal_matches_request(outcome.agent_id.as_str(), request)
                 })
             {
                 self.record_late_provider_response(&outcome);
@@ -156,7 +150,15 @@ impl RuntimeLlmSidecar {
         if !self.provider_completed_decisions.is_empty() {
             self.persist_provider_lineage_best_effort();
         }
-        if let Some(decision) = self.provider_completed_decisions.pop_front() {
+        while let Some(decision) = self.provider_completed_decisions.pop_front() {
+            if self.provider_decision_is_terminalized(&decision) {
+                // A terminal marker is authoritative even when a crash left
+                // the same response in the completed queue. Drop only the
+                // exact old identity; a later request for this Agent remains
+                // eligible because it carries a different turn/request pair.
+                self.persist_provider_lineage_best_effort();
+                continue;
+            }
             self.provider_held_decisions
                 .insert(decision.agent_id.clone(), decision.clone());
             self.persist_provider_lineage_best_effort();
@@ -169,7 +171,8 @@ impl RuntimeLlmSidecar {
         let now = world.state().time;
         let candidates = self.provider_agent_ids.iter().cloned().collect::<Vec<_>>();
         for agent_id in candidates {
-            if self.provider_recovery_pending.contains_key(&agent_id)
+            if self.provider_transport_exhausted.contains(&agent_id)
+                || self.provider_recovery_pending.contains_key(&agent_id)
                 || self
                     .provider_continuation_recovery_pending
                     .contains_key(&agent_id)
@@ -210,6 +213,22 @@ impl RuntimeLlmSidecar {
                     format!("Runtime cognition prefix rejected provider I/O: {error}"),
                 ));
             }
+            // The Runtime prefix above is durable evidence that this exact
+            // logical request was admitted.  Persist the matching sidecar
+            // active marker before handing the request to the actor: a crash
+            // after actor start but before its outcome is observed must fence
+            // the identity on restart instead of redispatching it.
+            self.provider_active_turns
+                .insert(agent_id.clone(), context.clone());
+            if let Err(error) = self.persist_provider_lineage() {
+                self.provider_active_turns.remove(agent_id.as_str());
+                let _ = runtime_provider_failure(world, &context, "persistence_failure");
+                return Some(RuntimeLlmDecision::from_agent_error(
+                    world,
+                    agent_id,
+                    format!("provider dispatch marker persistence failed: {error}"),
+                ));
+            }
             let Some(runner) = self
                 .runner
                 .as_mut()
@@ -227,6 +246,11 @@ impl RuntimeLlmSidecar {
                 context.request_context.clone(),
             );
             if let Err(error) = start_result {
+                self.provider_active_turns.remove(agent_id.as_str());
+                // If this cleanup cannot be persisted, retaining the durable
+                // marker is the safe outcome: restart recovery will fence the
+                // identity rather than risk a duplicate provider call.
+                self.persist_provider_lineage_best_effort();
                 let _ = runtime_provider_failure(world, &context, "provider_failure");
                 return Some(RuntimeLlmDecision::from_agent_error(
                     world,
@@ -297,7 +321,9 @@ impl RuntimeLlmSidecar {
         if let Some(cognition) = cognition.as_ref() {
             if decision_trace.as_ref().is_none_or(|trace| {
                 trace.parse_error.is_none()
-                    && (trace.llm_error.is_none() || is_trace_only_overflow(trace))
+                    && (trace.llm_error.is_none()
+                        || is_trace_only_overflow(trace)
+                        || is_budget_exhausted_wait(trace))
             }) {
                 self.provider_active_turns
                     .insert(agent_id.clone(), cognition.request.clone());

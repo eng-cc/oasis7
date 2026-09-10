@@ -191,11 +191,81 @@ domain `oasis7.cognition.request.v1`；response outer 中回显的 request diges
 
 同一 `decision_request_id + request_digest` 的重试必须得到同一逻辑结果或同一结构化失败；同一 request id 搭配不同 digest 是 `request_identity_collision`，必须 fail closed，不能覆盖旧结果。timeout 不能再单独构成幂等 identity。Runtime action/module envelope 的 `envelope_digest/envelope_idempotency_key` 是另一条 runtime-owned identity，必须在 paired runtime docs 定义，不能复用 `provider_invocation_key`。
 
+Response digest follows an independently versioned semantic contract:
+`response_digest = H_v1("oasis7.cognition.response.v2", canonical(decision, module_command, provider_error, memory_write_intents))`.
+Provider diagnostics and trace
+payload, including latency/token/cost observations, never enter this digest. The previous
+full-`DecisionResponse` value is classified as legacy domain
+`oasis7.cognition.response.v1`; target response validation rejects it with
+`legacy_response_digest_unsupported`. The local bridge persists response lineage under a bumped
+state schema and rejects old state on load, because the stored legacy digest is not
+self-describing and the response body is not persisted for safe recomputation. Any future
+migration must explicitly rewrite the complete response/artifact lineage; target adapters never
+silently reinterpret a V1 full-response digest as the V2 semantic digest.
+
 Harness 与 Runtime 的 canonical wire mapping 使用 paired runtime PRD 的
 `Cross-contract identity mapping`：`agent_subject == agent_id`，session/turn/request 使用
 `agent_session_id/agent_turn_id/decision_request_id`，`runtime_binding` 完整映射 world、
 branch/finality、base tick/hash、reorg epoch 与 runtime manifest hash。adapter 不得自行创造
 别名或从缺失字段猜测 identity。
+
+### 4.3.1 C0 request-bound call budget（selected next scope）
+
+当前 Harness 的 budget 仅覆盖 timeout/repair 语义；它没有可宣称为 paid cognition 的
+调用配额、reserve 或 settlement。C0 是下一步可独立验收的 economy-neutral protocol
+admission，且只覆盖 native `LlmAgentBehavior` lane：在
+`ContinuousAgentRequestContextV1.budget_contract` 中采用 `BudgetContractV1` 的两个调用
+上限字段：
+
+```text
+BudgetContractV1 {
+  max_model_calls,
+  max_tool_calls,
+  // existing timeout/repair fields remain part of the compatibility evolution
+}
+```
+
+字段是 trusted Harness host 为本次 native logical request 绑定的非负上限；本文不规定产品
+默认值、费率或换算关系。当前 Runtime Live host context 选择
+`max_model_calls = 4`、`max_tool_calls = 3`，这是该 host/profile 的 policy bound，不是
+普遍默认值或玩法平衡；其他 host/profile 必须显式提供自己的值，或进入兼容 lane。
+`max_model_calls = 0` 或 `max_tool_calls = 0` 明确拒绝对应类别的调用，
+不得解释为 unlimited、缺省值或自动补充。旧 outer context/legacy fixture 缺少这些 additive
+字段时，只能进入显式 compatibility lane；该 lane 不得伪装为 C0 target/proven，也不得把
+缺失字段静默升级成 paid economy policy。具体 Rust wire evolution 与旧 snapshot 的反序列化
+策略由 Agent implementation slice 冻结，但不得改变旧 lane 的语义。
+
+C0 native lane 的最小行为合同如下：
+
+- 每次进入 native `LlmCompletionClient::complete` 前必须通过 model-call admission；每次
+  进入 native `run_prompt_module` 前必须通过 tool-call admission。未通过 admission 时不得
+  调用对应 executor。C0 不假设一次 `decide` 等于一次 model call。
+- 同一 logical request 的 repair、transport retry 和 bounded retry 共享原有
+  session/turn/request identity 与同一 budget contract；retry 不重置、补充或绕过剩余配额。
+  semantic retry 仍创建新的 turn/request，并由新 context 显式携带新预算。
+- 预算耗尽返回稳定 `budget_exhausted`，Harness 收口为无副作用 `Wait`；不再发起超限的
+  model/tool call，不提交新的 candidate/action，不产生 projected/durable `MemoryWriteIntent`，
+  不改变 world、authority 或 Electricity/Data 余额。admission 前已经产生的本地 private
+  `AgentMemory` observation/diagnostic bookkeeping 可以保留；它不是 authoritative memory
+  commit、Runtime receipt 或玩家可见事实。
+- `Pending`、scheduler backpressure、未启动的 continuation 或诊断记录不消耗 call budget。
+  C0 的调用计数是 request protocol guard；token/latency/cost 仍只是 diagnostics/evaluation
+  inputs，不是扣账、lease、receipt 或玩家经济事实。
+
+当前 C0 implementation 不计量 opaque ProviderBacked adapter 内部的 model/tool calls、
+provider-side retry 或 provider 自己的 tool loop，也不把外部 provider 的一次 `decide` 推断为
+一次调用。ProviderBacked 的 self-metering、usage propagation 与 adapter contract 是后续
+provider/runtime slice；在该 slice 到来前，外层 C0 fields 不能宣称覆盖这些内部调用。已有
+`active_execute_until` 等不调用 provider/module 的 deterministic continuation 可以继续且不
+消耗 call budget；只有它后续实际尝试进入上述 native executor 时才执行 admission。
+
+因此 C0 只冻结“是否允许本次认知调用”的请求边界，不能被描述为 cognition lease、报价、
+资源 reserve/settle/release、refund/expiry 或 paid cognition。C1 才能由产品/玩法 authority
+决定付费资源、使用单位、owner/purpose/scope/authorization、quote/reserve/settle/release、
+expiry/refund、版本治理与玩家语义；C2 再由 Runtime/QA 证明 atomic lease/receipt、journal/
+replay 与 no-duplicate side effects。两阶段都不得在本 PRD 发明 numeric rate。Native
+TurnEngine、dynamic ToolRegistry 与 continuation convergence 只能在 C0 合同可消费后分别
+接入其对应 authority seam。
 
 ### 4.4 Session/Turn state mapping
 
@@ -427,7 +497,7 @@ Harness 只能消费 Runtime-owned status projection，不能生成或改写 `co
 | request identity/context/catalog/schema stale 或 mismatch | `Stale` / `NeedsRediscovery` | 不提交 action、memory 或 effect |
 | provider timeout/transport failure | bounded retry（同 request id）；耗尽后 `Wait(provider_unavailable)` | 不产生 heuristic action；保留脱敏 trace |
 | malformed/unknown/disallowed decision | `ActionRejected(invalid_decision)` 或 `Wait` | 不进入 Runtime commit，不消费 memory intent |
-| budget/repair limit exceeded | `Wait(budget_exhausted)` | 不把 repair 文本当 action |
+| native timeout/token/repair/model/tool call limit exceeded | `Wait(budget_exhausted)` | 不把 repair 文本当 action；不再发起超限 native provider/module call |
 | duplicate same digest | 原结果/原失败的 idempotent replay | exactly-once；不重复 provider side effect |
 | same request id with different digest | `ProtocolViolation(request_identity_collision)` | fail closed；不覆盖历史结果 |
 | unmatched/late/cross-agent feedback | diagnostic-only discard | 不污染 context/memory/continuation |
@@ -441,6 +511,26 @@ Harness 只能消费 Runtime-owned status projection，不能生成或改写 `co
 任何 provider failure 都不得偷偷替换为启发式动作。可用的安全降级是无副作用 `Wait` 或结构化 `ActionRejected`；重试必须受 bounded budget 限制。
 
 ## 11. P0-P2 rollout
+
+### C0：request-bound call budget（selected next closure）
+
+- Agent implementation 只在 native `LlmAgentBehavior` lane 把
+  `BudgetContractV1.max_model_calls` 与 `BudgetContractV1.max_tool_calls` 作为 request-bound
+  admission fields 接入 outer context；admission 分别位于 `LlmCompletionClient::complete`
+  和 `run_prompt_module` 之前。C0 不把一次 `decide` 推断为一次 model call，也不计量 opaque
+  ProviderBacked adapter 的内部调用；该 adapter 的 self-metering/usage contract 后置。
+- 当前 Runtime Live host context 使用 `max_model_calls=4`、`max_tool_calls=3`，仅是 host/profile
+  policy bound，不是 universal default 或玩法经济平衡；其他 host/profile 必须显式配置值或
+  走 compatibility lane。
+- C0 acceptance 只要求 identity binding、zero-is-deny、单调消耗、repair/retry 不重置、
+  exhaustion 的稳定 `budget_exhausted -> Wait` 与 native no-side-effect proof；不要求或暗示任何
+  token/latency/cost rate、Electricity/Data debit、lease、reserve、settle、refund 或 receipt。
+- legacy context 的 additive compatibility lane 必须显式标记；缺少新 fields 的旧输入不
+  得静默冒充 C0 target/proven。Integration order 固定为 product C0 contract -> Agent
+  implementation -> QA focused fixtures。
+- C0 通过后，Native TurnEngine 可消费同一 request budget seam；dynamic ToolRegistry、
+  continuation convergence 与完整 Cognition Economy 仍按后续 authority/dependency stages
+  进入，不能借 C0 提前承诺。
 
 ### P0.1：Identity、隔离与共同合同
 
@@ -488,12 +578,21 @@ Harness 只能消费 Runtime-owned status projection，不能生成或改写 `co
 - AC-HARNESS-10：timeout、malformed、stale、identity collision、provider unavailable、runtime deny/no_effect、cancelled、scheduler_backpressure 都有稳定失败码和无副作用保证；heuristic fallback 仅限显式 legacy lane且不计入 target proof。
 - AC-HARNESS-11：P0.1 identity、P0.2 async actor+MVCC、P0.3 minimum journal/recovery 全部 required 后，才可提出 production async claim；P1 live convergence/durable continuation、P2 advanced systems 分层；不得用 DTO、trace 或 aggregate metrics 冒充 `proven`。
 - AC-HARNESS-12：cognition economy 不在 P0 隐式实现；任何 reserve/settle 或计费承诺必须由独立 runtime/economy 合同和 receipt 证明。
+- AC-HARNESS-13：C0 native lane 的 `max_model_calls`/`max_tool_calls` 必须进入 request identity；
+  在 `complete`/`run_prompt_module` 调用前分别 admission，zero 明确拒绝，repair/transport
+  retry 不重置预算；耗尽返回稳定 `budget_exhausted -> Wait`，且无超限 native provider/module
+  call、新 candidate/action、projected/durable `MemoryWriteIntent`、world 或资源余额副作用。
+  admission 前已有的 local private `AgentMemory` observation/diagnostic bookkeeping 可保留，
+  但不构成 authoritative memory commit。无调用的 `active_execute_until` continuation 不消耗
+  budget。opaque ProviderBacked 内部调用不在 C0 覆盖范围；legacy context 只能走显式 additive
+  compatibility lane；C0 不构成 paid economy。
 
 ## 13. Verification Matrix
 
 | 层级 | 目标 fixture/命令类别 | 必须证明 | 不能证明 |
 | --- | --- | --- | --- |
 | `required` | canonical identity/JSON round-trip、完整 outer-context digest golden vectors（含不同 `transport_attempt`）、same-retry/different-turn、collision | identity 稳定、兼容序列化、幂等 key 不串 | provider 真实能力、Runtime commit/replay |
+| `required` | C0 native request-budget zero/positive fixtures、pre-`complete`/pre-`run_prompt_module` admission、repair/retry、exhaustion、no-call `active_execute_until` | native model/tool call count bounded、budget policy identity binding、稳定 `budget_exhausted -> Wait`、无新 action/projected-durable memory/world/resource side effect | opaque ProviderBacked internal calls、paid cognition、token/latency/cost rate、lease/reserve/settle/refund/receipt |
 | `required` | per-agent concurrency harness、retry/timeout、bounded repair | single in-flight、无双调用、稳定 Wait/Rejected | world scheduler 非阻塞或 MVCC 正确性 |
 | `required` | A/B interleaved feedback、late/unknown/duplicate feedback | correlation、分区、无 context contamination | Runtime receipt 持久化 |
 | `required` | feedback/trace bounds、credential redaction、gap/overflow、cancelled/backpressure、legacy module/feedback mapping | bounded projection、稳定 overflow、终态 cleanup、无启发式 target 漂移 | 真实 provider 的行为质量 |
@@ -523,6 +622,9 @@ invocation count、feedback partition 和 terminal disposition。
 ## 14. 明确 deferred 与 follow-up ownership
 
 - Runtime scheduler、world-independent progress、普通 action MVCC/stale/precondition、durable cognition journal/replay，以及 disposition-to-feedback mapping：由 paired `runtime_engineer` 文档和验证 slice 冻结，本专题只消费其 identity/receipt seam。
-- Cognition economy 的 reserve/settle、预算资源和扣账 receipt：P0 之外的独立 economy authority。
+- C0 request-bound call admission 属于 Harness protocol prerequisite；Cognition economy 的
+  paid resource choice/rate、reserve/settle/release、expiry/refund、预算资源和扣账 receipt
+  仍是 P0 之外的独立 product/gameplay/runtime/QA authority chain。C0 的 call count 不得被
+  解释为 lease、quote 或 paid cognition。
 - GoalGraph、belief memory、长期偏好纠正、共享/玩家可见 memory：分别由产品/玩法/Agent authority 联审，不能在本合同中隐式扩大。
 - Viewer transcript/diagnostic delivery、QA release judgment、repository Codex adapter/runtime dispatch：不属于本专题 ownership。

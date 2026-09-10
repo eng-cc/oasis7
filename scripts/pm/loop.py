@@ -165,7 +165,7 @@ def validate_task(root, task, tool_root, base=None, head=None, contracts=True, p
             if not repository: raise ValueError('dependency validation requires live repository identity')
             number = dependency_issue(repository, uid)
             terminal = _trusted_module(tool_root, root, binding, 'loop_terminal')
-            completed = terminal.validate_terminal_delivery(repository, uid, number)
+            completed = terminal.validate_terminal_delivery(repository, uid, number, repo_root=root)
             if completed['status'] != 'passed':
                 raise ValueError('dependency is not successfully completed: ' + uid + ': ' + '; '.join(completed['blockers']))
             dependency = live_binding({'repository': repository, 'issue_number': number, 'task_uid': uid})

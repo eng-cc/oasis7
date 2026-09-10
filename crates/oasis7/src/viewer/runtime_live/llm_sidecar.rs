@@ -259,6 +259,11 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     /// the marker durable prevents a restart from silently losing identity
     /// evidence and issuing a duplicate provider call.
     provider_recovery_pending: BTreeMap<String, lineage_persistence::ProviderRecoveryPending>,
+    /// A Runtime wake handoff may fail after the provider action is terminal.
+    /// Retain the exact context and disposition until Runtime accepts that
+    /// wake so retry cannot allocate a duplicate provider turn.
+    provider_wake_recovery_pending:
+        BTreeMap<String, lineage_persistence::ProviderWakeRecoveryPending>,
     provider_wait_until: BTreeMap<String, u64>,
     provider_feedback_seq: BTreeMap<String, u64>,
     /// Compatibility feedback sequencing is partitioned by Agent session;
@@ -278,6 +283,10 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     provider_lineage_binding: Option<RuntimeBindingV1>,
     provider_lineage_restored: bool,
     provider_lineage_hydrated: bool,
+    /// A lineage checkpoint that cannot be decoded is a recovery fence.  The
+    /// sidecar must not rebuild fresh contexts while its durable identity
+    /// evidence is unavailable.
+    provider_lineage_recovery_pending: Option<String>,
     pending_runtime_wakes: BTreeMap<String, SchedulerWakeV1>,
 }
 pub(in crate::viewer::runtime_live) struct RuntimePlayerBindingPlan {
@@ -337,6 +346,7 @@ impl RuntimeLlmSidecar {
             provider_continuation_proposals: BTreeMap::new(),
             provider_continuation_recovery_pending: BTreeMap::new(),
             provider_recovery_pending: BTreeMap::new(),
+            provider_wake_recovery_pending: BTreeMap::new(),
             provider_wait_until: BTreeMap::new(),
             provider_feedback_seq: BTreeMap::new(),
             provider_feedback_seq_by_session: BTreeMap::new(),
@@ -353,6 +363,7 @@ impl RuntimeLlmSidecar {
             provider_lineage_binding: None,
             provider_lineage_restored: false,
             provider_lineage_hydrated: false,
+            provider_lineage_recovery_pending: None,
             pending_runtime_wakes: BTreeMap::new(),
         }
     }
@@ -771,17 +782,21 @@ impl RuntimeLlmSidecar {
             .iter()
             .map(|wake| wake.wake_id.as_str())
             .collect::<BTreeSet<_>>();
-        self.pending_runtime_wakes
-            .retain(|wake_id, _| live_wake_ids.contains(wake_id.as_str()));
+        let mut pending_runtime_wakes = self.pending_runtime_wakes.clone();
+        let pending_runtime_wakes_migrated =
+            lineage_persistence::hydrate_pending_runtime_wake_identities(
+                &mut pending_runtime_wakes,
+                &wakes,
+                &self.provider_terminal_states,
+            )?;
+        pending_runtime_wakes.retain(|wake_id, _| live_wake_ids.contains(wake_id.as_str()));
         for wake in wakes {
             if !self.provider_lineage_hydrated
                 && self
                     .provider_active_turns
                     .get(wake.agent_id.as_str())
                     .is_some_and(|context| {
-                        context.request_context.agent_turn_id == wake.agent_turn_id
-                            && context.request_context.decision_request_id
-                                == wake.decision_request_id
+                        lineage_persistence::provider_context_matches_wake(context, &wake)
                     })
             {
                 // A process-local async runner cannot survive restart. Keep
@@ -789,9 +804,13 @@ impl RuntimeLlmSidecar {
                 // fresh provider dispatch through the recovered wake.
                 self.provider_active_turns.remove(wake.agent_id.as_str());
             }
-            self.pending_runtime_wakes
+            pending_runtime_wakes
                 .entry(wake.wake_id.clone())
                 .or_insert(wake);
+        }
+        self.pending_runtime_wakes = pending_runtime_wakes;
+        if pending_runtime_wakes_migrated {
+            self.persist_provider_lineage_best_effort();
         }
         Ok(())
     }
@@ -812,6 +831,40 @@ impl RuntimeLlmSidecar {
         self.pending_runtime_wakes
             .values()
             .filter(|wake| wake.agent_id == agent_id)
+            .min_by_key(|wake| (wake.wake_seq, wake.wake_id.as_str()))
+            .map(|wake| wake.wake_id.as_str())
+    }
+
+    pub(in crate::viewer::runtime_live) fn pending_runtime_wake_id_for_context(
+        &self,
+        agent_id: &str,
+        context: &cognition_context::ProviderContextState,
+    ) -> Option<&str> {
+        self.pending_runtime_wakes
+            .values()
+            .filter(|wake| {
+                wake.agent_id == agent_id
+                    && lineage_persistence::provider_context_matches_wake(context, wake)
+            })
+            .min_by_key(|wake| (wake.wake_seq, wake.wake_id.as_str()))
+            .map(|wake| wake.wake_id.as_str())
+    }
+
+    pub(in crate::viewer::runtime_live) fn pending_runtime_wake_id_for_terminal(
+        &self,
+        agent_id: &str,
+    ) -> Option<&str> {
+        let terminal = self.provider_terminal_states.get(agent_id)?;
+        self.pending_runtime_wakes
+            .values()
+            .filter(|wake| {
+                wake.agent_id == agent_id
+                    && wake.agent_session_id == terminal.agent_session_id
+                    && wake.agent_turn_id == terminal.agent_turn_id
+                    && wake.decision_request_id == terminal.decision_request_id
+                    && !wake.request_digest.is_empty()
+                    && wake.request_digest == terminal.request_digest
+            })
             .min_by_key(|wake| (wake.wake_seq, wake.wake_id.as_str()))
             .map(|wake| wake.wake_id.as_str())
     }
@@ -1076,6 +1129,9 @@ impl RuntimeLlmSidecar {
     }
 }
 
+#[cfg(test)]
+#[path = "llm_sidecar_budget_tests.rs"]
+mod budget_tests;
 #[cfg(test)]
 #[path = "llm_sidecar_tests.rs"]
 mod tests;

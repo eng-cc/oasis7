@@ -912,6 +912,7 @@ fn openai_client_respects_configured_timeout_without_hidden_retry() {
         system_prompt: config.system_prompt.clone(),
         user_prompt: "return wait".to_string(),
         debug_mode: false,
+        max_model_calls: None,
     };
     let started_at = Instant::now();
     let error = client
@@ -993,6 +994,7 @@ fn openai_client_retries_single_concurrency_limit_decode_failure() {
         system_prompt: config.system_prompt.clone(),
         user_prompt: "return wait".to_string(),
         debug_mode: false,
+        max_model_calls: None,
     };
 
     let result = client.complete(&request).expect("client should retry once");

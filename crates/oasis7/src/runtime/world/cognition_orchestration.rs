@@ -247,6 +247,7 @@ impl World {
         &mut self,
         wake: SchedulerWakeV1,
     ) -> Result<SchedulerEnqueueOutcome, WorldError> {
+        let wake = self.hydrate_legacy_scheduler_wake(wake)?;
         self.validate_cognition_wake_binding(&wake)?;
         let mut scheduler = self.cognition_scheduler()?;
         scheduler.advance_logical_tick(self.state.time);
@@ -778,6 +779,7 @@ impl World {
             agent_session_id: continuation.agent_session_id.clone(),
             agent_turn_id: continuation.agent_turn_id.clone(),
             decision_request_id: continuation.decision_request_id.clone(),
+            request_digest: continuation.origin_request_digest.clone(),
             next_wake_tick,
             eligible_since_tick: self.state.time,
             starvation_deadline_tick: self
@@ -944,7 +946,60 @@ impl World {
             .filter(|state| !state.is_null())
             .cloned()
             .ok_or_else(|| cognition_validation_error("scheduler_unconfigured"))?;
+        let state = self.hydrate_legacy_wake_request_digests(&state)?;
         CognitionScheduler::from_snapshot_json(state).map_err(|error| scheduler_error(error.code()))
+    }
+
+    /// V1 scheduler snapshots predate the wake request digest. Rehydrate that
+    /// field from the authoritative continuation origin before exposing any
+    /// wake to Runtime callers. An unresolvable legacy wake remains empty and
+    /// is therefore rejected by the provider sidecar's fail-closed handoff.
+    pub(in crate::runtime::world) fn hydrate_legacy_wake_request_digests(
+        &self,
+        scheduler_state: &JsonValue,
+    ) -> Result<JsonValue, WorldError> {
+        let continuations = self.active_cognition_continuations()?;
+        let mut state = scheduler_state.clone();
+        for bucket in ["active", "backpressure", "in_flight"] {
+            let Some(values) = state.get_mut(bucket) else {
+                continue;
+            };
+            match values {
+                JsonValue::Array(entries) => {
+                    for entry in entries {
+                        hydrate_wake_digest(entry, &continuations);
+                    }
+                }
+                JsonValue::Object(entries) => {
+                    for entry in entries.values_mut() {
+                        hydrate_wake_digest(entry, &continuations);
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(state)
+    }
+
+    /// Hydrate the request digest on a legacy direct-ingress wake only from
+    /// the matching, already validated Runtime continuation.  A supplied
+    /// digest is left untouched so the full binding check below rejects any
+    /// contradictory explicit identity.
+    fn hydrate_legacy_scheduler_wake(
+        &self,
+        mut wake: SchedulerWakeV1,
+    ) -> Result<SchedulerWakeV1, WorldError> {
+        if !wake.request_digest.is_empty() {
+            return Ok(wake);
+        }
+        let continuation = self
+            .active_cognition_continuations()?
+            .into_iter()
+            .find(|continuation| continuation.continuation_id == wake.continuation_id);
+        if let Some(continuation) = continuation {
+            wake.request_digest = continuation.origin_request_digest;
+        }
+        Ok(wake)
     }
 
     fn cognition_wake_has_active_continuation(
@@ -1050,6 +1105,7 @@ impl World {
             || continuation.agent_session_id != wake.agent_session_id
             || continuation.agent_turn_id != wake.agent_turn_id
             || continuation.decision_request_id != wake.decision_request_id
+            || continuation.origin_request_digest != wake.request_digest
         {
             return Err(cognition_validation_error("foreign_scheduler_wake"));
         }
@@ -1067,6 +1123,32 @@ fn cognition_validation_error(code: &str) -> WorldError {
     WorldError::DistributedValidationFailed {
         reason: format!("cognition validation failed: {code}"),
     }
+}
+
+fn hydrate_wake_digest(entry: &mut JsonValue, continuations: &[AgentContinuation]) {
+    let Some(object) = entry.as_object_mut() else {
+        return;
+    };
+    let missing_digest = object
+        .get("request_digest")
+        .and_then(JsonValue::as_str)
+        .is_none_or(str::is_empty);
+    if !missing_digest {
+        return;
+    }
+    let Some(continuation_id) = object.get("continuation_id").and_then(JsonValue::as_str) else {
+        return;
+    };
+    let Some(continuation) = continuations
+        .iter()
+        .find(|continuation| continuation.continuation_id == continuation_id)
+    else {
+        return;
+    };
+    object.insert(
+        "request_digest".to_string(),
+        JsonValue::String(continuation.origin_request_digest.clone()),
+    );
 }
 
 fn scheduler_error(code: &str) -> WorldError {

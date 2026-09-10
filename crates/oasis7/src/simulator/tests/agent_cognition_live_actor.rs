@@ -290,6 +290,7 @@ fn pending_runtime_feedback_retains_awaiting_outcome_until_terminal_or_expiry() 
             context.agent_session_id.as_str(),
             context.agent_turn_id.as_str(),
             context.decision_request_id.as_str(),
+            context.request_digest.to_string().as_str(),
         )
         .expect("explicit lease expiry releases the occupied outcome");
     assert_eq!(
@@ -299,4 +300,97 @@ fn pending_runtime_feedback_retains_awaiting_outcome_until_terminal_or_expiry() 
             .code(),
         "cognition_error"
     );
+}
+
+#[test]
+fn runtime_release_and_expiry_reject_digest_only_collisions() {
+    let context = ContinuousAgentTurnContextV1 {
+        agent_id: AGENT_ID.to_string(),
+        agent_session_id: "session.agent-live-digest-collision".to_string(),
+        agent_turn_id: "turn.agent-live-digest-collision".to_string(),
+        decision_request_id: "request.agent-live-digest-collision".to_string(),
+        request_digest: Digest32::from(
+            "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ),
+        memory_snapshot: MemoryContextSnapshotV1::empty("session_private"),
+        goal_snapshot: GoalSnapshotV1::empty(),
+        continuation: None,
+    };
+    let wrong_digest = "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+    let mut expiring = AsyncAgentRunner::builtin_fixture(AGENT_ID);
+    expiring
+        .start_turn_with_context(AGENT_ID, context.clone())
+        .expect("open expiry collision turn");
+    for _ in 0..1024 {
+        if !expiring
+            .poll_completed()
+            .expect("poll expiry collision turn")
+            .is_empty()
+        {
+            break;
+        }
+        std::thread::yield_now();
+    }
+    let expiry_error = expiring
+        .expire_runtime_turn(
+            AGENT_ID,
+            context.agent_session_id.as_str(),
+            context.agent_turn_id.as_str(),
+            context.decision_request_id.as_str(),
+            wrong_digest,
+        )
+        .expect_err("expiry must reject digest-only collision");
+    assert!(
+        expiry_error
+            .to_string()
+            .contains("unknown pending Runtime turn")
+    );
+    expiring
+        .expire_runtime_turn(
+            AGENT_ID,
+            context.agent_session_id.as_str(),
+            context.agent_turn_id.as_str(),
+            context.decision_request_id.as_str(),
+            context.request_digest.to_string().as_str(),
+        )
+        .expect("matching expiry identity releases the turn");
+
+    let mut releasing = AsyncAgentRunner::builtin_fixture(AGENT_ID);
+    releasing
+        .start_turn_with_context(AGENT_ID, context.clone())
+        .expect("open release collision turn");
+    for _ in 0..1024 {
+        if !releasing
+            .poll_completed()
+            .expect("poll release collision turn")
+            .is_empty()
+        {
+            break;
+        }
+        std::thread::yield_now();
+    }
+    let release_error = releasing
+        .release_runtime_turn_for_continuation(
+            AGENT_ID,
+            context.agent_session_id.as_str(),
+            context.agent_turn_id.as_str(),
+            context.decision_request_id.as_str(),
+            wrong_digest,
+        )
+        .expect_err("release must reject digest-only collision");
+    assert!(
+        release_error
+            .to_string()
+            .contains("unknown pending Runtime turn")
+    );
+    releasing
+        .release_runtime_turn_for_continuation(
+            AGENT_ID,
+            context.agent_session_id.as_str(),
+            context.agent_turn_id.as_str(),
+            context.decision_request_id.as_str(),
+            context.request_digest.to_string().as_str(),
+        )
+        .expect("matching release identity releases the turn");
 }

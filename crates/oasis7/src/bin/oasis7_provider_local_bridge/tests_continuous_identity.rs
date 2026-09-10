@@ -2,6 +2,7 @@ use super::*;
 use oasis7::capability_invocation_context::CapabilityInvocationContext;
 use oasis7::simulator::{
     COGNITION_CAPABILITY_CATALOG_DOMAIN, COGNITION_CAPABILITY_INVOCATION_CONTEXT_DOMAIN,
+    DecisionResponse, cognition_legacy_response_digest,
 };
 use oasis7_wasm_abi::CapabilityCatalogSnapshot;
 
@@ -18,6 +19,36 @@ impl AgentInvoker for RecordingInvoker {
             .expect("recording invocations lock")
             .push(invocation);
         self.response.clone()
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct LatencyChangingInvoker {
+    calls: Arc<Mutex<usize>>,
+}
+
+impl AgentInvoker for LatencyChangingInvoker {
+    fn invoke(&self, _invocation: AgentInvocation) -> Result<AgentInvocationOutput, String> {
+        let first_call = {
+            let mut calls = self.calls.lock().expect("latency invoker lock");
+            let first_call = *calls == 0;
+            *calls += 1;
+            first_call
+        };
+        if first_call {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        Ok(AgentInvocationOutput {
+            prompt: "prompt".to_string(),
+            text: r#"{"decision":"wait"}"#.to_string(),
+            provider_version: Some("provider/test".to_string()),
+            duration_ms: Some(1),
+            prompt_tokens: None,
+            completion_tokens: None,
+            total_tokens: None,
+            route_note: None,
+            upstream_trace: None,
+        })
     }
 }
 
@@ -571,6 +602,8 @@ fn continuous_context(
         budget_contract: oasis7::simulator::BudgetContractV1 {
             max_latency_ms: 7_000,
             max_repair_attempts: 1,
+            max_model_calls: 4,
+            max_tool_calls: 3,
         },
         request_digest: Digest32::default(),
     };
@@ -686,4 +719,81 @@ fn continuous_bridge_uses_outer_identity_for_session_and_invocation_key() {
         invocations[2].provider_invocation_key.as_deref(),
         Some(other_key.as_str())
     );
+}
+
+#[test]
+fn continuous_bridge_retry_ignores_non_authority_latency_in_response_identity() {
+    let state = ProviderState::new(CliOptions::default()).expect("build provider state");
+    let invoker = LatencyChangingInvoker::default();
+    let first = continuous_context("session-latency", 1);
+    let retry = continuous_context("session-latency", 2);
+
+    state
+        .handle_continuous_decision(first, None, &invoker)
+        .expect("first continuous invocation");
+    state
+        .handle_continuous_decision(retry, None, &invoker)
+        .expect("transport retry with different diagnostic latency");
+}
+
+#[test]
+fn continuous_bridge_rejects_legacy_full_response_digest_explicitly() {
+    let state = ProviderState::new(CliOptions::default()).expect("build provider state");
+    let current = state
+        .handle_continuous_decision(
+            continuous_context("session-legacy", 1),
+            None,
+            &recording_invoker(),
+        )
+        .expect("current response");
+    let mut legacy = current;
+    legacy.response_digest = cognition_legacy_response_digest(&legacy.base_decision_response);
+    let identity = legacy.response_artifact_identity();
+
+    assert_eq!(
+        legacy
+            .validate_response_artifact_identity(&identity)
+            .expect_err("legacy full response digest must not enter target validation")
+            .code(),
+        "legacy_response_digest_unsupported"
+    );
+}
+
+#[test]
+fn continuous_bridge_rejects_old_persisted_feedback_state_schema() {
+    let path = std::env::temp_dir().join(format!(
+        "oasis7-provider-feedback-legacy-schema-{}.json",
+        std::process::id()
+    ));
+    let response = DecisionResponse::wait("legacy-provider");
+    let legacy_digest = cognition_legacy_response_digest(&response);
+    let state = serde_json::json!({
+        "schema_version": 1,
+        "accepted_requests": {
+            "request-legacy": {
+                "agent_subject": "agent-legacy",
+                "agent_session_id": "session-legacy",
+                "agent_turn_id": "turn-legacy",
+                "decision_request_id": "request-legacy",
+                "request_digest": "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "response_digest": legacy_digest,
+                "accepted_order": 1
+            }
+        },
+        "partitions": []
+    });
+    std::fs::write(
+        &path,
+        serde_json::to_vec(&state).expect("encode legacy state"),
+    )
+    .expect("write legacy state");
+
+    let error =
+        ProviderState::new_with_feedback_state_path(CliOptions::default(), Some(path.clone()))
+            .expect_err("old persisted full-response digest state must fail closed");
+    assert!(
+        error.contains("unsupported schema"),
+        "unexpected error: {error}"
+    );
+    let _ = std::fs::remove_file(path);
 }

@@ -834,7 +834,7 @@ def validate_loop_inputs(root: pathlib.Path, binding: dict[str, Any], repository
             if len(bindings) >= 64:
                 die("selected dependency closure exceeds 64 tasks; narrow the dependency contract")
             live = github_issue_record(repository, uid)
-            require_loop_dependency_ready(live or {}, uid, repository)
+            require_loop_dependency_ready(live or {}, uid, repository, root)
             dependency = (live or {}).get("loop_binding")
             if not isinstance(dependency, dict):
                 die("selected dependency binding unavailable: " + uid)
@@ -847,10 +847,14 @@ def validate_loop_inputs(root: pathlib.Path, binding: dict[str, Any], repository
         sys.path.pop(0)
 
 
-def require_loop_dependency_ready(live: dict[str, Any], task_uid: str, repository: str = DEFAULT_REPO) -> None:
+def require_loop_dependency_ready(live: dict[str, Any], task_uid: str, repository: str = DEFAULT_REPO,
+                                  repo_root: pathlib.Path | None = None) -> None:
     """A delivery dependency needs the canonical merged terminal, not mere closure."""
     from loop_terminal import validate_terminal_delivery
-    result = validate_terminal_delivery(repository, task_uid, live.get("issue_number"))
+    if repo_root is None:
+        result = validate_terminal_delivery(repository, task_uid, live.get("issue_number"))
+    else:
+        result = validate_terminal_delivery(repository, task_uid, live.get("issue_number"), repo_root=repo_root)
     if result.get("status") != "passed":
         die("selected dependency has not completed merged delivery: " + task_uid + ": " + str(result.get("blockers")))
 

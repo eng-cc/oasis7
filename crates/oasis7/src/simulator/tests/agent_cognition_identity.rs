@@ -14,7 +14,7 @@ use crate::simulator::{
     COGNITION_CAPABILITY_INVOCATION_CONTEXT_DOMAIN, ContinuousAgentRequestContextV1,
     ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1, Digest32, FeedbackEnvelopeV1,
     FinalityBindingV1, GoalSnapshotV1, MemoryContextSnapshotV1, MemoryWriteIntentV1,
-    RuntimeBindingV1, h_v1,
+    RuntimeBindingV1, cognition_response_digest, h_v1,
 };
 use oasis7_wasm_abi::AgentCommandResponse;
 use serde_json::{Value, json};
@@ -34,7 +34,7 @@ fn inner_request() -> Value {
     .expect("serialize inner decision request")
 }
 
-fn request_fixture(transport_attempt: u64, timeout_budget_ms: u64) -> Value {
+pub(super) fn request_fixture(transport_attempt: u64, timeout_budget_ms: u64) -> Value {
     let mut base_decision_request = inner_request();
     base_decision_request["timeout_budget_ms"] = json!(timeout_budget_ms);
     json!({
@@ -66,12 +66,12 @@ fn request_fixture(transport_attempt: u64, timeout_budget_ms: u64) -> Value {
         "goal_snapshot_digest": "blake3:2222222222222222222222222222222222222222222222222222222222222222",
         "continuation_digest": "blake3:3333333333333333333333333333333333333333333333333333333333333333",
         "adapter_protocol_version": "loopback-http-v1",
-        "budget_contract": {"max_latency_ms": 60_000, "max_repair_attempts": 2},
+        "budget_contract": {"max_latency_ms": 60_000, "max_repair_attempts": 2, "max_model_calls": 4, "max_tool_calls": 3},
         "request_digest": "blake3:4444444444444444444444444444444444444444444444444444444444444444"
     })
 }
 
-fn production_request_fixture(transport_attempt: u64, timeout_budget_ms: u64) -> Value {
+pub(super) fn production_request_fixture(transport_attempt: u64, timeout_budget_ms: u64) -> Value {
     let mut fixture = request_fixture(transport_attempt, timeout_budget_ms);
     let subject = json!({
         "kind": "agent",
@@ -148,7 +148,7 @@ fn derived_request_digest(fixture: &Value) -> Digest32 {
     h_v1(REQUEST_DOMAIN, &bytes)
 }
 
-fn request_from_value(mut fixture: Value) -> ContinuousAgentRequestContextV1 {
+pub(super) fn request_from_value(mut fixture: Value) -> ContinuousAgentRequestContextV1 {
     fixture["request_digest"] = json!(derived_request_digest(&fixture));
     serde_json::from_value(fixture).expect("decode ContinuousAgentRequestContextV1 fixture")
 }
@@ -157,7 +157,7 @@ fn request(transport_attempt: u64, timeout_budget_ms: u64) -> ContinuousAgentReq
     request_from_value(request_fixture(transport_attempt, timeout_budget_ms))
 }
 
-fn production_turn_context(
+pub(super) fn production_turn_context(
     request_context: &ContinuousAgentRequestContextV1,
 ) -> ContinuousAgentTurnContextV1 {
     ContinuousAgentTurnContextV1 {
@@ -172,7 +172,7 @@ fn production_turn_context(
     }
 }
 
-fn production_observation(agent_id: &str, time: u64) -> Observation {
+pub(super) fn production_observation(agent_id: &str, time: u64) -> Observation {
     Observation {
         time,
         agent_id: agent_id.to_string(),
@@ -899,10 +899,7 @@ fn production_outer_context_preserves_retry_transport_and_runtime_binding() {
     assert_eq!(response.transport_attempt, prepared.transport_attempt);
     assert_eq!(
         response.response_digest,
-        h_v1(
-            "oasis7.cognition.response.v1",
-            &response.base_decision_response
-        )
+        cognition_response_digest(&response.base_decision_response)
     );
     let artifact_identity = response.response_artifact_identity();
     response

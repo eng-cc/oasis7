@@ -84,6 +84,7 @@ impl AsyncAgentRunner {
         agent_session_id: &str,
         agent_turn_id: &str,
         decision_request_id: &str,
+        request_digest: &str,
     ) -> Result<(), AsyncAgentRunnerError> {
         let Some((&turn_id, _outcome)) = self.awaiting_outcomes.iter().find(|(_, outcome)| {
             outcome.agent_id == agent_id
@@ -91,6 +92,7 @@ impl AsyncAgentRunner {
                     context.agent_session_id == agent_session_id
                         && context.agent_turn_id == agent_turn_id
                         && context.decision_request_id == decision_request_id
+                        && context.request_digest.to_string() == request_digest
                 })
         }) else {
             return Err(AsyncAgentRunnerError::Cognition(
@@ -120,6 +122,7 @@ impl AsyncAgentRunner {
         agent_session_id: &str,
         agent_turn_id: &str,
         decision_request_id: &str,
+        request_digest: &str,
     ) -> Result<(), AsyncAgentRunnerError> {
         let Some((&turn_id, _outcome)) = self.awaiting_outcomes.iter().find(|(_, outcome)| {
             outcome.agent_id == agent_id
@@ -127,6 +130,7 @@ impl AsyncAgentRunner {
                     context.agent_session_id == agent_session_id
                         && context.agent_turn_id == agent_turn_id
                         && context.decision_request_id == decision_request_id
+                        && context.request_digest.to_string() == request_digest
                 })
         }) else {
             return Err(AsyncAgentRunnerError::Cognition(

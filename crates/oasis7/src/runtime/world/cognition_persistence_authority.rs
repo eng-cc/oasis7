@@ -136,12 +136,7 @@ impl World {
                         | ContinuationStatusV1::Rejected
                 )
             })
-            .map(|continuation| {
-                continuation
-                    .validate_authoritative()
-                    .map_err(|error| cognition_validation(error.code()))?;
-                Ok(continuation)
-            })
+            .map(|continuation| normalize_cognition_continuation(continuation))
             .collect()
     }
 
@@ -161,7 +156,8 @@ impl World {
         else {
             return Ok(None);
         };
-        let scheduler = CognitionScheduler::from_snapshot_json(state.clone())
+        let scheduler_state = self.hydrate_legacy_wake_request_digests(state)?;
+        let scheduler = CognitionScheduler::from_snapshot_json(scheduler_state)
             .map_err(|error| cognition_validation(error.code()))?;
         let Some(wake) = scheduler.wake_by_id(wake_id) else {
             return Ok(None);
@@ -169,4 +165,20 @@ impl World {
         self.validate_cognition_wake_binding(&wake)?;
         Ok(Some(wake))
     }
+}
+
+/// Normalize one sparse legacy continuation into the typed authority view.
+/// Older snapshots omitted the Runtime-issued status digest; deriving it from
+/// the durable continuation fields makes that record eligible for identity
+/// hydration while leaving the persisted sparse projection unchanged.
+fn normalize_cognition_continuation(
+    mut continuation: AgentContinuation,
+) -> Result<AgentContinuation, WorldError> {
+    if continuation.continuation_status_digest.is_none() {
+        continuation.refresh_status_digest();
+    }
+    continuation
+        .validate_authoritative()
+        .map_err(|error| cognition_validation(error.code()))?;
+    Ok(continuation)
 }

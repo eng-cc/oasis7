@@ -49,6 +49,7 @@ fn seed_owner_resource(
         WorldKernel::from_snapshot(snapshot, journal).expect("rebuild kernel from seeded snapshot");
 }
 
+mod agent_cognition_budget;
 mod agent_cognition_continuation;
 mod agent_cognition_goal_snapshot;
 mod agent_cognition_identity;

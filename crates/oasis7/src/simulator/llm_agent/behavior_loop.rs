@@ -1,12 +1,71 @@
+use super::super::cognition_response_identity::cognition_response_digest;
 use super::super::continuous_agent_harness::{
-    COGNITION_RESPONSE_DIGEST_DOMAIN, CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR,
-    CONTINUOUS_AGENT_CONTEXT_VERSION, ContinuousAgentRequestContextV1,
-    ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1, h_v1,
+    CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR, CONTINUOUS_AGENT_CONTEXT_VERSION,
+    ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1,
+    ContinuousAgentTurnContextV1,
 };
 use super::super::decision_provider::{DecisionResponse, ProviderDiagnostics};
-use super::behavior_context::builtin_provider_decision;
+use super::behavior_budget::{BudgetTraceState, budget_diagnostics};
+use super::behavior_context::{CognitionBudgetExhausted, builtin_provider_decision};
 use super::*;
 use std::time::Instant;
+
+impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
+    fn admit_model_call(&mut self) -> Result<(), CognitionBudgetExhausted> {
+        let budget = self
+            .continuous_context
+            .request_context
+            .as_ref()
+            .map(|context| context.budget_contract.clone());
+        budget.map_or(Ok(()), |budget| {
+            self.continuous_context
+                .budget_ledger
+                .admit_model_call(&budget)
+        })
+    }
+
+    fn admit_tool_call(&mut self) -> Result<(), CognitionBudgetExhausted> {
+        let budget = self
+            .continuous_context
+            .request_context
+            .as_ref()
+            .map(|context| context.budget_contract.clone());
+        budget.map_or(Ok(()), |budget| {
+            self.continuous_context
+                .budget_ledger
+                .admit_tool_call(&budget)
+        })
+    }
+
+    pub(super) fn set_builtin_response_context(&mut self, decision: &AgentDecision) {
+        let Some(request_context) = self.continuous_context.request_context.as_ref() else {
+            return;
+        };
+        let response = DecisionResponse {
+            decision: builtin_provider_decision(decision),
+            module_command: None,
+            provider_error: None,
+            diagnostics: ProviderDiagnostics {
+                provider_id: Some("builtin_llm".to_string()),
+                ..ProviderDiagnostics::default()
+            },
+            trace_payload: Default::default(),
+            memory_write_intents: Vec::new(),
+        };
+        self.continuous_context.pending_response_context = Some(ContinuousAgentResponseContextV1 {
+            response_digest: cognition_response_digest(&response),
+            base_decision_response: response,
+            context_discriminator: CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR.to_string(),
+            context_version: CONTINUOUS_AGENT_CONTEXT_VERSION,
+            agent_session_id: request_context.agent_session_id.clone(),
+            agent_turn_id: request_context.agent_turn_id.clone(),
+            decision_request_id: request_context.decision_request_id.clone(),
+            retry_seq: request_context.retry_seq,
+            transport_attempt: request_context.transport_attempt,
+            request_digest: request_context.request_digest.clone(),
+        });
+    }
+}
 
 impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
     fn agent_id(&self) -> &str {
@@ -16,11 +75,12 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
     fn decide(&mut self, observation: &Observation) -> AgentDecision {
         self.pending_decision_rewrite = None;
         self.continuous_context.pending_response_context = None;
-        self.memory
-            .record_observation(observation.time, Self::observe_memory_summary(observation));
         let trace_chat_start = self
             .conversation_trace_cursor
             .min(self.conversation_history.len());
+
+        self.memory
+            .record_observation(observation.time, Self::observe_memory_summary(observation));
 
         if let Some(active_execute_until) = self.active_execute_until.as_mut() {
             match active_execute_until.evaluate_next_step(observation) {
@@ -52,6 +112,7 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
                             completion_tokens: None,
                             total_tokens: None,
                             retry_count: 0,
+                            ..budget_diagnostics(self.continuous_context.snapshot())
                         }),
                         llm_effect_intents: vec![],
                         llm_effect_receipts: vec![],
@@ -217,6 +278,11 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
                 system_prompt: prompt_output.system_prompt.clone(),
                 user_prompt,
                 debug_mode: self.config.llm_debug_mode,
+                max_model_calls: self
+                    .continuous_context
+                    .request_context
+                    .as_ref()
+                    .map(|context| context.budget_contract.max_model_calls),
             };
             let input_summary = format!(
                 "turn={turn}; module_calls={}/{}; repair_rounds={}/{}; force_replan={}; prompt_profile={}",
@@ -232,6 +298,28 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
                 request.user_prompt.as_str(),
             ));
 
+            if let Err(exhausted) = self.admit_model_call() {
+                return self.budget_exhausted_decision(
+                    observation,
+                    trace_chat_start,
+                    exhausted,
+                    BudgetTraceState {
+                        model,
+                        latency_total_ms,
+                        prompt_tokens_total,
+                        completion_tokens_total,
+                        total_tokens_total,
+                        has_prompt_tokens,
+                        has_completion_tokens,
+                        has_total_tokens,
+                        repair_rounds_used,
+                        trace_inputs,
+                        trace_outputs,
+                        llm_step_trace,
+                        llm_prompt_section_trace,
+                    },
+                );
+            }
             let request_started_at = Instant::now();
             match self.client.complete(&request) {
                 Ok(completion) => {
@@ -456,13 +544,6 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
                                     request: module_request,
                                     message_to_user,
                                 } => {
-                                    if let Some(message_to_user) = message_to_user.as_deref() {
-                                        let _ = self.append_conversation_message(
-                                            observation.time,
-                                            LlmChatRole::Agent,
-                                            message_to_user,
-                                        );
-                                    }
                                     if module_history.len() >= self.config.max_module_calls {
                                         deferred_parse_error = Some(format!(
                                             "module call limit exceeded: max_module_calls={}",
@@ -472,6 +553,52 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
                                         turn_output_summary =
                                             "module_call skipped: limit exceeded".to_string();
                                     } else {
+                                        if let Err(exhausted) = self.admit_tool_call() {
+                                            let denial = exhausted.message();
+                                            turn_status = "degraded".to_string();
+                                            turn_output_summary = format!(
+                                                "{}; module_call admission denied: {}",
+                                                turn_output_summary, denial
+                                            );
+                                            llm_step_trace.push(LlmStepTrace {
+                                                step_index: turn,
+                                                step_type: if is_repair_turn {
+                                                    "repair".to_string()
+                                                } else {
+                                                    "dialogue_turn".to_string()
+                                                },
+                                                input_summary: input_summary.clone(),
+                                                output_summary: turn_output_summary.clone(),
+                                                status: turn_status.clone(),
+                                            });
+                                            return self.budget_exhausted_decision(
+                                                observation,
+                                                trace_chat_start,
+                                                exhausted,
+                                                BudgetTraceState {
+                                                    model,
+                                                    latency_total_ms,
+                                                    prompt_tokens_total,
+                                                    completion_tokens_total,
+                                                    total_tokens_total,
+                                                    has_prompt_tokens,
+                                                    has_completion_tokens,
+                                                    has_total_tokens,
+                                                    repair_rounds_used,
+                                                    trace_inputs,
+                                                    trace_outputs,
+                                                    llm_step_trace,
+                                                    llm_prompt_section_trace,
+                                                },
+                                            );
+                                        }
+                                        if let Some(message_to_user) = message_to_user.as_deref() {
+                                            let _ = self.append_conversation_message(
+                                                observation.time,
+                                                LlmChatRole::Agent,
+                                                message_to_user,
+                                            );
+                                        }
                                         let module_name = module_request.module.clone();
                                         let module_args = module_request.args.clone();
                                         let intent_id = self.next_prompt_intent_id();
@@ -800,6 +927,7 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
                 completion_tokens: has_completion_tokens.then_some(completion_tokens_total),
                 total_tokens: has_total_tokens.then_some(total_tokens_total),
                 retry_count: repair_rounds_used,
+                ..budget_diagnostics(self.continuous_context.snapshot())
             }),
             llm_effect_intents,
             llm_effect_receipts,
@@ -812,32 +940,7 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
         // when it is hosted by the production async Harness. The LLM trace
         // remains the Builtin adapter diagnostic payload; this response is
         // the typed candidate/identity artifact consumed by Runtime.
-        if let Some(request_context) = self.continuous_context.request_context.as_ref() {
-            let response = DecisionResponse {
-                decision: builtin_provider_decision(&decision),
-                module_command: None,
-                provider_error: None,
-                diagnostics: ProviderDiagnostics {
-                    provider_id: Some("builtin_llm".to_string()),
-                    ..ProviderDiagnostics::default()
-                },
-                trace_payload: Default::default(),
-                memory_write_intents: Vec::new(),
-            };
-            self.continuous_context.pending_response_context =
-                Some(ContinuousAgentResponseContextV1 {
-                    response_digest: h_v1(COGNITION_RESPONSE_DIGEST_DOMAIN, &response),
-                    base_decision_response: response,
-                    context_discriminator: CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR.to_string(),
-                    context_version: CONTINUOUS_AGENT_CONTEXT_VERSION,
-                    agent_session_id: request_context.agent_session_id.clone(),
-                    agent_turn_id: request_context.agent_turn_id.clone(),
-                    decision_request_id: request_context.decision_request_id.clone(),
-                    retry_seq: request_context.retry_seq,
-                    transport_attempt: request_context.transport_attempt,
-                    request_digest: request_context.request_digest.clone(),
-                });
-        }
+        self.set_builtin_response_context(&decision);
 
         decision
     }
@@ -1068,6 +1171,9 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
         &mut self,
         context: Option<&ContinuousAgentRequestContextV1>,
     ) {
+        self.continuous_context
+            .budget_ledger
+            .bind_request(context.map(|value| value.request_digest.as_str()));
         self.continuous_context.request_context = context.cloned();
     }
 

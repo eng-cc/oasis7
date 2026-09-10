@@ -1,4 +1,4 @@
-use super::super::decision_trace::is_trace_only_overflow;
+use super::super::decision_trace::{is_budget_exhausted_wait, is_trace_only_overflow};
 use super::*;
 
 impl RuntimeLlmSidecar {
@@ -61,6 +61,12 @@ impl RuntimeLlmSidecar {
                 _ => None,
             };
             if let Some(agent_id) = selected_agent {
+                if self.provider_transport_exhausted.contains(&agent_id) {
+                    // Let the control-plane exhaustion path terminalize this
+                    // identity before the WASM runner can redispatch it.
+                    self.shadow_kernel = Some(kernel);
+                    return None;
+                }
                 if let Some(context) = self.provider_contexts.get(&agent_id).cloned() {
                     if let Err(error) = async_support::runtime_provider_prefix(world, &context) {
                         let _ = async_support::runtime_provider_failure(
@@ -154,7 +160,9 @@ impl RuntimeLlmSidecar {
         if let Some(cognition) = cognition.as_ref() {
             if tick.decision_trace.as_ref().is_none_or(|trace| {
                 trace.parse_error.is_none()
-                    && (trace.llm_error.is_none() || is_trace_only_overflow(trace))
+                    && (trace.llm_error.is_none()
+                        || is_trace_only_overflow(trace)
+                        || is_budget_exhausted_wait(trace))
             }) {
                 self.provider_active_turns
                     .insert(tick.agent_id.clone(), cognition.request.clone());
