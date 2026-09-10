@@ -4,6 +4,7 @@
 
 - 所属产品模块：世界规则与核心玩法
 - 上位产品 PRD：[`prd.md`](prd.md)
+- 配对产品 design：[`industrial-demand-goals-and-settlement.design.md`](industrial-demand-goals-and-settlement.design.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/game/gameplay/gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
@@ -284,9 +285,9 @@
 
 ### 7.2 未决问题
 
-- 尚未决定：不同 demand profile 对 full/reduced、partial matching、surplus hold 和 supplemental revision 的具体支持范围。影响：REQ-SC31-002、REQ-SC31-005。决策负责角色：`gameplay_designer` 联动 `producer_system_designer` 与对应专业 owner。需要 profile 合同和组合证据；在范围确定前，未声明路径保持不可选。
-- 尚未决定：具体 batch quantum、产率、价格、capacity、expiry 和 queue policy。影响：REQ-SC31-001、REQ-SC31-006。决策负责角色：对应 `game` / `world-runtime` / M4 专业 owner。需要正式专业规则；本专题不临时给出默认值。
-- 尚未决定：各正式玩家入口怎样承载同义 demand 读面。影响：REQ-SC31-008。决策负责角色：`viewer_engineer`、`agent_engineer`、`qa_engineer` 通过 TPM 协调；需要入口专属验证。文档层只要求语义 parity，不冻结布局、API 或 Agent prompt。
+- 尚未决定：不同 demand profile 对 full/reduced、partial matching、surplus hold 和 supplemental revision 的具体支持范围。影响：REQ-SC31-002、REQ-SC31-005。决策负责角色：`gameplay_designer` 联动 `producer_system_designer` 与对应专业 owner。需要 profile 合同和组合证据；在范围确定前，未声明路径保持不可选。任务引用：[`GitHub task #3650`](https://github.com/eng-cc/oasis7/issues/3650)，仅作为该决策的稳定 locator，不复制任务状态或宣称决策完成。
+- 尚未决定：具体 batch quantum、产率、价格、capacity、expiry 和 queue policy。影响：REQ-SC31-001、REQ-SC31-006。决策负责角色：对应 `game` / `world-runtime` / M4 专业 owner。需要正式专业规则；本专题不临时给出默认值。任务引用：[`GitHub task #3650`](https://github.com/eng-cc/oasis7/issues/3650)，仅作为该决策的稳定 locator，不复制任务状态或宣称决策完成。
+- 尚未决定：各正式玩家入口怎样承载同义 demand 读面。影响：REQ-SC31-008。决策负责角色：`viewer_engineer`、`agent_engineer`、`qa_engineer` 通过 TPM 协调；需要入口专属验证。文档层只要求语义 parity，不冻结布局、API 或 Agent prompt。任务引用：[`GitHub task #3650`](https://github.com/eng-cc/oasis7/issues/3650)，仅作为该决策的稳定 locator，不复制任务状态或宣称决策完成。
 
 这些未决问题不阻塞本专题对玩家语义、原文义务映射和验收边界的采纳；在对应实现输入前必须解决或明确排除受影响范围。
 

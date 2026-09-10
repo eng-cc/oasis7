@@ -4,6 +4,7 @@
 
 - 所属产品模块：世界规则与核心玩法
 - 上位产品 PRD：[`prd.md`](prd.md)
+- 配对产品 design：[`first-session-and-continuation.design.md`](first-session-and-continuation.design.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md)
