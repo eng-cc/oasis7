@@ -41,6 +41,8 @@ mod provider_action;
 use super::prompt_control_result::{
     PromptControlLedgerInsertError, PromptControlLedgerLookup, PromptControlLedgerReceipt,
 };
+#[path = "control_plane/provider_action_commit.rs"]
+mod provider_action_commit;
 pub(in crate::viewer::runtime_live) use agent_chat_intent::RuntimePrimaryIntent;
 use agent_chat_intent::{apply_accepted_primary_intent, resolve_agent_chat_intent};
 pub(super) use auth_helpers::map_auth_verify_error_code;
