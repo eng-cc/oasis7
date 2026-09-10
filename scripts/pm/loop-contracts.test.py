@@ -57,7 +57,7 @@ class ContractTests(unittest.TestCase):
 
     def test_default_obligation_uses_terminal_project_and_receipt_reader(self):
         calls = []
-        def terminal(repo, uid, number):
+        def terminal(repo, uid, number, **kwargs):
             calls.append((repo, uid, number))
             return {'status': 'passed', 'blockers': []}
         uid = 'task_' + 'b' * 32
@@ -66,7 +66,7 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(calls, [('eng-cc/oasis7', uid, 11)])
 
     def test_default_obligation_rejects_unfinished_terminal_reader(self):
-        reader = SimpleNamespace(validate_terminal_delivery=lambda *args: {'status': 'blocked', 'blockers': ['finalizer receipt missing']})
+        reader = SimpleNamespace(validate_terminal_delivery=lambda *args, **kwargs: {'status': 'blocked', 'blockers': ['finalizer receipt missing']})
         with patch.dict('sys.modules', {'loop_terminal': reader}):
             self.assertFalse(self.api.GitHubAuthority(self.root).obligation({'task_uid': 'task_' + 'b' * 32, 'issue_number': 11}))
 

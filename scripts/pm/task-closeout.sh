@@ -60,6 +60,7 @@ OUTPUT_JSON=0
 REVIEW_PACKET_FILE=""
 CI_READY_RECEIPT=""
 PR_MERGE_RECEIPT=""
+REVIEW_PLAN_SCHEMA=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -149,6 +150,7 @@ print('roles='+f('Review Roles'))
 print('head='+f('Source Head'))
 print('ledger='+f('Slice Ledger'))
 print('plan='+f('Review Plan'))
+print('plan_schema='+f('Review Plan Schema'))
 print('evidence_digest='+f('Review Evidence Digest'))
 PY
 )"
@@ -156,6 +158,7 @@ PY
   REVIEW_HEAD="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^head=//p')"
   REVIEW_LEDGER="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^ledger=//p')"
   REVIEW_PLAN="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^plan=//p')"
+  REVIEW_PLAN_SCHEMA="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^plan_schema=//p')"
   REVIEW_EVIDENCE_DIGEST="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^evidence_digest=//p')"
   if [[ -n "$REVIEW_PLAN" && "$REVIEW_PLAN" != n/a* ]]; then
     PLAN_FIELDS="$(python3 - "$ROOT_DIR" "$REVIEW_PLAN" <<'PY'
@@ -177,16 +180,25 @@ try:
     plan = json.loads(path.read_text(encoding='utf-8'))
 except (OSError, json.JSONDecodeError) as exc:
     raise SystemExit(f"review packet Review Plan cannot be read: {exc}")
-if plan.get('schema') != 'oasis7-review-plan/v1' or not isinstance(plan.get('roles'), list) or not plan.get('roles'):
-    raise SystemExit('review packet Review Plan is not a complete oasis7-review-plan/v1')
+if plan.get('schema') not in ('oasis7-review-plan/v1', 'oasis7-review-plan/v2') or not isinstance(plan.get('roles'), list) or not plan.get('roles'):
+    raise SystemExit('review packet Review Plan is not a complete supported review plan')
+if plan.get('schema') == 'oasis7-review-plan/v2':
+    import importlib.util
+    spec=importlib.util.spec_from_file_location('ci_ready_receipt_identity_v2', root/'scripts/pm/ci_ready_receipt_identity.py')
+    if spec is None or spec.loader is None: raise SystemExit('cannot load v2 review identity helper')
+    helper=importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
+    if plan.get('source_review_digest') != helper.source_review_digest(plan.get('source_review_identity')): raise SystemExit('v2 source review digest mismatch')
+    if plan.get('integration_ci_digest') != helper.integration_ci_digest(plan.get('integration_ci_identity')): raise SystemExit('v2 integration CI digest mismatch')
 preflight = plan.get('preflight') or {}
 ledger = preflight.get('ledger_path') if isinstance(preflight, dict) else ''
 print(','.join(str(role) for role in plan['roles']))
 print(str(ledger or ''))
+print(plan.get('schema'))
 PY
 )" || die "review packet Review Plan is invalid; regenerate with ./scripts/pm/review-plan.py --preflight-dir <dir> and rerun record-pre-pr-review"
     REVIEW_ROLES="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '1p')"
     PLAN_LEDGER="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '2p')"
+    REVIEW_PLAN_SCHEMA="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '3p')"
     if [[ "$REVIEW_LEDGER" == n/a* || -z "$REVIEW_LEDGER" ]]; then
       REVIEW_LEDGER="$PLAN_LEDGER"
     fi
@@ -288,11 +300,28 @@ PY
 fi
 
 if [[ "$TARGET_STATUS" == "ready" && -n "$CI_READY_RECEIPT" && "$VERIFICATION_PROFILE" != "fixture_repository_state" ]]; then
-  CI_REVIEW_EVIDENCE_DIGEST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8")).get("review_evidence_digest", ""))' "$CI_READY_RECEIPT")" \
-    || die "cannot read ci-ready receipt review authority"
-  [[ "$CI_REVIEW_EVIDENCE_DIGEST" =~ ^[0-9a-f]{64}$ ]] || die "ci-ready receipt lacks a canonical review evidence digest"
-  [[ "$CI_REVIEW_EVIDENCE_DIGEST" == "$REVIEW_EVIDENCE_DIGEST" ]] \
-    || die "ci-ready receipt authority does not match reviewed evidence digest"
+  if [[ "$REVIEW_PLAN_SCHEMA" == "oasis7-review-plan/v2" ]]; then
+    python3 - "$ROOT_DIR" "$REVIEW_PLAN" "$CI_READY_RECEIPT" <<'PY' \
+      || die "v2 source review cannot be reused: latest trusted integration tree or authority changed"
+import importlib.util
+import json
+import sys
+from pathlib import Path
+root=Path(sys.argv[1]).resolve()
+plan=json.loads(Path(sys.argv[2]).read_text(encoding='utf-8'))
+receipt=json.loads(Path(sys.argv[3]).read_text(encoding='utf-8'))
+spec=importlib.util.spec_from_file_location('ci_ready_receipt_identity_v2', root/'scripts/pm/ci_ready_receipt_identity.py')
+if spec is None or spec.loader is None: raise SystemExit('v2 identity helper unavailable')
+helper=importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
+if not helper.can_reuse_source_review(plan, receipt): raise SystemExit('changed tested tree or integration authority requires full review')
+PY
+  else
+    CI_REVIEW_EVIDENCE_DIGEST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8")).get("review_evidence_digest", ""))' "$CI_READY_RECEIPT")" \
+      || die "cannot read ci-ready receipt review authority"
+    [[ "$CI_REVIEW_EVIDENCE_DIGEST" =~ ^[0-9a-f]{64}$ ]] || die "ci-ready receipt lacks a canonical review evidence digest"
+    [[ "$CI_REVIEW_EVIDENCE_DIGEST" == "$REVIEW_EVIDENCE_DIGEST" ]] \
+      || die "ci-ready receipt authority does not match reviewed evidence digest"
+  fi
 fi
 
 selected_task_audit() {

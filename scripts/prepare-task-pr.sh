@@ -625,6 +625,10 @@ def emit(
     reviewed_source_head: str = "",
     comparison_oid: str = "",
     review_evidence_digest: str = "",
+    review_plan: str = "",
+    review_plan_schema: str = "",
+    source_review_digest: str = "",
+    integration_ci_digest: str = "",
 ) -> None:
     print(f"status={status}")
     print(f"task_uid={task_uid}")
@@ -646,6 +650,10 @@ def emit(
     print(f"reviewed_source_head={reviewed_source_head}")
     print(f"comparison_oid={comparison_oid}")
     print(f"review_evidence_digest={review_evidence_digest}")
+    print(f"review_plan={review_plan}")
+    print(f"review_plan_schema={review_plan_schema}")
+    print(f"source_review_digest={source_review_digest}")
+    print(f"integration_ci_digest={integration_ci_digest}")
     raise SystemExit(0)
 
 task_uid_re = re.compile(r"^task_[0-9a-f]{32}$")
@@ -1018,6 +1026,10 @@ if findings_disposition not in {"addressed", "no_findings"}:
 review_roles = parse_field(selected_block, "Review Roles")
 review_package = parse_field(selected_block, "Review Package")
 review_evidence_digest = parse_field(selected_block, "Review Evidence Digest")
+review_plan = parse_field(selected_block, "Review Plan")
+review_plan_schema = parse_field(selected_block, "Review Plan Schema")
+source_review_digest = parse_field(selected_block, "Source Review Digest")
+integration_ci_digest = parse_field(selected_block, "Integration CI Digest")
 review_verdicts = parse_field(selected_block, "Review Verdicts")
 residual_risk = parse_field(selected_block, "Residual Risk")
 slice_ledger = parse_field(selected_block, "Slice Ledger")
@@ -1048,6 +1060,10 @@ if missing:
         reviewed_source_head=reviewed_source_head,
         comparison_oid=comparison_oid,
         review_evidence_digest=review_evidence_digest,
+        review_plan=review_plan,
+        review_plan_schema=review_plan_schema,
+        source_review_digest=source_review_digest,
+        integration_ci_digest=integration_ci_digest,
     )
 
 emit(
@@ -1069,6 +1085,10 @@ emit(
     reviewed_source_head=reviewed_source_head,
     comparison_oid=comparison_oid,
     review_evidence_digest=review_evidence_digest,
+    review_plan=review_plan,
+    review_plan_schema=review_plan_schema,
+    source_review_digest=source_review_digest,
+    integration_ci_digest=integration_ci_digest,
 )
 PY
 }
@@ -1507,6 +1527,10 @@ LOCAL_ROLE_REVIEW_OPS_EVIDENCE="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "ops_e
 LOCAL_ROLE_REVIEW_LIVEOPS_EVIDENCE="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "liveops_evidence")"
 LOCAL_ROLE_REVIEW_SOURCE_HEAD="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "reviewed_source_head")"
 LOCAL_ROLE_REVIEW_EVIDENCE_DIGEST="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "review_evidence_digest")"
+LOCAL_ROLE_REVIEW_PLAN="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "review_plan")"
+LOCAL_ROLE_REVIEW_PLAN_SCHEMA="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "review_plan_schema")"
+LOCAL_ROLE_REVIEW_SOURCE_DIGEST="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "source_review_digest")"
+LOCAL_ROLE_REVIEW_INTEGRATION_DIGEST="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "integration_ci_digest")"
 if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" != "1" && "$LOCAL_ROLE_REVIEW_STATUS" == "passed" && -n "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then
   die "legacy task-bound \`--create\` is rejected; use ./scripts/prepare-task-pr.sh --draft-candidate --create, then ./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json> after same-head CI and draft-state checks"
 fi
@@ -1610,12 +1634,34 @@ PY
   [[ "$PR_IS_DRAFT" == false ]] && RECEIPT_VERIFY_CMD+=(--allow-ready-pr)
   "${RECEIPT_VERIFY_CMD[@]}" >/dev/null \
     || die "promote_draft ci_ready_receipt live validation failed"
-  RECEIPT_REVIEW_EVIDENCE_DIGEST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8")).get("review_evidence_digest", ""))' "$PROMOTE_DRAFT_RECEIPT")" \
-    || die "promote_draft could not read ci_ready_receipt review authority"
-  [[ "$RECEIPT_REVIEW_EVIDENCE_DIGEST" =~ ^[0-9a-f]{64}$ ]] \
-    || die "promote_draft ci_ready_receipt lacks a canonical review evidence digest"
-  [[ "$RECEIPT_REVIEW_EVIDENCE_DIGEST" == "$LOCAL_ROLE_REVIEW_EVIDENCE_DIGEST" ]] \
-    || die "promote_draft ci_ready_receipt authority does not match reviewed evidence digest"
+  if [[ "$LOCAL_ROLE_REVIEW_PLAN_SCHEMA" == "oasis7-review-plan/v2" ]]; then
+    [[ -n "$LOCAL_ROLE_REVIEW_PLAN" && "$LOCAL_ROLE_REVIEW_PLAN" != n/a* ]] \
+      || die "promote_draft v2 review requires its immutable review plan path"
+    python3 - "$SOURCE_WORKTREE" "$LOCAL_ROLE_REVIEW_PLAN" "$PROMOTE_DRAFT_RECEIPT" <<'PY' \
+      || die "promote_draft v2 source review reuse is not proven by the fresh integration receipt"
+import importlib.util
+import json
+import sys
+from pathlib import Path
+root=Path(sys.argv[1]).resolve()
+plan_path=Path(sys.argv[2])
+if not plan_path.is_absolute(): plan_path=root/plan_path
+plan=json.loads(plan_path.read_text(encoding="utf-8"))
+receipt=json.loads(Path(sys.argv[3]).read_text(encoding="utf-8"))
+spec=importlib.util.spec_from_file_location("ci_ready_receipt_identity_v2", root/"scripts/pm/ci_ready_receipt_identity.py")
+if spec is None or spec.loader is None: raise SystemExit("v2 identity helper unavailable")
+helper=importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
+if not helper.can_reuse_source_review(plan, receipt):
+    raise SystemExit("changed tested tree or integration authority requires full review")
+PY
+  else
+    RECEIPT_REVIEW_EVIDENCE_DIGEST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8")).get("review_evidence_digest", ""))' "$PROMOTE_DRAFT_RECEIPT")" \
+      || die "promote_draft could not read ci_ready_receipt review authority"
+    [[ "$RECEIPT_REVIEW_EVIDENCE_DIGEST" =~ ^[0-9a-f]{64}$ ]] \
+      || die "promote_draft ci_ready_receipt lacks a canonical review evidence digest"
+    [[ "$RECEIPT_REVIEW_EVIDENCE_DIGEST" == "$LOCAL_ROLE_REVIEW_EVIDENCE_DIGEST" ]] \
+      || die "promote_draft ci_ready_receipt authority does not match reviewed evidence digest"
+  fi
   python3 -I - "$SOURCE_WORKTREE" "$RT" "$PROMOTE_DRAFT_RECEIPT_BASE_OID" "$SOURCE_HEAD" "$ROOT_DIR" <<'PY' \
     || die "promote_draft fresh local loop/task admission failed"
 import base64,json,os,re,subprocess,sys

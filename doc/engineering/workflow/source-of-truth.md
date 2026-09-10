@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
-Version: **v1.15.1**
-Last Updated: **2026-09-10**
+Version: **v1.15.2**
+Last Updated: **2026-09-11**
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
 Mandatory rule:
@@ -96,11 +96,10 @@ never satisfy a live task.
 **Draft candidate and promotion gate.**
 
 A draft candidate opens or resumes its frozen-head draft PR before exact-head CI. Before any push or PR write, the repo-owned helper derives the bound task identity from canonical mapping, writes a marked `<!-- oasis7-pm-evidence -->` comment binding task UID, canonical worktree/branch, source head, and comparison ref/OID, then reads that exact identity back from the task issue; write/readback failure or mismatch rejects the operation. Its receipt binds repository, task, PR, base/head OIDs, check/app/run, planner, conclusion, and observation time. Review identity uses the receipt's canonical CI-authority digest over every one of those authority fields except observation time; `observed_at` is liveness evidence, not review scope. A same-authority live refresh may renew only `observed_at` without creating another review epoch. Any authority change, including head/base, check app/run, conclusion, or planner identity, invalidates CI evidence and review. Promotion requires a fresh live receipt whose CI-authority digest equals the recorded review evidence digest.
+<a id="split-source-review-integration-contract"></a>**Source professional review and integration CI (v2).** `oasis7-review-plan/v2` records `source_review_identity={task_uid,bootstrap_epoch,repository,pr_number,source_head_oid,source_scope_oid,changed_paths_digest,ordered_role_ids,role_contract_digest,review_policy_digest,input_contract_digest}` and `source_review_digest` as the SHA-256 of its canonical JSON; `source_scope_oid` is the fixed immutable source-review range base and is never the integration base. Its accepted integration snapshot records `integration_ci_identity={repository,task_uid,pr_number,source_head_oid,integration_base_oid,workflow_ref,workflow_sha,request_id,request_created_at,run_id,run_attempt,check_app_id,check_run_id,planner_digest,tested_tree_oid,conclusion}` and `integration_ci_digest` over that canonical JSON. Source-review reuse requires every source identity field and the accepted `tested_tree_oid` to match; a fresh latest exact integration dispatch/attempt and live current-PR readback remain mandatory. A changed tested tree, source/role/policy/input/authority identity, new finding, unknown dependency/authority closure, or legacy v1 plan requires a full new review epoch; target movement is reusable only when the latest trusted integration receipt is successful and its full `tested_tree_oid` equals the accepted snapshot.
 Promotion-side review revalidation binds the packet's immutable `Comparison OID`
-to the fresh receipt/plan base OID; the packet's symbolic `Comparison Ref` is
-audit context and may have moved since freeze. A moved symbolic ref alone
-must not invalidate the frozen review range, while a receipt base/head or PR
-base identity mismatch is rejected.
+to the fresh receipt/plan base OID; `Comparison Ref` is audit context and may
+move, but receipt base/head or PR base identity mismatch is rejected.
 Promotion also requires a fresh live repository default-branch read to match
 the task mapping's recorded `default_branch` and the caller-selected base;
 missing or drifted authority is rejected safely and never redefines the task base.
@@ -141,8 +140,8 @@ approval or the up-to-date protection represented by `BEHIND`. No separate colla
 <a id="post-merge-done-gate"></a>
 **Terminal Done.**
 
-A fresh merge receipt, task done truth, main sync, safe-cleanup receipt, and post-merge finalization complete in that order for a merged PR; classified non-merge work uses `non-merge-finalize.py` to record evidence-bound `closed_without_merge`.
-`done` is not terminal reconciliation: `post_merge_done` proves merged receipts; `closed_without_merge` proves its receipt/ledger and terminal tombstone (`checkout_recreation_forbidden: true`). Merged path uses `terminal-task-audit.py --task-uid <uid> --json`; non-merge uses receipt/ledger readback; only explicit `--resume-finalizer` repairs merged path.
+A fresh merge receipt, task done truth, main sync, safe-cleanup receipt, and post-merge finalization are recorded in that order for a merged PR; classified non-merge work uses `non-merge-finalize.py` to record evidence-bound `closed_without_merge`.
+`done` is not terminal reconciliation: `post_merge_done` proves merged receipts; `closed_without_merge` proves its receipt/ledger and terminal tombstone (`checkout_recreation_forbidden: true`). Its consumer must prove reciprocal same-repository task/PR number+URL, live `MERGED` state and merge commit/version, then load the task UID's repository-owned canonical receipt root, validate actual merge/main-sync/cleanup/tombstone/ledger bytes with schema and producer provenance, bind those digests, and read back the server finalizer; comment/Operation-ID alone, caller/local receipts, wrong author, missing/mismatched receipts, or non-PR/unmerged/cross-task delivery fail closed. Merged path uses `terminal-task-audit.py --task-uid <uid> --json`; non-merge uses receipt/ledger readback; only explicit `--resume-finalizer` repairs merged path.
 
 ## State, gate, and PM mapping
 | Workflow state | Gate meaning | GitHub Project status | Resume authority |
@@ -752,11 +751,11 @@ Use the existing evidence-backed no-change disposition path before resolving a G
 A passed packet in GitHub task issue evidence comments contains:
 
 - `Pre-PR Local Role Review: passed`
-- `Task UID`, `Source Worktree`, `Source Branch`, `Source Head`,
-  `Comparison Ref`, and its resolved `Comparison OID`
-- `Reviewed Changed Paths`, `Review Package`, and `Role Selection Basis`
-- `Review Roles`, per-role `Review Evidence`, and dual `Review Verdicts`
-- `Review Findings Disposition`, `Finding Disposition Evidence`, and `Review Plan` when an immutable plan was used
+- `Task UID`, `Source Worktree`, `Source Branch`, `Source Head`, `Comparison Ref`, and its resolved `Comparison OID`
+- `Source Review Identity v2`: `source_head_oid`, `source_scope_oid`, changed-path/ordered-role digests, and role/policy/input digests
+- `Integration CI Identity`: current target/base, dispatch/request/run, planner/tested-tree/conclusion digests, and latest receipt
+- `Reviewed Changed Paths`, `Review Package`, `Role Selection Basis`, `Review Roles`, per-role `Review Evidence`, dual `Review Verdicts`, and findings disposition evidence
+- `Review Plan` when an immutable plan was used; legacy v1 plans cannot be reused after CI authority drift
 - `Verification Matrix`, `Visual Evidence`, `WASM Evidence`, `Ops Evidence`,
   and `LiveOps Evidence`, each with evidence or a reasoned exemption
 - `Residual Risk` and `Slice Ledger`

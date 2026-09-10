@@ -17,21 +17,72 @@ spec = importlib.util.spec_from_file_location('loop_facade', Path(__file__).with
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 import loop_terminal
+from terminal_proof import receipt_chain_digest
+
+
+def receipt_fixture(task_uid, repository, issue_number, pr_number, pr_url):
+    def entry(record):
+        raw = json.dumps(record, sort_keys=True, separators=(',', ':')).encode()
+        return {'bytes': raw, 'digest': hashlib.sha256(raw).hexdigest(), 'record': record}
+    merge = entry({'receipt_type': 'oasis7_pr_merge', 'issuer': 'github_live_query', 'evidence_mode': 'production',
+                   'repository': repository, 'default_branch': 'main', 'pr_number': pr_number, 'pr_url': pr_url,
+                   'state': 'MERGED', 'merged_at': '2026-09-10T00:00:00Z', 'head_oid': 'a' * 40, 'base_ref': 'main'})
+    main_sync = entry({'receipt_type': 'oasis7_main_sync', 'issuer': 'post-merge-main-sync', 'task_uid': task_uid,
+                       'repository': repository, 'default_branch': 'main', 'merge_receipt_sha256': merge['digest'],
+                       'integration_mode': 'ancestry', 'observed_at': '2026-09-10T00:01:00Z'})
+    terminal = entry({'receipt_type': 'oasis7_terminal_cleanup', 'issuer': 'post-merge-cleanup', 'task_uid': task_uid,
+                      'repository': repository, 'issue_number': issue_number, 'pr_number': pr_number,
+                      'worktree': '/fixture/worktree', 'branch': 'task/fixture',
+                      'merge_receipt_sha256': merge['digest'], 'main_sync_receipt_sha256': main_sync['digest'],
+                      'observed_at': '2026-09-10T00:02:00Z'})
+    operations = {effect: {'effect': effect,
+                           'operation_id': hashlib.sha256(f'{task_uid}:post_merge_done:{effect}'.encode()).hexdigest(),
+                           'committed': True} for effect in ('project_update', 'evidence_comment', 'issue_close')}
+    ledger = entry({'schema': 'oasis7_finalizer_ledger_v1', 'task_uid': task_uid, 'operations': operations})
+    tombstone = entry({'schema': 'oasis7_terminal_tombstone_v1', 'task_uid': task_uid, 'repository': repository,
+                       'issue_number': issue_number, 'pr_number': pr_number, 'workflow_phase': 'post_merge_done',
+                       'terminal_receipt_sha256': terminal['digest'], 'canonical_worktree': '/fixture/worktree',
+                       'task_branch': 'task/fixture', 'checkout_recreation_forbidden': True})
+    return {'merge': merge, 'main_sync': main_sync, 'terminal': terminal, 'ledger': ledger, 'tombstone': tombstone}
 
 class LoopTests(unittest.TestCase):
     def dependency_command(self, command, bodies, *, search=None, terminal_pass=True):
         uid, dependency_uid = 'task_' + 'a' * 32, 'task_' + 'b' * 32
         task = {'task_uid': uid, 'repository': 'fixture/repo', 'loop_binding': {'task_uid': uid, 'dependencies': [dependency_uid]}}
         policy = SimpleNamespace(validate_binding=lambda _: {'blockers': []}, validate_tool_root=lambda *a: {'blockers': []}, validate_dependencies=lambda *a: {'blockers': []})
-        def terminal_delivery(repository, selected_uid, number):
+        def terminal_delivery(repository, selected_uid, number, **kwargs):
             url = f'https://github.com/{repository}/issues/{number}'
-            body = 'task_uid: ' + selected_uid + '\n- workflow_phase: `task_done`'
+            pr_number = number
+            pr_url = f'https://github.com/{repository}/pull/{pr_number}'
+            body = (f'<!-- oasis7-pm-task -->\ntask_uid: {selected_uid}\n'
+                    '- workflow_phase: `task_done`\n'
+                    f'- pr_number: `{pr_number}`\n- pr_url: `{pr_url}`\n')
             issue = {'number': number, 'html_url': url, 'body': body, 'state': 'closed', 'state_reason': 'completed'}
             item = {'id': 'I', 'project': {'id': 'P', 'number': 1, 'owner': {'login': 'fixture'}}, 'content': {'number': number, 'url': url, 'body': body}, 'fieldValues': {'pageInfo': {'hasNextPage': False}, 'nodes': [{'name': v, 'field': {'name': k}} for k, v in [('Status', 'Done' if terminal_pass else 'In Progress'), ('PM Status', 'done'), ('Workflow Phase', 'done')]]}}
             project = {'id': 'P', 'owner': 'fixture', 'number': 1, 'page_complete': True, 'items': [item]}
             operation = hashlib.sha256(f'{selected_uid}:post_merge_done:evidence_comment'.encode()).hexdigest()
-            comment = {'html_url': url + '#issuecomment-7', 'body': f'<!-- oasis7-pm-evidence -->\nOperation-ID: {operation}\nTask UID: {selected_uid}\nEvidence Phase: post_merge_done'}
-            return loop_terminal.validate_terminal_delivery(repository, selected_uid, number, issue_reader=lambda *a: issue, project_reader=lambda *a: project, comments_reader=lambda *a: [comment])
+            receipts = receipt_fixture(selected_uid, repository, number, pr_number, pr_url)
+            merge_digest, sync_digest, terminal_digest = (receipts['merge']['digest'], receipts['main_sync']['digest'], receipts['terminal']['digest'])
+            chain_digest = receipt_chain_digest(selected_uid, repository, number, pr_number, pr_url,
+                                                merge_digest, sync_digest, terminal_digest)
+            comment = {'html_url': url + '#issuecomment-7',
+                       'user': {'login': 'fixture'},
+                       'body': (f'<!-- oasis7-pm-evidence -->\nOperation-ID: {operation}\n'
+                                f'Task UID: {selected_uid}\nEvidence Phase: post_merge_done\n'
+                                'Receipt Chain Version: 1\nReceipt Type: oasis7_terminal_cleanup\n'
+                                'Receipt Issuer: post-merge-cleanup\n'
+                                f'PR Number: {pr_number}\nPR URL: {pr_url}\n'
+                                f'Merge Receipt SHA256: {merge_digest}\nMain Sync Receipt SHA256: {sync_digest}\n'
+                f'Terminal Receipt SHA256: {terminal_digest}\nReceipt Chain Digest: {chain_digest}\n')}
+            pr = {'number': pr_number, 'html_url': pr_url, 'body': f'Task: {selected_uid}\nRefs #{number}\n',
+                  'state': 'closed', 'merged': True, 'merged_at': '2026-09-10T00:00:00Z',
+                  'merge_commit_sha': 'b' * 40,
+                  'base': {'repo': {'full_name': repository}, 'ref': 'main'},
+                  'head': {'repo': {'full_name': repository}, 'sha': 'a' * 40}}
+            return loop_terminal.validate_terminal_delivery(repository, selected_uid, number,
+                issue_reader=lambda *a: issue, project_reader=lambda *a: project,
+                comments_reader=lambda *a: [comment], pr_reader=lambda *a: pr,
+                receipt_reader=lambda *a: receipts)
         terminal = SimpleNamespace(validate_terminal_delivery=terminal_delivery)
         contracts = SimpleNamespace(validate_contracts=lambda *a, **kw: {'blockers': []})
         def gh(args, **kwargs):
@@ -127,7 +178,7 @@ class LoopTests(unittest.TestCase):
 
     def test_in_progress_dependency_blocks_admission(self):
         policy = SimpleNamespace(validate_binding=lambda _: {'blockers': []}, validate_tool_root=lambda *args: {'blockers': []})
-        terminal = SimpleNamespace(validate_terminal_delivery=lambda *args: {'status': 'blocked', 'blockers': ['Project has not finalized dependency']})
+        terminal = SimpleNamespace(validate_terminal_delivery=lambda *args, **kwargs: {'status': 'blocked', 'blockers': ['Project has not finalized dependency']})
         binding = {'task_uid': 'task_' + 'a' * 32, 'dependencies': ['task_' + 'b' * 32]}
         with patch.object(module, '_trusted_module', side_effect=lambda *args: terminal if args[-1] == 'loop_terminal' else policy), patch.object(module.subprocess, 'check_output', side_effect=['[{"number":1}]', json.dumps({'number': 1, 'html_url': 'https://github.com/fixture/repo/issues/1', 'body': 'task_uid: ' + binding['dependencies'][0]})]):
             result = module.validate_task(Path('.'), {'loop_binding': binding, 'repository': 'fixture/repo'}, Path('.'))
@@ -136,7 +187,7 @@ class LoopTests(unittest.TestCase):
 
     def test_completed_dependency_uses_terminal_reader(self):
         policy = SimpleNamespace(validate_binding=lambda _: {'blockers': []}, validate_tool_root=lambda *args: {'blockers': []}, validate_dependencies=lambda *args: {'blockers': []})
-        terminal = SimpleNamespace(validate_terminal_delivery=lambda *args: {'status': 'passed', 'blockers': []})
+        terminal = SimpleNamespace(validate_terminal_delivery=lambda *args, **kwargs: {'status': 'passed', 'blockers': []})
         contracts = SimpleNamespace(validate_contracts=lambda *args, **kwargs: {'blockers': []})
         uid, dependency_uid = 'task_' + 'a' * 32, 'task_' + 'b' * 32
         binding = {'task_uid': uid, 'dependencies': [dependency_uid]}
