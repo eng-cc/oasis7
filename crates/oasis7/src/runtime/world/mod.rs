@@ -32,6 +32,9 @@ mod capability_effect_receipt_projection;
 #[cfg(test)]
 mod capability_test_fixture;
 mod cognition_command;
+mod cognition_economy;
+#[path = "cognition_economy_world.rs"]
+mod cognition_economy_world;
 mod cognition_feedback;
 mod cognition_gpd;
 mod cognition_orchestration;
@@ -139,6 +142,15 @@ pub use transition::{
     ExecutionTransaction, PreparedCommit, TransitionBaseHead, TransitionBuffer,
     TransitionCommitError, TransitionKernelEntriesView, TransitionKernelState,
     TransitionKernelView, TransitionPrepareError, TransitionRollbackError, TransitionSavepoint,
+};
+
+pub use cognition_economy::{
+    COGNITION_ECONOMY_SCHEMA_VERSION, COGNITION_LEASE_SCHEMA_VERSION,
+    COGNITION_RECEIPT_SCHEMA_VERSION, CognitionEconomyError, CognitionEconomyEventV1,
+    CognitionEconomyIdempotencyRecordV1, CognitionEconomyOperationRecordV1,
+    CognitionEconomyStateV1, CognitionEconomyV1, CognitionLease, CognitionLeaseQuoteV1,
+    CognitionLeaseRequestV1, CognitionLeaseStatusV1, CognitionLeaseV1, CognitionQuoteV1,
+    CognitionReceipt, CognitionReceiptV1, CognitionResourceBalanceV1,
 };
 
 #[cfg(all(test, feature = "wasmtime", feature = "test_tier_full"))]
