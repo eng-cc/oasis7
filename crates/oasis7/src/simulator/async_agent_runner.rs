@@ -474,6 +474,14 @@ impl AsyncAgentRunner {
         self.logical_tick
     }
 
+    /// Align the actor scheduler's observation clock with the authoritative
+    /// Runtime clock before a host admits a new provider turn. A provider
+    /// lease is reserved at that Runtime tick and must never appear to the
+    /// actor as reserved in the future.
+    pub fn sync_logical_tick(&mut self, logical_tick: WorldTime) {
+        self.logical_tick = self.logical_tick.max(logical_tick);
+    }
+
     pub fn active_turn_count(&self) -> usize {
         self.active_turns
     }

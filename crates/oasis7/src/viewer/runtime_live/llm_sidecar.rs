@@ -40,6 +40,10 @@ pub(super) struct RuntimePendingAction {
 pub(in crate::viewer::runtime_live) struct RuntimeProviderActionContext {
     pub(in crate::viewer::runtime_live) request: cognition_context::ProviderContextState,
     pub(in crate::viewer::runtime_live) response: ContinuousAgentResponseContextV1,
+    /// Runtime's durable admission lease remains correlated with the provider
+    /// response until the Runtime receipt or terminal disposition closes it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(in crate::viewer::runtime_live) cognition_lease: Option<crate::runtime::CognitionLeaseV1>,
     /// Keep provider memory intents correlated with the response until the
     /// Runtime receipt/readback authorizes their durable projection.
     #[serde(default)]
@@ -246,6 +250,10 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     provider_contexts: BTreeMap<String, cognition_context::ProviderContextState>,
     provider_retry_contexts: BTreeMap<String, cognition_context::ProviderContextState>,
     provider_active_turns: BTreeMap<String, cognition_context::ProviderContextState>,
+    /// The admission lease for an in-flight provider request. This is kept
+    /// separately from the response because provider failures have no response
+    /// envelope, while recovery still needs the exact lease identity.
+    provider_cognition_leases: BTreeMap<String, crate::runtime::CognitionLeaseV1>,
     /// Exact simulator proposals admitted into the Harness for Runtime-owned
     /// continuations.  Runtime projections alone cannot recreate the
     /// provider-side chain identity after restart.
@@ -317,6 +325,29 @@ impl RuntimeLlmSidecar {
         &self.provider_memory_store
     }
 
+    pub(in crate::viewer::runtime_live) fn provider_cognition_lease(
+        &self,
+        agent_id: &str,
+    ) -> Option<crate::runtime::CognitionLeaseV1> {
+        self.provider_cognition_leases.get(agent_id).cloned()
+    }
+
+    pub(in crate::viewer::runtime_live) fn bind_provider_cognition_lease(
+        &mut self,
+        agent_id: impl Into<String>,
+        lease: crate::runtime::CognitionLeaseV1,
+    ) {
+        self.provider_cognition_leases
+            .insert(agent_id.into(), lease);
+    }
+
+    pub(in crate::viewer::runtime_live) fn clear_provider_cognition_lease(
+        &mut self,
+        agent_id: &str,
+    ) {
+        self.provider_cognition_leases.remove(agent_id);
+    }
+
     pub(in crate::viewer::runtime_live) fn new(decision_mode: ViewerLiveDecisionMode) -> Self {
         Self {
             decision_mode,
@@ -343,6 +374,7 @@ impl RuntimeLlmSidecar {
             provider_contexts: BTreeMap::new(),
             provider_retry_contexts: BTreeMap::new(),
             provider_active_turns: BTreeMap::new(),
+            provider_cognition_leases: BTreeMap::new(),
             provider_continuation_proposals: BTreeMap::new(),
             provider_continuation_recovery_pending: BTreeMap::new(),
             provider_recovery_pending: BTreeMap::new(),

@@ -181,6 +181,8 @@ struct PersistedProviderLineageV1 {
     provider_contexts: BTreeMap<String, cognition_context::ProviderContextState>,
     provider_retry_contexts: BTreeMap<String, cognition_context::ProviderContextState>,
     provider_active_turns: BTreeMap<String, cognition_context::ProviderContextState>,
+    #[serde(default)]
+    provider_cognition_leases: BTreeMap<String, crate::runtime::CognitionLeaseV1>,
     /// The exact simulator proposal admitted into the Harness.  Runtime's
     /// durable continuation projection omits Harness chain inputs, so this
     /// mirror is required for restart hydration.
@@ -474,6 +476,7 @@ impl RuntimeLlmSidecar {
         self.provider_contexts = checkpoint.provider_contexts;
         self.provider_retry_contexts = checkpoint.provider_retry_contexts;
         self.provider_active_turns = checkpoint.provider_active_turns;
+        self.provider_cognition_leases = checkpoint.provider_cognition_leases;
         self.provider_continuation_proposals = checkpoint.provider_continuation_proposals;
         self.provider_continuation_recovery_pending =
             checkpoint.provider_continuation_recovery_pending;
@@ -638,6 +641,7 @@ impl RuntimeLlmSidecar {
             self.provider_active_turns.remove(agent_id.as_str());
             self.provider_contexts.remove(agent_id.as_str());
             self.provider_retry_contexts.remove(agent_id.as_str());
+            self.provider_cognition_leases.remove(agent_id.as_str());
             self.provider_recovery_pending.remove(agent_id.as_str());
             if !has_committed_wake {
                 self.provider_wake_recovery_pending
@@ -792,6 +796,7 @@ impl RuntimeLlmSidecar {
             self.provider_contexts.remove(agent_id.as_str());
             self.provider_retry_contexts.remove(agent_id.as_str());
             self.provider_active_turns.remove(agent_id.as_str());
+            self.provider_cognition_leases.remove(agent_id.as_str());
             self.provider_wait_until.remove(agent_id.as_str());
             self.provider_held_decisions.remove(agent_id.as_str());
             self.pending_actions
@@ -829,6 +834,7 @@ impl RuntimeLlmSidecar {
             provider_contexts: self.provider_contexts.clone(),
             provider_retry_contexts: self.provider_retry_contexts.clone(),
             provider_active_turns: self.provider_active_turns.clone(),
+            provider_cognition_leases: self.provider_cognition_leases.clone(),
             provider_continuation_proposals: self.provider_continuation_proposals.clone(),
             provider_continuation_recovery_pending: self
                 .provider_continuation_recovery_pending

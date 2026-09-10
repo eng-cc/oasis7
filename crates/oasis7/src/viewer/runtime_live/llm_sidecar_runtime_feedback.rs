@@ -491,12 +491,14 @@ impl RuntimeLlmSidecar {
         let recovery_backup = self.provider_recovery_pending.get(agent_id).cloned();
         let wake_recovery_backup = self.provider_wake_recovery_pending.get(agent_id).cloned();
         let exhausted_backup = self.provider_transport_exhausted.contains(agent_id);
+        let cognition_lease_backup = self.provider_cognition_leases.get(agent_id).cloned();
         self.provider_contexts.remove(agent_id);
         self.provider_active_turns.remove(agent_id);
         self.provider_wait_until.remove(agent_id);
         self.provider_held_decisions.remove(agent_id);
         self.provider_recovery_pending.remove(agent_id);
         self.provider_transport_exhausted.remove(agent_id);
+        self.provider_cognition_leases.remove(agent_id);
         if let Err(error) = self.persist_provider_lineage() {
             if let Some(context) = context_backup {
                 self.provider_contexts.insert(agent_id.to_string(), context);
@@ -526,6 +528,10 @@ impl RuntimeLlmSidecar {
             if exhausted_backup {
                 self.provider_transport_exhausted
                     .insert(agent_id.to_string());
+            }
+            if let Some(lease) = cognition_lease_backup {
+                self.provider_cognition_leases
+                    .insert(agent_id.to_string(), lease);
             }
             return Err(format!(
                 "provider lineage release persistence failed: {error}"
@@ -747,6 +753,7 @@ impl RuntimeLlmSidecar {
         self.provider_wait_until.remove(agent_id);
         self.provider_contexts.remove(agent_id);
         self.provider_held_decisions.remove(agent_id);
+        self.provider_cognition_leases.remove(agent_id);
         self.persist_provider_lineage_best_effort();
     }
 
@@ -800,6 +807,17 @@ impl RuntimeLlmSidecar {
             .filter_map(|(agent_id, wait_until)| (*wait_until <= now).then_some(agent_id.clone()))
             .collect();
         for agent_id in due_agents {
+            if let Some(lease) = self.provider_cognition_lease(agent_id.as_str()) {
+                world
+                    .release_cognition_lease(lease.lease_id.as_str())
+                    .map_err(|error| {
+                        format!(
+                            "cognition lease release failed after provider wait for {}: {error:?}",
+                            lease.lease_id
+                        )
+                    })?;
+                self.clear_provider_cognition_lease(agent_id.as_str());
+            }
             if let Some(context) = self.provider_contexts.get(agent_id.as_str()).cloned() {
                 let feedback = self.provider_feedback_for_request(
                     &context.request_context,
