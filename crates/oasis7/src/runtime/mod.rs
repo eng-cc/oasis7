@@ -121,6 +121,14 @@ pub use cognition_recovery::{
     RuntimeFeedbackOutboxRecordV1, RuntimeFeedbackProjectionV1, RuntimeFeedbackRequestV1,
     RuntimeReceiptLineageV1, WorldCommitRecordV1, WorldRootViewV1,
 };
+pub use world::{
+    COGNITION_ECONOMY_SCHEMA_VERSION, COGNITION_LEASE_SCHEMA_VERSION,
+    COGNITION_RECEIPT_SCHEMA_VERSION, CognitionEconomyError, CognitionEconomyEventV1,
+    CognitionEconomyIdempotencyRecordV1, CognitionEconomyOperationRecordV1,
+    CognitionEconomyStateV1, CognitionEconomyV1, CognitionLease, CognitionLeaseQuoteV1,
+    CognitionLeaseRequestV1, CognitionLeaseStatusV1, CognitionLeaseV1, CognitionQuoteV1,
+    CognitionReceipt, CognitionReceiptV1, CognitionResourceBalanceV1,
+};
 
 // Durable cognition scheduler, wake and continuation projections
 pub use cognition_retention::{

@@ -556,6 +556,10 @@ impl World {
         *world.persistence_dir.borrow_mut() = Some(dir.to_path_buf());
         let cognition_before = world.cognition.clone();
         world.recover_cognition()?;
+        // The typed economy is a separate durable projection. Validate it on
+        // restore so a malformed lease/receipt prefix cannot enter runtime as
+        // an apparently healthy World.
+        world.cognition_economy()?;
         if world.cognition != cognition_before {
             world.persist_runtime_transaction_if_configured()?;
         }
