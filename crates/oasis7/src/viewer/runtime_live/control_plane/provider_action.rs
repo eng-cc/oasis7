@@ -45,7 +45,8 @@ impl ViewerRuntimeLiveServer {
             .llm_sidecar
             .provider_transport_exhausted_agent_excluding(unresolved_wake_agent)
         {
-            return Err(self.finish_provider_transport_exhaustion(agent_id, None));
+            let lease = self.llm_sidecar.provider_cognition_lease(agent_id.as_str());
+            return Err(self.finish_provider_transport_exhaustion(agent_id, None, lease));
         }
         if let Some((_, agent_id, _)) = self.llm_sidecar.pending_provider_action_for_recovery() {
             if let Err(error) = self.retry_committed_provider_action() {
@@ -90,7 +91,12 @@ impl ViewerRuntimeLiveServer {
             .llm_sidecar
             .provider_transport_exhausted_agent_excluding(unresolved_wake_agent)
         {
-            return Err(self.finish_provider_transport_exhaustion(agent_id, decision_trace));
+            let lease = decision
+                .cognition
+                .as_ref()
+                .and_then(|cognition| cognition.cognition_lease.clone())
+                .or_else(|| self.llm_sidecar.provider_cognition_lease(agent_id.as_str()));
+            return Err(self.finish_provider_transport_exhaustion(agent_id, decision_trace, lease));
         }
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(trace) = decision_trace.as_ref() {
@@ -110,6 +116,20 @@ impl ViewerRuntimeLiveServer {
                 && !is_budget_exhausted_wait(trace)
             {
                 if !decision_trace_provider_error_retryable(trace).unwrap_or(false) {
+                    self.release_provider_cognition_lease(
+                        decision.agent_id.as_str(),
+                        decision
+                            .cognition
+                            .as_ref()
+                            .and_then(|cognition| cognition.cognition_lease.clone()),
+                    )
+                    .map_err(|error| {
+                        wake_handoff_error_trace(
+                            decision.agent_id.as_str(),
+                            self.world.state().time,
+                            error,
+                        )
+                    })?;
                     if let Some(feedback) = self.llm_sidecar.fail_provider_turn_with_feedback(
                         decision.agent_id.as_str(),
                         "failed",
@@ -136,6 +156,20 @@ impl ViewerRuntimeLiveServer {
                 return Err(trace.clone());
             }
             if let Some(message) = trace.parse_error.as_ref() {
+                self.release_provider_cognition_lease(
+                    decision.agent_id.as_str(),
+                    decision
+                        .cognition
+                        .as_ref()
+                        .and_then(|cognition| cognition.cognition_lease.clone()),
+                )
+                .map_err(|error| {
+                    wake_handoff_error_trace(
+                        decision.agent_id.as_str(),
+                        self.world.state().time,
+                        error,
+                    )
+                })?;
                 if let Some(feedback) = self.llm_sidecar.fail_provider_turn_with_feedback(
                     decision.agent_id.as_str(),
                     "rejected",
@@ -187,6 +221,17 @@ impl ViewerRuntimeLiveServer {
                                         error.reason(),
                                     ));
                                 }
+                                self.release_provider_cognition_lease(
+                                    cognition.request.request_context.agent_subject.as_str(),
+                                    cognition.cognition_lease.clone(),
+                                )
+                                .map_err(|release_error| {
+                                    wake_handoff_error_trace(
+                                        cognition.request.request_context.agent_subject.as_str(),
+                                        self.world.state().time,
+                                        release_error,
+                                    )
+                                })?;
                                 let stale_base = error.is_stale_base();
                                 let reason = error.reason();
                                 if stale_base {
@@ -259,6 +304,20 @@ impl ViewerRuntimeLiveServer {
                         "runtime llm bridge cannot map action: {}",
                         simulator_action_label(&action)
                     );
+                    self.release_provider_cognition_lease(
+                        decision.agent_id.as_str(),
+                        decision
+                            .cognition
+                            .as_ref()
+                            .and_then(|cognition| cognition.cognition_lease.clone()),
+                    )
+                    .map_err(|error| {
+                        wake_handoff_error_trace(
+                            decision.agent_id.as_str(),
+                            self.world.state().time,
+                            error,
+                        )
+                    })?;
                     self.llm_sidecar
                         .fail_provider_cognition_turn(
                             &mut self.world,
@@ -308,6 +367,17 @@ impl ViewerRuntimeLiveServer {
             },
             AgentDecision::Wait | AgentDecision::WaitTicks(_) => {
                 if let Some(cognition) = decision.cognition {
+                    self.release_provider_cognition_lease(
+                        decision.agent_id.as_str(),
+                        cognition.cognition_lease.clone(),
+                    )
+                    .map_err(|error| {
+                        wake_handoff_error_trace(
+                            decision.agent_id.as_str(),
+                            self.world.state().time,
+                            error,
+                        )
+                    })?;
                     let ticks = match &decision.decision {
                         AgentDecision::Wait => 1,
                         AgentDecision::WaitTicks(ticks) => (*ticks).max(1),
@@ -371,6 +441,17 @@ impl ViewerRuntimeLiveServer {
             }
             AgentDecision::Query(_) => {
                 if let Some(cognition) = decision.cognition {
+                    self.release_provider_cognition_lease(
+                        decision.agent_id.as_str(),
+                        cognition.cognition_lease.clone(),
+                    )
+                    .map_err(|error| {
+                        wake_handoff_error_trace(
+                            decision.agent_id.as_str(),
+                            self.world.state().time,
+                            error,
+                        )
+                    })?;
                     self.llm_sidecar
                         .fail_provider_cognition_turn(
                             &mut self.world,
@@ -422,6 +503,17 @@ impl ViewerRuntimeLiveServer {
             }
             AgentDecision::ModuleCommand { .. } => {
                 if let Some(cognition) = decision.cognition {
+                    self.release_provider_cognition_lease(
+                        decision.agent_id.as_str(),
+                        cognition.cognition_lease.clone(),
+                    )
+                    .map_err(|error| {
+                        wake_handoff_error_trace(
+                            decision.agent_id.as_str(),
+                            self.world.state().time,
+                            error,
+                        )
+                    })?;
                     self.llm_sidecar
                         .fail_provider_cognition_turn(
                             &mut self.world,
@@ -476,6 +568,7 @@ impl ViewerRuntimeLiveServer {
         &mut self,
         agent_id: String,
         prior_trace: Option<AgentDecisionTrace>,
+        cognition_lease: Option<crate::runtime::CognitionLeaseV1>,
     ) -> AgentDecisionTrace {
         let wake_recovery_context = self.llm_sidecar.provider_recovery_context(&agent_id);
         let reason = "failed_provider: provider transport retry budget exhausted";
@@ -506,6 +599,15 @@ impl ViewerRuntimeLiveServer {
             })
             .to_string(),
         );
+
+        if let Err(error) =
+            self.release_provider_cognition_lease(trace.agent_id.as_str(), cognition_lease)
+        {
+            trace.llm_error = Some(format!(
+                "{reason}; cognition lease release remains pending: {error}"
+            ));
+            return trace;
+        }
 
         if let Err(error) = self.llm_sidecar.fail_provider_cognition_turn(
             &mut self.world,
@@ -601,6 +703,47 @@ impl ViewerRuntimeLiveServer {
             ));
         }
         trace
+    }
+
+    fn release_provider_cognition_lease(
+        &mut self,
+        agent_id: &str,
+        lease: Option<crate::runtime::CognitionLeaseV1>,
+    ) -> Result<(), String> {
+        let lease = lease.or_else(|| self.llm_sidecar.provider_cognition_lease(agent_id));
+        let Some(lease) = lease else {
+            return Ok(());
+        };
+        self.world
+            .release_cognition_lease(lease.lease_id.as_str())
+            .map_err(|error| {
+                format!(
+                    "cognition lease release failed for {}: {error:?}",
+                    lease.lease_id
+                )
+            })?;
+        self.llm_sidecar.clear_provider_cognition_lease(agent_id);
+        Ok(())
+    }
+
+    fn settle_provider_cognition_lease(
+        &mut self,
+        agent_id: &str,
+        lease: Option<crate::runtime::CognitionLeaseV1>,
+    ) -> Result<(), String> {
+        let lease = lease.or_else(|| self.llm_sidecar.provider_cognition_lease(agent_id));
+        let Some(lease) = lease else {
+            return Ok(());
+        };
+        self.world
+            .settle_cognition_lease(lease.lease_id.as_str(), lease.reserved_amount)
+            .map_err(|error| {
+                format!(
+                    "cognition lease settlement failed for {}: {error:?}",
+                    lease.lease_id
+                )
+            })?;
+        Ok(())
     }
 
     fn deliver_provider_feedback_best_effort(
@@ -773,6 +916,10 @@ impl ViewerRuntimeLiveServer {
             .map_err(|error| {
                 format!("Runtime cognition receipt recovery verification failed: {error:?}")
             })?;
+        self.settle_provider_cognition_lease(
+            request.agent_subject.as_str(),
+            cognition.cognition_lease.clone(),
+        )?;
 
         let existing_feedback = self
             .world
@@ -895,6 +1042,34 @@ impl ViewerRuntimeLiveServer {
                     ))
                 }
             })?;
+        let action_id = committed
+            .action_id
+            .strip_prefix("action:")
+            .ok_or_else(|| {
+                ProviderRuntimeActionCommitError::PostCommit(
+                    "Runtime cognition commit returned an invalid action id".to_string(),
+                )
+            })?
+            .parse::<u64>()
+            .map_err(|error| {
+                ProviderRuntimeActionCommitError::PostCommit(format!(
+                    "Runtime cognition action id is not numeric: {error}"
+                ))
+            })?;
+        self.llm_sidecar.track_action(
+            action_id,
+            cognition.request.request_context.agent_subject.clone(),
+            simulator_action,
+            Some(cognition.clone()),
+        );
+        // The Runtime commit is authoritative. Persist the recovery record
+        // before settling so an economy persistence fault can retry the same
+        // idempotent operation after restart.
+        self.settle_provider_cognition_lease(
+            cognition.request.request_context.agent_subject.as_str(),
+            cognition.cognition_lease.clone(),
+        )
+        .map_err(ProviderRuntimeActionCommitError::PostCommit)?;
         let lineage = self
             .world
             .read_runtime_receipt_lineage(returned_lineage.receipt_id.as_str())
@@ -915,28 +1090,8 @@ impl ViewerRuntimeLiveServer {
                 "Runtime cognition receipt readback identity mismatch".to_string(),
             ));
         }
-        let action_id = committed
-            .action_id
-            .strip_prefix("action:")
-            .ok_or_else(|| {
-                ProviderRuntimeActionCommitError::PostCommit(
-                    "Runtime cognition commit returned an invalid action id".to_string(),
-                )
-            })?
-            .parse::<u64>()
-            .map_err(|error| {
-                ProviderRuntimeActionCommitError::PostCommit(format!(
-                    "Runtime cognition action id is not numeric: {error}"
-                ))
-            })?;
         self.llm_sidecar
             .clear_provider_stale_replans(cognition.request.request_context.agent_subject.as_str());
-        self.llm_sidecar.track_action(
-            action_id,
-            cognition.request.request_context.agent_subject.clone(),
-            simulator_action,
-            Some(cognition.clone()),
-        );
         let feedback = self.llm_sidecar.provider_feedback(
             cognition,
             Some(action_id),

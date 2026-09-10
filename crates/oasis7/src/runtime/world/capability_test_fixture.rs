@@ -56,6 +56,11 @@ impl World {
         if !self.state.agents.contains_key(agent_id) {
             return Err(fixture_error("provider fixture requires a live agent"));
         }
+        // Provider caller tests exercise the real Runtime lease admission
+        // path. Seed their account explicitly in the test fixture; production
+        // worlds must provision cognition units through their own authority
+        // and never receive an implicit dispatch-time refill.
+        self.set_cognition_resource_balance(agent_id, "cognition_units", 128)?;
         if let Some(existing) = self
             .capability_invocation_contexts
             .values()

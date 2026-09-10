@@ -240,6 +240,7 @@ impl RuntimeLlmSidecar {
         let wait_backup = self.provider_wait_until.get(agent_id).copied();
         let held_backup = self.provider_held_decisions.get(agent_id).cloned();
         let exhausted_backup = self.provider_transport_exhausted.contains(agent_id);
+        let cognition_lease_backup = self.provider_cognition_leases.get(agent_id).cloned();
         self.provider_wake_recovery_pending.remove(agent_id);
         self.provider_contexts.remove(agent_id);
         self.provider_active_turns.remove(agent_id);
@@ -247,6 +248,7 @@ impl RuntimeLlmSidecar {
         self.provider_wait_until.remove(agent_id);
         self.provider_held_decisions.remove(agent_id);
         self.provider_transport_exhausted.remove(agent_id);
+        self.provider_cognition_leases.remove(agent_id);
         if let Err(error) = self.persist_provider_lineage() {
             if let Some(wake) = wake_backup {
                 self.provider_wake_recovery_pending
@@ -274,6 +276,10 @@ impl RuntimeLlmSidecar {
             if exhausted_backup {
                 self.provider_transport_exhausted
                     .insert(agent_id.to_string());
+            }
+            if let Some(lease) = cognition_lease_backup {
+                self.provider_cognition_leases
+                    .insert(agent_id.to_string(), lease);
             }
             return Err(format!(
                 "provider wake recovery cleanup persistence failed: {error}"

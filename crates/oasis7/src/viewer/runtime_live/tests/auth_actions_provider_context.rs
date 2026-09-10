@@ -389,6 +389,30 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
     assert_eq!(memory_entry["provenance"], "runtime_authoritative");
     assert!(memory_entry["receipt_id"].as_str().is_some());
 
+    let economy = server
+        .world
+        .cognition_economy()
+        .expect("provider cognition economy projection");
+    assert!(
+        economy
+            .leases
+            .values()
+            .all(|lease| lease.status != crate::runtime::CognitionLeaseStatusV1::Reserved),
+        "provider outcomes must close every admitted cognition lease"
+    );
+    assert_eq!(
+        economy.leases.len(),
+        economy.receipts.len(),
+        "each provider lease must have one terminal economy receipt"
+    );
+    assert!(
+        economy
+            .receipts
+            .values()
+            .any(|receipt| receipt.status == crate::runtime::CognitionLeaseStatusV1::Settled),
+        "the authoritative Runtime action outcome must settle its lease"
+    );
+
     let (decision_records, feedback_records, recorded_paths) = captured_requests;
     assert_eq!(decision_records.len(), 3);
     assert_eq!(

@@ -223,6 +223,7 @@ impl RuntimeLlmSidecar {
                     self.provider_contexts.remove(agent_id.as_str());
                     self.provider_active_turns.remove(agent_id.as_str());
                     self.provider_retry_contexts.remove(agent_id.as_str());
+                    self.provider_cognition_leases.remove(agent_id.as_str());
                     self.provider_wait_until.remove(agent_id.as_str());
                     self.persist_provider_lineage_best_effort();
                     continue;
@@ -456,6 +457,7 @@ impl RuntimeLlmSidecar {
         self.provider_contexts.remove(agent_id);
         self.provider_retry_contexts.remove(agent_id);
         self.provider_active_turns.remove(agent_id);
+        self.provider_cognition_leases.remove(agent_id);
         self.provider_recovery_pending.remove(agent_id);
         self.provider_continuation_recovery_pending.remove(agent_id);
         self.provider_continuation_proposals
