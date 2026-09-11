@@ -1,0 +1,96 @@
+{
+  "schema": "oasis7.storage_first_red_evidence.v1",
+  "identity": {
+    "task_uid": "task_90c2722f6e1c48c3aebb6283cee471ce",
+    "issue": 3675,
+    "repository": "eng-cc/oasis7",
+    "worktree": "/Users/scc/ccwork/oasis7/.worktrees/oasis7-engineering-public-testnet-observer-closure-rollout-20260912",
+    "frozen_head_oid": "908e234275ff2aa78e7e0bf182dab9a54dbb6734",
+    "slice_id": "storage-first-contract-red-20260912",
+    "role": "qa_engineer",
+    "owner_role": "blockchain_ops_engineer",
+    "integration_order": 6,
+    "packet_sha256": "a3453b6747c8fcd22146d27ad6d95c9229c070229e27cec3c7c8ef4e47b5ba8e",
+    "design_artifact_sha256": "579c33a7af8e5caa17bc6bcebaaae895582a19f2286fbe1098f9ac7eab07f4d7",
+    "package_run": "34622549547"
+  },
+  "scope": {
+    "changed_files": [
+      "scripts/p2p-public-testnet-full-network-clean-room.test.py",
+      "scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py",
+      ".pm/scratch/task_90c2722f6e1c48c3aebb6283cee471ce/tdd/storage-first-red-20260912.json"
+    ],
+    "production_files_changed": false,
+    "node_or_provider_access": false,
+    "credential_access": false,
+    "authority_mutation": false,
+    "remote_mutation": false
+  },
+  "verification": {
+    "baseline": [
+      {
+        "command": "rtk python3 scripts/p2p-public-testnet-full-network-clean-room.test.py FullNetworkCleanRoomPlanTests.test_plan_emits_fixed_five_node_order_and_8_7_surfaces",
+        "result": "terminated after 30s with SIGINT (exit 130)",
+        "observed": "Existing crypto fixture setup was still in IdentityV2SigningToolContractTests._prepare_sign_assemble/_assemble subprocess; no assertion result emitted."
+      },
+      {
+        "command": "rtk python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py FullNetworkCleanRoomAdapterTests.test_identity_v2_evidence_schema_matches_planner_v2",
+        "result": "terminated after 30s with SIGINT (exit 130)",
+        "observed": "No output before bounded termination; no provider, node, or credential access observed."
+      }
+    ],
+    "red_tests": [
+      {
+        "command": "rtk python3 scripts/p2p-public-testnet-full-network-clean-room.test.py StorageFirstContractRedTests",
+        "result": "RED: 9 failures, 9 tests, exit 1",
+        "failure_signature": "AssertionError: RED: missing code-owned storage-first planner API (build_storage_first_contract or validate_storage_first_resume)"
+      },
+      {
+        "command": "rtk python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py StorageFirstAdapterRedTests",
+        "result": "RED: 7 failures, 7 tests, exit 1",
+        "failure_signature": "AssertionError: RED: missing storage-first adapter execute/resume/journal/receipt API"
+      }
+    ],
+    "syntax": {
+      "command": "rtk python3 -m py_compile scripts/p2p-public-testnet-full-network-clean-room.test.py scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py",
+      "result": "pass, exit 0"
+    },
+    "diff_hygiene": {
+      "command": "rtk git diff --check",
+      "result": "pass, no output"
+    },
+    "implementation_presence": {
+      "command": "rtk rg -n -i 'storage.?first|storage205.?only|provider_storage205' scripts/p2p-public-testnet-full-network-clean-room.py scripts/p2p-public-testnet-full-network-clean-room-adapter.py",
+      "result": "no matches; production storage-first behavior remains intentionally absent"
+    }
+  },
+  "red_contract": {
+    "planner_tests": 9,
+    "adapter_tests": 7,
+    "phase_id": "storage-205-first",
+    "target_nodes": ["storage-205"],
+    "mutating_operations": [
+      "stop:storage-205",
+      "delete:storage-205",
+      "rebuild:storage-205",
+      "start:storage-205",
+      "verify:storage-205"
+    ],
+    "completion_boundary": "storage-205-verified-pending-sequencer-probe",
+    "required_followups": [
+      "Implement code-owned planner contract and full parent identity-v2/current-admission closure.",
+      "Implement adapter apply/resume with live authority, nonce, known-host, and impact revalidation before each mutation.",
+      "Implement closed journal/receipt validation and reconciliation-blocked side-effect handling.",
+      "Rerun these RED tests as GREEN, then run the relevant baseline and release-gate suites at the same frozen head."
+    ]
+  },
+  "residual_risks": [
+    "Existing baseline characterization was bounded by the 30-second stop and did not produce a pass/fail assertion result.",
+    "These are intentionally RED contract tests; no production behavior or integration confidence is claimed.",
+    "Real node/provider transport and credential seam behavior remain untested by this slice."
+  ],
+  "commit": {
+    "status": "pending",
+    "sha": null
+  }
+}

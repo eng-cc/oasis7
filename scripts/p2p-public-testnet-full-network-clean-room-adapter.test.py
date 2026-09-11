@@ -4240,5 +4240,272 @@ class FleetLockPublisherProtectionTests(unittest.TestCase):
         self._exercise_publisher("aggregate")
 
 
+class StorageFirstAdapterRedTests(unittest.TestCase):
+    """RED contract for storage-205-first apply/resume boundaries.
+
+    The recording transport is an in-process test double.  It never opens a
+    socket or reads a credential; its only purpose is to expose an accidental
+    sequencer/observer callback or unsafe replay to the test.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.adapter = load_module("storage_first_adapter_under_test", ADAPTER_PATH)
+
+    def setUp(self) -> None:
+        self._directory = tempfile.TemporaryDirectory()
+        self.root = Path(self._directory.name)
+        self.plan = self._plan()
+        self.identity_map = copy.deepcopy(self.plan["identity_v2_evidence"])
+
+    def tearDown(self) -> None:
+        self._directory.cleanup()
+
+    def _plan(self) -> dict[str, object]:
+        node_order = [
+            "storage-205", "sequencer-204", "linux-lan-observer",
+            "windows-observer", "macos-observer",
+        ]
+        return {
+            "schema_version": "oasis7.public_testnet_full_network_clean_room_plan.v1",
+            "task_uid": "task_90c2722f6e1c48c3aebb6283cee471ce",
+            "head_oid": "9" * 40,
+            "plan_digest": "q" * 64,
+            "transaction_id": "txn-storage-first-red",
+            "capture_window_id": "capture-storage-first-red",
+            "node_order": node_order,
+            "global_order": [
+                *(f"preflight:{name}" for name in node_order),
+                "stop:storage-205", "delete:storage-205", "rebuild:storage-205",
+                "start:storage-205", "verify:storage-205", "fresh-root-probe", "fleet-health",
+            ],
+            "nodes": [{
+                "name": name,
+                "role": "validator" if name in {"storage-205", "sequencer-204"} else "observer",
+                "host_binding": {
+                    "known_hosts_path": "/operator/known-hosts",
+                    "known_host_fingerprint": f"fingerprint:{name}",
+                },
+                "endpoints": {
+                    "evidence": "http://sequencer/v1/chain/rebuild-proof"
+                    if name == "sequencer-204" else f"http://{name}/v1/chain/status",
+                },
+            } for name in node_order],
+            "identity_v2_evidence": {
+                "digest": "i" * 64,
+                "mode": "current_admission",
+                "entries": [{"node_name": name} for name in node_order],
+            },
+            "authority": {
+                "action": "full-network-clean-room",
+                "targets": node_order,
+                "digest": "a" * 64,
+            },
+            "forensic_backup": {
+                "action": "full-network-clean-room",
+                "targets": node_order,
+            },
+            "credential_nonce_ledger": {
+                "path": "/operator/nonce-ledger.jsonl",
+                "count": 5,
+                "reservations": [{"node": name} for name in node_order],
+            },
+            "known_hosts_digest": "k" * 64,
+            "consumer_impact_record": {"sha256": "c" * 64, "decision": "proceed"},
+            "package_provenance_digest": "p" * 64,
+            "deployment_inventory_digest": "d" * 64,
+            "independent_verifier": {
+                "verifier_id": "governed-receipt-verifier",
+                "trust_root_id": "oasis7-public-testnet-governance-root-v1",
+            },
+        }
+
+    def _authority(self) -> dict[str, object]:
+        return {
+            "action": "storage-205-first",
+            "targets": ["storage-205"],
+            "task_uid": self.plan["task_uid"],
+            "frozen_head_oid": self.plan["head_oid"],
+            "plan_digest": self.plan["plan_digest"],
+            "transaction_id": self.plan["transaction_id"],
+            "capture_window_id": self.plan["capture_window_id"],
+            "current_authorization": True,
+            "signed": True,
+            "expires_at": "2099-01-01T00:00:00Z",
+        }
+
+    class _Transport:
+        def __init__(self, side_effect_operation: str | None = None) -> None:
+            self.side_effect_operation = side_effect_operation
+            self.calls: list[str] = []
+            self.mutations: list[str] = []
+            self.rollback_candidates: list[str] = []
+
+        def inspect_node(self, node):
+            self.calls.append(f"inspect:{node['name']}")
+            return {"node": node["name"], "known_hosts_verified": True}
+
+        def preflight(self, operation, node):
+            self.calls.append(operation)
+            return {"operation": operation, "verified": True}
+
+        def verify(self, operation, node):
+            self.calls.append(operation)
+            return {"operation": operation, "verified": True}
+
+        def mutate(self, operation, node):
+            self.calls.append(operation)
+            self.mutations.append(operation)
+            self.rollback_candidates.append(operation)
+            if operation == self.side_effect_operation:
+                raise RuntimeError("provider side effect then throw")
+            return {
+                "operation": operation,
+                "phase_id": "storage-205-first",
+                "target": "storage-205",
+                "observer_mutation": False,
+                "verified": True,
+            }
+
+        def reobserve_failed_state(self, plan, started, failed_operation):
+            self.calls.append("reobserve-failed-state")
+            return {"failed_operation": failed_operation, "rollback_candidates": list(started)}
+
+        def rollback_clean_redeploy(self, plan, started, failed_state=None):
+            self.calls.append("rollback-clean-redeploy")
+            return {"rollback_candidates": list(started), "policy": "clean-redeploy"}
+
+    def _runner(self, transport, **overrides):
+        runner = getattr(self.adapter, "execute_storage_first", None)
+        self.assertTrue(callable(runner), "RED: missing storage-first adapter execute API")
+        kwargs = {
+            "phase": "storage-205-first",
+            "identity_v2_evidence": self.identity_map,
+            "journal_path": self.root / "storage-first.journal.json",
+            "ledger_path": self.root / "parent-nonce-ledger.jsonl",
+            "transport": transport,
+            "dry_run": False,
+            "provenance_verifier": lambda plan, receipt: {"verified": True},
+        }
+        kwargs.update(overrides)
+        return runner(self.plan, self._authority(), **kwargs)
+
+    def _resume(self, journal_path, **overrides):
+        resumer = getattr(self.adapter, "resume_storage_first", None)
+        self.assertTrue(callable(resumer), "RED: missing storage-first adapter resume API")
+        kwargs = {
+            "phase": "storage-205-first",
+            "identity_v2_evidence": self.identity_map,
+            "journal_path": journal_path,
+            "ledger_path": self.root / "parent-nonce-ledger.jsonl",
+            "transport": self._Transport(),
+            "provenance_verifier": lambda plan, receipt: {"verified": True},
+        }
+        kwargs.update(overrides)
+        return resumer(self.plan, self._authority(), **kwargs)
+
+    def test_storage_first_apply_calls_only_storage_callbacks(self):
+        transport = self._Transport()
+        self._runner(transport)
+        self.assertEqual(transport.mutations, [
+            "stop:storage-205", "delete:storage-205", "rebuild:storage-205",
+            "start:storage-205", "verify:storage-205",
+        ])
+        self.assertFalse(any("sequencer" in call or "observer" in call for call in transport.calls))
+        self.assertNotIn("fresh-root-probe", transport.calls)
+        self.assertNotIn("fleet-health", transport.calls)
+
+    def test_storage_first_apply_fails_before_lock_without_phase_and_current_map(self):
+        self.assertTrue(
+            callable(getattr(self.adapter, "execute_storage_first", None)),
+            "RED: missing storage-first adapter execute API",
+        )
+        for missing in ("phase", "identity_v2_evidence"):
+            with self.subTest(missing=missing):
+                transport = self._Transport()
+                kwargs = {missing: None}
+                with self.assertRaises(Exception):
+                    self._runner(transport, **kwargs)
+                self.assertEqual(transport.calls, [])
+                self.assertFalse((self.root / "storage-first.journal.json").exists())
+
+    def test_storage_first_resume_revalidates_live_authority_before_each_mutation(self):
+        transport = self._Transport()
+        checks = []
+        self._runner(transport, live_revalidator=lambda: checks.append("live"))
+        self.assertEqual(len(checks), len(transport.mutations))
+
+    def test_storage_first_resume_does_not_reuse_persisted_receipt_as_authority(self):
+        self.assertTrue(
+            callable(getattr(self.adapter, "resume_storage_first", None)),
+            "RED: missing storage-first adapter resume API",
+        )
+        journal = self.root / "persisted-receipt-only.json"
+        journal.write_text(json.dumps({
+            "schema_version": "oasis7.storage_first_mutation_journal.v1",
+            "phase_id": "storage-205-first",
+            "status": "preflight-complete",
+            "storage_receipts": [{"verified": True}],
+        }))
+        with self.assertRaises(Exception):
+            self._resume(journal, authority=None)
+
+    def test_storage_first_journal_states_and_cursor_are_closed(self):
+        validator = getattr(self.adapter, "validate_storage_first_journal", None)
+        self.assertTrue(callable(validator), "RED: missing storage-first journal validator API")
+        valid = {
+            "schema_version": "oasis7.storage_first_mutation_journal.v1",
+            "phase_id": "storage-205-first",
+            "status": "storage-205-running",
+            "next_operation": "rebuild:storage-205",
+            "completed_operations": ["stop:storage-205", "delete:storage-205"],
+        }
+        self.assertTrue(validator(valid))
+        for mutation in (
+            {"status": "unknown_status"},
+            {"next_operation": "stop:sequencer-204"},
+            {"status": "full-network-complete"},
+        ):
+            changed = copy.deepcopy(valid)
+            changed.update(mutation)
+            with self.subTest(mutation=mutation), self.assertRaises(Exception):
+                validator(changed)
+
+    def test_storage_first_side_effect_then_throw_requires_reconciliation(self):
+        transport = self._Transport(side_effect_operation="delete:storage-205")
+        journal = self.root / "side-effect.journal.json"
+        with self.assertRaises(Exception):
+            self._runner(transport, journal_path=journal)
+        self.assertTrue(journal.exists())
+        record = json.loads(journal.read_text())
+        self.assertEqual(record["failed_operation"], "delete:storage-205")
+        self.assertEqual(record["rollback_status"], "reconciliation-blocked")
+        self.assertEqual(record["next_operation"], "reconciliation-required")
+
+    def test_storage_first_receipts_forbid_secret_fields_and_false_closure(self):
+        validator = getattr(self.adapter, "validate_storage_first_receipt", None)
+        self.assertTrue(callable(validator), "RED: missing storage-first receipt validator API")
+        receipt = {
+            "schema_version": "oasis7.storage_first_receipt.v1",
+            "phase_id": "storage-205-first",
+            "operation": "verify:storage-205",
+            "target": "storage-205",
+            "observer_mutation": False,
+            "completion_boundary": "storage-205-verified-pending-sequencer-probe",
+        }
+        self.assertTrue(validator(receipt))
+        for mutation in (
+            {"credential": "not-allowed"},
+            {"nonce": "not-allowed"},
+            {"completion_boundary": "full-network-complete"},
+            {"fresh_root_probe": True},
+            {"fleet_health": True},
+        ):
+            changed = copy.deepcopy(receipt)
+            changed.update(mutation)
+            with self.subTest(mutation=mutation), self.assertRaises(Exception):
+                validator(changed)
+
+
 if __name__ == "__main__":
     unittest.main()
