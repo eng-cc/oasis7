@@ -507,7 +507,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     let mut runtime =
         NodeRuntime::new(config).with_consensus_progress_observer(publication_lifecycle_observer);
     if materialize_execution {
-        let execution_driver = NodeRuntimeExecutionDriver::new_with_storage_profile(
+        let mut execution_driver = NodeRuntimeExecutionDriver::new_with_storage_profile(
             paths.execution_bridge_state_path.clone(),
             paths.execution_world_dir.clone(),
             paths.execution_records_dir.clone(),
@@ -515,6 +515,11 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
             &storage_profile_config,
         )
         .map_err(|err| format!("failed to initialize execution driver: {err}"))?;
+        #[cfg(not(test))]
+        execution_bridge::publish_provider_backed_bootstrap_from_paths(
+            &mut execution_driver,
+            options.provider_backed_bootstrap_authority_paths.as_slice(),
+        )?;
         runtime = runtime.with_execution_hook(execution_driver);
     }
     let (mut runtime, replication_network) =

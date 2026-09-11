@@ -126,6 +126,11 @@ impl World {
             input.invocation_context.presenter.clone(),
             input.invocation_context.response_nonce.clone(),
         )?;
+        if derived_context.grant_id != input.grant.grant_id {
+            return Err(bootstrap_denied(
+                "provider bootstrap derived invocation context grant does not match supplied grant",
+            ));
+        }
         // Installing identity/authority/grant evidence appends its own
         // journal events, so the supplied catalog snapshot id may describe
         // the pre-bootstrap journal head. The authority-bearing fields are
@@ -280,6 +285,7 @@ fn bootstrap_denied(reason: impl Into<String>) -> WorldError {
 mod tests {
     use crate::geometry::GeoPos;
     use crate::runtime::{Action, ChainResourceDerivationContext, World};
+    use oasis7_wasm_abi::CapabilityPresenter;
     use std::fs;
 
     fn fixture_world() -> World {
@@ -387,6 +393,60 @@ mod tests {
             .bootstrap_provider_backed_authority(input)
             .expect_err("mismatched owner must fail closed");
         assert!(format!("{error:?}").contains("does not match live Runtime binding"));
+        assert_eq!(world.snapshot(), before);
+    }
+
+    #[test]
+    fn provider_bootstrap_rejects_multi_grant_context_mismatch_before_provisioning() {
+        let mut world = fixture_world();
+        let primary = world
+            .test_provider_backed_bootstrap_authority(
+                "agent-a",
+                "provider-bootstrap-multi-grant",
+                "provider-bootstrap-authority",
+                7,
+            )
+            .expect("build primary provider bootstrap input");
+        let secondary_grant = world
+            .install_test_provider_additional_capability_grant("agent-a", "secondary")
+            .expect("install secondary provider grant");
+        let (_, selected_context) = world
+            .capability_context_for_agent(
+                "agent-a",
+                CapabilityPresenter {
+                    presenter_id: "runtime-test-provider:agent-a".to_string(),
+                    presenter_kind: "provider".to_string(),
+                    session_id: Some("runtime-test-session:agent-a".to_string()),
+                    attestation_ref: None,
+                },
+                "provider-bootstrap-multi-grant-selection",
+            )
+            .expect("derive canonical selected grant");
+
+        let mut mismatched = primary.clone();
+        if selected_context.grant_id == primary.grant.grant_id {
+            mismatched.grant = secondary_grant;
+            mismatched.invocation_context.grant_id = mismatched.grant.grant_id.clone();
+            mismatched.invocation_context.subject = mismatched.grant.subject.clone();
+            mismatched.invocation_context.audience = mismatched.grant.audience.clone();
+            mismatched.invocation_context.module_id = mismatched.grant.scope.module_id.clone();
+            mismatched.invocation_context.module_version =
+                mismatched.grant.scope.module_version.clone();
+        }
+        assert_ne!(mismatched.grant.grant_id, selected_context.grant_id);
+        let before = world.snapshot();
+
+        let error = world
+            .bootstrap_provider_backed_authority(mismatched)
+            .expect_err("ambiguous multi-grant selection must fail closed");
+        assert!(format!("{error:?}").contains("derived invocation context grant"));
+        assert!(
+            world
+                .cognition_economy()
+                .expect("read unchanged economy")
+                .provision_journal
+                .is_empty()
+        );
         assert_eq!(world.snapshot(), before);
     }
 

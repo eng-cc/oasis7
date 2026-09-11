@@ -143,7 +143,6 @@ pub const VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID: &str = FORMAL_RELEASE_DEFAULT_
 pub struct ViewerRuntimeLiveServer {
     config: ViewerRuntimeLiveServerConfig,
     world: RuntimeWorld,
-    provider_backed_bootstrap_applied: bool,
     initial_world_time: u64,
     auto_play_paused: bool,
     next_auto_play_step_at: Option<Instant>,
@@ -258,16 +257,13 @@ impl ViewerRuntimeLiveServer {
             .as_deref()
             .map(str::trim)
             .is_some_and(|value| !value.is_empty());
-        let provider_backed_bootstrap_applied = if chain_linked {
-            config.provider_backed_bootstrap_authorities.is_empty()
-        } else {
+        if !chain_linked {
             apply_provider_backed_bootstrap_authorities(
                 &mut world,
                 &config.provider_backed_bootstrap_authorities,
             )
             .map_err(ViewerRuntimeLiveServerError::Init)?;
-            true
-        };
+        }
         let initial_world_time = world.state().time;
         let mut llm_sidecar = match seed_model.as_ref() {
             Some(model) => {
@@ -292,7 +288,6 @@ impl ViewerRuntimeLiveServer {
         let mut server = Self {
             config,
             world,
-            provider_backed_bootstrap_applied,
             initial_world_time,
             auto_play_paused: false,
             next_auto_play_step_at: None,
