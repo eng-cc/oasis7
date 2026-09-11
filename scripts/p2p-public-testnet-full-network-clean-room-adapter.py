@@ -4420,7 +4420,6 @@ STORAGE_FIRST_STATUSES = {
     "reconciliation-blocked",
 }
 _STORAGE_FIRST_ADMISSION_BINDINGS: dict[tuple[str, str, str], str] = {}
-_STORAGE_FIRST_LEGACY_NO_REVALIDATION_USED = False
 
 
 def _storage_first_validate_digest(value: Any, label: str) -> str:
@@ -4885,29 +4884,8 @@ def _storage_first_run(
             _storage_first_check_impact(plan)
             _guarded_callback(transport.inspect_node, transport_node)
             _guarded_callback(transport.preflight, "preflight:storage-205", transport_node)
-        if live_revalidator is None:
-            # Complete production plans always require a caller-provided
-            # live trust revalidator.  Keep the original shape-only fixture
-            # contract usable for its callback-isolation control; security
-            # fixtures either inject a seam/side-effect marker or exercise the
-            # mandatory rejection path below.
-            global _STORAGE_FIRST_LEGACY_NO_REVALIDATION_USED
-            shape_only = "capture_window" not in plan
-            fixture_seam = any(
-                isinstance(item, Mapping) and "credential_seam" in item
-                for item in (plan.get("nodes") if isinstance(plan.get("nodes"), list) else [])
-            )
-            fixture_side_effect = getattr(transport, "side_effect_operation", None) is not None
-            if shape_only and (fixture_seam or fixture_side_effect):
-                _STORAGE_FIRST_LEGACY_NO_REVALIDATION_USED = True
-                live_revalidator = lambda: True
-            elif shape_only and not _STORAGE_FIRST_LEGACY_NO_REVALIDATION_USED:
-                _STORAGE_FIRST_LEGACY_NO_REVALIDATION_USED = True
-                live_revalidator = lambda: True
-            else:
-                _fail("storage-first live revalidation is mandatory before mutation")
-        elif not callable(live_revalidator):
-            _fail("storage-first live revalidator is not callable")
+        if live_revalidator is None or not callable(live_revalidator):
+            _fail("storage-first live revalidation is mandatory before mutation")
         for index, operation in enumerate(STORAGE_FIRST_OPERATIONS[len(completed):], start=len(completed)):
             live_result = _guarded_callback(live_revalidator)
             if live_result is False:
