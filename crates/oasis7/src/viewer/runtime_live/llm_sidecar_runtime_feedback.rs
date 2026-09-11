@@ -808,20 +808,45 @@ impl RuntimeLlmSidecar {
             .collect();
         for agent_id in due_agents {
             if let Some(lease) = self.provider_cognition_lease(agent_id.as_str()) {
-                self.validate_provider_cognition_lease_for_agent(
-                    world,
-                    agent_id.as_str(),
-                    &lease,
-                    "wait release",
-                )?;
-                world
-                    .release_cognition_lease(lease.lease_id.as_str())
-                    .map_err(|error| {
-                        format!(
-                            "cognition lease release failed after provider wait for {}: {error:?}",
-                            lease.lease_id
-                        )
-                    })?;
+                let economy = world.cognition_economy().map_err(|error| {
+                    format!(
+                        "cognition lease wait release economy read failed for {}: {error:?}",
+                        lease.lease_id
+                    )
+                })?;
+                if let Some(runtime_lease) = economy.leases.get(lease.lease_id.as_str()) {
+                    if runtime_lease.lease_id != lease.lease_id
+                        || runtime_lease.idempotency_key != lease.idempotency_key
+                        || runtime_lease.account_id != lease.account_id
+                        || runtime_lease.agent_id != lease.agent_id
+                        || runtime_lease.agent_session_id != lease.agent_session_id
+                        || runtime_lease.agent_turn_id != lease.agent_turn_id
+                        || runtime_lease.decision_request_id != lease.decision_request_id
+                        || runtime_lease.request_digest != lease.request_digest
+                        || runtime_lease.quote != lease.quote
+                        || runtime_lease.reserved_amount != lease.reserved_amount
+                    {
+                        return Err(format!(
+                            "cognition lease wait release Runtime identity mismatch for {agent_id}"
+                        ));
+                    }
+                    if runtime_lease.status == crate::runtime::CognitionLeaseStatusV1::Reserved {
+                        self.validate_provider_cognition_lease_for_agent(
+                            world,
+                            agent_id.as_str(),
+                            &lease,
+                            "wait release",
+                        )?;
+                        world
+                            .release_cognition_lease(lease.lease_id.as_str())
+                            .map_err(|error| {
+                                format!(
+                                    "cognition lease release failed after provider wait for {}: {error:?}",
+                                    lease.lease_id
+                                )
+                            })?;
+                    }
+                }
                 self.clear_provider_cognition_lease(agent_id.as_str());
             }
             if let Some(context) = self.provider_contexts.get(agent_id.as_str()).cloned() {

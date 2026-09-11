@@ -257,3 +257,201 @@ fn native_budget_denial_round_trips_through_live_sidecar_without_effects() {
         )
     }));
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn budget_wait_without_response_context_enters_terminal_cleanup() {
+    let _env_guard = super::super::canonical_runtime_provider_env_lock()
+        .lock()
+        .expect("provider env lock");
+    let _provider_env_snapshot = NativeBudgetEnvSnapshot::capture(&[
+        VIEWER_AGENT_DECISION_SOURCE_ENV,
+        VIEWER_AGENT_PROVIDER_BACKEND_ENV,
+        VIEWER_AGENT_PROVIDER_CONTRACT_ENV,
+        VIEWER_AGENT_PROVIDER_TRANSPORT_ENV,
+        VIEWER_AGENT_PROVIDER_URL_ENV,
+        VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV,
+        VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV,
+        VIEWER_AGENT_PROVIDER_DECISION_TIMEOUT_MS_ENV,
+        VIEWER_AGENT_PROVIDER_PROFILE_ENV,
+        VIEWER_AGENT_EXECUTION_LANE_ENV,
+        VIEWER_AGENT_PROVIDER_MODE_ENV,
+        crate::simulator::ENV_LLM_MODEL,
+        crate::simulator::ENV_LLM_BASE_URL,
+        crate::simulator::ENV_LLM_API_KEY,
+    ]);
+    // SAFETY: the canonical provider lock serializes this test's environment setup.
+    unsafe {
+        oasis7::env_mut::set_var(crate::simulator::ENV_LLM_MODEL, "gpt-runtime-budget-test");
+        oasis7::env_mut::set_var(
+            crate::simulator::ENV_LLM_BASE_URL,
+            "https://example.invalid/v1",
+        );
+        oasis7::env_mut::set_var(crate::simulator::ENV_LLM_API_KEY, "test-key");
+    }
+    let config =
+        crate::viewer::ViewerRuntimeLiveServerConfig::new(crate::simulator::WorldScenario::Minimal)
+            .with_world_id("runtime-budget-no-response")
+            .with_decision_mode(ViewerLiveDecisionMode::Llm)
+            .with_test_cognition_runtime_binding("main", 0, None, "pending", 0);
+    let mut server =
+        crate::viewer::ViewerRuntimeLiveServer::new(config).expect("create live budget fixture");
+    let agent_id = "agent-0";
+    server.world = server.world.clone().with_cognition_scheduler(
+        serde_json::from_value(serde_json::json!({
+            "schema_version": "scheduler-policy.v1",
+            "max_total_wakes_per_tick": 8,
+            "max_wakes_per_agent_per_tick": 1,
+            "aging_after_ticks": 2,
+            "max_starvation_ticks": 4,
+            "initial_priority": 0,
+            "comparator": "deadline_due_desc,next_wake_tick_asc,effective_priority_desc,starvation_deadline_tick_asc,cursor_distance_asc,agent_id_asc,continuation_id_asc,wake_seq_asc",
+            "service_order": "stable_round_robin"
+        }))
+        .expect("decode scheduler policy"),
+        8,
+    );
+    server
+        .world
+        .install_test_provider_capability_fixture(agent_id)
+        .expect("install valid Runtime provider capability fixture");
+    let behavior = crate::simulator::LlmAgentBehavior::new(
+        agent_id,
+        native_budget_test_config(),
+        NativeBudgetDeniedClient {
+            calls: Arc::new(AtomicUsize::new(0)),
+        },
+    );
+    let mut runner = crate::simulator::AsyncAgentRunner::new(16).expect("create native runner");
+    runner.register(behavior).expect("register native behavior");
+    server.llm_sidecar.runner = Some(RuntimeDecisionRunner::Builtin(runner));
+    server
+        .llm_sidecar
+        .provider_agent_ids
+        .insert(agent_id.to_string());
+    server
+        .llm_sidecar
+        .sync_shadow_kernel(&server.world, &server.snapshot_config)
+        .expect("sync native shadow kernel");
+    let mut kernel = server
+        .llm_sidecar
+        .shadow_kernel
+        .take()
+        .expect("native shadow kernel");
+    server
+        .llm_sidecar
+        .prepare_provider_request_contexts(
+            &mut server.world,
+            &mut kernel,
+            "runtime-budget-no-response",
+        )
+        .expect("build valid Runtime request context");
+    let mut context = server
+        .llm_sidecar
+        .provider_contexts
+        .get(agent_id)
+        .cloned()
+        .expect("prepared provider context");
+    context.request_context.budget_contract.max_model_calls = 1;
+    context.request_context.budget_contract.max_tool_calls = 1;
+    context.request_context.request_digest = context.request_context.request_digest();
+    context.turn_context.request_digest = context.request_context.request_digest.clone();
+    server
+        .llm_sidecar
+        .provider_contexts
+        .insert(agent_id.to_string(), context.clone());
+    let lease = super::async_support::reserve_provider_cognition_lease(&mut server.world, &context)
+        .expect("reserve provider cognition lease");
+    super::async_support::runtime_provider_prefix(&mut server.world, &context)
+        .expect("prefix Runtime provider turn");
+    server
+        .llm_sidecar
+        .bind_provider_cognition_lease(agent_id.to_string(), lease.clone());
+
+    {
+        let runner = server
+            .llm_sidecar
+            .runner
+            .as_mut()
+            .and_then(RuntimeDecisionRunner::async_runner_mut)
+            .expect("native runner");
+        runner.sync_logical_tick(server.world.state().time);
+        runner
+            .start_turn_with_request_context_and_lease(
+                agent_id,
+                context.turn_context.clone(),
+                context.request_context.clone(),
+                lease.clone(),
+            )
+            .expect("start budget-denied provider turn");
+    }
+    let mut outcome = loop {
+        let completed = server
+            .llm_sidecar
+            .runner
+            .as_mut()
+            .and_then(RuntimeDecisionRunner::async_runner_mut)
+            .expect("native runner")
+            .poll_completed()
+            .expect("poll budget-denied provider turn");
+        if let Some(outcome) = completed.into_iter().next() {
+            break outcome;
+        }
+        std::thread::yield_now();
+    };
+    assert!(
+        outcome
+            .decision_trace
+            .as_ref()
+            .is_some_and(super::super::decision_trace::is_budget_exhausted_wait),
+        "native fixture must produce the normalized budget Wait"
+    );
+    // Simulate the provider lane's normalized Wait shape: the actor retained
+    // its trusted request/lease identity, but no provider response artifact
+    // survived the normalization boundary.
+    outcome.prepared_response_context = None;
+    let decision = server.llm_sidecar.provider_decision_from_async_outcome(
+        &mut server.world,
+        &mut kernel,
+        outcome,
+    );
+    assert!(
+        decision.cognition.is_none(),
+        "the regression fixture must omit prepared response context"
+    );
+    assert!(
+        server
+            .llm_sidecar
+            .provider_transport_exhausted
+            .contains(agent_id),
+        "normalized no-response Wait must enter durable terminal cleanup"
+    );
+
+    let trace = server
+        .enqueue_llm_action_from_sidecar()
+        .expect_err("exhausted no-response Wait must terminalize");
+    assert!(
+        trace
+            .llm_error
+            .as_deref()
+            .is_some_and(|error| error.contains("failed_provider")),
+        "terminal cleanup must report the failed provider disposition"
+    );
+    let economy = server
+        .world
+        .cognition_economy()
+        .expect("read economy after no-response cleanup");
+    assert_eq!(
+        economy
+            .leases
+            .get(lease.lease_id.as_str())
+            .expect("lease remains durable")
+            .status,
+        crate::runtime::CognitionLeaseStatusV1::Released,
+        "no-response budget cleanup must release the reserved unit"
+    );
+    assert!(
+        server.world.cognition_in_flight_wakes().unwrap().is_empty(),
+        "no-response budget cleanup must not leave a Runtime wake waiting"
+    );
+}

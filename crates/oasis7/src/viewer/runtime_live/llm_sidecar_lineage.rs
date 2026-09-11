@@ -145,6 +145,78 @@ impl RuntimeLlmSidecar {
         self.persist_provider_lineage_best_effort();
     }
 
+    /// Close a lease restored for an old Runtime binding before a stale
+    /// replan can build a new request identity. Restore itself accepts an
+    /// immutable world reference so it remains usable during bootstrap; the
+    /// first mutable prepare pass performs this cleanup before dispatch.
+    pub(in crate::viewer::runtime_live) fn release_binding_changed_provider_leases(
+        &mut self,
+        world: &mut RuntimeWorld,
+    ) -> Result<(), String> {
+        let stale_agents = self
+            .provider_stale_replans
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut leases_to_clear = Vec::new();
+        for agent_id in stale_agents {
+            let Some(lease) = self.provider_cognition_leases.get(&agent_id).cloned() else {
+                continue;
+            };
+            lease
+                .validate()
+                .map_err(|error| format!("stale provider cognition lease invalid: {error}"))?;
+            let economy = world.cognition_economy().map_err(|error| {
+                format!(
+                    "stale provider cognition lease economy read failed for {agent_id}: {error:?}"
+                )
+            })?;
+            let Some(runtime_lease) = economy.leases.get(lease.lease_id.as_str()) else {
+                // Runtime already closed or discarded the old lease. There is
+                // no economic effect left to release, so clear only this
+                // sidecar mirror and continue the replan.
+                leases_to_clear.push(agent_id);
+                continue;
+            };
+            if runtime_lease != &lease {
+                return Err(format!(
+                    "stale provider cognition lease Runtime identity mismatch for {agent_id}"
+                ));
+            }
+            if runtime_lease.status == crate::runtime::CognitionLeaseStatusV1::Reserved {
+                world
+                    .release_cognition_lease(lease.lease_id.as_str())
+                    .map_err(|error| {
+                        format!(
+                            "stale provider cognition lease release failed for {}: {error:?}",
+                            lease.lease_id
+                        )
+                    })?;
+            }
+            leases_to_clear.push(agent_id);
+        }
+        if leases_to_clear.is_empty() {
+            return Ok(());
+        }
+        let backups = leases_to_clear
+            .iter()
+            .filter_map(|agent_id| {
+                self.provider_cognition_leases
+                    .remove(agent_id)
+                    .map(|lease| (agent_id.clone(), lease))
+            })
+            .collect::<Vec<_>>();
+        if let Err(error) = self.persist_provider_lineage() {
+            for (agent_id, lease) in backups {
+                self.provider_cognition_leases.insert(agent_id, lease);
+            }
+            return Err(format!(
+                "stale provider cognition lease cleanup persistence failed: {error}"
+            ));
+        }
+        Ok(())
+    }
+
     pub(in crate::viewer::runtime_live) fn provider_transport_exhausted_agent(
         &self,
     ) -> Option<String> {

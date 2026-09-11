@@ -218,14 +218,16 @@ fn compensate_provider_wait_admission(
                 request.agent_subject.as_str(),
                 request,
                 lease,
-                "release",
+                "settle",
             ) {
                 compensation_errors.push(format!(
-                    "provider Wait cognition lease release validation failed: {error}"
+                    "provider Wait cognition lease settlement validation failed: {error}"
                 ));
-            } else if let Err(error) = world.release_cognition_lease(lease.lease_id.as_str()) {
+            } else if let Err(error) =
+                world.settle_cognition_lease(lease.lease_id.as_str(), lease.reserved_amount)
+            {
                 compensation_errors.push(format!(
-                    "provider Wait cognition lease release failed: {error:?}"
+                    "provider Wait cognition lease settlement failed: {error:?}"
                 ));
             } else {
                 sidecar.clear_provider_cognition_lease(request.agent_subject.as_str());

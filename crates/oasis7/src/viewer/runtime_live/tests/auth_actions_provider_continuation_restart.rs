@@ -776,6 +776,26 @@ fn runtime_provider_feedback_delivery_failure_survives_reload_without_readmissio
         0,
         "feedback transport failure must not leave a Runtime wake in flight"
     );
+    let exhausted_economy = server
+        .world
+        .cognition_economy()
+        .expect("read economy after exhausted provider transport");
+    assert!(
+        exhausted_economy
+            .leases
+            .values()
+            .all(|lease| lease.status == crate::runtime::CognitionLeaseStatusV1::Released),
+        "an exhausted transport with no provider response must release its reserved unit"
+    );
+    assert_eq!(
+        exhausted_economy
+            .receipts
+            .values()
+            .filter(|receipt| receipt.operation == "release")
+            .count(),
+        exhausted_economy.leases.len(),
+        "exhausted transport cleanup must emit one release receipt per lease"
+    );
 
     // A second control pass retries only the pending feedback outbox record;
     // it cannot readmit the terminal provider request.
@@ -1025,6 +1045,34 @@ fn runtime_provider_backed_wake_resumes_with_fresh_request_and_origin_lineage() 
             })),
         "provider Wait must leave a durable Runtime continuation: {}",
         server.world.cognition()
+    );
+    let wait_economy = server
+        .world
+        .cognition_economy()
+        .expect("read cognition economy after provider Wait");
+    assert_eq!(
+        wait_economy.leases.len(),
+        1,
+        "the successful provider Wait must have one admitted cognition lease"
+    );
+    assert_eq!(
+        wait_economy
+            .leases
+            .values()
+            .next()
+            .expect("provider Wait lease")
+            .status,
+        crate::runtime::CognitionLeaseStatusV1::Settled,
+        "provider I/O completion must settle the fixed cognition unit"
+    );
+    assert_eq!(
+        wait_economy
+            .receipts
+            .values()
+            .filter(|receipt| receipt.operation == "settle")
+            .count(),
+        1,
+        "provider Wait settlement must emit one terminal settle receipt"
     );
     server.world.step().expect("normal Runtime tick wakes Wait");
     let restarted_world = server.world.clone();
