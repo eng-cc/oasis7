@@ -392,7 +392,7 @@ impl CognitionLeaseV1 {
             || !bounded_identity(&self.agent_turn_id)
             || !bounded_identity(&self.decision_request_id)
             || !bounded_identity(&self.request_digest)
-            || self.reserved_amount == 0
+            || self.quote.payer_id != self.account_id
             || self.reserved_amount != self.quote.amount
         {
             return Err(CognitionEconomyError::InvalidState(
@@ -495,7 +495,6 @@ pub struct CognitionReceiptV1 {
     pub quote: CognitionLeaseQuoteV1,
     pub reserved_amount: u64,
     /// Canonical operation name: reserve, settle, release, expire, or refund.
-    /// Empty is accepted only for pre-remediation persisted receipts.
     #[serde(default)]
     pub operation: String,
     pub consumed_amount: u64,
@@ -539,6 +538,7 @@ impl CognitionReceiptV1 {
             || !bounded_identity(&self.agent_turn_id)
             || !bounded_identity(&self.decision_request_id)
             || !bounded_identity(&self.request_digest)
+            || self.quote.payer_id != self.account_id
             || self.reserved_amount == 0
             || (!self.operation.is_empty()
                 && !matches!(

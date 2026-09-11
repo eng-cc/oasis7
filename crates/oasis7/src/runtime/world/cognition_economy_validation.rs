@@ -208,6 +208,15 @@ impl CognitionEconomyStateV1 {
                 return Err(CognitionEconomyError::InvalidState(
                     "cognition_economy_journal_reserve_invalid",
                 ));
+            } else if self.operations.contains_key(&expected_operation)
+                || self.receipts.values().any(|receipt| {
+                    receipt.lease_id == lease.lease_id
+                        && receipt_operation_name(receipt) == Some("reserve")
+                })
+            {
+                return Err(CognitionEconomyError::InvalidState(
+                    "cognition_economy_journal_reserve_receipt_missing",
+                ));
             }
             previous_digest.clone_from(&event.event_digest);
         }
@@ -265,6 +274,16 @@ impl CognitionEconomyStateV1 {
                 ));
             }
             lease.validate()?;
+            if self
+                .balances
+                .get(&lease.account_id)
+                .and_then(|resources| resources.get(&lease.quote.resource))
+                .is_none()
+            {
+                return Err(CognitionEconomyError::InvalidState(
+                    "cognition_economy_lease_balance_missing",
+                ));
+            }
             let Some(record) = self.idempotency.get(&lease.idempotency_key) else {
                 return Err(CognitionEconomyError::InvalidState(
                     "cognition_economy_lease_index_invalid",
@@ -277,6 +296,32 @@ impl CognitionEconomyStateV1 {
                 return Err(CognitionEconomyError::InvalidState(
                     "cognition_economy_lease_index_invalid",
                 ));
+            }
+            let reserve_operation_key = operation_key(&lease.lease_id, "reserve");
+            let has_reserve_operation = self.operations.contains_key(&reserve_operation_key);
+            let has_reserve_receipt = self.receipts.values().any(|receipt| {
+                receipt.lease_id == lease.lease_id
+                    && receipt_operation_name(receipt) == Some("reserve")
+            });
+            if lease.status == CognitionLeaseStatusV1::Reserved
+                && ((has_reserve_operation || has_reserve_receipt) != lease.receipt_id.is_some())
+            {
+                return Err(CognitionEconomyError::InvalidState(
+                    "cognition_economy_lease_receipt_invalid",
+                ));
+            }
+            if lease.status == CognitionLeaseStatusV1::Reserved
+                && (has_reserve_operation || has_reserve_receipt)
+            {
+                let expected_reserve_receipt_id = economy_digest(
+                    COGNITION_ECONOMY_RECEIPT_ID_DOMAIN,
+                    &(lease.lease_id.as_str(), reserve_operation_key.as_str()),
+                );
+                if lease.receipt_id.as_deref() != Some(expected_reserve_receipt_id.as_str()) {
+                    return Err(CognitionEconomyError::InvalidState(
+                        "cognition_economy_lease_receipt_invalid",
+                    ));
+                }
             }
             if lease.status != CognitionLeaseStatusV1::Reserved {
                 let Some(receipt_id) = lease.receipt_id.as_deref() else {
