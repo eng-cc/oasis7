@@ -24475,7 +24475,18 @@ function DetailsPanel() {
     }
     return segments.length > 0 ? segments.join(" · ") : tr(locale(), "当前未发布世界尺度摘要。", "No world scale summary is published yet.");
   };
-  const selectedLabel = () => state.selectedKind && state.selectedId && !hiddenSelectedAgent() ? `${state.selectedKind}:${state.selectedId}` : tr(locale(), "未选择", "nothing selected");
+  const selectedLabel = () => {
+    if (!state.selectedKind || !state.selectedId || hiddenSelectedAgent()) {
+      return tr(locale(), "未选择", "nothing selected");
+    }
+    if (state.selectedKind === "module_visual") {
+      return pixelWorldSelectedEntityLabel(entityCollections(), {
+        kind: state.selectedKind,
+        id: state.selectedId
+      }, isLocaleZh(locale()));
+    }
+    return `${state.selectedKind}:${state.selectedId}`;
+  };
   const hiddenSelectedAgent = () => state.selectedKind === "agent" && state.selectedId && !isAgentVisibleToCurrentSession(state.selectedId);
   const hasVisibleSelectedObject = () => state.selectedObject && !hiddenSelectedAgent();
   const selectedModule = () => state.selectedKind === "module_visual" ? state.selectedObject : null;

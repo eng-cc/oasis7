@@ -25,6 +25,15 @@ async function renderModuleDetails() {
   core.initializeSoftwareSafeCore();
   core.setViewerLocale("en");
   const snapshot = sampleSnapshot();
+  snapshot.model.module_visual_entities = {
+    "module-relay": {
+      entity_id: "module-relay",
+      module_id: "relay-seven",
+      kind: "relay",
+      label: "Relay Seven",
+      anchor: { type: "absolute", data: { pos: { x_cm: 1_530_000, y_cm: 1_010_000, z_cm: 0 } } },
+    },
+  };
   core.injectSnapshot(snapshot);
   bindFirstSnapshotAgentForTest(core, snapshot);
   const dispose = main.mountViewerApp(root);
@@ -61,8 +70,12 @@ describe("module visual details", () => {
     const { core, root } = await renderModuleDetails();
     const detailsPanel = root.querySelector("#viewer-details-panel");
     await waitFor(() => expect(detailsPanel.querySelector("[data-viewer-module-details='true']")).toBeTruthy());
+    const currentCommandTarget = detailsPanel.querySelector(".badge-row");
     const moduleDetails = detailsPanel.querySelector("[data-viewer-module-details='true']");
     expect(core.state.selectedKind).toBe("module_visual");
+    expect(currentCommandTarget).toHaveTextContent("Current Command Target");
+    expect(currentCommandTarget).toHaveTextContent("Relay Seven");
+    expect(currentCommandTarget).not.toHaveTextContent("module_visual:module-relay");
     expect(within(moduleDetails).getByText("Module Details")).toBeInTheDocument();
     expect(within(moduleDetails).getByText("Relay Seven")).toBeInTheDocument();
     expect(moduleDetails).toHaveTextContent(/Kind\s*:\s*relay/);

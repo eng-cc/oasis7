@@ -1,11 +1,10 @@
-//! Opt-in runtime driver for producing module visual events through the real
-//! module execution path.
+//! Test-only runtime helper for producing module visual events through the
+//! real module execution path.
 //!
-//! This is deliberately file-backed and environment-gated. It exists so a
-//! headed QA session can cause a real `World::execute_module_call` to emit the
-//! same `ModuleEmitted` event that the world-feed bridge consumes. It is not a
-//! viewer gameplay request and is disabled unless the operator explicitly sets
-//! `OASIS7_RUNTIME_MODULE_VISUAL_DRIVER`.
+//! `runtime_live.rs` includes this module only under `cfg(test)`.  It keeps a
+//! reproducible real-runtime regression available in a fresh ephemeral world
+//! without exposing an environment gate, file-backed command channel, or
+//! synthetic module installation hook in release builds.
 
 use crate::runtime::{World as RuntimeWorld, WorldEventBody as RuntimeWorldEventBody};
 use crate::simulator::{ModuleVisualAnchor, ModuleVisualEntity, WorldModel};
@@ -15,63 +14,12 @@ use oasis7_wasm_abi::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::fs::{self, OpenOptions};
-use std::io::{BufWriter, Read, Write};
-use std::net::TcpStream;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-use super::{
-    RuntimeLiveSession, ViewerResponse, ViewerRuntimeLiveServer, ViewerRuntimeLiveServerError,
-    ViewerStream, map_runtime_event, send_response,
-};
-
-pub(super) const DRIVER_ENV: &str = "OASIS7_RUNTIME_MODULE_VISUAL_DRIVER";
 const DRIVER_SCHEMA_VERSION: u32 = 1;
 const UPSERT_KIND: &str = "module_visual_entity_upserted";
 const REMOVE_KIND: &str = "module_visual_entity_removed";
-
-pub(super) fn poll_module_visual_driver(
-    server: &mut ViewerRuntimeLiveServer,
-    session: &RuntimeLiveSession,
-    writer: &mut BufWriter<TcpStream>,
-) -> Result<(), ViewerRuntimeLiveServerError> {
-    let Some(driver) = server.module_visual_driver.as_mut() else {
-        return Ok(());
-    };
-    let emitted_events = driver
-        .poll(
-            &mut server.world,
-            &mut server.seed_model,
-            server.config.world_id.as_str(),
-            server.reorg_epoch,
-        )
-        .map_err(ViewerRuntimeLiveServerError::Init)?;
-    if emitted_events.is_empty() {
-        return Ok(());
-    }
-
-    // The driver has already committed a real ModuleEmitted journal row.
-    // Reuse the normal runtime event mapper as the publication trigger so
-    // the production Viewer refreshes its pull-based World Feed and reads
-    // the updated snapshot. No feed envelope or event payload is fabricated
-    // at this transport boundary.
-    if session.explicitly_subscribed_to(ViewerStream::Events) {
-        for runtime_event in emitted_events {
-            let event = map_runtime_event(
-                &runtime_event,
-                &server.snapshot_config,
-                server.seed_model.as_ref(),
-            );
-            if session.event_allowed(&event) {
-                send_response(writer, &ViewerResponse::Event { event })?;
-            }
-        }
-    }
-    if session.explicitly_subscribed_to(ViewerStream::Snapshot) {
-        let snapshot = server.compat_snapshot(session.current_player_id.as_deref());
-        send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
-    }
-    Ok(())
-}
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case")]
@@ -122,54 +70,6 @@ impl ModuleSandbox for EmissionSandbox {
 }
 
 impl RuntimeModuleVisualDriver {
-    pub(super) fn from_env(world: &mut RuntimeWorld) -> Result<Option<Self>, String> {
-        let Some(raw_path) = std::env::var_os(DRIVER_ENV) else {
-            return Ok(None);
-        };
-        let command_path = PathBuf::from(raw_path);
-        if command_path.as_os_str().is_empty() {
-            return Err(format!("{DRIVER_ENV} must name a JSONL driver file"));
-        }
-        if let Some(parent) = command_path
-            .parent()
-            .filter(|path| !path.as_os_str().is_empty())
-        {
-            fs::create_dir_all(parent).map_err(|err| format!("create driver directory: {err}"))?;
-        }
-        OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&command_path)
-            .map_err(|err| format!("open runtime module visual driver: {err}"))?;
-        let ack_path = ack_path_for(&command_path);
-
-        let runtime_module_id = world
-            .install_runtime_module_visual_driver()
-            .map_err(|err| format!("install runtime module visual driver: {err:?}"))?;
-
-        let driver = Self {
-            command_path,
-            ack_path,
-            read_offset: 0,
-            runtime_module_id,
-        };
-        driver.write_ack(&DriverAck {
-            schema_version: DRIVER_SCHEMA_VERSION,
-            status: "ready",
-            operation: "driver_ready".to_string(),
-            world_id: String::new(),
-            reorg_epoch: 0,
-            event_sequence: None,
-            runtime_module_id: driver.runtime_module_id.clone(),
-            event_kind: None,
-            event_payload: None,
-            module_visual_entity_id: None,
-            snapshot_module_visual_entity: None,
-            error: None,
-        })?;
-        Ok(Some(driver))
-    }
-
     pub(super) fn poll(
         &mut self,
         world: &mut RuntimeWorld,
@@ -439,6 +339,24 @@ mod tests {
     }
 
     #[test]
+    fn fresh_world_does_not_bootstrap_test_driver_module() {
+        let world = World::new();
+        assert!(
+            !world
+                .module_registry()
+                .active
+                .contains_key("runtime.qa.module_visual_driver")
+        );
+        assert!(
+            !world
+                .module_registry()
+                .records
+                .keys()
+                .any(|key| key.starts_with("runtime.qa.module_visual_driver@"))
+        );
+    }
+
+    #[test]
     fn driver_uses_runtime_module_call_for_upsert_and_remove() {
         let command_path = test_path();
         let _ = fs::remove_file(&command_path);
@@ -449,7 +367,7 @@ mod tests {
             ack_path: ack_path_for(&command_path),
             read_offset: 0,
             runtime_module_id: world
-                .install_runtime_module_visual_driver()
+                .install_test_runtime_module_visual_driver()
                 .expect("install driver module"),
         };
         let mut seed_model = None;

@@ -73,6 +73,10 @@ mod governance_vote_quote;
 mod governance_vote_quote_debug;
 mod mapping;
 mod market_quote_decision;
+// The real-runtime module visual driver is a focused test helper.  Keeping
+// this module out of normal builds prevents an environment variable or CLI
+// from mutating a production world.
+#[cfg(test)]
 mod module_visual_driver;
 mod player_gameplay;
 #[path = "runtime_live/power_projection.rs"]
@@ -121,7 +125,6 @@ use gameplay_snapshot::{
     player_gameplay_feedback_from_control_ack,
 };
 use mapping::{map_runtime_event, runtime_state_to_simulator_model};
-use module_visual_driver::RuntimeModuleVisualDriver;
 use runtime_script::RuntimeLiveScript;
 use session_policy::{
     RuntimeSessionPolicy, RuntimeSessionRevokeMetadata, location_id_for_pos,
@@ -145,7 +148,6 @@ pub struct ViewerRuntimeLiveServer {
     confirmed_player_gameplay_progress_time: Option<u64>,
     snapshot_config: WorldConfig,
     seed_model: Option<WorldModel>,
-    module_visual_driver: Option<RuntimeModuleVisualDriver>,
     script: RuntimeLiveScript,
     llm_sidecar: RuntimeLlmSidecar,
     pending_virtual_events: VecDeque<WorldEvent>,
@@ -269,8 +271,6 @@ impl ViewerRuntimeLiveServer {
             );
         }
         let next_virtual_event_id = latest_runtime_event_seq(&world).saturating_add(1).max(1);
-        let module_visual_driver = RuntimeModuleVisualDriver::from_env(&mut world)
-            .map_err(ViewerRuntimeLiveServerError::Init)?;
         let mut server = Self {
             config,
             world,
@@ -281,7 +281,6 @@ impl ViewerRuntimeLiveServer {
             confirmed_player_gameplay_progress_time: None,
             snapshot_config,
             seed_model,
-            module_visual_driver,
             script: RuntimeLiveScript::default(),
             llm_sidecar,
             pending_virtual_events: recovered_generation
@@ -489,7 +488,6 @@ impl ViewerRuntimeLiveServer {
             }
 
             let mut server = lock_shared_server(&shared)?;
-            module_visual_driver::poll_module_visual_driver(&mut server, &session, &mut writer)?;
             if server.authoritative_recovery_write_fence.is_none() {
                 server.drive_auto_play(&mut session, &mut writer)?;
             }
@@ -537,7 +535,6 @@ impl ViewerRuntimeLiveServer {
             }
 
             if self.authoritative_recovery_write_fence.is_none() {
-                module_visual_driver::poll_module_visual_driver(self, &session, &mut writer)?;
                 self.drive_auto_play(&mut session, &mut writer)?;
             }
         }

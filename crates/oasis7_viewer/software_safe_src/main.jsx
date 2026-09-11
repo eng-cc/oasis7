@@ -29,7 +29,7 @@ import { FactoryProductionFailureDispositionCard } from "./factory_production_fa
 import { AgentContextLite } from "./agent_context_lite.jsx";
 import { buildAgentContextDisplayModel } from "./viewer_agent_context_display_model.js";
 import { pixelWorldBlockerPresentation, pixelWorldConnectionPresentation } from "./pixel_world_presentation.js";
-import { pixelWorldReadableModuleLabel } from "./pixel_world_identity.js";
+import { pixelWorldReadableModuleLabel, pixelWorldSelectedEntityLabel } from "./pixel_world_identity.js";
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
 const [viewerStateRevision, setViewerStateRevision] = createSignal(0);
 function observeViewerStateRevision() {
@@ -3699,10 +3699,19 @@ function DetailsPanel() {
     }
     return segments.length > 0 ? segments.join(" · ") : tr(locale(), "当前未发布世界尺度摘要。", "No world scale summary is published yet.");
   };
-  const selectedLabel = () =>
-    core.state.selectedKind && core.state.selectedId && !hiddenSelectedAgent()
-      ? `${core.state.selectedKind}:${core.state.selectedId}`
-      : tr(locale(), "未选择", "nothing selected");
+  const selectedLabel = () => {
+    if (!core.state.selectedKind || !core.state.selectedId || hiddenSelectedAgent()) {
+      return tr(locale(), "未选择", "nothing selected");
+    }
+    if (core.state.selectedKind === "module_visual") {
+      return pixelWorldSelectedEntityLabel(
+        core.entityCollections(),
+        { kind: core.state.selectedKind, id: core.state.selectedId },
+        core.isLocaleZh(locale()),
+      );
+    }
+    return `${core.state.selectedKind}:${core.state.selectedId}`;
+  };
   const hiddenSelectedAgent = () =>
     core.state.selectedKind === "agent"
     && core.state.selectedId

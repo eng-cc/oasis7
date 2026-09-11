@@ -12,9 +12,10 @@ use oasis7_wasm_router::{PreparedSubscription, prepare_subscriptions};
 use super::super::util::{hash_json, to_canonical_cbor};
 use super::super::{
     EffectOrigin, ModuleArtifact, ModuleEvent, ModuleEventKind, ModuleKind, ModuleLimits,
-    ModuleManifest, ModuleRecord, ModuleRegistry, ModuleRole, WorldError, WorldEventBody,
-    WorldTime,
+    ModuleManifest, ModuleRegistry, WorldError, WorldEventBody, WorldTime,
 };
+#[cfg(test)]
+use super::super::{ModuleRecord, ModuleRole};
 use super::PreparedSubscriptionCacheEntry;
 use super::World;
 use super::capability_authorization_command_stage::{
@@ -423,11 +424,14 @@ pub(super) struct ActiveModuleInvocation {
 }
 
 impl World {
-    /// Install the opt-in local runtime module visual driver without exposing a
-    /// gameplay or viewer admission API. The driver is used only by the
-    /// environment-gated runtime-live QA bridge, and its synthetic module is
-    /// deliberately absent from normal world bootstrap and persisted state.
-    pub(crate) fn install_runtime_module_visual_driver(&mut self) -> Result<String, WorldError> {
+    /// Install the synthetic module used by the focused runtime visual-driver
+    /// regression.  This helper is test-only and runs against a fresh
+    /// ephemeral `World`; it is unavailable to normal runtime builds and is
+    /// never part of world bootstrap or a production admission path.
+    #[cfg(test)]
+    pub(crate) fn install_test_runtime_module_visual_driver(
+        &mut self,
+    ) -> Result<String, WorldError> {
         const MODULE_ID: &str = "runtime.qa.module_visual_driver";
         const VERSION: &str = "1.0.0";
         const ARTIFACT: &[u8] = b"oasis7-runtime-module-visual-driver-v1";
