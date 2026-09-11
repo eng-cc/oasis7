@@ -99,6 +99,14 @@ fn validate_provider_lease_identity(
         || lease.request_digest != request.request_digest.to_string()
         || lease.quote.resource != "cognition_units"
         || lease.reserved_amount != 1
+        || lease.quote.payer_id != lease.account_id
+        || lease.quote.resource_version != crate::runtime::COGNITION_RESOURCE_VERSION_V1
+        || lease.quote.purpose != "provider_cognition"
+        || lease.quote.scope != "agent_turn"
+        || lease.quote.policy_revision
+            != crate::runtime::COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION
+        || lease.quote.authority_context != request.capability_invocation_context_digest.to_string()
+        || lease.quote.world_binding != request.runtime_binding.base_world_hash.to_string()
     {
         return Err(format!(
             "provider cognition lease identity mismatch for {agent_id}"

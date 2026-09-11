@@ -14,6 +14,22 @@ use std::time::{Duration, Instant};
 const ACCOUNT_ID: &str = "account-agent-1";
 const RESOURCE: &str = "cognition_units";
 
+fn authority_quote(
+    request: &crate::simulator::ContinuousAgentRequestContextV1,
+    quote_id: &str,
+    amount: u64,
+) -> CognitionLeaseQuoteV1 {
+    CognitionLeaseQuoteV1::new(quote_id, RESOURCE, amount).with_authority(
+        ACCOUNT_ID,
+        crate::runtime::COGNITION_RESOURCE_VERSION_V1,
+        "provider_cognition",
+        "agent_turn",
+        crate::runtime::COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION,
+        request.capability_invocation_context_digest.to_string(),
+        request.runtime_binding.base_world_hash.to_string(),
+    )
+}
+
 fn request_context() -> crate::simulator::ContinuousAgentRequestContextV1 {
     let mut fixture = super::agent_cognition_identity::production_request_fixture(1, 60_000);
     fixture["retry_seq"] = serde_json::json!(1);
@@ -104,8 +120,8 @@ fn valid_runtime_lease_is_required_before_provider_dispatch_and_carried_to_outco
     let lease = reserve_lease(
         &mut world,
         &request,
-        "lease-admission-key",
-        CognitionLeaseQuoteV1::new("lease-admission-quote", RESOURCE, 1),
+        &request.provider_invocation_key().to_string(),
+        authority_quote(&request, "lease-admission-quote", 1),
     );
     let (mut runner, state) = runner_with_state();
 
@@ -136,14 +152,27 @@ fn valid_runtime_lease_is_required_before_provider_dispatch_and_carried_to_outco
 
     let economy = world.cognition_economy().expect("read Runtime economy");
     assert_eq!(economy.reserved_balance(ACCOUNT_ID, RESOURCE), 1);
-    assert!(
-        economy.receipts.is_empty(),
-        "Agent runner cannot settle a lease"
+    assert_eq!(
+        economy.receipts.len(),
+        1,
+        "Runtime reserve emits the admission receipt before the Agent runner settles"
     );
+    assert!(economy.receipts.values().any(|receipt| {
+        receipt.operation == "reserve" && receipt.status == CognitionLeaseStatusV1::Reserved
+    }));
     let receipt = world
         .settle_cognition_lease(&lease.lease_id, 1)
         .expect("Runtime settles the lease");
     assert_eq!(receipt.status, CognitionLeaseStatusV1::Settled);
+    assert_eq!(
+        world
+            .cognition_economy()
+            .expect("read settled economy")
+            .receipts
+            .len(),
+        2,
+        "settlement appends one terminal receipt to the reserve receipt"
+    );
 }
 
 #[test]
@@ -154,8 +183,8 @@ fn invalid_or_closed_lease_fences_dispatch_without_provider_call() {
     let lease = reserve_lease(
         &mut world,
         &request,
-        "lease-closed-key",
-        CognitionLeaseQuoteV1::new("lease-closed-quote", RESOURCE, 1),
+        &request.provider_invocation_key().to_string(),
+        authority_quote(&request, "lease-closed-quote", 1),
     );
     world
         .release_cognition_lease(&lease.lease_id)
@@ -201,14 +230,14 @@ fn lease_identity_mismatch_and_expiry_fence_provider_without_world_effect() {
         .set_cognition_resource_balance(ACCOUNT_ID, RESOURCE, 4)
         .and_then(|_| {
             world.reserve_cognition_lease(CognitionLeaseRequestV1::new(
-                "lease-mismatch-key",
+                request.provider_invocation_key().to_string(),
                 ACCOUNT_ID,
                 "agent-1",
                 request.agent_session_id.clone(),
                 request.agent_turn_id.clone(),
                 request.decision_request_id.clone(),
                 "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                CognitionLeaseQuoteV1::new("lease-mismatch-quote", RESOURCE, 1),
+                authority_quote(&request, "lease-mismatch-quote", 1),
             ))
         })
         .expect("reserve mismatched Runtime lease");
@@ -232,8 +261,8 @@ fn lease_identity_mismatch_and_expiry_fence_provider_without_world_effect() {
     let expiring = reserve_lease(
         &mut expiring_world,
         &request,
-        "lease-expiry-key",
-        CognitionLeaseQuoteV1::new("lease-expiry-quote", RESOURCE, 1).with_valid_until_tick(0),
+        &request.provider_invocation_key().to_string(),
+        authority_quote(&request, "lease-expiry-quote", 1).with_valid_until_tick(0),
     );
     runner
         .step_world_without_waiting_for_provider()

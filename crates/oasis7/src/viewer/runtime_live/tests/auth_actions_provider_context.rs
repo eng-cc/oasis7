@@ -400,10 +400,20 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
             .all(|lease| lease.status != crate::runtime::CognitionLeaseStatusV1::Reserved),
         "provider outcomes must close every admitted cognition lease"
     );
+    let terminal_receipts = economy
+        .receipts
+        .values()
+        .filter(|receipt| receipt.operation != "reserve")
+        .count();
     assert_eq!(
         economy.leases.len(),
-        economy.receipts.len(),
+        terminal_receipts,
         "each provider lease must have one terminal economy receipt"
+    );
+    assert_eq!(
+        economy.receipts.len(),
+        economy.leases.len() * 2,
+        "each provider lease must have one reserve and one terminal receipt"
     );
     assert!(
         economy

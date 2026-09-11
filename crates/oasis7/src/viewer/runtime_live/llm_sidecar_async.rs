@@ -58,11 +58,26 @@ pub(super) fn reserve_provider_cognition_lease(
     context: &cognition_context::ProviderContextState,
 ) -> Result<crate::runtime::CognitionLeaseV1, String> {
     let request = &context.request_context;
+    let runtime_binding = world
+        .current_cognition_runtime_binding()
+        .map_err(|error| format!("provider cognition Runtime binding unavailable: {error:?}"))?;
+    if runtime_binding != request.runtime_binding {
+        return Err("provider cognition Runtime binding changed before lease reserve".to_string());
+    }
     let invocation_key = request.provider_invocation_key().to_string();
     let quote = crate::runtime::CognitionLeaseQuoteV1::new(
         format!("cognition-quote:{invocation_key}"),
         COGNITION_LEASE_RESOURCE,
         1,
+    )
+    .with_authority(
+        request.agent_subject.clone(),
+        crate::runtime::COGNITION_RESOURCE_VERSION_V1,
+        "provider_cognition",
+        "agent_turn",
+        crate::runtime::COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION,
+        request.capability_invocation_context_digest.to_string(),
+        runtime_binding.base_world_hash.to_string(),
     );
     world
         .reserve_cognition_lease(crate::runtime::CognitionLeaseRequestV1::new(
