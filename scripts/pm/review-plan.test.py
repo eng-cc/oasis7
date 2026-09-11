@@ -449,6 +449,45 @@ class ReviewPlanTests(unittest.TestCase):
         )
         self.assertRegex(deleted.stderr.lower(), r"artifact|ledger")
 
+    def test_prior_review_context_rejects_artifact_path_escape(self) -> None:
+        prior_path = self.root / ".pm/scratch" / TASK / "review-plans" / "escaped-artifact.json"
+        prior = self.plan(
+            "--out", str(prior_path),
+            "--preflight-dir", str(self.root / ".pm/scratch" / TASK / "escaped-preflight"),
+        )
+        self.complete_collected_plan(prior)
+        ledger_path = Path(str(prior["preflight"]["ledger_path"]))
+        rows = [json.loads(line) for line in ledger_path.read_text(encoding="utf-8").splitlines() if line]
+        original_artifact = Path(str(rows[0]["artifacts"][0]))
+        outside_artifact = self.root.parent / f"{self.root.name}-outside-artifact.json"
+        outside_artifact.write_bytes(original_artifact.read_bytes())
+        self.addCleanup(lambda: outside_artifact.unlink(missing_ok=True))
+
+        (self.root / "repair.txt").write_text("repair\n", encoding="utf-8")
+        self.git("add", "repair.txt")
+        self.git("commit", "-m", "repair")
+        self.head = self.git("rev-parse", "HEAD")
+
+        collection_path = Path(str(prior["collection_path"]))
+        for index, reference in enumerate((
+            str(outside_artifact),
+            os.path.relpath(outside_artifact, ledger_path.parent),
+        )):
+            rows[0]["artifacts"] = [reference]
+            ledger_path.write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+                encoding="utf-8",
+            )
+            collection = json.loads(collection_path.read_text(encoding="utf-8"))
+            collection["ledger_digest"] = hashlib.sha256(ledger_path.read_bytes()).hexdigest()
+            collection_path.write_text(json.dumps(collection), encoding="utf-8")
+            result = self.run_plan(
+                "--prior-review-plan", str(prior_path),
+                "--out", str(self.root / ".pm/scratch" / TASK / "review-plans" / f"escape-{index}.json"),
+                ok=False,
+            )
+            self.assertRegex(result.stderr.lower(), r"artifact|repository|escape|ledger")
+
     def test_binary_diff_digest_ignores_external_diff_and_textconv(self) -> None:
         prior_head = self.head
         (self.root / "repair.txt").write_text("repair\n", encoding="utf-8")

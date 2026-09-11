@@ -152,9 +152,16 @@ def resolve_path(root: Path, value: str) -> Path:
 def resolve_collected_artifact(root: Path, ledger_path: Path, artifact: str) -> Path:
     path = Path(artifact)
     if path.is_absolute():
-        return path
-    root_path = root / path
-    return root_path if root_path.exists() else ledger_path.parent / path
+        resolved = path.resolve()
+    else:
+        root_path = root / path
+        candidate = root_path if root_path.exists() else ledger_path.parent / path
+        resolved = candidate.resolve()
+    try:
+        resolved.relative_to(root.resolve())
+    except ValueError:
+        fail(f"prior review artifact escapes the repository: {artifact}")
+    return resolved
 
 
 def validate_collected_ledger(root: Path, batch: dict[str, object], ledger_path: Path) -> str:

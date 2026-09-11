@@ -76,9 +76,16 @@ def binary_diff_digest(root: Path, old_head: str, new_head: str) -> str:
 def resolve_collected_artifact(root: Path, ledger_path: Path, artifact: str) -> Path:
     path = Path(artifact)
     if path.is_absolute():
-        return path
-    root_path = root / path
-    return root_path if root_path.exists() else ledger_path.parent / path
+        resolved = path.resolve()
+    else:
+        root_path = root / path
+        candidate = root_path if root_path.exists() else ledger_path.parent / path
+        resolved = candidate.resolve()
+    try:
+        resolved.relative_to(root.resolve())
+    except ValueError as exc:
+        raise ContractError(f"prior review artifact escapes the repository: {artifact}") from exc
+    return resolved
 
 
 def validate_collected_ledger(root: Path, batch: dict[str, Any], ledger_path: Path) -> str:

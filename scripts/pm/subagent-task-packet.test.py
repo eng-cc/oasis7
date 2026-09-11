@@ -482,6 +482,28 @@ class PacketTest(unittest.TestCase):
         rejected = self.review_admission(packet, plan, snapshot, ok=False)
         self.assertRegex(rejected.stderr.lower(), r"artifact|ledger")
 
+    def test_collected_artifact_path_escape_is_rejected(self) -> None:
+        prior_path, _, prior_epoch, _ = self.write_incremental_prior()
+        ledger_path = self.repo / ".pm/scratch" / TASK_UID / "prior-ledger.jsonl"
+        rows = [json.loads(line) for line in ledger_path.read_text(encoding="utf-8").splitlines() if line]
+        original_artifact = Path(str(rows[0]["artifacts"][0]))
+        outside_artifact = self.repo.parent / "outside-artifact.json"
+        outside_artifact.write_bytes(original_artifact.read_bytes())
+        self.addCleanup(lambda: outside_artifact.unlink(missing_ok=True))
+        batch_path = self.repo / ".pm/scratch" / TASK_UID / "review-batches" / f"{prior_epoch}.json"
+        batch = json.loads(batch_path.read_text(encoding="utf-8"))
+        for reference in (
+            str(outside_artifact),
+            os.path.relpath(outside_artifact, ledger_path.parent),
+        ):
+            rows[0]["artifacts"] = [reference]
+            ledger_path.write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+                encoding="utf-8",
+            )
+            with self.assertRaises(PACKET.PacketError):
+                PACKET.validate_collected_ledger(self.repo, batch, ledger_path)
+
     def test_binary_diff_digest_ignores_external_diff_and_textconv(self) -> None:
         prior_head = self.git("rev-parse", "HEAD")
         (self.repo / "repair.txt").write_text("repair\n", encoding="utf-8")
