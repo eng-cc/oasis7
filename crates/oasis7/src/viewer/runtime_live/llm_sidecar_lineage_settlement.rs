@@ -74,6 +74,17 @@ impl RuntimeLlmSidecar {
         }
         for agent_id in settled_agents {
             self.provider_cognition_leases.remove(agent_id.as_str());
+            let pending_receipt_recovery = self
+                .pending_actions
+                .values()
+                .any(|pending| pending.agent_id == agent_id && pending.cognition.is_some());
+            if pending_receipt_recovery {
+                // A crash can leave a committed action in the reconstructed
+                // pending map after Runtime settlement has succeeded. Keep
+                // its request/response and memory intents until the receipt
+                // recovery pass recreates feedback and consumes those intents.
+                continue;
+            }
             self.provider_active_turns.remove(agent_id.as_str());
             self.provider_contexts.remove(agent_id.as_str());
             self.provider_retry_contexts.remove(agent_id.as_str());

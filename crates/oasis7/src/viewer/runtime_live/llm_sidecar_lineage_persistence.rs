@@ -534,6 +534,32 @@ impl RuntimeLlmSidecar {
         self.persist_provider_lineage_best_effort();
     }
 
+    /// Release a lease for a request that has not reached provider I/O. A
+    /// failed Runtime release must keep the exact sidecar mirror fenced so a
+    /// later recovery pass can retry the same release without redispatching.
+    pub(in crate::viewer::runtime_live) fn release_provider_lease_before_io_or_fence(
+        &mut self,
+        world: &mut RuntimeWorld,
+        agent_id: &str,
+        context: &cognition_context::ProviderContextState,
+        lease: &crate::runtime::CognitionLeaseV1,
+    ) -> Result<(), String> {
+        match world.release_cognition_lease(lease.lease_id.as_str()) {
+            Ok(_) => {
+                self.clear_provider_cognition_lease(agent_id);
+                Ok(())
+            }
+            Err(error) => {
+                let message = format!(
+                    "cognition lease release before provider I/O failed for {}: {error:?}",
+                    lease.lease_id
+                );
+                self.fence_provider_cognition_lease(agent_id, context, message.clone());
+                Err(message)
+            }
+        }
+    }
+
     pub(in crate::viewer::runtime_live) fn validate_provider_cognition_lease_for_request(
         &self,
         world: &RuntimeWorld,
@@ -697,6 +723,13 @@ impl RuntimeLlmSidecar {
             .zip(checkpoint.runtime_binding.as_ref())
             .is_some_and(|(current, saved)| current != saved);
 
+        // Keep a copy of queued decisions long enough to reconcile a Runtime
+        // commit marker. The normal restore filter intentionally drops
+        // terminalized decisions, but a crash can occur before `track_action`
+        // persists the action and its receipt-gated memory intents.
+        let checkpoint_completed_decisions = checkpoint.provider_completed_decisions.clone();
+        let checkpoint_held_decisions = checkpoint.provider_held_decisions.clone();
+
         self.provider_session_ids = checkpoint.provider_session_ids;
         self.provider_agent_ids = checkpoint.provider_agent_ids;
         self.provider_context_seq = checkpoint.provider_context_seq;
@@ -802,38 +835,98 @@ impl RuntimeLlmSidecar {
             .keys()
             .cloned()
             .chain(self.provider_contexts.keys().cloned())
+            .chain(checkpoint_held_decisions.keys().cloned())
+            .chain(
+                checkpoint_completed_decisions
+                    .iter()
+                    .map(|decision| decision.agent_id.clone()),
+            )
             .collect::<BTreeSet<_>>();
         for agent_id in candidate_agents {
-            let request = self
-                .provider_active_turns
-                .get(agent_id.as_str())
-                .or_else(|| self.provider_contexts.get(agent_id.as_str()))
-                .map(|context| context.request_context.clone());
-            let Some(request) = request else { continue };
-            let Some(marker) = committed_runtime_record_for_request(world, &request)? else {
-                continue;
-            };
             let recovery_context = self
                 .provider_active_turns
                 .get(agent_id.as_str())
                 .or_else(|| self.provider_contexts.get(agent_id.as_str()))
+                .cloned()
+                .or_else(|| {
+                    checkpoint_held_decisions
+                        .values()
+                        .chain(checkpoint_completed_decisions.iter())
+                        .find(|decision| decision.agent_id == agent_id)
+                        .and_then(|decision| decision.cognition.as_ref())
+                        .map(|cognition| cognition.request.clone())
+                });
+            let Some(recovery_context) = recovery_context else {
+                continue;
+            };
+            let request = recovery_context.request_context.clone();
+            let Some(marker) = committed_runtime_record_for_request(world, &request)? else {
+                continue;
+            };
+            let committed_decision = checkpoint_held_decisions
+                .values()
+                .chain(checkpoint_completed_decisions.iter())
+                .find(|decision| decision_matches_commit_record(decision, &marker))
                 .cloned();
+            let mut committed_recovery_pending = self
+                .provider_cognition_leases
+                .contains_key(agent_id.as_str());
+            if let Some(decision) = committed_decision.as_ref()
+                && decision_matches_commit_record(decision, &marker)
+                && let Some(cognition) = decision.cognition.as_ref()
+            {
+                let action_id = marker
+                    .action_id
+                    .strip_prefix("action:")
+                    .and_then(|value| value.parse::<u64>().ok());
+                if let (Some(action_id), AgentDecision::Act(action)) =
+                    (action_id, &decision.decision)
+                {
+                    if let Some(existing) = self.pending_actions.get(&action_id) {
+                        if existing.agent_id != marker.agent_id
+                            || existing
+                                .cognition
+                                .as_ref()
+                                .is_none_or(|existing_cognition| {
+                                    !decision_matches_commit_record(decision, &marker)
+                                        || existing_cognition.request.request_context
+                                            != cognition.request.request_context
+                                })
+                        {
+                            return Err(format!(
+                                "committed provider action recovery identity conflict for {}",
+                                marker.action_id
+                            ));
+                        }
+                    } else {
+                        self.pending_actions.insert(
+                            action_id,
+                            RuntimePendingAction {
+                                agent_id: marker.agent_id.clone(),
+                                action: action.clone(),
+                                cognition: Some(cognition.clone()),
+                                feedback_emitted: false,
+                            },
+                        );
+                    }
+                    // Keep the reconstructed action/context until the receipt
+                    // recovery pass recreates feedback and applies memory
+                    // intents. Settlement alone must not erase this bridge.
+                    committed_recovery_pending = true;
+                }
+            }
             // A resumed Runtime continuation may still own an in-flight wake
             // when the sidecar checkpoint failed after the action receipt was
             // committed. Keep that exact wake visible as a terminal recovery
             // handoff; otherwise restore would clear the provider identity
             // and accidentally admit the continuation as a fresh turn.
-            let committed_wake = recovery_context.as_ref().and_then(|context| {
-                self.pending_runtime_wakes
-                    .values()
-                    .chain(runtime_wakes.iter())
-                    .find(|wake| provider_context_matches_wake(context, wake))
-                    .cloned()
-            });
+            let committed_wake = self
+                .pending_runtime_wakes
+                .values()
+                .chain(runtime_wakes.iter())
+                .find(|wake| provider_context_matches_wake(&recovery_context, wake))
+                .cloned();
             let has_committed_wake = committed_wake.is_some();
-            let has_committed_lease = self
-                .provider_cognition_leases
-                .contains_key(agent_id.as_str());
             self.provider_terminal_states.insert(
                 agent_id.clone(),
                 ProviderTerminalState {
@@ -848,13 +941,13 @@ impl RuntimeLlmSidecar {
                         .then_some(marker.feedback_id.clone()),
                 },
             );
-            if let (Some(context), Some(wake)) = (recovery_context, committed_wake) {
+            if let Some(wake) = committed_wake {
                 self.pending_runtime_wakes
                     .insert(wake.wake_id.clone(), wake);
                 self.provider_wake_recovery_pending.insert(
                     agent_id.clone(),
                     ProviderWakeRecoveryPending {
-                        active: context,
+                        active: recovery_context.clone(),
                         status: crate::runtime::ContinuationStatusV1::Completed,
                         reason: "provider_action_committed".to_string(),
                     },
@@ -868,7 +961,7 @@ impl RuntimeLlmSidecar {
                 !decision_matches_commit_record(decision, &marker)
                     && !(decision.cognition.is_none() && decision.agent_id == marker.agent_id)
             });
-            if !has_committed_lease {
+            if !committed_recovery_pending {
                 self.provider_active_turns.remove(agent_id.as_str());
                 self.provider_contexts.remove(agent_id.as_str());
                 self.provider_retry_contexts.remove(agent_id.as_str());
@@ -879,7 +972,7 @@ impl RuntimeLlmSidecar {
                     .remove(agent_id.as_str());
             }
             self.provider_wait_until.remove(agent_id.as_str());
-            if !has_committed_lease {
+            if !committed_recovery_pending {
                 self.pending_actions
                     .retain(|_, pending| pending.agent_id != agent_id);
             }
@@ -1022,6 +1115,17 @@ impl RuntimeLlmSidecar {
                 }
                 if self.provider_cognition_leases.contains_key(agent_id) {
                     // Keep the request/lease mirror for mutable settlement.
+                    return None;
+                }
+                if self
+                    .pending_actions
+                    .values()
+                    .any(|pending| pending.agent_id == *agent_id && pending.cognition.is_some())
+                {
+                    // A committed marker can be restored before `track_action`
+                    // wrote its pending record. Keep the reconstructed
+                    // receipt/memory recovery bridge until the control plane
+                    // has replayed feedback and receipt-gated memory writes.
                     return None;
                 }
                 let context = self.provider_contexts.get(agent_id)?;
