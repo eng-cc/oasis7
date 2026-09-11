@@ -46,6 +46,8 @@ GitHub Issue 是任务身份和正式证据 envelope；GitHub Project item 与�
 
 在有效机制支持时，复用现行 `input_contracts` 的 `contract_id`、`revision`、`contract_digest`、`publication_ref` 和 `consumed_clauses`；同时记录任务实际需要的 `acceptance_refs`。在未激活或不支持的环境，把这些语义放在可读 Issue/evidence 中，但不得用手工 JSON、front matter 或“已评审”文字伪造 adapter 绑定或消费资格。
 
+跨文件消费的条款、REQ/AC 或设计义务必须记录为继承自冻结合同/发布记录的不可变 contract/publication repository（当前 canonical `eng-cc/oasis7`）加能在固定内容中唯一解析的 repository-relative `path#fragment`，并在每个消费者匹配；局部标识只在同一文件且无歧义时适用。合同 digest 固定内容身份，但不替代条款定位；移动或改名必须保留映射或正式处置，不能隐式取当前仓库。
+
 固定输入至少应能定位到：来源路径或对象、不可变提交/发布记录、内容摘要或 digest、批准来源、消费条款、适用 owner 和失效条件。源文档仍是 proposal 时必须明确标为 proposal；本任务的 source snapshot、当前 HEAD 与 live 状态不得被历史附件中的旧 PR/分支叙述替换。
 
 输入改变与目标分支推进是两类事件。上游语义、权限、合同资格或验收发生实质变化时，按影响范围保留旧基线、暂停并迁移、或缩小 scope，并按现行 workflow 重新绑定/验证；main 因无关变更推进时，更新 integration/CI 证据，不自动重写产品或系统要求。不能在执行中静默换合同版本。
@@ -87,6 +89,8 @@ GitHub Issue 是任务身份和正式证据 envelope；GitHub Project item 与�
 - **交接义务**：下游准确消费的文档/合同/证据，以及仍需产品、QA 或其他专业 owner 判断的事项。
 
 接受、应用、持久化、发布、任务 done、PR merged 和能力可发布是不同事实。项目记录只能报告有证据支持的事实；未知、未运行、不适用和未证明范围必须保留，不以模板填满、CI 绿色或文本 `active` 互相推导。
+
+对包含多个交付义务的有限变更，协调记录必须先冻结本次批准的必要产品/专业接受条款、设计/实现/验证义务、明确排除或接受风险、映射槽位与候选选择规则，不预先伪造实际执行引用。进入组合验收或整体完成前，必须补齐真实 Task/合同/证据身份和 aggregate candidate；缺失 execution refs 保持 pending 并阻断整体完成，但不阻止已批准叶子按顺序执行，也不允许事后删减必要集合。整体完成须逐项证明该集合；缺失、未运行或未处置的义务不能因叶子 done、PR merged 或局部 green 消失。不同叶子可以有不同 source HEAD；组合证据必须另行固定一个可复现的 integration/tested tree、配置、入口、环境与证据窗口。
 
 ## 7. 证据身份、执行与边界
 
@@ -149,6 +153,10 @@ GitHub Issue 是任务身份和正式证据 envelope；GitHub Project item 与�
 
 稳定架构风险留在设计，动态风险和阻断留在当前 Issue；二者通过明确引用关联。风险至少包含触发条件、影响、owner、缓解/接受依据、复核触发和剩余风险。superseded 文档指向后继并退出默认首读入口；历史 evidence 和 source snapshot 保持可检索，不通过改写历史制造当前能力。
 
+需要处置的跨 loop 反馈必须形成可回读的关系：用现有 Issue comment、artifact、path#fragment 或等价 evidence identity 稳定定位原始发现（可在本记录内使用局部标签，不要求新的全局 ID 或第二台账），并记录接收 owner、处置 authority/approval owner、处置结论及依据、已授权的任务/合同修订或明确不修改决定、对消费者的阻断影响，以及解除阻断或关闭的证据。反馈记录本身不创建或启动下一个任务；未获得授权的阻断项继续留在当前协调记录的未完成义务中。此处是记录要求，不是新增状态或自动调度器。
+
+需要反向查询受影响消费者时，从现有合同绑定和 Task evidence 按需生成只读追踪视图，标明查询范围和未读取部分；不得维护另一份手工消费者清单或把该视图当作第二任务真值。
+
 新增 PM/系统内容目前按人工内容规则和现有结构/link checks 维护；没有新增 metadata parser、semantic checker、Project field 或 required gate。后续只有在代表性文档和明确 owner/授权到位后，才可由 source-of-truth-first 变更实现机械校验，并补充正反例与迁移边界。
 
 ## 11. 可复用记录模板
@@ -177,7 +185,7 @@ GitHub Issue 是任务身份和正式证据 envelope；GitHub Project item 与�
 | <义务> | <身份> | <文档/代码/验证> | <可判定条件> |
 
 ## 组合验收
-- 候选版本、入口、环境、配置：<实际身份>
+- 组合候选、入口、环境、配置：<实际 integration/tested tree 与证据窗口；各叶子保留自己的 source HEAD，不要求彼此相同>
 - 必需 AC/系统义务：<精确集合>
 - 组织者与专业判断：<真实 owner>
 - 证据位置：<Issue/artifact/receipt>
@@ -289,6 +297,12 @@ GitHub Issue 是任务身份和正式证据 envelope；GitHub Project item 与�
 建议：<保持现合同修复实现/由有权任务修订合同>
 当前可继续部分：<有界范围>
 当前阻断部分：<解除条件>
+来源 finding 定位：<现有 Issue comment/artifact/path#fragment 或 evidence identity；可加本记录局部标签，不新增全局 ID>
+接收 owner：<负责回读和处置的真实角色>
+处置 authority/approval owner：<批准修订或明确不修改的真实 authority>
+处置结论与依据：<保持合同修复实现／授权修订合同／明确不修改>
+关联任务／合同修订：<已授权记录；没有则写无>
+解除或关闭证据：<准确证据定位；未解除则写未完成>
 权限说明：此反馈不创建或启动下一个任务。
 ```
 
@@ -296,10 +310,13 @@ GitHub Issue 是任务身份和正式证据 envelope；GitHub Project item 与�
 
 ```markdown
 ## 本次候选
-<产品要求、产品/系统合同、代码集成身份、入口、配置、环境、窗口>
+<产品要求、产品/系统合同、代码集成身份、入口、配置、环境、窗口；叶子 source HEAD 可以不同，但组合必须固定可复现的 integration/tested tree>
 
 ## 必需交付对象
 <真实任务与证据；不以 closed 代替交付>
+
+## 必要集合与处置
+<本次冻结的完整 AC/义务集合、映射槽位与候选选择规则；组合前补齐真实映射、结果或有权处置；遗漏项保持未完成>
 
 ## AC/义务汇总
 | 验收引用 | 必需义务与入口 | 同一候选证据 | 结论 | 缺口/阻塞 |
@@ -324,6 +341,7 @@ GitHub Issue 是任务身份和正式证据 envelope；GitHub Project item 与�
 处置：保留旧基线／暂停／缩小 scope／按 workflow 重新绑定或迁移
 需要重验：受影响义务、入口、环境、候选身份和证据
 不受影响范围：依据与理由
+需要处置的反馈：稳定来源定位、接收 owner、处置 authority、结论依据、关联授权与解除/关闭证据
 批准与实施：有权 owner、真实记录与复核结果
 ```
 
