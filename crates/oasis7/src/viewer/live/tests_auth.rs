@@ -363,7 +363,7 @@ fn agent_chat_requires_player_id() {
 
 #[test]
 fn agent_chat_rejects_replayed_nonce() {
-    set_test_llm_env();
+    let _env_guard = set_test_llm_env();
     let config = WorldConfig::default();
     let init = WorldInitConfig::from_scenario(WorldScenario::Minimal, &config);
     let mut world = LiveWorld::new(config, init, ViewerLiveDecisionMode::Llm).expect("init ok");
@@ -400,7 +400,7 @@ fn agent_chat_rejects_replayed_nonce() {
 
 #[test]
 fn agent_chat_upgrades_compat_player_binding_with_public_key() {
-    set_test_llm_env();
+    let _env_guard = set_test_llm_env();
     let config = WorldConfig::default();
     let init = WorldInitConfig::from_scenario(WorldScenario::Minimal, &config);
     let mut world = LiveWorld::new(config, init, ViewerLiveDecisionMode::Llm).expect("init ok");

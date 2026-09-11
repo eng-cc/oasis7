@@ -8,6 +8,10 @@ mod protocol;
 mod rollback_audit_evidence;
 #[cfg(not(target_arch = "wasm32"))]
 mod runtime_live;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+pub(crate) fn canonical_runtime_provider_env_lock() -> &'static std::sync::Mutex<()> {
+    runtime_live::canonical_runtime_provider_env_lock()
+}
 #[cfg(not(target_arch = "wasm32"))]
 mod server;
 #[cfg(not(target_arch = "wasm32"))]

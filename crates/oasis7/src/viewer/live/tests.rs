@@ -14,7 +14,10 @@ use std::time::{Duration, Instant};
 #[path = "tests_auth.rs"]
 mod tests_auth;
 
-fn set_test_llm_env() {
+fn set_test_llm_env() -> std::sync::MutexGuard<'static, ()> {
+    let guard = crate::viewer::canonical_runtime_provider_env_lock()
+        .lock()
+        .expect("env lock");
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
             oasis7::env_mut::set_var(crate::simulator::ENV_LLM_MODEL, "gpt-4o-mini");
@@ -30,6 +33,7 @@ fn set_test_llm_env() {
     unsafe {
             oasis7::env_mut::set_var(crate::simulator::ENV_LLM_API_KEY, "test-api-key");
     }
+    guard
 }
 
 fn test_signer(seed: u8) -> (String, String) {
@@ -423,7 +427,7 @@ fn live_world_llm_bootstrap_script_mode_advances_tick() {
 
 #[test]
 fn live_world_llm_event_driven_gate_avoids_repeated_empty_ticks() {
-    set_test_llm_env();
+    let _env_guard = set_test_llm_env();
     let config = WorldConfig::default();
     let mut init = WorldInitConfig::default();
     init.agents = crate::simulator::AgentSpawnConfig {
@@ -451,7 +455,7 @@ fn live_world_llm_event_driven_gate_avoids_repeated_empty_ticks() {
 
 #[test]
 fn live_world_llm_mailbox_preserves_multiple_requests() {
-    set_test_llm_env();
+    let _env_guard = set_test_llm_env();
     let config = WorldConfig::default();
     let mut init = WorldInitConfig::default();
     init.agents = crate::simulator::AgentSpawnConfig {
@@ -486,7 +490,7 @@ fn live_world_llm_mailbox_preserves_multiple_requests() {
 
 #[test]
 fn live_world_event_drive_gate_tracks_llm_mailbox() {
-    set_test_llm_env();
+    let _env_guard = set_test_llm_env();
     let config = WorldConfig::default();
     let mut init = WorldInitConfig::default();
     init.agents = crate::simulator::AgentSpawnConfig {
@@ -511,7 +515,7 @@ fn live_world_non_consensus_path_is_event_drive_only() {
         LiveWorld::new(script_config, script_init, ViewerLiveDecisionMode::Script).expect("init");
     assert!(script_world.uses_non_consensus_event_drive());
 
-    set_test_llm_env();
+    let _env_guard = set_test_llm_env();
     let llm_config = WorldConfig::default();
     let mut llm_init = WorldInitConfig::default();
     llm_init.agents = crate::simulator::AgentSpawnConfig {
@@ -578,7 +582,7 @@ fn emit_step_outcome_skips_idle_metrics_when_disabled() {
 
 #[test]
 fn restore_behavior_long_term_memory_from_model_applies_persisted_entries() {
-    set_test_llm_env();
+    let _env_guard = set_test_llm_env();
     let config = WorldConfig::default();
     let init = WorldInitConfig::from_scenario(WorldScenario::Minimal, &config);
     let (mut kernel, _) = initialize_kernel(config, init).expect("init ok");
@@ -601,7 +605,7 @@ fn restore_behavior_long_term_memory_from_model_applies_persisted_entries() {
 
 #[test]
 fn sync_llm_runner_long_term_memory_writes_back_to_world_model() {
-    set_test_llm_env();
+    let _env_guard = set_test_llm_env();
     let config = WorldConfig::default();
     let init = WorldInitConfig::from_scenario(WorldScenario::Minimal, &config);
     let (mut kernel, _) = initialize_kernel(config, init).expect("init ok");
