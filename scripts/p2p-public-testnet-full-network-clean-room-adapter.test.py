@@ -15,6 +15,8 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -4631,6 +4633,44 @@ class StorageFirstSecurityRedTests(unittest.TestCase):
         with self.assertRaises(Exception):
             self._runner(transport)
         self.assertEqual(transport.mutations, [])
+
+    def test_qa_sf_003_fresh_process_requires_live_revalidation_before_mutation(self) -> None:
+        """A clean interpreter must not inherit a test-order bypass."""
+        probe = r'''
+import importlib.util
+import json
+from pathlib import Path
+
+test_path = Path.cwd() / "scripts" / "p2p-public-testnet-full-network-clean-room-adapter.test.py"
+spec = importlib.util.spec_from_file_location("fresh_fixture", test_path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+adapter = module.load_module("fresh_probe_adapter", module.ADAPTER_PATH)
+fixture = module.StorageFirstAdapterRedTests("runTest")
+fixture.adapter = adapter
+fixture.setUp()
+transport = fixture._Transport()
+try:
+    result = fixture._runner(transport)
+except Exception as error:
+    record = {"outcome": "rejected", "error": error.__class__.__name__, "mutations": transport.mutations}
+else:
+    record = {"outcome": "completed", "status": result.get("status"), "mutations": transport.mutations}
+finally:
+    fixture.tearDown()
+print(json.dumps(record, sort_keys=True))
+'''
+        completed = subprocess.run(
+            [sys.executable, "-c", probe],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        record = json.loads(completed.stdout.strip().splitlines()[-1])
+        self.assertEqual(record["mutations"], [])
+        self.assertEqual(record["outcome"], "rejected")
 
     def test_qa_sf_004_receipts_require_complete_bindings(self) -> None:
         receipt_validator = getattr(self.adapter, "validate_storage_first_receipt", None)
