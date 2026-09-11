@@ -32,6 +32,7 @@ fn write_generated_world_fixture(label: &str) -> PathBuf {
 
 #[test]
 fn generated_world_sidecar_initializes_runtime_live_snapshot_map() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
     let generated_world_dir = write_generated_world_fixture("generated-sidecar-snapshot-map");
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::formal_release_default()
