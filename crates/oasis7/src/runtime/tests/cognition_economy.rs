@@ -66,6 +66,36 @@ fn refresh_head_digest_for_test(economy: &mut CognitionEconomyStateV1) {
     );
 }
 
+fn operation_key_for_test(lease_id: &str, operation: &str) -> String {
+    economy_digest_for_test(
+        "oasis7.cognition.economy.operation.v1",
+        &(lease_id, operation),
+    )
+}
+
+fn request_fingerprint_for_test(request: &CognitionLeaseRequestV1) -> String {
+    economy_digest_for_test(
+        "oasis7.cognition.economy.request.v1",
+        &(
+            &request.schema_version,
+            &request.account_id,
+            &request.agent_id,
+            &request.agent_session_id,
+            &request.agent_turn_id,
+            &request.decision_request_id,
+            &request.request_digest,
+            &request.quote,
+        ),
+    )
+}
+
+fn receipt_id_for_test(lease_id: &str, operation_key: &str) -> String {
+    economy_digest_for_test(
+        "oasis7.cognition.economy.receipt-id.v1",
+        &(lease_id, operation_key),
+    )
+}
+
 #[test]
 fn reserve_is_runtime_authoritative_and_idempotent() {
     let mut economy = CognitionEconomyStateV1::new();
@@ -183,6 +213,77 @@ fn settlement_release_and_refund_preserve_conservation_and_terminality() {
             .release(&released.lease_id, 7)
             .expect("release replay"),
         release
+    );
+}
+
+#[test]
+fn settled_refund_allows_unrelated_active_reservation() {
+    let mut economy = CognitionEconomyStateV1::new();
+    economy
+        .set_resource_balance("account-agent-a", "cognition_units", 20)
+        .expect("seed balance");
+    let settled_lease = economy
+        .reserve(request("settled-refund-key", 5), 1)
+        .expect("reserve settled lease");
+    let settled = economy
+        .settle(&settled_lease.lease_id, 5, 2)
+        .expect("settle lease");
+    let active_lease = economy
+        .reserve(request("unrelated-active-key", 3), 3)
+        .expect("reserve unrelated active lease");
+
+    let refund = economy
+        .refund_settled(
+            &settled_lease.lease_id,
+            5,
+            &settled.receipt_id,
+            "provider_timeout",
+            4,
+        )
+        .expect("unrelated reservation must not block refund");
+    assert_eq!(refund.operation, "refund");
+    assert_eq!(
+        economy.reserved_balance("account-agent-a", "cognition_units"),
+        active_lease.reserved_amount
+    );
+    assert_eq!(
+        economy.available_balance("account-agent-a", "cognition_units"),
+        17
+    );
+}
+
+#[test]
+fn settled_refund_fails_closed_when_its_balance_backing_is_missing() {
+    let mut economy = CognitionEconomyStateV1::new();
+    economy
+        .set_resource_balance("account-agent-a", "cognition_units", 10)
+        .expect("seed balance");
+    let lease = economy
+        .reserve(request("missing-refund-balance-key", 8), 1)
+        .expect("reserve");
+    let settled = economy.settle(&lease.lease_id, 5, 2).expect("settle");
+
+    let mut missing_balance = economy.clone();
+    missing_balance.balances.remove("account-agent-a");
+    let before = missing_balance.clone();
+    let error = missing_balance
+        .refund_settled(
+            &lease.lease_id,
+            5,
+            &settled.receipt_id,
+            "provider_timeout",
+            3,
+        )
+        .expect_err("refund must not create a missing balance");
+    assert_eq!(error.code(), "cognition_refund_balance_missing");
+    assert_eq!(missing_balance, before);
+
+    let encoded = serde_json::to_value(&missing_balance).expect("encode malformed snapshot");
+    let recovery_error = CognitionEconomyStateV1::from_snapshot_json(encoded)
+        .expect_err("missing terminal balance must fail closed during recovery");
+    assert_eq!(
+        recovery_error.code(),
+        "cognition_economy_lease_balance_missing"
     );
 }
 
@@ -396,6 +497,117 @@ fn authority_identity_is_bound_into_quote_and_lease_idempotency() {
 }
 
 #[test]
+fn recovery_rejects_recomputed_lease_and_receipt_payer_mismatch() {
+    let mut economy = CognitionEconomyStateV1::new();
+    economy
+        .set_resource_balance("payer-a", "cognition_units", 8)
+        .expect("seed payer balance");
+    let request = CognitionLeaseRequestV1::new(
+        "recovery-payer-mismatch-key",
+        "payer-a",
+        "agent-a",
+        "session-a",
+        "turn-a",
+        "request-a",
+        "request-digest-a",
+        authority_quote("recovery-payer-mismatch-quote", 4, "world-a"),
+    );
+    let lease = economy.reserve(request, 1).expect("reserve");
+    let old_lease_id = lease.lease_id.clone();
+    let old_reserve_receipt_id = lease.receipt_id.clone().expect("reserve receipt");
+
+    let mut forged_lease = economy.leases.remove(&old_lease_id).expect("stored lease");
+    forged_lease.quote.payer_id = "payer-b".to_string();
+    forged_lease.quote.refresh_digest();
+    let forged_request = CognitionLeaseRequestV1::new(
+        forged_lease.idempotency_key.clone(),
+        forged_lease.account_id.clone(),
+        forged_lease.agent_id.clone(),
+        forged_lease.agent_session_id.clone(),
+        forged_lease.agent_turn_id.clone(),
+        forged_lease.decision_request_id.clone(),
+        forged_lease.request_digest.clone(),
+        forged_lease.quote.clone(),
+    );
+    let forged_lease_id = forged_request.derived_lease_id();
+    forged_lease.lease_id = forged_lease_id.clone();
+    let forged_reserve_operation_key = operation_key_for_test(&forged_lease_id, "reserve");
+    let forged_reserve_receipt_id =
+        receipt_id_for_test(&forged_lease_id, &forged_reserve_operation_key);
+    forged_lease.receipt_id = Some(forged_reserve_receipt_id.clone());
+    economy
+        .leases
+        .insert(forged_lease_id.clone(), forged_lease.clone());
+
+    let idempotency = economy
+        .idempotency
+        .get_mut(&forged_lease.idempotency_key)
+        .expect("idempotency record");
+    idempotency.lease_id = forged_lease_id.clone();
+    idempotency.request_fingerprint = request_fingerprint_for_test(&forged_request);
+
+    let mut forged_receipt = economy
+        .receipts
+        .remove(&old_reserve_receipt_id)
+        .expect("reserve receipt");
+    forged_receipt.lease_id = forged_lease_id.clone();
+    forged_receipt.receipt_id = forged_reserve_receipt_id.clone();
+    forged_receipt.quote = forged_lease.quote.clone();
+    forged_receipt.receipt_digest = forged_receipt.recompute_digest();
+    economy
+        .receipts
+        .insert(forged_reserve_receipt_id.clone(), forged_receipt);
+
+    let old_reserve_operation_key = operation_key_for_test(&old_lease_id, "reserve");
+    let mut forged_operation = economy
+        .operations
+        .remove(&old_reserve_operation_key)
+        .expect("reserve operation");
+    forged_operation.operation_key = forged_reserve_operation_key.clone();
+    forged_operation.operation_digest = economy_digest_for_test(
+        "oasis7.cognition.economy.operation.v1",
+        &forged_reserve_operation_key,
+    );
+    forged_operation.lease_id = forged_lease_id.clone();
+    forged_operation.receipt_id = forged_reserve_receipt_id.clone();
+    economy
+        .operations
+        .insert(forged_reserve_operation_key.clone(), forged_operation);
+
+    let event = economy.journal.first_mut().expect("reserve event");
+    event.lease_id = forged_lease_id;
+    event.operation_key = forged_reserve_operation_key;
+    event.receipt_id = forged_reserve_receipt_id;
+    refresh_event_digest_for_test(event);
+    refresh_head_digest_for_test(&mut economy);
+
+    let encoded = serde_json::to_value(&economy).expect("encode recomputed forged snapshot");
+    let error = CognitionEconomyStateV1::from_snapshot_json(encoded)
+        .expect_err("payer/account mismatch must fail closed after digest recomputation");
+    assert_eq!(error.code(), "cognition_lease_invalid");
+}
+
+#[test]
+fn receipt_validation_rejects_recomputed_payer_account_mismatch() {
+    let mut economy = CognitionEconomyStateV1::new();
+    economy
+        .set_resource_balance("account-agent-a", "cognition_units", 8)
+        .expect("seed balance");
+    let lease = economy
+        .reserve(request("receipt-payer-mismatch-key", 4), 1)
+        .expect("reserve");
+    let settled = economy.settle(&lease.lease_id, 4, 2).expect("settle");
+    let mut forged = settled;
+    forged.quote.payer_id = "payer-b".to_string();
+    forged.quote.refresh_digest();
+    forged.receipt_digest = forged.recompute_digest();
+    let error = forged
+        .validate()
+        .expect_err("receipt payer/account mismatch must fail closed");
+    assert_eq!(error.code(), "cognition_receipt_invalid");
+}
+
+#[test]
 fn settle_requires_positive_bounded_usage_without_mutation() {
     let mut economy = CognitionEconomyStateV1::new();
     economy
@@ -480,6 +692,54 @@ fn release_and_expire_have_distinct_terminal_receipts() {
             .expect_err("expired lease cannot be settled")
             .code(),
         "cognition_lease_already_closed"
+    );
+}
+
+#[test]
+fn reserve_journal_requires_current_linkage_but_accepts_truly_legacy_prefix() {
+    let mut economy = CognitionEconomyStateV1::new();
+    economy
+        .set_resource_balance("account-agent-a", "cognition_units", 8)
+        .expect("seed balance");
+    let lease = economy
+        .reserve(request("reserve-linkage-key", 4), 1)
+        .expect("reserve");
+    let reserve_receipt_id = lease.receipt_id.clone().expect("reserve receipt");
+    let reserve_operation_key = operation_key_for_test(&lease.lease_id, "reserve");
+
+    let mut empty_linkage = economy.clone();
+    empty_linkage.journal[0].receipt_id.clear();
+    refresh_event_digest_for_test(&mut empty_linkage.journal[0]);
+    refresh_head_digest_for_test(&mut empty_linkage);
+    let error = empty_linkage
+        .validate()
+        .expect_err("current reserve records require journal receipt linkage");
+    assert_eq!(
+        error.code(),
+        "cognition_economy_journal_reserve_receipt_missing"
+    );
+
+    let mut missing_receipt = economy.clone();
+    missing_receipt.receipts.remove(&reserve_receipt_id);
+    assert!(
+        missing_receipt.validate().is_err(),
+        "reserve event cannot outlive its receipt"
+    );
+
+    let mut legacy = economy;
+    legacy.receipts.remove(&reserve_receipt_id);
+    legacy.operations.remove(&reserve_operation_key);
+    legacy
+        .leases
+        .get_mut(&lease.lease_id)
+        .expect("legacy lease")
+        .receipt_id = None;
+    legacy.journal[0].receipt_id.clear();
+    refresh_event_digest_for_test(&mut legacy.journal[0]);
+    refresh_head_digest_for_test(&mut legacy);
+    assert!(
+        legacy.validate().is_ok(),
+        "legacy reserve prefix remains readable without new linkage"
     );
 }
 

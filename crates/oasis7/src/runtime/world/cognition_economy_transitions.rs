@@ -34,6 +34,7 @@ impl CognitionEconomyStateV1 {
                 CognitionEconomyError::InvalidState("cognition_operation_receipt_missing"),
             );
         }
+        lease.validate()?;
         if lease.status != CognitionLeaseStatusV1::Settled {
             return Err(CognitionEconomyError::InvalidState(
                 "cognition_refund_requires_settled",
@@ -54,20 +55,92 @@ impl CognitionEconomyStateV1 {
                 "cognition_refund_parent_receipt_missing",
             ));
         };
+        parent.validate()?;
         if parent.operation != "settle"
             || parent.status != CognitionLeaseStatusV1::Settled
             || parent.lease_id != lease.lease_id
             || parent.consumed_amount != lease.settled_amount
             || parent.receipt_id != parent_receipt_id
+            || lease.receipt_id.as_deref() != Some(parent_receipt_id)
         {
             return Err(CognitionEconomyError::InvalidState(
                 "cognition_refund_parent_receipt_invalid",
             ));
         }
-        let balance = self.balance_mut(&lease.account_id, &lease.quote.resource);
-        if balance.reserved != 0 {
+
+        let settle_operation_key = operation_key(&lease.lease_id, "settle");
+        let Some(settle_operation) = self.operations.get(&settle_operation_key) else {
             return Err(CognitionEconomyError::InvalidState(
-                "cognition_refund_reserved_balance_invalid",
+                "cognition_refund_settlement_provenance_invalid",
+            ));
+        };
+        if settle_operation.operation_key != settle_operation_key
+            || settle_operation.lease_id != lease.lease_id
+            || settle_operation.receipt_id != parent_receipt_id
+            || settle_operation.operation_digest
+                != economy_digest(
+                    COGNITION_ECONOMY_OPERATION_DOMAIN,
+                    &(settle_operation_key.as_str(), lease.settled_amount),
+                )
+        {
+            return Err(CognitionEconomyError::InvalidState(
+                "cognition_refund_settlement_provenance_invalid",
+            ));
+        }
+        let settle_events: Vec<_> = self
+            .journal
+            .iter()
+            .filter(|event| event.lease_id == lease.lease_id && event.event_kind == "settle")
+            .collect();
+        if settle_events.len() != 1 {
+            return Err(CognitionEconomyError::InvalidState(
+                "cognition_refund_settlement_provenance_invalid",
+            ));
+        }
+        let settle_event = settle_events[0];
+        if settle_event.operation_key != settle_operation_key
+            || settle_event.idempotency_key != lease.idempotency_key
+            || settle_event.resource != lease.quote.resource
+            || settle_event.reserved_amount != lease.reserved_amount
+            || settle_event.consumed_amount != lease.settled_amount
+            || settle_event.released_amount != 0
+            || settle_event.refunded_amount != lease.refunded_amount
+            || settle_event.net_amount != lease.net_amount
+            || settle_event.parent_receipt_id.is_some()
+            || settle_event.reason.is_some()
+            || settle_event.receipt_id != parent_receipt_id
+            || settle_event.status != CognitionLeaseStatusV1::Settled
+        {
+            return Err(CognitionEconomyError::InvalidState(
+                "cognition_refund_settlement_provenance_invalid",
+            ));
+        }
+
+        let expected_reserved = self
+            .leases
+            .values()
+            .filter(|candidate| {
+                candidate.status == CognitionLeaseStatusV1::Reserved
+                    && candidate.account_id == lease.account_id
+                    && candidate.quote.resource == lease.quote.resource
+            })
+            .try_fold(0_u64, |total, candidate| {
+                total.checked_add(candidate.reserved_amount).ok_or(
+                    CognitionEconomyError::InvalidState("cognition_economy_reserved_overflow"),
+                )
+            })?;
+        let Some(balance) = self
+            .balances
+            .get_mut(&lease.account_id)
+            .and_then(|resources| resources.get_mut(&lease.quote.resource))
+        else {
+            return Err(CognitionEconomyError::InvalidState(
+                "cognition_refund_balance_missing",
+            ));
+        };
+        if balance.reserved != expected_reserved {
+            return Err(CognitionEconomyError::InvalidState(
+                "cognition_refund_balance_reservation_mismatch",
             ));
         }
         balance.available = balance.available.checked_add(refunded_amount).ok_or(
