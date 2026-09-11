@@ -79,6 +79,52 @@ def _fixture_descriptor(path: Path) -> dict[str, object]:
 class FullNetworkCleanRoomPlanTests(unittest.TestCase):
     _baseline_fixture_ready = False
 
+    def test_checkpoint_and_nested_payload_mutations_reject_before_publication(self):
+        """Valid signatures/claims must not authorize changed recovery metadata."""
+        request = self._input()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, evidence_path = root / "request.json", root / "identity-map.json"
+            _write_fixture_json(source, request)
+            _write_fixture_json(evidence_path, self._baseline_identity_v2_evidence)
+            control = root / "valid-plan.json"
+            self.assertEqual(self.module.main([
+                "--input", str(source), "--identity-v2-evidence-map", str(evidence_path),
+                "--out", str(control),
+            ]), 0)
+            self.assertEqual(json.loads(control.read_text())["truth"]["checkpoint"], request["truth"]["checkpoint"])
+            cases = (
+                ("checkpoint-sha", "checkpoint", "sha256", "f" * 64),
+                ("checkpoint-path", "checkpoint", "receipt_path", "/operator/truth/substituted-checkpoint.json"),
+                ("checkpoint-size", "checkpoint", "size_bytes", 1025),
+                ("nested-output", "nested", "output_sha256", "f" * 64),
+                ("nested-verifier", "nested", "verifier_id", "untrusted-verifier"),
+                ("nested-root", "nested", "trust_root_id", "untrusted-root"),
+            )
+            for label, section, field, value in cases:
+                with self.subTest(mutation=label):
+                    changed = copy.deepcopy(request)
+                    target = (changed["truth"]["checkpoint"] if section == "checkpoint" else
+                              changed["fresh_root_probe"]["validator_verify_outputs"]["storage-205"])
+                    target[field] = value
+                    # Keep every existing receipt and signature byte unchanged.
+                    self.assertEqual(changed["truth"]["checkpoint"]["receipt"], request["truth"]["checkpoint"]["receipt"])
+                    self.assertEqual(changed["fresh_root_probe"]["receipt"], request["fresh_root_probe"]["receipt"])
+                    for key in ("signed_payload_sha256", "signature_hex", "canonical_digest"):
+                        self.assertEqual(changed["fresh_root_probe"]["validator_verify_outputs"]["storage-205"][key],
+                                         request["fresh_root_probe"]["validator_verify_outputs"]["storage-205"][key])
+                    _write_fixture_json(source, changed)
+                    output = root / f"{label}-plan.json"
+                    with patch.object(self.module, "_write_plan_atomic", wraps=self.module._write_plan_atomic) as publish:
+                        try:
+                            self.module.main(["--input", str(source), "--identity-v2-evidence-map", str(evidence_path), "--out", str(output)])
+                        except SystemExit:
+                            rejected = True
+                        else:
+                            rejected = False
+                    self.assertEqual((rejected, publish.call_count, output.exists()), (True, 0, False),
+                                     "unchanged receipts must reject mutated checkpoint/nested payload before publication")
+
     @classmethod
     def setUpClass(cls) -> None:
         """Create one independent, real-crypto v2 map before request mutations."""
@@ -90,6 +136,8 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             "runTest"
         )
         cls._baseline_signing.setUp()
+        cls._semantic_signature_cache = {}
+        cls._configure_semantic_authority(cls._baseline_module)
         cls._baseline_signing.peer_registry = cls._baseline_signing.root / "managed-peers.json"
         peer_authority = cls._baseline_module._peer_registry_authority()
         peer_authority.REGISTRY_PATH = cls._baseline_signing.peer_registry
@@ -135,6 +183,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
     def setUp(self) -> None:
         type(self).setUpClass()
         self.module = load_module()
+        type(self)._configure_semantic_authority(self.module)
         self._impact_directory = tempfile.TemporaryDirectory()
         self._impact_path = Path(self._impact_directory.name) / "consumer-impact.json"
         baseline = type(self)
@@ -594,6 +643,55 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             )
         )
 
+    @classmethod
+    def _configure_semantic_authority(cls, module) -> None:
+        """Relocate only the live authority fixture; use the real strict verifier."""
+        signing = cls._baseline_signing
+        authority = module._semantic_signing_authority()._load_adapter_module()
+        key = signing.public_key.read_bytes()
+        body = {"schema_version": "oasis7.validator_pair_provenance_trust_root.v1",
+                "root_id": authority.CANONICAL_TRUST_ROOT_ID,
+                "network_id": module.CANONICAL_NETWORK_ID,
+                "allowlist": [{"signer_id": "governance-signer", "algorithm": "ed25519",
+                               "public_key_hex": key.hex(),
+                               "public_key_sha256": hashlib.sha256(key).hexdigest()}]}
+        body["root_digest"] = hashlib.sha256(json.dumps(
+            body, ensure_ascii=True, sort_keys=True, separators=(",", ":")
+        ).encode()).hexdigest()
+        path = signing.root / "semantic-governance-root.json"
+        _write_fixture_json(path, body)
+        path.chmod(0o600)
+        authority.CANONICAL_TRUST_ROOT_PATH = str(path)
+        authority.CANONICAL_TRUST_ROOT_FILE_SHA256 = _fixture_digest(path)
+        authority.CANONICAL_TRUST_ROOT_DIGEST = body["root_digest"]
+        authority.CANONICAL_TRUST_ROOT_OWNER_UID = os.getuid()
+
+    def _sign_semantic_fixture(self, request):
+        """Sign initial valid payloads only, never caller mutations at admission."""
+        cls = type(self)
+        signing = cls._baseline_signing
+        values = [(kind, request["truth"][kind]) for kind in ("package", "genesis", "world", "checkpoint")]
+        values += [("validator_verify_output", value) for value in
+                   request["fresh_root_probe"]["validator_verify_outputs"].values()]
+        values.append(("fresh_root_probe", request["fresh_root_probe"]))
+        for kind, value in values:
+            receipt = value if kind == "validator_verify_output" else value["receipt"]
+            receipt["verifier_id"] = "governed-receipt-verifier"
+            receipt["trust_root_id"] = "oasis7-public-testnet-governance-root-v1"
+            material = self.module.canonical_semantic_receipt_payload(kind, value, receipt)
+            digest = hashlib.sha256(material).hexdigest()
+            if digest not in cls._semantic_signature_cache:
+                payload = signing.root / "semantic-payload.bin"
+                signature = signing.root / "semantic-signature.bin"
+                payload.write_bytes(material)
+                signing._openssl("pkeyutl", "-sign", "-inkey", str(signing.private_key),
+                                 "-rawin", "-in", str(payload), "-out", str(signature))
+                cls._semantic_signature_cache[digest] = signature.read_bytes().hex()
+            receipt["signed_payload_sha256"] = digest
+            receipt["signature_hex"] = cls._semantic_signature_cache[digest]
+            receipt["canonical_digest"] = self.module._canonical_receipt_digest(receipt)
+        return request
+
     def _input(self, *, authority_instant: datetime | None = None) -> dict[str, object]:
         transaction_id = "txn-clean-room-001"
         capture_window_id = "capture-window-20260901-001"
@@ -870,7 +968,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             },
         ]
         deployment_inventory = self._deployment_inventory(nodes)
-        return {
+        return self._sign_semantic_fixture({
             "schema_version": "oasis7.public_testnet_full_network_clean_room_input.v1",
             "transaction_id": transaction_id,
             "capture_window_id": capture_window_id,
@@ -1003,7 +1101,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             },
             "deployment_inventory": deployment_inventory,
             "nodes": nodes,
-        }
+        })
 
     def test_independently_signed_new_peer_snapshot_is_admitted(self) -> None:
         signing_module = type(self)._baseline_signing_module

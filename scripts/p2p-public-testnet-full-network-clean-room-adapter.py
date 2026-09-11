@@ -1650,6 +1650,9 @@ def validate_live_trust_root_file() -> dict[str, Any]:
         "owner_uid": metadata.st_uid,
         "mode": CANONICAL_TRUST_ROOT_MODE,
         "regular_file": True,
+        "root_id": root.get("root_id"),
+        "network_id": root.get("network_id"),
+        "allowlist": copy.deepcopy(allowlist),
     }
 
 
@@ -2583,6 +2586,22 @@ def _verify_plan_receipts_with_verifier(
                 },
             }
         )
+    planner = _load_planner()
+    semantic_evidence = [(kind, plan["truth"][kind]) for kind in ("package", "genesis", "world", "checkpoint")]
+    semantic_evidence.extend(("validator_verify_output", output) for output in
+                             plan["fresh_root_probe"]["validator_verify_outputs"].values())
+    semantic_evidence.append(("fresh_root_probe", plan["fresh_root_probe"]))
+    for kind, value in semantic_evidence:
+        receipt = value if kind == "validator_verify_output" else value["receipt"]
+        # The callback receives the exact canonical signed bytes, not a digest
+        # claimed by the caller. Local cryptographic admission already ran.
+        evidence.append({"receipt": receipt, "bindings": {
+            "kind": kind,
+            "task_uid": plan["task_uid"], "frozen_head_oid": plan["head_oid"],
+            "plan_digest": plan["plan_digest"],
+            "consumer_impact_record": _consumer_impact_locator(plan),
+            "semantic_payload_hex": planner.canonical_semantic_receipt_payload(kind, value, receipt).hex(),
+        }})
     failures: list[str] = []
     for item in evidence:
         verifier_receipt = copy.deepcopy(item["receipt"])
@@ -3405,6 +3424,8 @@ def _project_transport_fresh_root_probe(value: Any) -> dict[str, Any]:
         "authenticated",
         "verified",
         "signer_id",
+        "verifier_id",
+        "trust_root_id",
         "signed_payload_sha256",
         "signature_hex",
         "canonical_digest",

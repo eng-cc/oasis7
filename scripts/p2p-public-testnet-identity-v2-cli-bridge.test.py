@@ -487,11 +487,23 @@ planner.IDENTITY_V2_TRUST_CONFIG_PATH = Path({str(self.signing.trust)!r})
 planner.IDENTITY_V2_TRUST_CONFIG_SHA256 = {digest_bytes(self.signing.trust.read_bytes())!r}
 planner.IDENTITY_V2_PROVIDER_REGISTRY_PATH = Path({str(self.signing.registry)!r})
 planner.IDENTITY_V2_PROVIDER_REGISTRY_SHA256 = {digest_bytes(self.signing.registry.read_bytes())!r}
+{self._semantic_authority_fixture_source()}
 raise SystemExit(planner.main(sys.argv[1:]))
 '''
         harness.write_text(source, encoding="utf-8")
         harness.chmod(harness.stat().st_mode | stat.S_IXUSR)
         return harness
+
+    def _semantic_authority_fixture_source(self) -> str:
+        # Genuine semantic signatures use the planner fixture's ephemeral key;
+        # the child relocates the same live root pins without a production seam.
+        authority = self.planner.module._semantic_signing_authority()._load_adapter_module()
+        return "\n".join([
+            "semantic_authority = planner._semantic_signing_authority()._load_adapter_module()",
+            *[f"semantic_authority.{field} = {getattr(authority, field)!r}" for field in (
+                "CANONICAL_TRUST_ROOT_PATH", "CANONICAL_TRUST_ROOT_FILE_SHA256",
+                "CANONICAL_TRUST_ROOT_DIGEST", "CANONICAL_TRUST_ROOT_OWNER_UID")],
+        ])
 
     def _adapter_harness(self) -> Path:
         """Run the real adapter against the same patched planner instance."""
@@ -522,6 +534,7 @@ planner.IDENTITY_V2_PROVIDER_REGISTRY_PATH = Path({str(self.signing.registry)!r}
 planner.IDENTITY_V2_PROVIDER_REGISTRY_SHA256 = {digest_bytes(self.signing.registry.read_bytes())!r}
 adapter = load("identity_v2_bridge_adapter", {str(ADAPTER)!r})
 adapter._PLANNER_MODULE = planner
+{self._semantic_authority_fixture_source()}
 raise SystemExit(adapter.main(sys.argv[1:]))
 '''
         harness.write_text(source, encoding="utf-8")

@@ -336,6 +336,76 @@ class ReceivedPlanOnlyTransport:
 
 
 class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
+    def test_checkpoint_and_nested_payload_mutations_reject_before_effects(self):
+        adapter = self.adapter
+        root = Path(self._test_directory.name)
+        control_transport = ApplyTransport(adapter, self.plan)
+        result = adapter.execute(self.plan, self._authority(True), journal_path=root / "valid-control.json",
+                                 ledger_path=self.ledger_path, transport=control_transport, dry_run=False,
+                                 provenance_verifier=self._recovery_verifier)
+        self.assertEqual(result["status"], "complete")
+        self.assertTrue(control_transport.operations)
+        cases = (
+            ("checkpoint-sha", "checkpoint", "sha256", "f" * 64),
+            ("checkpoint-path", "checkpoint", "receipt_path", "/operator/truth/substituted-checkpoint.json"),
+            ("checkpoint-size", "checkpoint", "size_bytes", 1025),
+            ("nested-output", "nested", "output_sha256", "f" * 64),
+            ("nested-verifier", "nested", "verifier_id", "untrusted-verifier"),
+            ("nested-root", "nested", "trust_root_id", "untrusted-root"),
+        )
+        for label, section, field, value in cases:
+            with self.subTest(mutation=label):
+                self._write_ledger(self.ledger_path)
+                ledger_before = self.ledger_path.read_bytes()
+                changed = copy.deepcopy(self.plan)
+                target = (changed["truth"]["checkpoint"] if section == "checkpoint" else
+                          changed["fresh_root_probe"]["validator_verify_outputs"]["storage-205"])
+                target[field] = value
+                self.assertEqual(changed["truth"]["checkpoint"]["receipt"], self.plan["truth"]["checkpoint"]["receipt"])
+                self.assertEqual(changed["fresh_root_probe"]["receipt"], self.plan["fresh_root_probe"]["receipt"])
+                for key in ("signed_payload_sha256", "signature_hex", "canonical_digest"):
+                    self.assertEqual(changed["fresh_root_probe"]["validator_verify_outputs"]["storage-205"][key],
+                                     self.plan["fresh_root_probe"]["validator_verify_outputs"]["storage-205"][key])
+                # A caller can rehash a plan; its digest is not receipt authority.
+                changed["plan_digest"] = adapter.canonical_plan_digest(changed)
+                try:
+                    adapter.validate_plan(changed)
+                except adapter.AdapterError:
+                    admission_rejected = True
+                else:
+                    admission_rejected = False
+                transport = ApplyTransport(adapter, changed)
+                journal = root / f"{label}.json"
+                with mock.patch.object(adapter, "_write_journal", wraps=adapter._write_journal) as write, \
+                     mock.patch.object(adapter, "reserve_nonce", wraps=adapter.reserve_nonce) as reserve, \
+                     mock.patch.object(transport, "inspect_node", wraps=transport.inspect_node) as inspect:
+                    try:
+                        adapter.execute(changed, self._authority(True, changed), journal_path=journal,
+                                        ledger_path=self.ledger_path, transport=transport, dry_run=False,
+                                        provenance_verifier=self._recovery_verifier)
+                    except adapter.AdapterError:
+                        execute_rejected = True
+                    else:
+                        execute_rejected = False
+                self.assertEqual((admission_rejected, execute_rejected, write.call_count, reserve.call_count,
+                                  inspect.call_count, len(transport.operations), journal.exists(),
+                                  self.ledger_path.read_bytes() == ledger_before),
+                                 (True, True, 0, 0, 0, 0, False, True),
+                                 "receipt-integrity rejection must precede nonce, callback and journal effects")
+
+    def test_plan_verifier_covers_truth_probe_and_nested_receipts(self):
+        seen = []
+        def verifier(plan, receipt):
+            seen.append(receipt["schema_version"])
+            return self._recovery_verifier(plan, receipt)
+        self.adapter._verify_plan_receipts_with_verifier(self.plan, verifier)
+        required = {self.plan["truth"][section]["receipt"]["schema_version"]
+                    for section in ("package", "genesis", "world", "checkpoint")}
+        required.add(self.plan["fresh_root_probe"]["receipt"]["schema_version"])
+        required.add(self.plan["fresh_root_probe"]["validator_verify_outputs"]["storage-205"]["schema_version"])
+        self.assertTrue(required.issubset(set(seen)), f"unverified truth/probe receipt schemas: {sorted(required - set(seen))}")
+        self.assertEqual(seen.count(self.plan["fresh_root_probe"]["validator_verify_outputs"]["storage-205"]["schema_version"]), 2)
+
     def _assert_live_root_callback_boundary(self, boundary):
         adapter = self.adapter
         original_validator = self.live_trust_root_patcher.temp_original
@@ -437,6 +507,7 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
             if isinstance(value, list): return [rebind(item) for item in value]
             return replacements.get(value, value) if isinstance(value, str) else value
         second = rebind(first)
+        self.fixture._sign_semantic_fixture(second)
         second["plan_digest"] = adapter.canonical_plan_digest(second)
         authorities = [self._authority(True, plan) for plan in (first, second)]
         # Both independently bound admissions must be valid before contention.
@@ -766,6 +837,7 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         # covered by the process-level bridge suite; unit tests stay focused
         # on adapter ordering and side-effect boundaries.
         self.adapter._PLANNER_MODULE = self.planner
+        self.planner._SEMANTIC_SIGNING_MODULE = self.fixture.module._semantic_signing_authority()
         self._test_directory = tempfile.TemporaryDirectory()
         self._fleet_lock_patch = mock.patch.object(
             self.adapter, "CANONICAL_FLEET_LOCK_PATH",

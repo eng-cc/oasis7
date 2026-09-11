@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import importlib.util
 import json
+from functools import lru_cache
 import os
 import re
 import stat
@@ -501,6 +502,105 @@ def validate_authenticated_receipt(
     if not any(character != "0" for character in canonical_digest):
         die(f"{label}.canonical_digest must not be empty")
     return receipt
+
+
+SEMANTIC_RECEIPT_SCHEMAS = {
+    "package": "oasis7.package_provenance.v1",
+    "genesis": "oasis7.genesis_binding.v1",
+    "world": "oasis7.world_binding.v1",
+    "checkpoint": "oasis7.checkpoint_binding.v1",
+    "fresh_root_probe": "oasis7.fresh_root_probe_receipt.v1",
+    "validator_verify_output": "oasis7.validator_verify_output.v1",
+}
+_SEMANTIC_ENVELOPE_FIELDS = frozenset({
+    "schema_version", "authenticated", "verified", "signer_id", "verifier_id",
+    "trust_root_id", "signed_payload_sha256", "signature_hex", "canonical_digest",
+})
+_SEMANTIC_SIGNING_MODULE: Any = None
+
+
+def _semantic_signing_authority() -> Any:
+    """Reuse repository crypto and its pinned live-root validator, not caller config."""
+    global _SEMANTIC_SIGNING_MODULE
+    if _SEMANTIC_SIGNING_MODULE is None:
+        path = Path(__file__).with_name("p2p-public-testnet-identity-v2-signing-tool.py")
+        if path.is_symlink() or not path.is_file():
+            die("repository semantic receipt verifier is unavailable")
+        spec = importlib.util.spec_from_file_location("oasis7_clean_room_semantic_crypto", path)
+        if spec is None or spec.loader is None:
+            die("repository semantic receipt verifier cannot be loaded")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        _SEMANTIC_SIGNING_MODULE = module
+    return _SEMANTIC_SIGNING_MODULE
+
+
+def canonical_semantic_receipt_payload(
+    kind: str, value: dict[str, Any], receipt: dict[str, Any]
+) -> bytes:
+    """V1 signed contract: domain, exact receipt identity, and every semantic field.
+
+    Detached truth/probe receipts exclude only their receipt member. Inline
+    validator outputs exclude only the fixed authentication envelope. The
+    outer probe also commits to both complete signed validator outputs.
+    """
+    excluded = _SEMANTIC_ENVELOPE_FIELDS if kind == "validator_verify_output" else {"receipt"}
+    payload = {
+        "schema_version": "oasis7.clean_room_semantic_payload.v1",
+        "kind": kind,
+        "receipt_schema": SEMANTIC_RECEIPT_SCHEMAS[kind],
+        "network_id": CANONICAL_NETWORK_ID,
+        "signer_id": receipt.get("signer_id"),
+        "verifier_id": receipt.get("verifier_id"),
+        "trust_root_id": receipt.get("trust_root_id"),
+        "payload": {key: item for key, item in value.items() if key not in excluded},
+    }
+    return b"OASIS7-CLEAN-ROOM-SEMANTIC-RECEIPT-V1\x00" + json.dumps(
+        payload, ensure_ascii=True, sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode("utf-8")
+
+
+@lru_cache(maxsize=128)
+def _verify_semantic_signature(public_key: bytes, material: bytes, signature: bytes) -> bool:
+    # Cache only the pure mathematical operation on exact bytes. The live
+    # pinned authority and its current allowlist are still read on every call.
+    return _semantic_signing_authority().verify_ed25519(public_key, material, signature)
+
+
+def validate_semantic_receipt(kind: str, value: dict[str, Any], allowed_signers: set[str]) -> None:
+    receipt = value if kind == "validator_verify_output" else value.get("receipt")
+    receipt = validate_authenticated_receipt(receipt, f"{kind}.receipt", allowed_signers)
+    crypto = _semantic_signing_authority()
+    authority = crypto._load_adapter_module()
+    if (receipt.get("schema_version") != SEMANTIC_RECEIPT_SCHEMAS[kind]
+            or receipt.get("verifier_id") != authority.CANONICAL_VERIFIER_ID
+            or receipt.get("trust_root_id") != authority.CANONICAL_TRUST_ROOT_ID):
+        die(f"{kind} semantic receipt identity mismatch")
+    material = canonical_semantic_receipt_payload(kind, value, receipt)
+    if receipt["signed_payload_sha256"] != hashlib.sha256(material).hexdigest():
+        die(f"{kind} semantic signed payload digest mismatch")
+    if receipt["canonical_digest"] != _canonical_receipt_digest(receipt):
+        die(f"{kind} semantic receipt canonical digest mismatch")
+    try:
+        root = authority.validate_live_trust_root_file()
+    except authority.AdapterError as error:
+        die(f"{kind} semantic receipt trust root rejected: {error}")
+    if (root.get("root_id") != authority.CANONICAL_TRUST_ROOT_ID
+            or root.get("network_id") != CANONICAL_NETWORK_ID):
+        die(f"{kind} semantic receipt trust root identity mismatch")
+    keys = [entry for entry in root.get("allowlist", [])
+            if entry.get("signer_id") == receipt["signer_id"]]
+    if len(keys) != 1 or keys[0].get("algorithm") != "ed25519":
+        die(f"{kind} semantic receipt signer lacks one pinned Ed25519 key")
+    public_key_hex = keys[0].get("public_key_hex")
+    if not isinstance(public_key_hex, str) or HEX64_RE.fullmatch(public_key_hex) is None:
+        die(f"{kind} semantic receipt public key is unavailable")
+    public_key = bytes.fromhex(public_key_hex)
+    if hashlib.sha256(public_key).hexdigest() != keys[0]["public_key_sha256"]:
+        die(f"{kind} semantic receipt public key digest mismatch")
+    if not _verify_semantic_signature(public_key, material, bytes.fromhex(receipt["signature_hex"])):
+        die(f"{kind} semantic receipt Ed25519 signature rejected")
 
 
 def _canonical_deployment_inventory_payload_digest(inventory: dict[str, Any]) -> str:
@@ -1812,7 +1912,7 @@ def _validate_truth(truth: Any, allowed_signers: set[str]) -> dict[str, Any]:
         or world_head["state_root"] != checkpoint["execution_state_root"].lower()
     ):
         die("truth world-head/checkpoint execution binding mismatch")
-    return {
+    canonical_truth = {
         "package": {
             **package,
             "commit": package_commit,
@@ -1824,6 +1924,11 @@ def _validate_truth(truth: Any, allowed_signers: set[str]) -> dict[str, Any]:
         "execution": execution,
         "checkpoint": {**checkpoint, "manifest_hash": manifest_hash, "height": height},
     }
+    for kind in ("package", "genesis", "world", "checkpoint"):
+        if canonical_truth[kind] != value[kind]:
+            die(f"truth.{kind} signed semantic payload must already be canonical")
+        validate_semantic_receipt(kind, canonical_truth[kind], allowed_signers)
+    return canonical_truth
 
 
 def _validate_probe(
@@ -1882,7 +1987,9 @@ def _validate_probe(
         ):
             die(f"{name} validator verify output checkpoint binding mismatch")
         require_hex(output.get("output_sha256"), f"{name}.validator_verify_output.output_sha256")
+        validate_semantic_receipt("validator_verify_output", output, allowed_signers)
     validate_authenticated_receipt(value.get("receipt"), "fresh_root_probe.receipt", allowed_signers)
+    validate_semantic_receipt("fresh_root_probe", value, allowed_signers)
     return value
 
 
