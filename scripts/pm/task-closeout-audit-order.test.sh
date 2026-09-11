@@ -17,7 +17,18 @@ raise SystemExit(0)
 EOF
 cat >"$F/scripts/pm/github-project-workflow.sh" <<'EOF'
 #!/usr/bin/env bash
-echo audit >>"$EVENTS"; printf '{"status":"ok"}'
+if [[ "${OASIS7_TRACEABILITY_CONTEXT_ONLY:-}" == 1 ]]; then
+  echo selected-audit >>"$EVENTS"
+else
+  echo audit >>"$EVENTS"
+fi
+target_status="${FIXTURE_TARGET_STATUS:-done}"
+if [[ "$target_status" == ready ]]; then
+  workflow_phase=pre_pr_ready
+else
+  workflow_phase=task_done
+fi
+printf '{"status":"ok","selected_task":{"task_uid":"task_11111111111111111111111111111111","target":"%s","workflow_phase":"%s"}}' "$target_status" "$workflow_phase"
 EOF
 cat >"$F/scripts/pm/claim-ready.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -59,7 +70,10 @@ assert_review_plan_path_rejected() {
   local rc=$?
   set -e
   [[ "$rc" != "0" ]] || { echo "expected escaping review plan to fail: $plan_ref" >&2; exit 1; }
-  [[ ! -s "$T/events" ]] || { echo "escaping review plan reached lifecycle mutation: $plan_ref" >&2; exit 1; }
+  diff -u <(printf 'selected-audit\n') "$T/events" || {
+    echo "escaping review plan reached lifecycle mutation: $plan_ref" >&2
+    exit 1
+  }
   grep -qi "escapes repository root" "$T/$slug.err"
 }
 
@@ -72,13 +86,13 @@ run_case() {
   cp "$T/review.base" "$F/review.md"; cp "$T/ledger.base" "$F/slice-ledger.jsonl"; cp "$T/receipt.base" "$F/receipt.json"; cp "$T/mapping.base" "$F/.pm/github-project-sync/tasks.json"
   if [[ "$status" == ready ]]; then args=(--review-packet-file "$F/review.md"); else args=(--pr-receipt "$F/receipt.json"); fi
   set +e
-  (cd "$F"; EVENTS="$T/events" MUTATE_KIND="$kind" PACKET="$F/review.md" LEDGER="$F/slice-ledger.jsonl" RECEIPT="$F/receipt.json" PM_ROOT_DIR="$F" \
+  (cd "$F"; EVENTS="$T/events" FIXTURE_TARGET_STATUS="$status" MUTATE_KIND="$kind" PACKET="$F/review.md" LEDGER="$F/slice-ledger.jsonl" RECEIPT="$F/receipt.json" PM_ROOT_DIR="$F" \
     ./scripts/pm/task-closeout.sh --role tpm --task-uid task_11111111111111111111111111111111 \
     --to-status "$status" --claim-type "$([[ "$status" == ready ]] && echo ready_for_pr || echo task_complete)" \
     --verification-profile fixture_repository_state "${args[@]}" --json >/dev/null 2>"$T/err")
   local rc=$?; set -e
-  if [[ -z "$kind" ]]; then [[ $rc == 0 ]] || { cat "$T/err"; return 1; }; diff -u <(printf 'claim\naudit\ntransition\naudit\n') "$T/events"
-  else [[ $rc != 0 ]]; diff -u <(printf 'claim\n') "$T/events"; fi
+  if [[ -z "$kind" ]]; then [[ $rc == 0 ]] || { cat "$T/err"; return 1; }; diff -u <(printf 'selected-audit\nclaim\naudit\ntransition\naudit\n') "$T/events"
+  else [[ $rc != 0 ]]; diff -u <(printf 'selected-audit\nclaim\n') "$T/events"; fi
 }
 run_case ready ""; run_case done ""
 for kind in head mapping packet ledger; do

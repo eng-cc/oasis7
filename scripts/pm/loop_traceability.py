@@ -59,7 +59,7 @@ class TraceabilityError(ValueError):
 
 
 def canonical_bytes(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
 def canonical_digest(value: Any) -> str:
@@ -208,13 +208,22 @@ class GitHubAuthorityReader:
         if comment.get("id") != comment_id or comment.get("issue_url") != _api_issue_url(issue_number):
             raise TraceabilityError("live authority comment identity mismatch")
         comments = self.api(f"repos/{repository}/issues/{issue_number}/comments?per_page=100", paginate=True)
-        return {
+        result = {
             "reader_kind": self.reader_kind,
             "repository": repository,
             "issue": issue,
             "comment": comment,
             "comments": _flatten_comments(comments),
         }
+        try:
+            payload = json.loads(comment.get("body") or "")
+        except (TypeError, json.JSONDecodeError):
+            payload = None
+        if isinstance(payload, dict) and "reverse_consumers" in payload:
+            result["reverse_consumers"] = payload["reverse_consumers"]
+        elif isinstance(payload, dict) and isinstance(payload.get("contract"), dict) and "reverse_consumers" in payload["contract"]:
+            result["reverse_consumers"] = payload["contract"]["reverse_consumers"]
+        return result
 
 
 class ImmutableSourceReader:
@@ -226,9 +235,7 @@ class ImmutableSourceReader:
 
     def __call__(self, reference: dict[str, Any]) -> dict[str, Any]:
         reference = _reference_value(reference, "source reference")
-        source_commit = self.source_commit
-        if source_commit is None:
-            source_commit = reference.get("source_commit")
+        source_commit = reference.get("source_commit") or self.source_commit
         _oid(source_commit, "source_commit")
         try:
             raw = resolve_frozen_fragment(self.repo_root, source_commit, reference["path"], reference["fragment"])
@@ -289,6 +296,8 @@ def _validate_record_shape(record: Any) -> list[str]:
         if not isinstance(coordination.get("record_digest"), str) or not DIGEST.fullmatch(coordination["record_digest"]):
             errors.append("coordination_ref record_digest is invalid")
         _oid(coordination.get("source_commit"), "coordination_ref source_commit")
+        if not errors and coordination.get("record_digest") != record_digest(record):
+            errors.append("record_digest recomputation mismatch")
     except TraceabilityError as exc:
         errors.append(str(exc))
     obligations = record.get("required_obligations")
@@ -324,10 +333,52 @@ def _validate_record_shape(record: Any) -> list[str]:
             if slot_id in slot_ids:
                 errors.append("duplicate mapping slot")
             slot_ids.add(slot_id)
+            if slot.get("owner_loop") not in {"product", "system", "code"}:
+                errors.append(f"{slot_id} owner_loop is invalid or missing")
+            if not isinstance(slot.get("owner_role"), str) or not slot["owner_role"].strip():
+                errors.append(f"{slot_id} owner_role is invalid or missing")
     if isinstance(obligations, list) and isinstance(slots, list):
         for obligation in obligations:
             if isinstance(obligation, dict) and obligation.get("mapping_slot") not in slot_ids:
                 errors.append(f"{obligation.get('obligation_id', 'required obligation')} mapping_slot is unknown")
+    if isinstance(obligations, list):
+        for obligation in obligations:
+            if not isinstance(obligation, dict):
+                continue
+            obligation_id = obligation.get("obligation_id") or "required obligation"
+            if type(obligation.get("required")) is not bool:
+                errors.append(f"{obligation_id} required is invalid or missing")
+            if obligation.get("owner_loop") not in {"product", "system", "code"}:
+                errors.append(f"{obligation_id} owner_loop is invalid or missing")
+            if not isinstance(obligation.get("owner_role"), str) or not obligation["owner_role"].strip():
+                errors.append(f"{obligation_id} owner_role is invalid or missing")
+    feedback = record.get("feedback")
+    if not isinstance(feedback, list):
+        errors.append("feedback must be a list")
+    else:
+        required_feedback_fields = (
+            "source_locator",
+            "receiving_owner",
+            "disposition_authority",
+            "decision",
+            "basis",
+            "authorized_follow_up",
+            "affected_consumer",
+        )
+        for index, item in enumerate(feedback):
+            prefix = f"feedback[{index}]"
+            if not isinstance(item, dict):
+                errors.append(f"{prefix} must be an object")
+                continue
+            for field in required_feedback_fields:
+                if not isinstance(item.get(field), str) or not item[field].strip():
+                    errors.append(f"{prefix} {field} is invalid or missing")
+            if type(item.get("blocking")) is not bool:
+                errors.append(f"{prefix} blocking is invalid or missing")
+            if "clearance" not in item:
+                errors.append(f"{prefix} clearance is missing")
+            elif item["clearance"] is not None and not isinstance(item["clearance"], dict):
+                errors.append(f"{prefix} clearance must be an object or null")
     comparable = (record.get("candidate_selection") or {}).get("comparable_fields")
     if not isinstance(comparable, list) or len(set(comparable)) != len(comparable):
         errors.append("candidate comparable_fields must be a unique list")
@@ -395,11 +446,26 @@ def _validate_published_contract(
         if clause_id and (not matches or reference.get("fragment") not in {fragment for fragment, _digest in matches}):
             errors.append("contract publication path/fragment mismatch")
         expected_content_digests = {digest for fragment, digest in matches if isinstance(digest, str)}
-        if contract_reader is not None and source_commit is not None and expected_content_digests:
-            source = _reader_result(contract_reader, reference, "published contract source readback")
-            actual_content_digest = source.get("source_digest") or source.get("content_digest")
-            if actual_content_digest not in expected_content_digests:
-                errors.append("contract publication content digest mismatch")
+        declared_heads: list[str] = []
+        for field in ("source_head", "merged_head"):
+            try:
+                _oid(contract.get(field), f"published contract {field}")
+                if contract[field] not in declared_heads:
+                    declared_heads.append(contract[field])
+            except TraceabilityError as exc:
+                errors.append(str(exc))
+        if contract_reader is not None and expected_content_digests:
+            for declared_head in declared_heads:
+                source_reference = deepcopy(reference)
+                source_reference["source_commit"] = declared_head
+                source = _reader_result(contract_reader, source_reference, "published contract source readback")
+                if source.get("path") not in {None, reference.get("path")} or source.get("fragment") not in {None, reference.get("fragment")}:
+                    errors.append("published contract source path/fragment mismatch")
+                if source.get("source_commit") not in {None, declared_head}:
+                    errors.append("published contract source commit mismatch")
+                actual_content_digest = source.get("source_digest") or source.get("content_digest")
+                if actual_content_digest not in expected_content_digests:
+                    errors.append("contract publication content digest mismatch")
     except (TraceabilityError, KeyError, TypeError, json.JSONDecodeError) as exc:
         errors.append(_error_text(exc))
     return errors
@@ -416,6 +482,8 @@ def _validate_bound_references(
         for reference in consumed:
             try:
                 reference = _reference_value(reference, "consumed clause reference")
+                if reference.get("repository") != REPOSITORY:
+                    raise TraceabilityError("consumed clause reference repository mismatch")
                 _validate_bound_identity(reference, "consumed clause reference", strict_revision=True)
                 result = _reader_result(contract_reader, reference, "contract/source readback")
                 if result.get("path") not in {None, reference["path"]} or result.get("fragment") not in {None, reference["fragment"]}:
@@ -848,6 +916,8 @@ def _validate_matrix(record: dict[str, Any], candidate: dict[str, Any], evidence
         if not isinstance(row, dict):
             errors.append("applicability_matrix row must be an object")
             continue
+        if not isinstance(row.get("leaf_evidence_locator"), str) or not row["leaf_evidence_locator"].strip():
+            errors.append("leaf_evidence_locator is invalid or missing")
         obligation_id = row.get("obligation_id")
         slot_id = row.get("mapping_slot")
         if obligation_id in by_obligation or slot_id in by_slot:
@@ -923,6 +993,32 @@ def _validate_evidence(candidate: dict[str, Any], evidence: Any) -> tuple[list[s
                 errors.append("evidence_digest mismatch")
         values.append(item)
     return errors, values
+
+
+def validate_record(record: Any, root: Path | str | None = None) -> dict[str, Any]:
+    """Validate the side-effect-free record projection used by hosted CI."""
+    del root  # The structural projection does not read the repository.
+    return _result(_validate_record_shape(record))
+
+
+def validate_candidate(
+    record: dict[str, Any], candidate: Any, evidence: Any, *, source_commit: str | None = None,
+) -> dict[str, Any]:
+    """Validate candidate/evidence shape without claiming live admission."""
+    del source_commit  # Hosted projection does not establish immutable source authority.
+    record_errors = _validate_record_shape(record)
+    if record_errors:
+        return _result(record_errors)
+    errors = _candidate_shape(candidate)
+    if errors:
+        return _result(errors)
+    evidence_errors, values = _validate_evidence(candidate, evidence)
+    errors.extend(evidence_errors)
+    if not isinstance(candidate.get("applicability_matrix"), list) or not isinstance(candidate.get("equivalence_rules"), list):
+        errors.append("composition evidence missing")
+    if isinstance(candidate.get("applicability_matrix"), list):
+        errors.extend(_validate_matrix(record, candidate, values))
+    return _result(errors)
 
 
 def validate_aggregate(
@@ -1012,10 +1108,22 @@ def reverse_consumers(
         observed_kind = _reader_kind(readback)
         if observed_kind != reader_kind:
             errors.append("reader_kind does not match authority reader")
-        consumers = contract_ref.get("reverse_consumers", [])
-        if not isinstance(consumers, list):
-            errors.append("reverse consumers must be a list")
-            consumers = []
+        authority_consumers = readback.get("reverse_consumers")
+        requested_consumers = contract_ref.get("reverse_consumers")
+        if requested_consumers is not None:
+            if not isinstance(authority_consumers, list):
+                errors.append("authority reverse consumers must be a list")
+                authority_consumers = []
+            elif requested_consumers != authority_consumers:
+                errors.append("reverse consumer projection does not match authority")
+        elif authority_consumers is None:
+            # The ordinary read-only view may request no projection.  An
+            # authority-provided list is still returned when present.
+            authority_consumers = []
+        elif not isinstance(authority_consumers, list):
+            errors.append("authority reverse consumers must be a list")
+            authority_consumers = []
+        consumers = authority_consumers
         return _result(
             errors,
             consumers=deepcopy(consumers),

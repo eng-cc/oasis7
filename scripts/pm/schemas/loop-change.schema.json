@@ -23,7 +23,7 @@
     "required_obligations": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/obligation"}},
     "mapping_slots": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/mapping_slot"}},
     "candidate_selection": {"$ref": "#/$defs/candidate_selection"},
-    "feedback": {"type": "array", "items": {"type": "object"}},
+    "feedback": {"type": "array", "items": {"$ref": "#/$defs/feedback"}},
     "input_contracts": {"type": "array", "items": {"type": "object"}},
     "consumed_clause_refs": {"type": "array", "items": {"$ref": "#/$defs/path_ref"}}
   },
@@ -43,7 +43,7 @@
       "type": "object",
       "required": ["repository", "path", "fragment"],
       "properties": {
-        "repository": {"type": "string", "minLength": 1},
+        "repository": {"const": "eng-cc/oasis7"},
         "path": {"type": "string", "minLength": 1},
         "fragment": {"type": "string", "minLength": 1},
         "contract_id": {"type": "string", "minLength": 1},
@@ -84,6 +84,31 @@
         "repository": {"const": "eng-cc/oasis7"},
         "issue_number": {"type": "integer", "minimum": 1},
         "comment_id": {"type": "integer", "minimum": 1}
+      }
+    },
+    "feedback": {
+      "type": "object",
+      "required": [
+        "source_locator",
+        "receiving_owner",
+        "disposition_authority",
+        "decision",
+        "basis",
+        "authorized_follow_up",
+        "affected_consumer",
+        "blocking",
+        "clearance"
+      ],
+      "properties": {
+        "source_locator": {"type": "string", "minLength": 1},
+        "receiving_owner": {"type": "string", "minLength": 1},
+        "disposition_authority": {"type": "string", "minLength": 1},
+        "decision": {"type": "string", "minLength": 1},
+        "basis": {"type": "string", "minLength": 1},
+        "authorized_follow_up": {"type": "string", "minLength": 1},
+        "affected_consumer": {"type": "string", "minLength": 1},
+        "blocking": {"type": "boolean"},
+        "clearance": {"type": ["object", "null"]}
       }
     },
     "candidate_selection": {

@@ -47,7 +47,7 @@ CANDIDATE_FIELDS = (
 
 
 def _canonical(value):
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
 def _record_digest(record):
@@ -457,6 +457,166 @@ class CloseoutFixture:
         return subprocess.run(command, cwd=self.root, env=environment, text=True, capture_output=True)
 
 
+class PinnedCloseoutFixture:
+    """Use a real Git repository to distinguish pinned code from local shadowing."""
+
+    def __init__(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name) / "target"
+        self.root.mkdir(parents=True)
+        self.target_script_dir = self.root / "scripts" / "pm"
+        self.target_script_dir.mkdir(parents=True)
+        self.script_dir = Path(self.tmp.name) / "entrypoint" / "scripts" / "pm"
+        self.script_dir.mkdir(parents=True)
+        for name in (
+            "task-closeout.sh",
+            "loop.py",
+            "loop_recovery.py",
+            "loop_gate.py",
+            "loop_policy.py",
+            "loop_contracts.py",
+            "loop_traceability.py",
+            "loop-policy.v1.json",
+        ):
+            shutil.copy2(HERE / name, self.target_script_dir / name)
+        shutil.copy2(HERE / "task-closeout.sh", self.script_dir / "task-closeout.sh")
+        (self.target_script_dir / "task-closeout.sh").chmod(0o755)
+        (self.script_dir / "task-closeout.sh").chmod(0o755)
+        (self.root / "doc" / "engineering").mkdir(parents=True)
+        (self.root / "doc" / "engineering" / "spec.md").write_text(
+            "<a id=\"acceptance\"></a>\n# Acceptance\n", encoding="utf-8"
+        )
+        self.marker = self.root / "downstream-mutation.log"
+        self.mapping_path = self.root / ".pm" / "github-project-sync" / "tasks.json"
+        self.mapping_path.parent.mkdir(parents=True)
+        self.mapping_path.write_text(json.dumps({
+            "version": 1,
+            "tasks": {
+                TASK_UID: {
+                    "task_uid": TASK_UID,
+                    "repository": REPOSITORY,
+                    "issue_number": 3671,
+                    "owner_role": "repository_health_engineer",
+                    "status": "in_progress",
+                    "workflow_phase": "in_progress",
+                    "canonical_worktree": str(self.root.resolve()),
+                    "worktree_hint": str(self.root.resolve()),
+                    "task_branch": "main",
+                    "change_id": CHANGE_ID,
+                    "traceability_mode": "aggregate",
+                }
+            },
+        }, sort_keys=True), encoding="utf-8")
+        self._write_remote_stubs()
+        self._git("init", "-q", "-b", "main")
+        self._git("config", "user.name", "Pinned Fixture")
+        self._git("config", "user.email", "pinned@example.invalid")
+        self._git("add", ".")
+        self._git("commit", "-qm", "pinned closeout fixture")
+        self.remote = self.root.parent / "origin.git"
+        subprocess.run(["git", "init", "-q", "--bare", str(self.remote)], check=True)
+        self._git("remote", "add", "origin", str(self.remote))
+        self._publish_head()
+
+    def _git(self, *args):
+        return subprocess.check_output(
+            ["git", "-C", str(self.root), *args], text=True
+        ).strip()
+
+    def _publish_head(self):
+        self._git("push", "-q", "origin", "HEAD:main")
+        head = self._git("rev-parse", "HEAD")
+        self._git("update-ref", "refs/remotes/origin/main", head)
+        return head
+
+    def _write_remote_stubs(self):
+        workflow = self.script_dir / "github-project-workflow.sh"
+        workflow.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -eu\n"
+            "if [[ \"${OASIS7_TRACEABILITY_CONTEXT_ONLY:-0}\" != 1 ]]; then\n"
+            "  printf '%s\\n' audit >> \"$OASIS7_CLOSEOUT_MARKER\"\n"
+            "  printf '%s\\n' '{\"status\":\"ok\"}'\n"
+            "else\n"
+            "  python3 - \"$PM_ROOT_DIR\" \"$@\" <<'PY'\n"
+            "import json, sys\n"
+            "from pathlib import Path\n"
+            "root, uid = Path(sys.argv[1]), sys.argv[-1]\n"
+            "task = json.loads((root / '.pm/github-project-sync/tasks.json').read_text())['tasks'][uid]\n"
+            "print(json.dumps({'status': 'ok', 'task_uid': uid, 'selected_task': task}))\n"
+            "PY\n"
+            "fi\n",
+            encoding="utf-8",
+        )
+        workflow.chmod(0o755)
+        closeout = self.script_dir / "github-project-task.py"
+        closeout.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json\n"
+            "import os\n"
+            "import sys\n"
+            "\n"
+            "uid = sys.argv[sys.argv.index('--task-uid') + 1]\n"
+            "with open(os.environ['OASIS7_CLOSEOUT_MARKER'], 'a', encoding='utf-8') as handle:\n"
+            "    handle.write('closeout\\n')\n"
+            "print(json.dumps({'task_uid': uid, 'status': 'deferred', 'issue_url': 'fixture://closeout'}))\n",
+            encoding="utf-8",
+        )
+        closeout.chmod(0o755)
+
+    def bind(self, policy_commit):
+        mapping = json.loads(self.mapping_path.read_text(encoding="utf-8"))
+        mapping["tasks"][TASK_UID]["loop_binding"] = {
+            "task_uid": TASK_UID,
+            "change_id": CHANGE_ID,
+            "policy_commit": policy_commit,
+        }
+        self.mapping_path.write_text(json.dumps(mapping, sort_keys=True), encoding="utf-8")
+
+    def pin_helper(self, result):
+        status, blocker = result
+        self.target_script_dir.joinpath("loop_traceability.py").write_text(
+            "def validate_aggregate(*args, **kwargs):\n"
+            f"    return {{'status': {status!r}, 'blockers': {[blocker] if blocker else []!r}}}\n",
+            encoding="utf-8",
+        )
+        self._git("add", "scripts/pm/loop_traceability.py")
+        self._git("commit", "-qm", "update pinned helper fixture")
+        return self._publish_head()
+
+    def shadow_helper(self, result):
+        status, blocker = result
+        self.script_dir.joinpath("loop_traceability.py").write_text(
+            "def validate_aggregate(*args, **kwargs):\n"
+            f"    return {{'status': {status!r}, 'blockers': {[blocker] if blocker else []!r}}}\n",
+            encoding="utf-8",
+        )
+
+    def record(self, value):
+        return self.write_json("record.json", value)
+
+    def write_json(self, name, value):
+        path = self.root / name
+        path.write_text(json.dumps(value, sort_keys=True), encoding="utf-8")
+        return path
+
+    def run(self, *extra):
+        command = [
+            str(self.script_dir / "task-closeout.sh"),
+            "--role", "repository_health_engineer",
+            "--task-uid", TASK_UID,
+            "--to-status", "deferred",
+            "--verification-profile", "fixture_repository_state",
+            *extra,
+        ]
+        environment = dict(os.environ)
+        environment["PM_ROOT_DIR"] = str(self.root)
+        environment["OASIS7_CLOSEOUT_MARKER"] = str(self.marker)
+        return subprocess.run(
+            command, cwd=self.root, env=environment, text=True, capture_output=True
+        )
+
+
 class TraceabilityTests(unittest.TestCase):
     def setUp(self):
         self.api = _load_api()
@@ -598,6 +758,165 @@ class TraceabilityTests(unittest.TestCase):
         result = self.aggregate(candidate, evidence, record)
         self.assert_blocked_for(result, "feedback", "clearance")
 
+    def test_sys_w2_001_traceability_canonical_bytes_preserve_utf8(self):
+        value = {"文本": "玩家"}
+        expected = json.dumps(
+            value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode("utf-8")
+        self.assertEqual(self.api.canonical_bytes(value), expected)
+        self.assertEqual(
+            self.api.canonical_digest(value),
+            "sha256:" + hashlib.sha256(expected).hexdigest(),
+        )
+
+    def test_sys_w2_002_consumed_clause_repository_must_be_canonical(self):
+        record = deepcopy(self.record)
+        consumed = _contract_ref()
+        consumed["revision"] = 1
+        record["consumed_clause_refs"] = [consumed]
+        positive = self.leaf(record, self.refresh_record_binding(record))
+        self.assertEqual(positive.get("status"), "passed", positive)
+
+        foreign = deepcopy(record)
+        foreign["consumed_clause_refs"][0]["repository"] = "foreign/repo"
+        negative = self.leaf(foreign, self.refresh_record_binding(foreign))
+        self.assert_blocked_for(negative, "consumed clause reference", "repository")
+
+    def test_sys_w2_003_published_contract_uses_declared_frozen_source_head(self):
+        source_a = "a" * 40
+        source_b = "b" * 40
+        raw_a = b'<a id="frozen-clause"></a>\n# Contract A\n'
+        raw_b = b'<a id="frozen-clause"></a>\n# Contract B\n'
+        digest_a = "sha256:" + hashlib.sha256(raw_a).hexdigest()
+        digest_b = "sha256:" + hashlib.sha256(raw_b).hexdigest()
+        contract = {
+            "schema": "oasis7.loop-contract/v1",
+            "contract_id": "engineering-workflow",
+            "revision": 1,
+            "source_head": source_b,
+            "merged_head": source_b,
+            "content_refs": [{
+                "path": "contract.md",
+                "fragment": "frozen-clause",
+                "clauses": ["QW2-1"],
+                "sha256": digest_b,
+            }],
+        }
+        publication_digest = self.api.published_contract_digest(contract)
+        reference = _contract_ref(path="contract.md", fragment="frozen-clause", clause_id="QW2-1")
+        reference.update({
+            "revision": 1,
+            "contract_digest": publication_digest,
+            "source_commit": source_a,
+        })
+
+        class PublicationAuthority:
+            reader_kind = "github_live_query"
+
+            def __call__(self, _reference):
+                return {
+                    "reader_kind": self.reader_kind,
+                    "comment": {"body": json.dumps({
+                        "marker": "oasis7-loop-contract",
+                        "contract": contract,
+                        "contract_digest": publication_digest,
+                    })},
+                }
+
+        calls = []
+
+        def contract_reader(observed):
+            calls.append(deepcopy(observed))
+            selected = observed.get("source_commit")
+            return {
+                "status": "passed",
+                "source_commit": selected,
+                "source_digest": digest_b if selected == source_b else digest_a,
+            }
+
+        errors = self.api._validate_published_contract(
+            reference,
+            PublicationAuthority(),
+            contract_reader,
+            source_commit=source_a,
+        )
+        self.assertEqual(errors, [], errors)
+        self.assertTrue(calls, "published content must be read back")
+        self.assertTrue(
+            all(call.get("source_commit") == source_b for call in calls),
+            calls,
+        )
+
+    def test_sys_w2_004_feedback_requires_structured_clearance_chain(self):
+        variants = [
+            ("malformed feedback", {"blocking": True, "clearance": None}),
+            ("missing finding chain", [{"blocking": True, "clearance": {"status": "passed"}}]),
+        ]
+        for label, feedback in variants:
+            with self.subTest(label=label):
+                record = deepcopy(self.record)
+                record["feedback"] = feedback
+                self.refresh_record_binding(record)
+                candidate, evidence = self.complete_aggregate(record)
+                result = self.aggregate(candidate, evidence, record)
+                self.assert_blocked_for(result, "feedback")
+
+    def test_sys_w2_005_reverse_consumers_reject_forged_caller_projection(self):
+        readers = FixtureReaders(self.record)
+        expected = [{"task_uid": LEAF_UID, "change_id": CHANGE_ID}]
+        original = readers.authority
+
+        def authority(*args, **kwargs):
+            result = original(*args, **kwargs)
+            result["reverse_consumers"] = deepcopy(expected)
+            return result
+
+        readers.authority = authority
+        reference = _contract_ref()
+        reference["reverse_consumers"] = deepcopy(expected)
+        positive = self.api.reverse_consumers(
+            reference,
+            authority_reader=readers.authority,
+            reader_kind="fixture_authority",
+        )
+        self.assertEqual(positive.get("status"), "passed", positive)
+        self.assertEqual(positive.get("consumers"), expected)
+
+        forged = deepcopy(reference)
+        forged["reverse_consumers"] = [{
+            "task_uid": "task_" + "d" * 32,
+            "change_id": "forged",
+        }]
+        negative = self.api.reverse_consumers(
+            forged,
+            authority_reader=readers.authority,
+            reader_kind="fixture_authority",
+        )
+        self.assert_blocked_for(negative, "reverse", "consumer")
+
+    def test_sys_w2_006_record_requires_obligation_and_mapping_ownership(self):
+        variants = [
+            ("obligation.required", lambda item: item.pop("required", None), "required"),
+            ("obligation.owner_loop", lambda item: item.pop("owner_loop", None), "owner_loop"),
+            ("obligation.owner_role", lambda item: item.pop("owner_role", None), "owner_role"),
+            ("mapping_slot.owner_loop", lambda item: item.pop("owner_loop", None), "owner_loop"),
+            ("mapping_slot.owner_role", lambda item: item.pop("owner_role", None), "owner_role"),
+        ]
+        for label, mutate, token in variants:
+            with self.subTest(field=label):
+                record = deepcopy(self.record)
+                items = (
+                    record["required_obligations"]
+                    if label.startswith("obligation")
+                    else record["mapping_slots"]
+                )
+                for item in items:
+                    mutate(item)
+                self.refresh_record_binding(record)
+                candidate, evidence = self.complete_aggregate(record)
+                result = self.aggregate(candidate, evidence, record)
+                self.assert_blocked_for(result, token)
+
     def test_optional_binding_absence_is_valid_for_ordinary_single_leaf(self):
         binding = _binding()
         binding.pop("coordination_ref")
@@ -699,6 +1018,19 @@ class TraceabilityTests(unittest.TestCase):
         candidate, evidence = self.complete_aggregate()
         candidate["applicability_matrix"][0]["leaf_evidence_digest"] = "sha256:" + "9" * 64
         self.assert_blocked_for(self.aggregate(candidate, evidence), "evidence_digest", "matrix")
+
+    def test_rh_w2_003_matrix_requires_stable_leaf_evidence_locator(self):
+        variants = [
+            ("missing", lambda row: row.pop("leaf_evidence_locator", None)),
+            ("empty", lambda row: row.update(leaf_evidence_locator="")),
+            ("non-string", lambda row: row.update(leaf_evidence_locator={"comment_id": 1})),
+        ]
+        for label, mutate in variants:
+            with self.subTest(locator=label):
+                candidate, evidence = self.complete_aggregate()
+                mutate(candidate["applicability_matrix"][0])
+                result = self.aggregate(candidate, evidence)
+                self.assert_blocked_for(result, "leaf_evidence_locator")
 
     def test_aggregate_rejects_duplicate_evidence_and_evidence_candidate_drift(self):
         candidate, evidence = self.complete_aggregate()
@@ -1038,18 +1370,13 @@ class TraceabilityTests(unittest.TestCase):
         self.assertFalse(fixture.marker.exists(), output)
 
     def test_closeout_failed_aggregate_preflight_blocks_before_remote_mutation(self):
-        fixture = CloseoutFixture()
+        fixture = PinnedCloseoutFixture()
         self.addCleanup(fixture.tmp.cleanup)
-        mapping_path = fixture.root / ".pm" / "github-project-sync" / "tasks.json"
-        mapping = json.loads(mapping_path.read_text())
-        mapping["tasks"][TASK_UID]["loop_binding"] = {"policy_commit": SOURCE_OID}
-        mapping_path.write_text(json.dumps(mapping, sort_keys=True))
         record = fixture.record(self.record)
         candidate = fixture.write_json("candidate.json", _candidate(self.record))
-        (fixture.script_dir / "loop_traceability.py").write_text(
-            "def validate_aggregate(*args, **kwargs):\n"
-            "    return {'status': 'blocked', 'blockers': ['forced aggregate preflight sentinel']}\n"
-        )
+        pinned_blocked = fixture.pin_helper(("blocked", "forced aggregate preflight sentinel"))
+        fixture.bind(pinned_blocked)
+        fixture.shadow_helper(("passed", ""))
         result = fixture.run(
             "--traceability-mode", "aggregate",
             "--traceability-record", str(record),
@@ -1058,6 +1385,47 @@ class TraceabilityTests(unittest.TestCase):
         output = result.stdout + result.stderr
         self.assertNotEqual(result.returncode, 0, output)
         self.assertIn("forced aggregate preflight sentinel", output)
+        self.assertFalse(fixture.marker.exists(), output)
+
+    def test_rh_w2_002_closeout_rejects_divergent_unpinned_helper(self):
+        fixture = PinnedCloseoutFixture()
+        self.addCleanup(fixture.tmp.cleanup)
+        record = fixture.record(self.record)
+        candidate, evidence = self.complete_aggregate()
+        candidate_payload = fixture.write_json(
+            "candidate.json", {"candidate": candidate, "evidence": evidence}
+        )
+        pinned_pass = fixture.pin_helper(("passed", ""))
+        fixture.bind(pinned_pass)
+        fixture.shadow_helper(("blocked", "mutable-helper-sentinel"))
+        positive = fixture.run(
+            "--traceability-mode", "aggregate",
+            "--traceability-record", str(record),
+            "--traceability-candidate", str(candidate_payload),
+        )
+        positive_output = positive.stdout + positive.stderr
+        self.assertEqual(positive.returncode, 0, positive_output)
+        self.assertEqual(
+            fixture.marker.read_text(encoding="utf-8").splitlines(),
+            ["audit", "closeout", "audit"],
+            positive_output,
+        )
+
+        fixture.marker.unlink()
+        pinned_blocked = fixture.pin_helper(("blocked", "pinned-helper-sentinel"))
+        fixture.bind(pinned_blocked)
+        fixture.shadow_helper(("passed", ""))
+        negative = fixture.run(
+            "--traceability-mode", "aggregate",
+            "--traceability-record", str(record),
+            "--traceability-candidate", str(candidate_payload),
+        )
+        output = negative.stdout + negative.stderr
+        self.assertNotEqual(negative.returncode, 0, output)
+        self.assertTrue(
+            "pinned-helper-sentinel" in output,
+            output,
+        )
         self.assertFalse(fixture.marker.exists(), output)
 
     def test_closeout_rejects_valid_record_for_another_selected_task(self):

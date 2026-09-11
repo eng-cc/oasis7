@@ -123,6 +123,11 @@ def _trusted_module(root, target, binding, name):
     return module
 
 
+def trusted_module(root, target, binding, name):
+    """Expose the single pinned-loader boundary to lifecycle callers."""
+    return _trusted_module(root, target, binding, name)
+
+
 def dependency_issue(repository, uid):
     # Search results are locators, not identity; a full window is not complete.
     hits = json.loads(subprocess.check_output(['gh', 'issue', 'list', '-R', repository, '--state', 'all', '--search', uid + ' in:body', '--json', 'number', '--limit', '100'], text=True))

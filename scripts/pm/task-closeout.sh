@@ -178,8 +178,10 @@ run_traceability_preflight() {
   # after selected-task context and before any remote lifecycle write.
   local output
   output="$(python3 - "$ROOT_DIR" "$TASK_UID" "$TRACEABILITY_MODE" "$TRACEABILITY_RECORD" "$TRACEABILITY_CANDIDATE" "$SCRIPT_DIR" "$SELECTED_TRACEABILITY_CONTEXT_JSON" <<'PY'
+import contextlib
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -315,15 +317,6 @@ if mode == 'aggregate':
     if isinstance(declared_candidate, dict) and candidate_payload != declared_candidate:
         raise SystemExit('traceability aggregate candidate does not match declared candidate')
 
-helper_path = script_dir / 'loop_traceability.py'
-if not helper_path.is_file():
-    raise SystemExit('effective traceability helper is unavailable: ' + str(helper_path))
-spec = importlib.util.spec_from_file_location('closeout_loop_traceability', helper_path)
-if spec is None or spec.loader is None:
-    raise SystemExit('effective traceability helper cannot be loaded')
-helper = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(helper)
-
 record_source_commit = ((record.get('coordination_ref') or {}).get('source_commit')
                         if isinstance(record, dict) else None)
 effective_binding = authoritative_binding if isinstance(authoritative_binding, dict) else binding
@@ -332,60 +325,128 @@ if not isinstance(record_source_commit, str):
     raise SystemExit('traceability closeout requires immutable record_source_commit')
 if not isinstance(effective_tool_commit, str):
     raise SystemExit('traceability closeout requires immutable effective_tool_commit')
+import tempfile
 
-def live_authority_reader(reference):
-    factory = getattr(helper, 'live_authority_reader', None)
-    if callable(factory):
-        return factory(root)(reference)
-    authority = (getattr(helper, 'GitHubAuthorityReader', None)
-                 or getattr(helper, 'GitHubAuthority', None))
-    if callable(authority):
-        return authority(root)(reference)
-    raise RuntimeError('live traceability authority reader unavailable')
+def run_pinned_preflight():
+    tool_root = None
+    worktree_added = False
+    failure = None
+    result = None
+    temporary = None
+    try:
+        temporary = tempfile.TemporaryDirectory(prefix='oasis7-loop-tools-')
+        with contextlib.nullcontext(temporary.name) as temporary_path:
+            tool_root = Path(temporary_path) / 'tools'
+            subprocess.run(
+                ['git', '-C', str(root), 'fetch', '--no-tags', 'origin', 'main:refs/remotes/origin/main'],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ['git', '-C', str(root), 'worktree', 'add', '--detach', str(tool_root), effective_tool_commit],
+                check=True,
+                capture_output=True,
+            )
+            worktree_added = True
+            tool_scripts = tool_root / 'scripts' / 'pm'
+            if not tool_scripts.is_dir():
+                raise ValueError('effective traceability tool root is unavailable')
+            sys.path.insert(0, str(tool_scripts))
+            facade_spec = importlib.util.spec_from_file_location(
+                'closeout_loop_facade', tool_scripts / 'loop.py'
+            )
+            if facade_spec is None or facade_spec.loader is None:
+                raise ValueError('effective loop facade cannot be loaded')
+            facade = importlib.util.module_from_spec(facade_spec)
+            facade_spec.loader.exec_module(facade)
+            trusted_loader = getattr(facade, 'trusted_module', None)
+            if not callable(trusted_loader):
+                raise ValueError('effective loop facade lacks trusted_module')
+            helper = trusted_loader(tool_root, root, effective_binding, 'loop_traceability')
 
-def live_contract_reader(reference):
-    factory = getattr(helper, 'live_contract_reader', None)
-    if callable(factory):
-        return factory(root)(reference)
-    authority = (getattr(helper, 'ImmutableSourceReader', None)
-                 or getattr(helper, 'GitHubContractReader', None))
-    if callable(authority):
-        return authority(root, record_source_commit)(reference)
-    raise RuntimeError('live traceability contract reader unavailable')
+            def live_authority_reader(reference):
+                factory = getattr(helper, 'live_authority_reader', None)
+                if callable(factory):
+                    return factory(root)(reference)
+                authority = (getattr(helper, 'GitHubAuthorityReader', None)
+                             or getattr(helper, 'GitHubAuthority', None))
+                if callable(authority):
+                    return authority(root)(reference)
+                raise RuntimeError('live traceability authority reader unavailable')
 
-if mode == 'aggregate':
-    validate = getattr(helper, 'validate_aggregate', None)
-    if not callable(validate):
-        raise SystemExit('effective traceability helper lacks validate_aggregate')
-    result = validate(
-        record,
-        candidate,
-        evidence,
-        authority_reader=live_authority_reader,
-        contract_reader=live_contract_reader,
-        source_commit=effective_tool_commit,
-        effective_tool_commit=effective_tool_commit,
-        record_source_commit=record_source_commit,
-    )
-else:
-    validate = getattr(helper, 'validate_leaf', None)
-    if not callable(validate):
-        raise SystemExit('effective traceability helper lacks validate_leaf')
-    result = validate(
-        record,
-        effective_binding,
-        authority_reader=live_authority_reader,
-        contract_reader=live_contract_reader,
-        source_commit=effective_tool_commit,
-        effective_tool_commit=effective_tool_commit,
-        record_source_commit=record_source_commit,
-    )
-if not isinstance(result, dict):
-    raise SystemExit('traceability preflight returned no structured result')
-if result.get('status') != 'passed':
-    blockers = result.get('blockers') or ['traceability preflight blocked']
-    raise SystemExit('; '.join(str(item) for item in blockers))
-print(json.dumps({'status': 'passed', 'mode': mode, 'reader_kind': 'github_live_query'}, sort_keys=True))
+            def live_contract_reader(reference):
+                factory = getattr(helper, 'live_contract_reader', None)
+                if callable(factory):
+                    return factory(root)(reference)
+                authority = (getattr(helper, 'ImmutableSourceReader', None)
+                             or getattr(helper, 'GitHubContractReader', None))
+                if callable(authority):
+                    return authority(root, record_source_commit)(reference)
+                raise RuntimeError('live traceability contract reader unavailable')
+
+            if mode == 'aggregate':
+                validate = getattr(helper, 'validate_aggregate', None)
+                if not callable(validate):
+                    raise ValueError('effective traceability helper lacks validate_aggregate')
+                result = validate(
+                    record,
+                    candidate,
+                    evidence,
+                    authority_reader=live_authority_reader,
+                    contract_reader=live_contract_reader,
+                    source_commit=effective_tool_commit,
+                    effective_tool_commit=effective_tool_commit,
+                    record_source_commit=record_source_commit,
+                )
+            else:
+                validate = getattr(helper, 'validate_leaf', None)
+                if not callable(validate):
+                    raise ValueError('effective traceability helper lacks validate_leaf')
+                result = validate(
+                    record,
+                    effective_binding,
+                    authority_reader=live_authority_reader,
+                    contract_reader=live_contract_reader,
+                    source_commit=effective_tool_commit,
+                    effective_tool_commit=effective_tool_commit,
+                    record_source_commit=record_source_commit,
+                )
+            if not isinstance(result, dict):
+                raise ValueError('traceability preflight returned no structured result')
+            if result.get('status') != 'passed':
+                blockers = result.get('blockers') or ['traceability preflight blocked']
+                raise ValueError('; '.join(str(item) for item in blockers))
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError, ImportError, subprocess.CalledProcessError) as exc:
+        failure = str(exc)
+    finally:
+        if worktree_added and tool_root is not None:
+            try:
+                cleanup = subprocess.run(
+                    ['git', '-C', str(root), 'worktree', 'remove', str(tool_root)],
+                    text=True,
+                    capture_output=True,
+                )
+                cleanup_failure = None
+                if cleanup.returncode:
+                    detail = (cleanup.stderr or cleanup.stdout or '').strip()
+                    cleanup_failure = 'effective traceability tool worktree cleanup failed'
+                    if detail:
+                        cleanup_failure += ': ' + detail
+            except OSError as exc:
+                cleanup_failure = 'effective traceability tool worktree cleanup failed: ' + str(exc)
+            if cleanup_failure:
+                failure = (failure + '; ' if failure else '') + cleanup_failure
+        if temporary is not None:
+            try:
+                temporary.cleanup()
+            except OSError as exc:
+                cleanup_failure = 'effective traceability temporary directory cleanup failed: ' + str(exc)
+                failure = (failure + '; ' if failure else '') + cleanup_failure
+    if failure:
+        raise SystemExit(failure)
+    print(json.dumps({'status': 'passed', 'mode': mode, 'reader_kind': 'github_live_query'}, sort_keys=True))
+
+run_pinned_preflight()
 PY
   )" || die "traceability $TRACEABILITY_MODE preflight failed before closeout mutation"
   TRACEABILITY_RESULT_JSON="$output"
