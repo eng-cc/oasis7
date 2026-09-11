@@ -11,16 +11,26 @@ use serde_json::Value as JsonValue;
 use std::collections::BTreeMap;
 use std::fmt;
 
+#[path = "cognition_economy_provisioning.rs"]
+mod provisioning;
 #[path = "cognition_economy_transitions.rs"]
 mod transitions;
 #[path = "cognition_economy_validation.rs"]
 mod validation;
+
+pub use provisioning::{
+    CognitionProvisioningEventV1, CognitionProvisioningReceiptV1, CognitionProvisioningRecordV1,
+    CognitionProvisioningRequestV1,
+};
 
 pub const COGNITION_ECONOMY_SCHEMA_VERSION: &str = "cognition-economy.v1";
 pub const COGNITION_LEASE_SCHEMA_VERSION: &str = "cognition-lease.v1";
 pub const COGNITION_RECEIPT_SCHEMA_VERSION: &str = "cognition-receipt.v1";
 pub const COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION: &str = "fixed_unit_experimental";
 pub const COGNITION_RESOURCE_VERSION_V1: &str = "cognition_units.v1";
+pub const COGNITION_PROVISIONING_SCHEMA_VERSION: &str = "cognition-provisioning.v1";
+pub const COGNITION_PROVISIONING_RECEIPT_SCHEMA_VERSION: &str = "cognition-provisioning-receipt.v1";
+pub const COGNITION_PROVISIONING_EVENT_SCHEMA_VERSION: &str = "cognition-provisioning-event.v1";
 const COGNITION_DEFAULT_PURPOSE: &str = "provider_cognition";
 const COGNITION_DEFAULT_SCOPE: &str = "agent_turn";
 const COGNITION_LEGACY_AUTHORITY_CONTEXT: &str = "legacy-unbound";
@@ -34,6 +44,16 @@ const COGNITION_ECONOMY_LEASE_ID_DOMAIN: &str = "oasis7.cognition.economy.lease-
 const COGNITION_ECONOMY_OPERATION_DOMAIN: &str = "oasis7.cognition.economy.operation.v1";
 const COGNITION_ECONOMY_RECEIPT_ID_DOMAIN: &str = "oasis7.cognition.economy.receipt-id.v1";
 const COGNITION_ECONOMY_RECEIPT_DOMAIN: &str = "oasis7.cognition.economy.receipt.v1";
+const COGNITION_PROVISIONING_AUTHORITY_DOMAIN: &str =
+    "oasis7.cognition.economy.provisioning-authority.v1";
+const COGNITION_PROVISIONING_DIGEST_DOMAIN: &str = "oasis7.cognition.economy.provisioning.v1";
+const COGNITION_PROVISIONING_RECEIPT_ID_DOMAIN: &str =
+    "oasis7.cognition.economy.provisioning-receipt-id.v1";
+const COGNITION_PROVISIONING_RECEIPT_DOMAIN: &str =
+    "oasis7.cognition.economy.provisioning-receipt.v1";
+const COGNITION_PROVISIONING_EVENT_DOMAIN: &str = "oasis7.cognition.economy.provisioning-event.v1";
+const COGNITION_PROVISIONING_JOURNAL_DOMAIN: &str =
+    "oasis7.cognition.economy.provisioning-journal.v1";
 const MAX_IDENTITY_BYTES: usize = 256;
 
 fn default_resource_version() -> String {
@@ -58,6 +78,13 @@ fn default_authority_context() -> String {
 
 fn default_world_binding() -> String {
     COGNITION_LEGACY_WORLD_BINDING.to_string()
+}
+
+fn default_provisioning_head_digest() -> String {
+    economy_digest(
+        COGNITION_PROVISIONING_JOURNAL_DOMAIN,
+        &(0_u64, Vec::<CognitionProvisioningEventV1>::new()),
+    )
 }
 
 fn bounded_identity(value: &str) -> bool {
@@ -701,6 +728,18 @@ pub struct CognitionEconomyStateV1 {
     pub schema_version: String,
     #[serde(default)]
     pub balances: BTreeMap<String, BTreeMap<String, CognitionResourceBalanceV1>>,
+    /// Immutable one-time allowances installed by Runtime authority before a
+    /// provider turn.  The map key is the authority-supplied provision id.
+    #[serde(default)]
+    pub provisions: BTreeMap<String, CognitionProvisioningRecordV1>,
+    #[serde(default)]
+    pub provision_receipts: BTreeMap<String, CognitionProvisioningReceiptV1>,
+    #[serde(default)]
+    pub provision_journal: Vec<CognitionProvisioningEventV1>,
+    #[serde(default)]
+    pub provision_head_seq: u64,
+    #[serde(default = "default_provisioning_head_digest")]
+    pub provision_head_digest: String,
     #[serde(default)]
     pub leases: BTreeMap<String, CognitionLeaseV1>,
     #[serde(default)]
@@ -724,6 +763,11 @@ impl Default for CognitionEconomyStateV1 {
         Self {
             schema_version: COGNITION_ECONOMY_SCHEMA_VERSION.to_string(),
             balances: BTreeMap::new(),
+            provisions: BTreeMap::new(),
+            provision_receipts: BTreeMap::new(),
+            provision_journal: Vec::new(),
+            provision_head_seq: 0,
+            provision_head_digest: default_provisioning_head_digest(),
             leases: BTreeMap::new(),
             receipts: BTreeMap::new(),
             idempotency: BTreeMap::new(),
@@ -914,6 +958,13 @@ impl CognitionEconomyStateV1 {
         if self.reserved_balance(account_id.as_str(), resource.as_str()) != 0 {
             return Err(CognitionEconomyError::InvalidState(
                 "cognition_balance_has_active_reservation",
+            ));
+        }
+        if self.provisions.values().any(|provision| {
+            provision.request.account_id == account_id && provision.request.resource == resource
+        }) {
+            return Err(CognitionEconomyError::Conflict(
+                "cognition_provisioning_balance_immutable",
             ));
         }
         self.balances.entry(account_id).or_default().insert(

@@ -4,7 +4,7 @@ use super::super::error::WorldError;
 use super::World;
 use super::cognition_economy::{
     CognitionEconomyError, CognitionEconomyStateV1, CognitionLeaseRequestV1, CognitionLeaseV1,
-    CognitionReceiptV1,
+    CognitionProvisioningReceiptV1, CognitionProvisioningRequestV1, CognitionReceiptV1,
 };
 
 fn world_economy_error(error: CognitionEconomyError) -> WorldError {
@@ -45,6 +45,54 @@ impl World {
         transaction.persist_runtime_transaction_if_configured()?;
         *self = transaction;
         Ok(())
+    }
+
+    /// Install one Runtime-authorized cognition allowance for a live Agent's
+    /// capability owner.  The owner binding and current world identity are
+    /// derived from Runtime state so callers cannot fund an arbitrary account
+    /// or carry an allowance across a reorg/generation boundary.
+    pub fn provision_cognition_for_agent(
+        &mut self,
+        agent_id: &str,
+        provision_id: impl Into<String>,
+        authority_context: impl Into<String>,
+        allowance: u64,
+    ) -> Result<CognitionProvisioningReceiptV1, WorldError> {
+        if !self.state.agents.contains_key(agent_id) {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "cognition provisioning requires a live agent".to_string(),
+            });
+        }
+        let identity = self
+            .capability_revocation_state
+            .agent_identities
+            .get(agent_id)
+            .ok_or_else(|| WorldError::DistributedValidationFailed {
+                reason: "cognition provisioning requires a live capability identity".to_string(),
+            })?
+            .clone();
+        let binding = self.current_cognition_runtime_binding()?;
+        let request = CognitionProvisioningRequestV1::new(
+            provision_id,
+            identity.owner_binding.clone(),
+            identity.owner_binding,
+            identity.generation,
+            binding.world_id,
+            binding.branch_id,
+            binding.reorg_epoch,
+            allowance,
+            authority_context,
+        );
+        let mut transaction = self.clone();
+        let mut economy = transaction.cognition_economy()?;
+        let receipt = economy
+            .provision(request, transaction.state.time)
+            .map_err(world_economy_error)?;
+        transaction.cognition["cognition_economy"] =
+            economy.snapshot_json().map_err(world_economy_error)?;
+        transaction.persist_runtime_transaction_if_configured()?;
+        *self = transaction;
+        Ok(receipt)
     }
 
     pub fn reserve_cognition_lease(
