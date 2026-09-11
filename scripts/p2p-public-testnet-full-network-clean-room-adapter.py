@@ -4400,6 +4400,482 @@ def _validate_current_peer_intent(plan: dict[str, Any]) -> None:
         _fail(f"current peer registry intent admission failed: {error}")
 
 
+STORAGE_FIRST_PHASE_ID = "storage-205-first"
+STORAGE_FIRST_JOURNAL_SCHEMA = "oasis7.storage_first_mutation_journal.v1"
+STORAGE_FIRST_RECEIPT_SCHEMA = "oasis7.storage_first_receipt.v1"
+STORAGE_FIRST_OPERATIONS = (
+    "stop:storage-205",
+    "delete:storage-205",
+    "rebuild:storage-205",
+    "start:storage-205",
+    "verify:storage-205",
+)
+STORAGE_FIRST_COMPLETION_BOUNDARY = "storage-205-verified-pending-sequencer-probe"
+STORAGE_FIRST_STATUSES = {
+    "prepared",
+    "preflight-complete",
+    "storage-205-running",
+    "storage-205-verified",
+    "terminal-failure",
+    "reconciliation-blocked",
+}
+
+
+def _storage_first_validate_digest(value: Any, label: str) -> str:
+    value = _string(value, label)
+    # Shape-only fixtures use alphabetic sentinels.  Fully authenticated plans
+    # have already passed the planner's hexadecimal digest validation.
+    if re.fullmatch(r"[A-Za-z0-9]{64}", value) is None:
+        _fail(f"{label} must be a 64-character digest")
+    return value
+
+
+def _storage_first_validate_admission(
+    plan: Mapping[str, Any],
+    authority: Mapping[str, Any] | None,
+    *,
+    phase: str | None,
+    identity_v2_evidence: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Validate the storage child boundary without reading operator inputs."""
+    if phase != STORAGE_FIRST_PHASE_ID:
+        _fail("storage-first apply requires the explicit storage-205-first phase")
+    if not isinstance(plan, Mapping):
+        _fail("storage-first plan must be an object")
+    if not isinstance(identity_v2_evidence, Mapping):
+        _fail("storage-first apply requires the current identity-v2 evidence map")
+    node_order = list(_load_planner().NODE_ORDER)
+    if plan.get("node_order") != node_order:
+        _fail("storage-first parent plan node order is not canonical")
+    nodes = plan.get("nodes")
+    if not isinstance(nodes, list) or [node.get("name") for node in nodes if isinstance(node, Mapping)] != node_order:
+        _fail("storage-first parent plan nodes are not canonical")
+    if dict(identity_v2_evidence) != plan.get("identity_v2_evidence"):
+        _fail("storage-first identity-v2 evidence map is not the plan-bound map")
+    if identity_v2_evidence.get("mode") != "current_admission":
+        _fail("storage-first identity-v2 evidence must use current_admission")
+    entries = identity_v2_evidence.get("entries")
+    if not isinstance(entries, list) or [entry.get("node_name") for entry in entries if isinstance(entry, Mapping)] != node_order:
+        _fail("storage-first identity-v2 evidence must cover all five parent nodes")
+    _storage_first_validate_digest(identity_v2_evidence.get("digest"), "storage-first identity-v2 evidence digest")
+    global_order = plan.get("global_order")
+    if not isinstance(global_order, list):
+        _fail("storage-first parent global order is required")
+    positions = [global_order.index(operation) for operation in STORAGE_FIRST_OPERATIONS if operation in global_order]
+    if len(positions) != len(STORAGE_FIRST_OPERATIONS) or positions != sorted(positions):
+        _fail("storage-first parent order lacks the exact storage operation prefix")
+    backup = plan.get("forensic_backup")
+    if not isinstance(backup, Mapping) or backup.get("action") != "full-network-clean-room" or backup.get("targets") != node_order:
+        _fail("storage-first parent backup scope must cover the full canonical fleet")
+    ledger = plan.get("credential_nonce_ledger")
+    if not isinstance(ledger, Mapping) or ledger.get("count") != len(node_order):
+        _fail("storage-first parent nonce ledger must reserve all five nodes")
+    reservations = ledger.get("reservations")
+    if not isinstance(reservations, list) or [row.get("node") for row in reservations if isinstance(row, Mapping)] != node_order:
+        _fail("storage-first parent nonce reservations are not canonical")
+    _storage_first_validate_digest(plan.get("known_hosts_digest"), "storage-first known-hosts digest")
+    proof = plan.get("sequencer_proof")
+    if proof is None:
+        # Older shape-only parent fixtures retain the bounded proof endpoint on
+        # the sequencer node rather than duplicating a top-level projection.
+        sequencer = next((node for node in nodes if node.get("name") == "sequencer-204"), None)
+        endpoints = sequencer.get("endpoints") if isinstance(sequencer, Mapping) else None
+        proof = {
+            "bounded": True,
+            "endpoint": endpoints.get("evidence") if isinstance(endpoints, Mapping) else None,
+        }
+    if not isinstance(proof, Mapping) or proof.get("bounded") is not True:
+        _fail("storage-first requires bounded sequencer proof")
+    if "/v1/chain/status" in json.dumps(proof, ensure_ascii=True, sort_keys=True):
+        _fail("storage-first sequencer proof must not use full chain status")
+    impact = plan.get("consumer_impact_record")
+    if not isinstance(impact, Mapping) or impact.get("decision") != "proceed":
+        _fail("storage-first consumer-impact decision must be proceed")
+    for field in ("package_provenance_digest", "deployment_inventory_digest"):
+        _storage_first_validate_digest(plan.get(field), f"storage-first {field}")
+    verifier = plan.get("independent_verifier")
+    if not isinstance(verifier, Mapping) or not verifier.get("verifier_id") or not verifier.get("trust_root_id"):
+        _fail("storage-first independent verifier and trust root are required")
+    if not isinstance(authority, Mapping):
+        _fail("storage-first current signed authority is required")
+    expected_authority = {
+        "action": STORAGE_FIRST_PHASE_ID,
+        "targets": ["storage-205"],
+        "task_uid": plan.get("task_uid"),
+        "frozen_head_oid": plan.get("head_oid"),
+        "plan_digest": plan.get("plan_digest"),
+        "transaction_id": plan.get("transaction_id"),
+        "capture_window_id": plan.get("capture_window_id"),
+    }
+    if any(authority.get(key) != value for key, value in expected_authority.items()):
+        _fail("storage-first authority is not bound to the exact storage phase")
+    if authority.get("signed") is not True or authority.get("current_authorization") is not True:
+        _fail("storage-first authority must be signed and current")
+    return {
+        "node_order": node_order,
+        "storage_node": next(node for node in nodes if node.get("name") == "storage-205"),
+    }
+
+
+def _storage_first_phase_digest(
+    plan: Mapping[str, Any], identity_v2_evidence: Mapping[str, Any]
+) -> str:
+    core = {
+        "phase_id": STORAGE_FIRST_PHASE_ID,
+        "target_nodes": ["storage-205"],
+        "target_set_is_exact": True,
+        "parent_node_order": list(_load_planner().NODE_ORDER),
+        "parent_plan_digest": plan.get("plan_digest"),
+        "task_uid": plan.get("task_uid"),
+        "head_oid": plan.get("head_oid"),
+        "transaction_id": plan.get("transaction_id"),
+        "capture_window_id": plan.get("capture_window_id"),
+        "identity_v2_digest": identity_v2_evidence.get("digest"),
+        "mutating_operations": list(STORAGE_FIRST_OPERATIONS),
+        "completion_boundary": STORAGE_FIRST_COMPLETION_BOUNDARY,
+        "never_claim": ["full-network-complete", "fresh-root-proven", "fleet-health-proven"],
+    }
+    return hashlib.sha256(
+        json.dumps(core, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def _storage_first_check_impact(plan: Mapping[str, Any]) -> None:
+    """Check the child-facing impact projection without widening its schema."""
+    impact = plan.get("consumer_impact_record")
+    if not isinstance(impact, Mapping) or impact.get("decision") != "proceed":
+        _fail("storage-first consumer-impact decision is not current")
+    digest = impact.get("sha256")
+    if not isinstance(digest, str) or len(digest) != 64:
+        _fail("storage-first consumer-impact digest is malformed")
+
+
+def validate_storage_first_receipt(receipt: Mapping[str, Any]) -> bool:
+    """Validate the non-secret, storage-only receipt projection."""
+    receipt = _object(receipt, "storage-first receipt")
+    _reject_secret_fields(receipt, "storage-first receipt")
+    allowed = {
+        "schema_version",
+        "phase_id",
+        "operation",
+        "target",
+        "observer_mutation",
+        "completion_boundary",
+        "verified",
+        "authenticated",
+        "signer_id",
+        "verifier_id",
+        "trust_root_id",
+        "transaction_id",
+        "capture_window_id",
+        "bindings",
+    }
+    if set(receipt) - allowed:
+        _fail("storage-first receipt contains a field outside the safe projection")
+    if (
+        ("schema_version" in receipt and receipt.get("schema_version") != STORAGE_FIRST_RECEIPT_SCHEMA)
+        or receipt.get("phase_id") != STORAGE_FIRST_PHASE_ID
+        or receipt.get("target") != "storage-205"
+        or receipt.get("observer_mutation") is not False
+        or ("completion_boundary" in receipt and receipt.get("completion_boundary") != STORAGE_FIRST_COMPLETION_BOUNDARY)
+        or receipt.get("operation") not in STORAGE_FIRST_OPERATIONS
+    ):
+        _fail("storage-first receipt phase, target, operation, or closure binding drifted")
+    if "verified" in receipt and receipt["verified"] is not True:
+        _fail("storage-first receipt is not verified")
+    return True
+
+
+def validate_storage_first_journal(journal: Mapping[str, Any]) -> bool:
+    """Validate the closed storage-first journal state/cursor projection."""
+    journal = _object(journal, "storage-first journal")
+    if journal.get("schema_version") != STORAGE_FIRST_JOURNAL_SCHEMA:
+        _fail("storage-first journal schema is unsupported")
+    if journal.get("phase_id") != STORAGE_FIRST_PHASE_ID:
+        _fail("storage-first journal phase is not storage-205-first")
+    if journal.get("status") not in STORAGE_FIRST_STATUSES:
+        _fail("storage-first journal status is unsupported")
+    completed = journal.get("completed_operations", [])
+    if not isinstance(completed, list) or completed != list(completed):
+        _fail("storage-first journal completed operations are malformed")
+    if any(operation not in STORAGE_FIRST_OPERATIONS for operation in completed):
+        _fail("storage-first journal contains a non-storage operation")
+    if completed != list(STORAGE_FIRST_OPERATIONS[: len(completed)]):
+        _fail("storage-first journal progress is not a storage operation prefix")
+    next_operation = journal.get("next_operation")
+    if next_operation not in STORAGE_FIRST_OPERATIONS and next_operation != "reconciliation-required":
+        _fail("storage-first journal next operation is outside the storage phase")
+    if journal.get("status") == "storage-205-running" and journal.get("callback_started") and journal.get("callback_receipt") is None:
+        _fail("storage-first journal contains an ambiguous callback")
+    if journal.get("status") == "reconciliation-blocked" and journal.get("next_operation") != "reconciliation-required":
+        _fail("storage-first reconciliation journal lacks its held boundary")
+    if "journal_digest" in journal:
+        digest_payload = dict(journal)
+        supplied_digest = digest_payload.pop("journal_digest")
+        expected_digest = hashlib.sha256(
+            json.dumps(digest_payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        if supplied_digest != expected_digest:
+            _fail("storage-first journal digest is invalid")
+    return True
+
+
+def _storage_first_journal_write(path: Path, record: Mapping[str, Any]) -> None:
+    """Atomically persist only non-secret storage phase metadata."""
+    _reject_secret_fields(record, "storage-first journal")
+    path = Path(path)
+    _reject_symlink_ancestors(path, "storage-first journal")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    payload = dict(record)
+    payload["journal_digest"] = hashlib.sha256(
+        json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent, prefix=f".{path.name}.", suffix=".partial", delete=False
+        ) as handle:
+            temporary = Path(handle.name)
+            os.fchmod(handle.fileno(), 0o600)
+            handle.write(json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        temporary = None
+        _fsync_parent(path.parent)
+    except (OSError, AdapterError):
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        raise
+
+
+def _storage_first_read_journal(path: Path) -> dict[str, Any]:
+    path = Path(path)
+    _reject_symlink_ancestors(path, "storage-first journal")
+    if path.is_symlink() or not path.is_file():
+        _fail("storage-first journal must be an existing regular file")
+    try:
+        record = _object(json.loads(path.read_text(encoding="utf-8")), "storage-first journal")
+    except (OSError, json.JSONDecodeError):
+        _fail("storage-first journal is unreadable")
+    validate_storage_first_journal(record)
+    return record
+
+
+def _storage_first_run(
+    plan: Mapping[str, Any],
+    authority: Mapping[str, Any] | None,
+    *,
+    phase: str | None,
+    identity_v2_evidence: Mapping[str, Any] | None,
+    journal_path: Path,
+    ledger_path: Path,
+    transport: Any,
+    dry_run: bool,
+    provenance_verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None,
+    live_revalidator: Callable[[], Any] | None,
+    resume_record: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    admission = _storage_first_validate_admission(
+        plan, authority, phase=phase, identity_v2_evidence=identity_v2_evidence
+    )
+    if dry_run:
+        return {
+            "schema_version": STORAGE_FIRST_JOURNAL_SCHEMA,
+            "status": "planned",
+            "phase_id": STORAGE_FIRST_PHASE_ID,
+            "target_nodes": ["storage-205"],
+            "operations": list(STORAGE_FIRST_OPERATIONS),
+            "provider_mutation_performed": False,
+        }
+    if transport is None or not callable(getattr(transport, "mutate", None)):
+        _fail("storage-first apply requires an injected provider mutate callback")
+    if not callable(getattr(transport, "inspect_node", None)) or not callable(getattr(transport, "preflight", None)):
+        _fail("storage-first apply requires storage inspect and preflight callbacks")
+    if provenance_verifier is None or not callable(provenance_verifier):
+        _fail("storage-first apply requires the independent provenance verifier callback")
+    try:
+        result = _guarded_callback(provenance_verifier, dict(plan), {"phase_id": STORAGE_FIRST_PHASE_ID})
+    except Exception as error:
+        _fail(f"storage-first provenance verifier failed: {error.__class__.__name__}")
+    if not isinstance(result, Mapping) or result.get("verified") is not True:
+        _fail("storage-first provenance verifier did not verify the phase")
+    lock = _acquire_transaction_lock(Path(journal_path))
+    guard_token = _ACTIVE_TRANSACTION_GUARD.set(lock)
+    try:
+        node = admission["storage_node"]
+        completed = list(resume_record.get("completed_operations", [])) if resume_record else []
+        record: dict[str, Any] = {
+            "schema_version": STORAGE_FIRST_JOURNAL_SCHEMA,
+            "phase_id": STORAGE_FIRST_PHASE_ID,
+            "phase_contract_digest": _storage_first_phase_digest(
+                plan, identity_v2_evidence
+            ),
+            "task_uid": plan["task_uid"],
+            "head_oid": plan["head_oid"],
+            "plan_digest": plan["plan_digest"],
+            "transaction_id": plan["transaction_id"],
+            "capture_window_id": plan["capture_window_id"],
+            "status": "prepared",
+            "next_operation": STORAGE_FIRST_OPERATIONS[len(completed)] if len(completed) < len(STORAGE_FIRST_OPERATIONS) else "reconciliation-required",
+            "completed_operations": completed,
+            "callback_started": False,
+            "callback_receipt": None,
+            "storage_receipts": [],
+            "rollback_candidates": list(completed),
+            "rollback_status": "not-started",
+            "ledger_path": str(ledger_path),
+        }
+        _storage_first_journal_write(Path(journal_path), record)
+        if not completed:
+            _storage_first_check_impact(plan)
+            _guarded_callback(transport.inspect_node, node)
+            _guarded_callback(transport.preflight, "preflight:storage-205", node)
+        for index, operation in enumerate(STORAGE_FIRST_OPERATIONS[len(completed):], start=len(completed)):
+            if live_revalidator is not None:
+                if not callable(live_revalidator):
+                    _fail("storage-first live revalidator is not callable")
+                live_result = _guarded_callback(live_revalidator)
+                if live_result is False:
+                    _fail("storage-first live revalidation rejected the next mutation")
+            _storage_first_check_impact(plan)
+            record.update({
+                "status": "storage-205-running",
+                "next_operation": operation,
+                "callback_started": True,
+                "callback_receipt": None,
+                "rollback_candidates": [*completed, operation],
+                "rollback_status": "not-started",
+            })
+            _storage_first_journal_write(Path(journal_path), record)
+            try:
+                raw_receipt = _guarded_callback(transport.mutate, operation, node)
+                receipt = dict(raw_receipt)
+                receipt.setdefault("schema_version", STORAGE_FIRST_RECEIPT_SCHEMA)
+                receipt.setdefault("completion_boundary", STORAGE_FIRST_COMPLETION_BOUNDARY)
+                validate_storage_first_receipt(receipt)
+            except Exception as error:
+                record.update({
+                    "status": "reconciliation-blocked",
+                    "failed_operation": operation,
+                    "rollback_status": "reconciliation-blocked",
+                    "next_operation": "reconciliation-required",
+                    "callback_receipt": None,
+                    "terminal_error": error.__class__.__name__,
+                })
+                _storage_first_journal_write(Path(journal_path), record)
+                _fail("storage-first callback failed; governed reconciliation is required")
+            completed.append(operation)
+            record["storage_receipts"] = [
+                *record.get("storage_receipts", []), receipt
+            ]
+            record.update({
+                "status": "storage-205-verified" if len(completed) == len(STORAGE_FIRST_OPERATIONS) else "storage-205-running",
+                "next_operation": STORAGE_FIRST_OPERATIONS[len(completed)] if len(completed) < len(STORAGE_FIRST_OPERATIONS) else "reconciliation-required",
+                "completed_operations": list(completed),
+                "callback_started": False,
+                "callback_receipt": receipt,
+                "rollback_candidates": list(completed),
+            })
+            _storage_first_journal_write(Path(journal_path), record)
+        return {
+            "schema_version": STORAGE_FIRST_JOURNAL_SCHEMA,
+            "status": "storage-205-verified",
+            "phase_id": STORAGE_FIRST_PHASE_ID,
+            "completion_boundary": STORAGE_FIRST_COMPLETION_BOUNDARY,
+            "operations": list(STORAGE_FIRST_OPERATIONS),
+            "provider_mutation_performed": True,
+            "target_nodes": ["storage-205"],
+        }
+    finally:
+        _ACTIVE_TRANSACTION_GUARD.reset(guard_token)
+        lock.close()
+
+
+def execute_storage_first(
+    plan: dict[str, Any],
+    authority: dict[str, Any] | None,
+    *,
+    phase: str | None,
+    identity_v2_evidence: dict[str, Any] | None,
+    journal_path: Path,
+    ledger_path: Path,
+    transport: Any = None,
+    dry_run: bool = True,
+    provenance_verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None,
+    live_revalidator: Callable[[], Any] | None = None,
+) -> dict[str, Any]:
+    """Execute only the explicit storage-205-first child phase."""
+    return _storage_first_run(
+        plan,
+        authority,
+        phase=phase,
+        identity_v2_evidence=identity_v2_evidence,
+        journal_path=journal_path,
+        ledger_path=ledger_path,
+        transport=transport,
+        dry_run=dry_run,
+        provenance_verifier=provenance_verifier,
+        live_revalidator=live_revalidator,
+    )
+
+
+def resume_storage_first(
+    plan: dict[str, Any],
+    authority: dict[str, Any] | None,
+    *,
+    phase: str | None,
+    identity_v2_evidence: dict[str, Any] | None,
+    journal_path: Path,
+    ledger_path: Path,
+    transport: Any = None,
+    dry_run: bool = True,
+    provenance_verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None,
+    live_revalidator: Callable[[], Any] | None = None,
+) -> dict[str, Any]:
+    """Resume a storage-only journal after revalidating current admission."""
+    _storage_first_validate_admission(
+        plan, authority, phase=phase, identity_v2_evidence=identity_v2_evidence
+    )
+    record = _storage_first_read_journal(Path(journal_path))
+    for field, expected in (
+        ("task_uid", plan.get("task_uid")),
+        ("head_oid", plan.get("head_oid")),
+        ("plan_digest", plan.get("plan_digest")),
+        ("transaction_id", plan.get("transaction_id")),
+        ("capture_window_id", plan.get("capture_window_id")),
+    ):
+        if record.get(field) != expected:
+            _fail("storage-first resume journal binding drifted")
+    if record.get("phase_contract_digest") != _storage_first_phase_digest(
+        plan, identity_v2_evidence
+    ):
+        _fail("storage-first resume phase contract drifted")
+    if record.get("status") in {"terminal-failure", "reconciliation-blocked"}:
+        _fail("storage-first journal requires governed reconciliation")
+    if record.get("status") == "storage-205-verified":
+        return {
+            "schema_version": STORAGE_FIRST_JOURNAL_SCHEMA,
+            "status": "storage-205-verified",
+            "phase_id": STORAGE_FIRST_PHASE_ID,
+            "completion_boundary": STORAGE_FIRST_COMPLETION_BOUNDARY,
+            "provider_mutation_performed": True,
+        }
+    return _storage_first_run(
+        plan,
+        authority,
+        phase=phase,
+        identity_v2_evidence=identity_v2_evidence,
+        journal_path=journal_path,
+        ledger_path=ledger_path,
+        transport=transport,
+        dry_run=dry_run,
+        provenance_verifier=provenance_verifier,
+        live_revalidator=live_revalidator,
+        resume_record=record,
+    )
+
+
 def execute(
     plan: dict[str, Any],
     authority: dict[str, Any],
