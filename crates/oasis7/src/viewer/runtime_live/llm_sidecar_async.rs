@@ -359,7 +359,7 @@ impl RuntimeLlmSidecar {
         None
     }
 
-    fn provider_decision_from_async_outcome(
+    pub(super) fn provider_decision_from_async_outcome(
         &mut self,
         world: &mut RuntimeWorld,
         kernel: &mut WorldKernel,
@@ -438,6 +438,21 @@ impl RuntimeLlmSidecar {
                 llm_chat_messages: Vec::new(),
             })
         });
+        if cognition.is_none()
+            && decision_trace
+                .as_ref()
+                .is_some_and(is_budget_exhausted_wait)
+            && context.is_some()
+        {
+            // The actor's budget normalizer intentionally emits a no-effect
+            // Wait, but custom/provider lanes may not produce a response
+            // artifact for that denial.  Keep the request/lease in the
+            // sidecar recovery maps and route it through the same terminal
+            // cleanup pass as an exhausted transport; otherwise the control
+            // plane sees a bare Wait and leaves the awaiting Runtime turn
+            // occupied forever.
+            self.mark_provider_transport_exhausted(agent_id.clone());
+        }
         let mut continuation_admitted = false;
         if let Some(cognition) = cognition.as_ref() {
             if decision_trace.as_ref().is_none_or(|trace| {

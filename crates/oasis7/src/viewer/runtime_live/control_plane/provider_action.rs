@@ -377,11 +377,32 @@ impl ViewerRuntimeLiveServer {
             },
             AgentDecision::Wait | AgentDecision::WaitTicks(_) => {
                 if let Some(cognition) = decision.cognition {
-                    self.release_provider_cognition_lease_for_request(
-                        decision.agent_id.as_str(),
-                        cognition.cognition_lease.clone(),
-                        Some(&cognition.request.request_context),
-                    )
+                    // A provider response means the fixed cognition unit was
+                    // consumed even when the proposed outcome is Wait.  Keep
+                    // release for no-I/O paths such as a native budget
+                    // denial; successful Wait/WaitTicks must settle exactly
+                    // once so repeated waits cannot run at zero net charge.
+                    if decision_trace
+                        .as_ref()
+                        .is_some_and(is_budget_exhausted_wait)
+                    {
+                        self.release_provider_cognition_lease_for_request(
+                            decision.agent_id.as_str(),
+                            cognition.cognition_lease.clone(),
+                            Some(&cognition.request.request_context),
+                        )
+                    } else {
+                        let settlement = self.settle_provider_cognition_lease_for_request(
+                            decision.agent_id.as_str(),
+                            cognition.cognition_lease.clone(),
+                            Some(&cognition.request.request_context),
+                        );
+                        if settlement.is_ok() {
+                            self.llm_sidecar
+                                .clear_provider_cognition_lease(decision.agent_id.as_str());
+                        }
+                        settlement
+                    }
                     .map_err(|error| {
                         wake_handoff_error_trace(
                             decision.agent_id.as_str(),
@@ -736,6 +757,38 @@ impl ViewerRuntimeLiveServer {
         let Some(lease) = lease else {
             return Ok(());
         };
+        if let Some(runtime_lease) = self
+            .world
+            .cognition_economy()
+            .map_err(|error| format!("cognition lease release economy read failed: {error:?}"))?
+            .leases
+            .get(lease.lease_id.as_str())
+        {
+            if runtime_lease.lease_id != lease.lease_id
+                || runtime_lease.idempotency_key != lease.idempotency_key
+                || runtime_lease.account_id != lease.account_id
+                || runtime_lease.agent_id != lease.agent_id
+                || runtime_lease.agent_session_id != lease.agent_session_id
+                || runtime_lease.agent_turn_id != lease.agent_turn_id
+                || runtime_lease.decision_request_id != lease.decision_request_id
+                || runtime_lease.request_digest != lease.request_digest
+                || runtime_lease.quote != lease.quote
+                || runtime_lease.reserved_amount != lease.reserved_amount
+            {
+                return Err(format!(
+                    "cognition lease release Runtime identity mismatch for {agent_id}"
+                ));
+            }
+            if runtime_lease.status != crate::runtime::CognitionLeaseStatusV1::Reserved {
+                // A provider Wait compensation or an earlier retry may have
+                // already settled/released this exact lease. Preserve the
+                // terminal Runtime result and only clear the stale sidecar
+                // mirror; never turn a completed provider call into a second
+                // economic release.
+                self.llm_sidecar.clear_provider_cognition_lease(agent_id);
+                return Ok(());
+            }
+        }
         if let Some(request) = request {
             self.llm_sidecar
                 .validate_provider_cognition_lease_for_request(
