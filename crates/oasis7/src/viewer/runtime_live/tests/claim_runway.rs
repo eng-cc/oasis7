@@ -16,6 +16,7 @@ fn bind_agent_for_snapshot(server: &mut ViewerRuntimeLiveServer, agent_id: &str)
 
 #[test]
 fn compat_snapshot_quotes_complete_epoch_runway_and_advisory_threshold() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
     for (balance, expected_after, expected_runway, expected_warning, expected_action) in [
         (375, 50, 2, false, "compare_candidates_first"),
         (374, 49, 1, true, "wait_or_fund_first"),
