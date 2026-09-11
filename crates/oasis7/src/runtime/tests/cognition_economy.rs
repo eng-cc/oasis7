@@ -11,6 +11,18 @@ fn quote(id: &str, resource: &str, amount: u64) -> CognitionLeaseQuoteV1 {
     CognitionLeaseQuoteV1::new(id, resource, amount)
 }
 
+fn authority_quote(id: &str, amount: u64, world_binding: &str) -> CognitionLeaseQuoteV1 {
+    quote(id, "cognition_units", amount).with_authority(
+        "payer-a",
+        "cognition_units.v1",
+        "provider_cognition",
+        "agent_turn",
+        COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION,
+        "authority-context-a",
+        world_binding,
+    )
+}
+
 fn request(key: &str, amount: u64) -> CognitionLeaseRequestV1 {
     CognitionLeaseRequestV1::new(
         key,
@@ -160,7 +172,8 @@ fn settlement_release_and_refund_preserve_conservation_and_terminality() {
         .expect("second reserve");
     let release = economy.release(&released.lease_id, 6).expect("release");
     assert_eq!(release.status, CognitionLeaseStatusV1::Released);
-    assert_eq!(release.refunded_amount, 6);
+    assert_eq!(release.released_amount, 6);
+    assert_eq!(release.refunded_amount, 0);
     assert_eq!(
         economy.available_balance("account-agent-a", "cognition_units"),
         20
@@ -185,11 +198,16 @@ fn quote_digest_and_expiry_are_immutable_runtime_inputs() {
         "cognition_quote_invalid"
     );
 
-    let expired = request("expired-key", 1);
-    let expired = CognitionLeaseRequestV1 {
-        quote: quote("expired", "cognition_units", 1).with_valid_until_tick(2),
-        ..expired
-    };
+    let expired = CognitionLeaseRequestV1::new(
+        "expired-key",
+        "account-agent-a",
+        "agent-a",
+        "session-a",
+        "turn-a",
+        "request-a",
+        "request-digest-a",
+        quote("expired", "cognition_units", 1).with_valid_until_tick(2),
+    );
     let mut economy = CognitionEconomyStateV1::new();
     economy
         .set_resource_balance("account-agent-a", "cognition_units", 5)
@@ -225,7 +243,10 @@ fn boundary_amount_validation_returns_error_without_panicking() {
         quote: request.quote.clone(),
         reserved_amount: amount,
         settled_amount: amount,
+        released_amount: 0,
         refunded_amount: amount,
+        compensated_amount: 0,
+        net_amount: amount,
         status: CognitionLeaseStatusV1::Settled,
         reserved_at_tick: 1,
         closed_at_tick: Some(2),
@@ -252,8 +273,13 @@ fn boundary_amount_validation_returns_error_without_panicking() {
         request_digest: lease.request_digest,
         quote: lease.quote,
         reserved_amount: amount,
+        operation: "settle".to_string(),
         consumed_amount: amount,
+        released_amount: 0,
         refunded_amount: amount,
+        net_amount: amount,
+        parent_receipt_id: None,
+        reason: None,
         status: CognitionLeaseStatusV1::Settled,
         issued_at_tick: 2,
     };
@@ -317,6 +343,198 @@ fn validation_rejects_duplicate_terminal_journal_transition() {
     assert!(
         economy.validate().is_err(),
         "a lease must have one canonical terminal journal transition"
+    );
+}
+
+#[test]
+fn authority_identity_is_bound_into_quote_and_lease_idempotency() {
+    let first = CognitionLeaseRequestV1::new(
+        "authority-key",
+        "payer-a",
+        "agent-a",
+        "session-a",
+        "turn-a",
+        "request-a",
+        "request-digest-a",
+        authority_quote("authority-quote", 4, "world-a"),
+    );
+    let second = CognitionLeaseRequestV1::new(
+        "authority-key",
+        "payer-a",
+        "agent-a",
+        "session-a",
+        "turn-a",
+        "request-a",
+        "request-digest-a",
+        authority_quote("authority-quote", 4, "world-b"),
+    );
+    assert_ne!(first.derived_lease_id(), second.derived_lease_id());
+
+    let mut economy = CognitionEconomyStateV1::new();
+    economy
+        .set_resource_balance("payer-a", "cognition_units", 8)
+        .expect("seed authority payer balance");
+    economy.reserve(first, 1).expect("reserve first authority");
+    assert_eq!(
+        economy
+            .reserve(second, 1)
+            .expect_err("world authority change must conflict")
+            .code(),
+        "cognition_idempotency_conflict"
+    );
+
+    let mut unsupported_policy = authority_quote("unsupported-policy", 1, "world-a");
+    unsupported_policy.policy_revision = "dynamic_provider_metering.v1".to_string();
+    unsupported_policy.refresh_digest();
+    assert_eq!(
+        unsupported_policy
+            .validate()
+            .expect_err("deferred policy revisions must fail closed")
+            .code(),
+        "cognition_quote_invalid"
+    );
+}
+
+#[test]
+fn settle_requires_positive_bounded_usage_without_mutation() {
+    let mut economy = CognitionEconomyStateV1::new();
+    economy
+        .set_resource_balance("account-agent-a", "cognition_units", 8)
+        .expect("seed balance");
+    let lease = economy
+        .reserve(request("usage-key", 4), 1)
+        .expect("reserve");
+
+    let before_zero = economy.clone();
+    let zero = economy
+        .settle(&lease.lease_id, 0, 2)
+        .expect_err("zero usage must be rejected");
+    assert_eq!(zero.code(), "cognition_settlement_usage_zero");
+    assert_eq!(economy, before_zero);
+
+    let before_overuse = economy.clone();
+    let overuse = economy
+        .settle(&lease.lease_id, 5, 2)
+        .expect_err("overuse must be rejected");
+    assert_eq!(
+        overuse.code(),
+        "cognition_settlement_usage_exceeds_reservation"
+    );
+    assert_eq!(economy, before_overuse);
+}
+
+#[test]
+fn release_and_expire_have_distinct_terminal_receipts() {
+    let mut economy = CognitionEconomyStateV1::new();
+    economy
+        .set_resource_balance("account-agent-a", "cognition_units", 12)
+        .expect("seed balance");
+    let release_lease = economy
+        .reserve(
+            CognitionLeaseRequestV1::new(
+                "release-distinct-key",
+                "account-agent-a",
+                "agent-a",
+                "session-a",
+                "turn-a",
+                "request-a",
+                "request-digest-a",
+                quote("release-distinct-quote", "cognition_units", 4).with_valid_until_tick(10),
+            ),
+            1,
+        )
+        .expect("reserve release lease");
+    let release = economy
+        .release(&release_lease.lease_id, 2)
+        .expect("release reserved lease");
+    assert_eq!(release.operation, "release");
+    assert_eq!(release.released_amount, 4);
+    assert_eq!(release.refunded_amount, 0);
+    assert_eq!(release.net_amount, 0);
+
+    let expire_lease = economy
+        .reserve(
+            CognitionLeaseRequestV1::new(
+                "expire-distinct-key",
+                "account-agent-a",
+                "agent-a",
+                "session-a",
+                "turn-b",
+                "request-b",
+                "request-digest-b",
+                quote("expire-distinct-quote", "cognition_units", 3).with_valid_until_tick(4),
+            ),
+            1,
+        )
+        .expect("reserve expiring lease");
+    let expired = economy
+        .expire(&expire_lease.lease_id, 5)
+        .expect("expire expired lease");
+    assert_eq!(expired.operation, "expire");
+    assert_eq!(expired.status, CognitionLeaseStatusV1::Expired);
+    assert_eq!(expired.released_amount, 3);
+    assert_eq!(expired.refunded_amount, 0);
+    assert_eq!(
+        economy
+            .settle(&expire_lease.lease_id, 1, 6)
+            .expect_err("expired lease cannot be settled")
+            .code(),
+        "cognition_lease_already_closed"
+    );
+}
+
+#[test]
+fn settled_refund_requires_parent_receipt_reason_and_bounded_amount() {
+    let mut economy = CognitionEconomyStateV1::new();
+    economy
+        .set_resource_balance("account-agent-a", "cognition_units", 10)
+        .expect("seed balance");
+    let lease = economy
+        .reserve(request("compensate-key", 8), 1)
+        .expect("reserve");
+    let settled = economy.settle(&lease.lease_id, 5, 2).expect("settle");
+    let before_invalid = economy.clone();
+    let invalid = economy
+        .refund_settled(
+            &lease.lease_id,
+            6,
+            &settled.receipt_id,
+            "provider_timeout",
+            3,
+        )
+        .expect_err("refund cannot exceed parent consumed amount");
+    assert_eq!(invalid.code(), "cognition_refund_amount_invalid");
+    assert_eq!(economy, before_invalid);
+
+    let refund = economy
+        .refund_settled(
+            &lease.lease_id,
+            5,
+            &settled.receipt_id,
+            "provider_timeout",
+            3,
+        )
+        .expect("Runtime-authorized compensation");
+    assert_eq!(refund.operation, "refund");
+    assert_eq!(
+        refund.parent_receipt_id.as_deref(),
+        Some(settled.receipt_id.as_str())
+    );
+    assert_eq!(refund.reason.as_deref(), Some("provider_timeout"));
+    assert_eq!(refund.consumed_amount, 5);
+    assert_eq!(refund.refunded_amount, 5);
+    assert_eq!(refund.net_amount, 0);
+    assert_eq!(
+        economy
+            .refund_settled(
+                &lease.lease_id,
+                5,
+                &settled.receipt_id,
+                "provider_timeout",
+                99,
+            )
+            .expect("compensation replay"),
+        refund
     );
 }
 
@@ -402,7 +620,7 @@ fn world_save_load_retains_typed_economy_projection_atomically() {
         economy.reserved_balance("account-agent-a", "cognition_units"),
         0
     );
-    assert_eq!(economy.receipts.len(), 1);
+    assert_eq!(economy.receipts.len(), 2);
     assert_eq!(
         economy.leases[&lease.lease_id].status,
         CognitionLeaseStatusV1::Settled

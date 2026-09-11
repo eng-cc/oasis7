@@ -11,12 +11,20 @@ use serde_json::Value as JsonValue;
 use std::collections::BTreeMap;
 use std::fmt;
 
+#[path = "cognition_economy_transitions.rs"]
+mod transitions;
 #[path = "cognition_economy_validation.rs"]
 mod validation;
 
 pub const COGNITION_ECONOMY_SCHEMA_VERSION: &str = "cognition-economy.v1";
 pub const COGNITION_LEASE_SCHEMA_VERSION: &str = "cognition-lease.v1";
 pub const COGNITION_RECEIPT_SCHEMA_VERSION: &str = "cognition-receipt.v1";
+pub const COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION: &str = "fixed_unit_experimental";
+pub const COGNITION_RESOURCE_VERSION_V1: &str = "cognition_units.v1";
+const COGNITION_DEFAULT_PURPOSE: &str = "provider_cognition";
+const COGNITION_DEFAULT_SCOPE: &str = "agent_turn";
+const COGNITION_LEGACY_AUTHORITY_CONTEXT: &str = "legacy-unbound";
+const COGNITION_LEGACY_WORLD_BINDING: &str = "legacy-unbound";
 const COGNITION_ECONOMY_EVENT_SCHEMA_VERSION: &str = "cognition-economy-event.v1";
 const COGNITION_ECONOMY_JOURNAL_DOMAIN: &str = "oasis7.cognition.economy.journal-head.v1";
 const COGNITION_ECONOMY_EVENT_DOMAIN: &str = "oasis7.cognition.economy.event.v1";
@@ -27,6 +35,30 @@ const COGNITION_ECONOMY_OPERATION_DOMAIN: &str = "oasis7.cognition.economy.opera
 const COGNITION_ECONOMY_RECEIPT_ID_DOMAIN: &str = "oasis7.cognition.economy.receipt-id.v1";
 const COGNITION_ECONOMY_RECEIPT_DOMAIN: &str = "oasis7.cognition.economy.receipt.v1";
 const MAX_IDENTITY_BYTES: usize = 256;
+
+fn default_resource_version() -> String {
+    COGNITION_RESOURCE_VERSION_V1.to_string()
+}
+
+fn default_purpose() -> String {
+    COGNITION_DEFAULT_PURPOSE.to_string()
+}
+
+fn default_scope() -> String {
+    COGNITION_DEFAULT_SCOPE.to_string()
+}
+
+fn default_policy_revision() -> String {
+    COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION.to_string()
+}
+
+fn default_authority_context() -> String {
+    COGNITION_LEGACY_AUTHORITY_CONTEXT.to_string()
+}
+
+fn default_world_binding() -> String {
+    COGNITION_LEGACY_WORLD_BINDING.to_string()
+}
 
 fn bounded_identity(value: &str) -> bool {
     !value.trim().is_empty()
@@ -102,8 +134,24 @@ impl std::error::Error for CognitionEconomyError {}
 pub struct CognitionLeaseQuoteV1 {
     pub schema_version: String,
     pub quote_id: String,
+    /// Runtime payer identity.  The legacy constructor leaves this empty so
+    /// the request constructor can bind the existing account identity.
+    #[serde(default)]
+    pub payer_id: String,
     pub resource: String,
+    #[serde(default = "default_resource_version")]
+    pub resource_version: String,
     pub amount: u64,
+    #[serde(default = "default_purpose")]
+    pub purpose: String,
+    #[serde(default = "default_scope")]
+    pub scope: String,
+    #[serde(default = "default_policy_revision")]
+    pub policy_revision: String,
+    #[serde(default = "default_authority_context")]
+    pub authority_context: String,
+    #[serde(default = "default_world_binding")]
+    pub world_binding: String,
     #[serde(default)]
     pub valid_until_tick: Option<u64>,
     pub quote_digest: String,
@@ -115,16 +163,46 @@ pub type CognitionQuoteV1 = CognitionLeaseQuoteV1;
 
 impl CognitionLeaseQuoteV1 {
     pub fn new(quote_id: impl Into<String>, resource: impl Into<String>, amount: u64) -> Self {
+        let resource = resource.into();
         let mut quote = Self {
             schema_version: COGNITION_LEASE_SCHEMA_VERSION.to_string(),
             quote_id: quote_id.into(),
-            resource: resource.into(),
+            payer_id: String::new(),
+            resource: resource.clone(),
+            resource_version: format!("{resource}.v1"),
             amount,
+            purpose: COGNITION_DEFAULT_PURPOSE.to_string(),
+            scope: COGNITION_DEFAULT_SCOPE.to_string(),
+            policy_revision: COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION.to_string(),
+            authority_context: COGNITION_LEGACY_AUTHORITY_CONTEXT.to_string(),
+            world_binding: COGNITION_LEGACY_WORLD_BINDING.to_string(),
             valid_until_tick: None,
             quote_digest: String::new(),
         };
         quote.refresh_digest();
         quote
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_authority(
+        mut self,
+        payer_id: impl Into<String>,
+        resource_version: impl Into<String>,
+        purpose: impl Into<String>,
+        scope: impl Into<String>,
+        policy_revision: impl Into<String>,
+        authority_context: impl Into<String>,
+        world_binding: impl Into<String>,
+    ) -> Self {
+        self.payer_id = payer_id.into();
+        self.resource_version = resource_version.into();
+        self.purpose = purpose.into();
+        self.scope = scope.into();
+        self.policy_revision = policy_revision.into();
+        self.authority_context = authority_context.into();
+        self.world_binding = world_binding.into();
+        self.refresh_digest();
+        self
     }
 
     pub fn with_valid_until_tick(mut self, tick: u64) -> Self {
@@ -150,7 +228,14 @@ impl CognitionLeaseQuoteV1 {
         if self.schema_version != COGNITION_LEASE_SCHEMA_VERSION
             || !bounded_identity(&self.quote_id)
             || !bounded_identity(&self.resource)
+            || (!self.payer_id.is_empty() && !bounded_identity(&self.payer_id))
+            || !bounded_identity(&self.resource_version)
             || self.amount == 0
+            || !bounded_identity(&self.purpose)
+            || !bounded_identity(&self.scope)
+            || self.policy_revision != COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION
+            || !bounded_identity(&self.authority_context)
+            || !bounded_identity(&self.world_binding)
             || !valid_digest(&self.quote_digest)
             || self.quote_digest != self.recompute_digest()
         {
@@ -187,12 +272,17 @@ impl CognitionLeaseRequestV1 {
         agent_turn_id: impl Into<String>,
         decision_request_id: impl Into<String>,
         request_digest: impl Into<String>,
-        quote: CognitionLeaseQuoteV1,
+        mut quote: CognitionLeaseQuoteV1,
     ) -> Self {
+        let account_id = account_id.into();
+        if quote.payer_id.is_empty() {
+            quote.payer_id = account_id.clone();
+            quote.refresh_digest();
+        }
         Self {
             schema_version: COGNITION_LEASE_SCHEMA_VERSION.to_string(),
             idempotency_key: idempotency_key.into(),
-            account_id: account_id.into(),
+            account_id,
             agent_id: agent_id.into(),
             agent_session_id: agent_session_id.into(),
             agent_turn_id: agent_turn_id.into(),
@@ -211,6 +301,8 @@ impl CognitionLeaseRequestV1 {
             || !bounded_identity(&self.agent_turn_id)
             || !bounded_identity(&self.decision_request_id)
             || !bounded_identity(&self.request_digest)
+            || !bounded_identity(&self.quote.payer_id)
+            || self.quote.payer_id != self.account_id
         {
             return Err(CognitionEconomyError::InvalidInput(
                 "cognition_lease_request_invalid",
@@ -243,14 +335,16 @@ impl CognitionLeaseRequestV1 {
     }
 }
 
-/// Terminal state of a lease.  `Reserved` is the only state that can be
-/// settled or released.  Refund may close either a reserved or settled lease.
+/// Terminal state of a lease. `Reserved` is the only state that can be settled,
+/// released, expired, or compensated. Expired and all other terminal states
+/// reject late responses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CognitionLeaseStatusV1 {
     Reserved,
     Settled,
     Released,
+    Expired,
     Refunded,
 }
 
@@ -269,7 +363,13 @@ pub struct CognitionLeaseV1 {
     pub quote: CognitionLeaseQuoteV1,
     pub reserved_amount: u64,
     pub settled_amount: u64,
+    #[serde(default)]
+    pub released_amount: u64,
     pub refunded_amount: u64,
+    #[serde(default)]
+    pub compensated_amount: u64,
+    #[serde(default)]
+    pub net_amount: u64,
     pub status: CognitionLeaseStatusV1,
     pub reserved_at_tick: u64,
     #[serde(default)]
@@ -315,23 +415,57 @@ impl CognitionLeaseV1 {
                 "cognition_lease_identity_invalid",
             ));
         }
+        let legacy_release_shape = self.status == CognitionLeaseStatusV1::Released
+            && self.released_amount == 0
+            && self.refunded_amount == self.reserved_amount
+            && self.compensated_amount == 0
+            && self.net_amount == 0;
+        let legacy_refund_shape = self.status == CognitionLeaseStatusV1::Refunded
+            && self.released_amount == 0
+            && self.compensated_amount == 0
+            && self.refunded_amount == self.reserved_amount
+            && self.net_amount == 0;
         if self.settled_amount > self.reserved_amount
             || self.refunded_amount > self.reserved_amount
             || (self.status == CognitionLeaseStatusV1::Reserved
                 && (self.settled_amount != 0
                     || self.refunded_amount != 0
-                    || self.closed_at_tick.is_some()
-                    || self.receipt_id.is_some()))
-            || (self.status == CognitionLeaseStatusV1::Released
-                && (self.settled_amount != 0 || self.refunded_amount != self.reserved_amount))
+                    || self.released_amount != 0
+                    || self.compensated_amount != 0
+                    || self.net_amount != 0
+                    || self.closed_at_tick.is_some()))
+            || (matches!(
+                self.status,
+                CognitionLeaseStatusV1::Released | CognitionLeaseStatusV1::Expired
+            ) && (self.settled_amount != 0
+                || (!legacy_release_shape
+                    && (self.refunded_amount != 0
+                        || self.released_amount != self.reserved_amount))
+                || self.compensated_amount != 0
+                || self.net_amount != 0))
             || (self.status == CognitionLeaseStatusV1::Refunded
-                && self.refunded_amount != self.reserved_amount)
+                && (!legacy_refund_shape
+                    && (self.settled_amount == 0
+                        || self.released_amount != 0
+                        || self.compensated_amount == 0
+                        || self.compensated_amount > self.settled_amount
+                        || self
+                            .reserved_amount
+                            .checked_sub(self.settled_amount)
+                            .and_then(|remaining| remaining.checked_add(self.compensated_amount))
+                            != Some(self.refunded_amount)
+                        || self.settled_amount.checked_sub(self.compensated_amount)
+                            != Some(self.net_amount))))
             || (self.status != CognitionLeaseStatusV1::Reserved
                 && (self.closed_at_tick.is_none()
                     || self
                         .receipt_id
                         .as_deref()
                         .is_none_or(|id| !valid_digest(id))))
+            || (self.status == CognitionLeaseStatusV1::Settled
+                && (self.released_amount != 0
+                    || self.compensated_amount != 0
+                    || (self.net_amount != 0 && self.net_amount != self.settled_amount)))
             || (self.status == CognitionLeaseStatusV1::Settled
                 && self.settled_amount.checked_add(self.refunded_amount)
                     != Some(self.reserved_amount))
@@ -360,8 +494,20 @@ pub struct CognitionReceiptV1 {
     pub request_digest: String,
     pub quote: CognitionLeaseQuoteV1,
     pub reserved_amount: u64,
+    /// Canonical operation name: reserve, settle, release, expire, or refund.
+    /// Empty is accepted only for pre-remediation persisted receipts.
+    #[serde(default)]
+    pub operation: String,
     pub consumed_amount: u64,
+    #[serde(default)]
+    pub released_amount: u64,
     pub refunded_amount: u64,
+    #[serde(default)]
+    pub net_amount: u64,
+    #[serde(default)]
+    pub parent_receipt_id: Option<String>,
+    #[serde(default)]
+    pub reason: Option<String>,
     pub status: CognitionLeaseStatusV1,
     pub issued_at_tick: u64,
 }
@@ -380,6 +526,7 @@ impl CognitionReceiptV1 {
     }
 
     pub fn validate(&self) -> Result<(), CognitionEconomyError> {
+        let legacy_operation = self.operation.is_empty();
         if self.schema_version != COGNITION_RECEIPT_SCHEMA_VERSION
             || !bounded_identity(&self.receipt_id)
             || !valid_digest(&self.receipt_id)
@@ -393,15 +540,85 @@ impl CognitionReceiptV1 {
             || !bounded_identity(&self.decision_request_id)
             || !bounded_identity(&self.request_digest)
             || self.reserved_amount == 0
+            || (!self.operation.is_empty()
+                && !matches!(
+                    self.operation.as_str(),
+                    "reserve" | "settle" | "release" | "expire" | "refund"
+                ))
             || self.consumed_amount > self.reserved_amount
+            || self.released_amount > self.reserved_amount
             || self.refunded_amount > self.reserved_amount
-            || self.status == CognitionLeaseStatusV1::Reserved
+            || (self.status == CognitionLeaseStatusV1::Reserved && self.operation != "reserve")
             || (self.status == CognitionLeaseStatusV1::Settled
                 && self.consumed_amount.checked_add(self.refunded_amount)
                     != Some(self.reserved_amount))
             || (self.status == CognitionLeaseStatusV1::Released
-                && (self.consumed_amount != 0 || self.refunded_amount != self.reserved_amount))
-            || (self.status == CognitionLeaseStatusV1::Refunded && self.consumed_amount != 0)
+                && ((!legacy_operation
+                    && (self.consumed_amount != 0
+                        || self.released_amount != self.reserved_amount
+                        || self.refunded_amount != 0
+                        || self.net_amount != 0))
+                    || (legacy_operation
+                        && (self.consumed_amount != 0
+                            || self.released_amount != 0
+                            || self.refunded_amount != self.reserved_amount
+                            || self.net_amount != 0))))
+            || (self.status == CognitionLeaseStatusV1::Expired
+                && (self.consumed_amount != 0
+                    || self.released_amount != self.reserved_amount
+                    || self.refunded_amount != 0
+                    || self.net_amount != 0))
+            || (self.status == CognitionLeaseStatusV1::Refunded
+                && (!legacy_operation
+                    && (self.consumed_amount == 0
+                        || self.released_amount != 0
+                        || self.refunded_amount == 0
+                        || self.refunded_amount > self.consumed_amount
+                        || self.consumed_amount.checked_sub(self.refunded_amount)
+                            != Some(self.net_amount))))
+            || (self.operation == "reserve"
+                && (self.status != CognitionLeaseStatusV1::Reserved
+                    || self.consumed_amount != 0
+                    || self.released_amount != 0
+                    || self.refunded_amount != 0
+                    || self.net_amount != 0
+                    || self.parent_receipt_id.is_some()
+                    || self.reason.is_some()))
+            || (self.operation == "settle"
+                && (self.status != CognitionLeaseStatusV1::Settled
+                    || self.consumed_amount == 0
+                    || self.released_amount != 0
+                    || self.net_amount != self.consumed_amount
+                    || self.parent_receipt_id.is_some()
+                    || self.reason.is_some()))
+            || (matches!(self.operation.as_str(), "release" | "expire")
+                && (self.status
+                    != if self.operation == "release" {
+                        CognitionLeaseStatusV1::Released
+                    } else {
+                        CognitionLeaseStatusV1::Expired
+                    }
+                    || self.consumed_amount != 0
+                    || self.released_amount != self.reserved_amount
+                    || self.refunded_amount != 0
+                    || self.net_amount != 0
+                    || self.parent_receipt_id.is_some()))
+            || (self.operation == "refund"
+                && (self.status != CognitionLeaseStatusV1::Refunded
+                    || self.consumed_amount == 0
+                    || self.released_amount != 0
+                    || self.refunded_amount == 0
+                    || self.refunded_amount > self.consumed_amount
+                    || self.consumed_amount.checked_sub(self.refunded_amount)
+                        != Some(self.net_amount)
+                    || self
+                        .parent_receipt_id
+                        .as_deref()
+                        .is_none_or(|id| !valid_digest(id))
+                    || self
+                        .reason
+                        .as_deref()
+                        .is_none_or(|reason| !bounded_identity(reason))))
             || self.receipt_digest != self.recompute_digest()
         {
             return Err(CognitionEconomyError::InvalidState(
@@ -453,7 +670,15 @@ pub struct CognitionEconomyEventV1 {
     pub resource: String,
     pub reserved_amount: u64,
     pub consumed_amount: u64,
+    #[serde(default)]
+    pub released_amount: u64,
     pub refunded_amount: u64,
+    #[serde(default)]
+    pub net_amount: u64,
+    #[serde(default)]
+    pub parent_receipt_id: Option<String>,
+    #[serde(default)]
+    pub reason: Option<String>,
     pub status: CognitionLeaseStatusV1,
     pub receipt_id: String,
     pub event_digest: String,
@@ -608,8 +833,68 @@ impl CognitionEconomyStateV1 {
         lease_id: &str,
         tick: u64,
     ) -> Result<CognitionReceiptV1, CognitionEconomyError> {
+        let refund_key = operation_key(lease_id, "refund");
+        if let Some(existing) = self.operations.get(&refund_key) {
+            return self.receipts.get(&existing.receipt_id).cloned().ok_or(
+                CognitionEconomyError::InvalidState("cognition_operation_receipt_missing"),
+            );
+        }
+        let parent_receipt_id = self
+            .leases
+            .get(lease_id)
+            .and_then(|lease| lease.receipt_id.as_deref())
+            .filter(|receipt_id| {
+                self.receipts
+                    .get(*receipt_id)
+                    .is_some_and(|receipt| receipt.operation == "settle")
+            })
+            .or_else(|| {
+                self.operations
+                    .get(&operation_key(lease_id, "settle"))
+                    .map(|record| record.receipt_id.as_str())
+            })
+            .unwrap_or_default()
+            .to_string();
+        let amount = self
+            .leases
+            .get(lease_id)
+            .map(|lease| lease.settled_amount)
+            .unwrap_or_default();
+        self.refund_settled(
+            lease_id,
+            amount,
+            parent_receipt_id.as_str(),
+            "runtime_compatibility_refund",
+            tick,
+        )
+    }
+
+    /// Runtime-authorized compensating refund for a settled lease. The parent
+    /// settlement receipt and reason are immutable audit inputs; the amount
+    /// cannot exceed the settled usage and the operation is terminal.
+    pub fn refund_settled(
+        &mut self,
+        lease_id: &str,
+        refunded_amount: u64,
+        parent_receipt_id: &str,
+        reason: &str,
+        tick: u64,
+    ) -> Result<CognitionReceiptV1, CognitionEconomyError> {
         let mut next = self.clone();
-        let receipt = next.refund_inner(lease_id, tick)?;
+        let receipt =
+            next.refund_inner(lease_id, refunded_amount, parent_receipt_id, reason, tick)?;
+        next.validate()?;
+        *self = next;
+        Ok(receipt)
+    }
+
+    pub fn expire(
+        &mut self,
+        lease_id: &str,
+        tick: u64,
+    ) -> Result<CognitionReceiptV1, CognitionEconomyError> {
+        let mut next = self.clone();
+        let receipt = next.expire_inner(lease_id, tick)?;
         next.validate()?;
         *self = next;
         Ok(receipt)
@@ -701,7 +986,10 @@ impl CognitionEconomyStateV1 {
             quote: request.quote.clone(),
             reserved_amount: request.quote.amount,
             settled_amount: 0,
+            released_amount: 0,
             refunded_amount: 0,
+            compensated_amount: 0,
+            net_amount: 0,
             status: CognitionLeaseStatusV1::Reserved,
             reserved_at_tick: tick,
             closed_at_tick: None,
@@ -715,13 +1003,65 @@ impl CognitionEconomyStateV1 {
                 lease_id: lease_id.clone(),
             },
         );
+        let reserve_operation_key = operation_key(&lease_id, "reserve");
+        let reserve_receipt_id = economy_digest(
+            COGNITION_ECONOMY_RECEIPT_ID_DOMAIN,
+            &(lease.lease_id.as_str(), reserve_operation_key.as_str()),
+        );
+        let mut reserve_receipt = CognitionReceiptV1 {
+            schema_version: COGNITION_RECEIPT_SCHEMA_VERSION.to_string(),
+            receipt_id: reserve_receipt_id.clone(),
+            receipt_digest: String::new(),
+            lease_id: lease.lease_id.clone(),
+            idempotency_key: lease.idempotency_key.clone(),
+            account_id: lease.account_id.clone(),
+            agent_id: lease.agent_id.clone(),
+            agent_session_id: lease.agent_session_id.clone(),
+            agent_turn_id: lease.agent_turn_id.clone(),
+            decision_request_id: lease.decision_request_id.clone(),
+            request_digest: lease.request_digest.clone(),
+            quote: lease.quote.clone(),
+            reserved_amount: lease.reserved_amount,
+            operation: "reserve".to_string(),
+            consumed_amount: 0,
+            released_amount: 0,
+            refunded_amount: 0,
+            net_amount: 0,
+            parent_receipt_id: None,
+            reason: None,
+            status: CognitionLeaseStatusV1::Reserved,
+            issued_at_tick: tick,
+        };
+        reserve_receipt.receipt_digest = reserve_receipt.recompute_digest();
+        reserve_receipt.validate()?;
+        let mut lease = lease;
+        lease.receipt_id = Some(reserve_receipt_id.clone());
+        self.leases.insert(lease_id.clone(), lease.clone());
+        self.receipts
+            .insert(reserve_receipt_id.clone(), reserve_receipt);
+        self.operations.insert(
+            reserve_operation_key.clone(),
+            CognitionEconomyOperationRecordV1 {
+                operation_key: reserve_operation_key.clone(),
+                operation_digest: economy_digest(
+                    COGNITION_ECONOMY_OPERATION_DOMAIN,
+                    &reserve_operation_key,
+                ),
+                lease_id: lease_id.clone(),
+                receipt_id: reserve_receipt_id.clone(),
+            },
+        );
         self.append_event(
             "reserve",
             &lease,
-            &operation_key(&lease_id, "reserve"),
-            "",
+            &reserve_operation_key,
+            &reserve_receipt_id,
             0,
             0,
+            0,
+            0,
+            None,
+            None,
         )?;
         Ok(lease)
     }
@@ -737,6 +1077,16 @@ impl CognitionEconomyStateV1 {
             .get(lease_id)
             .cloned()
             .ok_or_else(|| CognitionEconomyError::LeaseNotFound(lease_id.to_string()))?;
+        if consumed_amount == 0 {
+            return Err(CognitionEconomyError::InvalidInput(
+                "cognition_settlement_usage_zero",
+            ));
+        }
+        if consumed_amount > lease.reserved_amount {
+            return Err(CognitionEconomyError::InvalidInput(
+                "cognition_settlement_usage_exceeds_reservation",
+            ));
+        }
         let key = operation_key(lease_id, "settle");
         let digest = economy_digest(
             COGNITION_ECONOMY_OPERATION_DOMAIN,
@@ -757,11 +1107,6 @@ impl CognitionEconomyStateV1 {
                 "cognition_lease_already_closed",
             ));
         }
-        if consumed_amount > lease.reserved_amount {
-            return Err(CognitionEconomyError::InvalidInput(
-                "cognition_settlement_exceeds_reservation",
-            ));
-        }
         let refund = lease.reserved_amount - consumed_amount;
         let balance = self.balance_mut(&lease.account_id, &lease.quote.resource);
         if balance.reserved < lease.reserved_amount {
@@ -780,11 +1125,16 @@ impl CognitionEconomyStateV1 {
         let receipt = self.close_lease(
             lease,
             CognitionLeaseStatusV1::Settled,
+            "settle",
             consumed_amount,
+            0,
             refund,
             tick,
             key,
             digest,
+            0,
+            None,
+            None,
         )?;
         Ok(receipt)
     }
@@ -830,191 +1180,17 @@ impl CognitionEconomyStateV1 {
         self.close_lease(
             lease,
             CognitionLeaseStatusV1::Released,
+            "release",
             0,
             reserved_amount,
-            tick,
-            key,
-            digest,
-        )
-    }
-
-    fn refund_inner(
-        &mut self,
-        lease_id: &str,
-        tick: u64,
-    ) -> Result<CognitionReceiptV1, CognitionEconomyError> {
-        let lease = self
-            .leases
-            .get(lease_id)
-            .cloned()
-            .ok_or_else(|| CognitionEconomyError::LeaseNotFound(lease_id.to_string()))?;
-        let key = operation_key(lease_id, "refund");
-        let digest = economy_digest(COGNITION_ECONOMY_OPERATION_DOMAIN, &key);
-        if let Some(existing) = self.operations.get(&key) {
-            if existing.operation_digest != digest {
-                return Err(CognitionEconomyError::Conflict(
-                    "cognition_refund_idempotency_conflict",
-                ));
-            }
-            return self.receipts.get(&existing.receipt_id).cloned().ok_or(
-                CognitionEconomyError::InvalidState("cognition_operation_receipt_missing"),
-            );
-        }
-        let (refund, reserved_balance_to_release) = match lease.status {
-            CognitionLeaseStatusV1::Reserved => (lease.reserved_amount, lease.reserved_amount),
-            CognitionLeaseStatusV1::Settled => (lease.settled_amount, 0),
-            CognitionLeaseStatusV1::Released | CognitionLeaseStatusV1::Refunded => {
-                return Err(CognitionEconomyError::InvalidState(
-                    "cognition_lease_already_closed",
-                ));
-            }
-        };
-        let balance = self.balance_mut(&lease.account_id, &lease.quote.resource);
-        if balance.reserved < reserved_balance_to_release {
-            return Err(CognitionEconomyError::InvalidState(
-                "cognition_reserved_balance_missing",
-            ));
-        }
-        balance.reserved -= reserved_balance_to_release;
-        balance.available =
-            balance
-                .available
-                .checked_add(refund)
-                .ok_or(CognitionEconomyError::InvalidState(
-                    "cognition_available_balance_overflow",
-                ))?;
-        self.close_lease(
-            lease,
-            CognitionLeaseStatusV1::Refunded,
             0,
-            refund,
             tick,
             key,
             digest,
+            0,
+            None,
+            None,
         )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn close_lease(
-        &mut self,
-        mut lease: CognitionLeaseV1,
-        status: CognitionLeaseStatusV1,
-        consumed_amount: u64,
-        refunded_amount: u64,
-        tick: u64,
-        operation_key: String,
-        operation_digest: String,
-    ) -> Result<CognitionReceiptV1, CognitionEconomyError> {
-        let receipt_id = economy_digest(
-            COGNITION_ECONOMY_RECEIPT_ID_DOMAIN,
-            &(lease.lease_id.as_str(), operation_key.as_str()),
-        );
-        let mut receipt = CognitionReceiptV1 {
-            schema_version: COGNITION_RECEIPT_SCHEMA_VERSION.to_string(),
-            receipt_id: receipt_id.clone(),
-            receipt_digest: String::new(),
-            lease_id: lease.lease_id.clone(),
-            idempotency_key: lease.idempotency_key.clone(),
-            account_id: lease.account_id.clone(),
-            agent_id: lease.agent_id.clone(),
-            agent_session_id: lease.agent_session_id.clone(),
-            agent_turn_id: lease.agent_turn_id.clone(),
-            decision_request_id: lease.decision_request_id.clone(),
-            request_digest: lease.request_digest.clone(),
-            quote: lease.quote.clone(),
-            reserved_amount: lease.reserved_amount,
-            consumed_amount,
-            refunded_amount,
-            status,
-            issued_at_tick: tick,
-        };
-        receipt.receipt_digest = receipt.recompute_digest();
-        lease.status = status;
-        lease.settled_amount = match status {
-            CognitionLeaseStatusV1::Settled => consumed_amount,
-            CognitionLeaseStatusV1::Released => 0,
-            CognitionLeaseStatusV1::Refunded => lease.settled_amount,
-            CognitionLeaseStatusV1::Reserved => 0,
-        };
-        lease.refunded_amount = match status {
-            CognitionLeaseStatusV1::Settled => refunded_amount,
-            CognitionLeaseStatusV1::Released => lease.reserved_amount,
-            CognitionLeaseStatusV1::Refunded => {
-                lease.refunded_amount.checked_add(refunded_amount).ok_or(
-                    CognitionEconomyError::InvalidState("cognition_refund_overflow"),
-                )?
-            }
-            CognitionLeaseStatusV1::Reserved => 0,
-        };
-        lease.closed_at_tick = Some(tick);
-        lease.receipt_id = Some(receipt_id.clone());
-        lease.validate()?;
-        self.leases.insert(lease.lease_id.clone(), lease.clone());
-        self.receipts.insert(receipt_id.clone(), receipt.clone());
-        self.operations.insert(
-            operation_key.clone(),
-            CognitionEconomyOperationRecordV1 {
-                operation_key: operation_key.clone(),
-                operation_digest,
-                lease_id: lease.lease_id.clone(),
-                receipt_id: receipt_id.clone(),
-            },
-        );
-        self.append_event(
-            match status {
-                CognitionLeaseStatusV1::Settled => "settle",
-                CognitionLeaseStatusV1::Released => "release",
-                CognitionLeaseStatusV1::Refunded => "refund",
-                CognitionLeaseStatusV1::Reserved => "reserve",
-            },
-            &lease,
-            &operation_key,
-            &receipt_id,
-            consumed_amount,
-            refunded_amount,
-        )?;
-        Ok(receipt)
-    }
-
-    fn append_event(
-        &mut self,
-        event_kind: &str,
-        lease: &CognitionLeaseV1,
-        operation_key: &str,
-        receipt_id: &str,
-        consumed_amount: u64,
-        refunded_amount: u64,
-    ) -> Result<(), CognitionEconomyError> {
-        let journal_seq = self.head_seq.saturating_add(1);
-        let parent_event_digest = self
-            .journal
-            .last()
-            .map(|event| event.event_digest.clone())
-            .unwrap_or_default();
-        let mut event = CognitionEconomyEventV1 {
-            schema_version: COGNITION_ECONOMY_EVENT_SCHEMA_VERSION.to_string(),
-            journal_seq,
-            parent_event_digest,
-            event_kind: event_kind.to_string(),
-            lease_id: lease.lease_id.clone(),
-            operation_key: operation_key.to_string(),
-            idempotency_key: lease.idempotency_key.clone(),
-            resource: lease.quote.resource.clone(),
-            reserved_amount: lease.reserved_amount,
-            consumed_amount,
-            refunded_amount,
-            status: lease.status,
-            receipt_id: receipt_id.to_string(),
-            event_digest: String::new(),
-        };
-        event.event_digest = event.recompute_digest();
-        self.journal.push(event);
-        self.head_seq = journal_seq;
-        self.head_digest = economy_digest(
-            COGNITION_ECONOMY_JOURNAL_DOMAIN,
-            &(self.head_seq, &self.journal),
-        );
-        Ok(())
     }
 }
 
