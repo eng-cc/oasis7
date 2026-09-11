@@ -53,10 +53,35 @@ fn valid_test_provider_context(
         "oasis7.cognition.test.observation.v1",
         &request.base_decision_request.observation,
     );
-    request.capability_catalog_digest =
-        crate::simulator::h_v1("oasis7.cognition.test.capability-catalog.v1", &agent_id);
-    request.capability_invocation_context_digest =
-        crate::simulator::h_v1("oasis7.cognition.test.capability-invocation.v1", &agent_id);
+    let persisted_invocation = world
+        .capability_invocation_contexts()
+        .values()
+        .find(|context| {
+            matches!(
+                &context.subject,
+                oasis7_wasm_abi::CapabilitySubject::Agent { agent_id: subject_id, .. }
+                    if subject_id == agent_id
+            ) && context.presenter.presenter_kind == "provider"
+        })
+        .cloned()
+        .expect("Runtime provider invocation fixture");
+    let (catalog, invocation) = world
+        .capability_context_for_agent(
+            agent_id,
+            persisted_invocation.presenter.clone(),
+            persisted_invocation.response_nonce.clone(),
+        )
+        .expect("Runtime provider capability projection");
+    request.base_decision_request.capability_catalog = Some(catalog.clone());
+    request.base_decision_request.capability_invocation_context = Some(invocation.clone());
+    request.capability_catalog_digest = crate::simulator::h_v1(
+        crate::simulator::COGNITION_CAPABILITY_CATALOG_DOMAIN,
+        &catalog,
+    );
+    request.capability_invocation_context_digest = crate::simulator::h_v1(
+        crate::simulator::COGNITION_CAPABILITY_INVOCATION_CONTEXT_DOMAIN,
+        &invocation,
+    );
     request.memory_snapshot_digest =
         crate::simulator::h_v1("oasis7.cognition.test.memory.v1", &agent_id);
     request.goal_snapshot_digest =
@@ -69,6 +94,84 @@ fn valid_test_provider_context(
     request.request_digest = request.request_digest();
     context.turn_context.request_digest = request.request_digest.clone();
     context
+}
+
+fn provider_context_with_owner_binding(
+    mut context: cognition_context::ProviderContextState,
+    owner_binding: &str,
+) -> cognition_context::ProviderContextState {
+    let request = &mut context.request_context;
+    let invocation = request
+        .base_decision_request
+        .capability_invocation_context
+        .as_mut()
+        .expect("provider invocation context");
+    if let oasis7_wasm_abi::CapabilitySubject::Agent {
+        owner_binding: current,
+        ..
+    } = &mut invocation.subject
+    {
+        *current = owner_binding.to_string();
+    }
+    let catalog = request
+        .base_decision_request
+        .capability_catalog
+        .as_mut()
+        .expect("provider capability catalog");
+    catalog.subject = invocation.subject.clone();
+    request.capability_catalog_digest = crate::simulator::h_v1(
+        crate::simulator::COGNITION_CAPABILITY_CATALOG_DOMAIN,
+        catalog,
+    );
+    request.capability_invocation_context_digest = crate::simulator::h_v1(
+        crate::simulator::COGNITION_CAPABILITY_INVOCATION_CONTEXT_DOMAIN,
+        invocation,
+    );
+    request.request_digest = request.request_digest();
+    context.turn_context.request_digest = request.request_digest.clone();
+    context
+}
+
+#[test]
+fn provider_lease_uses_runtime_owner_binding_and_rejects_cross_owner_reuse() {
+    let mut world = bound_provider_lease_test_world(&["agent-a"]);
+    let context_a =
+        valid_test_provider_context(&world, "agent-a", "turn-owner-a", "request-owner-a");
+    let payer_a = payer_support::provider_payer_id(&context_a.request_context)
+        .expect("Runtime owner binding A");
+    let lease_a = reserve_test_provider_lease(&mut world, &context_a);
+    assert_eq!(payer_a, "runtime-test-owner:agent-a");
+    assert_eq!(lease_a.account_id, payer_a);
+    assert_eq!(lease_a.quote.payer_id, payer_a);
+    assert_ne!(lease_a.account_id, context_a.request_context.agent_subject);
+
+    let context_b = provider_context_with_owner_binding(context_a.clone(), "authorized-owner-b");
+    let payer_b = payer_support::provider_payer_id(&context_b.request_context)
+        .expect("Runtime owner binding B");
+    assert_ne!(
+        payer_a, payer_b,
+        "owner bindings must partition lease identity"
+    );
+    let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    sidecar
+        .provider_contexts
+        .insert("agent-a".to_string(), context_b);
+    sidecar
+        .provider_cognition_leases
+        .insert("agent-a".to_string(), lease_a);
+    sidecar.provider_wait_until.insert("agent-a".to_string(), 0);
+    let economy_before = world
+        .cognition_economy()
+        .expect("read economy before reuse");
+    let error = sidecar
+        .release_due_provider_waits(&mut world)
+        .expect_err("cross-owner lease reuse must fail closed");
+    assert!(error.contains("cognition lease identity mismatch"));
+    assert_eq!(
+        world.cognition_economy().expect("read economy after reuse"),
+        economy_before,
+        "cross-owner rejection must not emit an economic receipt"
+    );
 }
 
 #[test]
