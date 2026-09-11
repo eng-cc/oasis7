@@ -4,11 +4,14 @@ Canonical workflow: [capability](../doc/engineering/workflow/source-of-truth.md#
 
 This file is an operator command index, not a second workflow specification.
 
+PM 内容规范：[项目管理记录规范](../doc/engineering/doc-governance/project-management-record-standard.design.md)。生命周期、绑定、准入、权限、门禁与收尾仍以 [workflow source of truth](../doc/engineering/workflow/source-of-truth.md) 为准。
+
 ## Storage Contract
 
 - GitHub Issues + GitHub Project 是 authoritative project-management truth；GitHub Project 是 active work queue。
 - `Task UID` is stable identity. GitHub issue number / Project item id 只是外部对象句柄。
-- `.pm/tasks/` and `.pm/archive/` are generated/cache views; do not edit them manually.
+- `.pm/github-project-sync/tasks.json` is the generated task-to-Issue/Project mapping cache; it may be regenerated and is not task truth. Do not edit it manually.
+- `.pm/github-project-sync/task-archive.jsonl` is the immutable repo-local archive for historical task metadata and evidence; it is not a planning queue or current-status source.
 - Task issue evidence comments are the formal evidence sink. Fallback evidence is temporary until replayed.
 
 ## Start and Inspect

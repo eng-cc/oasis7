@@ -14,6 +14,8 @@
 | --- | --- | --- |
 | `doc/engineering/doc-governance/doc-structure-standard.prd.md` | `doc/engineering/doc-governance/doc-structure-standard.design.md`；`documentation-governance.manual.md`（how-to） | GitHub task issue evidence comments |
 | `doc/engineering/doc-governance/product-documentation-standard.prd.md` | `doc/engineering/doc-governance/product-documentation-standard.design.md`；`product-documentation-standard.templates.md` | GitHub task issue evidence comments |
+| 系统设计写作规范（standalone content standard） | `doc/engineering/doc-governance/system-design-writing-standard.design.md` | GitHub task issue evidence comments |
+| 项目管理记录规范（standalone content standard） | `doc/engineering/doc-governance/project-management-record-standard.design.md` | GitHub task issue evidence comments |
 | `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md` | n/a（当前契约已收敛到 PRD） | n/a（执行证据归 GitHub task 与 git history） |
 | Production-supervisor workflow governance（normative source: [workflow source of truth](workflow/source-of-truth.md#capability-and-ownership)） | Target design: [production-supervisor-runtime.design.md](workflow/production-supervisor-runtime.design.md) | Evidence: GitHub task issue evidence comments |
 | Historical document-governance triplets | Current organization and consumption rules: `doc/engineering/doc-governance/doc-structure-standard.design.md`; inventory and maintenance-cost routing: `doc/engineering/governance/README.md` | Historical decision/rollout evidence: Git history and GitHub task issue evidence comments |
@@ -22,6 +24,7 @@
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
 - 文档配对规则：`*.prd.md`、`*.design.md` 与同名 GitHub task issue evidence comments。
+- 上述两份 standalone content standard 没有另建 PRD 或本地 project ledger；它们的规范正文由 design 文件承接，任务与执行证据仍回到 GitHub task truth。
 - `doc/engineering/doc-governance/README.md` 是 doc-governance 簇级分流入口；本索引保留完整三件套可达性，不再要求读者从长表里判断治理问题归属。
 - `doc/engineering/rust-governance/README.md` 是 Rust 文件结构治理簇级分流入口；本索引保留单一当前契约的精确检索入口，不再复制已完成专题的 design / project。
 - `engineering` 根目录默认只保留 `README.md / prd.md / design.md / GitHub task issue evidence comments / prd.index.md` 五个模块入口；治理专题已分别下沉到 `doc-governance/`、`rust-governance/` 与 `governance/`。`doc-structure-standard` 负责组织、职责和消费层边界，`governance/README.md` 负责 inventory 和维护成本 follow-up 路由；workflow source of truth 与 `.agents/skills/README.md` 分别承接 self-evolution task/evidence boundary 与 skill reachability。已完成且规则已被这些 current authorities 承接的一次性专题不再作为 live 三件套暴露。`doc/devlog` 的当前入口是 `doc/devlog/README.md` compact archive summary，不再通过 active 专题三件套暴露。
