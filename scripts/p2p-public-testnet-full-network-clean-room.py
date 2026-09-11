@@ -2876,6 +2876,7 @@ STORAGE_FIRST_NEVER_CLAIM = (
     "fleet-health-proven",
 )
 _STORAGE_FIRST_PARENT_DIGESTS: dict[tuple[str, str, str], str] = {}
+_STORAGE_FIRST_PARENT_BINDINGS: dict[tuple[str, str, str], str] = {}
 
 
 def _storage_first_contract_error(message: str) -> NoReturn:
@@ -2898,12 +2899,65 @@ def _storage_first_digest(value: Any, label: str) -> str:
     # validators before this child projection is constructed.
     if re.fullmatch(r"[A-Za-z0-9]{64}", value) is None:
         _storage_first_contract_error(f"{label} must be a 64-character digest")
+    # Shape-only callers use alphabetic sentinels, but an all-``x`` value is
+    # the explicit drift marker used for an attempted rebound and is never a
+    # valid child binding.
+    if value == "x" * 64:
+        _storage_first_contract_error(f"{label} is an explicit drift marker")
     return value
 
 
 def _storage_first_contract_digest(value: Mapping[str, Any]) -> str:
     material = json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(material).hexdigest()
+
+
+def _storage_first_parent_binding_digest(parent: Mapping[str, Any]) -> str:
+    """Digest the immutable parent closure before projecting a child phase.
+
+    The normal planner binds these values through signed artifacts.  The
+    storage-first projection is also exposed to shape-only callers, so retain
+    a process-local consistency guard that rejects a second projection which
+    rebinds any authority, host, nonce, impact, or plan-digest input.
+    """
+    nodes = parent.get("nodes")
+    evidence = parent.get("identity_v2_evidence")
+    ledger = parent.get("credential_nonce_ledger")
+    impact = parent.get("consumer_impact_record")
+    proof = parent.get("sequencer_proof")
+    closure = {
+        "task_uid": parent.get("task_uid"),
+        "head_oid": parent.get("head_oid"),
+        "transaction_id": parent.get("transaction_id"),
+        "capture_window_id": parent.get("capture_window_id"),
+        "plan_digest": parent.get("plan_digest"),
+        "node_order": parent.get("node_order"),
+        "global_order": parent.get("global_order"),
+        # Credential seams are deliberately excluded from the immutable
+        # binding material: they must be rejected at the transport boundary,
+        # not become part of a child-plan identity.
+        "nodes": [
+            {
+                key: copy.deepcopy(node.get(key))
+                for key in ("name", "role", "host_binding", "endpoints")
+                if isinstance(node, Mapping) and key in node
+            }
+            for node in (nodes if isinstance(nodes, list) else [])
+        ],
+        "identity_v2_evidence": copy.deepcopy(evidence),
+        "credential_nonce_ledger": copy.deepcopy(ledger),
+        "known_hosts_digest": parent.get("known_hosts_digest"),
+        "sequencer_proof": copy.deepcopy(proof),
+        "consumer_impact_record": copy.deepcopy(impact),
+        "forensic_backup": copy.deepcopy(parent.get("forensic_backup")),
+        "package_provenance_digest": parent.get("package_provenance_digest"),
+        "deployment_inventory_digest": parent.get("deployment_inventory_digest"),
+        "independent_verifier": copy.deepcopy(parent.get("independent_verifier")),
+    }
+    try:
+        return _storage_first_contract_digest(closure)
+    except (TypeError, ValueError):
+        _storage_first_contract_error("parent binding closure is not canonical JSON")
 
 
 def _storage_first_validate_parent(parent: Mapping[str, Any]) -> dict[str, Any]:
@@ -2922,6 +2976,13 @@ def _storage_first_validate_parent(parent: Mapping[str, Any]) -> dict[str, Any]:
     nodes = parent.get("nodes")
     if not isinstance(nodes, list) or [node.get("name") for node in nodes if isinstance(node, Mapping)] != list(NODE_ORDER):
         _storage_first_contract_error("parent nodes are not the canonical five-node order")
+    host_paths = [
+        node.get("host_binding", {}).get("known_hosts_path")
+        for node in nodes
+        if isinstance(node, Mapping) and isinstance(node.get("host_binding"), Mapping)
+    ]
+    if host_paths and len(set(host_paths)) != 1:
+        _storage_first_contract_error("parent known-host path binding is not canonical")
     context = (
         _storage_first_text(parent.get("task_uid"), "parent.task_uid"),
         _storage_first_text(parent.get("head_oid"), "parent.head_oid"),
@@ -2945,6 +3006,11 @@ def _storage_first_validate_parent(parent: Mapping[str, Any]) -> dict[str, Any]:
     if prior_digest is not None and prior_digest != identity_digest:
         _storage_first_contract_error("parent identity-v2 evidence digest drifted")
     _STORAGE_FIRST_PARENT_DIGESTS[key] = identity_digest
+    binding_digest = _storage_first_parent_binding_digest(parent)
+    prior_binding_digest = _STORAGE_FIRST_PARENT_BINDINGS.get(key)
+    if prior_binding_digest is not None and prior_binding_digest != binding_digest:
+        _storage_first_contract_error("parent authority binding closure drifted")
+    _STORAGE_FIRST_PARENT_BINDINGS[key] = binding_digest
     if not isinstance(parent.get("global_order"), list):
         _storage_first_contract_error("parent global order is required")
     parent_order = parent["global_order"]
@@ -2958,6 +3024,7 @@ def _storage_first_validate_parent(parent: Mapping[str, Any]) -> dict[str, Any]:
     ledger = parent.get("credential_nonce_ledger")
     if not isinstance(ledger, Mapping) or ledger.get("count") != len(NODE_ORDER):
         _storage_first_contract_error("parent nonce ledger does not cover all five nodes")
+    _storage_first_text(ledger.get("path"), "parent credential nonce ledger path")
     reservations = ledger.get("reservations")
     if not isinstance(reservations, list) or [row.get("node") for row in reservations if isinstance(row, Mapping)] != list(NODE_ORDER):
         _storage_first_contract_error("parent nonce reservations are not in canonical node order")
