@@ -32,6 +32,104 @@ impl CognitionEconomyStateV1 {
                 }
             }
         }
+        if self.provision_head_seq != self.provision_journal.len() as u64 {
+            return Err(CognitionEconomyError::InvalidState(
+                "cognition_provisioning_head_invalid",
+            ));
+        }
+        let expected_provision_head = economy_digest(
+            COGNITION_PROVISIONING_JOURNAL_DOMAIN,
+            &(self.provision_head_seq, &self.provision_journal),
+        );
+        if self.provision_head_digest != expected_provision_head {
+            return Err(CognitionEconomyError::InvalidState(
+                "cognition_provisioning_head_digest_mismatch",
+            ));
+        }
+        let mut previous_provision_digest = String::new();
+        let mut provision_bindings = BTreeMap::new();
+        for (provision_id, record) in &self.provisions {
+            if provision_id != &record.request.provision_id {
+                return Err(CognitionEconomyError::InvalidState(
+                    "cognition_provisioning_index_invalid",
+                ));
+            }
+            record.validate()?;
+            if provision_bindings
+                .insert(record.request.binding_key(), provision_id)
+                .is_some()
+            {
+                return Err(CognitionEconomyError::InvalidState(
+                    "cognition_provisioning_binding_duplicate",
+                ));
+            }
+            let Some(balance) = self
+                .balances
+                .get(record.request.account_id.as_str())
+                .and_then(|resources| resources.get(record.request.resource.as_str()))
+            else {
+                return Err(CognitionEconomyError::InvalidState(
+                    "cognition_provisioning_balance_missing",
+                ));
+            };
+            if !matches!(
+                balance.available.checked_add(balance.reserved),
+                Some(total) if total <= record.request.allowance
+            ) {
+                return Err(CognitionEconomyError::InvalidState(
+                    "cognition_provisioning_balance_mismatch",
+                ));
+            }
+            let Some(receipt) = self.provision_receipts.get(record.receipt_id.as_str()) else {
+                return Err(CognitionEconomyError::InvalidState(
+                    "cognition_provisioning_receipt_missing",
+                ));
+            };
+            if receipt.request != record.request || receipt.receipt_id != record.receipt_id {
+                return Err(CognitionEconomyError::InvalidState(
+                    "cognition_provisioning_receipt_mismatch",
+                ));
+            }
+        }
+        for (receipt_id, receipt) in &self.provision_receipts {
+            receipt.validate()?;
+            let Some(record) = self.provisions.get(&receipt.request.provision_id) else {
+                return Err(CognitionEconomyError::InvalidState(
+                    "cognition_provisioning_receipt_index_invalid",
+                ));
+            };
+            if receipt_id != &receipt.receipt_id || record.receipt_id != receipt.receipt_id {
+                return Err(CognitionEconomyError::InvalidState(
+                    "cognition_provisioning_receipt_index_invalid",
+                ));
+            }
+        }
+        for (index, event) in self.provision_journal.iter().enumerate() {
+            event.validate()?;
+            if event.journal_seq != index as u64 + 1
+                || event.parent_event_digest != previous_provision_digest
+            {
+                return Err(CognitionEconomyError::InvalidState(
+                    "cognition_provisioning_journal_invalid",
+                ));
+            }
+            let Some(record) = self.provisions.get(&event.request.provision_id) else {
+                return Err(CognitionEconomyError::InvalidState(
+                    "cognition_provisioning_journal_record_missing",
+                ));
+            };
+            if record.request != event.request || record.receipt_id != event.receipt_id {
+                return Err(CognitionEconomyError::InvalidState(
+                    "cognition_provisioning_journal_record_mismatch",
+                ));
+            }
+            previous_provision_digest.clone_from(&event.event_digest);
+        }
+        if self.provisions.len() != self.provision_journal.len() {
+            return Err(CognitionEconomyError::InvalidState(
+                "cognition_provisioning_journal_cardinality_invalid",
+            ));
+        }
         let mut previous_digest = String::new();
         let mut event_counts: BTreeMap<String, (u8, u8, u8, u8, u8)> = BTreeMap::new();
         for (index, event) in self.journal.iter().enumerate() {

@@ -1019,3 +1019,151 @@ fn world_save_load_retains_typed_economy_projection_atomically() {
     let _ = fs::remove_dir_all(&dir);
     let _ = fs::remove_dir_all(&round_trip);
 }
+
+fn bound_world_with_identity(agent_id: &str, owner_binding: &str) -> World {
+    let mut world = World::new();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: agent_id.to_string(),
+        pos: crate::geometry::GeoPos::new(0, 0, 0),
+    });
+    world.step().expect("register provider agent");
+    world
+        .bind_cognition_runtime("provision-world", "main", 0, None, "pending", 0)
+        .expect("bind cognition runtime");
+    world
+        .install_capability_agent_identity(agent_id, owner_binding, 1)
+        .expect("install capability identity");
+    world
+}
+
+#[test]
+fn provisioning_is_owner_bound_once_and_exactly_idempotent() {
+    let mut world = bound_world_with_identity("agent-a", "owner-a");
+    let first = world
+        .provision_cognition_for_agent("agent-a", "provision-a", "authority-a", 7)
+        .expect("provision allowance");
+    assert_eq!(first.request.account_id, "owner-a");
+    assert_eq!(first.request.owner_binding, "owner-a");
+    assert_eq!(
+        first.request.resource_version,
+        COGNITION_RESOURCE_VERSION_V1
+    );
+    assert_eq!(
+        first.request.policy_revision,
+        COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION
+    );
+    assert!(!first.request.authority_digest.is_empty());
+    assert!(!first.request.provisioning_digest.is_empty());
+
+    let before = world.cognition_economy().expect("read provisioned economy");
+    assert_eq!(before.available_balance("owner-a", "cognition_units"), 7);
+    assert_eq!(before.provisions.len(), 1);
+    assert_eq!(before.provision_receipts.len(), 1);
+    assert_eq!(before.provision_journal.len(), 1);
+    assert_eq!(before.provision_head_seq, 1);
+
+    let replay = world
+        .provision_cognition_for_agent("agent-a", "provision-a", "authority-a", 7)
+        .expect("exact provision replay");
+    assert_eq!(replay, first);
+    assert_eq!(
+        world.cognition_economy().expect("read replayed economy"),
+        before,
+        "exact replay must not refill or append journal evidence"
+    );
+}
+
+#[test]
+fn provisioning_rejects_changed_allowance_authority_or_owner() {
+    let mut world = bound_world_with_identity("agent-a", "owner-a");
+    world
+        .provision_cognition_for_agent("agent-a", "provision-a", "authority-a", 7)
+        .expect("provision allowance");
+
+    let changed_amount = world
+        .provision_cognition_for_agent("agent-a", "provision-a", "authority-a", 8)
+        .expect_err("changed amount must conflict");
+    assert!(format!("{changed_amount:?}").contains("cognition_provisioning_idempotency_conflict"));
+
+    let changed_authority = world
+        .provision_cognition_for_agent("agent-a", "provision-a", "authority-b", 7)
+        .expect_err("changed authority must conflict");
+    assert!(
+        format!("{changed_authority:?}").contains("cognition_provisioning_idempotency_conflict")
+    );
+
+    world
+        .install_capability_agent_identity("agent-a", "owner-b", 2)
+        .expect("rotate owner identity");
+    let changed_owner = world
+        .provision_cognition_for_agent("agent-a", "provision-a", "authority-a", 7)
+        .expect_err("changed owner must conflict");
+    assert!(format!("{changed_owner:?}").contains("cognition_provisioning_idempotency_conflict"));
+}
+
+#[test]
+fn provisioning_persists_across_restart_without_legacy_implicit_seed() {
+    let mut world = bound_world_with_identity("agent-a", "owner-a");
+    world
+        .provision_cognition_for_agent("agent-a", "provision-a", "authority-a", 7)
+        .expect("provision allowance");
+    let dir = temp_dir("provision-restart");
+    world.save_to_dir(&dir).expect("save provisioned world");
+
+    let restored = World::load_from_dir(&dir).expect("restore provisioned world");
+    assert_eq!(
+        restored.cognition_economy().expect("restored economy"),
+        world.cognition_economy().expect("original economy")
+    );
+    let mut restored_economy = restored.cognition_economy().expect("restored economy");
+    let before_replay = restored_economy.clone();
+    let replay = restored_economy
+        .provision(
+            before_replay
+                .provisions
+                .get("provision-a")
+                .expect("restored provision")
+                .request
+                .clone(),
+            0,
+        )
+        .expect("replay restored provision");
+    assert_eq!(
+        replay.request.provisioning_digest,
+        before_replay
+            .provisions
+            .get("provision-a")
+            .expect("restored provision")
+            .request
+            .provisioning_digest
+    );
+    assert_eq!(restored_economy, before_replay);
+
+    let legacy_dir = temp_dir("provision-legacy");
+    World::new()
+        .save_to_dir(&legacy_dir)
+        .expect("save legacy world");
+    let snapshot_path = legacy_dir.join("snapshot.json");
+    let snapshot_bytes = fs::read(&snapshot_path).expect("read legacy snapshot");
+    let mut snapshot: Value = serde_json::from_slice(&snapshot_bytes).expect("decode snapshot");
+    snapshot
+        .as_object_mut()
+        .expect("snapshot object")
+        .remove("cognition");
+    fs::write(
+        &snapshot_path,
+        serde_json::to_vec_pretty(&snapshot).expect("encode legacy snapshot"),
+    )
+    .expect("write legacy snapshot");
+    let _ = fs::remove_dir_all(legacy_dir.join(".distfs-state"));
+    let _ = fs::remove_file(legacy_dir.join("snapshot.manifest.json"));
+    let _ = fs::remove_file(legacy_dir.join("journal.segments.json"));
+    let legacy = World::load_from_dir(&legacy_dir).expect("restore legacy world");
+    let legacy_economy = legacy.cognition_economy().expect("legacy economy default");
+    assert!(legacy_economy.provisions.is_empty());
+    assert!(legacy_economy.provision_receipts.is_empty());
+    assert!(legacy_economy.provision_journal.is_empty());
+
+    let _ = fs::remove_dir_all(&dir);
+    let _ = fs::remove_dir_all(&legacy_dir);
+}

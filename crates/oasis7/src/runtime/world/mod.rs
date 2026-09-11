@@ -146,12 +146,15 @@ pub use transition::{
 
 pub use cognition_economy::{
     COGNITION_ECONOMY_SCHEMA_VERSION, COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION,
-    COGNITION_LEASE_SCHEMA_VERSION, COGNITION_RECEIPT_SCHEMA_VERSION,
-    COGNITION_RESOURCE_VERSION_V1, CognitionEconomyError, CognitionEconomyEventV1,
-    CognitionEconomyIdempotencyRecordV1, CognitionEconomyOperationRecordV1,
-    CognitionEconomyStateV1, CognitionEconomyV1, CognitionLease, CognitionLeaseQuoteV1,
-    CognitionLeaseRequestV1, CognitionLeaseStatusV1, CognitionLeaseV1, CognitionQuoteV1,
-    CognitionReceipt, CognitionReceiptV1, CognitionResourceBalanceV1,
+    COGNITION_LEASE_SCHEMA_VERSION, COGNITION_PROVISIONING_EVENT_SCHEMA_VERSION,
+    COGNITION_PROVISIONING_RECEIPT_SCHEMA_VERSION, COGNITION_PROVISIONING_SCHEMA_VERSION,
+    COGNITION_RECEIPT_SCHEMA_VERSION, COGNITION_RESOURCE_VERSION_V1, CognitionEconomyError,
+    CognitionEconomyEventV1, CognitionEconomyIdempotencyRecordV1,
+    CognitionEconomyOperationRecordV1, CognitionEconomyStateV1, CognitionEconomyV1, CognitionLease,
+    CognitionLeaseQuoteV1, CognitionLeaseRequestV1, CognitionLeaseStatusV1, CognitionLeaseV1,
+    CognitionProvisioningEventV1, CognitionProvisioningReceiptV1, CognitionProvisioningRecordV1,
+    CognitionProvisioningRequestV1, CognitionQuoteV1, CognitionReceipt, CognitionReceiptV1,
+    CognitionResourceBalanceV1,
 };
 
 #[cfg(all(test, feature = "wasmtime", feature = "test_tier_full"))]
