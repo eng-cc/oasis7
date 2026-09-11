@@ -3,6 +3,7 @@
 import copy
 import hashlib
 import importlib.util
+import json
 from pathlib import Path
 import tempfile
 import subprocess
@@ -138,6 +139,110 @@ class ContractTests(unittest.TestCase):
     def test_unknown_clause_and_delivery_rejected(self):
         self.ref["consumed_clauses"]=["missing"]
         self.assertEqual(self.check()["status"],"blocked")
+
+    def test_duplicate_bare_clause_requires_path_qualified_consumption(self):
+        contract = copy.deepcopy(self.contract)
+        contract["content_refs"] = [
+            {"path": "doc/one.md", "sha256": self.contract["content_refs"][0]["sha256"], "clauses": ["shared"]},
+            {"path": "doc/two.md", "sha256": self.contract["content_refs"][0]["sha256"], "clauses": ["shared"]},
+        ]
+        bare = {"consumed_clauses": ["shared"]}
+        errors = self.api.validate_consumed_clause_refs(contract, bare)
+        self.assertTrue(any("doc/one.md" in error and "doc/two.md" in error for error in errors), errors)
+        qualified = {"consumed_clause_refs": [
+            {"repository": "eng-cc/oasis7", "path": "doc/one.md", "fragment": "shared", "clause_id": "shared"},
+            {"repository": "eng-cc/oasis7", "path": "doc/two.md", "fragment": "shared", "clause_id": "shared"},
+        ]}
+        self.assertEqual(self.api.validate_consumed_clause_refs(contract, qualified), [])
+
+    def test_bound_clause_resolves_fragment_at_both_immutable_heads(self):
+        path = self.root / "anchored.md"
+        path.write_text('<a id="section-1"></a>\n# Frozen section\n')
+        self.git("add", ".")
+        self.git("commit", "-qm", "anchored source")
+        source = self.git("rev-parse", "HEAD")
+        self.git("commit", "--allow-empty", "-qm", "anchored merge")
+        merged = self.git("rev-parse", "HEAD")
+        digest = "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+        contract = copy.deepcopy(self.contract)
+        contract.update(source_head=source, merged_head=merged)
+        contract["content_refs"] = [{"path": "anchored.md", "sha256": digest, "clauses": ["section-1"], "fragment": "section-1"}]
+        reference = {"contract_id": "S", "revision": 1, "contract_digest": self.api.contract_digest(contract),
+                     "publication_ref": {"issue_number": 11, "comment_id": 123}, "consumed_clauses": ["section-1"],
+                     "consumed_clause_refs": [{"repository": "eng-cc/oasis7", "path": "anchored.md", "fragment": "section-1",
+                                                "clause_id": "section-1", "contract_id": "S", "revision": 1,
+                                                "contract_digest": self.api.contract_digest(contract),
+                                                "publication_ref": {"repository": "eng-cc/oasis7", "issue_number": 11, "comment_id": 123}}]}
+        self.assertEqual(self.api.validate_consumed_clause_refs(contract, reference, root=self.root, bound=True), [])
+
+    def test_bound_clause_missing_fragment_is_rejected_with_locator(self):
+        contract = copy.deepcopy(self.contract)
+        reference = {"contract_id": "S", "revision": 1, "contract_digest": self.api.contract_digest(contract),
+                     "publication_ref": {"issue_number": 11, "comment_id": 123}, "consumed_clauses": ["section-1"],
+                     "consumed_clause_refs": [{"repository": "eng-cc/oasis7", "path": "spec.md", "fragment": "missing",
+                                                "clause_id": "section-1", "contract_id": "S", "revision": 1,
+                                                "contract_digest": self.api.contract_digest(contract),
+                                                "publication_ref": {"repository": "eng-cc/oasis7", "issue_number": 11, "comment_id": 123}}]}
+        errors = self.api.validate_consumed_clause_refs(contract, reference, root=self.root, bound=True)
+        self.assertTrue(any("spec.md#missing" in error for error in errors), errors)
+
+    def test_contract_schema_projects_fragment_shapes_and_integer_revision(self):
+        schema = json.loads((HERE / "schemas" / "loop-contract.schema.json").read_text())
+        self.assertEqual(schema["properties"]["revision"], {"type": "integer", "minimum": 1})
+        content = schema["properties"]["content_refs"]["items"]
+        self.assertEqual(content["required"], ["path", "sha256", "clauses"])
+        self.assertEqual(content["properties"]["fragment"], {"$ref": "#/$defs/fragment"})
+        fragments = content["properties"]["fragments"]
+        self.assertEqual(fragments["type"], "object")
+        self.assertEqual(fragments["minProperties"], 1)
+        self.assertEqual(fragments["additionalProperties"], {"$ref": "#/$defs/fragment"})
+        self.assertEqual(schema["$defs"]["fragment"]["minLength"], 1)
+        self.assertIn("pattern", schema["$defs"]["fragment"])
+
+    def test_plural_fragment_declaration_resolves_at_both_immutable_heads(self):
+        path = self.root / "plural.md"
+        path.write_text('<a id="section-1"></a>\n# Frozen section\n')
+        self.git("add", ".")
+        self.git("commit", "-qm", "plural fragment source")
+        source = self.git("rev-parse", "HEAD")
+        self.git("commit", "--allow-empty", "-qm", "plural fragment merge")
+        merged = self.git("rev-parse", "HEAD")
+        contract = copy.deepcopy(self.contract)
+        contract.update(source_head=source, merged_head=merged)
+        contract["content_refs"] = [{
+            "path": "plural.md",
+            "sha256": "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest(),
+            "clauses": ["section-1"],
+            "fragments": {"section-1": "section-1"},
+        }]
+        pr = {"number": 12, "merged": True, "head": source, "merge_commit": merged}
+        self.assertEqual(self.api.validate_contract_record(contract, self.root, pr), [])
+
+    def test_empty_or_unknown_fragment_map_is_rejected(self):
+        for fragments in ({}, {"unknown": "section-1"}):
+            with self.subTest(fragments=fragments):
+                contract = copy.deepcopy(self.contract)
+                contract["content_refs"][0]["fragments"] = fragments
+                errors = self.api.validate_contract_record(contract, self.root, {
+                    "number": 12,
+                    "merged": True,
+                    "head": self.source,
+                    "merge_commit": self.merged,
+                })
+                self.assertTrue(any("invalid content clause fragments" in error for error in errors), errors)
+
+    def test_published_revision_does_not_coerce_fixture_string_or_non_positive_value(self):
+        for revision in ("1", 0, -1, True):
+            with self.subTest(revision=revision):
+                reference = copy.deepcopy(self.ref)
+                reference["revision"] = revision
+                result = self.api.validate_contracts(
+                    self.root,
+                    self.root,
+                    {"input_contracts": [reference], "target_delivery": "pilot"},
+                    authority_reader=lambda ref: copy.deepcopy(self.record),
+                )
+                self.assertEqual(result["status"], "blocked", result)
 
     def test_unfinished_delivery_obligation_blocks_release(self):
         binding={"input_contracts":[self.ref],"target_delivery":"pilot", "delivery_obligations":[{"id":"manual", "task_uid":"task_"+"c"*32}]}

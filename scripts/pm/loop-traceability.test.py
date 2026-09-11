@@ -412,8 +412,12 @@ class CloseoutFixture:
         workflow.write_text(
             "#!/usr/bin/env bash\n"
             "set -eu\n"
-            "printf '%s\\n' audit >> \"$OASIS7_CLOSEOUT_MARKER\"\n"
-            "printf '%s\\n' '{\"status\":\"ok\"}'\n"
+            "if [[ \"${OASIS7_TRACEABILITY_CONTEXT_ONLY:-0}\" != 1 ]]; then\n"
+            "  printf '%s\\n' audit >> \"$OASIS7_CLOSEOUT_MARKER\"\n"
+            "  printf '%s\\n' '{\"status\":\"ok\"}'\n"
+            "else\n"
+            f"  printf '%s\\n' '{{\"status\":\"ok\",\"task_uid\":\"{TASK_UID}\",\"selected_task\":{{\"task_uid\":\"{TASK_UID}\"}}}}'\n"
+            "fi\n"
         )
         workflow.chmod(0o755)
         closeout = self.script_dir / "github-project-task.py"
@@ -844,12 +848,27 @@ class TraceabilityTests(unittest.TestCase):
         stale_binding = self.refresh_record_binding(stale_source)
         self.assert_blocked_for(self.leaf(stale_source, stale_binding), "source_commit")
 
+    def test_effective_tool_and_record_source_commits_are_distinct(self):
+        effective_tool_commit = "1" * 40
+        result = self.api.validate_leaf(
+            self.record,
+            self.binding,
+            authority_reader=self.readers.authority,
+            contract_reader=self.readers.contract,
+            source_commit=effective_tool_commit,
+            effective_tool_commit=effective_tool_commit,
+            record_source_commit=SOURCE_OID,
+        )
+        self.assertEqual(result.get("status"), "passed", result)
+        self.assertEqual(result.get("effective_tool_commit"), effective_tool_commit)
+        self.assertEqual(result.get("record_source_commit"), SOURCE_OID)
+
     def test_duplicate_coordination_comments_block_exact_readback(self):
         readers = FixtureReaders(self.record)
         payload = readers.authority()
         payload["comments"] = [deepcopy(payload["comment"]), deepcopy(readers.comment)]
         readers.authority = lambda *args, **kwargs: payload
-        result = self.leaf()
+        result = self.leaf(readers=readers)
         self.assert_blocked_for(result, "duplicate", "coordination comment")
 
     def test_bind_resume_and_doctor_block_before_mutation_with_pinned_helper(self):
@@ -974,6 +993,7 @@ class TraceabilityTests(unittest.TestCase):
                     argv.extend(["--loop-binding", str(binding_path)])
 
                 with patch.object(loop, "pre_mutation_admission", gate, create=True), \
+                        patch.object(loop, "_traceability_adapter", lambda effective_root, target_root, bound, commit: loader(effective_root, commit)), \
                         patch.object(loop, "load_task", return_value=task), \
                         patch.object(loop, "validate_task", side_effect=downstream_validate), \
                         patch.object(loop, "common_dir", return_value=root), \
@@ -1020,6 +1040,10 @@ class TraceabilityTests(unittest.TestCase):
     def test_closeout_failed_aggregate_preflight_blocks_before_remote_mutation(self):
         fixture = CloseoutFixture()
         self.addCleanup(fixture.tmp.cleanup)
+        mapping_path = fixture.root / ".pm" / "github-project-sync" / "tasks.json"
+        mapping = json.loads(mapping_path.read_text())
+        mapping["tasks"][TASK_UID]["loop_binding"] = {"policy_commit": SOURCE_OID}
+        mapping_path.write_text(json.dumps(mapping, sort_keys=True))
         record = fixture.record(self.record)
         candidate = fixture.write_json("candidate.json", _candidate(self.record))
         (fixture.script_dir / "loop_traceability.py").write_text(
@@ -1034,6 +1058,29 @@ class TraceabilityTests(unittest.TestCase):
         output = result.stdout + result.stderr
         self.assertNotEqual(result.returncode, 0, output)
         self.assertIn("forced aggregate preflight sentinel", output)
+        self.assertFalse(fixture.marker.exists(), output)
+
+    def test_closeout_rejects_valid_record_for_another_selected_task(self):
+        fixture = CloseoutFixture()
+        self.addCleanup(fixture.tmp.cleanup)
+        other = deepcopy(self.record)
+        other["task_uid"] = "task_" + "b" * 32
+        other["coordination_ref"]["issue_number"] = 3672
+        other["coordination_ref"]["comment_id"] = 5636906115
+        other["coordination_ref"]["record_digest"] = _record_digest(other)
+        record = fixture.record(other)
+        candidate, evidence = self.complete_aggregate(other)
+        candidate_payload = fixture.write_json(
+            "candidate.json", {"candidate": candidate, "evidence": evidence}
+        )
+        result = fixture.run(
+            "--traceability-mode", "aggregate",
+            "--traceability-record", str(record),
+            "--traceability-candidate", str(candidate_payload),
+        )
+        output = result.stdout + result.stderr
+        self.assertNotEqual(result.returncode, 0, output)
+        self.assertIn("selected task", output)
         self.assertFalse(fixture.marker.exists(), output)
 
     def test_closeout_ordinary_unbound_leaf_remains_eligible(self):
@@ -1056,6 +1103,58 @@ class TraceabilityTests(unittest.TestCase):
         self.assertTrue(result.get("local_live_admission_required"), result)
         self.assertNotIn("mutation", result)
         self.assertNotIn("dispatch_request", result)
+
+    def test_immutable_source_reader_uses_frozen_anchor_and_distinct_content_digest(self):
+        """The source proof must resolve committed bytes and exact anchors."""
+        repository_root = HERE.parent.parent
+        frozen = self.api.ImmutableSourceReader(repository_root, SOURCE_OID)
+        published_shape = {
+            "repository": REPOSITORY,
+            "path": "doc/engineering/workflow/source-of-truth.md",
+            "fragment": "traceability-record-contract",
+            "contract_id": "engineering-workflow",
+            "revision": 1,
+        }
+        live_source = frozen(published_shape)
+        self.assertEqual(live_source.get("status"), "passed", live_source)
+        self.assertEqual(live_source.get("source_commit"), SOURCE_OID)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(["git", "-C", str(root), "init", "-q"], check=True)
+            subprocess.run(["git", "-C", str(root), "config", "user.email", "traceability@example.invalid"], check=True)
+            subprocess.run(["git", "-C", str(root), "config", "user.name", "traceability-test"], check=True)
+            document = root / "contract.md"
+            exact = '<a id="traceability-record-contract"></a>\n# Contract\n'
+            document.write_text(exact, encoding="utf-8")
+            subprocess.run(["git", "-C", str(root), "add", "contract.md"], check=True)
+            subprocess.run(["git", "-C", str(root), "commit", "-qm", "exact contract anchor"], check=True)
+            commit = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+            raw_digest = "sha256:" + hashlib.sha256(exact.encode("utf-8")).hexdigest()
+            reference = {
+                "repository": REPOSITORY,
+                "path": "contract.md",
+                "fragment": "traceability-record-contract",
+                "source_digest": raw_digest,
+            }
+            reader = self.api.ImmutableSourceReader(root, commit)
+            result = reader(reference)
+            self.assertEqual(result.get("status"), "passed", result)
+            self.assertEqual(result.get("source_digest"), raw_digest)
+
+            tampered = dict(reference)
+            tampered["source_digest"] = "sha256:" + "9" * 64
+            with self.assertRaises(ValueError) as digest_error:
+                reader(tampered)
+            self.assertIn("digest mismatch", str(digest_error.exception))
+
+            document.write_text("traceability-record-contract is only mentioned\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(root), "add", "contract.md"], check=True)
+            subprocess.run(["git", "-C", str(root), "commit", "-qm", "remove anchor"], check=True)
+            missing_commit = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+            with self.assertRaises(ValueError) as anchor_error:
+                self.api.ImmutableSourceReader(root, missing_commit)(reference)
+            self.assertIn("unresolved immutable contract fragment", str(anchor_error.exception))
 
 
 if __name__ == "__main__":

@@ -33,6 +33,12 @@ Options:
   --review-packet-file <path> Passed review packet bound to frozen HEAD (required for ready)
   --ci-ready-receipt <path> Trusted CI receipt bound to the reviewed draft head
   --pr-receipt <path>    Trusted merged-PR receipt (required for PR-backed done)
+  --traceability-mode <leaf|aggregate>
+                          Optional coordinating-record preflight mode
+  --traceability-record <path>
+                          Frozen coordinating record JSON
+  --traceability-candidate <path>
+                          Aggregate candidate/evidence JSON
   --no-lint               Accepted for compatibility; legacy PM lint is not run
   --json                  Print machine-readable JSON summary only
   -h, --help              Show help
@@ -61,6 +67,10 @@ REVIEW_PACKET_FILE=""
 CI_READY_RECEIPT=""
 PR_MERGE_RECEIPT=""
 REVIEW_PLAN_SCHEMA=""
+TRACEABILITY_MODE=""
+TRACEABILITY_RECORD=""
+TRACEABILITY_CANDIDATE=""
+TRACEABILITY_RESULT_JSON='{"status":"skipped","reason":"ordinary lifecycle closeout"}'
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -92,6 +102,18 @@ while [[ $# -gt 0 ]]; do
     --review-packet-file) REVIEW_PACKET_FILE="${2:-}"; shift 2 ;;
     --ci-ready-receipt) CI_READY_RECEIPT="${2:-}"; shift 2 ;;
     --pr-receipt) PR_MERGE_RECEIPT="${2:-}"; shift 2 ;;
+    --traceability-mode)
+      TRACEABILITY_MODE="${2:-}"
+      shift 2
+      ;;
+    --traceability-record)
+      TRACEABILITY_RECORD="${2:-}"
+      shift 2
+      ;;
+    --traceability-candidate)
+      TRACEABILITY_CANDIDATE="${2:-}"
+      shift 2
+      ;;
     --no-lint)
       shift
       ;;
@@ -112,6 +134,14 @@ done
 [[ -n "$ROLE" ]] || die "--role is required"
 [[ -n "$TASK_UID" ]] || die "--task-uid is required"
 [[ "$TARGET_STATUS" == "ready" || "$TARGET_STATUS" == "done" || "$TARGET_STATUS" == "deferred" ]] || die "--to-status must be ready, done, or deferred"
+[[ -z "$TRACEABILITY_MODE" || "$TRACEABILITY_MODE" == "leaf" || "$TRACEABILITY_MODE" == "aggregate" ]] \
+  || die "--traceability-mode must be leaf or aggregate"
+if [[ -n "$TRACEABILITY_RECORD" && ! -f "$TRACEABILITY_RECORD" ]]; then
+  die "traceability record cannot be read: $TRACEABILITY_RECORD"
+fi
+if [[ -n "$TRACEABILITY_CANDIDATE" && ! -f "$TRACEABILITY_CANDIDATE" ]]; then
+  die "traceability candidate cannot be read: $TRACEABILITY_CANDIDATE"
+fi
 if [[ -z "$CLAIM_TYPE" ]]; then
   if [[ "$TARGET_STATUS" == "done" ]]; then
     CLAIM_TYPE="task_complete"
@@ -131,6 +161,237 @@ fi
 if [[ "$TARGET_STATUS" == "ready" && "$CLAIM_TYPE" != "ready_for_pr" ]]; then
   die "--claim-type must be ready_for_pr when --to-status is ready"
 fi
+
+selected_traceability_context() {
+  # The selected-task audit is read-only. The environment marker lets fixture
+  # callers return context without confusing it with the transition audits.
+  OASIS7_TRACEABILITY_CONTEXT_ONLY=1 \
+    "$SCRIPT_DIR/github-project-workflow.sh" --json audit --task-uid "$TASK_UID"
+}
+
+SELECTED_TRACEABILITY_CONTEXT_JSON="$(selected_traceability_context)" \
+  || die "selected live task audit failed before traceability context selection"
+
+run_traceability_preflight() {
+  # This is a projection boundary only. The core helper owns all record,
+  # candidate, reader, and digest validation; closeout enforces its result
+  # after selected-task context and before any remote lifecycle write.
+  local output
+  output="$(python3 - "$ROOT_DIR" "$TASK_UID" "$TRACEABILITY_MODE" "$TRACEABILITY_RECORD" "$TRACEABILITY_CANDIDATE" "$SCRIPT_DIR" "$SELECTED_TRACEABILITY_CONTEXT_JSON" <<'PY'
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1]).resolve()
+task_uid, requested_mode = sys.argv[2], sys.argv[3]
+record_arg, candidate_arg, script_dir = sys.argv[4], sys.argv[5], Path(sys.argv[6]).resolve()
+try:
+    selected_context = json.loads(sys.argv[7])
+except (TypeError, ValueError, json.JSONDecodeError) as exc:
+    raise SystemExit('selected live task audit returned invalid JSON: ' + str(exc))
+if not isinstance(selected_context, dict) or selected_context.get('status') != 'ok':
+    raise SystemExit('selected live task audit is not authoritative')
+selected_task = selected_context.get('selected_task')
+if not isinstance(selected_task, dict):
+    raise SystemExit('selected live task audit omitted selected task context')
+live_uid = selected_task.get('task_uid') or selected_context.get('task_uid')
+if live_uid != task_uid:
+    raise SystemExit('selected task UID does not match requested task')
+mapping_path = root / '.pm/github-project-sync/tasks.json'
+
+try:
+    mapping = json.loads(mapping_path.read_text(encoding='utf-8'))
+    task = (mapping.get('tasks') or {})[task_uid]
+except (OSError, ValueError, KeyError, TypeError) as exc:
+    raise SystemExit('traceability task context unavailable: ' + str(exc))
+if not isinstance(task, dict):
+    raise SystemExit('traceability task context is not an object')
+if task.get('task_uid', task_uid) != task_uid:
+    raise SystemExit('local selected task UID does not match requested task')
+
+binding = task.get('loop_binding') if isinstance(task.get('loop_binding'), dict) else {}
+live_binding_value = selected_task.get('loop_binding') or selected_context.get('loop_binding')
+live_binding = live_binding_value if isinstance(live_binding_value, dict) else None
+live_change_id = selected_task.get('change_id') or selected_context.get('change_id')
+if live_change_id is not None and task.get('change_id') not in (None, live_change_id):
+    raise SystemExit('selected live task change_id does not match local task context')
+if live_binding is not None and binding and live_binding != binding:
+    raise SystemExit('selected live task loop binding does not match local task context')
+authoritative_binding = live_binding or binding
+declared_ref = (selected_task.get('coordination_ref')
+                or task.get('coordination_ref')
+                or authoritative_binding.get('coordination_ref'))
+declared_record = (selected_task.get('traceability_record')
+                   or task.get('traceability_record')
+                   or task.get('coordination_record'))
+declared_candidate = (selected_task.get('traceability_candidate')
+                      or selected_task.get('aggregate_candidate')
+                      or task.get('traceability_candidate')
+                      or task.get('aggregate_candidate'))
+record = None
+if record_arg:
+    try:
+        record = json.loads(Path(record_arg).expanduser().resolve().read_text(encoding='utf-8'))
+    except (OSError, ValueError) as exc:
+        raise SystemExit('traceability coordinating record cannot be read: ' + str(exc))
+elif isinstance(declared_record, dict):
+    record = declared_record
+
+if record is not None:
+    if record.get('task_uid') != task_uid:
+        raise SystemExit('coordinating record does not match selected task UID')
+    if live_change_id is not None and record.get('change_id') != live_change_id:
+        raise SystemExit('coordinating record change_id does not match selected task')
+    if isinstance(authoritative_binding, dict):
+        if authoritative_binding.get('task_uid') not in (None, task_uid):
+            raise SystemExit('selected task binding UID does not match requested task')
+        binding_change_id = authoritative_binding.get('change_id')
+        if binding_change_id is not None and record.get('change_id') != binding_change_id:
+            raise SystemExit('coordinating record change_id does not match selected task binding')
+        binding_ref = authoritative_binding.get('coordination_ref')
+        record_ref = record.get('coordination_ref')
+        if isinstance(binding_ref, dict) and record_ref != binding_ref:
+            raise SystemExit('coordinating record authority does not match selected task binding')
+
+def aggregate_record(value):
+    if not isinstance(value, dict):
+        return False
+    obligations = value.get('required_obligations')
+    slots = value.get('mapping_slots')
+    return ((isinstance(obligations, list) and len(obligations) > 1)
+            or (isinstance(slots, list) and len(slots) > 1))
+
+declared_aggregate = (
+    requested_mode == 'aggregate'
+    or aggregate_record(record)
+    or aggregate_record(declared_record)
+    or selected_task.get('traceability_mode') == 'aggregate'
+    or selected_task.get('completion_mode') == 'aggregate'
+    or task.get('traceability_mode') == 'aggregate'
+    or task.get('completion_mode') == 'aggregate'
+)
+live_mode = (selected_task.get('traceability_mode')
+             or selected_task.get('completion_mode')
+             or selected_context.get('traceability_mode')
+             or selected_context.get('completion_mode'))
+if live_mode in {'leaf', 'aggregate'} and requested_mode and requested_mode != live_mode:
+    raise SystemExit('traceability closeout mode does not match selected live task context')
+if live_mode == 'leaf' and declared_aggregate:
+    raise SystemExit('aggregate traceability context does not match selected live task')
+mode = live_mode or requested_mode or ('aggregate' if declared_aggregate else ('leaf' if record is not None else ''))
+if not requested_mode and not declared_aggregate and isinstance(declared_ref, dict):
+    mode = 'leaf'
+if declared_aggregate and mode == 'leaf':
+    raise SystemExit('traceability closeout cannot downgrade aggregate context to leaf')
+if not mode:
+    print(json.dumps({'status': 'skipped', 'reason': 'ordinary lifecycle closeout'}, sort_keys=True))
+    raise SystemExit(0)
+if record is None:
+    raise SystemExit('traceability ' + mode + ' closeout requires coordinating record')
+if mode == 'aggregate' and not candidate_arg and declared_candidate is None:
+    raise SystemExit('traceability aggregate closeout requires aggregate candidate')
+
+candidate = None
+evidence = []
+if candidate_arg:
+    try:
+        candidate_payload = json.loads(Path(candidate_arg).expanduser().resolve().read_text(encoding='utf-8'))
+    except (OSError, ValueError) as exc:
+        raise SystemExit('traceability aggregate candidate cannot be read: ' + str(exc))
+elif isinstance(declared_candidate, dict):
+    candidate_payload = declared_candidate
+else:
+    candidate_payload = None
+if mode == 'aggregate':
+    if not isinstance(candidate_payload, dict):
+        raise SystemExit('traceability aggregate candidate is not an object')
+    # Only one explicit envelope shape is accepted. The core validates every
+    # candidate/evidence identity; a CLI field cannot replace the record.
+    candidate = candidate_payload.get('candidate', candidate_payload.get('aggregate_candidate', candidate_payload))
+    evidence = candidate_payload.get('evidence', candidate_payload.get('leaf_evidence', []))
+    if not isinstance(candidate, dict) or not isinstance(evidence, list):
+        raise SystemExit('traceability aggregate candidate/evidence envelope is invalid')
+    if isinstance(declared_candidate, dict) and candidate_payload != declared_candidate:
+        raise SystemExit('traceability aggregate candidate does not match declared candidate')
+
+helper_path = script_dir / 'loop_traceability.py'
+if not helper_path.is_file():
+    raise SystemExit('effective traceability helper is unavailable: ' + str(helper_path))
+spec = importlib.util.spec_from_file_location('closeout_loop_traceability', helper_path)
+if spec is None or spec.loader is None:
+    raise SystemExit('effective traceability helper cannot be loaded')
+helper = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(helper)
+
+record_source_commit = ((record.get('coordination_ref') or {}).get('source_commit')
+                        if isinstance(record, dict) else None)
+effective_binding = authoritative_binding if isinstance(authoritative_binding, dict) else binding
+effective_tool_commit = effective_binding.get('policy_commit') if isinstance(effective_binding, dict) else None
+if not isinstance(record_source_commit, str):
+    raise SystemExit('traceability closeout requires immutable record_source_commit')
+if not isinstance(effective_tool_commit, str):
+    raise SystemExit('traceability closeout requires immutable effective_tool_commit')
+
+def live_authority_reader(reference):
+    factory = getattr(helper, 'live_authority_reader', None)
+    if callable(factory):
+        return factory(root)(reference)
+    authority = (getattr(helper, 'GitHubAuthorityReader', None)
+                 or getattr(helper, 'GitHubAuthority', None))
+    if callable(authority):
+        return authority(root)(reference)
+    raise RuntimeError('live traceability authority reader unavailable')
+
+def live_contract_reader(reference):
+    factory = getattr(helper, 'live_contract_reader', None)
+    if callable(factory):
+        return factory(root)(reference)
+    authority = (getattr(helper, 'ImmutableSourceReader', None)
+                 or getattr(helper, 'GitHubContractReader', None))
+    if callable(authority):
+        return authority(root, record_source_commit)(reference)
+    raise RuntimeError('live traceability contract reader unavailable')
+
+if mode == 'aggregate':
+    validate = getattr(helper, 'validate_aggregate', None)
+    if not callable(validate):
+        raise SystemExit('effective traceability helper lacks validate_aggregate')
+    result = validate(
+        record,
+        candidate,
+        evidence,
+        authority_reader=live_authority_reader,
+        contract_reader=live_contract_reader,
+        source_commit=effective_tool_commit,
+        effective_tool_commit=effective_tool_commit,
+        record_source_commit=record_source_commit,
+    )
+else:
+    validate = getattr(helper, 'validate_leaf', None)
+    if not callable(validate):
+        raise SystemExit('effective traceability helper lacks validate_leaf')
+    result = validate(
+        record,
+        effective_binding,
+        authority_reader=live_authority_reader,
+        contract_reader=live_contract_reader,
+        source_commit=effective_tool_commit,
+        effective_tool_commit=effective_tool_commit,
+        record_source_commit=record_source_commit,
+    )
+if not isinstance(result, dict):
+    raise SystemExit('traceability preflight returned no structured result')
+if result.get('status') != 'passed':
+    blockers = result.get('blockers') or ['traceability preflight blocked']
+    raise SystemExit('; '.join(str(item) for item in blockers))
+print(json.dumps({'status': 'passed', 'mode': mode, 'reader_kind': 'github_live_query'}, sort_keys=True))
+PY
+  )" || die "traceability $TRACEABILITY_MODE preflight failed before closeout mutation"
+  TRACEABILITY_RESULT_JSON="$output"
+}
+
+run_traceability_preflight
 if [[ "$TARGET_STATUS" == "ready" ]]; then
   if [[ "$VERIFICATION_PROFILE" != "fixture_repository_state" ]]; then
     [[ -n "$CI_READY_RECEIPT" && -f "$CI_READY_RECEIPT" ]] || die "ready closeout requires --ci-ready-receipt"
@@ -422,7 +683,7 @@ else:
   raise SystemExit('task-closeout: selected-task postcondition audit lacks expected status/phase')
 PY
 
-RESULT_JSON="$(python3 - "$ROLE" "$TARGET_STATUS" "$CLAIM_READY_JSON" "$TASK_AUDIT_JSON" "$CLOSEOUT_JSON" "$POSTCONDITION_AUDIT_JSON" <<'PY'
+RESULT_JSON="$(python3 - "$ROLE" "$TARGET_STATUS" "$CLAIM_READY_JSON" "$TASK_AUDIT_JSON" "$CLOSEOUT_JSON" "$POSTCONDITION_AUDIT_JSON" "$TRACEABILITY_RESULT_JSON" <<'PY'
 import json
 import sys
 
@@ -432,6 +693,7 @@ claim = json.loads(sys.argv[3])
 audit = json.loads(sys.argv[4])
 closeout = json.loads(sys.argv[5])
 postcondition = json.loads(sys.argv[6])
+traceability = json.loads(sys.argv[7])
 payload = {
     "task_uid": closeout["task_uid"],
     "role": role,
@@ -443,6 +705,7 @@ payload = {
     "task_audit": audit,
     "workflow_close": closeout,
     "postcondition_readback": postcondition,
+    "traceability_preflight": traceability,
     "move_task": closeout,
     "pm_lint": {"status": "skipped", "ran": False, "reason": "repo-local .pm/tasks retired"},
     "recommended_next_command": "./scripts/prepare-task-pr.sh",
