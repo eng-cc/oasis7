@@ -90,7 +90,7 @@
     "Real node/provider transport and credential seam behavior remain untested by this slice."
   ],
   "commit": {
-    "status": "pending",
-    "sha": null
+    "status": "committed",
+    "sha": "92c369f87de5868975bebf8e6a6ab5d81f8c6d29"
   }
 }
