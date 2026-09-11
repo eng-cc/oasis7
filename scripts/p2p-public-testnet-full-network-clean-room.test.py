@@ -3450,5 +3450,42 @@ class StorageFirstContractRedTests(unittest.TestCase):
                 validator(contract, changed)
 
 
+class StorageFirstParentSecurityRedTests(unittest.TestCase):
+    """Finding-specific RED coverage for QA-SF-001 parent admission.
+
+    These mutations represent parent evidence rebinding that must be rejected
+    before a storage-only child contract is projected.  The fixture is entirely
+    in-process and contains no signed material or provider access.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.module = load_module()
+
+    def _parent_plan(self) -> dict[str, object]:
+        fixture = StorageFirstContractRedTests("runTest")
+        fixture.module = self.module
+        return fixture._parent_plan()
+
+    def test_qa_sf_001_parent_binding_rebinds_fail_closed(self) -> None:
+        builder = getattr(self.module, "build_storage_first_contract", None)
+        self.assertTrue(callable(builder), "RED: missing storage-first planner API")
+        base = self._parent_plan()
+        mutations = {
+            "known-host-path": lambda plan: plan["nodes"][0]["host_binding"].update(
+                {"known_hosts_path": "/operator/rebound-known-hosts"}
+            ),
+            "known-host-digest": lambda plan: plan.update({"known_hosts_digest": "x" * 64}),
+            "missing-ledger-path": lambda plan: plan["credential_nonce_ledger"].pop("path"),
+            "impact-digest": lambda plan: plan["consumer_impact_record"].update({"sha256": "x" * 64}),
+            "plan-digest": lambda plan: plan.update({"plan_digest": "x" * 64}),
+        }
+        for mutation, apply in mutations.items():
+            changed = copy.deepcopy(base)
+            apply(changed)
+            with self.subTest(mutation=mutation), self.assertRaises(Exception):
+                builder(changed)
+
+
 if __name__ == "__main__":
     unittest.main()

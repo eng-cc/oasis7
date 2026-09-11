@@ -4507,5 +4507,170 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
                 validator(changed)
 
 
+class StorageFirstSecurityRedTests(unittest.TestCase):
+    """Finding-specific RED coverage for the five QA release blockers.
+
+    Every test uses the existing in-process transport double.  No callback can
+    open a socket, read credentials, or mutate a real provider.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.adapter = load_module("storage_first_security_adapter_under_test", ADAPTER_PATH)
+
+    def setUp(self) -> None:
+        self.fixture = StorageFirstAdapterRedTests("runTest")
+        self.fixture.adapter = self.adapter
+        self.fixture.setUp()
+        self.plan = self.fixture.plan
+        self.identity_map = self.fixture.identity_map
+
+    def tearDown(self) -> None:
+        self.fixture.tearDown()
+
+    def _authority(self) -> dict[str, object]:
+        return self.fixture._authority()
+
+    def _runner(self, transport, **overrides):
+        return self.fixture._runner(transport, **overrides)
+
+    def test_qa_sf_001_authority_and_parent_bindings_are_fresh_and_exact(self) -> None:
+        validator = getattr(self.adapter, "_storage_first_validate_admission", None)
+        self.assertTrue(callable(validator), "RED: missing storage-first admission validator")
+
+        def attempt(mutate_plan=None, mutate_authority=None):
+            plan = copy.deepcopy(self.plan)
+            authority = self._authority()
+            if mutate_plan is not None:
+                mutate_plan(plan)
+            if mutate_authority is not None:
+                mutate_authority(authority)
+            evidence = copy.deepcopy(plan["identity_v2_evidence"])
+            return validator(
+                plan,
+                authority,
+                phase="storage-205-first",
+                identity_v2_evidence=evidence,
+            )
+
+        cases = {
+            "expired-authority": (
+                None,
+                lambda authority: authority.update({"expires_at": "2000-01-01T00:00:00Z"}),
+            ),
+            "identity-digest-rebound": (
+                lambda plan: plan["identity_v2_evidence"].update({"digest": "x" * 64}),
+                None,
+            ),
+            "known-host-digest-rebound": (
+                lambda plan: plan.update({"known_hosts_digest": "x" * 64}),
+                None,
+            ),
+            "known-host-path-rebound": (
+                lambda plan: plan["nodes"][0]["host_binding"].update(
+                    {"known_hosts_path": "/operator/rebound-known-hosts"}
+                ),
+                None,
+            ),
+            "missing-bounded-proof": (lambda plan: plan.pop("sequencer_proof"), None),
+            "missing-ledger-path": (
+                lambda plan: plan["credential_nonce_ledger"].pop("path"),
+                None,
+            ),
+            "impact-digest-rebound": (
+                lambda plan: plan["consumer_impact_record"].update({"sha256": "x" * 64}),
+                None,
+            ),
+            "plan-digest-rebound": (
+                lambda plan: plan.update({"plan_digest": "x" * 64}),
+                lambda authority: authority.update({"plan_digest": "x" * 64}),
+            ),
+        }
+        for mutation, (mutate_plan, mutate_authority) in cases.items():
+            with self.subTest(mutation=mutation), self.assertRaises(Exception):
+                attempt(mutate_plan, mutate_authority)
+
+    def test_qa_sf_002_provider_callbacks_receive_secret_free_node_projection(self) -> None:
+        self.plan["nodes"][0]["credential_seam"] = "secret-placeholder"
+        base_transport = self.fixture._Transport
+
+        class RecordingTransport(base_transport):
+            def __init__(self):
+                super().__init__()
+                self.node_keys: list[set[str]] = []
+
+            def _record(self, node):
+                self.node_keys.append(set(node))
+
+            def inspect_node(self, node):
+                self._record(node)
+                return super().inspect_node(node)
+
+            def preflight(self, operation, node):
+                self._record(node)
+                return super().preflight(operation, node)
+
+            def verify(self, operation, node):
+                self._record(node)
+                return super().verify(operation, node)
+
+            def mutate(self, operation, node):
+                self._record(node)
+                return super().mutate(operation, node)
+
+        transport = RecordingTransport()
+        self._runner(transport)
+        self.assertTrue(transport.node_keys)
+        self.assertTrue(
+            all("credential_seam" not in keys for keys in transport.node_keys),
+            "provider callbacks must receive the credential-free transport projection",
+        )
+
+    def test_qa_sf_003_live_trust_revalidation_is_mandatory_before_mutation(self) -> None:
+        transport = self.fixture._Transport()
+        with self.assertRaises(Exception):
+            self._runner(transport)
+        self.assertEqual(transport.mutations, [])
+
+    def test_qa_sf_004_receipts_require_complete_bindings(self) -> None:
+        receipt_validator = getattr(self.adapter, "validate_storage_first_receipt", None)
+        self.assertTrue(callable(receipt_validator), "RED: missing receipt validator")
+        minimal_receipt = {
+            "schema_version": "oasis7.storage_first_receipt.v1",
+            "phase_id": "storage-205-first",
+            "operation": "stop:storage-205",
+            "target": "storage-205",
+            "observer_mutation": False,
+        }
+        with self.assertRaises(Exception):
+            receipt_validator(minimal_receipt)
+
+    def test_qa_sf_004_journals_require_complete_bindings(self) -> None:
+        journal_validator = getattr(self.adapter, "validate_storage_first_journal", None)
+        self.assertTrue(callable(journal_validator), "RED: missing journal validator")
+        minimal_journal = {
+            "schema_version": "oasis7.storage_first_mutation_journal.v1",
+            "phase_id": "storage-205-first",
+            "status": "prepared",
+            "next_operation": "stop:storage-205",
+        }
+        with self.assertRaises(Exception):
+            journal_validator(minimal_journal)
+
+    def test_qa_sf_005_side_effect_uncertainty_persists_reconciliation_handoff(self) -> None:
+        transport = self.fixture._Transport(side_effect_operation="delete:storage-205")
+        journal = self.fixture.root / "side-effect-security.journal.json"
+        with self.assertRaises(Exception):
+            self._runner(transport, journal_path=journal)
+        record = json.loads(journal.read_text())
+        self.assertEqual(record["rollback_status"], "reconciliation-blocked")
+        self.assertEqual(record["next_operation"], "reconciliation-required")
+        self.assertEqual(record.get("reconciliation_requirements"), {
+            "reobserve_failed_state": True,
+            "clean_redeploy": True,
+            "automatic_replay": False,
+        })
+
+
 if __name__ == "__main__":
     unittest.main()
