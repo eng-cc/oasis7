@@ -178,7 +178,17 @@ impl RuntimeLlmSidecar {
                 leases_to_clear.push(agent_id);
                 continue;
             };
-            if runtime_lease != &lease {
+            if runtime_lease.lease_id != lease.lease_id
+                || runtime_lease.idempotency_key != lease.idempotency_key
+                || runtime_lease.account_id != lease.account_id
+                || runtime_lease.agent_id != lease.agent_id
+                || runtime_lease.agent_session_id != lease.agent_session_id
+                || runtime_lease.agent_turn_id != lease.agent_turn_id
+                || runtime_lease.decision_request_id != lease.decision_request_id
+                || runtime_lease.request_digest != lease.request_digest
+                || runtime_lease.quote != lease.quote
+                || runtime_lease.reserved_amount != lease.reserved_amount
+            {
                 return Err(format!(
                     "stale provider cognition lease Runtime identity mismatch for {agent_id}"
                 ));

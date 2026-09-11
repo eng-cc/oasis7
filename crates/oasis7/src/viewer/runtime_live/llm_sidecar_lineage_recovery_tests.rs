@@ -346,6 +346,130 @@ fn binding_changed_restore_releases_stale_lease_before_replan() {
 }
 
 #[test]
+fn binding_changed_stale_lease_checkpoint_retry_reconciles_terminal_release() {
+    let mut old_world = bound_provider_lease_test_world(&["agent-a"]);
+    old_world = old_world.with_cognition_scheduler(
+        serde_json::from_value(serde_json::json!({
+            "schema_version": "scheduler-policy.v1",
+            "max_total_wakes_per_tick": 8,
+            "max_wakes_per_agent_per_tick": 1,
+            "aging_after_ticks": 2,
+            "max_starvation_ticks": 4,
+            "initial_priority": 0,
+            "comparator": "deadline_due_desc,next_wake_tick_asc,effective_priority_desc,starvation_deadline_tick_asc,cursor_distance_asc,agent_id_asc,continuation_id_asc,wake_seq_asc",
+            "service_order": "stable_round_robin"
+        }))
+        .expect("decode checkpoint-retry scheduler policy"),
+        8,
+    );
+    let old_context = valid_test_provider_context(&old_world, "agent-a", "turn-old", "request-old");
+    let old_lease = reserve_test_provider_lease(&mut old_world, &old_context);
+    let old_binding = old_world
+        .current_cognition_runtime_binding()
+        .expect("old Runtime cognition binding");
+    let path = std::env::temp_dir().join(format!(
+        "oasis7-viewer-provider-lineage-binding-retry-{}-{}.json",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos()
+    ));
+    let blocked_backup = path.with_extension(format!("blocked-backup-{}", std::process::id()));
+    let mut first = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    first.configure_provider_lineage_store(path.clone());
+    first.provider_agent_ids.insert("agent-a".to_string());
+    first
+        .provider_contexts
+        .insert("agent-a".to_string(), old_context);
+    first
+        .provider_cognition_leases
+        .insert("agent-a".to_string(), old_lease.clone());
+    first.provider_lineage_binding = Some(old_binding);
+    first
+        .persist_provider_lineage()
+        .expect("persist checkpoint-retry stale binding fixture");
+
+    let mut new_world = old_world.clone();
+    new_world
+        .invalidate_cognition_for_reorg(1)
+        .expect("authorize checkpoint-retry binding change");
+    new_world
+        .bind_cognition_runtime(
+            "lease-recovery-world",
+            "lease-recovery-branch",
+            0,
+            None,
+            "pending",
+            1,
+        )
+        .expect("bind checkpoint-retry Runtime identity");
+
+    let mut restarted = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    restarted.configure_provider_lineage_store(path.clone());
+    restarted
+        .restore_provider_lineage(&new_world)
+        .expect("restore checkpoint-retry provider lineage");
+    restarted
+        .install_test_provider_lineage_checkpoint_blocker()
+        .expect("install checkpoint blocker");
+    let mut kernel = WorldKernel::new();
+    let error = restarted
+        .prepare_provider_request_contexts(&mut new_world, &mut kernel, "lease-recovery-world")
+        .expect_err("checkpoint failure must retain retryable stale identity");
+    assert!(
+        error.contains("stale provider cognition lease cleanup persistence failed"),
+        "checkpoint failure must be surfaced: {error}"
+    );
+    assert_eq!(
+        new_world
+            .cognition_economy()
+            .expect("read Runtime economy after failed persistence")
+            .leases
+            .get(old_lease.lease_id.as_str())
+            .expect("released lease remains durable")
+            .status,
+        crate::runtime::CognitionLeaseStatusV1::Released,
+        "Runtime release must commit before sidecar persistence retry"
+    );
+    assert!(
+        restarted.provider_cognition_leases.contains_key("agent-a"),
+        "failed checkpoint must retain the sidecar mirror for retry"
+    );
+
+    std::fs::remove_dir(&path).expect("remove checkpoint blocker");
+    restarted
+        .prepare_provider_request_contexts(&mut new_world, &mut kernel, "lease-recovery-world")
+        .expect("same-server stale lease cleanup must retry after checkpoint recovery");
+    assert!(
+        restarted.provider_cognition_leases.is_empty(),
+        "retry must clear the terminal lease mirror"
+    );
+    let checkpoint: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).expect("read retried checkpoint cleanup"))
+            .expect("decode retried checkpoint cleanup");
+    assert!(
+        checkpoint["provider_cognition_leases"]
+            .as_object()
+            .is_some_and(serde_json::Map::is_empty),
+        "retry must durably clear the old lease before replan"
+    );
+    assert_eq!(
+        new_world
+            .cognition_economy()
+            .expect("read Runtime economy after retry")
+            .receipts
+            .values()
+            .filter(|receipt| receipt.operation == "release")
+            .count(),
+        1,
+        "retry must not emit a duplicate Runtime release"
+    );
+    let _ = std::fs::remove_file(path);
+    let _ = std::fs::remove_file(blocked_backup);
+}
+
+#[test]
 fn provider_lease_release_fences_cross_request_without_economic_mutation() {
     let mut world = bound_provider_lease_test_world(&["agent-a"]);
     let old_context = valid_test_provider_context(&world, "agent-a", "turn-old", "request-old");
