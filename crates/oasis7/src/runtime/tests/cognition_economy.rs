@@ -1,6 +1,7 @@
 //! Runtime cognition economy transition, idempotency and crash-prefix tests.
 
 use super::super::*;
+use serde::Serialize;
 use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
@@ -29,6 +30,28 @@ fn temp_dir(prefix: &str) -> PathBuf {
         .expect("clock after epoch")
         .as_nanos();
     std::env::temp_dir().join(format!("oasis7-cognition-economy-{prefix}-{nanos}"))
+}
+
+fn economy_digest_for_test<T: Serialize>(domain: &str, payload: &T) -> String {
+    let bytes = oasis7_wasm_abi::encode_canonical_cbor(&(domain, payload))
+        .expect("economy test payload is canonically encodable");
+    format!("blake3:{}", blake3::hash(&bytes))
+}
+
+fn refresh_event_digest_for_test(event: &mut CognitionEconomyEventV1) {
+    let mut value = serde_json::to_value(&*event).expect("economy event serializes");
+    value
+        .as_object_mut()
+        .expect("economy event is an object")
+        .remove("event_digest");
+    event.event_digest = economy_digest_for_test("oasis7.cognition.economy.event.v1", &value);
+}
+
+fn refresh_head_digest_for_test(economy: &mut CognitionEconomyStateV1) {
+    economy.head_digest = economy_digest_for_test(
+        "oasis7.cognition.economy.journal-head.v1",
+        &(economy.head_seq, &economy.journal),
+    );
 }
 
 #[test]
@@ -183,6 +206,118 @@ fn quote_digest_and_expiry_are_immutable_runtime_inputs() {
         5
     );
     assert_eq!(economy.journal.len(), 0);
+}
+
+#[test]
+fn boundary_amount_validation_returns_error_without_panicking() {
+    let amount = u64::MAX;
+    let request = request("max-amount-key", amount);
+    let lease = CognitionLeaseV1 {
+        schema_version: COGNITION_LEASE_SCHEMA_VERSION.to_string(),
+        lease_id: request.derived_lease_id(),
+        idempotency_key: request.idempotency_key.clone(),
+        account_id: request.account_id.clone(),
+        agent_id: request.agent_id.clone(),
+        agent_session_id: request.agent_session_id.clone(),
+        agent_turn_id: request.agent_turn_id.clone(),
+        decision_request_id: request.decision_request_id.clone(),
+        request_digest: request.request_digest.clone(),
+        quote: request.quote.clone(),
+        reserved_amount: amount,
+        settled_amount: amount,
+        refunded_amount: amount,
+        status: CognitionLeaseStatusV1::Settled,
+        reserved_at_tick: 1,
+        closed_at_tick: Some(2),
+        receipt_id: Some(format!("blake3:{}", "0".repeat(64))),
+    };
+    let lease_result = std::panic::catch_unwind(|| lease.validate());
+    assert!(
+        lease_result.is_ok(),
+        "lease boundary validation must return an error instead of panicking"
+    );
+    assert!(lease_result.unwrap().is_err());
+
+    let mut receipt = CognitionReceiptV1 {
+        schema_version: COGNITION_RECEIPT_SCHEMA_VERSION.to_string(),
+        receipt_id: format!("blake3:{}", "1".repeat(64)),
+        receipt_digest: String::new(),
+        lease_id: lease.lease_id,
+        idempotency_key: lease.idempotency_key,
+        account_id: lease.account_id,
+        agent_id: lease.agent_id,
+        agent_session_id: lease.agent_session_id,
+        agent_turn_id: lease.agent_turn_id,
+        decision_request_id: lease.decision_request_id,
+        request_digest: lease.request_digest,
+        quote: lease.quote,
+        reserved_amount: amount,
+        consumed_amount: amount,
+        refunded_amount: amount,
+        status: CognitionLeaseStatusV1::Settled,
+        issued_at_tick: 2,
+    };
+    receipt.receipt_digest = receipt.recompute_digest();
+    let receipt_result = std::panic::catch_unwind(|| receipt.validate());
+    assert!(
+        receipt_result.is_ok(),
+        "receipt boundary validation must return an error instead of panicking"
+    );
+    assert!(receipt_result.unwrap().is_err());
+}
+
+#[test]
+fn validation_rejects_receipt_amount_mismatch_with_lease_transition() {
+    let mut economy = CognitionEconomyStateV1::new();
+    economy
+        .set_resource_balance("account-agent-a", "cognition_units", 20)
+        .expect("seed balance");
+    let lease = economy
+        .reserve(request("amount-linkage-key", 8), 1)
+        .expect("reserve");
+    economy.settle(&lease.lease_id, 5, 2).expect("settle");
+
+    let stored_lease = economy
+        .leases
+        .get_mut(&lease.lease_id)
+        .expect("stored lease");
+    stored_lease.settled_amount = 4;
+    stored_lease.refunded_amount = 4;
+
+    assert!(
+        economy.validate().is_err(),
+        "receipt amounts must match the lease transition"
+    );
+}
+
+#[test]
+fn validation_rejects_duplicate_terminal_journal_transition() {
+    let mut economy = CognitionEconomyStateV1::new();
+    economy
+        .set_resource_balance("account-agent-a", "cognition_units", 20)
+        .expect("seed balance");
+    let lease = economy
+        .reserve(request("duplicate-event-key", 8), 1)
+        .expect("reserve");
+    economy.settle(&lease.lease_id, 5, 2).expect("settle");
+
+    let mut duplicate = economy.journal.last().cloned().expect("settle event");
+    duplicate.journal_seq = economy.journal.len() as u64 + 1;
+    duplicate.parent_event_digest = economy
+        .journal
+        .last()
+        .expect("settle event")
+        .event_digest
+        .clone();
+    refresh_event_digest_for_test(&mut duplicate);
+    economy.journal.push(duplicate);
+    economy.head_seq = economy.journal.len() as u64;
+    refresh_head_digest_for_test(&mut economy);
+
+    assert!(
+        economy.validate().is_err(),
+        "a lease must have one canonical terminal journal transition"
+    );
 }
 
 #[test]
