@@ -160,8 +160,6 @@ def visible_lines(text: str) -> list[tuple[int, str]]:
     for number, line in enumerate(text.splitlines(), start=1):
         if number in excluded_lines:
             continue
-        if line.startswith("\t") or line.startswith("    "):
-            continue
         visible.append((number, line))
     return visible
 

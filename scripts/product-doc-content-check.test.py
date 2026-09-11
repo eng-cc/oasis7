@@ -293,6 +293,29 @@ def nested_fenced_examples(root: Path) -> None:
     (root / TOPIC).write_text(TOPIC_TEXT + examples, encoding="utf-8")
 
 
+def list_continuation_unresolved_id(root: Path) -> None:
+    continuation = """
+- A list item whose continuation remains prose.
+    REQ-NONEXISTENT-001 must not be hidden by indentation.
+"""
+    (root / TOPIC).write_text(TOPIC_TEXT + continuation, encoding="utf-8")
+
+
+def list_continuation_orphan_anchor(root: Path) -> None:
+    continuation = """
+- A list item whose continuation remains prose.
+    <a id="req-list-orphan-001"></a>
+"""
+    (root / TOPIC).write_text(TOPIC_TEXT + continuation, encoding="utf-8")
+
+
+def true_indented_code_example(root: Path) -> None:
+    code = """
+    REQ-CODE-001 and [missing](missing.md) remain code.
+"""
+    (root / TOPIC).write_text(TOPIC_TEXT + code, encoding="utf-8")
+
+
 def indented_requirement_heading_without_acceptance(root: Path) -> None:
     updated = TOPIC_TEXT.replace(
         "<a id=\"req-sample-001\"></a>\n### REQ-SAMPLE-001",
@@ -329,6 +352,9 @@ def main() -> None:
     scenario(None, multiline_comment_before_authority)
     scenario(None, multiline_comment_before_cross_file_refs)
     scenario(None, nested_fenced_examples)
+    scenario("unresolved-id-reference", list_continuation_unresolved_id)
+    scenario("anchor-without-declaration", list_continuation_orphan_anchor)
+    scenario(None, true_indented_code_example)
     scenario("req-missing-acceptance", indented_requirement_heading_without_acceptance)
     scenario("anchor-without-declaration", standalone_requirement_and_acceptance_anchors)
     scenario("duplicate-anchor", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("<a id=\"ac-sample-001\"></a>", "<a id=\"req-sample-001\"></a>\n<a id=\"ac-sample-001\"></a>"), encoding="utf-8"))
