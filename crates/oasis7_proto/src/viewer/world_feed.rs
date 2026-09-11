@@ -89,6 +89,10 @@ pub struct WorldFeedEvent {
     pub summary: String,
     pub detail: String,
     pub receipt_ref: Option<String>,
+    /// Optional identity of a simulator module visual entity affected by this event.
+    /// Legacy feed events omit this field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub module_visual_entity_id: Option<String>,
     /// Optional additive major-event authority; legacy feed events omit it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub major_event: Option<WorldFeedMajorEvent>,
@@ -178,7 +182,7 @@ pub struct WorldFeedEnvelope {
 #[cfg(test)]
 mod tests {
     use super::{
-        WorldFeedGapReason, WorldFeedMajorEvent, WorldFeedMajorEventIdentity,
+        WorldFeedEvent, WorldFeedGapReason, WorldFeedMajorEvent, WorldFeedMajorEventIdentity,
         WorldFeedMajorEventSource, WorldFeedUnavailableReason,
     };
 
@@ -243,5 +247,37 @@ mod tests {
         let decoded_legacy: WorldFeedMajorEvent =
             serde_json::from_value(legacy_numeric).expect("decode legacy numeric logical time");
         assert_eq!(decoded_legacy.logical_time, 42);
+    }
+
+    #[test]
+    fn world_feed_event_module_visual_id_is_additive_and_legacy_decodable() {
+        let legacy = serde_json::json!({
+            "event_seq": "7",
+            "kind": "snapshot_created",
+            "summary": "snapshot created event",
+            "detail": "{}",
+            "receipt_ref": null
+        });
+        let decoded_legacy: WorldFeedEvent =
+            serde_json::from_value(legacy).expect("decode legacy world feed event");
+        assert_eq!(decoded_legacy.module_visual_entity_id, None);
+        let legacy_encoded =
+            serde_json::to_value(&decoded_legacy).expect("re-encode legacy world feed event");
+        assert!(legacy_encoded.get("module_visual_entity_id").is_none());
+
+        let event = WorldFeedEvent {
+            event_seq: 8,
+            kind: "module_visual_entity_upserted".to_string(),
+            summary: "module visual entity upserted event".to_string(),
+            detail: "{}".to_string(),
+            receipt_ref: None,
+            module_visual_entity_id: Some("module-relay".to_string()),
+            major_event: None,
+        };
+        let encoded = serde_json::to_value(&event).expect("encode module visual world feed event");
+        assert_eq!(encoded["module_visual_entity_id"], "module-relay");
+        let decoded: WorldFeedEvent =
+            serde_json::from_value(encoded).expect("decode module visual world feed event");
+        assert_eq!(decoded, event);
     }
 }

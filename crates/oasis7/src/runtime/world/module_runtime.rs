@@ -12,7 +12,8 @@ use oasis7_wasm_router::{PreparedSubscription, prepare_subscriptions};
 use super::super::util::{hash_json, to_canonical_cbor};
 use super::super::{
     EffectOrigin, ModuleArtifact, ModuleEvent, ModuleEventKind, ModuleKind, ModuleLimits,
-    ModuleManifest, ModuleRegistry, WorldError, WorldEventBody, WorldTime,
+    ModuleManifest, ModuleRecord, ModuleRegistry, ModuleRole, WorldError, WorldEventBody,
+    WorldTime,
 };
 use super::PreparedSubscriptionCacheEntry;
 use super::World;
@@ -422,6 +423,58 @@ pub(super) struct ActiveModuleInvocation {
 }
 
 impl World {
+    /// Install the opt-in local runtime module visual driver without exposing a
+    /// gameplay or viewer admission API. The driver is used only by the
+    /// environment-gated runtime-live QA bridge, and its synthetic module is
+    /// deliberately absent from normal world bootstrap and persisted state.
+    pub(crate) fn install_runtime_module_visual_driver(&mut self) -> Result<String, WorldError> {
+        const MODULE_ID: &str = "runtime.qa.module_visual_driver";
+        const VERSION: &str = "1.0.0";
+        const ARTIFACT: &[u8] = b"oasis7-runtime-module-visual-driver-v1";
+
+        if self.module_registry.active.contains_key(MODULE_ID) {
+            return Ok(MODULE_ID.to_string());
+        }
+        let wasm_hash = super::super::util::sha256_hex(ARTIFACT);
+        self.register_module_artifact(wasm_hash.clone(), ARTIFACT)?;
+        let manifest = ModuleManifest {
+            module_id: MODULE_ID.to_string(),
+            name: "Runtime module visual QA driver".to_string(),
+            version: VERSION.to_string(),
+            kind: ModuleKind::Pure,
+            role: ModuleRole::AgentInternal,
+            wasm_hash,
+            interface_version: "wasm-1".to_string(),
+            exports: vec!["call".to_string()],
+            subscriptions: Vec::new(),
+            required_caps: Vec::new(),
+            abi_contract: Default::default(),
+            artifact_identity: None,
+            limits: ModuleLimits {
+                max_mem_bytes: 1024,
+                max_gas: 10_000,
+                max_call_rate: u32::MAX,
+                max_output_bytes: 4096,
+                max_effects: 0,
+                max_emits: 1,
+            },
+        };
+        let key = ModuleRegistry::record_key(MODULE_ID, VERSION);
+        self.module_registry.records.insert(
+            key,
+            ModuleRecord {
+                manifest,
+                registered_at: self.state.time,
+                registered_by: "runtime-module-visual-driver".to_string(),
+                audit_event_id: None,
+            },
+        );
+        self.module_registry
+            .active
+            .insert(MODULE_ID.to_string(), VERSION.to_string());
+        Ok(MODULE_ID.to_string())
+    }
+
     // ---------------------------------------------------------------------
     // Module artifact and limits
     // ---------------------------------------------------------------------

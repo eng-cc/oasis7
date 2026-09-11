@@ -352,7 +352,7 @@ export function PixelWorldCanvasRenderer(props) {
           onHover={props.onHover}
         />
         <PixelWorldHostVisualLayer
-          enabled={props.visualOverlayEnabled?.() ?? false}
+          enabled={props.visualOverlayEnabled}
           locale={props.locale}
           renderState={props.renderState}
           selection={props.selection}
@@ -1037,10 +1037,10 @@ export function PixelWorldHost(props) {
   const [diagnosticsDrawerOpen, setDiagnosticsDrawerOpen] = createSignal(pixelWorldFocusUiSessionState.diagnosticsDrawerOpen);
   const [maximized, setMaximized] = createSignal(pixelWorldFocusUiSessionState.maximized);
   installPixelWorldRenderDtoProbe(visualFixtureName, renderState, onCleanup);
-  const visualOverlayEnabled = () => Boolean(
-    visualFixtureName
-      || document.body?.getAttribute("data-viewer-visual-fixture"),
-  );
+  const visualOverlayEnabled = () => {
+    coreRevision();
+    return Boolean(visualFixtureName || document.body?.getAttribute("data-viewer-visual-fixture"));
+  };
   const hoveredHotspot = () => {
     const hover = hoverSelection();
     if (hover?.kind !== "hotspot") {
@@ -1079,8 +1079,6 @@ export function PixelWorldHost(props) {
   const adapter = createMemo(() => createPixelWorldHostAdapter({
     onSelectEntity(selection) {
       const applied = core.applySelection(selection);
-      setCoreRevision((revision) => revision + 1);
-      applyRendererUpdate();
       if (applied?.kind === "module_visual") {
         focusViewerPanel("viewer-details-panel");
       }
@@ -1116,6 +1114,7 @@ export function PixelWorldHost(props) {
   }));
   let mountedCanvas = null;
   let rendererAttemptGeneration = 0;
+  let rendererUpdatePending = false;
   const rendererAttemptIsCurrent = (canvas, generation) => generation === rendererAttemptGeneration && mountedCanvas === canvas;
   function applyRendererUpdate() {
     if (rendererStatus() === "unavailable") {
@@ -1205,6 +1204,10 @@ export function PixelWorldHost(props) {
       camera: cameraState(),
       fatal: result?.fatal || null,
     });
+    if (rendererUpdatePending) {
+      rendererUpdatePending = false;
+      applyRendererUpdate();
+    }
   }
   function requestReadyMode() {
     const canvas = mountedCanvas?.isConnected ? mountedCanvas : null;
@@ -1227,12 +1230,16 @@ export function PixelWorldHost(props) {
     }
     window.addEventListener("keydown", handleKeyDown);
     onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
-    if (pixelWorldTestApiEnabled()) {
-      core.setRenderHook(() => {
-        setCoreRevision((revision) => revision + 1);
+    const unsubscribeRenderHook = core.subscribeRenderHook?.(() => {
+      setCoreRevision((revision) => revision + 1);
+      if (rendererStatus() === "ready") {
         applyRendererUpdate();
-      });
-      onCleanup(() => core.setRenderHook(null));
+      } else {
+        rendererUpdatePending = true;
+      }
+    });
+    onCleanup(unsubscribeRenderHook);
+    if (pixelWorldTestApiEnabled()) {
       onCleanup(installPixelWorldHotspotPointerProbe({ fixtureName: visualFixtureName, getCanvas: () => mountedCanvas, getRendererStatus: rendererStatus, getHotspotHitTargets: () => adapter().hotspotTestHitTargets(), getLocationHitTargets: () => adapter().locationTestHitTargets(), getHoverSelection: hoverSelection, getHoveredHotspot: hoveredHotspot }));
     }
   });
@@ -1346,11 +1353,6 @@ export function PixelWorldHost(props) {
             const generation = ++rendererAttemptGeneration;
             if (rendererStatus() !== "ready") {
               void setReadyMode(canvas, generation);
-            }
-          }}
-          onCanvasUpdate={() => {
-            if (rendererStatus() === "ready") {
-              applyRendererUpdate();
             }
           }}
         />

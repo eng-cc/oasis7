@@ -158,11 +158,11 @@ export function PixelWorldCanvasAgentHitTargets(props) {
 }
 
 export function PixelWorldHostVisualLayer(props) {
+  const enabled = () => typeof props.enabled === "function" ? props.enabled() : props.enabled;
   const visualState = () => pixelWorldVisualState(props.renderState());
   const selection = () => props.selection?.() || visualState().selection;
   const projectedAgents = () => visualState().agents;
-  if (!props.enabled) return <></>;
-  return <>
+  return <Show when={enabled()}>
     <div class="pixel-world-canvas__grid" /><div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--one" /><div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--two" />
     <For each={visualState().fragmentTerrain.slice(0, 96)}>{(patch, index) => <div class={`pixel-world-fragment-terrain${terrainReferencesSelection(patch, selection()) ? " pixel-world-fragment-terrain--associated" : selection() ? " pixel-world-fragment-terrain--muted" : ""}`} data-compound={patch.dominant_compound} data-associated={terrainReferencesSelection(patch, selection()) ? "true" : "false"} style={fragmentTerrainStyle(patch, visualState().worldBounds, index())} title={`${patch.location_id}:${patch.dominant_compound}`} />}</For>
     <For each={visualState().links.slice(0, 10)}>{(link, index) => <>
@@ -179,7 +179,7 @@ export function PixelWorldHostVisualLayer(props) {
     <Index each={visualState().moduleVisualEntities.slice(0, 24)}>{(module, index) => { const label = () => pixelWorldReadableModuleLabel(module(), module().id, core.isLocaleZh(props.locale())); return <button type="button" class="pixel-world-entity pixel-world-entity--module" data-pixel-world-module-marker="true" data-module-id={module().id} data-module-kind={module().kind} data-module-label={module().label || undefined} data-selected={selection()?.kind === "module_visual" && selection()?.id === module().id ? "true" : "false"} data-marker-code={pixelWorldEntityMarkerCode(module(), module().id, "module_visual")} aria-pressed={selection()?.kind === "module_visual" && selection()?.id === module().id ? "true" : "false"} aria-label={`${tr(props.locale(), "选择模块", "Select Module")} ${label()}`} style={moduleMarkerStyle(module(), index, visualState().worldBounds)} title={label()} onMouseEnter={() => props.onHover({ kind: "module_visual", id: module().id })} onMouseLeave={() => props.onHover(null)} onClick={() => props.onSelect({ kind: "module_visual", id: module().id })}>
       <span class="pixel-world-entity__code">{pixelWorldEntityMarkerCode(module(), module().id, "module_visual")}</span>
     </button>; }}</Index>
-  </>;
+  </Show>;
 }
 
 export function PixelWorldCanvasLegend(props) {

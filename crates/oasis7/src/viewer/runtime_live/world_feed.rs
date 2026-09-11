@@ -5,6 +5,24 @@ use std::collections::BTreeMap;
 
 const DEFAULT_LIMIT: usize = 50;
 const MAX_LIMIT: usize = 200;
+const MODULE_VISUAL_ENTITY_UPSERTED_KIND: &str = "module_visual_entity_upserted";
+const MODULE_VISUAL_ENTITY_REMOVED_KIND: &str = "module_visual_entity_removed";
+
+#[derive(Debug, Deserialize)]
+struct ModuleVisualEntityUpsertPayload {
+    entity: crate::simulator::ModuleVisualEntity,
+}
+
+#[derive(Debug, Deserialize)]
+struct ModuleVisualEntityRemovedPayload {
+    entity_id: String,
+}
+
+#[derive(Debug)]
+struct ModuleVisualEventProjection {
+    kind: &'static str,
+    entity_id: String,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Cursor {
@@ -255,7 +273,11 @@ fn project_event(
         .get("kind")
         .and_then(serde_json::Value::as_str)
         .unwrap_or("RuntimeEvent");
-    let kind = snake_case(source_kind);
+    let module_visual_projection = project_module_visual_event(&event.body);
+    let kind = module_visual_projection.as_ref().map_or_else(
+        || snake_case(source_kind),
+        |projection| projection.kind.to_string(),
+    );
     protocol::WorldFeedEvent {
         event_seq: event.id,
         summary: format!("{} event", kind.replace('_', " ")),
@@ -263,8 +285,50 @@ fn project_event(
         detail: serde_json::to_string(&event.body).unwrap_or_else(|_| "null".to_string()),
         // No durable runtime receipt identity is available yet; never infer one.
         receipt_ref: None,
+        module_visual_entity_id: module_visual_projection.map(|projection| projection.entity_id),
         major_event: major_event.cloned(),
     }
+}
+
+/// Project the explicit module visual mutation contract carried by a durable
+/// `ModuleEmitted` event.  The payload is decoded as typed data; `detail` is
+/// deliberately not inspected because it is only a legacy display string.
+fn project_module_visual_event(
+    body: &crate::runtime::WorldEventBody,
+) -> Option<ModuleVisualEventProjection> {
+    let crate::runtime::WorldEventBody::ModuleEmitted(module_emit) = body else {
+        return None;
+    };
+
+    match module_emit.kind.as_str() {
+        "module_visual_entity_upserted" | "ModuleVisualEntityUpserted" => {
+            let payload = serde_json::from_value::<ModuleVisualEntityUpsertPayload>(
+                module_emit.payload.clone(),
+            )
+            .ok()?;
+            let entity_id = non_empty_identity(&payload.entity.entity_id)?;
+            Some(ModuleVisualEventProjection {
+                kind: MODULE_VISUAL_ENTITY_UPSERTED_KIND,
+                entity_id,
+            })
+        }
+        "module_visual_entity_removed" | "ModuleVisualEntityRemoved" => {
+            let payload = serde_json::from_value::<ModuleVisualEntityRemovedPayload>(
+                module_emit.payload.clone(),
+            )
+            .ok()?;
+            Some(ModuleVisualEventProjection {
+                kind: MODULE_VISUAL_ENTITY_REMOVED_KIND,
+                entity_id: non_empty_identity(&payload.entity_id)?,
+            })
+        }
+        _ => None,
+    }
+}
+
+fn non_empty_identity(value: &str) -> Option<String> {
+    let value = value.trim();
+    (!value.is_empty()).then(|| value.to_string())
 }
 
 fn project_major_event(
@@ -373,6 +437,20 @@ mod tests {
         Journal, MajorWorldEventVisibilityPermission, SnapshotMeta, WorldEvent, WorldEventBody,
     };
 
+    fn module_emit_event(id: u64, kind: &str, payload: serde_json::Value) -> WorldEvent {
+        WorldEvent {
+            id,
+            time: id,
+            caused_by: None,
+            body: WorldEventBody::ModuleEmitted(oasis7_wasm_abi::ModuleEmitEvent {
+                module_id: "fixture.visual-module".to_string(),
+                trace_id: format!("trace-{id}"),
+                kind: kind.to_string(),
+                payload,
+            }),
+        }
+    }
+
     fn event(id: u64) -> WorldEvent {
         WorldEvent {
             id,
@@ -417,6 +495,147 @@ mod tests {
         );
         assert!(feed.events.iter().all(|event| event.receipt_ref.is_none()));
         assert!(!feed.snapshot_reload_required);
+    }
+
+    #[test]
+    fn module_visual_emit_events_project_authoritative_ids_for_upsert_and_remove() {
+        let entity = crate::simulator::ModuleVisualEntity {
+            entity_id: "module-relay".to_string(),
+            module_id: "fixture.visual-module".to_string(),
+            kind: "relay".to_string(),
+            label: Some("Relay".to_string()),
+            anchor: crate::simulator::ModuleVisualAnchor::Absolute {
+                pos: crate::geometry::GeoPos::new(100, 200, 0),
+            },
+        };
+        let upsert_payload = serde_json::json!({
+            "entity": serde_json::to_value(entity).expect("encode visual entity")
+        });
+        let journal = Journal {
+            events: vec![
+                module_emit_event(1, "ModuleVisualEntityUpserted", upsert_payload),
+                module_emit_event(
+                    2,
+                    "ModuleVisualEntityRemoved",
+                    serde_json::json!({ "entity_id": "module-relay" }),
+                ),
+                event(3),
+            ],
+        };
+        let replayed_journal =
+            Journal::from_json(&journal.to_json().expect("encode runtime journal"))
+                .expect("decode runtime journal");
+
+        let feed = build_world_feed(
+            "world-a",
+            4,
+            &replayed_journal,
+            &BTreeMap::new(),
+            None,
+            50,
+            MajorWorldEventVisibilityPermission::Public,
+        );
+
+        assert_eq!(feed.status, protocol::WorldFeedStatus::Ready);
+        assert_eq!(feed.events[0].kind, "module_visual_entity_upserted");
+        assert_eq!(
+            feed.events[0].module_visual_entity_id.as_deref(),
+            Some("module-relay")
+        );
+        assert_eq!(feed.events[1].kind, "module_visual_entity_removed");
+        assert_eq!(
+            feed.events[1].module_visual_entity_id.as_deref(),
+            Some("module-relay")
+        );
+        assert_eq!(feed.events[2].kind, "snapshot_created");
+        assert_eq!(feed.events[2].module_visual_entity_id, None);
+    }
+
+    #[test]
+    fn module_visual_events_do_not_require_major_event_visibility_authority() {
+        let entity = crate::simulator::ModuleVisualEntity {
+            entity_id: "runtime-entity".to_string(),
+            module_id: "runtime-module".to_string(),
+            kind: "runtime_driver".to_string(),
+            label: None,
+            anchor: crate::simulator::ModuleVisualAnchor::Absolute {
+                pos: crate::geometry::GeoPos::new(1, 2, 3),
+            },
+        };
+        let feed = build_world_feed(
+            "world-a",
+            4,
+            &Journal {
+                events: vec![module_emit_event(
+                    1,
+                    MODULE_VISUAL_ENTITY_UPSERTED_KIND,
+                    serde_json::json!({
+                        "entity": serde_json::to_value(entity).expect("encode visual entity")
+                    }),
+                )],
+            },
+            &BTreeMap::new(),
+            None,
+            50,
+            MajorWorldEventVisibilityPermission::Unknown,
+        );
+
+        assert_eq!(feed.status, protocol::WorldFeedStatus::Ready);
+        assert_eq!(feed.unavailable_reason, None);
+        assert_eq!(feed.events.len(), 1);
+        assert_eq!(
+            feed.events[0].module_visual_entity_id.as_deref(),
+            Some("runtime-entity")
+        );
+    }
+
+    #[test]
+    fn unrelated_module_emits_do_not_infer_visual_entity_identity() {
+        let journal = Journal {
+            events: vec![module_emit_event(
+                1,
+                "telemetry",
+                serde_json::json!({ "entity_id": "module-relay" }),
+            )],
+        };
+        let feed = build_world_feed(
+            "world-a",
+            4,
+            &journal,
+            &BTreeMap::new(),
+            None,
+            50,
+            MajorWorldEventVisibilityPermission::Public,
+        );
+
+        assert_eq!(feed.events.len(), 1);
+        assert_eq!(feed.events[0].kind, "module_emitted");
+        assert_eq!(feed.events[0].module_visual_entity_id, None);
+    }
+
+    #[test]
+    fn malformed_visual_emit_does_not_infer_identity_from_detail() {
+        let journal = Journal {
+            events: vec![module_emit_event(
+                1,
+                "ModuleVisualEntityUpserted",
+                serde_json::json!({ "entity_id": "module-relay" }),
+            )],
+        };
+        let feed = build_world_feed(
+            "world-a",
+            4,
+            &journal,
+            &BTreeMap::new(),
+            None,
+            50,
+            MajorWorldEventVisibilityPermission::Public,
+        );
+
+        assert_eq!(feed.events.len(), 1);
+        assert_eq!(feed.events[0].kind, "module_emitted");
+        assert_eq!(feed.events[0].module_visual_entity_id, None);
+        assert!(feed.events[0].detail.contains("module-relay"));
     }
 
     #[test]

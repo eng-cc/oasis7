@@ -15,6 +15,7 @@ import { createGovernanceVoteQuoteIntegration } from "./governance_vote_quote_in
 import { createWarDeclarationQuoteIntegration } from "./war_declaration_quote_integration.js";
 import { createMarketQuoteDecisionIntegration } from "./market_quote_decision_integration.js";
 import { createViewerQuoteProtocolFacade } from "./viewer_quote_protocol_facade.js";
+import { createViewerRenderHookRegistry } from "./viewer_render_hook_registry.js";
 import { buildViewerEntityLists, renderViewerEntityList, resourceSummary } from "./viewer_entity_list_renderer.js";
 import {
   DEFAULT_WS_ADDR,
@@ -71,7 +72,7 @@ const pendingControlFeedback = new Map();
 const pendingSemanticCommands = [];
 let pendingSessionRegisterWaiter = null;
 const elements = {};
-let renderHook = () => {};
+const renderHook = createViewerRenderHookRegistry();
 let bootstrapped = false; const worldFeedTransport = createWorldFeedTransport({ getSocket: () => socket, getState: () => state, render, requestSnapshot: () => requestSnapshotSafe(), sendJson });
 export const requestWorldFeed = (...args) => worldFeedTransport.requestWorldFeed(...args); export const reloadWorldFeedFromAuthoritativeSnapshot = (...args) => worldFeedTransport.reloadWorldFeedFromAuthoritativeSnapshot(...args);
 const HELLO_ACK_TIMEOUT_MS = 2000;
@@ -136,9 +137,8 @@ export function setSelectedSearch(value) {
   state.selectedSearch = String(value || "");
   render();
 }
-export function setRenderHook(nextHook) {
-  renderHook = typeof nextHook === "function" ? nextHook : () => {};
-}
+export const setRenderHook = (nextHook) => renderHook.set(nextHook);
+export const subscribeRenderHook = (nextHook) => renderHook.subscribe(nextHook);
 function getSearchParams() {
   return new URLSearchParams(window.location.search || "");
 }
@@ -4214,7 +4214,7 @@ function bindEvents() {
 }
 
 function render() {
-  renderHook();
+  renderHook.invoke();
 }
 
 function requestRender() {

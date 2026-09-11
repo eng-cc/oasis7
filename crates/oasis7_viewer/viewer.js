@@ -4449,6 +4449,26 @@ function createViewerQuoteProtocolFacade({
   }
   return { handleQuoteGameplayActionError, handleQuoteViewerMessage, invalidateSnapshotBoundQuotes };
 }
+const noop = () => {
+};
+function createViewerRenderHookRegistry() {
+  let primary = noop;
+  const subscribers = /* @__PURE__ */ new Set();
+  return {
+    set(nextHook) {
+      primary = typeof nextHook === "function" ? nextHook : noop;
+    },
+    subscribe(nextHook) {
+      if (typeof nextHook !== "function") return noop;
+      subscribers.add(nextHook);
+      return () => subscribers.delete(nextHook);
+    },
+    invoke() {
+      primary();
+      for (const subscriber of [...subscribers]) subscriber();
+    }
+  };
+}
 function resourceSummary$1(resources) {
   if (!resources || typeof resources !== "object") {
     return "-";
@@ -5581,8 +5601,7 @@ const pendingControlFeedback = /* @__PURE__ */ new Map();
 const pendingSemanticCommands = [];
 let pendingSessionRegisterWaiter = null;
 const elements = {};
-let renderHook = () => {
-};
+const renderHook = createViewerRenderHookRegistry();
 let bootstrapped = false;
 const worldFeedTransport = createWorldFeedTransport({ getSocket: () => socket, getState: () => state, render, requestSnapshot: () => requestSnapshotSafe(), sendJson });
 const requestWorldFeed = (...args) => worldFeedTransport.requestWorldFeed(...args);
@@ -5648,10 +5667,8 @@ function setSelectedSearch(value2) {
   state.selectedSearch = String(value2 || "");
   render();
 }
-function setRenderHook(nextHook) {
-  renderHook = typeof nextHook === "function" ? nextHook : () => {
-  };
-}
+const setRenderHook = (nextHook) => renderHook.set(nextHook);
+const subscribeRenderHook = (nextHook) => renderHook.subscribe(nextHook);
 function getSearchParams() {
   return new URLSearchParams(window.location.search || "");
 }
@@ -9374,7 +9391,7 @@ function bindEvents() {
   });
 }
 function render() {
-  renderHook();
+  renderHook.invoke();
 }
 function requestRender() {
   render();
@@ -9606,6 +9623,7 @@ const core = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty
   snapshotSemanticFeedback,
   startHostedAccountLogin,
   state,
+  subscribeRenderHook,
   summarizeEventTitle,
   togglePromptOverridesVisible,
   toggleSoftwareSafeLocale,
@@ -11016,230 +11034,237 @@ function PixelWorldCanvasAgentHitTargets(props) {
   })];
 }
 function PixelWorldHostVisualLayer(props) {
+  const enabled = () => typeof props.enabled === "function" ? props.enabled() : props.enabled;
   const visualState = () => pixelWorldVisualState(props.renderState());
   const selection = () => props.selection?.() || visualState().selection;
   const projectedAgents = () => visualState().agents;
-  if (!props.enabled) return [];
-  return [_tmpl$3$n(), _tmpl$4$k(), _tmpl$5$j(), createComponent(For, {
-    get each() {
-      return visualState().fragmentTerrain.slice(0, 96);
+  return createComponent(Show, {
+    get when() {
+      return enabled();
     },
-    children: (patch, index) => (() => {
-      var _el$8 = _tmpl$6$d();
-      createRenderEffect((_p$) => {
-        var _v$14 = `pixel-world-fragment-terrain${terrainReferencesSelection(patch, selection()) ? " pixel-world-fragment-terrain--associated" : selection() ? " pixel-world-fragment-terrain--muted" : ""}`, _v$15 = patch.dominant_compound, _v$16 = terrainReferencesSelection(patch, selection()) ? "true" : "false", _v$17 = fragmentTerrainStyle(patch, visualState().worldBounds, index()), _v$18 = `${patch.location_id}:${patch.dominant_compound}`;
-        _v$14 !== _p$.e && className(_el$8, _p$.e = _v$14);
-        _v$15 !== _p$.t && setAttribute(_el$8, "data-compound", _p$.t = _v$15);
-        _v$16 !== _p$.a && setAttribute(_el$8, "data-associated", _p$.a = _v$16);
-        _p$.o = style(_el$8, _v$17, _p$.o);
-        _v$18 !== _p$.i && setAttribute(_el$8, "title", _p$.i = _v$18);
-        return _p$;
-      }, {
-        e: void 0,
-        t: void 0,
-        a: void 0,
-        o: void 0,
-        i: void 0
-      });
-      return _el$8;
-    })()
-  }), createComponent(For, {
-    get each() {
-      return visualState().links.slice(0, 10);
-    },
-    children: (link, index) => [(() => {
-      var _el$9 = _tmpl$6$d();
-      createRenderEffect((_p$) => {
-        var _v$19 = `pixel-world-route${linkReferencesSelection(link, selection(), projectedAgents()) ? " pixel-world-route--associated" : selection() ? " pixel-world-route--muted" : ""}`, _v$20 = link.id, _v$21 = link.kind, _v$22 = linkReferencesSelection(link, selection(), projectedAgents()) ? "true" : "false", _v$23 = routeStyle(link, visualState().worldBounds, index()), _v$24 = `${link.kind}:${link.id}`;
-        _v$19 !== _p$.e && className(_el$9, _p$.e = _v$19);
-        _v$20 !== _p$.t && setAttribute(_el$9, "data-route-id", _p$.t = _v$20);
-        _v$21 !== _p$.a && setAttribute(_el$9, "data-route-kind", _p$.a = _v$21);
-        _v$22 !== _p$.o && setAttribute(_el$9, "data-associated", _p$.o = _v$22);
-        _p$.i = style(_el$9, _v$23, _p$.i);
-        _v$24 !== _p$.n && setAttribute(_el$9, "title", _p$.n = _v$24);
-        return _p$;
-      }, {
-        e: void 0,
-        t: void 0,
-        a: void 0,
-        o: void 0,
-        i: void 0,
-        n: void 0
-      });
-      return _el$9;
-    })(), (() => {
-      var _el$0 = _tmpl$6$d();
-      createRenderEffect((_p$) => {
-        var _v$25 = `pixel-world-route-waypoint pixel-world-route-waypoint--mid${linkReferencesSelection(link, selection(), projectedAgents()) ? " pixel-world-route-waypoint--associated" : selection() ? " pixel-world-route-waypoint--muted" : ""}`, _v$26 = link.id, _v$27 = link.kind, _v$28 = linkReferencesSelection(link, selection(), projectedAgents()) ? "true" : "false", _v$29 = routeWaypointStyle(link, visualState().worldBounds, index(), "mid"), _v$30 = `${link.kind}:waypoint`;
-        _v$25 !== _p$.e && className(_el$0, _p$.e = _v$25);
-        _v$26 !== _p$.t && setAttribute(_el$0, "data-route-id", _p$.t = _v$26);
-        _v$27 !== _p$.a && setAttribute(_el$0, "data-route-kind", _p$.a = _v$27);
-        _v$28 !== _p$.o && setAttribute(_el$0, "data-associated", _p$.o = _v$28);
-        _p$.i = style(_el$0, _v$29, _p$.i);
-        _v$30 !== _p$.n && setAttribute(_el$0, "title", _p$.n = _v$30);
-        return _p$;
-      }, {
-        e: void 0,
-        t: void 0,
-        a: void 0,
-        o: void 0,
-        i: void 0,
-        n: void 0
-      });
-      return _el$0;
-    })(), (() => {
-      var _el$1 = _tmpl$6$d();
-      createRenderEffect((_p$) => {
-        var _v$31 = `pixel-world-route-waypoint pixel-world-route-waypoint--target${linkReferencesSelection(link, selection(), projectedAgents()) ? " pixel-world-route-waypoint--associated" : selection() ? " pixel-world-route-waypoint--muted" : ""}`, _v$32 = link.id, _v$33 = link.kind, _v$34 = linkReferencesSelection(link, selection(), projectedAgents()) ? "true" : "false", _v$35 = routeWaypointStyle(link, visualState().worldBounds, index(), "to"), _v$36 = `${link.kind}:target`;
-        _v$31 !== _p$.e && className(_el$1, _p$.e = _v$31);
-        _v$32 !== _p$.t && setAttribute(_el$1, "data-route-id", _p$.t = _v$32);
-        _v$33 !== _p$.a && setAttribute(_el$1, "data-route-kind", _p$.a = _v$33);
-        _v$34 !== _p$.o && setAttribute(_el$1, "data-associated", _p$.o = _v$34);
-        _p$.i = style(_el$1, _v$35, _p$.i);
-        _v$36 !== _p$.n && setAttribute(_el$1, "title", _p$.n = _v$36);
-        return _p$;
-      }, {
-        e: void 0,
-        t: void 0,
-        a: void 0,
-        o: void 0,
-        i: void 0,
-        n: void 0
-      });
-      return _el$1;
-    })()]
-  }), createComponent(Index, {
-    get each() {
-      return visualState().locations.slice(0, 8);
-    },
-    children: (location, index) => (() => {
-      var _el$10 = _tmpl$7$9(), _el$11 = _el$10.firstChild;
-      _el$10.$$click = () => props.onSelect({
-        kind: "location",
-        id: location().id
-      });
-      _el$10.addEventListener("mouseleave", () => props.onHover(null));
-      _el$10.addEventListener("mouseenter", () => props.onHover({
-        kind: "location",
-        id: location().id
-      }));
-      insert(_el$11, () => pixelWorldEntityMarkerCode(location(), location().id, "location"));
-      createRenderEffect((_p$) => {
-        var _v$37 = location().id, _v$38 = selection()?.kind === "location" && selection()?.id === location().id ? "true" : "false", _v$39 = pixelWorldEntityMarkerCode(location(), location().id, "location"), _v$40 = selection()?.kind === "location" && selection()?.id === location().id ? "true" : "false", _v$41 = `${tr$3(props.locale(), "选择地点", "Select Location")} ${location().label || location().id}`, _v$42 = location().marker_role, _v$43 = {
-          ...toWorldPercentStyle(location().pos, visualState().worldBounds, {
-            left: `${12 + index % 4 * 21}%`,
-            top: `${18 + Math.floor(index / 4) * 26}%`
-          }),
-          opacity: location().marker_alpha
-        }, _v$44 = location().label;
-        _v$37 !== _p$.e && setAttribute(_el$10, "data-location-id", _p$.e = _v$37);
-        _v$38 !== _p$.t && setAttribute(_el$10, "data-selected", _p$.t = _v$38);
-        _v$39 !== _p$.a && setAttribute(_el$10, "data-marker-code", _p$.a = _v$39);
-        _v$40 !== _p$.o && setAttribute(_el$10, "aria-pressed", _p$.o = _v$40);
-        _v$41 !== _p$.i && setAttribute(_el$10, "aria-label", _p$.i = _v$41);
-        _v$42 !== _p$.n && setAttribute(_el$10, "data-marker-role", _p$.n = _v$42);
-        _p$.s = style(_el$10, _v$43, _p$.s);
-        _v$44 !== _p$.h && setAttribute(_el$10, "title", _p$.h = _v$44);
-        return _p$;
-      }, {
-        e: void 0,
-        t: void 0,
-        a: void 0,
-        o: void 0,
-        i: void 0,
-        n: void 0,
-        s: void 0,
-        h: void 0
-      });
-      return _el$10;
-    })()
-  }), createComponent(Index, {
-    get each() {
-      return visualState().agents.slice(0, 10);
-    },
-    children: (agent, index) => {
-      const label = () => pixelWorldReadableAgentLabel(agent(), agent().id, isLocaleZh(props.locale()));
-      return (() => {
-        var _el$12 = _tmpl$8$6(), _el$13 = _el$12.firstChild;
-        _el$12.$$click = () => props.onSelect({
-          kind: "agent",
-          id: agent().id
-        });
-        _el$12.addEventListener("mouseleave", () => props.onHover(null));
-        _el$12.addEventListener("mouseenter", () => props.onHover({
-          kind: "agent",
-          id: agent().id
-        }));
-        insert(_el$13, () => pixelWorldEntityMarkerCode(agent(), agent().id, "agent"));
-        createRenderEffect((_p$) => {
-          var _v$45 = agent().id, _v$46 = selection()?.kind === "agent" && selection()?.id === agent().id ? "true" : "false", _v$47 = pixelWorldEntityMarkerCode(agent(), agent().id, "agent"), _v$48 = agent().position_source, _v$49 = selection()?.kind === "agent" && selection()?.id === agent().id ? "true" : "false", _v$50 = `${tr$3(props.locale(), "选择 Agent", "Select Agent")} ${label()}`, _v$51 = agentMarkerStyle(agent(), index, visualState().worldBounds), _v$52 = label();
-          _v$45 !== _p$.e && setAttribute(_el$12, "data-agent-id", _p$.e = _v$45);
-          _v$46 !== _p$.t && setAttribute(_el$12, "data-selected", _p$.t = _v$46);
-          _v$47 !== _p$.a && setAttribute(_el$12, "data-marker-code", _p$.a = _v$47);
-          _v$48 !== _p$.o && setAttribute(_el$12, "data-position-source", _p$.o = _v$48);
-          _v$49 !== _p$.i && setAttribute(_el$12, "aria-pressed", _p$.i = _v$49);
-          _v$50 !== _p$.n && setAttribute(_el$12, "aria-label", _p$.n = _v$50);
-          _p$.s = style(_el$12, _v$51, _p$.s);
-          _v$52 !== _p$.h && setAttribute(_el$12, "title", _p$.h = _v$52);
-          return _p$;
-        }, {
-          e: void 0,
-          t: void 0,
-          a: void 0,
-          o: void 0,
-          i: void 0,
-          n: void 0,
-          s: void 0,
-          h: void 0
-        });
-        return _el$12;
-      })();
+    get children() {
+      return [_tmpl$3$n(), _tmpl$4$k(), _tmpl$5$j(), createComponent(For, {
+        get each() {
+          return visualState().fragmentTerrain.slice(0, 96);
+        },
+        children: (patch, index) => (() => {
+          var _el$8 = _tmpl$6$d();
+          createRenderEffect((_p$) => {
+            var _v$14 = `pixel-world-fragment-terrain${terrainReferencesSelection(patch, selection()) ? " pixel-world-fragment-terrain--associated" : selection() ? " pixel-world-fragment-terrain--muted" : ""}`, _v$15 = patch.dominant_compound, _v$16 = terrainReferencesSelection(patch, selection()) ? "true" : "false", _v$17 = fragmentTerrainStyle(patch, visualState().worldBounds, index()), _v$18 = `${patch.location_id}:${patch.dominant_compound}`;
+            _v$14 !== _p$.e && className(_el$8, _p$.e = _v$14);
+            _v$15 !== _p$.t && setAttribute(_el$8, "data-compound", _p$.t = _v$15);
+            _v$16 !== _p$.a && setAttribute(_el$8, "data-associated", _p$.a = _v$16);
+            _p$.o = style(_el$8, _v$17, _p$.o);
+            _v$18 !== _p$.i && setAttribute(_el$8, "title", _p$.i = _v$18);
+            return _p$;
+          }, {
+            e: void 0,
+            t: void 0,
+            a: void 0,
+            o: void 0,
+            i: void 0
+          });
+          return _el$8;
+        })()
+      }), createComponent(For, {
+        get each() {
+          return visualState().links.slice(0, 10);
+        },
+        children: (link, index) => [(() => {
+          var _el$9 = _tmpl$6$d();
+          createRenderEffect((_p$) => {
+            var _v$19 = `pixel-world-route${linkReferencesSelection(link, selection(), projectedAgents()) ? " pixel-world-route--associated" : selection() ? " pixel-world-route--muted" : ""}`, _v$20 = link.id, _v$21 = link.kind, _v$22 = linkReferencesSelection(link, selection(), projectedAgents()) ? "true" : "false", _v$23 = routeStyle(link, visualState().worldBounds, index()), _v$24 = `${link.kind}:${link.id}`;
+            _v$19 !== _p$.e && className(_el$9, _p$.e = _v$19);
+            _v$20 !== _p$.t && setAttribute(_el$9, "data-route-id", _p$.t = _v$20);
+            _v$21 !== _p$.a && setAttribute(_el$9, "data-route-kind", _p$.a = _v$21);
+            _v$22 !== _p$.o && setAttribute(_el$9, "data-associated", _p$.o = _v$22);
+            _p$.i = style(_el$9, _v$23, _p$.i);
+            _v$24 !== _p$.n && setAttribute(_el$9, "title", _p$.n = _v$24);
+            return _p$;
+          }, {
+            e: void 0,
+            t: void 0,
+            a: void 0,
+            o: void 0,
+            i: void 0,
+            n: void 0
+          });
+          return _el$9;
+        })(), (() => {
+          var _el$0 = _tmpl$6$d();
+          createRenderEffect((_p$) => {
+            var _v$25 = `pixel-world-route-waypoint pixel-world-route-waypoint--mid${linkReferencesSelection(link, selection(), projectedAgents()) ? " pixel-world-route-waypoint--associated" : selection() ? " pixel-world-route-waypoint--muted" : ""}`, _v$26 = link.id, _v$27 = link.kind, _v$28 = linkReferencesSelection(link, selection(), projectedAgents()) ? "true" : "false", _v$29 = routeWaypointStyle(link, visualState().worldBounds, index(), "mid"), _v$30 = `${link.kind}:waypoint`;
+            _v$25 !== _p$.e && className(_el$0, _p$.e = _v$25);
+            _v$26 !== _p$.t && setAttribute(_el$0, "data-route-id", _p$.t = _v$26);
+            _v$27 !== _p$.a && setAttribute(_el$0, "data-route-kind", _p$.a = _v$27);
+            _v$28 !== _p$.o && setAttribute(_el$0, "data-associated", _p$.o = _v$28);
+            _p$.i = style(_el$0, _v$29, _p$.i);
+            _v$30 !== _p$.n && setAttribute(_el$0, "title", _p$.n = _v$30);
+            return _p$;
+          }, {
+            e: void 0,
+            t: void 0,
+            a: void 0,
+            o: void 0,
+            i: void 0,
+            n: void 0
+          });
+          return _el$0;
+        })(), (() => {
+          var _el$1 = _tmpl$6$d();
+          createRenderEffect((_p$) => {
+            var _v$31 = `pixel-world-route-waypoint pixel-world-route-waypoint--target${linkReferencesSelection(link, selection(), projectedAgents()) ? " pixel-world-route-waypoint--associated" : selection() ? " pixel-world-route-waypoint--muted" : ""}`, _v$32 = link.id, _v$33 = link.kind, _v$34 = linkReferencesSelection(link, selection(), projectedAgents()) ? "true" : "false", _v$35 = routeWaypointStyle(link, visualState().worldBounds, index(), "to"), _v$36 = `${link.kind}:target`;
+            _v$31 !== _p$.e && className(_el$1, _p$.e = _v$31);
+            _v$32 !== _p$.t && setAttribute(_el$1, "data-route-id", _p$.t = _v$32);
+            _v$33 !== _p$.a && setAttribute(_el$1, "data-route-kind", _p$.a = _v$33);
+            _v$34 !== _p$.o && setAttribute(_el$1, "data-associated", _p$.o = _v$34);
+            _p$.i = style(_el$1, _v$35, _p$.i);
+            _v$36 !== _p$.n && setAttribute(_el$1, "title", _p$.n = _v$36);
+            return _p$;
+          }, {
+            e: void 0,
+            t: void 0,
+            a: void 0,
+            o: void 0,
+            i: void 0,
+            n: void 0
+          });
+          return _el$1;
+        })()]
+      }), createComponent(Index, {
+        get each() {
+          return visualState().locations.slice(0, 8);
+        },
+        children: (location, index) => (() => {
+          var _el$10 = _tmpl$7$9(), _el$11 = _el$10.firstChild;
+          _el$10.$$click = () => props.onSelect({
+            kind: "location",
+            id: location().id
+          });
+          _el$10.addEventListener("mouseleave", () => props.onHover(null));
+          _el$10.addEventListener("mouseenter", () => props.onHover({
+            kind: "location",
+            id: location().id
+          }));
+          insert(_el$11, () => pixelWorldEntityMarkerCode(location(), location().id, "location"));
+          createRenderEffect((_p$) => {
+            var _v$37 = location().id, _v$38 = selection()?.kind === "location" && selection()?.id === location().id ? "true" : "false", _v$39 = pixelWorldEntityMarkerCode(location(), location().id, "location"), _v$40 = selection()?.kind === "location" && selection()?.id === location().id ? "true" : "false", _v$41 = `${tr$3(props.locale(), "选择地点", "Select Location")} ${location().label || location().id}`, _v$42 = location().marker_role, _v$43 = {
+              ...toWorldPercentStyle(location().pos, visualState().worldBounds, {
+                left: `${12 + index % 4 * 21}%`,
+                top: `${18 + Math.floor(index / 4) * 26}%`
+              }),
+              opacity: location().marker_alpha
+            }, _v$44 = location().label;
+            _v$37 !== _p$.e && setAttribute(_el$10, "data-location-id", _p$.e = _v$37);
+            _v$38 !== _p$.t && setAttribute(_el$10, "data-selected", _p$.t = _v$38);
+            _v$39 !== _p$.a && setAttribute(_el$10, "data-marker-code", _p$.a = _v$39);
+            _v$40 !== _p$.o && setAttribute(_el$10, "aria-pressed", _p$.o = _v$40);
+            _v$41 !== _p$.i && setAttribute(_el$10, "aria-label", _p$.i = _v$41);
+            _v$42 !== _p$.n && setAttribute(_el$10, "data-marker-role", _p$.n = _v$42);
+            _p$.s = style(_el$10, _v$43, _p$.s);
+            _v$44 !== _p$.h && setAttribute(_el$10, "title", _p$.h = _v$44);
+            return _p$;
+          }, {
+            e: void 0,
+            t: void 0,
+            a: void 0,
+            o: void 0,
+            i: void 0,
+            n: void 0,
+            s: void 0,
+            h: void 0
+          });
+          return _el$10;
+        })()
+      }), createComponent(Index, {
+        get each() {
+          return visualState().agents.slice(0, 10);
+        },
+        children: (agent, index) => {
+          const label = () => pixelWorldReadableAgentLabel(agent(), agent().id, isLocaleZh(props.locale()));
+          return (() => {
+            var _el$12 = _tmpl$8$6(), _el$13 = _el$12.firstChild;
+            _el$12.$$click = () => props.onSelect({
+              kind: "agent",
+              id: agent().id
+            });
+            _el$12.addEventListener("mouseleave", () => props.onHover(null));
+            _el$12.addEventListener("mouseenter", () => props.onHover({
+              kind: "agent",
+              id: agent().id
+            }));
+            insert(_el$13, () => pixelWorldEntityMarkerCode(agent(), agent().id, "agent"));
+            createRenderEffect((_p$) => {
+              var _v$45 = agent().id, _v$46 = selection()?.kind === "agent" && selection()?.id === agent().id ? "true" : "false", _v$47 = pixelWorldEntityMarkerCode(agent(), agent().id, "agent"), _v$48 = agent().position_source, _v$49 = selection()?.kind === "agent" && selection()?.id === agent().id ? "true" : "false", _v$50 = `${tr$3(props.locale(), "选择 Agent", "Select Agent")} ${label()}`, _v$51 = agentMarkerStyle(agent(), index, visualState().worldBounds), _v$52 = label();
+              _v$45 !== _p$.e && setAttribute(_el$12, "data-agent-id", _p$.e = _v$45);
+              _v$46 !== _p$.t && setAttribute(_el$12, "data-selected", _p$.t = _v$46);
+              _v$47 !== _p$.a && setAttribute(_el$12, "data-marker-code", _p$.a = _v$47);
+              _v$48 !== _p$.o && setAttribute(_el$12, "data-position-source", _p$.o = _v$48);
+              _v$49 !== _p$.i && setAttribute(_el$12, "aria-pressed", _p$.i = _v$49);
+              _v$50 !== _p$.n && setAttribute(_el$12, "aria-label", _p$.n = _v$50);
+              _p$.s = style(_el$12, _v$51, _p$.s);
+              _v$52 !== _p$.h && setAttribute(_el$12, "title", _p$.h = _v$52);
+              return _p$;
+            }, {
+              e: void 0,
+              t: void 0,
+              a: void 0,
+              o: void 0,
+              i: void 0,
+              n: void 0,
+              s: void 0,
+              h: void 0
+            });
+            return _el$12;
+          })();
+        }
+      }), createComponent(Index, {
+        get each() {
+          return visualState().moduleVisualEntities.slice(0, 24);
+        },
+        children: (module, index) => {
+          const label = () => pixelWorldReadableModuleLabel(module(), module().id, isLocaleZh(props.locale()));
+          return (() => {
+            var _el$14 = _tmpl$9$5(), _el$15 = _el$14.firstChild;
+            _el$14.$$click = () => props.onSelect({
+              kind: "module_visual",
+              id: module().id
+            });
+            _el$14.addEventListener("mouseleave", () => props.onHover(null));
+            _el$14.addEventListener("mouseenter", () => props.onHover({
+              kind: "module_visual",
+              id: module().id
+            }));
+            insert(_el$15, () => pixelWorldEntityMarkerCode(module(), module().id, "module_visual"));
+            createRenderEffect((_p$) => {
+              var _v$53 = module().id, _v$54 = module().kind, _v$55 = module().label || void 0, _v$56 = selection()?.kind === "module_visual" && selection()?.id === module().id ? "true" : "false", _v$57 = pixelWorldEntityMarkerCode(module(), module().id, "module_visual"), _v$58 = selection()?.kind === "module_visual" && selection()?.id === module().id ? "true" : "false", _v$59 = `${tr$3(props.locale(), "选择模块", "Select Module")} ${label()}`, _v$60 = moduleMarkerStyle(module(), index, visualState().worldBounds), _v$61 = label();
+              _v$53 !== _p$.e && setAttribute(_el$14, "data-module-id", _p$.e = _v$53);
+              _v$54 !== _p$.t && setAttribute(_el$14, "data-module-kind", _p$.t = _v$54);
+              _v$55 !== _p$.a && setAttribute(_el$14, "data-module-label", _p$.a = _v$55);
+              _v$56 !== _p$.o && setAttribute(_el$14, "data-selected", _p$.o = _v$56);
+              _v$57 !== _p$.i && setAttribute(_el$14, "data-marker-code", _p$.i = _v$57);
+              _v$58 !== _p$.n && setAttribute(_el$14, "aria-pressed", _p$.n = _v$58);
+              _v$59 !== _p$.s && setAttribute(_el$14, "aria-label", _p$.s = _v$59);
+              _p$.h = style(_el$14, _v$60, _p$.h);
+              _v$61 !== _p$.r && setAttribute(_el$14, "title", _p$.r = _v$61);
+              return _p$;
+            }, {
+              e: void 0,
+              t: void 0,
+              a: void 0,
+              o: void 0,
+              i: void 0,
+              n: void 0,
+              s: void 0,
+              h: void 0,
+              r: void 0
+            });
+            return _el$14;
+          })();
+        }
+      })];
     }
-  }), createComponent(Index, {
-    get each() {
-      return visualState().moduleVisualEntities.slice(0, 24);
-    },
-    children: (module, index) => {
-      const label = () => pixelWorldReadableModuleLabel(module(), module().id, isLocaleZh(props.locale()));
-      return (() => {
-        var _el$14 = _tmpl$9$5(), _el$15 = _el$14.firstChild;
-        _el$14.$$click = () => props.onSelect({
-          kind: "module_visual",
-          id: module().id
-        });
-        _el$14.addEventListener("mouseleave", () => props.onHover(null));
-        _el$14.addEventListener("mouseenter", () => props.onHover({
-          kind: "module_visual",
-          id: module().id
-        }));
-        insert(_el$15, () => pixelWorldEntityMarkerCode(module(), module().id, "module_visual"));
-        createRenderEffect((_p$) => {
-          var _v$53 = module().id, _v$54 = module().kind, _v$55 = module().label || void 0, _v$56 = selection()?.kind === "module_visual" && selection()?.id === module().id ? "true" : "false", _v$57 = pixelWorldEntityMarkerCode(module(), module().id, "module_visual"), _v$58 = selection()?.kind === "module_visual" && selection()?.id === module().id ? "true" : "false", _v$59 = `${tr$3(props.locale(), "选择模块", "Select Module")} ${label()}`, _v$60 = moduleMarkerStyle(module(), index, visualState().worldBounds), _v$61 = label();
-          _v$53 !== _p$.e && setAttribute(_el$14, "data-module-id", _p$.e = _v$53);
-          _v$54 !== _p$.t && setAttribute(_el$14, "data-module-kind", _p$.t = _v$54);
-          _v$55 !== _p$.a && setAttribute(_el$14, "data-module-label", _p$.a = _v$55);
-          _v$56 !== _p$.o && setAttribute(_el$14, "data-selected", _p$.o = _v$56);
-          _v$57 !== _p$.i && setAttribute(_el$14, "data-marker-code", _p$.i = _v$57);
-          _v$58 !== _p$.n && setAttribute(_el$14, "aria-pressed", _p$.n = _v$58);
-          _v$59 !== _p$.s && setAttribute(_el$14, "aria-label", _p$.s = _v$59);
-          _p$.h = style(_el$14, _v$60, _p$.h);
-          _v$61 !== _p$.r && setAttribute(_el$14, "title", _p$.r = _v$61);
-          return _p$;
-        }, {
-          e: void 0,
-          t: void 0,
-          a: void 0,
-          o: void 0,
-          i: void 0,
-          n: void 0,
-          s: void 0,
-          h: void 0,
-          r: void 0
-        });
-        return _el$14;
-      })();
-    }
-  })];
+  });
 }
 function PixelWorldCanvasLegend(props) {
   return (() => {
@@ -12436,7 +12461,7 @@ function PixelWorldCanvasRenderer(props) {
           }
         }), createComponent(PixelWorldHostVisualLayer, {
           get enabled() {
-            return props.visualOverlayEnabled?.() ?? false;
+            return props.visualOverlayEnabled;
           },
           get locale() {
             return props.locale;
@@ -13368,7 +13393,10 @@ function PixelWorldHost(props) {
   const [diagnosticsDrawerOpen, setDiagnosticsDrawerOpen] = createSignal(pixelWorldFocusUiSessionState.diagnosticsDrawerOpen);
   const [maximized, setMaximized] = createSignal(pixelWorldFocusUiSessionState.maximized);
   installPixelWorldRenderDtoProbe(visualFixtureName, renderState, onCleanup);
-  const visualOverlayEnabled = () => Boolean(visualFixtureName || document.body?.getAttribute("data-viewer-visual-fixture"));
+  const visualOverlayEnabled = () => {
+    coreRevision();
+    return Boolean(visualFixtureName || document.body?.getAttribute("data-viewer-visual-fixture"));
+  };
   const hoveredHotspot = () => {
     const hover = hoverSelection();
     if (hover?.kind !== "hotspot") {
@@ -13407,8 +13435,6 @@ function PixelWorldHost(props) {
   const adapter = createMemo(() => createPixelWorldHostAdapter({
     onSelectEntity(selection) {
       const applied = applySelection(selection);
-      setCoreRevision((revision) => revision + 1);
-      applyRendererUpdate();
       if (applied?.kind === "module_visual") {
         focusViewerPanel("viewer-details-panel");
       }
@@ -13444,6 +13470,7 @@ function PixelWorldHost(props) {
   }));
   let mountedCanvas = null;
   let rendererAttemptGeneration = 0;
+  let rendererUpdatePending = false;
   const rendererAttemptIsCurrent = (canvas, generation) => generation === rendererAttemptGeneration && mountedCanvas === canvas;
   function applyRendererUpdate() {
     if (rendererStatus() === "unavailable") {
@@ -13533,6 +13560,10 @@ function PixelWorldHost(props) {
       camera: cameraState(),
       fatal: result?.fatal || null
     });
+    if (rendererUpdatePending) {
+      rendererUpdatePending = false;
+      applyRendererUpdate();
+    }
   }
   function requestReadyMode() {
     const canvas = mountedCanvas?.isConnected ? mountedCanvas : null;
@@ -13555,12 +13586,16 @@ function PixelWorldHost(props) {
     }
     window.addEventListener("keydown", handleKeyDown);
     onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
-    if (pixelWorldTestApiEnabled()) {
-      setRenderHook(() => {
-        setCoreRevision((revision) => revision + 1);
+    const unsubscribeRenderHook = subscribeRenderHook?.(() => {
+      setCoreRevision((revision) => revision + 1);
+      if (rendererStatus() === "ready") {
         applyRendererUpdate();
-      });
-      onCleanup(() => setRenderHook(null));
+      } else {
+        rendererUpdatePending = true;
+      }
+    });
+    onCleanup(unsubscribeRenderHook);
+    if (pixelWorldTestApiEnabled()) {
       onCleanup(installPixelWorldHotspotPointerProbe({
         fixtureName: visualFixtureName,
         getCanvas: () => mountedCanvas,
@@ -13690,11 +13725,6 @@ function PixelWorldHost(props) {
             const generation = ++rendererAttemptGeneration;
             if (rendererStatus() !== "ready") {
               void setReadyMode(canvas, generation);
-            }
-          },
-          onCanvasUpdate: () => {
-            if (rendererStatus() === "ready") {
-              applyRendererUpdate();
             }
           }
         });
