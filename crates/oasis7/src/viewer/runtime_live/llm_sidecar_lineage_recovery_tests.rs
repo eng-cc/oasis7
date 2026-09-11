@@ -38,6 +38,7 @@ fn reserve_test_provider_lease(
 }
 
 fn valid_test_provider_context(
+    world: &RuntimeWorld,
     agent_id: &str,
     agent_turn_id: &str,
     decision_request_id: &str,
@@ -62,6 +63,9 @@ fn valid_test_provider_context(
         crate::simulator::h_v1("oasis7.cognition.test.goal.v1", &agent_id);
     request.continuation_digest =
         crate::simulator::h_v1("oasis7.cognition.test.continuation.v1", &agent_id);
+    request.runtime_binding = world
+        .current_cognition_runtime_binding()
+        .expect("Runtime cognition binding");
     request.request_digest = request.request_digest();
     context.turn_context.request_digest = request.request_digest.clone();
     context
@@ -70,8 +74,8 @@ fn valid_test_provider_context(
 #[test]
 fn provider_lineage_restore_fences_cross_request_lease_before_dispatch() {
     let mut world = bound_provider_lease_test_world(&["agent-a"]);
-    let old_context = valid_test_provider_context("agent-a", "turn-old", "request-old");
-    let new_context = valid_test_provider_context("agent-a", "turn-new", "request-new");
+    let old_context = valid_test_provider_context(&world, "agent-a", "turn-old", "request-old");
+    let new_context = valid_test_provider_context(&world, "agent-a", "turn-new", "request-new");
     let old_lease = reserve_test_provider_lease(&mut world, &old_context);
     let path = std::env::temp_dir().join(format!(
         "oasis7-viewer-provider-lineage-cross-lease-{}-{}.json",
@@ -132,8 +136,8 @@ fn provider_lineage_restore_fences_cross_request_lease_before_dispatch() {
 #[test]
 fn provider_lease_release_fences_cross_request_without_economic_mutation() {
     let mut world = bound_provider_lease_test_world(&["agent-a"]);
-    let old_context = valid_test_provider_context("agent-a", "turn-old", "request-old");
-    let new_context = valid_test_provider_context("agent-a", "turn-new", "request-new");
+    let old_context = valid_test_provider_context(&world, "agent-a", "turn-old", "request-old");
+    let new_context = valid_test_provider_context(&world, "agent-a", "turn-new", "request-new");
     let old_lease = reserve_test_provider_lease(&mut world, &old_context);
     let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
     sidecar
@@ -161,6 +165,32 @@ fn provider_lease_release_fences_cross_request_without_economic_mutation() {
     assert!(
         sidecar.provider_cognition_leases.contains_key("agent-a"),
         "rejected lease remains available for durable recovery inspection"
+    );
+}
+
+#[test]
+fn provider_lease_reserve_fences_stale_runtime_binding_without_economic_mutation() {
+    let mut world = bound_provider_lease_test_world(&["agent-a"]);
+    let mut context = valid_test_provider_context(&world, "agent-a", "turn-stale", "request-stale");
+    context.request_context.runtime_binding.branch_id = "stale-branch".to_string();
+    context.request_context.request_digest = context.request_context.request_digest();
+    context.turn_context.request_digest = context.request_context.request_digest.clone();
+    let economy_before = world
+        .cognition_economy()
+        .expect("read economy before stale reserve");
+
+    let error = crate::viewer::runtime_live::control_plane::llm_sidecar::async_support::reserve_provider_cognition_lease(
+        &mut world,
+        &context,
+    )
+        .expect_err("stale Runtime binding must be rejected before reserve");
+    assert!(error.contains("Runtime binding changed before lease reserve"));
+    assert_eq!(
+        world
+            .cognition_economy()
+            .expect("read economy after stale reserve"),
+        economy_before,
+        "stale binding rejection must not reserve balance or emit a receipt"
     );
 }
 

@@ -140,6 +140,9 @@ pub(super) fn validate_cognition_lease_for_request(
     lease: &CognitionLeaseV1,
     logical_tick: WorldTime,
 ) -> Result<(), AsyncAgentRunnerError> {
+    request_context.validate().map_err(|error| {
+        AsyncAgentRunnerError::Cognition(format!("cognition_request_invalid: {error}"))
+    })?;
     lease.validate().map_err(|error| {
         AsyncAgentRunnerError::Cognition(format!("cognition_lease_invalid: {error}"))
     })?;
@@ -150,10 +153,24 @@ pub(super) fn validate_cognition_lease_for_request(
     }
     if lease.agent_id != agent_id
         || request_context.agent_subject != agent_id
+        || lease.idempotency_key != request_context.provider_invocation_key().to_string()
         || lease.agent_session_id != request_context.agent_session_id
         || lease.agent_turn_id != request_context.agent_turn_id
         || lease.decision_request_id != request_context.decision_request_id
         || lease.request_digest != request_context.request_digest.to_string()
+        || lease.account_id != lease.quote.payer_id
+        || lease.quote.resource != "cognition_units"
+        || lease.reserved_amount != 1
+        || lease.quote.resource_version != crate::runtime::COGNITION_RESOURCE_VERSION_V1
+        || lease.quote.purpose != "provider_cognition"
+        || lease.quote.scope != "agent_turn"
+        || lease.quote.policy_revision
+            != crate::runtime::COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION
+        || lease.quote.authority_context
+            != request_context
+                .capability_invocation_context_digest
+                .to_string()
+        || lease.quote.world_binding != request_context.runtime_binding.base_world_hash.to_string()
     {
         return Err(AsyncAgentRunnerError::Cognition(
             "cognition_lease_identity_mismatch".to_string(),
