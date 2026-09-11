@@ -20,6 +20,8 @@ Read the bound task's compact resume state from the canonical worktree; follow o
 python3 ./scripts/pm/workflow-next.py --repo-root <canonical-worktree> --task-uid <TASK-UID> --json
 ```
 
+For a finite multi-obligation change, before a leaf enters finish, read its coordinating Issue record and confirm the approved required set, mapping slots, candidate-selection rule and blocking feedback under the [traceability record contract](../../../doc/engineering/workflow/source-of-truth.md#traceability-record-contract). Ordinary single-task/single-leaf work follows its own task Issue and does not require a second coordinating Issue. Before claiming aggregate or overall completion, compare that frozen record with actual Task/contract/evidence references, aggregate source/integration/tested-tree candidate, results and feedback clearance. An omitted optional `delivery_obligations` binding is not itself a blocker when the required record and evidence are complete; only missing proof for a declared obligation keeps the aggregate claim pending. That does not invalidate a bounded truthful leaf completion or create a new state or ledger. Preserve classified non-merge outcomes and report the aggregate blocker with its resume condition.
+
 ## Freeze-Commit Gates
 
 1. Freeze comparison ref and implementation head. Run `git diff --check <Comparison Ref>...<Source Head>`.
@@ -118,13 +120,11 @@ python3 ./scripts/pm/non-merge-finalize.py \
 - PR URL and merged receipt, or canonical blocker with resume instruction
 - main-sync and cleanup result
 
-Missing trusted runtime attestation is `capability_blocked` for unattended automation,
-not human-operated PRs. Never manufacture passed evidence or downgrade a blocker.
+Missing trusted runtime attestation is `capability_blocked` for unattended automation, not human-operated PRs. Never manufacture passed evidence or downgrade a blocker.
 ## Guardrails
 
 For an explicitly bound manual loop task, use `scripts/pm/loop.py` with the effective trusted tool root before admission or continuation. Preserve the exact loop binding, immutable contracts, scope and user merge hold. At stable waits return resumable evidence without heartbeat or scheduled continuation; completion never starts another task. See [manual entry authority](../../../doc/engineering/workflow/source-of-truth.md#manual-three-loop-transition). Legacy tasks retain their existing route.
 Do not bypass a canonical gate, mutate implementation after freeze without restarting review, or clean up before trusted merge evidence. Hosted loop CI proves repository scope/content only; promotion and merge require fresh effective-helper admission using the existing local `gh` login, without exporting credentials or accepting caller-signed substitute receipts.
-
 ## Known Failure Modes
 
 Stale verification; locally fabricated receipts; treating PR creation as completion; cleanup against unbound paths.
