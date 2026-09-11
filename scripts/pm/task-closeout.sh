@@ -185,6 +185,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Loading the detached effective helper must not write interpreter bytecode into
+# that temporary Git worktree. Cleanup must continue to reject real dirty files.
+sys.dont_write_bytecode = True
+
 root = Path(sys.argv[1]).resolve()
 task_uid, requested_mode = sys.argv[2], sys.argv[3]
 record_arg, candidate_arg, script_dir = sys.argv[4], sys.argv[5], Path(sys.argv[6]).resolve()

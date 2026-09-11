@@ -612,6 +612,10 @@ class PinnedCloseoutFixture:
         environment = dict(os.environ)
         environment["PM_ROOT_DIR"] = str(self.root)
         environment["OASIS7_CLOSEOUT_MARKER"] = str(self.marker)
+        # CI's interpreter writes bytecode beside imported sources. Exercise
+        # that environment so the pinned worktree cleanup cannot rely on the
+        # developer machine's external pycache prefix.
+        environment["PYTHONPYCACHEPREFIX"] = "/"
         return subprocess.run(
             command, cwd=self.root, env=environment, text=True, capture_output=True
         )
