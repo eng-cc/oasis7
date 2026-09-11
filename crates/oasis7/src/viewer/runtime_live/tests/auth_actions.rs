@@ -1,7 +1,10 @@
 use super::*;
-use std::collections::BTreeMap;
-use std::io::Read;
 use std::sync::{Arc, Mutex};
+
+pub(super) use super::mock_http::{
+    MockHttpResponse, RecordedHttpRequest, provider_context_response,
+    spawn_runtime_live_mock_http_server, spawn_runtime_live_mock_http_server_with_provider_probes,
+};
 
 #[path = "auth_actions_agent_chat.rs"]
 mod agent_chat_tests;
@@ -693,38 +696,6 @@ fn runtime_step_control_surfaces_runtime_failure_as_blocked_ack() {
     );
 }
 
-#[derive(Debug, Clone)]
-pub(super) struct RecordedHttpRequest {
-    pub(super) method: String,
-    pub(super) path: String,
-    pub(super) headers: BTreeMap<String, String>,
-    pub(super) body: Vec<u8>,
-}
-
-#[derive(Debug, Clone)]
-pub(super) struct MockHttpResponse {
-    pub(super) status_code: u16,
-    pub(super) body: String,
-}
-
-pub(super) fn provider_context_response(
-    context: &crate::simulator::ContinuousAgentRequestContextV1,
-    response: crate::simulator::DecisionResponse,
-) -> crate::simulator::ContinuousAgentResponseContextV1 {
-    crate::simulator::ContinuousAgentResponseContextV1 {
-        response_digest: crate::simulator::cognition_response_digest(&response),
-        base_decision_response: response,
-        context_discriminator: crate::simulator::CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR.to_string(),
-        context_version: crate::simulator::CONTINUOUS_AGENT_CONTEXT_VERSION,
-        agent_session_id: context.agent_session_id.clone(),
-        agent_turn_id: context.agent_turn_id.clone(),
-        decision_request_id: context.decision_request_id.clone(),
-        retry_seq: context.retry_seq,
-        transport_attempt: context.transport_attempt,
-        request_digest: context.request_digest.clone(),
-    }
-}
-
 #[test]
 fn runtime_agent_chat_requires_explicit_session_registration() {
     let _guard = lock_test_llm_env();
@@ -764,114 +735,6 @@ fn runtime_agent_chat_requires_explicit_session_registration() {
         .handle_agent_chat(request)
         .expect_err("session register should be required before agent chat");
     assert_eq!(err.code, "session_not_found");
-}
-
-pub(super) fn spawn_runtime_live_mock_http_server<F>(
-    expected_connections: usize,
-    handler: F,
-) -> String
-where
-    F: Fn(RecordedHttpRequest) -> MockHttpResponse + Send + Sync + 'static,
-{
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind mock http server");
-    let bind = listener.local_addr().expect("listener addr");
-    let handler = Arc::new(handler);
-    std::thread::spawn(move || {
-        for _ in 0..expected_connections {
-            let (mut stream, _) = listener.accept().expect("accept mock request");
-            let request = read_runtime_live_http_request(&mut stream);
-            let response = handler(request);
-            write_runtime_live_json_response(
-                &mut stream,
-                response.status_code,
-                response.body.as_str(),
-            );
-        }
-    });
-    format!("http://{}", bind)
-}
-
-fn read_runtime_live_http_request(stream: &mut std::net::TcpStream) -> RecordedHttpRequest {
-    let mut buffer = Vec::new();
-    let mut chunk = [0_u8; 1024];
-    let mut header_end = None;
-    let mut content_length = 0_usize;
-
-    loop {
-        let bytes = stream.read(&mut chunk).expect("read request bytes");
-        if bytes == 0 {
-            break;
-        }
-        buffer.extend_from_slice(&chunk[..bytes]);
-        if header_end.is_none() {
-            header_end = find_runtime_live_header_terminator(buffer.as_slice());
-            if let Some(boundary) = header_end {
-                let header = std::str::from_utf8(&buffer[..boundary]).expect("utf8 header");
-                content_length = header
-                    .lines()
-                    .find_map(|line| {
-                        let (name, value) = line.split_once(':')?;
-                        if name.eq_ignore_ascii_case("content-length") {
-                            value.trim().parse::<usize>().ok()
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or(0);
-            }
-        }
-        if let Some(boundary) = header_end {
-            if buffer.len() >= boundary + 4 + content_length {
-                break;
-            }
-        }
-    }
-
-    let boundary = header_end.expect("header boundary");
-    let header = std::str::from_utf8(&buffer[..boundary]).expect("utf8 header");
-    let mut lines = header.lines();
-    let request_line = lines.next().expect("request line");
-    let mut request_line_parts = request_line.split_whitespace();
-    let method = request_line_parts.next().expect("method").to_string();
-    let path = request_line_parts.next().expect("path").to_string();
-    let mut headers = BTreeMap::new();
-    for line in lines {
-        if let Some((name, value)) = line.split_once(':') {
-            headers.insert(name.trim().to_ascii_lowercase(), value.trim().to_string());
-        }
-    }
-    let body = buffer[(boundary + 4)..(boundary + 4 + content_length)].to_vec();
-
-    RecordedHttpRequest {
-        method,
-        path,
-        headers,
-        body,
-    }
-}
-
-fn find_runtime_live_header_terminator(buffer: &[u8]) -> Option<usize> {
-    buffer.windows(4).position(|window| window == b"\r\n\r\n")
-}
-
-fn write_runtime_live_json_response(
-    stream: &mut std::net::TcpStream,
-    status_code: u16,
-    body: &str,
-) {
-    let status_text = match status_code {
-        200 => "OK",
-        404 => "Not Found",
-        _ => "Error",
-    };
-    let response = format!(
-        "HTTP/1.1 {status_code} {status_text}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-        body.len(),
-        body
-    );
-    stream
-        .write_all(response.as_bytes())
-        .expect("write mock response");
 }
 
 #[test]
