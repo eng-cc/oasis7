@@ -636,6 +636,131 @@ fn settle_requires_positive_bounded_usage_without_mutation() {
 }
 
 #[test]
+fn settlement_at_lease_deadline_is_valid() {
+    let mut economy = CognitionEconomyStateV1::new();
+    economy
+        .set_resource_balance("account-agent-a", "cognition_units", 8)
+        .expect("seed balance");
+    let lease = economy
+        .reserve(
+            CognitionLeaseRequestV1::new(
+                "deadline-boundary-key",
+                "account-agent-a",
+                "agent-a",
+                "session-a",
+                "turn-a",
+                "request-a",
+                "request-digest-a",
+                quote("deadline-boundary-quote", "cognition_units", 4).with_valid_until_tick(3),
+            ),
+            1,
+        )
+        .expect("reserve before deadline");
+
+    let settled = economy
+        .settle(&lease.lease_id, 3, 3)
+        .expect("settlement at the inclusive deadline is valid");
+    assert_eq!(settled.status, CognitionLeaseStatusV1::Settled);
+    assert_eq!(settled.operation, "settle");
+    assert_eq!(settled.consumed_amount, 3);
+    assert_eq!(settled.refunded_amount, 1);
+    assert_eq!(
+        economy.available_balance("account-agent-a", "cognition_units"),
+        5
+    );
+    assert_eq!(
+        economy.reserved_balance("account-agent-a", "cognition_units"),
+        0
+    );
+    assert_eq!(
+        economy.journal.last().expect("settle event").event_kind,
+        "settle"
+    );
+    economy
+        .validate()
+        .expect("deadline settlement preserves invariants");
+}
+
+#[test]
+fn late_settlement_atomically_expires_reserved_lease() {
+    let mut economy = CognitionEconomyStateV1::new();
+    economy
+        .set_resource_balance("account-agent-a", "cognition_units", 8)
+        .expect("seed balance");
+    let lease = economy
+        .reserve(
+            CognitionLeaseRequestV1::new(
+                "deadline-late-key",
+                "account-agent-a",
+                "agent-a",
+                "session-a",
+                "turn-a",
+                "request-a",
+                "request-digest-a",
+                quote("deadline-late-quote", "cognition_units", 4).with_valid_until_tick(3),
+            ),
+            1,
+        )
+        .expect("reserve before deadline");
+
+    let expired = economy
+        .settle(&lease.lease_id, 3, 4)
+        .expect("late settlement closes the lease through expiry");
+    assert_eq!(expired.status, CognitionLeaseStatusV1::Expired);
+    assert_eq!(expired.operation, "expire");
+    assert_eq!(expired.consumed_amount, 0);
+    assert_eq!(expired.released_amount, 4);
+    assert_eq!(expired.refunded_amount, 0);
+    assert_eq!(expired.reason.as_deref(), Some("quote_expired"));
+    assert_eq!(
+        economy.available_balance("account-agent-a", "cognition_units"),
+        8
+    );
+    assert_eq!(
+        economy.reserved_balance("account-agent-a", "cognition_units"),
+        0
+    );
+    assert_eq!(
+        economy.leases[&lease.lease_id].status,
+        CognitionLeaseStatusV1::Expired
+    );
+    assert_eq!(
+        economy.receipts.len(),
+        2,
+        "reserve and expiry receipts are linked"
+    );
+    assert_eq!(
+        economy.journal.len(),
+        2,
+        "expiry appends one terminal event"
+    );
+    assert_eq!(
+        economy.journal.last().expect("expiry event").event_kind,
+        "expire"
+    );
+    economy
+        .validate()
+        .expect("atomic expiry preserves invariants");
+    let encoded = economy.snapshot_json().expect("encode expired economy");
+    let restored = CognitionEconomyStateV1::from_snapshot_json(encoded)
+        .expect("decode atomically expired economy");
+    assert_eq!(
+        restored, economy,
+        "expiry receipt and journal replay deterministically"
+    );
+
+    let after_expiry = economy.clone();
+    let retry = economy
+        .settle(&lease.lease_id, 3, 5)
+        .expect_err("an expired lease rejects late settlement retries");
+    assert_eq!(retry.code(), "cognition_lease_already_closed");
+    assert_eq!(
+        economy, after_expiry,
+        "late retries do not append a second transition"
+    );
+}
+
+#[test]
 fn release_and_expire_have_distinct_terminal_receipts() {
     let mut economy = CognitionEconomyStateV1::new();
     economy
