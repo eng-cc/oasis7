@@ -271,11 +271,15 @@ impl RuntimeLlmSidecar {
             };
             self.bind_provider_cognition_lease(agent_id.clone(), cognition_lease.clone());
             if let Err(error) = runtime_provider_prefix(world, &context) {
-                let release_error = world
-                    .release_cognition_lease(cognition_lease.lease_id.as_str())
+                let release_error = self
+                    .release_provider_lease_before_io_or_fence(
+                        world,
+                        agent_id.as_str(),
+                        &context,
+                        &cognition_lease,
+                    )
                     .err()
-                    .map(|error| format!("; cognition lease release failed: {error:?}"));
-                self.clear_provider_cognition_lease(agent_id.as_str());
+                    .map(|error| format!("; {error}"));
                 return Some(RuntimeLlmDecision::from_agent_error(
                     world,
                     agent_id,
@@ -294,11 +298,15 @@ impl RuntimeLlmSidecar {
                 .insert(agent_id.clone(), context.clone());
             if let Err(error) = self.persist_provider_lineage() {
                 self.provider_active_turns.remove(agent_id.as_str());
-                let release_error = world
-                    .release_cognition_lease(cognition_lease.lease_id.as_str())
+                let release_error = self
+                    .release_provider_lease_before_io_or_fence(
+                        world,
+                        agent_id.as_str(),
+                        &context,
+                        &cognition_lease,
+                    )
                     .err()
-                    .map(|error| format!("; cognition lease release failed: {error:?}"));
-                self.clear_provider_cognition_lease(agent_id.as_str());
+                    .map(|error| format!("; {error}"));
                 let _ = runtime_provider_failure(world, &context, "persistence_failure");
                 return Some(RuntimeLlmDecision::from_agent_error(
                     world,
@@ -314,12 +322,22 @@ impl RuntimeLlmSidecar {
                 .as_mut()
                 .and_then(RuntimeDecisionRunner::async_runner_mut)
             else {
-                let _ = world.release_cognition_lease(cognition_lease.lease_id.as_str());
-                self.clear_provider_cognition_lease(agent_id.as_str());
+                let release_error = self
+                    .release_provider_lease_before_io_or_fence(
+                        world,
+                        agent_id.as_str(),
+                        &context,
+                        &cognition_lease,
+                    )
+                    .err()
+                    .map(|error| format!("; {error}"))
+                    .unwrap_or_default();
                 let _ = runtime_provider_failure(world, &context, "provider_failure");
                 return Some(RuntimeLlmDecision::from_error(
                     world,
-                    "provider runner disappeared while starting an async turn".to_string(),
+                    format!(
+                        "provider runner disappeared while starting an async turn{release_error}"
+                    ),
                 ));
             };
             runner.sync_logical_tick(world.state().time);
@@ -332,11 +350,15 @@ impl RuntimeLlmSidecar {
             );
             if let Err(error) = start_result {
                 self.provider_active_turns.remove(agent_id.as_str());
-                let release_error = world
-                    .release_cognition_lease(cognition_lease.lease_id.as_str())
+                let release_error = self
+                    .release_provider_lease_before_io_or_fence(
+                        world,
+                        agent_id.as_str(),
+                        &context,
+                        &cognition_lease,
+                    )
                     .err()
-                    .map(|error| format!("; cognition lease release failed: {error:?}"));
-                self.clear_provider_cognition_lease(agent_id.as_str());
+                    .map(|error| format!("; {error}"));
                 // If this cleanup cannot be persisted, retaining the durable
                 // marker is the safe outcome: restart recovery will fence the
                 // identity rather than risk a duplicate provider call.

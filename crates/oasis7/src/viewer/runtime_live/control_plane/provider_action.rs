@@ -25,7 +25,21 @@ impl ViewerRuntimeLiveServer {
             .as_ref()
             .map(|(agent_id, _)| agent_id.as_str());
         if let Some(agent_id) = self.llm_sidecar.provider_stale_replan_exhausted_agent() {
+            // Stale binding recovery owns the old lease. Run that cleanup
+            // before terminalizing an exhausted replan; otherwise the early
+            // return would leave a Reserved mirror and block durable recovery.
+            let stale_replan_cleanup = self
+                .llm_sidecar
+                .release_binding_changed_provider_leases(&mut self.world)
+                .err();
             let mut trace = stale_replan_exhausted_trace(&self.world, agent_id.as_str());
+            if let Some(error) = stale_replan_cleanup {
+                trace.llm_error = Some(format!(
+                    "{}; stale provider lease cleanup remains pending: {error}",
+                    trace.llm_error.take().unwrap_or_default()
+                ));
+                return Err(trace);
+            }
             if let Err(error) = self.handoff_runtime_wake_for_agent(
                 agent_id.as_str(),
                 crate::runtime::ContinuationStatusV1::Rejected,

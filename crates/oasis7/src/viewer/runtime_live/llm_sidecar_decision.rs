@@ -99,11 +99,15 @@ impl RuntimeLlmSidecar {
                         };
                     self.bind_provider_cognition_lease(agent_id.clone(), cognition_lease.clone());
                     if let Err(error) = async_support::runtime_provider_prefix(world, &context) {
-                        let release_error = world
-                            .release_cognition_lease(cognition_lease.lease_id.as_str())
+                        let release_error = self
+                            .release_provider_lease_before_io_or_fence(
+                                world,
+                                agent_id.as_str(),
+                                &context,
+                                &cognition_lease,
+                            )
                             .err()
-                            .map(|error| format!("; cognition lease release failed: {error:?}"));
-                        self.clear_provider_cognition_lease(agent_id.as_str());
+                            .map(|error| format!("; {error}"));
                         self.shadow_kernel = Some(kernel);
                         return Some(RuntimeLlmDecision::from_agent_error(
                             world,

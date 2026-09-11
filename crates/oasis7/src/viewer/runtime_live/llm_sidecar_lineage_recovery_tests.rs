@@ -1,4 +1,7 @@
 use super::*;
+use crate::viewer::runtime_live::{
+    ViewerRuntimeLiveServer, ViewerRuntimeLiveServerConfig, WorldScenario,
+};
 
 fn bound_provider_lease_test_world(agent_ids: &[&str]) -> RuntimeWorld {
     bound_provider_lease_test_world_with_binding(agent_ids, "pending", None)
@@ -478,6 +481,64 @@ fn binding_changed_stale_lease_checkpoint_retry_reconciles_terminal_release() {
 }
 
 #[test]
+fn stale_replan_exhaustion_cleans_restored_lease_before_terminal_return() {
+    let mut world = bound_provider_lease_test_world(&["agent-a"]);
+    let context =
+        valid_test_provider_context(&world, "agent-a", "turn-stale-max", "request-stale-max");
+    let lease = reserve_test_provider_lease(&mut world, &context);
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("Runtime live server");
+    server.world = world;
+    server
+        .llm_sidecar
+        .provider_agent_ids
+        .insert("agent-a".to_string());
+    server
+        .llm_sidecar
+        .provider_contexts
+        .insert("agent-a".to_string(), context);
+    server
+        .llm_sidecar
+        .provider_cognition_leases
+        .insert("agent-a".to_string(), lease.clone());
+    for count in 1..=3 {
+        assert!(server.llm_sidecar.schedule_provider_stale_replan(
+            "agent-a",
+            format!("turn-stale-max-{count}").as_str(),
+            format!("request-stale-max-{count}").as_str(),
+        ));
+    }
+    assert!(!server.llm_sidecar.schedule_provider_stale_replan(
+        "agent-a",
+        "turn-stale-max-overflow",
+        "request-stale-max-overflow",
+    ));
+
+    server
+        .enqueue_llm_action_from_sidecar()
+        .expect_err("stale replan exhaustion must remain a terminal result");
+    assert!(
+        server.llm_sidecar.provider_cognition_leases.is_empty(),
+        "exhaustion must clean the restored stale lease before returning"
+    );
+    assert_eq!(
+        server
+            .world
+            .cognition_economy()
+            .expect("read economy after stale replan exhaustion")
+            .leases
+            .get(lease.lease_id.as_str())
+            .expect("stale lease remains durable")
+            .status,
+        crate::runtime::CognitionLeaseStatusV1::Released,
+        "stale replan exhaustion must release the old Runtime reservation"
+    );
+}
+
+#[test]
 fn committed_marker_recovery_settles_provider_lease_before_clearing_mirror() {
     // The provider fixture installs a finalized capability authority. Commit
     // validation requires the equivalent verified runtime finality binding,
@@ -581,6 +642,48 @@ fn committed_marker_recovery_settles_provider_lease_before_clearing_mirror() {
     first
         .provider_cognition_leases
         .insert("agent-a".to_string(), lease.clone());
+    let provider_response = crate::simulator::DecisionResponse::wait("recovery-provider");
+    let cognition =
+        crate::viewer::runtime_live::control_plane::llm_sidecar::RuntimeProviderActionContext {
+            request: context.clone(),
+            response: crate::simulator::ContinuousAgentResponseContextV1 {
+                response_digest: crate::simulator::cognition_response_digest(&provider_response),
+                base_decision_response: provider_response,
+                context_discriminator: crate::simulator::CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR
+                    .to_string(),
+                context_version: crate::simulator::CONTINUOUS_AGENT_CONTEXT_VERSION,
+                agent_session_id: context.request_context.agent_session_id.clone(),
+                agent_turn_id: context.request_context.agent_turn_id.clone(),
+                decision_request_id: context.request_context.decision_request_id.clone(),
+                retry_seq: context.request_context.retry_seq,
+                transport_attempt: context.request_context.transport_attempt,
+                request_digest: context.request_context.request_digest.clone(),
+            },
+            cognition_lease: Some(lease.clone()),
+            memory_write_intents: vec![crate::simulator::MemoryWriteIntent {
+                scope: "provider-recovery".to_string(),
+                summary: "restore committed memory intent".to_string(),
+                tags: vec!["crash".to_string()],
+            }],
+        };
+    first.provider_held_decisions.insert(
+        "agent-a".to_string(),
+        async_support::RuntimeLlmDecision {
+            agent_id: "agent-a".to_string(),
+            decision: AgentDecision::Act(crate::simulator::Action::MoveAgent {
+                agent_id: "agent-a".to_string(),
+                to: "loc-recovery".to_string(),
+            }),
+            decision_trace: None,
+            cognition: Some(cognition),
+            memory_write_intents: vec![crate::simulator::MemoryWriteIntent {
+                scope: "provider-recovery".to_string(),
+                summary: "restore committed memory intent".to_string(),
+                tags: vec!["crash".to_string()],
+            }],
+            continuation_admitted: false,
+        },
+    );
     first
         .persist_provider_lineage()
         .expect("persist committed lease recovery checkpoint");
@@ -593,6 +696,22 @@ fn committed_marker_recovery_settles_provider_lease_before_clearing_mirror() {
     assert!(
         restored.provider_cognition_leases.contains_key("agent-a"),
         "commit-marker recovery must retain the lease until Runtime settlement"
+    );
+    let recovered_pending = restored
+        .pending_actions
+        .values()
+        .find(|pending| pending.agent_id == "agent-a")
+        .expect("commit-marker recovery must rebuild the pre-track action");
+    assert_eq!(
+        recovered_pending
+            .cognition
+            .as_ref()
+            .expect("recovered cognition context")
+            .memory_write_intents
+            .first()
+            .map(|intent| intent.summary.as_str()),
+        Some("restore committed memory intent"),
+        "pre-track recovery must retain receipt-gated memory intent"
     );
     assert_eq!(
         world
@@ -610,6 +729,13 @@ fn committed_marker_recovery_settles_provider_lease_before_clearing_mirror() {
     assert!(
         restored.provider_cognition_leases.is_empty(),
         "lease mirror is cleared only after settlement succeeds"
+    );
+    assert!(
+        restored
+            .pending_actions
+            .values()
+            .any(|pending| { pending.agent_id == "agent-a" && pending.cognition.is_some() }),
+        "settlement must retain the recovery bridge until feedback finalization"
     );
     let economy = world
         .cognition_economy()
@@ -676,6 +802,50 @@ fn provider_lease_release_fences_cross_request_without_economic_mutation() {
     assert!(
         sidecar.provider_cognition_leases.contains_key("agent-a"),
         "rejected lease remains available for durable recovery inspection"
+    );
+}
+
+#[test]
+fn pre_io_release_failure_retains_and_fences_lease_mirror() {
+    let mut world = bound_provider_lease_test_world(&["agent-a"]);
+    let context = valid_test_provider_context(&world, "agent-a", "turn-pre-io", "request-pre-io");
+    let lease = reserve_test_provider_lease(&mut world, &context);
+    world
+        .release_cognition_lease(lease.lease_id.as_str())
+        .expect("close Runtime lease to inject a release fault");
+    let mut fault_lease = lease.clone();
+    fault_lease.lease_id = "missing-pre-io-lease".to_string();
+
+    let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    sidecar
+        .provider_contexts
+        .insert("agent-a".to_string(), context.clone());
+    sidecar
+        .provider_cognition_leases
+        .insert("agent-a".to_string(), fault_lease.clone());
+    let error = sidecar
+        .release_provider_lease_before_io_or_fence(&mut world, "agent-a", &context, &fault_lease)
+        .expect_err("closed Runtime lease must exercise the pre-I/O release fault path");
+    assert!(error.contains("release before provider I/O failed"));
+    assert!(
+        sidecar.provider_cognition_leases.contains_key("agent-a"),
+        "failed pre-I/O release must retain the exact lease mirror"
+    );
+    assert!(
+        sidecar.provider_recovery_pending.contains_key("agent-a"),
+        "failed pre-I/O release must install a durable recovery fence"
+    );
+    assert!(sidecar.provider_transport_exhausted.contains("agent-a"));
+    assert_eq!(
+        world
+            .cognition_economy()
+            .expect("read economy after injected release fault")
+            .receipts
+            .values()
+            .filter(|receipt| receipt.lease_id == lease.lease_id && receipt.operation == "release")
+            .count(),
+        1,
+        "the failed second release must not add an economic receipt"
     );
 }
 
