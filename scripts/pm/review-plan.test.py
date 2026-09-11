@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import importlib.util
 import os
 from pathlib import Path
 import subprocess
@@ -12,6 +14,10 @@ from unittest.mock import patch
 
 
 SCRIPT = Path(__file__).with_name("review-plan.py")
+_SPEC = importlib.util.spec_from_file_location("review_plan_under_test", SCRIPT)
+assert _SPEC is not None and _SPEC.loader is not None
+REVIEW_PLAN = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(REVIEW_PLAN)
 TASK = "task_" + "1" * 32
 EVIDENCE = "b" * 64
 COMPARISON_REF = "refs/remotes/origin/main"
@@ -80,6 +86,36 @@ class ReviewPlanTests(unittest.TestCase):
         )
         self.assertEqual(0, result.returncode, result.stderr)
         return json.loads(result.stdout)
+
+    def complete_collected_plan(self, plan: dict[str, object]) -> None:
+        preflight = plan["preflight"]
+        assert isinstance(preflight, dict)
+        ledger_path = Path(str(preflight["ledger_path"]))
+        rows = []
+        for item in plan["expected_slices"]:
+            assert isinstance(item, dict)
+            artifact_path = ledger_path.parent / f"{item['slice_id']}.json"
+            artifact_path.write_text(json.dumps({
+                "role": item["role"], "slice_id": item["slice_id"],
+                "task_uid": TASK, "head": plan["frozen_head"], "epoch": plan["epoch"],
+                "status": "completed", "disposition": "no_findings",
+                "findings": [], "residual_risk": "none",
+            }), encoding="utf-8")
+            rows.append({
+                "role": item["role"], "slice_id": item["slice_id"],
+                "task_uid": TASK, "head": plan["frozen_head"], "epoch": plan["epoch"],
+                "status": "completed",
+                "artifact_digest": hashlib.sha256(artifact_path.read_bytes()).hexdigest(),
+                "artifacts": [str(artifact_path)],
+            })
+        ledger_path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
+        ledger_digest = hashlib.sha256(ledger_path.read_bytes()).hexdigest()
+        Path(str(plan["collection_path"])).write_text(json.dumps({
+            "schema": "oasis7-review-collection/v1", "status": "passed",
+            "epoch": plan["epoch"], "task_uid": TASK, "frozen_head": plan["frozen_head"],
+            "ledger_digest": ledger_digest,
+            "roles": sorted(str(item["role"]) for item in plan["expected_slices"]),
+        }), encoding="utf-8")
 
     def write_receipt(self, path: Path, *, base_oid: str, head_oid: str) -> None:
         path.write_text(json.dumps({
@@ -351,6 +387,145 @@ class ReviewPlanTests(unittest.TestCase):
             ok=False,
         )
         self.assertIn("duplicate manual role", result.stderr.lower())
+
+    def test_prior_review_context_binds_real_prior_head_delta(self) -> None:
+        prior_path = self.root / ".pm/scratch" / TASK / "review-plans" / "prior.json"
+        prior = self.plan(
+            "--out", str(prior_path),
+            "--preflight-dir", str(self.root / ".pm/scratch" / TASK / "prior-preflight"),
+        )
+        self.complete_collected_plan(prior)
+        prior_bytes = prior_path.read_bytes()
+
+        (self.root / "repair.txt").write_text("repair\n", encoding="utf-8")
+        self.git("add", "repair.txt")
+        self.git("commit", "-m", "repair")
+        self.head = self.git("rev-parse", "HEAD")
+        current_path = self.root / ".pm/scratch" / TASK / "review-plans" / "current.json"
+
+        current = self.plan(
+            "--prior-review-plan", str(prior_path),
+            "--out", str(current_path),
+        )
+        context = current["incremental_review_context"]
+        self.assertEqual("oasis7-review-context/v1", context["schema"])
+        self.assertEqual(prior["frozen_head"], context["prior_head_oid"])
+        self.assertEqual(self.head, context["current_head_oid"])
+        self.assertEqual(["repair.txt"], context["delta_paths"])
+        self.assertEqual(
+            hashlib.sha256(prior_bytes).hexdigest(),
+            context["prior_plan_digest"],
+        )
+        self.assertNotEqual(prior["epoch"], current["epoch"])
+
+    def test_prior_review_context_rejects_deleted_collected_artifact(self) -> None:
+        prior_path = self.root / ".pm/scratch" / TASK / "review-plans" / "deleted-artifact.json"
+        prior = self.plan(
+            "--out", str(prior_path),
+            "--preflight-dir", str(self.root / ".pm/scratch" / TASK / "prior-preflight"),
+        )
+        self.complete_collected_plan(prior)
+        ledger_path = Path(str(prior["preflight"]["ledger_path"]))
+        row = json.loads(ledger_path.read_text(encoding="utf-8").splitlines()[0])
+        artifact_path = Path(str(row["artifacts"][0]))
+        artifact_path.write_text(artifact_path.read_text(encoding="utf-8") + "tampered\n", encoding="utf-8")
+
+        (self.root / "repair.txt").write_text("repair\n", encoding="utf-8")
+        self.git("add", "repair.txt")
+        self.git("commit", "-m", "repair")
+        self.head = self.git("rev-parse", "HEAD")
+        result = self.run_plan(
+            "--prior-review-plan", str(prior_path),
+            "--out", str(self.root / ".pm/scratch" / TASK / "review-plans" / "current.json"),
+            ok=False,
+        )
+        self.assertRegex(result.stderr.lower(), r"artifact|ledger")
+
+        artifact_path.unlink()
+        deleted = self.run_plan(
+            "--prior-review-plan", str(prior_path),
+            "--out", str(self.root / ".pm/scratch" / TASK / "review-plans" / "deleted.json"),
+            ok=False,
+        )
+        self.assertRegex(deleted.stderr.lower(), r"artifact|ledger")
+
+    def test_prior_review_context_rejects_artifact_path_escape(self) -> None:
+        prior_path = self.root / ".pm/scratch" / TASK / "review-plans" / "escaped-artifact.json"
+        prior = self.plan(
+            "--out", str(prior_path),
+            "--preflight-dir", str(self.root / ".pm/scratch" / TASK / "escaped-preflight"),
+        )
+        self.complete_collected_plan(prior)
+        ledger_path = Path(str(prior["preflight"]["ledger_path"]))
+        rows = [json.loads(line) for line in ledger_path.read_text(encoding="utf-8").splitlines() if line]
+        original_artifact = Path(str(rows[0]["artifacts"][0]))
+        outside_artifact = self.root.parent / f"{self.root.name}-outside-artifact.json"
+        outside_artifact.write_bytes(original_artifact.read_bytes())
+        self.addCleanup(lambda: outside_artifact.unlink(missing_ok=True))
+
+        (self.root / "repair.txt").write_text("repair\n", encoding="utf-8")
+        self.git("add", "repair.txt")
+        self.git("commit", "-m", "repair")
+        self.head = self.git("rev-parse", "HEAD")
+
+        collection_path = Path(str(prior["collection_path"]))
+        for index, reference in enumerate((
+            str(outside_artifact),
+            os.path.relpath(outside_artifact, ledger_path.parent),
+        )):
+            rows[0]["artifacts"] = [reference]
+            ledger_path.write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+                encoding="utf-8",
+            )
+            collection = json.loads(collection_path.read_text(encoding="utf-8"))
+            collection["ledger_digest"] = hashlib.sha256(ledger_path.read_bytes()).hexdigest()
+            collection_path.write_text(json.dumps(collection), encoding="utf-8")
+            result = self.run_plan(
+                "--prior-review-plan", str(prior_path),
+                "--out", str(self.root / ".pm/scratch" / TASK / "review-plans" / f"escape-{index}.json"),
+                ok=False,
+            )
+            self.assertRegex(result.stderr.lower(), r"artifact|repository|escape|ledger")
+
+    def test_binary_diff_digest_ignores_external_diff_and_textconv(self) -> None:
+        prior_head = self.head
+        (self.root / "repair.txt").write_text("repair\n", encoding="utf-8")
+        self.git("add", "repair.txt")
+        self.git("commit", "-m", "repair")
+        current_head = self.git("rev-parse", "HEAD")
+        external = self.root / "external-diff"
+        external.write_text("#!/bin/sh\nprintf 'external diff output\\n'\n", encoding="utf-8")
+        external.chmod(0o755)
+        baseline = REVIEW_PLAN.binary_diff_digest(self.root, prior_head, current_head)
+        self.git("config", "diff.external", str(external))
+        with patch.dict(os.environ, {"GIT_EXTERNAL_DIFF": str(external)}):
+            self.assertEqual(
+                baseline,
+                REVIEW_PLAN.binary_diff_digest(self.root, prior_head, current_head),
+            )
+
+    def test_prior_review_context_rejects_tampered_prior_identity(self) -> None:
+        prior_path = self.root / ".pm/scratch" / TASK / "review-plans" / "tampered.json"
+        prior = self.plan(
+            "--out", str(prior_path),
+            "--preflight-dir", str(self.root / ".pm/scratch" / TASK / "prior-preflight"),
+        )
+        self.complete_collected_plan(prior)
+        tampered = json.loads(prior_path.read_text(encoding="utf-8"))
+        tampered["relevant_evidence_digest"] = "c" * 64
+        prior_path.write_text(json.dumps(tampered), encoding="utf-8")
+
+        (self.root / "repair.txt").write_text("repair\n", encoding="utf-8")
+        self.git("add", "repair.txt")
+        self.git("commit", "-m", "repair")
+        self.head = self.git("rev-parse", "HEAD")
+        result = self.run_plan(
+            "--prior-review-plan", str(prior_path),
+            "--out", str(self.root / ".pm/scratch" / TASK / "review-plans" / "current.json"),
+            ok=False,
+        )
+        self.assertRegex(result.stderr.lower(), r"prior.*digest|prior.*identity|prior.*plan")
 
 
 if __name__ == "__main__":

@@ -102,12 +102,12 @@ cat >"$TMPDIR/bin/gh" <<'EOF'
 import json, os, sys
 args = sys.argv[1:]
 open(os.environ["GH_LOG"], "a").write(" ".join(args) + "\n")
-if args[0:2] != ["api", "repos/eng-cc/oasis7/issues/3615"] and args[0:2] != ["api", "repos/eng-cc/oasis7/issues/3615/comments/3934017999"] and args[0:2] != ["api", "repos/eng-cc/oasis7/collaborators/repo-admin/permission"]:
+if args[0:2] != ["api", "repos/eng-cc/oasis7/issues/3615"] and args[0:2] != ["api", "repos/eng-cc/oasis7/issues/comments/3934017999"] and args[0:2] != ["api", "repos/eng-cc/oasis7/collaborators/repo-admin/permission"]:
     raise SystemExit("unexpected gh invocation: " + " ".join(args))
 if args[1] == "repos/eng-cc/oasis7/issues/3615":
     print(json.dumps({"number":3615, "body":"<!-- oasis7-pm-task -->\ntask_uid: task_11111111111111111111111111111111\n"}))
 elif "comments" in args[1]:
-    print(json.dumps({"id":3934017999, "body":os.environ["BODY"], "user":{"login":"repo-admin"}, "created_at":"2026-09-06T10:00:00Z"}))
+    print(json.dumps({"id":3934017999, "body":os.environ["BODY"], "issue_url":"https://api.github.com/repos/eng-cc/oasis7/issues/3615", "user":{"login":"repo-admin"}, "created_at":"2026-09-06T10:00:00Z"}))
 else:
     print(json.dumps({"permission":"admin"}))
 EOF

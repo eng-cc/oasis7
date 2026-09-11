@@ -61,7 +61,8 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
         self.temp.cleanup()
 
     def _write_fake_gh(self, *, permission: str, author: str = ADMIN, body: str | None = None,
-                       issue_number: int = ISSUE, task_body: str | None = None) -> None:
+                       issue_number: int = ISSUE, task_body: str | None = None,
+                       comment_issue_number: int = ISSUE) -> None:
         if body is None:
             body = self.body
         if task_body is None:
@@ -71,12 +72,12 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
             "import json, os, sys\n"
             "args = sys.argv[1:]\n"
             "open(os.environ['GH_LOG'], 'a').write(' '.join(args) + '\\n')\n"
-            f"if args[:2] != ['api', 'repos/eng-cc/oasis7/issues/{issue_number}'] and args[:2] != ['api', 'repos/eng-cc/oasis7/issues/{issue_number}/comments/3934017999'] and args[:2] != ['api', 'repos/eng-cc/oasis7/collaborators/{author}/permission']:\n"
+            f"if args[:2] != ['api', 'repos/eng-cc/oasis7/issues/{issue_number}'] and args[:2] != ['api', 'repos/eng-cc/oasis7/issues/comments/3934017999'] and args[:2] != ['api', 'repos/eng-cc/oasis7/collaborators/{author}/permission']:\n"
             "    raise SystemExit('unexpected gh call: ' + ' '.join(args))\n"
             f"if args[1] == 'repos/eng-cc/oasis7/issues/{issue_number}':\n"
             "    print(json.dumps({'number': " + str(issue_number) + ", 'body': " + repr(task_body) + "}))\n"
             "elif 'comments' in args[1]:\n"
-            "    print(json.dumps({'id': 3934017999, 'body': " + repr(body) + ", 'user': {'login': " + repr(author) + "}, 'created_at': '2026-09-06T10:00:00Z'}))\n"
+            "    print(json.dumps({'id': 3934017999, 'body': " + repr(body) + ", 'issue_url': 'https://api.github.com/repos/eng-cc/oasis7/issues/" + str(comment_issue_number) + "', 'user': {'login': " + repr(author) + "}, 'created_at': '2026-09-06T10:00:00Z'}))\n"
             "else:\n"
             "    print(json.dumps({'permission': " + repr(permission) + "}))\n",
             encoding="utf-8",
@@ -178,8 +179,15 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
         self.assertEqual("passed", result["status"])
         self.assertEqual("addressed", result["aggregate"])
         self.assertEqual(before, self.ledger.read_bytes())
-        self.assertIn("issues/3615/comments/3934017999", self.gh_log.read_text())
+        self.assertIn("issues/comments/3934017999", self.gh_log.read_text())
         self.assertIn("collaborators/repo-admin/permission", self.gh_log.read_text())
+
+    def test_resolution_comment_must_belong_to_canonical_task_issue(self) -> None:
+        self._write_fake_gh(permission="admin", comment_issue_number=999)
+        before = self.ledger.read_bytes()
+        failure = self.run_script(ok=False)
+        self.assertIn("issue", failure.stderr.lower())
+        self.assertEqual(before, self.ledger.read_bytes())
 
     def test_non_admin_and_author_mismatch_fail_closed(self) -> None:
         self._write_fake_gh(permission="write")
