@@ -2,11 +2,14 @@
 
 本手册只说明维护操作；组织规则、权威边界与裁定原则以 [`doc-structure-standard.design.md`](doc-structure-standard.design.md) 为准。
 
+系统设计正文按 [`system-design-writing-standard.design.md`](system-design-writing-standard.design.md) 的十二段骨架、需求承接和验证映射维护；项目管理记录按 [`project-management-record-standard.design.md`](project-management-record-standard.design.md) 维护。生命周期、权限、任务状态和门禁仍只从 [`workflow source of truth`](../workflow/source-of-truth.md) 读取。
+
 ## 1. Intake 与分类
 
 1. 先识别读者对象与文档职责，再选择目录和后缀。
 2. 产品承诺、跨域组合和端到端成功标准，进入既有 `doc/product/` 四模块之一；实现合同、指标、测试、运维与历史证据留在专业域。
 3. 不确定时暂停建档，记录候选目录、冲突的权威和需要裁定的问题，交由对应 domain owner 与 `repository_health_engineer` 复核；不要以新根级目录或双写规避判断。
+4. 专业技术设计使用系统设计写作规范；任务、slice、变更与验收事实使用 GitHub-backed PM 记录规范，不在产品或设计正文复制可变状态。
 
 ### 1.1 新建与实质变更产品文档的作者步骤
 
