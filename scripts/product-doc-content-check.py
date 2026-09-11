@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 import html
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -209,23 +210,69 @@ def fragment_exists(text: str, fragment: str) -> bool:
     return False
 
 
-def validate_link(root: Path, source: Path, raw_target: str, source_text: str, errors: list[str], path: str, code: str) -> tuple[Path | None, str | None]:
+def selected_target_text(
+    root: Path,
+    head: str,
+    source: Path,
+    target_path: Path,
+    source_text: str,
+    use_worktree_content: bool,
+) -> str | None:
+    if target_path == source:
+        return source_text
+    try:
+        target_rel = target_path.relative_to(root)
+    except ValueError:
+        return None
+    if use_worktree_content:
+        if not target_path.is_file():
+            return None
+        return target_path.read_text(encoding="utf-8")
+    return git_text(root, head, target_rel.as_posix())
+
+
+def resolve_link_path(source: Path, target: str, use_worktree_content: bool) -> Path:
+    candidate = source.parent / target
+    if use_worktree_content:
+        return candidate.resolve()
+    # Do not follow live-worktree symlinks while resolving a frozen revision.
+    return Path(os.path.abspath(candidate))
+
+
+def validate_link(
+    root: Path,
+    head: str,
+    source: Path,
+    raw_target: str,
+    source_text: str,
+    errors: list[str],
+    path: str,
+    code: str,
+    use_worktree_content: bool,
+) -> tuple[Path | None, str | None]:
     target, fragment = split_link_target(raw_target)
     if not target and fragment is not None:
         target_path = source
     elif not target or "://" in target or target.startswith("mailto:"):
         return None, fragment
     else:
-        target_path = (source.parent / target).resolve()
+        target_path = resolve_link_path(source, target, use_worktree_content)
     try:
         target_rel = target_path.relative_to(root)
     except ValueError:
         fail(errors, code, path, f"link escapes repository: {raw_target}")
         return None, fragment
-    if not target_path.is_file():
+    target_text = selected_target_text(
+        root,
+        head,
+        source,
+        target_path,
+        source_text,
+        use_worktree_content,
+    )
+    if target_text is None:
         fail(errors, code, path, f"missing target: {target_rel.as_posix()}")
         return None, fragment
-    target_text = source_text if target_path == source else target_path.read_text(encoding="utf-8")
     if fragment and not fragment_exists(target_text, fragment):
         fail(errors, "invalid-fragment", path, f"{target_rel.as_posix()}#{fragment}")
     return target_path, fragment
@@ -451,7 +498,7 @@ def check_requirements(path: str, text: str, errors: list[str]) -> None:
                     fail(errors, "unresolved-requirement", path, f"{identifier} -> {reference}")
 
 
-def check_document(root: Path, path: str, text: str, errors: list[str]) -> None:
+def check_document(root: Path, head: str, path: str, text: str, errors: list[str], use_worktree_content: bool) -> None:
     source = root / path
     if path.endswith("/prd.md"):
         # Canonical module roots retain their existing identity/SC contract;
@@ -469,7 +516,7 @@ def check_document(root: Path, path: str, text: str, errors: list[str]) -> None:
         for _number, _raw, target in links:
             target_path, _fragment = split_link_target(target)
             if target_path:
-                resolved = (source.parent / target_path).resolve()
+                resolved = resolve_link_path(source, target_path, use_worktree_content)
                 try:
                     pair_targets.append(resolved.relative_to(root).as_posix())
                 except ValueError:
@@ -486,9 +533,29 @@ def check_document(root: Path, path: str, text: str, errors: list[str]) -> None:
             if "://" in target_path or target_path.startswith(("mailto:", "//")):
                 fail(errors, "authority-external-link", path, f"line {number} must resolve inside the repository: {target}")
                 continue
-            validate_link(root, source, target, text, errors, f"{path}:{number}", "authority-link")
+            validate_link(
+                root,
+                head,
+                source,
+                target,
+                text,
+                errors,
+                f"{path}:{number}",
+                "authority-link",
+                use_worktree_content,
+            )
     for number, _raw, target in links:
-        validate_link(root, source, target, text, errors, f"{path}:{number}", "markdown-link")
+        validate_link(
+            root,
+            head,
+            source,
+            target,
+            text,
+            errors,
+            f"{path}:{number}",
+            "markdown-link",
+            use_worktree_content,
+        )
     check_requirements(path, text, errors)
 
 
@@ -535,7 +602,7 @@ def main() -> int:
         return 0
     errors: list[str] = []
     for document in documents:
-        check_document(root, document.path, document.new_text, errors)
+        check_document(root, head, document.path, document.new_text, errors, args.worktree)
     if errors:
         print("\n".join(errors))
         return 1

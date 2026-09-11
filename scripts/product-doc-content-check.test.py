@@ -266,6 +266,77 @@ def scenario_worktree_local_overlay_wins() -> None:
         shutil.rmtree(root)
 
 
+def scenario_committed_target_content_is_frozen() -> None:
+    root, base, _head = make_repo()
+    try:
+        target = root / "doc/game/prd.md"
+        (root / TOPIC).write_text(
+            TOPIC_TEXT.replace("../../game/prd.md#authority", "../../game/prd.md#missing", 1)
+            + "\ncommitted source change\n",
+            encoding="utf-8",
+        )
+        target.write_text("# Gameplay\n## Authority\n", encoding="utf-8")
+        run_git(root, "add", ".")
+        run_git(root, "commit", "-qm", "invalid committed target fragment")
+        head = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+
+        # A live edit must not make an explicit committed-range check pass.
+        target.write_text("# Gameplay\n<a id=\"missing\"></a>\n## Authority\n", encoding="utf-8")
+        result = invoke(root, base, head)
+        output = result.stdout + result.stderr
+        assert result.returncode != 0, output
+        assert "invalid-fragment" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_worktree_target_overlay_remains_valid() -> None:
+    root, base, _head = make_repo()
+    try:
+        target = root / "doc/game/prd.md"
+        (root / TOPIC).write_text(
+            TOPIC_TEXT.replace("../../game/prd.md#authority", "../../game/prd.md#missing", 1)
+            + "\ncommitted source change\n",
+            encoding="utf-8",
+        )
+        target.write_text("# Gameplay\n## Authority\n", encoding="utf-8")
+        run_git(root, "add", ".")
+        run_git(root, "commit", "-qm", "invalid committed target fragment")
+        head = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+
+        # Worktree mode intentionally follows the live target overlay.
+        target.write_text("# Gameplay\n<a id=\"missing\"></a>\n## Authority\n", encoding="utf-8")
+        result = invoke(root, base, head, worktree=True)
+        output = result.stdout + result.stderr
+        assert result.returncode == 0, output
+        assert "product-doc-content: OK (checked 1" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_committed_target_existence_is_frozen() -> None:
+    root, base, _head = make_repo()
+    try:
+        target = root / "doc/game/missing.md"
+        (root / TOPIC).write_text(
+            TOPIC_TEXT.replace("../../game/prd.md#authority", "../../game/missing.md#authority", 1)
+            + "\ncommitted source change\n",
+            encoding="utf-8",
+        )
+        run_git(root, "add", ".")
+        run_git(root, "commit", "-qm", "missing committed target")
+        head = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+
+        # A newly created live target must not mask a missing committed target.
+        target.write_text("# Missing\n<a id=\"authority\"></a>\n", encoding="utf-8")
+        result = invoke(root, base, head)
+        output = result.stdout + result.stderr
+        assert result.returncode != 0, output
+        assert "missing target: doc/game/missing.md" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
 def multiline_comment_before_authority(root: Path) -> None:
     marker = "- 专业域权威：[`gameplay authority`](../../game/prd.md#authority)"
     comment = "<!-- removed from the rendered document\nthis comment spans multiple source lines\n-->\n"
@@ -386,6 +457,9 @@ def main() -> None:
     scenario(None, even_escaped_paired_design_link)
     scenario_worktree_overlapping_target_change()
     scenario_worktree_local_overlay_wins()
+    scenario_committed_target_content_is_frozen()
+    scenario_worktree_target_overlay_remains_valid()
+    scenario_committed_target_existence_is_frozen()
     scenario_checked(lambda root: (root / TOPIC).write_text(
         TOPIC_TEXT.replace("玩家需要知道当前目标", "  玩家需要知道当前目标"), encoding="utf-8"
     ))
