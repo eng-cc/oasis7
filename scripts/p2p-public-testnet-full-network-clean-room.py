@@ -2662,7 +2662,7 @@ def _plan_output_inputs(source: Path, evidence_path: Path, evidence: dict[str, A
                  IDENTITY_V2_GOVERNANCE_ROOT_PATH,
                  Path(__file__).with_name("p2p-public-testnet-full-network-clean-room-adapter.py"),
                  Path(__file__).with_name("fixtures") / "oasis7-governance-root.v1.json"]
-    protected.extend(_peer_registry_authority().protected_paths())
+    protected.extend(_peer_registry_authority().publisher_protected_paths())
     descriptors = [evidence.get("context"), evidence.get("plan_intent")]
     for entry in evidence.get("entries", []):
         if isinstance(entry, dict):

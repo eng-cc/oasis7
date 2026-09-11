@@ -106,9 +106,6 @@ CANONICAL_NETWORK_ID = "oasis7-public-testnet-governed-20260606"
 CANONICAL_VERIFIER_ID = "governed-receipt-verifier"
 CANONICAL_TRUST_ROOT_ID = "oasis7-public-testnet-governance-root-v1"
 CANONICAL_TRUST_ROOT_PATH = "/operator/truth/governance-root.json"
-# One deployment-owned serialization identity for this fixed managed fleet.
-# It is never selected by a journal, transaction, plan, nonce, or CLI argument.
-CANONICAL_FLEET_LOCK_PATH = Path("/operator/truth/full-network-clean-room.lock")
 CANONICAL_TRUST_ROOT_FIXTURE_PATH = Path(__file__).with_name("fixtures") / "oasis7-governance-root.v1.json"
 # These are code-owned values recorded from the repository fixture.  The first
 # is the provenance helper's canonical semantic digest; the second pins the
@@ -414,6 +411,11 @@ def _load_planner() -> Any:
     spec.loader.exec_module(module)
     _PLANNER_MODULE = module
     return module
+
+
+# One code-owned path shared with all publisher output protection.
+# Never selected by a journal, transaction, plan, nonce, or CLI argument.
+CANONICAL_FLEET_LOCK_PATH = _load_planner()._peer_registry_authority().CANONICAL_FLEET_LOCK_PATH
 
 
 def _safe_relative_paths(root: str, paths: Any, platform: str, label: str) -> list[str]:

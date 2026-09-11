@@ -18,6 +18,7 @@ from pathlib import Path
 import tempfile
 import threading
 import unittest
+from contextlib import ExitStack
 from datetime import datetime, timezone
 from unittest import mock
 
@@ -4067,6 +4068,104 @@ class ReviewFiveBoundaryTests(unittest.TestCase):
                 self.assertEqual(len(modules), 1, "planner crypto baseline module reloaded per test")
             finally:
                 FullNetworkCleanRoomAdapterTests.tearDownClass()
+
+
+class FleetLockPublisherProtectionTests(unittest.TestCase):
+    """Repository publishers must not invalidate another callback's fleet lock."""
+
+    def _exercise_publisher(self, publisher):
+        for alias in ("exact", "normalized", "hardlink"):
+            with self.subTest(publisher=publisher, alias=alias), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory).resolve()
+                adapter = load_module("publisher_lock_adapter", ADAPTER_PATH)
+                planner = load_module("publisher_lock_planner", PLANNER_PATH)
+                signing = load_module("publisher_lock_signing", ROOT / "scripts/p2p-public-testnet-identity-v2-signing-tool.py")
+                sidecar = load_module("publisher_lock_sidecar", ROOT / "scripts/p2p-public-testnet-identity-receipt-v2.py")
+                aggregate = load_module("publisher_lock_aggregate", ROOT / "scripts/p2p-public-testnet-identity-v2-evidence-aggregate.py")
+                lock_path = root / "full-network-clean-room.lock"
+                modules = (adapter, adapter._load_planner()._peer_registry_authority(),
+                           planner._peer_registry_authority(), signing._peer_registry_authority(),
+                           aggregate.PLANNER._peer_registry_authority())
+                with ExitStack() as patches:
+                    # Relocate only code-owned fixture authority, never expose a CLI override.
+                    for module in modules:
+                        patches.enter_context(mock.patch.object(module, "CANONICAL_FLEET_LOCK_PATH", str(lock_path)))
+                    patches.enter_context(mock.patch.object(sidecar, "_load_planner", return_value=planner))
+
+                    def publish(output):
+                        if publisher == "planner":
+                            protected = planner._plan_output_inputs(root / "input", root / "map", {})
+                            planner._write_plan_atomic(output, {"fixture": True}, protected)
+                        elif publisher == "signing":
+                            signing._reject_output_aliases([(output, "verified output")], [])
+                            signing._atomic_write(output, b'{"fixture": true}', "verified output")
+                        elif publisher == "sidecar":
+                            sidecar._reject_output_aliases([(output, "evidence-map output")], [])
+                            sidecar._write_atomically(output, {"fixture": True})
+                        else:
+                            aggregate._write_atomic({"fixture": True}, output, retained_paths=[])
+
+                    first = adapter._acquire_fleet_transaction_guard(root / "first.json")
+                    token = adapter._ACTIVE_TRANSACTION_GUARD.set(first)
+                    try:
+                        # Positive control must succeed while a fleet callback is active.
+                        ordinary = root / "ordinary.json"
+                        publish(ordinary)
+                        self.assertEqual(json.loads(ordinary.read_text()), {"fixture": True})
+                        output = lock_path
+                        if alias == "normalized":
+                            (root / "nested").mkdir()
+                            output = root / "nested" / ".." / lock_path.name
+                        elif alias == "hardlink":
+                            output = root / "lock-hardlink"
+                            os.link(lock_path, output)
+                        original = (lock_path.read_bytes(), lock_path.stat().st_ino)
+                        output_original = (output.read_bytes(), output.stat().st_ino)
+                        observed = {}
+
+                        def callback():
+                            try:
+                                publish(output)
+                            except (SystemExit, signing.ToolError, adapter.AdapterError):
+                                observed["publisher_rejected"] = True
+                            else:
+                                observed["publisher_rejected"] = False
+                            observed["lock_preserved"] = (lock_path.read_bytes(), lock_path.stat().st_ino) == original
+                            observed["output_preserved"] = (output.read_bytes(), output.stat().st_ino) == output_original
+                            try:
+                                second = adapter._acquire_fleet_transaction_guard(root / "second.json")
+                            except adapter.AdapterError:
+                                observed["second_lock_blocked"] = True
+                            else:
+                                observed["second_lock_blocked"] = False
+                                second.close()
+
+                        try:
+                            adapter._guarded_callback(callback)
+                        except adapter.AdapterError:
+                            observed["post_callback_guard_failed"] = True
+                        else:
+                            observed["post_callback_guard_failed"] = False
+                        self.assertEqual(observed, {
+                            "publisher_rejected": True, "lock_preserved": True,
+                            "output_preserved": True, "second_lock_blocked": True,
+                            "post_callback_guard_failed": False,
+                        }, "publisher must reject before replacement, not detect drift after the callback")
+                    finally:
+                        adapter._ACTIVE_TRANSACTION_GUARD.reset(token)
+                        first.close()
+
+    def test_planner_cannot_replace_held_fleet_lock(self):
+        self._exercise_publisher("planner")
+
+    def test_signing_cannot_replace_held_fleet_lock(self):
+        self._exercise_publisher("signing")
+
+    def test_sidecar_cannot_replace_held_fleet_lock(self):
+        self._exercise_publisher("sidecar")
+
+    def test_aggregate_cannot_replace_held_fleet_lock(self):
+        self._exercise_publisher("aggregate")
 
 
 if __name__ == "__main__":

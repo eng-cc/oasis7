@@ -560,7 +560,7 @@ def _reject_output_aliases(
         [(Path(__file__), "sidecar code"), (PLANNER_PATH, "planner code")]
     )
     protected_paths.extend((path, "peer registry authority")
-                           for path in _load_planner()._peer_registry_authority().protected_paths())
+                           for path in _load_planner()._peer_registry_authority().publisher_protected_paths())
     for output, output_label in outputs:
         if output.is_symlink():
             die(f"{output_label} must not be a symlink")

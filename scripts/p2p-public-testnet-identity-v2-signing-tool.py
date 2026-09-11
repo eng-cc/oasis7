@@ -837,7 +837,7 @@ def _publish_verification_pair(outputs: tuple[tuple[Path, bytes], ...]) -> None:
 
 def _code_owned_paths() -> tuple[Path, ...]:
     return (
-        *_peer_registry_authority().protected_paths(),
+        *_peer_registry_authority().publisher_protected_paths(),
         DEPLOYED_TRUST_CONFIG,
         DEPLOYED_PROVIDER_REGISTRY,
         DEPLOYED_GOVERNANCE_ROOT,

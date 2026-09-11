@@ -11,6 +11,7 @@ from types import MappingProxyType
 
 
 REGISTRY_PATH = Path("/operator/truth/managed-peer-registry.json")
+CANONICAL_FLEET_LOCK_PATH = Path("/operator/truth/full-network-clean-room.lock")
 REGISTRY_SHA256 = None
 SCHEMA = "oasis7.managed_peer_registry.v1"
 NETWORK_ID = "oasis7-public-testnet-governed-20260606"
@@ -29,6 +30,12 @@ def fail(message):
 
 def protected_paths():
     return (Path(__file__), Path(REGISTRY_PATH))
+
+
+def publisher_protected_paths():
+    # Publishers share the adapter's persistent exclusion inode authority.
+    # Replacing this pathname would let another transaction lock a new inode.
+    return (*protected_paths(), Path(CANONICAL_FLEET_LOCK_PATH))
 
 
 def _object(pairs):

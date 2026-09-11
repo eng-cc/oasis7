@@ -2835,6 +2835,56 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
 
 
 class PlannerOutputAliasTests(unittest.TestCase):
+    def test_cli_cannot_replace_held_fleet_lock(self):
+        for alias in ("exact", "normalized", "hardlink"):
+            with self.subTest(alias=alias), tempfile.TemporaryDirectory() as directory:
+                module = load_module()
+                root = Path(directory).resolve()
+                paths, source, evidence = self._authority_fixture(module, root)
+                spec = importlib.util.spec_from_file_location(
+                    "planner_cli_lock_adapter", ROOT / "scripts/p2p-public-testnet-full-network-clean-room-adapter.py")
+                adapter = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(adapter)
+                lock_path = root / "full-network-clean-room.lock"
+                adapter.CANONICAL_FLEET_LOCK_PATH = str(lock_path)
+                with patch.object(module._peer_registry_authority(), "CANONICAL_FLEET_LOCK_PATH", str(lock_path)):
+                    first = adapter._acquire_fleet_transaction_guard(root / "first.json")
+                    try:
+                        plan = {"plan_digest": "test", "execution": {"mode": "plan-only"}}
+                        with patch.object(module, "build_plan", return_value=plan):
+                            ordinary = root / "ordinary-plan.json"
+                            self.assertEqual(module.main(["--input", str(source), "--identity-v2-evidence-map", str(evidence), "--out", str(ordinary)]), 0)
+                        output = lock_path
+                        if alias == "normalized":
+                            (root / "nested").mkdir()
+                            output = root / "nested" / ".." / lock_path.name
+                        elif alias == "hardlink":
+                            output = root / "hardlink"
+                            os.link(lock_path, output)
+                        before = (lock_path.read_bytes(), lock_path.stat().st_ino,
+                                  output.read_bytes(), output.stat().st_ino)
+                        with patch.object(module, "build_plan", return_value=plan) as build:
+                            try:
+                                module.main(["--input", str(source), "--identity-v2-evidence-map", str(evidence), "--out", str(output)])
+                            except SystemExit:
+                                rejected = True
+                            else:
+                                rejected = False
+                        try:
+                            second = adapter._acquire_fleet_transaction_guard(root / "second.json")
+                        except adapter.AdapterError:
+                            blocked = True
+                        else:
+                            blocked = False
+                            second.close()
+                        after = (lock_path.read_bytes(), lock_path.stat().st_ino,
+                                 output.read_bytes(), output.stat().st_ino)
+                        self.assertEqual((rejected, build.call_count, before == after, blocked),
+                                         (True, 0, True, True),
+                                         "CLI must reject lock aliases before plan building or publication")
+                    finally:
+                        first.close()
+
     def test_governance_root_is_protected_without_opening_it(self):
         module = load_module()
         protected = module._plan_output_inputs(Path("/fixture/input"), Path("/fixture/map"), {})
