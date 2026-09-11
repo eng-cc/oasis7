@@ -40,6 +40,14 @@ class MarkdownBlock:
     end_line: int
 
 
+@dataclass(frozen=True)
+class MarkdownHtml:
+    """A genuine HTML node emitted by the CommonMark parser."""
+
+    line: int
+    content: str
+
+
 def parse_markdown_blocks(text: str) -> tuple[MarkdownBlock, ...]:
     """Return parsed block spans with source-map line positions.
 
@@ -55,6 +63,42 @@ def parse_markdown_blocks(text: str) -> tuple[MarkdownBlock, ...]:
         start, end = token.map
         blocks.append(MarkdownBlock(token.type, start + 1, end))
     return tuple(blocks)
+
+
+def parse_markdown_html(text: str) -> tuple[MarkdownHtml, ...]:
+    """Return HTML nodes while excluding code spans and code blocks.
+
+    CommonMark emits inline HTML as ``html_inline`` children and block HTML as
+    ``html_block`` tokens.  Code spans containing HTML are ``code_inline``
+    children, so consumers can safely inspect these nodes for real anchors.
+    """
+    nodes: list[MarkdownHtml] = []
+    source_lines = text.splitlines()
+    for token in _MARKDOWN.parse(text):
+        if token.type == "html_block" and token.map:
+            start, _end = token.map
+            nodes.append(MarkdownHtml(line=start + 1, content=token.content))
+            continue
+        if token.type != "inline" or not token.children or not token.map:
+            continue
+        start, end = token.map
+        search_line = start
+        search_offset = 0
+        for child in token.children:
+            if child.type != "html_inline":
+                continue
+            line = start + 1
+            for source_index in range(search_line, min(end, len(source_lines))):
+                offset = search_offset if source_index == search_line else 0
+                position = source_lines[source_index].find(child.content, offset)
+                if position < 0:
+                    continue
+                line = source_index + 1
+                search_line = source_index
+                search_offset = position + len(child.content)
+                break
+            nodes.append(MarkdownHtml(line=line, content=child.content))
+    return tuple(nodes)
 
 
 def parse_markdown_links(text: str) -> tuple[MarkdownLink, ...]:

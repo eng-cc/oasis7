@@ -387,6 +387,42 @@ def true_indented_code_example(root: Path) -> None:
     (root / TOPIC).write_text(TOPIC_TEXT + code, encoding="utf-8")
 
 
+def legacy_declarations_missing_anchors(root: Path) -> None:
+    declarations = """
+## 6. 兼容性声明
+- REQ-LEGACY-001：兼容旧入口的要求。
+- AC-LEGACY-001：兼容旧入口的验收。
+| REQ-TABLE-001 | requirement |
+| AC-TABLE-001 | acceptance |
+"""
+    (root / TOPIC).write_text(TOPIC_TEXT + declarations, encoding="utf-8")
+
+
+def legacy_declarations_with_anchors(root: Path) -> None:
+    declarations = """
+## 6. 兼容性声明
+<a id="req-legacy-001"></a>
+- REQ-LEGACY-001：兼容旧入口的要求。
+<a id="ac-legacy-001"></a>
+- AC-LEGACY-001：兼容旧入口的验收。
+<a id="req-table-001"></a>
+| REQ-TABLE-001 | requirement |
+<a id="ac-table-001"></a>
+| AC-TABLE-001 | acceptance |
+"""
+    (root / TOPIC).write_text(TOPIC_TEXT + declarations, encoding="utf-8")
+
+
+def inline_code_anchor_is_not_fragment(root: Path) -> None:
+    (root / "doc/game/prd.md").write_text(
+        "# Gameplay\n`<a id=\"pseudo\"></a>`\n## Authority\n", encoding="utf-8"
+    )
+    updated = TOPIC_TEXT.replace(
+        "../../game/prd.md#authority", "../../game/prd.md#pseudo", 1
+    )
+    (root / TOPIC).write_text(updated, encoding="utf-8")
+
+
 def indented_requirement_heading_without_acceptance(root: Path) -> None:
     updated = TOPIC_TEXT.replace(
         "<a id=\"req-sample-001\"></a>\n### REQ-SAMPLE-001",
@@ -405,6 +441,9 @@ def standalone_requirement_and_acceptance_anchors(root: Path) -> None:
 
 def main() -> None:
     scenario(None, lambda _root: None)
+    scenario("missing-anchor", legacy_declarations_missing_anchors)
+    scenario(None, legacy_declarations_with_anchors)
+    scenario("invalid-fragment", inline_code_anchor_is_not_fragment)
     scenario("missing-metadata", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("- Owner role：`producer_system_designer`\n", ""), encoding="utf-8"))
     scenario("missing-normal-path", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("正常路径", "体验").replace("路径", "方向").replace("流程", "方向").replace("循环", "方向").replace("链路", "方向"), encoding="utf-8"))
     scenario("missing-evidence-boundary", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("证据", "范围证明"), encoding="utf-8"))
@@ -463,7 +502,7 @@ def main() -> None:
     scenario_checked(lambda root: (root / TOPIC).write_text(
         TOPIC_TEXT.replace("玩家需要知道当前目标", "  玩家需要知道当前目标"), encoding="utf-8"
     ))
-    scenario(None, lambda root: (root / TOPIC).write_text(
+    scenario("missing-anchor", lambda root: (root / TOPIC).write_text(
         TOPIC_TEXT + "\n本文仅说明 REQ-SAMPLE-* / AC-SAMPLE-* 这一组旧编号。\n- AC-LEGACY-001：保留既有验收编号。\n",
         encoding="utf-8",
     ))

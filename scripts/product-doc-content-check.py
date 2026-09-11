@@ -14,7 +14,11 @@ import sys
 from urllib.parse import unquote
 
 try:
-    from product_doc_markdown import parse_markdown_blocks, parse_markdown_links
+    from product_doc_markdown import (
+        parse_markdown_blocks,
+        parse_markdown_html,
+        parse_markdown_links,
+    )
 except RuntimeError as exc:
     print(f"product-doc-content: error: {exc}", file=sys.stderr)
     raise SystemExit(2) from exc
@@ -165,6 +169,33 @@ def visible_lines(text: str) -> list[tuple[int, str]]:
     return visible
 
 
+def actual_anchor_occurrences(text: str) -> list[tuple[str, int]]:
+    """Return ``(anchor_id, line)`` pairs from parser-recognized HTML only."""
+    occurrences: list[tuple[str, int]] = []
+    for node in parse_markdown_html(without_html_comments(text)):
+        for match in ANCHOR_RE.finditer(node.content):
+            line = node.line + node.content[: match.start()].count("\n")
+            occurrences.append((match.group(1), line))
+    return occurrences
+
+
+def strip_actual_anchors(
+    line_number: int,
+    line: str,
+    anchors_by_line: dict[int, set[str]],
+) -> str:
+    """Remove only parser-recognized anchors from a visible source line."""
+    allowed = anchors_by_line.get(line_number)
+    if not allowed:
+        return line
+    return ANCHOR_RE.sub(
+        lambda match: ""
+        if match.group(1).strip().lower() in allowed
+        else match.group(0),
+        line,
+    )
+
+
 def metadata_value(text: str, label: str) -> str | None:
     match = re.search(rf"^- {re.escape(label)}：(.+)$", text, re.MULTILINE)
     return match.group(1).strip() if match else None
@@ -199,10 +230,10 @@ def github_heading_slug(value: str) -> str:
 
 def fragment_exists(text: str, fragment: str) -> bool:
     wanted = fragment.strip().lower()
-    visible = "\n".join(line for _, line in visible_lines(text))
-    for anchor in ANCHOR_RE.findall(visible):
+    for anchor, _number in actual_anchor_occurrences(text):
         if anchor.strip().lower() == wanted:
             return True
+    visible = "\n".join(line for _, line in visible_lines(text))
     for line in visible.splitlines():
         match = re.match(r"^ {0,3}#{1,6}\s+(.+?)\s*#*\s*$", line)
         if match and github_heading_slug(match.group(1)) == wanted:
@@ -392,15 +423,20 @@ def check_minimum_design_content(path: str, text: str, errors: list[str]) -> Non
 
 def check_requirements(path: str, text: str, errors: list[str]) -> None:
     lines = visible_lines(text)
-    prose = "\n".join(ANCHOR_RE.sub("", line) for _, line in lines)
+    anchors_by_line: dict[int, set[str]] = {}
+    actual_anchors = actual_anchor_occurrences(text)
+    for anchor, number in actual_anchors:
+        anchors_by_line.setdefault(number, set()).add(anchor.strip().lower())
+    prose = "\n".join(
+        strip_actual_anchors(number, line, anchors_by_line) for number, line in lines
+    )
     anchors: dict[str, int] = {}
-    for number, line in lines:
-        for anchor in ANCHOR_RE.findall(line):
-            key = anchor.strip().lower()
-            if key in anchors:
-                fail(errors, "duplicate-anchor", path, f"{anchor} at lines {anchors[key]} and {number}")
-            else:
-                anchors[key] = number
+    for anchor, number in actual_anchors:
+        key = anchor.strip().lower()
+        if key in anchors:
+            fail(errors, "duplicate-anchor", path, f"{anchor} at lines {anchors[key]} and {number}")
+        else:
+            anchors[key] = number
 
     declarations: dict[str, int] = {}
     declaration_kinds: dict[str, str] = {}
@@ -420,7 +456,7 @@ def check_requirements(path: str, text: str, errors: list[str]) -> None:
                 declaration_levels[identifier] = len(heading.group(0).lstrip().split()[0])
             else:
                 declaration_kinds[identifier] = "legacy"
-        if declaration_kinds.get(identifier) == "heading" and identifier.lower() not in anchors:
+        if identifier.lower() not in anchors:
             fail(errors, "missing-anchor", path, f"{identifier} has no <a id=\"{identifier.lower()}\"> anchor")
 
     # An anchor only becomes a usable local target when a declaration also
@@ -445,7 +481,7 @@ def check_requirements(path: str, text: str, errors: list[str]) -> None:
                 linked_fragments.append((number, fragment.upper()))
 
     for number, line in lines:
-        tokens = id_tokens(ANCHOR_RE.sub("", line)) - local_tokens
+        tokens = id_tokens(strip_actual_anchors(number, line, anchors_by_line)) - local_tokens
         if not tokens:
             continue
         line_fragments = {
@@ -481,7 +517,10 @@ def check_requirements(path: str, text: str, errors: list[str]) -> None:
             if next_level_match and len(next_level_match.group(1)) <= level:
                 end = next_index
                 break
-        block = "\n".join(ANCHOR_RE.sub("", item) for _, item in lines[index + 1 : end])
+        block = "\n".join(
+            strip_actual_anchors(item_number, item, anchors_by_line)
+            for item_number, item in lines[index + 1 : end]
+        )
         if identifier.startswith("REQ-"):
             acceptance_refs = id_tokens(block) & {token for token in all_tokens if token.startswith("AC-")}
             if not acceptance_refs:
