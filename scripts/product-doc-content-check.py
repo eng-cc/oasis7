@@ -347,7 +347,7 @@ def check_minimum_design_content(path: str, text: str, errors: list[str]) -> Non
 
 def check_requirements(path: str, text: str, errors: list[str]) -> None:
     lines = visible_lines(text)
-    prose = "\n".join(line for _, line in lines)
+    prose = "\n".join(ANCHOR_RE.sub("", line) for _, line in lines)
     anchors: dict[str, int] = {}
     for number, line in lines:
         for anchor in ANCHOR_RE.findall(line):
@@ -370,20 +370,21 @@ def check_requirements(path: str, text: str, errors: list[str]) -> None:
             declarations[identifier] = number
             if HEADING_PREFIX_RE.match(line):
                 declaration_kinds[identifier] = "heading"
-                declaration_levels[identifier] = len(line) - len(line.lstrip("#"))
+                heading = HEADING_PREFIX_RE.match(line)
+                assert heading is not None
+                declaration_levels[identifier] = len(heading.group(0).lstrip().split()[0])
             else:
                 declaration_kinds[identifier] = "legacy"
         if declaration_kinds.get(identifier) == "heading" and identifier.lower() not in anchors:
             fail(errors, "missing-anchor", path, f"{identifier} has no <a id=\"{identifier.lower()}\"> anchor")
 
-    # A standalone explicit anchor is also a usable local declaration.  The
-    # common anchor-before-heading form was already accounted for above and
-    # must not be reported as a duplicate declaration.
+    # An anchor only becomes a usable local target when a declaration also
+    # exists.  The common anchor-before-heading form was already accounted for
+    # above; an orphan REQ/AC anchor violates the declaration+anchor contract.
     for anchor, number in anchors.items():
         identifier = anchor.upper()
         if identifier.startswith(("REQ-", "AC-")) and identifier not in declarations and identifier in id_tokens(anchor):
-            declarations[identifier] = number
-            declaration_kinds[identifier] = "anchor"
+            fail(errors, "anchor-without-declaration", path, f"{anchor} at line {number} has no REQ/AC declaration")
 
     all_tokens = id_tokens(prose)
     local_tokens = set(declarations)
@@ -399,7 +400,7 @@ def check_requirements(path: str, text: str, errors: list[str]) -> None:
                 linked_fragments.append((number, fragment.upper()))
 
     for number, line in lines:
-        tokens = id_tokens(line) - local_tokens
+        tokens = id_tokens(ANCHOR_RE.sub("", line)) - local_tokens
         if not tokens:
             continue
         line_fragments = {
@@ -435,7 +436,7 @@ def check_requirements(path: str, text: str, errors: list[str]) -> None:
             if next_level_match and len(next_level_match.group(1)) <= level:
                 end = next_index
                 break
-        block = "\n".join(item for _, item in lines[index + 1 : end])
+        block = "\n".join(ANCHOR_RE.sub("", item) for _, item in lines[index + 1 : end])
         if identifier.startswith("REQ-"):
             acceptance_refs = id_tokens(block) & {token for token in all_tokens if token.startswith("AC-")}
             if not acceptance_refs:

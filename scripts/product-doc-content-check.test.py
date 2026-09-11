@@ -293,6 +293,22 @@ def nested_fenced_examples(root: Path) -> None:
     (root / TOPIC).write_text(TOPIC_TEXT + examples, encoding="utf-8")
 
 
+def indented_requirement_heading_without_acceptance(root: Path) -> None:
+    updated = TOPIC_TEXT.replace(
+        "<a id=\"req-sample-001\"></a>\n### REQ-SAMPLE-001",
+        "<a id=\"req-sample-001\"></a>\n  ### REQ-SAMPLE-001",
+    ).replace("- 验收：AC-SAMPLE-001\n", "")
+    (root / TOPIC).write_text(updated, encoding="utf-8")
+
+
+def standalone_requirement_and_acceptance_anchors(root: Path) -> None:
+    (root / TOPIC).write_text(
+        TOPIC_TEXT
+        + '\n<a id="req-orphan-001"></a>\n<a id="ac-orphan-001"></a>\n',
+        encoding="utf-8",
+    )
+
+
 def main() -> None:
     scenario(None, lambda _root: None)
     scenario("missing-metadata", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("- Owner role：`producer_system_designer`\n", ""), encoding="utf-8"))
@@ -313,6 +329,8 @@ def main() -> None:
     scenario(None, multiline_comment_before_authority)
     scenario(None, multiline_comment_before_cross_file_refs)
     scenario(None, nested_fenced_examples)
+    scenario("req-missing-acceptance", indented_requirement_heading_without_acceptance)
+    scenario("anchor-without-declaration", standalone_requirement_and_acceptance_anchors)
     scenario("duplicate-anchor", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("<a id=\"ac-sample-001\"></a>", "<a id=\"req-sample-001\"></a>\n<a id=\"ac-sample-001\"></a>"), encoding="utf-8"))
     scenario("unresolved-cross-file-id", lambda root: (root / DESIGN).write_text(DESIGN_TEXT.replace("sample.prd.md#req-sample-001", "sample.prd.md#req-missing"), encoding="utf-8"))
     scenario("external-cross-file-id", external_requirement_links)
