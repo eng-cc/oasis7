@@ -808,6 +808,12 @@ impl RuntimeLlmSidecar {
             .collect();
         for agent_id in due_agents {
             if let Some(lease) = self.provider_cognition_lease(agent_id.as_str()) {
+                self.validate_provider_cognition_lease_for_agent(
+                    world,
+                    agent_id.as_str(),
+                    &lease,
+                    "wait release",
+                )?;
                 world
                     .release_cognition_lease(lease.lease_id.as_str())
                     .map_err(|error| {

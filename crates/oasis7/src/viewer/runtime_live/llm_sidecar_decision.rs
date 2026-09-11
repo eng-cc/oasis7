@@ -68,6 +68,25 @@ impl RuntimeLlmSidecar {
                     return None;
                 }
                 if let Some(context) = self.provider_contexts.get(&agent_id).cloned() {
+                    if let Some(existing_lease) = self.provider_cognition_lease(agent_id.as_str()) {
+                        if let Err(error) = self.validate_provider_cognition_lease_for_request(
+                            world,
+                            agent_id.as_str(),
+                            &context.request_context,
+                            &existing_lease,
+                            "dispatch",
+                        ) {
+                            self.fence_provider_cognition_lease(
+                                agent_id.as_str(),
+                                &context,
+                                error.clone(),
+                            );
+                            self.shadow_kernel = Some(kernel);
+                            return Some(RuntimeLlmDecision::from_agent_error(
+                                world, agent_id, error,
+                            ));
+                        }
+                    }
                     let cognition_lease =
                         match async_support::reserve_provider_cognition_lease(world, &context) {
                             Ok(lease) => lease,
