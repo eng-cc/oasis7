@@ -161,7 +161,7 @@ impl ViewerRuntimeLiveServer {
 
     fn apply_chain_linked_runtime_update(
         &mut self,
-        prepared: PreparedChainLinkedRuntimeUpdate,
+        mut prepared: PreparedChainLinkedRuntimeUpdate,
         session: &mut RuntimeLiveSession,
     ) -> Result<ChainLinkedRuntimeDispatch, ViewerRuntimeLiveServerError> {
         self.llm_sidecar
@@ -207,6 +207,19 @@ impl ViewerRuntimeLiveServer {
                 advanced: false,
                 responses: Vec::new(),
             });
+        }
+
+        // Chain status has been loaded and validated by this point. Apply an
+        // explicit provider authority only once to the first verified world;
+        // subsequent chain snapshots must carry their own durable Runtime
+        // provisioning state and are never refilled by the viewer.
+        if !self.provider_backed_bootstrap_applied {
+            apply_provider_backed_bootstrap_authorities(
+                &mut prepared.world,
+                &self.config.provider_backed_bootstrap_authorities,
+            )
+            .map_err(ViewerRuntimeLiveServerError::Init)?;
+            self.provider_backed_bootstrap_applied = true;
         }
 
         // Event IDs are a rolling sequence. Select the prepared journal by

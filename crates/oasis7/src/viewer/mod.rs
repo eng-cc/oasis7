@@ -113,8 +113,8 @@ pub use rollback_audit_evidence::{
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use runtime_live::{
-    ChainLinkPolicy, VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID, ViewerRuntimeLiveServer,
-    ViewerRuntimeLiveServerConfig, ViewerRuntimeLiveServerError,
+    ChainLinkPolicy, ProviderBackedBootstrapAuthorityV1, VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID,
+    ViewerRuntimeLiveServer, ViewerRuntimeLiveServerConfig, ViewerRuntimeLiveServerError,
     runtime_agent_chat_echo_enabled_from_env, viewer_bootstrap_formal_release_runtime_world,
     viewer_bootstrap_generated_sidecar_runtime_world,
 };

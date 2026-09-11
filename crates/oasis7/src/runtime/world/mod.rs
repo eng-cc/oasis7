@@ -118,6 +118,7 @@ mod module_tick_runtime;
 mod operability_release_gate;
 mod persistence;
 mod prepared_base_head;
+mod provider_backed_bootstrap;
 pub use persistence::{
     AuthoritativeRecoveryCommitError, AuthoritativeRecoveryCommitStatus,
     CommittedAuthoritativeRecoveryGeneration,
@@ -138,6 +139,7 @@ mod tick_consensus;
 mod tick_consensus_state_root;
 mod transition;
 
+pub use provider_backed_bootstrap::ProviderBackedBootstrapAuthorityV1;
 pub use transition::{
     ExecutionTransaction, PreparedCommit, TransitionBaseHead, TransitionBuffer,
     TransitionCommitError, TransitionKernelEntriesView, TransitionKernelState,
