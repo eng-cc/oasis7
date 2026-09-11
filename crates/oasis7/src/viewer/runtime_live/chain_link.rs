@@ -3,9 +3,10 @@ use super::*;
 
 use super::super::protocol::{CollectDataCommand, GameplayActionError, GameplayActionRequest};
 use crate::runtime::{
-    MainTokenConfig, MainTokenSupplyState, WorldEvent as RuntimeWorldEvent,
-    production_hardened_main_token_config,
+    CognitionProvisioningRequestV1, MainTokenConfig, MainTokenSupplyState,
+    WorldEvent as RuntimeWorldEvent, production_hardened_main_token_config,
 };
+use std::collections::BTreeSet;
 use std::net::ToSocketAddrs;
 
 const CHAIN_GAMEPLAY_SUBMIT_PATH: &str = "/v1/chain/gameplay/submit";
@@ -45,6 +46,199 @@ struct PreparedChainLinkedRuntimeUpdate {
 struct ChainLinkedRuntimeDispatch {
     advanced: bool,
     responses: Vec<ViewerResponse>,
+}
+
+/// Verify that a chain-linked execution snapshot already contains the exact
+/// authority/provisioning transaction supplied to the viewer. A chain-linked
+/// viewer is an observer: it must never install authority or mutate the
+/// chain writer's persistence directory. The chain writer owns publication;
+/// this check only admits a snapshot after its durable records are visible.
+fn verify_provider_backed_bootstrap_authorities(
+    world: &RuntimeWorld,
+    authorities: &[ProviderBackedBootstrapAuthorityV1],
+) -> Result<(), String> {
+    if authorities.is_empty() {
+        return Ok(());
+    }
+
+    let binding = world
+        .current_cognition_runtime_binding()
+        .map_err(|error| format!("ProviderBacked authority binding unavailable: {error:?}"))?;
+    let economy = world
+        .cognition_economy()
+        .map_err(|error| format!("ProviderBacked provisioning ledger unavailable: {error:?}"))?;
+    let revocation = world.capability_revocation_state();
+    let mut seen_agents = BTreeSet::new();
+    let mut seen_provisions = BTreeSet::new();
+
+    for authority in authorities {
+        if !seen_agents.insert(authority.agent_id.clone())
+            || !seen_provisions.insert(authority.provision_id.clone())
+        {
+            return Err(
+                "ProviderBacked authority bootstrap input contains duplicate agent or provision id"
+                    .to_string(),
+            );
+        }
+        if authority.agent_id.trim().is_empty()
+            || authority.owner_binding.trim().is_empty()
+            || authority.owner_generation == 0
+            || authority.world_id != binding.world_id
+            || authority.branch_id != binding.branch_id
+            || authority.reorg_epoch != binding.reorg_epoch
+        {
+            return Err(
+                "ProviderBacked authority bootstrap input does not match live chain binding"
+                    .to_string(),
+            );
+        }
+        if !world.state().agents.contains_key(&authority.agent_id) {
+            return Err(format!(
+                "ProviderBacked authority bootstrap agent is not live: {}",
+                authority.agent_id
+            ));
+        }
+
+        let identity = revocation
+            .agent_identities
+            .get(&authority.agent_id)
+            .ok_or_else(|| {
+                format!(
+                    "ProviderBacked authority identity is not durably installed: {}",
+                    authority.agent_id
+                )
+            })?;
+        if identity != &authority.identity
+            || identity.owner_binding != authority.owner_binding
+            || identity.generation != authority.owner_generation
+        {
+            return Err(format!(
+                "ProviderBacked authority identity mismatch for agent {}",
+                authority.agent_id
+            ));
+        }
+
+        let persisted_record = revocation
+            .authority_records
+            .get(&authority.authority_record.issuer_id)
+            .ok_or_else(|| {
+                format!(
+                    "ProviderBacked authority record is not durably installed for agent {}",
+                    authority.agent_id
+                )
+            })?;
+        let persisted_proof = revocation
+            .authority_finality_proofs
+            .get(&authority.authority_record.issuer_id)
+            .ok_or_else(|| {
+                format!(
+                    "ProviderBacked authority finality proof is not durably installed for agent {}",
+                    authority.agent_id
+                )
+            })?;
+        if persisted_record != &authority.authority_record
+            || persisted_proof != &authority.authority_finality_proof
+        {
+            return Err(format!(
+                "ProviderBacked authority finality evidence mismatch for agent {}",
+                authority.agent_id
+            ));
+        }
+
+        let encoded_grant = serde_json::to_value(&authority.grant)
+            .map_err(|error| format!("ProviderBacked grant cannot be encoded: {error}"))?;
+        if world.capability_grants_v2().get(&authority.grant.grant_id) != Some(&encoded_grant) {
+            return Err(format!(
+                "ProviderBacked grant is not durably installed for agent {}",
+                authority.agent_id
+            ));
+        }
+
+        let persisted_context = world
+            .capability_invocation_contexts()
+            .values()
+            .find(|context| {
+                context.grant_id == authority.grant.grant_id
+                    && context.subject == authority.invocation_context.subject
+                    && context.presenter == authority.invocation_context.presenter
+                    && context.audience == authority.invocation_context.audience
+                    && context.module_id == authority.invocation_context.module_id
+                    && context.module_version == authority.invocation_context.module_version
+                    && context.response_nonce == authority.invocation_context.response_nonce
+            })
+            .ok_or_else(|| {
+                format!(
+                    "ProviderBacked invocation context is not durably installed for agent {}",
+                    authority.agent_id
+                )
+            })?;
+        if persisted_context.grant_id != authority.invocation_context.grant_id {
+            return Err(format!(
+                "ProviderBacked invocation context grant mismatch for agent {}",
+                authority.agent_id
+            ));
+        }
+
+        let expected_request = CognitionProvisioningRequestV1::new(
+            authority.provision_id.clone(),
+            authority.owner_binding.clone(),
+            authority.owner_binding.clone(),
+            authority.owner_generation,
+            authority.world_id.clone(),
+            authority.branch_id.clone(),
+            authority.reorg_epoch,
+            authority.allowance,
+            authority.authority_context.clone(),
+        );
+        expected_request
+            .validate()
+            .map_err(|error| format!("ProviderBacked provisioning request invalid: {error}"))?;
+        if expected_request.authority_digest != authority.authority_digest
+            || expected_request.provisioning_digest != authority.provisioning_digest
+        {
+            return Err(format!(
+                "ProviderBacked provisioning digest mismatch for agent {}",
+                authority.agent_id
+            ));
+        }
+
+        let provision = economy
+            .provisions
+            .get(&authority.provision_id)
+            .ok_or_else(|| {
+                format!(
+                    "ProviderBacked provisioning is not durably committed for agent {}",
+                    authority.agent_id
+                )
+            })?;
+        if provision.request != expected_request {
+            return Err(format!(
+                "ProviderBacked provisioning request mismatch for agent {}",
+                authority.agent_id
+            ));
+        }
+        let receipt = economy
+            .provision_receipts
+            .get(&provision.receipt_id)
+            .ok_or_else(|| {
+                format!(
+                    "ProviderBacked provisioning receipt is missing for agent {}",
+                    authority.agent_id
+                )
+            })?;
+        if receipt.request != expected_request
+            || !economy.provision_journal.iter().any(|event| {
+                event.request == expected_request && event.receipt_id == provision.receipt_id
+            })
+        {
+            return Err(format!(
+                "ProviderBacked provisioning receipt/journal mismatch for agent {}",
+                authority.agent_id
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 fn session_requests_runtime_feedback(session: &RuntimeLiveSession) -> bool {
@@ -161,7 +355,7 @@ impl ViewerRuntimeLiveServer {
 
     fn apply_chain_linked_runtime_update(
         &mut self,
-        mut prepared: PreparedChainLinkedRuntimeUpdate,
+        prepared: PreparedChainLinkedRuntimeUpdate,
         session: &mut RuntimeLiveSession,
     ) -> Result<ChainLinkedRuntimeDispatch, ViewerRuntimeLiveServerError> {
         self.llm_sidecar
@@ -172,6 +366,15 @@ impl ViewerRuntimeLiveServer {
         let prepared_snapshot = prepared.world.snapshot();
         let baseline_snapshot_hash = compute_runtime_snapshot_hash(&baseline_snapshot)?;
         let prepared_snapshot_hash = compute_runtime_snapshot_hash(&prepared_snapshot)?;
+        // Chain-linked viewers are observers. The chain writer must publish
+        // authority and provisioning records in its committed world before
+        // the viewer accepts that world; the viewer never mutates the loaded
+        // execution directory and keeps retrying while publication is absent.
+        verify_provider_backed_bootstrap_authorities(
+            &prepared.world,
+            &self.config.provider_backed_bootstrap_authorities,
+        )
+        .map_err(ViewerRuntimeLiveServerError::Init)?;
         let materially_different_world = prepared_snapshot_hash != baseline_snapshot_hash
             && chain_linked_runtime_has_playable_state(&prepared.world);
         if prepared.committed_height < self.last_chain_committed_height
@@ -207,19 +410,6 @@ impl ViewerRuntimeLiveServer {
                 advanced: false,
                 responses: Vec::new(),
             });
-        }
-
-        // Chain status has been loaded and validated by this point. Apply an
-        // explicit provider authority only once to the first verified world;
-        // subsequent chain snapshots must carry their own durable Runtime
-        // provisioning state and are never refilled by the viewer.
-        if !self.provider_backed_bootstrap_applied {
-            apply_provider_backed_bootstrap_authorities(
-                &mut prepared.world,
-                &self.config.provider_backed_bootstrap_authorities,
-            )
-            .map_err(ViewerRuntimeLiveServerError::Init)?;
-            self.provider_backed_bootstrap_applied = true;
         }
 
         // Event IDs are a rolling sequence. Select the prepared journal by

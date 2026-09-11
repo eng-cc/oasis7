@@ -160,6 +160,42 @@ impl World {
         })
     }
 
+    /// Install one additional valid command grant for a provider fixture.
+    ///
+    /// The grant deliberately shares the agent, authority, audience, and
+    /// command scope with the primary fixture grant while carrying a distinct
+    /// nonce. This lets bootstrap tests exercise the ambiguity boundary where
+    /// catalog selection must not silently replace the caller-supplied grant.
+    #[cfg(test)]
+    pub fn install_test_provider_additional_capability_grant(
+        &mut self,
+        agent_id: &str,
+        nonce_suffix: &str,
+    ) -> Result<CapabilityGrantV2, WorldError> {
+        let mut staged = self.clone();
+        let identity = staged
+            .capability_revocation_state
+            .agent_identities
+            .get(agent_id)
+            .cloned()
+            .ok_or_else(|| fixture_error("fixture identity is missing"))?;
+        let (world_id, branch_id, finality_epoch, _) = staged.bound_runtime_identity()?;
+        if nonce_suffix.trim().is_empty() {
+            return Err(fixture_error("fixture additional grant nonce is required"));
+        }
+        let grant = staged.fixture_command_grant_with_nonce(
+            agent_id,
+            &identity,
+            world_id.as_str(),
+            branch_id.as_str(),
+            finality_epoch,
+            format!("runtime-test-provider:{agent_id}:additional:{nonce_suffix}"),
+        )?;
+        staged.register_capability_grant_v2(grant.clone())?;
+        *self = staged;
+        Ok(grant)
+    }
+
     fn install_test_provider_capability_fixture_inner(
         &mut self,
         agent_id: &str,
@@ -484,6 +520,25 @@ impl World {
         branch_id: &str,
         finality_epoch: u64,
     ) -> Result<CapabilityGrantV2, WorldError> {
+        self.fixture_command_grant_with_nonce(
+            agent_id,
+            identity,
+            world_id,
+            branch_id,
+            finality_epoch,
+            format!("runtime-test-provider:{agent_id}:{branch_id}:{finality_epoch}"),
+        )
+    }
+
+    fn fixture_command_grant_with_nonce(
+        &self,
+        agent_id: &str,
+        identity: &CapabilityAgentIdentity,
+        world_id: &str,
+        branch_id: &str,
+        finality_epoch: u64,
+        grant_nonce: String,
+    ) -> Result<CapabilityGrantV2, WorldError> {
         let issuer_key = fixture_signing_key(ISSUER_SEED);
         let finalized_receipt_id =
             format!("runtime-test-authority:{world_id}:{branch_id}:{finality_epoch}");
@@ -526,7 +581,7 @@ impl World {
             },
             issued_at_tick: self.state.time,
             expires_at_tick: Some(self.state.time.saturating_add(100)),
-            grant_nonce: format!("runtime-test-provider:{agent_id}:{branch_id}:{finality_epoch}"),
+            grant_nonce,
             parent_grant_id: None,
             delegation_depth: 0,
             revocation_epoch: 0,

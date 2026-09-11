@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 mod driver_startup_recovery;
 mod product_validation_intent;
+mod provider_bootstrap;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct ExecutionBridgeState {
@@ -820,3 +821,4 @@ pub(crate) use self::driver_observability::{
     ExecutionBridgeCommitTimingSnapshot, record_execution_bridge_module_tick_routing_metrics,
     snapshot_execution_bridge_commit_timing, snapshot_execution_bridge_module_tick_routing_metrics,
 };
+pub(super) use self::provider_bootstrap::publish_provider_backed_bootstrap_from_paths;
