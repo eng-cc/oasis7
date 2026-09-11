@@ -178,11 +178,23 @@ def validate_incremental_context(root: Path, context: dict[str, object], task_ui
     batch_epoch = hashlib.sha256(json.dumps(
         batch_identity, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")).hexdigest()
+    plan_slices = prior_plan.get("expected_slices")
+    batch_slices = batch.get("expected_slices")
+    if not isinstance(plan_slices, list) or not isinstance(batch_slices, list):
+        fail("review context prior batch slice identities are invalid")
+    plan_identities = [(item.get("role"), item.get("slice_id")) for item in plan_slices if isinstance(item, dict)]
+    batch_identities = [(item.get("role"), item.get("slice_id")) for item in batch_slices if isinstance(item, dict)]
+    plan_roles = [item.get("role") for item in plan_slices if isinstance(item, dict)]
+    batch_roles = [item.get("role") for item in batch_slices if isinstance(item, dict)]
     if (batch.get("schema") != "oasis7-review-batch/v1" or batch.get("epoch") != batch_epoch
             or batch.get("task_uid") != task_uid or batch.get("frozen_head") != prior_head
             or prior_plan.get("relevant_evidence_digest") != batch.get("relevant_evidence_digest")
-            or prior_plan.get("expected_slices") != batch.get("expected_slices")
-            or prior_plan.get("roles") != [item.get("role") for item in prior_plan.get("expected_slices", [])]):
+            or sorted(plan_identities) != sorted(batch_identities)
+            or len(plan_identities) != len(plan_slices) or len(batch_identities) != len(batch_slices)
+            or len(set(plan_identities)) != len(plan_identities) or len(set(batch_identities)) != len(batch_identities)
+            or prior_plan.get("roles") != plan_roles
+            or len(set(plan_roles)) != len(plan_roles)
+            or sorted(plan_roles) != sorted(batch_roles)):
         fail("review context prior plan does not match its immutable batch")
     if prior_plan.get("schema") == "oasis7-review-plan/v2":
         helper_path = Path(__file__).with_name("ci_ready_receipt_identity.py")

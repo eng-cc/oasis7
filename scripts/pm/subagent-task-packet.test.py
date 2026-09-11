@@ -279,7 +279,12 @@ class PacketTest(unittest.TestCase):
 
     def write_incremental_prior(self) -> tuple[Path, str, str, Path]:
         prior_head = self.git("rev-parse", "HEAD")
-        expected_slices = [{"role": "qa_engineer", "slice_id": "qa-review"}]
+        requested_slices = [
+            {"role": "repository_health_engineer", "slice_id": "repository-health-review"},
+            {"role": "qa_engineer", "slice_id": "qa-review"},
+            {"role": "producer_system_designer", "slice_id": "producer-review"},
+        ]
+        expected_slices = sorted(requested_slices, key=lambda item: (item["role"], item["slice_id"]))
         batch_identity = {
             "task_uid": TASK_UID, "frozen_head": prior_head,
             "relevant_evidence_digest": "b" * 64,
@@ -304,14 +309,16 @@ class PacketTest(unittest.TestCase):
         prior_path.write_text(json.dumps({
             "schema": "oasis7-review-plan/v1", "task_uid": TASK_UID,
             "frozen_head": prior_head, "epoch": prior_epoch,
-            "relevant_evidence_digest": "b" * 64, "roles": ["qa_engineer"],
-            "batch_path": str(batch_path), "expected_slices": expected_slices,
+            "relevant_evidence_digest": "b" * 64,
+            "roles": [item["role"] for item in requested_slices],
+            "batch_path": str(batch_path), "expected_slices": requested_slices,
             "preflight": {"ledger_path": str(ledger_path)},
         }), encoding="utf-8")
         collection_path.write_text(json.dumps({
             "schema": "oasis7-review-collection/v1", "status": "passed",
             "epoch": prior_epoch, "task_uid": TASK_UID, "frozen_head": prior_head,
-            "ledger_digest": ledger_digest, "roles": ["qa_engineer"],
+            "ledger_digest": ledger_digest,
+            "roles": [item["role"] for item in expected_slices],
         }), encoding="utf-8")
         return prior_path, prior_head, prior_epoch, collection_path
 
@@ -422,7 +429,8 @@ class PacketTest(unittest.TestCase):
             "prior_head_oid": prior_head, "prior_epoch": prior_epoch,
             "current_head_oid": self.git("rev-parse", "HEAD"),
             "prior_source_review_digest": "b" * 64, "prior_integration_ci_digest": None,
-            "prior_roles": ["qa_engineer"], "delta_paths": ["repair.txt"],
+            "prior_roles": ["repository_health_engineer", "qa_engineer", "producer_system_designer"],
+            "delta_paths": ["repair.txt"],
             "prior_collection_path": str(collection_path.relative_to(self.repo)),
             "prior_collection_digest": hashlib.sha256(collection_path.read_bytes()).hexdigest(),
             "prior_collection_ledger_digest": json.loads(collection_path.read_text())["ledger_digest"],
@@ -459,7 +467,8 @@ class PacketTest(unittest.TestCase):
             "prior_head_oid": prior_head, "prior_epoch": prior_epoch,
             "current_head_oid": self.git("rev-parse", "HEAD"),
             "prior_source_review_digest": "b" * 64, "prior_integration_ci_digest": None,
-            "prior_roles": ["qa_engineer"], "delta_paths": ["repair.txt"],
+            "prior_roles": ["repository_health_engineer", "qa_engineer", "producer_system_designer"],
+            "delta_paths": ["repair.txt"],
             "prior_collection_path": str(collection_path.relative_to(self.repo)),
             "prior_collection_digest": hashlib.sha256(collection_path.read_bytes()).hexdigest(),
             "prior_collection_ledger_digest": json.loads(collection_path.read_text())["ledger_digest"],
