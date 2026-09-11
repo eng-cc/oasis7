@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+"""Small shared Markdown link-node adapter for product-document gates.
+
+The gates need actual CommonMark link nodes, rather than a second regular
+expression approximation.  ``markdown-it-py`` is pinned in
+``scripts/doc-governance-requirements.txt`` and uses its CommonMark preset;
+GFM extensions are intentionally not required for this contract.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+try:
+    from markdown_it import MarkdownIt
+except ModuleNotFoundError as exc:  # pragma: no cover - exercised by setup checks
+    raise RuntimeError(
+        "product-document Markdown parsing requires markdown-it-py; "
+        "install scripts/doc-governance-requirements.txt"
+    ) from exc
+
+
+_MARKDOWN = MarkdownIt("commonmark")
+
+
+@dataclass(frozen=True)
+class MarkdownLink:
+    """A genuine Markdown link node and its source block line."""
+
+    line: int
+    target: str
+
+
+@dataclass(frozen=True)
+class MarkdownBlock:
+    """A parsed Markdown block and its inclusive one-based source lines."""
+
+    kind: str
+    start_line: int
+    end_line: int
+
+
+@dataclass(frozen=True)
+class MarkdownHtml:
+    """A genuine HTML node emitted by the CommonMark parser."""
+
+    line: int
+    content: str
+
+
+def parse_markdown_blocks(text: str) -> tuple[MarkdownBlock, ...]:
+    """Return parsed block spans with source-map line positions.
+
+    The CommonMark parser owns recognition of fenced and indented code blocks,
+    including blocks nested in lists and blockquotes.  Consumers can use the
+    returned source spans to exclude code without maintaining a second fence
+    grammar.
+    """
+    blocks: list[MarkdownBlock] = []
+    for token in _MARKDOWN.parse(text):
+        if token.type not in {"fence", "code_block"} or not token.map:
+            continue
+        start, end = token.map
+        blocks.append(MarkdownBlock(token.type, start + 1, end))
+    return tuple(blocks)
+
+
+def parse_markdown_html(text: str) -> tuple[MarkdownHtml, ...]:
+    """Return HTML nodes while excluding code spans and code blocks.
+
+    CommonMark emits inline HTML as ``html_inline`` children and block HTML as
+    ``html_block`` tokens.  Code spans containing HTML are ``code_inline``
+    children, so consumers can safely inspect these nodes for real anchors.
+    """
+    nodes: list[MarkdownHtml] = []
+    source_lines = text.splitlines()
+    for token in _MARKDOWN.parse(text):
+        if token.type == "html_block" and token.map:
+            start, _end = token.map
+            nodes.append(MarkdownHtml(line=start + 1, content=token.content))
+            continue
+        if token.type != "inline" or not token.children or not token.map:
+            continue
+        start, end = token.map
+        search_line = start
+        search_offset = 0
+        for child in token.children:
+            if child.type != "html_inline":
+                continue
+            line = start + 1
+            for source_index in range(search_line, min(end, len(source_lines))):
+                offset = search_offset if source_index == search_line else 0
+                position = source_lines[source_index].find(child.content, offset)
+                if position < 0:
+                    continue
+                line = source_index + 1
+                search_line = source_index
+                search_offset = position + len(child.content)
+                break
+            nodes.append(MarkdownHtml(line=line, content=child.content))
+    return tuple(nodes)
+
+
+def parse_markdown_links(text: str) -> tuple[MarkdownLink, ...]:
+    """Return clickable Markdown link nodes, excluding images and code nodes.
+
+    ``token.map`` is the source block's zero-based line span.  A multi-line
+    destination is attributed to its first source line; the gates only use the
+    line for diagnostics and link-node association.
+    """
+    links: list[MarkdownLink] = []
+    source_lines = text.splitlines()
+    for token in _MARKDOWN.parse(text):
+        if token.type != "inline" or not token.children or not token.map:
+            continue
+        start, end = token.map
+        line = start + 1
+        search_line = start
+        search_offset = 0
+        for child in token.children:
+            if child.type != "link_open":
+                continue
+            attrs = dict(child.attrs or ())
+            target = attrs.get("href")
+            if target:
+                for source_index in range(search_line, min(end, len(source_lines))):
+                    offset = search_offset if source_index == search_line else 0
+                    position = source_lines[source_index].find(target, offset)
+                    if position < 0:
+                        continue
+                    line = source_index + 1
+                    search_line = source_index
+                    search_offset = position + len(target)
+                    break
+                links.append(MarkdownLink(line=line, target=target))
+    return tuple(links)

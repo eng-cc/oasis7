@@ -9,6 +9,8 @@
 1. 一个新文档应该放在哪个目录；
 2. 一个新文档应该承担什么职责。
 
+产品文档的内容合同、REQ/AC 追踪、玩家体验与证据边界由配对的 [`product-documentation-standard.design.md`](product-documentation-standard.design.md) 承接；本文继续拥有目录落位、文件职责、入口与专题可达性。两份规范共同维护现有四模块产品树，不新增第五模块。
+
 本规范只规定组织形式与职责边界，不处理历史迁移节奏。
 
 ## 2. 核心原则

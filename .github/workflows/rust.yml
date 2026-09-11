@@ -340,9 +340,13 @@ jobs:
             libxinerama-dev \
             libasound2-dev \
             libudev-dev
+      - name: Install product-document Markdown parser
+        run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
       - name: Run required test tier
         env:
           INTEGRATION_MODE: ${{ inputs.run_mode }}
+          OASIS7_PRODUCT_DOC_BASE: ${{ steps.scope.outputs.base_oid }}
+          OASIS7_PRODUCT_DOC_HEAD: ${{ steps.scope.outputs.head_oid }}
           OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS: ${{ steps.scope.outputs.run_oasis7_required_tests }}
           OASIS7_CI_RUN_CONSENSUS_TESTS: ${{ steps.scope.outputs.run_consensus_tests }}
           OASIS7_CI_RUN_DISTFS_TESTS: ${{ steps.scope.outputs.run_distfs_tests }}
@@ -500,6 +504,16 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Resolve product-document gate range
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_oid="$(git rev-parse --verify 'HEAD^1')"
+          head_oid="$(git rev-parse --verify 'HEAD^{commit}')"
+          printf 'OASIS7_PRODUCT_DOC_BASE=%s\n' "$base_oid" >>"$GITHUB_ENV"
+          printf 'OASIS7_PRODUCT_DOC_HEAD=%s\n' "$head_oid" >>"$GITHUB_ENV"
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
@@ -541,6 +555,8 @@ jobs:
         run: |
           set -euo pipefail
           trunk --version | grep -Fqx "trunk ${TRUNK_VERSION}"
+      - name: Install product-document Markdown parser
+        run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
       - name: Run full test tier
         run: CI_VERBOSE=1 ./scripts/ci-tests.sh full
 
@@ -565,6 +581,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - id: preflight
         name: Validate human-authorized full escalation
         env:
@@ -586,6 +604,14 @@ jobs:
             --finished-at "${started_at}" --conclusion skipped
           echo "actual_head=${actual_head}" >>"${GITHUB_OUTPUT}"
           echo "started_at=${started_at}" >>"${GITHUB_OUTPUT}"
+      - name: Resolve product-document gate range
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_oid="$(git rev-parse --verify 'HEAD^1')"
+          head_oid="$(git rev-parse --verify 'HEAD^{commit}')"
+          printf 'OASIS7_PRODUCT_DOC_BASE=%s\n' "$base_oid" >>"$GITHUB_ENV"
+          printf 'OASIS7_PRODUCT_DOC_HEAD=%s\n' "$head_oid" >>"$GITHUB_ENV"
       - uses: actions/setup-node@v6
       - name: Install viewer web dependencies
         run: npm ci --prefix crates/oasis7_viewer
@@ -614,6 +640,8 @@ jobs:
         run: |
           set -euo pipefail
           trunk --version | grep -Fqx "trunk ${TRUNK_VERSION}"
+      - name: Install product-document Markdown parser
+        run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
       - id: full
         name: Run human-authorized full test tier
         run: CI_VERBOSE=1 ./scripts/ci-tests.sh full

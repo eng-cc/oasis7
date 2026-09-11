@@ -9,6 +9,12 @@ from pathlib import Path
 import re
 import sys
 
+try:
+    from product_doc_markdown import parse_markdown_links
+except RuntimeError as exc:
+    print(f"product-doc-governance: error: {exc}", file=sys.stderr)
+    raise SystemExit(2) from exc
+
 
 @dataclass(frozen=True)
 class ProductModule:
@@ -60,8 +66,6 @@ REQUIRED_HEADINGS = (
     "### 5.1 验收追踪",
     "## 6. Non-Goals",
 )
-
-
 def metadata(text: str, label: str) -> str | None:
     match = re.search(rf"^- {re.escape(label)}：(?:`([^`]+)`|(.+))$", text, re.MULTILINE)
     if not match:
@@ -96,9 +100,10 @@ def fail(errors: list[str], code: str, detail: str) -> None:
 
 
 def markdown_targets(root: Path, source: Path, text: str) -> set[str]:
+    """Resolve repository targets from actual CommonMark link nodes."""
     targets: set[str] = set()
-    for raw_target in re.findall(r"\[[^]]+\]\(([^)]+)\)", text):
-        target = raw_target.split("#", 1)[0].strip()
+    for link in parse_markdown_links(text):
+        target = link.target.split("#", 1)[0].strip()
         if not target or "://" in target:
             continue
         resolved = (source.parent / target).resolve()
@@ -107,6 +112,11 @@ def markdown_targets(root: Path, source: Path, text: str) -> set[str]:
         except ValueError:
             continue
     return targets
+
+
+def markdown_targets_outside_fenced_code(root: Path, source: Path, text: str) -> set[str]:
+    """Compatibility wrapper for the prose-only Markdown target scanner."""
+    return markdown_targets(root, source, text)
 
 
 def topic_targets_for_section(
@@ -236,6 +246,9 @@ def check(root: Path) -> list[str]:
             topic_path = root / topic
             if topic_path.parent != path.parent:
                 fail(errors, "topic-module-boundary", f"{module.path}: {topic}")
+            if not topic_path.is_file():
+                fail(errors, "topic-missing", f"{module.path}: declared active topic {topic} does not exist")
+                continue
             if metadata(topic_path.read_text(encoding="utf-8"), "生命周期") != "active":
                 fail(errors, "topic-lifecycle", f"active topic must declare active lifecycle: {topic}")
             declared_topics.add(topic)
@@ -245,6 +258,9 @@ def check(root: Path) -> list[str]:
             topic_path = root / topic
             if topic_path.parent != path.parent:
                 fail(errors, "topic-module-boundary", f"{module.path}: {topic}")
+            if not topic_path.is_file():
+                fail(errors, "topic-missing", f"{module.path}: declared migration topic {topic} does not exist")
+                continue
             lifecycle = metadata(topic_path.read_text(encoding="utf-8"), "生命周期")
             if lifecycle not in {"superseded", "retired"}:
                 fail(errors, "topic-lifecycle", f"migration topic must be superseded or retired: {topic}")
@@ -300,8 +316,10 @@ def check(root: Path) -> list[str]:
             )
         for suffix in (".design.md",):
             paired_path = topic_path.with_name(topic_path.name.removesuffix(".prd.md") + suffix)
-            if paired_path.is_file() and topic not in paired_path.read_text(encoding="utf-8"):
-                fail(errors, "topic-pair-backlink", f"{paired_path.relative_to(root)} must reference {topic}")
+            if paired_path.is_file():
+                paired_text = paired_path.read_text(encoding="utf-8")
+                if topic not in markdown_targets_outside_fenced_code(root, paired_path, paired_text):
+                    fail(errors, "topic-pair-backlink", f"{paired_path.relative_to(root)} must link {topic}")
         if metadata(topic_text, "产品层唯一 PRD") not in {None, module_root}:
             fail(errors, "topic-module-authority", f"{topic}: 产品层唯一 PRD must name its module root")
         for authority in TOPIC_PROFESSIONAL_AUTHORITIES.get(topic, ()):

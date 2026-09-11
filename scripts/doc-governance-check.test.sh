@@ -42,6 +42,10 @@ cat >"$FIXTURE/scripts/product-doc-governance-check.py" <<'PY'
 #!/usr/bin/env python3
 raise SystemExit(0)
 PY
+cat >"$FIXTURE/scripts/product-doc-content-check.py" <<'PY'
+#!/usr/bin/env python3
+print("product-doc-content: checked 0: reason=fixture")
+PY
 chmod +x "$FIXTURE/scripts/doc-governance-check.sh"
 
 cat >"$FIXTURE/doc/testing/prd.md" <<'DOC'

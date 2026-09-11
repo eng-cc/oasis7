@@ -4,6 +4,8 @@
 
 本目录的文档树以 PRD 为主，并可按需包含同名配对的 design：PRD 承载产品真值、产品承诺、组合关系和跨域验收；design 承载产品设计。迁移与交付追踪、任务状态和过程证据只由 GitHub Issue / GitHub Project-backed task truth 承载，不创建本地 project ledger。
 
+产品文档规范与可复用模板：[`product-documentation-standard.prd.md`](../engineering/doc-governance/product-documentation-standard.prd.md)、[`product-documentation-standard.design.md`](../engineering/doc-governance/product-documentation-standard.design.md)、[`product-documentation-standard.templates.md`](../engineering/doc-governance/product-documentation-standard.templates.md)。
+
 ## 四大产品模块
 
 | 产品模块 | 唯一入口 | 产品职责 |
