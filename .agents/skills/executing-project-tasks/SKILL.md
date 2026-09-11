@@ -24,11 +24,12 @@ python3 ./scripts/pm/workflow-next.py --repo-root <canonical-worktree> \
   --task-uid <TASK-UID> --json
 ```
 
-4. Implement one bounded step in its declared write scope.
-5. Run the step-level verification and inspect the output.
+4. For a finite multi-obligation change, before implementing a leaf, read its coordinating Issue record and confirm the approved required set, mapping slots, candidate-selection rule and blocking feedback under the [traceability record contract](../../../doc/engineering/workflow/source-of-truth.md#traceability-record-contract). Ordinary single-task/single-leaf work follows its own task Issue and does not require a second coordinating Issue. The optional `delivery_obligations` binding may be absent; absence does not prove there are no obligations, but is not itself a blocker when the required record and evidence are complete.
+5. Implement one bounded step in its declared write scope.
+6. Run the step-level verification and inspect the output.
    Route commands expected to emit broad logs or search results through `./scripts/pm/bounded-command-output.py`; inspect the bounded summary and retain the reported full artifact/digest for debugging.
-6. Append result, evidence, deviation, and next step to the same task issue.
-7. Repeat until scope is implemented and verified, then route to `finishing-a-development-branch`.
+7. Append result, evidence, deviation, and next step to the same task issue.
+8. Repeat until scope is implemented and verified, then route to `finishing-a-development-branch`. A leaf may complete truthfully while aggregate obligations remain pending.
 
 If any command, test, or behavior is unexpected, automatically route to `systematic-debugging`, resolve the root cause, and resume the same step. Pause only for canonical `external_wait` or `capability_blocked`, recording resume authority and instruction from the canonical state contract.
 
