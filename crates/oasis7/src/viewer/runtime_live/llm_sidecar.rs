@@ -95,6 +95,8 @@ mod decision;
 mod lineage;
 #[path = "llm_sidecar_lineage_persistence.rs"]
 mod lineage_persistence;
+#[path = "llm_sidecar_lineage_settlement.rs"]
+mod lineage_settlement;
 #[path = "llm_sidecar_payer.rs"]
 mod payer_support;
 #[path = "llm_sidecar_provider.rs"]
