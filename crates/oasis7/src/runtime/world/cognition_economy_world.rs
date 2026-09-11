@@ -96,6 +96,22 @@ impl World {
         Ok(receipt)
     }
 
+    pub fn expire_cognition_lease(
+        &mut self,
+        lease_id: &str,
+    ) -> Result<CognitionReceiptV1, WorldError> {
+        let mut transaction = self.clone();
+        let mut economy = transaction.cognition_economy()?;
+        let receipt = economy
+            .expire(lease_id, transaction.state.time)
+            .map_err(world_economy_error)?;
+        transaction.cognition["cognition_economy"] =
+            economy.snapshot_json().map_err(world_economy_error)?;
+        transaction.persist_runtime_transaction_if_configured()?;
+        *self = transaction;
+        Ok(receipt)
+    }
+
     pub fn refund_cognition_lease(
         &mut self,
         lease_id: &str,
@@ -104,6 +120,31 @@ impl World {
         let mut economy = transaction.cognition_economy()?;
         let receipt = economy
             .refund(lease_id, transaction.state.time)
+            .map_err(world_economy_error)?;
+        transaction.cognition["cognition_economy"] =
+            economy.snapshot_json().map_err(world_economy_error)?;
+        transaction.persist_runtime_transaction_if_configured()?;
+        *self = transaction;
+        Ok(receipt)
+    }
+
+    pub fn refund_settled_cognition_lease(
+        &mut self,
+        lease_id: &str,
+        refunded_amount: u64,
+        parent_receipt_id: &str,
+        reason: &str,
+    ) -> Result<CognitionReceiptV1, WorldError> {
+        let mut transaction = self.clone();
+        let mut economy = transaction.cognition_economy()?;
+        let receipt = economy
+            .refund_settled(
+                lease_id,
+                refunded_amount,
+                parent_receipt_id,
+                reason,
+                transaction.state.time,
+            )
             .map_err(world_economy_error)?;
         transaction.cognition["cognition_economy"] =
             economy.snapshot_json().map_err(world_economy_error)?;
