@@ -95,6 +95,8 @@ mod decision;
 mod lineage;
 #[path = "llm_sidecar_lineage_persistence.rs"]
 mod lineage_persistence;
+#[path = "llm_sidecar_lineage_recovery.rs"]
+mod lineage_recovery;
 #[path = "llm_sidecar_lineage_settlement.rs"]
 mod lineage_settlement;
 #[path = "llm_sidecar_payer.rs"]
@@ -820,7 +822,7 @@ impl RuntimeLlmSidecar {
             .collect::<BTreeSet<_>>();
         let mut pending_runtime_wakes = self.pending_runtime_wakes.clone();
         let pending_runtime_wakes_migrated =
-            lineage_persistence::hydrate_pending_runtime_wake_identities(
+            lineage_recovery::hydrate_pending_runtime_wake_identities(
                 &mut pending_runtime_wakes,
                 &wakes,
                 &self.provider_terminal_states,
