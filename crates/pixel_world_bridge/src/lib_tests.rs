@@ -295,6 +295,157 @@ fn agent_label_changes_the_render_content_signature() {
     );
 }
 
+fn sample_render_state_with_presentation_metadata() -> RenderState {
+    let mut state = sample_render_state_for_camera("agent");
+    state.module_visual_entities = vec![ModuleVisualEntity {
+        id: "module-visual-0".to_string(),
+        module_id: "module-0".to_string(),
+        kind: "relay".to_string(),
+        label: Some("Relay marker".to_string()),
+        pos: Position {
+            x_cm: 1_700_000.0,
+            y_cm: 1_200_000.0,
+            z_cm: 0.0,
+        },
+    }];
+    state.links = vec![Link {
+        id: "route-0".to_string(),
+        kind: "logistics_route".to_string(),
+        label: Some("North supply route".to_string()),
+        from: Position {
+            x_cm: 1_000_000.0,
+            y_cm: 700_000.0,
+            z_cm: 0.0,
+        },
+        to: Position {
+            x_cm: 2_000_000.0,
+            y_cm: 1_400_000.0,
+            z_cm: 0.0,
+        },
+        emphasis: Some(0.72),
+        status: Some("active".to_string()),
+        source_class: Some("runtime_projection".to_string()),
+        freshness: Some("current".to_string()),
+    }];
+    state.visual_hotspots = vec![VisualHotspot {
+        id: "hotspot-0".to_string(),
+        label: "Current objective".to_string(),
+        kind: "goal".to_string(),
+        pos: Position {
+            x_cm: 1_900_000.0,
+            y_cm: 1_500_000.0,
+            z_cm: 0.0,
+        },
+        emphasis: Some(0.8),
+        size_hint_px: Some(12.0),
+    }];
+    state
+}
+
+fn assert_presentation_metadata_update_reconciles(
+    field: &str,
+    mutate: impl FnOnce(&mut RenderState),
+) {
+    let original = sample_render_state_with_presentation_metadata();
+    let initial_signature = render_content_signature(Some(&original));
+    let mut runtime = BevyRuntimeState {
+        mounted: true,
+        render_state: Some(original.clone()),
+        render_version: 1,
+        render_content_signature: initial_signature,
+        reactive_scheduling: true,
+        camera: CameraState {
+            zoom: 2.25,
+            pan_x_px: 42.0,
+            pan_y_px: -18.0,
+        },
+        camera_fit_version: 7,
+        last_canvas_size: Some((960, 540)),
+        camera_user_override: true,
+        hit_regions_dirty: false,
+        ..Default::default()
+    };
+
+    let mut changed = original;
+    mutate(&mut changed);
+    let next_signature = render_content_signature(Some(&changed));
+    assert_ne!(
+        next_signature, initial_signature,
+        "{field} metadata must invalidate the render content signature"
+    );
+
+    apply_external_render_snapshot(
+        &mut runtime,
+        true,
+        RenderSnapshot::Changed {
+            version: 2,
+            state: Some(changed),
+        },
+    );
+
+    assert_eq!(runtime.render_content_signature, next_signature);
+    assert!(
+        runtime.needs_reconcile,
+        "{field} metadata must trigger reactive reconciliation"
+    );
+    assert!(
+        runtime.camera_user_override,
+        "{field} metadata must preserve the manual camera"
+    );
+    assert_eq!(runtime.camera_fit_version, 7);
+    assert_eq!(runtime.last_canvas_size, Some((960, 540)));
+    assert!(!runtime.hit_regions_dirty);
+}
+
+#[test]
+fn locale_changes_trigger_reconcile_without_camera_refit() {
+    assert_presentation_metadata_update_reconciles("locale", |state| {
+        state.locale = "zh-CN".to_string();
+    });
+}
+
+#[test]
+fn module_kind_changes_trigger_reconcile_without_camera_refit() {
+    assert_presentation_metadata_update_reconciles("module kind", |state| {
+        state.module_visual_entities[0].kind = "beacon".to_string();
+    });
+}
+
+#[test]
+fn module_id_changes_trigger_reconcile_without_camera_refit() {
+    assert_presentation_metadata_update_reconciles("module id", |state| {
+        state.module_visual_entities[0].module_id = "module-1".to_string();
+    });
+}
+
+#[test]
+fn module_label_changes_trigger_reconcile_without_camera_refit() {
+    assert_presentation_metadata_update_reconciles("module label", |state| {
+        state.module_visual_entities[0].label = Some("Beacon marker".to_string());
+    });
+}
+
+#[test]
+fn link_label_changes_trigger_reconcile_without_camera_refit() {
+    assert_presentation_metadata_update_reconciles("link label", |state| {
+        state.links[0].label = Some("South supply route".to_string());
+    });
+}
+
+#[test]
+fn hotspot_kind_changes_trigger_reconcile_without_camera_refit() {
+    assert_presentation_metadata_update_reconciles("hotspot kind", |state| {
+        state.visual_hotspots[0].kind = "blocker".to_string();
+    });
+}
+
+#[test]
+fn hotspot_label_changes_trigger_reconcile_without_camera_refit() {
+    assert_presentation_metadata_update_reconciles("hotspot label", |state| {
+        state.visual_hotspots[0].label = "Blocked route".to_string();
+    });
+}
+
 #[test]
 fn location_label_changes_trigger_reactive_reconcile_without_camera_reset() {
     let original = sample_render_state_for_camera("location");

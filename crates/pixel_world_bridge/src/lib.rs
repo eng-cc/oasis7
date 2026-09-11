@@ -727,6 +727,10 @@ fn render_signature(render_state: Option<&RenderState>, mode: RenderSignatureMod
         return hasher.finish();
     };
 
+    if matches!(mode, RenderSignatureMode::Content) {
+        render_state.locale.hash(&mut hasher);
+    }
+
     render_state.world_bounds.is_some().hash(&mut hasher);
     if let Some(bounds) = render_state.world_bounds.as_ref() {
         hash_f64(&mut hasher, bounds.width_cm);
@@ -765,6 +769,11 @@ fn render_signature(render_state: Option<&RenderState>, mode: RenderSignatureMod
     for entity in &render_state.module_visual_entities {
         entity.id.hash(&mut hasher);
         hash_position(&mut hasher, &entity.pos);
+        if matches!(mode, RenderSignatureMode::Content) {
+            entity.module_id.hash(&mut hasher);
+            entity.kind.hash(&mut hasher);
+            entity.label.hash(&mut hasher);
+        }
     }
 
     render_state.agents.len().hash(&mut hasher);
@@ -788,6 +797,9 @@ fn render_signature(render_state: Option<&RenderState>, mode: RenderSignatureMod
         hash_position(&mut hasher, &link.from);
         hash_position(&mut hasher, &link.to);
         hash_f64(&mut hasher, link.emphasis.unwrap_or(0.0));
+        if matches!(mode, RenderSignatureMode::Content) {
+            link.label.hash(&mut hasher);
+        }
         link.status.hash(&mut hasher);
         link.source_class.hash(&mut hasher);
         link.freshness.hash(&mut hasher);
@@ -804,6 +816,10 @@ fn render_signature(render_state: Option<&RenderState>, mode: RenderSignatureMod
         hash_position(&mut hasher, &hotspot.pos);
         hash_f64(&mut hasher, hotspot.emphasis.unwrap_or(0.0));
         hash_f64(&mut hasher, hotspot.size_hint_px.unwrap_or(0.0));
+        if matches!(mode, RenderSignatureMode::Content) {
+            hotspot.kind.hash(&mut hasher);
+            hotspot.label.hash(&mut hasher);
+        }
     }
 
     render_state.receipt_target.is_some().hash(&mut hasher);
