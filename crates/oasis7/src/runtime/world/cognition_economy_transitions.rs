@@ -1,6 +1,89 @@
 use super::*;
 
 impl CognitionEconomyStateV1 {
+    pub(super) fn settle_inner(
+        &mut self,
+        lease_id: &str,
+        consumed_amount: u64,
+        tick: u64,
+    ) -> Result<CognitionReceiptV1, CognitionEconomyError> {
+        let lease = self
+            .leases
+            .get(lease_id)
+            .cloned()
+            .ok_or_else(|| CognitionEconomyError::LeaseNotFound(lease_id.to_string()))?;
+        if consumed_amount == 0 {
+            return Err(CognitionEconomyError::InvalidInput(
+                "cognition_settlement_usage_zero",
+            ));
+        }
+        if consumed_amount > lease.reserved_amount {
+            return Err(CognitionEconomyError::InvalidInput(
+                "cognition_settlement_usage_exceeds_reservation",
+            ));
+        }
+        let key = operation_key(lease_id, "settle");
+        let digest = economy_digest(
+            COGNITION_ECONOMY_OPERATION_DOMAIN,
+            &(key.as_str(), consumed_amount),
+        );
+        if let Some(existing) = self.operations.get(&key) {
+            if existing.operation_digest != digest {
+                return Err(CognitionEconomyError::Conflict(
+                    "cognition_settlement_idempotency_conflict",
+                ));
+            }
+            return self.receipts.get(&existing.receipt_id).cloned().ok_or(
+                CognitionEconomyError::InvalidState("cognition_operation_receipt_missing"),
+            );
+        }
+        if lease.status != CognitionLeaseStatusV1::Reserved {
+            return Err(CognitionEconomyError::InvalidState(
+                "cognition_lease_already_closed",
+            ));
+        }
+        if lease
+            .quote
+            .valid_until_tick
+            .is_some_and(|expires| tick > expires)
+        {
+            // A late provider response cannot consume the reservation. Close
+            // it through the canonical expiry transition to return the
+            // reservation atomically with its receipt and journal event.
+            return self.expire_inner(lease_id, tick);
+        }
+        let refund = lease.reserved_amount - consumed_amount;
+        let balance = self.balance_mut(&lease.account_id, &lease.quote.resource);
+        if balance.reserved < lease.reserved_amount {
+            return Err(CognitionEconomyError::InvalidState(
+                "cognition_reserved_balance_missing",
+            ));
+        }
+        balance.reserved -= lease.reserved_amount;
+        balance.available =
+            balance
+                .available
+                .checked_add(refund)
+                .ok_or(CognitionEconomyError::InvalidState(
+                    "cognition_available_balance_overflow",
+                ))?;
+        let receipt = self.close_lease(
+            lease,
+            CognitionLeaseStatusV1::Settled,
+            "settle",
+            consumed_amount,
+            0,
+            refund,
+            tick,
+            key,
+            digest,
+            0,
+            None,
+            None,
+        )?;
+        Ok(receipt)
+    }
+
     pub(super) fn refund_inner(
         &mut self,
         lease_id: &str,
