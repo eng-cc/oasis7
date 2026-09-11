@@ -4408,7 +4408,7 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
 
     def test_storage_first_apply_calls_only_storage_callbacks(self):
         transport = self._Transport()
-        self._runner(transport)
+        self._runner(transport, live_revalidator=lambda: True)
         self.assertEqual(transport.mutations, [
             "stop:storage-205", "delete:storage-205", "rebuild:storage-205",
             "start:storage-205", "verify:storage-205",
@@ -4477,7 +4477,7 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
         transport = self._Transport(side_effect_operation="delete:storage-205")
         journal = self.root / "side-effect.journal.json"
         with self.assertRaises(Exception):
-            self._runner(transport, journal_path=journal)
+            self._runner(transport, journal_path=journal, live_revalidator=lambda: True)
         self.assertTrue(journal.exists())
         record = json.loads(journal.read_text())
         self.assertEqual(record["failed_operation"], "delete:storage-205")
@@ -4621,7 +4621,7 @@ class StorageFirstSecurityRedTests(unittest.TestCase):
                 return super().mutate(operation, node)
 
         transport = RecordingTransport()
-        self._runner(transport)
+        self._runner(transport, live_revalidator=lambda: True)
         self.assertTrue(transport.node_keys)
         self.assertTrue(
             all("credential_seam" not in keys for keys in transport.node_keys),
@@ -4701,7 +4701,7 @@ print(json.dumps(record, sort_keys=True))
         transport = self.fixture._Transport(side_effect_operation="delete:storage-205")
         journal = self.fixture.root / "side-effect-security.journal.json"
         with self.assertRaises(Exception):
-            self._runner(transport, journal_path=journal)
+            self._runner(transport, journal_path=journal, live_revalidator=lambda: True)
         record = json.loads(journal.read_text())
         self.assertEqual(record["rollback_status"], "reconciliation-blocked")
         self.assertEqual(record["next_operation"], "reconciliation-required")
