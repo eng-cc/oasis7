@@ -84,6 +84,14 @@ fn provider_dispatch_http_restart_fence_issues_one_request() {
         while !server_stop.load(Ordering::Acquire) {
             match listener.accept() {
                 Ok((mut stream, _)) => {
+                    // Accepted sockets inherit the listener's nonblocking
+                    // mode on some platforms. Switch the connection back to
+                    // blocking before reading headers so concurrent tests do
+                    // not race the provider client and turn a normal
+                    // WouldBlock into a poisoned test thread.
+                    stream
+                        .set_nonblocking(false)
+                        .expect("make provider connection blocking");
                     let (path, _body) = read_http_request(&stream);
                     match path.as_str() {
                         "/v1/responses" => {
