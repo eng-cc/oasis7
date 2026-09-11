@@ -26,6 +26,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 #[path = "oasis7_chain_runtime_status_payload_gate_policy_tests.rs"]
 mod gate_policy_tests;
+#[path = "status_payload_module_tick_isolation_tests.rs"]
+mod module_tick_isolation_tests;
 
 const TEST_MODULE_ARTIFACT_SIGNER_NODE_ID: &str = "test.module.release.signer";
 

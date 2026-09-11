@@ -68,7 +68,16 @@ struct ExecutionBridgeCommitTimingState {
     slow_count: u64,
     last_slow_stage: Option<String>,
     stages: BTreeMap<&'static str, ExecutionBridgeStageTimingCounter>,
+    #[cfg(not(test))]
     module_tick_routing_metrics: Option<ModuleTickRoutingMetricsSnapshot>,
+}
+
+#[cfg(test)]
+std::thread_local! {
+    // Parallel tests represent independent drivers; do not share their live
+    // routing samples. Production retains process-wide publication below.
+    static MODULE_TICK_ROUTING_METRICS: std::cell::RefCell<Option<ModuleTickRoutingMetricsSnapshot>> =
+        const { std::cell::RefCell::new(None) };
 }
 
 #[derive(Debug, Default)]
@@ -244,20 +253,32 @@ pub(crate) fn snapshot_execution_bridge_commit_timing() -> ExecutionBridgeCommit
 #[allow(dead_code)]
 pub(crate) fn snapshot_execution_bridge_module_tick_routing_metrics()
 -> Option<ModuleTickRoutingMetricsSnapshot> {
-    commit_timing_state()
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .module_tick_routing_metrics
-        .clone()
+    #[cfg(test)]
+    {
+        MODULE_TICK_ROUTING_METRICS.with(|metrics| metrics.borrow().clone())
+    }
+    #[cfg(not(test))]
+    {
+        commit_timing_state()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .module_tick_routing_metrics
+            .clone()
+    }
 }
 
 pub(crate) fn record_execution_bridge_module_tick_routing_metrics(
     metrics: ModuleTickRoutingMetricsSnapshot,
 ) {
-    commit_timing_state()
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .module_tick_routing_metrics = Some(metrics);
+    #[cfg(test)]
+    MODULE_TICK_ROUTING_METRICS.with(|state| *state.borrow_mut() = Some(metrics));
+    #[cfg(not(test))]
+    {
+        commit_timing_state()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .module_tick_routing_metrics = Some(metrics);
+    }
 }
 
 fn record_commit_timing_observation(observation: &CommitObservation<'_>, level: tracing::Level) {
@@ -485,6 +506,7 @@ fn emit_execution_bridge_observation(
 
 #[cfg(test)]
 pub(crate) fn reset_execution_bridge_commit_timing_for_tests() {
+    MODULE_TICK_ROUTING_METRICS.with(|metrics| *metrics.borrow_mut() = None);
     *commit_timing_state()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner()) =

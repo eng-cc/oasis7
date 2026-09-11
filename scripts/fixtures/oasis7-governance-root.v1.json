@@ -1,0 +1,14 @@
+{
+  "allowlist": [
+    {
+      "algorithm": "ed25519",
+      "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111",
+      "public_key_sha256": "02d449a31fbb267c8f352e9968a79e3e5fc95c1bbeaa502fd6454ebde5a4bedc",
+      "signer_id": "governance-signer"
+    }
+  ],
+  "network_id": "oasis7-public-testnet-governed-20260606",
+  "root_digest": "5abd00f3e90a3e894f110f5a32ecab772e23e97ad7ec2cc9d675ae65282ae8ab",
+  "root_id": "oasis7-public-testnet-governance-root-v1",
+  "schema_version": "oasis7.validator_pair_provenance_trust_root.v1"
+}
