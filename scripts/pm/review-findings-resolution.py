@@ -359,11 +359,14 @@ def validate_manifest(root: Path, manifest_path: Path, ledger_path: Path, task_u
         raise ContractError("resolution readback comment id is invalid")
     validate_live_task_issue(task_uid, issue_number)
     author = require_string(readback.get("author"), "resolution readback author")
-    comment = gh_json(["api", f"repos/{CANONICAL_REPOSITORY}/issues/{issue_number}/comments/{comment_id}"], "resolution comment")
+    comment = gh_json(["api", f"repos/{CANONICAL_REPOSITORY}/issues/comments/{comment_id}"], "resolution comment")
     if not isinstance(comment, dict):
         raise ContractError("GitHub resolution comment is not an object")
     if comment.get("id") != comment_id:
         raise ContractError("GitHub resolution comment id mismatch")
+    expected_issue_url = f"https://api.github.com/repos/{CANONICAL_REPOSITORY}/issues/{issue_number}"
+    if comment.get("issue_url") != expected_issue_url:
+        raise ContractError("GitHub resolution comment issue does not match the canonical task issue")
     body = comment.get("body")
     if not isinstance(body, str):
         raise ContractError("GitHub resolution comment body is missing")
