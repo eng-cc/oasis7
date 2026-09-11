@@ -125,6 +125,7 @@ fn server_with_candidates(
 }
 
 fn claim_choice_json(server: &mut ViewerRuntimeLiveServer) -> Value {
+    let _env_guard = runtime_provider_env_lock().lock().expect("env lock");
     let snapshot = server.compat_snapshot(Some(SNAPSHOT_PLAYER_ID));
     serde_json::to_value(
         snapshot
