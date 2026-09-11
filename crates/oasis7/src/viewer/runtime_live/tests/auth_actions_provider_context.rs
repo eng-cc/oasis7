@@ -640,19 +640,22 @@ fn runtime_provider_action_receipt_recovers_after_sidecar_finalization_checkpoin
     ));
     let blocked_backup =
         lineage_path.with_extension(format!("blocked-backup-{}", std::process::id()));
-    let runtime_config = || {
-        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+    let runtime_config = |with_lineage_store: bool| {
+        let mut config = ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm)
-            .with_provider_lineage_store(lineage_path.clone())
             .with_test_cognition_runtime_binding(
                 "receipt-recovery-branch",
                 0,
                 Some(finality_block_hash.clone()),
                 "verified",
                 0,
-            )
+            );
+        if with_lineage_store {
+            config = config.with_provider_lineage_store(lineage_path.clone());
+        }
+        config
     };
-    let mut server = ViewerRuntimeLiveServer::new(runtime_config()).expect("runtime server");
+    let mut server = ViewerRuntimeLiveServer::new(runtime_config(true)).expect("runtime server");
     super::provider_continuation_drains::install_cognition_scheduler(&mut server);
     server
         .world
@@ -731,8 +734,12 @@ fn runtime_provider_action_receipt_recovers_after_sidecar_finalization_checkpoin
     std::fs::rename(&blocked_backup, &lineage_path).expect("restore pre-fault checkpoint");
 
     let committed_world = server.world.clone();
-    let mut restarted = ViewerRuntimeLiveServer::new(runtime_config()).expect("restarted server");
+    let mut restarted =
+        ViewerRuntimeLiveServer::new(runtime_config(false)).expect("restarted server");
     restarted.world = committed_world;
+    restarted
+        .llm_sidecar
+        .configure_provider_lineage_store(lineage_path.clone());
     restarted
         .llm_sidecar
         .restore_provider_lineage(&restarted.world)

@@ -24,6 +24,26 @@ fn wait_for_provider_phase(
     }
 }
 
+fn restart_provider_server(
+    config: ViewerRuntimeLiveServerConfig,
+    world: RuntimeWorld,
+    lineage_path: &std::path::Path,
+) -> ViewerRuntimeLiveServer {
+    // A restart must restore the persisted sidecar only after the authoritative
+    // Runtime world is loaded. The bootstrap Minimal world intentionally has
+    // no provider capability identity and must never be used for payer lookup.
+    let mut server = ViewerRuntimeLiveServer::new(config).expect("restarted Runtime live server");
+    server.world = world;
+    server
+        .llm_sidecar
+        .configure_provider_lineage_store(lineage_path.to_path_buf());
+    server
+        .llm_sidecar
+        .restore_provider_lineage(&server.world)
+        .expect("restore provider lineage against authoritative Runtime world");
+    server
+}
+
 fn assert_provider_wait_post_admission_fault_is_compensated(
     fault_name: &str,
     fault_message: &str,
@@ -257,11 +277,8 @@ fn assert_provider_wait_post_admission_fault_is_compensated(
                 "real persistence fault must be retryable on the same server"
             );
         }
-        let mut restarted = ViewerRuntimeLiveServer::new(
-            runtime_config().with_provider_lineage_store(lineage_path.clone()),
-        )
-        .expect("restart Runtime live server for provider Wait recovery");
-        restarted.world = server.world.clone();
+        let mut restarted =
+            restart_provider_server(runtime_config(), server.world.clone(), &lineage_path);
         wait_for_provider_phase(
             "provider Wait recovery after restore",
             Duration::from_secs(5),
@@ -557,11 +574,8 @@ fn runtime_provider_wait_real_checkpoint_blocker_retries_same_server_then_reload
     assert_eq!(decision_requests(), 1);
 
     // Reload the persisted cleanup before allowing a later fresh provider turn.
-    let mut restarted = ViewerRuntimeLiveServer::new(
-        runtime_config().with_provider_lineage_store(lineage_path.clone()),
-    )
-    .expect("reload cleaned provider lineage");
-    restarted.world = server.world.clone();
+    let mut restarted =
+        restart_provider_server(runtime_config(), server.world.clone(), &lineage_path);
     assert!(
         !restarted.llm_sidecar.has_provider_wait_recovery("agent-0"),
         "reload must observe persisted compensation cleanup"
@@ -812,11 +826,7 @@ fn runtime_provider_feedback_delivery_failure_survives_reload_without_readmissio
         1,
         "persisted Runtime snapshot must retain the pending feedback outbox"
     );
-    let mut restarted = ViewerRuntimeLiveServer::new(
-        runtime_config().with_provider_lineage_store(lineage_path.clone()),
-    )
-    .expect("reload with pending terminal feedback");
-    restarted.world = persisted_world;
+    let mut restarted = restart_provider_server(runtime_config(), persisted_world, &lineage_path);
     let _ = restarted.enqueue_llm_action_from_sidecar();
     assert_eq!(restarted.world.pending_runtime_feedback().unwrap().len(), 1);
     assert_eq!(
@@ -1018,15 +1028,7 @@ fn runtime_provider_backed_wake_resumes_with_fresh_request_and_origin_lineage() 
     );
     server.world.step().expect("normal Runtime tick wakes Wait");
     let restarted_world = server.world.clone();
-    let mut restarted = ViewerRuntimeLiveServer::new(
-        runtime_config().with_provider_lineage_store(lineage_path.clone()),
-    )
-    .expect("restarted server");
-    restarted.world = restarted_world;
-    restarted
-        .llm_sidecar
-        .restore_provider_lineage(&restarted.world)
-        .expect("restore provider lineage before wake resume");
+    let mut restarted = restart_provider_server(runtime_config(), restarted_world, &lineage_path);
     restarted
         .sync_runtime_wake_projection()
         .expect("mirror Runtime-selected wake into restarted Viewer");
