@@ -20,6 +20,7 @@ SLICE_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 MAX_SUMMARY_BYTES = 4096
 DELIVERY_MODES = {"minimal_head_bound_task_packet", "full_history_escalation"}
 ROLE_ACTIVATIONS = {"message_assigned_adapter_inactive", "named_role_adapter_backed"}
+INCREMENTAL_CONTEXT_SCHEMA = "oasis7-review-context/v1"
 
 
 class PacketError(RuntimeError):
@@ -37,6 +38,13 @@ def git(root: Path, *args: str) -> str:
     if result.returncode:
         fail(result.stderr.strip() or f"git {' '.join(args)} failed")
     return result.stdout.strip()
+
+
+def git_bytes(root: Path, *args: str) -> bytes:
+    result = subprocess.run(["git", "-C", str(root), *args], capture_output=True)
+    if result.returncode:
+        fail(result.stderr.decode(errors="replace").strip() or f"git {' '.join(args)} failed")
+    return result.stdout
 
 
 def repo_root() -> Path:
@@ -132,6 +140,130 @@ def resolve_path(root: Path, value: str) -> Path:
     return (path if path.is_absolute() else root / path).resolve()
 
 
+def validate_incremental_context(root: Path, context: dict[str, object], task_uid: str,
+                                 current_head: str) -> None:
+    if context.get("schema") != INCREMENTAL_CONTEXT_SCHEMA or context.get("authority") != "context_only":
+        fail("review context is not advisory oasis7-review-context/v1")
+    if context.get("task_uid") != task_uid or context.get("current_head_oid") != current_head:
+        fail("review context task or current head does not match packet")
+    prior_head = str(context.get("prior_head_oid") or "")
+    if not re.fullmatch(r"[0-9a-f]{40,64}", prior_head) or prior_head == current_head:
+        fail("review context prior head is invalid")
+    prior_path_raw = context.get("prior_plan_path")
+    if not isinstance(prior_path_raw, str):
+        fail("review context prior plan path is missing")
+    prior_path = resolve_path(root, prior_path_raw)
+    canonical_plan_dir = (root / ".pm" / "scratch" / task_uid / "review-plans").resolve()
+    if prior_path.parent != canonical_plan_dir:
+        fail("review context prior plan is outside the canonical task review plans")
+    try:
+        actual_plan_digest = hashlib.sha256(prior_path.read_bytes()).hexdigest()
+    except OSError as exc:
+        fail(f"cannot read review context prior plan: {exc}")
+    if context.get("prior_plan_digest") != actual_plan_digest:
+        fail("review context prior plan digest does not match its bytes")
+    prior_plan = load_object(prior_path, "review context prior plan")
+    if prior_plan.get("task_uid") != task_uid or prior_plan.get("frozen_head") != prior_head:
+        fail("review context prior plan identity does not match its context")
+    prior_epoch = str(context.get("prior_epoch") or "")
+    if prior_plan.get("epoch") != prior_epoch or not re.fullmatch(r"[0-9a-f]{64}", prior_epoch):
+        fail("review context prior epoch does not match its plan")
+    batch_raw = prior_plan.get("batch_path")
+    canonical_batch = (root / ".pm" / "scratch" / task_uid / "review-batches" / f"{prior_epoch}.json").resolve()
+    if not isinstance(batch_raw, str) or resolve_path(root, batch_raw) != canonical_batch:
+        fail("review context prior batch is not canonical")
+    batch = load_object(canonical_batch, "review context prior batch")
+    batch_identity = {key: batch.get(key) for key in
+                      ("task_uid", "frozen_head", "relevant_evidence_digest", "expected_slices")}
+    batch_epoch = hashlib.sha256(json.dumps(
+        batch_identity, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")).hexdigest()
+    if (batch.get("schema") != "oasis7-review-batch/v1" or batch.get("epoch") != batch_epoch
+            or batch.get("task_uid") != task_uid or batch.get("frozen_head") != prior_head
+            or prior_plan.get("relevant_evidence_digest") != batch.get("relevant_evidence_digest")
+            or prior_plan.get("expected_slices") != batch.get("expected_slices")
+            or prior_plan.get("roles") != [item.get("role") for item in prior_plan.get("expected_slices", [])]):
+        fail("review context prior plan does not match its immutable batch")
+    if prior_plan.get("schema") == "oasis7-review-plan/v2":
+        helper_path = Path(__file__).with_name("ci_ready_receipt_identity.py")
+        spec = importlib.util.spec_from_file_location("ci_ready_receipt_identity_context", helper_path)
+        if spec is None or spec.loader is None:
+            fail("cannot load v2 review identity helper for prior context")
+        helper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(helper)
+        try:
+            if prior_plan.get("source_review_digest") != helper.source_review_digest(prior_plan.get("source_review_identity")):
+                fail("review context prior v2 source digest is invalid")
+            if prior_plan.get("integration_ci_digest") != helper.integration_ci_digest(prior_plan.get("integration_ci_identity")):
+                fail("review context prior v2 integration digest is invalid")
+        except (TypeError, ValueError) as exc:
+            fail(f"review context prior v2 identity is invalid: {exc}")
+        if prior_plan.get("relevant_evidence_digest") != prior_plan.get("source_review_digest"):
+            fail("review context prior v2 evidence digest does not match source digest")
+        if prior_plan.get("integration_ci_provenance") != {"live_validation": "ci-ready-receipt-live", "trusted_integration_artifact": True}:
+            fail("review context prior v2 provenance is not trusted")
+    source_digest = prior_plan.get("source_review_digest", prior_plan.get("relevant_evidence_digest"))
+    if context.get("prior_source_review_digest") != source_digest:
+        fail("review context prior source digest does not match its plan")
+    if context.get("prior_integration_ci_digest") != prior_plan.get("integration_ci_digest"):
+        fail("review context prior integration digest does not match its plan")
+    prior_roles = context.get("prior_roles")
+    if prior_roles != prior_plan.get("roles") or not isinstance(prior_roles, list) or not prior_roles:
+        fail("review context prior roles do not match its plan")
+    collection_path_raw = context.get("prior_collection_path")
+    if not isinstance(collection_path_raw, str):
+        fail("review context prior collection path is missing")
+    collection_path = resolve_path(root, collection_path_raw)
+    canonical_collection = (root / ".pm" / "scratch" / task_uid / "review-batches" / f"{prior_epoch}.collection.json").resolve()
+    if collection_path != canonical_collection:
+        fail("review context prior collection is not canonical")
+    try:
+        collection_bytes = collection_path.read_bytes()
+    except OSError as exc:
+        fail(f"cannot read review context prior collection: {exc}")
+    if context.get("prior_collection_digest") != hashlib.sha256(collection_bytes).hexdigest():
+        fail("review context prior collection digest does not match its bytes")
+    collection = load_object(collection_path, "review context prior collection")
+    if (collection.get("schema") != "oasis7-review-collection/v1" or collection.get("status") != "passed"
+            or collection.get("task_uid") != task_uid or collection.get("epoch") != prior_epoch
+            or collection.get("frozen_head") != prior_head):
+        fail("review context prior collection is not a completed passed collection")
+    ledger_raw = prior_plan.get("preflight", {}).get("ledger_path") if isinstance(prior_plan.get("preflight"), dict) else None
+    if not isinstance(ledger_raw, str):
+        fail("review context prior plan has no ledger")
+    ledger_path = resolve_path(root, ledger_raw)
+    try:
+        ledger_path.relative_to(root.resolve())
+    except ValueError:
+        fail("review context prior ledger escapes the repository")
+    try:
+        ledger_digest = hashlib.sha256(ledger_path.read_bytes()).hexdigest()
+    except OSError as exc:
+        fail(f"cannot read review context prior ledger: {exc}")
+    if context.get("prior_collection_ledger_digest") != ledger_digest or collection.get("ledger_digest") != ledger_digest:
+        fail("review context prior collection ledger digest does not match its bytes")
+    if sorted(collection.get("roles", [])) != sorted(prior_roles):
+        fail("review context prior collection roles do not match its plan")
+    delta_paths = context.get("delta_paths")
+    if not isinstance(delta_paths, list) or any(not isinstance(path, str) for path in delta_paths):
+        fail("review context delta paths are invalid")
+    if delta_paths != sorted(set(delta_paths)):
+        fail("review context delta paths are not sorted and unique")
+    actual_paths = [line for line in git(root, "diff", "--name-only", "--no-renames", prior_head, current_head).splitlines() if line]
+    if actual_paths != delta_paths:
+        fail("review context delta paths do not match the prior-head to current-head diff")
+    expected_delta_digest = hashlib.sha256(json.dumps(
+        sorted(delta_paths), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")).hexdigest()
+    if context.get("delta_paths_digest") != expected_delta_digest:
+        fail("review context delta paths digest is invalid")
+    expected_patch_digest = hashlib.sha256(
+        git_bytes(root, "diff", "--binary", "--no-renames", prior_head, current_head)
+    ).hexdigest()
+    if context.get("delta_patch_digest") != expected_patch_digest:
+        fail("review context patch digest does not match the prior-head to current-head diff")
+
+
 def validate_packet(root: Path, packet: dict[str, object]) -> None:
     if packet.get("schema") != SCHEMA:
         fail(f"unsupported packet schema: {packet.get('schema')}")
@@ -197,6 +329,11 @@ def validate_packet(root: Path, packet: dict[str, object]) -> None:
         fail(f"governance refs must include: {', '.join(sorted(required))}")
     for value in governance + scoped:
         repo_reference(root, str(value), "packet reference")
+    review_context = packet.get("review_context")
+    if review_context is not None:
+        if not isinstance(review_context, dict):
+            fail("packet review_context must be an object")
+        validate_incremental_context(root, review_context, task_uid, str(identity["head"]))
     if packet.get("packet_digest") != canonical_digest(packet):
         fail("packet digest mismatch")
 
@@ -257,6 +394,16 @@ def review_admission(root: Path, packet_path: Path, plan_path: Path,
             fail("bootstrap snapshot has an invalid bootstrap epoch")
         if source_identity.get("bootstrap_epoch") != snapshot_epoch:
             fail("v2 source review bootstrap epoch does not match bootstrap snapshot")
+
+    plan_context = plan.get("incremental_review_context")
+    packet_context = packet.get("review_context")
+    if plan_context is None:
+        if packet_context is not None:
+            fail("packet carries review context absent from its review plan")
+    else:
+        if not isinstance(plan_context, dict) or packet_context != plan_context:
+            fail("packet review context does not match its review plan")
+        validate_incremental_context(root, plan_context, task_uid, str(identity["head"]))
 
     canonical_packet_dir = (root / ".pm" / "scratch" / task_uid / "slice-packets").resolve()
     if packet_path.parent != canonical_packet_dir:
@@ -355,6 +502,10 @@ def review_admission(root: Path, packet_path: Path, plan_path: Path,
         "integration_base_oid": integration_base,
         "review_plan_schema": plan_schema,
         "source_review_digest": plan.get("source_review_digest", plan.get("relevant_evidence_digest")),
+        "incremental_review_context_digest": (
+            hashlib.sha256(json.dumps(plan_context, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+            if isinstance(plan_context, dict) else None
+        ),
         "role": packet_role,
         "slice_id": packet_slice,
         "packet_digest": packet["packet_digest"],
@@ -394,6 +545,7 @@ def parser() -> argparse.ArgumentParser:
     create.add_argument("--return-contract", required=True)
     create.add_argument("--validation-command", required=True)
     create.add_argument("--formal-sink", required=True)
+    create.add_argument("--review-plan", help="canonical review plan whose advisory context is embedded in this packet")
     create.add_argument("--out")
     validate = sub.add_parser("validate")
     validate.add_argument("packet")
@@ -432,6 +584,21 @@ def main() -> int:
     loop_admission = admission(root, task, facts['base_sha'], facts['head'])
     governance = [repo_reference(root, item, "governance-ref") for item in args.governance_ref]
     scoped = [repo_reference(root, item, "scoped-ref") for item in args.scoped_ref]
+    review_context: dict[str, object] | None = None
+    if args.review_plan:
+        review_plan_path = resolve_path(root, args.review_plan)
+        canonical_plan_dir = (root / ".pm" / "scratch" / args.task_uid / "review-plans").resolve()
+        if review_plan_path.parent != canonical_plan_dir:
+            fail("--review-plan must be a canonical task review plan")
+        review_plan = load_object(review_plan_path, "review plan")
+        if review_plan.get("task_uid") != args.task_uid or review_plan.get("frozen_head") != facts["head"]:
+            fail("--review-plan task or frozen head does not match packet")
+        candidate_context = review_plan.get("incremental_review_context")
+        if candidate_context is not None:
+            if not isinstance(candidate_context, dict):
+                fail("review plan incremental context must be an object")
+            validate_incremental_context(root, candidate_context, args.task_uid, str(facts["head"]))
+            review_context = candidate_context
     packet: dict[str, object] = {
         "schema": SCHEMA,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -459,6 +626,8 @@ def main() -> int:
             "collaboration_boundary": bounded(args.collaboration_boundary, "context.collaboration_boundary"),
         },
     }
+    if review_context is not None:
+        packet["review_context"] = review_context
     packet["slice"]["full_history_escalation_reason"] = bounded(
         args.full_history_escalation_reason,
         "slice.full_history_escalation_reason",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 from pathlib import Path
 import subprocess
@@ -80,6 +81,36 @@ class ReviewPlanTests(unittest.TestCase):
         )
         self.assertEqual(0, result.returncode, result.stderr)
         return json.loads(result.stdout)
+
+    def complete_collected_plan(self, plan: dict[str, object]) -> None:
+        preflight = plan["preflight"]
+        assert isinstance(preflight, dict)
+        ledger_path = Path(str(preflight["ledger_path"]))
+        rows = []
+        for item in plan["expected_slices"]:
+            assert isinstance(item, dict)
+            artifact_path = ledger_path.parent / f"{item['slice_id']}.json"
+            artifact_path.write_text(json.dumps({
+                "role": item["role"], "slice_id": item["slice_id"],
+                "task_uid": TASK, "head": plan["frozen_head"], "epoch": plan["epoch"],
+                "status": "completed", "disposition": "no_findings",
+                "findings": [], "residual_risk": "none",
+            }), encoding="utf-8")
+            rows.append({
+                "role": item["role"], "slice_id": item["slice_id"],
+                "task_uid": TASK, "head": plan["frozen_head"], "epoch": plan["epoch"],
+                "status": "completed",
+                "artifact_digest": hashlib.sha256(artifact_path.read_bytes()).hexdigest(),
+                "artifacts": [str(artifact_path)],
+            })
+        ledger_path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
+        ledger_digest = hashlib.sha256(ledger_path.read_bytes()).hexdigest()
+        Path(str(plan["collection_path"])).write_text(json.dumps({
+            "schema": "oasis7-review-collection/v1", "status": "passed",
+            "epoch": plan["epoch"], "task_uid": TASK, "frozen_head": plan["frozen_head"],
+            "ledger_digest": ledger_digest,
+            "roles": sorted(str(item["role"]) for item in plan["expected_slices"]),
+        }), encoding="utf-8")
 
     def write_receipt(self, path: Path, *, base_oid: str, head_oid: str) -> None:
         path.write_text(json.dumps({
@@ -351,6 +382,58 @@ class ReviewPlanTests(unittest.TestCase):
             ok=False,
         )
         self.assertIn("duplicate manual role", result.stderr.lower())
+
+    def test_prior_review_context_binds_real_prior_head_delta(self) -> None:
+        prior_path = self.root / ".pm/scratch" / TASK / "review-plans" / "prior.json"
+        prior = self.plan(
+            "--out", str(prior_path),
+            "--preflight-dir", str(self.root / ".pm/scratch" / TASK / "prior-preflight"),
+        )
+        self.complete_collected_plan(prior)
+        prior_bytes = prior_path.read_bytes()
+
+        (self.root / "repair.txt").write_text("repair\n", encoding="utf-8")
+        self.git("add", "repair.txt")
+        self.git("commit", "-m", "repair")
+        self.head = self.git("rev-parse", "HEAD")
+        current_path = self.root / ".pm/scratch" / TASK / "review-plans" / "current.json"
+
+        current = self.plan(
+            "--prior-review-plan", str(prior_path),
+            "--out", str(current_path),
+        )
+        context = current["incremental_review_context"]
+        self.assertEqual("oasis7-review-context/v1", context["schema"])
+        self.assertEqual(prior["frozen_head"], context["prior_head_oid"])
+        self.assertEqual(self.head, context["current_head_oid"])
+        self.assertEqual(["repair.txt"], context["delta_paths"])
+        self.assertEqual(
+            hashlib.sha256(prior_bytes).hexdigest(),
+            context["prior_plan_digest"],
+        )
+        self.assertNotEqual(prior["epoch"], current["epoch"])
+
+    def test_prior_review_context_rejects_tampered_prior_identity(self) -> None:
+        prior_path = self.root / ".pm/scratch" / TASK / "review-plans" / "tampered.json"
+        prior = self.plan(
+            "--out", str(prior_path),
+            "--preflight-dir", str(self.root / ".pm/scratch" / TASK / "prior-preflight"),
+        )
+        self.complete_collected_plan(prior)
+        tampered = json.loads(prior_path.read_text(encoding="utf-8"))
+        tampered["relevant_evidence_digest"] = "c" * 64
+        prior_path.write_text(json.dumps(tampered), encoding="utf-8")
+
+        (self.root / "repair.txt").write_text("repair\n", encoding="utf-8")
+        self.git("add", "repair.txt")
+        self.git("commit", "-m", "repair")
+        self.head = self.git("rev-parse", "HEAD")
+        result = self.run_plan(
+            "--prior-review-plan", str(prior_path),
+            "--out", str(self.root / ".pm/scratch" / TASK / "review-plans" / "current.json"),
+            ok=False,
+        )
+        self.assertRegex(result.stderr.lower(), r"prior.*digest|prior.*identity|prior.*plan")
 
 
 if __name__ == "__main__":

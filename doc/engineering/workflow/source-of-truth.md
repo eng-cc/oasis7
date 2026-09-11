@@ -744,6 +744,7 @@ A nonblocking improvement may remain unchanged in this PR when its benefit is lo
 
 Use the existing evidence-backed no-change disposition path before resolving a GitHub thread. For formal role findings, preserve the immutable return and satisfy the role-finding resolution contract below: evidence-backed rejection uses `rejected_with_evidence`; a justified nonblocking no-change decision uses `non_actionable` only when evidence establishes why no change is required for this PR. It must never relabel a real blocker to bypass a gate. This guidance adds no disposition or lifecycle state and changes no resolver permissions. Required checks, requested changes, thread/disposition readback, frozen-head review, holds and merge authorization remain governed by the existing gates; triage alone does not make the PR merge-ready.
 
+Before pushing a repair, inventory all comments currently available and record an evidence-backed disposition for each. Batch only compatible accepted repairs that share the current source scope and can use one focused verification and push/CI cycle; a newly discovered blocker remains in scope and must be handled. Comments arriving after triage require a fresh inventory. There is no arbitrary cycle cap; batching never carries approval across a changed source head: after a push, prior review returns and any prior plan are context only, while the new epoch, current-head CI and all required roles remain mandatory.
 #### Pre-PR review packet
 
 A passed packet in GitHub task issue evidence comments contains:
@@ -760,6 +761,8 @@ A passed packet in GitHub task issue evidence comments contains:
 
 The immutable ledger matches `Review Roles` and `Source Head`, with one return per required role; each human-operated return binds slice ID, role, activation/context mode, actual runtime or unverifiable reason, artifact digest, both verdicts, disposition, and residual risk.
 The repository validates role coverage, head binding, and artifact integrity; the GitHub task issue remains the evidence sink. `n/a` ledgers and fixtures fail closed for live tasks.
+
+An optional `--prior-review-plan <completed-plan>` supplies incremental context only. The plan helper accepts it only when the prior plan, batch, completed collection and ledger are intact, and records the prior/current heads, exact changed paths and actual prior-head-to-current-head patch digest. Passing `--review-plan <current-plan>` to task-packet creation embeds that context with `authority=context_only`; it never supplies a current approval, role return, CI result or merge authority. Source changes still create a new review epoch and require current-head CI plus every expected role. Roles affected by the delta may focus their assessment on it; every other required role still confirms current impact in the existing evidence and residual risk. Uncertainty, authority or policy drift, an uncovered finding, or invalid/incomplete prior evidence requires full assessment.
 
 ##### Role-finding resolution contract
 

@@ -277,6 +277,44 @@ class PacketTest(unittest.TestCase):
             self.assertNotEqual(0, result.returncode, result.stdout)
         return result
 
+    def write_incremental_prior(self) -> tuple[Path, str, str, Path]:
+        prior_head = self.git("rev-parse", "HEAD")
+        expected_slices = [{"role": "qa_engineer", "slice_id": "qa-review"}]
+        batch_identity = {
+            "task_uid": TASK_UID, "frozen_head": prior_head,
+            "relevant_evidence_digest": "b" * 64,
+            "expected_slices": expected_slices,
+        }
+        prior_epoch = hashlib.sha256(json.dumps(
+            batch_identity, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")).hexdigest()
+        prior_path = self.repo / ".pm/scratch" / TASK_UID / "review-plans" / "prior.json"
+        ledger_path = self.repo / ".pm/scratch" / TASK_UID / "prior-ledger.jsonl"
+        batch_path = self.repo / ".pm/scratch" / TASK_UID / "review-batches" / f"{prior_epoch}.json"
+        collection_path = batch_path.with_name(f"{prior_epoch}.collection.json")
+        prior_path.parent.mkdir(parents=True, exist_ok=True)
+        ledger_path.parent.mkdir(parents=True, exist_ok=True)
+        collection_path.parent.mkdir(parents=True, exist_ok=True)
+        ledger_path.write_text("completed\n", encoding="utf-8")
+        ledger_digest = hashlib.sha256(ledger_path.read_bytes()).hexdigest()
+        batch_path.write_text(json.dumps({
+            "schema": "oasis7-review-batch/v1", "epoch": prior_epoch,
+            **batch_identity,
+        }), encoding="utf-8")
+        prior_path.write_text(json.dumps({
+            "schema": "oasis7-review-plan/v1", "task_uid": TASK_UID,
+            "frozen_head": prior_head, "epoch": prior_epoch,
+            "relevant_evidence_digest": "b" * 64, "roles": ["qa_engineer"],
+            "batch_path": str(batch_path), "expected_slices": expected_slices,
+            "preflight": {"ledger_path": str(ledger_path)},
+        }), encoding="utf-8")
+        collection_path.write_text(json.dumps({
+            "schema": "oasis7-review-collection/v1", "status": "passed",
+            "epoch": prior_epoch, "task_uid": TASK_UID, "frozen_head": prior_head,
+            "ledger_digest": ledger_digest, "roles": ["qa_engineer"],
+        }), encoding="utf-8")
+        return prior_path, prior_head, prior_epoch, collection_path
+
     def test_review_admission_requires_current_cross_bound_packet_plan_and_snapshot(self) -> None:
         packet = self.invoke(self.create_args()).stdout.splitlines()[0]
         snapshot = self.create_snapshot()
@@ -368,6 +406,77 @@ class PacketTest(unittest.TestCase):
         replacement["expected_slices"] = [{"role": "qa_engineer", "slice_id": "qa-review"}]
         plan.write_text(json.dumps(replacement), encoding="utf-8")
         self.review_admission(packet, plan, snapshot, ok=False)
+
+    def test_review_plan_context_is_consumed_by_packet_and_admission(self) -> None:
+        prior_path, prior_head, prior_epoch, collection_path = self.write_incremental_prior()
+        (self.repo / "repair.txt").write_text("repair\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.repo), "add", "repair.txt"], check=True)
+        subprocess.run(["git", "-C", str(self.repo), "commit", "-m", "repair"], check=True, capture_output=True)
+
+        packet_ref = f".pm/scratch/{TASK_UID}/slice-packets/qa-review.json"
+        plan = self.create_review_plan(packet_ref)
+        context = {
+            "schema": "oasis7-review-context/v1", "authority": "context_only",
+            "task_uid": TASK_UID, "prior_plan_path": str(prior_path.relative_to(self.repo)),
+            "prior_plan_digest": hashlib.sha256(prior_path.read_bytes()).hexdigest(),
+            "prior_head_oid": prior_head, "prior_epoch": prior_epoch,
+            "current_head_oid": self.git("rev-parse", "HEAD"),
+            "prior_source_review_digest": "b" * 64, "prior_integration_ci_digest": None,
+            "prior_roles": ["qa_engineer"], "delta_paths": ["repair.txt"],
+            "prior_collection_path": str(collection_path.relative_to(self.repo)),
+            "prior_collection_digest": hashlib.sha256(collection_path.read_bytes()).hexdigest(),
+            "prior_collection_ledger_digest": json.loads(collection_path.read_text())["ledger_digest"],
+            "delta_paths_digest": hashlib.sha256(json.dumps(
+                ["repair.txt"], separators=(",", ":"), sort_keys=True,
+            ).encode()).hexdigest(),
+            "delta_patch_digest": hashlib.sha256(subprocess.check_output(
+                ["git", "-C", str(self.repo), "diff", "--binary", "--no-renames", prior_head, self.git("rev-parse", "HEAD")],
+            )).hexdigest(),
+            "reviewer_guidance": "confirm impact",
+        }
+        plan_payload = json.loads(plan.read_text(encoding="utf-8"))
+        plan_payload["incremental_review_context"] = context
+        plan.write_text(json.dumps(plan_payload), encoding="utf-8")
+
+        packet = self.invoke(self.create_args() + ["--review-plan", str(plan)]).stdout.splitlines()[0]
+        snapshot = self.create_snapshot()
+        admitted = self.review_admission(packet, plan, snapshot)
+        admitted_payload = json.loads(admitted.stdout)
+        self.assertEqual("admitted", admitted_payload["status"])
+        self.assertTrue(admitted_payload["incremental_review_context_digest"])
+
+    def test_review_admission_rejects_packet_that_omits_plan_context(self) -> None:
+        prior_path, prior_head, prior_epoch, collection_path = self.write_incremental_prior()
+        (self.repo / "repair.txt").write_text("repair\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.repo), "add", "repair.txt"], check=True)
+        subprocess.run(["git", "-C", str(self.repo), "commit", "-m", "repair"], check=True, capture_output=True)
+        packet_ref = f".pm/scratch/{TASK_UID}/slice-packets/qa-review.json"
+        plan = self.create_review_plan(packet_ref)
+        context = {
+            "schema": "oasis7-review-context/v1", "authority": "context_only",
+            "task_uid": TASK_UID, "prior_plan_path": str(prior_path.relative_to(self.repo)),
+            "prior_plan_digest": hashlib.sha256(prior_path.read_bytes()).hexdigest(),
+            "prior_head_oid": prior_head, "prior_epoch": prior_epoch,
+            "current_head_oid": self.git("rev-parse", "HEAD"),
+            "prior_source_review_digest": "b" * 64, "prior_integration_ci_digest": None,
+            "prior_roles": ["qa_engineer"], "delta_paths": ["repair.txt"],
+            "prior_collection_path": str(collection_path.relative_to(self.repo)),
+            "prior_collection_digest": hashlib.sha256(collection_path.read_bytes()).hexdigest(),
+            "prior_collection_ledger_digest": json.loads(collection_path.read_text())["ledger_digest"],
+            "delta_paths_digest": hashlib.sha256(json.dumps(
+                ["repair.txt"], separators=(",", ":"), sort_keys=True,
+            ).encode()).hexdigest(),
+            "delta_patch_digest": hashlib.sha256(subprocess.check_output(
+                ["git", "-C", str(self.repo), "diff", "--binary", "--no-renames", prior_head, self.git("rev-parse", "HEAD")],
+            )).hexdigest(),
+            "reviewer_guidance": "confirm impact",
+        }
+        plan_payload = json.loads(plan.read_text(encoding="utf-8"))
+        plan_payload["incremental_review_context"] = context
+        plan.write_text(json.dumps(plan_payload), encoding="utf-8")
+        packet = self.invoke(self.create_args()).stdout.splitlines()[0]
+        rejected = self.review_admission(packet, plan, self.create_snapshot(), ok=False)
+        self.assertIn("review context", rejected.stderr.lower())
 
 
 if __name__ == "__main__":

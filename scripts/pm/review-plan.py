@@ -20,6 +20,7 @@ HEAD_RE = re.compile(r"[0-9a-f]{40,64}\Z")
 SHA_RE = re.compile(r"[0-9a-f]{64}\Z")
 SCHEMA = "oasis7-review-plan/v1"
 V2_SCHEMA = "oasis7-review-plan/v2"
+INCREMENTAL_CONTEXT_SCHEMA = "oasis7-review-context/v1"
 
 
 class ContractError(ValueError):
@@ -46,6 +47,145 @@ def load_json(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ContractError(f"JSON object required: {path}")
     return value
+
+
+def git_text(root: Path, *args: str) -> str:
+    result = subprocess.run(["git", "-C", str(root), *args], text=True, capture_output=True)
+    if result.returncode:
+        detail = result.stderr.strip() or result.stdout.strip() or "git command failed"
+        raise ContractError(detail)
+    return result.stdout
+
+
+def git_bytes(root: Path, *args: str) -> bytes:
+    result = subprocess.run(["git", "-C", str(root), *args], capture_output=True)
+    if result.returncode:
+        detail = result.stderr.decode(errors="replace").strip() or "git command failed"
+        raise ContractError(detail)
+    return result.stdout
+
+
+def validate_prior_plan(root: Path, path: Path, task_uid: str) -> tuple[dict[str, Any], str, dict[str, str]]:
+    """Validate prior plan identity before using it as advisory context."""
+    canonical_dir = (root / ".pm" / "scratch" / task_uid / "review-plans").resolve()
+    resolved = path.resolve()
+    if resolved.parent != canonical_dir:
+        raise ContractError("--prior-review-plan must be a canonical task review plan")
+    plan = load_json(resolved)
+    if plan.get("task_uid") != task_uid:
+        raise ContractError("prior review plan task UID does not match --task-uid")
+    schema = plan.get("schema")
+    if schema not in (SCHEMA, V2_SCHEMA):
+        raise ContractError("prior review plan has an unsupported schema")
+    epoch = plan.get("epoch")
+    if not isinstance(epoch, str) or not SHA_RE.fullmatch(epoch):
+        raise ContractError("prior review plan has an invalid epoch")
+    batch_raw = plan.get("batch_path")
+    batch_path = Path(str(batch_raw)).resolve() if isinstance(batch_raw, str) else None
+    canonical_batch = (root / ".pm" / "scratch" / task_uid / "review-batches" / f"{epoch}.json").resolve()
+    if batch_path != canonical_batch:
+        raise ContractError("prior review plan does not reference its canonical batch")
+    batch = load_json(canonical_batch)
+    batch_identity = {key: batch.get(key) for key in
+                      ("task_uid", "frozen_head", "relevant_evidence_digest", "expected_slices")}
+    if batch.get("schema") != "oasis7-review-batch/v1" or batch.get("epoch") != digest(batch_identity):
+        raise ContractError("prior review batch identity is invalid")
+    if plan.get("epoch") != batch.get("epoch") or plan.get("relevant_evidence_digest") != batch.get("relevant_evidence_digest"):
+        raise ContractError("prior review plan does not match its immutable batch")
+    if plan.get("frozen_head") != batch.get("frozen_head"):
+        raise ContractError("prior review plan head does not match its immutable batch")
+    if sorted(plan.get("expected_slices", []), key=lambda item: (item.get("role"), item.get("slice_id"))) != batch.get("expected_slices"):
+        raise ContractError("prior review plan slice set does not match its immutable batch")
+    expected_roles = [item.get("role") for item in plan.get("expected_slices", [])]
+    if plan.get("roles") != expected_roles or len(set(expected_roles)) != len(expected_roles):
+        raise ContractError("prior review plan roles do not match its slice set")
+    if sorted(expected_roles) != sorted(item.get("role") for item in batch.get("expected_slices", [])):
+        raise ContractError("prior review plan roles do not match its immutable batch")
+    preflight = plan.get("preflight")
+    if not isinstance(preflight, dict) or not isinstance(preflight.get("ledger_path"), str):
+        raise ContractError("prior review plan has no completed review ledger")
+    ledger_path = Path(preflight["ledger_path"]).resolve()
+    try:
+        ledger_bytes = ledger_path.read_bytes()
+    except OSError as exc:
+        raise ContractError(f"cannot read prior review ledger: {exc}") from exc
+    try:
+        ledger_path.relative_to(root.resolve())
+    except ValueError as exc:
+        raise ContractError("prior review ledger escapes the repository") from exc
+    ledger_digest = sha256_bytes(ledger_bytes)
+    collection_path = canonical_batch.with_name(f"{epoch}.collection.json")
+    collection = load_json(collection_path)
+    if (collection.get("schema") != "oasis7-review-collection/v1" or collection.get("status") != "passed"
+            or collection.get("task_uid") != task_uid or collection.get("epoch") != epoch
+            or collection.get("frozen_head") != batch.get("frozen_head")
+            or collection.get("ledger_digest") != ledger_digest):
+        raise ContractError("prior review collection is missing, incomplete, or does not match its ledger")
+    if sorted(collection.get("roles", [])) != sorted(item.get("role") for item in batch.get("expected_slices", [])):
+        raise ContractError("prior review collection roles do not match its immutable batch")
+    prior_digest = plan.get("relevant_evidence_digest")
+    if not isinstance(prior_digest, str) or not SHA_RE.fullmatch(prior_digest):
+        raise ContractError("prior review plan evidence digest is invalid")
+    if schema == V2_SCHEMA:
+        identity_module = load_identity_module()
+        try:
+            if plan.get("source_review_digest") != identity_module.source_review_digest(plan.get("source_review_identity")):
+                raise ContractError("prior v2 source review digest is invalid")
+            if plan.get("integration_ci_digest") != identity_module.integration_ci_digest(plan.get("integration_ci_identity")):
+                raise ContractError("prior v2 integration CI digest is invalid")
+        except (TypeError, ValueError) as exc:
+            raise ContractError(f"prior v2 review identity is invalid: {exc}") from exc
+        if prior_digest != plan.get("source_review_digest"):
+            raise ContractError("prior v2 evidence digest does not match source review digest")
+        provenance = plan.get("integration_ci_provenance")
+        if provenance != {"live_validation": "ci-ready-receipt-live", "trusted_integration_artifact": True}:
+            raise ContractError("prior v2 integration provenance is not trusted")
+    return plan, sha256_bytes(resolved.read_bytes()), {
+        "path": collection_path.relative_to(root).as_posix(),
+        "digest": sha256_bytes(collection_path.read_bytes()),
+        "ledger_digest": ledger_digest,
+    }
+
+
+def prior_review_context(root: Path, path: str, task_uid: str, current_head: str) -> dict[str, Any]:
+    plan, prior_plan_digest, collection = validate_prior_plan(root, Path(path), task_uid)
+    prior_head = plan.get("frozen_head")
+    if not isinstance(prior_head, str) or not HEAD_RE.fullmatch(prior_head):
+        raise ContractError("prior review plan frozen head is invalid")
+    if prior_head == current_head:
+        raise ContractError("prior review context requires a different prior head")
+    ancestor = subprocess.run(
+        ["git", "-C", str(root), "merge-base", "--is-ancestor", prior_head, current_head],
+        text=True, capture_output=True,
+    )
+    if ancestor.returncode != 0:
+        if ancestor.returncode == 1:
+            raise ContractError("prior review head is not an ancestor of the current head")
+        raise ContractError(ancestor.stderr.strip() or "cannot validate prior review ancestry")
+    delta_paths = sorted(line for line in git_text(root, "diff", "--name-only", "--no-renames", prior_head, current_head).splitlines() if line)
+    if len(delta_paths) != len(set(delta_paths)):
+        raise ContractError("prior review delta contains duplicate paths")
+    relative_path = Path(path).resolve().relative_to(root.resolve()).as_posix()
+    return {
+        "schema": INCREMENTAL_CONTEXT_SCHEMA,
+        "authority": "context_only",
+        "task_uid": task_uid,
+        "prior_plan_path": relative_path,
+        "prior_plan_digest": prior_plan_digest,
+        "prior_head_oid": prior_head,
+        "prior_epoch": plan.get("epoch"),
+        "current_head_oid": current_head,
+        "prior_source_review_digest": plan.get("source_review_digest", plan.get("relevant_evidence_digest")),
+        "prior_integration_ci_digest": plan.get("integration_ci_digest"),
+        "prior_roles": plan.get("roles"),
+        "prior_collection_path": collection["path"],
+        "prior_collection_digest": collection["digest"],
+        "prior_collection_ledger_digest": collection["ledger_digest"],
+        "delta_paths": delta_paths,
+        "delta_paths_digest": digest(sorted(delta_paths)),
+        "delta_patch_digest": sha256_bytes(git_bytes(root, "diff", "--binary", "--no-renames", prior_head, current_head)),
+        "reviewer_guidance": "Use this diff to focus assessment; confirm impact explicitly and escalate to full review for uncertainty or authority drift.",
+    }
 
 
 def ci_receipt_authority(path: Path, task_uid: str, frozen_head: str) -> tuple[str, str, str | None]:
@@ -406,6 +546,7 @@ def main() -> int:
     parser.add_argument("--role-contract-digest")
     parser.add_argument("--review-policy-digest")
     parser.add_argument("--input-contract-digest")
+    parser.add_argument("--prior-review-plan", help="canonical prior plan used only as incremental review context")
     args = parser.parse_args()
     try:
         if not TASK_RE.fullmatch(args.task_uid):
@@ -488,6 +629,10 @@ def main() -> int:
             if integration_identity["source_head_oid"] != args.head or integration_identity["task_uid"] != args.task_uid:
                 raise ContractError("v2 integration CI identity does not match task/source head")
             source_digest = identity_module.source_review_digest(source_identity)
+        incremental_context = (
+            prior_review_context(root, args.prior_review_plan, args.task_uid, args.head)
+            if args.prior_review_plan else None
+        )
         slices = expected_slices(args.task_uid, args.head, source_digest, comparison_ref, comparison_oid, roles)
         batch, batch_reused = ensure_batch(root, args.task_uid, args.head, source_digest, slices)
         epoch = str(batch["epoch"])
@@ -537,6 +682,8 @@ def main() -> int:
                 comparable = lambda value: {key: item for key, item in value.items() if key != "reused"}
                 if comparable(recorded_preflight) != comparable(preflight_result):
                     raise ContractError("existing review plan preflight does not match its immutable artifacts")
+            if args.prior_review_plan and plan.get("incremental_review_context") != incremental_context:
+                raise ContractError("existing review plan incremental context does not match requested prior plan")
             result: dict[str, object] = {**plan, "reused": True}
             if args.review_schema == V2_SCHEMA and receipt_value is not None:
                 result["latest_integration_ci_digest"] = load_identity_module().integration_ci_digest(
@@ -549,6 +696,8 @@ def main() -> int:
                       "packet_refs": packet_refs(args.task_uid, slices), "reused": batch_reused}
             if preflight_result is not None:
                 result["preflight"] = preflight_result
+            if incremental_context is not None:
+                result["incremental_review_context"] = incremental_context
             write_plan(plan_path, result)
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return 0
