@@ -1,14 +1,22 @@
 use super::*;
 
 fn bound_provider_lease_test_world(agent_ids: &[&str]) -> RuntimeWorld {
+    bound_provider_lease_test_world_with_binding(agent_ids, "pending", None)
+}
+
+fn bound_provider_lease_test_world_with_binding(
+    agent_ids: &[&str],
+    finality_status: &str,
+    finality_block_hash: Option<String>,
+) -> RuntimeWorld {
     let mut world = RuntimeWorld::new();
     world
         .bind_cognition_runtime(
             "lease-recovery-world",
             "lease-recovery-branch",
             0,
-            None,
-            "pending",
+            finality_block_hash,
+            finality_status,
             0,
         )
         .expect("Runtime cognition binding");
@@ -467,6 +475,173 @@ fn binding_changed_stale_lease_checkpoint_retry_reconciles_terminal_release() {
     );
     let _ = std::fs::remove_file(path);
     let _ = std::fs::remove_file(blocked_backup);
+}
+
+#[test]
+fn committed_marker_recovery_settles_provider_lease_before_clearing_mirror() {
+    // The provider fixture installs a finalized capability authority. Commit
+    // validation requires the equivalent verified runtime finality binding,
+    // so seed the fixture with a valid shared finality hash from the start.
+    let mut world = bound_provider_lease_test_world_with_binding(
+        &["agent-a"],
+        "verified",
+        Some(
+            crate::simulator::h_v1("oasis7.test.committed-marker-finality.v1", &"finality")
+                .to_string(),
+        ),
+    );
+    let context =
+        valid_test_provider_context(&world, "agent-a", "turn-committed", "request-committed");
+    let lease = reserve_test_provider_lease(&mut world, &context);
+    let binding = world
+        .current_cognition_runtime_binding()
+        .expect("Runtime cognition binding");
+    let request = crate::runtime::RuntimeCognitionCommitRequestV1 {
+        agent_id: context.request_context.agent_subject.clone(),
+        agent_session_id: context.request_context.agent_session_id.clone(),
+        agent_turn_id: context.request_context.agent_turn_id.clone(),
+        decision_request_id: context.request_context.decision_request_id.clone(),
+        retry_seq: context.request_context.retry_seq,
+        transport_attempt: context.request_context.transport_attempt,
+        request_digest: context.request_context.request_digest.to_string(),
+        observation_digest: context.request_context.observation_digest.to_string(),
+        context_digest:
+            crate::viewer::runtime_live::control_plane::llm_sidecar::runtime_provider_context_digest(
+                &context.request_context,
+            ),
+        capability_snapshot_hash: crate::simulator::h_v1(
+            "oasis7.runtime.manifest.v1",
+            &world.capability_authorization_root(),
+        )
+        .to_string(),
+        authority_context_hash: crate::simulator::h_v1(
+            "oasis7.runtime.authority-context.v1",
+            &world.capability_authorization_root(),
+        )
+        .to_string(),
+        captured_base_binding: crate::runtime::RuntimeCognitionBaseBindingV1 {
+            world_id: binding.world_id,
+            branch_id: binding.branch_id,
+            finality_epoch: binding.finality_epoch,
+            finality_block_hash: binding.finality_block_hash.map(|hash| hash.to_string()),
+            finality_status: binding.finality_status,
+            base_tick: binding.base_tick,
+            base_world_hash: binding.base_world_hash.to_string(),
+            reorg_epoch: binding.reorg_epoch,
+            runtime_manifest_hash: binding.runtime_manifest_hash.to_string(),
+        },
+    };
+    let mut response = crate::runtime::RuntimeCognitionResponseArtifactV1 {
+        schema_version: 1,
+        context_discriminator:
+            crate::runtime::RuntimeCognitionResponseArtifactV1::CONTEXT_DISCRIMINATOR.to_string(),
+        context_version: crate::runtime::RuntimeCognitionResponseArtifactV1::CONTEXT_VERSION,
+        agent_session_id: request.agent_session_id.clone(),
+        agent_turn_id: request.agent_turn_id.clone(),
+        decision_request_id: request.decision_request_id.clone(),
+        retry_seq: request.retry_seq,
+        transport_attempt: request.transport_attempt,
+        request_digest: request.request_digest.clone(),
+        response_digest: crate::simulator::h_v1(
+            "oasis7.test.committed-marker-response.v1",
+            &"response",
+        )
+        .to_string(),
+        artifact_digest: String::new(),
+    };
+    response.refresh_artifact_digest();
+    world
+        .commit_cognition_action(
+            request,
+            RuntimeAction::MoveAgent {
+                agent_id: "agent-a".to_string(),
+                to: GeoPos::new(1, 1, 0),
+            },
+            response,
+        )
+        .expect("commit Runtime provider response");
+
+    let path = std::env::temp_dir().join(format!(
+        "oasis7-provider-committed-lease-recovery-{}-{}.json",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos()
+    ));
+    let mut first = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    first.configure_provider_lineage_store(path.clone());
+    first.provider_agent_ids.insert("agent-a".to_string());
+    first
+        .provider_active_turns
+        .insert("agent-a".to_string(), context.clone());
+    first
+        .provider_contexts
+        .insert("agent-a".to_string(), context.clone());
+    first
+        .provider_cognition_leases
+        .insert("agent-a".to_string(), lease.clone());
+    first
+        .persist_provider_lineage()
+        .expect("persist committed lease recovery checkpoint");
+
+    let mut restored = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    restored.configure_provider_lineage_store(path.clone());
+    restored
+        .restore_provider_lineage(&world)
+        .expect("restore committed lease recovery checkpoint");
+    assert!(
+        restored.provider_cognition_leases.contains_key("agent-a"),
+        "commit-marker recovery must retain the lease until Runtime settlement"
+    );
+    assert_eq!(
+        world
+            .cognition_economy()
+            .expect("read economy before recovery settlement")
+            .leases
+            .get(lease.lease_id.as_str())
+            .expect("committed lease")
+            .status,
+        crate::runtime::CognitionLeaseStatusV1::Reserved
+    );
+    restored
+        .settle_committed_provider_cognition_leases(&mut world)
+        .expect("committed marker must settle the exact Runtime lease");
+    assert!(
+        restored.provider_cognition_leases.is_empty(),
+        "lease mirror is cleared only after settlement succeeds"
+    );
+    let economy = world
+        .cognition_economy()
+        .expect("read economy after recovery settlement");
+    assert_eq!(
+        economy
+            .leases
+            .get(lease.lease_id.as_str())
+            .expect("settled lease")
+            .status,
+        crate::runtime::CognitionLeaseStatusV1::Settled
+    );
+    assert_eq!(
+        economy
+            .receipts
+            .values()
+            .filter(|receipt| receipt.lease_id == lease.lease_id && receipt.operation == "settle")
+            .count(),
+        1,
+        "recovery settlement must emit exactly one receipt"
+    );
+    let checkpoint: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(&path).expect("read settled lease recovery checkpoint"),
+    )
+    .expect("decode settled lease recovery checkpoint");
+    assert!(
+        checkpoint["provider_cognition_leases"]
+            .as_object()
+            .is_some_and(serde_json::Map::is_empty),
+        "settled recovery must durably clear the sidecar lease mirror"
+    );
+    let _ = std::fs::remove_file(path);
 }
 
 #[test]

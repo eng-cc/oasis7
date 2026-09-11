@@ -74,7 +74,7 @@ pub(super) fn provider_context_identity_matches(
             == payer_support::provider_payer_id(&right.request_context).ok()
 }
 
-fn validate_provider_lease_identity(
+pub(super) fn validate_provider_lease_identity(
     agent_id: &str,
     request: &crate::simulator::ContinuousAgentRequestContextV1,
     lease: &crate::runtime::CognitionLeaseV1,
@@ -118,7 +118,7 @@ fn validate_provider_lease_identity(
     Ok(())
 }
 
-fn validate_provider_lease_binding(
+pub(super) fn validate_provider_lease_binding(
     world: &RuntimeWorld,
     agent_id: &str,
     request: &crate::simulator::ContinuousAgentRequestContextV1,
@@ -428,7 +428,7 @@ fn decode_provider_lineage_checkpoint(
     Ok((checkpoint, migrated))
 }
 
-fn committed_runtime_record_for_request(
+pub(super) fn committed_runtime_record_for_request(
     world: &RuntimeWorld,
     request: &crate::simulator::ContinuousAgentRequestContextV1,
 ) -> Result<Option<WorldCommitRecordV1>, String> {
@@ -831,6 +831,9 @@ impl RuntimeLlmSidecar {
                     .cloned()
             });
             let has_committed_wake = committed_wake.is_some();
+            let has_committed_lease = self
+                .provider_cognition_leases
+                .contains_key(agent_id.as_str());
             self.provider_terminal_states.insert(
                 agent_id.clone(),
                 ProviderTerminalState {
@@ -865,18 +868,21 @@ impl RuntimeLlmSidecar {
                 !decision_matches_commit_record(decision, &marker)
                     && !(decision.cognition.is_none() && decision.agent_id == marker.agent_id)
             });
-            self.provider_active_turns.remove(agent_id.as_str());
-            self.provider_contexts.remove(agent_id.as_str());
-            self.provider_retry_contexts.remove(agent_id.as_str());
-            self.provider_cognition_leases.remove(agent_id.as_str());
-            self.provider_recovery_pending.remove(agent_id.as_str());
+            if !has_committed_lease {
+                self.provider_active_turns.remove(agent_id.as_str());
+                self.provider_contexts.remove(agent_id.as_str());
+                self.provider_retry_contexts.remove(agent_id.as_str());
+                self.provider_recovery_pending.remove(agent_id.as_str());
+            }
             if !has_committed_wake {
                 self.provider_wake_recovery_pending
                     .remove(agent_id.as_str());
             }
             self.provider_wait_until.remove(agent_id.as_str());
-            self.pending_actions
-                .retain(|_, pending| pending.agent_id != agent_id);
+            if !has_committed_lease {
+                self.pending_actions
+                    .retain(|_, pending| pending.agent_id != agent_id);
+            }
             self.provider_continuation_proposals
                 .retain(|_, proposal| proposal.agent_id != agent_id);
             self.provider_continuation_recovery_pending
@@ -1010,8 +1016,12 @@ impl RuntimeLlmSidecar {
         let terminal_agents = self
             .provider_terminal_states
             .iter()
-            .filter_map(|(agent_id, terminal)| {
+            .filter_map(|(agent_id, _terminal)| {
                 if self.provider_wake_recovery_pending.contains_key(agent_id) {
+                    return None;
+                }
+                if self.provider_cognition_leases.contains_key(agent_id) {
+                    // Keep the request/lease mirror for mutable settlement.
                     return None;
                 }
                 let context = self.provider_contexts.get(agent_id)?;
