@@ -363,7 +363,7 @@ fn rust_host_state_projects_module_visual_entities_with_resolved_anchors_only() 
             "module_id": "module-z",
             "kind": "opaque_kind",
             "label": "Stored label",
-            "anchor": { "type": "absolute", "data": { "x_cm": 7100000, "y_cm": 1200000, "z_cm": 80 } }
+            "anchor": { "type": "absolute", "data": { "pos": { "x_cm": 7100000, "y_cm": 1200000, "z_cm": 80 } } }
         },
         "a-location": {
             "entity_id": "a-location",
@@ -429,7 +429,7 @@ fn rust_host_state_keeps_module_visual_selection_as_a_current_entry() {
             "label": "Relay Seven",
             "anchor": {
                 "type": "absolute",
-                "data": { "x_cm": 7_100_000, "y_cm": 1_200_000, "z_cm": 80 }
+                "data": { "pos": { "x_cm": 7_100_000, "y_cm": 1_200_000, "z_cm": 80 } }
             }
         }
     });

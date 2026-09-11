@@ -55,6 +55,22 @@ describe("pixel world visual fixtures", () => {
     ).toBe(240_000);
   });
 
+  it("uses the simulator ModuleVisualAnchor data envelope for module fixture anchors", () => {
+    window.history.replaceState({}, "", "/viewer.html?test_api=1&connect=0&pixel_world_visual_fixture=module_visual_entities");
+
+    expect(installPixelWorldVisualFixtureHook()).toBe("module_visual_entities");
+    const entities = window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.module_visual_entities().model.module_visual_entities;
+
+    expect(entities["module-absolute"].anchor).toEqual({
+      type: "absolute",
+      data: { pos: { x_cm: 1_850_000, y_cm: 3_600_000, z_cm: 0 } },
+    });
+    expect(entities["module-agent"].anchor).toEqual({
+      type: "agent",
+      data: { agent_id: "agent-0" },
+    });
+  });
+
   it("registers a spatially distinct healthy/low/zero Micro Depot stock-runway fixture", () => {
     window.history.replaceState({}, "", "/viewer.html?test_api=1&connect=0&pixel_world_visual_fixture=micro_depot_stock_runway");
 

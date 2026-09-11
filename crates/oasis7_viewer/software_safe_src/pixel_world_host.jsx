@@ -242,19 +242,50 @@ export function buildPixelWorldRenderInput(locale = core.state.uiLocale) {
     },
   };
 }
-function PixelWorldCanvasRenderer(props) {
+export function PixelWorldCanvasRenderer(props) {
   let canvasRef;
   const [stageSize, setStageSize] = createSignal({ width: 960, height: 540 });
-  onMount(() => {
-    const update = () => {
-      const rect = canvasRef?.getBoundingClientRect();
-      if (rect?.width && rect?.height) setStageSize({ width: rect.width, height: rect.height });
+  const [rendererDimensions, setRendererDimensions] = createSignal({ width: 960, height: 540 });
+  let metricRefreshGeneration = 0;
+  const updateCanvasMetrics = () => {
+    const rect = canvasRef?.getBoundingClientRect();
+    if (!rect?.width || !rect?.height) return;
+    const nextStage = { width: rect.width, height: rect.height };
+    const nextRenderer = {
+      width: Number(canvasRef?.width) || rect.width,
+      height: Number(canvasRef?.height) || rect.height,
     };
-    update();
-    if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(update);
-    observer.observe(canvasRef);
-    onCleanup(() => observer.disconnect());
+    setStageSize((previous) => previous.width === nextStage.width && previous.height === nextStage.height ? previous : nextStage);
+    setRendererDimensions((previous) => previous.width === nextRenderer.width && previous.height === nextRenderer.height ? previous : nextRenderer);
+  };
+  const scheduleCanvasMetricsRefresh = () => {
+    const generation = ++metricRefreshGeneration;
+    let remainingFrames = 2;
+    const refresh = () => {
+      if (generation !== metricRefreshGeneration) return;
+      updateCanvasMetrics();
+      remainingFrames -= 1;
+      if (remainingFrames > 0) requestAnimationFrame(refresh);
+    };
+    requestAnimationFrame(refresh);
+  };
+  const rendererSize = () => rendererDimensions();
+  onMount(() => {
+    updateCanvasMetrics();
+    const frame = requestAnimationFrame(updateCanvasMetrics);
+    let resizeObserver;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(updateCanvasMetrics);
+      resizeObserver.observe(canvasRef);
+    }
+    const mutationObserver = typeof MutationObserver === 'undefined' ? null : new MutationObserver(updateCanvasMetrics);
+    mutationObserver?.observe(canvasRef, { attributes: true, attributeFilter: ['width', 'height'] });
+    onCleanup(() => {
+      metricRefreshGeneration += 1;
+      cancelAnimationFrame(frame);
+      resizeObserver?.disconnect();
+      mutationObserver?.disconnect();
+    });
   });
   const hotspotFocus = createHotspotFocusRestoration();
   const visualState = () => pixelWorldVisualState(props.renderState());
@@ -271,7 +302,11 @@ function PixelWorldCanvasRenderer(props) {
   onMount(() => onCleanup(installPixelWorldMobileSelectionSafeArea(() => canvasRef?.closest(".pixel-world-canvas"))));
   createEffect(() => {
     props.cameraState?.();
+    props.rendererStatus?.();
+    props.renderState?.();
     stageSize();
+    updateCanvasMetrics();
+    scheduleCanvasMetricsRefresh();
     requestAnimationFrame(() => applyPixelWorldMobileSelectionSafeArea(canvasRef?.closest('.pixel-world-canvas')));
   });
   createEffect(() => {
@@ -326,7 +361,7 @@ function PixelWorldCanvasRenderer(props) {
           onHover={props.onHover}
         />
         </>}>
-          <PixelWorldRendererTargets locale={props.locale} renderState={props.renderState} selection={props.selection} cameraState={props.cameraState} stageSize={stageSize} onSelect={props.onSelect} onHover={props.onHover} />
+          <PixelWorldRendererTargets locale={props.locale} renderState={props.renderState} selection={props.selection} cameraState={props.cameraState} stageSize={stageSize} rendererSize={rendererSize} onSelect={props.onSelect} onHover={props.onHover} />
         </Show>
         <PixelWorldHostHotspotLayer locale={props.locale} renderState={props.renderState} cameraState={props.cameraState}
           rendererProjection={props.rendererProjection} stageSize={() => props.rendererProjection?.() ? stageSize() : undefined}

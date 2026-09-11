@@ -68,6 +68,25 @@ export function fieldValue(value, snakeName, camelName, fallback = undefined) {
   if (camelName && value[camelName] !== undefined) return value[camelName];
   return fallback;
 }
+const AUTHORITATIVE_LINK_KINDS = new Set([
+  "agent_assignment",
+  "route",
+  "logistics",
+  "logistics_route",
+  "supply_route",
+  "delivery_route",
+  "resource_flow",
+  "resource_transfer",
+  "material_transfer",
+  "material_transit",
+]);
+function hasCurrentRuntimeLinkAuthority(link) {
+  const kind = String(fieldValue(link, "kind", "kind", "")).trim();
+  return AUTHORITATIVE_LINK_KINDS.has(kind)
+    && fieldValue(link, "status", "status", null) === "active"
+    && fieldValue(link, "source_class", "sourceClass", null) === "runtime_projection"
+    && fieldValue(link, "freshness", "freshness", null) === "current";
+}
 function explicitLinkEndpointIds(link) {
   if (!link || typeof link !== "object") return { agent: [], location: [] };
   const endpoint = (names) => names.map((name) => fieldValue(link, name, name.replace(/_([a-z])/g, (_, character) => character.toUpperCase()), null)).filter((value) => value != null && String(value).trim()).map((value) => String(value).trim());
@@ -77,26 +96,25 @@ function explicitLinkEndpointIds(link) {
   };
   return explicit;
 }
-function hasAuthoritativeAssignment(agent) {
+function hasCurrentRuntimeRelation(agent, expectedKind) {
   const envelope = [agent?.relation, agent?.assignment].find((candidate) => candidate && typeof candidate === "object");
-  return envelope?.kind === "agent_assignment"
+  return fieldValue(envelope, "kind", "kind", null) === expectedKind
     && envelope?.status === "active"
     && envelope?.source_class === "runtime_projection"
     && envelope?.freshness === "current";
 }
 function linkReferencesSelection(link, selection, agents) {
   if (!selection?.id || !selection?.kind) return false;
+  if (!hasCurrentRuntimeLinkAuthority(link)) return false;
   const endpointIds = explicitLinkEndpointIds(link);
   if ((selection.kind === "agent" ? endpointIds.agent : endpointIds.location).includes(String(selection.id))) {
     return true;
   }
-  if (link?.kind !== "agent_assignment" || link?.status !== "active" || link?.source_class !== "runtime_projection" || link?.freshness !== "current") {
-    return false;
-  }
+  const linkKind = fieldValue(link, "kind", "kind", null);
   return agents.some((agent) => {
     const agentId = String(agent?.id || "").trim();
     const locationId = String(fieldValue(agent, "location_id", "locationId", "")).trim();
-    if (!agentId || !locationId || !hasAuthoritativeAssignment(agent)) {
+    if (!agentId || !locationId || !hasCurrentRuntimeRelation(agent, linkKind)) {
       return false;
     }
     if (link.id !== `link:${agentId}:${locationId}`) {

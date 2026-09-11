@@ -10315,14 +10315,14 @@ function pixelWorldModuleVisualEntitiesFixture() {
       module_id: "fixture-module",
       kind: "beacon",
       label: "Beacon marker",
-      anchor: { type: "absolute", data: { x_cm: 185e4, y_cm: 36e5, z_cm: 0 } }
+      anchor: { type: "absolute", data: { pos: { x_cm: 185e4, y_cm: 36e5, z_cm: 0 } } }
     },
     "module-relay": {
       entity_id: "module-relay",
       module_id: "fixture-module",
       kind: "relay",
       label: "Relay marker",
-      anchor: { type: "absolute", data: { x_cm: 185e4, y_cm: 36e5, z_cm: 0 } }
+      anchor: { type: "absolute", data: { pos: { x_cm: 185e4, y_cm: 36e5, z_cm: 0 } } }
     },
     "module-agent": {
       entity_id: "module-agent",
@@ -10850,6 +10850,11 @@ function fieldValue(value2, snakeName, camelName, fallback = void 0) {
   if (camelName && value2[camelName] !== void 0) return value2[camelName];
   return fallback;
 }
+const AUTHORITATIVE_LINK_KINDS = /* @__PURE__ */ new Set(["agent_assignment", "route", "logistics", "logistics_route", "supply_route", "delivery_route", "resource_flow", "resource_transfer", "material_transfer", "material_transit"]);
+function hasCurrentRuntimeLinkAuthority(link) {
+  const kind = String(fieldValue(link, "kind", "kind", "")).trim();
+  return AUTHORITATIVE_LINK_KINDS.has(kind) && fieldValue(link, "status", "status", null) === "active" && fieldValue(link, "source_class", "sourceClass", null) === "runtime_projection" && fieldValue(link, "freshness", "freshness", null) === "current";
+}
 function explicitLinkEndpointIds(link) {
   if (!link || typeof link !== "object") return {
     agent: [],
@@ -10862,23 +10867,22 @@ function explicitLinkEndpointIds(link) {
   };
   return explicit;
 }
-function hasAuthoritativeAssignment(agent) {
+function hasCurrentRuntimeRelation(agent, expectedKind) {
   const envelope = [agent?.relation, agent?.assignment].find((candidate) => candidate && typeof candidate === "object");
-  return envelope?.kind === "agent_assignment" && envelope?.status === "active" && envelope?.source_class === "runtime_projection" && envelope?.freshness === "current";
+  return fieldValue(envelope, "kind", "kind", null) === expectedKind && envelope?.status === "active" && envelope?.source_class === "runtime_projection" && envelope?.freshness === "current";
 }
 function linkReferencesSelection(link, selection, agents) {
   if (!selection?.id || !selection?.kind) return false;
+  if (!hasCurrentRuntimeLinkAuthority(link)) return false;
   const endpointIds = explicitLinkEndpointIds(link);
   if ((selection.kind === "agent" ? endpointIds.agent : endpointIds.location).includes(String(selection.id))) {
     return true;
   }
-  if (link?.kind !== "agent_assignment" || link?.status !== "active" || link?.source_class !== "runtime_projection" || link?.freshness !== "current") {
-    return false;
-  }
+  const linkKind = fieldValue(link, "kind", "kind", null);
   return agents.some((agent) => {
     const agentId = String(agent?.id || "").trim();
     const locationId = String(fieldValue(agent, "location_id", "locationId", "")).trim();
-    if (!agentId || !locationId || !hasAuthoritativeAssignment(agent)) {
+    if (!agentId || !locationId || !hasCurrentRuntimeRelation(agent, linkKind)) {
       return false;
     }
     if (link.id !== `link:${agentId}:${locationId}`) {
@@ -11783,31 +11787,73 @@ function forwardRendererTargetPointer(event) {
   }));
 }
 var _tmpl$$q = /* @__PURE__ */ template(`<button type=button class="pixel-world-entity pixel-world-renderer-target"data-renderer-target=true>`);
-function rendererEntityTargetStyle(entity, worldBounds, size, camera) {
+const RENDERER_TARGET_SIZE_PX = 44;
+const MODULE_CO_ANCHOR_RING_OFFSETS = [[-48, -48], [0, -48], [48, -48], [-48, 0], [48, 0], [-48, 48], [0, 48], [48, 48]];
+function positionKey(position) {
+  if (!position || typeof position !== "object") return null;
+  const x = Number(position.x_cm ?? position.xCm);
+  const y = Number(position.y_cm ?? position.yCm);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  const z = Number(position.z_cm ?? position.zCm ?? 0);
+  return `${x}|${y}|${Number.isFinite(z) ? z : 0}`;
+}
+function moduleCoAnchorOffset(index) {
+  const ring = Math.floor(index / MODULE_CO_ANCHOR_RING_OFFSETS.length) + 1;
+  const [x, y] = MODULE_CO_ANCHOR_RING_OFFSETS[index % MODULE_CO_ANCHOR_RING_OFFSETS.length];
+  return {
+    x: x * ring,
+    y: y * ring
+  };
+}
+function moduleTargetOffsets(visualState) {
+  const modules = visualState.moduleVisualEntities.filter((entity) => entity?.pos).slice().sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+  const parentPositions = [...visualState.agents.filter((entity) => entity?.pos), ...visualState.locations.filter((entity) => entity?.pos)].map((entity) => positionKey(entity.pos));
+  const offsets = /* @__PURE__ */ new Map();
+  modules.forEach((module, index) => {
+    const key = positionKey(module.pos);
+    const coAnchoredModules = key === null ? [] : modules.filter((other) => positionKey(other.pos) === key);
+    const coAnchorIndex = coAnchoredModules.findIndex((other) => other.id === module.id);
+    const hasParent = key !== null && parentPositions.includes(key);
+    offsets.set(module.id, hasParent || coAnchoredModules.length > 1 ? moduleCoAnchorOffset(coAnchorIndex >= 0 ? coAnchorIndex : index) : {
+      x: 0,
+      y: 0
+    });
+  });
+  return offsets;
+}
+function rendererEntityTargetStyle(entity, worldBounds, size, camera, screenOffset, rendererSize = size) {
   const {
     width,
     height
   } = size;
+  const rendererWidth = Number(rendererSize?.width) || width;
+  const rendererHeight = Number(rendererSize?.height) || height;
   const idLength = new TextEncoder().encode(entity.id || "").length;
-  const point = toCanvasPoint(entity.pos, worldBounds, width, height, camera) || toCanvasPoint({
-    x_cm: 36 + idLength * 29 % Math.max(40, width - 72),
-    y_cm: 44 + idLength * 17 % Math.max(48, height - 88)
+  const point = toCanvasPoint(entity.pos, worldBounds, rendererWidth, rendererHeight, camera) || toCanvasPoint({
+    x_cm: 36 + idLength * 29 % Math.max(40, rendererWidth - 72),
+    y_cm: 44 + idLength * 17 % Math.max(48, rendererHeight - 88)
   }, {
-    width_cm: width,
-    depth_cm: height
-  }, width, height, camera);
+    width_cm: rendererWidth,
+    depth_cm: rendererHeight
+  }, rendererWidth, rendererHeight, camera);
+  const offsetScaleX = rendererWidth / width;
+  const offsetScaleY = rendererHeight / height;
+  const x = (point.x + (Number(screenOffset?.x) || 0) * offsetScaleX) / rendererWidth * width;
+  const y = (point.y + (Number(screenOffset?.y) || 0) * offsetScaleY) / rendererHeight * height;
+  const halfTarget = RENDERER_TARGET_SIZE_PX / 2;
   return {
-    left: `${point.x / width * 100}%`,
-    top: `${point.y / height * 100}%`,
-    width: "44px",
-    height: "44px",
+    left: `${x / width * 100}%`,
+    top: `${y / height * 100}%`,
+    width: `${RENDERER_TARGET_SIZE_PX}px`,
+    height: `${RENDERER_TARGET_SIZE_PX}px`,
     transform: "translate(-50%, -50%)",
-    display: point.x + 22 <= 0 || point.y + 22 <= 0 || point.x - 22 >= width || point.y - 22 >= height ? "none" : void 0
+    display: x + halfTarget <= 0 || y + halfTarget <= 0 || x - halfTarget >= width || y - halfTarget >= height ? "none" : void 0
   };
 }
 function PixelWorldRendererTargets(props) {
   const state2 = createMemo(() => pixelWorldVisualState(props.renderState()));
   const isZh = () => isLocaleZh(props.locale());
+  const moduleOffsets = createMemo(() => moduleTargetOffsets(state2()));
   const entities = createMemo(() => new Map([...state2().agents.map((entity) => [JSON.stringify(["agent", entity.id]), entity]), ...(state2().worldBounds ? state2().locations.filter((entity) => entity.pos) : []).map((entity) => [JSON.stringify(["location", entity.id]), entity]), ...state2().moduleVisualEntities.filter((entity) => entity.pos).map((entity) => [JSON.stringify(["module_visual", entity.id]), entity])]));
   const keys = createMemo(() => [...entities().keys()]);
   return createComponent(For, {
@@ -11833,7 +11879,7 @@ function PixelWorldRendererTargets(props) {
         setAttribute(_el$, "data-pixel-world-location-marker", kind === "location" ? "true" : void 0);
         setAttribute(_el$, "data-pixel-world-module-marker", kind === "module_visual" ? "true" : void 0);
         createRenderEffect((_p$) => {
-          var _v$ = kind === "agent" ? entity().id : void 0, _v$2 = kind === "location" ? entity().id : void 0, _v$3 = kind === "module_visual" ? entity().id : void 0, _v$4 = kind === "module_visual" ? entity().kind : void 0, _v$5 = props.selection()?.kind === kind && props.selection()?.id === entity().id ? "true" : "false", _v$6 = props.selection()?.kind === kind && props.selection()?.id === entity().id, _v$7 = `${isZh() ? "选择" : "Select"} ${kind === "agent" ? pixelWorldReadableAgentLabel(entity(), entity().id, isZh()) : kind === "module_visual" ? pixelWorldReadableModuleLabel(entity(), entity().id, isZh()) : entity().label || entity().id}`, _v$8 = rendererEntityTargetStyle(entity(), state2().worldBounds, props.stageSize(), props.cameraState?.());
+          var _v$ = kind === "agent" ? entity().id : void 0, _v$2 = kind === "location" ? entity().id : void 0, _v$3 = kind === "module_visual" ? entity().id : void 0, _v$4 = kind === "module_visual" ? entity().kind : void 0, _v$5 = props.selection()?.kind === kind && props.selection()?.id === entity().id ? "true" : "false", _v$6 = props.selection()?.kind === kind && props.selection()?.id === entity().id, _v$7 = `${isZh() ? "选择" : "Select"} ${kind === "agent" ? pixelWorldReadableAgentLabel(entity(), entity().id, isZh()) : kind === "module_visual" ? pixelWorldReadableModuleLabel(entity(), entity().id, isZh()) : entity().label || entity().id}`, _v$8 = rendererEntityTargetStyle(entity(), state2().worldBounds, props.stageSize(), props.cameraState?.(), kind === "module_visual" ? moduleOffsets().get(entity().id) : void 0, props.rendererSize?.());
           _v$ !== _p$.e && setAttribute(_el$, "data-agent-id", _p$.e = _v$);
           _v$2 !== _p$.t && setAttribute(_el$, "data-location-id", _p$.t = _v$2);
           _v$3 !== _p$.a && setAttribute(_el$, "data-module-id", _p$.a = _v$3);
@@ -12272,19 +12318,56 @@ function PixelWorldCanvasRenderer(props) {
     width: 960,
     height: 540
   });
-  onMount(() => {
-    const update = () => {
-      const rect = canvasRef?.getBoundingClientRect();
-      if (rect?.width && rect?.height) setStageSize({
-        width: rect.width,
-        height: rect.height
-      });
+  const [rendererDimensions, setRendererDimensions] = createSignal({
+    width: 960,
+    height: 540
+  });
+  let metricRefreshGeneration = 0;
+  const updateCanvasMetrics = () => {
+    const rect = canvasRef?.getBoundingClientRect();
+    if (!rect?.width || !rect?.height) return;
+    const nextStage = {
+      width: rect.width,
+      height: rect.height
     };
-    update();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(update);
-    observer.observe(canvasRef);
-    onCleanup(() => observer.disconnect());
+    const nextRenderer = {
+      width: Number(canvasRef?.width) || rect.width,
+      height: Number(canvasRef?.height) || rect.height
+    };
+    setStageSize((previous) => previous.width === nextStage.width && previous.height === nextStage.height ? previous : nextStage);
+    setRendererDimensions((previous) => previous.width === nextRenderer.width && previous.height === nextRenderer.height ? previous : nextRenderer);
+  };
+  const scheduleCanvasMetricsRefresh = () => {
+    const generation = ++metricRefreshGeneration;
+    let remainingFrames = 2;
+    const refresh = () => {
+      if (generation !== metricRefreshGeneration) return;
+      updateCanvasMetrics();
+      remainingFrames -= 1;
+      if (remainingFrames > 0) requestAnimationFrame(refresh);
+    };
+    requestAnimationFrame(refresh);
+  };
+  const rendererSize = () => rendererDimensions();
+  onMount(() => {
+    updateCanvasMetrics();
+    const frame = requestAnimationFrame(updateCanvasMetrics);
+    let resizeObserver;
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(updateCanvasMetrics);
+      resizeObserver.observe(canvasRef);
+    }
+    const mutationObserver = typeof MutationObserver === "undefined" ? null : new MutationObserver(updateCanvasMetrics);
+    mutationObserver?.observe(canvasRef, {
+      attributes: true,
+      attributeFilter: ["width", "height"]
+    });
+    onCleanup(() => {
+      metricRefreshGeneration += 1;
+      cancelAnimationFrame(frame);
+      resizeObserver?.disconnect();
+      mutationObserver?.disconnect();
+    });
   });
   const hotspotFocus = createHotspotFocusRestoration();
   const visualState = () => pixelWorldVisualState(props.renderState());
@@ -12301,7 +12384,11 @@ function PixelWorldCanvasRenderer(props) {
   onMount(() => onCleanup(installPixelWorldMobileSelectionSafeArea(() => canvasRef?.closest(".pixel-world-canvas"))));
   createEffect(() => {
     props.cameraState?.();
+    props.rendererStatus?.();
+    props.renderState?.();
     stageSize();
+    updateCanvasMetrics();
+    scheduleCanvasMetricsRefresh();
     requestAnimationFrame(() => applyPixelWorldMobileSelectionSafeArea(canvasRef?.closest(".pixel-world-canvas")));
   });
   createEffect(() => {
@@ -12386,6 +12473,7 @@ function PixelWorldCanvasRenderer(props) {
             return props.cameraState;
           },
           stageSize,
+          rendererSize,
           get onSelect() {
             return props.onSelect;
           },

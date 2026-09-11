@@ -39,7 +39,7 @@ async function renderModuleDetails() {
     module_id: "relay-seven",
     kind: "relay",
     label: "Relay Seven",
-    anchor: { type: "absolute", data: { x_cm: 1_530_000, y_cm: 1_010_000, z_cm: 0 } },
+    anchor: { type: "absolute", data: { pos: { x_cm: 1_530_000, y_cm: 1_010_000, z_cm: 0 } } },
   };
   core.requestRender();
   return { core, root };
@@ -66,7 +66,7 @@ describe("module visual details", () => {
     expect(within(moduleDetails).getByText("Module Details")).toBeInTheDocument();
     expect(within(moduleDetails).getByText("Relay Seven")).toBeInTheDocument();
     expect(moduleDetails).toHaveTextContent(/Kind\s*:\s*relay/);
-    expect(moduleDetails).toHaveTextContent(/absolute ·/i);
+    expect(moduleDetails).toHaveTextContent(/absolute · x=15.3 km · y=10.1 km · z=0 cm/i);
     expect(within(detailsPanel).queryByText("Agent Chat")).not.toBeInTheDocument();
     expect(within(detailsPanel).queryByLabelText("Message")).not.toBeInTheDocument();
     expect(within(detailsPanel).queryByText("The current account has no controllable Agent yet. Claim one or wait for your own Agent binding to sync.")).not.toBeInTheDocument();

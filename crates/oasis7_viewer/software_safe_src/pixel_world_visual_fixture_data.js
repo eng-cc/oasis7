@@ -320,14 +320,14 @@ export function pixelWorldModuleVisualEntitiesFixture() {
       module_id: "fixture-module",
       kind: "beacon",
       label: "Beacon marker",
-      anchor: { type: "absolute", data: { x_cm: 1_850_000, y_cm: 3_600_000, z_cm: 0 } },
+      anchor: { type: "absolute", data: { pos: { x_cm: 1_850_000, y_cm: 3_600_000, z_cm: 0 } } },
     },
     "module-relay": {
       entity_id: "module-relay",
       module_id: "fixture-module",
       kind: "relay",
       label: "Relay marker",
-      anchor: { type: "absolute", data: { x_cm: 1_850_000, y_cm: 3_600_000, z_cm: 0 } },
+      anchor: { type: "absolute", data: { pos: { x_cm: 1_850_000, y_cm: 3_600_000, z_cm: 0 } } },
     },
     "module-agent": {
       entity_id: "module-agent",

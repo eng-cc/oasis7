@@ -420,7 +420,7 @@ fn build_module_visual_entities(
             let anchor = obj(entity, "anchor");
             let anchor_data = obj(anchor, "data");
             let pos = match str_key(anchor, "type")? {
-                "absolute" => normalize_position(anchor_data),
+                "absolute" => normalize_position(obj(anchor_data, "pos")),
                 "location" => {
                     let location_id = str_key(anchor_data, "location_id")?;
                     locations

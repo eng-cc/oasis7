@@ -2,7 +2,7 @@ use super::*;
 use crate::render::module_visual_entities::{
     MODULE_LABEL_LAYER_Z, MODULE_VISUAL_ENTITY_COLOR, MODULE_VISUAL_ENTITY_SIZE_PX,
     ModuleIdentityChipPart, PixelWorldModuleIdentityChipVisual, PixelWorldModuleVisualEntity,
-    PixelWorldModuleVisualLabel,
+    PixelWorldModuleVisualLabel, module_co_anchor_offset,
 };
 
 fn module_visual(id: &str, pos: Position) -> ModuleVisualEntity {
@@ -241,6 +241,113 @@ fn module_visual_entities_render_interactive_markers_and_reconcile_stale_markers
         0,
         "changing to an unknown kind must reconcile away the previous known-kind chip"
     );
+}
+
+#[test]
+fn co_anchored_module_hit_stack_keeps_agent_and_location_centers_selectable() {
+    let agent_anchor = sample_position(1_520_000.0, 1_015_000.0);
+    let location_anchor = sample_position(1_500_000.0, 1_000_000.0);
+    let mut state = sample_render_state(12_000.0);
+    state.locations[0].pos = location_anchor.clone();
+    state.agents[0].pos = Some(agent_anchor.clone());
+    state.module_visual_entities = vec![
+        module_visual_with_kind("module-agent-a", "beacon", agent_anchor.clone()),
+        module_visual_with_kind("module-agent-b", "relay", agent_anchor.clone()),
+        module_visual_with_kind("module-agent-c", "sensor", agent_anchor),
+        module_visual_with_kind("module-location-a", "artifact", location_anchor.clone()),
+        module_visual_with_kind("module-location-b", "relay", location_anchor),
+    ];
+
+    let mut app = render_test_app(state);
+    let regions = hit_regions(&mut app);
+    let center = |region: &HitRegion| {
+        (
+            (region.left + region.right) / 2.0,
+            (region.top + region.bottom) / 2.0,
+        )
+    };
+    let agent_region = regions
+        .iter()
+        .find(|region| region.kind == "agent" && region.id == "agent-0")
+        .expect("co-anchored agent must retain a hit region");
+    assert_eq!(
+        hit_test(&regions, center(agent_region).0, center(agent_region).1),
+        Some(("agent".to_string(), "agent-0".to_string())),
+        "the parent Agent center must remain selectable when modules share its anchor"
+    );
+    let location_region = regions
+        .iter()
+        .find(|region| region.kind == "location" && region.id == "loc-0")
+        .expect("co-anchored location must retain a hit region");
+    assert_eq!(
+        hit_test(
+            &regions,
+            center(location_region).0,
+            center(location_region).1,
+        ),
+        Some(("location".to_string(), "loc-0".to_string())),
+        "the parent Location center must remain selectable when modules share its anchor"
+    );
+
+    let module_regions = regions
+        .iter()
+        .filter(|region| region.kind == "module_visual")
+        .collect::<Vec<_>>();
+    assert_eq!(module_regions.len(), 5);
+    for region in &module_regions {
+        assert_eq!(
+            hit_test(&regions, center(region).0, center(region).1),
+            Some((region.kind.to_string(), region.id.clone())),
+            "each displaced module center must resolve to its own Bevy hit region"
+        );
+    }
+    for (left, right) in module_regions.iter().enumerate() {
+        for other in module_regions.iter().skip(left + 1) {
+            assert_ne!(
+                center(right),
+                center(other),
+                "co-anchored module slots must stay distinct"
+            );
+        }
+    }
+
+    let marker_centers = {
+        let world = app.world_mut();
+        let mut markers = world.query::<(&PixelWorldModuleVisualEntity, &Transform)>();
+        markers
+            .iter(world)
+            .map(|(marker, transform)| {
+                (
+                    marker.id.clone(),
+                    (
+                        f64::from(VIEWPORT_WIDTH as f32 / 2.0 + transform.translation.x),
+                        f64::from(VIEWPORT_HEIGHT as f32 / 2.0 - transform.translation.y),
+                    ),
+                )
+            })
+            .collect::<std::collections::HashMap<_, _>>()
+    };
+    for region in module_regions {
+        let marker_center = marker_centers
+            .get(&region.id)
+            .expect("each module hit region must have a rendered marker");
+        let region_center = center(region);
+        assert!((marker_center.0 - region_center.0).abs() < 0.001);
+        assert!((marker_center.1 - region_center.1).abs() < 0.001);
+    }
+}
+
+#[test]
+fn co_anchor_renderer_offsets_keep_the_48_css_gap_across_backing_scales() {
+    for backing_scale in [1.0_f32, 1.5, 2.0] {
+        let scale = Vec2::splat(backing_scale);
+        let first = module_co_anchor_offset(0, scale);
+        let second = module_co_anchor_offset(1, scale);
+        let css_gap_x = (second.x - first.x) / backing_scale;
+        let css_gap_y = (second.y - first.y) / backing_scale;
+        assert!((css_gap_x - 48.0).abs() < f32::EPSILON);
+        assert!(css_gap_y.abs() < f32::EPSILON);
+    }
 }
 
 #[test]

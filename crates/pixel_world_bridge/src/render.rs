@@ -940,6 +940,11 @@ pub(crate) fn render_scene(
     if runtime.reactive_scheduling && !static_reconcile && !animation_reconcile {
         return;
     }
+    let renderer_scale = if static_reconcile {
+        renderer_to_css_scale(width, height)
+    } else {
+        Vec2::ONE
+    };
     if runtime.reactive_scheduling {
         runtime.needs_reconcile = false;
         runtime.animation_dirty = false;
@@ -993,6 +998,7 @@ pub(crate) fn render_scene(
             &queries.module_identity_chips,
             width,
             height,
+            renderer_scale,
             rebuild_hit_regions,
         );
         reconcile_links(&mut commands, &mut runtime, width, height);

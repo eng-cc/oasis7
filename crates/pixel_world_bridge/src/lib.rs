@@ -12,6 +12,8 @@ use js_sys::{Function, Object, Reflect};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Value, json};
 use serde_wasm_bindgen::{Serializer, from_value};
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
@@ -569,6 +571,35 @@ fn to_bevy_translation(canvas_x: f64, canvas_y: f64, width: f64, height: f64, z:
         ((height / 2.0) - canvas_y) as f32,
         z,
     )
+}
+
+#[cfg(target_arch = "wasm32")]
+fn renderer_to_css_scale(width: f64, height: f64) -> Vec2 {
+    let selector = BRIDGE_SHARED.with(|shared| shared.borrow().canvas_selector.clone());
+    let Some(selector) = selector else {
+        return Vec2::ONE;
+    };
+    let Some(document) = web_sys::window().and_then(|window| window.document()) else {
+        return Vec2::ONE;
+    };
+    let Ok(Some(element)) = document.query_selector(&selector) else {
+        return Vec2::ONE;
+    };
+    let Ok(canvas) = element.dyn_into::<HtmlCanvasElement>() else {
+        return Vec2::ONE;
+    };
+    let rect = canvas.get_bounding_client_rect();
+    let css_width = rect.width();
+    let css_height = rect.height();
+    if !css_width.is_finite() || !css_height.is_finite() || css_width <= 0.0 || css_height <= 0.0 {
+        return Vec2::ONE;
+    }
+    Vec2::new((width / css_width) as f32, (height / css_height) as f32)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn renderer_to_css_scale(_width: f64, _height: f64) -> Vec2 {
+    Vec2::ONE
 }
 
 fn sprite_for_square(color: Color, size: f32) -> Sprite {

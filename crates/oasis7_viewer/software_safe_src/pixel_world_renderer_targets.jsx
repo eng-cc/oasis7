@@ -5,19 +5,82 @@ import { pixelWorldReadableAgentLabel, pixelWorldReadableModuleLabel } from './p
 import { isLocaleZh } from './legacy_core.js';
 import { forwardRendererTargetPointer } from './pixel_world_renderer_target_input.js';
 
-// Mirrors the renderer's logical-canvas projection, including missing-position
-// presentation. Never apply collision offsets to a true world hit target.
-export function rendererEntityTargetStyle(entity, worldBounds, size, camera) {
+const RENDERER_TARGET_SIZE_PX = 44;
+const MODULE_CO_ANCHOR_RING_OFFSETS = [
+  [-48, -48],
+  [0, -48],
+  [48, -48],
+  [-48, 0],
+  [48, 0],
+  [-48, 48],
+  [0, 48],
+  [48, 48],
+];
+
+function positionKey(position) {
+  if (!position || typeof position !== 'object') return null;
+  const x = Number(position.x_cm ?? position.xCm);
+  const y = Number(position.y_cm ?? position.yCm);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  const z = Number(position.z_cm ?? position.zCm ?? 0);
+  return `${x}|${y}|${Number.isFinite(z) ? z : 0}`;
+}
+
+function moduleCoAnchorOffset(index) {
+  const ring = Math.floor(index / MODULE_CO_ANCHOR_RING_OFFSETS.length) + 1;
+  const [x, y] = MODULE_CO_ANCHOR_RING_OFFSETS[index % MODULE_CO_ANCHOR_RING_OFFSETS.length];
+  return { x: x * ring, y: y * ring };
+}
+
+function moduleTargetOffsets(visualState) {
+  const modules = visualState.moduleVisualEntities
+    .filter(entity => entity?.pos)
+    .slice()
+    .sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+  const parentPositions = [
+    ...visualState.agents.filter(entity => entity?.pos),
+    ...visualState.locations.filter(entity => entity?.pos),
+  ].map(entity => positionKey(entity.pos));
+  const offsets = new Map();
+  modules.forEach((module, index) => {
+    const key = positionKey(module.pos);
+    const coAnchoredModules = key === null
+      ? []
+      : modules.filter(other => positionKey(other.pos) === key);
+    const coAnchorIndex = coAnchoredModules.findIndex(other => other.id === module.id);
+    const hasParent = key !== null && parentPositions.includes(key);
+    offsets.set(
+      module.id,
+      hasParent || coAnchoredModules.length > 1
+        ? moduleCoAnchorOffset(coAnchorIndex >= 0 ? coAnchorIndex : index)
+        : { x: 0, y: 0 },
+    );
+  });
+  return offsets;
+}
+
+// Mirrors the renderer's backing-canvas projection, including missing-position
+// presentation. The backing point is converted to the CSS stage after camera
+// pan/zoom and co-anchor offsets are applied in renderer coordinates.
+export function rendererEntityTargetStyle(entity, worldBounds, size, camera, screenOffset, rendererSize = size) {
   const { width, height } = size;
+  const rendererWidth = Number(rendererSize?.width) || width;
+  const rendererHeight = Number(rendererSize?.height) || height;
   const idLength = new TextEncoder().encode(entity.id || '').length;
-  const point = toCanvasPoint(entity.pos, worldBounds, width, height, camera)
-    || toCanvasPoint({ x_cm: 36 + (idLength * 29) % Math.max(40, width - 72), y_cm: 44 + (idLength * 17) % Math.max(48, height - 88) }, { width_cm: width, depth_cm: height }, width, height, camera);
-  return { left: `${point.x / width * 100}%`, top: `${point.y / height * 100}%`, width: '44px', height: '44px', transform: 'translate(-50%, -50%)', display: point.x + 22 <= 0 || point.y + 22 <= 0 || point.x - 22 >= width || point.y - 22 >= height ? 'none' : undefined };
+  const point = toCanvasPoint(entity.pos, worldBounds, rendererWidth, rendererHeight, camera)
+    || toCanvasPoint({ x_cm: 36 + (idLength * 29) % Math.max(40, rendererWidth - 72), y_cm: 44 + (idLength * 17) % Math.max(48, rendererHeight - 88) }, { width_cm: rendererWidth, depth_cm: rendererHeight }, rendererWidth, rendererHeight, camera);
+  const offsetScaleX = rendererWidth / width;
+  const offsetScaleY = rendererHeight / height;
+  const x = ((point.x + ((Number(screenOffset?.x) || 0) * offsetScaleX)) / rendererWidth) * width;
+  const y = ((point.y + ((Number(screenOffset?.y) || 0) * offsetScaleY)) / rendererHeight) * height;
+  const halfTarget = RENDERER_TARGET_SIZE_PX / 2;
+  return { left: `${x / width * 100}%`, top: `${y / height * 100}%`, width: `${RENDERER_TARGET_SIZE_PX}px`, height: `${RENDERER_TARGET_SIZE_PX}px`, transform: 'translate(-50%, -50%)', display: x + halfTarget <= 0 || y + halfTarget <= 0 || x - halfTarget >= width || y - halfTarget >= height ? 'none' : undefined };
 }
 
 export function PixelWorldRendererTargets(props) {
   const state = createMemo(() => pixelWorldVisualState(props.renderState()));
   const isZh = () => isLocaleZh(props.locale());
+  const moduleOffsets = createMemo(() => moduleTargetOffsets(state()));
   // Solid's For retains nodes by key; snapshot objects are replaced routinely.
   // Keep kind/id keys stable while reading labels and positions from the latest map.
   const entities = createMemo(() => new Map([
@@ -44,7 +107,7 @@ export function PixelWorldRendererTargets(props) {
     data-selected={props.selection()?.kind === kind && props.selection()?.id === entity().id ? 'true' : 'false'}
     aria-pressed={props.selection()?.kind === kind && props.selection()?.id === entity().id}
     aria-label={`${isZh() ? '选择' : 'Select'} ${kind === 'agent' ? pixelWorldReadableAgentLabel(entity(), entity().id, isZh()) : kind === 'module_visual' ? pixelWorldReadableModuleLabel(entity(), entity().id, isZh()) : entity().label || entity().id}`}
-    style={rendererEntityTargetStyle(entity(),state().worldBounds,props.stageSize(),props.cameraState?.())}
+    style={rendererEntityTargetStyle(entity(),state().worldBounds,props.stageSize(),props.cameraState?.(),kind === 'module_visual' ? moduleOffsets().get(entity().id) : undefined, props.rendererSize?.())}
     onClick={() => props.onSelect({kind,id:entity().id})}
     onPointerDown={forwardRendererTargetPointer}
     onMouseEnter={() => props.onHover({kind,id:entity().id})}

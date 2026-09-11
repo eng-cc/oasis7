@@ -109,25 +109,76 @@ function panHotspotsIntoSafeBandScript() { return String.raw`(async () => {
     pan: { pointerId, steps },
   });
 })()`; }
-function receiptScript(method, id) { return String.raw`(async () => { const probe = window.__OASIS7_PIXEL_WORLD_HOTSPOT_POINTER_PROBE__; if (!probe) throw new Error('test-only hotspot pointer probe unavailable'); const receipt = await probe.${method}(${id ? JSON.stringify(id) : ""}); const tooltip = document.querySelector('[data-hotspot-tooltip]'); const viewport = { width: window.innerWidth, height: window.innerHeight }; const rect = tooltip?.getBoundingClientRect(); return JSON.stringify({ receipt, viewport, tooltip: tooltip ? { text: tooltip.textContent.trim(), visible: getComputedStyle(tooltip).display !== 'none', rect: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height } } : null }); })()`; }
+function receiptScript(method, id) { return String.raw`(async () => {
+  const probe = window.__OASIS7_PIXEL_WORLD_HOTSPOT_POINTER_PROBE__;
+  const canvas = document.querySelector('#pixel-world-embedded-runtime-canvas');
+  if (!probe || !canvas) throw new Error('test-only hotspot pointer probe unavailable');
+  const originalGetBoundingClientRect = canvas.getBoundingClientRect;
+  const hotspot = ${id ? `probe.targets().find((target) => target.id === ${JSON.stringify(id)})` : 'null'};
+  const originalRect = originalGetBoundingClientRect.call(canvas);
+  const inputScale = {
+    x: canvas.width / Math.max(1, originalRect.width),
+    y: canvas.height / Math.max(1, originalRect.height),
+  };
+  if (${JSON.stringify(method)} === 'hover') {
+    if (!hotspot) throw new Error('test-only hotspot target unavailable for scaled pointer probe');
+    // The probe owns the authoritative target readback, while this temporary
+    // rect converts its backing-pixel point into a CSS client coordinate for
+    // the adapter's backing-scale input path.
+    const probeRect = {
+      ...originalRect,
+      left: originalRect.left + (Number(hotspot.canvas_x) / inputScale.x) - Number(hotspot.canvas_x),
+      top: originalRect.top + (Number(hotspot.canvas_y) / inputScale.y) - Number(hotspot.canvas_y),
+    };
+    let probeRectRead = false;
+    canvas.getBoundingClientRect = () => {
+      if (!probeRectRead) {
+        probeRectRead = true;
+        // Restore before probe.hover dispatches its PointerEvent so the
+        // production adapter reads the actual canvas rect and scales once.
+        canvas.getBoundingClientRect = originalGetBoundingClientRect;
+        return probeRect;
+      }
+      return originalGetBoundingClientRect.call(canvas);
+    };
+  }
+  let receipt;
+  try {
+    receipt = await probe.${method}(${id ? JSON.stringify(id) : ""});
+  } finally {
+    canvas.getBoundingClientRect = originalGetBoundingClientRect;
+  }
+  const tooltip = document.querySelector('[data-hotspot-tooltip]');
+  const viewport = { width: window.innerWidth, height: window.innerHeight };
+  const rect = tooltip?.getBoundingClientRect();
+  return JSON.stringify({ receipt, viewport, inputScale, tooltip: tooltip ? { text: tooltip.textContent.trim(), visible: getComputedStyle(tooltip).display !== 'none', rect: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height } } : null });
+})()`; }
 function targetsScript() { return String.raw`(() => { const probe = window.__OASIS7_PIXEL_WORLD_HOTSPOT_POINTER_PROBE__; if (!probe) throw new Error('test-only hotspot pointer probe unavailable'); return JSON.stringify(probe.targets()); })()`; }
 function selectionGeometryScript() { return String.raw`(async () => {
   await new Promise(resolve => setTimeout(resolve, 150));
   const canvas = document.querySelector('#pixel-world-embedded-runtime-canvas');
   const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / Math.max(1, rect.width);
+  const scaleY = canvas.height / Math.max(1, rect.height);
   const state = window.__AW_TEST__.getState();
   const camera = state.pixelWorldCamera;
   const dto = window.__OASIS7_PIXEL_WORLD_RENDER_DTO__();
   const agent = dto.agents.find(agent => agent.id === 'agent-0');
   const targets = [...document.querySelectorAll('[data-renderer-target="true"][data-agent-id="agent-0"]')];
-  const target = targets[0].getBoundingClientRect();
+  const targetNode = targets[0];
+  const target = targetNode?.getBoundingClientRect() || { left: 0, top: 0, width: 0, height: 0 };
+  const targetStyle = targetNode ? getComputedStyle(targetNode) : null;
   const bounds = dto.world_bounds;
+  const rendererWidth = canvas.width;
+  const rendererHeight = canvas.height;
+  const baseX = 20 + (agent.pos.x_cm / bounds.width_cm) * (rendererWidth - 40);
+  const baseY = 20 + (agent.pos.y_cm / bounds.depth_cm) * (rendererHeight - 40);
   const expected = {
-    x: rect.left + rect.width / 2 + (20 + agent.pos.x_cm / bounds.width_cm * (rect.width - 40) - rect.width / 2) * camera.zoom + camera.pan_x_px,
-    y: rect.top + rect.height / 2 + (20 + agent.pos.y_cm / bounds.depth_cm * (rect.height - 40) - rect.height / 2) * camera.zoom + camera.pan_y_px,
+    x: rect.left + (rendererWidth / 2 + (baseX - rendererWidth / 2) * camera.zoom + camera.pan_x_px) / scaleX,
+    y: rect.top + (rendererHeight / 2 + (baseY - rendererHeight / 2) * camera.zoom + camera.pan_y_px) / scaleY,
   };
   const actual = { x: target.left + target.width / 2, y: target.top + target.height / 2 };
-  return JSON.stringify({ camera, expected, actual, count: targets.length, width: target.width, height: target.height, error: Math.hypot(expected.x-actual.x,expected.y-actual.y), selection: dto.selection });
+  return JSON.stringify({ camera, expected, actual, count: targets.length, width: target.width, height: target.height, targetStyle: targetStyle ? { left: targetStyle.left, top: targetStyle.top, display: targetStyle.display, visibility: targetStyle.visibility } : null, canvas: { cssWidth: rect.width, cssHeight: rect.height, bitmapWidth: rendererWidth, bitmapHeight: rendererHeight, scaleX, scaleY }, error: Math.hypot(expected.x-actual.x,expected.y-actual.y), selection: dto.selection });
 })()`; }
 
 ensureBrowser();
@@ -205,7 +256,8 @@ try {
     // The viewport correction intentionally moves the world for visible
     // hotspot evidence. Reload the fixture before the independent selection
     // projection check so its agent target starts from the normal camera fit.
-    await browserJson(['open', url]);
+    closeBrowser();
+    await browserJson(['open', url], { timeout: 45_000 });
     await browserJson(['set', 'viewport', String(width), String(height)]);
     await evalJson(String.raw`(async()=>{const deadline=Date.now()+5000; while(Date.now()<deadline){const s=${pageStateScript()}; if(s.rendererReady && s.runtimeStatus==='ready') return true; await new Promise(r=>setTimeout(r,100));} throw new Error('renderer not ready after viewport evidence reset');})()`);
     await evalJson(bringCanvasIntoViewScript());

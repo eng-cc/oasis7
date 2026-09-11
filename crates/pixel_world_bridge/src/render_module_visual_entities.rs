@@ -65,17 +65,45 @@ pub(crate) fn despawn_module_identity_chips(
     }
 }
 
-const CO_ANCHOR_OFFSETS: [Vec2; 9] = [
-    Vec2::ZERO,
-    Vec2::new(-3.0, -3.0),
-    Vec2::new(3.0, -3.0),
-    Vec2::new(-3.0, 3.0),
-    Vec2::new(3.0, 3.0),
-    Vec2::new(-6.0, 0.0),
-    Vec2::new(6.0, 0.0),
-    Vec2::new(0.0, -6.0),
-    Vec2::new(0.0, 6.0),
+// The Rust hit regions are 16 renderer px wide, but the matching transparent
+// Web targets are 44 CSS px wide. Keep the public co-anchor spacing in CSS
+// units, then scale it into the live renderer backing space at reconciliation.
+const CO_ANCHOR_RING_OFFSETS: [Vec2; 8] = [
+    Vec2::new(-48.0, -48.0),
+    Vec2::new(0.0, -48.0),
+    Vec2::new(48.0, -48.0),
+    Vec2::new(-48.0, 0.0),
+    Vec2::new(48.0, 0.0),
+    Vec2::new(-48.0, 48.0),
+    Vec2::new(0.0, 48.0),
+    Vec2::new(48.0, 48.0),
 ];
+
+pub(crate) fn module_co_anchor_offset(index: usize, renderer_to_css_scale: Vec2) -> Vec2 {
+    let ring = (index / CO_ANCHOR_RING_OFFSETS.len() + 1) as f32;
+    let css_offset = CO_ANCHOR_RING_OFFSETS[index % CO_ANCHOR_RING_OFFSETS.len()];
+    Vec2::new(
+        css_offset.x * renderer_to_css_scale.x,
+        css_offset.y * renderer_to_css_scale.y,
+    ) * ring
+}
+
+fn positions_match(left: &Position, right: &Position) -> bool {
+    left.x_cm == right.x_cm && left.y_cm == right.y_cm && left.z_cm == right.z_cm
+}
+
+fn module_shares_parent_anchor(render_state: &RenderState, position: &Position) -> bool {
+    render_state
+        .locations
+        .iter()
+        .any(|location| positions_match(&location.pos, position))
+        || render_state.agents.iter().any(|agent| {
+            agent
+                .pos
+                .as_ref()
+                .is_some_and(|agent_position| positions_match(agent_position, position))
+        })
+}
 
 pub(super) fn reconcile_module_visual_entities(
     commands: &mut Commands,
@@ -83,6 +111,7 @@ pub(super) fn reconcile_module_visual_entities(
     chip_queries: &ModuleIdentityChipQueries,
     width: f64,
     height: f64,
+    renderer_to_css_scale: Vec2,
     rebuild_hit_regions: bool,
 ) {
     let existing_chips = chip_queries
@@ -128,13 +157,18 @@ pub(super) fn reconcile_module_visual_entities(
         };
         let co_anchor_index = entities[..index]
             .iter()
-            .filter(|other| {
-                other.pos.x_cm == entity.pos.x_cm
-                    && other.pos.y_cm == entity.pos.y_cm
-                    && other.pos.z_cm == entity.pos.z_cm
-            })
+            .filter(|other| positions_match(&other.pos, &entity.pos))
             .count();
-        let co_anchor_offset = CO_ANCHOR_OFFSETS[co_anchor_index % CO_ANCHOR_OFFSETS.len()];
+        let co_anchor_count = entities
+            .iter()
+            .filter(|other| positions_match(&other.pos, &entity.pos))
+            .count();
+        let co_anchor_offset =
+            if module_shares_parent_anchor(render_state, &entity.pos) || co_anchor_count > 1 {
+                module_co_anchor_offset(co_anchor_index, renderer_to_css_scale)
+            } else {
+                Vec2::ZERO
+            };
         active_ids.insert(entity.id.clone());
         let mut transform = Transform::from_translation(to_bevy_translation(
             canvas_x + f64::from(co_anchor_offset.x),

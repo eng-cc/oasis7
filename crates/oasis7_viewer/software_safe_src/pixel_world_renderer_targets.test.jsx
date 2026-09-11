@@ -78,4 +78,117 @@ describe('real renderer accessible projection', () => {
     expect(select).toHaveBeenCalledWith({kind:'agent',id:'agent-0'});
     expect(view.container.querySelectorAll('[data-agent-id="agent-0"]')).toHaveLength(1);
   });
+
+  it('reprojects targets when a late backing-size update arrives after mount', () => {
+    const cssSize = { width: 1440, height: 1000 };
+    const camera = { zoom: 1.563, pan_x_px: 932, pan_y_px: -523 };
+    const [backingSize, setBackingSize] = createSignal({ width: 960, height: 540 });
+    const view = render(() => <PixelWorldRendererTargets
+      locale={() => 'en'}
+      renderState={() => ({ world_bounds: { width_cm: 10_000_000, depth_cm: 5_000_000 }, agents: [{ id: 'agent-0', pos: { x_cm: 2_900_000, y_cm: 3_450_000, z_cm: 0 } }], locations: [] })}
+      cameraState={() => camera}
+      stageSize={() => cssSize}
+      rendererSize={backingSize}
+      selection={() => null}
+      onSelect={() => {}}
+      onHover={() => {}}
+    />);
+    const target = view.container.querySelector('[data-renderer-target="true"]');
+    const initial = target.style.left;
+    setBackingSize({ width: 2880, height: 2000 });
+    expect(target.style.left).not.toBe(initial);
+    expect(target.style.left).toBe(rendererEntityTargetStyle(
+      { id: 'agent-0', pos: { x_cm: 2_900_000, y_cm: 3_450_000, z_cm: 0 } },
+      { width_cm: 10_000_000, depth_cm: 5_000_000 },
+      cssSize,
+      camera,
+      undefined,
+      { width: 2880, height: 2000 },
+    ).left);
+  });
+
+  it('projects agent, location, and module targets through the actual backing canvas size', () => {
+    const cssSize = { width: 1440, height: 900 };
+    const backingSize = { width: 2880, height: 1800 };
+    const camera = { zoom: 1.563, pan_x_px: 932, pan_y_px: -523 };
+    const renderBounds = { width_cm: 10_000_000, depth_cm: 5_000_000 };
+    const agent = { id: 'agent-0', pos: { x_cm: 2_900_000, y_cm: 3_450_000, z_cm: 0 } };
+    const location = { id: 'loc-0', label: 'Factory', pos: { x_cm: 4_300_000, y_cm: 3_100_000, z_cm: 0 } };
+    const moduleAgent = { id: 'module-agent', kind: 'beacon', pos: agent.pos };
+    const moduleLocation = { id: 'module-location', kind: 'relay', pos: location.pos };
+    const center = (style) => ({
+      x: parseFloat(style.left) * cssSize.width / 100,
+      y: parseFloat(style.top) * cssSize.height / 100,
+    });
+
+    expect(center(rendererEntityTargetStyle(agent, renderBounds, cssSize, camera, null, backingSize))).toEqual({
+      x: expect.closeTo(719.9134, 4),
+      y: expect.closeTo(449.8336, 4),
+    });
+    expect(center(rendererEntityTargetStyle(location, renderBounds, cssSize, camera, null, backingSize))).toEqual({
+      x: expect.closeTo(1030.6378, 4),
+      y: expect.closeTo(353.5528, 4),
+    });
+    expect(center(rendererEntityTargetStyle(moduleAgent, renderBounds, cssSize, camera, { x: -48, y: -48 }, backingSize))).toEqual({
+      x: expect.closeTo(671.9134, 4),
+      y: expect.closeTo(401.8336, 4),
+    });
+    expect(center(rendererEntityTargetStyle(moduleLocation, renderBounds, cssSize, camera, { x: -48, y: -48 }, backingSize))).toEqual({
+      x: expect.closeTo(982.6378, 4),
+      y: expect.closeTo(305.5528, 4),
+    });
+    expect(719.9134 - 671.9134).toBeCloseTo(48, 4);
+    expect(449.8336 - 401.8336).toBeCloseTo(48, 4);
+  });
+
+  it('keeps co-anchored parent and module DOM targets aligned and independently clickable', async () => {
+    const anchor = { x_cm: 250, y_cm: 600 };
+    const locationAnchor = { x_cm: 100, y_cm: 200 };
+    const select = vi.fn();
+    const size = { width: 960, height: 540 };
+    const view = render(() => <PixelWorldRendererTargets
+      locale={() => 'en'}
+      renderState={() => ({
+        world_bounds: bounds,
+        agents: [{ id: 'agent-0', pos: anchor }],
+        locations: [{ id: 'loc-0', label: 'Depot', pos: locationAnchor }],
+        module_visual_entities: [
+          { id: 'module-agent-a', kind: 'beacon', pos: anchor },
+          { id: 'module-agent-b', kind: 'relay', pos: anchor },
+          { id: 'module-location-a', kind: 'artifact', pos: locationAnchor },
+        ],
+      })}
+      stageSize={() => size}
+      selection={() => null}
+      onSelect={select}
+      onHover={() => {}}
+    />);
+    const center = (target) => ({
+      x: parseFloat(target.style.left) * size.width / 100,
+      y: parseFloat(target.style.top) * size.height / 100,
+    });
+    const agent = view.container.querySelector('[data-agent-id="agent-0"]');
+    const location = view.container.querySelector('[data-location-id="loc-0"]');
+    const agentModuleA = view.container.querySelector('[data-module-id="module-agent-a"]');
+    const agentModuleB = view.container.querySelector('[data-module-id="module-agent-b"]');
+    const locationModule = view.container.querySelector('[data-module-id="module-location-a"]');
+    expect(center(agentModuleA)).toEqual({ x: center(agent).x - 48, y: center(agent).y - 48 });
+    expect(center(agentModuleB)).toEqual({ x: center(agent).x, y: center(agent).y - 48 });
+    expect(center(locationModule)).toEqual({ x: center(location).x - 48, y: center(location).y - 48 });
+    expect(Math.abs(center(agentModuleA).x - center(agent).x)).toBeGreaterThanOrEqual(44);
+    expect(Math.abs(center(agentModuleA).y - center(agent).y)).toBeGreaterThanOrEqual(44);
+
+    await fireEvent.click(agent);
+    await fireEvent.click(location);
+    await fireEvent.click(agentModuleA);
+    await fireEvent.click(agentModuleB);
+    await fireEvent.click(locationModule);
+    expect(select.mock.calls).toEqual([
+      [{ kind: 'agent', id: 'agent-0' }],
+      [{ kind: 'location', id: 'loc-0' }],
+      [{ kind: 'module_visual', id: 'module-agent-a' }],
+      [{ kind: 'module_visual', id: 'module-agent-b' }],
+      [{ kind: 'module_visual', id: 'module-location-a' }],
+    ]);
+  });
 });
