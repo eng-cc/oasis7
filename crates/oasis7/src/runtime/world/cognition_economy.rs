@@ -333,7 +333,8 @@ impl CognitionLeaseV1 {
                         .as_deref()
                         .is_none_or(|id| !valid_digest(id))))
             || (self.status == CognitionLeaseStatusV1::Settled
-                && self.settled_amount + self.refunded_amount != self.reserved_amount)
+                && self.settled_amount.checked_add(self.refunded_amount)
+                    != Some(self.reserved_amount))
         {
             return Err(CognitionEconomyError::InvalidState(
                 "cognition_lease_state_invalid",
@@ -396,7 +397,8 @@ impl CognitionReceiptV1 {
             || self.refunded_amount > self.reserved_amount
             || self.status == CognitionLeaseStatusV1::Reserved
             || (self.status == CognitionLeaseStatusV1::Settled
-                && self.consumed_amount + self.refunded_amount != self.reserved_amount)
+                && self.consumed_amount.checked_add(self.refunded_amount)
+                    != Some(self.reserved_amount))
             || (self.status == CognitionLeaseStatusV1::Released
                 && (self.consumed_amount != 0 || self.refunded_amount != self.reserved_amount))
             || (self.status == CognitionLeaseStatusV1::Refunded && self.consumed_amount != 0)

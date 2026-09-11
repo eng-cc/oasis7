@@ -33,6 +33,7 @@ impl CognitionEconomyStateV1 {
             }
         }
         let mut previous_digest = String::new();
+        let mut event_counts: BTreeMap<String, (u8, u8, u8, u8)> = BTreeMap::new();
         for (index, event) in self.journal.iter().enumerate() {
             if event.schema_version != COGNITION_ECONOMY_EVENT_SCHEMA_VERSION
                 || event.journal_seq != index as u64 + 1
@@ -54,6 +55,42 @@ impl CognitionEconomyStateV1 {
                     "cognition_economy_journal_lease_missing",
                 ));
             };
+            let counts = event_counts.entry(event.lease_id.clone()).or_default();
+            match event.event_kind.as_str() {
+                "reserve" => {
+                    if counts.0 != 0 || counts.1 != 0 || counts.2 != 0 || counts.3 != 0 {
+                        return Err(CognitionEconomyError::InvalidState(
+                            "cognition_economy_journal_cardinality_invalid",
+                        ));
+                    }
+                    counts.0 = 1;
+                }
+                "settle" => {
+                    if counts.0 != 1 || counts.1 != 0 || counts.2 != 0 || counts.3 != 0 {
+                        return Err(CognitionEconomyError::InvalidState(
+                            "cognition_economy_journal_cardinality_invalid",
+                        ));
+                    }
+                    counts.1 = 1;
+                }
+                "release" => {
+                    if counts.0 != 1 || counts.1 != 0 || counts.2 != 0 || counts.3 != 0 {
+                        return Err(CognitionEconomyError::InvalidState(
+                            "cognition_economy_journal_cardinality_invalid",
+                        ));
+                    }
+                    counts.2 = 1;
+                }
+                "refund" => {
+                    if counts.0 != 1 || counts.2 != 0 || counts.3 != 0 || counts.1 > 1 {
+                        return Err(CognitionEconomyError::InvalidState(
+                            "cognition_economy_journal_cardinality_invalid",
+                        ));
+                    }
+                    counts.3 = 1;
+                }
+                _ => {}
+            }
             if event.idempotency_key != lease.idempotency_key
                 || event.resource != lease.quote.resource
                 || event.reserved_amount != lease.reserved_amount
@@ -124,6 +161,30 @@ impl CognitionEconomyStateV1 {
             previous_digest.clone_from(&event.event_digest);
         }
         for (lease_id, lease) in &self.leases {
+            let (reserve_count, settle_count, release_count, refund_count) =
+                event_counts.get(lease_id).copied().unwrap_or_default();
+            let valid_cardinality = match lease.status {
+                CognitionLeaseStatusV1::Reserved => {
+                    (reserve_count, settle_count, release_count, refund_count) == (1, 0, 0, 0)
+                }
+                CognitionLeaseStatusV1::Settled => {
+                    (reserve_count, settle_count, release_count, refund_count) == (1, 1, 0, 0)
+                }
+                CognitionLeaseStatusV1::Released => {
+                    (reserve_count, settle_count, release_count, refund_count) == (1, 0, 1, 0)
+                }
+                CognitionLeaseStatusV1::Refunded => {
+                    reserve_count == 1
+                        && settle_count <= 1
+                        && release_count == 0
+                        && refund_count == 1
+                }
+            };
+            if !valid_cardinality {
+                return Err(CognitionEconomyError::InvalidState(
+                    "cognition_economy_journal_cardinality_invalid",
+                ));
+            }
             lease.validate()?;
             let Some(record) = self.idempotency.get(&lease.idempotency_key) else {
                 return Err(CognitionEconomyError::InvalidState(
@@ -293,4 +354,25 @@ fn receipt_matches_lease(receipt: &CognitionReceiptV1, lease: &CognitionLeaseV1)
         && receipt.request_digest == lease.request_digest
         && receipt.quote == lease.quote
         && receipt.reserved_amount == lease.reserved_amount
+        && match receipt.status {
+            CognitionLeaseStatusV1::Reserved => false,
+            CognitionLeaseStatusV1::Settled => {
+                matches!(
+                    lease.status,
+                    CognitionLeaseStatusV1::Settled | CognitionLeaseStatusV1::Refunded
+                ) && receipt.consumed_amount == lease.settled_amount
+                    && lease.reserved_amount.checked_sub(lease.settled_amount)
+                        == Some(receipt.refunded_amount)
+            }
+            CognitionLeaseStatusV1::Released => {
+                lease.status == CognitionLeaseStatusV1::Released
+                    && receipt.consumed_amount == 0
+                    && receipt.refunded_amount == lease.refunded_amount
+            }
+            CognitionLeaseStatusV1::Refunded => {
+                lease.status == CognitionLeaseStatusV1::Refunded
+                    && receipt.consumed_amount == 0
+                    && receipt.refunded_amount == lease.settled_amount
+            }
+        }
 }
