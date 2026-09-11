@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import importlib.util
 import os
 from pathlib import Path
 import subprocess
@@ -13,6 +14,10 @@ from unittest.mock import patch
 
 
 SCRIPT = Path(__file__).with_name("review-plan.py")
+_SPEC = importlib.util.spec_from_file_location("review_plan_under_test", SCRIPT)
+assert _SPEC is not None and _SPEC.loader is not None
+REVIEW_PLAN = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(REVIEW_PLAN)
 TASK = "task_" + "1" * 32
 EVIDENCE = "b" * 64
 COMPARISON_REF = "refs/remotes/origin/main"
@@ -412,6 +417,54 @@ class ReviewPlanTests(unittest.TestCase):
             context["prior_plan_digest"],
         )
         self.assertNotEqual(prior["epoch"], current["epoch"])
+
+    def test_prior_review_context_rejects_deleted_collected_artifact(self) -> None:
+        prior_path = self.root / ".pm/scratch" / TASK / "review-plans" / "deleted-artifact.json"
+        prior = self.plan(
+            "--out", str(prior_path),
+            "--preflight-dir", str(self.root / ".pm/scratch" / TASK / "prior-preflight"),
+        )
+        self.complete_collected_plan(prior)
+        ledger_path = Path(str(prior["preflight"]["ledger_path"]))
+        row = json.loads(ledger_path.read_text(encoding="utf-8").splitlines()[0])
+        artifact_path = Path(str(row["artifacts"][0]))
+        artifact_path.write_text(artifact_path.read_text(encoding="utf-8") + "tampered\n", encoding="utf-8")
+
+        (self.root / "repair.txt").write_text("repair\n", encoding="utf-8")
+        self.git("add", "repair.txt")
+        self.git("commit", "-m", "repair")
+        self.head = self.git("rev-parse", "HEAD")
+        result = self.run_plan(
+            "--prior-review-plan", str(prior_path),
+            "--out", str(self.root / ".pm/scratch" / TASK / "review-plans" / "current.json"),
+            ok=False,
+        )
+        self.assertRegex(result.stderr.lower(), r"artifact|ledger")
+
+        artifact_path.unlink()
+        deleted = self.run_plan(
+            "--prior-review-plan", str(prior_path),
+            "--out", str(self.root / ".pm/scratch" / TASK / "review-plans" / "deleted.json"),
+            ok=False,
+        )
+        self.assertRegex(deleted.stderr.lower(), r"artifact|ledger")
+
+    def test_binary_diff_digest_ignores_external_diff_and_textconv(self) -> None:
+        prior_head = self.head
+        (self.root / "repair.txt").write_text("repair\n", encoding="utf-8")
+        self.git("add", "repair.txt")
+        self.git("commit", "-m", "repair")
+        current_head = self.git("rev-parse", "HEAD")
+        external = self.root / "external-diff"
+        external.write_text("#!/bin/sh\nprintf 'external diff output\\n'\n", encoding="utf-8")
+        external.chmod(0o755)
+        baseline = REVIEW_PLAN.binary_diff_digest(self.root, prior_head, current_head)
+        self.git("config", "diff.external", str(external))
+        with patch.dict(os.environ, {"GIT_EXTERNAL_DIFF": str(external)}):
+            self.assertEqual(
+                baseline,
+                REVIEW_PLAN.binary_diff_digest(self.root, prior_head, current_head),
+            )
 
     def test_prior_review_context_rejects_tampered_prior_identity(self) -> None:
         prior_path = self.root / ".pm/scratch" / TASK / "review-plans" / "tampered.json"

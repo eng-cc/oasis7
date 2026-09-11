@@ -21,6 +21,7 @@ MAX_SUMMARY_BYTES = 4096
 DELIVERY_MODES = {"minimal_head_bound_task_packet", "full_history_escalation"}
 ROLE_ACTIVATIONS = {"message_assigned_adapter_inactive", "named_role_adapter_backed"}
 INCREMENTAL_CONTEXT_SCHEMA = "oasis7-review-context/v1"
+SHA_RE = re.compile(r"[0-9a-f]{64}\Z")
 
 
 class PacketError(RuntimeError):
@@ -45,6 +46,14 @@ def git_bytes(root: Path, *args: str) -> bytes:
     if result.returncode:
         fail(result.stderr.decode(errors="replace").strip() or f"git {' '.join(args)} failed")
     return result.stdout
+
+
+def binary_diff_digest(root: Path, old_head: str, new_head: str) -> str:
+    """Hash a diff without repository-configured output filters."""
+    return hashlib.sha256(git_bytes(
+        root, "diff", "--binary", "--no-ext-diff", "--no-textconv", "--no-renames",
+        old_head, new_head,
+    )).hexdigest()
 
 
 def repo_root() -> Path:
@@ -138,6 +147,106 @@ def load_object(path: Path, name: str) -> dict[str, object]:
 def resolve_path(root: Path, value: str) -> Path:
     path = Path(value)
     return (path if path.is_absolute() else root / path).resolve()
+
+
+def resolve_collected_artifact(root: Path, ledger_path: Path, artifact: str) -> Path:
+    path = Path(artifact)
+    if path.is_absolute():
+        return path
+    root_path = root / path
+    return root_path if root_path.exists() else ledger_path.parent / path
+
+
+def validate_collected_ledger(root: Path, batch: dict[str, object], ledger_path: Path) -> str:
+    """Revalidate collector output and every immutable artifact before reuse."""
+    try:
+        raw = ledger_path.read_bytes()
+        decoded = raw.decode("utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        fail(f"cannot read prior review ledger: {exc}")
+    entries: list[dict[str, object]] = []
+    for line_number, line in enumerate(decoded.splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError as exc:
+            fail(f"invalid prior review ledger JSON on line {line_number}: {exc}")
+        if not isinstance(value, dict):
+            fail(f"prior review ledger line {line_number} is not an object")
+        entries.append(value)
+
+    expected_raw = batch.get("expected_slices")
+    if not isinstance(expected_raw, list) or any(not isinstance(item, dict) for item in expected_raw):
+        fail("prior review batch expected slices are invalid")
+    expected = {(item.get("role"), item.get("slice_id")) for item in expected_raw}
+    if len(expected) != len(expected_raw):
+        fail("prior review batch contains duplicate expected slices")
+    seen: set[tuple[object, object]] = set()
+    seen_roles: set[object] = set()
+    seen_ids: set[object] = set()
+    for item in entries:
+        role, slice_id = item.get("role"), item.get("slice_id")
+        identity = (role, slice_id)
+        if role in seen_roles:
+            fail(f"duplicate prior review role: {role}")
+        if slice_id in seen_ids:
+            fail(f"duplicate prior review slice id: {slice_id}")
+        seen_roles.add(role)
+        seen_ids.add(slice_id)
+        seen.add(identity)
+        if item.get("task_uid") != batch.get("task_uid"):
+            fail(f"prior review ledger task mismatch for role {role}")
+        if item.get("head") != batch.get("frozen_head"):
+            fail(f"prior review ledger head mismatch for role {role}")
+        if item.get("epoch", item.get("review_epoch")) != batch.get("epoch"):
+            fail(f"prior review ledger epoch mismatch for role {role}")
+        if item.get("status") != "completed":
+            fail(f"prior review ledger is not completed for role {role}")
+        artifact_digest = item.get("artifact_digest")
+        artifacts = item.get("artifacts")
+        if not isinstance(artifact_digest, str) or not SHA_RE.fullmatch(artifact_digest):
+            fail(f"invalid prior review artifact digest for role {role}")
+        if not isinstance(artifacts, list) or len(artifacts) != 1 or not isinstance(artifacts[0], str):
+            fail(f"prior review role {role} must bind exactly one artifact")
+        artifact_path = resolve_collected_artifact(root, ledger_path, artifacts[0])
+        try:
+            artifact_bytes = artifact_path.read_bytes()
+        except OSError as exc:
+            fail(f"cannot read prior review artifact for role {role}: {artifact_path} ({exc})")
+        if hashlib.sha256(artifact_bytes).hexdigest() != artifact_digest:
+            fail(f"prior review artifact digest mismatch for role {role}")
+        try:
+            returned = json.loads(artifact_bytes)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            fail(f"prior review artifact is not valid JSON for role {role}: {exc}")
+        if not isinstance(returned, dict):
+            fail(f"prior review artifact is not an object for role {role}")
+        identity_fields = {
+            "role": role, "slice_id": slice_id, "task_uid": batch.get("task_uid"),
+            "head": batch.get("frozen_head"), "epoch": batch.get("epoch"), "status": "completed",
+        }
+        for field, expected_value in identity_fields.items():
+            if returned.get(field) != expected_value:
+                fail(f"prior review artifact {field} mismatch for role {role}")
+        disposition = returned.get("disposition")
+        findings = returned.get("findings")
+        residual_risk = returned.get("residual_risk")
+        if disposition not in {"findings", "no_findings"}:
+            fail(f"prior review artifact disposition is invalid for role {role}")
+        if not isinstance(findings, list) or (disposition == "findings" and not findings):
+            fail(f"prior review artifact findings are invalid for role {role}")
+        if disposition == "no_findings" and findings:
+            fail(f"prior review no_findings artifact contains findings for role {role}")
+        if not isinstance(residual_risk, str) or not residual_risk.strip():
+            fail(f"prior review artifact residual_risk is missing for role {role}")
+    missing = expected - seen
+    unexpected = seen - expected
+    if missing:
+        fail(f"prior review ledger is missing expected returns: {sorted(missing)}")
+    if unexpected:
+        fail(f"prior review ledger has unexpected returns: {sorted(unexpected)}")
+    return hashlib.sha256(raw).hexdigest()
 
 
 def validate_incremental_context(root: Path, context: dict[str, object], task_uid: str,
@@ -248,10 +357,7 @@ def validate_incremental_context(root: Path, context: dict[str, object], task_ui
         ledger_path.relative_to(root.resolve())
     except ValueError:
         fail("review context prior ledger escapes the repository")
-    try:
-        ledger_digest = hashlib.sha256(ledger_path.read_bytes()).hexdigest()
-    except OSError as exc:
-        fail(f"cannot read review context prior ledger: {exc}")
+    ledger_digest = validate_collected_ledger(root, batch, ledger_path)
     if context.get("prior_collection_ledger_digest") != ledger_digest or collection.get("ledger_digest") != ledger_digest:
         fail("review context prior collection ledger digest does not match its bytes")
     if sorted(collection.get("roles", [])) != sorted(prior_roles):
@@ -269,9 +375,7 @@ def validate_incremental_context(root: Path, context: dict[str, object], task_ui
     ).encode("utf-8")).hexdigest()
     if context.get("delta_paths_digest") != expected_delta_digest:
         fail("review context delta paths digest is invalid")
-    expected_patch_digest = hashlib.sha256(
-        git_bytes(root, "diff", "--binary", "--no-renames", prior_head, current_head)
-    ).hexdigest()
+    expected_patch_digest = binary_diff_digest(root, prior_head, current_head)
     if context.get("delta_patch_digest") != expected_patch_digest:
         fail("review context patch digest does not match the prior-head to current-head diff")
 

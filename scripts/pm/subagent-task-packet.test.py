@@ -14,6 +14,10 @@ from pathlib import Path
 
 
 SOURCE = Path(__file__).with_name("subagent-task-packet.py")
+_SPEC = importlib.util.spec_from_file_location("subagent_task_packet_under_test", SOURCE)
+assert _SPEC is not None and _SPEC.loader is not None
+PACKET = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(PACKET)
 SNAPSHOT_HELPER = Path(__file__).with_name("bootstrap-task-snapshot.py")
 TASK_UID = "task_11111111111111111111111111111111"
 
@@ -300,7 +304,26 @@ class PacketTest(unittest.TestCase):
         prior_path.parent.mkdir(parents=True, exist_ok=True)
         ledger_path.parent.mkdir(parents=True, exist_ok=True)
         collection_path.parent.mkdir(parents=True, exist_ok=True)
-        ledger_path.write_text("completed\n", encoding="utf-8")
+        rows = []
+        for item in expected_slices:
+            artifact_path = ledger_path.parent / f"{item['slice_id']}.json"
+            artifact_path.write_text(json.dumps({
+                "role": item["role"], "slice_id": item["slice_id"],
+                "task_uid": TASK_UID, "head": prior_head, "epoch": prior_epoch,
+                "status": "completed", "disposition": "no_findings",
+                "findings": [], "residual_risk": "none",
+            }, sort_keys=True), encoding="utf-8")
+            rows.append({
+                "role": item["role"], "slice_id": item["slice_id"],
+                "task_uid": TASK_UID, "head": prior_head, "epoch": prior_epoch,
+                "status": "completed",
+                "artifact_digest": hashlib.sha256(artifact_path.read_bytes()).hexdigest(),
+                "artifacts": [str(artifact_path)],
+            })
+        ledger_path.write_text(
+            "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+            encoding="utf-8",
+        )
         ledger_digest = hashlib.sha256(ledger_path.read_bytes()).hexdigest()
         batch_path.write_text(json.dumps({
             "schema": "oasis7-review-batch/v1", "epoch": prior_epoch,
@@ -452,6 +475,29 @@ class PacketTest(unittest.TestCase):
         admitted_payload = json.loads(admitted.stdout)
         self.assertEqual("admitted", admitted_payload["status"])
         self.assertTrue(admitted_payload["incremental_review_context_digest"])
+
+        ledger_path = self.repo / ".pm/scratch" / TASK_UID / "prior-ledger.jsonl"
+        first_row = json.loads(ledger_path.read_text(encoding="utf-8").splitlines()[0])
+        Path(str(first_row["artifacts"][0])).unlink()
+        rejected = self.review_admission(packet, plan, snapshot, ok=False)
+        self.assertRegex(rejected.stderr.lower(), r"artifact|ledger")
+
+    def test_binary_diff_digest_ignores_external_diff_and_textconv(self) -> None:
+        prior_head = self.git("rev-parse", "HEAD")
+        (self.repo / "repair.txt").write_text("repair\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.repo), "add", "repair.txt"], check=True)
+        subprocess.run(["git", "-C", str(self.repo), "commit", "-m", "repair"], check=True, capture_output=True)
+        current_head = self.git("rev-parse", "HEAD")
+        external = self.repo / "external-diff"
+        external.write_text("#!/bin/sh\nprintf 'external diff output\\n'\n", encoding="utf-8")
+        external.chmod(0o755)
+        baseline = PACKET.binary_diff_digest(self.repo, prior_head, current_head)
+        self.git("config", "diff.external", str(external))
+        with patch.dict(os.environ, {"GIT_EXTERNAL_DIFF": str(external)}):
+            self.assertEqual(
+                baseline,
+                PACKET.binary_diff_digest(self.repo, prior_head, current_head),
+            )
 
     def test_review_admission_rejects_packet_that_omits_plan_context(self) -> None:
         prior_path, prior_head, prior_epoch, collection_path = self.write_incremental_prior()
