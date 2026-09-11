@@ -181,6 +181,7 @@ fn rust_host_state_projects_assignment_only_from_explicit_current_relation_autho
     let mut input = sample_input();
     input["lists"]["agents"][0]["relation"] = json!({
         "kind": "agent_assignment",
+        "label": "Current assignment",
         "status": "active",
         "source_class": "runtime_projection",
         "freshness": "current"
@@ -190,6 +191,7 @@ fn rust_host_state_projects_assignment_only_from_explicit_current_relation_autho
     assert_eq!(state["links"][0]["status"], "active");
     assert_eq!(state["links"][0]["source_class"], "runtime_projection");
     assert_eq!(state["links"][0]["freshness"], "current");
+    assert_eq!(state["links"][0]["label"], "Current assignment");
 
     for (field, value) in [
         ("status", json!("stale")),
@@ -204,6 +206,53 @@ fn rust_host_state_projects_assignment_only_from_explicit_current_relation_autho
                 .unwrap()
                 .is_empty(),
             "relation {field} must fail closed"
+        );
+    }
+}
+
+#[test]
+fn rust_host_state_projects_generic_current_route_authority_to_render_links() {
+    let mut input = sample_input();
+    input["lists"]["agents"][0]["relation"] = json!({
+        "kind": "logistics_route",
+        "label": "Ore route",
+        "status": "active",
+        "source_class": "runtime_projection",
+        "freshness": "current"
+    });
+
+    let state = build_render_state(&input);
+    let links = state["links"].as_array().expect("projected links");
+    assert_eq!(links.len(), 1, "known generic route must reach RenderState");
+    assert_eq!(links[0]["kind"], "logistics_route");
+    assert_eq!(links[0]["label"], "Ore route");
+    assert_eq!(links[0]["status"], "active");
+    assert_eq!(links[0]["source_class"], "runtime_projection");
+    assert_eq!(links[0]["freshness"], "current");
+    assert!(links[0]["from"].is_object() && links[0]["to"].is_object());
+}
+
+#[test]
+fn rust_host_state_keeps_generic_projection_fail_closed_for_unknown_or_stale_authority() {
+    for (kind, status, source_class, freshness) in [
+        ("unknown", "active", "runtime_projection", "current"),
+        ("logistics_route", "queued", "runtime_projection", "current"),
+        ("resource_flow", "active", "local_pending", "current"),
+        ("route", "active", "runtime_projection", "stale"),
+    ] {
+        let mut input = sample_input();
+        input["lists"]["agents"][0]["relation"] = json!({
+            "kind": kind,
+            "status": status,
+            "source_class": source_class,
+            "freshness": freshness,
+        });
+        assert!(
+            build_render_state(&input)["links"]
+                .as_array()
+                .expect("projected links")
+                .is_empty(),
+            "generic relation {kind} must fail closed for non-current authority"
         );
     }
 }
@@ -362,6 +411,40 @@ fn rust_host_state_projects_module_visual_entities_with_resolved_anchors_only() 
     );
     assert_eq!(state["module_visual_entities"][2]["kind"], "opaque_kind");
     assert_eq!(state["module_visual_entities"][2]["label"], "Stored label");
+    assert_eq!(
+        state["module_visual_entities"][2]["anchor"],
+        input["snapshot"]["model"]["module_visual_entities"]["z-absolute"]["anchor"],
+        "module details must retain the display-only anchor payload"
+    );
+}
+
+#[test]
+fn rust_host_state_keeps_module_visual_selection_as_a_current_entry() {
+    let mut input = sample_input();
+    input["snapshot"]["model"]["module_visual_entities"] = json!({
+        "module-relay": {
+            "entity_id": "module-relay",
+            "module_id": "module-7",
+            "kind": "relay",
+            "label": "Relay Seven",
+            "anchor": {
+                "type": "absolute",
+                "data": { "x_cm": 7_100_000, "y_cm": 1_200_000, "z_cm": 80 }
+            }
+        }
+    });
+    input["selectedKind"] = json!("module_visual");
+    input["selectedId"] = json!("module-relay");
+
+    let state = build_render_state(&input);
+    assert_eq!(
+        state["selection"],
+        json!({ "kind": "module_visual", "id": "module-relay" })
+    );
+    assert_eq!(
+        state["module_visual_entities"][0]["pos"],
+        json!({ "x_cm": 7_100_000.0, "y_cm": 1_200_000.0, "z_cm": 80.0 })
+    );
 }
 
 #[test]

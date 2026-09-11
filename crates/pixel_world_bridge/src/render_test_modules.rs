@@ -30,6 +30,9 @@ mod assignment_cue_tests;
 #[path = "render_social_links_tests.rs"]
 mod social_link_tests;
 
+#[path = "render_links_tests.rs"]
+mod links_tests;
+
 #[path = "render_micro_depot_facilities_tests.rs"]
 mod micro_depot_facilities_tests;
 

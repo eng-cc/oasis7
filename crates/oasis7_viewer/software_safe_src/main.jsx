@@ -29,6 +29,7 @@ import { FactoryProductionFailureDispositionCard } from "./factory_production_fa
 import { AgentContextLite } from "./agent_context_lite.jsx";
 import { buildAgentContextDisplayModel } from "./viewer_agent_context_display_model.js";
 import { pixelWorldBlockerPresentation, pixelWorldConnectionPresentation } from "./pixel_world_presentation.js";
+import { pixelWorldReadableModuleLabel } from "./pixel_world_identity.js";
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
 const [viewerStateRevision, setViewerStateRevision] = createSignal(0);
 function observeViewerStateRevision() {
@@ -3707,6 +3708,19 @@ function DetailsPanel() {
     && core.state.selectedId
     && !core.isAgentVisibleToCurrentSession(core.state.selectedId);
   const hasVisibleSelectedObject = () => core.state.selectedObject && !hiddenSelectedAgent();
+  const selectedModule = () => core.state.selectedKind === "module_visual" ? core.state.selectedObject : null;
+  const selectedModuleAnchor = () => {
+    const anchor = selectedModule()?.anchor;
+    if (!anchor || typeof anchor !== "object") return tr(locale(), "锚点不可用", "Anchor unavailable");
+    const type = String(anchor.type || "anchor").trim();
+    const data = anchor.data || {};
+    if (type === "absolute") {
+      const position = data.pos || data;
+      return `${type} · ${core.formatWorldPositionCm(position)}`;
+    }
+    const id = data.agent_id || data.location_id || data.id;
+    return id ? `${type} · ${id}` : type;
+  };
   const snapshotSummary = () => ({
     config: core.state.snapshot?.config || null,
     counts: {
@@ -3733,15 +3747,17 @@ function DetailsPanel() {
         <Badge>{selectedLabel()}</Badge>
       </div>
       <Show
-        when={!hiddenSelectedAgent()}
+        when={!hiddenSelectedAgent() && core.state.selectedKind !== "module_visual"}
         fallback={
-          <EmptyState>
-            {tr(
-              locale(),
-              "当前账号还没有可控 Agent。请先完成认领或等待自己的 Agent 绑定同步。",
-              "The current account has no controllable Agent yet. Claim one or wait for your own Agent binding to sync.",
-            )}
-          </EmptyState>
+          <Show when={core.state.selectedKind !== "module_visual"}>
+            <EmptyState>
+              {tr(
+                locale(),
+                "当前账号还没有可控 Agent。请先完成认领或等待自己的 Agent 绑定同步。",
+                "The current account has no controllable Agent yet. Claim one or wait for your own Agent binding to sync.",
+              )}
+            </EmptyState>
+          </Show>
         }
       >
         <InteractionPanel />
@@ -3771,6 +3787,20 @@ function DetailsPanel() {
             )}
             value={() => core.clone(selected())}
           />
+        )}
+      </Show>
+      <Show when={selectedModule()}>
+        {(module) => (
+          <div class="viewer-module-details" data-viewer-module-details="true">
+            <div class="panel__title panel__title--spaced">{tr(locale(), "模块明细", "Module Details")}</div>
+            <div class="badge-row">
+              <Badge class="badge badge--accent">{pixelWorldReadableModuleLabel(module(), module().id, core.isLocaleZh(locale()))}</Badge>
+              <Badge>{`module=${module().module_id || "-"}`}</Badge>
+            </div>
+            <div class="feedback-detail"><strong>{tr(locale(), "类型", "Kind")}</strong>: {module().kind || "artifact"}</div>
+            <div class="feedback-detail"><strong>{tr(locale(), "标签", "Label")}</strong>: {module().label || module().id}</div>
+            <div class="feedback-detail"><strong>{tr(locale(), "锚点", "Anchor")}</strong>: {selectedModuleAnchor()}</div>
+          </div>
         )}
       </Show>
       <div>

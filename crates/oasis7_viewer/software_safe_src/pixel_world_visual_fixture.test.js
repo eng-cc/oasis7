@@ -137,4 +137,25 @@ describe("pixel world visual fixtures", () => {
     expect(core.modelLists().agents.map((agent) => agent.id)).toContain("agent-0");
     expect(core.state.snapshot.model.agent_player_bindings["agent-0"]).toBe("local-test-player-fixture");
   });
+
+  it("keeps every routes-and-events relation control visible after local auth alignment", () => {
+    window.history.replaceState({}, "", "/viewer.html?test_api=1&connect=0&pixel_world_visual_fixture=routes_and_events");
+    expect(installPixelWorldVisualFixtureHook()).toBe("routes_and_events");
+    core.state.auth = {
+      ...core.state.auth,
+      available: true,
+      playerId: "local-test-player-routes",
+      publicKey: "routes-public-key",
+      source: "local_test_api_ephemeral",
+      boundAgentId: null,
+    };
+
+    expect(window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT__()).toBe(true);
+    expect(core.modelLists().agents.map((agent) => agent.id)).toEqual(expect.arrayContaining([
+      "agent-route",
+      "agent-unknown-route",
+      "agent-stale-route",
+      "agent-zero-route",
+    ]));
+  });
 });

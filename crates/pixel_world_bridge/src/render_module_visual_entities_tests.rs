@@ -149,7 +149,7 @@ fn module_visual_raster_signature(kind: &str) -> (usize, String) {
 }
 
 #[test]
-fn module_visual_entities_are_neutral_noninteractive_and_reconcile_stale_markers() {
+fn module_visual_entities_render_interactive_markers_and_reconcile_stale_markers() {
     let mut state = sample_render_state(12_000.0);
     state.module_visual_entities = vec![
         module_visual_with_kind(
@@ -188,13 +188,17 @@ fn module_visual_entities_are_neutral_noninteractive_and_reconcile_stale_markers
         rendered[0].1, rendered[1].1,
         "co-anchors must receive distinct stable offsets"
     );
-    assert!(
-        world
-            .resource::<BevyRuntimeState>()
-            .hit_regions
-            .iter()
-            .all(|region| region.kind != "module_visual"),
-        "a module marker must not create an interaction region"
+    let module_hit_regions = world
+        .resource::<BevyRuntimeState>()
+        .hit_regions
+        .iter()
+        .filter(|region| region.kind == "module_visual")
+        .map(|region| region.id.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        module_hit_regions,
+        vec!["module-a", "module-z"],
+        "each visible module marker must expose a hit region for selection"
     );
 
     world
@@ -366,6 +370,11 @@ fn module_visual_labels_are_zoom_gated_stably_suppressed_and_reconciled() {
         .expect("test render state")
         .module_visual_entities
         .clear();
+    {
+        let mut runtime = world.resource_mut::<BevyRuntimeState>();
+        runtime.render_version += 1;
+        runtime.hit_regions_dirty = true;
+    }
     app.update();
     let world = app.world_mut();
     let mut labels = world.query::<&PixelWorldModuleVisualLabel>();
@@ -379,7 +388,47 @@ fn module_visual_labels_are_zoom_gated_stably_suppressed_and_reconciled() {
             .resource::<BevyRuntimeState>()
             .hit_regions
             .iter()
-            .all(|region| region.kind != "module_visual"),
-        "labels must not introduce a hit-test region"
+            .all(|region| region.kind != "module_visual")
+    );
+}
+
+#[test]
+fn module_visual_labels_yield_to_shared_map_label_obstacles() {
+    let anchor = sample_position(1_530_000.0, 1_010_000.0);
+    let mut state = sample_render_state(12_000.0);
+    state.agents.clear();
+    state.locations.clear();
+    state.links.clear();
+    state.visual_hotspots = vec![VisualHotspot {
+        id: "goal-highlight".to_string(),
+        label: "Current objective".to_string(),
+        kind: "goal".to_string(),
+        pos: anchor.clone(),
+        emphasis: Some(1.0),
+        size_hint_px: Some(14.0),
+    }];
+    state.module_visual_entities = vec![module_visual_with_label(
+        "module-goal",
+        "relay",
+        Some("Relay marker"),
+        anchor,
+    )];
+
+    let mut app = render_test_app(state);
+    let world = app.world_mut();
+    let mut module_labels = world.query::<&PixelWorldModuleVisualLabel>();
+    assert_eq!(
+        module_labels.iter(world).count(),
+        0,
+        "module identity labels must yield to the shared objective label obstacle"
+    );
+    let mut map_labels = world.query::<(&crate::render::map_labels::PixelWorldMapLabel, &Text2d)>();
+    assert_eq!(
+        map_labels
+            .iter(world)
+            .map(|(_, text)| text.0.clone())
+            .collect::<Vec<_>>(),
+        vec!["Current objective"],
+        "the shared map label remains the readable priority"
     );
 }

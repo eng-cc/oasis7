@@ -41,6 +41,10 @@ function focusViewerAnchor(event) {
   event.preventDefault();
 }
 
+function focusViewerPanel(panelId) {
+  return focusViewerTarget(`#${panelId}`);
+}
+
 function installViewerRouteController() {
   const handleKeyDown = (event) => {
     if (
@@ -104,4 +108,4 @@ function SecondaryViewerNavigation(props) {
   );
 }
 
-export { MobileJumpRail, SecondaryViewerNavigation, focusViewerAnchor, installViewerRouteController };
+export { MobileJumpRail, SecondaryViewerNavigation, focusViewerAnchor, focusViewerPanel, installViewerRouteController };

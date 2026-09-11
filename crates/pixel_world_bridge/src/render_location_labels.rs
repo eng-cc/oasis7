@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use super::map_labels::map_label_obstacles;
 use super::*;
 
 const LOCATION_LABEL_COLOR: Color = Color::srgba_u8(226, 232, 240, 220);
@@ -48,21 +49,15 @@ pub(super) fn reconcile_location_labels(
         despawn_location_labels(commands, queries);
         return;
     };
-    if runtime.camera.zoom < LOCATION_LABEL_MIN_ZOOM {
-        despawn_location_labels(commands, queries);
-        return;
-    }
-
     let selected_id = render_state
         .selection
         .as_ref()
         .and_then(|selection| (selection.kind == "location").then_some(selection.id.as_str()));
+    let map_obstacles = map_label_obstacles(render_state, width, height, &runtime.camera);
     let mut locations = render_state.locations.iter().collect::<Vec<_>>();
     locations.sort_by(|left, right| {
-        let left_selected = Some(left.id.as_str()) == selected_id;
-        let right_selected = Some(right.id.as_str()) == selected_id;
-        right_selected
-            .cmp(&left_selected)
+        location_label_priority(left.id.as_str(), selected_id)
+            .cmp(&location_label_priority(right.id.as_str(), selected_id))
             .then_with(|| left.id.cmp(&right.id))
     });
 
@@ -78,9 +73,17 @@ pub(super) fn reconcile_location_labels(
         let label_x = canvas_x;
         let label_y = canvas_y - LOCATION_LABEL_ABOVE_MARKER_PX;
         let rect = LocationLabelRect::above_marker(label_x, label_y, &display);
-        if accepted_rects
-            .iter()
-            .any(|accepted| accepted.overlaps(rect))
+        let priority = location_label_priority(location.id.as_str(), selected_id);
+        if runtime.camera.zoom < LOCATION_LABEL_MIN_ZOOM && priority > 0 {
+            continue;
+        }
+        if priority > 0
+            && (accepted_rects
+                .iter()
+                .any(|accepted| accepted.overlaps(rect))
+                || map_obstacles.iter().any(|obstacle| {
+                    obstacle.overlaps_bounds(rect.left, rect.right, rect.top, rect.bottom)
+                }))
         {
             continue;
         }
@@ -115,6 +118,10 @@ pub(super) fn reconcile_location_labels(
             commands.entity(entity).despawn();
         }
     }
+}
+
+fn location_label_priority(id: &str, selected_id: Option<&str>) -> u8 {
+    u8::from(selected_id != Some(id))
 }
 
 fn location_label_display(location: &Location) -> String {

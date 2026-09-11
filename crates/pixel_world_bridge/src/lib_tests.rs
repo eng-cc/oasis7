@@ -10,6 +10,7 @@ use wasm_bindgen_test::wasm_bindgen_test;
 
 fn sample_render_state_for_camera(selection_kind: &str) -> RenderState {
     RenderState {
+        locale: "en".to_string(),
         world_bounds: Some(WorldBounds {
             width_cm: 3_000_000.0,
             depth_cm: 2_000_000.0,

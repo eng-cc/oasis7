@@ -19,6 +19,7 @@ fn assignment_link_state() -> RenderState {
         Link {
             id: "assignment:agent-0:loc-0".to_string(),
             kind: "agent_assignment".to_string(),
+            label: None,
             from: sample_position(1_250_000.0, 750_000.0),
             to: sample_position(1_750_000.0, 1_250_000.0),
             emphasis: Some(0.72),
@@ -29,6 +30,7 @@ fn assignment_link_state() -> RenderState {
         Link {
             id: "unknown:agent-0".to_string(),
             kind: "resource_transfer".to_string(),
+            label: None,
             from: sample_position(1_250_000.0, 1_250_000.0),
             to: sample_position(1_750_000.0, 750_000.0),
             emphasis: Some(0.72),

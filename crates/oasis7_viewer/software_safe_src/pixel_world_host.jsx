@@ -13,6 +13,7 @@ import { resolvePixelWorldReadoutStatus } from "./pixel_world_readout.js";
 import { pixelWorldBlockerPresentation, pixelWorldConnectionPresentation, pixelWorldFeedFreshnessPresentation } from "./pixel_world_presentation.js";
 import { pixelWorldHotspotGlyphSize, pixelWorldHotspotStyle } from "./pixel_world_hotspot_projection.js";
 import { PixelWorldRendererTargets } from './pixel_world_renderer_targets.jsx';
+import { focusViewerPanel } from "./viewer_navigation.jsx";
 export { pixelWorldSelectedBlockerVisualFixture };
 function tr(locale, zh, en) { return core.isLocaleZh(locale) ? zh : en; }
 async function waitForRuntimeCanvasAttachment(canvas) {
@@ -1042,9 +1043,12 @@ export function PixelWorldHost(props) {
   });
   const adapter = createMemo(() => createPixelWorldHostAdapter({
     onSelectEntity(selection) {
-      core.applySelection(selection);
+      const applied = core.applySelection(selection);
       setCoreRevision((revision) => revision + 1);
       applyRendererUpdate();
+      if (applied?.kind === "module_visual") {
+        focusViewerPanel("viewer-details-panel");
+      }
     },
     onHoverEntity(selection) {
       setHoverSelection(selection);

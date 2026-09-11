@@ -69,9 +69,10 @@ fn agent_labels_are_zoom_gated_stably_suppressed_and_reconciled_without_hit_regi
         .camera
         .zoom = 1.0;
     app.update();
-    assert!(
-        rendered_texts(&mut app).is_empty(),
-        "overview zoom must keep Agent identity labels hidden"
+    assert_eq!(
+        rendered_texts(&mut app),
+        vec!["Selected survey agent".to_string()],
+        "overview zoom may retain the selected Agent while suppressing ambient identities"
     );
 
     {
@@ -138,5 +139,28 @@ fn agent_labels_clear_when_a_mounted_scene_loses_its_render_state() {
     assert!(
         rendered_texts(&mut app).is_empty(),
         "a mounted scene without a render snapshot must not retain stale Agent labels"
+    );
+}
+
+#[test]
+fn active_agent_wins_an_identity_collision_before_ambient_ids() {
+    let anchor = sample_position(1_530_000.0, 1_010_000.0);
+    let mut state = sample_render_state(12_000.0);
+    state.selection = None;
+    state.active_intent_target = Some(ActiveIntentTarget {
+        agent_id: "agent-z".to_string(),
+        status: "accepted".to_string(),
+    });
+    state.agents = vec![
+        agent_with_label("agent-a", "Ambient survey", anchor.clone()),
+        agent_with_label("agent-z", "Active route agent", anchor),
+    ];
+
+    let mut app = render_test_app(state);
+
+    assert_eq!(
+        rendered_texts(&mut app),
+        vec!["Active route agent".to_string()],
+        "active Agent identity must outrank ambient labels at a dense anchor"
     );
 }

@@ -145,6 +145,32 @@ describe("WorldFeedPanel", () => {
     expect(document.querySelectorAll("a[data-world-feed-receipt-ref]")).toHaveLength(1);
   });
 
+  it("offers module locate only for a live snapshot target", () => {
+    const onFocusModule = vi.fn();
+    const liveModule = { id: "module-relay", label: "Relay Seven" };
+    const resolveModuleVisualEntity = (event) => event.module_visual_entity_id === liveModule.id ? liveModule : null;
+    render(() => (
+      <WorldFeedPanel
+        feed={() => ({
+          status: "ready",
+          events: [
+            { event_seq: 100, kind: "ModuleVisualEntityRemoved", summary: "Removed marker reference", module_visual_entity_id: "module-deleted" },
+            { event_seq: 101, kind: "ModuleVisualEntityUpserted", summary: "Relay marker published", module_visual_entity_id: "module-relay" },
+          ],
+        })}
+        locale={() => "en"}
+        tr={tr}
+        resolveModuleVisualEntity={resolveModuleVisualEntity}
+        onFocusModule={onFocusModule}
+      />
+    ));
+    expect(document.querySelectorAll("[data-world-feed-module-locate]")).toHaveLength(1);
+    const locate = screen.getByRole("button", { name: /locate module relay seven/i });
+    fireEvent.click(locate);
+    expect(onFocusModule).toHaveBeenCalledWith(expect.objectContaining({ module_visual_entity_id: "module-relay" }));
+    expect(screen.queryByRole("button", { name: /locate module module-deleted/i })).not.toBeInTheDocument();
+  });
+
   it("surfaces the highest event sequence in the collapsed summary while preserving feed status", () => {
     render(() => (
       <WorldFeedPanel

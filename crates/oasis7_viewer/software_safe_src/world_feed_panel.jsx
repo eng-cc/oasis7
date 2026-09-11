@@ -237,6 +237,19 @@ function WorldFeedPanel(props) {
                       {tr(locale(), `查看明确回执 ${event.receipt_ref}`, `View explicit receipt ${event.receipt_ref}`)}
                     </a>
                   </Show>
+                  <Show when={props.resolveModuleVisualEntity?.(event)}>
+                    {(module) => (
+                      <button
+                        type="button"
+                        class="world-feed__module-locate"
+                        data-world-feed-module-locate={module().id}
+                        aria-label={`${tr(locale(), "定位模块", "Locate module")} ${module().label || module().id}`}
+                        onClick={() => props.onFocusModule?.(event)}
+                      >
+                        {tr(locale(), "定位模块", "Locate module")}: {module().label || module().id}
+                      </button>
+                    )}
+                  </Show>
                 </article>
               )}
             </For>

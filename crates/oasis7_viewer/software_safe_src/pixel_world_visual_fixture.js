@@ -54,6 +54,41 @@ export function installPixelWorldVisualFixtureHook() {
   const fixture = fixtures[fixtureName]();
   core.injectSnapshot(fixture, { returnState: false });
   if (fixtureName === "module_visual_entities") {
+    const moduleFixtureEvents = [
+      {
+        event_seq: 101,
+        kind: "ModuleVisualEntityUpserted",
+        summary: "Relay marker published",
+        detail: "The relay marker is available on the world map.",
+        receipt_ref: null,
+        module_visual_entity_id: "module-relay",
+      },
+      {
+        event_seq: 100,
+        kind: "ModuleVisualEntityRemoved",
+        summary: "Removed marker reference",
+        detail: "The referenced marker is no longer in the current snapshot.",
+        receipt_ref: null,
+        module_visual_entity_id: "module-deleted",
+      },
+    ];
+    core.state.worldFeed = {
+      status: "ready",
+      schemaVersion: "world_feed/v1",
+      worldId: "fixture-world",
+      reorgEpoch: "0",
+      cursor: "101",
+      events: moduleFixtureEvents,
+      stale: false,
+      gapReason: null,
+      unavailableReason: null,
+      snapshotReloadRequired: false,
+      requestInFlight: false,
+      requestCursor: null,
+      requestLimit: 50,
+      dedupedCount: 0,
+      lastError: null,
+    };
     // This is test-api-only and uses whole snapshots so it cannot expose a
     // production action path. It lets a browser smoke prove update/removal.
     window.__OASIS7_MODULE_VISUAL_FIXTURE_CONTROL__ = {
@@ -61,6 +96,20 @@ export function installPixelWorldVisualFixtureHook() {
         const next = core.clone(fixture);
         next.model.module_visual_entities = core.clone(entities || {});
         core.injectSnapshot(next, { returnState: false });
+        core.requestRender();
+        return true;
+      },
+      publishEvent(event) {
+        core.state.worldFeed.events = [core.clone(event)];
+        core.state.worldFeed.status = "ready";
+        core.state.worldFeed.stale = false;
+        core.requestRender();
+        return true;
+      },
+      publishStaleEvent(event) {
+        core.state.worldFeed.events = [core.clone(event)];
+        core.state.worldFeed.status = "gap";
+        core.state.worldFeed.stale = true;
         core.requestRender();
         return true;
       },
@@ -82,17 +131,18 @@ export function installPixelWorldVisualFixtureHook() {
     const playerId = String(core.state.auth.playerId || "player-one").trim() || "player-one";
     const publicKey = String(core.state.auth.publicKey || "abcdef0123456789abcdef0123456789").trim();
     const model = core.state.snapshot?.model || {};
+    const alignedAgentIds = fixtureName === "routes_and_events"
+      ? Object.keys(model.agents || {})
+      : ["agent-0"];
     model.agent_player_bindings = {
       ...(model.agent_player_bindings || {}),
-      "agent-0": playerId,
     };
     model.agent_player_public_key_bindings = {
       ...(model.agent_player_public_key_bindings || {}),
-      "agent-0": publicKey,
     };
-    if (fixtureName === 'routes_and_events') {
-      model.agent_player_bindings['agent-1'] = playerId;
-      model.agent_player_public_key_bindings['agent-1'] = publicKey;
+    for (const agentId of alignedAgentIds) {
+      model.agent_player_bindings[agentId] = playerId;
+      model.agent_player_public_key_bindings[agentId] = publicKey;
     }
     core.state.auth = {
     ...core.state.auth,

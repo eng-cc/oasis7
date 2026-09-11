@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use super::map_labels::map_label_obstacles;
 use super::*;
 
 pub(crate) const MODULE_VISUAL_ENTITY_COLOR: Color = Color::srgb_u8(129, 140, 248);
@@ -82,6 +83,7 @@ pub(super) fn reconcile_module_visual_entities(
     chip_queries: &ModuleIdentityChipQueries,
     width: f64,
     height: f64,
+    rebuild_hit_regions: bool,
 ) {
     let existing_chips = chip_queries
         .chips
@@ -107,6 +109,7 @@ pub(super) fn reconcile_module_visual_entities(
         despawn_module_identity_chips(commands, chip_queries);
         return;
     };
+    let map_obstacles = map_label_obstacles(render_state, width, height, &runtime.camera);
 
     let mut entities = render_state
         .module_visual_entities
@@ -141,6 +144,16 @@ pub(super) fn reconcile_module_visual_entities(
             MODULE_VISUAL_ENTITY_LAYER_Z,
         ));
         transform.rotation = Quat::from_rotation_z(std::f32::consts::FRAC_PI_4);
+        if rebuild_hit_regions {
+            runtime.hit_regions.push(HitRegion {
+                kind: "module_visual",
+                id: entity.id.clone(),
+                left: canvas_x + f64::from(co_anchor_offset.x) - MODULE_VISUAL_HIT_HALF_SIZE,
+                top: canvas_y + f64::from(co_anchor_offset.y) - MODULE_VISUAL_HIT_HALF_SIZE,
+                right: canvas_x + f64::from(co_anchor_offset.x) + MODULE_VISUAL_HIT_HALF_SIZE,
+                bottom: canvas_y + f64::from(co_anchor_offset.y) + MODULE_VISUAL_HIT_HALF_SIZE,
+            });
+        }
         let sprite = sprite_for_square(MODULE_VISUAL_ENTITY_COLOR, MODULE_VISUAL_ENTITY_SIZE_PX);
         if let Some(existing) = runtime.module_visual_entities.get(&entity.id).copied() {
             commands.entity(existing).insert((sprite, transform));
@@ -192,6 +205,14 @@ pub(super) fn reconcile_module_visual_entities(
             if accepted_label_rects
                 .iter()
                 .all(|accepted| !accepted.overlaps(label_rect))
+                && map_obstacles.iter().all(|obstacle| {
+                    !obstacle.overlaps_bounds(
+                        label_rect.left,
+                        label_rect.right,
+                        label_rect.top,
+                        label_rect.bottom,
+                    )
+                })
             {
                 accepted_label_rects.push(label_rect);
                 active_labels.insert(entity.id.clone());

@@ -547,8 +547,13 @@ function entityCollections() {
   return {
     agents: Object.values(model.agents || {}),
     locations: Object.values(model.locations || {}),
+    moduleVisualEntities: Object.values(model.module_visual_entities || {}).map((entry) => normalizeModuleVisualEntity(entry)).filter(Boolean),
   };
 }
+function normalizeModuleVisualEntity(entry, fallbackId = "") { if (!entry || typeof entry !== "object") return null; const id = String(entry.entity_id || entry.id || fallbackId || "").trim(); if (!id) return null; return { ...entry, id, module_id: String(entry.module_id || entry.moduleId || "").trim(), kind: String(entry.kind || "artifact").trim() || "artifact", label: entry.label == null ? null : String(entry.label).trim() || null, anchor: entry.anchor || null }; }
+function moduleVisualEntityIdFromEvent(event, depth = 0) { if (!event || typeof event !== "object" || depth > 4) return null; for (const key of ["module_visual_entity_id", "moduleVisualEntityId", "entity_id", "entityId"]) { const value = event[key]; if (value != null && String(value).trim()) return String(value).trim(); } for (const value of [event.entity, event.data, event.payload, event.event, event.kind]) { const id = moduleVisualEntityIdFromEvent(value, depth + 1); if (id) return id; } return null; }
+function moduleVisualEntityFromEvent(event) { const id = moduleVisualEntityIdFromEvent(event); return id ? entityCollections().moduleVisualEntities.find((entry) => entry.id === id) || null : null; }
+function focusModuleFromEvent(event) { const target = moduleVisualEntityFromEvent(event); return target ? applySelection({ kind: "module_visual", id: target.id }) : null; }
 
 function agentBindingForId(agentId) {
   const id = String(agentId || "").trim();
@@ -668,12 +673,14 @@ function applySelection(selection) {
   if (!selection) return null;
   const kind = String(selection.kind || "").toLowerCase();
   const id = String(selection.id || "");
-  const { agents, locations } = entityCollections();
+  const { agents, locations, moduleVisualEntities } = entityCollections();
   let object = null;
   if (kind === "agent") {
     object = agents.find((entry) => entry.id === id) || null;
   } else if (kind === "location") {
     object = locations.find((entry) => entry.id === id) || null;
+  } else if (kind === "module_visual") {
+    object = moduleVisualEntities.find((entry) => entry.id === id) || null;
   }
   if (!object) {
     return null;
@@ -1368,7 +1375,7 @@ function handleSnapshot(snapshot) {
       applySelection({ kind: "location", id: locations[0].id });
     }
   } else if (state.selectedKind && state.selectedId) {
-    applySelection({ kind: state.selectedKind, id: state.selectedId });
+    if (!applySelection({ kind: state.selectedKind, id: state.selectedId })) { state.selectedKind = null; state.selectedId = null; state.selectedObject = null; syncAgentInteractionDrafts(true); }
   }
   hydrateChatHistoryFromStorage();
   syncAgentInteractionDrafts(false);
@@ -4368,6 +4375,7 @@ export {
   describePromptVersionState,
   describeSemanticFeedback,
   entityCollections,
+  focusModuleFromEvent,
   expireHostedRuntimeSyncTimeoutForTest,
   expirePendingAgentChatOverallTimeoutForTest,
   expirePendingSessionRegisterWaiterForTest,

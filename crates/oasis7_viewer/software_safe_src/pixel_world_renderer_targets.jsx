@@ -1,7 +1,7 @@
 import { createMemo, For } from 'solid-js';
 import { toCanvasPoint } from './pixel_world_hotspot_projection.js';
 import { pixelWorldVisualState } from './pixel_world_visual_clarity.jsx';
-import { pixelWorldReadableAgentLabel } from './pixel_world_identity.js';
+import { pixelWorldReadableAgentLabel, pixelWorldReadableModuleLabel } from './pixel_world_identity.js';
 import { isLocaleZh } from './legacy_core.js';
 import { forwardRendererTargetPointer } from './pixel_world_renderer_target_input.js';
 
@@ -24,6 +24,8 @@ export function PixelWorldRendererTargets(props) {
     ...state().agents.map(entity => [JSON.stringify(['agent', entity.id]), entity]),
     ...(state().worldBounds ? state().locations.filter(entity => entity.pos) : [])
       .map(entity => [JSON.stringify(['location', entity.id]), entity]),
+    ...state().moduleVisualEntities.filter(entity => entity.pos)
+      .map(entity => [JSON.stringify(['module_visual', entity.id]), entity]),
   ]));
   const keys = createMemo(() => [...entities().keys()]);
   return <For each={keys()}>{key => {
@@ -35,10 +37,13 @@ export function PixelWorldRendererTargets(props) {
     data-location-id={kind === 'location' ? entity().id : undefined}
     data-pixel-world-agent-marker={kind === 'agent' ? 'true' : undefined}
     data-pixel-world-location-marker={kind === 'location' ? 'true' : undefined}
+    data-pixel-world-module-marker={kind === 'module_visual' ? 'true' : undefined}
+    data-module-id={kind === 'module_visual' ? entity().id : undefined}
+    data-module-kind={kind === 'module_visual' ? entity().kind : undefined}
     data-renderer-target="true"
     data-selected={props.selection()?.kind === kind && props.selection()?.id === entity().id ? 'true' : 'false'}
     aria-pressed={props.selection()?.kind === kind && props.selection()?.id === entity().id}
-    aria-label={`${isZh() ? '选择' : 'Select'} ${kind === 'agent' ? pixelWorldReadableAgentLabel(entity(), entity().id, isZh()) : entity().label || entity().id}`}
+    aria-label={`${isZh() ? '选择' : 'Select'} ${kind === 'agent' ? pixelWorldReadableAgentLabel(entity(), entity().id, isZh()) : kind === 'module_visual' ? pixelWorldReadableModuleLabel(entity(), entity().id, isZh()) : entity().label || entity().id}`}
     style={rendererEntityTargetStyle(entity(),state().worldBounds,props.stageSize(),props.cameraState?.())}
     onClick={() => props.onSelect({kind,id:entity().id})}
     onPointerDown={forwardRendererTargetPointer}
