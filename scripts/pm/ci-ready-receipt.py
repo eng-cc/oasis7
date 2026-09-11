@@ -204,6 +204,8 @@ def main():
     if run.get('_integration'):
         proof=run['_integration']
         payload.update(integration_run_id=proof['workflow_run_id'],tested_tree_oid=proof['tested_tree_oid'],tested_commit_oid=proof['tested_commit_oid'],workflow_sha=proof['workflow_sha'])
+        if old is None or any(key in old for key in ('request_id', 'workflow_ref', 'run_attempt')):
+            payload.update(workflow_ref=proof['workflow_ref'],request_id=proof['request_id'],request_created_at=proof['request_created_at'],run_id=proof['run_id'],run_attempt=proof['run_attempt'],live_validation='ci-ready-receipt-live',trusted_integration_artifact=True)
     payload["review_evidence_digest"]=review_evidence_digest(payload)
     if old is not None:
         for key,val in payload.items():
@@ -232,6 +234,13 @@ def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=Fals
                 raise ValueError('explicit integration locator superseded by current request')
             if check_name!='required-gate': raise ValueError('unsupported manual check')
             check,proof=verified_run(repository,uid,number,base,head,selected["id"],app)
+            proof={**proof,
+              "request_id": selected["id"],
+              "request_created_at": dt.datetime.fromtimestamp(selected["requested_at"], dt.timezone.utc).isoformat(),
+              "run_id": proof.get("workflow_run_id", selected["id"]),
+              "run_attempt": selected["run_attempt"],
+              "check_app_id": (check.get("app") or {}).get("id"),
+              "check_run_id": check.get("id")}
             if current_request(repository,uid,number,base,head,pr['base']['ref'])!=selected:
                 raise ValueError('current request changed during integration verification')
             fresh=gh('api',f'repos/{repository}/pulls/{number}')

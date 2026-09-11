@@ -298,14 +298,88 @@ run_site_contract_tests() {
   run bash ./scripts/site-checks-contract.test.sh
 }
 
+product_doc_range() {
+  local base_oid="${OASIS7_PRODUCT_DOC_BASE:-}"
+  local head_oid="${OASIS7_PRODUCT_DOC_HEAD:-}"
+  if [[ -n "$base_oid" || -n "$head_oid" ]]; then
+    [[ -n "$base_oid" && -n "$head_oid" ]] || {
+      echo "product-doc-content: explicit base/head must be supplied together" >&2
+      return 1
+    }
+    printf '%s\n%s\n' "$base_oid" "$head_oid"
+    return 0
+  fi
+  if [[ -n "${GITHUB_EVENT_PATH:-}" ]]; then
+    if [[ ! -f "$GITHUB_EVENT_PATH" ]]; then
+      echo "product-doc-content: CI event path is missing or unreadable" >&2
+      return 1
+    fi
+    python3 - "$GITHUB_EVENT_PATH" "${GITHUB_EVENT_NAME:-}" "${GITHUB_SHA:-}" <<'PY'
+import json
+import re
+import sys
+
+event_path, event_name, default_head = sys.argv[1:]
+try:
+    with open(event_path, encoding="utf-8") as handle:
+        payload = json.load(handle)
+except (OSError, ValueError) as exc:
+    raise SystemExit(f"product-doc-content: malformed CI event: {exc}")
+if event_name == "pull_request":
+    base = ((payload.get("pull_request") or {}).get("base") or {}).get("sha")
+    head = ((payload.get("pull_request") or {}).get("head") or {}).get("sha")
+elif event_name == "push":
+    base = payload.get("before")
+    head = payload.get("after")
+elif event_name == "workflow_dispatch":
+    inputs = payload.get("inputs") or {}
+    base = inputs.get("integration_base")
+    head = inputs.get("expected_head")
+else:
+    raise SystemExit(f"product-doc-content: unsupported CI event range: {event_name or '<empty>'}")
+if not isinstance(base, str) or not isinstance(head, str) or not base or not head:
+    raise SystemExit("product-doc-content: CI event did not provide both base/head OIDs")
+if not re.fullmatch(r"[0-9a-fA-F]{40}", base) or not re.fullmatch(r"[0-9a-fA-F]{40}", head):
+    raise SystemExit("product-doc-content: CI event base/head must be full 40-character OIDs")
+print(base)
+print(head)
+PY
+    return $?
+  fi
+  if [[ "${CI:-}" == "true" || "${GITHUB_ACTIONS:-}" == "true" ]]; then
+    echo "product-doc-content: CI requires explicit base/head OIDs or a valid event payload" >&2
+    return 1
+  fi
+}
+
+run_product_doc_governance_check() {
+  local range
+  range="$(product_doc_range)" || return 1
+  if [[ -n "$range" ]]; then
+    local base_oid head_oid
+    base_oid="$(printf '%s\n' "$range" | sed -n '1p')"
+    head_oid="$(printf '%s\n' "$range" | sed -n '2p')"
+    [[ -n "$base_oid" && -n "$head_oid" ]] || {
+      echo "product-doc-content: event did not provide explicit base/head" >&2
+      return 1
+    }
+    OASIS7_PRODUCT_DOC_BASE="$base_oid" OASIS7_PRODUCT_DOC_HEAD="$head_oid" \
+      run ./scripts/doc-governance-check.sh
+  else
+    run ./scripts/doc-governance-check.sh
+  fi
+}
+
 run_standalone_tool_lockfiles_checks() {
   run bash ./scripts/check-standalone-tool-lockfiles.test.sh
   run ./scripts/check-standalone-tool-lockfiles.sh
 }
 
 run_required_gate_checks() {
-  run ./scripts/doc-governance-check.sh
+  run_product_doc_governance_check
   run python3 ./scripts/product-doc-governance-check.test.py
+  run python3 ./scripts/product-doc-content-check.test.py
+  run bash ./scripts/product-doc-content-callers.test.sh
   run python3 ./scripts/p2p-public-testnet-full-network-clean-room.test.py
   run python3 ./scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py
   run python3 ./scripts/p2p-public-testnet-identity-v2-signing-tool.test.py

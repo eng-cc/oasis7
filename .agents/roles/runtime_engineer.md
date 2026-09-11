@@ -26,7 +26,7 @@
 
 ## Outputs
 - Runtime 代码、迁移、持久化与恢复实现
-- 运行时 PRD / project 回写
+- 仅在当前 task 的 `write_scope`、slice permission 与 runtime authority 明确允许且属于同一 loop 时回写运行时 PRD / project；否则返回 evidence packet 或 finding 给 TPM
 - 回放一致性、恢复验证、长时仿真回归结果
 - 对外稳定接口与错误语义
 
@@ -67,10 +67,10 @@ Return: role and slice outcome; implementation or findings with file evidence; c
 - 使用约定：角色决定 owner，技能决定方法；当任务跨到规则定义或模块 ABI 时，仍需按 Inputs/Decisions 触发联审而不是靠技能替代协作。
 
 ## Checklist
-- 是否更新 `doc/world-runtime/prd.md`、相关 design/evidence 与 GitHub task issue evidence
+- 当前 task 的 `write_scope`、slice permission 与 runtime authority 是否明确允许更新 `doc/world-runtime/prd.md`、相关 design/evidence 与 GitHub task issue evidence；否则只返回 evidence packet 给 TPM
 - 若 `runtime_engineer` 是 task owner，是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role runtime_engineer --task-uid <TASK-UID>`；若作为 `tpm` 派生的 bounded subagent slice，是否把 start/close/finding 证据回写到 GitHub task issue evidence comments，而不是用非 owner role 调用 `workflow-report`
 - 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只把结论停留在 GitHub task issue evidence 局部记录
 - 是否检查单文件 Rust 长度上限
 - 是否执行 `env -u RUSTC_WRAPPER cargo check`
 - 是否补 replay / recovery / long-run regression 验证
-- 是否在行为变更时同步更新上游规则文档
+- 是否在行为变更且同一 loop、明确 task authority 允许时同步更新上游规则文档；跨 loop 或 authority 不明时返回 finding，不写上游文档

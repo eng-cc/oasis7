@@ -9,6 +9,8 @@
 1. 一个新文档应该放在哪个目录；
 2. 一个新文档应该承担什么职责。
 
+产品文档的内容合同、REQ/AC 追踪、玩家体验与证据边界由配对的 [`product-documentation-standard.design.md`](product-documentation-standard.design.md) 承接；专业技术设计的内容合同与验证映射由 [`system-design-writing-standard.design.md`](system-design-writing-standard.design.md) 承接，任务记录和组合验收由 [`project-management-record-standard.design.md`](project-management-record-standard.design.md) 承接；本文继续拥有目录落位、文件职责、入口与专题可达性。共同规则维护现有四模块产品树，不新增第五模块。
+
 本规范只规定组织形式与职责边界，不处理历史迁移节奏。
 
 ## 2. 核心原则
@@ -27,6 +29,8 @@
 推荐职责后缀如下：
 - `*.prd.md`：Why / What / Done
 - `*.design.md`：How / Structure / Contract
+- `system-design-writing-standard.design.md`：专业技术设计的十二段内容、需求承接与验证映射
+- `project-management-record-standard.design.md`：GitHub-backed 任务记录、证据与组合验收内容
 - GitHub Issue / GitHub Project-backed task truth：任务、状态与过程证据的唯一可变载体；仓库不再创建本地 project ledger
 - `*.manual.md`：How to use / verify
 - `*.runbook.md`：How to operate / release / recover

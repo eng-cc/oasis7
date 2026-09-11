@@ -3,7 +3,12 @@
 本目录是 `doc/` 文档树治理的唯一上游分流入口，收拢文档组织、路径落位、入口减重与存量维护成本治理。读者应先从这里判断问题属于哪一类，再进入当前 authority；不要把同一治理规则继续复制到模块 README 或零散专题里。
 
 ## 首读路径
+- 专业系统设计的十二段骨架、需求承接、验证映射与证据边界：`doc/engineering/doc-governance/system-design-writing-standard.design.md`
+- GitHub-backed 项目记录、任务合同、专业 slice 与组合验收：`doc/engineering/doc-governance/project-management-record-standard.design.md`
 - 文档组织规则、后缀职责、模块 README 边界：`doc/engineering/doc-governance/doc-structure-standard.design.md`
+- 产品文档内容要求、四模块边界与三类采纳试点：`doc/engineering/doc-governance/product-documentation-standard.design.md`
+- 产品文档采纳目标、Done 与范围：`doc/engineering/doc-governance/product-documentation-standard.prd.md`
+- 根/专题/design 模板与迁移审查卡：`doc/engineering/doc-governance/product-documentation-standard.templates.md`
 - 文档 intake、迁移、registry、例外与证据生命周期的维护步骤：`doc/engineering/doc-governance/documentation-governance.manual.md`
 - 默认阅读面、活跃真值/审计留痕/历史归档/兼容跳转的消费边界：`doc/engineering/doc-governance/doc-structure-standard.design.md`
 - 文档存量、热点目录、近限文件与维护成本判断：`doc/engineering/governance/README.md`，并用 `scripts/doc-inventory-report.sh` 复算
@@ -14,6 +19,10 @@
 | 问题 | Canonical 入口 | 说明 |
 | --- | --- | --- |
 | 新文档应该放在哪里、承担什么职责 | `doc-structure-standard.design.md` | 顶层组织规范；定义模块、专题、分册、README、PRD/design/manual/runbook 边界，并将任务追踪定向到 GitHub Issue/Project |
+| 产品文档应该写什么、如何验收和追踪 | `product-documentation-standard.design.md` | 在现有四模块与专业 authority 上补充内容合同、REQ/AC 追踪、状态/证据边界和三类试点 |
+| 产品文档如何套用结构、迁移代表性主题 | `product-documentation-standard.templates.md` | 提供根/专题/design 模板、需求/验收卡和 Prompt/首局/SC-31 迁移模式 |
+| 专业系统设计如何承接需求、表达合同并映射验证 | `system-design-writing-standard.design.md` | 十二段技术骨架；不替代产品设计、实现、运行或发布证据 |
+| 任务、slice、固定输入和组合验收如何留证 | `project-management-record-standard.design.md` | 复用现有 GitHub Issue/Project 与 workflow；不新增本地台账或状态机 |
 | 需要执行迁移、登记一级目录/例外或处理治理检查失败 | `documentation-governance.manual.md` | maintainer how-to；只执行 Design 已定义的规则，不另行裁定规则 |
 | 根入口或模块 README 过长、重复维护共享规则 | `doc-structure-standard.design.md` | 处理默认阅读面噪音，避免 landing page 变成第二份规范正文 |
 | 文档总量、热点子目录、devlog backlog 或近限长文件抬高维护成本 | `../governance/README.md` | 处理入口减重之后的存量维护成本，配合 `scripts/doc-inventory-report.sh` 复算 |

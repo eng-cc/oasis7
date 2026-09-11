@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import re
 import subprocess
@@ -228,9 +229,34 @@ def review_admission(root: Path, packet_path: Path, plan_path: Path,
     task_uid = str(identity["task_uid"])
 
     plan = load_object(plan_path, "review plan")
-    if plan.get("schema") != "oasis7-review-plan/v1":
+    plan_schema = plan.get("schema")
+    if plan_schema not in {"oasis7-review-plan/v1", "oasis7-review-plan/v2"}:
         fail(f"unsupported review plan schema: {plan.get('schema')}")
+    if plan_schema == "oasis7-review-plan/v2":
+        helper_path = Path(__file__).with_name("ci_ready_receipt_identity.py")
+        spec = importlib.util.spec_from_file_location("ci_ready_receipt_identity_v2", helper_path)
+        if spec is None or spec.loader is None:
+            fail("cannot load v2 review identity helper")
+        helper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(helper)
+        try:
+            if plan.get("source_review_digest") != helper.source_review_digest(plan.get("source_review_identity")):
+                fail("v2 source review digest does not match its identity")
+            if plan.get("integration_ci_digest") != helper.integration_ci_digest(plan.get("integration_ci_identity")):
+                fail("v2 integration CI digest does not match its identity")
+        except (TypeError, ValueError) as exc:
+            fail(f"invalid v2 review identity: {exc}")
     snapshot = validate_bootstrap_snapshot(root, snapshot_path, task_uid)
+    if plan_schema == "oasis7-review-plan/v2":
+        source_identity = plan.get("source_review_identity")
+        snapshot_task = snapshot.get("task")
+        if not isinstance(source_identity, dict) or not isinstance(snapshot_task, dict):
+            fail("v2 review identity and bootstrap snapshot task must be objects")
+        snapshot_epoch = snapshot_task.get("bootstrap_epoch")
+        if type(snapshot_epoch) is not int or snapshot_epoch < 1:
+            fail("bootstrap snapshot has an invalid bootstrap epoch")
+        if source_identity.get("bootstrap_epoch") != snapshot_epoch:
+            fail("v2 source review bootstrap epoch does not match bootstrap snapshot")
 
     canonical_packet_dir = (root / ".pm" / "scratch" / task_uid / "slice-packets").resolve()
     if packet_path.parent != canonical_packet_dir:
@@ -256,9 +282,12 @@ def review_admission(root: Path, packet_path: Path, plan_path: Path,
     ).encode("utf-8")).hexdigest()
     if batch.get("epoch") != batch_epoch or epoch != batch_epoch:
         fail("review batch epoch does not match immutable batch contents")
-    for field in ("task_uid", "frozen_head", "relevant_evidence_digest"):
-        if plan.get(field) != batch.get(field):
-            fail(f"review plan {field} does not match canonical batch")
+    batch_digest = batch.get("relevant_evidence_digest")
+    plan_digest = plan.get("relevant_evidence_digest", plan.get("source_review_digest"))
+    if plan.get("task_uid") != batch.get("task_uid") or plan.get("frozen_head") != batch.get("frozen_head"):
+        fail("review plan task/head does not match canonical batch")
+    if plan_digest != batch_digest:
+        fail("review plan evidence digest does not match canonical batch")
 
     expected = plan.get("expected_slices")
     refs = plan.get("packet_refs")
@@ -324,6 +353,8 @@ def review_admission(root: Path, packet_path: Path, plan_path: Path,
         "comparison_ref": identity["base_ref"],
         "comparison_oid": identity["base_sha"],
         "integration_base_oid": integration_base,
+        "review_plan_schema": plan_schema,
+        "source_review_digest": plan.get("source_review_digest", plan.get("relevant_evidence_digest")),
         "role": packet_role,
         "slice_id": packet_slice,
         "packet_digest": packet["packet_digest"],

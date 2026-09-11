@@ -5,8 +5,8 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
-if ! PYTHON_BIN="$("$repo_root/scripts/pm/find-python-with-module.sh" ast)"; then
-  echo "doc-governance-check: cannot find a functional Python interpreter" >&2
+if ! PYTHON_BIN="$("$repo_root/scripts/pm/find-python-with-module.sh" markdown_it)"; then
+  echo "doc-governance-check: markdown-it-py is required; install scripts/doc-governance-requirements.txt" >&2
   exit 1
 fi
 
@@ -27,9 +27,11 @@ Checks:
   6. Role labels in devlogs and handoff templates must use canonical names from
      .agents/roles/*.md.
   7. The thin product overlay must contain exactly four product-owned PRDs with
-      stable metadata, lifecycle, authority backlinks, and acceptance traceability.
+     stable metadata, lifecycle, authority backlinks, and acceptance traceability.
   8. Every live top-level doc directory must be registered with a valid entrypoint,
      root-navigation coverage, and lifecycle fields for controlled exceptions.
+  9. New or materially changed product PRD/design files must pass the scoped
+     content contract with the selected base/head and worktree changes.
 USAGE
 }
 
@@ -59,6 +61,29 @@ done < <(find .agents/roles -mindepth 1 -maxdepth 1 -type f -name '*.md' | sed '
 fail() {
   echo "doc-governance-check: FAIL: $*"
   failures=$((failures + 1))
+}
+
+run_product_doc_content_check() {
+  local base_oid="${OASIS7_PRODUCT_DOC_BASE:-}"
+  local head_oid="${OASIS7_PRODUCT_DOC_HEAD:-}"
+  if [[ -n "$base_oid" || -n "$head_oid" ]]; then
+    if [[ -z "$base_oid" || -z "$head_oid" ]]; then
+      echo "product-doc-content: error: explicit base/head must be supplied together" >&2
+      return 1
+    fi
+  else
+    head_oid="$(git rev-parse --verify HEAD^{commit})"
+    base_oid="$(git merge-base HEAD main 2>/dev/null || true)"
+    if [[ -z "$base_oid" ]]; then
+      base_oid="$(git rev-parse --verify HEAD^ 2>/dev/null || true)"
+    fi
+  fi
+  if [[ -z "$base_oid" || -z "$head_oid" ]]; then
+    echo "product-doc-content: error: unable to derive explicit base/head for worktree check" >&2
+    return 1
+  fi
+  "$PYTHON_BIN" scripts/product-doc-content-check.py \
+    --repo-root "$repo_root" --base "$base_oid" --head "$head_oid" --worktree
 }
 
 regex_match_file() {
@@ -516,6 +541,10 @@ fi
 
 if ! "$PYTHON_BIN" scripts/product-doc-governance-check.py; then
   fail "product documentation overlay contract failed"
+fi
+
+if ! run_product_doc_content_check; then
+  fail "product document content contract failed"
 fi
 
 if ((failures > 0)); then

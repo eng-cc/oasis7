@@ -185,7 +185,7 @@ class GitHubAuthority:
 
     def obligation(self,obligation):
         from loop_terminal import validate_terminal_delivery
-        checked = validate_terminal_delivery(REPOSITORY, obligation.get("task_uid"), obligation.get("issue_number"))
+        checked = validate_terminal_delivery(REPOSITORY, obligation.get("task_uid"), obligation.get("issue_number"), repo_root=self.repo_root)
         return checked['status'] == 'passed'
 
     def publish(self,binding,contract,before_write=None):

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -27,6 +28,7 @@ class PacketTest(unittest.TestCase):
         for path in ("scripts/pm", ".pm/github-project-sync", ".agents/roles", "doc/engineering/workflow"):
             (self.repo / path).mkdir(parents=True, exist_ok=True)
         shutil.copy2(SOURCE, self.repo / "scripts/pm/subagent-task-packet.py")
+        shutil.copy2(SOURCE.with_name("ci_ready_receipt_identity.py"), self.repo / "scripts/pm/ci_ready_receipt_identity.py")
         for helper in ('loop_gate.py', 'loop.py', 'loop_recovery.py'):
             shutil.copy2(SOURCE.with_name(helper), self.repo / 'scripts/pm' / helper)
         fakebin = Path(self.tmp.name) / 'fakebin'
@@ -181,6 +183,86 @@ class PacketTest(unittest.TestCase):
         path.write_text(json.dumps(plan), encoding="utf-8")
         return path
 
+    def create_v2_review_plan(self, packet_path: str, bootstrap_epoch: int) -> Path:
+        identity_spec = importlib.util.spec_from_file_location(
+            "ci_ready_receipt_identity_for_test", SOURCE.with_name("ci_ready_receipt_identity.py")
+        )
+        assert identity_spec and identity_spec.loader
+        identity_module = importlib.util.module_from_spec(identity_spec)
+        identity_spec.loader.exec_module(identity_module)
+        base_sha = self.git("rev-parse", "main")
+        head = self.git("rev-parse", "HEAD")
+        source = identity_module.source_review_identity(
+            task_uid=TASK_UID,
+            bootstrap_epoch=bootstrap_epoch,
+            repository="example/repo",
+            pr_number=1,
+            source_head_oid=head,
+            source_scope_oid=base_sha,
+            changed_paths_digest="1" * 64,
+            ordered_role_ids=["repository_health_engineer", "qa_engineer"],
+            role_contract_digest="2" * 64,
+            review_policy_digest="3" * 64,
+            input_contract_digest="4" * 64,
+        )
+        receipt = {
+            "repository": "example/repo", "task_uid": TASK_UID, "pr_number": 1,
+            "source_head_oid": head, "integration_base_oid": base_sha,
+            "workflow_ref": "example/repo/.github/workflows/rust.yml@refs/heads/main",
+            "workflow_sha": base_sha, "request_id": 1,
+            "request_created_at": "2026-09-11T00:00:00Z", "run_id": 2,
+            "run_attempt": 1, "check_app_id": 3, "check_run_id": 4,
+            "planner_digest": "5" * 64,
+            "tested_tree_oid": self.git("rev-parse", "HEAD^{tree}"),
+            "conclusion": "success",
+        }
+        integration = identity_module.integration_ci_identity(receipt)
+        source_digest = identity_module.source_review_digest(source)
+        expected_slices = sorted([
+            {"role": "repository_health_engineer", "slice_id": "repository-health-review"},
+            {"role": "qa_engineer", "slice_id": "qa-review"},
+        ], key=lambda item: (item["role"], item["slice_id"]))
+        batch_identity = {
+            "task_uid": TASK_UID, "frozen_head": head,
+            "relevant_evidence_digest": source_digest, "expected_slices": expected_slices,
+        }
+        epoch = hashlib.sha256(json.dumps(
+            batch_identity, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        batch_path = self.repo / ".pm/scratch" / TASK_UID / "review-batches" / f"{epoch}.json"
+        batch_path.parent.mkdir(parents=True, exist_ok=True)
+        batch_path.write_text(json.dumps({
+            "schema": "oasis7-review-batch/v1", "epoch": epoch, "task_uid": TASK_UID,
+            "frozen_head": head, "relevant_evidence_digest": source_digest,
+            "expected_slices": expected_slices,
+        }), encoding="utf-8")
+        plan = {
+            "schema": "oasis7-review-plan/v2", "task_uid": TASK_UID,
+            "frozen_head": head, "comparison_ref": "main", "comparison_oid": base_sha,
+            "epoch": epoch, "batch_path": str(batch_path),
+            "relevant_evidence_digest": source_digest,
+            "source_review_identity": source,
+            "source_review_digest": source_digest,
+            "integration_ci_identity": integration,
+            "integration_ci_digest": identity_module.integration_ci_digest(integration),
+            "integration_ci_provenance": {
+                "live_validation": "ci-ready-receipt-live",
+                "trusted_integration_artifact": True,
+            },
+            "source_scope_oid": base_sha, "integration_base_oid": base_sha,
+            "roles": [item["role"] for item in expected_slices],
+            "expected_slices": expected_slices,
+            "packet_refs": [
+                {"role": "repository_health_engineer", "slice_id": "repository-health-review",
+                 "packet_ref": f".pm/scratch/{TASK_UID}/slice-packets/repository-health-review.json"},
+                {"role": "qa_engineer", "slice_id": "qa-review", "packet_ref": packet_path},
+            ],
+        }
+        path = self.repo / ".pm/scratch" / TASK_UID / "review-plans" / f"v2-{bootstrap_epoch}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(plan), encoding="utf-8")
+        return path
+
     def git(self, *args: str) -> str:
         return subprocess.check_output(["git", "-C", str(self.repo), *args], text=True).strip()
 
@@ -220,6 +302,17 @@ class PacketTest(unittest.TestCase):
         payload["producer"] = "tampered"
         snapshot.write_text(json.dumps(payload), encoding="utf-8")
         self.review_admission(packet, plan, snapshot, ok=False)
+
+    def test_v2_review_admission_binds_plan_epoch_to_bootstrap_snapshot(self) -> None:
+        packet = self.invoke(self.create_args()).stdout.splitlines()[0]
+        snapshot = self.create_snapshot()
+        valid = self.create_v2_review_plan(packet, bootstrap_epoch=1)
+        admitted = self.review_admission(packet, valid, snapshot)
+        self.assertEqual("admitted", json.loads(admitted.stdout)["status"])
+
+        wrong_epoch = self.create_v2_review_plan(packet, bootstrap_epoch=2)
+        rejected = self.review_admission(packet, wrong_epoch, snapshot, ok=False)
+        self.assertIn("bootstrap epoch", rejected.stderr.lower())
 
     def test_review_admission_invalidates_after_head_or_comparison_ref_changes(self) -> None:
         packet = self.invoke(self.create_args()).stdout.splitlines()[0]
