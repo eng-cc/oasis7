@@ -196,6 +196,7 @@ fn compensate_provider_wait_admission(
         .provider_continuation_recovery_pending
         .get(request.agent_subject.as_str())
         .cloned();
+    let lease_backup = sidecar.provider_cognition_lease(request.agent_subject.as_str());
 
     if compensation_errors.is_empty() {
         #[cfg(test)]
@@ -207,6 +208,27 @@ fn compensate_provider_wait_admission(
                 compensation_errors.push(format!(
                     "provider Wait test checkpoint blocker setup failed: {error}"
                 ));
+            }
+        }
+    }
+    if compensation_errors.is_empty() {
+        if let Some(lease) = lease_backup.as_ref() {
+            if let Err(error) = sidecar.validate_provider_cognition_lease_for_request(
+                world,
+                request.agent_subject.as_str(),
+                request,
+                lease,
+                "release",
+            ) {
+                compensation_errors.push(format!(
+                    "provider Wait cognition lease release validation failed: {error}"
+                ));
+            } else if let Err(error) = world.release_cognition_lease(lease.lease_id.as_str()) {
+                compensation_errors.push(format!(
+                    "provider Wait cognition lease release failed: {error:?}"
+                ));
+            } else {
+                sidecar.clear_provider_cognition_lease(request.agent_subject.as_str());
             }
         }
     }
@@ -269,6 +291,9 @@ fn compensate_provider_wait_admission(
                 request.agent_subject.to_string(),
                 format!("{reason}; compensation identity retained"),
             );
+        }
+        if let Some(lease) = lease_backup {
+            sidecar.bind_provider_cognition_lease(request.agent_subject.clone(), lease);
         }
         if let Some(context) = context_backup.as_ref().or(active_backup.as_ref()) {
             sidecar

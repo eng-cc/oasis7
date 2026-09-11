@@ -113,12 +113,16 @@ impl ViewerRuntimeLiveServer {
                 && !is_budget_exhausted_wait(trace)
             {
                 if !decision_trace_provider_error_retryable(trace).unwrap_or(false) {
-                    self.release_provider_cognition_lease(
+                    self.release_provider_cognition_lease_for_request(
                         decision.agent_id.as_str(),
                         decision
                             .cognition
                             .as_ref()
                             .and_then(|cognition| cognition.cognition_lease.clone()),
+                        decision
+                            .cognition
+                            .as_ref()
+                            .map(|cognition| &cognition.request.request_context),
                     )
                     .map_err(|error| {
                         wake_handoff_error_trace(
@@ -153,12 +157,16 @@ impl ViewerRuntimeLiveServer {
                 return Err(trace.clone());
             }
             if let Some(message) = trace.parse_error.as_ref() {
-                self.release_provider_cognition_lease(
+                self.release_provider_cognition_lease_for_request(
                     decision.agent_id.as_str(),
                     decision
                         .cognition
                         .as_ref()
                         .and_then(|cognition| cognition.cognition_lease.clone()),
+                    decision
+                        .cognition
+                        .as_ref()
+                        .map(|cognition| &cognition.request.request_context),
                 )
                 .map_err(|error| {
                     wake_handoff_error_trace(
@@ -218,9 +226,10 @@ impl ViewerRuntimeLiveServer {
                                         error.reason(),
                                     ));
                                 }
-                                self.release_provider_cognition_lease(
+                                self.release_provider_cognition_lease_for_request(
                                     cognition.request.request_context.agent_subject.as_str(),
                                     cognition.cognition_lease.clone(),
+                                    Some(&cognition.request.request_context),
                                 )
                                 .map_err(|release_error| {
                                     wake_handoff_error_trace(
@@ -301,12 +310,16 @@ impl ViewerRuntimeLiveServer {
                         "runtime llm bridge cannot map action: {}",
                         simulator_action_label(&action)
                     );
-                    self.release_provider_cognition_lease(
+                    self.release_provider_cognition_lease_for_request(
                         decision.agent_id.as_str(),
                         decision
                             .cognition
                             .as_ref()
                             .and_then(|cognition| cognition.cognition_lease.clone()),
+                        decision
+                            .cognition
+                            .as_ref()
+                            .map(|cognition| &cognition.request.request_context),
                     )
                     .map_err(|error| {
                         wake_handoff_error_trace(
@@ -364,9 +377,10 @@ impl ViewerRuntimeLiveServer {
             },
             AgentDecision::Wait | AgentDecision::WaitTicks(_) => {
                 if let Some(cognition) = decision.cognition {
-                    self.release_provider_cognition_lease(
+                    self.release_provider_cognition_lease_for_request(
                         decision.agent_id.as_str(),
                         cognition.cognition_lease.clone(),
+                        Some(&cognition.request.request_context),
                     )
                     .map_err(|error| {
                         wake_handoff_error_trace(
@@ -438,9 +452,10 @@ impl ViewerRuntimeLiveServer {
             }
             AgentDecision::Query(_) => {
                 if let Some(cognition) = decision.cognition {
-                    self.release_provider_cognition_lease(
+                    self.release_provider_cognition_lease_for_request(
                         decision.agent_id.as_str(),
                         cognition.cognition_lease.clone(),
+                        Some(&cognition.request.request_context),
                     )
                     .map_err(|error| {
                         wake_handoff_error_trace(
@@ -500,9 +515,10 @@ impl ViewerRuntimeLiveServer {
             }
             AgentDecision::ModuleCommand { .. } => {
                 if let Some(cognition) = decision.cognition {
-                    self.release_provider_cognition_lease(
+                    self.release_provider_cognition_lease_for_request(
                         decision.agent_id.as_str(),
                         cognition.cognition_lease.clone(),
+                        Some(&cognition.request.request_context),
                     )
                     .map_err(|error| {
                         wake_handoff_error_trace(
@@ -707,10 +723,37 @@ impl ViewerRuntimeLiveServer {
         agent_id: &str,
         lease: Option<crate::runtime::CognitionLeaseV1>,
     ) -> Result<(), String> {
+        self.release_provider_cognition_lease_for_request(agent_id, lease, None)
+    }
+
+    fn release_provider_cognition_lease_for_request(
+        &mut self,
+        agent_id: &str,
+        lease: Option<crate::runtime::CognitionLeaseV1>,
+        request: Option<&crate::simulator::ContinuousAgentRequestContextV1>,
+    ) -> Result<(), String> {
         let lease = lease.or_else(|| self.llm_sidecar.provider_cognition_lease(agent_id));
         let Some(lease) = lease else {
             return Ok(());
         };
+        if let Some(request) = request {
+            self.llm_sidecar
+                .validate_provider_cognition_lease_for_request(
+                    &self.world,
+                    agent_id,
+                    request,
+                    &lease,
+                    "release",
+                )?;
+        } else {
+            self.llm_sidecar
+                .validate_provider_cognition_lease_for_agent(
+                    &self.world,
+                    agent_id,
+                    &lease,
+                    "release",
+                )?;
+        }
         self.world
             .release_cognition_lease(lease.lease_id.as_str())
             .map_err(|error| {
@@ -723,15 +766,34 @@ impl ViewerRuntimeLiveServer {
         Ok(())
     }
 
-    pub(super) fn settle_provider_cognition_lease(
+    pub(super) fn settle_provider_cognition_lease_for_request(
         &mut self,
         agent_id: &str,
         lease: Option<crate::runtime::CognitionLeaseV1>,
+        request: Option<&crate::simulator::ContinuousAgentRequestContextV1>,
     ) -> Result<(), String> {
         let lease = lease.or_else(|| self.llm_sidecar.provider_cognition_lease(agent_id));
         let Some(lease) = lease else {
             return Ok(());
         };
+        if let Some(request) = request {
+            self.llm_sidecar
+                .validate_provider_cognition_lease_for_request(
+                    &self.world,
+                    agent_id,
+                    request,
+                    &lease,
+                    "settle",
+                )?;
+        } else {
+            self.llm_sidecar
+                .validate_provider_cognition_lease_for_agent(
+                    &self.world,
+                    agent_id,
+                    &lease,
+                    "settle",
+                )?;
+        }
         self.world
             .settle_cognition_lease(lease.lease_id.as_str(), lease.reserved_amount)
             .map_err(|error| {

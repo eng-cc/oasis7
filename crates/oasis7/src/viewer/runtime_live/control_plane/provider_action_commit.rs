@@ -48,9 +48,10 @@ impl ViewerRuntimeLiveServer {
             .map_err(|error| {
                 format!("Runtime cognition receipt recovery verification failed: {error:?}")
             })?;
-        self.settle_provider_cognition_lease(
+        self.settle_provider_cognition_lease_for_request(
             request.agent_subject.as_str(),
             cognition.cognition_lease.clone(),
+            Some(request),
         )?;
 
         let existing_feedback = self
@@ -184,9 +185,10 @@ impl ViewerRuntimeLiveServer {
         // The Runtime commit is authoritative. Persist the recovery record
         // before settling so an economy persistence fault can retry the same
         // idempotent operation after restart.
-        self.settle_provider_cognition_lease(
+        self.settle_provider_cognition_lease_for_request(
             cognition.request.request_context.agent_subject.as_str(),
             cognition.cognition_lease.clone(),
+            Some(&cognition.request.request_context),
         )
         .map_err(ProviderRuntimeActionCommitError::PostCommit)?;
         let lineage = self

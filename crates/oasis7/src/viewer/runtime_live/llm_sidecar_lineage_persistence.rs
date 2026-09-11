@@ -72,6 +72,93 @@ pub(super) fn provider_context_identity_matches(
         && left.request_context.request_digest == right.request_context.request_digest
 }
 
+fn validate_provider_lease_identity(
+    agent_id: &str,
+    request: &crate::simulator::ContinuousAgentRequestContextV1,
+    lease: &crate::runtime::CognitionLeaseV1,
+) -> Result<(), String> {
+    request
+        .validate()
+        .map_err(|error| format!("provider cognition request invalid: {error}"))?;
+    lease
+        .validate()
+        .map_err(|error| format!("provider cognition lease invalid: {error}"))?;
+    if lease.status != crate::runtime::CognitionLeaseStatusV1::Reserved {
+        return Err(format!(
+            "provider cognition lease is not reserved for {agent_id}"
+        ));
+    }
+    let expected_invocation_key = request.provider_invocation_key().to_string();
+    if lease.agent_id != agent_id
+        || request.agent_subject != agent_id
+        || lease.account_id != request.agent_subject
+        || lease.idempotency_key != expected_invocation_key
+        || lease.agent_session_id != request.agent_session_id
+        || lease.agent_turn_id != request.agent_turn_id
+        || lease.decision_request_id != request.decision_request_id
+        || lease.request_digest != request.request_digest.to_string()
+        || lease.quote.resource != "cognition_units"
+        || lease.reserved_amount != 1
+    {
+        return Err(format!(
+            "provider cognition lease identity mismatch for {agent_id}"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_provider_lease_binding(
+    world: &RuntimeWorld,
+    agent_id: &str,
+    request: &crate::simulator::ContinuousAgentRequestContextV1,
+    lease: &crate::runtime::CognitionLeaseV1,
+    operation: &str,
+) -> Result<(), String> {
+    validate_provider_lease_identity(agent_id, request, lease)?;
+    let economy = world.cognition_economy().map_err(|error| {
+        format!("provider cognition lease {operation} economy read failed: {error:?}")
+    })?;
+    let runtime_lease = economy.leases.get(lease.lease_id.as_str()).ok_or_else(|| {
+        format!(
+            "provider cognition lease {operation} missing from Runtime: {}",
+            lease.lease_id
+        )
+    })?;
+    if runtime_lease.idempotency_key != lease.idempotency_key
+        || runtime_lease.account_id != lease.account_id
+        || runtime_lease.agent_id != lease.agent_id
+        || runtime_lease.agent_session_id != lease.agent_session_id
+        || runtime_lease.agent_turn_id != lease.agent_turn_id
+        || runtime_lease.decision_request_id != lease.decision_request_id
+        || runtime_lease.request_digest != lease.request_digest
+        || runtime_lease.quote != lease.quote
+        || runtime_lease.reserved_amount != lease.reserved_amount
+    {
+        return Err(format!(
+            "provider cognition lease {operation} Runtime identity mismatch for {agent_id}"
+        ));
+    }
+    if operation == "dispatch"
+        && runtime_lease.status != crate::runtime::CognitionLeaseStatusV1::Reserved
+    {
+        return Err(format!(
+            "provider cognition lease dispatch is already closed for {agent_id}"
+        ));
+    }
+    if operation == "dispatch"
+        && (lease.reserved_at_tick > world.state().time
+            || lease
+                .quote
+                .valid_until_tick
+                .is_some_and(|expires| world.state().time > expires))
+    {
+        return Err(format!(
+            "provider cognition lease dispatch is stale for {agent_id}"
+        ));
+    }
+    Ok(())
+}
+
 pub(super) fn provider_context_matches_wake(
     context: &cognition_context::ProviderContextState,
     wake: &crate::runtime::SchedulerWakeV1,
@@ -221,6 +308,85 @@ struct PersistedProviderLineageV1 {
     pending_runtime_wakes: BTreeMap<String, crate::runtime::SchedulerWakeV1>,
 }
 
+fn validate_persisted_provider_cognition_leases(
+    world: &RuntimeWorld,
+    checkpoint: &PersistedProviderLineageV1,
+) -> Result<(), String> {
+    for (agent_id, lease) in &checkpoint.provider_cognition_leases {
+        if lease.agent_id != *agent_id {
+            return Err(format!(
+                "provider cognition lease key mismatch for {agent_id}"
+            ));
+        }
+        let mut contexts = Vec::new();
+        if let Some(context) = checkpoint.provider_contexts.get(agent_id) {
+            contexts.push(&context.request_context);
+        }
+        if let Some(context) = checkpoint.provider_active_turns.get(agent_id) {
+            contexts.push(&context.request_context);
+        }
+        if let Some(context) = checkpoint.provider_retry_contexts.get(agent_id) {
+            contexts.push(&context.request_context);
+        }
+        if let Some(pending) = checkpoint.provider_recovery_pending.get(agent_id) {
+            contexts.push(&pending.active.request_context);
+        }
+        if let Some(pending) = checkpoint.provider_wake_recovery_pending.get(agent_id) {
+            contexts.push(&pending.active.request_context);
+        }
+        for pending in checkpoint.pending_actions.values() {
+            if pending.agent_id == *agent_id
+                && let Some(cognition) = pending.cognition.as_ref()
+            {
+                contexts.push(&cognition.request.request_context);
+            }
+        }
+        for decision in checkpoint
+            .provider_completed_decisions
+            .iter()
+            .chain(checkpoint.provider_held_decisions.values())
+        {
+            if decision.agent_id == *agent_id
+                && let Some(cognition) = decision.cognition.as_ref()
+            {
+                contexts.push(&cognition.request.request_context);
+            }
+        }
+        if contexts.is_empty() {
+            return Err(format!(
+                "provider cognition lease context missing for {agent_id}"
+            ));
+        }
+        for request in contexts {
+            // Validate the sidecar copy against its complete request identity
+            // even when this process has not yet installed the matching
+            // Runtime world. The server constructor restores the sidecar
+            // before a caller can replace a bootstrap world in tests/tools;
+            // dispatch and economic cleanup repeat the Runtime lookup below
+            // before permitting any effect.
+            validate_provider_lease_identity(agent_id, request, lease)?;
+            if let Err(error) =
+                validate_provider_lease_binding(world, agent_id, request, lease, "restore")
+            {
+                // Runtime removes a lease as part of an authoritative receipt
+                // settlement. A crash can still leave the sidecar copy in the
+                // checkpoint until receipt feedback finalization completes;
+                // accept only the exact committed request identity, after
+                // validating the lease fields above, and let restore's
+                // commit-marker reconciliation discard the stale mirror. A
+                // bootstrap world with no matching lease is also deferred to
+                // the dispatch/economic validation gates described above.
+                if !error.contains("missing from Runtime")
+                    && committed_runtime_record_for_request(world, request)?.is_none()
+                {
+                    return Err(error);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn decode_provider_lineage_checkpoint(
     bytes: &[u8],
 ) -> Result<(PersistedProviderLineageV1, bool), String> {
@@ -338,6 +504,54 @@ fn migrate_legacy_budget_contracts(value: &mut Value) -> Result<(), String> {
 }
 
 impl RuntimeLlmSidecar {
+    pub(in crate::viewer::runtime_live) fn fence_provider_cognition_lease(
+        &mut self,
+        agent_id: &str,
+        context: &cognition_context::ProviderContextState,
+        reason: impl Into<String>,
+    ) {
+        self.provider_recovery_pending.insert(
+            agent_id.to_string(),
+            ProviderRecoveryPending {
+                active: context.clone(),
+                reason: reason.into(),
+            },
+        );
+        self.provider_transport_exhausted
+            .insert(agent_id.to_string());
+        self.persist_provider_lineage_best_effort();
+    }
+
+    pub(in crate::viewer::runtime_live) fn validate_provider_cognition_lease_for_request(
+        &self,
+        world: &RuntimeWorld,
+        agent_id: &str,
+        request: &crate::simulator::ContinuousAgentRequestContextV1,
+        lease: &crate::runtime::CognitionLeaseV1,
+        operation: &str,
+    ) -> Result<(), String> {
+        validate_provider_lease_binding(world, agent_id, request, lease, operation)
+    }
+
+    pub(in crate::viewer::runtime_live) fn validate_provider_cognition_lease_for_agent(
+        &self,
+        world: &RuntimeWorld,
+        agent_id: &str,
+        lease: &crate::runtime::CognitionLeaseV1,
+        operation: &str,
+    ) -> Result<(), String> {
+        let context = self.provider_recovery_context(agent_id).ok_or_else(|| {
+            format!("provider cognition lease {operation} context missing for {agent_id}")
+        })?;
+        self.validate_provider_cognition_lease_for_request(
+            world,
+            agent_id,
+            &context.request_context,
+            lease,
+            operation,
+        )
+    }
+
     /// Return true when a queued provider decision carries the exact identity
     /// already closed by Runtime. A legacy decision may omit its cognition
     /// envelope, so use the durable sidecar context for that compatibility
@@ -444,6 +658,7 @@ impl RuntimeLlmSidecar {
                 return Err(error);
             }
         };
+        validate_persisted_provider_cognition_leases(world, &checkpoint)?;
         for (proposal_id, proposal) in &checkpoint.provider_continuation_proposals {
             if proposal_id != &proposal.continuation_proposal_id {
                 return Err(format!(
