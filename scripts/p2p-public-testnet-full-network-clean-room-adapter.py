@@ -106,6 +106,9 @@ CANONICAL_NETWORK_ID = "oasis7-public-testnet-governed-20260606"
 CANONICAL_VERIFIER_ID = "governed-receipt-verifier"
 CANONICAL_TRUST_ROOT_ID = "oasis7-public-testnet-governance-root-v1"
 CANONICAL_TRUST_ROOT_PATH = "/operator/truth/governance-root.json"
+# One deployment-owned serialization identity for this fixed managed fleet.
+# It is never selected by a journal, transaction, plan, nonce, or CLI argument.
+CANONICAL_FLEET_LOCK_PATH = Path("/operator/truth/full-network-clean-room.lock")
 CANONICAL_TRUST_ROOT_FIXTURE_PATH = Path(__file__).with_name("fixtures") / "oasis7-governance-root.v1.json"
 # These are code-owned values recorded from the repository fixture.  The first
 # is the provenance helper's canonical semantic digest; the second pins the
@@ -2235,7 +2238,11 @@ def _guarded_callback(callback: Callable[..., Any], *args: Any) -> Any:
 
 def _acquire_transaction_lock(journal_path: Path) -> Any:
     """Serialize a transaction and leave the lock durable for inspection."""
-    lock_path = Path(f"{journal_path}.lock")
+    return _acquire_lock_path(Path(f"{journal_path}.lock"))
+
+
+def _acquire_lock_path(lock_path: Path) -> Any:
+    """Acquire an owner-protected lock while retaining pathname identity."""
     _reject_symlink_ancestors(lock_path)
     if lock_path.is_symlink():
         _fail("transaction lock must not be a symlink")
@@ -2286,6 +2293,37 @@ def _release_transaction_lock(handle: Any) -> None:
         fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
     finally:
         handle.close()
+
+
+class _FleetTransactionGuard:
+    """Retain both locks through callbacks, recovery and durable completion."""
+
+    def __init__(self, fleet: Any, journal: Any):
+        self.fleet, self.journal = fleet, journal
+
+    def check(self) -> None:
+        self.fleet.check()
+        self.journal.check()
+
+    def close(self) -> None:
+        try:
+            _release_transaction_lock(self.journal)
+        finally:
+            _release_transaction_lock(self.fleet)
+
+
+def _acquire_fleet_transaction_guard(journal_path: Path) -> _FleetTransactionGuard:
+    # Globally fixed order: fleet first, then journal; release in reverse.
+    fleet_path = Path(CANONICAL_FLEET_LOCK_PATH)
+    if not fleet_path.is_absolute():
+        _fail("canonical fleet lock must be absolute")
+    fleet = _acquire_lock_path(fleet_path)
+    try:
+        journal = _acquire_transaction_lock(journal_path)
+    except BaseException:
+        _release_transaction_lock(fleet)
+        raise
+    return _FleetTransactionGuard(fleet, journal)
 
 
 def _persist_terminal(journal_path: Path, record: dict[str, Any]) -> None:
@@ -3978,6 +4016,7 @@ def _execute_unlocked(
                     capture_start, capture_end = _capture_window_bounds(plan)
                     if not capture_start <= dt.datetime.now(dt.timezone.utc) < capture_end:
                         _fail("provider mutation capture lease is expired or not yet active")
+                    validate_live_trust_root_file()
                     if _rollback_candidate(operation) and operation not in rollback_candidates:
                         admitted_candidates = [*rollback_candidates, operation]
                         # Persist the admitted scope before the callback can
@@ -3992,6 +4031,7 @@ def _execute_unlocked(
                             backup_status=backup_status, rollback_candidates=admitted_candidates,
                         ))
                         rollback_candidates = admitted_candidates
+                    validate_live_trust_root_file()
                     raw_receipt = _guarded_callback(transport.mutate, operation, transport_node)
                 # A successful start/rebuild callback may have changed the
                 # provider even if its receipt is malformed or the following
@@ -4138,6 +4178,7 @@ def _execute_unlocked(
                 capture_start, capture_end = _capture_window_bounds(plan)
                 if not capture_start <= dt.datetime.now(dt.timezone.utc) < capture_end:
                     _fail("recovery capture lease is expired or not yet active")
+                validate_live_trust_root_file()
                 rollback_reobservation_receipt = _guarded_callback(transport.reobserve_failed_state,
                     rollback_plan, rollback_candidates_snapshot, failed_operation
                 )
@@ -4163,6 +4204,7 @@ def _execute_unlocked(
                 capture_start, capture_end = _capture_window_bounds(plan)
                 if not capture_start <= dt.datetime.now(dt.timezone.utc) < capture_end:
                     _fail("recovery capture lease is expired or not yet active")
+                validate_live_trust_root_file()
                 rollback_receipt = _guarded_callback(transport.rollback_clean_redeploy,
                     rollback_plan, rollback_candidates_snapshot, rollback_reobservation_receipt
                 )
@@ -4292,8 +4334,15 @@ def _reject_journal_input_aliases(
     for descriptor in descriptors:
         if isinstance(descriptor, dict) and isinstance(descriptor.get("path"), str):
             protected.append(Path(descriptor["path"]))
-    outputs = [Path(journal_path), Path(f"{journal_path}.lock"), Path(f"{journal_path}.emergency.json")]
+    outputs = [Path(journal_path), Path(f"{journal_path}.lock"),
+               Path(f"{journal_path}.emergency.json"), Path(CANONICAL_FLEET_LOCK_PATH)]
     try:
+        for index, output in enumerate(outputs):
+            for other in outputs[index + 1:]:
+                if output.resolve() == other.resolve() or (
+                    output.exists() and other.exists() and output.samefile(other)
+                ):
+                    _fail("transaction outputs must not alias the fleet lock or each other")
         # Reject direct anchor collisions first, even if the colliding anchor
         # is malformed. Then fail closed while expanding the authority closure.
         for output in outputs:
@@ -4342,7 +4391,7 @@ def execute(
     """Serialize one transaction while retaining the implementation boundary."""
     _reject_journal_input_aliases(Path(journal_path), Path(ledger_path), plan)
     _validate_current_peer_intent(plan)
-    lock = _acquire_transaction_lock(Path(journal_path))
+    lock = _acquire_fleet_transaction_guard(Path(journal_path))
     guard_token = _ACTIVE_TRANSACTION_GUARD.set(lock)
     try:
         return _execute_unlocked(
@@ -4357,7 +4406,7 @@ def execute(
         )
     finally:
         _ACTIVE_TRANSACTION_GUARD.reset(guard_token)
-        _release_transaction_lock(lock)
+        lock.close()
 
 
 def _resume_transaction_unlocked(
@@ -4636,7 +4685,7 @@ def resume_transaction(
     """Serialize resume/reconciliation against the same transaction lock."""
     _reject_journal_input_aliases(Path(journal_path), Path(ledger_path), plan)
     _validate_current_peer_intent(plan)
-    lock = _acquire_transaction_lock(Path(journal_path))
+    lock = _acquire_fleet_transaction_guard(Path(journal_path))
     guard_token = _ACTIVE_TRANSACTION_GUARD.set(lock)
     try:
         return _resume_transaction_unlocked(
@@ -4651,7 +4700,7 @@ def resume_transaction(
         )
     finally:
         _ACTIVE_TRANSACTION_GUARD.reset(guard_token)
-        _release_transaction_lock(lock)
+        lock.close()
 
 
 def _load_json(path: Path, label: str) -> dict[str, Any]:

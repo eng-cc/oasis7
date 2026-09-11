@@ -16,6 +16,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import threading
 import unittest
 from datetime import datetime, timezone
 from unittest import mock
@@ -334,6 +335,193 @@ class ReceivedPlanOnlyTransport:
 
 
 class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
+    def _assert_live_root_callback_boundary(self, boundary):
+        adapter = self.adapter
+        original_validator = self.live_trust_root_patcher.temp_original
+        root = Path(self._test_directory.name) / "live-governance-root.json"
+        for drift in (False, True):
+            with self.subTest(boundary=boundary, drift=drift):
+                self._write_ledger(self.ledger_path)
+                root.write_bytes(adapter.CANONICAL_TRUST_ROOT_FIXTURE_PATH.read_bytes())
+                root.chmod(0o600)
+                triggered = []
+                checks = []
+                def check_root():
+                    checks.append(True)
+                    with mock.patch.object(adapter, "CANONICAL_TRUST_ROOT_PATH", str(root)):
+                        return original_validator()
+                def change_root():
+                    if not triggered:
+                        triggered.append(boundary)
+                        if drift:
+                            root.write_bytes(b"replaced authority")
+                recovery = boundary in {"recovery-verifier", "reobserve"}
+                failed = "stop:storage-205"
+                transport = ApplyTransport(adapter, self.plan,
+                    side_effect_operation=failed if recovery else None)
+                inspect = transport.inspect_node
+                mutate = transport.mutate
+                reobserve = transport.reobserve_failed_state
+                def inspected(node):
+                    receipt = inspect(node)
+                    if boundary == "preflight": change_root()
+                    return receipt
+                def mutated(operation, node):
+                    receipt = mutate(operation, node)
+                    if boundary == "prior-mutation" and operation == failed: change_root()
+                    return receipt
+                def reobserved(*args):
+                    receipt = reobserve(*args)
+                    if boundary == "reobserve": change_root()
+                    return receipt
+                def verifier(plan, receipt):
+                    result = self._recovery_verifier(plan, receipt)
+                    if boundary == "recovery-verifier" and transport.failed_operation == failed:
+                        change_root()
+                    return result
+                transport.inspect_node = inspected
+                transport.mutate = mutated
+                transport.reobserve_failed_state = reobserved
+                journal = Path(self._test_directory.name) / f"root-{boundary}-{drift}.json"
+                error = None
+                with mock.patch.object(adapter, "validate_live_trust_root_file", side_effect=check_root):
+                    try:
+                        result = adapter.execute(self.plan, self._authority(True), journal_path=journal,
+                            ledger_path=self.ledger_path, transport=transport, dry_run=False,
+                            provenance_verifier=verifier)
+                    except adapter.AdapterError as caught:
+                        error = caught
+                self.assertEqual(triggered, [boundary])
+                self.assertTrue(checks)
+                if not drift:
+                    if recovery:
+                        self.assertIsNotNone(error)
+                        self.assertEqual(transport.rollback_operations, ["rollback"])
+                    else:
+                        self.assertIsNone(error)
+                        self.assertEqual(result["status"], "complete")
+                    continue
+                destructive = [op for op in transport.operations if adapter._rollback_candidate(op)]
+                self.assertEqual(destructive, [] if boundary == "preflight" else [failed],
+                                 "live root drift must stop further fleet mutation")
+                self.assertEqual(transport.rollback_reobservations,
+                                 [failed] if boundary == "reobserve" else [])
+                self.assertEqual(transport.rollback_operations, [])
+                self.assertIsNotNone(error)
+                if recovery or boundary == "prior-mutation":
+                    record = json.loads(journal.read_text())
+                    self.assertEqual(record["rollback_status"], "reconciliation-blocked")
+                    self.assertEqual(record["rollback_candidates"], [failed])
+                    self.assertIsNone(record["rollback_receipt"])
+
+    def test_live_root_drift_during_preflight_blocks_mutation(self):
+        self._assert_live_root_callback_boundary("preflight")
+
+    def test_live_root_drift_after_mutation_blocks_next_and_recovery(self):
+        self._assert_live_root_callback_boundary("prior-mutation")
+
+    def test_live_root_drift_during_recovery_verifier_blocks_reobserve(self):
+        self._assert_live_root_callback_boundary("recovery-verifier")
+
+    def test_live_root_drift_during_reobserve_blocks_redeploy(self):
+        self._assert_live_root_callback_boundary("reobserve")
+
+    def _assert_same_fleet_transactions_serialized(self, resume):
+        adapter = self.adapter
+        first = self.plan
+        replacements = {first["transaction_id"]: "txn-independent-second"}
+        replacements.update({value: value + "-second" for value in first["credential_nonce_ledger"]["reserved_nonces"]})
+        def rebind(value):
+            if isinstance(value, dict): return {key: rebind(item) for key, item in value.items()}
+            if isinstance(value, list): return [rebind(item) for item in value]
+            return replacements.get(value, value) if isinstance(value, str) else value
+        second = rebind(first)
+        second["plan_digest"] = adapter.canonical_plan_digest(second)
+        authorities = [self._authority(True, plan) for plan in (first, second)]
+        # Both independently bound admissions must be valid before contention.
+        for plan, authority in zip((first, second), authorities):
+            adapter.validate_authority(plan, authority)
+        self.assertNotEqual(first["transaction_id"], second["transaction_id"])
+        self.assertTrue(set(first["credential_nonce_ledger"]["reserved_nonces"]).isdisjoint(
+            second["credential_nonce_ledger"]["reserved_nonces"]))
+        root = Path(self._test_directory.name)
+        journals = [root / "fleet-first.json", root / "fleet-second.json"]
+        control = adapter.execute(second, authorities[1], journal_path=root / "independent-control.json",
+            ledger_path=self.ledger_path, transport=ApplyTransport(adapter, second), dry_run=False,
+            provenance_verifier=self._recovery_verifier)
+        self.assertEqual(control["status"], "complete")
+        # This is an isolated synthetic ledger, reset between independent cases.
+        self._write_ledger(self.ledger_path)
+        if resume:
+            original_write = adapter._write_journal
+            def prepared(path, record):
+                original_write(path, record)
+                if record["status"] == "prepared": raise KeyboardInterrupt
+            with mock.patch.object(adapter, "_write_journal", side_effect=prepared):
+                with self.assertRaises(KeyboardInterrupt):
+                    adapter.execute(second, authorities[1], journal_path=journals[1],
+                        ledger_path=self.ledger_path, transport=ApplyTransport(adapter, second),
+                        dry_run=False, provenance_verifier=self._recovery_verifier)
+        entered, release = threading.Event(), threading.Event()
+        transport = ApplyTransport(adapter, first)
+        original_mutate = transport.mutate
+        def hold(operation, node):
+            if operation == "stop:storage-205":
+                entered.set()
+                if not release.wait(30): raise RuntimeError("test callback barrier timed out")
+            return original_mutate(operation, node)
+        transport.mutate = hold
+        first_results = []
+        def run_first():
+            try:
+                first_results.append(adapter.execute(first, authorities[0], journal_path=journals[0],
+                    ledger_path=self.ledger_path, transport=transport, dry_run=False,
+                    provenance_verifier=self._recovery_verifier))
+            except BaseException as error: first_results.append(error)
+        worker = threading.Thread(target=run_first)
+        worker.start()
+        intrusions = []
+        second_transport = ApplyTransport(adapter, second)
+        def forbidden_inspect(node):
+            intrusions.append(node["name"])
+            raise KeyboardInterrupt("second transaction reached provider while fleet busy")
+        second_transport.inspect_node = forbidden_inspect
+        def invoke(transport):
+            if resume:
+                return adapter.resume_transaction(second, authorities[1], journals[1],
+                    ledger_path=self.ledger_path, transport=transport, dry_run=False,
+                    provenance_verifier=self._recovery_verifier)
+            return adapter.execute(second, authorities[1], journal_path=journals[1],
+                ledger_path=self.ledger_path, transport=transport, dry_run=False,
+                provenance_verifier=self._recovery_verifier)
+        contention_error = None
+        try:
+            self.assertTrue(entered.wait(30), first_results)
+            ledger_before = self.ledger_path.read_bytes()
+            try: invoke(second_transport)
+            except BaseException as error: contention_error = error
+            ledger_after = self.ledger_path.read_bytes()
+        finally:
+            release.set()
+            worker.join(30)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(len(first_results), 1)
+        self.assertIsInstance(first_results[0], dict, first_results)
+        self.assertEqual(first_results[0]["status"], "complete")
+        self.assertEqual(intrusions, [], "different journals cannot bypass fleet serialization")
+        self.assertIsInstance(contention_error, adapter.AdapterError)
+        self.assertRegex(str(contention_error), "(?i)lock|busy|fleet")
+        self.assertEqual(ledger_before, ledger_after, "contender must not consume nonces")
+        # The rejected independent plan must remain usable after release.
+        result = invoke(ApplyTransport(adapter, second))
+        self.assertEqual(result["status"], "complete")
+
+    def test_same_fleet_distinct_execute_transactions_are_serialized(self):
+        self._assert_same_fleet_transactions_serialized(False)
+
+    def test_same_fleet_distinct_resume_transactions_are_serialized(self):
+        self._assert_same_fleet_transactions_serialized(True)
+
     @classmethod
     def setUpClass(cls):
         cls.fixture_module = load_module("full_network_clean_room_fixture", PLANNER_TEST_PATH)
@@ -578,6 +766,11 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         # on adapter ordering and side-effect boundaries.
         self.adapter._PLANNER_MODULE = self.planner
         self._test_directory = tempfile.TemporaryDirectory()
+        self._fleet_lock_patch = mock.patch.object(
+            self.adapter, "CANONICAL_FLEET_LOCK_PATH",
+            Path(self._test_directory.name) / "governed-fleet.lock", create=True,
+        )
+        self._fleet_lock_patch.start()
         # The alias fence reads the authority reference closure independently
         # of the mocked cryptographic verifier. Provision real synthetic files.
         authority_root = Path(self._test_directory.name) / "authority"
@@ -626,6 +819,7 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         self.live_trust_root_patcher.start()
 
     def tearDown(self) -> None:
+        self._fleet_lock_patch.stop()
         self.live_trust_root_patcher.stop()
         self._planner_anchor_patch.stop()
         self.adapter._PLANNER_MODULE = None

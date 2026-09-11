@@ -43,6 +43,42 @@ never supplied by a plan or authority envelope. The fixture's public-key
 values are non-secret test material and must not be treated as production
 signing credentials.
 
+## Full-network clean-room execution lock
+
+The adapter fixes one shared fleet-lock path:
+`/operator/truth/full-network-clean-room.lock`. Provision its parent directory
+for the operator account running the adapter; the immediate parent must be
+owned by that account and not group/other writable. The lock must be an
+operator-owned regular file with mode `0600`, with no symlink in its path or
+ancestors. The helper can create a missing parent/lock, but this does not waive
+the ownership/mode checks or grant deployment authority. Do not remove,
+replace, rename or rotate the lock or parent while an execution is active.
+
+Both `execute` and `resume_transaction` acquire the fleet lock first, then the
+per-journal `<journal>.lock`, using nonblocking exclusive `flock`. Contention
+fails closed; choosing a different journal or transaction ID cannot bypass
+the common lock on the same execution host. Failure to acquire the journal
+lock releases the fleet lock. Both remain held through provider callbacks,
+recovery and durable completion, and release in reverse order on exit. The
+guards recheck held descriptor/path and immediate-parent identities, ownership
+and modes around callbacks and before guarded journal effects; detected drift
+blocks further effects. The durable lock files remain after release.
+
+This is a local shared-filesystem execution lock, not a distributed lease or
+multi-host authority service. Separate operator machines with separate lock
+files are not serialized; independently governed deployment coordination must
+ensure a single execution authority. `flock` and pathname checks do not isolate
+the process from arbitrary hostile same-UID writers. Unsupported locking or
+an unverifiable lock binding fails closed.
+
+The adapter also revalidates the live governance-root file before destructive
+mutation and before each recovery re-observation/clean-redeploy callback,
+including after external verification and the admitted-scope journal write.
+Missing, replaced, digest-drifted or metadata-invalid root evidence blocks the
+next callback; a prior successful check is not continuing authority. These
+checks do not extend capture/no-backup leases or remove the identity-v2
+production capability blockers below.
+
 ## Identity-v2 admission profile (not provisioned)
 
 Identity-v2 is a separate signing domain and authority profile. It does not
