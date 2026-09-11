@@ -79,6 +79,14 @@ impl World {
         }
 
         let identity = self.install_fixture_agent_identity(agent_id)?;
+        // Cognition leases charge the Runtime-authorized capability owner,
+        // not the Agent subject. Keep the legacy Agent balance for unrelated
+        // fixture consumers while provisioning the explicit payer account.
+        self.set_cognition_resource_balance(
+            identity.owner_binding.as_str(),
+            "cognition_units",
+            128,
+        )?;
         self.install_fixture_authority(
             world_id.as_str(),
             branch_id.as_str(),

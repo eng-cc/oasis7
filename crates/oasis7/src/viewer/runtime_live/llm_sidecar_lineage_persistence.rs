@@ -70,6 +70,8 @@ pub(super) fn provider_context_identity_matches(
         && left.request_context.agent_turn_id == right.request_context.agent_turn_id
         && left.request_context.decision_request_id == right.request_context.decision_request_id
         && left.request_context.request_digest == right.request_context.request_digest
+        && payer_support::provider_payer_id(&left.request_context).ok()
+            == payer_support::provider_payer_id(&right.request_context).ok()
 }
 
 fn validate_provider_lease_identity(
@@ -83,6 +85,7 @@ fn validate_provider_lease_identity(
     lease
         .validate()
         .map_err(|error| format!("provider cognition lease invalid: {error}"))?;
+    let expected_account = payer_support::provider_payer_id(request)?;
     if lease.status != crate::runtime::CognitionLeaseStatusV1::Reserved {
         return Err(format!(
             "provider cognition lease is not reserved for {agent_id}"
@@ -91,7 +94,7 @@ fn validate_provider_lease_identity(
     let expected_invocation_key = request.provider_invocation_key().to_string();
     if lease.agent_id != agent_id
         || request.agent_subject != agent_id
-        || lease.account_id != request.agent_subject
+        || lease.account_id != expected_account
         || lease.idempotency_key != expected_invocation_key
         || lease.agent_session_id != request.agent_session_id
         || lease.agent_turn_id != request.agent_turn_id
@@ -123,6 +126,7 @@ fn validate_provider_lease_binding(
     operation: &str,
 ) -> Result<(), String> {
     validate_provider_lease_identity(agent_id, request, lease)?;
+    payer_support::runtime_authorized_provider_payer_id(world, request)?;
     let economy = world.cognition_economy().map_err(|error| {
         format!("provider cognition lease {operation} economy read failed: {error:?}")
     })?;

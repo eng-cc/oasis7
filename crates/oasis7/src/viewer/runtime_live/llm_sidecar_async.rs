@@ -64,6 +64,7 @@ pub(super) fn reserve_provider_cognition_lease(
     if runtime_binding != request.runtime_binding {
         return Err("provider cognition Runtime binding changed before lease reserve".to_string());
     }
+    let payer_id = payer_support::runtime_authorized_provider_payer_id(world, request)?;
     let invocation_key = request.provider_invocation_key().to_string();
     let quote = crate::runtime::CognitionLeaseQuoteV1::new(
         format!("cognition-quote:{invocation_key}"),
@@ -71,7 +72,7 @@ pub(super) fn reserve_provider_cognition_lease(
         1,
     )
     .with_authority(
-        request.agent_subject.clone(),
+        payer_id.clone(),
         crate::runtime::COGNITION_RESOURCE_VERSION_V1,
         "provider_cognition",
         "agent_turn",
@@ -82,7 +83,7 @@ pub(super) fn reserve_provider_cognition_lease(
     world
         .reserve_cognition_lease(crate::runtime::CognitionLeaseRequestV1::new(
             invocation_key,
-            request.agent_subject.clone(),
+            payer_id,
             request.agent_subject.clone(),
             request.agent_session_id.clone(),
             request.agent_turn_id.clone(),
