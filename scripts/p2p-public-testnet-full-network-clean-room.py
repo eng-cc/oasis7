@@ -14,6 +14,7 @@ import argparse
 import copy
 from datetime import datetime, timedelta, timezone
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -259,16 +260,6 @@ EXPECTED_NODES: dict[str, dict[str, str]] = {
         "service_manager": "launchd",
         "service": "oasis7.testnet.fourth",
     },
-}
-
-# This registry is code-owned.  Identity receipts may attest a deployment
-# peer, but caller-supplied unique values cannot redefine the managed fleet.
-CANONICAL_PEER_REGISTRY = {
-    "storage-205": "12D3KooWtriadtestnetstorage",
-    "sequencer-204": "12D3KooWtriadtestnetsequencer",
-    "linux-lan-observer": "12D3KooWtriadtestnetlocal",
-    "windows-observer": "12D3KooWtriadtestnetwindowsobserver",
-    "macos-observer": "12D3KooWtriadtestnetfourthlocal",
 }
 
 # Connection inventory is code-owned.  Callers may provide evidence for these
@@ -788,7 +779,7 @@ def _identity_v2_evidence_map(
         expected = expected_by_name[name]
         if entry.get("node_id") != expected["node_id"]:
             die(f"identity-v2 evidence {name} node id binding mismatch")
-        expected_peer = CANONICAL_PEER_REGISTRY[name]
+        expected_peer = _peer_registry_authority().load_snapshot()["peers"][name]
         if entry.get("peer_id") != expected_peer:
             die(f"identity-v2 evidence {name} peer binding mismatch")
         _, raw_bytes = _evidence_descriptor(entry.get("raw_v1"), f"identity-v2 {name} raw-v1")
@@ -1287,17 +1278,34 @@ def _canonical_state_surface_variants(name: str) -> tuple[tuple[str, ...], ...]:
     return (canonical,)
 
 
+_PEER_REGISTRY_MODULE = None
+
+
+def _peer_registry_authority():
+    global _PEER_REGISTRY_MODULE
+    if _PEER_REGISTRY_MODULE is None:
+        path = Path(__file__).with_name("p2p-public-testnet-peer-registry.py")
+        spec = importlib.util.spec_from_file_location("managed_peer_registry", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _PEER_REGISTRY_MODULE = module
+    return _PEER_REGISTRY_MODULE
+
+
 def _canonical_plan_intent(context_digest: str) -> dict[str, Any]:
     """Build the exact pre-receipt intent from code-owned deployment truth."""
+    snapshot = _peer_registry_authority().load_snapshot()
     return {
-        "schema_version": "oasis7.clean_room_plan_intent.v1",
+        "schema_version": "oasis7.clean_room_plan_intent.v2",
         "context_digest": context_digest,
+        "peer_registry_sha256": snapshot["sha256"],
+        "peer_registry_epoch": snapshot["registry_epoch"],
         "adapter_action": CANONICAL_PLAN_INTENT_ACTION,
         "nodes": [
             {
                 "node_name": name,
                 "node_id": EXPECTED_NODES[name]["node_id"],
-                "peer_id": CANONICAL_PEER_REGISTRY[name],
+                "peer_id": snapshot["peers"][name],
                 "role": EXPECTED_NODES[name]["role"],
                 "reset_surface_ids": list(CANONICAL_PLAN_INTENT_RESET_SURFACE_IDS),
             }
@@ -2021,7 +2029,9 @@ def _validate_nodes(
             expected_rotation_epoch=None,
         )
         peer_id = require_string(identity_receipt.get("peer_id"), f"{name}.identity_receipt.peer_id")
-        expected_peer_id = governed.get("peer_id", CANONICAL_PEER_REGISTRY[name])
+        expected_peer_id = _peer_registry_authority().load_snapshot()["peers"][name]
+        if governed.get("peer_id", expected_peer_id) != expected_peer_id:
+            die(f"{name} deployment inventory peer differs from pinned peer registry")
         if peer_id != expected_peer_id:
             die(f"{name}.identity_receipt.peer_id does not match authenticated deployment inventory")
         if peer_id in seen_peer_ids:
@@ -2652,6 +2662,7 @@ def _plan_output_inputs(source: Path, evidence_path: Path, evidence: dict[str, A
                  IDENTITY_V2_GOVERNANCE_ROOT_PATH,
                  Path(__file__).with_name("p2p-public-testnet-full-network-clean-room-adapter.py"),
                  Path(__file__).with_name("fixtures") / "oasis7-governance-root.v1.json"]
+    protected.extend(_peer_registry_authority().protected_paths())
     descriptors = [evidence.get("context"), evidence.get("plan_intent")]
     for entry in evidence.get("entries", []):
         if isinstance(entry, dict):

@@ -23,6 +23,13 @@ ROOT = Path(__file__).resolve().parents[1]
 MODULE_PATH = ROOT / "scripts" / "p2p-public-testnet-full-network-clean-room.py"
 SIDECAR_PATH = ROOT / "scripts" / "p2p-public-testnet-identity-receipt-v2.py"
 SIGNING_TEST_PATH = ROOT / "scripts" / "p2p-public-testnet-identity-v2-signing-tool.test.py"
+FIXTURE_PEERS = {
+    "storage-205": "12D3KooWtriadtestnetstorage",
+    "sequencer-204": "12D3KooWtriadtestnetsequencer",
+    "linux-lan-observer": "12D3KooWtriadtestnetlocal",
+    "windows-observer": "12D3KooWtriadtestnetwindowsobserver",
+    "macos-observer": "12D3KooWtriadtestnetfourthlocal",
+}
 
 
 def load_module():
@@ -31,6 +38,8 @@ def load_module():
         raise AssertionError(f"cannot load clean-room module: {MODULE_PATH}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    # Fixture-generator compatibility only; production never reads this field.
+    module.CANONICAL_PEER_REGISTRY = dict(FIXTURE_PEERS)
     return module
 
 
@@ -81,6 +90,17 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             "runTest"
         )
         cls._baseline_signing.setUp()
+        cls._baseline_signing.peer_registry = cls._baseline_signing.root / "managed-peers.json"
+        peer_authority = cls._baseline_module._peer_registry_authority()
+        peer_authority.REGISTRY_PATH = cls._baseline_signing.peer_registry
+        _write_fixture_json(peer_authority.REGISTRY_PATH, {
+            "schema_version": peer_authority.SCHEMA, "network_id": peer_authority.NETWORK_ID,
+            "registry_epoch": "fixture-peer-epoch-1",
+            "nodes": [{"node_name": name, "node_id": peer_authority.NODE_IDS[name], "peer_id": peer}
+                      for name, peer in cls._baseline_module.CANONICAL_PEER_REGISTRY.items()],
+        })
+        peer_authority.REGISTRY_PATH.chmod(0o600)
+        peer_authority.REGISTRY_SHA256 = _fixture_digest(peer_authority.REGISTRY_PATH)
         cls._baseline_impact_directory = tempfile.TemporaryDirectory(
             prefix="oasis7-planner-baseline-"
         )
@@ -118,6 +138,7 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
         self._impact_directory = tempfile.TemporaryDirectory()
         self._impact_path = Path(self._impact_directory.name) / "consumer-impact.json"
         baseline = type(self)
+        self.module._PEER_REGISTRY_MODULE = baseline._baseline_module._peer_registry_authority()
         self._baseline_identity_v2_evidence = copy.deepcopy(baseline._baseline_evidence)
         self._build_plan_without_evidence = self.module.build_plan
         self.module.IDENTITY_V2_VERIFY_TOOL_PATH = baseline._baseline_signing.verifier
@@ -223,7 +244,9 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
         _write_fixture_json(
             self.signing.intent,
             {
-                "schema_version": "oasis7.clean_room_plan_intent.v1",
+                "schema_version": "oasis7.clean_room_plan_intent.v2",
+                "peer_registry_sha256": self.module._peer_registry_authority().REGISTRY_SHA256,
+                "peer_registry_epoch": self.module._peer_registry_authority().load_snapshot()["registry_epoch"],
                 "context_digest": self.signing.context_digest,
                 "adapter_action": "public-testnet-governed-rebuild",
                 "nodes": intent_nodes,
@@ -982,6 +1005,97 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             "nodes": nodes,
         }
 
+    def test_independently_signed_new_peer_snapshot_is_admitted(self) -> None:
+        signing_module = type(self)._baseline_signing_module
+        signing = signing_module.IdentityV2SigningToolContractTests("runTest")
+        signing.setUp()
+        self.addCleanup(signing.tearDown)
+        builder = type(self)("runTest")
+        builder.module = load_module()
+        builder.signing = signing
+        builder._impact_path = signing.root / "consumer-impact.json"
+        # Only the fixture generator gets these synthetic identities. The
+        # independent production module under test keeps its actual code.
+        builder.module.CANONICAL_PEER_REGISTRY = {
+            name: f"GovernedFixturePeer{index}" for index, name in enumerate(builder.module.NODE_ORDER)
+        }
+        authority = builder.module._peer_registry_authority()
+        signing.peer_registry = signing.root / "managed-peers.json"
+        authority.REGISTRY_PATH = signing.peer_registry
+        _write_fixture_json(signing.peer_registry, {"schema_version": authority.SCHEMA,
+            "network_id": authority.NETWORK_ID, "registry_epoch": "fixture-rotated-epoch",
+            "nodes": [{"node_name": name, "node_id": authority.NODE_IDS[name], "peer_id": peer}
+                      for name, peer in builder.module.CANONICAL_PEER_REGISTRY.items()]})
+        signing.peer_registry.chmod(0o600)
+        authority.REGISTRY_SHA256 = _fixture_digest(signing.peer_registry)
+        builder._baseline_request = builder._input()
+        builder._align_signing_context()
+        artifacts = builder._make_baseline_signed_artifacts(label="new-peers")
+        evidence = builder._write_baseline_evidence_map(artifacts, label="new-peers")
+        target = load_module()
+        target._PEER_REGISTRY_MODULE = authority
+        for stem, path in (("VERIFY_TOOL", signing.verifier), ("TRUST_CONFIG", signing.trust),
+                           ("PROVIDER_REGISTRY", signing.registry)):
+            setattr(target, f"IDENTITY_V2_{stem}_PATH", path)
+            setattr(target, f"IDENTITY_V2_{stem}_SHA256", _fixture_digest(path))
+        target._independently_verify_identity_v2_entries(
+            evidence, Path(evidence["context"]["path"]), Path(evidence["plan_intent"]["path"]))
+        with self.subTest(admission="current-independently-signed"):
+            try:
+                admitted, _, _ = target._identity_v2_evidence_map(evidence, builder._baseline_request)
+            except SystemExit as error:
+                self.fail(f"independently signed current peer snapshot rejected: {error}")
+            self.assertEqual(admitted, evidence)
+        remapped = copy.deepcopy(evidence)
+        remapped["entries"][0]["peer_id"] = "CallerInventedPeer"
+        with self.assertRaises(SystemExit):
+            target._identity_v2_evidence_map(remapped, builder._baseline_request)
+
+    def test_signed_peer_snapshot_rotation_rejects_old_plan_before_effects(self) -> None:
+        # Baseline setup prepared, signed and independently verified all five
+        # node envelopes with ephemeral Ed25519 keys and an exact v2 intent.
+        plan = self.module.build_plan(self._input())
+        adapter_path = Path(__file__).with_name("p2p-public-testnet-full-network-clean-room-adapter.py")
+        spec = importlib.util.spec_from_file_location("peer_rotation_adapter", adapter_path)
+        adapter = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(adapter)
+        adapter._PLANNER_MODULE = self.module
+        adapter.validate_plan(plan)
+        registry = self.module._peer_registry_authority()
+        before_bytes = registry.REGISTRY_PATH.read_bytes()
+        before_pin = registry.REGISTRY_SHA256
+        try:
+            for change in ("digest-only", "epoch-only", "peer-rotation"):
+                changed = json.loads(before_bytes)
+                if change == "epoch-only": changed["registry_epoch"] = "fixture-peer-epoch-2"
+                if change == "peer-rotation": changed["nodes"][0]["peer_id"] = "RotatedFixturePeerOnly"
+                raw = before_bytes + b"\n" if change == "digest-only" else json.dumps(changed, sort_keys=True).encode()
+                registry.REGISTRY_PATH.write_bytes(raw)
+                registry.REGISTRY_SHA256 = hashlib.sha256(raw).hexdigest()
+                for route in ("execute-api", "resume-api", "execute-cli"):
+                    with self.subTest(change=change, route=route), tempfile.TemporaryDirectory() as directory:
+                        root = Path(directory)
+                        journal, ledger = root / "journal.json", root / "ledger.jsonl"
+                        plan_path, authority_path, evidence_path = root / "plan.json", root / "authority.json", root / "evidence.json"
+                        _write_fixture_json(plan_path, plan)
+                        _write_fixture_json(authority_path, {})
+                        _write_fixture_json(evidence_path, plan["identity_v2_evidence"])
+                        before = {path.name: _fixture_digest(path) for path in root.iterdir()}
+                        with self.assertRaisesRegex(adapter.AdapterError, r"intent|peer registry"):
+                            if route.endswith("api"):
+                                method = adapter.execute if route == "execute-api" else adapter.resume_transaction
+                                method(plan, {}, journal_path=journal, ledger_path=ledger, dry_run=True)
+                            else:
+                                adapter.main(["--plan", str(plan_path), "--authority", str(authority_path),
+                                    "--journal", str(journal), "--ledger", str(ledger),
+                                    "--identity-v2-evidence-map", str(evidence_path),
+                                    "--identity-v2-mode", "current_admission"])
+                        self.assertEqual(before, {path.name: _fixture_digest(path) for path in root.iterdir()},
+                                         "rotated old plan must be rejected before lock/journal/output creation")
+        finally:
+            registry.REGISTRY_PATH.write_bytes(before_bytes)
+            registry.REGISTRY_SHA256 = before_pin
+
     def test_plan_emits_fixed_five_node_order_and_8_7_surfaces(self) -> None:
         plan = self.module.build_plan(self._input())
 
@@ -1346,7 +1460,9 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
         context_path.chmod(0o600)
         context_digest = hashlib.sha256(context_path.read_bytes()).hexdigest()
         intent = {
-            "schema_version": "oasis7.clean_room_plan_intent.v1",
+            "schema_version": "oasis7.clean_room_plan_intent.v2",
+            "peer_registry_sha256": self.module._peer_registry_authority().REGISTRY_SHA256,
+            "peer_registry_epoch": self.module._peer_registry_authority().load_snapshot()["registry_epoch"],
             "context_digest": context_digest,
             "adapter_action": self.module.CANONICAL_PLAN_INTENT_ACTION,
             "nodes": [

@@ -34,7 +34,7 @@ PAYLOAD_SCHEMA = "oasis7.identity_receipt.v2"
 TRUST_SCHEMA = "oasis7.identity_v2_trust_config.v1"
 REGISTRY_SCHEMA = "oasis7.identity_v2_provider_registry.v1"
 CONTEXT_SCHEMA = "oasis7.identity_v2_context.v1"
-INTENT_SCHEMA = "oasis7.clean_room_plan_intent.v1"
+INTENT_SCHEMA = "oasis7.clean_room_plan_intent.v2"
 ALGORITHM = "ed25519"
 DOMAIN = "oasis7.identity_receipt.v2/signature/v1"
 PROVIDER_ATTESTATION_SCHEMA_V2 = "oasis7.identity_v2_provider_attestation.v2"
@@ -112,7 +112,7 @@ CONTEXT_FIELDS = frozenset(
         "expires_at",
     }
 )
-INTENT_FIELDS = frozenset({"schema_version", "context_digest", "adapter_action", "nodes"})
+INTENT_FIELDS = frozenset({"schema_version", "context_digest", "adapter_action", "nodes", "peer_registry_sha256", "peer_registry_epoch"})
 NODE_FIELDS = frozenset({"node_name", "node_id", "peer_id", "role", "reset_surface_ids"})
 ATTESTATION_FIELDS = frozenset(
     {
@@ -653,10 +653,33 @@ def validate_context(context: dict[str, Any], *, now: datetime | None = None, hi
     return context
 
 
+_PEER_REGISTRY_MODULE = None
+
+
+def _peer_registry_authority():
+    global _PEER_REGISTRY_MODULE
+    if _PEER_REGISTRY_MODULE is None:
+        path = Path(__file__).with_name("p2p-public-testnet-peer-registry.py")
+        spec = importlib.util.spec_from_file_location("managed_peer_registry", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _PEER_REGISTRY_MODULE = module
+    return _PEER_REGISTRY_MODULE
+
+
 def validate_intent(intent: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+    if intent.get("schema_version") == "oasis7.clean_room_plan_intent.v1":
+        fail("legacy plan-intent schema lacks current peer registry binding")
     require_exact_fields(intent, INTENT_FIELDS, "plan-intent")
     if intent["schema_version"] != INTENT_SCHEMA:
         fail("plan-intent schema is unsupported")
+    try:
+        snapshot = _peer_registry_authority().load_snapshot()
+    except SystemExit as error:
+        fail(str(error))
+    if (intent["peer_registry_sha256"] != snapshot["sha256"]
+            or intent["peer_registry_epoch"] != snapshot["registry_epoch"]):
+        fail("plan-intent peer registry digest or epoch is not current")
     if intent["context_digest"] != sha256_bytes(canonical(context)):
         fail("plan-intent context digest mismatch")
     require_string(intent.get("adapter_action"), "plan-intent.adapter_action", safe=True)
@@ -678,6 +701,9 @@ def validate_intent(intent: dict[str, Any], context: dict[str, Any]) -> dict[str
         previous = name
         require_string(node.get("node_id"), f"{label}.node_id", safe=True)
         peer = require_string(node.get("peer_id"), f"{label}.peer_id", safe=True)
+        if (name not in snapshot["peers"] or peer != snapshot["peers"][name]
+                or node["node_id"] != _peer_registry_authority().NODE_IDS[name]):
+            fail("plan-intent node peer does not match current registry")
         if peer in peers:
             fail("plan-intent peers must be unique")
         peers.add(peer)
@@ -687,6 +713,8 @@ def validate_intent(intent: dict[str, Any], context: dict[str, Any]) -> dict[str
             fail(f"{label}.reset_surface_ids must contain strings")
         if surfaces != sorted(set(surfaces)):
             fail(f"{label}.reset_surface_ids must be sorted and unique")
+    if names != set(snapshot["peers"]):
+        fail("plan-intent must cover the complete peer registry")
     return intent
 
 
@@ -809,6 +837,7 @@ def _publish_verification_pair(outputs: tuple[tuple[Path, bytes], ...]) -> None:
 
 def _code_owned_paths() -> tuple[Path, ...]:
     return (
+        *_peer_registry_authority().protected_paths(),
         DEPLOYED_TRUST_CONFIG,
         DEPLOYED_PROVIDER_REGISTRY,
         DEPLOYED_GOVERNANCE_ROOT,

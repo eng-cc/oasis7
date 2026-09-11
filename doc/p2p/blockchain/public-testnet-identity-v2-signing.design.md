@@ -188,7 +188,7 @@ others:
 ```
 
 `plan_digest` is the digest of a separate, pre-receipt
-`oasis7.clean_room_plan_intent.v1` document containing governed task UID,
+`oasis7.clean_room_plan_intent.v2` document binding governed task UID,
 frozen HEAD, capture window, network/adapter action, managed node names/roles,
 and canonical reset-surface identifiers. It excludes identity receipts,
 signatures, verification outputs, and final-plan receipt digests. Its canonical
@@ -201,11 +201,23 @@ The exact context schema is `oasis7.identity_v2_context.v1`: fields are
 All are non-empty strings; timestamps use UTC `YYYY-MM-DDTHH:MM:SSZ`, HEAD is
 40 lowercase hexadecimal characters, and timestamp ordering is checked.
 The exact plan-intent fields are `schema_version` (the value above),
-`context_digest`, `adapter_action`, and `nodes`. Each node has only `node_name`,
+`context_digest`, `adapter_action`, `peer_registry_sha256`,
+`peer_registry_epoch`, and `nodes`. Each node has only `node_name`,
 `node_id`, `peer_id`, `role`, and `reset_surface_ids`; identities are strings,
 surfaces are unique strings, nodes are sorted by unique `node_name`, and surface
 IDs are sorted. Node set, roles, action and surfaces must equal independently
 approved deployment truth, not values invented by a receipt.
+The intent always contains all five canonical managed nodes, including when
+preparing one node's envelope. The digest and epoch must match the current
+independently pinned managed-peer registry, whose shared loader is
+`scripts/p2p-public-testnet-peer-registry.py`. These fields enter the canonical
+intent digest and are therefore signed through the payload's `plan_digest`.
+`peer_registry_epoch` is the registry's `registry_epoch`, distinct from the
+context's signing-key `rotation_epoch`. Registry byte-digest or epoch changes
+invalidate old intent, evidence-map, plan and resume admission. Current
+validation rejects intent v1; it never adds missing fields or upgrades old
+signed evidence. The registry pin remains unprovisioned, as specified by the
+[deployment contract](./public-testnet-governance-trust-root-provisioning.md#managed-peer-registry-not-provisioned).
 Both documents reject duplicate/unknown fields and noncanonical serialization;
 their digests use the same sorted-key compact JSON encoding as the payload.
 `context_digest` binds the exact canonical context and is signed. Shared fields

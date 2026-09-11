@@ -18,6 +18,7 @@ There is no caller-selected command, endpoint, private-key option, or
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -419,6 +420,18 @@ class IdentityV2SigningToolContractTests(unittest.TestCase):
         self.verifier.chmod(self.verifier.stat().st_mode | stat.S_IXUSR)
 
     def _write_context_and_intent(self) -> None:
+        spec = importlib.util.spec_from_file_location("signing_fixture_peers", TOOL.with_name("p2p-public-testnet-peer-registry.py"))
+        peer_authority = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(peer_authority)
+        self.peer_registry = self.root / "managed-peers.json"
+        peers = {name: PEER_ID if node_id == NODE_ID else f"FixturePeer{index}"
+                 for index, (name, node_id) in enumerate(peer_authority.NODE_IDS.items())}
+        peer_value = {"schema_version": peer_authority.SCHEMA, "network_id": peer_authority.NETWORK_ID,
+                      "registry_epoch": "fixture-peer-epoch-1",
+                      "nodes": [{"node_name": name, "node_id": node_id, "peer_id": peers[name]}
+                                for name, node_id in peer_authority.NODE_IDS.items()]}
+        write_json(self.peer_registry, peer_value)
+        self.peer_registry.chmod(0o600)
         context = {
             "schema_version": "oasis7.identity_v2_context.v1",
             "network_id": NETWORK_ID,
@@ -434,17 +447,19 @@ class IdentityV2SigningToolContractTests(unittest.TestCase):
         write_json(self.context, context)
         context_digest = digest_file(self.context)
         intent = {
-            "schema_version": "oasis7.clean_room_plan_intent.v1",
+            "schema_version": "oasis7.clean_room_plan_intent.v2",
             "context_digest": context_digest,
+            "peer_registry_sha256": digest_file(self.peer_registry),
+            "peer_registry_epoch": peer_value["registry_epoch"],
             "adapter_action": "public-testnet-governed-rebuild",
             "nodes": [
                 {
-                    "node_name": NODE_ID,
-                    "node_id": NODE_ID,
-                    "peer_id": PEER_ID,
-                    "role": "validator",
+                    "node_name": name,
+                    "node_id": peer_authority.NODE_IDS[name],
+                    "peer_id": peers[name],
+                    "role": "validator" if name in {"storage-205", "sequencer-204"} else "observer",
                     "reset_surface_ids": ["config", "execution", "world"],
-                }
+                } for name in sorted(peers)
             ],
         }
         write_json(self.intent, intent)
@@ -555,11 +570,18 @@ class IdentityV2SigningToolContractTests(unittest.TestCase):
             digest_file(self.trust),
             digest_file(self.registry),
         )
+        harness = CHILD_HARNESS
+        if hasattr(self, "peer_registry"):
+            peer_setup = (
+                f"tool._peer_registry_authority().REGISTRY_PATH = Path({str(self.peer_registry)!r})\n"
+                f"tool._peer_registry_authority().REGISTRY_SHA256 = {digest_file(self.peer_registry)!r}\n"
+            )
+            harness = harness.replace("raise SystemExit(tool.main", peer_setup + "raise SystemExit(tool.main")
         return subprocess.run(
             [
                 sys.executable,
                 "-c",
-                CHILD_HARNESS,
+                harness,
                 str(TOOL),
                 str(self.governance_root),
                 str(self.trust),

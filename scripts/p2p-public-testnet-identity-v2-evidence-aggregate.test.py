@@ -62,6 +62,8 @@ class EvidenceAggregateTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         fixture = self.planner_tests.FullNetworkCleanRoomPlanTests("runTest")
         fixture.setUp()
+        if hasattr(fixture, "module"):
+            self.planner._PEER_REGISTRY_MODULE = fixture.module._peer_registry_authority()
         self.addCleanup(fixture.tearDown)
         (self.root / "artifacts").mkdir(mode=0o700)
         self.full_map, self.request = fixture._network_binding_evidence_fixture(
@@ -79,8 +81,18 @@ class EvidenceAggregateTests(unittest.TestCase):
         self.temp.cleanup()
 
     def run_aggregate(self, input_paths: list[Path], output: Path) -> subprocess.CompletedProcess[str]:
+        peer_authority = self.planner._peer_registry_authority()
+        harness = f"""import importlib.util, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location('aggregate_fixture', {str(AGGREGATOR)!r})
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module.PLANNER._peer_registry_authority().REGISTRY_PATH = Path({str(peer_authority.REGISTRY_PATH)!r})
+module.PLANNER._peer_registry_authority().REGISTRY_SHA256 = {peer_authority.REGISTRY_SHA256!r}
+raise SystemExit(module.main(sys.argv[1:]))
+"""
         return subprocess.run(
-            [sys.executable, str(AGGREGATOR), *(arg for path in input_paths for arg in ("--input-map", str(path))), "--out", str(output)],
+            [sys.executable, "-c", harness, *(arg for path in input_paths for arg in ("--input-map", str(path))), "--out", str(output)],
             text=True,
             capture_output=True,
             check=False,
@@ -88,6 +100,7 @@ class EvidenceAggregateTests(unittest.TestCase):
 
     def _aggregate_authority_fixture(self, root):
         aggregate = load_module(AGGREGATOR, "aggregate_authority_regression")
+        aggregate.PLANNER._PEER_REGISTRY_MODULE = self.planner._peer_registry_authority()
         names = ("trust.json", "registry.json", "verifier", "trust-key", "provider-key", "provider-adapter")
         paths = {name: root / name for name in names}
         for path in paths.values():

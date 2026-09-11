@@ -564,6 +564,9 @@ class FullNetworkCleanRoomAdapterTests(unittest.TestCase):
         self.adapter = load_module("full_network_clean_room_adapter", ADAPTER_PATH)
         self.fixture = self.fixture_module.FullNetworkCleanRoomPlanTests()
         self.fixture.setUp()
+        self.planner._PEER_REGISTRY_MODULE = self.fixture.module._peer_registry_authority()
+        self.planner.CANONICAL_PEER_REGISTRY = dict(self.fixture_module.FIXTURE_PEERS)
+        self.adapter.CANONICAL_PEER_REGISTRY = dict(self.fixture_module.FIXTURE_PEERS)
         self._planner_anchor_patch = mock.patch.multiple(
             self.planner,
             _independently_verify_identity_v2_entries=mock.Mock(return_value={}),

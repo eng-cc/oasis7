@@ -108,7 +108,8 @@ def _read_input_map(path: Path, index: int) -> dict[str, Any]:
     if not isinstance(name, str) or name not in NODE_ORDER:
         die(f"input map {index} node is unexpected")
     expected = PLANNER.EXPECTED_NODES[name]
-    if entry.get("node_id") != expected["node_id"] or entry.get("peer_id") != PLANNER.CANONICAL_PEER_REGISTRY[name]:
+    if (entry.get("node_id") != expected["node_id"]
+            or entry.get("peer_id") != PLANNER._peer_registry_authority().load_snapshot()["peers"][name]):
         die(f"input map {index} {name} identity binding does not match the canonical registry")
     normalized_entry = {
         "node_name": name,

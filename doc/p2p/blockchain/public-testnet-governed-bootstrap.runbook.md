@@ -92,11 +92,10 @@ nodes with convenient receipts.
 5. Context is exact `oasis7.identity_v2_context.v1` with
    `schema_version`, `network_id`, `task_uid`, `head_oid`, `capture_window_id`,
    `capture_start`, `capture_end`, `rotation_epoch`, `issued_at`, and
-   `expires_at`. Plan intent is exact `oasis7.clean_room_plan_intent.v1` with
-   `schema_version`, `context_digest`, `adapter_action`, and `nodes`. Each node has exactly `node_name`, `node_id`, `peer_id`, `role`, and `reset_surface_ids`; nodes and reset-surface IDs are sorted and unique.
-   The order is context -> context digest -> plan intent -> plan digest ->
-   payload -> signature -> verification receipt -> final plan; final-plan
-   digest never flows upstream.
+   `expires_at`. Plan intent is exact `oasis7.clean_room_plan_intent.v2` with
+   `schema_version`, `context_digest`, `adapter_action`, `peer_registry_sha256`, `peer_registry_epoch`, and `nodes`. Each node has exactly `node_name`, `node_id`, `peer_id`, `role`, and `reset_surface_ids`; all five managed nodes are required, and nodes and reset-surface IDs are sorted and unique.
+   The order is context -> context digest -> plan intent -> plan digest -> payload -> signature -> verification receipt -> final plan; final-plan digest never flows upstream.
+   Peer tuples/digest/epoch come from independently pinned `/operator/truth/managed-peer-registry.json`, shared by planner, adapter and signing validation. Its pin is unprovisioned: no historical/synthetic peers or caller overrides substitute for authority. Rotation invalidates old intent/evidence/plan/resume even with unchanged peers; v1 is rejected without silent migration. Obtain fresh governed evidence per the [provisioning contract](./public-testnet-governance-trust-root-provisioning.md#managed-peer-registry-not-provisioned).
 6. Only `oasis7.identity_v2_verification_receipt.v1` with
    `mode=current_admission`, `verified=true`, and `apply_authorized=true` may
    enter a destructive plan or adapter transaction. `historical_audit` is

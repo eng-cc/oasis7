@@ -192,13 +192,6 @@ _PLANNER_MODULE: Any | None = None
 
 # This registry is code-owned.  It is not derived from plan input, a host
 # response, or a caller-supplied peer list.
-CANONICAL_PEER_REGISTRY = {
-    "storage-205": "12D3KooWtriadtestnetstorage",
-    "sequencer-204": "12D3KooWtriadtestnetsequencer",
-    "linux-lan-observer": "12D3KooWtriadtestnetlocal",
-    "windows-observer": "12D3KooWtriadtestnetwindowsobserver",
-    "macos-observer": "12D3KooWtriadtestnetfourthlocal",
-}
 
 # Provider callbacks receive only these DTO fields.  Keeping the allowlist in
 # the adapter makes a future planner field opt-in rather than an accidental
@@ -1041,8 +1034,7 @@ def validate_plan(
         _fail("plan host inventory is not code-owned")
     if plan.get("canonical_endpoint_inventory") != planner.CANONICAL_ENDPOINT_INVENTORY:
         _fail("plan endpoint inventory is not code-owned")
-    if getattr(planner, "CANONICAL_PEER_REGISTRY", None) != CANONICAL_PEER_REGISTRY:
-        _fail("planner and adapter peer registries are not the same code-owned registry")
+    peer_snapshot = planner._peer_registry_authority().load_snapshot()
     deployment_inventory = _validate_deployment_inventory(
         plan, planner, capture_window_bounds
     )
@@ -1183,7 +1175,9 @@ def validate_plan(
             ),
         )
         peer_id = _string(identity.get("peer_id"), f"{name} identity peer id")
-        expected_peer_id = governed.get("peer_id", CANONICAL_PEER_REGISTRY[name])
+        expected_peer_id = peer_snapshot["peers"][name]
+        if governed.get("peer_id", expected_peer_id) != expected_peer_id:
+            _fail(f"{name} deployment inventory peer differs from pinned peer registry")
         if peer_id != expected_peer_id:
             _fail(f"{name} identity peer id does not match authenticated deployment inventory")
         if peer_id in seen_peer_ids:
@@ -3242,7 +3236,7 @@ def _project_transport_inventory(value: Any) -> dict[str, Any]:
         "transport deployment inventory",
     )
     nodes = _object(inventory["nodes"], "transport deployment inventory nodes")
-    if set(nodes) != set(CANONICAL_PEER_REGISTRY):
+    if set(nodes) != set(_load_planner().NODE_ORDER):
         _fail("transport deployment inventory node set is not canonical")
     inventory["nodes"] = {
         name: _project_exact_object(
@@ -3253,7 +3247,7 @@ def _project_transport_inventory(value: Any) -> dict[str, Any]:
             },
             f"transport deployment inventory {name}",
         )
-        for name in CANONICAL_PEER_REGISTRY
+        for name in _load_planner().NODE_ORDER
     }
     inventory["receipt"] = _project_exact_object(
         inventory["receipt"],
@@ -3294,7 +3288,7 @@ def _project_transport_surfaces(value: Any) -> dict[str, Any]:
 
 def _project_transport_host_inventory(value: Any) -> dict[str, Any]:
     inventory = _object(value, "transport canonical host inventory")
-    if set(inventory) != set(CANONICAL_PEER_REGISTRY):
+    if set(inventory) != set(_load_planner().NODE_ORDER):
         _fail("transport canonical host inventory node set is not canonical")
     return {
         name: _project_exact_object(
@@ -3302,13 +3296,13 @@ def _project_transport_host_inventory(value: Any) -> dict[str, Any]:
             {"target", "known_hosts_path", "known_host_fingerprint"},
             f"transport canonical host inventory {name}",
         )
-        for name in CANONICAL_PEER_REGISTRY
+        for name in _load_planner().NODE_ORDER
     }
 
 
 def _project_transport_endpoint_inventory(value: Any) -> dict[str, Any]:
     inventory = _object(value, "transport canonical endpoint inventory")
-    if set(inventory) != set(CANONICAL_PEER_REGISTRY):
+    if set(inventory) != set(_load_planner().NODE_ORDER):
         _fail("transport canonical endpoint inventory node set is not canonical")
     return {
         name: _project_exact_object(
@@ -3316,7 +3310,7 @@ def _project_transport_endpoint_inventory(value: Any) -> dict[str, Any]:
             {"healthz", "evidence"},
             f"transport canonical endpoint inventory {name}",
         )
-        for name in CANONICAL_PEER_REGISTRY
+        for name in _load_planner().NODE_ORDER
     }
 
 
@@ -4273,6 +4267,7 @@ def _reject_journal_input_aliases(
     """
     protected = [Path(ledger_path), Path(CANONICAL_TRUST_ROOT_PATH), *input_paths]
     planner = _load_planner()
+    protected.extend(planner._peer_registry_authority().protected_paths())
     protected.extend((
         Path(planner.IDENTITY_V2_TRUST_CONFIG_PATH),
         Path(planner.IDENTITY_V2_PROVIDER_REGISTRY_PATH),
@@ -4320,6 +4315,19 @@ def _reject_journal_input_aliases(
         _fail("cannot establish transaction journal and retained input separation")
 
 
+def _validate_current_peer_intent(plan: dict[str, Any]) -> None:
+    """Reject stale snapshot-bound intent before lock or journal creation."""
+    planner = _load_planner()
+    try:
+        evidence = _object(plan.get("identity_v2_evidence"), "identity-v2 evidence map")
+        _, raw = planner._evidence_descriptor(evidence.get("plan_intent"), "plan intent")
+        intent = json.loads(raw)
+        if not isinstance(intent, dict) or intent != planner._canonical_plan_intent(intent.get("context_digest")):
+            _fail("plan intent does not match current pinned peer registry")
+    except (SystemExit, ValueError, UnicodeError) as error:
+        _fail(f"current peer registry intent admission failed: {error}")
+
+
 def execute(
     plan: dict[str, Any],
     authority: dict[str, Any],
@@ -4333,6 +4341,7 @@ def execute(
 ) -> dict[str, Any]:
     """Serialize one transaction while retaining the implementation boundary."""
     _reject_journal_input_aliases(Path(journal_path), Path(ledger_path), plan)
+    _validate_current_peer_intent(plan)
     lock = _acquire_transaction_lock(Path(journal_path))
     guard_token = _ACTIVE_TRANSACTION_GUARD.set(lock)
     try:
@@ -4626,6 +4635,7 @@ def resume_transaction(
 ) -> dict[str, Any]:
     """Serialize resume/reconciliation against the same transaction lock."""
     _reject_journal_input_aliases(Path(journal_path), Path(ledger_path), plan)
+    _validate_current_peer_intent(plan)
     lock = _acquire_transaction_lock(Path(journal_path))
     guard_token = _ACTIVE_TRANSACTION_GUARD.set(lock)
     try:

@@ -158,6 +158,8 @@ class IdentityV2CliBridgeTests(unittest.TestCase):
         self.signing.setUp()
         self.planner = planner_module.FullNetworkCleanRoomPlanTests("runTest")
         self.planner.setUp()
+        shutil.copyfile(self.planner.module._peer_registry_authority().REGISTRY_PATH, self.signing.peer_registry)
+        self.signing.peer_registry.chmod(0o600)
         self.request = self.planner._input()
 
         self._align_signing_context()
@@ -194,7 +196,9 @@ class IdentityV2CliBridgeTests(unittest.TestCase):
         write_json(
             self.signing.intent,
             {
-                "schema_version": "oasis7.clean_room_plan_intent.v1",
+                "schema_version": "oasis7.clean_room_plan_intent.v2",
+                "peer_registry_sha256": digest_bytes(self.signing.peer_registry.read_bytes()),
+                "peer_registry_epoch": json.loads(self.signing.peer_registry.read_text())["registry_epoch"],
                 "context_digest": self.signing.context_digest,
                 "adapter_action": "public-testnet-governed-rebuild",
                 "nodes": intent_nodes,
@@ -374,6 +378,9 @@ class IdentityV2CliBridgeTests(unittest.TestCase):
         wrapper_name = "identity-v2-signing-tool-wrapper.py" if marker is None else f"untrusted-{marker.stem}.py"
         wrapper = self.root / wrapper_name
         harness = load_module("identity_v2_signing_tool_contract_for_wrapper", TOOL_TEST).CHILD_HARNESS
+        peer_setup = (f"tool._peer_registry_authority().REGISTRY_PATH = Path({str(self.signing.peer_registry)!r})\n"
+                      f"tool._peer_registry_authority().REGISTRY_SHA256 = {digest_bytes(self.signing.peer_registry.read_bytes())!r}\n")
+        harness = harness.replace("raise SystemExit(tool.main", peer_setup + "raise SystemExit(tool.main")
         marker_statement = (
             f"Path({str(marker)!r}).write_text('invoked\\n', encoding='utf-8')"
             if marker is not None
@@ -472,6 +479,8 @@ def load(name, path):
     return module
 
 planner = load("identity_v2_bridge_planner", {str(PLANNER)!r})
+planner._peer_registry_authority().REGISTRY_PATH = Path({str(self.signing.peer_registry)!r})
+planner._peer_registry_authority().REGISTRY_SHA256 = {digest_bytes(self.signing.peer_registry.read_bytes())!r}
 planner.IDENTITY_V2_VERIFY_TOOL_PATH = Path({str(verifier_tool)!r})
 planner.IDENTITY_V2_VERIFY_TOOL_SHA256 = {digest_bytes(verifier_tool.read_bytes())!r}
 planner.IDENTITY_V2_TRUST_CONFIG_PATH = Path({str(self.signing.trust)!r})
@@ -503,6 +512,8 @@ def load(name, path):
     return module
 
 planner = load("identity_v2_bridge_adapter_planner", {str(PLANNER)!r})
+planner._peer_registry_authority().REGISTRY_PATH = Path({str(self.signing.peer_registry)!r})
+planner._peer_registry_authority().REGISTRY_SHA256 = {digest_bytes(self.signing.peer_registry.read_bytes())!r}
 planner.IDENTITY_V2_VERIFY_TOOL_PATH = Path({str(verifier_tool)!r})
 planner.IDENTITY_V2_VERIFY_TOOL_SHA256 = {digest_bytes(verifier_tool.read_bytes())!r}
 planner.IDENTITY_V2_TRUST_CONFIG_PATH = Path({str(self.signing.trust)!r})

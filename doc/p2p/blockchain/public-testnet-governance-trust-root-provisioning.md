@@ -53,6 +53,48 @@ signer authority. This profile is currently **NOT PROVISIONED / CAPABILITY
 BLOCKED**. No live provider, private key, credential, node, or production
 identity configuration is created by this document.
 
+### Managed peer registry (not provisioned)
+
+The shared `scripts/p2p-public-testnet-peer-registry.py` loader fixes the path
+`/operator/truth/managed-peer-registry.json`. Its independent `REGISTRY_SHA256`
+pin is currently `None`; admission fails closed until separately approved
+deployment authority provisions the exact bytes and pin. There is no CLI,
+environment, receipt or caller-inventory override, and no synthetic or
+historical-peer fallback. Historical four-node topology evidence does not
+establish current identities or supply the missing verified Windows identity.
+
+The exact schema is `oasis7.managed_peer_registry.v1`, with fields
+`schema_version`, `network_id`, `registry_epoch`, and `nodes`. The network is
+`oasis7-public-testnet-governed-20260606`. Each of exactly five nodes has only
+`node_name`, `node_id`, and `peer_id`; names and node IDs must match the shared
+loader's canonical five-node set, and peer IDs must be unique. Provisioning
+requires independent current evidence for every tuple, including Windows,
+and governance approval of the complete snapshot and its rotation epoch.
+Do not copy test fixtures or infer peer IDs from names, logs or old documents.
+
+The loader requires an operator-owned regular file, mode `0600` on POSIX,
+rejects path symlinks except the fixed `/var` and `/tmp` system aliases, reads
+through `O_NOFOLLOW`, and compares file identity before/after reading plus the
+exact SHA-256 pin. Every ancestor must stat successfully as a directory owned
+by root or the operator account. Group/other write bits are rejected except
+on root-owned sticky directories; a foreign-owned directory is rejected even
+with mode `0755`. The fixed `/var` and `/tmp` aliases still undergo these
+directory ownership/write-mode checks after resolution. Stat failures and
+non-directory ancestors fail closed before the registry is read. These
+pre/post checks do not claim atomic protection against a hostile same-owner
+process replacing and restoring paths between checks. All output alias guards
+also protect the registry and its shared loader source.
+
+The full-five-node `oasis7.clean_room_plan_intent.v2` includes
+`peer_registry_sha256` and `peer_registry_epoch`; both are covered by its signed
+canonical digest and compared with current registry authority. Registry epoch
+is separate from signing-key `rotation_epoch`. A changed digest or epoch
+invalidates old intent/map/plan and resume admission, including a registry
+rotation retaining the same peer tuples. Intent v1 has no silent migration:
+fresh governed context/intent/signatures/evidence are required. These software
+checks neither provision authority nor establish current node health, provider
+custody or release readiness.
+
 The deployment must reserve these code-owned paths before activation:
 
 | artifact | deployment path | independent admission requirement |
