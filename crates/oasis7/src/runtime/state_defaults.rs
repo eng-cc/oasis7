@@ -118,6 +118,7 @@ impl Default for WorldState {
             crises: BTreeMap::new(),
             meta_progress: BTreeMap::new(),
             module_states: BTreeMap::new(),
+            module_visual_entities: BTreeMap::new(),
             module_artifact_owners: BTreeMap::new(),
             module_artifact_listings: BTreeMap::new(),
             module_artifact_bids: BTreeMap::new(),

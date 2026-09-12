@@ -204,14 +204,9 @@ function normalizeEvent(event, context) {
   if (event.major_event != null && majorEvent == null) {
     return null;
   }
-  const moduleVisualEntityId = [
-    event.module_visual_entity_id,
-    event.moduleVisualEntityId,
-    event.entity_id,
-    event.entityId,
-    event.entity?.entity_id,
-    event.data?.entity?.entity_id,
-  ].find((value) => value != null && String(value).trim());
+  const moduleVisualEntityId = typeof event.module_visual_entity_id === "string"
+    ? event.module_visual_entity_id.trim()
+    : "";
   return {
     event_seq: typeof event.event_seq === "number" ? event.event_seq : eventSeq,
     kind,

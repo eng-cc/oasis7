@@ -1,8 +1,14 @@
 use super::GovernanceIdentityProfileState;
-use super::projection::GovernanceIdentityProfileOverlay;
 use serde::Serialize;
 use serde::ser::{SerializeMap, Serializer};
 use std::collections::BTreeMap;
+
+#[derive(Debug, Clone, PartialEq)]
+pub(super) struct GovernanceIdentityProfileOverlay {
+    pub(super) target_agent_id: String,
+    pub(super) next_profile: GovernanceIdentityProfileState,
+    pub(super) allow_insert: bool,
+}
 
 pub(super) struct GovernanceIdentityProfileMapProjection<'a> {
     pub(super) profiles: &'a BTreeMap<String, GovernanceIdentityProfileState>,

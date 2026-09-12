@@ -371,12 +371,13 @@ mod tests {
                 .expect("install driver module"),
         };
         let mut seed_model = None;
+        let runtime_module_id = driver.runtime_module_id.clone();
         append_command(
             &command_path,
             json!({
                 "operation": "upsert",
                 "entity_id": "qa-entity",
-                "module_id": "qa-module",
+                "module_id": runtime_module_id,
                 "anchor": {
                     "type": "absolute",
                     "data": {"pos": {"x_cm": 100, "y_cm": 200, "z_cm": 300}}
@@ -402,7 +403,15 @@ mod tests {
                 .as_ref()
                 .and_then(|model| model.module_visual_entities.get("qa-entity"))
                 .map(|entity| entity.module_id.as_str()),
-            Some("qa-module")
+            Some(driver.runtime_module_id.as_str())
+        );
+        assert_eq!(
+            world
+                .state()
+                .module_visual_entities
+                .get("qa-entity")
+                .map(|entity| entity.module_id.as_str()),
+            Some(driver.runtime_module_id.as_str())
         );
 
         append_command(
@@ -427,6 +436,12 @@ mod tests {
             !seed_model
                 .as_ref()
                 .is_some_and(|model| model.module_visual_entities.contains_key("qa-entity"))
+        );
+        assert!(
+            !world
+                .state()
+                .module_visual_entities
+                .contains_key("qa-entity")
         );
 
         let ack = fs::read_to_string(ack_path_for(&command_path)).expect("driver ack");

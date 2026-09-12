@@ -232,7 +232,12 @@ pub(super) fn reconcile_module_visual_entities(
             }
         }
         if runtime.camera.zoom >= MODULE_LABEL_MIN_ZOOM {
-            let display = module_visual_label(entity.label.as_deref(), &entity.kind, &entity.id);
+            let display = module_visual_label(
+                entity.label.as_deref(),
+                &entity.kind,
+                &entity.id,
+                &render_state.locale,
+            );
             let label_x = canvas_x + f64::from(co_anchor_offset.x);
             let label_y = canvas_y + f64::from(co_anchor_offset.y) - MODULE_LABEL_ABOVE_MARKER_PX;
             let label_rect = ModuleLabelRect::above_marker(label_x, label_y, &display);
@@ -316,10 +321,15 @@ impl ModuleLabelRect {
     }
 }
 
-fn module_visual_label(label: Option<&str>, kind: &str, id: &str) -> String {
+fn module_visual_label(label: Option<&str>, kind: &str, id: &str, locale: &str) -> String {
+    let fallback = if locale.trim().to_ascii_lowercase().starts_with("zh") {
+        format!("模块 {kind}:{id}")
+    } else {
+        format!("{kind}:{id}")
+    };
     match label.map(str::trim).filter(|label| !label.is_empty()) {
-        Some(explicit) => truncate_module_label(explicit),
-        None => truncate_module_label(&format!("{kind}:{id}")),
+        Some(explicit) if explicit != id => truncate_module_label(explicit),
+        _ => truncate_module_label(&fallback),
     }
 }
 

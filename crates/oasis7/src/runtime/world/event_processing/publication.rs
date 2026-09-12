@@ -225,6 +225,15 @@ impl World {
                     )]),
                 })
             }
+            WorldEventBody::ModuleEmitted(event) => {
+                self.state
+                    .prepare_module_visual_event(event)?
+                    .map(|next| PreparedEventStateDelta::ModuleVisualEntities {
+                        event: event.clone(),
+                        next,
+                    })
+                    .or_else(|| PreparedEventStateDelta::for_body(self, &body))
+            }
             WorldEventBody::ModuleRuntimeCharged(charge) => {
                 Some(PreparedEventStateDelta::ModuleRuntimeCharged(
                     self.prepare_module_runtime_charge_event(charge, self.state.time)?,
@@ -610,6 +619,9 @@ impl World {
                         agents: &BTreeMap::new(),
                     },
                 )?,
+            PreparedEventStateDelta::ModuleVisualEntities { next, .. } => {
+                self.state_root_hash_with_module_visual_overlay(next)?
+            }
             PreparedEventStateDelta::ModuleRuntimeCharged(prepared) => self
                 .state_root_hash_with_command_overlay(
                     super::super::super::state::CommandStateOverlay {

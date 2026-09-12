@@ -551,7 +551,7 @@ function entityCollections() {
   };
 }
 function normalizeModuleVisualEntity(entry, fallbackId = "") { if (!entry || typeof entry !== "object") return null; const id = String(entry.entity_id || entry.id || fallbackId || "").trim(); if (!id) return null; return { ...entry, id, module_id: String(entry.module_id || entry.moduleId || "").trim(), kind: String(entry.kind || "artifact").trim() || "artifact", label: entry.label == null ? null : String(entry.label).trim() || null, anchor: entry.anchor || null }; }
-function moduleVisualEntityIdFromEvent(event, depth = 0) { if (!event || typeof event !== "object" || depth > 4) return null; for (const key of ["module_visual_entity_id", "moduleVisualEntityId", "entity_id", "entityId"]) { const value = event[key]; if (value != null && String(value).trim()) return String(value).trim(); } for (const value of [event.entity, event.data, event.payload, event.event, event.kind]) { const id = moduleVisualEntityIdFromEvent(value, depth + 1); if (id) return id; } return null; }
+function moduleVisualEntityIdFromEvent(event) { if (!event || typeof event !== "object" || typeof event.module_visual_entity_id !== "string") return null; const id = event.module_visual_entity_id.trim(); return id || null; }
 function moduleVisualEntityFromEvent(event) { const id = moduleVisualEntityIdFromEvent(event); return id ? entityCollections().moduleVisualEntities.find((entry) => entry.id === id) || null : null; }
 function focusModuleFromEvent(event) { const target = moduleVisualEntityFromEvent(event); return target ? applySelection({ kind: "module_visual", id: target.id }) : null; }
 

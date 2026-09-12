@@ -1,9 +1,18 @@
 import { For, Show } from "solid-js";
 import { compareUnsignedDecimal } from "./world_feed_state.js";
 import { pixelWorldMajorEventPresentation } from "./pixel_world_presentation.js";
+import { pixelWorldReadableModuleLabel } from "./pixel_world_identity.js";
 
 function readFeed(props) {
   return typeof props.feed === "function" ? props.feed() : props.feed || {};
+}
+
+function readableModuleLabel(module, locale) {
+  return pixelWorldReadableModuleLabel(
+    module,
+    module?.id,
+    String(locale).trim().toLowerCase().startsWith("zh"),
+  );
 }
 
 function statusCopy(locale, tr, status) {
@@ -243,10 +252,10 @@ function WorldFeedPanel(props) {
                         type="button"
                         class="world-feed__module-locate"
                         data-world-feed-module-locate={module().id}
-                        aria-label={`${tr(locale(), "定位模块", "Locate module")} ${module().label || module().id}`}
+                        aria-label={`${tr(locale(), "定位模块", "Locate module")} ${readableModuleLabel(module(), locale())}`}
                         onClick={() => props.onFocusModule?.(event)}
                       >
-                        {tr(locale(), "定位模块", "Locate module")}: {module().label || module().id}
+                        {tr(locale(), "定位模块", "Locate module")}: {readableModuleLabel(module(), locale())}
                       </button>
                     )}
                   </Show>

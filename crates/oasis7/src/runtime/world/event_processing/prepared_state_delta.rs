@@ -17,6 +17,10 @@ pub(in crate::runtime::world::event_processing) enum PreparedEventStateDelta {
     ModuleStateUpdated {
         module_states: BTreeMap<String, Vec<u8>>,
     },
+    ModuleVisualEntities {
+        event: oasis7_wasm_abi::ModuleEmitEvent,
+        next: BTreeMap<String, crate::simulator::ModuleVisualEntity>,
+    },
     ModuleRuntimeCharged(super::super::super::module_runtime_metering::PreparedModuleRuntimeCharge),
     EffectQueued {
         intent_id: String,
@@ -177,6 +181,10 @@ impl PreparedEventStateDelta {
             Self::ModuleStateUpdated { module_states } => matches!(body,
                 WorldEventBody::ModuleStateUpdated(update)
                 if module_states.len() == 1 && module_states.get(&update.module_id) == Some(&update.state)),
+            Self::ModuleVisualEntities { event, .. } => matches!(
+                body,
+                WorldEventBody::ModuleEmitted(body_event) if body_event == event
+            ),
             Self::ModuleRuntimeCharged(prepared) => matches!(body,
                 WorldEventBody::ModuleRuntimeCharged(charge)
                 if prepared.agents.contains_key(&charge.payer_agent_id)),
@@ -348,6 +356,7 @@ impl PreparedEventStateDelta {
             Self::ModuleRelease(_) => unreachable!("release uses a sparse release overlay"),
             Self::ModuleInstance { .. }
             | Self::ModuleStateUpdated { .. }
+            | Self::ModuleVisualEntities { .. }
             | Self::ModuleRuntimeCharged(_) => {
                 unreachable!("module output uses a command overlay")
             }
@@ -457,6 +466,9 @@ impl PreparedEventStateDelta {
             }
             Self::ModuleStateUpdated { module_states } => {
                 world.state.module_states.extend(module_states)
+            }
+            Self::ModuleVisualEntities { next, .. } => {
+                world.state.module_visual_entities = next;
             }
             Self::ModuleRuntimeCharged(prepared) => prepared.install_infallible(world),
             Self::EffectQueued {

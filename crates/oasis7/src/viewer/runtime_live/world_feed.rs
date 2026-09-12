@@ -8,16 +8,6 @@ const MAX_LIMIT: usize = 200;
 const MODULE_VISUAL_ENTITY_UPSERTED_KIND: &str = "module_visual_entity_upserted";
 const MODULE_VISUAL_ENTITY_REMOVED_KIND: &str = "module_visual_entity_removed";
 
-#[derive(Debug, Deserialize)]
-struct ModuleVisualEntityUpsertPayload {
-    entity: crate::simulator::ModuleVisualEntity,
-}
-
-#[derive(Debug, Deserialize)]
-struct ModuleVisualEntityRemovedPayload {
-    entity_id: String,
-}
-
 #[derive(Debug)]
 struct ModuleVisualEventProjection {
     kind: &'static str,
@@ -300,29 +290,20 @@ fn project_module_visual_event(
         return None;
     };
 
-    match module_emit.kind.as_str() {
-        "module_visual_entity_upserted" | "ModuleVisualEntityUpserted" => {
-            let payload = serde_json::from_value::<ModuleVisualEntityUpsertPayload>(
-                module_emit.payload.clone(),
-            )
-            .ok()?;
-            let entity_id = non_empty_identity(&payload.entity.entity_id)?;
+    match crate::runtime::parse_module_visual_emit(module_emit).ok()?? {
+        crate::runtime::ModuleVisualMutation::Upsert(entity) => {
+            let entity_id = non_empty_identity(&entity.entity_id)?;
             Some(ModuleVisualEventProjection {
                 kind: MODULE_VISUAL_ENTITY_UPSERTED_KIND,
                 entity_id,
             })
         }
-        "module_visual_entity_removed" | "ModuleVisualEntityRemoved" => {
-            let payload = serde_json::from_value::<ModuleVisualEntityRemovedPayload>(
-                module_emit.payload.clone(),
-            )
-            .ok()?;
+        crate::runtime::ModuleVisualMutation::Remove(entity_id) => {
             Some(ModuleVisualEventProjection {
                 kind: MODULE_VISUAL_ENTITY_REMOVED_KIND,
-                entity_id: non_empty_identity(&payload.entity_id)?,
+                entity_id: non_empty_identity(&entity_id)?,
             })
         }
-        _ => None,
     }
 }
 
@@ -555,7 +536,7 @@ mod tests {
     fn module_visual_events_do_not_require_major_event_visibility_authority() {
         let entity = crate::simulator::ModuleVisualEntity {
             entity_id: "runtime-entity".to_string(),
-            module_id: "runtime-module".to_string(),
+            module_id: "fixture.visual-module".to_string(),
             kind: "runtime_driver".to_string(),
             label: None,
             anchor: crate::simulator::ModuleVisualAnchor::Absolute {
@@ -636,6 +617,40 @@ mod tests {
         assert_eq!(feed.events[0].kind, "module_emitted");
         assert_eq!(feed.events[0].module_visual_entity_id, None);
         assert!(feed.events[0].detail.contains("module-relay"));
+    }
+
+    #[test]
+    fn malformed_visual_emit_missing_module_or_anchor_stays_generic() {
+        for field in ["module_id", "anchor"] {
+            let mut entity = serde_json::json!({
+                "entity_id": "module-relay",
+                "module_id": "fixture.visual-module",
+                "kind": "relay",
+                "anchor": {
+                    "type": "absolute",
+                    "data": { "pos": { "x_cm": 1, "y_cm": 2, "z_cm": 0 } }
+                }
+            });
+            entity.as_object_mut().unwrap().remove(field);
+            let feed = build_world_feed(
+                "world-a",
+                4,
+                &Journal {
+                    events: vec![module_emit_event(
+                        1,
+                        "ModuleVisualEntityUpserted",
+                        serde_json::json!({ "entity": entity }),
+                    )],
+                },
+                &BTreeMap::new(),
+                None,
+                50,
+                MajorWorldEventVisibilityPermission::Public,
+            );
+
+            assert_eq!(feed.events[0].kind, "module_emitted");
+            assert_eq!(feed.events[0].module_visual_entity_id, None);
+        }
     }
 
     #[test]

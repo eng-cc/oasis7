@@ -1,36 +1,12 @@
 use super::body_projection::AgentMapProjection;
-use super::governance_identity_projection::GovernanceIdentityProfileMapProjection;
+pub use super::body_projection::BodyOverlay;
+use super::governance_identity_projection::{
+    GovernanceIdentityProfileMapProjection, GovernanceIdentityProfileOverlay,
+};
 use super::module_release_transition::ReleaseMapProjection;
 use super::*;
 use serde::Serialize;
 use serde::ser::SerializeStruct;
-
-#[derive(Debug, Clone, PartialEq)]
-pub(super) enum BodyOverlayMutation {
-    Body {
-        body_view: crate::models::BodyKernelView,
-        last_active: WorldTime,
-    },
-    RouteOnly,
-}
-
-/// A typed, borrowed overlay for the state fields needed while preparing a
-/// domain transition. The overlay is intentionally narrow: it cannot mutate
-/// the canonical [`WorldState`] and it can either update the target agent's
-/// body fields or represent a route-only event with no body mutation.
-#[derive(Debug, Clone, PartialEq)]
-pub struct BodyOverlay {
-    pub(super) agent_id: String,
-    pub(super) mutation: BodyOverlayMutation,
-    pub(super) routed_domain_event: Option<DomainEvent>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct GovernanceIdentityProfileOverlay {
-    pub(super) target_agent_id: String,
-    pub(super) next_profile: GovernanceIdentityProfileState,
-    pub(super) allow_insert: bool,
-}
 
 /// Borrowed typed overlays preserving canonical serialization.
 #[derive(Debug)]
@@ -536,7 +512,7 @@ where
         ..
     } = state;
 
-    let field_count = 94
+    let field_count = 95
         - usize::from(
             state.agent_intent_ledger.is_empty()
                 && agent_intent_overlay.is_none_or(|overlay| overlay.ledger_updates.is_empty()),
@@ -551,7 +527,8 @@ where
         - usize::from(state.factory_construction_receipts.is_empty() && industry_overlay.is_none_or(|v| !v.has_construction_receipt()))
         - usize::from(state.product_validation_attempts.is_empty() && industry_history_overlay.is_none())
         - usize::from(state.recipe_completion_receipts.is_empty() && industry_overlay.is_none_or(|v| !v.has_completion_receipt()))
-        - usize::from(state.factory_recycle_receipts.is_empty() && industry_overlay.is_none_or(|v| !v.has_recycle_receipt()));
+        - usize::from(state.factory_recycle_receipts.is_empty() && industry_overlay.is_none_or(|v| !v.has_recycle_receipt()))
+        - usize::from(state.module_visual_entities.is_empty());
     let mut output = serializer.serialize_struct("WorldState", field_count)?;
     output.serialize_field("time", &state.time)?;
     if let Some(overlay) = agent_claim_terminal_overlay {
@@ -963,6 +940,9 @@ where
         )?;
     } else {
         output.serialize_field("module_states", &state.module_states)?;
+    }
+    if !state.module_visual_entities.is_empty() {
+        output.serialize_field("module_visual_entities", &state.module_visual_entities)?;
     }
     if let Some(overlay) = module_marketplace_overlay {
         overlay.serialize_market_fields(state, &mut output)?;

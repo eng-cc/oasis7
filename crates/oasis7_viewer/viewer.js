@@ -4858,14 +4858,7 @@ function normalizeEvent(event, context) {
   if (event.major_event != null && majorEvent == null) {
     return null;
   }
-  const moduleVisualEntityId = [
-    event.module_visual_entity_id,
-    event.moduleVisualEntityId,
-    event.entity_id,
-    event.entityId,
-    event.entity?.entity_id,
-    event.data?.entity?.entity_id
-  ].find((value2) => value2 != null && String(value2).trim());
+  const moduleVisualEntityId = typeof event.module_visual_entity_id === "string" ? event.module_visual_entity_id.trim() : "";
   return {
     event_seq: typeof event.event_seq === "number" ? event.event_seq : eventSeq,
     kind,
@@ -6043,17 +6036,10 @@ function normalizeModuleVisualEntity(entry, fallbackId = "") {
   if (!id) return null;
   return { ...entry, id, module_id: String(entry.module_id || entry.moduleId || "").trim(), kind: String(entry.kind || "artifact").trim() || "artifact", label: entry.label == null ? null : String(entry.label).trim() || null, anchor: entry.anchor || null };
 }
-function moduleVisualEntityIdFromEvent(event, depth = 0) {
-  if (!event || typeof event !== "object" || depth > 4) return null;
-  for (const key of ["module_visual_entity_id", "moduleVisualEntityId", "entity_id", "entityId"]) {
-    const value2 = event[key];
-    if (value2 != null && String(value2).trim()) return String(value2).trim();
-  }
-  for (const value2 of [event.entity, event.data, event.payload, event.event, event.kind]) {
-    const id = moduleVisualEntityIdFromEvent(value2, depth + 1);
-    if (id) return id;
-  }
-  return null;
+function moduleVisualEntityIdFromEvent(event) {
+  if (!event || typeof event !== "object" || typeof event.module_visual_entity_id !== "string") return null;
+  const id = event.module_visual_entity_id.trim();
+  return id || null;
 }
 function moduleVisualEntityFromEvent(event) {
   const id = moduleVisualEntityIdFromEvent(event);
@@ -13961,6 +13947,9 @@ var _tmpl$$n = /* @__PURE__ */ template(`<div class=world-feed__latest data-worl
 function readFeed(props) {
   return typeof props.feed === "function" ? props.feed() : props.feed || {};
 }
+function readableModuleLabel(module, locale) {
+  return pixelWorldReadableModuleLabel(module, module?.id, String(locale).trim().toLowerCase().startsWith("zh"));
+}
 function statusCopy(locale, tr2, status) {
   const copy2 = {
     loading: ["正在加载世界动态…", "Loading world activity…"],
@@ -14183,9 +14172,9 @@ function WorldFeedPanel(props) {
                 var _el$28 = _tmpl$11$1(), _el$29 = _el$28.firstChild;
                 _el$28.$$click = () => props.onFocusModule?.(event);
                 insert(_el$28, () => tr2(locale(), "定位模块", "Locate module"), _el$29);
-                insert(_el$28, () => module().label || module().id, null);
+                insert(_el$28, () => readableModuleLabel(module(), locale()), null);
                 createRenderEffect((_p$) => {
-                  var _v$13 = module().id, _v$14 = `${tr2(locale(), "定位模块", "Locate module")} ${module().label || module().id}`;
+                  var _v$13 = module().id, _v$14 = `${tr2(locale(), "定位模块", "Locate module")} ${readableModuleLabel(module(), locale())}`;
                   _v$13 !== _p$.e && setAttribute(_el$28, "data-world-feed-module-locate", _p$.e = _v$13);
                   _v$14 !== _p$.t && setAttribute(_el$28, "aria-label", _p$.t = _v$14);
                   return _p$;
@@ -24613,7 +24602,7 @@ function DetailsPanel() {
         insert(_el$376, () => tr(locale(), "类型", "Kind"));
         insert(_el$375, () => module().kind || "artifact", null);
         insert(_el$379, () => tr(locale(), "标签", "Label"));
-        insert(_el$378, () => module().label || module().id, null);
+        insert(_el$378, () => pixelWorldReadableModuleLabel(module(), module().id, isLocaleZh(locale())), null);
         insert(_el$382, () => tr(locale(), "锚点", "Anchor"));
         insert(_el$381, selectedModuleAnchor, null);
         return _el$372;

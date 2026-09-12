@@ -11,7 +11,7 @@ vi.mock("./pixel_world_host.jsx", () => ({
 
 let activeCleanup = null;
 
-async function renderModuleDetails() {
+async function renderModuleDetails(moduleLabel = "Relay Seven", moduleLocale = "en") {
   activeCleanup?.();
   vi.resetModules();
   window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");
@@ -23,14 +23,14 @@ async function renderModuleDetails() {
   root.id = "app";
   document.body.appendChild(root);
   core.initializeSoftwareSafeCore();
-  core.setViewerLocale("en");
+  core.setViewerLocale(moduleLocale);
   const snapshot = sampleSnapshot();
   snapshot.model.module_visual_entities = {
     "module-relay": {
       entity_id: "module-relay",
       module_id: "relay-seven",
       kind: "relay",
-      label: "Relay Seven",
+      label: moduleLabel,
       anchor: { type: "absolute", data: { pos: { x_cm: 1_530_000, y_cm: 1_010_000, z_cm: 0 } } },
     },
   };
@@ -47,7 +47,7 @@ async function renderModuleDetails() {
     id: "module-relay",
     module_id: "relay-seven",
     kind: "relay",
-    label: "Relay Seven",
+    label: moduleLabel,
     anchor: { type: "absolute", data: { pos: { x_cm: 1_530_000, y_cm: 1_010_000, z_cm: 0 } } },
   };
   core.requestRender();
@@ -83,5 +83,14 @@ describe("module visual details", () => {
     expect(within(detailsPanel).queryByText("Agent Chat")).not.toBeInTheDocument();
     expect(within(detailsPanel).queryByLabelText("Message")).not.toBeInTheDocument();
     expect(within(detailsPanel).queryByText("The current account has no controllable Agent yet. Claim one or wait for your own Agent binding to sync.")).not.toBeInTheDocument();
+  }, 60000);
+
+  it.each([null, "", "module-relay"])("uses a localized readable fallback in the module details label row for %s", async (label) => {
+    const { root } = await renderModuleDetails(label, "zh");
+    const detailsPanel = root.querySelector("#viewer-details-panel");
+    await waitFor(() => expect(detailsPanel.querySelector("[data-viewer-module-details='true']")).toBeTruthy());
+    const moduleDetails = detailsPanel.querySelector("[data-viewer-module-details='true']");
+    expect(moduleDetails).toHaveTextContent(/模块 relay:module-relay/);
+    expect(moduleDetails).not.toHaveTextContent(/标签\s*:\s*module-relay$/);
   }, 60000);
 });

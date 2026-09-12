@@ -84,6 +84,8 @@ mod module_release_publication_transaction_regressions;
 mod module_release_review_publication_transaction_regressions;
 #[cfg(test)]
 mod module_store_load_transaction_regressions;
+#[cfg(test)]
+mod module_visual_publication_transaction_regressions;
 pub(crate) mod node_points_settlement_publication;
 #[cfg(test)]
 mod power_publication_transaction_regressions;
@@ -182,6 +184,7 @@ use super::snapshot::{Journal, SnapshotCatalog};
 use super::state::WorldState;
 use super::types::{ActionId, IntentSeq, ProposalId, WorldEventId, WorldTime};
 use crate::chain_resource_schema::{ChainResourceDelta, ChainResourceManifest};
+use crate::simulator::ModuleVisualEntity;
 
 #[derive(Debug, Clone)]
 pub(super) struct PreparedSubscriptionCacheEntry {
@@ -656,6 +659,37 @@ impl World {
 
     pub fn state(&self) -> &WorldState {
         &self.state
+    }
+
+    pub(crate) fn initialize_module_visual_entities(
+        &mut self,
+        entities: &BTreeMap<String, ModuleVisualEntity>,
+    ) -> Result<(), WorldError> {
+        if !self.journal.events.is_empty() {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: "module visual entities can only be initialized before publication"
+                    .to_string(),
+            });
+        }
+        let mut next = self.state.module_visual_entities.clone();
+        for (entity_id, entity) in entities {
+            let entity = entity.clone().sanitized();
+            if entity_id.trim().is_empty()
+                || entity.entity_id != entity_id.trim()
+                || entity.module_id.is_empty()
+            {
+                return Err(WorldError::ResourceBalanceInvalid {
+                    reason: format!("invalid initial module visual entity: {entity_id}"),
+                });
+            }
+            if next.insert(entity_id.clone(), entity).is_some() {
+                return Err(WorldError::ResourceBalanceInvalid {
+                    reason: format!("duplicate initial module visual entity: {entity_id}"),
+                });
+            }
+        }
+        self.state.module_visual_entities = next;
+        Ok(())
     }
 
     pub fn manifest(&self) -> &Manifest {

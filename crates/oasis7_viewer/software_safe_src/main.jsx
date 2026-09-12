@@ -3807,7 +3807,7 @@ function DetailsPanel() {
               <Badge>{`module=${module().module_id || "-"}`}</Badge>
             </div>
             <div class="feedback-detail"><strong>{tr(locale(), "类型", "Kind")}</strong>: {module().kind || "artifact"}</div>
-            <div class="feedback-detail"><strong>{tr(locale(), "标签", "Label")}</strong>: {module().label || module().id}</div>
+            <div class="feedback-detail"><strong>{tr(locale(), "标签", "Label")}</strong>: {pixelWorldReadableModuleLabel(module(), module().id, core.isLocaleZh(locale()))}</div>
             <div class="feedback-detail"><strong>{tr(locale(), "锚点", "Anchor")}</strong>: {selectedModuleAnchor()}</div>
           </div>
         )}

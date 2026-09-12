@@ -847,7 +847,9 @@ impl World {
                 self.apply_module_event(event, time)?;
             }
             WorldEventBody::ModuleCallFailed(_) => {}
-            WorldEventBody::ModuleEmitted(_) => {}
+            WorldEventBody::ModuleEmitted(event) => {
+                self.state.apply_module_visual_event_at(event, time)?;
+            }
             WorldEventBody::ModuleStateUpdated(update) => {
                 self.state
                     .module_states

@@ -500,6 +500,27 @@ fn module_visual_labels_are_zoom_gated_stably_suppressed_and_reconciled() {
 }
 
 #[test]
+fn module_visual_labels_fallback_when_explicit_label_matches_entity_id() {
+    let mut state = sample_render_state(12_000.0);
+    state.locale = "zh-CN".to_string();
+    state.module_visual_entities = vec![module_visual_with_label(
+        "module-equal",
+        "relay",
+        Some("module-equal"),
+        sample_position(1_530_000.0, 1_010_000.0),
+    )];
+
+    let mut app = render_test_app(state);
+    let world = app.world_mut();
+    let mut labels = world.query::<(&PixelWorldModuleVisualLabel, &Text2d)>();
+    let rendered = labels
+        .iter(world)
+        .map(|(_, text)| text.0.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(rendered, vec!["模块 relay:module-equal"]);
+}
+
+#[test]
 fn module_visual_labels_yield_to_shared_map_label_obstacles() {
     let anchor = sample_position(1_530_000.0, 1_010_000.0);
     let mut state = sample_render_state(12_000.0);

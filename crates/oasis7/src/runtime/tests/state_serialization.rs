@@ -36,3 +36,15 @@ fn authenticated_collect_data_nonces_are_backward_compatible_and_omitted_when_em
     let decoded: WorldState = serde_json::from_value(value).expect("decode legacy world state");
     assert!(decoded.authenticated_collect_data_last_nonces.is_empty());
 }
+
+#[test]
+fn module_visual_entities_are_backward_compatible_and_omitted_when_empty() {
+    let state = WorldState::default();
+    let mut value = serde_json::to_value(&state).expect("serialize world state");
+    let object = value.as_object_mut().expect("world state object");
+    assert!(!object.contains_key("module_visual_entities"));
+
+    object.remove("module_visual_entities");
+    let decoded: WorldState = serde_json::from_value(value).expect("decode legacy world state");
+    assert!(decoded.module_visual_entities.is_empty());
+}

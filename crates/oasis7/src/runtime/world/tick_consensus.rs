@@ -844,10 +844,40 @@ impl World {
         &self,
         command_overlay: CommandStateOverlay<'_>,
     ) -> Result<String, WorldError> {
+        self.state_root_hash_with_command_and_module_visual_overlay(
+            command_overlay,
+            &self.state.module_visual_entities,
+        )
+    }
+
+    pub(super) fn state_root_hash_with_command_and_module_visual_overlay(
+        &self,
+        command_overlay: CommandStateOverlay<'_>,
+        module_visual_entities: &BTreeMap<String, crate::simulator::ModuleVisualEntity>,
+    ) -> Result<String, WorldError> {
         let manifest_hash = self.current_manifest_hash()?;
         let policy_hash = hash_json(&self.policies)?;
+        let mut state = self.state.clone();
+        state.module_visual_entities = module_visual_entities.clone();
         let state_projection =
-            WorldStateProjection::borrowed(&self.state).with_command_overlay(command_overlay);
+            WorldStateProjection::borrowed(&state).with_command_overlay(command_overlay);
+        let projection = StateRootProjection {
+            state: &state_projection,
+            manifest_hash: manifest_hash.as_str(),
+            policy_hash: policy_hash.as_str(),
+        };
+        hash_json(&projection)
+    }
+
+    pub(super) fn state_root_hash_with_module_visual_overlay(
+        &self,
+        module_visual_entities: &BTreeMap<String, crate::simulator::ModuleVisualEntity>,
+    ) -> Result<String, WorldError> {
+        let manifest_hash = self.current_manifest_hash()?;
+        let policy_hash = hash_json(&self.policies)?;
+        let mut state = self.state.clone();
+        state.module_visual_entities = module_visual_entities.clone();
+        let state_projection = WorldStateProjection::borrowed(&state);
         let projection = StateRootProjection {
             state: &state_projection,
             manifest_hash: manifest_hash.as_str(),

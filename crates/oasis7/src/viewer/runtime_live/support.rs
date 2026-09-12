@@ -377,6 +377,9 @@ fn bootstrap_runtime_world_from_model(
     label: &str,
 ) -> Result<(RuntimeWorld, WorldConfig), String> {
     let mut world = RuntimeWorld::new_production_hardened();
+    world
+        .initialize_module_visual_entities(&model.module_visual_entities)
+        .map_err(|err| format!("{label} initialize module visuals failed: {err:?}"))?;
     world.set_resource_balance(ResourceKind::Electricity, 400);
     for (material, amount) in [
         ("structural_frame", 40),
