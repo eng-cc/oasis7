@@ -27,6 +27,11 @@ pub(super) fn build_oasis7_viewer_live_command(
             .arg("--provider-lineage-store")
             .arg(options.provider_lineage_store.as_str());
     }
+    for path in &options.provider_bootstrap_authority_paths {
+        command
+            .arg("--provider-bootstrap-authority")
+            .arg(path.as_str());
+    }
     if options.chain_enabled || options.deployment_mode == "hosted_public_join" {
         command
             .arg("--chain-status-bind")

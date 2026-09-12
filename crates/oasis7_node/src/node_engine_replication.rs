@@ -1128,4 +1128,27 @@ impl PosNodeEngine {
         }
         Ok(())
     }
+
+    pub(super) fn record_synced_replication_height(
+        &mut self,
+        height: u64,
+        block_hash: String,
+        committed_at_ms: i64,
+    ) -> Result<(), NodeError> {
+        if height <= self.committed_height {
+            return Ok(());
+        }
+        let next_synced_height =
+            checked_replication_successor(height, "height", "recording synced replication height")?;
+        self.clear_pending_action_reservation()?;
+        self.discard_replicated_execution_inputs_through_height(height)?;
+        self.replication_persisted_height = self.replication_persisted_height.max(height);
+        self.committed_height = height;
+        self.network_committed_height = self.network_committed_height.max(height);
+        self.last_committed_at_ms = Some(committed_at_ms);
+        self.next_height = next_synced_height;
+        self.last_committed_block_hash = Some(block_hash);
+        self.pending = None;
+        Ok(())
+    }
 }

@@ -11,6 +11,8 @@ use serde_json::Value as JsonValue;
 use std::collections::BTreeMap;
 use std::fmt;
 
+#[path = "cognition_economy_balances.rs"]
+mod balances;
 #[path = "cognition_economy_provisioning.rs"]
 mod provisioning;
 #[path = "cognition_economy_transitions.rs"]
@@ -728,6 +730,15 @@ pub struct CognitionEconomyStateV1 {
     pub schema_version: String,
     #[serde(default)]
     pub balances: BTreeMap<String, BTreeMap<String, CognitionResourceBalanceV1>>,
+    /// Versioned balances for Runtime-authorized provisioning bindings. The
+    /// legacy `balances` map remains readable for snapshots written before
+    /// authority-bound provisioning existed.
+    #[serde(default)]
+    pub provisioned_balances: BTreeMap<String, BTreeMap<String, CognitionResourceBalanceV1>>,
+    /// Durable location of each lease's reserved amount. This keeps terminal
+    /// transitions on the generation/reorg balance that admitted the lease.
+    #[serde(default)]
+    pub lease_binding_keys: BTreeMap<String, String>,
     /// Immutable one-time allowances installed by Runtime authority before a
     /// provider turn.  The map key is the authority-supplied provision id.
     #[serde(default)]
@@ -763,6 +774,8 @@ impl Default for CognitionEconomyStateV1 {
         Self {
             schema_version: COGNITION_ECONOMY_SCHEMA_VERSION.to_string(),
             balances: BTreeMap::new(),
+            provisioned_balances: BTreeMap::new(),
+            lease_binding_keys: BTreeMap::new(),
             provisions: BTreeMap::new(),
             provision_receipts: BTreeMap::new(),
             provision_journal: Vec::new(),
@@ -803,22 +816,6 @@ impl CognitionEconomyStateV1 {
         })
     }
 
-    pub fn available_balance(&self, account_id: &str, resource: &str) -> u64 {
-        self.balances
-            .get(account_id)
-            .and_then(|resources| resources.get(resource))
-            .map(|balance| balance.available)
-            .unwrap_or_default()
-    }
-
-    pub fn reserved_balance(&self, account_id: &str, resource: &str) -> u64 {
-        self.balances
-            .get(account_id)
-            .and_then(|resources| resources.get(resource))
-            .map(|balance| balance.reserved)
-            .unwrap_or_default()
-    }
-
     /// Explicit bootstrap/credit operation.  It never refills implicitly and
     /// cannot overwrite an account while an active reservation exists.
     pub fn set_resource_balance(
@@ -841,7 +838,25 @@ impl CognitionEconomyStateV1 {
     ) -> Result<CognitionLeaseV1, CognitionEconomyError> {
         request.validate()?;
         let mut next = self.clone();
-        let lease = next.reserve_inner(request, tick)?;
+        let lease = next.reserve_inner(request, tick, None)?;
+        next.validate()?;
+        *self = next;
+        Ok(lease)
+    }
+
+    /// Reserve against one exact Runtime provisioning binding. The binding is
+    /// supplied by `World`, which derives it from the current capability
+    /// identity and runtime world/reorg tuple.
+    pub(crate) fn reserve_for_binding(
+        &mut self,
+        request: CognitionLeaseRequestV1,
+        binding_key: impl Into<String>,
+        tick: u64,
+    ) -> Result<CognitionLeaseV1, CognitionEconomyError> {
+        request.validate()?;
+        let mut next = self.clone();
+        let binding_key = binding_key.into();
+        let lease = next.reserve_inner(request, tick, Some(binding_key))?;
         next.validate()?;
         *self = next;
         Ok(lease)
@@ -977,24 +992,27 @@ impl CognitionEconomyStateV1 {
         Ok(())
     }
 
-    fn balance_mut(&mut self, account_id: &str, resource: &str) -> &mut CognitionResourceBalanceV1 {
-        self.balances
-            .entry(account_id.to_string())
-            .or_default()
-            .entry(resource.to_string())
-            .or_default()
-    }
-
     fn reserve_inner(
         &mut self,
         request: CognitionLeaseRequestV1,
         tick: u64,
+        binding_key: Option<String>,
     ) -> Result<CognitionLeaseV1, CognitionEconomyError> {
         let fingerprint = request.fingerprint_digest();
         if let Some(existing) = self.idempotency.get(&request.idempotency_key) {
             if existing.request_fingerprint != fingerprint {
                 return Err(CognitionEconomyError::Conflict(
                     "cognition_idempotency_conflict",
+                ));
+            }
+            if let Some(binding_key) = binding_key.as_deref()
+                && self
+                    .lease_binding_keys
+                    .get(&existing.lease_id)
+                    .is_some_and(|existing_binding| existing_binding != binding_key)
+            {
+                return Err(CognitionEconomyError::Conflict(
+                    "cognition_provisioning_binding_conflict",
                 ));
             }
             return self.leases.get(&existing.lease_id).cloned().ok_or_else(|| {
@@ -1010,8 +1028,25 @@ impl CognitionEconomyStateV1 {
                 "cognition_quote_expired",
             ));
         }
+        if let Some(binding_key) = binding_key.as_deref() {
+            self.migrate_legacy_balance_for_binding(binding_key)?;
+        }
         let lease_id = request.derived_lease_id();
-        let balance = self.balance_mut(&request.account_id, &request.quote.resource);
+        if let Some(binding_key) = binding_key.as_deref() {
+            let _ = self.provisioned_balance_mut(
+                binding_key,
+                request.account_id.as_str(),
+                request.quote.resource.as_str(),
+            )?;
+        }
+        let balance = if let Some(binding_key) = binding_key.as_deref() {
+            self.provisioned_balances
+                .get_mut(binding_key)
+                .and_then(|resources| resources.get_mut(&request.quote.resource))
+                .expect("validated provisioning balance exists")
+        } else {
+            self.balance_mut(&request.account_id, &request.quote.resource)
+        };
         if balance.available < request.quote.amount {
             return Err(CognitionEconomyError::InsufficientBalance {
                 account_id: request.account_id,
@@ -1047,6 +1082,10 @@ impl CognitionEconomyStateV1 {
             receipt_id: None,
         };
         self.leases.insert(lease_id.clone(), lease.clone());
+        if let Some(binding_key) = binding_key {
+            self.lease_binding_keys
+                .insert(lease_id.clone(), binding_key);
+        }
         self.idempotency.insert(
             request.idempotency_key.clone(),
             CognitionEconomyIdempotencyRecordV1 {
@@ -1115,60 +1154,6 @@ impl CognitionEconomyStateV1 {
             None,
         )?;
         Ok(lease)
-    }
-
-    fn release_inner(
-        &mut self,
-        lease_id: &str,
-        tick: u64,
-    ) -> Result<CognitionReceiptV1, CognitionEconomyError> {
-        let lease = self
-            .leases
-            .get(lease_id)
-            .cloned()
-            .ok_or_else(|| CognitionEconomyError::LeaseNotFound(lease_id.to_string()))?;
-        let key = operation_key(lease_id, "release");
-        let digest = economy_digest(COGNITION_ECONOMY_OPERATION_DOMAIN, &key);
-        if let Some(existing) = self.operations.get(&key) {
-            if existing.operation_digest != digest {
-                return Err(CognitionEconomyError::Conflict(
-                    "cognition_release_idempotency_conflict",
-                ));
-            }
-            return self.receipts.get(&existing.receipt_id).cloned().ok_or(
-                CognitionEconomyError::InvalidState("cognition_operation_receipt_missing"),
-            );
-        }
-        if lease.status != CognitionLeaseStatusV1::Reserved {
-            return Err(CognitionEconomyError::InvalidState(
-                "cognition_lease_already_closed",
-            ));
-        }
-        let balance = self.balance_mut(&lease.account_id, &lease.quote.resource);
-        if balance.reserved < lease.reserved_amount {
-            return Err(CognitionEconomyError::InvalidState(
-                "cognition_reserved_balance_missing",
-            ));
-        }
-        balance.reserved -= lease.reserved_amount;
-        balance.available = balance.available.checked_add(lease.reserved_amount).ok_or(
-            CognitionEconomyError::InvalidState("cognition_available_balance_overflow"),
-        )?;
-        let reserved_amount = lease.reserved_amount;
-        self.close_lease(
-            lease,
-            CognitionLeaseStatusV1::Released,
-            "release",
-            0,
-            reserved_amount,
-            0,
-            tick,
-            key,
-            digest,
-            0,
-            None,
-            None,
-        )
     }
 }
 

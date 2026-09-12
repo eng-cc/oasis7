@@ -672,6 +672,12 @@ impl World {
         world.journal = journal;
         world.manifest = snapshot.manifest;
         world.cognition = snapshot.cognition;
+        // Every reconstruction path, including direct checkpoint/replay
+        // installation, must validate the typed economy before exposing the
+        // candidate world. Directory recovery performs the same check after
+        // cognition projection repair; this call closes the public restore
+        // path that bypasses that post-load hook.
+        world.cognition_economy()?;
         world.module_registry = snapshot.module_registry;
         world.module_artifacts = snapshot.module_artifacts;
         let module_artifact_bytes = snapshot.module_artifact_bytes;

@@ -1,6 +1,60 @@
 use super::*;
 
 impl CognitionEconomyStateV1 {
+    pub(super) fn release_inner(
+        &mut self,
+        lease_id: &str,
+        tick: u64,
+    ) -> Result<CognitionReceiptV1, CognitionEconomyError> {
+        let lease = self
+            .leases
+            .get(lease_id)
+            .cloned()
+            .ok_or_else(|| CognitionEconomyError::LeaseNotFound(lease_id.to_string()))?;
+        let key = operation_key(lease_id, "release");
+        let digest = economy_digest(COGNITION_ECONOMY_OPERATION_DOMAIN, &key);
+        if let Some(existing) = self.operations.get(&key) {
+            if existing.operation_digest != digest {
+                return Err(CognitionEconomyError::Conflict(
+                    "cognition_release_idempotency_conflict",
+                ));
+            }
+            return self.receipts.get(&existing.receipt_id).cloned().ok_or(
+                CognitionEconomyError::InvalidState("cognition_operation_receipt_missing"),
+            );
+        }
+        if lease.status != CognitionLeaseStatusV1::Reserved {
+            return Err(CognitionEconomyError::InvalidState(
+                "cognition_lease_already_closed",
+            ));
+        }
+        let balance = self.lease_balance_mut(&lease)?;
+        if balance.reserved < lease.reserved_amount {
+            return Err(CognitionEconomyError::InvalidState(
+                "cognition_reserved_balance_missing",
+            ));
+        }
+        balance.reserved -= lease.reserved_amount;
+        balance.available = balance.available.checked_add(lease.reserved_amount).ok_or(
+            CognitionEconomyError::InvalidState("cognition_available_balance_overflow"),
+        )?;
+        let reserved_amount = lease.reserved_amount;
+        self.close_lease(
+            lease,
+            CognitionLeaseStatusV1::Released,
+            "release",
+            0,
+            reserved_amount,
+            0,
+            tick,
+            key,
+            digest,
+            0,
+            None,
+            None,
+        )
+    }
+
     pub(super) fn settle_inner(
         &mut self,
         lease_id: &str,
@@ -53,7 +107,7 @@ impl CognitionEconomyStateV1 {
             return self.expire_inner(lease_id, tick);
         }
         let refund = lease.reserved_amount - consumed_amount;
-        let balance = self.balance_mut(&lease.account_id, &lease.quote.resource);
+        let balance = self.lease_balance_mut(&lease)?;
         if balance.reserved < lease.reserved_amount {
             return Err(CognitionEconomyError::InvalidState(
                 "cognition_reserved_balance_missing",
@@ -206,21 +260,31 @@ impl CognitionEconomyStateV1 {
                 candidate.status == CognitionLeaseStatusV1::Reserved
                     && candidate.account_id == lease.account_id
                     && candidate.quote.resource == lease.quote.resource
+                    && self.lease_binding_keys.get(&candidate.lease_id)
+                        == self.lease_binding_keys.get(&lease.lease_id)
             })
             .try_fold(0_u64, |total, candidate| {
                 total.checked_add(candidate.reserved_amount).ok_or(
                     CognitionEconomyError::InvalidState("cognition_economy_reserved_overflow"),
                 )
             })?;
-        let Some(balance) = self
-            .balances
-            .get_mut(&lease.account_id)
-            .and_then(|resources| resources.get_mut(&lease.quote.resource))
-        else {
+        let has_balance = if let Some(binding_key) = self.lease_binding_keys.get(&lease.lease_id) {
+            self.provisioned_balances
+                .get(binding_key)
+                .and_then(|resources| resources.get(&lease.quote.resource))
+                .is_some()
+        } else {
+            self.balances
+                .get(&lease.account_id)
+                .and_then(|resources| resources.get(&lease.quote.resource))
+                .is_some()
+        };
+        if !has_balance {
             return Err(CognitionEconomyError::InvalidState(
                 "cognition_refund_balance_missing",
             ));
-        };
+        }
+        let balance = self.lease_balance_mut(&lease)?;
         if balance.reserved != expected_reserved {
             return Err(CognitionEconomyError::InvalidState(
                 "cognition_refund_balance_reservation_mismatch",
@@ -282,7 +346,7 @@ impl CognitionEconomyStateV1 {
                 "cognition_lease_not_expired",
             ));
         }
-        let balance = self.balance_mut(&lease.account_id, &lease.quote.resource);
+        let balance = self.lease_balance_mut(&lease)?;
         if balance.reserved < lease.reserved_amount {
             return Err(CognitionEconomyError::InvalidState(
                 "cognition_reserved_balance_missing",

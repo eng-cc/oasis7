@@ -499,6 +499,13 @@ impl PosNodeEngine {
                 payload.height, err
             ),
         })?;
+        validate_replicated_execution_input_actions(payload.actions.as_slice(), payload.height)
+            .map_err(|err| NodeError::Replication {
+                reason: format!(
+                    "synced replication height {} replicated execution input validation failed: {}",
+                    payload.height, err
+                ),
+            })?;
         let previous_execution_height = self.last_execution_height;
         let previous_execution_block_hash = self.last_execution_block_hash.clone();
         let previous_execution_state_root = self.last_execution_state_root.clone();
@@ -657,28 +664,6 @@ impl PosNodeEngine {
         self.record_synced_replication_height(payload.height, block_hash, committed_at_ms)
     }
 
-    pub(super) fn record_synced_replication_height(
-        &mut self,
-        height: u64,
-        block_hash: String,
-        committed_at_ms: i64,
-    ) -> Result<(), NodeError> {
-        if height <= self.committed_height {
-            return Ok(());
-        }
-        let next_synced_height =
-            checked_replication_successor(height, "height", "recording synced replication height")?;
-        self.clear_pending_action_reservation()?;
-        self.replication_persisted_height = self.replication_persisted_height.max(height);
-        self.committed_height = height;
-        self.network_committed_height = self.network_committed_height.max(height);
-        self.last_committed_at_ms = Some(committed_at_ms);
-        self.next_height = next_synced_height;
-        self.last_committed_block_hash = Some(block_hash);
-        self.pending = None;
-        Ok(())
-    }
-
     pub(super) fn rollback_to_replicated_commit_boundary(
         &mut self,
         height: u64,
@@ -795,6 +780,11 @@ impl PosNodeEngine {
                 Ok(bytes) => bytes,
                 Err(_) => return Ok(()),
             };
+        if validate_replicated_execution_input_actions(message.actions.as_slice(), message.height)
+            .is_err()
+        {
+            return Ok(());
+        }
         if validate_consensus_action_root(message.action_root.as_str(), message.actions.as_slice())
             .is_err()
         {
@@ -995,6 +985,14 @@ impl PosNodeEngine {
                     if validate_consensus_action_root(
                         commit.action_root.as_str(),
                         commit.actions.as_slice(),
+                    )
+                    .is_err()
+                    {
+                        continue;
+                    }
+                    if validate_replicated_execution_input_actions(
+                        commit.actions.as_slice(),
+                        commit.height,
                     )
                     .is_err()
                     {

@@ -3,7 +3,12 @@ use super::super::driver::{NodeRuntimeExecutionDriver, load_execution_world};
 use super::*;
 use oasis7::geometry::GeoPos;
 use oasis7::runtime::{Action, ChainResourceDerivationContext, World as RuntimeWorld};
-use oasis7_node::{NodeExecutionCommitContext, NodeExecutionHook, compute_consensus_action_root};
+use oasis7_node::{
+    NodeConsensusAction, NodeExecutionCommitContext, NodeExecutionHook,
+    NodeReplicatedExecutionInputV1, PROVIDER_BACKED_BOOTSTRAP_EXECUTION_INPUT_KIND,
+    REPLICATED_EXECUTION_INPUT_ACTION_ID, REPLICATED_EXECUTION_INPUT_SUBMITTER,
+    compute_consensus_action_root,
+};
 
 fn provider_bootstrap_fixture(
     world_dir: &std::path::Path,
@@ -51,7 +56,10 @@ fn provider_bootstrap_fixture(
     input
 }
 
-fn commit_context(height: u64) -> NodeExecutionCommitContext {
+fn commit_context_with_actions(
+    height: u64,
+    committed_actions: Vec<NodeConsensusAction>,
+) -> NodeExecutionCommitContext {
     NodeExecutionCommitContext {
         world_id: "bootstrap-world".to_string(),
         node_id: "node-a".to_string(),
@@ -60,10 +68,33 @@ fn commit_context(height: u64) -> NodeExecutionCommitContext {
         slot: height.saturating_sub(1),
         epoch: 0,
         node_block_hash: format!("node-h{height}"),
-        action_root: compute_consensus_action_root(&[]).expect("empty action root"),
-        committed_actions: Vec::new(),
+        action_root: compute_consensus_action_root(committed_actions.as_slice())
+            .expect("action root"),
+        committed_actions,
         committed_at_unix_ms: height as i64 * 1_000,
     }
+}
+
+fn commit_context(height: u64) -> NodeExecutionCommitContext {
+    commit_context_with_actions(height, Vec::new())
+}
+
+fn provider_bootstrap_action(
+    target_height: u64,
+    input: oasis7::runtime::ProviderBackedBootstrapAuthorityV1,
+) -> NodeConsensusAction {
+    let authorities = serde_cbor::to_vec(&vec![input]).expect("encode provider authorities");
+    let input = NodeReplicatedExecutionInputV1::new(
+        PROVIDER_BACKED_BOOTSTRAP_EXECUTION_INPUT_KIND,
+        target_height,
+        authorities,
+    );
+    NodeConsensusAction::from_payload(
+        REPLICATED_EXECUTION_INPUT_ACTION_ID,
+        REPLICATED_EXECUTION_INPUT_SUBMITTER,
+        input.encode().expect("encode provider execution input"),
+    )
+    .expect("build provider bootstrap action")
 }
 
 fn seed_predecessor_commit(
@@ -131,26 +162,16 @@ fn provider_bootstrap_waits_for_canonical_commit_and_replays_after_restart() {
         "startup staging must not persist a cognition allowance"
     );
 
-    driver
-        .stage_provider_backed_bootstrap_authorities(vec![input.clone()])
-        .expect("stage explicit authority bundle");
-    let staged_before_commit =
-        load_execution_world(world_dir.as_path()).expect("reload baseline after staging");
-    assert_eq!(
-        staged_before_commit
-            .cognition_economy()
-            .expect("staged cognition economy")
-            .available_balance(input.owner_binding.as_str(), "cognition_units"),
-        0,
-        "staged authority must remain outside the persisted execution world"
-    );
     assert!(
         !execution_bridge_record_path(records_dir.as_path(), 2).exists(),
-        "staging must not fabricate the bootstrap execution record"
+        "producer input must not fabricate the bootstrap execution record"
     );
 
-    let first_context = commit_context(2);
-    let first_result = driver.on_commit(first_context).expect("canonical commit");
+    let first_context =
+        commit_context_with_actions(2, vec![provider_bootstrap_action(2, input.clone())]);
+    let first_result = driver
+        .on_commit(first_context.clone())
+        .expect("canonical commit");
     let first_record = load_execution_bridge_record(
         execution_bridge_record_path(records_dir.as_path(), 2).as_path(),
     )
@@ -197,13 +218,15 @@ fn provider_bootstrap_waits_for_canonical_commit_and_replays_after_restart() {
         "restart must retain the exact provisioned allowance"
     );
 
-    // Passing the same explicit bundle again is an exact replay. It must not
-    // refill the account, while the subsequent committed height still ticks
-    // and receives its own canonical record/root.
+    let replay_result = restarted
+        .on_commit(first_context)
+        .expect("exact replay of the committed bootstrap input");
+    assert_eq!(replay_result, first_result);
+
+    // The bootstrap transaction is height-bound and is not re-injected by the
+    // process on later commits. A replayed chain state must still tick without
+    // refilling the account.
     let owner_binding = input.owner_binding.clone();
-    restarted
-        .stage_provider_backed_bootstrap_authorities(vec![input])
-        .expect("stage exact replay bundle");
     let second_result = restarted
         .on_commit(commit_context(3))
         .expect("commit later height after restart");
@@ -231,6 +254,65 @@ fn provider_bootstrap_waits_for_canonical_commit_and_replays_after_restart() {
 }
 
 #[test]
+fn provider_bootstrap_replicated_input_converges_across_materializers() {
+    let dir_a = temp_dir("provider-bootstrap-peer-a");
+    let dir_b = temp_dir("provider-bootstrap-peer-b");
+    let world_a = dir_a.join("world");
+    let world_b = dir_b.join("world");
+    let input_a = provider_bootstrap_fixture(world_a.as_path());
+    let input_b = provider_bootstrap_fixture(world_b.as_path());
+    assert_eq!(
+        input_a, input_b,
+        "same ordered authority input must be reproducible"
+    );
+
+    let mut driver_a = NodeRuntimeExecutionDriver::new(
+        dir_a.join("state.json"),
+        world_a.clone(),
+        dir_a.join("records"),
+        dir_a.join("store"),
+    )
+    .expect("peer A driver");
+    let mut driver_b = NodeRuntimeExecutionDriver::new(
+        dir_b.join("state.json"),
+        world_b.clone(),
+        dir_b.join("records"),
+        dir_b.join("store"),
+    )
+    .expect("peer B driver");
+    seed_predecessor_commit(
+        &mut driver_a,
+        dir_a.join("state.json").as_path(),
+        world_a.as_path(),
+        dir_a.join("records").as_path(),
+        dir_a.join("store").as_path(),
+    );
+    seed_predecessor_commit(
+        &mut driver_b,
+        dir_b.join("state.json").as_path(),
+        world_b.as_path(),
+        dir_b.join("records").as_path(),
+        dir_b.join("store").as_path(),
+    );
+
+    let context_a = commit_context_with_actions(2, vec![provider_bootstrap_action(2, input_a)]);
+    let context_b = commit_context_with_actions(2, vec![provider_bootstrap_action(2, input_b)]);
+    assert_eq!(
+        context_a.action_root, context_b.action_root,
+        "peer commit action roots must include identical replicated input bytes"
+    );
+    let result_a = driver_a.on_commit(context_a).expect("peer A commit");
+    let result_b = driver_b.on_commit(context_b).expect("peer B commit");
+    assert_eq!(
+        result_a, result_b,
+        "peer materializers must converge on execution roots"
+    );
+
+    let _ = fs::remove_dir_all(dir_a);
+    let _ = fs::remove_dir_all(dir_b);
+}
+
+#[test]
 fn provider_bootstrap_commit_root_survives_world_restart() {
     let dir = temp_dir("provider-bootstrap-root-restart");
     let state_path = dir.join("state.json");
@@ -253,10 +335,10 @@ fn provider_bootstrap_commit_root_survives_world_restart() {
         storage_root.as_path(),
     );
     driver
-        .stage_provider_backed_bootstrap_authorities(vec![input])
-        .expect("stage authority");
-    driver
-        .on_commit(commit_context(2))
+        .on_commit(commit_context_with_actions(
+            2,
+            vec![provider_bootstrap_action(2, input)],
+        ))
         .expect("canonical commit");
 
     let record = load_execution_bridge_record(

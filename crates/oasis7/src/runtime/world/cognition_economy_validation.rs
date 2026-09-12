@@ -32,6 +32,23 @@ impl CognitionEconomyStateV1 {
                 }
             }
         }
+        for (binding_key, resources) in &self.provisioned_balances {
+            if !valid_digest(binding_key) || self.provision_for_binding(binding_key).is_none() {
+                return Err(CognitionEconomyError::InvalidState(
+                    "cognition_provisioning_balance_binding_invalid",
+                ));
+            }
+            let request = self
+                .provision_for_binding(binding_key)
+                .expect("checked provisioning balance binding");
+            for resource in resources.keys() {
+                if !bounded_identity(resource) || resource != &request.resource {
+                    return Err(CognitionEconomyError::InvalidState(
+                        "cognition_provisioning_balance_identity_invalid",
+                    ));
+                }
+            }
+        }
         if self.provision_head_seq != self.provision_journal.len() as u64 {
             return Err(CognitionEconomyError::InvalidState(
                 "cognition_provisioning_head_invalid",
@@ -63,11 +80,35 @@ impl CognitionEconomyStateV1 {
                     "cognition_provisioning_binding_duplicate",
                 ));
             }
-            let Some(balance) = self
+            let binding_key = record.request.binding_key();
+            let versioned_balance = self
+                .provisioned_balances
+                .get(binding_key.as_str())
+                .and_then(|resources| resources.get(record.request.resource.as_str()));
+            let legacy_balance = self
                 .balances
                 .get(record.request.account_id.as_str())
-                .and_then(|resources| resources.get(record.request.resource.as_str()))
-            else {
+                .and_then(|resources| resources.get(record.request.resource.as_str()));
+            let matching_provisions = self
+                .provisions
+                .values()
+                .filter(|candidate| {
+                    candidate.request.account_id == record.request.account_id
+                        && candidate.request.resource == record.request.resource
+                })
+                .count();
+            if versioned_balance.is_some() && legacy_balance.is_some() {
+                return Err(CognitionEconomyError::InvalidState(
+                    "cognition_provisioning_balance_ambiguous",
+                ));
+            }
+            if legacy_balance.is_some() && matching_provisions != 1 {
+                return Err(CognitionEconomyError::InvalidState(
+                    "cognition_provisioning_balance_ambiguous",
+                ));
+            }
+            let balance = versioned_balance.or(legacy_balance);
+            let Some(balance) = balance else {
                 return Err(CognitionEconomyError::InvalidState(
                     "cognition_provisioning_balance_missing",
                 ));
@@ -88,6 +129,30 @@ impl CognitionEconomyStateV1 {
             if receipt.request != record.request || receipt.receipt_id != record.receipt_id {
                 return Err(CognitionEconomyError::InvalidState(
                     "cognition_provisioning_receipt_mismatch",
+                ));
+            }
+        }
+        for (lease_id, binding_key) in &self.lease_binding_keys {
+            let Some(lease) = self.leases.get(lease_id) else {
+                return Err(CognitionEconomyError::InvalidState(
+                    "cognition_lease_binding_index_invalid",
+                ));
+            };
+            let Some(request) = self.provision_for_binding(binding_key) else {
+                return Err(CognitionEconomyError::InvalidState(
+                    "cognition_lease_binding_index_invalid",
+                ));
+            };
+            if request.account_id != lease.account_id
+                || request.resource != lease.quote.resource
+                || self
+                    .provisioned_balances
+                    .get(binding_key)
+                    .and_then(|resources| resources.get(&lease.quote.resource))
+                    .is_none()
+            {
+                return Err(CognitionEconomyError::InvalidState(
+                    "cognition_lease_binding_index_invalid",
                 ));
             }
         }
@@ -372,12 +437,19 @@ impl CognitionEconomyStateV1 {
                 ));
             }
             lease.validate()?;
-            if self
-                .balances
-                .get(&lease.account_id)
-                .and_then(|resources| resources.get(&lease.quote.resource))
-                .is_none()
-            {
+            let has_lease_balance =
+                if let Some(binding_key) = self.lease_binding_keys.get(&lease.lease_id) {
+                    self.provisioned_balances
+                        .get(binding_key)
+                        .and_then(|resources| resources.get(&lease.quote.resource))
+                        .is_some()
+                } else {
+                    self.balances
+                        .get(&lease.account_id)
+                        .and_then(|resources| resources.get(&lease.quote.resource))
+                        .is_some()
+                };
+            if !has_lease_balance {
                 return Err(CognitionEconomyError::InvalidState(
                     "cognition_economy_lease_balance_missing",
                 ));
@@ -520,10 +592,15 @@ impl CognitionEconomyStateV1 {
                 ));
             }
         }
-        let mut expected_reserved: BTreeMap<(String, String), u64> = BTreeMap::new();
+        let mut expected_reserved: BTreeMap<(Option<String>, String, String), u64> =
+            BTreeMap::new();
         for lease in self.leases.values() {
             if lease.status == CognitionLeaseStatusV1::Reserved {
-                let key = (lease.account_id.clone(), lease.quote.resource.clone());
+                let key = (
+                    self.lease_binding_keys.get(&lease.lease_id).cloned(),
+                    lease.account_id.clone(),
+                    lease.quote.resource.clone(),
+                );
                 let value = expected_reserved.entry(key).or_default();
                 *value = value.checked_add(lease.reserved_amount).ok_or(
                     CognitionEconomyError::InvalidState("cognition_economy_reserved_overflow"),
@@ -533,7 +610,7 @@ impl CognitionEconomyStateV1 {
         for (account_id, resources) in &self.balances {
             for (resource, balance) in resources {
                 if expected_reserved
-                    .get(&(account_id.clone(), resource.clone()))
+                    .get(&(None, account_id.clone(), resource.clone()))
                     .copied()
                     .unwrap_or_default()
                     != balance.reserved
@@ -544,8 +621,21 @@ impl CognitionEconomyStateV1 {
                 }
             }
         }
-        for ((account_id, resource), reserved) in expected_reserved {
-            if self.reserved_balance(account_id.as_str(), resource.as_str()) != reserved {
+        for ((binding_key, account_id, resource), reserved) in expected_reserved {
+            let actual = if let Some(binding_key) = binding_key {
+                self.provisioned_balances
+                    .get(&binding_key)
+                    .and_then(|resources| resources.get(&resource))
+                    .map(|balance| balance.reserved)
+                    .unwrap_or_default()
+            } else {
+                self.balances
+                    .get(&account_id)
+                    .and_then(|resources| resources.get(&resource))
+                    .map(|balance| balance.reserved)
+                    .unwrap_or_default()
+            };
+            if actual != reserved {
                 return Err(CognitionEconomyError::InvalidState(
                     "cognition_economy_balance_reservation_missing",
                 ));
