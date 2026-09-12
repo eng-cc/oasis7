@@ -1777,8 +1777,16 @@ def validate_credential_ledger(
     path: Path,
     *,
     raw_v1_bytes_by_node: Mapping[str, bytes] | None = None,
+    allow_committed_reservations: bool = False,
 ) -> dict[str, int]:
-    """Validate ownership, one-shot format, uniqueness, and replay state."""
+    """Validate ownership, one-shot format, uniqueness, and replay state.
+
+    Fresh admission rejects every plan nonce already present in the ledger.
+    A resume admission may allow rows already committed by this exact
+    transaction; the checkpoint-bound reservation validator must then prove
+    that the journal state and complete ledger set still match before any
+    provider callback is reached.
+    """
     validate_plan(plan, raw_v1_bytes_by_node=raw_v1_bytes_by_node)
     rows = _read_ledger(Path(path))
     seen: set[str] = set()
@@ -1788,7 +1796,10 @@ def validate_credential_ledger(
         if nonce in seen:
             _fail("credential nonce ledger contains a replayed nonce")
         seen.add(nonce)
-        if nonce in plan_nonces:
+        if nonce in plan_nonces and (
+            not allow_committed_reservations
+            or row["transaction_id"] != plan["transaction_id"]
+        ):
             _fail("credential nonce ledger already consumed a plan nonce")
     return {"rows": len(rows), "unique_nonces": len(seen)}
 
@@ -4554,6 +4565,7 @@ def _storage_first_is_canonical_child_projection(
 
 def _storage_first_canonical_gates(
     plan: Mapping[str, Any], authority: Mapping[str, Any] | None, ledger_path: Path,
+    *, allow_committed_reservations: bool = False,
 ) -> None:
     """Enter every canonical parent gate before the child compatibility seam.
 
@@ -4582,7 +4594,11 @@ def _storage_first_canonical_gates(
             _fail("storage-first current signed authority is required")
         validate_authority(dict(plan), dict(authority))
         validate_live_trust_root_file()
-        validate_credential_ledger(dict(plan), Path(ledger_path))
+        validate_credential_ledger(
+            dict(plan),
+            Path(ledger_path),
+            allow_committed_reservations=allow_committed_reservations,
+        )
     except Exception:
         if not fixture or mocked:
             raise
@@ -5519,7 +5535,10 @@ def _storage_first_run(
     _storage_first_reject_aliases(Path(journal_path), Path(ledger_path), plan)
     _storage_first_validate_ledger_binding(plan, Path(ledger_path))
     _storage_first_canonical_gates(
-        plan, authority, Path(ledger_path)
+        plan,
+        authority,
+        Path(ledger_path),
+        allow_committed_reservations=resume_record is not None,
     )
     admission = _storage_first_validate_admission(
         plan, authority, phase=phase, identity_v2_evidence=identity_v2_evidence
@@ -5898,7 +5917,12 @@ def resume_storage_first(
     """Resume a storage-only journal after revalidating current admission."""
     _storage_first_reject_aliases(Path(journal_path), Path(ledger_path), plan)
     _storage_first_validate_ledger_binding(plan, Path(ledger_path))
-    _storage_first_canonical_gates(plan, authority, Path(ledger_path))
+    _storage_first_canonical_gates(
+        plan,
+        authority,
+        Path(ledger_path),
+        allow_committed_reservations=True,
+    )
     _storage_first_validate_admission(
         plan, authority, phase=phase, identity_v2_evidence=identity_v2_evidence
     )
