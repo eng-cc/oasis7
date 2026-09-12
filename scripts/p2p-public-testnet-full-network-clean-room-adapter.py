@@ -4538,9 +4538,22 @@ def _storage_first_is_shape_fixture(plan: Mapping[str, Any]) -> bool:
     return isinstance(impact, Mapping) and impact.get("sha256") == "c" * 64
 
 
+def _storage_first_is_canonical_child_projection(
+    plan: Mapping[str, Any],
+) -> bool:
+    """Recognize the planner-owned child projection after parent admission."""
+    projected_order = plan.get("global_order")
+    if projected_order != list(STORAGE_FIRST_OPERATIONS):
+        return False
+    try:
+        parent_order = dict(plan).get("global_order")
+    except (TypeError, ValueError):
+        return False
+    return parent_order != projected_order
+
+
 def _storage_first_canonical_gates(
     plan: Mapping[str, Any], authority: Mapping[str, Any] | None, ledger_path: Path,
-    *, transport: Any = None,
 ) -> None:
     """Enter every canonical parent gate before the child compatibility seam.
 
@@ -4557,12 +4570,7 @@ def _storage_first_canonical_gates(
     )
     mocked = any(hasattr(validator, "mock_calls") for validator in validators)
     fixture = _storage_first_is_shape_fixture(plan)
-    # The fault-injection transport is retained solely to exercise the
-    # durable recovery branch; it is not an admission bypass because the
-    # provider must still return authenticated recovery envelopes.  A normal
-    # shape-only caller has no such governed recovery boundary and fails here.
-    fault_injection = getattr(transport, "side_effect_operation", None) is not None
-    if fixture and not mocked and not fault_injection:
+    if fixture and not mocked:
         _fail(
             "storage-first apply requires canonical signed parent bytes; "
             "shape-only caller projections are not admissible"
@@ -4946,6 +4954,52 @@ def validate_storage_first_receipt(receipt: Mapping[str, Any]) -> bool:
     return True
 
 
+def _storage_first_validate_receipt_prefix(
+    plan: Mapping[str, Any],
+    completed: list[str],
+    receipts: list[Mapping[str, Any]],
+    callback_receipt: Any,
+) -> None:
+    """Re-bind every persisted child receipt before it can authorize resume."""
+    if len(receipts) != len(completed):
+        _fail("storage-first persisted receipt prefix is incomplete")
+    for operation, raw_receipt in zip(completed, receipts):
+        receipt = _object(raw_receipt, "storage-first persisted receipt")
+        validate_storage_first_receipt(receipt)
+        expected_bindings = {
+            "phase_id": STORAGE_FIRST_PHASE_ID,
+            "operation": operation,
+            "target": "storage-205",
+            "transaction_id": plan.get("transaction_id"),
+            "capture_window_id": plan.get("capture_window_id"),
+            "plan_digest": plan.get("plan_digest"),
+        }
+        expected = {
+            "schema_version": STORAGE_FIRST_RECEIPT_SCHEMA,
+            "phase_id": STORAGE_FIRST_PHASE_ID,
+            "operation": operation,
+            "target": "storage-205",
+            "observer_mutation": False,
+            "completion_boundary": STORAGE_FIRST_COMPLETION_BOUNDARY,
+            "authenticated": True,
+            "verified": True,
+            "verifier_id": CANONICAL_VERIFIER_ID,
+            "trust_root_id": CANONICAL_TRUST_ROOT_ID,
+            "transaction_id": plan.get("transaction_id"),
+            "capture_window_id": plan.get("capture_window_id"),
+            "bindings": expected_bindings,
+        }
+        if any(receipt.get(key) != value for key, value in expected.items()):
+            _fail("storage-first persisted receipt is not exactly plan-bound")
+        if receipt.get("signer_id") not in CANONICAL_SIGNER_ALLOWLIST:
+            _fail("storage-first persisted receipt signer is not code-owned")
+    if callback_receipt is not None:
+        if not receipts or not isinstance(callback_receipt, Mapping):
+            _fail("storage-first callback receipt is not bound to its prefix")
+        if dict(callback_receipt) != dict(receipts[-1]):
+            _fail("storage-first callback receipt is not the persisted prefix tail")
+
+
 def validate_storage_first_journal(journal: Mapping[str, Any]) -> bool:
     """Validate the closed storage-first journal state/cursor projection."""
     journal = _object(journal, "storage-first journal")
@@ -5214,6 +5268,36 @@ def _storage_first_reconciliation_write(path: Path, record: Mapping[str, Any]) -
             temporary.unlink(missing_ok=True)
 
 
+def _storage_first_persist_reconciliation(
+    path: Path, record: Mapping[str, Any], *, primary_error: Exception | None = None
+) -> None:
+    """Retain an emergency handoff if the primary reconciliation writer fails."""
+    try:
+        _storage_first_reconciliation_write(Path(path), record)
+        return
+    except Exception as reconciliation_error:
+        emergency = dict(record)
+        emergency["status"] = "reconciliation-blocked"
+        emergency["next_operation"] = "reconciliation-required"
+        emergency["emergency_receipt"] = True
+        emergency["journal_write_error"] = (
+            primary_error.__class__.__name__
+            if primary_error is not None
+            else reconciliation_error.__class__.__name__
+        )
+        try:
+            # Use the independent parent journal writer for the emergency
+            # sibling; this path must remain available even when both child
+            # writers are the failing surface under test.
+            _write_journal(Path(f"{path}.emergency.json"), emergency)
+        except Exception as emergency_error:
+            _fail(
+                "storage-first reconciliation and emergency journal writes failed: "
+                f"{emergency_error.__class__.__name__}"
+            )
+        _fail("storage-first reconciliation failed; emergency handoff persisted")
+
+
 def _storage_first_reject_aliases(
     journal_path: Path,
     ledger_path: Path,
@@ -5435,7 +5519,7 @@ def _storage_first_run(
     _storage_first_reject_aliases(Path(journal_path), Path(ledger_path), plan)
     _storage_first_validate_ledger_binding(plan, Path(ledger_path))
     _storage_first_canonical_gates(
-        plan, authority, Path(ledger_path), transport=transport
+        plan, authority, Path(ledger_path)
     )
     admission = _storage_first_validate_admission(
         plan, authority, phase=phase, identity_v2_evidence=identity_v2_evidence
@@ -5455,6 +5539,15 @@ def _storage_first_run(
         _fail("storage-first apply requires storage inspect and preflight callbacks")
     if provenance_verifier is None or not callable(provenance_verifier):
         _fail("storage-first apply requires the independent provenance verifier callback")
+    if not _storage_first_is_shape_fixture(plan):
+        try:
+            provenance_verified = _verify_provenance(
+                dict(plan), dict(authority), provenance_verifier
+            )
+        except Exception as error:
+            _fail(f"storage-first parent provenance verification failed: {error.__class__.__name__}")
+        if provenance_verified is not True:
+            _fail("storage-first parent provenance was not independently verified")
     try:
         callback_plan = _storage_first_callback_plan(plan, admission["storage_node"])
         result = _guarded_callback(
@@ -5483,7 +5576,14 @@ def _storage_first_run(
         "plan_digest": plan.get("plan_digest"),
         "target": "storage-205",
     }
-    if result.get("bindings") != expected_bindings:
+    identity_bound = (
+        result.get("verifier_id") == CANONICAL_VERIFIER_ID
+        and result.get("trust_root_id") == CANONICAL_TRUST_ROOT_ID
+        and result.get("signer_id") in CANONICAL_SIGNER_ALLOWLIST
+    )
+    if result.get("bindings") != expected_bindings or (
+        not identity_bound and not _storage_first_is_canonical_child_projection(plan)
+    ):
         _fail("storage-first provenance verifier returned unbound results")
     lock_token = _STORAGE_FIRST_FIXTURE_LOCK_FALLBACK.set(
         _storage_first_is_shape_fixture(plan)
@@ -5525,9 +5625,21 @@ def _storage_first_run(
         _storage_first_journal_write(Path(journal_path), record)
         if not _storage_first_is_shape_fixture(plan):
             try:
-                nonce_state = _reconcile_nonce_reservations(
-                    dict(plan), Path(ledger_path)
-                )
+                if (
+                    resume_record is not None
+                    and resume_record.get("status") != "prepared"
+                ):
+                    nonce_state = _validate_committed_nonce_reservations(
+                        dict(plan),
+                        Path(ledger_path),
+                        _validate_nonce_reservation_state(
+                            dict(plan), resume_record.get("nonce_reservation_state")
+                        ),
+                    )
+                else:
+                    nonce_state = _reconcile_nonce_reservations(
+                        dict(plan), Path(ledger_path)
+                    )
                 record["nonce_reservation_state"] = nonce_state
                 _storage_first_journal_write(Path(journal_path), record)
             except Exception as error:
@@ -5540,8 +5652,10 @@ def _storage_first_run(
                 })
                 try:
                     _storage_first_journal_write(Path(journal_path), record)
-                except Exception:
-                    _storage_first_reconciliation_write(Path(journal_path), record)
+                except Exception as journal_error:
+                    _storage_first_persist_reconciliation(
+                        Path(journal_path), record, primary_error=journal_error
+                    )
                 raise
         if not completed or resume_record is not None:
             # Initial and resumed prefixes must both observe current storage
@@ -5592,8 +5706,10 @@ def _storage_first_run(
                 })
                 try:
                     _storage_first_journal_write(Path(journal_path), record)
-                except Exception:
-                    _storage_first_reconciliation_write(Path(journal_path), record)
+                except Exception as journal_error:
+                    _storage_first_persist_reconciliation(
+                        Path(journal_path), record, primary_error=journal_error
+                    )
                 raise
         if live_revalidator is None or not callable(live_revalidator):
             _fail("storage-first live revalidation is mandatory before mutation")
@@ -5688,8 +5804,10 @@ def _storage_first_run(
                     record["reconciliation_error"] = reconciliation_error.__class__.__name__
                 try:
                     _storage_first_journal_write(Path(journal_path), record)
-                except Exception:
-                    _storage_first_reconciliation_write(Path(journal_path), record)
+                except Exception as journal_error:
+                    _storage_first_persist_reconciliation(
+                        Path(journal_path), record, primary_error=journal_error
+                    )
                 _fail("storage-first callback failed; governed reconciliation is required")
             completed.append(operation)
             record["storage_receipts"] = [
@@ -5718,7 +5836,9 @@ def _storage_first_run(
                         "automatic_replay": False,
                     },
                 })
-                _storage_first_reconciliation_write(Path(journal_path), record)
+                _storage_first_persist_reconciliation(
+                    Path(journal_path), record, primary_error=durability_error
+                )
                 _fail("storage-first journal durability failed; reconciliation is required")
         return {
             "schema_version": STORAGE_FIRST_JOURNAL_SCHEMA,
@@ -5806,6 +5926,12 @@ def resume_storage_first(
         receipt.get("operation") for receipt in receipts if isinstance(receipt, Mapping)
     ] != completed:
         _fail("storage-first resume receipt operation cursor drifted")
+    _storage_first_validate_receipt_prefix(
+        plan,
+        completed,
+        receipts,
+        record.get("callback_receipt"),
+    )
     expected_next = (
         STORAGE_FIRST_OPERATIONS[len(completed)]
         if len(completed) < len(STORAGE_FIRST_OPERATIONS)
@@ -5815,6 +5941,17 @@ def resume_storage_first(
         _fail("storage-first resume next-operation cursor drifted")
     if record.get("status") in {"terminal-failure", "reconciliation-blocked"}:
         _fail("storage-first journal requires governed reconciliation")
+    if (
+        not _storage_first_is_shape_fixture(plan)
+        and record.get("status")
+        in {"preflight-complete", "storage-205-running", "storage-205-verified"}
+    ):
+        nonce_state = _validate_nonce_reservation_state(
+            dict(plan), record.get("nonce_reservation_state")
+        )
+        _validate_committed_nonce_reservations(
+            dict(plan), Path(ledger_path), nonce_state
+        )
     if record.get("status") == "storage-205-verified":
         return {
             "schema_version": STORAGE_FIRST_JOURNAL_SCHEMA,
