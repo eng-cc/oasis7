@@ -167,6 +167,14 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                 }
                 options.chain_replication_bootstrap_peers.push(value);
             }
+            "--provider-bootstrap-authority" => {
+                options
+                    .provider_bootstrap_authority_paths
+                    .push(parse_required_value(
+                        &mut iter,
+                        "--provider-bootstrap-authority",
+                    )?);
+            }
             "--chain-local-standalone-test" => {
                 options.chain_local_standalone_test = true;
                 options.chain_p2p_user_mode = "private_safe".to_string();
@@ -535,6 +543,8 @@ Options:\n\
                                keep conservative fallback when auto mode suggests public entry (default)\n\
   --chain-replication-network-peer <multiaddr>\n\
                                oasis7_chain_runtime replication bootstrap peer multiaddr (repeatable; first explicit value replaces bundled defaults)\n\
+  --provider-bootstrap-authority <path>\n\
+                               explicit provider authority bundle for oasis7_chain_runtime (repeatable; no default)\n\
   --chain-local-standalone-test\n\
                                do not join external testnet peers; configure a self-validating single-node local commit loop\n\
   --chain-node-tick-ms <n>     oasis7_chain_runtime worker poll/fallback interval ms (default: {DEFAULT_CHAIN_NODE_TICK_MS})\n\

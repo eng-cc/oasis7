@@ -12,7 +12,7 @@ use super::checkpoint::{
     maybe_persist_execution_checkpoint_for_record, persist_execution_bridge_record,
     run_execution_bridge_incremental_retention_maintenance,
 };
-use super::driver::{
+use super::execution_hash::{
     ExecutionHashPayload, execution_resource_commit_hash, execution_resource_context_hash,
     execution_resource_created_at_height,
 };
