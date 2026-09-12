@@ -245,6 +245,7 @@ mod tests {
                     capabilities: Vec::new(),
                     world_id: "test-world".to_string(),
                     control_profile: oasis7::viewer::ViewerControlProfile::Live,
+                    authority_epoch: None,
                 },
             );
             expect_request_type(&mut reader, |request| {
@@ -299,6 +300,7 @@ mod tests {
                         capabilities: Vec::new(),
                         world_id: "test-world".to_string(),
                         control_profile: oasis7::viewer::ViewerControlProfile::Live,
+                        authority_epoch: None,
                     },
                 );
                 expect_request_type(&mut reader, |request| {
