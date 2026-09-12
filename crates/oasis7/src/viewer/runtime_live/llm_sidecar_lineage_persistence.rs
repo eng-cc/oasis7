@@ -127,6 +127,31 @@ pub(super) fn validate_provider_lease_binding(
 ) -> Result<(), String> {
     validate_provider_lease_identity(agent_id, request, lease)?;
     payer_support::runtime_authorized_provider_payer_id(world, request)?;
+    validate_provider_lease_runtime_record(world, agent_id, lease, operation)?;
+    if operation == "dispatch"
+        && (lease.reserved_at_tick > world.state().time
+            || lease
+                .quote
+                .valid_until_tick
+                .is_some_and(|expires| world.state().time > expires))
+    {
+        return Err(format!(
+            "provider cognition lease dispatch is stale for {agent_id}"
+        ));
+    }
+    Ok(())
+}
+
+/// Validate the exact Runtime-owned lease record without projecting its
+/// request through the current capability authority. Generation rotation
+/// deliberately makes an old request's grant obsolete, but the old Reserved
+/// lease still needs a durable release during recovery.
+fn validate_provider_lease_runtime_record(
+    world: &RuntimeWorld,
+    agent_id: &str,
+    lease: &crate::runtime::CognitionLeaseV1,
+    operation: &str,
+) -> Result<(), String> {
     let economy = world.cognition_economy().map_err(|error| {
         format!("provider cognition lease {operation} economy read failed: {error:?}")
     })?;
@@ -157,17 +182,6 @@ pub(super) fn validate_provider_lease_binding(
             "provider cognition lease dispatch is already closed for {agent_id}"
         ));
     }
-    if operation == "dispatch"
-        && (lease.reserved_at_tick > world.state().time
-            || lease
-                .quote
-                .valid_until_tick
-                .is_some_and(|expires| world.state().time > expires))
-    {
-        return Err(format!(
-            "provider cognition lease dispatch is stale for {agent_id}"
-        ));
-    }
     Ok(())
 }
 
@@ -194,6 +208,11 @@ struct PersistedProviderLineageV1 {
     provider_active_turns: BTreeMap<String, cognition_context::ProviderContextState>,
     #[serde(default)]
     provider_cognition_leases: BTreeMap<String, crate::runtime::CognitionLeaseV1>,
+    /// Runtime capability owner/generation is separate from
+    /// `RuntimeBindingV1`: an Agent identity rotation may leave the world
+    /// binding unchanged while invalidating every old provider grant.
+    #[serde(default)]
+    provider_capability_identities: BTreeMap<String, crate::runtime::CapabilityAgentIdentity>,
     /// The exact simulator proposal admitted into the Harness.  Runtime's
     /// durable continuation projection omits Harness chain inputs, so this
     /// mirror is required for restart hydration.
@@ -289,9 +308,24 @@ fn validate_persisted_provider_cognition_leases(
             // dispatch and economic cleanup repeat the Runtime lookup below
             // before permitting any effect.
             validate_provider_lease_identity(agent_id, request, lease)?;
-            if let Err(error) =
+            let authority_rotated = provider_request_capability_identity(request)
+                .zip(
+                    world
+                        .capability_revocation_state()
+                        .agent_identities
+                        .get(agent_id),
+                )
+                .is_some_and(|(saved, current)| saved != *current);
+            let binding_validation = if authority_rotated {
+                // A rotated generation intentionally invalidates the old
+                // grant. Validate the durable Runtime lease record exactly,
+                // but do not ask the new authority to validate an obsolete
+                // request before the recovery pass releases that lease.
+                validate_provider_lease_runtime_record(world, agent_id, lease, "restore")
+            } else {
                 validate_provider_lease_binding(world, agent_id, request, lease, "restore")
-            {
+            };
+            if let Err(error) = binding_validation {
                 // Runtime removes a lease as part of an authoritative receipt
                 // settlement. A crash can still leave the sidecar copy in the
                 // checkpoint until receipt feedback finalization completes;
@@ -309,6 +343,27 @@ fn validate_persisted_provider_cognition_leases(
         }
     }
     Ok(())
+}
+
+pub(super) fn provider_request_capability_identity(
+    request: &crate::simulator::ContinuousAgentRequestContextV1,
+) -> Option<crate::runtime::CapabilityAgentIdentity> {
+    let invocation = request
+        .base_decision_request
+        .capability_invocation_context
+        .as_ref()?;
+    let oasis7_wasm_abi::CapabilitySubject::Agent {
+        agent_id: _,
+        owner_binding,
+        generation,
+    } = &invocation.subject
+    else {
+        return None;
+    };
+    Some(crate::runtime::CapabilityAgentIdentity {
+        owner_binding: owner_binding.clone(),
+        generation: *generation,
+    })
 }
 
 fn decode_provider_lineage_checkpoint(
@@ -614,6 +669,7 @@ impl RuntimeLlmSidecar {
         self.provider_retry_contexts = checkpoint.provider_retry_contexts;
         self.provider_active_turns = checkpoint.provider_active_turns;
         self.provider_cognition_leases = checkpoint.provider_cognition_leases;
+        self.provider_capability_identities = checkpoint.provider_capability_identities;
         self.provider_continuation_proposals = checkpoint.provider_continuation_proposals;
         self.provider_continuation_recovery_pending =
             checkpoint.provider_continuation_recovery_pending;
@@ -700,6 +756,45 @@ impl RuntimeLlmSidecar {
         self.pending_runtime_wakes = pending_runtime_wakes;
         self.provider_lineage_binding = current_binding.or(checkpoint.runtime_binding);
         self.provider_lineage_restored = true;
+
+        // Checkpoint v2 did not carry an explicit capability identity mirror.
+        // Backfill it from the persisted request subject while preserving the
+        // request as the identity-bearing evidence for the old turn. A live
+        // owner/generation mismatch is handled below as a stale replan and
+        // must never be sent through fresh-grant validation.
+        let identity_contexts = self
+            .provider_contexts
+            .iter()
+            .chain(self.provider_active_turns.iter())
+            .chain(self.provider_retry_contexts.iter())
+            .map(|(agent_id, context)| (agent_id.as_str(), &context.request_context))
+            .collect::<Vec<_>>();
+        for (agent_id, request) in identity_contexts {
+            if let Some(identity) = provider_request_capability_identity(request) {
+                if let Some(saved) = self.provider_capability_identities.get(agent_id)
+                    && saved != &identity
+                {
+                    return Err(format!(
+                        "provider capability identity does not match persisted request for {agent_id}"
+                    ));
+                }
+                self.provider_capability_identities
+                    .entry(agent_id.to_string())
+                    .or_insert(identity);
+            }
+        }
+        let capability_identity_changed_agents = self
+            .provider_capability_identities
+            .iter()
+            .filter_map(|(agent_id, saved)| {
+                world
+                    .capability_revocation_state()
+                    .agent_identities
+                    .get(agent_id)
+                    .filter(|current| *current != saved)
+                    .map(|_| agent_id.clone())
+            })
+            .collect::<BTreeSet<_>>();
 
         // Runtime's committed marker is authoritative over the sidecar's
         // checkpoint. A process can stop after Runtime commits the response
@@ -908,6 +1003,13 @@ impl RuntimeLlmSidecar {
             .collect::<Vec<_>>();
         let mut recovered_orphan = false;
         for (agent_id, active, context, same_identity, retained) in orphaned_active_markers {
+            if capability_identity_changed_agents.contains(&agent_id) && context.is_none() {
+                // An active marker can be the only persisted copy of a
+                // request in the reserve-before-mirror crash prefix. Keep it
+                // for the identity-rotation cleanup below; the marker itself
+                // carries the request needed to release the exact lease.
+                continue;
+            }
             if !same_identity {
                 // Preserve the mismatched marker rather than silently
                 // dropping evidence.  A subsequent prepare pass is fenced by
@@ -933,6 +1035,14 @@ impl RuntimeLlmSidecar {
                 recovered_orphan = true;
                 continue;
             }
+            if capability_identity_changed_agents.contains(&agent_id) {
+                // The active marker is the only durable request context in a
+                // crash prefix covered by an identity rotation. Preserve it
+                // until the stale-replan pass below can release the exact
+                // Runtime lease and queue fresh planning under the new
+                // owner/generation.
+                continue;
+            }
             if retained {
                 continue;
             }
@@ -946,19 +1056,39 @@ impl RuntimeLlmSidecar {
             self.provider_transport_exhausted.insert(agent_id);
             recovered_orphan = true;
         }
-        if binding_changed {
+        if binding_changed || !capability_identity_changed_agents.is_empty() {
             let mut stale_contexts = self
                 .provider_contexts
                 .keys()
-                .filter(|agent_id| !retained_agents.contains(*agent_id))
+                .filter(|agent_id| {
+                    capability_identity_changed_agents.contains(*agent_id)
+                        || (binding_changed && !retained_agents.contains(*agent_id))
+                })
                 .cloned()
                 .collect::<Vec<_>>();
             let retry_agents = self
                 .provider_retry_contexts
                 .keys()
-                .filter(|agent_id| !retained_agents.contains(*agent_id))
+                .filter(|agent_id| {
+                    capability_identity_changed_agents.contains(*agent_id)
+                        || (binding_changed && !retained_agents.contains(*agent_id))
+                })
                 .cloned()
                 .collect::<Vec<_>>();
+            let active_agents = self
+                .provider_active_turns
+                .keys()
+                .filter(|agent_id| {
+                    capability_identity_changed_agents.contains(*agent_id)
+                        || (binding_changed && !retained_agents.contains(*agent_id))
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            for agent_id in active_agents {
+                if !stale_contexts.contains(&agent_id) && !retry_agents.contains(&agent_id) {
+                    stale_contexts.push(agent_id);
+                }
+            }
             for agent_id in retry_agents {
                 if !stale_contexts.contains(&agent_id) {
                     stale_contexts.push(agent_id);
@@ -968,7 +1098,8 @@ impl RuntimeLlmSidecar {
                 let context = self
                     .provider_contexts
                     .remove(agent_id.as_str())
-                    .or_else(|| self.provider_retry_contexts.remove(agent_id.as_str()));
+                    .or_else(|| self.provider_retry_contexts.remove(agent_id.as_str()))
+                    .or_else(|| self.provider_active_turns.remove(agent_id.as_str()));
                 let Some(context) = context else { continue };
                 self.provider_retry_contexts.remove(agent_id.as_str());
                 self.provider_active_turns.remove(agent_id.as_str());
@@ -1054,6 +1185,7 @@ impl RuntimeLlmSidecar {
             provider_retry_contexts: self.provider_retry_contexts.clone(),
             provider_active_turns: self.provider_active_turns.clone(),
             provider_cognition_leases: self.provider_cognition_leases.clone(),
+            provider_capability_identities: self.provider_capability_identities.clone(),
             provider_continuation_proposals: self.provider_continuation_proposals.clone(),
             provider_continuation_recovery_pending: self
                 .provider_continuation_recovery_pending

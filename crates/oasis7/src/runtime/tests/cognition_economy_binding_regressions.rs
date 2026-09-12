@@ -37,6 +37,102 @@ fn bound_world_with_identity(agent_id: &str, owner_binding: &str) -> World {
 }
 
 #[test]
+fn bound_runtime_rejects_provider_cognition_from_legacy_only_balance() {
+    let mut world = bound_world_with_identity("agent-a", "owner-a");
+    world
+        .set_cognition_resource_balance("owner-a", "cognition_units", 7)
+        .expect("legacy balance can be restored for a bound snapshot");
+    let world_binding = world
+        .current_cognition_runtime_binding()
+        .expect("current runtime binding")
+        .base_world_hash
+        .to_string();
+
+    let error = world
+        .reserve_cognition_lease(CognitionLeaseRequestV1::new(
+            "bound-legacy-only",
+            "owner-a",
+            "agent-a",
+            "session-a",
+            "turn-a",
+            "request-a",
+            "request-digest-a",
+            authority_quote_for("owner-a", "bound-legacy-quote", 3, &world_binding),
+        ))
+        .expect_err("bound provider cognition requires an exact provision");
+    assert!(format!("{error:?}").contains("cognition_provisioning_binding_required"));
+
+    let economy = world.cognition_economy().expect("read unchanged economy");
+    assert_eq!(
+        economy
+            .balances
+            .get("owner-a")
+            .and_then(|resources| resources.get("cognition_units"))
+            .map(|balance| balance.available),
+        Some(7),
+        "legacy balance must not be consumed while Runtime is bound"
+    );
+    assert!(economy.leases.is_empty());
+}
+
+#[test]
+fn bound_runtime_rejects_legacy_only_balance_after_generation_and_reorg_rotation() {
+    let mut world = bound_world_with_identity("agent-a", "owner-a");
+    world = world.with_cognition_scheduler(super::agent_cognition_runtime_hardening::policy(), 1);
+    world
+        .set_cognition_resource_balance("owner-a", "cognition_units", 7)
+        .expect("legacy balance can be restored for a bound snapshot");
+    world
+        .install_capability_agent_identity("agent-a", "owner-a", 2)
+        .expect("rotate capability generation");
+    world
+        .invalidate_cognition_for_reorg(1)
+        .expect("authorize the reorg binding");
+    world
+        .bind_cognition_runtime("provision-world", "main", 0, None, "pending", 1)
+        .expect("bind the new reorg epoch");
+    let world_binding = world
+        .current_cognition_runtime_binding()
+        .expect("current rotated runtime binding")
+        .base_world_hash
+        .to_string();
+
+    let error = world
+        .reserve_cognition_lease(CognitionLeaseRequestV1::new(
+            "rotated-bound-legacy-only",
+            "owner-a",
+            "agent-a",
+            "session-b",
+            "turn-b",
+            "request-b",
+            "request-digest-b",
+            authority_quote_for("owner-a", "rotated-legacy-quote", 3, &world_binding),
+        ))
+        .expect_err("generation/reorg rotation must not revive legacy funding");
+    assert!(format!("{error:?}").contains("cognition_provisioning_binding_required"));
+
+    let error = world
+        .provision_cognition_for_agent("agent-a", "rotated-provision", "authority-b", 2)
+        .expect_err("post-rotation provisioning cannot guess a legacy binding");
+    assert!(format!("{error:?}").contains("cognition_provisioning_balance_already_initialized"));
+
+    let economy = world
+        .cognition_economy()
+        .expect("read unchanged rotated economy");
+    assert_eq!(
+        economy
+            .balances
+            .get("owner-a")
+            .and_then(|resources| resources.get("cognition_units"))
+            .map(|balance| balance.available),
+        Some(7),
+        "legacy balance must remain untouched after rotation"
+    );
+    assert!(economy.leases.is_empty());
+    assert!(economy.provisions.is_empty());
+}
+
+#[test]
 fn provisioning_versions_balances_across_owner_generations() {
     let mut economy = CognitionEconomyStateV1::new();
     let old_request = CognitionProvisioningRequestV1::new(
