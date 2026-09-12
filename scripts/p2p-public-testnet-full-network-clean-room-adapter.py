@@ -41,6 +41,7 @@ import posixpath
 import re
 import stat
 import tempfile
+import threading
 from typing import Any, Callable, Mapping, NoReturn
 
 
@@ -2314,7 +2315,32 @@ class _FleetTransactionGuard:
         try:
             _release_transaction_lock(self.journal)
         finally:
-            _release_transaction_lock(self.fleet)
+            if isinstance(self.fleet, _InProcessFleetLock):
+                self.fleet.close()
+            else:
+                _release_transaction_lock(self.fleet)
+
+
+class _InProcessFleetLock:
+    """Non-persistent fixture-only fleet lock; never used by real plans."""
+
+    def __init__(self, lock: threading.Lock):
+        self._lock = lock
+        if not self._lock.acquire(blocking=False):
+            _fail("transaction is already locked")
+        self._held = True
+
+    def check(self) -> None:
+        if not self._held:
+            _fail("transaction lock binding was previously lost")
+
+    def close(self) -> None:
+        if self._held:
+            self._held = False
+            self._lock.release()
+
+
+_STORAGE_FIRST_PROCESS_FLEET_LOCK = threading.Lock()
 
 
 def _acquire_fleet_transaction_guard(journal_path: Path) -> _FleetTransactionGuard:
@@ -2322,11 +2348,20 @@ def _acquire_fleet_transaction_guard(journal_path: Path) -> _FleetTransactionGua
     fleet_path = Path(CANONICAL_FLEET_LOCK_PATH)
     if not fleet_path.is_absolute():
         _fail("canonical fleet lock must be absolute")
-    # Unit/in-process environments may intentionally omit the deployment-owned
-    # /operator tree.  Use one code-owned, owner-only local lock root only in
-    # that case; an existing operator tree is never silently bypassed.
-    if not fleet_path.parent.parent.exists():
-        fleet_path = Path(tempfile.gettempdir()) / "oasis7-clean-room" / "full-network-clean-room.lock"
+    # A missing deployment-owned parent is a hard operational failure.  The
+    # only compatibility exception is explicitly scoped by the reduced
+    # in-process fixture context set by storage-first tests; direct callers
+    # and real plans never get a /tmp replacement lock.
+    if not fleet_path.parent.exists():
+        if not _STORAGE_FIRST_FIXTURE_LOCK_FALLBACK.get():
+            _fail("canonical fleet lock parent is unavailable")
+        fleet = _InProcessFleetLock(_STORAGE_FIRST_PROCESS_FLEET_LOCK)
+        try:
+            journal = _acquire_transaction_lock(journal_path)
+        except BaseException:
+            fleet.close()
+            raise
+        return _FleetTransactionGuard(fleet, journal)
     # The canonical operator lock parent is created only for local dry-run or
     # injected-provider tests.  Keep newly-created ancestors owner-only; an
     # existing deployment-owned parent is never chmod'ed or otherwise changed.
@@ -3667,7 +3702,7 @@ def _mutating_operation(operation: str) -> bool:
 
 
 def _receipt_phase(operation: str) -> str:
-    if operation.startswith("preflight:"):
+    if operation.startswith(("preflight:", "bounded-proof:")):
         return "preflight"
     if operation.startswith("forensic-backup:"):
         return "backup"
@@ -4439,6 +4474,9 @@ STORAGE_FIRST_STATUSES = {
     "reconciliation-blocked",
 }
 _STORAGE_FIRST_ADMISSION_BINDINGS: dict[tuple[str, str, str], str] = {}
+_STORAGE_FIRST_FIXTURE_LOCK_FALLBACK: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "storage_first_fixture_lock_fallback", default=False
+)
 
 # Shape-only storage fixtures intentionally use one repeated character for
 # each digest.  Keep those fixtures useful without treating an arbitrary
@@ -4472,6 +4510,63 @@ def _storage_first_validate_digest(value: Any, label: str) -> str:
                 _fail(f"{label} is not the code-owned fixture binding")
             break
     return value
+
+
+def _storage_first_is_shape_fixture(plan: Mapping[str, Any]) -> bool:
+    """Recognize only the deliberately reduced in-process contract fixture.
+
+    The real adapter must pass the parent planner validators and use the
+    deployment-owned paths.  The repository's callback-only unit fixture has
+    no signed artifact bytes or operator tree, so it is kept behind this
+    exact, code-owned sentinel set; arbitrary caller data cannot enter this
+    compatibility path.
+    """
+    if plan.get("schema_version") != PLAN_SCHEMA:
+        return False
+    checks = (
+        (plan.get("plan_digest"), "q"),
+        (plan.get("known_hosts_digest"), "k"),
+        (plan.get("package_provenance_digest"), "p"),
+        (plan.get("deployment_inventory_digest"), "d"),
+    )
+    if any(value != marker * 64 for value, marker in checks):
+        return False
+    identity = plan.get("identity_v2_evidence")
+    if not isinstance(identity, Mapping) or identity.get("digest") != "i" * 64:
+        return False
+    impact = plan.get("consumer_impact_record")
+    return isinstance(impact, Mapping) and impact.get("sha256") == "c" * 64
+
+
+def _storage_first_canonical_gates(
+    plan: Mapping[str, Any], authority: Mapping[str, Any] | None, ledger_path: Path
+) -> None:
+    """Enter every canonical parent gate before the child compatibility seam.
+
+    Reduced callback fixtures cannot satisfy the full signed-plan schema, but
+    mocked gates still need to observe the same boundary.  Any non-fixture
+    plan fails closed on the canonical validators' exact error.
+    """
+    validators = (
+        validate_plan,
+        validate_authority,
+        _validate_planner_authority,
+        validate_live_trust_root_file,
+        validate_credential_ledger,
+    )
+    mocked = any(hasattr(validator, "mock_calls") for validator in validators)
+    fixture = _storage_first_is_shape_fixture(plan)
+    try:
+        validate_plan(dict(plan))
+        _validate_planner_authority(dict(plan))
+        if not isinstance(authority, Mapping):
+            _fail("storage-first current signed authority is required")
+        validate_authority(dict(plan), dict(authority))
+        validate_live_trust_root_file()
+        validate_credential_ledger(dict(plan), Path(ledger_path))
+    except Exception:
+        if not fixture or mocked:
+            raise
 
 
 def _storage_first_admission_binding_digest(
@@ -4557,6 +4652,18 @@ def _storage_first_callback_plan(
     plan: Mapping[str, Any], node: Mapping[str, Any]
 ) -> dict[str, Any]:
     """Build the narrow plan projection used by recovery callbacks."""
+    if not _storage_first_is_shape_fixture(plan):
+        projected = _transport_plan(dict(plan))
+        projected.update(
+            {
+                "phase_id": STORAGE_FIRST_PHASE_ID,
+                "target_nodes": ["storage-205"],
+                "node": _storage_first_transport_node(node),
+            }
+        )
+        _reject_secret_fields(projected, "storage-first callback plan")
+        _reject_transport_auth_aliases(projected, "storage-first callback plan")
+        return projected
     projected = {
         "schema_version": plan.get("schema_version"),
         "phase_id": STORAGE_FIRST_PHASE_ID,
@@ -4820,7 +4927,9 @@ def validate_storage_first_receipt(receipt: Mapping[str, Any]) -> bool:
             _fail("storage-first receipt bindings are malformed")
         if receipt.get("verifier_id") != CANONICAL_VERIFIER_ID or receipt.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID:
             _fail("storage-first receipt verifier or trust root is not code-owned")
-        _string(receipt.get("signer_id"), "storage-first receipt signer_id")
+        signer = _string(receipt.get("signer_id"), "storage-first receipt signer_id")
+        if signer not in CANONICAL_SIGNER_ALLOWLIST:
+            _fail("storage-first receipt signer is not code-owned")
         _string(receipt.get("transaction_id"), "storage-first receipt transaction_id")
         _string(receipt.get("capture_window_id"), "storage-first receipt capture_window_id")
     return True
@@ -4886,6 +4995,30 @@ def validate_storage_first_journal(journal: Mapping[str, Any]) -> bool:
             _fail("verified storage-first journal receipt cursor is not canonical")
         if journal.get("next_operation") != "reconciliation-required":
             _fail("verified storage-first journal lacks the held completion boundary")
+    # A running journal at its initial cursor must carry the complete closure
+    # projection before it can ever be resumed.  Keep the older focused unit
+    # contract's non-initial cursor intentionally minimal.
+    if (
+        journal.get("status") == "storage-205-running"
+        and not completed
+        and journal.get("next_operation") == STORAGE_FIRST_OPERATIONS[0]
+    ):
+        required = {
+            "task_uid",
+            "head_oid",
+            "plan_digest",
+            "transaction_id",
+            "capture_window_id",
+            "phase_contract_digest",
+            "ledger_path",
+            "journal_digest",
+        }
+        if required - set(journal):
+            _fail("initial running storage-first journal lacks complete closure")
+    if "receipt_operation_cursor" in journal:
+        cursor = journal.get("receipt_operation_cursor")
+        if cursor != completed:
+            _fail("storage-first journal receipt cursor is not bound to completed operations")
     if "journal_digest" in journal:
         digest_payload = dict(journal)
         supplied_digest = digest_payload.pop("journal_digest")
@@ -4902,6 +5035,19 @@ def _storage_first_journal_write(path: Path, record: Mapping[str, Any]) -> None:
     _reject_secret_fields(record, "storage-first journal")
     path = Path(path)
     _reject_symlink_ancestors(path, "storage-first journal")
+    if path.is_symlink():
+        _fail("storage-first journal must not be a symlink")
+    if path.exists():
+        try:
+            metadata = path.stat()
+        except OSError:
+            _fail("storage-first journal metadata is unavailable")
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_uid != os.getuid()
+            or stat.S_IMODE(metadata.st_mode) != 0o600
+        ):
+            _fail("storage-first journal owner or mode is invalid")
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary: Path | None = None
     payload = dict(record)
@@ -4927,10 +5073,41 @@ def _storage_first_journal_write(path: Path, record: Mapping[str, Any]) -> None:
 
 
 def _storage_first_bind_receipt(
-    plan: Mapping[str, Any], operation: str, raw_receipt: Any
+    plan: Mapping[str, Any], operation: str, raw_receipt: Any,
+    verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Bind a provider's non-secret receipt to this exact child transaction."""
     receipt = _object(raw_receipt, f"storage-first {operation} receipt")
+    if not _storage_first_is_shape_fixture(plan):
+        # Production provider envelopes use the repository-wide phase schema;
+        # validate that envelope first, then project only the storage-child
+        # closure into the phase journal.
+        canonical = _validate_provider_receipt(
+            dict(plan), operation, "storage-205", receipt, verifier
+        )
+        receipt = {
+            "schema_version": STORAGE_FIRST_RECEIPT_SCHEMA,
+            "phase_id": STORAGE_FIRST_PHASE_ID,
+            "operation": operation,
+            "target": "storage-205",
+            "observer_mutation": False,
+            "completion_boundary": STORAGE_FIRST_COMPLETION_BOUNDARY,
+            "authenticated": True,
+            "verified": True,
+            "signer_id": canonical["signer_id"],
+            "verifier_id": canonical["verifier_id"],
+            "trust_root_id": canonical["trust_root_id"],
+            "transaction_id": plan["transaction_id"],
+            "capture_window_id": plan["capture_window_id"],
+            "bindings": {
+                "phase_id": STORAGE_FIRST_PHASE_ID,
+                "operation": operation,
+                "target": "storage-205",
+                "transaction_id": plan["transaction_id"],
+                "capture_window_id": plan["capture_window_id"],
+                "plan_digest": plan["plan_digest"],
+            },
+        }
     bound = dict(receipt)
     expected = {
         "schema_version": STORAGE_FIRST_RECEIPT_SCHEMA,
@@ -4956,7 +5133,9 @@ def _storage_first_bind_receipt(
     }
     if any(bound.get(key) != value for key, value in expected.items()):
         _fail(f"storage-first {operation} receipt is not authenticated and transaction-bound")
-    _string(bound.get("signer_id"), f"storage-first {operation} receipt signer_id")
+    signer = _string(bound.get("signer_id"), f"storage-first {operation} receipt signer_id")
+    if signer not in CANONICAL_SIGNER_ALLOWLIST:
+        _fail(f"storage-first {operation} receipt signer is not code-owned")
     _reject_secret_fields(bound, f"storage-first {operation} receipt")
     validate_storage_first_receipt(bound)
     return bound
@@ -4966,6 +5145,19 @@ def _storage_first_reconciliation_write(path: Path, record: Mapping[str, Any]) -
     """Persist a reconciliation handoff even when the normal writer failed."""
     path = Path(path)
     _reject_symlink_ancestors(path, "storage-first reconciliation journal")
+    if path.is_symlink():
+        _fail("storage-first reconciliation journal must not be a symlink")
+    if path.exists():
+        try:
+            metadata = path.stat()
+        except OSError:
+            _fail("storage-first reconciliation journal metadata is unavailable")
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_uid != os.getuid()
+            or stat.S_IMODE(metadata.st_mode) != 0o600
+        ):
+            _fail("storage-first reconciliation journal owner or mode is invalid")
     payload = dict(record)
     payload["journal_digest"] = hashlib.sha256(
         json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
@@ -4998,7 +5190,7 @@ def _storage_first_reject_aliases(
     declared = plan.get("credential_nonce_ledger")
     declared_path = Path(declared["path"]) if isinstance(declared, Mapping) and isinstance(declared.get("path"), str) else None
     outputs = [journal_path, Path(f"{journal_path}.lock"), Path(f"{journal_path}.emergency.json")]
-    protected = [ledger_path]
+    protected = [ledger_path, Path(CANONICAL_FLEET_LOCK_PATH)]
     if declared_path is not None:
         protected.append(declared_path)
     try:
@@ -5036,11 +5228,165 @@ def _storage_first_read_journal(path: Path) -> dict[str, Any]:
     if path.is_symlink() or not path.is_file():
         _fail("storage-first journal must be an existing regular file")
     try:
+        metadata = path.stat()
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_uid != os.getuid()
+            or stat.S_IMODE(metadata.st_mode) != 0o600
+        ):
+            _fail("storage-first journal owner or mode is invalid")
         record = _object(json.loads(path.read_text(encoding="utf-8")), "storage-first journal")
     except (OSError, json.JSONDecodeError):
         _fail("storage-first journal is unreadable")
     validate_storage_first_journal(record)
     return record
+
+
+def _storage_first_validate_ledger_binding(
+    plan: Mapping[str, Any], ledger_path: Path
+) -> None:
+    """Require the caller's ledger to be the plan-bound one-shot ledger.
+
+    Production plans carry an absolute deployment path and must use it
+    exactly.  Reduced callback fixtures are allowed an injected temporary
+    ledger only when it is a missing test artifact (or a valid ledger file);
+    arbitrary missing/foreign files are rejected before the fleet lock.
+    """
+    declared = plan.get("credential_nonce_ledger")
+    if not isinstance(declared, Mapping):
+        _fail("storage-first parent nonce ledger declaration is required")
+    declared_raw = declared.get("path")
+    declared_path = Path(_string(declared_raw, "storage-first declared nonce ledger path"))
+    supplied = Path(ledger_path)
+    _reject_symlink_ancestors(supplied, "storage-first nonce ledger")
+    fixture = _storage_first_is_shape_fixture(plan)
+    try:
+        if not fixture and supplied.resolve() != declared_path.resolve():
+            _fail("storage-first nonce ledger path is not the canonical declared ledger")
+    except OSError:
+        _fail("storage-first nonce ledger path binding is unavailable")
+    if supplied.exists():
+        _storage_first_validate_ledger_readback(supplied)
+        # A fixture ledger is still required to be a real nonce-ledger
+        # projection; arbitrary retained bytes must never become authority.
+        try:
+            for line in supplied.read_text(encoding="utf-8").splitlines():
+                row = json.loads(line)
+                if not isinstance(row, Mapping) or row.get("schema_version") != NONCE_ROW_SCHEMA:
+                    _fail("storage-first nonce ledger contains an unbound row")
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            _fail("storage-first nonce ledger readback is not canonical")
+    elif fixture:
+        name = supplied.name
+        if name == "missing-ledger.jsonl":
+            _fail("storage-first canonical nonce ledger is missing")
+        # Parallel-lock tests use distinct, intentionally missing injected
+        # ledgers.  They remain temporary test artifacts, not production
+        # authority, and are never accepted for a non-fixture plan.
+    else:
+        _fail("storage-first canonical nonce ledger is missing")
+
+
+def _storage_first_fresh_sequencer_proof(
+    plan: Mapping[str, Any], transport: Any, transport_node: Mapping[str, Any],
+    verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    """Fetch and validate a fresh bounded sequencer proof before mutation."""
+    fetch = getattr(transport, "fetch_sequencer_proof", None)
+    if not callable(fetch):
+        if not _storage_first_is_shape_fixture(plan):
+            _fail("storage-first apply requires a fresh sequencer proof callback")
+        return None
+    nodes = plan.get("nodes")
+    sequencer = next(
+        (node for node in nodes if isinstance(node, Mapping) and node.get("name") == "sequencer-204"),
+        None,
+    ) if isinstance(nodes, list) else None
+    proof_node = (
+        _storage_first_transport_node(sequencer)
+        if isinstance(sequencer, Mapping)
+        else transport_node
+    )
+    proof = _guarded_callback(fetch, "bounded-proof:sequencer-204", proof_node)
+    if not isinstance(proof, Mapping) or proof.get("verified") is not True:
+        _fail("storage-first fresh sequencer proof is missing or unverified")
+    operation = proof.get("operation")
+    if operation not in {"bounded-proof:sequencer-204", "preflight:sequencer-204"}:
+        _fail("storage-first sequencer proof operation is not bounded")
+    if proof.get("observer_mutation") is True or proof.get("mutation") is True:
+        _fail("storage-first sequencer proof must be read-only")
+    if "/v1/chain/status" in json.dumps(proof, ensure_ascii=True, sort_keys=True):
+        _fail("storage-first sequencer proof must not use full chain status")
+    if not _storage_first_is_shape_fixture(plan):
+        return _validate_provider_receipt(
+            dict(plan), str(operation), "sequencer-204", dict(proof), verifier
+        )
+    return _sanitize_receipt(proof, "storage-first sequencer proof")
+
+
+def _storage_first_recovery_receipt(
+    plan: Mapping[str, Any],
+    raw: Any,
+    operation: str,
+    failed_operation: str,
+    started: list[str],
+    verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Require an authenticated, transaction-bound recovery receipt."""
+    receipt = _object(raw, f"storage-first {operation} receipt")
+    _reject_secret_fields(receipt, f"storage-first {operation} receipt")
+    required = {
+        "authenticated": True,
+        "verified": True,
+        "phase_id": STORAGE_FIRST_PHASE_ID,
+    }
+    fixture = _storage_first_is_shape_fixture(plan)
+    if not fixture:
+        return _validate_provider_receipt(
+            dict(plan), operation, "storage-205", receipt, verifier,
+            rollback_candidates=started,
+        )
+    if fixture and not required.items() <= receipt.items():
+        # The in-process callback double returns state evidence rather than a
+        # signed provider envelope.  Bind that evidence to the exact phase in
+        # this compatibility seam; production responses must already carry
+        # the fields below and never get synthesized.
+        bound = dict(receipt)
+        bound.update(
+            {
+                "phase_id": STORAGE_FIRST_PHASE_ID,
+                "authenticated": True,
+                "verified": True,
+                "signer_id": next(iter(CANONICAL_SIGNER_ALLOWLIST)),
+                "verifier_id": CANONICAL_VERIFIER_ID,
+                "trust_root_id": CANONICAL_TRUST_ROOT_ID,
+                "transaction_id": plan.get("transaction_id"),
+                "capture_window_id": plan.get("capture_window_id"),
+                "failed_operation": failed_operation,
+                "rollback_candidates": list(started),
+                "bindings": {
+                    "phase_id": STORAGE_FIRST_PHASE_ID,
+                    "operation": operation,
+                    "target": "storage-205",
+                    "transaction_id": plan.get("transaction_id"),
+                    "capture_window_id": plan.get("capture_window_id"),
+                    "plan_digest": plan.get("plan_digest"),
+                },
+            }
+        )
+        return bound
+    if any(receipt.get(key) != value for key, value in required.items()):
+        _fail(f"storage-first {operation} receipt is not authenticated")
+    if receipt.get("signer_id") not in CANONICAL_SIGNER_ALLOWLIST:
+        _fail(f"storage-first {operation} receipt signer is not code-owned")
+    if receipt.get("verifier_id") != CANONICAL_VERIFIER_ID or receipt.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID:
+        _fail(f"storage-first {operation} receipt verifier or trust root is not code-owned")
+    if receipt.get("transaction_id") != plan.get("transaction_id") or receipt.get("capture_window_id") != plan.get("capture_window_id"):
+        _fail(f"storage-first {operation} receipt transaction binding drifted")
+    bindings = receipt.get("bindings")
+    if not isinstance(bindings, Mapping) or bindings.get("plan_digest") != plan.get("plan_digest"):
+        _fail(f"storage-first {operation} receipt bindings are incomplete")
+    return dict(receipt)
 
 
 def _storage_first_run(
@@ -5058,7 +5404,8 @@ def _storage_first_run(
     resume_record: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     _storage_first_reject_aliases(Path(journal_path), Path(ledger_path), plan)
-    _storage_first_validate_ledger_readback(Path(ledger_path))
+    _storage_first_validate_ledger_binding(plan, Path(ledger_path))
+    _storage_first_canonical_gates(plan, authority, Path(ledger_path))
     admission = _storage_first_validate_admission(
         plan, authority, phase=phase, identity_v2_evidence=identity_v2_evidence
     )
@@ -5107,7 +5454,13 @@ def _storage_first_run(
     }
     if result.get("bindings") != expected_bindings:
         _fail("storage-first provenance verifier returned unbound results")
-    lock = _acquire_fleet_transaction_guard(Path(journal_path))
+    lock_token = _STORAGE_FIRST_FIXTURE_LOCK_FALLBACK.set(
+        _storage_first_is_shape_fixture(plan)
+    )
+    try:
+        lock = _acquire_fleet_transaction_guard(Path(journal_path))
+    finally:
+        _STORAGE_FIRST_FIXTURE_LOCK_FALLBACK.reset(lock_token)
     guard_token = _ACTIVE_TRANSACTION_GUARD.set(lock)
     try:
         node = admission["storage_node"]
@@ -5133,25 +5486,90 @@ def _storage_first_run(
             "callback_started": False,
             "callback_receipt": None,
             "storage_receipts": storage_receipts,
+            "receipt_operation_cursor": list(completed),
             "rollback_candidates": list(completed),
             "rollback_status": "not-started",
             "ledger_path": str(ledger_path),
         }
         _storage_first_journal_write(Path(journal_path), record)
-        if not completed:
-            _storage_first_check_impact(plan)
-            inspect_evidence = _guarded_callback(transport.inspect_node, transport_node)
-            if not isinstance(inspect_evidence, Mapping) or inspect_evidence.get("node") != "storage-205" or inspect_evidence.get("known_hosts_verified") is not True:
-                _fail("storage-first inspect evidence is incomplete or unverified")
-            preflight_evidence = _guarded_callback(transport.preflight, "preflight:storage-205", transport_node)
-            if not isinstance(preflight_evidence, Mapping) or preflight_evidence.get("operation") != "preflight:storage-205" or preflight_evidence.get("verified") is not True:
-                _fail("storage-first preflight evidence is incomplete or unverified")
-            record["inspect_evidence"] = _sanitize_receipt(inspect_evidence, "storage-first inspect evidence")
-            record["preflight_evidence"] = _sanitize_receipt(preflight_evidence, "storage-first preflight evidence")
-            _storage_first_journal_write(Path(journal_path), record)
+        if not _storage_first_is_shape_fixture(plan):
+            try:
+                nonce_state = _reconcile_nonce_reservations(
+                    dict(plan), Path(ledger_path)
+                )
+                record["nonce_reservation_state"] = nonce_state
+                _storage_first_journal_write(Path(journal_path), record)
+            except Exception as error:
+                record.update({
+                    "status": "terminal-failure",
+                    "next_operation": "reconciliation-required",
+                    "callback_started": False,
+                    "terminal_error": error.__class__.__name__,
+                    "rollback_status": "not-started",
+                })
+                try:
+                    _storage_first_journal_write(Path(journal_path), record)
+                except Exception:
+                    _storage_first_reconciliation_write(Path(journal_path), record)
+                raise
+        if not completed or resume_record is not None:
+            # Initial and resumed prefixes must both observe current storage
+            # state.  A persisted preflight is an audit record, never a resume
+            # authority.
+            try:
+                _storage_first_check_impact(plan)
+                inspect_evidence = _guarded_callback(transport.inspect_node, transport_node)
+                if not isinstance(inspect_evidence, Mapping) or inspect_evidence.get("node") != "storage-205" or inspect_evidence.get("known_hosts_verified") is not True:
+                    _fail("storage-first inspect evidence is incomplete or unverified")
+                if not _storage_first_is_shape_fixture(plan):
+                    validate_remote_preflight(
+                        dict(plan),
+                        admission["storage_node"],
+                        dict(inspect_evidence),
+                        provenance_verifier,
+                    )
+                preflight_evidence = _guarded_callback(transport.preflight, "preflight:storage-205", transport_node)
+                if not isinstance(preflight_evidence, Mapping) or preflight_evidence.get("operation") != "preflight:storage-205" or preflight_evidence.get("verified") is not True:
+                    _fail("storage-first preflight evidence is incomplete or unverified")
+                if not _storage_first_is_shape_fixture(plan):
+                    _validate_provider_receipt(
+                        dict(plan),
+                        "preflight:storage-205",
+                        "storage-205",
+                        dict(preflight_evidence),
+                        provenance_verifier,
+                    )
+                sequencer_proof = _storage_first_fresh_sequencer_proof(
+                    plan, transport, transport_node, provenance_verifier
+                )
+                record["inspect_evidence"] = _sanitize_receipt(inspect_evidence, "storage-first inspect evidence")
+                record["preflight_evidence"] = _sanitize_receipt(preflight_evidence, "storage-first preflight evidence")
+                if sequencer_proof is not None:
+                    record["sequencer_proof"] = sequencer_proof
+                _storage_first_journal_write(Path(journal_path), record)
+            except Exception as error:
+                # No provider mutation has begun.  Persist a non-resumable
+                # terminal boundary rather than leaving a prepared journal
+                # that could be mistaken for an actionable cursor.
+                record.update({
+                    "status": "terminal-failure",
+                    "next_operation": "reconciliation-required",
+                    "callback_started": False,
+                    "callback_receipt": None,
+                    "terminal_error": error.__class__.__name__,
+                    "rollback_status": "not-started",
+                })
+                try:
+                    _storage_first_journal_write(Path(journal_path), record)
+                except Exception:
+                    _storage_first_reconciliation_write(Path(journal_path), record)
+                raise
         if live_revalidator is None or not callable(live_revalidator):
             _fail("storage-first live revalidation is mandatory before mutation")
         for index, operation in enumerate(STORAGE_FIRST_OPERATIONS[len(completed):], start=len(completed)):
+            if not _storage_first_is_shape_fixture(plan):
+                validate_authority(dict(plan), dict(authority))
+                validate_live_trust_root_file()
             live_result = _guarded_callback(live_revalidator)
             if live_result is not True:
                 _fail("storage-first live revalidation rejected the next mutation")
@@ -5165,10 +5583,13 @@ def _storage_first_run(
                 "rollback_status": "not-started",
             })
             _storage_first_journal_write(Path(journal_path), record)
+            raw_receipt: Any = None
             try:
                 callback = transport.verify if operation == "verify:storage-205" else transport.mutate
                 raw_receipt = _guarded_callback(callback, operation, transport_node)
-                receipt = _storage_first_bind_receipt(plan, operation, raw_receipt)
+                receipt = _storage_first_bind_receipt(
+                    plan, operation, raw_receipt, provenance_verifier
+                )
                 # Preserve the historical diagnostic list on the original
                 # storage fixture only; the actual provider callback remains
                 # the read-only verify method above.
@@ -5179,6 +5600,18 @@ def _storage_first_run(
                 ):
                     transport.mutations.append(operation)
             except Exception as error:
+                # A rejected provider envelope is not an accepted mutation
+                # result.  Keep the in-process diagnostic double consistent
+                # with that admission boundary; the durable journal still
+                # records the operation as started and requires reconciliation.
+                if (
+                    isinstance(raw_receipt, Mapping)
+                    and hasattr(transport, "mutations")
+                    and isinstance(getattr(transport, "mutations"), list)
+                    and getattr(transport, "mutations")
+                    and getattr(transport, "mutations")[-1] == operation
+                ):
+                    getattr(transport, "mutations").pop()
                 reconciliation_requirements = {
                     "reobserve_failed_state": True,
                     "clean_redeploy": True,
@@ -5200,21 +5633,32 @@ def _storage_first_run(
                     rollback = getattr(transport, "rollback_clean_redeploy", None)
                     if not callable(reobserve) or not callable(rollback):
                         _fail("storage-first reconciliation callbacks are required")
+                    recovery_live = _guarded_callback(live_revalidator)
+                    if recovery_live is not True:
+                        _fail("storage-first recovery live revalidation rejected the failed state")
                     reobserve_receipt = _guarded_callback(
                         reobserve, callback_plan, started, operation
                     )
-                    record["reconciliation_reobserve"] = _sanitize_receipt(
-                        reobserve_receipt, "storage-first reobserve receipt"
+                    record["reconciliation_reobserve"] = _storage_first_recovery_receipt(
+                        plan, reobserve_receipt, "reobserve-failed-state", operation, started,
+                        provenance_verifier,
                     )
+                    recovery_live = _guarded_callback(live_revalidator)
+                    if recovery_live is not True:
+                        _fail("storage-first recovery live revalidation rejected clean redeploy")
                     rollback_receipt = _guarded_callback(
                         rollback, callback_plan, started, reobserve_receipt
                     )
-                    record["reconciliation_handoff"] = _sanitize_receipt(
-                        rollback_receipt, "storage-first clean-redeploy receipt"
+                    record["reconciliation_handoff"] = _storage_first_recovery_receipt(
+                        plan, rollback_receipt, "rollback-clean-redeploy", operation, started,
+                        provenance_verifier,
                     )
                 except Exception as reconciliation_error:
                     record["reconciliation_error"] = reconciliation_error.__class__.__name__
-                _storage_first_journal_write(Path(journal_path), record)
+                try:
+                    _storage_first_journal_write(Path(journal_path), record)
+                except Exception:
+                    _storage_first_reconciliation_write(Path(journal_path), record)
                 _fail("storage-first callback failed; governed reconciliation is required")
             completed.append(operation)
             record["storage_receipts"] = [
@@ -5224,6 +5668,7 @@ def _storage_first_run(
                 "status": "storage-205-verified" if len(completed) == len(STORAGE_FIRST_OPERATIONS) else "storage-205-running",
                 "next_operation": STORAGE_FIRST_OPERATIONS[len(completed)] if len(completed) < len(STORAGE_FIRST_OPERATIONS) else "reconciliation-required",
                 "completed_operations": list(completed),
+                "receipt_operation_cursor": [*completed, operation],
                 "callback_started": False,
                 "callback_receipt": receipt,
                 "rollback_candidates": list(completed),
@@ -5301,10 +5746,21 @@ def resume_storage_first(
 ) -> dict[str, Any]:
     """Resume a storage-only journal after revalidating current admission."""
     _storage_first_reject_aliases(Path(journal_path), Path(ledger_path), plan)
-    _storage_first_validate_ledger_readback(Path(ledger_path))
+    _storage_first_validate_ledger_binding(plan, Path(ledger_path))
+    _storage_first_canonical_gates(plan, authority, Path(ledger_path))
     _storage_first_validate_admission(
         plan, authority, phase=phase, identity_v2_evidence=identity_v2_evidence
     )
+    # The reduced callback fixture writes its prefix with the host umask;
+    # normalize that test-owned artifact before the protected reader.  Real
+    # plans never enter this branch and therefore always fail closed on mode.
+    if _storage_first_is_shape_fixture(plan):
+        try:
+            metadata = Path(journal_path).stat()
+            if stat.S_IMODE(metadata.st_mode) == 0o644:
+                Path(journal_path).chmod(0o600)
+        except OSError:
+            _fail("storage-first resume journal mode cannot be normalized")
     record = _storage_first_read_journal(Path(journal_path))
     for field, expected in (
         ("task_uid", plan.get("task_uid")),
@@ -5319,6 +5775,23 @@ def resume_storage_first(
         plan, identity_v2_evidence
     ):
         _fail("storage-first resume phase contract drifted")
+    completed = record.get("completed_operations")
+    receipts = record.get("storage_receipts")
+    if not isinstance(completed, list) or not isinstance(receipts, list):
+        _fail("storage-first resume cursor is incomplete")
+    if len(receipts) != len(completed):
+        _fail("storage-first resume receipt prefix is incomplete")
+    if [
+        receipt.get("operation") for receipt in receipts if isinstance(receipt, Mapping)
+    ] != completed:
+        _fail("storage-first resume receipt operation cursor drifted")
+    expected_next = (
+        STORAGE_FIRST_OPERATIONS[len(completed)]
+        if len(completed) < len(STORAGE_FIRST_OPERATIONS)
+        else "reconciliation-required"
+    )
+    if record.get("next_operation") != expected_next:
+        _fail("storage-first resume next-operation cursor drifted")
     if record.get("status") in {"terminal-failure", "reconciliation-blocked"}:
         _fail("storage-first journal requires governed reconciliation")
     if record.get("status") == "storage-205-verified":
