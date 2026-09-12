@@ -29,7 +29,7 @@ mod capability_authorization_transaction;
 mod capability_authorization_validation;
 mod capability_catalog;
 mod capability_effect_receipt_projection;
-#[cfg(test)]
+#[cfg(any(test, feature = "test_tier_required"))]
 mod capability_test_fixture;
 mod cognition_command;
 mod cognition_economy;

@@ -6,6 +6,7 @@ use oasis7_proto::distributed::{BlobRef, WIRE_ENCODING_CBOR, WorldBlock, WorldHe
 use serde::{Deserialize, Serialize};
 
 mod driver_startup_recovery;
+mod execution_hash;
 mod product_validation_intent;
 mod provider_bootstrap;
 

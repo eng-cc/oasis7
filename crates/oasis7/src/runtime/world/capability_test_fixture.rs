@@ -38,7 +38,7 @@ impl World {
     /// Install a complete, proof-bearing provider capability fixture for an
     /// already-bound in-crate live test World.  Viewer only opts into this
     /// seam; it does not construct authority, grant, or invocation fields.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test_tier_required"))]
     pub fn install_test_provider_capability_fixture(
         &mut self,
         agent_id: &str,
@@ -53,7 +53,7 @@ impl World {
     /// legacy cognition balance. This lets Runtime bootstrap tests exercise
     /// the explicit provisioning path while keeping the production fixture
     /// behavior unchanged.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test_tier_required"))]
     pub fn install_test_provider_capability_fixture_without_cognition_balance(
         &mut self,
         agent_id: &str,
@@ -67,7 +67,7 @@ impl World {
     /// Build a complete explicit ProviderBacked bootstrap bundle from the
     /// proof-bearing in-crate fixture. The helper is test-only; production
     /// bundles must come from the externally governed authority path.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test_tier_required"))]
     pub fn test_provider_backed_bootstrap_authority(
         &self,
         agent_id: &str,
@@ -166,7 +166,7 @@ impl World {
     /// command scope with the primary fixture grant while carrying a distinct
     /// nonce. This lets bootstrap tests exercise the ambiguity boundary where
     /// catalog selection must not silently replace the caller-supplied grant.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test_tier_required"))]
     pub fn install_test_provider_additional_capability_grant(
         &mut self,
         agent_id: &str,
