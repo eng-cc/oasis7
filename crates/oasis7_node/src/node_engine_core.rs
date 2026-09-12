@@ -445,9 +445,49 @@ impl PosNodeEngine {
         let queued_payload_bytes = queued.iter().fold(0usize, |total, action| {
             total.saturating_add(action.payload_cbor.len())
         });
+        if let Err(reason) = validate_replicated_execution_input_actions(queued.as_slice(), 0) {
+            release_action_payload_bytes(
+                &self.pending_consensus_action_queue_bytes,
+                queued_payload_bytes,
+            );
+            return Err(NodeError::Consensus {
+                reason: format!("validate queued replicated execution inputs failed: {reason}"),
+            });
+        }
         let mut filtered = Vec::with_capacity(queued.len());
+        let mut future_inputs = Vec::new();
         let mut dropped_payload_bytes = 0usize;
         for action in queued {
+            if let Some(input) = decode_replicated_execution_input_action(&action).map_err(
+                |reason| NodeError::Consensus {
+                    reason: format!(
+                        "decode queued replicated execution input failed action_id={}: {reason}",
+                        action.action_id
+                    ),
+                },
+            )? {
+                if input.target_height == 0 {
+                    release_action_payload_bytes(
+                        &self.pending_consensus_action_queue_bytes,
+                        queued_payload_bytes,
+                    );
+                    return Err(NodeError::Consensus {
+                        reason: format!(
+                            "queued replicated execution input is not height-bound before proposal height {}",
+                            self.next_height
+                        ),
+                    });
+                }
+                if input.target_height > self.next_height {
+                    future_inputs.push(action);
+                    continue;
+                }
+                if input.target_height < self.next_height {
+                    dropped_payload_bytes =
+                        dropped_payload_bytes.saturating_add(action.payload_cbor.len());
+                    continue;
+                }
+            }
             match should_drop_transfer_action_before_proposal(&action, now_ms) {
                 Ok(true) => {
                     dropped_payload_bytes =
@@ -467,6 +507,10 @@ impl PosNodeEngine {
             &self.pending_consensus_action_queue_bytes,
             dropped_payload_bytes,
         );
+        for action in future_inputs {
+            self.pending_consensus_actions
+                .insert(action.action_id, action);
+        }
         Ok(filtered)
     }
 
@@ -529,6 +573,7 @@ impl PosNodeEngine {
                     "applying committed decision",
                 )?;
                 self.clear_pending_action_reservation()?;
+                self.discard_replicated_execution_inputs_through_height(decision.height)?;
                 self.committed_height = decision.height;
                 self.network_committed_height = self.network_committed_height.max(decision.height);
                 self.last_committed_block_hash = Some(decision.block_hash.clone());

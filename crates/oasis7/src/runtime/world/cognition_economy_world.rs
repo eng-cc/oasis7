@@ -101,14 +101,73 @@ impl World {
     ) -> Result<CognitionLeaseV1, WorldError> {
         let mut transaction = self.clone();
         let mut economy = transaction.cognition_economy()?;
-        let lease = economy
-            .reserve(request, transaction.state.time)
-            .map_err(world_economy_error)?;
+        let lease = if let Some(binding_key) =
+            transaction.cognition_provisioning_binding_for_request(&request, &economy)?
+        {
+            economy
+                .reserve_for_binding(request, binding_key, transaction.state.time)
+                .map_err(world_economy_error)?
+        } else {
+            economy
+                .reserve(request, transaction.state.time)
+                .map_err(world_economy_error)?
+        };
         transaction.cognition["cognition_economy"] =
             economy.snapshot_json().map_err(world_economy_error)?;
         transaction.persist_runtime_transaction_if_configured()?;
         *self = transaction;
         Ok(lease)
+    }
+
+    fn cognition_provisioning_binding_for_request(
+        &self,
+        request: &CognitionLeaseRequestV1,
+        economy: &CognitionEconomyStateV1,
+    ) -> Result<Option<String>, WorldError> {
+        if !self
+            .cognition
+            .get("runtime_binding")
+            .is_some_and(serde_json::Value::is_object)
+        {
+            return Ok(None);
+        }
+        let binding = self.current_cognition_runtime_binding()?;
+        let account_has_provision = economy.provisions.values().any(|record| {
+            record.request.account_id == request.account_id
+                && record.request.resource == request.quote.resource
+        });
+        if !account_has_provision {
+            return Ok(None);
+        }
+        let identity = self
+            .capability_revocation_state
+            .agent_identities
+            .get(request.agent_id.as_str())
+            .ok_or_else(|| {
+                world_economy_error(CognitionEconomyError::InvalidState(
+                    "cognition_provisioning_identity_missing",
+                ))
+            })?;
+        let Some(record) = economy.provisions.values().find(|record| {
+            let provision = &record.request;
+            provision.account_id == request.account_id
+                && provision.owner_binding == identity.owner_binding
+                && provision.owner_generation == identity.generation
+                && provision.world_id == binding.world_id
+                && provision.branch_id == binding.branch_id
+                && provision.reorg_epoch == binding.reorg_epoch
+                && provision.resource == request.quote.resource
+        }) else {
+            return Err(world_economy_error(CognitionEconomyError::Conflict(
+                "cognition_provisioning_binding_required",
+            )));
+        };
+        if request.quote.world_binding != binding.base_world_hash.to_string() {
+            return Err(world_economy_error(CognitionEconomyError::Conflict(
+                "cognition_provisioning_binding_mismatch",
+            )));
+        }
+        Ok(Some(record.request.binding_key()))
     }
 
     pub fn settle_cognition_lease(

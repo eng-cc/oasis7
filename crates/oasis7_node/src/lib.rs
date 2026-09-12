@@ -58,6 +58,7 @@ mod node_engine_network;
 mod node_engine_network_hash;
 mod node_engine_peer_types;
 mod node_engine_proposal_reservation;
+mod node_engine_replicated_input;
 mod node_engine_replication;
 mod node_engine_replication_checkpoint;
 mod node_engine_replication_checkpoint_fetch;
@@ -71,6 +72,7 @@ mod node_engine_transfer_filter;
 mod node_runtime_batch_retention;
 mod node_runtime_core;
 mod node_runtime_lifecycle;
+mod node_runtime_replicated_input;
 mod pos_engine_gossip;
 mod pos_schedule;
 mod pos_state_store;
@@ -101,6 +103,10 @@ pub use execution_hook::{
     NodeExecutionCheckpointBlob, NodeExecutionCheckpointBlobRef, NodeExecutionCheckpointBundle,
     NodeExecutionCheckpointDescriptor, NodeExecutionCheckpointInstallContext,
     NodeExecutionCommitContext, NodeExecutionCommitResult, NodeExecutionHook,
+    NodeReplicatedExecutionInputV1, PROVIDER_BACKED_BOOTSTRAP_EXECUTION_INPUT_KIND,
+    REPLICATED_EXECUTION_INPUT_ACTION_ID, REPLICATED_EXECUTION_INPUT_SUBMITTER,
+    REPLICATED_EXECUTION_INPUT_VERSION, bind_replicated_execution_input_action,
+    decode_replicated_execution_input_action, validate_replicated_execution_input_actions,
 };
 use gossip_udp::{
     GossipAttestationMessage, GossipCommitMessage, GossipEndpoint, GossipMessage,
@@ -156,6 +162,7 @@ use feedback_runtime::{
 use network_bridge::{ConsensusNetworkEndpoint, ReplicationNetworkEndpoint};
 use node_engine_peer_types::{ConsensusMisbehaviorEvidence, PeerCommittedHead};
 use node_runtime_core::RuntimeState;
+use node_runtime_replicated_input::bind_pending_replicated_execution_inputs as bind_replicated_inputs;
 use pos_state_store::PosNodeStateStore;
 use pos_validation::{normalize_consensus_public_key_hex, validated_pos_state};
 use provider_publication_queue::{ProviderPublicationEnqueueResult, ProviderPublicationQueue};
@@ -411,6 +418,10 @@ impl NodeRuntime {
                     return Err(err);
                 }
             }
+        }
+        if let Err(err) = bind_replicated_inputs(self, engine.next_height) {
+            self.running.store(false, Ordering::SeqCst);
+            return Err(err);
         }
         {
             let mut current = lock_state(&self.state);
@@ -1181,10 +1192,4 @@ type PendingProposal = NodePosPendingProposal<NodeConsensusAction, PosConsensusS
 type PosDecision = NodePosDecision<NodeConsensusAction, PosConsensusStatus>;
 
 #[cfg(test)]
-mod tests;
-#[cfg(test)]
-mod tests_action_payload;
-#[cfg(test)]
-mod tests_gossip_player;
-#[cfg(test)]
-mod tests_hardening;
+include!("tests_modules.rs");

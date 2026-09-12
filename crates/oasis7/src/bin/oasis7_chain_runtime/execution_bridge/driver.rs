@@ -2,12 +2,9 @@ use std::fs;
 use std::time::{Duration, Instant};
 
 use crate::release_security_policy_for_storage_profile;
-use oasis7::consensus_action_payload::{
-    ConsensusActionPayloadBody, decode_consensus_action_payload,
-};
 use oasis7::runtime::{
-    BlobStore, ChainResourceDerivationContext, LocalCasStore, ProviderBackedBootstrapAuthorityV1,
-    RuntimeCommittedTickContext, World as RuntimeWorld, WorldError, blake3_hex,
+    BlobStore, ChainResourceDerivationContext, LocalCasStore, RuntimeCommittedTickContext,
+    World as RuntimeWorld, WorldError, blake3_hex,
 };
 use oasis7::simulator::{Action as SimulatorAction, ActionSubmitter, WorldEventKind, WorldKernel};
 use oasis7_node::{
@@ -84,11 +81,6 @@ pub(crate) struct NodeRuntimeExecutionDriver {
     /// It is deliberately outside the runtime state root and is cleared after
     /// the authoritative per-height record is published.
     pub(super) pending_product_validation_intent: Option<ProductValidationIntentMarkerV1>,
-    /// Explicit ProviderBacked authority bundles validated at startup and
-    /// consumed by the next canonical execution commit. Keeping these out of
-    /// the persisted world until `on_commit` prevents a startup-only mutation
-    /// from getting ahead of the execution bridge record/head.
-    pub(super) pending_provider_backed_bootstrap: Option<Vec<ProviderBackedBootstrapAuthorityV1>>,
 }
 
 impl NodeRuntimeExecutionDriver {
@@ -382,7 +374,6 @@ impl NodeRuntimeExecutionDriver {
             retention_reconcile_pending,
             retention_reconcile_next_height,
             pending_product_validation_intent: None,
-            pending_provider_backed_bootstrap: None,
         }
     }
 
@@ -692,24 +683,11 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         };
 
         let decode_started_at = Instant::now();
-        let mut decoded_runtime_actions = Vec::with_capacity(context.committed_actions.len());
-        let mut decoded_simulator_actions = Vec::with_capacity(context.committed_actions.len());
-        for action in &context.committed_actions {
-            match decode_consensus_action_payload(action.payload_cbor.as_slice()) {
-                Ok(ConsensusActionPayloadBody::RuntimeAction { action: decoded }) => {
-                    decoded_runtime_actions.push(decoded);
-                }
-                Ok(ConsensusActionPayloadBody::SimulatorAction { action, submitter }) => {
-                    decoded_simulator_actions.push((action, submitter));
-                }
-                Err(err) => {
-                    return Err(format!(
-                        "execution driver decode committed action failed action_id={} err={}",
-                        action.action_id, err
-                    ));
-                }
-            }
-        }
+        let (
+            decoded_runtime_actions,
+            decoded_simulator_actions,
+            replicated_provider_backed_bootstrap,
+        ) = super::driver_replicated_input::decode_committed_actions(&context)?;
         let decode_ms = decode_started_at.elapsed();
         let runtime_action_count = decoded_runtime_actions.len();
 
@@ -724,8 +702,6 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         let previous_execution_world = self.execution_world.clone();
         let previous_simulator_mirror = self.simulator_mirror.clone();
         let previous_state = self.state.clone();
-        let previous_pending_provider_backed_bootstrap =
-            self.pending_provider_backed_bootstrap.clone();
         macro_rules! rollback_on_error {
             ($result:expr) => {
                 match $result {
@@ -734,14 +710,14 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                         self.execution_world = previous_execution_world;
                         self.simulator_mirror = previous_simulator_mirror;
                         self.state = previous_state;
-                        self.pending_provider_backed_bootstrap =
-                            previous_pending_provider_backed_bootstrap;
                         return Err(err);
                     }
                 }
             };
         }
-        rollback_on_error!(self.apply_pending_provider_backed_bootstrap());
+        if let Some(authorities) = replicated_provider_backed_bootstrap.as_deref() {
+            rollback_on_error!(self.apply_provider_backed_bootstrap(authorities));
+        }
         let runtime_step_started_at = Instant::now();
         if !resume_after_product_validation_intent {
             for action in decoded_runtime_actions {
@@ -894,7 +870,6 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                 self.execution_world = previous_execution_world;
                 self.simulator_mirror = previous_simulator_mirror;
                 self.state = previous_state;
-                self.pending_provider_backed_bootstrap = previous_pending_provider_backed_bootstrap;
                 return Err(format!(
                     "execution driver peer mismatch at height {}: local_block={} peer_block={} local_state={} peer_state={}",
                     context.height,
@@ -1018,7 +993,6 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             }
             self.pending_product_validation_intent = None;
         }
-        self.pending_provider_backed_bootstrap = None;
         let persist_world_ms = state_persist_ms;
         let retention_started_at = Instant::now();
         let reconcile_due = self.retention_reconcile_pending

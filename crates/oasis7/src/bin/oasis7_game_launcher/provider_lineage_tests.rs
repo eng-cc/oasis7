@@ -101,3 +101,35 @@ fn build_oasis7_chain_runtime_args_omits_provider_authority_paths_when_chain_dis
     );
     assert!(!args.iter().any(|arg| arg == "/tmp/provider-authority.json"));
 }
+
+#[test]
+fn build_viewer_live_command_forwards_provider_authority_paths_for_hosted_join() {
+    let options = CliOptions {
+        chain_enabled: false,
+        deployment_mode: "hosted_public_join".to_string(),
+        provider_bootstrap_authority_paths: vec![
+            "/tmp/provider-authority-one.json".to_string(),
+            "output/authority bundles/provider-authority-two.json".to_string(),
+        ],
+        ..CliOptions::default()
+    };
+
+    let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
+    let args: Vec<String> = command
+        .get_args()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    let authority_args: Vec<String> = args
+        .windows(2)
+        .filter(|pair| pair[0] == "--provider-bootstrap-authority")
+        .map(|pair| pair[1].clone())
+        .collect();
+
+    assert_eq!(
+        authority_args,
+        vec![
+            "/tmp/provider-authority-one.json".to_string(),
+            "output/authority bundles/provider-authority-two.json".to_string(),
+        ]
+    );
+}

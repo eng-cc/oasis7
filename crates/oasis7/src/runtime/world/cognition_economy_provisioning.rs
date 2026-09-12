@@ -165,7 +165,7 @@ impl CognitionProvisioningRequestV1 {
         Ok(())
     }
 
-    pub(super) fn binding_key(&self) -> String {
+    pub(crate) fn binding_key(&self) -> String {
         economy_digest(
             COGNITION_PROVISIONING_DIGEST_DOMAIN,
             &(
@@ -340,10 +340,11 @@ impl CognitionEconomyStateV1 {
         // A capability owner receives one allowance for one world identity.
         // This also makes two agents sharing an owner account converge on the
         // same provision instead of silently refilling the account.
+        let binding_key = request.binding_key();
         if self
             .provisions
             .values()
-            .any(|existing| existing.request.binding_key() == request.binding_key())
+            .any(|existing| existing.request.binding_key() == binding_key)
         {
             return Err(CognitionEconomyError::Conflict(
                 "cognition_provisioning_binding_conflict",
@@ -356,13 +357,53 @@ impl CognitionEconomyStateV1 {
             .and_then(|resources| resources.get(request.resource.as_str()))
             .is_some()
         {
-            return Err(CognitionEconomyError::Conflict(
-                "cognition_provisioning_balance_already_initialized",
-            ));
+            // Snapshots written before versioned provisioning stored the
+            // allowance in the account-wide legacy map. Move that allowance
+            // to its immutable historical binding before installing the new
+            // generation/reorg binding. Existing leases are moved with it so
+            // terminal transitions still settle against their original fund.
+            let legacy_binding = self
+                .provisions
+                .values()
+                .find(|existing| {
+                    existing.request.account_id == request.account_id
+                        && existing.request.resource == request.resource
+                })
+                .map(|existing| existing.request.binding_key());
+            let Some(legacy_binding) = legacy_binding else {
+                return Err(CognitionEconomyError::Conflict(
+                    "cognition_provisioning_balance_already_initialized",
+                ));
+            };
+            let legacy_balance = self
+                .balances
+                .get_mut(request.account_id.as_str())
+                .and_then(|resources| resources.remove(request.resource.as_str()))
+                .expect("legacy balance checked above");
+            if self
+                .balances
+                .get(request.account_id.as_str())
+                .is_some_and(BTreeMap::is_empty)
+            {
+                self.balances.remove(request.account_id.as_str());
+            }
+            self.provisioned_balances
+                .entry(legacy_binding.clone())
+                .or_default()
+                .insert(request.resource.clone(), legacy_balance);
+            for lease in self.leases.values() {
+                if lease.account_id == request.account_id
+                    && lease.quote.resource == request.resource
+                    && !self.lease_binding_keys.contains_key(&lease.lease_id)
+                {
+                    self.lease_binding_keys
+                        .insert(lease.lease_id.clone(), legacy_binding.clone());
+                }
+            }
         }
 
-        self.balances
-            .entry(request.account_id.clone())
+        self.provisioned_balances
+            .entry(binding_key)
             .or_default()
             .insert(
                 request.resource.clone(),

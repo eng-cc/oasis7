@@ -99,6 +99,11 @@ impl PosNodeEngine {
                 ),
             });
         }
+        validate_replicated_execution_input_actions(actions, 0).map_err(|reason| {
+            NodeError::Consensus {
+                reason: format!("inbound replicated execution input validation failed: {reason}"),
+            }
+        })?;
         actions.iter().try_fold(0usize, |total, action| {
             if action.payload_cbor.len() > self.max_consensus_action_payload_bytes {
                 return Err(NodeError::Consensus {

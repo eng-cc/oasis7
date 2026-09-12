@@ -2,6 +2,9 @@ use std::fs;
 use std::path::PathBuf;
 
 use oasis7::runtime::{ProviderBackedBootstrapAuthorityV1, World as RuntimeWorld};
+use oasis7_node::{
+    NodeReplicatedExecutionInputV1, NodeRuntime, PROVIDER_BACKED_BOOTSTRAP_EXECUTION_INPUT_KIND,
+};
 
 use super::driver::NodeRuntimeExecutionDriver;
 
@@ -31,53 +34,50 @@ impl NodeRuntimeExecutionDriver {
         Ok(world)
     }
 
-    pub(crate) fn stage_provider_backed_bootstrap_authorities(
+    pub(super) fn apply_provider_backed_bootstrap(
         &mut self,
-        authorities: Vec<ProviderBackedBootstrapAuthorityV1>,
+        authorities: &[ProviderBackedBootstrapAuthorityV1],
     ) -> Result<(), String> {
         if authorities.is_empty() {
-            return Ok(());
+            return Err("ProviderBacked authority bootstrap input cannot be empty".to_string());
         }
-        if let Some(existing) = self.pending_provider_backed_bootstrap.as_ref() {
-            if existing == &authorities {
-                return Ok(());
-            }
-            return Err(
-                "ProviderBacked authority bootstrap already staged with different input"
-                    .to_string(),
-            );
-        }
-
-        // Validate the complete batch against a detached world. This keeps
-        // malformed or mismatched authority input fail-closed at startup
-        // without writing the execution world before a canonical commit.
         let mut validation_world = self.execution_world_without_persistence()?;
         validation_world
-            .bootstrap_provider_backed_authorities(authorities.as_slice())
+            .bootstrap_provider_backed_authorities(authorities)
             .map_err(|error| {
                 format!(
-                    "validate ProviderBacked authority bootstrap for canonical execution commit failed: {error:?}"
+                    "apply ProviderBacked authority bootstrap for canonical execution commit failed: {error:?}"
                 )
             })?;
-        self.pending_provider_backed_bootstrap = Some(authorities);
+        self.execution_world = validation_world;
         Ok(())
     }
+}
 
-    pub(super) fn apply_pending_provider_backed_bootstrap(&mut self) -> Result<(), String> {
-        let Some(authorities) = self.pending_provider_backed_bootstrap.as_ref() else {
-            return Ok(());
-        };
-        let mut staged_world = self.execution_world_without_persistence()?;
-        staged_world
-            .bootstrap_provider_backed_authorities(authorities.as_slice())
-            .map_err(|error| {
-                format!(
-                    "apply ProviderBacked authority bootstrap in canonical execution commit failed: {error:?}"
-                )
-            })?;
-        self.execution_world = staged_world;
-        Ok(())
+pub(super) fn decode_provider_backed_bootstrap_execution_input(
+    input: &NodeReplicatedExecutionInputV1,
+) -> Result<Vec<ProviderBackedBootstrapAuthorityV1>, String> {
+    if input.kind != PROVIDER_BACKED_BOOTSTRAP_EXECUTION_INPUT_KIND {
+        return Err(format!(
+            "unsupported replicated execution input kind {}",
+            input.kind
+        ));
     }
+    if input.target_height == 0 {
+        return Err(
+            "ProviderBacked authority bootstrap input must be bound to a commit height".to_string(),
+        );
+    }
+    let authorities = serde_cbor::from_slice::<Vec<ProviderBackedBootstrapAuthorityV1>>(
+        input.payload_cbor.as_slice(),
+    )
+    .map_err(|error| {
+        format!("decode ProviderBacked authority bootstrap replicated input failed: {error}")
+    })?;
+    if authorities.is_empty() {
+        return Err("ProviderBacked authority bootstrap input cannot be empty".to_string());
+    }
+    Ok(authorities)
 }
 
 /// Load explicit authority bundles before entering the chain runtime loop.
@@ -105,18 +105,28 @@ fn load_provider_backed_bootstrap_authorities(
         .collect()
 }
 
-/// Stage explicit ProviderBacked authority bundles for the next canonical
-/// execution commit. The live world writer lock is held by the chain runtime
-/// before this function is called. Runtime validates the whole batch without
-/// persistence here; the execution bridge applies and publishes it together
-/// with the next per-height commit/replay record.
+/// Translate explicit ProviderBacked authority bundles into one producer-side
+/// replicated execution input. The input is queued in the node consensus
+/// engine and is committed only when the authoritative proposer includes it;
+/// materializing nodes receive the exact ordered bytes through the block.
 pub(crate) fn publish_provider_backed_bootstrap_from_paths(
-    driver: &mut NodeRuntimeExecutionDriver,
+    runtime: &NodeRuntime,
     paths: &[PathBuf],
 ) -> Result<(), String> {
     if paths.is_empty() {
         return Ok(());
     }
     let authorities = load_provider_backed_bootstrap_authorities(paths)?;
-    driver.stage_provider_backed_bootstrap_authorities(authorities)
+    let payload_cbor = serde_cbor::to_vec(&authorities).map_err(|error| {
+        format!("encode ProviderBacked authority bootstrap replicated input failed: {error}")
+    })?;
+    runtime
+        .submit_replicated_execution_input(NodeReplicatedExecutionInputV1::new(
+            PROVIDER_BACKED_BOOTSTRAP_EXECUTION_INPUT_KIND,
+            0,
+            payload_cbor,
+        ))
+        .map_err(|error| {
+            format!("queue ProviderBacked authority bootstrap replicated input failed: {error}")
+        })
 }

@@ -1,0 +1,374 @@
+//! Cognition economy authority-binding and snapshot reconstruction regressions.
+
+use super::super::*;
+use serde_json::Value;
+
+fn authority_quote_for(
+    account_id: &str,
+    id: &str,
+    amount: u64,
+    world_binding: &str,
+) -> CognitionLeaseQuoteV1 {
+    CognitionLeaseQuoteV1::new(id, "cognition_units", amount).with_authority(
+        account_id,
+        COGNITION_RESOURCE_VERSION_V1,
+        "provider_cognition",
+        "agent_turn",
+        COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION,
+        "authority-context-a",
+        world_binding,
+    )
+}
+
+fn bound_world_with_identity(agent_id: &str, owner_binding: &str) -> World {
+    let mut world = World::new();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: agent_id.to_string(),
+        pos: crate::geometry::GeoPos::new(0, 0, 0),
+    });
+    world.step().expect("register provider agent");
+    world
+        .bind_cognition_runtime("provision-world", "main", 0, None, "pending", 0)
+        .expect("bind cognition runtime");
+    world
+        .install_capability_agent_identity(agent_id, owner_binding, 1)
+        .expect("install capability identity");
+    world
+}
+
+#[test]
+fn provisioning_versions_balances_across_owner_generations() {
+    let mut economy = CognitionEconomyStateV1::new();
+    let old_request = CognitionProvisioningRequestV1::new(
+        "provision-generation-1",
+        "owner-a",
+        "owner-a",
+        1,
+        "world-a",
+        "main",
+        0,
+        7,
+        "authority-a",
+    );
+    let old_binding = old_request.binding_key();
+    economy
+        .provision(old_request, 1)
+        .expect("first generation allowance");
+
+    let old_lease_request = CognitionLeaseRequestV1::new(
+        "generation-1-lease",
+        "owner-a",
+        "agent-a",
+        "session-a",
+        "turn-a",
+        "request-a",
+        "request-digest-a",
+        CognitionLeaseQuoteV1::new("generation-1-quote", "cognition_units", 4).with_authority(
+            "owner-a",
+            COGNITION_RESOURCE_VERSION_V1,
+            "provider_cognition",
+            "agent_turn",
+            COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION,
+            "authority-a",
+            "world-a",
+        ),
+    );
+    let old_lease = economy
+        .reserve_for_binding(old_lease_request, old_binding, 2)
+        .expect("old generation reserve");
+
+    let new_request = CognitionProvisioningRequestV1::new(
+        "provision-generation-2",
+        "owner-a",
+        "owner-a",
+        2,
+        "world-a",
+        "main",
+        1,
+        2,
+        "authority-b",
+    );
+    let new_binding = new_request.binding_key();
+    economy
+        .provision(new_request, 3)
+        .expect("new generation allowance must be independently provisionable");
+    assert_eq!(economy.available_balance("owner-a", "cognition_units"), 5);
+
+    let new_lease_request = CognitionLeaseRequestV1::new(
+        "generation-2-lease-too-large",
+        "owner-a",
+        "agent-a",
+        "session-b",
+        "turn-b",
+        "request-b",
+        "request-digest-b",
+        CognitionLeaseQuoteV1::new("generation-2-quote-too-large", "cognition_units", 3)
+            .with_authority(
+                "owner-a",
+                COGNITION_RESOURCE_VERSION_V1,
+                "provider_cognition",
+                "agent_turn",
+                COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION,
+                "authority-b",
+                "world-a",
+            ),
+    );
+    assert_eq!(
+        economy
+            .reserve_for_binding(new_lease_request, new_binding.clone(), 4)
+            .expect_err("new generation must not spend old allowance")
+            .code(),
+        "cognition_insufficient_balance"
+    );
+
+    let new_lease_request = CognitionLeaseRequestV1::new(
+        "generation-2-lease",
+        "owner-a",
+        "agent-a",
+        "session-b",
+        "turn-b",
+        "request-b",
+        "request-digest-b",
+        CognitionLeaseQuoteV1::new("generation-2-quote", "cognition_units", 2).with_authority(
+            "owner-a",
+            COGNITION_RESOURCE_VERSION_V1,
+            "provider_cognition",
+            "agent_turn",
+            COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION,
+            "authority-b",
+            "world-a",
+        ),
+    );
+    economy
+        .reserve_for_binding(new_lease_request, new_binding, 4)
+        .expect("new generation may spend its new allowance");
+    economy
+        .release(&old_lease.lease_id, 5)
+        .expect("old lease remains bound to old balance");
+    economy.validate().expect("versioned balances remain valid");
+    assert_eq!(economy.available_balance("owner-a", "cognition_units"), 7);
+}
+
+#[test]
+fn world_reserve_uses_current_generation_provisioning_binding() {
+    let mut world = bound_world_with_identity("agent-a", "owner-a");
+    world
+        .provision_cognition_for_agent("agent-a", "provision-generation-1", "authority-a", 7)
+        .expect("provision generation one allowance");
+    let old_world_binding = world
+        .current_cognition_runtime_binding()
+        .expect("generation one runtime binding")
+        .base_world_hash
+        .to_string();
+    let old_lease = world
+        .reserve_cognition_lease(CognitionLeaseRequestV1::new(
+            "world-generation-1-lease",
+            "owner-a",
+            "agent-a",
+            "session-a",
+            "turn-a",
+            "request-a",
+            "request-digest-a",
+            authority_quote_for("owner-a", "world-generation-1-quote", 4, &old_world_binding),
+        ))
+        .expect("generation one lease");
+
+    world
+        .install_capability_agent_identity("agent-a", "owner-a", 2)
+        .expect("rotate capability generation");
+    world
+        .provision_cognition_for_agent("agent-a", "provision-generation-2", "authority-a", 2)
+        .expect("provision generation two allowance");
+    let new_world_binding = world
+        .current_cognition_runtime_binding()
+        .expect("generation two runtime binding")
+        .base_world_hash
+        .to_string();
+
+    let oversized = world.reserve_cognition_lease(CognitionLeaseRequestV1::new(
+        "world-generation-2-oversized",
+        "owner-a",
+        "agent-a",
+        "session-b",
+        "turn-b",
+        "request-b",
+        "request-digest-b",
+        authority_quote_for(
+            "owner-a",
+            "world-generation-2-oversized-quote",
+            3,
+            &new_world_binding,
+        ),
+    ));
+    let oversized_error = format!(
+        "{:?}",
+        oversized.expect_err("old allowance must not fund generation two")
+    );
+    assert!(oversized_error.contains("cognition_insufficient_balance"));
+
+    let new_lease = world
+        .reserve_cognition_lease(CognitionLeaseRequestV1::new(
+            "world-generation-2-lease",
+            "owner-a",
+            "agent-a",
+            "session-b",
+            "turn-b",
+            "request-c",
+            "request-digest-c",
+            authority_quote_for("owner-a", "world-generation-2-quote", 2, &new_world_binding),
+        ))
+        .expect("generation two allowance");
+    world
+        .release_cognition_lease(&old_lease.lease_id)
+        .expect("generation one lease remains releasable");
+    world
+        .release_cognition_lease(&new_lease.lease_id)
+        .expect("generation two lease remains releasable");
+    assert_eq!(
+        world
+            .cognition_economy()
+            .expect("read generation balances")
+            .available_balance("owner-a", "cognition_units"),
+        9
+    );
+}
+
+#[test]
+fn from_snapshot_validates_cognition_economy_and_accepts_legacy_absence() {
+    let world = World::new();
+    let mut invalid_snapshot = world.snapshot();
+    let mut economy =
+        serde_json::to_value(world.cognition_economy().expect("economy")).expect("encode economy");
+    economy["head_digest"] = Value::String("blake3:invalid".to_string());
+    invalid_snapshot.cognition = serde_json::json!({ "cognition_economy": economy });
+    let error = World::from_snapshot(invalid_snapshot, world.journal().clone())
+        .expect_err("direct snapshot reconstruction must validate economy");
+    assert!(format!("{error:?}").contains("cognition_economy_head_digest_mismatch"));
+
+    let mut legacy_snapshot = world.snapshot();
+    legacy_snapshot.cognition = Value::Null;
+    World::from_snapshot(legacy_snapshot, world.journal().clone())
+        .expect("legacy snapshots without cognition economy remain valid");
+}
+
+#[test]
+fn legacy_provision_balance_migrates_before_bound_reserve() {
+    let mut economy = CognitionEconomyStateV1::new();
+    let provision = CognitionProvisioningRequestV1::new(
+        "legacy-provision",
+        "owner-a",
+        "owner-a",
+        1,
+        "world-a",
+        "main",
+        0,
+        7,
+        "authority-a",
+    );
+    let binding_key = provision.binding_key();
+    economy.provision(provision, 1).expect("install provision");
+    let old_lease = economy
+        .reserve_for_binding(
+            CognitionLeaseRequestV1::new(
+                "legacy-lease",
+                "owner-a",
+                "agent-a",
+                "session-a",
+                "turn-a",
+                "request-a",
+                "request-digest-a",
+                CognitionLeaseQuoteV1::new("legacy-quote", "cognition_units", 4).with_authority(
+                    "owner-a",
+                    COGNITION_RESOURCE_VERSION_V1,
+                    "provider_cognition",
+                    "agent_turn",
+                    COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION,
+                    "authority-a",
+                    "world-a",
+                ),
+            ),
+            binding_key.clone(),
+            2,
+        )
+        .expect("reserve provision");
+
+    let mut legacy_resources = economy
+        .provisioned_balances
+        .remove(&binding_key)
+        .expect("versioned balance");
+    let legacy_balance = legacy_resources
+        .remove("cognition_units")
+        .expect("versioned resource balance");
+    economy
+        .balances
+        .entry("owner-a".to_string())
+        .or_default()
+        .insert("cognition_units".to_string(), legacy_balance);
+    economy.lease_binding_keys.clear();
+    let encoded = economy.snapshot_json().expect("encode legacy projection");
+    let mut restored = CognitionEconomyStateV1::from_snapshot_json(encoded)
+        .expect("legacy projection remains valid");
+    let before_replay = restored.clone();
+    let replay = restored
+        .reserve_for_binding(
+            CognitionLeaseRequestV1::new(
+                "legacy-lease",
+                "owner-a",
+                "agent-a",
+                "session-a",
+                "turn-a",
+                "request-a",
+                "request-digest-a",
+                CognitionLeaseQuoteV1::new("legacy-quote", "cognition_units", 4).with_authority(
+                    "owner-a",
+                    COGNITION_RESOURCE_VERSION_V1,
+                    "provider_cognition",
+                    "agent_turn",
+                    COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION,
+                    "authority-a",
+                    "world-a",
+                ),
+            ),
+            binding_key.clone(),
+            3,
+        )
+        .expect("replay legacy reserve");
+    assert_eq!(replay.lease_id, old_lease.lease_id);
+    assert_eq!(restored, before_replay, "exact replay remains a no-op");
+
+    let replayed = restored
+        .reserve_for_binding(
+            CognitionLeaseRequestV1::new(
+                "legacy-followup",
+                "owner-a",
+                "agent-a",
+                "session-a",
+                "turn-b",
+                "request-b",
+                "request-digest-b",
+                CognitionLeaseQuoteV1::new("legacy-followup-quote", "cognition_units", 2)
+                    .with_authority(
+                        "owner-a",
+                        COGNITION_RESOURCE_VERSION_V1,
+                        "provider_cognition",
+                        "agent_turn",
+                        COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION,
+                        "authority-a",
+                        "world-a",
+                    ),
+            ),
+            binding_key,
+            3,
+        )
+        .expect("migrate legacy balance before reserve");
+    restored
+        .release(&old_lease.lease_id, 4)
+        .expect("migrated old lease remains terminal");
+    restored
+        .release(&replayed.lease_id, 4)
+        .expect("new bound lease remains terminal");
+    restored
+        .validate()
+        .expect("migrated projection remains valid");
+    assert_eq!(restored.available_balance("owner-a", "cognition_units"), 7);
+}
