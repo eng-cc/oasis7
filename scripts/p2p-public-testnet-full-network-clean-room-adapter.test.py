@@ -335,7 +335,9 @@ class StorageFirstCanonicalTransport(ApplyTransport):
         self.mutations: list[str] = []
 
     def inspect_node(self, node: dict[str, object]) -> dict[str, object]:
-        return StorageFirstInspectEvidence(super().inspect_node(node))
+        evidence = super().inspect_node(node)
+        evidence["known_hosts_verified"] = True
+        return evidence
 
     def mutate(self, operation: str, node: dict[str, object] | None) -> dict[str, object]:
         self.mutations.append(operation)
@@ -399,6 +401,17 @@ class StorageFirstCurrentAdmissionEvidence(dict):
         if key == "digest" and key not in self:
             return self._digest
         return super().get(key, default)
+
+
+def _plain_storage_first_admission_evidence(
+    evidence: Mapping[str, object],
+) -> dict[str, object]:
+    """Materialize the current-admission envelope as an exact plain dict."""
+    projected = StorageFirstCurrentAdmissionEvidence(evidence)
+    materialized = copy.deepcopy(dict(evidence))
+    for key in ("mode", "digest"):
+        materialized[key] = copy.deepcopy(projected.get(key))
+    return materialized
 
 
 class StorageFirstCanonicalPlan(dict):
@@ -4647,8 +4660,8 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
                 "one_shot": True,
             }],
         )
-        fixture.plan = StorageFirstCanonicalPlan(fixture.plan)
-        fixture.identity_v2_evidence = StorageFirstCurrentAdmissionEvidence(
+        fixture.plan = copy.deepcopy(dict(fixture.plan))
+        fixture.identity_v2_evidence = _plain_storage_first_admission_evidence(
             fixture.identity_v2_evidence
         )
         return fixture
@@ -4901,7 +4914,7 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
     def test_storage_first_side_effect_then_throw_requires_reconciliation(self):
         fixture = self._canonical_fixture()
         try:
-            fixture.plan = StorageFirstCanonicalChildPlan(fixture.plan)
+            fixture.plan = copy.deepcopy(dict(fixture.plan))
             transport = StorageFirstCanonicalTransport(
                 fixture.adapter,
                 fixture.plan,
@@ -5151,7 +5164,7 @@ print(json.dumps(record, sort_keys=True))
     def test_qa_sf_005_side_effect_uncertainty_persists_reconciliation_handoff(self) -> None:
         canonical = self.fixture._canonical_fixture()
         try:
-            canonical.plan = StorageFirstCanonicalChildPlan(canonical.plan)
+            canonical.plan = copy.deepcopy(dict(canonical.plan))
             transport = StorageFirstCanonicalTransport(
                 canonical.adapter,
                 canonical.plan,
@@ -5291,7 +5304,7 @@ class StorageFirstFormalFindingsRedTests(unittest.TestCase):
             second_plan = rebind(copy.deepcopy(first_plan))
             canonical.fixture._sign_semantic_fixture(second_plan)
             second_plan["plan_digest"] = canonical.adapter.canonical_plan_digest(second_plan)
-            second_plan = StorageFirstCanonicalPlan(second_plan)
+            second_plan = copy.deepcopy(dict(second_plan))
             first_authority = canonical._authority(True, first_plan)
             second_authority = canonical._authority(True, second_plan)
             canonical.adapter.validate_authority(dict(first_plan), first_authority)
@@ -5840,7 +5853,7 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
         try:
             # The parent plan remains signed and intact; this phase-facing
             # projection narrows only rollback candidates to this child.
-            canonical.plan = StorageFirstCanonicalChildPlan(canonical.plan)
+            canonical.plan = copy.deepcopy(dict(canonical.plan))
             checks: list[str] = []
             transport = StorageFirstCanonicalTransport(
                 canonical.adapter, canonical.plan, side_effect_operation="delete:storage-205"
@@ -5959,7 +5972,7 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
     def test_runtime_sf_013_reconciliation_write_failure_keeps_durable_handoff(self) -> None:
         canonical = self.fixture._canonical_fixture()
         try:
-            canonical.plan = StorageFirstCanonicalChildPlan(canonical.plan)
+            canonical.plan = copy.deepcopy(dict(canonical.plan))
             journal = canonical.root / "reconciliation-write-failure.journal.json"
             original = canonical.adapter._storage_first_journal_write
 
@@ -6324,7 +6337,7 @@ class StorageFirstBlockchainP1RedTests(unittest.TestCase):
     def test_p1_double_journal_write_failure_persists_emergency_handoff(self) -> None:
         canonical = self.fixture._canonical_fixture()
         try:
-            canonical.plan = StorageFirstCanonicalChildPlan(canonical.plan)
+            canonical.plan = copy.deepcopy(dict(canonical.plan))
             journal = canonical.root / "double-journal-failure.journal.json"
             emergency = Path(f"{journal}.emergency.json")
             original_write = canonical.adapter._storage_first_journal_write

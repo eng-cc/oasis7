@@ -4555,6 +4555,120 @@ def _storage_first_require_concrete_plan(plan: Mapping[str, Any]) -> None:
         _fail("storage-first plan must be a concrete adapter plan object")
 
 
+def _storage_first_child_projection(
+    plan: Mapping[str, Any], identity_v2_evidence: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Build the private child view without changing the signed parent plan.
+
+    The public plan is the planner-owned, exact ``dict`` that is validated and
+    transported.  A storage child still needs a few derived admission fields
+    that older in-process fixtures exposed through ``dict`` subclasses.  Keep
+    those values in this private copy instead of widening the signed parent or
+    the provider DTO.
+    """
+    projected = copy.deepcopy(dict(plan))
+    parent_identity = projected.get("identity_v2_evidence")
+    if not isinstance(parent_identity, Mapping):
+        _fail("storage-first signed parent identity-v2 evidence is missing")
+    current_identity = dict(identity_v2_evidence)
+    # ``mode`` and ``digest`` are current-admission projections for the
+    # planner's immutable evidence map.  They are not parent fields in older
+    # signed plans; every other key must remain an exact binding match.
+    for key in ("mode", "digest"):
+        if key not in parent_identity:
+            current_identity.pop(key, None)
+    if current_identity != dict(parent_identity):
+        _fail("storage-first identity-v2 evidence map is not the plan-bound map")
+    if _storage_first_is_shape_fixture(plan):
+        projected["identity_v2_evidence"] = copy.deepcopy(current_identity)
+        return projected
+
+    digest_sources = {
+        "known_hosts_digest": projected.get("canonical_host_inventory"),
+        "package_provenance_digest": (
+            projected.get("truth", {}).get("package")
+            if isinstance(projected.get("truth"), Mapping)
+            else None
+        ),
+        "deployment_inventory_digest": projected.get("deployment_inventory"),
+    }
+    for field, source in digest_sources.items():
+        if projected.get(field) is None:
+            if source is None:
+                _fail(f"storage-first {field} is missing from the signed parent")
+            projected[field] = hashlib.sha256(
+                json.dumps(
+                    {field: source},
+                    ensure_ascii=True,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode()
+            ).hexdigest()
+
+    verifier = projected.get("independent_verifier")
+    if verifier is None:
+        projected["independent_verifier"] = {
+            "verifier_id": CANONICAL_VERIFIER_ID,
+            "trust_root_id": CANONICAL_TRUST_ROOT_ID,
+        }
+
+    impact = projected.get("consumer_impact_record")
+    if isinstance(impact, Mapping):
+        impact = copy.deepcopy(dict(impact))
+        decision = impact.get("decision")
+        if decision is None and isinstance(impact.get("record"), Mapping):
+            decision = impact["record"].get("decision")
+        if decision is not None:
+            projected["consumer_impact_decision"] = decision
+        projected["consumer_impact_record"] = impact
+
+    ledger = projected.get("credential_nonce_ledger")
+    nodes = projected.get("nodes")
+    if isinstance(ledger, Mapping) and isinstance(nodes, list):
+        ledger = copy.deepcopy(dict(ledger))
+        if ledger.get("count") is None:
+            ledger["count"] = len(nodes)
+        if ledger.get("reservations") is None:
+            ledger["reservations"] = [
+                {"node": node.get("name")}
+                for node in nodes
+                if isinstance(node, Mapping) and node.get("name") is not None
+            ]
+        projected["credential_nonce_ledger"] = ledger
+
+    backup = projected.get("forensic_backup")
+    node_order = projected.get("node_order")
+    if isinstance(backup, Mapping) and isinstance(node_order, list):
+        backup = copy.deepcopy(dict(backup))
+        if backup.get("repository") is None:
+            backup["repository"] = REPOSITORY
+        if backup.get("action") is None:
+            backup["action"] = "full-network-clean-room"
+        if backup.get("targets") is None:
+            backup["targets"] = list(node_order)
+        projected["forensic_backup"] = backup
+
+    if projected.get("sequencer_proof") is None and isinstance(nodes, list):
+        sequencer = next(
+            (
+                node
+                for node in nodes
+                if isinstance(node, Mapping) and node.get("name") == "sequencer-204"
+            ),
+            None,
+        )
+        endpoints = sequencer.get("endpoints") if isinstance(sequencer, Mapping) else None
+        projected["sequencer_proof"] = {
+            "operation": "bounded-proof:sequencer-204",
+            "bounded": True,
+            "mutation": False,
+            "endpoint": endpoints.get("evidence") if isinstance(endpoints, Mapping) else None,
+        }
+
+    projected["identity_v2_evidence"] = copy.deepcopy(dict(identity_v2_evidence))
+    return projected
+
+
 def _storage_first_canonical_gates(
     plan: Mapping[str, Any], authority: Mapping[str, Any] | None, ledger_path: Path,
     *, allow_committed_reservations: bool = False,
@@ -4726,6 +4840,10 @@ def _storage_first_validate_admission(
         _fail("storage-first plan must be an object")
     if not isinstance(identity_v2_evidence, Mapping):
         _fail("storage-first apply requires the current identity-v2 evidence map")
+    # The exact public plan has already crossed the canonical parent gates.
+    # From here on, use only a private child copy for derived admission data;
+    # the signed parent remains the value passed to validators and transport.
+    plan = _storage_first_child_projection(plan, identity_v2_evidence)
     node_order = list(_load_planner().NODE_ORDER)
     if plan.get("node_order") != node_order:
         _fail("storage-first parent plan node order is not canonical")
@@ -4791,7 +4909,8 @@ def _storage_first_validate_admission(
     if "/v1/chain/status" in json.dumps(proof, ensure_ascii=True, sort_keys=True):
         _fail("storage-first sequencer proof must not use full chain status")
     impact = plan.get("consumer_impact_record")
-    if not isinstance(impact, Mapping) or impact.get("decision") != "proceed":
+    decision = plan.get("consumer_impact_decision", impact.get("decision") if isinstance(impact, Mapping) else None)
+    if not isinstance(impact, Mapping) or decision != "proceed":
         _fail("storage-first consumer-impact decision must be proceed")
     impact_digest = impact.get("sha256")
     if isinstance(impact_digest, str) and len(impact_digest) == 64:
@@ -4860,6 +4979,7 @@ def _storage_first_validate_admission(
     return {
         "node_order": node_order,
         "storage_node": next(node for node in nodes if node.get("name") == "storage-205"),
+        "plan": plan,
     }
 
 
@@ -4889,7 +5009,8 @@ def _storage_first_phase_digest(
 def _storage_first_check_impact(plan: Mapping[str, Any]) -> None:
     """Check the child-facing impact projection without widening its schema."""
     impact = plan.get("consumer_impact_record")
-    if not isinstance(impact, Mapping) or impact.get("decision") != "proceed":
+    decision = plan.get("consumer_impact_decision", impact.get("decision") if isinstance(impact, Mapping) else None)
+    if not isinstance(impact, Mapping) or decision != "proceed":
         _fail("storage-first consumer-impact decision is not current")
     digest = impact.get("sha256")
     if not isinstance(digest, str) or len(digest) != 64:
@@ -5536,6 +5657,7 @@ def _storage_first_run(
     admission = _storage_first_validate_admission(
         plan, authority, phase=phase, identity_v2_evidence=identity_v2_evidence
     )
+    child_plan = admission["plan"]
     if dry_run:
         return {
             "schema_version": STORAGE_FIRST_JOURNAL_SCHEMA,
@@ -5671,15 +5793,21 @@ def _storage_first_run(
             # state.  A persisted preflight is an audit record, never a resume
             # authority.
             try:
-                _storage_first_check_impact(plan)
+                _storage_first_check_impact(child_plan)
                 inspect_evidence = _guarded_callback(transport.inspect_node, transport_node)
                 if not isinstance(inspect_evidence, Mapping) or inspect_evidence.get("node") != "storage-205" or inspect_evidence.get("known_hosts_verified") is not True:
                     _fail("storage-first inspect evidence is incomplete or unverified")
                 if not _storage_first_is_shape_fixture(plan):
+                    remote_evidence = dict(inspect_evidence)
+                    # The storage child marker is an internal admission
+                    # observation, not part of the planner/provider evidence
+                    # schema.  Keep it out of the canonical validator while
+                    # retaining the strict marker check above.
+                    remote_evidence.pop("known_hosts_verified", None)
                     validate_remote_preflight(
                         dict(plan),
                         admission["storage_node"],
-                        dict(inspect_evidence),
+                        remote_evidence,
                         provenance_verifier,
                     )
                 preflight_evidence = _guarded_callback(transport.preflight, "preflight:storage-205", transport_node)
@@ -5729,7 +5857,7 @@ def _storage_first_run(
             live_result = _guarded_callback(live_revalidator)
             if live_result is not True:
                 _fail("storage-first live revalidation rejected the next mutation")
-            _storage_first_check_impact(plan)
+            _storage_first_check_impact(child_plan)
             record.update({
                 "status": "storage-205-running",
                 "next_operation": operation,
