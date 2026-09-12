@@ -1,7 +1,7 @@
-use super::lineage_persistence::{
-    committed_runtime_record_for_request, validate_provider_lease_binding,
-    validate_provider_lease_identity,
+use super::lineage_generation_recovery::{
+    validate_provider_lease_binding, validate_provider_lease_identity,
 };
+use super::lineage_persistence::committed_runtime_record_for_request;
 use super::*;
 use crate::runtime::World as RuntimeWorld;
 

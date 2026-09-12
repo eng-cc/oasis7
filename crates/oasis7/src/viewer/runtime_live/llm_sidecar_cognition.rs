@@ -310,7 +310,9 @@ impl RuntimeLlmSidecar {
                     goal_snapshot,
                 )?;
                 if let Some(identity) =
-                    lineage_persistence::provider_request_capability_identity(&request_context)
+                    lineage_generation_recovery::provider_request_capability_identity(
+                        &request_context,
+                    )
                 {
                     self.provider_capability_identities
                         .insert(agent_id.clone(), identity);
