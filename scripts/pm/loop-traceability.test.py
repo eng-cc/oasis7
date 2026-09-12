@@ -786,6 +786,45 @@ class TraceabilityTests(unittest.TestCase):
         negative = self.leaf(foreign, self.refresh_record_binding(foreign))
         self.assert_blocked_for(negative, "consumed clause reference", "repository")
 
+    def test_rh_w2_004_present_non_list_consumed_clause_refs_block(self):
+        for invalid in ("bad", {}, 1, True, None):
+            with self.subTest(invalid=invalid):
+                record = deepcopy(self.record)
+                record["consumed_clause_refs"] = invalid
+                result = self.leaf(record, self.refresh_record_binding(record))
+                self.assert_blocked_for(result, "consumed_clause_refs", "list")
+
+        empty = deepcopy(self.record)
+        empty["consumed_clause_refs"] = []
+        result = self.leaf(empty, self.refresh_record_binding(empty))
+        self.assertEqual(result.get("status"), "passed", result)
+
+    def test_rh_w2_005_schema_preserves_generic_and_bound_revision_contracts(self):
+        schema = json.loads((HERE / "schemas" / "loop-change.schema.json").read_text())
+        acceptance_items = schema["$defs"]["obligation"]["properties"]["acceptance_refs"]["items"]["anyOf"]
+        self.assertIn({"$ref": "#/$defs/path_ref"}, acceptance_items)
+        self.assertEqual(
+            schema["$defs"]["path_ref"]["properties"]["revision"],
+            {"anyOf": [{"type": "integer", "minimum": 1}, {"type": "string", "minLength": 1}]},
+        )
+        self.assertEqual(
+            schema["properties"]["consumed_clause_refs"],
+            {"type": "array", "items": {"$ref": "#/$defs/bound_path_ref"}},
+        )
+        self.assertEqual(
+            schema["$defs"]["bound_path_ref"]["properties"]["revision"],
+            {"type": "integer", "minimum": 1},
+        )
+
+        generic_string = deepcopy(self.record)
+        self.assertEqual(self.leaf(generic_string).get("status"), "passed")
+        for invalid in (True, 0, -1, 1.0, ""):
+            with self.subTest(invalid=invalid):
+                record = deepcopy(self.record)
+                record["required_obligations"][0]["acceptance_refs"][0]["revision"] = invalid
+                result = self.leaf(record, self.refresh_record_binding(record))
+                self.assert_blocked_for(result, "acceptance reference", "revision")
+
     def test_sys_w2_003_published_contract_uses_declared_frozen_source_head(self):
         source_a = "a" * 40
         source_b = "b" * 40

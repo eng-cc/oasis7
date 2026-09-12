@@ -352,6 +352,8 @@ def _validate_record_shape(record: Any) -> list[str]:
                 errors.append(f"{obligation_id} owner_loop is invalid or missing")
             if not isinstance(obligation.get("owner_role"), str) or not obligation["owner_role"].strip():
                 errors.append(f"{obligation_id} owner_role is invalid or missing")
+    if "consumed_clause_refs" in record and not isinstance(record["consumed_clause_refs"], list):
+        errors.append("consumed_clause_refs must be a list when present")
     feedback = record.get("feedback")
     if not isinstance(feedback, list):
         errors.append("feedback must be a list")
@@ -403,8 +405,13 @@ def _validate_bound_identity(reference: dict[str, Any], field: str, *, strict_re
     if strict_revision:
         if type(reference["revision"]) is not int or reference["revision"] < 1:
             raise TraceabilityError(f"{field} revision must be a positive integer")
-    elif not isinstance(reference["revision"], (int, str)) or not str(reference["revision"]).strip():
-        raise TraceabilityError(f"{field} revision is invalid")
+    else:
+        revision = reference["revision"]
+        if type(revision) is int:
+            if revision < 1:
+                raise TraceabilityError(f"{field} revision must be a positive integer")
+        elif not isinstance(revision, str) or not revision.strip():
+            raise TraceabilityError(f"{field} revision must be a positive integer or non-empty string")
     _digest(reference["contract_digest"], f"{field} contract_digest")
     _authority_reference(reference["publication_ref"], f"{field} publication_ref")
 
