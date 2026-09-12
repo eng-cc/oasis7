@@ -61,6 +61,8 @@ def validate_authority_map(value: Any, *, task_uid: str, expected_role: str) -> 
     digest = value.get("authority_digest")
     if not isinstance(digest, str) or not DIGEST.fullmatch(digest):
         errors.append("approval authority map digest is invalid")
+    elif digest != authority_digest(value):
+        errors.append("approval authority map digest recomputation mismatch")
     return errors
 
 

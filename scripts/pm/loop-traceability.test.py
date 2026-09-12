@@ -378,12 +378,14 @@ class FixtureReaders:
         self.authority_results.append(result)
         return result
 
-    def install_live_leaf_results(self, candidate, evidence):
+    def install_live_leaf_results(
+        self, candidate, evidence, *, profile="fixture_repository_state", mode="fixture"
+    ):
         for row, item in zip(candidate["applicability_matrix"], evidence):
             leaf_candidate = deepcopy(item["candidate"])
             verification = {
-                "profile": "fixture_repository_state",
-                "mode": "fixture",
+                "profile": profile,
+                "mode": mode,
                 "frozen_source_head": leaf_candidate["source_head_oid"],
                 "frozen_source_tree": leaf_candidate["tested_tree_oid"],
                 "repository_fingerprint_before": "1" * 64,
@@ -1126,7 +1128,12 @@ class TraceabilityTests(unittest.TestCase):
             item["candidate"]["configuration_digest"] = candidate["configuration_digest"]
             row["configuration_digest"] = candidate["configuration_digest"]
         readers = FixtureReaders(record)
-        readers.install_live_leaf_results(candidate, evidence)
+        readers.install_live_leaf_results(
+            candidate,
+            evidence,
+            profile="repository_required",
+            mode="live_nonfinal",
+        )
         readers.install_authority_map_and_approval(record, candidate, evidence)
         result = self.aggregate(candidate, evidence, record, readers)
         self.assertEqual(result.get("status"), "passed", result)
@@ -1198,6 +1205,92 @@ class TraceabilityTests(unittest.TestCase):
         readers.authority = authority
         result = self.aggregate(candidate, evidence, record, readers)
         self.assert_blocked_for(result, "verification", "profile")
+
+    def test_live_leaf_result_requires_complete_bound_verification_projection(self):
+        mutations = [
+            ("missing frozen source head", lambda verification: verification.pop("frozen_source_head", None)),
+            ("missing before fingerprint", lambda verification: verification.pop("repository_fingerprint_before", None)),
+            ("missing after fingerprint", lambda verification: verification.pop("repository_fingerprint_after", None)),
+            ("mismatched frozen source head", lambda verification: verification.update({"frozen_source_head": "0" * 40})),
+            ("fabricated before fingerprint", lambda verification: verification.update({"repository_fingerprint_before": "2" * 64})),
+        ]
+        failures = []
+        for label, mutate in mutations:
+            with self.subTest(case=label):
+                record = deepcopy(self.record)
+                candidate, evidence = self.complete_aggregate(record)
+                candidate["configuration_digest"] = _configuration_digest(candidate)
+                for row, item in zip(candidate["applicability_matrix"], evidence):
+                    item["candidate"]["configuration_digest"] = candidate["configuration_digest"]
+                    row["configuration_digest"] = candidate["configuration_digest"]
+
+                readers = FixtureReaders(record)
+                readers.install_live_leaf_results(candidate, evidence)
+                readers.install_authority_map_and_approval(record, candidate, evidence)
+                original_authority = readers.authority
+
+                def authority(*args, **kwargs):
+                    reference = args[0] if args else kwargs.get("authority_ref") or kwargs.get("coordination_ref")
+                    result = original_authority(*args, **kwargs)
+                    if isinstance(reference, dict) and reference.get("comment_id") == LEAF_RESULT_COMMENT_IDS[LEAF_UID]:
+                        body = json.loads(result["comment"]["body"])
+                        body["verification"]["profile"] = "repository_required"
+                        body["verification"]["mode"] = "live_nonfinal"
+                        mutate(body["verification"])
+                        body["verification_digest"] = self.api.leaf_verification_digest(body["verification"])
+                        body["evidence_digest"] = self.api.leaf_evidence_digest(
+                            body["task_uid"], body["status"], body["candidate"], body["verification_digest"]
+                        )
+                        body_text = _canonical(body)
+                        result["comment"]["body"] = body_text
+                        candidate["applicability_matrix"][0]["leaf_evidence_locator"]["body_digest"] = (
+                            "sha256:" + hashlib.sha256(body_text.encode("utf-8")).hexdigest()
+                        )
+                        candidate["applicability_matrix"][0]["leaf_evidence_digest"] = body["evidence_digest"]
+                        evidence[0]["evidence_digest"] = body["evidence_digest"]
+                    return result
+
+                readers.authority = authority
+                result = self.aggregate(candidate, evidence, record, readers)
+                if result.get("status") != "blocked":
+                    failures.append({"case": label, "status": result.get("status"), "blockers": result.get("blockers")})
+        self.assertFalse(failures, failures)
+
+    def test_live_leaf_result_rejects_fixture_profile_on_live_reader(self):
+        record = deepcopy(self.record)
+        candidate, evidence = self.complete_aggregate(record)
+        candidate["configuration_digest"] = _configuration_digest(candidate)
+        for row, item in zip(candidate["applicability_matrix"], evidence):
+            item["candidate"]["configuration_digest"] = candidate["configuration_digest"]
+            row["configuration_digest"] = candidate["configuration_digest"]
+        readers = FixtureReaders(record)
+        readers.install_live_leaf_results(candidate, evidence)
+        readers.install_authority_map_and_approval(record, candidate, evidence)
+        result = self.aggregate(candidate, evidence, record, readers)
+        self.assert_blocked_for(result, "fixture")
+
+    def test_authority_map_rejects_stale_self_digest(self):
+        record = deepcopy(self.record)
+        candidate, evidence = self.complete_aggregate(record)
+        candidate["configuration_digest"] = _configuration_digest(candidate)
+        for row, item in zip(candidate["applicability_matrix"], evidence):
+            item["candidate"]["configuration_digest"] = candidate["configuration_digest"]
+            row["configuration_digest"] = candidate["configuration_digest"]
+        readers = FixtureReaders(record)
+        readers.install_live_leaf_results(candidate, evidence)
+        readers.install_authority_map_and_approval(record, candidate, evidence)
+
+        map_comment = readers.comments[AUTHORITY_MAP_COMMENT_ID]
+        authority_map = json.loads(map_comment["body"])
+        authority_map["authority_digest"] = "sha256:" + "f" * 64
+        map_body = _canonical(authority_map)
+        map_comment["body"] = map_body
+        candidate["equivalence_rules"][0]["authority_map_ref"]["body_digest"] = (
+            "sha256:" + hashlib.sha256(map_body.encode("utf-8")).hexdigest()
+        )
+
+        result = self.aggregate(candidate, evidence, record, readers)
+        self.assert_blocked_for(result, "authority", "digest")
 
     def test_equivalence_approval_role_matches_source_obligation_owner(self):
         record = deepcopy(self.record)
@@ -1357,11 +1450,18 @@ class TraceabilityTests(unittest.TestCase):
     def test_equivalence_requires_published_role_map_and_current_permission(self):
         candidate, evidence = self.complete_aggregate()
         rule = candidate["equivalence_rules"][0]
+        authority_map = build_authority_map(
+            task_uid=self.record["task_uid"],
+            role="producer_system_designer",
+            account="mapped-admin",
+            permission_floor="admin",
+        )
+        authority_map_body = _canonical(authority_map)
         authority_map_ref = {
             "repository": REPOSITORY,
             "issue_number": 3671,
             "comment_id": 5636906120,
-            "body_digest": "sha256:" + "a" * 64,
+            "body_digest": "sha256:" + hashlib.sha256(authority_map_body.encode()).hexdigest(),
         }
         rule["authority_map_ref"] = authority_map_ref
         readers = FixtureReaders(self.record)
@@ -1369,15 +1469,7 @@ class TraceabilityTests(unittest.TestCase):
         positive["reader_kind"] = "github_live_query"
         positive["comment"]["user"] = {"login": "mapped-admin"}
         positive["permission"] = {"permission": "admin"}
-        positive["authority_map"] = {
-            "marker": "oasis7-loop-approval-authority",
-            "schema": "oasis7.loop-approval-authority/v1",
-            "task_uid": self.record["task_uid"],
-            "role": "producer_system_designer",
-            "account": "mapped-admin",
-            "permission_floor": "admin",
-            "authority_digest": "sha256:" + "b" * 64,
-        }
+        positive["authority_map"] = authority_map
         self.assertEqual(
             self.api._validate_approval_authority(
                 positive, rule, self.record, evidence[1]["evidence_digest"]

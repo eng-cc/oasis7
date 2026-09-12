@@ -1312,6 +1312,8 @@ def _validate_leaf_result_readback(
         verification = body.get("verification")
         errors.extend(verification_projection_errors(verification))
         if isinstance(verification, dict):
+            if kind == "github_live_query" and verification.get("profile") == "fixture_repository_state":
+                errors.append("live leaf result verification fixture profile is not allowed")
             if body.get("verification_digest") != leaf_verification_digest(verification):
                 errors.append("leaf result verification_digest mismatch")
         leaf_candidate = body.get("candidate")
@@ -1322,6 +1324,11 @@ def _validate_leaf_result_readback(
             )
             if body.get("evidence_digest") != expected_evidence_digest:
                 errors.append("leaf result evidence_digest mismatch")
+            if (
+                isinstance(verification, dict)
+                and verification.get("frozen_source_head") != leaf_candidate.get("source_head_oid")
+            ):
+                errors.append("leaf result verification frozen_source_head mismatch with candidate")
             for field in CANDIDATE_FIELDS:
                 if row.get(field) is not None and row.get(field) != leaf_candidate.get(field):
                     errors.append(f"leaf result {field} mismatch with matrix row")

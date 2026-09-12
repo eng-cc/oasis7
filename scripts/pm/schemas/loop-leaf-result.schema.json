@@ -29,7 +29,15 @@
     "verification": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["profile", "verification_epoch_stable", "verification_exit_code"],
+      "required": [
+        "profile",
+        "mode",
+        "frozen_source_head",
+        "repository_fingerprint_before",
+        "repository_fingerprint_after",
+        "verification_epoch_stable",
+        "verification_exit_code"
+      ],
       "properties": {
         "profile": {"enum": ["codex_subagent_role_fit", "workflow_behavior", "repository_required", "fixture_repository_state"]},
         "mode": {"enum": ["fixture", "live_nonfinal", "detached_frozen_tree"]},

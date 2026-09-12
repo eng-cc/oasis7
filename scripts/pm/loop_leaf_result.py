@@ -43,6 +43,9 @@ def verification_projection_errors(verification: Any) -> list[str]:
     errors: list[str] = []
     unexpected = sorted(set(verification) - VERIFICATION_FIELDS)
     errors.extend(f"leaf result verification field is not supported: {field}" for field in unexpected)
+    required = VERIFICATION_FIELDS - {"frozen_source_tree"}
+    for field in sorted(required - set(verification)):
+        errors.append(f"leaf result verification {field} is missing")
     profile = verification.get("profile")
     modes = VERIFICATION_PROFILE_MODES.get(profile) if isinstance(profile, str) else None
     if modes is None:
@@ -64,6 +67,12 @@ def verification_projection_errors(verification: Any) -> list[str]:
         errors.append("leaf result verification exit code is not zero")
     if verification.get("verification_epoch_stable") is not True:
         errors.append("leaf result verification epoch is not stable")
+    if (
+        verification.get("repository_fingerprint_before") is not None
+        and verification.get("repository_fingerprint_after") is not None
+        and verification.get("repository_fingerprint_before") != verification.get("repository_fingerprint_after")
+    ):
+        errors.append("leaf result verification repository fingerprints do not match")
     return errors
 
 
