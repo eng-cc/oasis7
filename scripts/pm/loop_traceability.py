@@ -28,6 +28,7 @@ from loop_leaf_result import (
     SCHEMA as LEAF_RESULT_SCHEMA,
     canonical_digest as leaf_canonical_digest,
     leaf_evidence_digest,
+    verification_projection_errors,
     verification_digest as leaf_verification_digest,
 )
 
@@ -908,15 +909,17 @@ def _validate_approval_authority(
         kind = _reader_kind(readback)
         reference = _authority_reference(rule.get("authority_ref"), "equivalence authority_ref")
         authority_map_ref = rule.get("authority_map_ref")
-        if authority_map_ref is not None:
-            if not isinstance(authority_map_ref, dict):
-                errors.append("equivalence authority map reference is invalid")
+        if not isinstance(authority_map_ref, dict):
+            if authority_map_ref is None:
+                errors.append("equivalence authority map reference is required")
             else:
-                try:
-                    _authority_reference(authority_map_ref, "authority_map_ref")
-                    _digest(authority_map_ref.get("body_digest"), "authority_map_ref body_digest")
-                except TraceabilityError as exc:
-                    errors.append(str(exc))
+                errors.append("equivalence authority map reference is invalid")
+        else:
+            try:
+                _authority_reference(authority_map_ref, "authority_map_ref")
+                _digest(authority_map_ref.get("body_digest"), "authority_map_ref body_digest")
+            except TraceabilityError as exc:
+                errors.append(str(exc))
         issue = readback.get("issue")
         comment = readback.get("comment")
         if readback.get("repository") != REPOSITORY:
@@ -968,7 +971,7 @@ def _validate_approval_authority(
         duplicate_comments = [item for item in _flatten_comments(readback.get("comments")) if item.get("id") == reference["comment_id"]]
         if len(duplicate_comments) > 1:
             errors.append("duplicate equivalence authority comment")
-        if authority_map_ref is not None:
+        if isinstance(authority_map_ref, dict):
             expected_role = rule.get("approver_role")
             authority_map = readback.get("authority_map")
             errors.extend(validate_authority_map(authority_map, task_uid=record.get("task_uid"), expected_role=expected_role))
@@ -1012,6 +1015,33 @@ def _validate_equivalence_rules(
         leaf_candidate = _evidence_candidate(evidence_by_uid[source["task_uid"]]) or {}
         if source.get("source_head_oid") != leaf_candidate.get("source_head_oid"):
             errors.append("equivalence source leaf candidate mismatch")
+        source_rows = [
+            row for row in candidate.get("applicability_matrix", [])
+            if isinstance(row, dict) and row.get("leaf_task_uid") == source.get("task_uid")
+        ]
+        source_owner_role = None
+        if len(source_rows) != 1:
+            errors.append("equivalence source leaf must map to exactly one applicability row")
+        else:
+            source_row = source_rows[0]
+            obligations = {
+                item.get("obligation_id"): item
+                for item in record.get("required_obligations", [])
+                if isinstance(item, dict)
+            }
+            slots = {
+                item.get("slot_id"): item
+                for item in record.get("mapping_slots", [])
+                if isinstance(item, dict)
+            }
+            obligation = obligations.get(source_row.get("obligation_id"))
+            slot = slots.get(source_row.get("mapping_slot"))
+            if isinstance(obligation, dict):
+                source_owner_role = obligation.get("owner_role")
+            if isinstance(obligation, dict) and isinstance(slot, dict) and obligation.get("owner_role") != slot.get("owner_role"):
+                errors.append("equivalence source obligation and mapping slot owner_role mismatch")
+            if source_owner_role != rule.get("approver_role"):
+                errors.append("equivalence approver_role does not match source obligation owner_role")
         aggregate_identity = rule.get("aggregate_candidate")
         if not isinstance(aggregate_identity, dict) or aggregate_identity.get("change_id") != candidate.get("change_id") or aggregate_identity.get("tested_tree_oid") != candidate.get("tested_tree_oid"):
             errors.append("equivalence aggregate candidate identity mismatch")
@@ -1032,7 +1062,7 @@ def _validate_equivalence_rules(
                 errors.append("equivalence supporting evidence digest mismatch")
             readback = _reader_result(authority_reader, ref, "equivalence authority readback")
             authority_map_ref = rule.get("authority_map_ref")
-            if authority_map_ref is not None:
+            if isinstance(authority_map_ref, dict):
                 map_ref = _authority_reference(authority_map_ref, "authority_map_ref")
                 _digest(map_ref.get("body_digest"), "authority_map_ref body_digest")
                 map_readback = _reader_result(authority_reader, map_ref, "approval authority map readback")
@@ -1280,13 +1310,7 @@ def _validate_leaf_result_readback(
         if body.get("status") != "passed":
             errors.append("leaf result status is not passed")
         verification = body.get("verification")
-        if not isinstance(verification, dict) or not isinstance(verification.get("profile"), str) or not verification.get("profile").strip():
-            errors.append("leaf result verification profile is missing")
-        else:
-            if verification.get("verification_exit_code") != 0:
-                errors.append("leaf result verification exit code is not zero")
-            if verification.get("verification_epoch_stable") is not True:
-                errors.append("leaf result verification epoch is not stable")
+        errors.extend(verification_projection_errors(verification))
         if isinstance(verification, dict):
             if body.get("verification_digest") != leaf_verification_digest(verification):
                 errors.append("leaf result verification_digest mismatch")

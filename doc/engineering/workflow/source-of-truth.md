@@ -206,10 +206,8 @@ flowchart TD
   O -->|PR check/requested-changes/comment failure| L[Review Fix Loop]
   L --> I
 ```
-
 ### 1.1 Skill Map by Phase
 This map makes skill reachability explicit. TPM owns the route decision as a workflow coordination act and records the selected skill path in GitHub task issue evidence comments before delegated execution begins.
-
 | Phase / trigger | Skill surface | Requiredness | Formal evidence |
 | --- | --- | --- | --- |
 | Any user request starts | `default-workflow-bootstrap` | Required before fact lookup, chat answer, professional slice dispatch, edits, verification, review, or external messaging unless already inside the bound task worktree | Bootstrap entry in GitHub task issue evidence comments |

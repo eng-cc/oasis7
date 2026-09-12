@@ -1162,6 +1162,88 @@ class TraceabilityTests(unittest.TestCase):
             candidate["equivalence_rules"][0]["supporting_evidence_digest"],
         )
 
+    def test_live_leaf_result_requires_repository_owned_verification_profile(self):
+        record = deepcopy(self.record)
+        candidate, evidence = self.complete_aggregate(record)
+        candidate["configuration_digest"] = _configuration_digest(candidate)
+        for row, item in zip(candidate["applicability_matrix"], evidence):
+            item["candidate"]["configuration_digest"] = candidate["configuration_digest"]
+            row["configuration_digest"] = candidate["configuration_digest"]
+
+        readers = FixtureReaders(record)
+        readers.install_live_leaf_results(candidate, evidence)
+        readers.install_authority_map_and_approval(record, candidate, evidence)
+        original_authority = readers.authority
+
+        def authority(*args, **kwargs):
+            reference = args[0] if args else kwargs.get("authority_ref") or kwargs.get("coordination_ref")
+            result = original_authority(*args, **kwargs)
+            if isinstance(reference, dict) and reference.get("comment_id") == LEAF_RESULT_COMMENT_IDS[LEAF_UID]:
+                body = json.loads(result["comment"]["body"])
+                body["verification"]["profile"] = "attacker-profile"
+                body["verification"]["mode"] = "caller-authored"
+                body["verification_digest"] = self.api.leaf_verification_digest(body["verification"])
+                body["evidence_digest"] = self.api.leaf_evidence_digest(
+                    body["task_uid"], body["status"], body["candidate"], body["verification_digest"]
+                )
+                body_text = _canonical(body)
+                result["comment"]["body"] = body_text
+                candidate["applicability_matrix"][0]["leaf_evidence_locator"]["body_digest"] = (
+                    "sha256:" + hashlib.sha256(body_text.encode("utf-8")).hexdigest()
+                )
+                candidate["applicability_matrix"][0]["leaf_evidence_digest"] = body["evidence_digest"]
+                evidence[0]["evidence_digest"] = body["evidence_digest"]
+            return result
+
+        readers.authority = authority
+        result = self.aggregate(candidate, evidence, record, readers)
+        self.assert_blocked_for(result, "verification", "profile")
+
+    def test_equivalence_approval_role_matches_source_obligation_owner(self):
+        record = deepcopy(self.record)
+        candidate, evidence = self.complete_aggregate(record)
+        candidate["configuration_digest"] = _configuration_digest(candidate)
+        for row, item in zip(candidate["applicability_matrix"], evidence):
+            item["candidate"]["configuration_digest"] = candidate["configuration_digest"]
+            row["configuration_digest"] = candidate["configuration_digest"]
+
+        # The equivalence source is the second leaf, whose declared owner is
+        # producer_system_designer.  A map for the other declared owner must
+        # not authorize that source leaf.
+        candidate["equivalence_rules"][0]["approver_role"] = "repository_health_engineer"
+        readers = FixtureReaders(record)
+        readers.install_live_leaf_results(candidate, evidence)
+        readers.install_authority_map_and_approval(record, candidate, evidence)
+        result = self.aggregate(candidate, evidence, record, readers)
+        self.assert_blocked_for(result, "role")
+
+    def test_equivalence_requires_published_authority_map_reference(self):
+        record = deepcopy(self.record)
+        candidate, evidence = self.complete_aggregate(record)
+        candidate["configuration_digest"] = _configuration_digest(candidate)
+        for row, item in zip(candidate["applicability_matrix"], evidence):
+            item["candidate"]["configuration_digest"] = candidate["configuration_digest"]
+            row["configuration_digest"] = candidate["configuration_digest"]
+
+        readers = FixtureReaders(record)
+        readers.install_live_leaf_results(candidate, evidence)
+        readers.install_authority_map_and_approval(record, candidate, evidence)
+        candidate["equivalence_rules"][0].pop("authority_map_ref")
+        original_authority = readers.authority
+
+        def authority(*args, **kwargs):
+            reference = args[0] if args else kwargs.get("authority_ref") or kwargs.get("coordination_ref")
+            result = original_authority(*args, **kwargs)
+            if isinstance(reference, dict) and reference.get("comment_id") == EQUIVALENCE_APPROVAL_COMMENT_ID:
+                result["reader_kind"] = "github_live_query"
+                result["comment"]["user"] = {"login": "attacker"}
+                result["permission"] = {"permission": "write"}
+            return result
+
+        readers.authority = authority
+        result = self.aggregate(candidate, evidence, record, readers)
+        self.assert_blocked_for(result, "authority", "map")
+
     def test_missing_matrix_row_blocks_even_with_terminal_leaf_evidence(self):
         record = deepcopy(self.record)
         candidate = _candidate(record)

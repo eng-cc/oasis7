@@ -28,10 +28,11 @@
     "candidate": {"type": "object"},
     "verification": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["profile", "verification_epoch_stable", "verification_exit_code"],
       "properties": {
-        "profile": {"type": "string", "minLength": 1},
-        "mode": {"type": "string", "minLength": 1},
+        "profile": {"enum": ["codex_subagent_role_fit", "workflow_behavior", "repository_required", "fixture_repository_state"]},
+        "mode": {"enum": ["fixture", "live_nonfinal", "detached_frozen_tree"]},
         "frozen_source_head": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
         "frozen_source_tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
         "repository_fingerprint_before": {"type": "string", "pattern": "^[0-9a-f]{64}$"},

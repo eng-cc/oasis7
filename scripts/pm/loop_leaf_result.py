@@ -15,6 +15,57 @@ UID = re.compile(r"task_[0-9a-f]{32}\Z")
 OID = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 
+# Keep this allowlist aligned with claim-ready.sh's repository-owned profiles.
+# The fixture profile is retained solely for deterministic local tests; live
+# readers still require github_live_query authority before using a result.
+VERIFICATION_PROFILE_MODES = {
+    "codex_subagent_role_fit": frozenset({"live_nonfinal", "detached_frozen_tree"}),
+    "workflow_behavior": frozenset({"live_nonfinal", "detached_frozen_tree"}),
+    "repository_required": frozenset({"live_nonfinal", "detached_frozen_tree"}),
+    "fixture_repository_state": frozenset({"fixture"}),
+}
+VERIFICATION_FIELDS = frozenset({
+    "profile",
+    "mode",
+    "frozen_source_head",
+    "frozen_source_tree",
+    "repository_fingerprint_before",
+    "repository_fingerprint_after",
+    "verification_epoch_stable",
+    "verification_exit_code",
+})
+
+
+def verification_projection_errors(verification: Any) -> list[str]:
+    """Validate the closed repository-owned claim-ready projection."""
+    if not isinstance(verification, dict):
+        return ["leaf result verification is invalid"]
+    errors: list[str] = []
+    unexpected = sorted(set(verification) - VERIFICATION_FIELDS)
+    errors.extend(f"leaf result verification field is not supported: {field}" for field in unexpected)
+    profile = verification.get("profile")
+    modes = VERIFICATION_PROFILE_MODES.get(profile) if isinstance(profile, str) else None
+    if modes is None:
+        errors.append("leaf result verification profile is not repository-owned")
+    mode = verification.get("mode")
+    if not isinstance(mode, str) or not mode.strip():
+        errors.append("leaf result verification mode is missing")
+    elif modes is not None and mode not in modes:
+        errors.append("leaf result verification mode is not supported for profile")
+    for field, pattern in (
+        ("frozen_source_head", OID),
+        ("frozen_source_tree", OID),
+        ("repository_fingerprint_before", re.compile(r"[0-9a-f]{64}\Z")),
+        ("repository_fingerprint_after", re.compile(r"[0-9a-f]{64}\Z")),
+    ):
+        if field in verification and (not isinstance(verification[field], str) or not pattern.fullmatch(verification[field])):
+            errors.append(f"leaf result verification {field} is invalid")
+    if verification.get("verification_exit_code") != 0:
+        errors.append("leaf result verification exit code is not zero")
+    if verification.get("verification_epoch_stable") is not True:
+        errors.append("leaf result verification epoch is not stable")
+    return errors
+
 
 def canonical_bytes(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
@@ -72,11 +123,9 @@ def build_leaf_result(
         raise ValueError("leaf result candidate is invalid")
     if not isinstance(verification, dict):
         raise ValueError("leaf result verification is invalid")
-    profile = verification.get("profile")
-    if not isinstance(profile, str) or not profile.strip():
-        raise ValueError("leaf result verification profile is required")
-    if verification.get("verification_exit_code") != 0 or verification.get("verification_epoch_stable") is not True:
-        raise ValueError("leaf result verification did not pass a stable epoch")
+    verification_errors = verification_projection_errors(verification)
+    if verification_errors:
+        raise ValueError("; ".join(verification_errors))
     if candidate.get("configuration_digest") != canonical_digest(configuration_projection(candidate)):
         raise ValueError("leaf result configuration_digest does not match effective metadata")
     result = {
