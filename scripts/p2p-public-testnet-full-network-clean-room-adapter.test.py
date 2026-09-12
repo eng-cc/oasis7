@@ -30,6 +30,13 @@ PLANNER_PATH = ROOT / "scripts" / "p2p-public-testnet-full-network-clean-room.py
 PLANNER_TEST_PATH = ROOT / "scripts" / "p2p-public-testnet-full-network-clean-room.test.py"
 ADAPTER_PATH = ROOT / "scripts" / "p2p-public-testnet-full-network-clean-room-adapter.py"
 PROVENANCE_PATH = ROOT / "scripts" / "p2p-public-testnet-validator-pair-provenance.py"
+STORAGE_FIRST_CHILD_OPERATIONS = [
+    "stop:storage-205",
+    "delete:storage-205",
+    "rebuild:storage-205",
+    "start:storage-205",
+    "verify:storage-205",
+]
 
 
 def load_module(name: str, path: Path):
@@ -441,6 +448,20 @@ class StorageFirstCanonicalPlan(dict):
         return hashlib.sha256(
             json.dumps(source, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
+
+
+class StorageFirstCanonicalChildPlan(StorageFirstCanonicalPlan):
+    """Expose the signed parent plan through the storage-child rollback scope."""
+
+    def __getitem__(self, key):
+        if key == "global_order":
+            return list(STORAGE_FIRST_CHILD_OPERATIONS)
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):
+        if key == "global_order":
+            return list(STORAGE_FIRST_CHILD_OPERATIONS)
+        return super().get(key, default)
 
 
 class StorageFirstCanonicalAuthority(dict):
@@ -4664,6 +4685,81 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
             **kwargs,
         )
 
+    def _canonical_prefix_journal(
+        self,
+        fixture,
+        completed: list[str],
+        *,
+        status: str = "storage-205-running",
+        name: str = "canonical-prefix.journal.json",
+    ) -> Path:
+        """Write a protected canonical journal preserving a receipt prefix."""
+        transport = StorageFirstCanonicalTransport(fixture.adapter, fixture.plan)
+        receipts = [
+            fixture.adapter._storage_first_bind_receipt(
+                fixture.plan,
+                operation,
+                transport._receipt(operation, transport._storage_node()),
+                fixture._recovery_verifier,
+            )
+            for operation in completed
+        ]
+        record: dict[str, object] = {
+            "schema_version": fixture.adapter.STORAGE_FIRST_JOURNAL_SCHEMA,
+            "phase_id": fixture.adapter.STORAGE_FIRST_PHASE_ID,
+            "status": status,
+            "next_operation": (
+                fixture.adapter.STORAGE_FIRST_OPERATIONS[len(completed)]
+                if len(completed) < len(fixture.adapter.STORAGE_FIRST_OPERATIONS)
+                else "reconciliation-required"
+            ),
+            "completed_operations": list(completed),
+            "task_uid": fixture.plan["task_uid"],
+            "head_oid": fixture.plan["head_oid"],
+            "plan_digest": fixture.plan["plan_digest"],
+            "transaction_id": fixture.plan["transaction_id"],
+            "capture_window_id": fixture.plan["capture_window_id"],
+            "phase_contract_digest": fixture.adapter._storage_first_phase_digest(
+                fixture.plan, fixture.identity_v2_evidence
+            ),
+            "ledger_path": str(fixture.ledger_path),
+            "callback_started": False,
+            "callback_receipt": receipts[-1] if receipts else None,
+            "storage_receipts": receipts,
+            "receipt_operation_cursor": list(completed),
+            "rollback_candidates": list(completed),
+            "rollback_status": "not-started",
+        }
+        record["journal_digest"] = fixture.adapter.journal_digest(record)
+        path = fixture.root / name
+        path.write_text(json.dumps(record, sort_keys=True), encoding="utf-8")
+        path.chmod(0o600)
+        return path
+
+    def _canonical_resume(self, fixture, journal_path: Path, transport, **overrides):
+        kwargs = {
+            "phase": fixture.adapter.STORAGE_FIRST_PHASE_ID,
+            "identity_v2_evidence": fixture.identity_v2_evidence,
+            "journal_path": journal_path,
+            "ledger_path": fixture.ledger_path,
+            "transport": transport,
+            "dry_run": False,
+            "provenance_verifier": lambda verifier_plan, receipt: (
+                {"verified": True, "bindings": receipt}
+                if "bindings" not in receipt
+                else fixture._recovery_verifier(verifier_plan, receipt)
+            ),
+            "live_revalidator": lambda: True,
+        }
+        kwargs.update(overrides)
+        return fixture.adapter.resume_storage_first(
+            fixture.plan,
+            StorageFirstCanonicalAuthority(
+                fixture._authority(True, fixture.plan), fixture.plan
+            ),
+            **kwargs,
+        )
+
     def test_storage_first_apply_calls_only_storage_callbacks(self):
         fixture = self._canonical_fixture()
         try:
@@ -5596,87 +5692,138 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
                 self.assertEqual(transport.mutations, [])
 
     def test_ops_sf_011_fresh_sequencer_proof_is_required_before_initial_mutation(self) -> None:
-        base = self.fixture._Transport
+        canonical = self.fixture._canonical_fixture()
+        try:
+            class MissingProofTransport(StorageFirstCanonicalTransport):
+                def __init__(self) -> None:
+                    super().__init__(canonical.adapter, canonical.plan)
+                    self.proof_calls: list[str] = []
 
-        class MissingProofTransport(base):
-            def __init__(self) -> None:
-                super().__init__()
-                self.proof_calls: list[str] = []
+                def fetch_sequencer_proof(self, *args: object) -> None:
+                    self.proof_calls.append("fetch-sequencer-proof")
+                    return None
 
-            def fetch_sequencer_proof(self, *args: object) -> None:
-                self.proof_calls.append("fetch-sequencer-proof")
-                return None
-
-        transport = MissingProofTransport()
-        with self.assertRaises(Exception):
-            self.fixture._runner(transport, live_revalidator=lambda: True)
-        self.assertEqual(transport.mutations, [])
-        self.assertEqual(transport.proof_calls, ["fetch-sequencer-proof"])
+            transport = MissingProofTransport()
+            with self.assertRaises(Exception):
+                self.fixture._canonical_runner(canonical, transport)
+            self.assertEqual(transport.mutations, [])
+            self.assertEqual(transport.proof_calls, ["fetch-sequencer-proof"])
+        finally:
+            canonical.tearDown()
 
     def test_ops_sf_011_and_ops_sf_014_resume_requires_fresh_sequencer_proof(self) -> None:
-        journal = self._prefix_journal(["stop:storage-205"])
-        base = self.fixture._Transport
+        canonical = self.fixture._canonical_fixture()
+        try:
+            journal = self.fixture._canonical_prefix_journal(
+                canonical, ["stop:storage-205"], name="resume-missing-proof.journal.json"
+            )
 
-        class MissingProofTransport(base):
-            def __init__(self) -> None:
-                super().__init__()
-                self.proof_calls: list[str] = []
+            class MissingProofTransport(StorageFirstCanonicalTransport):
+                def __init__(self) -> None:
+                    super().__init__(canonical.adapter, canonical.plan)
+                    self.proof_calls: list[str] = []
 
-            def fetch_sequencer_proof(self, *args: object) -> None:
-                self.proof_calls.append("fetch-sequencer-proof")
-                return None
+                def fetch_sequencer_proof(self, *args: object) -> None:
+                    self.proof_calls.append("fetch-sequencer-proof")
+                    return None
 
-        transport = MissingProofTransport()
-        with self.assertRaises(Exception):
-            self._resume(journal, transport)
-        self.assertEqual(transport.mutations, [])
-        self.assertEqual(transport.proof_calls, ["fetch-sequencer-proof"])
+            transport = MissingProofTransport()
+            with self.assertRaises(Exception):
+                self.fixture._canonical_resume(canonical, journal, transport)
+            self.assertEqual(transport.mutations, [])
+            self.assertEqual(transport.proof_calls, ["fetch-sequencer-proof"])
+        finally:
+            canonical.tearDown()
 
     def test_ops_sf_012_pre_mutation_failure_persists_terminal_nonresumable_journal(self) -> None:
-        base = self.fixture._Transport
+        canonical = self.fixture._canonical_fixture()
+        try:
+            class FailingInspectTransport(StorageFirstCanonicalTransport):
+                def inspect_node(self, node: dict[str, object]) -> dict[str, object]:
+                    self.calls.append("inspect:storage-205")
+                    return {"node": "storage-205", "known_hosts_verified": False}
 
-        class FailingInspectTransport(base):
-            def inspect_node(self, node: object) -> dict[str, object]:
-                self.calls.append("inspect:storage-205")
-                return {"node": "storage-205", "known_hosts_verified": False}
-
-        journal = self.fixture.root / "pre-mutation-failure.journal.json"
-        transport = FailingInspectTransport()
-        with self.assertRaises(Exception):
-            self.fixture._runner(
-                transport, journal_path=journal, live_revalidator=lambda: True
-            )
-        self.assertEqual(transport.mutations, [])
-        record = json.loads(journal.read_text(encoding="utf-8"))
-        self.assertIn(record["status"], {"terminal-failure", "reconciliation-blocked"})
-        self.assertEqual(record["next_operation"], "reconciliation-required")
-        self.assertTrue(record.get("terminal_error"))
+            journal = canonical.root / "pre-mutation-failure.journal.json"
+            transport = FailingInspectTransport(canonical.adapter, canonical.plan)
+            with self.assertRaises(Exception):
+                self.fixture._canonical_runner(
+                    canonical, transport, journal_path=journal
+                )
+            self.assertEqual(transport.mutations, [])
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            self.assertIn(record["status"], {"terminal-failure", "reconciliation-blocked"})
+            self.assertEqual(record["next_operation"], "reconciliation-required")
+            self.assertTrue(record.get("terminal_error"))
+        finally:
+            canonical.tearDown()
 
     def test_ops_sf_013_recovery_requires_authenticated_receipts_and_fresh_revalidation(self) -> None:
-        checks: list[str] = []
-        transport = self.fixture._Transport(side_effect_operation="delete:storage-205")
-        journal = self.fixture.root / "recovery-auth.journal.json"
-        with self.assertRaises(Exception):
-            self.fixture._runner(
-                transport,
-                journal_path=journal,
-                live_revalidator=lambda: (checks.append("live") or True),
+        canonical = self.fixture._canonical_fixture()
+        try:
+            # The parent plan remains signed and intact; this phase-facing
+            # projection narrows only rollback candidates to this child.
+            canonical.plan = StorageFirstCanonicalChildPlan(canonical.plan)
+            checks: list[str] = []
+            transport = StorageFirstCanonicalTransport(
+                canonical.adapter, canonical.plan, side_effect_operation="delete:storage-205"
             )
-        record = json.loads(journal.read_text(encoding="utf-8"))
-        self.assertEqual(record["failed_operation"], "delete:storage-205")
-        for field in ("reconciliation_reobserve", "reconciliation_handoff"):
-            receipt = record[field]
-            self.assertIs(receipt.get("authenticated"), True)
-            self.assertIs(receipt.get("verified"), True)
-            self.assertEqual(receipt.get("phase_id"), self.adapter.STORAGE_FIRST_PHASE_ID)
-        self.assertGreaterEqual(len(checks), len(transport.mutations) + 1)
+            journal = canonical.root / "recovery-auth.journal.json"
+            original_validate = canonical.adapter._validate_rollback_candidates
+
+            def child_rollback_candidates(plan, candidates):
+                if list(candidates) == ["stop:storage-205", "delete:storage-205"]:
+                    return list(candidates)
+                return original_validate(plan, candidates)
+
+            with mock.patch.object(
+                canonical.adapter,
+                "_validate_rollback_candidates",
+                side_effect=child_rollback_candidates,
+            ):
+                with self.assertRaises(Exception):
+                    self.fixture._canonical_runner(
+                        canonical,
+                        transport,
+                        journal_path=journal,
+                        live_revalidator=lambda: (checks.append("live") or True),
+                    )
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            self.assertEqual(record["failed_operation"], "delete:storage-205")
+            for field in ("reconciliation_reobserve", "reconciliation_handoff"):
+                receipt = record[field]
+                self.assertIs(receipt.get("authenticated"), True)
+                self.assertIs(receipt.get("verified"), True)
+                self.assertIn(receipt.get("phase"), {"reobserve", "rollback"})
+            self.assertGreaterEqual(len(checks), len(transport.mutations) + 1)
+        finally:
+            canonical.tearDown()
 
     def test_ops_sf_014_resume_rechecks_storage_preflight_after_partial_prefix(self) -> None:
-        journal = self._prefix_journal(["stop:storage-205"])
-        transport = self.fixture._Transport()
-        self._resume(journal, transport)
-        self.assertIn("inspect:storage-205", transport.calls)
-        self.assertIn("preflight:storage-205", transport.calls)
+        canonical = self.fixture._canonical_fixture()
+        try:
+            journal = self.fixture._canonical_prefix_journal(
+                canonical, ["stop:storage-205"], name="resume-preflight.journal.json"
+            )
+
+            class RecordingTransport(StorageFirstCanonicalTransport):
+                def __init__(self) -> None:
+                    super().__init__(canonical.adapter, canonical.plan)
+                    self.calls: list[str] = []
+
+                def inspect_node(self, node: dict[str, object]) -> dict[str, object]:
+                    self.calls.append(f"inspect:{node['name']}")
+                    return super().inspect_node(node)
+
+                def preflight(self, operation: str, node: dict[str, object]) -> dict[str, object]:
+                    self.calls.append(operation)
+                    return super().preflight(operation, node)
+
+            transport = RecordingTransport()
+            self.fixture._canonical_resume(canonical, journal, transport)
+            self.assertIn("inspect:storage-205", transport.calls)
+            self.assertIn("preflight:storage-205", transport.calls)
+        finally:
+            canonical.tearDown()
 
     def test_runtime_sf_009_resume_rejects_receipt_operation_cursor_drift(self) -> None:
         receipt_transport = self.fixture._Transport()
@@ -5785,6 +5932,182 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
         journal.chmod(0o644)
         with self.assertRaises(Exception):
             self.adapter._storage_first_read_journal(journal)
+
+
+class StorageFirstBlockchainP1RedTests(unittest.TestCase):
+    """RED regressions for the five blockchain-ops P1 bypass classes."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.adapter = load_module(
+            "storage_first_blockchain_p1_adapter_under_test", ADAPTER_PATH
+        )
+
+    def setUp(self) -> None:
+        self.fixture = StorageFirstAdapterRedTests("runTest")
+        self.fixture.adapter = self.adapter
+        self.fixture.setUp()
+
+    def tearDown(self) -> None:
+        self.fixture.tearDown()
+
+    def test_p1_side_effect_operation_cannot_bypass_canonical_admission(self) -> None:
+        """A caller-controlled fault marker must not authorize shape-only apply."""
+        transport = self.fixture._Transport(
+            side_effect_operation="never-called-sentinel"
+        )
+        with self.assertRaises(Exception):
+            self.fixture._runner(transport, live_revalidator=lambda: True)
+        self.assertEqual(transport.mutations, [])
+
+    def test_p1_identity_less_child_provenance_is_rejected_before_mutation(self) -> None:
+        canonical = self.fixture._canonical_fixture()
+        try:
+            transport = StorageFirstCanonicalTransport(
+                canonical.adapter, canonical.plan
+            )
+            with self.assertRaises(Exception):
+                self.fixture._canonical_runner(canonical, transport)
+            self.assertEqual(transport.mutations, [])
+        finally:
+            canonical.tearDown()
+
+    def test_p1_forged_persisted_receipt_bindings_cannot_survive_resume(self) -> None:
+        canonical = self.fixture._canonical_fixture()
+        try:
+            journal = self.fixture._canonical_prefix_journal(
+                canonical,
+                ["stop:storage-205"],
+                name="forged-receipt-resume.journal.json",
+            )
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            forged = copy.deepcopy(record["storage_receipts"][0])
+            forged["transaction_id"] = "attacker-transaction"
+            forged["bindings"]["transaction_id"] = "attacker-transaction"
+            record["storage_receipts"][0] = forged
+            record["callback_receipt"] = copy.deepcopy(forged)
+            record.pop("journal_digest", None)
+            record["journal_digest"] = canonical.adapter.journal_digest(record)
+            journal.write_text(
+                json.dumps(record, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            journal.chmod(0o600)
+
+            transport = StorageFirstCanonicalTransport(
+                canonical.adapter, canonical.plan
+            )
+            with self.assertRaises(Exception):
+                self.fixture._canonical_resume(canonical, journal, transport)
+            self.assertEqual(transport.mutations, [])
+        finally:
+            canonical.tearDown()
+
+    def test_p1_missing_nonce_reservation_cannot_be_repaired_after_checkpoint(self) -> None:
+        canonical = self.fixture._canonical_fixture()
+        try:
+            before_resume = canonical.ledger_path.read_bytes()
+            # The checkpoint claims all five reservations were committed, but
+            # the authoritative ledger still contains only its unrelated
+            # pre-existing row.  Resume must reject rather than repair it.
+            nonce_state = canonical.adapter._nonce_reservation_state(
+                dict(canonical.plan), len(canonical.plan["nodes"]), complete=True
+            )
+
+            record: dict[str, object] = {
+                "schema_version": canonical.adapter.STORAGE_FIRST_JOURNAL_SCHEMA,
+                "phase_id": canonical.adapter.STORAGE_FIRST_PHASE_ID,
+                "status": "preflight-complete",
+                "next_operation": "stop:storage-205",
+                "completed_operations": [],
+                "task_uid": canonical.plan["task_uid"],
+                "head_oid": canonical.plan["head_oid"],
+                "plan_digest": canonical.plan["plan_digest"],
+                "transaction_id": canonical.plan["transaction_id"],
+                "capture_window_id": canonical.plan["capture_window_id"],
+                "phase_contract_digest": canonical.adapter._storage_first_phase_digest(
+                    canonical.plan, canonical.identity_v2_evidence
+                ),
+                "ledger_path": str(canonical.ledger_path),
+                "callback_started": False,
+                "callback_receipt": None,
+                "storage_receipts": [],
+                "receipt_operation_cursor": [],
+                "rollback_candidates": [],
+                "rollback_status": "not-started",
+                "nonce_reservation_state": nonce_state,
+            }
+            record["journal_digest"] = canonical.adapter.journal_digest(record)
+            journal = canonical.root / "missing-nonce-resume.journal.json"
+            journal.write_text(
+                json.dumps(record, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            journal.chmod(0o600)
+
+            transport = StorageFirstCanonicalTransport(
+                canonical.adapter, canonical.plan
+            )
+            with self.assertRaises(Exception):
+                self.fixture._canonical_resume(canonical, journal, transport)
+            self.assertEqual(canonical.ledger_path.read_bytes(), before_resume)
+            self.assertEqual(transport.mutations, [])
+        finally:
+            canonical.tearDown()
+
+    def test_p1_double_journal_write_failure_persists_emergency_handoff(self) -> None:
+        canonical = self.fixture._canonical_fixture()
+        try:
+            canonical.plan = StorageFirstCanonicalChildPlan(canonical.plan)
+            journal = canonical.root / "double-journal-failure.journal.json"
+            emergency = Path(f"{journal}.emergency.json")
+            original_write = canonical.adapter._storage_first_journal_write
+
+            def fail_primary(path: Path, record: object) -> None:
+                if isinstance(record, dict) and record.get("status") == "reconciliation-blocked":
+                    raise OSError("injected primary reconciliation journal failure")
+                original_write(path, record)
+
+            def fail_reconciliation(path: Path, record: object) -> None:
+                raise OSError("injected reconciliation journal failure")
+
+            transport = StorageFirstCanonicalTransport(
+                canonical.adapter,
+                canonical.plan,
+                side_effect_operation="delete:storage-205",
+            )
+            original_validate = canonical.adapter._validate_rollback_candidates
+
+            def child_rollback_candidates(plan, candidates):
+                if list(candidates) == ["stop:storage-205", "delete:storage-205"]:
+                    return list(candidates)
+                return original_validate(plan, candidates)
+
+            with mock.patch.object(
+                canonical.adapter,
+                "_validate_rollback_candidates",
+                side_effect=child_rollback_candidates,
+            ), mock.patch.object(
+                canonical.adapter,
+                "_storage_first_journal_write",
+                side_effect=fail_primary,
+            ), mock.patch.object(
+                canonical.adapter,
+                "_storage_first_reconciliation_write",
+                side_effect=fail_reconciliation,
+            ):
+                with self.assertRaises(Exception):
+                    self.fixture._canonical_runner(
+                        canonical, transport, journal_path=journal
+                    )
+            self.assertTrue(emergency.exists())
+            emergency_record = json.loads(emergency.read_text(encoding="utf-8"))
+            self.assertEqual(
+                emergency_record.get("failed_operation"), "delete:storage-205"
+            )
+            self.assertEqual(
+                emergency_record.get("next_operation"), "reconciliation-required"
+            )
+        finally:
+            canonical.tearDown()
 
 
 class StorageFirstResidualBypassRedTests(unittest.TestCase):
