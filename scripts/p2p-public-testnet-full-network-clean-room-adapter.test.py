@@ -5451,5 +5451,130 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
             self.adapter._storage_first_read_journal(journal)
 
 
+class StorageFirstResidualBypassRedTests(unittest.TestCase):
+    """RED regressions for the remaining exact-head compatibility bypasses."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.adapter = load_module("storage_first_residual_bypass_adapter_under_test", ADAPTER_PATH)
+
+    def setUp(self) -> None:
+        self.fixture = StorageFirstAdapterRedTests("runTest")
+        self.fixture.adapter = self.adapter
+        self.fixture.setUp()
+        bindings = getattr(self.adapter, "_STORAGE_FIRST_ADMISSION_BINDINGS", None)
+        if isinstance(bindings, dict):
+            bindings.clear()
+        self.plan = self.fixture.plan
+
+    def tearDown(self) -> None:
+        self.fixture.tearDown()
+
+    def test_ops_sf_009_shape_only_library_caller_cannot_bypass_canonical_bytes(self) -> None:
+        """A caller-shaped sentinel plan must not enter destructive apply."""
+        transport = self.fixture._Transport()
+        with self.assertRaises(Exception):
+            self.fixture._runner(transport, live_revalidator=lambda: True)
+        self.assertEqual(transport.mutations, [])
+
+    def test_ops_sf_010_runtime_sf_008_arbitrary_missing_ledger_is_rejected(self) -> None:
+        ledger = self.fixture.root / "arbitrary-missing-ledger.jsonl"
+        transport = self.fixture._Transport()
+        with self.assertRaises(Exception):
+            self.fixture._runner(
+                transport, ledger_path=ledger, live_revalidator=lambda: True
+            )
+        self.assertFalse(ledger.exists())
+        self.assertEqual(transport.mutations, [])
+
+    def test_ops_sf_011_runtime_sf_012_forged_shape_sequencer_proof_is_rejected(self) -> None:
+        base = self.fixture._Transport
+
+        class ForgedProofTransport(base):
+            def fetch_sequencer_proof(self, *args: object) -> dict[str, object]:
+                return {
+                    "operation": "bounded-proof:sequencer-204",
+                    "verified": True,
+                    "mutation": False,
+                }
+
+        transport = ForgedProofTransport()
+        with self.assertRaises(Exception):
+            self.fixture._runner(transport, live_revalidator=lambda: True)
+        self.assertEqual(transport.mutations, [])
+
+    def test_ops_sf_013_shape_recovery_receipts_cannot_be_synthesized(self) -> None:
+        base = self.fixture._Transport
+
+        class BareRecoveryTransport(base):
+            def __init__(self) -> None:
+                super().__init__(side_effect_operation="delete:storage-205")
+                self.raw_reobserve: dict[str, object] | None = None
+
+            def reobserve_failed_state(
+                self, plan: object, started: object, failed_operation: object
+            ) -> dict[str, object]:
+                result = super().reobserve_failed_state(plan, started, failed_operation)
+                self.raw_reobserve = result
+                return result
+
+        transport = BareRecoveryTransport()
+        journal = self.fixture.root / "bare-recovery.journal.json"
+        with self.assertRaises(Exception):
+            self.fixture._runner(
+                transport, journal_path=journal, live_revalidator=lambda: True
+            )
+        self.assertEqual(transport.raw_reobserve, {
+            "failed_operation": "delete:storage-205",
+            "rollback_candidates": ["stop:storage-205", "delete:storage-205"],
+        })
+        record = json.loads(journal.read_text(encoding="utf-8"))
+        self.assertNotEqual(
+            record.get("reconciliation_reobserve", {}).get("authenticated"), True
+        )
+
+    def test_runtime_sf_014_noninitial_running_journal_requires_complete_closure(self) -> None:
+        transport = self.fixture._Transport()
+        transport.plan = self.plan
+        receipt = transport._receipt("stop:storage-205")
+        incomplete = {
+            "schema_version": self.adapter.STORAGE_FIRST_JOURNAL_SCHEMA,
+            "phase_id": self.adapter.STORAGE_FIRST_PHASE_ID,
+            "status": "storage-205-running",
+            "next_operation": "delete:storage-205",
+            "completed_operations": ["stop:storage-205"],
+            "callback_started": False,
+            "callback_receipt": receipt,
+            "storage_receipts": [receipt],
+            "rollback_candidates": ["stop:storage-205"],
+            "rollback_status": "not-started",
+        }
+        with self.assertRaises(Exception):
+            self.adapter.validate_storage_first_journal(incomplete)
+
+    def test_runtime_sf_011_cli_rejects_journal_aliasing_plan_input(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            plan = root / "plan.json"
+            authority = root / "authority.json"
+            ledger = root / "ledger.jsonl"
+            plan.write_text(json.dumps(self.plan), encoding="utf-8")
+            plan.chmod(0o600)
+            authority.write_text(json.dumps(self.fixture._authority()), encoding="utf-8")
+            ledger.write_text("", encoding="utf-8")
+            with mock.patch.object(
+                self.adapter, "execute_storage_first", return_value={"status": "dry-run"}
+            ) as child:
+                with self.assertRaises(Exception):
+                    self.adapter.main([
+                        "--plan", str(plan),
+                        "--authority", str(authority),
+                        "--journal", str(plan),
+                        "--ledger", str(ledger),
+                        "--phase", "storage-205-first",
+                    ])
+            child.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
