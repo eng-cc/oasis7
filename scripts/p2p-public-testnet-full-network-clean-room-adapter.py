@@ -4549,18 +4549,10 @@ def _storage_first_is_shape_fixture(plan: Mapping[str, Any]) -> bool:
     return isinstance(impact, Mapping) and impact.get("sha256") == "c" * 64
 
 
-def _storage_first_is_canonical_child_projection(
-    plan: Mapping[str, Any],
-) -> bool:
-    """Recognize the planner-owned child projection after parent admission."""
-    projected_order = plan.get("global_order")
-    if projected_order != list(STORAGE_FIRST_OPERATIONS):
-        return False
-    try:
-        parent_order = dict(plan).get("global_order")
-    except (TypeError, ValueError):
-        return False
-    return parent_order != projected_order
+def _storage_first_require_concrete_plan(plan: Mapping[str, Any]) -> None:
+    """Reject caller-defined Mapping views before entering storage apply."""
+    if not isinstance(plan, dict):
+        _fail("storage-first plan must be a concrete adapter plan object")
 
 
 def _storage_first_canonical_gates(
@@ -5532,6 +5524,7 @@ def _storage_first_run(
     live_revalidator: Callable[[], Any] | None,
     resume_record: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    _storage_first_require_concrete_plan(plan)
     _storage_first_reject_aliases(Path(journal_path), Path(ledger_path), plan)
     _storage_first_validate_ledger_binding(plan, Path(ledger_path))
     _storage_first_canonical_gates(
@@ -5584,10 +5577,9 @@ def _storage_first_run(
         _fail(f"storage-first provenance verifier failed: {error.__class__.__name__}")
     if not isinstance(result, Mapping) or result.get("verified") is not True:
         _fail("storage-first provenance verifier did not verify the phase")
-    # Legacy in-process doubles expose a side-effect-only lambda while the
-    # governed callback contract is a named verifier returning bound fields.
-    # Keep that compatibility seam narrow: production/named callbacks must
-    # return the exact non-secret binding closure supplied above.
+    # The governed callback contract is a named verifier returning bound
+    # fields.  Every caller, including a child-phase projection, must return
+    # the exact non-secret binding closure and code-owned identity fields.
     expected_bindings = {
         "phase_id": STORAGE_FIRST_PHASE_ID,
         "transaction_id": plan.get("transaction_id"),
@@ -5600,9 +5592,7 @@ def _storage_first_run(
         and result.get("trust_root_id") == CANONICAL_TRUST_ROOT_ID
         and result.get("signer_id") in CANONICAL_SIGNER_ALLOWLIST
     )
-    if result.get("bindings") != expected_bindings or (
-        not identity_bound and not _storage_first_is_canonical_child_projection(plan)
-    ):
+    if result.get("bindings") != expected_bindings or not identity_bound:
         _fail("storage-first provenance verifier returned unbound results")
     lock_token = _STORAGE_FIRST_FIXTURE_LOCK_FALLBACK.set(
         _storage_first_is_shape_fixture(plan)
@@ -5915,6 +5905,7 @@ def resume_storage_first(
     live_revalidator: Callable[[], Any] | None = None,
 ) -> dict[str, Any]:
     """Resume a storage-only journal after revalidating current admission."""
+    _storage_first_require_concrete_plan(plan)
     _storage_first_reject_aliases(Path(journal_path), Path(ledger_path), plan)
     _storage_first_validate_ledger_binding(plan, Path(ledger_path))
     _storage_first_canonical_gates(
