@@ -14,6 +14,7 @@ import hashlib
 import importlib.util
 import json
 import os
+from collections.abc import Mapping
 from pathlib import Path
 import subprocess
 import sys
@@ -6079,6 +6080,51 @@ class StorageFirstBlockchainP1RedTests(unittest.TestCase):
                 self.fixture._canonical_runner(
                     canonical,
                     transport,
+                    provenance_verifier=identity_less_child,
+                )
+            self.assertEqual(transport.mutations, [])
+        finally:
+            canonical.tearDown()
+
+    def test_p1_custom_mapping_cannot_forge_child_projection_for_identityless_provenance(self) -> None:
+        canonical = self.fixture._canonical_fixture()
+        try:
+            class ForgedChildProjection(Mapping):
+                """Caller mapping with divergent get/dict views."""
+
+                def __init__(self, source):
+                    self.source = source
+
+                def __getitem__(self, key):
+                    return self.source[key]
+
+                def __iter__(self):
+                    return iter(self.source.keys())
+
+                def __len__(self):
+                    return len(self.source)
+
+                def keys(self):
+                    return self.source.keys()
+
+                def get(self, key, default=None):
+                    if key == "global_order":
+                        return list(STORAGE_FIRST_CHILD_OPERATIONS)
+                    return self.source.get(key, default)
+
+            forged_plan = ForgedChildProjection(canonical.plan)
+            transport = StorageFirstCanonicalTransport(canonical.adapter, forged_plan)
+
+            def identity_less_child(verifier_plan, receipt):
+                if isinstance(receipt, dict) and "bindings" in receipt:
+                    return canonical._recovery_verifier(verifier_plan, receipt)
+                return {"verified": True, "bindings": receipt}
+
+            with self.assertRaises(Exception):
+                self.fixture._canonical_runner(
+                    canonical,
+                    transport,
+                    plan=forged_plan,
                     provenance_verifier=identity_less_child,
                 )
             self.assertEqual(transport.mutations, [])
