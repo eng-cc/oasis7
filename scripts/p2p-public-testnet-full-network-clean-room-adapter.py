@@ -4575,6 +4575,41 @@ def _storage_first_require_concrete_plan(plan: Mapping[str, Any]) -> None:
     require_exact_containers(plan)
 
 
+def _storage_first_require_concrete_authority(
+    authority: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Normalize the signed parent and reject mutable nested authority views."""
+    if authority is None:
+        return None
+    if not isinstance(authority, dict):
+        _fail("storage-first authority must be a concrete adapter authority object")
+
+    # ``dict.copy`` is the native implementation: it strips a top-level dict
+    # subclass's overrideable ``get``/attribute view while preserving the
+    # canonical parent fields for validation.  Child-only fields are projected
+    # separately after the canonical authority result grants authorization.
+    normalized = dict.copy(authority)
+
+    def require_exact_containers(value: Any) -> None:
+        # Traverse only native containers so a malicious Mapping/Sequence
+        # cannot execute an overridden iterator while crossing this boundary.
+        if type(value) is dict:
+            for child in value.values():
+                require_exact_containers(child)
+            return
+        if type(value) is list:
+            for child in value:
+                require_exact_containers(child)
+            return
+        if isinstance(value, Mapping):
+            _fail("storage-first authority contains a non-concrete nested mapping")
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+            _fail("storage-first authority contains a non-concrete sequence")
+
+    require_exact_containers(normalized)
+    return normalized
+
+
 def _storage_first_child_projection(
     plan: Mapping[str, Any], identity_v2_evidence: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -4692,7 +4727,7 @@ def _storage_first_child_projection(
 def _storage_first_canonical_gates(
     plan: Mapping[str, Any], authority: Mapping[str, Any] | None, ledger_path: Path,
     *, allow_committed_reservations: bool = False,
-) -> None:
+) -> dict[str, Any] | None:
     """Enter every canonical parent gate before the child compatibility seam.
 
     Reduced callback fixtures cannot satisfy the full signed-plan schema, but
@@ -4713,12 +4748,19 @@ def _storage_first_canonical_gates(
             "storage-first apply requires canonical signed parent bytes; "
             "shape-only caller projections are not admissible"
         )
+    authority_summary: dict[str, Any] | None = None
     try:
         validate_plan(dict(plan))
         _validate_planner_authority(dict(plan))
         if not isinstance(authority, Mapping):
             _fail("storage-first current signed authority is required")
-        validate_authority(dict(plan), dict(authority))
+        validated_authority = validate_authority(dict(plan), dict(authority))
+        if (
+            not isinstance(validated_authority, Mapping)
+            or validated_authority.get("apply_authorized") is not True
+        ):
+            _fail("storage-first current authority does not grant apply authorization")
+        authority_summary = dict(validated_authority)
         validate_live_trust_root_file()
         validate_credential_ledger(
             dict(plan),
@@ -4728,6 +4770,41 @@ def _storage_first_canonical_gates(
     except Exception:
         if not fixture or mocked:
             raise
+    return authority_summary
+
+
+def _storage_first_child_authority(
+    plan: Mapping[str, Any],
+    authority: Mapping[str, Any],
+    authority_summary: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Project canonical parent authorization into the storage child scope."""
+    authority = _storage_first_require_concrete_authority(authority)
+    if not isinstance(authority, dict):
+        _fail("storage-first canonical authority is unavailable")
+    if not isinstance(authority_summary, Mapping):
+        _fail("storage-first canonical authority summary is unavailable")
+    if authority_summary.get("apply_authorized") is not True:
+        _fail("storage-first current authority does not grant apply authorization")
+    capture_window = plan.get("capture_window")
+    if type(capture_window) is not dict:
+        _fail("storage-first parent capture window is not a concrete object")
+    expires_at = capture_window.get("ends_at")
+    _parse_utc(expires_at, "storage-first child authority expires_at")
+    projected = copy.deepcopy(authority)
+    projected.update({
+        "action": STORAGE_FIRST_PHASE_ID,
+        "targets": ["storage-205"],
+        "task_uid": plan.get("task_uid"),
+        "frozen_head_oid": plan.get("head_oid"),
+        "plan_digest": plan.get("plan_digest"),
+        "transaction_id": plan.get("transaction_id"),
+        "capture_window_id": plan.get("capture_window_id"),
+        "current_authorization": authority_summary["apply_authorized"],
+        "signed": authority_summary["apply_authorized"],
+        "expires_at": expires_at,
+    })
+    return projected
 
 
 def _storage_first_admission_binding_digest(
@@ -4854,6 +4931,7 @@ def _storage_first_validate_admission(
     identity_v2_evidence: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     """Validate the storage child boundary without reading operator inputs."""
+    authority = _storage_first_require_concrete_authority(authority)
     if phase != STORAGE_FIRST_PHASE_ID:
         _fail("storage-first apply requires the explicit storage-205-first phase")
     if not isinstance(plan, Mapping):
@@ -5666,16 +5744,20 @@ def _storage_first_run(
     resume_record: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     _storage_first_require_concrete_plan(plan)
+    authority = _storage_first_require_concrete_authority(authority)
     _storage_first_reject_aliases(Path(journal_path), Path(ledger_path), plan)
     _storage_first_validate_ledger_binding(plan, Path(ledger_path))
-    _storage_first_canonical_gates(
+    authority_summary = _storage_first_canonical_gates(
         plan,
         authority,
         Path(ledger_path),
         allow_committed_reservations=resume_record is not None,
     )
+    child_authority = _storage_first_child_authority(
+        plan, authority, authority_summary
+    )
     admission = _storage_first_validate_admission(
-        plan, authority, phase=phase, identity_v2_evidence=identity_v2_evidence
+        plan, child_authority, phase=phase, identity_v2_evidence=identity_v2_evidence
     )
     child_plan = admission["plan"]
     if dry_run:
@@ -5696,7 +5778,7 @@ def _storage_first_run(
     if not _storage_first_is_shape_fixture(plan):
         try:
             provenance_verified = _verify_provenance(
-                dict(plan), dict(authority), provenance_verifier
+                dict(plan), child_authority, provenance_verifier
             )
         except Exception as error:
             _fail(f"storage-first parent provenance verification failed: {error.__class__.__name__}")
@@ -6054,16 +6136,20 @@ def resume_storage_first(
 ) -> dict[str, Any]:
     """Resume a storage-only journal after revalidating current admission."""
     _storage_first_require_concrete_plan(plan)
+    authority = _storage_first_require_concrete_authority(authority)
     _storage_first_reject_aliases(Path(journal_path), Path(ledger_path), plan)
     _storage_first_validate_ledger_binding(plan, Path(ledger_path))
-    _storage_first_canonical_gates(
+    authority_summary = _storage_first_canonical_gates(
         plan,
         authority,
         Path(ledger_path),
         allow_committed_reservations=True,
     )
+    child_authority = _storage_first_child_authority(
+        plan, authority, authority_summary
+    )
     _storage_first_validate_admission(
-        plan, authority, phase=phase, identity_v2_evidence=identity_v2_evidence
+        plan, child_authority, phase=phase, identity_v2_evidence=identity_v2_evidence
     )
     record = _storage_first_read_journal(Path(journal_path))
     for field, expected in (
