@@ -4814,6 +4814,22 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
         self.assertNotIn("fresh-root-probe", transport.operations)
         self.assertNotIn("fleet-health", transport.operations)
 
+    def test_storage_first_success_persists_a_valid_receipt_cursor(self):
+        """A successful run must emit a journal that its validator accepts."""
+        fixture = self._canonical_fixture()
+        journal = fixture.root / "successful-storage-first.journal.json"
+        try:
+            transport = StorageFirstCanonicalTransport(fixture.adapter, fixture.plan)
+            self._canonical_runner(fixture, transport, journal_path=journal)
+            self.assertTrue(journal.exists())
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            self.assertEqual(
+                record["receipt_operation_cursor"], record["completed_operations"]
+            )
+            self.assertTrue(fixture.adapter.validate_storage_first_journal(record))
+        finally:
+            fixture.tearDown()
+
     def test_storage_first_apply_fails_before_lock_without_phase_and_current_map(self):
         self.assertTrue(
             callable(getattr(self.adapter, "execute_storage_first", None)),
