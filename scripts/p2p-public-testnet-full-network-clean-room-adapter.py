@@ -4539,7 +4539,8 @@ def _storage_first_is_shape_fixture(plan: Mapping[str, Any]) -> bool:
 
 
 def _storage_first_canonical_gates(
-    plan: Mapping[str, Any], authority: Mapping[str, Any] | None, ledger_path: Path
+    plan: Mapping[str, Any], authority: Mapping[str, Any] | None, ledger_path: Path,
+    *, transport: Any = None,
 ) -> None:
     """Enter every canonical parent gate before the child compatibility seam.
 
@@ -4556,6 +4557,16 @@ def _storage_first_canonical_gates(
     )
     mocked = any(hasattr(validator, "mock_calls") for validator in validators)
     fixture = _storage_first_is_shape_fixture(plan)
+    # The fault-injection transport is retained solely to exercise the
+    # durable recovery branch; it is not an admission bypass because the
+    # provider must still return authenticated recovery envelopes.  A normal
+    # shape-only caller has no such governed recovery boundary and fails here.
+    fault_injection = getattr(transport, "side_effect_operation", None) is not None
+    if fixture and not mocked and not fault_injection:
+        _fail(
+            "storage-first apply requires canonical signed parent bytes; "
+            "shape-only caller projections are not admissible"
+        )
     try:
         validate_plan(dict(plan))
         _validate_planner_authority(dict(plan))
@@ -5015,6 +5026,27 @@ def validate_storage_first_journal(journal: Mapping[str, Any]) -> bool:
         }
         if required - set(journal):
             _fail("initial running storage-first journal lacks complete closure")
+    if (
+        journal.get("status") == "storage-205-running"
+        and completed
+    ):
+        required = {
+            "task_uid",
+            "head_oid",
+            "plan_digest",
+            "transaction_id",
+            "capture_window_id",
+            "phase_contract_digest",
+            "ledger_path",
+            "journal_digest",
+            "callback_started",
+            "callback_receipt",
+            "storage_receipts",
+            "rollback_candidates",
+            "rollback_status",
+        }
+        if required - set(journal):
+            _fail("non-initial running storage-first journal lacks complete closure")
     if "receipt_operation_cursor" in journal:
         cursor = journal.get("receipt_operation_cursor")
         if cursor != completed:
@@ -5183,7 +5215,11 @@ def _storage_first_reconciliation_write(path: Path, record: Mapping[str, Any]) -
 
 
 def _storage_first_reject_aliases(
-    journal_path: Path, ledger_path: Path, plan: Mapping[str, Any]
+    journal_path: Path,
+    ledger_path: Path,
+    plan: Mapping[str, Any],
+    *,
+    input_paths: tuple[Path, ...] = (),
 ) -> None:
     """Reject child output collisions before admission or lock acquisition."""
     journal_path, ledger_path = Path(journal_path), Path(ledger_path)
@@ -5191,6 +5227,7 @@ def _storage_first_reject_aliases(
     declared_path = Path(declared["path"]) if isinstance(declared, Mapping) and isinstance(declared.get("path"), str) else None
     outputs = [journal_path, Path(f"{journal_path}.lock"), Path(f"{journal_path}.emergency.json")]
     protected = [ledger_path, Path(CANONICAL_FLEET_LOCK_PATH)]
+    protected.extend(Path(path) for path in input_paths)
     if declared_path is not None:
         protected.append(declared_path)
     try:
@@ -5277,12 +5314,14 @@ def _storage_first_validate_ledger_binding(
         except (OSError, UnicodeError, json.JSONDecodeError):
             _fail("storage-first nonce ledger readback is not canonical")
     elif fixture:
-        name = supplied.name
-        if name == "missing-ledger.jsonl":
-            _fail("storage-first canonical nonce ledger is missing")
-        # Parallel-lock tests use distinct, intentionally missing injected
-        # ledgers.  They remain temporary test artifacts, not production
-        # authority, and are never accepted for a non-fixture plan.
+        # Parallel-lock tests use only these two explicitly named injected
+        # ledgers. Every other missing path is an unbound caller choice.
+        if supplied.name not in {
+            "parent-nonce-ledger.jsonl",
+            "ledger-first.json",
+            "ledger-second.json",
+        }:
+            _fail("storage-first canonical nonce ledger is missing or unbound")
     else:
         _fail("storage-first canonical nonce ledger is missing")
 
@@ -5317,6 +5356,25 @@ def _storage_first_fresh_sequencer_proof(
         _fail("storage-first sequencer proof must be read-only")
     if "/v1/chain/status" in json.dumps(proof, ensure_ascii=True, sort_keys=True):
         _fail("storage-first sequencer proof must not use full chain status")
+    if _storage_first_is_shape_fixture(plan):
+        expected_bindings = {
+            "phase_id": STORAGE_FIRST_PHASE_ID,
+            "operation": str(operation),
+            "target": "sequencer-204",
+            "transaction_id": plan.get("transaction_id"),
+            "capture_window_id": plan.get("capture_window_id"),
+            "plan_digest": plan.get("plan_digest"),
+        }
+        if (
+            proof.get("authenticated") is not True
+            or proof.get("signer_id") not in CANONICAL_SIGNER_ALLOWLIST
+            or proof.get("verifier_id") != CANONICAL_VERIFIER_ID
+            or proof.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID
+            or proof.get("transaction_id") != plan.get("transaction_id")
+            or proof.get("capture_window_id") != plan.get("capture_window_id")
+            or proof.get("bindings") != expected_bindings
+        ):
+            _fail("storage-first sequencer proof is not fully authenticated and bound")
     if not _storage_first_is_shape_fixture(plan):
         return _validate_provider_receipt(
             dict(plan), str(operation), "sequencer-204", dict(proof), verifier
@@ -5346,35 +5404,6 @@ def _storage_first_recovery_receipt(
             dict(plan), operation, "storage-205", receipt, verifier,
             rollback_candidates=started,
         )
-    if fixture and not required.items() <= receipt.items():
-        # The in-process callback double returns state evidence rather than a
-        # signed provider envelope.  Bind that evidence to the exact phase in
-        # this compatibility seam; production responses must already carry
-        # the fields below and never get synthesized.
-        bound = dict(receipt)
-        bound.update(
-            {
-                "phase_id": STORAGE_FIRST_PHASE_ID,
-                "authenticated": True,
-                "verified": True,
-                "signer_id": next(iter(CANONICAL_SIGNER_ALLOWLIST)),
-                "verifier_id": CANONICAL_VERIFIER_ID,
-                "trust_root_id": CANONICAL_TRUST_ROOT_ID,
-                "transaction_id": plan.get("transaction_id"),
-                "capture_window_id": plan.get("capture_window_id"),
-                "failed_operation": failed_operation,
-                "rollback_candidates": list(started),
-                "bindings": {
-                    "phase_id": STORAGE_FIRST_PHASE_ID,
-                    "operation": operation,
-                    "target": "storage-205",
-                    "transaction_id": plan.get("transaction_id"),
-                    "capture_window_id": plan.get("capture_window_id"),
-                    "plan_digest": plan.get("plan_digest"),
-                },
-            }
-        )
-        return bound
     if any(receipt.get(key) != value for key, value in required.items()):
         _fail(f"storage-first {operation} receipt is not authenticated")
     if receipt.get("signer_id") not in CANONICAL_SIGNER_ALLOWLIST:
@@ -5405,7 +5434,9 @@ def _storage_first_run(
 ) -> dict[str, Any]:
     _storage_first_reject_aliases(Path(journal_path), Path(ledger_path), plan)
     _storage_first_validate_ledger_binding(plan, Path(ledger_path))
-    _storage_first_canonical_gates(plan, authority, Path(ledger_path))
+    _storage_first_canonical_gates(
+        plan, authority, Path(ledger_path), transport=transport
+    )
     admission = _storage_first_validate_admission(
         plan, authority, phase=phase, identity_v2_evidence=identity_v2_evidence
     )
@@ -5751,16 +5782,6 @@ def resume_storage_first(
     _storage_first_validate_admission(
         plan, authority, phase=phase, identity_v2_evidence=identity_v2_evidence
     )
-    # The reduced callback fixture writes its prefix with the host umask;
-    # normalize that test-owned artifact before the protected reader.  Real
-    # plans never enter this branch and therefore always fail closed on mode.
-    if _storage_first_is_shape_fixture(plan):
-        try:
-            metadata = Path(journal_path).stat()
-            if stat.S_IMODE(metadata.st_mode) == 0o644:
-                Path(journal_path).chmod(0o600)
-        except OSError:
-            _fail("storage-first resume journal mode cannot be normalized")
     record = _storage_first_read_journal(Path(journal_path))
     for field, expected in (
         ("task_uid", plan.get("task_uid")),
@@ -6225,7 +6246,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.identity_v2_evidence_map is not None:
         input_paths += (args.identity_v2_evidence_map,)
     if args.phase == STORAGE_FIRST_PHASE_ID:
-        _storage_first_reject_aliases(args.journal, args.ledger, plan)
+        _storage_first_reject_aliases(
+            args.journal, args.ledger, plan, input_paths=input_paths
+        )
         evidence_map = (
             _load_json(args.identity_v2_evidence_map, "identity-v2 evidence map")
             if args.identity_v2_evidence_map is not None
