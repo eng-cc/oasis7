@@ -487,18 +487,10 @@ impl NodeRuntimeExecutionDriver {
                 target_height, err
             )
         })?;
-        // Runtime snapshots intentionally omit WASM bytes. Rehydrate the
-        // module store before persisting the restored head so a restart can
-        // rebuild a module-bearing execution world from the canonical CAS
-        // snapshot without dropping its artifact payloads.
-        restored_world
-            .load_module_store_from_dir(self.world_dir.as_path())
-            .map_err(|err| {
-                format!(
-                    "execution driver restore runtime module store failed at height {}: {:?}",
-                    target_height, err
-                )
-            })?;
+        // Module artifact bytes are restored by `World::from_snapshot` from
+        // the canonical CAS snapshot payload. Do not consult `world_dir`
+        // here: it may contain a newer module-store cache than this
+        // historical execution head.
         restored_world.set_release_security_policy(world_policy);
         let mut rebuild_ms = runtime_rebuild_started_at.elapsed();
         let restored_commit_block_hash = restored_resource_delta

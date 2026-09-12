@@ -7,8 +7,10 @@ use super::driver::NodeRuntimeExecutionDriver;
 
 impl NodeRuntimeExecutionDriver {
     fn execution_world_without_persistence(&self) -> Result<RuntimeWorld, String> {
+        let snapshot = self.execution_world.snapshot();
+        let has_inline_module_artifacts = !snapshot.module_artifact_bytes.is_empty();
         let mut world = RuntimeWorld::from_snapshot(
-            self.execution_world.snapshot(),
+            snapshot,
             self.execution_world.journal().clone(),
         )
         .map_err(|error| {
@@ -17,13 +19,15 @@ impl NodeRuntimeExecutionDriver {
             )
         })?
         .with_release_security_policy(self.execution_world.release_security_policy().clone());
-        world
-            .load_module_store_from_dir(self.world_dir.as_path())
-            .map_err(|error| {
-                format!(
-                    "load execution module store for ProviderBacked bootstrap failed: {error:?}"
-                )
-            })?;
+        if !has_inline_module_artifacts {
+            world
+                .load_module_store_from_dir(self.world_dir.as_path())
+                .map_err(|error| {
+                    format!(
+                        "load execution module store for ProviderBacked bootstrap failed: {error:?}"
+                    )
+                })?;
+        }
         Ok(world)
     }
 
