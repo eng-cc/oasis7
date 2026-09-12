@@ -3897,7 +3897,7 @@ function AppShell() {
             <Show when={!diagnosticsVisualFixture()}>
               <WorldSummaryPanel directorController={directorSession.controller} onRequestDirector={directorSession.request} />
             </Show>
-            <WorldFeedSurface core={core} locale={locale} tr={tr} onReloadSnapshot={() => core.reloadWorldFeedFromAuthoritativeSnapshot()} />
+            <WorldFeedSurface core={core} locale={locale} tr={tr} observeState={observeViewerStateRevision} onReloadSnapshot={() => core.reloadWorldFeedFromAuthoritativeSnapshot()} />
           </div>
         </div>
       </section>

@@ -14232,8 +14232,13 @@ function WorldFeedSurface({
   locale,
   tr: tr2,
   onReloadSnapshot,
-  onRetryFeed
+  onRetryFeed,
+  observeState
 }) {
+  const feed = () => {
+    observeState?.();
+    return core2.state.worldFeed;
+  };
   const retryFeed = () => {
     if (typeof onRetryFeed === "function") {
       return onRetryFeed();
@@ -14243,12 +14248,15 @@ function WorldFeedSurface({
     });
   };
   return createComponent(WorldFeedPanel, {
-    feed: () => core2.state.worldFeed,
+    feed,
     locale,
     tr: tr2,
     onReloadSnapshot,
     onRetryFeed: retryFeed,
-    resolveModuleVisualEntity: (event) => core2?.entityCollections?.().moduleVisualEntities.find((entry) => entry.id === event?.module_visual_entity_id) || null,
+    resolveModuleVisualEntity: (event) => {
+      observeState?.();
+      return core2?.entityCollections?.().moduleVisualEntities.find((entry) => entry.id === event?.module_visual_entity_id) || null;
+    },
     onFocusModule: (event) => {
       const applied = core2?.focusModuleFromEvent?.(event);
       if (applied?.kind === "module_visual") {
@@ -24741,6 +24749,7 @@ function AppShell() {
       core,
       locale,
       tr,
+      observeState: observeViewerStateRevision,
       onReloadSnapshot: () => reloadWorldFeedFromAuthoritativeSnapshot()
     }), null);
     insert(_el$397, () => tr(locale(), "指挥与核查", "Command and Inspect"));

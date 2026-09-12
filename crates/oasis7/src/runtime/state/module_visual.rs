@@ -7,6 +7,11 @@ use std::collections::BTreeMap;
 pub(crate) const MODULE_VISUAL_ENTITY_UPSERTED_KIND: &str = "module_visual_entity_upserted";
 pub(crate) const MODULE_VISUAL_ENTITY_REMOVED_KIND: &str = "module_visual_entity_removed";
 
+/// Bounds the durable map serialized into snapshots and included in the
+/// state-root calculation. Updates and removals do not consume capacity, so
+/// old snapshots can be loaded and drained without migration.
+pub(crate) const MAX_MODULE_VISUAL_ENTITIES: usize = 4_096;
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ModuleVisualMutation {
     Upsert(ModuleVisualEntity),
@@ -118,11 +123,10 @@ impl WorldState {
             return Ok(None);
         };
         let module_id = event.module_id.trim();
-        let mut next = current_entities.clone();
         match mutation {
             ModuleVisualMutation::Upsert(entity) => {
                 validate_anchor(self, &entity.anchor, time)?;
-                if let Some(existing) = next.get(entity.entity_id.as_str()) {
+                if let Some(existing) = current_entities.get(entity.entity_id.as_str()) {
                     if existing.module_id != module_id {
                         return Err(WorldError::ResourceBalanceInvalid {
                             reason: format!(
@@ -131,11 +135,19 @@ impl WorldState {
                             ),
                         });
                     }
+                } else if current_entities.len() >= MAX_MODULE_VISUAL_ENTITIES {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "module visual entity maximum of {MAX_MODULE_VISUAL_ENTITIES} reached"
+                        ),
+                    });
                 }
+                let mut next = current_entities.clone();
                 next.insert(entity.entity_id.clone(), entity);
+                Ok(Some(next))
             }
             ModuleVisualMutation::Remove(entity_id) => {
-                let Some(existing) = next.get(entity_id.as_str()) else {
+                let Some(existing) = current_entities.get(entity_id.as_str()) else {
                     return Err(WorldError::ResourceBalanceInvalid {
                         reason: format!("module visual entity unknown: {entity_id}"),
                     });
@@ -148,10 +160,11 @@ impl WorldState {
                         ),
                     });
                 }
+                let mut next = current_entities.clone();
                 next.remove(entity_id.as_str());
+                Ok(Some(next))
             }
         }
-        Ok(Some(next))
     }
 
     pub(crate) fn apply_module_visual_event_at(
