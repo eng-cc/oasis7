@@ -5,8 +5,8 @@ use super::*;
 const MAP_OBJECTIVE_COLOR: Color = Color::srgba_u8(254, 240, 138, 244);
 const MAP_BLOCKER_COLOR: Color = Color::srgba_u8(253, 186, 116, 244);
 const MAP_ROUTE_COLOR: Color = Color::srgba_u8(186, 230, 253, 236);
-// Keep map callouts above location identities while letting selected/active
-// agent identities retain the top label layer at a shared anchor.
+// Keep map callouts above ambient location identities while selected location
+// and selected/active agent identities retain priority at a shared anchor.
 const MAP_LABEL_LAYER_Z: f32 = AGENT_LAYER_Z + 0.002;
 const MAP_LABEL_FONT_SIZE_PX: f32 = 11.0;
 const MAP_LABEL_GLYPH_ADVANCE_PX: f64 = 6.0;

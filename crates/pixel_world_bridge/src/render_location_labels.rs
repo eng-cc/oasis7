@@ -5,6 +5,7 @@ use super::*;
 
 const LOCATION_LABEL_COLOR: Color = Color::srgba_u8(226, 232, 240, 220);
 const LOCATION_LABEL_LAYER_Z: f32 = SELECTED_LOCATION_CUE_LAYER_Z + 0.005;
+const SELECTED_LOCATION_LABEL_LAYER_Z: f32 = AGENT_LAYER_Z + 0.004;
 const LOCATION_LABEL_MIN_ZOOM: f64 = 1.75;
 const LOCATION_LABEL_ABOVE_MARKER_PX: f64 = 14.0;
 const LOCATION_LABEL_FONT_SIZE_PX: f32 = 10.0;
@@ -101,7 +102,7 @@ pub(super) fn reconcile_location_labels(
                 label_y,
                 width,
                 height,
-                LOCATION_LABEL_LAYER_Z,
+                location_label_layer_z(location.id.as_str(), selected_id),
             )),
         );
         let label = PixelWorldLocationLabel {
@@ -122,6 +123,14 @@ pub(super) fn reconcile_location_labels(
 
 fn location_label_priority(id: &str, selected_id: Option<&str>) -> u8 {
     u8::from(selected_id != Some(id))
+}
+
+fn location_label_layer_z(id: &str, selected_id: Option<&str>) -> f32 {
+    if selected_id == Some(id) {
+        SELECTED_LOCATION_LABEL_LAYER_Z
+    } else {
+        LOCATION_LABEL_LAYER_Z
+    }
 }
 
 fn location_label_display(location: &Location) -> String {

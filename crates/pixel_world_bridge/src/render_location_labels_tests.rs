@@ -96,6 +96,57 @@ fn location_labels_are_selected_first_and_suppress_collisions_deterministically(
 }
 
 #[test]
+fn selected_location_label_renders_above_overlapping_map_label() {
+    let anchor = sample_position(1_500_000.0, 1_000_000.0);
+    let mut state = sample_render_state(12_000.0);
+    state.agents.clear();
+    state.fragment_terrain.clear();
+    state.selection = Some(Selection {
+        kind: "location".to_string(),
+        id: "loc-selected".to_string(),
+    });
+    state.locations = vec![location_with(
+        "loc-selected",
+        "Selected location",
+        anchor.clone(),
+    )];
+    state.visual_hotspots = vec![VisualHotspot {
+        id: "goal-overlap".to_string(),
+        label: "Current objective".to_string(),
+        kind: "goal".to_string(),
+        pos: anchor,
+        emphasis: Some(1.0),
+        size_hint_px: Some(14.0),
+    }];
+
+    let mut app = render_test_app(state);
+    let world = app.world_mut();
+    let mut locations = world.query::<(
+        &crate::render::location_labels::PixelWorldLocationLabel,
+        &Transform,
+    )>();
+    let selected_location_z = locations
+        .iter(world)
+        .find_map(|(label, transform)| {
+            (label.id == "loc-selected").then_some(transform.translation.z)
+        })
+        .expect("selected location label");
+    let mut map_labels =
+        world.query::<(&crate::render::map_labels::PixelWorldMapLabel, &Transform)>();
+    let map_label_z = map_labels
+        .iter(world)
+        .find_map(|(label, transform)| {
+            (label.id == "map:goal-overlap").then_some(transform.translation.z)
+        })
+        .expect("overlapping map label");
+
+    assert!(
+        selected_location_z > map_label_z,
+        "selected location identity must render above an overlapping map label (selected_z={selected_location_z}, map_z={map_label_z})"
+    );
+}
+
+#[test]
 fn location_labels_fallback_and_truncate_identity_at_high_zoom() {
     let mut state = sample_render_state(12_000.0);
     state.agents.clear();

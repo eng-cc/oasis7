@@ -14,6 +14,8 @@ pub struct WorldStateProjection<'a> {
     state: &'a WorldState,
     body_overlay: Option<BodyOverlay>,
     command_overlay: Option<CommandStateOverlay<'a>>,
+    module_visual_entities_overlay:
+        Option<&'a BTreeMap<String, crate::simulator::ModuleVisualEntity>>,
     module_instance_overlay: Option<&'a module_instance_transition::PreparedModuleInstance>,
     module_release_overlay: Option<&'a module_release_transition::PreparedModuleRelease>,
     module_marketplace_overlay:
@@ -66,6 +68,7 @@ impl<'a> WorldStateProjection<'a> {
             state,
             body_overlay: None,
             command_overlay: None,
+            module_visual_entities_overlay: None,
             module_instance_overlay: None,
             module_release_overlay: None,
             module_marketplace_overlay: None,
@@ -265,6 +268,14 @@ impl<'a> WorldStateProjection<'a> {
         self
     }
 
+    pub(crate) fn with_module_visual_entities_overlay(
+        mut self,
+        module_visual_entities: &'a BTreeMap<String, crate::simulator::ModuleVisualEntity>,
+    ) -> Self {
+        self.module_visual_entities_overlay = Some(module_visual_entities);
+        self
+    }
+
     pub(crate) fn with_governance_identity_profile_overlay(
         mut self,
         target_agent_id: impl Into<String>,
@@ -299,7 +310,8 @@ impl Serialize for WorldState {
     {
         serialize_world_state(
             self, None, None, None, None, None, None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None, None, None, None, None, serializer,
+            None, None, None, None, None, None, None, None, None, None, None, None, None,
+            serializer,
         )
     }
 }
@@ -322,6 +334,7 @@ impl Serialize for WorldStateProjection<'_> {
             self.state,
             self.body_overlay.as_ref(),
             self.command_overlay.as_ref(),
+            self.module_visual_entities_overlay,
             self.module_instance_overlay,
             self.module_release_overlay,
             self.module_marketplace_overlay,
@@ -354,6 +367,7 @@ fn serialize_world_state<S>(
     state: &WorldState,
     body_overlay: Option<&BodyOverlay>,
     command_overlay: Option<&CommandStateOverlay<'_>>,
+    module_visual_entities_overlay: Option<&BTreeMap<String, crate::simulator::ModuleVisualEntity>>,
     module_instance_overlay: Option<&module_instance_transition::PreparedModuleInstance>,
     module_release_overlay: Option<&module_release_transition::PreparedModuleRelease>,
     module_marketplace_overlay: Option<&module_marketplace_transition::PreparedModuleMarketplace>,
@@ -528,7 +542,11 @@ where
         - usize::from(state.product_validation_attempts.is_empty() && industry_history_overlay.is_none())
         - usize::from(state.recipe_completion_receipts.is_empty() && industry_overlay.is_none_or(|v| !v.has_completion_receipt()))
         - usize::from(state.factory_recycle_receipts.is_empty() && industry_overlay.is_none_or(|v| !v.has_recycle_receipt()))
-        - usize::from(state.module_visual_entities.is_empty());
+        - usize::from(
+            module_visual_entities_overlay
+                .unwrap_or(&state.module_visual_entities)
+                .is_empty(),
+        );
     let mut output = serializer.serialize_struct("WorldState", field_count)?;
     output.serialize_field("time", &state.time)?;
     if let Some(overlay) = agent_claim_terminal_overlay {
@@ -941,8 +959,10 @@ where
     } else {
         output.serialize_field("module_states", &state.module_states)?;
     }
-    if !state.module_visual_entities.is_empty() {
-        output.serialize_field("module_visual_entities", &state.module_visual_entities)?;
+    let module_visual_entities =
+        module_visual_entities_overlay.unwrap_or(&state.module_visual_entities);
+    if !module_visual_entities.is_empty() {
+        output.serialize_field("module_visual_entities", module_visual_entities)?;
     }
     if let Some(overlay) = module_marketplace_overlay {
         overlay.serialize_market_fields(state, &mut output)?;

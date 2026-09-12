@@ -395,10 +395,12 @@ impl<'a> TrustedCommandStage<'a> {
             resources: &self.resource_updates,
             agents: &self.agent_updates,
         };
-        let mut state = self.base.state.clone();
-        state.module_visual_entities = self.module_visual_entities.clone();
-        canonical_hash(&WorldStateProjection::borrowed(&state).with_command_overlay(overlay))
-            .map_err(|error| super::capability_authorization::deny(format!("state hash: {error}")))
+        canonical_hash(
+            &WorldStateProjection::borrowed(&self.base.state)
+                .with_command_overlay(overlay)
+                .with_module_visual_entities_overlay(&self.module_visual_entities),
+        )
+        .map_err(|error| super::capability_authorization::deny(format!("state hash: {error}")))
     }
 
     pub(super) fn consensus_state_root_hash(&self) -> Result<String, WorldError> {
