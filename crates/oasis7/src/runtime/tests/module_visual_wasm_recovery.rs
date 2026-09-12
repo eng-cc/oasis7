@@ -251,18 +251,32 @@ fn real_wasm_visual_upsert_remove_survives_on_disk_recovery() {
     assert!(dir.join("module_registry.json").exists());
     assert!(dir.join("snapshot.json").exists());
 
-    // Exercise the manifest/hash rejection at the same boundary as recovery.
+    // The snapshot owns the canonical bytes. A mutable external cache may be
+    // stale or tampered with without changing the bytes selected for recovery.
     fs::write(&artifact_path, b"tampered-visual-wasm").expect("tamper persisted artifact");
-    let error = World::load_from_dir(&dir).expect_err("tampered wasm must be rejected");
-    assert!(matches!(
-        error,
-        WorldError::ModuleStoreManifestMismatch { wasm_hash: ref rejected }
-            if rejected == &wasm_hash
-    ));
-    fs::write(&artifact_path, persisted_bytes).expect("restore persisted artifact");
+    let mut recovered_with_tampered_cache =
+        World::load_from_dir(&dir).expect("canonical snapshot bytes bypass tampered cache");
+    assert_eq!(
+        recovered_with_tampered_cache
+            .load_module(&wasm_hash)
+            .expect("canonical recovered artifact is executable")
+            .bytes
+            .as_ref(),
+        wasm_bytes.as_slice()
+    );
+    assert_eq!(
+        recovered_with_tampered_cache
+            .state()
+            .module_visual_entities
+            .get(ENTITY_ID)
+            .expect("visual entity survives sidecar recovery")
+            .label
+            .as_deref(),
+        Some("WASM recovery relay")
+    );
 
-    // Remove the sidecar so this checks the ordinary JSON snapshot/journal
-    // recovery path as well as the module registry/artifact files on disk.
+    // Remove the sidecar so the ordinary JSON snapshot/journal recovery path
+    // is also proven to use the canonical inline bytes.
     fs::remove_dir_all(dir.join(".distfs-state")).expect("force JSON recovery");
     let mut restored = World::load_from_dir(&dir).expect("recover visual world from disk");
     assert_eq!(
