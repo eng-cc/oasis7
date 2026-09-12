@@ -5594,7 +5594,36 @@ class StorageFirstFormalFindingsRedTests(unittest.TestCase):
             ledger = root / "ledger.jsonl"
             for path in (plan, authority, journal, ledger):
                 path.write_text("{}", encoding="utf-8")
-            with mock.patch.object(self.adapter, "execute_storage_first", return_value={"status": "dry-run"}) as child, \
+            authority_root = root / "authority-anchors"
+            authority_root.mkdir(mode=0o700)
+            public_key = authority_root / "provider-public-key"
+            provider = authority_root / "provider-adapter"
+            verifier_tool = authority_root / "identity-verifier"
+            for path in (public_key, provider, verifier_tool):
+                path.write_bytes(b"synthetic canonical authority fixture")
+                path.chmod(0o600)
+            trust_config = authority_root / "trust-config.json"
+            registry = authority_root / "provider-registry.json"
+            trust_config.write_text(
+                json.dumps({"allowlist": [{"public_key_ref": str(public_key)}]}),
+                encoding="utf-8",
+            )
+            registry.write_text(
+                json.dumps({
+                    "trust_config_path": str(trust_config),
+                    "providers": [{
+                        "public_key_ref": str(public_key),
+                        "adapter_path": str(provider),
+                    }],
+                    "verifier": {"executable_path": str(verifier_tool)},
+                }),
+                encoding="utf-8",
+            )
+            planner = load_module("storage_first_cli_alias_planner", PLANNER_PATH)
+            with mock.patch.object(self.adapter, "_PLANNER_MODULE", planner), \
+                 mock.patch.object(planner, "IDENTITY_V2_TRUST_CONFIG_PATH", trust_config), \
+                 mock.patch.object(planner, "IDENTITY_V2_PROVIDER_REGISTRY_PATH", registry), \
+                 mock.patch.object(self.adapter, "execute_storage_first", return_value={"status": "dry-run"}) as child, \
                  mock.patch.object(self.adapter, "execute", return_value={"status": "legacy"}) as legacy:
                 try:
                     result = self.adapter.main([
