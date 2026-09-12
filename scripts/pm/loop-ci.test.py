@@ -88,6 +88,8 @@ class CIGateTests(unittest.TestCase):
                 "loop_ci_content.py",
                 "loop_contracts.py",
                 "loop_policy.py",
+                "loop_approval_authority.py",
+                "loop_leaf_result.py",
                 "loop_traceability.py",
                 "loop-policy.v1.json",
             ):
