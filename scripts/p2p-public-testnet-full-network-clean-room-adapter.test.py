@@ -5132,5 +5132,324 @@ class StorageFirstSecurityFollowupRedTests(unittest.TestCase):
         self.assertEqual(transport.mutations, [])
 
 
+class StorageFirstAdversarialRedTests(unittest.TestCase):
+    """Second-wave RED coverage for the exact formal storage-first blockers.
+
+    These tests deliberately keep all provider interactions in the existing
+    in-process transport double.  They encode the missing canonical byte,
+    freshness, cursor, recovery, lock, provenance, durability, and journal
+    contracts without opening a socket or reading an operator credential.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.adapter = load_module("storage_first_adversarial_adapter_under_test", ADAPTER_PATH)
+
+    def setUp(self) -> None:
+        self.fixture = StorageFirstAdapterRedTests("runTest")
+        self.fixture.adapter = self.adapter
+        self.fixture.setUp()
+        bindings = getattr(self.adapter, "_STORAGE_FIRST_ADMISSION_BINDINGS", None)
+        if isinstance(bindings, dict):
+            bindings.clear()
+        self.plan = self.fixture.plan
+
+    def tearDown(self) -> None:
+        self.fixture.tearDown()
+
+    def _prefix_journal(
+        self,
+        completed: list[str],
+        *,
+        receipts: list[dict[str, object]] | None = None,
+        status: str = "preflight-complete",
+    ) -> Path:
+        transport = self.fixture._Transport()
+        transport.plan = self.plan
+        if receipts is None:
+            receipts = [transport._receipt(operation) for operation in completed]
+        ledger = self.fixture.root / "parent-nonce-ledger.jsonl"
+        journal = self.fixture.root / "resume-prefix.journal.json"
+        record: dict[str, object] = {
+            "schema_version": self.adapter.STORAGE_FIRST_JOURNAL_SCHEMA,
+            "phase_id": self.adapter.STORAGE_FIRST_PHASE_ID,
+            "phase_contract_digest": self.adapter._storage_first_phase_digest(
+                self.plan, self.fixture.identity_map
+            ),
+            "task_uid": self.plan["task_uid"],
+            "head_oid": self.plan["head_oid"],
+            "plan_digest": self.plan["plan_digest"],
+            "transaction_id": self.plan["transaction_id"],
+            "capture_window_id": self.plan["capture_window_id"],
+            "status": status,
+            "next_operation": self.adapter.STORAGE_FIRST_OPERATIONS[len(completed)],
+            "completed_operations": list(completed),
+            "callback_started": False,
+            "callback_receipt": None,
+            "storage_receipts": copy.deepcopy(receipts),
+            "rollback_candidates": list(completed),
+            "rollback_status": "not-started",
+            "ledger_path": str(ledger),
+        }
+        record["journal_digest"] = hashlib.sha256(
+            json.dumps(record, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        journal.write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")
+        return journal
+
+    def _resume(self, journal: Path, transport: object, **overrides: object) -> object:
+        if hasattr(transport, "plan"):
+            setattr(transport, "plan", self.plan)
+        kwargs: dict[str, object] = {
+            "phase": self.adapter.STORAGE_FIRST_PHASE_ID,
+            "identity_v2_evidence": self.fixture.identity_map,
+            "journal_path": journal,
+            "ledger_path": self.fixture.root / "parent-nonce-ledger.jsonl",
+            "transport": transport,
+            "dry_run": False,
+            "provenance_verifier": self.fixture._bound_provenance,
+            "live_revalidator": lambda: True,
+        }
+        kwargs.update(overrides)
+        return self.adapter.resume_storage_first(self.plan, self.fixture._authority(), **kwargs)
+
+    def test_ops_sf_009_storage_apply_invokes_canonical_admission_authority_trust_and_ledger_gates(self) -> None:
+        calls: list[str] = []
+
+        def mark(name: str):
+            def callback(*args: object, **kwargs: object) -> None:
+                calls.append(name)
+            return callback
+
+        with ExitStack() as stack:
+            for name in (
+                "validate_plan",
+                "validate_authority",
+                "_validate_planner_authority",
+                "validate_live_trust_root_file",
+                "validate_credential_ledger",
+            ):
+                stack.enter_context(mock.patch.object(self.adapter, name, side_effect=mark(name)))
+            self.fixture._runner(
+                self.fixture._Transport(), live_revalidator=lambda: True
+            )
+        self.assertTrue(
+            set(calls) & {"validate_plan", "validate_authority", "_validate_planner_authority"},
+            "storage apply must enter the canonical parent/authority validation boundary",
+        )
+        self.assertIn("validate_live_trust_root_file", calls)
+        self.assertIn("validate_credential_ledger", calls)
+
+    def test_ops_sf_010_and_runtime_sf_008_storage_apply_requires_declared_canonical_ledger(self) -> None:
+        cases = {
+            "missing-ledger": (self.fixture.root / "missing-ledger.jsonl", None),
+            "nonempty-alternate-ledger": (
+                self.fixture.root / "alternate-ledger.jsonl",
+                "foreign-ledger-bytes\n",
+            ),
+        }
+        for label, (ledger, contents) in cases.items():
+            with self.subTest(case=label):
+                if contents is not None:
+                    ledger.write_text(contents, encoding="utf-8")
+                transport = self.fixture._Transport()
+                with self.assertRaises(Exception):
+                    self.fixture._runner(
+                        transport, ledger_path=ledger, live_revalidator=lambda: True
+                    )
+                self.assertEqual(transport.mutations, [])
+
+    def test_ops_sf_011_fresh_sequencer_proof_is_required_before_initial_mutation(self) -> None:
+        base = self.fixture._Transport
+
+        class MissingProofTransport(base):
+            def __init__(self) -> None:
+                super().__init__()
+                self.proof_calls: list[str] = []
+
+            def fetch_sequencer_proof(self, *args: object) -> None:
+                self.proof_calls.append("fetch-sequencer-proof")
+                return None
+
+        transport = MissingProofTransport()
+        with self.assertRaises(Exception):
+            self.fixture._runner(transport, live_revalidator=lambda: True)
+        self.assertEqual(transport.mutations, [])
+        self.assertEqual(transport.proof_calls, ["fetch-sequencer-proof"])
+
+    def test_ops_sf_011_and_ops_sf_014_resume_requires_fresh_sequencer_proof(self) -> None:
+        journal = self._prefix_journal(["stop:storage-205"])
+        base = self.fixture._Transport
+
+        class MissingProofTransport(base):
+            def __init__(self) -> None:
+                super().__init__()
+                self.proof_calls: list[str] = []
+
+            def fetch_sequencer_proof(self, *args: object) -> None:
+                self.proof_calls.append("fetch-sequencer-proof")
+                return None
+
+        transport = MissingProofTransport()
+        with self.assertRaises(Exception):
+            self._resume(journal, transport)
+        self.assertEqual(transport.mutations, [])
+        self.assertEqual(transport.proof_calls, ["fetch-sequencer-proof"])
+
+    def test_ops_sf_012_pre_mutation_failure_persists_terminal_nonresumable_journal(self) -> None:
+        base = self.fixture._Transport
+
+        class FailingInspectTransport(base):
+            def inspect_node(self, node: object) -> dict[str, object]:
+                self.calls.append("inspect:storage-205")
+                return {"node": "storage-205", "known_hosts_verified": False}
+
+        journal = self.fixture.root / "pre-mutation-failure.journal.json"
+        transport = FailingInspectTransport()
+        with self.assertRaises(Exception):
+            self.fixture._runner(
+                transport, journal_path=journal, live_revalidator=lambda: True
+            )
+        self.assertEqual(transport.mutations, [])
+        record = json.loads(journal.read_text(encoding="utf-8"))
+        self.assertIn(record["status"], {"terminal-failure", "reconciliation-blocked"})
+        self.assertEqual(record["next_operation"], "reconciliation-required")
+        self.assertTrue(record.get("terminal_error"))
+
+    def test_ops_sf_013_recovery_requires_authenticated_receipts_and_fresh_revalidation(self) -> None:
+        checks: list[str] = []
+        transport = self.fixture._Transport(side_effect_operation="delete:storage-205")
+        journal = self.fixture.root / "recovery-auth.journal.json"
+        with self.assertRaises(Exception):
+            self.fixture._runner(
+                transport,
+                journal_path=journal,
+                live_revalidator=lambda: (checks.append("live") or True),
+            )
+        record = json.loads(journal.read_text(encoding="utf-8"))
+        self.assertEqual(record["failed_operation"], "delete:storage-205")
+        for field in ("reconciliation_reobserve", "reconciliation_handoff"):
+            receipt = record[field]
+            self.assertIs(receipt.get("authenticated"), True)
+            self.assertIs(receipt.get("verified"), True)
+            self.assertEqual(receipt.get("phase_id"), self.adapter.STORAGE_FIRST_PHASE_ID)
+        self.assertGreaterEqual(len(checks), len(transport.mutations) + 1)
+
+    def test_ops_sf_014_resume_rechecks_storage_preflight_after_partial_prefix(self) -> None:
+        journal = self._prefix_journal(["stop:storage-205"])
+        transport = self.fixture._Transport()
+        self._resume(journal, transport)
+        self.assertIn("inspect:storage-205", transport.calls)
+        self.assertIn("preflight:storage-205", transport.calls)
+
+    def test_runtime_sf_009_resume_rejects_receipt_operation_cursor_drift(self) -> None:
+        receipt_transport = self.fixture._Transport()
+        receipt_transport.plan = self.plan
+        forged_receipt = receipt_transport._receipt("rebuild:storage-205")
+        journal = self._prefix_journal(
+            ["stop:storage-205"], receipts=[forged_receipt]
+        )
+        transport = self.fixture._Transport()
+        with self.assertRaises(Exception):
+            self._resume(journal, transport)
+        self.assertEqual(transport.mutations, [])
+
+    def test_runtime_sf_011_fleet_lock_alias_is_rejected_without_replacement(self) -> None:
+        fleet_lock = self.fixture.root / "operator" / "truth" / "fleet.lock"
+        fleet_lock.parent.mkdir(parents=True)
+        transport = self.fixture._Transport()
+        with mock.patch.object(self.adapter, "CANONICAL_FLEET_LOCK_PATH", str(fleet_lock)):
+            with self.assertRaises(Exception):
+                self.fixture._runner(
+                    transport, journal_path=fleet_lock, live_revalidator=lambda: True
+                )
+        self.assertFalse(fleet_lock.exists())
+        self.assertEqual(transport.mutations, [])
+
+    def test_runtime_sf_011_missing_operator_lock_fails_closed_without_tmp_fallback(self) -> None:
+        canonical = self.fixture.root / "operator" / "missing" / "truth" / "fleet.lock"
+        journal = self.fixture.root / "fallback-journal.json"
+        fallback_root = self.fixture.root / "tmp-fallback"
+        guard = None
+        with mock.patch.object(self.adapter, "CANONICAL_FLEET_LOCK_PATH", str(canonical)), \
+             mock.patch.object(self.adapter.tempfile, "gettempdir", return_value=str(fallback_root)):
+            try:
+                with self.assertRaises(Exception):
+                    guard = self.adapter._acquire_fleet_transaction_guard(journal)
+            finally:
+                if guard is not None:
+                    guard.close()
+        self.assertFalse(fallback_root.exists())
+
+    def test_runtime_sf_012_provider_receipt_signer_must_be_code_owned(self) -> None:
+        base = self.fixture._Transport
+
+        class AttackerReceiptTransport(base):
+            def _receipt(self, operation: str) -> dict[str, object]:
+                receipt = super()._receipt(operation)
+                receipt["signer_id"] = "attacker"
+                return receipt
+
+        transport = AttackerReceiptTransport()
+        with self.assertRaises(Exception):
+            self.fixture._runner(transport, live_revalidator=lambda: True)
+        self.assertEqual(transport.mutations, [])
+
+    def test_runtime_sf_013_reconciliation_write_failure_keeps_durable_handoff(self) -> None:
+        journal = self.fixture.root / "reconciliation-write-failure.journal.json"
+        original = self.adapter._storage_first_journal_write
+
+        def fail_reconciliation_write(path: Path, record: object) -> None:
+            if isinstance(record, dict) and record.get("status") == "reconciliation-blocked":
+                raise OSError("injected reconciliation journal failure")
+            original(path, record)
+
+        transport = self.fixture._Transport(side_effect_operation="delete:storage-205")
+        with mock.patch.object(
+            self.adapter, "_storage_first_journal_write", side_effect=fail_reconciliation_write
+        ):
+            with self.assertRaises(Exception):
+                self.fixture._runner(
+                    transport, journal_path=journal, live_revalidator=lambda: True
+                )
+        durable_candidates = [journal, Path(f"{journal}.emergency.json")]
+        durable_records = [
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in durable_candidates
+            if path.exists()
+        ]
+        self.assertTrue(
+            any(
+                record.get("status") in {"terminal-failure", "reconciliation-blocked"}
+                and record.get("failed_operation") == "delete:storage-205"
+                and record.get("next_operation") == "reconciliation-required"
+                for record in durable_records
+            )
+        )
+
+    def test_runtime_sf_014_journal_requires_complete_closure_projection(self) -> None:
+        validator = self.adapter.validate_storage_first_journal
+        incomplete = {
+            "schema_version": self.adapter.STORAGE_FIRST_JOURNAL_SCHEMA,
+            "phase_id": self.adapter.STORAGE_FIRST_PHASE_ID,
+            "status": "storage-205-running",
+            "next_operation": "stop:storage-205",
+            "completed_operations": [],
+            "callback_started": False,
+            "callback_receipt": None,
+            "storage_receipts": [],
+            "rollback_candidates": [],
+            "rollback_status": "not-started",
+        }
+        with self.assertRaises(Exception):
+            validator(incomplete)
+
+    def test_runtime_sf_014_journal_reader_requires_protected_file(self) -> None:
+        journal = self._prefix_journal([])
+        journal.chmod(0o644)
+        with self.assertRaises(Exception):
+            self.adapter._storage_first_read_journal(journal)
+
+
 if __name__ == "__main__":
     unittest.main()
