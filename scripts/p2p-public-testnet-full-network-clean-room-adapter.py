@@ -4551,7 +4551,7 @@ def _storage_first_is_shape_fixture(plan: Mapping[str, Any]) -> bool:
 
 def _storage_first_require_concrete_plan(plan: Mapping[str, Any]) -> None:
     """Reject caller-defined Mapping views before entering storage apply."""
-    if not isinstance(plan, dict):
+    if type(plan) is not dict:
         _fail("storage-first plan must be a concrete adapter plan object")
 
 
