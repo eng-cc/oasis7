@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use oasis7::runtime::{ProviderBackedBootstrapAuthorityV1, World as RuntimeWorld};
 use oasis7_node::{
@@ -105,18 +105,66 @@ fn load_provider_backed_bootstrap_authorities(
         .collect()
 }
 
+/// Load the current execution world into a detached validation copy.
+///
+/// Provider bootstrap is an explicit producer input, so semantic validation
+/// must happen before it enters the consensus queue. The validation copy must
+/// retain the exact current snapshot/journal/module state while preventing a
+/// successful preflight from publishing any runtime or cognition changes.
+fn detached_execution_world_for_bootstrap(world_dir: &Path) -> Result<RuntimeWorld, String> {
+    let current = super::driver::load_execution_world(world_dir)?;
+    let snapshot = current.snapshot();
+    let has_inline_module_artifacts = !snapshot.module_artifact_bytes.is_empty();
+    let journal = current.journal().clone();
+    let release_security_policy = current.release_security_policy().clone();
+    let mut detached = RuntimeWorld::from_snapshot(snapshot, journal)
+        .map_err(|error| {
+            format!(
+            "clone current execution world for ProviderBacked bootstrap preflight failed: {error:?}"
+        )
+        })?
+        .with_release_security_policy(release_security_policy);
+    if !has_inline_module_artifacts {
+        detached
+            .load_module_store_from_dir(world_dir)
+            .map_err(|error| {
+                format!(
+                    "load execution module store for ProviderBacked bootstrap preflight failed: {error:?}"
+                )
+            })?;
+    }
+    Ok(detached)
+}
+
+fn validate_provider_backed_bootstrap_before_admission(
+    world_dir: &Path,
+    authorities: &[ProviderBackedBootstrapAuthorityV1],
+) -> Result<(), String> {
+    let mut detached_world = detached_execution_world_for_bootstrap(world_dir)?;
+    detached_world
+        .bootstrap_provider_backed_authorities(authorities)
+        .map_err(|error| {
+            format!(
+                "ProviderBacked authority bootstrap preflight rejected before consensus admission: {error:?}"
+            )
+        })?;
+    Ok(())
+}
+
 /// Translate explicit ProviderBacked authority bundles into one producer-side
 /// replicated execution input. The input is queued in the node consensus
 /// engine and is committed only when the authoritative proposer includes it;
 /// materializing nodes receive the exact ordered bytes through the block.
 pub(crate) fn publish_provider_backed_bootstrap_from_paths(
     runtime: &NodeRuntime,
+    world_dir: &Path,
     paths: &[PathBuf],
 ) -> Result<(), String> {
     if paths.is_empty() {
         return Ok(());
     }
     let authorities = load_provider_backed_bootstrap_authorities(paths)?;
+    validate_provider_backed_bootstrap_before_admission(world_dir, authorities.as_slice())?;
     let payload_cbor = serde_cbor::to_vec(&authorities).map_err(|error| {
         format!("encode ProviderBacked authority bootstrap replicated input failed: {error}")
     })?;

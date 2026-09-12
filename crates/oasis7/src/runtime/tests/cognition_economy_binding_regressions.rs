@@ -1,7 +1,37 @@
 //! Cognition economy authority-binding and snapshot reconstruction regressions.
 
 use super::super::*;
+use serde::Serialize;
 use serde_json::Value;
+
+fn economy_digest_for_test<T: Serialize>(domain: &str, payload: &T) -> String {
+    let bytes = oasis7_wasm_abi::encode_canonical_cbor(&(domain, payload))
+        .expect("economy test payload is canonically encodable");
+    format!("blake3:{}", blake3::hash(&bytes))
+}
+
+fn refresh_provision_event_digest_for_test(event: &mut Value) {
+    let mut value = event.clone();
+    value
+        .as_object_mut()
+        .expect("provisioning event is an object")
+        .remove("event_digest");
+    event["event_digest"] = Value::String(economy_digest_for_test(
+        "oasis7.cognition.economy.provisioning-event.v1",
+        &value,
+    ));
+}
+
+fn refresh_provision_head_digest_for_test(economy: &mut Value) {
+    let head_seq = economy["provision_head_seq"]
+        .as_u64()
+        .expect("provision head sequence");
+    let journal = economy["provision_journal"].clone();
+    economy["provision_head_digest"] = Value::String(economy_digest_for_test(
+        "oasis7.cognition.economy.provisioning-journal.v1",
+        &(head_seq, journal),
+    ));
+}
 
 fn authority_quote_for(
     account_id: &str,
@@ -345,6 +375,66 @@ fn from_snapshot_validates_cognition_economy_and_accepts_legacy_absence() {
     legacy_snapshot.cognition = Value::Null;
     World::from_snapshot(legacy_snapshot, world.journal().clone())
         .expect("legacy snapshots without cognition economy remain valid");
+}
+
+#[test]
+fn provisioning_snapshot_journal_is_a_bijection_with_provisions() {
+    let mut economy = CognitionEconomyStateV1::new();
+    let provision_a = CognitionProvisioningRequestV1::new(
+        "provision-a",
+        "owner-a",
+        "owner-a",
+        1,
+        "world-a",
+        "main",
+        0,
+        7,
+        "authority-a",
+    );
+    let provision_b = CognitionProvisioningRequestV1::new(
+        "provision-b",
+        "owner-b",
+        "owner-b",
+        1,
+        "world-b",
+        "main",
+        0,
+        5,
+        "authority-b",
+    );
+    economy
+        .provision(provision_a, 1)
+        .expect("install provision A");
+    economy
+        .provision(provision_b, 2)
+        .expect("install provision B");
+
+    let valid_snapshot = economy.snapshot_json().expect("encode valid economy");
+    let mut valid_world_snapshot = World::new().snapshot();
+    valid_world_snapshot.cognition = serde_json::json!({
+        "cognition_economy": valid_snapshot.clone()
+    });
+    World::from_snapshot(valid_world_snapshot, World::new().journal().clone())
+        .expect("one journal event per provision is valid");
+
+    let mut duplicate_snapshot = valid_snapshot;
+    let journal = duplicate_snapshot["provision_journal"]
+        .as_array_mut()
+        .expect("provision journal array");
+    let mut duplicate_event = journal[0].clone();
+    duplicate_event["journal_seq"] = Value::from(2_u64);
+    duplicate_event["parent_event_digest"] = journal[0]["event_digest"].clone();
+    refresh_provision_event_digest_for_test(&mut duplicate_event);
+    journal[1] = duplicate_event;
+    refresh_provision_head_digest_for_test(&mut duplicate_snapshot);
+
+    let mut invalid_world_snapshot = World::new().snapshot();
+    invalid_world_snapshot.cognition = serde_json::json!({
+        "cognition_economy": duplicate_snapshot
+    });
+    let error = World::from_snapshot(invalid_world_snapshot, World::new().journal().clone())
+        .expect_err("duplicate A event must not mask missing B event");
+    assert!(format!("{error:?}").contains("cognition_provisioning_journal_cardinality_invalid"));
 }
 
 #[test]

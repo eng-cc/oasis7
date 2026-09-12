@@ -510,6 +510,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         #[cfg(not(test))]
         execution_bridge::publish_provider_backed_bootstrap_from_paths(
             &runtime,
+            paths.execution_world_dir.as_path(),
             options.provider_backed_bootstrap_authority_paths.as_slice(),
         )?;
         let execution_driver = NodeRuntimeExecutionDriver::new_with_storage_profile(
