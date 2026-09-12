@@ -21,7 +21,7 @@ use super::super::{
 };
 use super::World;
 use super::prepared_base_head::WorldPreparedBaseHead;
-use crate::simulator::ResourceKind;
+use crate::simulator::{ModuleVisualEntity, ResourceKind};
 
 const MODULE_RUNTIME_FEE_BYTES_PER_UNIT: u64 = 1_024;
 
@@ -124,6 +124,7 @@ pub(super) struct PreparedTrustedCommand {
     pub(super) base_head: WorldPreparedBaseHead,
     pub(super) module_cache_additions: Vec<ModuleArtifact>,
     pub(super) module_states: BTreeMap<String, Vec<u8>>,
+    pub(super) module_visual_entities: BTreeMap<String, ModuleVisualEntity>,
     pub(super) agent_updates: BTreeMap<String, super::super::agent_cell::AgentCell>,
     pub(super) resource_updates: BTreeMap<ResourceKind, i64>,
     pub(super) pending_effects: VecDeque<EffectIntent>,
@@ -147,6 +148,7 @@ pub(super) struct TrustedCommandStage<'a> {
     module_cache: oasis7_wasm_abi::ModuleCache,
     module_cache_additions: Vec<ModuleArtifact>,
     module_states: BTreeMap<String, Vec<u8>>,
+    module_visual_entities: BTreeMap<String, ModuleVisualEntity>,
     agent_updates: BTreeMap<String, super::super::agent_cell::AgentCell>,
     resource_updates: BTreeMap<ResourceKind, i64>,
     pending_effects: VecDeque<EffectIntent>,
@@ -168,6 +170,7 @@ impl<'a> TrustedCommandStage<'a> {
             module_cache: base.module_cache.clone(),
             module_cache_additions: Vec::new(),
             module_states: BTreeMap::new(),
+            module_visual_entities: base.state.module_visual_entities.clone(),
             agent_updates: BTreeMap::new(),
             resource_updates: BTreeMap::new(),
             pending_effects: base.pending_effects.clone(),
@@ -393,18 +396,23 @@ impl<'a> TrustedCommandStage<'a> {
             agents: &self.agent_updates,
         };
         canonical_hash(
-            &WorldStateProjection::borrowed(&self.base.state).with_command_overlay(overlay),
+            &WorldStateProjection::borrowed(&self.base.state)
+                .with_command_overlay(overlay)
+                .with_module_visual_entities_overlay(&self.module_visual_entities),
         )
         .map_err(|error| super::capability_authorization::deny(format!("state hash: {error}")))
     }
 
     pub(super) fn consensus_state_root_hash(&self) -> Result<String, WorldError> {
         self.base
-            .state_root_hash_with_command_overlay(CommandStateOverlay {
-                module_states: &self.module_states,
-                resources: &self.resource_updates,
-                agents: &self.agent_updates,
-            })
+            .state_root_hash_with_command_and_module_visual_overlay(
+                CommandStateOverlay {
+                    module_states: &self.module_states,
+                    resources: &self.resource_updates,
+                    agents: &self.agent_updates,
+                },
+                &self.module_visual_entities,
+            )
     }
 
     pub(super) fn call_module_raw(
@@ -465,7 +473,20 @@ impl<'a> TrustedCommandStage<'a> {
             WorldEventBody::CapabilityAuthorization(
                 CapabilityAuthorizationEvent::CommandCommitted { .. },
             ) => {}
-            WorldEventBody::PolicyDecisionRecorded(_) | WorldEventBody::ModuleEmitted(_) => {}
+            WorldEventBody::PolicyDecisionRecorded(_) => {}
+            WorldEventBody::ModuleEmitted(event) => {
+                if let Some(next) = self
+                    .base
+                    .state
+                    .prepare_module_visual_event_at_with_entities(
+                        event,
+                        self.base.state.time,
+                        &self.module_visual_entities,
+                    )?
+                {
+                    self.module_visual_entities = next;
+                }
+            }
             WorldEventBody::ModuleStateUpdated(update) => {
                 self.module_states
                     .insert(update.module_id.clone(), update.state.clone());
@@ -716,6 +737,7 @@ impl<'a> TrustedCommandStage<'a> {
             base_head: self.base_head,
             module_cache_additions: self.module_cache_additions,
             module_states: self.module_states,
+            module_visual_entities: self.module_visual_entities,
             agent_updates: self.agent_updates,
             resource_updates: self.resource_updates,
             pending_effects: self.pending_effects,
@@ -746,6 +768,7 @@ impl<'a> TrustedCommandStage<'a> {
                         base_head: self.base_head,
                         module_cache_additions: self.module_cache_additions,
                         module_states: self.module_states,
+                        module_visual_entities: self.module_visual_entities,
                         agent_updates: self.agent_updates,
                         resource_updates: self.resource_updates,
                         pending_effects: self.pending_effects,
@@ -864,6 +887,7 @@ impl PreparedTrustedCommand {
         for (module_id, state) in self.module_states {
             world.state.module_states.insert(module_id, state);
         }
+        world.state.module_visual_entities = self.module_visual_entities;
         for (agent_id, cell) in self.agent_updates {
             world.state.agents.insert(agent_id, cell);
         }

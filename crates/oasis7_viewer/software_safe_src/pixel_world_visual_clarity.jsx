@@ -1,6 +1,6 @@
 import { For, Index, Show } from "solid-js";
 import * as core from "./legacy_core.js";
-import { pixelWorldEntityMarkerCode, pixelWorldReadableAgentLabel } from "./pixel_world_identity.js";
+import { pixelWorldEntityMarkerCode, pixelWorldReadableAgentLabel, pixelWorldReadableModuleLabel } from "./pixel_world_identity.js";
 import { pixelWorldSparseScenePresentation } from "./pixel_world_presentation.js";
 
 const FRAGMENT_TERRAIN_PALETTE = {
@@ -25,6 +25,12 @@ export function toWorldPercentStyle(pos, worldBounds, fallbackStyle) {
 export function agentMarkerStyle(agent, index, worldBounds) {
   const base = toWorldPercentStyle(agent.pos, worldBounds, { left: `${18 + ((index % 5) * 15)}%`, top: `${14 + (Math.floor(index / 5) * 22)}%` });
   const offsets = [[-18, -18], [18, -18], [-18, 18], [18, 18], [0, -30], [0, 30], [-30, 0], [30, 0], [-28, -28], [28, 28]];
+  const [x, y] = offsets[index % offsets.length] || [0, 0];
+  return { ...base, transform: `translate(${x}px, ${y}px)` };
+}
+export function moduleMarkerStyle(module, index, worldBounds) {
+  const base = toWorldPercentStyle(module.pos, worldBounds, { left: `${18 + ((index % 5) * 15)}%`, top: `${14 + (Math.floor(index / 5) * 22)}%` });
+  const offsets = [[0, 0], [-12, -12], [12, -12], [-12, 12], [12, 12], [-24, 0], [24, 0], [0, -24], [0, 24]];
   const [x, y] = offsets[index % offsets.length] || [0, 0];
   return { ...base, transform: `translate(${x}px, ${y}px)` };
 }
@@ -62,6 +68,25 @@ export function fieldValue(value, snakeName, camelName, fallback = undefined) {
   if (camelName && value[camelName] !== undefined) return value[camelName];
   return fallback;
 }
+const AUTHORITATIVE_LINK_KINDS = new Set([
+  "agent_assignment",
+  "route",
+  "logistics",
+  "logistics_route",
+  "supply_route",
+  "delivery_route",
+  "resource_flow",
+  "resource_transfer",
+  "material_transfer",
+  "material_transit",
+]);
+function hasCurrentRuntimeLinkAuthority(link) {
+  const kind = String(fieldValue(link, "kind", "kind", "")).trim();
+  return AUTHORITATIVE_LINK_KINDS.has(kind)
+    && fieldValue(link, "status", "status", null) === "active"
+    && fieldValue(link, "source_class", "sourceClass", null) === "runtime_projection"
+    && fieldValue(link, "freshness", "freshness", null) === "current";
+}
 function explicitLinkEndpointIds(link) {
   if (!link || typeof link !== "object") return { agent: [], location: [] };
   const endpoint = (names) => names.map((name) => fieldValue(link, name, name.replace(/_([a-z])/g, (_, character) => character.toUpperCase()), null)).filter((value) => value != null && String(value).trim()).map((value) => String(value).trim());
@@ -71,26 +96,25 @@ function explicitLinkEndpointIds(link) {
   };
   return explicit;
 }
-function hasAuthoritativeAssignment(agent) {
+function hasCurrentRuntimeRelation(agent, expectedKind) {
   const envelope = [agent?.relation, agent?.assignment].find((candidate) => candidate && typeof candidate === "object");
-  return envelope?.kind === "agent_assignment"
+  return fieldValue(envelope, "kind", "kind", null) === expectedKind
     && envelope?.status === "active"
     && envelope?.source_class === "runtime_projection"
     && envelope?.freshness === "current";
 }
 function linkReferencesSelection(link, selection, agents) {
   if (!selection?.id || !selection?.kind) return false;
+  if (!hasCurrentRuntimeLinkAuthority(link)) return false;
   const endpointIds = explicitLinkEndpointIds(link);
   if ((selection.kind === "agent" ? endpointIds.agent : endpointIds.location).includes(String(selection.id))) {
     return true;
   }
-  if (link?.kind !== "agent_assignment" || link?.status !== "active" || link?.source_class !== "runtime_projection" || link?.freshness !== "current") {
-    return false;
-  }
+  const linkKind = fieldValue(link, "kind", "kind", null);
   return agents.some((agent) => {
     const agentId = String(agent?.id || "").trim();
     const locationId = String(fieldValue(agent, "location_id", "locationId", "")).trim();
-    if (!agentId || !locationId || !hasAuthoritativeAssignment(agent)) {
+    if (!agentId || !locationId || !hasCurrentRuntimeRelation(agent, linkKind)) {
       return false;
     }
     if (link.id !== `link:${agentId}:${locationId}`) {
@@ -108,29 +132,37 @@ export function arrayField(value, snakeName, camelName) {
 }
 function normalizeVisualEntity(entry) {
   if (!entry || typeof entry !== "object") return entry;
-  return { ...entry, location_id: fieldValue(entry, "location_id", "locationId", null), marker_role: fieldValue(entry, "marker_role", "markerRole", null), marker_alpha: fieldValue(entry, "marker_alpha", "markerAlpha", undefined), position_source: fieldValue(entry, "position_source", "positionSource", null), dominant_compound: fieldValue(entry, "dominant_compound", "dominantCompound", undefined), footprint_cm: fieldValue(entry, "footprint_cm", "footprintCm", undefined) };
+  return { ...entry, location_id: fieldValue(entry, "location_id", "locationId", null), marker_role: fieldValue(entry, "marker_role", "markerRole", null), marker_alpha: fieldValue(entry, "marker_alpha", "markerAlpha", undefined), position_source: fieldValue(entry, "position_source", "positionSource", null), dominant_compound: fieldValue(entry, "dominant_compound", "dominantCompound", undefined), footprint_cm: fieldValue(entry, "footprint_cm", "footprintCm", undefined), module_id: fieldValue(entry, "module_id", "moduleId", null), anchor: fieldValue(entry, "anchor", "anchor", null) };
 }
 export function pixelWorldVisualState(renderState) {
   const state = renderState || {};
-  return { worldBounds: fieldValue(state, "world_bounds", "worldBounds", null), fragmentTerrain: arrayField(state, "fragment_terrain", "fragmentTerrain").map(normalizeVisualEntity), links: arrayField(state, "links", "links"), locations: arrayField(state, "locations", "locations").map(normalizeVisualEntity), agents: arrayField(state, "agents", "agents").map(normalizeVisualEntity), selection: fieldValue(state, "selection", "selection", null), goalHighlight: fieldValue(state, "goal_highlight", "goalHighlight", null), blockerHighlight: fieldValue(state, "blocker_highlight", "blockerHighlight", null), visualHotspots: arrayField(state, "visual_hotspots", "visualHotspots").map(normalizeVisualEntity) };
+  return { worldBounds: fieldValue(state, "world_bounds", "worldBounds", null), fragmentTerrain: arrayField(state, "fragment_terrain", "fragmentTerrain").map(normalizeVisualEntity), links: arrayField(state, "links", "links"), locations: arrayField(state, "locations", "locations").map(normalizeVisualEntity), agents: arrayField(state, "agents", "agents").map(normalizeVisualEntity), moduleVisualEntities: arrayField(state, "module_visual_entities", "moduleVisualEntities").map(normalizeVisualEntity), selection: fieldValue(state, "selection", "selection", null), goalHighlight: fieldValue(state, "goal_highlight", "goalHighlight", null), blockerHighlight: fieldValue(state, "blocker_highlight", "blockerHighlight", null), visualHotspots: arrayField(state, "visual_hotspots", "visualHotspots").map(normalizeVisualEntity) };
 }
 
 export function PixelWorldCanvasAgentHitTargets(props) {
   const visualState = () => pixelWorldVisualState(props.renderState());
-  return <For each={visualState().agents.slice(0, 10)}>{(agent, index) => {
-    const label = pixelWorldReadableAgentLabel(agent, agent.id, core.isLocaleZh(props.locale()));
-    return <button type="button" class="pixel-world-entity pixel-world-entity--agent pixel-world-entity--canvas-hit-target" data-pixel-world-agent-marker="true" data-agent-id={agent.id} data-marker-code={pixelWorldEntityMarkerCode(agent, agent.id, "agent")} data-position-source={agent.position_source} data-selected={props.selection()?.kind === "agent" && props.selection()?.id === agent.id ? "true" : "false"} aria-pressed={props.selection()?.kind === "agent" && props.selection()?.id === agent.id ? "true" : "false"} aria-label={`${tr(props.locale(), "选择 Agent", "Select Agent")} ${label}`} style={agentMarkerStyle(agent, index(), visualState().worldBounds)} title={label} onMouseEnter={() => props.onHover({ kind: "agent", id: agent.id })} onMouseLeave={() => props.onHover(null)} onClick={() => props.onSelect({ kind: "agent", id: agent.id })}>
+  return <>
+    <For each={visualState().agents.slice(0, 10)}>{(agent, index) => {
+      const label = pixelWorldReadableAgentLabel(agent, agent.id, core.isLocaleZh(props.locale()));
+      return <button type="button" class="pixel-world-entity pixel-world-entity--agent pixel-world-entity--canvas-hit-target" data-pixel-world-agent-marker="true" data-agent-id={agent.id} data-marker-code={pixelWorldEntityMarkerCode(agent, agent.id, "agent")} data-position-source={agent.position_source} data-selected={props.selection()?.kind === "agent" && props.selection()?.id === agent.id ? "true" : "false"} aria-pressed={props.selection()?.kind === "agent" && props.selection()?.id === agent.id ? "true" : "false"} aria-label={`${tr(props.locale(), "选择 Agent", "Select Agent")} ${label}`} style={agentMarkerStyle(agent, index(), visualState().worldBounds)} title={label} onMouseEnter={() => props.onHover({ kind: "agent", id: agent.id })} onMouseLeave={() => props.onHover(null)} onClick={() => props.onSelect({ kind: "agent", id: agent.id })}>
       <span class="pixel-world-entity__code">{pixelWorldEntityMarkerCode(agent, agent.id, "agent")}</span>
-    </button>;
-  }}</For>;
+      </button>;
+    }}</For>
+    <For each={visualState().moduleVisualEntities.slice(0, 24)}>{(module, index) => {
+      const label = pixelWorldReadableModuleLabel(module, module.id, core.isLocaleZh(props.locale()));
+      return <button type="button" class="pixel-world-entity pixel-world-entity--module pixel-world-entity--canvas-hit-target" data-pixel-world-module-marker="true" data-module-id={module.id} data-module-kind={module.kind} data-module-label={module.label || undefined} data-marker-code={pixelWorldEntityMarkerCode(module, module.id, "module_visual")} data-selected={props.selection()?.kind === "module_visual" && props.selection()?.id === module.id ? "true" : "false"} aria-pressed={props.selection()?.kind === "module_visual" && props.selection()?.id === module.id ? "true" : "false"} aria-label={`${tr(props.locale(), "选择模块", "Select Module")} ${label}`} style={moduleMarkerStyle(module, index(), visualState().worldBounds)} title={label} onMouseEnter={() => props.onHover({ kind: "module_visual", id: module.id })} onMouseLeave={() => props.onHover(null)} onClick={() => props.onSelect({ kind: "module_visual", id: module.id })}>
+        <span class="pixel-world-entity__code">{pixelWorldEntityMarkerCode(module, module.id, "module_visual")}</span>
+      </button>;
+    }}</For>
+  </>;
 }
 
 export function PixelWorldHostVisualLayer(props) {
+  const enabled = () => typeof props.enabled === "function" ? props.enabled() : props.enabled;
   const visualState = () => pixelWorldVisualState(props.renderState());
   const selection = () => props.selection?.() || visualState().selection;
   const projectedAgents = () => visualState().agents;
-  if (!props.enabled) return <></>;
-  return <>
+  return <Show when={enabled()}>
     <div class="pixel-world-canvas__grid" /><div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--one" /><div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--two" />
     <For each={visualState().fragmentTerrain.slice(0, 96)}>{(patch, index) => <div class={`pixel-world-fragment-terrain${terrainReferencesSelection(patch, selection()) ? " pixel-world-fragment-terrain--associated" : selection() ? " pixel-world-fragment-terrain--muted" : ""}`} data-compound={patch.dominant_compound} data-associated={terrainReferencesSelection(patch, selection()) ? "true" : "false"} style={fragmentTerrainStyle(patch, visualState().worldBounds, index())} title={`${patch.location_id}:${patch.dominant_compound}`} />}</For>
     <For each={visualState().links.slice(0, 10)}>{(link, index) => <>
@@ -144,7 +176,10 @@ export function PixelWorldHostVisualLayer(props) {
     <Index each={visualState().agents.slice(0, 10)}>{(agent, index) => { const label = () => pixelWorldReadableAgentLabel(agent(), agent().id, core.isLocaleZh(props.locale())); return <button class="pixel-world-entity pixel-world-entity--agent" data-pixel-world-agent-marker="true" data-agent-id={agent().id} data-selected={selection()?.kind === "agent" && selection()?.id === agent().id ? "true" : "false"} data-marker-code={pixelWorldEntityMarkerCode(agent(), agent().id, "agent")} data-position-source={agent().position_source} aria-pressed={selection()?.kind === "agent" && selection()?.id === agent().id ? "true" : "false"} aria-label={`${tr(props.locale(), "选择 Agent", "Select Agent")} ${label()}`} style={agentMarkerStyle(agent(), index, visualState().worldBounds)} title={label()} onMouseEnter={() => props.onHover({ kind: "agent", id: agent().id })} onMouseLeave={() => props.onHover(null)} onClick={() => props.onSelect({ kind: "agent", id: agent().id })}>
       <span class="pixel-world-entity__code">{pixelWorldEntityMarkerCode(agent(), agent().id, "agent")}</span>
     </button>; }}</Index>
-  </>;
+    <Index each={visualState().moduleVisualEntities.slice(0, 24)}>{(module, index) => { const label = () => pixelWorldReadableModuleLabel(module(), module().id, core.isLocaleZh(props.locale())); return <button type="button" class="pixel-world-entity pixel-world-entity--module" data-pixel-world-module-marker="true" data-module-id={module().id} data-module-kind={module().kind} data-module-label={module().label || undefined} data-selected={selection()?.kind === "module_visual" && selection()?.id === module().id ? "true" : "false"} data-marker-code={pixelWorldEntityMarkerCode(module(), module().id, "module_visual")} aria-pressed={selection()?.kind === "module_visual" && selection()?.id === module().id ? "true" : "false"} aria-label={`${tr(props.locale(), "选择模块", "Select Module")} ${label()}`} style={moduleMarkerStyle(module(), index, visualState().worldBounds)} title={label()} onMouseEnter={() => props.onHover({ kind: "module_visual", id: module().id })} onMouseLeave={() => props.onHover(null)} onClick={() => props.onSelect({ kind: "module_visual", id: module().id })}>
+      <span class="pixel-world-entity__code">{pixelWorldEntityMarkerCode(module(), module().id, "module_visual")}</span>
+    </button>; }}</Index>
+  </Show>;
 }
 
 export function PixelWorldCanvasLegend(props) {

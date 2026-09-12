@@ -204,12 +204,16 @@ function normalizeEvent(event, context) {
   if (event.major_event != null && majorEvent == null) {
     return null;
   }
+  const moduleVisualEntityId = typeof event.module_visual_entity_id === "string"
+    ? event.module_visual_entity_id.trim()
+    : "";
   return {
     event_seq: typeof event.event_seq === "number" ? event.event_seq : eventSeq,
     kind,
     summary,
     detail,
     receipt_ref: receiptRef,
+    ...(moduleVisualEntityId ? { module_visual_entity_id: String(moduleVisualEntityId).trim() } : {}),
     ...(majorEvent ? { major_event: majorEvent } : {}),
   };
 }

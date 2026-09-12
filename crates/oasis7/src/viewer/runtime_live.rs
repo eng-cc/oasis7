@@ -73,6 +73,11 @@ mod governance_vote_quote;
 mod governance_vote_quote_debug;
 mod mapping;
 mod market_quote_decision;
+// The real-runtime module visual driver is a focused test helper.  Keeping
+// this module out of normal builds prevents an environment variable or CLI
+// from mutating a production world.
+#[cfg(test)]
+mod module_visual_driver;
 mod player_gameplay;
 #[path = "runtime_live/power_projection.rs"]
 mod power_projection;

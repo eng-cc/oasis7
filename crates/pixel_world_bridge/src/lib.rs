@@ -12,9 +12,12 @@ use js_sys::{Function, Object, Reflect};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Value, json};
 use serde_wasm_bindgen::{Serializer, from_value};
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
+mod bridge_api;
 mod facility_signature;
 mod host_state;
 mod presentation_clock;
@@ -104,6 +107,10 @@ struct Link {
     id: String,
     #[allow(dead_code)]
     kind: String,
+    /// Optional producer supplied presentation text. It never participates
+    /// in relation authority; viewers fall back to the localized type label.
+    #[serde(default)]
+    label: Option<String>,
     from: Position,
     to: Position,
     emphasis: Option<f64>,
@@ -226,6 +233,10 @@ struct FocusTarget {
     id: String,
 }
 
+fn default_render_locale() -> String {
+    "en".to_string()
+}
+
 #[derive(Clone, Debug, Deserialize)]
 struct WorldBounds {
     width_cm: f64,
@@ -236,6 +247,8 @@ struct WorldBounds {
 
 #[derive(Clone, Debug, Deserialize)]
 struct RenderState {
+    #[serde(default = "default_render_locale")]
+    locale: String,
     world_bounds: Option<WorldBounds>,
     locations: Vec<Location>,
     #[serde(default)]
@@ -560,6 +573,35 @@ fn to_bevy_translation(canvas_x: f64, canvas_y: f64, width: f64, height: f64, z:
     )
 }
 
+#[cfg(target_arch = "wasm32")]
+fn renderer_to_css_scale(width: f64, height: f64) -> Vec2 {
+    let selector = BRIDGE_SHARED.with(|shared| shared.borrow().canvas_selector.clone());
+    let Some(selector) = selector else {
+        return Vec2::ONE;
+    };
+    let Some(document) = web_sys::window().and_then(|window| window.document()) else {
+        return Vec2::ONE;
+    };
+    let Ok(Some(element)) = document.query_selector(&selector) else {
+        return Vec2::ONE;
+    };
+    let Ok(canvas) = element.dyn_into::<HtmlCanvasElement>() else {
+        return Vec2::ONE;
+    };
+    let rect = canvas.get_bounding_client_rect();
+    let css_width = rect.width();
+    let css_height = rect.height();
+    if !css_width.is_finite() || !css_height.is_finite() || css_width <= 0.0 || css_height <= 0.0 {
+        return Vec2::ONE;
+    }
+    Vec2::new((width / css_width) as f32, (height / css_height) as f32)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn renderer_to_css_scale(_width: f64, _height: f64) -> Vec2 {
+    Vec2::ONE
+}
+
 fn sprite_for_square(color: Color, size: f32) -> Sprite {
     Sprite::from_color(color, Vec2::splat(size))
 }
@@ -716,6 +758,10 @@ fn render_signature(render_state: Option<&RenderState>, mode: RenderSignatureMod
         return hasher.finish();
     };
 
+    if matches!(mode, RenderSignatureMode::Content) {
+        render_state.locale.hash(&mut hasher);
+    }
+
     render_state.world_bounds.is_some().hash(&mut hasher);
     if let Some(bounds) = render_state.world_bounds.as_ref() {
         hash_f64(&mut hasher, bounds.width_cm);
@@ -754,6 +800,11 @@ fn render_signature(render_state: Option<&RenderState>, mode: RenderSignatureMod
     for entity in &render_state.module_visual_entities {
         entity.id.hash(&mut hasher);
         hash_position(&mut hasher, &entity.pos);
+        if matches!(mode, RenderSignatureMode::Content) {
+            entity.module_id.hash(&mut hasher);
+            entity.kind.hash(&mut hasher);
+            entity.label.hash(&mut hasher);
+        }
     }
 
     render_state.agents.len().hash(&mut hasher);
@@ -777,6 +828,9 @@ fn render_signature(render_state: Option<&RenderState>, mode: RenderSignatureMod
         hash_position(&mut hasher, &link.from);
         hash_position(&mut hasher, &link.to);
         hash_f64(&mut hasher, link.emphasis.unwrap_or(0.0));
+        if matches!(mode, RenderSignatureMode::Content) {
+            link.label.hash(&mut hasher);
+        }
         link.status.hash(&mut hasher);
         link.source_class.hash(&mut hasher);
         link.freshness.hash(&mut hasher);
@@ -793,6 +847,10 @@ fn render_signature(render_state: Option<&RenderState>, mode: RenderSignatureMod
         hash_position(&mut hasher, &hotspot.pos);
         hash_f64(&mut hasher, hotspot.emphasis.unwrap_or(0.0));
         hash_f64(&mut hasher, hotspot.size_hint_px.unwrap_or(0.0));
+        if matches!(mode, RenderSignatureMode::Content) {
+            hotspot.kind.hash(&mut hasher);
+            hotspot.label.hash(&mut hasher);
+        }
     }
 
     render_state.receipt_target.is_some().hash(&mut hasher);
@@ -1033,160 +1091,6 @@ fn sync_external_state(mut runtime: ResMut<BevyRuntimeState>) {
     runtime.animation_dirty |= animation_version != runtime.animation_version;
     if runtime.animation_dirty {
         runtime.animation_version = animation_version;
-    }
-}
-
-#[wasm_bindgen]
-impl PixelWorldBridge {
-    #[wasm_bindgen(constructor)]
-    pub fn new(on_event: Function, on_fatal: Function) -> Self {
-        Self {
-            mounted: false,
-            on_event,
-            on_fatal,
-        }
-    }
-
-    #[wasm_bindgen]
-    pub fn mount(&mut self, canvas: HtmlCanvasElement, initial_render_state: JsValue) -> JsValue {
-        let parsed_state = match parse_render_state(initial_render_state) {
-            Ok(state) => state,
-            Err(error) => return emit_fatal_payload(&error.as_string().unwrap_or_default()),
-        };
-        let canvas_id = if canvas.id().is_empty() {
-            let generated = "pixel-world-embedded-runtime-canvas".to_string();
-            canvas.set_id(&generated);
-            generated
-        } else {
-            canvas.id()
-        };
-        let canvas_selector = format!("#{canvas_id}");
-
-        let mount_result = BRIDGE_SHARED.with(|shared| {
-            let mut shared = shared.borrow_mut();
-            if let Some(existing_selector) = &shared.canvas_selector
-                && existing_selector != &canvas_selector
-            {
-                return Err(format!(
-                    "bevy runtime already bound to {existing_selector}, cannot rebind to {canvas_selector}"
-                ));
-            }
-            shared.canvas_selector = Some(canvas_selector.clone());
-            shared.render_state = Some(parsed_state);
-            shared.render_version += 1;
-            shared.mounted = true;
-            shared.on_event = Some(self.on_event.clone());
-            shared.on_fatal = Some(self.on_fatal.clone());
-            let should_boot = !shared.booted;
-            if should_boot {
-                shared.booted = true;
-            }
-            Ok(should_boot)
-        });
-
-        let should_boot = match mount_result {
-            Ok(should_boot) => should_boot,
-            Err(message) => return emit_fatal_payload(&message),
-        };
-
-        self.mounted = true;
-
-        if should_boot {
-            boot_bevy_app(canvas_selector);
-        }
-
-        let _ = emit_event_value(&json!({ "type": "canvas_ready" }));
-        let _ = emit_camera_state(&CameraState::default());
-        status_value("ready")
-    }
-
-    #[wasm_bindgen]
-    pub fn update(&mut self, next_render_state: JsValue) -> JsValue {
-        if !self.mounted {
-            return status_value("detached");
-        }
-        let parsed_state = match parse_render_state(next_render_state) {
-            Ok(state) => state,
-            Err(error) => return emit_fatal_payload(&error.as_string().unwrap_or_default()),
-        };
-        BRIDGE_SHARED.with(|shared| {
-            let mut shared = shared.borrow_mut();
-            shared.render_state = Some(parsed_state);
-            shared.render_version += 1;
-        });
-        status_value("ready")
-    }
-
-    #[wasm_bindgen]
-    pub fn hotspot_test_hit_targets(&self, contract: String) -> JsValue {
-        if !self.mounted || contract != HOTSPOT_TEST_READBACK_CONTRACT {
-            return JsValue::NULL;
-        }
-        BRIDGE_SHARED.with(|shared| {
-            js_value_from_serializable(&shared.borrow().hotspot_test_targets)
-                .unwrap_or(JsValue::NULL)
-        })
-    }
-
-    #[wasm_bindgen]
-    pub fn location_test_hit_targets(&self, contract: String) -> JsValue {
-        if !self.mounted || contract != LOCATION_TEST_READBACK_CONTRACT {
-            return JsValue::NULL;
-        }
-        BRIDGE_SHARED.with(|shared| {
-            js_value_from_serializable(&shared.borrow().location_test_targets)
-                .unwrap_or(JsValue::NULL)
-        })
-    }
-
-    #[wasm_bindgen]
-    pub fn pointer_down(&mut self, x: f64, y: f64, pointer_id: i32) -> JsValue {
-        push_input_event(InputEvent::PointerDown { x, y, pointer_id });
-        status_value("ready")
-    }
-
-    #[wasm_bindgen]
-    pub fn pointer_move(&mut self, x: f64, y: f64, is_leave: bool, pointer_id: i32) -> JsValue {
-        push_input_event(InputEvent::PointerMove {
-            x,
-            y,
-            is_leave,
-            pointer_id,
-        });
-        status_value("ready")
-    }
-
-    #[wasm_bindgen]
-    pub fn pointer_up(&mut self, pointer_id: i32) -> JsValue {
-        push_input_event(InputEvent::PointerUp { pointer_id });
-        status_value("ready")
-    }
-
-    #[wasm_bindgen]
-    pub fn wheel(&mut self, delta_y: f64) -> JsValue {
-        push_input_event(InputEvent::Wheel { delta_y });
-        status_value("ready")
-    }
-
-    #[wasm_bindgen]
-    pub fn click(&mut self, x: f64, y: f64) -> JsValue {
-        push_input_event(InputEvent::Click { x, y });
-        status_value("ready")
-    }
-
-    #[wasm_bindgen]
-    pub fn unmount(&mut self) -> JsValue {
-        self.mounted = false;
-        BRIDGE_SHARED.with(|shared| {
-            let mut shared = shared.borrow_mut();
-            shared.mounted = false;
-            shared.render_state = None;
-            shared.render_version += 1;
-            shared.input_events.clear();
-            shared.hotspot_test_targets.clear();
-            shared.location_test_targets.clear();
-        });
-        status_value("detached")
     }
 }
 

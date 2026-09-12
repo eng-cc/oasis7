@@ -9,6 +9,93 @@ export function pixelWorldRoutesAndEventsVisualFixture() {
   snapshot.model.locations['loc-1'].pos = { x_cm: 5_200_000, y_cm: 2_650_000, z_cm: 0 };
   snapshot.model.agent_player_bindings['agent-1'] = 'player-one';
   snapshot.model.agent_player_public_key_bindings['agent-1'] = snapshot.model.agent_player_public_key_bindings['agent-0'];
+
+  const genericRelation = {
+    kind: 'logistics_route',
+    label: 'Ore logistics route',
+    status: 'active',
+    source_class: 'runtime_projection',
+    freshness: 'current',
+  };
+  snapshot.model.agents['agent-route'] = {
+    id: 'agent-route',
+    name: 'Route Agent',
+    location_id: 'loc-route',
+    pos: { x_cm: 1_200_000, y_cm: 900_000, z_cm: 0 },
+    relation: { ...genericRelation },
+    resources: {},
+  };
+  snapshot.model.locations['loc-route'] = {
+    id: 'loc-route',
+    name: 'Ore Transfer Yard',
+    pos: { x_cm: 2_300_000, y_cm: 900_000, z_cm: 0 },
+    profile: { radius_cm: 30_000, material: 'ore' },
+    resources: {},
+  };
+  snapshot.model.agents['agent-unknown-route'] = {
+    id: 'agent-unknown-route',
+    name: 'Unknown Route Agent',
+    location_id: 'loc-unknown-route',
+    pos: { x_cm: 1_200_000, y_cm: 1_600_000, z_cm: 0 },
+    relation: {
+      kind: 'unknown',
+      status: 'active',
+      source_class: 'runtime_projection',
+      freshness: 'current',
+    },
+    resources: {},
+  };
+  snapshot.model.locations['loc-unknown-route'] = {
+    id: 'loc-unknown-route',
+    name: 'Unknown Route Yard',
+    pos: { x_cm: 2_300_000, y_cm: 1_600_000, z_cm: 0 },
+    profile: { radius_cm: 30_000, material: 'ore' },
+    resources: {},
+  };
+  snapshot.model.agents['agent-stale-route'] = {
+    id: 'agent-stale-route',
+    name: 'Stale Route Agent',
+    location_id: 'loc-stale-route',
+    pos: { x_cm: 1_200_000, y_cm: 2_300_000, z_cm: 0 },
+    relation: {
+      kind: 'route',
+      status: 'active',
+      source_class: 'runtime_projection',
+      freshness: 'stale',
+    },
+    resources: {},
+  };
+  snapshot.model.locations['loc-stale-route'] = {
+    id: 'loc-stale-route',
+    name: 'Stale Route Yard',
+    pos: { x_cm: 2_300_000, y_cm: 2_300_000, z_cm: 0 },
+    profile: { radius_cm: 30_000, material: 'ore' },
+    resources: {},
+  };
+  snapshot.model.agents['agent-zero-route'] = {
+    id: 'agent-zero-route',
+    name: 'Zero Length Agent',
+    location_id: 'loc-zero-route',
+    pos: { x_cm: 7_500_000, y_cm: 4_200_000, z_cm: 0 },
+    relation: {
+      kind: 'resource_flow',
+      status: 'active',
+      source_class: 'runtime_projection',
+      freshness: 'current',
+    },
+    resources: {},
+  };
+  snapshot.model.locations['loc-zero-route'] = {
+    id: 'loc-zero-route',
+    name: 'Zero Length Yard',
+    pos: { x_cm: 7_500_000, y_cm: 4_200_000, z_cm: 0 },
+    profile: { radius_cm: 30_000, material: 'ore' },
+    resources: {},
+  };
+  for (const id of ['agent-route', 'agent-unknown-route', 'agent-stale-route', 'agent-zero-route']) {
+    snapshot.model.agent_player_bindings[id] = 'player-one';
+    snapshot.model.agent_player_public_key_bindings[id] = snapshot.model.agent_player_public_key_bindings['agent-0'];
+  }
   return snapshot;
 }
 
@@ -233,14 +320,14 @@ export function pixelWorldModuleVisualEntitiesFixture() {
       module_id: "fixture-module",
       kind: "beacon",
       label: "Beacon marker",
-      anchor: { type: "absolute", data: { x_cm: 1_850_000, y_cm: 3_600_000, z_cm: 0 } },
+      anchor: { type: "absolute", data: { pos: { x_cm: 1_850_000, y_cm: 3_600_000, z_cm: 0 } } },
     },
     "module-relay": {
       entity_id: "module-relay",
       module_id: "fixture-module",
       kind: "relay",
       label: "Relay marker",
-      anchor: { type: "absolute", data: { x_cm: 1_850_000, y_cm: 3_600_000, z_cm: 0 } },
+      anchor: { type: "absolute", data: { pos: { x_cm: 1_850_000, y_cm: 3_600_000, z_cm: 0 } } },
     },
     "module-agent": {
       entity_id: "module-agent",

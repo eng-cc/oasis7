@@ -68,6 +68,9 @@ use selected_location_cue::{PixelWorldSelectedLocationCue, reconcile_selected_lo
 #[path = "render_location_labels.rs"]
 mod location_labels;
 use location_labels::{LocationLabelQueries, despawn_location_labels, reconcile_location_labels};
+#[path = "render_map_labels.rs"]
+pub(crate) mod map_labels;
+use map_labels::{MapLabelQueries, despawn_map_labels, reconcile_map_labels};
 #[path = "render_location_corner_frame.rs"]
 mod location_corner_frame;
 use location_corner_frame::{PixelWorldLocationCornerFrame, reconcile_location_corner_frames};
@@ -105,6 +108,7 @@ use hotspot_cues::{HotspotCueQueries, despawn_hotspot_cues, reconcile_hotspot_cu
 const LOCATION_HIT_HALF_SIZE: f64 = 8.0;
 const AGENT_HIT_HALF_SIZE: f64 = 8.0;
 const HOTSPOT_HIT_HALF_SIZE: f64 = 8.0;
+const MODULE_VISUAL_HIT_HALF_SIZE: f64 = 8.0;
 const FRAGMENT_HIDDEN_THRESHOLD_PX: f64 = 1.5;
 const FRAGMENT_DETAIL_THRESHOLD_PX: f64 = 10.0;
 const FRAGMENT_LAYER_Z: f32 = 0.35;
@@ -215,6 +219,11 @@ fn selection_focus_position(
             .iter()
             .find(|location| location.id == focus_target.id)
             .map(|location| location.pos.clone()),
+        "module_visual" => render_state
+            .module_visual_entities
+            .iter()
+            .find(|entity| entity.id == focus_target.id)
+            .map(|entity| entity.pos.clone()),
         _ => None,
     }
 }
@@ -731,6 +740,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     module_identity_chips: ModuleIdentityChipQueries<'w, 's>,
     location_visuals: Query<'w, 's, (Entity, &'static PixelWorldLocationVisual)>,
     location_labels: LocationLabelQueries<'w, 's>,
+    map_labels: MapLabelQueries<'w, 's>,
     location_resource_cues: Query<'w, 's, (Entity, &'static PixelWorldLocationResourceCue)>,
     selected_location_cues: Query<'w, 's, (Entity, &'static PixelWorldSelectedLocationCue)>,
     location_corner_frames: Query<'w, 's, (Entity, &'static PixelWorldLocationCornerFrame)>,
@@ -769,6 +779,7 @@ pub(crate) fn render_scene(
             commands.entity(entity).despawn();
         }
         despawn_location_labels(&mut commands, &queries.location_labels);
+        despawn_map_labels(&mut commands, &queries.map_labels);
         despawn(&mut commands, &queries.location_resource_cues);
         despawn_selected_resource_readouts(&mut commands, &queries.selected_resource_readouts);
         for (entity, _) in queries.fragment_insets.iter() {
@@ -929,6 +940,11 @@ pub(crate) fn render_scene(
     if runtime.reactive_scheduling && !static_reconcile && !animation_reconcile {
         return;
     }
+    let renderer_scale = if static_reconcile {
+        renderer_to_css_scale(width, height)
+    } else {
+        Vec2::ONE
+    };
     if runtime.reactive_scheduling {
         runtime.needs_reconcile = false;
         runtime.animation_dirty = false;
@@ -982,6 +998,8 @@ pub(crate) fn render_scene(
             &queries.module_identity_chips,
             width,
             height,
+            renderer_scale,
+            rebuild_hit_regions,
         );
         reconcile_links(&mut commands, &mut runtime, width, height);
         reconcile_social_links(
@@ -1014,6 +1032,7 @@ pub(crate) fn render_scene(
         width,
         height,
     );
+    reconcile_map_labels(&mut commands, &runtime, &queries.map_labels, width, height);
     reconcile_location_corner_frames(
         &mut commands,
         &runtime,

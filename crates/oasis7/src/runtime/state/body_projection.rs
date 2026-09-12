@@ -1,8 +1,27 @@
-use super::projection::BodyOverlayMutation;
-use super::{AgentCell, BodyOverlay, DomainEvent};
+use super::{AgentCell, DomainEvent};
 use serde::Serialize;
 use serde::ser::{SerializeMap, SerializeSeq, SerializeStruct};
 use std::collections::{BTreeMap, VecDeque};
+
+#[derive(Debug, Clone, PartialEq)]
+pub(super) enum BodyOverlayMutation {
+    Body {
+        body_view: crate::models::BodyKernelView,
+        last_active: super::WorldTime,
+    },
+    RouteOnly,
+}
+
+/// A typed, borrowed overlay for the state fields needed while preparing a
+/// domain transition. The overlay is intentionally narrow: it cannot mutate
+/// the canonical [`WorldState`] and it can either update the target agent's
+/// body fields or represent a route-only event with no body mutation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BodyOverlay {
+    pub(super) agent_id: String,
+    pub(super) mutation: BodyOverlayMutation,
+    pub(super) routed_domain_event: Option<DomainEvent>,
+}
 
 impl BodyOverlay {
     pub fn new(

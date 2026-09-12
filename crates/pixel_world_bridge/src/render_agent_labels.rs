@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use super::map_labels::map_label_obstacles;
 use super::*;
 
 const AGENT_LABEL_COLOR: Color = Color::srgba_u8(226, 232, 240, 220);
@@ -44,21 +45,19 @@ pub(super) fn reconcile_agent_labels(
         despawn_agent_labels(commands, queries);
         return;
     };
-    if runtime.camera.zoom < AGENT_LABEL_MIN_ZOOM {
-        despawn_agent_labels(commands, queries);
-        return;
-    }
-
     let selected_id = render_state
         .selection
         .as_ref()
         .and_then(|selection| (selection.kind == "agent").then_some(selection.id.as_str()));
+    let map_obstacles = map_label_obstacles(render_state, width, height, &runtime.camera);
     let mut agents = render_state.agents.iter().collect::<Vec<_>>();
     agents.sort_by(|left, right| {
-        let left_selected = Some(left.id.as_str()) == selected_id;
-        let right_selected = Some(right.id.as_str()) == selected_id;
-        right_selected
-            .cmp(&left_selected)
+        agent_label_priority(render_state, left.id.as_str(), selected_id)
+            .cmp(&agent_label_priority(
+                render_state,
+                right.id.as_str(),
+                selected_id,
+            ))
             .then_with(|| left.id.cmp(&right.id))
     });
 
@@ -81,9 +80,20 @@ pub(super) fn reconcile_agent_labels(
         let label_x = canvas_x;
         let label_y = canvas_y - AGENT_LABEL_ABOVE_MARKER_PX;
         let rect = AgentLabelRect::above_marker(label_x, label_y, &display);
+        let priority = agent_label_priority(render_state, agent.id.as_str(), selected_id);
+        if runtime.camera.zoom < AGENT_LABEL_MIN_ZOOM && priority > 1 {
+            continue;
+        }
         if accepted_rects
             .iter()
             .any(|accepted| accepted.overlaps(rect))
+        {
+            continue;
+        }
+        if priority > 1
+            && map_obstacles.iter().any(|obstacle| {
+                obstacle.overlaps_bounds(rect.left, rect.right, rect.top, rect.bottom)
+            })
         {
             continue;
         }
@@ -118,6 +128,34 @@ pub(super) fn reconcile_agent_labels(
             commands.entity(entity).despawn();
         }
     }
+}
+
+fn agent_label_priority(render_state: &RenderState, id: &str, selected_id: Option<&str>) -> u8 {
+    if selected_id == Some(id) {
+        return 0;
+    }
+    if render_state
+        .active_intent_target
+        .as_ref()
+        .is_some_and(|target| {
+            target.agent_id == id
+                && matches!(target.status.as_str(), "submitted" | "accepted" | "blocked")
+        })
+    {
+        return 1;
+    }
+    if render_state
+        .recommended_target
+        .as_ref()
+        .is_some_and(|target| target.agent_id == id)
+        || render_state
+            .receipt_target
+            .as_ref()
+            .is_some_and(|target| target.agent_id == id)
+    {
+        return 2;
+    }
+    3
 }
 
 fn agent_label_display(agent: &Agent) -> String {

@@ -1,7 +1,7 @@
 //! World state management.
 
 use crate::models::AgentState;
-use crate::simulator::{ModuleInstallTarget, ResourceKind};
+use crate::simulator::{ModuleInstallTarget, ModuleVisualEntity, ResourceKind};
 use oasis7_wasm_abi::{
     FactoryModuleSpec, FactoryProfileV1, MaterialProfileV1, MaterialStack, ModuleManifest,
     ProductProfileV1, ProductValidationDecision, RecipeProfileV1,
@@ -63,6 +63,7 @@ mod logistics_path_authority;
 pub(crate) mod module_instance_transition;
 pub(crate) mod module_marketplace_transition;
 pub(crate) mod module_release_transition;
+mod module_visual;
 mod projection;
 mod starter_industrial;
 #[path = "state_defaults.rs"]
@@ -81,6 +82,7 @@ pub(crate) use command_projection::{
     CommandStateOverlay,
 };
 pub(super) use logistics_path_authority::LogisticsPathAuthorityV1;
+pub(crate) use module_visual::{ModuleVisualMutation, parse_module_visual_emit};
 pub use projection::{BodyOverlay, WorldStateProjection};
 
 fn default_world_material_ledger() -> MaterialLedgerId {
@@ -665,6 +667,8 @@ pub struct WorldState {
     pub meta_progress: BTreeMap<String, MetaProgressState>,
     #[serde(default)]
     pub module_states: BTreeMap<String, Vec<u8>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub module_visual_entities: BTreeMap<String, ModuleVisualEntity>,
     #[serde(default)]
     pub module_artifact_owners: BTreeMap<String, String>,
     #[serde(default)]

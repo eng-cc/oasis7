@@ -150,6 +150,7 @@ mod module_lifecycle_transaction_regressions;
 mod module_routing_transaction_regressions;
 mod module_runtime_metering;
 mod module_tick_routing_transaction_regressions;
+mod module_visual_wasm_recovery;
 mod modules;
 mod operability_release_gate;
 mod persistence;

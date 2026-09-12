@@ -215,6 +215,30 @@ describe("World Feed transport", () => {
     expect(core.state.recentEvents).toEqual([]);
   });
 
+  it("focuses modules only from canonical World Feed linkage", async () => {
+    const core = await import("./legacy_core.js");
+    core.initializeSoftwareSafeCore();
+    core.state.snapshot = {
+      model: {
+        module_visual_entities: {
+          "module-relay": {
+            entity_id: "module-relay",
+            module_id: "relay-seven",
+            kind: "relay",
+            label: "Relay Seven",
+          },
+        },
+      },
+    };
+
+    expect(core.focusModuleFromEvent({ kind: "resource_change", entity_id: "module-relay" })).toBeNull();
+    expect(core.focusModuleFromEvent({ kind: "agent_spoke", data: { entity: { entity_id: "module-relay" } } })).toBeNull();
+    expect(core.focusModuleFromEvent({ kind: "module_visual_entity_upserted", module_visual_entity_id: "module-relay" })).toMatchObject({
+      kind: "module_visual",
+      id: "module-relay",
+    });
+  });
+
   it("continues an initial page asynchronously from the returned cursor", async () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");

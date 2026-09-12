@@ -82,12 +82,69 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-canvas__selection")).toHaveTextContent("Selected: Shared Name");
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("selects keyboard reachable module markers and exposes readable current details", async () => {
+    const snapshot = sampleSnapshot();
+    snapshot.model.module_visual_entities = {
+      "module-relay": {
+        entity_id: "module-relay",
+        module_id: "module-7",
+        kind: "relay",
+        label: "Relay Seven",
+        anchor: {
+          type: "absolute",
+          data: { pos: { x_cm: 7_100_000, y_cm: 1_200_000, z_cm: 80 } },
+        },
+      },
+    };
+    runtimeMock.deriveRenderState = vi.fn((input) => ({
+      ...buildTestRustRenderState(input),
+      moduleVisualEntities: [{
+        id: "module-relay",
+        moduleId: "module-7",
+        kind: "relay",
+        label: "Relay Seven",
+        anchor: snapshot.model.module_visual_entities["module-relay"].anchor,
+        pos: { x_cm: 7_100_000, y_cm: 1_200_000, z_cm: 80 },
+      }],
+      selection: input.selectedKind && input.selectedId
+        ? { kind: input.selectedKind, id: input.selectedId }
+        : { kind: "agent", id: "agent-0" },
+    }));
+
+    const { core } = await renderPixelWorldHost(snapshot, "?test_api=1&connect=0&locale=en");
+    await waitFor(() => {
+      expect(document.querySelector('[data-pixel-world-module-marker="true"]')).toBeInTheDocument();
+    });
+    const detailsPanel = document.createElement("section");
+    detailsPanel.id = "viewer-details-panel";
+    detailsPanel.tabIndex = -1;
+    document.body.appendChild(detailsPanel);
+    const marker = document.querySelector('[data-pixel-world-module-marker="true"]');
+    expect(marker).toBeInstanceOf(HTMLButtonElement);
+    expect(marker).not.toBeDisabled();
+    expect(marker).toHaveAttribute("aria-label", "Select Module Relay Seven");
+
+    fireEvent.click(marker);
+    await waitFor(() => expect(core.state.selectedKind).toBe("module_visual"));
+    expect(core.state.selectedId).toBe("module-relay");
+    expect(core.state.selectedObject).toEqual(expect.objectContaining({
+      id: "module-relay",
+      module_id: "module-7",
+      kind: "relay",
+      label: "Relay Seven",
+    }));
+    expect(document.querySelector(".pixel-world-canvas__selection")).toHaveTextContent("Relay Seven");
+    expect(core.state.selectedObject.anchor).toEqual(snapshot.model.module_visual_entities["module-relay"].anchor);
+    expect(window.location.hash).toBe("#viewer-details-panel");
+    expect(document.activeElement).toBe(detailsPanel);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("highlights only routes with explicit selected endpoint ids", async () => {
     runtimeMock.deriveRenderState = vi.fn((input) => ({
       ...buildTestRustRenderState(input),
       selection: { kind: "agent", id: "agent-0" },
       links: [
-        { id: "link-associated", kind: "agent_assignment", from: { x_cm: 1, y_cm: 1 }, to: { x_cm: 2, y_cm: 2 }, agent_id: "agent-0", location_id: "loc-0" },
+        { id: "link-associated", kind: "agent_assignment", from: { x_cm: 1, y_cm: 1 }, to: { x_cm: 2, y_cm: 2 }, agent_id: "agent-0", location_id: "loc-0", status: "active", source_class: "runtime_projection", freshness: "current" },
         { id: "link-unassociated", kind: "agent_assignment", from: { x_cm: 3, y_cm: 3 }, to: { x_cm: 4, y_cm: 4 } },
       ],
     }));
@@ -105,6 +162,70 @@ describe("pixel world host", () => {
     expect(unassociated).toHaveAttribute("data-associated", "false");
     expect(unassociated).toHaveClass("pixel-world-route--muted");
     expect(document.querySelectorAll(".pixel-world-route[role='button'], .pixel-world-route button")).toHaveLength(0);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("associates only known current runtime links when matching endpoint ids are present", async () => {
+    const authority = { status: "active", source_class: "runtime_projection", freshness: "current" };
+    const endpoint = { agent_id: "agent-0", location_id: "loc-0" };
+    const geometry = { from: { x_cm: 1, y_cm: 1 }, to: { x_cm: 2, y_cm: 2 } };
+    runtimeMock.deriveRenderState = vi.fn((input) => ({
+      ...buildTestRustRenderState(input),
+      selection: { kind: "agent", id: "agent-0" },
+      links: [
+        { id: "link-assignment", kind: "agent_assignment", ...geometry, ...endpoint, ...authority },
+        { id: "link-route", kind: "route", ...geometry, ...endpoint, ...authority },
+        { id: "link-logistics-route", kind: "logistics_route", ...geometry, ...endpoint, ...authority },
+        { id: "link-resource-flow", kind: "resource_flow", ...geometry, ...endpoint, ...authority },
+        { id: "link-unknown", kind: "unknown", ...geometry, ...endpoint, ...authority },
+        { id: "link-stale", kind: "route", ...geometry, ...endpoint, ...authority, freshness: "stale" },
+        { id: "link-local-pending", kind: "resource_flow", ...geometry, ...endpoint, ...authority, source_class: "local_pending" },
+        { id: "link-nonruntime", kind: "logistics_route", ...geometry, ...endpoint, ...authority, source_class: "viewer_cache" },
+      ],
+    }));
+    await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_visual_fixture=selected_blocker",
+    );
+
+    await waitFor(() => {
+      expect(document.querySelectorAll(".pixel-world-route")).toHaveLength(8);
+    });
+    for (const id of ["link-assignment", "link-route", "link-logistics-route", "link-resource-flow"]) {
+      expect(document.querySelector(`[data-route-id="${id}"]`)).toHaveAttribute("data-associated", "true");
+    }
+    for (const id of ["link-unknown", "link-stale", "link-local-pending", "link-nonruntime"]) {
+      expect(document.querySelector(`[data-route-id="${id}"]`)).toHaveAttribute("data-associated", "false");
+      expect(document.querySelector(`[data-route-id="${id}"]`)).toHaveClass("pixel-world-route--muted");
+    }
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("associates current generic relation links by their canonical agent-location id", async () => {
+    const authority = { kind: "logistics_route", status: "active", source_class: "runtime_projection", freshness: "current" };
+    runtimeMock.deriveRenderState = vi.fn((input) => {
+      const state = buildTestRustRenderState(input);
+      state.agents = [{ ...state.agents[0], location_id: "loc-0", relation: authority }];
+      return {
+        ...state,
+        selection: { kind: "agent", id: "agent-0" },
+        links: [{
+          id: "link:agent-0:loc-0",
+          kind: authority.kind,
+          from: { x_cm: 1, y_cm: 1 },
+          to: { x_cm: 2, y_cm: 2 },
+          status: authority.status,
+          source_class: authority.source_class,
+          freshness: authority.freshness,
+        }],
+      };
+    });
+    await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_visual_fixture=selected_blocker",
+    );
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-route-id="link:agent-0:loc-0"]')).toHaveAttribute("data-associated", "true");
+    });
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("associates authoritative host relation projections by their canonical link id", async () => {

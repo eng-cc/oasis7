@@ -37,7 +37,7 @@ function stableMarkerHash(value) {
  */
 export function pixelWorldEntityMarkerCode(entity, fallbackId = "", kind = "agent") {
   const id = String(entity?.id || fallbackId || "unknown").trim() || "unknown";
-  const prefix = kind === "location" ? "L" : "A";
+  const prefix = kind === "location" ? "L" : kind === "module_visual" ? "M" : "A";
   // The runtime entity domain uses `agent-<n>` and `loc-<n>`. Keep those
   // compact codes, while preserving distinct codes for compatibility-shaped
   // IDs such as `agent_0` that are not the canonical runtime spelling.
@@ -53,6 +53,14 @@ export function pixelWorldEntityMarkerCode(entity, fallbackId = "", kind = "agen
     .toUpperCase()
     .slice(0, 4) || "X";
   return `${prefix}${token}-${stableMarkerHash(`${kind}:${id}`)}`;
+}
+
+export function pixelWorldReadableModuleLabel(module, fallbackId = "", isLocaleZh = false) {
+  const id = String(module?.id || module?.entity_id || fallbackId || "").trim();
+  const explicitLabel = String(module?.label || "").trim();
+  if (explicitLabel && explicitLabel !== id) return explicitLabel;
+  const kind = String(module?.kind || "artifact").trim() || "artifact";
+  return isLocaleZh ? `模块 ${kind}:${id}` : `${kind}:${id}`;
 }
 
 export function pixelWorldReadableAgentLabel(agent, fallbackId = "", isLocaleZh = false) {
@@ -94,6 +102,10 @@ export function pixelWorldSelectedEntityLabel(visualState, selection, isLocaleZh
   if (selection.kind === "agent") {
     const agent = visualState.agents.find((candidate) => candidate.id === selection.id);
     return pixelWorldReadableAgentLabel(agent, selection.id, isLocaleZh);
+  }
+  if (selection.kind === "module_visual") {
+    const module = (visualState.moduleVisualEntities || []).find((candidate) => candidate.id === selection.id);
+    return pixelWorldReadableModuleLabel(module, selection.id, isLocaleZh);
   }
   const location = visualState.locations.find((candidate) => candidate.id === selection.id);
   return pixelWorldReadableLocationLabel(location, selection.id, isLocaleZh);

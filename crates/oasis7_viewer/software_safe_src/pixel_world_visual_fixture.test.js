@@ -55,6 +55,22 @@ describe("pixel world visual fixtures", () => {
     ).toBe(240_000);
   });
 
+  it("uses the simulator ModuleVisualAnchor data envelope for module fixture anchors", () => {
+    window.history.replaceState({}, "", "/viewer.html?test_api=1&connect=0&pixel_world_visual_fixture=module_visual_entities");
+
+    expect(installPixelWorldVisualFixtureHook()).toBe("module_visual_entities");
+    const entities = window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.module_visual_entities().model.module_visual_entities;
+
+    expect(entities["module-absolute"].anchor).toEqual({
+      type: "absolute",
+      data: { pos: { x_cm: 1_850_000, y_cm: 3_600_000, z_cm: 0 } },
+    });
+    expect(entities["module-agent"].anchor).toEqual({
+      type: "agent",
+      data: { agent_id: "agent-0" },
+    });
+  });
+
   it("registers a spatially distinct healthy/low/zero Micro Depot stock-runway fixture", () => {
     window.history.replaceState({}, "", "/viewer.html?test_api=1&connect=0&pixel_world_visual_fixture=micro_depot_stock_runway");
 
@@ -136,5 +152,26 @@ describe("pixel world visual fixtures", () => {
     expect(core.state.auth.boundAgentId).toBe("agent-0");
     expect(core.modelLists().agents.map((agent) => agent.id)).toContain("agent-0");
     expect(core.state.snapshot.model.agent_player_bindings["agent-0"]).toBe("local-test-player-fixture");
+  });
+
+  it("keeps every routes-and-events relation control visible after local auth alignment", () => {
+    window.history.replaceState({}, "", "/viewer.html?test_api=1&connect=0&pixel_world_visual_fixture=routes_and_events");
+    expect(installPixelWorldVisualFixtureHook()).toBe("routes_and_events");
+    core.state.auth = {
+      ...core.state.auth,
+      available: true,
+      playerId: "local-test-player-routes",
+      publicKey: "routes-public-key",
+      source: "local_test_api_ephemeral",
+      boundAgentId: null,
+    };
+
+    expect(window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT__()).toBe(true);
+    expect(core.modelLists().agents.map((agent) => agent.id)).toEqual(expect.arrayContaining([
+      "agent-route",
+      "agent-unknown-route",
+      "agent-stale-route",
+      "agent-zero-route",
+    ]));
   });
 });

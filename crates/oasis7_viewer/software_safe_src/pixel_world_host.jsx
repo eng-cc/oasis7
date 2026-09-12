@@ -13,6 +13,7 @@ import { resolvePixelWorldReadoutStatus } from "./pixel_world_readout.js";
 import { pixelWorldBlockerPresentation, pixelWorldConnectionPresentation, pixelWorldFeedFreshnessPresentation } from "./pixel_world_presentation.js";
 import { pixelWorldHotspotGlyphSize, pixelWorldHotspotStyle } from "./pixel_world_hotspot_projection.js";
 import { PixelWorldRendererTargets } from './pixel_world_renderer_targets.jsx';
+import { focusViewerPanel } from "./viewer_navigation.jsx";
 export { pixelWorldSelectedBlockerVisualFixture };
 function tr(locale, zh, en) { return core.isLocaleZh(locale) ? zh : en; }
 async function waitForRuntimeCanvasAttachment(canvas) {
@@ -241,19 +242,50 @@ export function buildPixelWorldRenderInput(locale = core.state.uiLocale) {
     },
   };
 }
-function PixelWorldCanvasRenderer(props) {
+export function PixelWorldCanvasRenderer(props) {
   let canvasRef;
   const [stageSize, setStageSize] = createSignal({ width: 960, height: 540 });
-  onMount(() => {
-    const update = () => {
-      const rect = canvasRef?.getBoundingClientRect();
-      if (rect?.width && rect?.height) setStageSize({ width: rect.width, height: rect.height });
+  const [rendererDimensions, setRendererDimensions] = createSignal({ width: 960, height: 540 });
+  let metricRefreshGeneration = 0;
+  const updateCanvasMetrics = () => {
+    const rect = canvasRef?.getBoundingClientRect();
+    if (!rect?.width || !rect?.height) return;
+    const nextStage = { width: rect.width, height: rect.height };
+    const nextRenderer = {
+      width: Number(canvasRef?.width) || rect.width,
+      height: Number(canvasRef?.height) || rect.height,
     };
-    update();
-    if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(update);
-    observer.observe(canvasRef);
-    onCleanup(() => observer.disconnect());
+    setStageSize((previous) => previous.width === nextStage.width && previous.height === nextStage.height ? previous : nextStage);
+    setRendererDimensions((previous) => previous.width === nextRenderer.width && previous.height === nextRenderer.height ? previous : nextRenderer);
+  };
+  const scheduleCanvasMetricsRefresh = () => {
+    const generation = ++metricRefreshGeneration;
+    let remainingFrames = 2;
+    const refresh = () => {
+      if (generation !== metricRefreshGeneration) return;
+      updateCanvasMetrics();
+      remainingFrames -= 1;
+      if (remainingFrames > 0) requestAnimationFrame(refresh);
+    };
+    requestAnimationFrame(refresh);
+  };
+  const rendererSize = () => rendererDimensions();
+  onMount(() => {
+    updateCanvasMetrics();
+    const frame = requestAnimationFrame(updateCanvasMetrics);
+    let resizeObserver;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(updateCanvasMetrics);
+      resizeObserver.observe(canvasRef);
+    }
+    const mutationObserver = typeof MutationObserver === 'undefined' ? null : new MutationObserver(updateCanvasMetrics);
+    mutationObserver?.observe(canvasRef, { attributes: true, attributeFilter: ['width', 'height'] });
+    onCleanup(() => {
+      metricRefreshGeneration += 1;
+      cancelAnimationFrame(frame);
+      resizeObserver?.disconnect();
+      mutationObserver?.disconnect();
+    });
   });
   const hotspotFocus = createHotspotFocusRestoration();
   const visualState = () => pixelWorldVisualState(props.renderState());
@@ -270,7 +302,11 @@ function PixelWorldCanvasRenderer(props) {
   onMount(() => onCleanup(installPixelWorldMobileSelectionSafeArea(() => canvasRef?.closest(".pixel-world-canvas"))));
   createEffect(() => {
     props.cameraState?.();
+    props.rendererStatus?.();
+    props.renderState?.();
     stageSize();
+    updateCanvasMetrics();
+    scheduleCanvasMetricsRefresh();
     requestAnimationFrame(() => applyPixelWorldMobileSelectionSafeArea(canvasRef?.closest('.pixel-world-canvas')));
   });
   createEffect(() => {
@@ -316,7 +352,7 @@ function PixelWorldCanvasRenderer(props) {
           onHover={props.onHover}
         />
         <PixelWorldHostVisualLayer
-          enabled={props.visualOverlayEnabled?.() ?? false}
+          enabled={props.visualOverlayEnabled}
           locale={props.locale}
           renderState={props.renderState}
           selection={props.selection}
@@ -325,7 +361,7 @@ function PixelWorldCanvasRenderer(props) {
           onHover={props.onHover}
         />
         </>}>
-          <PixelWorldRendererTargets locale={props.locale} renderState={props.renderState} selection={props.selection} cameraState={props.cameraState} stageSize={stageSize} onSelect={props.onSelect} onHover={props.onHover} />
+          <PixelWorldRendererTargets locale={props.locale} renderState={props.renderState} selection={props.selection} cameraState={props.cameraState} stageSize={stageSize} rendererSize={rendererSize} onSelect={props.onSelect} onHover={props.onHover} />
         </Show>
         <PixelWorldHostHotspotLayer locale={props.locale} renderState={props.renderState} cameraState={props.cameraState}
           rendererProjection={props.rendererProjection} stageSize={() => props.rendererProjection?.() ? stageSize() : undefined}
@@ -1001,10 +1037,10 @@ export function PixelWorldHost(props) {
   const [diagnosticsDrawerOpen, setDiagnosticsDrawerOpen] = createSignal(pixelWorldFocusUiSessionState.diagnosticsDrawerOpen);
   const [maximized, setMaximized] = createSignal(pixelWorldFocusUiSessionState.maximized);
   installPixelWorldRenderDtoProbe(visualFixtureName, renderState, onCleanup);
-  const visualOverlayEnabled = () => Boolean(
-    visualFixtureName
-      || document.body?.getAttribute("data-viewer-visual-fixture"),
-  );
+  const visualOverlayEnabled = () => {
+    coreRevision();
+    return Boolean(visualFixtureName || document.body?.getAttribute("data-viewer-visual-fixture"));
+  };
   const hoveredHotspot = () => {
     const hover = hoverSelection();
     if (hover?.kind !== "hotspot") {
@@ -1042,9 +1078,10 @@ export function PixelWorldHost(props) {
   });
   const adapter = createMemo(() => createPixelWorldHostAdapter({
     onSelectEntity(selection) {
-      core.applySelection(selection);
-      setCoreRevision((revision) => revision + 1);
-      applyRendererUpdate();
+      const applied = core.applySelection(selection);
+      if (applied?.kind === "module_visual") {
+        focusViewerPanel("viewer-details-panel");
+      }
     },
     onHoverEntity(selection) {
       setHoverSelection(selection);
@@ -1077,6 +1114,7 @@ export function PixelWorldHost(props) {
   }));
   let mountedCanvas = null;
   let rendererAttemptGeneration = 0;
+  let rendererUpdatePending = false;
   const rendererAttemptIsCurrent = (canvas, generation) => generation === rendererAttemptGeneration && mountedCanvas === canvas;
   function applyRendererUpdate() {
     if (rendererStatus() === "unavailable") {
@@ -1166,6 +1204,10 @@ export function PixelWorldHost(props) {
       camera: cameraState(),
       fatal: result?.fatal || null,
     });
+    if (rendererUpdatePending) {
+      rendererUpdatePending = false;
+      applyRendererUpdate();
+    }
   }
   function requestReadyMode() {
     const canvas = mountedCanvas?.isConnected ? mountedCanvas : null;
@@ -1188,12 +1230,16 @@ export function PixelWorldHost(props) {
     }
     window.addEventListener("keydown", handleKeyDown);
     onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
-    if (pixelWorldTestApiEnabled()) {
-      core.setRenderHook(() => {
-        setCoreRevision((revision) => revision + 1);
+    const unsubscribeRenderHook = core.subscribeRenderHook?.(() => {
+      setCoreRevision((revision) => revision + 1);
+      if (rendererStatus() === "ready") {
         applyRendererUpdate();
-      });
-      onCleanup(() => core.setRenderHook(null));
+      } else {
+        rendererUpdatePending = true;
+      }
+    });
+    onCleanup(unsubscribeRenderHook);
+    if (pixelWorldTestApiEnabled()) {
       onCleanup(installPixelWorldHotspotPointerProbe({ fixtureName: visualFixtureName, getCanvas: () => mountedCanvas, getRendererStatus: rendererStatus, getHotspotHitTargets: () => adapter().hotspotTestHitTargets(), getLocationHitTargets: () => adapter().locationTestHitTargets(), getHoverSelection: hoverSelection, getHoveredHotspot: hoveredHotspot }));
     }
   });
@@ -1307,11 +1353,6 @@ export function PixelWorldHost(props) {
             const generation = ++rendererAttemptGeneration;
             if (rendererStatus() !== "ready") {
               void setReadyMode(canvas, generation);
-            }
-          }}
-          onCanvasUpdate={() => {
-            if (rendererStatus() === "ready") {
-              applyRendererUpdate();
             }
           }}
         />

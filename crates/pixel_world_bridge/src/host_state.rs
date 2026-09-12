@@ -380,6 +380,7 @@ fn resolve_selection_position(
     selection: &Value,
     agents: &[Value],
     locations: &[Value],
+    module_visual_entities: &[Value],
 ) -> Option<Value> {
     let kind = str_key(selection, "kind")?;
     let id = str_key(selection, "id")?;
@@ -392,6 +393,10 @@ fn resolve_selection_position(
             .iter()
             .find(|location| str_key(location, "id") == Some(id))
             .and_then(|location| normalize_position(obj(location, "pos"))),
+        "module_visual" => module_visual_entities
+            .iter()
+            .find(|entity| str_key(entity, "id") == Some(id))
+            .and_then(|entity| normalize_position(obj(entity, "pos"))),
         _ => None,
     }
 }
@@ -415,7 +420,7 @@ fn build_module_visual_entities(
             let anchor = obj(entity, "anchor");
             let anchor_data = obj(anchor, "data");
             let pos = match str_key(anchor, "type")? {
-                "absolute" => normalize_position(anchor_data),
+                "absolute" => normalize_position(obj(anchor_data, "pos")),
                 "location" => {
                     let location_id = str_key(anchor_data, "location_id")?;
                     locations
@@ -437,6 +442,7 @@ fn build_module_visual_entities(
                 "module_id": str_key(entity, "module_id").unwrap_or(""),
                 "kind": str_key(entity, "kind").unwrap_or(""),
                 "label": string_key(entity, "label"),
+                "anchor": anchor.clone(),
                 "pos": pos,
             }))
         })
@@ -1067,19 +1073,20 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
     };
     let links = relation_projection::build_pixel_world_links(&agents, &location_by_id);
     let social_links = social_links::build_pixel_world_social_links(input, &agents, &locations);
-    let anchor = resolve_selection_position(&selection, &agents, &locations)
-        .or_else(|| {
-            agents
-                .iter()
-                .find(|agent| obj(agent, "pos").is_object())
-                .and_then(|agent| normalize_position(obj(agent, "pos")))
-        })
-        .or_else(|| {
-            locations
-                .first()
-                .and_then(|location| normalize_position(obj(location, "pos")))
-        })
-        .or_else(|| world_center_position(&world_bounds));
+    let anchor =
+        resolve_selection_position(&selection, &agents, &locations, &module_visual_entities)
+            .or_else(|| {
+                agents
+                    .iter()
+                    .find(|agent| obj(agent, "pos").is_object())
+                    .and_then(|agent| normalize_position(obj(agent, "pos")))
+            })
+            .or_else(|| {
+                locations
+                    .first()
+                    .and_then(|location| normalize_position(obj(location, "pos")))
+            })
+            .or_else(|| world_center_position(&world_bounds));
     let goal_highlight = json!({
         "title": localized_goal_title(locale, gameplay),
         "objective": localized_objective_detail(locale, gameplay),

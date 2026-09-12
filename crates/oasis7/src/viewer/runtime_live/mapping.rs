@@ -29,6 +29,9 @@ pub(super) use mapping_events::{
     runtime_fallback_event_kind, runtime_reject_reason_to_simulator, runtime_structured_event,
     seed_location_id_for_agent_or_pos, seed_location_id_for_pos,
 };
+#[cfg(test)]
+#[path = "mapping_module_visual_tests.rs"]
+mod module_visual_tests;
 
 pub(super) fn runtime_state_to_simulator_model(
     state: &crate::runtime::WorldState,
@@ -36,6 +39,10 @@ pub(super) fn runtime_state_to_simulator_model(
     seed_model: Option<&WorldModel>,
 ) -> WorldModel {
     let mut model = seed_model.cloned().unwrap_or_default();
+    // Seed module visuals are absorbed into the runtime state during
+    // bootstrap.  Leaving them in this fallback model would resurrect an
+    // entity after an authoritative removal.
+    model.module_visual_entities.clear();
     model.agents.clear();
     let runtime_power_statuses = runtime_storage_power_statuses(state);
 
@@ -100,6 +107,15 @@ pub(super) fn runtime_state_to_simulator_model(
                 kind: factory.spec.factory_id.clone(),
             },
         );
+    }
+
+    // Module visual entities are part of the authoritative runtime snapshot;
+    // project them after the seed model so production events can upsert the
+    // same entity without mutating the seed model.
+    for (entity_id, entity) in &state.module_visual_entities {
+        model
+            .module_visual_entities
+            .insert(entity_id.clone(), entity.clone());
     }
 
     model.agent_prompt_profiles = sidecar.prompt_profiles.clone();

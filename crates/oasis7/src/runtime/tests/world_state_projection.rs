@@ -11,6 +11,8 @@ use super::super::{
 use super::pos;
 use crate::models::BodyKernelView;
 use crate::runtime::util::hash_json;
+use crate::simulator::{ModuleVisualAnchor, ModuleVisualEntity};
+use std::collections::BTreeMap;
 
 fn registered_agent_world() -> World {
     let mut world = World::new();
@@ -112,6 +114,46 @@ fn typed_body_overlay_matches_golden_state_without_mutating_original() {
         .expect("fixture agent remains present");
     assert_eq!(original_agent.state.body_view, original_body_view);
     assert_eq!(original_agent.last_active, original_last_active);
+}
+
+#[test]
+fn borrowed_module_visual_overlay_matches_golden_state_without_mutating_original() {
+    let world = registered_agent_world();
+    let mut module_visual_entities = BTreeMap::new();
+    module_visual_entities.insert(
+        "projection-fixture-visual".to_string(),
+        ModuleVisualEntity {
+            entity_id: "projection-fixture-visual".to_string(),
+            module_id: "projection-fixture-module".to_string(),
+            kind: "relay".to_string(),
+            label: Some("Fixture Relay".to_string()),
+            anchor: ModuleVisualAnchor::Absolute { pos: pos(17, 23) },
+        },
+    );
+
+    let original_bytes = serde_json::to_vec(world.state()).expect("serialize original state");
+    let mut golden = world.state().clone();
+    golden.module_visual_entities = module_visual_entities.clone();
+
+    let projection = WorldStateProjection::borrowed(world.state())
+        .with_module_visual_entities_overlay(&module_visual_entities);
+    let projected_bytes = serde_json::to_vec(&projection).expect("serialize visual overlay");
+    let golden_bytes = serde_json::to_vec(&golden).expect("serialize golden state");
+
+    assert_eq!(
+        projected_bytes, golden_bytes,
+        "borrowed visual overlay must serialize exactly like the equivalent golden state"
+    );
+    assert_eq!(
+        hash_json(&projection).expect("hash visual overlay projection"),
+        hash_json(&golden).expect("hash golden state"),
+        "borrowed visual overlay must produce the equivalent canonical hash"
+    );
+    assert_eq!(
+        serde_json::to_vec(world.state()).expect("serialize state after projection"),
+        original_bytes,
+        "building a visual overlay must not mutate the borrowed canonical state"
+    );
 }
 
 #[test]

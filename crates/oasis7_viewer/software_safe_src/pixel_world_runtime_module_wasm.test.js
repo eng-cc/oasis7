@@ -136,7 +136,7 @@ describe("pixel world wasm runtime bridge", () => {
     return event;
   }
 
-  it("forwards click coordinates in CSS pixels so Bevy hit testing matches the embedded window", async () => {
+  it("maps CSS click coordinates into the canvas backing coordinate space", async () => {
     const { createPixelWorldBridge } = await import("./pixel_world_runtime_module_wasm.js");
     const onEvent = vi.fn();
     const bridge = await createPixelWorldBridge({ onEvent });
@@ -181,12 +181,12 @@ describe("pixel world wasm runtime bridge", () => {
     }));
 
     expect(runtimeState.instances).toHaveLength(1);
-    expect(runtimeState.instances[0].click).toHaveBeenCalledWith(120, 75);
+    expect(runtimeState.instances[0].click).toHaveBeenCalledWith(240, 150);
     expect(onEvent).toHaveBeenCalledWith({
       type: "select_entity",
       selection: {
         kind: "agent",
-        id: "120,75",
+        id: "240,150",
       },
     });
   });
@@ -464,6 +464,8 @@ describe("pixel world wasm runtime bridge", () => {
     const { createPixelWorldBridge } = await import("./pixel_world_runtime_module_wasm.js");
     const bridge = await createPixelWorldBridge();
     const canvas = document.createElement("canvas");
+    canvas.width = 480;
+    canvas.height = 270;
     canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 480, height: 270 });
     canvas.setPointerCapture = vi.fn();
     canvas.releasePointerCapture = vi.fn();
@@ -491,6 +493,8 @@ describe("pixel world wasm runtime bridge", () => {
     const { createPixelWorldBridge } = await import("./pixel_world_runtime_module_wasm.js");
     const bridge = await createPixelWorldBridge();
     const canvas = document.createElement("canvas");
+    canvas.width = 480;
+    canvas.height = 270;
     canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 480, height: 270 });
 
     bridge.mount(canvas, { selection: null });
@@ -510,6 +514,8 @@ describe("pixel world wasm runtime bridge", () => {
     const { createPixelWorldBridge } = await import("./pixel_world_runtime_module_wasm.js");
     const bridge = await createPixelWorldBridge();
     const canvas = document.createElement("canvas");
+    canvas.width = 480;
+    canvas.height = 270;
     canvas.getBoundingClientRect = () => ({
       left: 0,
       top: 0,
@@ -544,6 +550,8 @@ describe("pixel world wasm runtime bridge", () => {
     const { createPixelWorldBridge } = await import("./pixel_world_runtime_module_wasm.js");
     const bridge = await createPixelWorldBridge();
     const canvas = document.createElement("canvas");
+    canvas.width = 480;
+    canvas.height = 270;
     canvas.getBoundingClientRect = () => ({
       left: 0,
       top: 0,
@@ -578,6 +586,8 @@ describe("pixel world wasm runtime bridge", () => {
     const { createPixelWorldBridge } = await import("./pixel_world_runtime_module_wasm.js");
     const bridge = await createPixelWorldBridge();
     const canvas = document.createElement("canvas");
+    canvas.width = 480;
+    canvas.height = 270;
     canvas.getBoundingClientRect = () => ({
       left: 0,
       top: 0,

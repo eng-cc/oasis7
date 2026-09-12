@@ -156,6 +156,43 @@ describe("World Feed v1 state", () => {
     expect(consumed.state.events[0].receipt_ref).toBeNull();
   });
 
+  it("keeps module linkage limited to the canonical field", () => {
+    const consumed = consumeWorldFeed(createInitialWorldFeedState(), feed({
+      events: [
+        {
+          event_seq: 7,
+          kind: "resource_change",
+          summary: "Resource changed",
+          detail: "ore +1",
+          receipt_ref: null,
+          entity_id: "module-relay",
+        },
+        {
+          event_seq: 8,
+          kind: "agent_spoke",
+          summary: "Agent spoke",
+          detail: "hello",
+          receipt_ref: null,
+          entityId: "module-relay",
+          entity: { entity_id: "module-relay" },
+          data: { entity: { entity_id: "module-relay" } },
+        },
+        {
+          event_seq: 9,
+          kind: "module_visual_entity_upserted",
+          summary: "Module marker published",
+          detail: "module",
+          receipt_ref: null,
+          module_visual_entity_id: "module-relay",
+        },
+      ],
+    }));
+
+    expect(consumed.state.events[0]).not.toHaveProperty("module_visual_entity_id");
+    expect(consumed.state.events[1]).not.toHaveProperty("module_visual_entity_id");
+    expect(consumed.state.events[2]).toHaveProperty("module_visual_entity_id", "module-relay");
+  });
+
   it("fails closed when one page contains conflicting rows for the same identity", () => {
     const conflict = consumeWorldFeed(createInitialWorldFeedState(), feed({
       events: [

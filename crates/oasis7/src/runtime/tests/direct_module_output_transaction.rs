@@ -3,7 +3,7 @@ use super::modules::activate_module_manifest;
 use super::signed_test_artifact_identity;
 use oasis7_wasm_abi::{
     ModuleCallErrorCode, ModuleCallFailure, ModuleCallRequest, ModuleCommandDeclaration,
-    ModuleCommandEnvelope, ModuleOutput, ModuleSandbox, ModuleSchemaDeclarations,
+    ModuleCommandEnvelope, ModuleEmit, ModuleOutput, ModuleSandbox, ModuleSchemaDeclarations,
 };
 
 const MODULE_ID: &str = "m.direct-output.transaction";
@@ -122,6 +122,19 @@ fn world_with_active_module_and_authority_drift() -> World {
     world
 }
 
+fn visual_output(kind: &str, payload: serde_json::Value) -> ModuleOutput {
+    ModuleOutput {
+        new_state: None,
+        effects: Vec::new(),
+        emits: vec![ModuleEmit {
+            kind: kind.to_string(),
+            payload,
+        }],
+        tick_lifecycle: None,
+        output_bytes: 0,
+    }
+}
+
 fn assert_no_partial_publication(
     world: &World,
     snapshot_before: &Snapshot,
@@ -179,6 +192,98 @@ fn direct_module_call_output_failure_does_not_publish_partial_world() {
             .iter()
             .any(|event| { matches!(event.body, WorldEventBody::ModuleCallFailed(_)) }),
         "infrastructure publication failure must not append a second failure audit event"
+    );
+}
+
+#[test]
+fn direct_module_call_visual_emit_updates_snapshot_and_recovery_state() {
+    const ENTITY_ID: &str = "direct-output-relay";
+
+    let mut world = world_with_active_module();
+    let baseline = world.snapshot();
+    let mut upsert_sandbox = FixedOutputSandbox {
+        output: visual_output(
+            "module_visual_entity_upserted",
+            serde_json::json!({
+                "entity": {
+                    "entity_id": ENTITY_ID,
+                    "module_id": MODULE_ID,
+                    "kind": "relay",
+                    "label": "Direct output relay",
+                    "anchor": {
+                        "type": "absolute",
+                        "data": { "pos": { "x_cm": 100, "y_cm": 200, "z_cm": 0 } }
+                    }
+                }
+            }),
+        ),
+        calls: 0,
+    };
+    world
+        .execute_module_call(
+            MODULE_ID,
+            "trace-direct-visual-upsert",
+            Vec::new(),
+            &mut upsert_sandbox,
+        )
+        .expect("real module output upsert");
+    assert_eq!(
+        world
+            .state()
+            .module_visual_entities
+            .get(ENTITY_ID)
+            .map(|entity| entity.module_id.as_str()),
+        Some(MODULE_ID)
+    );
+    assert_eq!(
+        world
+            .tick_consensus_records()
+            .last()
+            .expect("visual upsert consensus record")
+            .block
+            .header
+            .state_root,
+        world
+            .current_state_root_hash()
+            .expect("visual upsert state root")
+    );
+
+    let mut remove_sandbox = FixedOutputSandbox {
+        output: visual_output(
+            "module_visual_entity_removed",
+            serde_json::json!({ "entity_id": ENTITY_ID }),
+        ),
+        calls: 0,
+    };
+    world
+        .execute_module_call(
+            MODULE_ID,
+            "trace-direct-visual-remove",
+            Vec::new(),
+            &mut remove_sandbox,
+        )
+        .expect("real module output removal");
+    assert!(!world.state().module_visual_entities.contains_key(ENTITY_ID));
+    assert_eq!(
+        world
+            .tick_consensus_records()
+            .last()
+            .expect("visual removal consensus record")
+            .block
+            .header
+            .state_root,
+        world
+            .current_state_root_hash()
+            .expect("visual removal state root")
+    );
+
+    let recovered = World::from_snapshot(baseline, world.journal().clone())
+        .expect("recover real module visual output journal");
+    assert!(
+        !recovered
+            .state()
+            .module_visual_entities
+            .contains_key(ENTITY_ID)
     );
 }
 

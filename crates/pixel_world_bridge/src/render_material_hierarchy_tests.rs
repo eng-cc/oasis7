@@ -63,6 +63,7 @@ fn material_route_fixture() -> RenderState {
         Link {
             id: "published-primary".into(),
             kind: "route".into(),
+            label: None,
             from: state.agents[0].pos.clone().unwrap(),
             to: state.locations[0].pos.clone(),
             emphasis: Some(1.0),
@@ -73,6 +74,7 @@ fn material_route_fixture() -> RenderState {
         Link {
             id: "published-secondary".into(),
             kind: "route".into(),
+            label: None,
             from: state.locations[0].pos.clone(),
             to: state.locations[1].pos.clone(),
             emphasis: Some(0.25),

@@ -1122,6 +1122,7 @@ mod tests {
                     summary: "Max event sequence".to_string(),
                     detail: "{}".to_string(),
                     receipt_ref: None,
+                    module_visual_entity_id: None,
                     major_event: None,
                 }],
                 status: WorldFeedStatus::Ready,

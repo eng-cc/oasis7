@@ -15,12 +15,19 @@ fn location_with(id: &str, label: &str, pos: Position) -> Location {
 
 fn rendered_location_texts(app: &mut App) -> Vec<String> {
     let world = app.world_mut();
-    let mut labels = world.query::<(&Text2d, &TextFont)>();
-    labels
+    let mut location_labels = world.query::<(
+        &Text2d,
+        &TextFont,
+        &crate::render::location_labels::PixelWorldLocationLabel,
+    )>();
+    let mut texts = location_labels
         .iter(world)
-        .filter(|(_, font)| font.font_size == FontSize::Px(10.0))
-        .map(|(text, _)| text.0.clone())
-        .collect()
+        .filter(|(_, font, _)| font.font_size == FontSize::Px(10.0))
+        .map(|(text, _, _)| text.0.clone())
+        .collect::<Vec<_>>();
+    let mut map_labels = world.query::<(&Text2d, &crate::render::map_labels::PixelWorldMapLabel)>();
+    texts.extend(map_labels.iter(world).map(|(text, _)| text.0.clone()));
+    texts
 }
 
 #[test]
@@ -86,6 +93,57 @@ fn location_labels_are_selected_first_and_suppress_collisions_deterministically(
         "without selection, the lexicographically smallest id wins a collision"
     );
     assert_eq!(hit_regions(&mut app).len(), 2);
+}
+
+#[test]
+fn selected_location_label_renders_above_overlapping_map_label() {
+    let anchor = sample_position(1_500_000.0, 1_000_000.0);
+    let mut state = sample_render_state(12_000.0);
+    state.agents.clear();
+    state.fragment_terrain.clear();
+    state.selection = Some(Selection {
+        kind: "location".to_string(),
+        id: "loc-selected".to_string(),
+    });
+    state.locations = vec![location_with(
+        "loc-selected",
+        "Selected location",
+        anchor.clone(),
+    )];
+    state.visual_hotspots = vec![VisualHotspot {
+        id: "goal-overlap".to_string(),
+        label: "Current objective".to_string(),
+        kind: "goal".to_string(),
+        pos: anchor,
+        emphasis: Some(1.0),
+        size_hint_px: Some(14.0),
+    }];
+
+    let mut app = render_test_app(state);
+    let world = app.world_mut();
+    let mut locations = world.query::<(
+        &crate::render::location_labels::PixelWorldLocationLabel,
+        &Transform,
+    )>();
+    let selected_location_z = locations
+        .iter(world)
+        .find_map(|(label, transform)| {
+            (label.id == "loc-selected").then_some(transform.translation.z)
+        })
+        .expect("selected location label");
+    let mut map_labels =
+        world.query::<(&crate::render::map_labels::PixelWorldMapLabel, &Transform)>();
+    let map_label_z = map_labels
+        .iter(world)
+        .find_map(|(label, transform)| {
+            (label.id == "map:goal-overlap").then_some(transform.translation.z)
+        })
+        .expect("overlapping map label");
+
+    assert!(
+        selected_location_z > map_label_z,
+        "selected location identity must render above an overlapping map label (selected_z={selected_location_z}, map_z={map_label_z})"
+    );
 }
 
 #[test]
@@ -170,4 +228,114 @@ fn location_labels_gate_on_zoom_and_clean_up_stale_entities() {
         .render_state = None;
     app.update();
     assert!(rendered_location_texts(&mut app).is_empty());
+}
+
+#[test]
+fn objective_and_blocker_hotspots_keep_their_labels_when_ambient_locations_are_dense() {
+    let anchor = sample_position(1_500_000.0, 1_000_000.0);
+    let mut state = sample_render_state(12_000.0);
+    state.agents.clear();
+    state.fragment_terrain.clear();
+    state.selection = None;
+    state.locations = vec![
+        location_with("loc-a", "Ambient Alpha", anchor.clone()),
+        location_with("loc-b", "Ambient Beta", anchor.clone()),
+    ];
+    state.visual_hotspots = vec![
+        VisualHotspot {
+            id: "goal-highlight".to_string(),
+            label: "Current objective".to_string(),
+            kind: "goal".to_string(),
+            pos: anchor.clone(),
+            emphasis: Some(1.0),
+            size_hint_px: Some(14.0),
+        },
+        VisualHotspot {
+            id: "blocker-highlight".to_string(),
+            label: "Blocked route".to_string(),
+            kind: "blocker".to_string(),
+            pos: anchor,
+            emphasis: Some(1.0),
+            size_hint_px: Some(16.0),
+        },
+    ];
+    state.links = vec![Link {
+        id: "route:ore-line".to_string(),
+        kind: "route".to_string(),
+        label: None,
+        from: sample_position(100_000.0, 100_000.0),
+        to: sample_position(600_000.0, 100_000.0),
+        emphasis: Some(0.72),
+        status: Some("active".to_string()),
+        source_class: Some("runtime_projection".to_string()),
+        freshness: Some("current".to_string()),
+    }];
+
+    let mut app = render_test_app(state);
+
+    let labels = rendered_location_texts(&mut app);
+    assert!(
+        labels.contains(&"Current objective".to_string()),
+        "the current objective must remain a visible map label"
+    );
+    assert!(
+        labels.contains(&"Blocked route".to_string()),
+        "the current blocker must remain a visible map label"
+    );
+    assert!(
+        labels.contains(&"Route".to_string()),
+        "an authoritative route must remain a visible map label"
+    );
+    assert!(
+        !labels.contains(&"Ambient Alpha".to_string())
+            && !labels.contains(&"Ambient Beta".to_string()),
+        "dense ambient identity labels must yield to objective and blocker labels"
+    );
+}
+
+fn route_label_state(locale: &str, kind: &str, label: Option<&str>) -> RenderState {
+    let mut state = sample_render_state(12_000.0);
+    state.locale = locale.to_string();
+    state.locations.clear();
+    state.agents.clear();
+    state.fragment_terrain.clear();
+    state.visual_hotspots.clear();
+    state.selection = None;
+    state.links = vec![Link {
+        id: "route:locale-line".to_string(),
+        kind: kind.to_string(),
+        label: label.map(ToString::to_string),
+        from: sample_position(100_000.0, 100_000.0),
+        to: sample_position(600_000.0, 100_000.0),
+        emphasis: Some(0.72),
+        status: Some("active".to_string()),
+        source_class: Some("runtime_projection".to_string()),
+        freshness: Some("current".to_string()),
+    }];
+    state
+}
+
+#[test]
+fn route_labels_use_locale_fallback_and_preserve_published_names() {
+    let mut zh = render_test_app(route_label_state("zh-CN", "logistics_route", None));
+    assert!(
+        rendered_location_texts(&mut zh).contains(&"物流路线".to_string()),
+        "Chinese locale must use the localized logistics route type fallback"
+    );
+
+    let mut en = render_test_app(route_label_state("en-US", "logistics_route", None));
+    assert!(
+        rendered_location_texts(&mut en).contains(&"Logistics route".to_string()),
+        "English locale must use the English logistics route type fallback"
+    );
+
+    let mut published = render_test_app(route_label_state(
+        "zh-CN",
+        "logistics_route",
+        Some("北线物资"),
+    ));
+    assert!(
+        rendered_location_texts(&mut published).contains(&"北线物资".to_string()),
+        "a published route name must take precedence over the localized type fallback"
+    );
 }

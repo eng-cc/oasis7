@@ -7,6 +7,7 @@ const runtimeMock = vi.hoisted(() => ({
   mountGates: [],
   mountResults: [],
   mountCalls: 0,
+  updateCalls: 0,
   onEvent: null,
 }));
 vi.mock("./pixel_world_runtime_loader.js", async () => ({
@@ -44,6 +45,7 @@ vi.mock("./pixel_world_runtime_loader.js", async () => ({
           };
         },
         update() {
+          runtimeMock.updateCalls += 1;
           if (runtimeMock.deriveRenderState) {
             return {
               status: "ready",
@@ -399,11 +401,11 @@ function bindFirstSnapshotAgentForTest(core, snapshot) {
     boundAgentId: agentId,
   };
 }
-async function renderPixelWorldHost(snapshot = sampleSnapshot(), search = "?test_api=1&connect=0&locale=en", locale = "en") {
+async function renderPixelWorldHost(snapshot = sampleSnapshot(), search = "?test_api=1&connect=0&locale=en", locale = "en", { injectionSearch = search } = {}) {
   activeCleanup?.();
   activeCleanup = null;
   vi.resetModules();
-  window.history.replaceState({}, "", `/software_safe.html${search}`);
+  window.history.replaceState({}, "", `/software_safe.html${injectionSearch}`);
   window.localStorage.clear();
   document.body.innerHTML = "";
   const core = await import("./legacy_core.js");
@@ -411,6 +413,7 @@ async function renderPixelWorldHost(snapshot = sampleSnapshot(), search = "?test
   core.setViewerLocale(locale);
   core.injectSnapshot(snapshot);
   bindFirstSnapshotAgentForTest(core, snapshot);
+  window.history.replaceState({}, "", `/software_safe.html${search}`);
   const view = render(() => <PixelWorldHost locale={locale} />);
   activeCleanup = view.unmount;
   return {
@@ -428,6 +431,7 @@ beforeEach(() => {
   runtimeMock.mountGates = [];
   runtimeMock.mountResults = [];
   runtimeMock.mountCalls = 0;
+  runtimeMock.updateCalls = 0;
   runtimeMock.onEvent = null;
   canvasContextSpy = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({});
   window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=0&locale=en");

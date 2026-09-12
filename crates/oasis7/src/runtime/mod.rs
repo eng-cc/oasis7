@@ -324,6 +324,7 @@ pub use state::{
     StarterIndustrialFeasibilityStatus, StarterIndustrialMilestoneV1, WorldState,
     WorldStateProjection,
 };
+pub(crate) use state::{ModuleVisualMutation, parse_module_visual_emit};
 
 // World
 pub use world::{
