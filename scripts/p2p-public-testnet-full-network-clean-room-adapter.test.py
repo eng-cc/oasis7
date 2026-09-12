@@ -4339,9 +4339,36 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
     class _Transport:
         def __init__(self, side_effect_operation: str | None = None) -> None:
             self.side_effect_operation = side_effect_operation
+            self.plan: dict[str, object] | None = None
             self.calls: list[str] = []
             self.mutations: list[str] = []
             self.rollback_candidates: list[str] = []
+
+        def _receipt(self, operation: str) -> dict[str, object]:
+            assert self.plan is not None, "test transport must be bound to the plan"
+            return {
+                "schema_version": "oasis7.storage_first_receipt.v1",
+                "phase_id": "storage-205-first",
+                "operation": operation,
+                "target": "storage-205",
+                "observer_mutation": False,
+                "completion_boundary": "storage-205-verified-pending-sequencer-probe",
+                "authenticated": True,
+                "verified": True,
+                "signer_id": "governance-signer",
+                "verifier_id": "governed-receipt-verifier",
+                "trust_root_id": "oasis7-public-testnet-governance-root-v1",
+                "transaction_id": self.plan["transaction_id"],
+                "capture_window_id": self.plan["capture_window_id"],
+                "bindings": {
+                    "phase_id": "storage-205-first",
+                    "operation": operation,
+                    "target": "storage-205",
+                    "transaction_id": self.plan["transaction_id"],
+                    "capture_window_id": self.plan["capture_window_id"],
+                    "plan_digest": self.plan["plan_digest"],
+                },
+            }
 
         def inspect_node(self, node):
             self.calls.append(f"inspect:{node['name']}")
@@ -4353,7 +4380,7 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
 
         def verify(self, operation, node):
             self.calls.append(operation)
-            return {"operation": operation, "verified": True}
+            return self._receipt(operation)
 
         def mutate(self, operation, node):
             self.calls.append(operation)
@@ -4361,13 +4388,7 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
             self.rollback_candidates.append(operation)
             if operation == self.side_effect_operation:
                 raise RuntimeError("provider side effect then throw")
-            return {
-                "operation": operation,
-                "phase_id": "storage-205-first",
-                "target": "storage-205",
-                "observer_mutation": False,
-                "verified": True,
-            }
+            return self._receipt(operation)
 
         def reobserve_failed_state(self, plan, started, failed_operation):
             self.calls.append("reobserve-failed-state")
@@ -4380,6 +4401,7 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
     def _runner(self, transport, **overrides):
         runner = getattr(self.adapter, "execute_storage_first", None)
         self.assertTrue(callable(runner), "RED: missing storage-first adapter execute API")
+        transport.plan = self.plan
         kwargs = {
             "phase": "storage-205-first",
             "identity_v2_evidence": self.identity_map,
@@ -4387,7 +4409,7 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
             "ledger_path": self.root / "parent-nonce-ledger.jsonl",
             "transport": transport,
             "dry_run": False,
-            "provenance_verifier": lambda plan, receipt: {"verified": True},
+            "provenance_verifier": self._bound_provenance,
         }
         kwargs.update(overrides)
         return runner(self.plan, self._authority(), **kwargs)
@@ -4395,16 +4417,31 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
     def _resume(self, journal_path, **overrides):
         resumer = getattr(self.adapter, "resume_storage_first", None)
         self.assertTrue(callable(resumer), "RED: missing storage-first adapter resume API")
+        transport = self._Transport()
+        transport.plan = self.plan
         kwargs = {
             "phase": "storage-205-first",
             "identity_v2_evidence": self.identity_map,
             "journal_path": journal_path,
             "ledger_path": self.root / "parent-nonce-ledger.jsonl",
-            "transport": self._Transport(),
-            "provenance_verifier": lambda plan, receipt: {"verified": True},
+            "transport": transport,
+            "provenance_verifier": self._bound_provenance,
         }
         kwargs.update(overrides)
         return resumer(self.plan, self._authority(), **kwargs)
+
+    @staticmethod
+    def _bound_provenance(plan, receipt):
+        return {
+            "verified": True,
+            "bindings": {
+                "phase_id": "storage-205-first",
+                "transaction_id": plan["transaction_id"],
+                "capture_window_id": plan["capture_window_id"],
+                "plan_digest": plan["plan_digest"],
+                "target": "storage-205",
+            },
+        }
 
     def test_storage_first_apply_calls_only_storage_callbacks(self):
         transport = self._Transport()
@@ -4434,7 +4471,7 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
     def test_storage_first_resume_revalidates_live_authority_before_each_mutation(self):
         transport = self._Transport()
         checks = []
-        self._runner(transport, live_revalidator=lambda: checks.append("live"))
+        self._runner(transport, live_revalidator=lambda: (checks.append("live") or True))
         self.assertEqual(len(checks), len(transport.mutations))
 
     def test_storage_first_resume_does_not_reuse_persisted_receipt_as_authority(self):
@@ -5043,6 +5080,56 @@ class StorageFirstFormalFindingsRedTests(unittest.TestCase):
             self.assertEqual(result["status"], "dry-run")
             child.assert_called_once()
             legacy.assert_not_called()
+
+
+class StorageFirstSecurityFollowupRedTests(unittest.TestCase):
+    """Follow-up RED coverage for provider/authentication compatibility seams."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.adapter = load_module("storage_first_security_followup_under_test", ADAPTER_PATH)
+
+    def setUp(self) -> None:
+        self.fixture = StorageFirstAdapterRedTests("runTest")
+        self.fixture.adapter = self.adapter
+        self.fixture.setUp()
+        bindings = getattr(self.adapter, "_STORAGE_FIRST_ADMISSION_BINDINGS", None)
+        if isinstance(bindings, dict):
+            bindings.clear()
+
+    def tearDown(self) -> None:
+        self.fixture.tearDown()
+
+    def test_provider_receipt_cannot_synthesize_authentication_via_setdefault(self) -> None:
+        binder = getattr(self.adapter, "_storage_first_bind_receipt", None)
+        self.assertTrue(callable(binder), "RED: missing provider receipt binding boundary")
+        operation = "stop:storage-205"
+        raw_provider_receipt = {
+            "schema_version": "oasis7.storage_first_receipt.v1",
+            "phase_id": "storage-205-first",
+            "operation": operation,
+            "target": "storage-205",
+            "observer_mutation": False,
+            "completion_boundary": "storage-205-verified-pending-sequencer-probe",
+        }
+        with self.assertRaises(Exception):
+            binder(self.fixture.plan, operation, raw_provider_receipt)
+
+    def test_none_live_revalidation_fails_even_for_lambda(self) -> None:
+        transport = self.fixture._Transport()
+        with self.assertRaises(Exception):
+            self.fixture._runner(transport, live_revalidator=lambda: None)
+        self.assertEqual(transport.mutations, [])
+
+    def test_unbound_provenance_result_fails_even_for_lambda(self) -> None:
+        transport = self.fixture._Transport()
+        with self.assertRaises(Exception):
+            self.fixture._runner(
+                transport,
+                provenance_verifier=lambda plan, receipt: {"verified": True},
+                live_revalidator=lambda: True,
+            )
+        self.assertEqual(transport.mutations, [])
 
 
 if __name__ == "__main__":

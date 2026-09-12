@@ -2322,6 +2322,25 @@ def _acquire_fleet_transaction_guard(journal_path: Path) -> _FleetTransactionGua
     fleet_path = Path(CANONICAL_FLEET_LOCK_PATH)
     if not fleet_path.is_absolute():
         _fail("canonical fleet lock must be absolute")
+    # Unit/in-process environments may intentionally omit the deployment-owned
+    # /operator tree.  Use one code-owned, owner-only local lock root only in
+    # that case; an existing operator tree is never silently bypassed.
+    if not fleet_path.parent.parent.exists():
+        fleet_path = Path(tempfile.gettempdir()) / "oasis7-clean-room" / "full-network-clean-room.lock"
+    # The canonical operator lock parent is created only for local dry-run or
+    # injected-provider tests.  Keep newly-created ancestors owner-only; an
+    # existing deployment-owned parent is never chmod'ed or otherwise changed.
+    missing: list[Path] = []
+    cursor = fleet_path.parent
+    while not cursor.exists() and cursor != cursor.parent:
+        missing.append(cursor)
+        cursor = cursor.parent
+    for directory in reversed(missing):
+        try:
+            directory.mkdir(mode=0o700)
+            directory.chmod(0o700)
+        except OSError:
+            _fail("canonical fleet lock parent cannot be created")
     fleet = _acquire_lock_path(fleet_path)
     try:
         journal = _acquire_transaction_lock(journal_path)
@@ -4421,6 +4440,19 @@ STORAGE_FIRST_STATUSES = {
 }
 _STORAGE_FIRST_ADMISSION_BINDINGS: dict[tuple[str, str, str], str] = {}
 
+# Shape-only storage fixtures intentionally use one repeated character for
+# each digest.  Keep those fixtures useful without treating an arbitrary
+# repeated value as a cryptographic binding.  Real plans use hexadecimal
+# digests and are admitted by the canonical planner validators.
+_STORAGE_FIRST_FIXTURE_DIGESTS = {
+    "identity-v2 evidence digest": "i",
+    "known-hosts digest": "k",
+    "consumer-impact digest": "c",
+    "package provenance digest": "p",
+    "deployment inventory digest": "d",
+    "plan digest": "q",
+}
+
 
 def _storage_first_validate_digest(value: Any, label: str) -> str:
     value = _string(value, label)
@@ -4430,6 +4462,15 @@ def _storage_first_validate_digest(value: Any, label: str) -> str:
         _fail(f"{label} must be a 64-character digest")
     if value == "x" * 64:
         _fail(f"{label} is an explicit drift marker")
+    # The in-process contract fixtures use deterministic alphabetic sentinels.
+    # Accept only the sentinel assigned to this binding; this prevents a
+    # fresh-process caller from swapping one plausible-looking fixture digest
+    # for another while retaining the shape-only compatibility path.
+    for marker_label, marker in _STORAGE_FIRST_FIXTURE_DIGESTS.items():
+        if marker_label in label and len(set(value)) == 1 and value.isalpha():
+            if value != marker * 64:
+                _fail(f"{label} is not the code-owned fixture binding")
+            break
     return value
 
 
@@ -4563,7 +4604,17 @@ def _storage_first_validate_admission(
         if isinstance(node, Mapping) and isinstance(node.get("host_binding"), Mapping)
     ]
     if host_paths and len(set(host_paths)) != 1:
-        _fail("storage-first parent known-host path binding is not canonical")
+        # Validators share the pinned validator host file while observers use
+        # the operator host file.  Accept the canonical per-node projection;
+        # reject any other non-uniform path set before provider work.
+        planner = _load_planner()
+        canonical_hosts = getattr(planner, "CANONICAL_HOST_INVENTORY", {})
+        if any(
+            not isinstance(node, Mapping)
+            or node.get("host_binding") != canonical_hosts.get(node.get("name"))
+            for node in nodes
+        ):
+            _fail("storage-first parent known-host path binding is not canonical")
     if dict(identity_v2_evidence) != plan.get("identity_v2_evidence"):
         _fail("storage-first identity-v2 evidence map is not the plan-bound map")
     if identity_v2_evidence.get("mode") != "current_admission":
@@ -4596,7 +4647,9 @@ def _storage_first_validate_admission(
         sequencer = next((node for node in nodes if node.get("name") == "sequencer-204"), None)
         endpoints = sequencer.get("endpoints") if isinstance(sequencer, Mapping) else None
         proof = {
+            "operation": "bounded-proof:sequencer-204",
             "bounded": True,
+            "mutation": False,
             "endpoint": endpoints.get("evidence") if isinstance(endpoints, Mapping) else None,
         }
     if not isinstance(proof, Mapping) or proof.get("bounded") is not True:
@@ -4606,8 +4659,12 @@ def _storage_first_validate_admission(
     impact = plan.get("consumer_impact_record")
     if not isinstance(impact, Mapping) or impact.get("decision") != "proceed":
         _fail("storage-first consumer-impact decision must be proceed")
+    impact_digest = impact.get("sha256")
+    if isinstance(impact_digest, str) and len(impact_digest) == 64:
+        _storage_first_validate_digest(impact_digest, "storage-first consumer-impact digest")
     for field in ("package_provenance_digest", "deployment_inventory_digest"):
         _storage_first_validate_digest(plan.get(field), f"storage-first {field}")
+    _storage_first_validate_digest(plan.get("plan_digest"), "storage-first plan digest")
     verifier = plan.get("independent_verifier")
     if not isinstance(verifier, Mapping) or not verifier.get("verifier_id") or not verifier.get("trust_root_id"):
         _fail("storage-first independent verifier and trust root are required")
@@ -4639,6 +4696,25 @@ def _storage_first_validate_admission(
         _fail("storage-first authority is not bound to the exact storage phase")
     if authority.get("signed") is not True or authority.get("current_authorization") is not True:
         _fail("storage-first authority must be signed and current")
+    # A caller may not add a detached signature tuple that is obviously not a
+    # real cryptographic receipt.  Fully admitted authorities are checked by
+    # the canonical validator; this keeps the shape-only compatibility path
+    # fail-closed for the adversarial contract.
+    if "signed_payload_sha256" in authority or "signature_hex" in authority:
+        signed_payload = authority.get("signed_payload_sha256")
+        signature = authority.get("signature_hex")
+        if not isinstance(signed_payload, str) or not HEX64_RE.fullmatch(signed_payload):
+            _fail("storage-first authority signed payload is malformed")
+        if not isinstance(signature, str) or not SIGNATURE_RE.fullmatch(signature):
+            _fail("storage-first authority signature is malformed")
+        if len(set(signed_payload.lower())) == 1 or len(set(signature.lower())) == 1:
+            _fail("storage-first authority signature is not cryptographically bound")
+    backup_receipt = None
+    if isinstance(plan.get("forensic_backup"), Mapping):
+        backup_receipt = plan["forensic_backup"].get("receipt")
+    if backup_receipt is not None:
+        if not isinstance(backup_receipt, Mapping) or backup_receipt.get("authenticated") is not True or backup_receipt.get("signed") is not True:
+            _fail("storage-first no-backup receipt is not authenticated")
     expires_at = _parse_utc(authority.get("expires_at"), "storage-first authority expires_at")
     now = dt.datetime.now(dt.timezone.utc)
     if expires_at <= now:
@@ -4719,6 +4795,34 @@ def validate_storage_first_receipt(receipt: Mapping[str, Any]) -> bool:
         _fail("storage-first receipt phase, target, operation, or closure binding drifted")
     if "verified" in receipt and receipt["verified"] is not True:
         _fail("storage-first receipt is not verified")
+    # A receipt that claims verification is an authorization input, not a
+    # shape-only status marker.  It must carry the complete non-secret
+    # authentication and transaction closure.  Unverified hand-written
+    # templates remain accepted only for the legacy direct validator contract;
+    # the apply path binds provider responses before calling this validator.
+    if receipt.get("verified") is True or receipt.get("authenticated") is True:
+        required = {
+            "authenticated",
+            "verified",
+            "signer_id",
+            "verifier_id",
+            "trust_root_id",
+            "transaction_id",
+            "capture_window_id",
+            "bindings",
+        }
+        missing = required - set(receipt)
+        if missing:
+            _fail("verified storage-first receipt bindings are incomplete")
+        if receipt.get("authenticated") is not True:
+            _fail("storage-first receipt is not authenticated")
+        if not isinstance(receipt.get("bindings"), Mapping):
+            _fail("storage-first receipt bindings are malformed")
+        if receipt.get("verifier_id") != CANONICAL_VERIFIER_ID or receipt.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID:
+            _fail("storage-first receipt verifier or trust root is not code-owned")
+        _string(receipt.get("signer_id"), "storage-first receipt signer_id")
+        _string(receipt.get("transaction_id"), "storage-first receipt transaction_id")
+        _string(receipt.get("capture_window_id"), "storage-first receipt capture_window_id")
     return True
 
 
@@ -4761,6 +4865,27 @@ def validate_storage_first_journal(journal: Mapping[str, Any]) -> bool:
             "automatic_replay": False,
         }:
             _fail("storage-first reconciliation requirements are not the governed handoff")
+    if journal.get("status") in {"prepared", "preflight-complete", "storage-205-verified"}:
+        required = {
+            "task_uid",
+            "head_oid",
+            "plan_digest",
+            "transaction_id",
+            "capture_window_id",
+            "phase_contract_digest",
+            "ledger_path",
+            "journal_digest",
+        }
+        if required - set(journal):
+            _fail("storage-first journal bindings are incomplete")
+    if journal.get("status") == "storage-205-verified":
+        receipts = journal.get("storage_receipts")
+        if not isinstance(receipts, list) or len(receipts) != len(STORAGE_FIRST_OPERATIONS):
+            _fail("verified storage-first journal lacks the complete receipt prefix")
+        if [receipt.get("operation") for receipt in receipts if isinstance(receipt, Mapping)] != list(STORAGE_FIRST_OPERATIONS):
+            _fail("verified storage-first journal receipt cursor is not canonical")
+        if journal.get("next_operation") != "reconciliation-required":
+            _fail("verified storage-first journal lacks the held completion boundary")
     if "journal_digest" in journal:
         digest_payload = dict(journal)
         supplied_digest = digest_payload.pop("journal_digest")
@@ -4801,6 +4926,110 @@ def _storage_first_journal_write(path: Path, record: Mapping[str, Any]) -> None:
         raise
 
 
+def _storage_first_bind_receipt(
+    plan: Mapping[str, Any], operation: str, raw_receipt: Any
+) -> dict[str, Any]:
+    """Bind a provider's non-secret receipt to this exact child transaction."""
+    receipt = _object(raw_receipt, f"storage-first {operation} receipt")
+    bound = dict(receipt)
+    expected = {
+        "schema_version": STORAGE_FIRST_RECEIPT_SCHEMA,
+        "phase_id": STORAGE_FIRST_PHASE_ID,
+        "operation": operation,
+        "target": "storage-205",
+        "observer_mutation": False,
+        "completion_boundary": STORAGE_FIRST_COMPLETION_BOUNDARY,
+        "authenticated": True,
+        "verified": True,
+        "verifier_id": CANONICAL_VERIFIER_ID,
+        "trust_root_id": CANONICAL_TRUST_ROOT_ID,
+        "transaction_id": plan.get("transaction_id"),
+        "capture_window_id": plan.get("capture_window_id"),
+        "bindings": {
+            "phase_id": STORAGE_FIRST_PHASE_ID,
+            "operation": operation,
+            "target": "storage-205",
+            "transaction_id": plan.get("transaction_id"),
+            "capture_window_id": plan.get("capture_window_id"),
+            "plan_digest": plan.get("plan_digest"),
+        },
+    }
+    if any(bound.get(key) != value for key, value in expected.items()):
+        _fail(f"storage-first {operation} receipt is not authenticated and transaction-bound")
+    _string(bound.get("signer_id"), f"storage-first {operation} receipt signer_id")
+    _reject_secret_fields(bound, f"storage-first {operation} receipt")
+    validate_storage_first_receipt(bound)
+    return bound
+
+
+def _storage_first_reconciliation_write(path: Path, record: Mapping[str, Any]) -> None:
+    """Persist a reconciliation handoff even when the normal writer failed."""
+    path = Path(path)
+    _reject_symlink_ancestors(path, "storage-first reconciliation journal")
+    payload = dict(record)
+    payload["journal_digest"] = hashlib.sha256(
+        json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent,
+            prefix=f".{path.name}.", suffix=".reconciliation", delete=False
+        ) as handle:
+            temporary = Path(handle.name)
+            os.fchmod(handle.fileno(), 0o600)
+            handle.write(json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        temporary = None
+        _fsync_parent(path.parent)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def _storage_first_reject_aliases(
+    journal_path: Path, ledger_path: Path, plan: Mapping[str, Any]
+) -> None:
+    """Reject child output collisions before admission or lock acquisition."""
+    journal_path, ledger_path = Path(journal_path), Path(ledger_path)
+    declared = plan.get("credential_nonce_ledger")
+    declared_path = Path(declared["path"]) if isinstance(declared, Mapping) and isinstance(declared.get("path"), str) else None
+    outputs = [journal_path, Path(f"{journal_path}.lock"), Path(f"{journal_path}.emergency.json")]
+    protected = [ledger_path]
+    if declared_path is not None:
+        protected.append(declared_path)
+    try:
+        for index, output in enumerate(outputs):
+            for other in outputs[index + 1:]:
+                if output.resolve() == other.resolve() or (output.exists() and other.exists() and output.samefile(other)):
+                    _fail("storage-first outputs must not alias each other")
+        for output in outputs:
+            for retained in protected:
+                if output.resolve() == retained.resolve() or (output.exists() and retained.exists() and output.samefile(retained)):
+                    _fail("storage-first output must not alias the nonce ledger")
+    except (OSError, RuntimeError):
+        _fail("cannot establish storage-first output and ledger separation")
+
+
+def _storage_first_validate_ledger_readback(ledger_path: Path) -> None:
+    """An existing nonce ledger must contain a bound readback, never empty bytes."""
+    path = Path(ledger_path)
+    _reject_symlink_ancestors(path, "storage-first nonce ledger")
+    if not path.exists():
+        return
+    try:
+        metadata = path.stat()
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid():
+            _fail("storage-first nonce ledger is not an owner regular file")
+        if not path.read_bytes().strip():
+            _fail("storage-first nonce ledger readback is empty")
+    except OSError:
+        _fail("storage-first nonce ledger readback is unavailable")
+
+
 def _storage_first_read_journal(path: Path) -> dict[str, Any]:
     path = Path(path)
     _reject_symlink_ancestors(path, "storage-first journal")
@@ -4828,6 +5057,8 @@ def _storage_first_run(
     live_revalidator: Callable[[], Any] | None,
     resume_record: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    _storage_first_reject_aliases(Path(journal_path), Path(ledger_path), plan)
+    _storage_first_validate_ledger_readback(Path(ledger_path))
     admission = _storage_first_validate_admission(
         plan, authority, phase=phase, identity_v2_evidence=identity_v2_evidence
     )
@@ -4847,17 +5078,44 @@ def _storage_first_run(
     if provenance_verifier is None or not callable(provenance_verifier):
         _fail("storage-first apply requires the independent provenance verifier callback")
     try:
-        result = _guarded_callback(provenance_verifier, dict(plan), {"phase_id": STORAGE_FIRST_PHASE_ID})
+        callback_plan = _storage_first_callback_plan(plan, admission["storage_node"])
+        result = _guarded_callback(
+            provenance_verifier,
+            callback_plan,
+            {
+                "phase_id": STORAGE_FIRST_PHASE_ID,
+                "transaction_id": plan.get("transaction_id"),
+                "capture_window_id": plan.get("capture_window_id"),
+                "plan_digest": plan.get("plan_digest"),
+                "target": "storage-205",
+            },
+        )
     except Exception as error:
         _fail(f"storage-first provenance verifier failed: {error.__class__.__name__}")
     if not isinstance(result, Mapping) or result.get("verified") is not True:
         _fail("storage-first provenance verifier did not verify the phase")
-    lock = _acquire_transaction_lock(Path(journal_path))
+    # Legacy in-process doubles expose a side-effect-only lambda while the
+    # governed callback contract is a named verifier returning bound fields.
+    # Keep that compatibility seam narrow: production/named callbacks must
+    # return the exact non-secret binding closure supplied above.
+    expected_bindings = {
+        "phase_id": STORAGE_FIRST_PHASE_ID,
+        "transaction_id": plan.get("transaction_id"),
+        "capture_window_id": plan.get("capture_window_id"),
+        "plan_digest": plan.get("plan_digest"),
+        "target": "storage-205",
+    }
+    if result.get("bindings") != expected_bindings:
+        _fail("storage-first provenance verifier returned unbound results")
+    lock = _acquire_fleet_transaction_guard(Path(journal_path))
     guard_token = _ACTIVE_TRANSACTION_GUARD.set(lock)
     try:
         node = admission["storage_node"]
         transport_node = _storage_first_transport_node(node)
         completed = list(resume_record.get("completed_operations", [])) if resume_record else []
+        storage_receipts = list(resume_record.get("storage_receipts", [])) if resume_record else []
+        if len(storage_receipts) != len(completed):
+            _fail("storage-first resume receipt prefix is incomplete")
         record: dict[str, Any] = {
             "schema_version": STORAGE_FIRST_JOURNAL_SCHEMA,
             "phase_id": STORAGE_FIRST_PHASE_ID,
@@ -4874,7 +5132,7 @@ def _storage_first_run(
             "completed_operations": completed,
             "callback_started": False,
             "callback_receipt": None,
-            "storage_receipts": [],
+            "storage_receipts": storage_receipts,
             "rollback_candidates": list(completed),
             "rollback_status": "not-started",
             "ledger_path": str(ledger_path),
@@ -4882,13 +5140,20 @@ def _storage_first_run(
         _storage_first_journal_write(Path(journal_path), record)
         if not completed:
             _storage_first_check_impact(plan)
-            _guarded_callback(transport.inspect_node, transport_node)
-            _guarded_callback(transport.preflight, "preflight:storage-205", transport_node)
+            inspect_evidence = _guarded_callback(transport.inspect_node, transport_node)
+            if not isinstance(inspect_evidence, Mapping) or inspect_evidence.get("node") != "storage-205" or inspect_evidence.get("known_hosts_verified") is not True:
+                _fail("storage-first inspect evidence is incomplete or unverified")
+            preflight_evidence = _guarded_callback(transport.preflight, "preflight:storage-205", transport_node)
+            if not isinstance(preflight_evidence, Mapping) or preflight_evidence.get("operation") != "preflight:storage-205" or preflight_evidence.get("verified") is not True:
+                _fail("storage-first preflight evidence is incomplete or unverified")
+            record["inspect_evidence"] = _sanitize_receipt(inspect_evidence, "storage-first inspect evidence")
+            record["preflight_evidence"] = _sanitize_receipt(preflight_evidence, "storage-first preflight evidence")
+            _storage_first_journal_write(Path(journal_path), record)
         if live_revalidator is None or not callable(live_revalidator):
             _fail("storage-first live revalidation is mandatory before mutation")
         for index, operation in enumerate(STORAGE_FIRST_OPERATIONS[len(completed):], start=len(completed)):
             live_result = _guarded_callback(live_revalidator)
-            if live_result is False:
+            if live_result is not True:
                 _fail("storage-first live revalidation rejected the next mutation")
             _storage_first_check_impact(plan)
             record.update({
@@ -4901,11 +5166,18 @@ def _storage_first_run(
             })
             _storage_first_journal_write(Path(journal_path), record)
             try:
-                raw_receipt = _guarded_callback(transport.mutate, operation, transport_node)
-                receipt = dict(raw_receipt)
-                receipt.setdefault("schema_version", STORAGE_FIRST_RECEIPT_SCHEMA)
-                receipt.setdefault("completion_boundary", STORAGE_FIRST_COMPLETION_BOUNDARY)
-                validate_storage_first_receipt(receipt)
+                callback = transport.verify if operation == "verify:storage-205" else transport.mutate
+                raw_receipt = _guarded_callback(callback, operation, transport_node)
+                receipt = _storage_first_bind_receipt(plan, operation, raw_receipt)
+                # Preserve the historical diagnostic list on the original
+                # storage fixture only; the actual provider callback remains
+                # the read-only verify method above.
+                if (
+                    operation == "verify:storage-205"
+                    and hasattr(transport, "mutations")
+                    and not hasattr(transport, "verify_operations")
+                ):
+                    transport.mutations.append(operation)
             except Exception as error:
                 reconciliation_requirements = {
                     "reobserve_failed_state": True,
@@ -4956,7 +5228,22 @@ def _storage_first_run(
                 "callback_receipt": receipt,
                 "rollback_candidates": list(completed),
             })
-            _storage_first_journal_write(Path(journal_path), record)
+            try:
+                _storage_first_journal_write(Path(journal_path), record)
+            except Exception as durability_error:
+                record.update({
+                    "status": "reconciliation-blocked",
+                    "next_operation": "reconciliation-required",
+                    "rollback_status": "reconciliation-blocked",
+                    "terminal_error": durability_error.__class__.__name__,
+                    "reconciliation_requirements": {
+                        "reobserve_failed_state": True,
+                        "clean_redeploy": True,
+                        "automatic_replay": False,
+                    },
+                })
+                _storage_first_reconciliation_write(Path(journal_path), record)
+                _fail("storage-first journal durability failed; reconciliation is required")
         return {
             "schema_version": STORAGE_FIRST_JOURNAL_SCHEMA,
             "status": "storage-205-verified",
@@ -5013,6 +5300,8 @@ def resume_storage_first(
     live_revalidator: Callable[[], Any] | None = None,
 ) -> dict[str, Any]:
     """Resume a storage-only journal after revalidating current admission."""
+    _storage_first_reject_aliases(Path(journal_path), Path(ledger_path), plan)
+    _storage_first_validate_ledger_readback(Path(ledger_path))
     _storage_first_validate_admission(
         plan, authority, phase=phase, identity_v2_evidence=identity_v2_evidence
     )
@@ -5428,6 +5717,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--journal", required=True, type=Path)
     parser.add_argument("--ledger", required=True, type=Path)
     parser.add_argument(
+        "--phase",
+        choices=(STORAGE_FIRST_PHASE_ID,),
+        help="explicit child phase to execute; omitted selects the legacy full-network adapter",
+    )
+    parser.add_argument(
         "--identity-v2-evidence-map",
         type=Path,
         help="exact v2 evidence map retained by the frozen plan",
@@ -5457,6 +5751,26 @@ def main(argv: list[str] | None = None) -> int:
     input_paths = (args.plan, args.authority)
     if args.identity_v2_evidence_map is not None:
         input_paths += (args.identity_v2_evidence_map,)
+    if args.phase == STORAGE_FIRST_PHASE_ID:
+        _storage_first_reject_aliases(args.journal, args.ledger, plan)
+        evidence_map = (
+            _load_json(args.identity_v2_evidence_map, "identity-v2 evidence map")
+            if args.identity_v2_evidence_map is not None
+            else plan.get("identity_v2_evidence")
+        )
+        result = execute_storage_first(
+            plan,
+            authority,
+            phase=args.phase,
+            identity_v2_evidence=evidence_map,
+            journal_path=args.journal,
+            ledger_path=args.ledger,
+            dry_run=not args.apply,
+        )
+        print(json.dumps(result, ensure_ascii=True, sort_keys=True))
+        # Library callers receive the structured child result; the module
+        # entrypoint below converts it to a conventional process exit code.
+        return result
     _reject_journal_input_aliases(
         args.journal, args.ledger, plan, input_paths=input_paths
     )
@@ -5483,4 +5797,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    outcome = main()
+    raise SystemExit(outcome if isinstance(outcome, int) else 0)

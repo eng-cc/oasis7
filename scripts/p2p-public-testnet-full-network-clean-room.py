@@ -2982,7 +2982,18 @@ def _storage_first_validate_parent(parent: Mapping[str, Any]) -> dict[str, Any]:
         if isinstance(node, Mapping) and isinstance(node.get("host_binding"), Mapping)
     ]
     if host_paths and len(set(host_paths)) != 1:
-        _storage_first_contract_error("parent known-host path binding is not canonical")
+        # The two validators intentionally share one pinned host file while
+        # observer aliases use the operator host file.  A canonical parent
+        # therefore has a per-node path projection, not one fleet-wide path.
+        # Keep the older shape-only fixture contract (one shared path), but
+        # require every non-uniform projection to match the code-owned map.
+        canonical_hosts = globals().get("CANONICAL_HOST_INVENTORY", {})
+        if any(
+            not isinstance(node, Mapping)
+            or node.get("host_binding") != canonical_hosts.get(node.get("name"))
+            for node in nodes
+        ):
+            _storage_first_contract_error("parent known-host path binding is not canonical")
     context = (
         _storage_first_text(parent.get("task_uid"), "parent.task_uid"),
         _storage_first_text(parent.get("head_oid"), "parent.head_oid"),
@@ -3030,6 +3041,28 @@ def _storage_first_validate_parent(parent: Mapping[str, Any]) -> dict[str, Any]:
         _storage_first_contract_error("parent nonce reservations are not in canonical node order")
     known_hosts_digest = _storage_first_digest(parent.get("known_hosts_digest"), "parent known-hosts digest")
     proof = parent.get("sequencer_proof")
+    if proof is None:
+        # Normal build_plan retains the bounded proof in the sequencer's
+        # canonical evidence endpoint rather than duplicating a top-level
+        # field.  Only the canonical per-node projection may supply this
+        # compatibility projection; shape-only fixtures must still declare it.
+        canonical_hosts = globals().get("CANONICAL_HOST_INVENTORY", {})
+        canonical_endpoints = globals().get("CANONICAL_ENDPOINT_INVENTORY", {})
+        canonical_projection = all(
+            isinstance(node, Mapping)
+            and node.get("host_binding") == canonical_hosts.get(node.get("name"))
+            and node.get("endpoints") == canonical_endpoints.get(node.get("name"))
+            for node in nodes
+        )
+        sequencer = next((node for node in nodes if node.get("name") == "sequencer-204"), None)
+        if canonical_projection and isinstance(sequencer, Mapping):
+            endpoints = sequencer.get("endpoints")
+            proof = {
+                "operation": "bounded-proof:sequencer-204",
+                "endpoint": endpoints.get("evidence") if isinstance(endpoints, Mapping) else None,
+                "bounded": True,
+                "mutation": False,
+            }
     if not isinstance(proof, Mapping) or proof.get("bounded") is not True:
         _storage_first_contract_error("bounded sequencer proof is required")
     if "/v1/chain/status" in json.dumps(proof, ensure_ascii=True, sort_keys=True):
@@ -3050,6 +3083,7 @@ def _storage_first_validate_parent(parent: Mapping[str, Any]) -> dict[str, Any]:
         "identity_digest": identity_digest,
         "known_hosts_digest": known_hosts_digest,
         "consumer_impact_record": copy.deepcopy(parent["consumer_impact_record"]),
+        "sequencer_proof": copy.deepcopy(proof),
         "parent_node_order": list(NODE_ORDER),
         "parent_plan_digest": _storage_first_digest(parent.get("plan_digest"), "parent.plan_digest"),
         "parent": parent,
@@ -3114,7 +3148,7 @@ def build_storage_first_contract(parent: Mapping[str, Any]) -> dict[str, Any]:
         },
         "sequencer_proof": {
             "operation": "bounded-proof:sequencer-204",
-            "endpoint": parent["sequencer_proof"].get("endpoint"),
+            "endpoint": binding["sequencer_proof"].get("endpoint"),
             "bounded": True,
             "mutation": False,
         },
