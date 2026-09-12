@@ -6131,6 +6131,115 @@ class StorageFirstBlockchainP1RedTests(unittest.TestCase):
         finally:
             canonical.tearDown()
 
+    def test_runtime_p1_dict_subclass_nodes_redirect_rejected_before_effects(self) -> None:
+        """A dict subclass must not split canonical bytes from callback targets."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            class RedirectedNodesPlan(StorageFirstCanonicalPlan):
+                """Return attacker targets from get('nodes') only."""
+
+                def get(self, key, default=None):
+                    if key != "nodes":
+                        return super().get(key, default)
+                    nodes = copy.deepcopy(super().get(key, default))
+                    for node in nodes:
+                        if node.get("name") == "storage-205":
+                            node["endpoints"] = {
+                                **node["endpoints"],
+                                "healthz": "https://attacker.invalid/healthz",
+                                "evidence": "https://attacker.invalid/evidence",
+                            }
+                    return nodes
+
+            forged_plan = RedirectedNodesPlan(canonical.plan)
+            self.assertEqual(dict(forged_plan)["nodes"], canonical.plan["nodes"])
+            self.assertNotEqual(forged_plan.get("nodes"), dict(forged_plan)["nodes"])
+            redirected_storage = next(
+                node for node in forged_plan.get("nodes")
+                if node["name"] == "storage-205"
+            )
+            self.assertEqual(
+                redirected_storage["endpoints"]["evidence"],
+                "https://attacker.invalid/evidence",
+            )
+
+            def assert_rejected_without_effects(label, invoke, transport, journal, before=None):
+                effects = {"child_journal": 0, "parent_journal": 0, "fleet_lock": 0}
+
+                def trap(effect):
+                    def record(*args, **kwargs):
+                        effects[effect] += 1
+                        raise AssertionError(f"unexpected {effect} effect")
+
+                    return record
+
+                caught = None
+                with mock.patch.object(
+                    canonical.adapter,
+                    "_storage_first_journal_write",
+                    side_effect=trap("child_journal"),
+                ), mock.patch.object(
+                    canonical.adapter,
+                    "_write_journal",
+                    side_effect=trap("parent_journal"),
+                ), mock.patch.object(
+                    canonical.adapter,
+                    "_acquire_fleet_transaction_guard",
+                    side_effect=trap("fleet_lock"),
+                ):
+                    try:
+                        invoke()
+                    except Exception as error:
+                        caught = error
+
+                self.assertEqual(
+                    effects,
+                    {"child_journal": 0, "parent_journal": 0, "fleet_lock": 0},
+                    f"{label} crossed a protected side-effect boundary",
+                )
+                self.assertEqual(transport.mutations, [], f"{label} reached provider mutation")
+                if before is not None:
+                    self.assertEqual(journal.read_bytes(), before, f"{label} changed its journal")
+                self.assertIsNotNone(caught, f"{label} accepted redirected provider targets")
+
+            execute_journal = canonical.root / "dict-subclass-execute.journal.json"
+            execute_transport = StorageFirstCanonicalTransport(
+                canonical.adapter, forged_plan
+            )
+            assert_rejected_without_effects(
+                "execute",
+                lambda: self.fixture._canonical_runner(
+                    canonical,
+                    execute_transport,
+                    plan=forged_plan,
+                    journal_path=execute_journal,
+                ),
+                execute_transport,
+                execute_journal,
+            )
+
+            resume_journal = self.fixture._canonical_prefix_journal(
+                canonical,
+                ["stop:storage-205"],
+                name="dict-subclass-resume.journal.json",
+            )
+            resume_before = resume_journal.read_bytes()
+            canonical.plan = forged_plan
+            resume_transport = StorageFirstCanonicalTransport(
+                canonical.adapter, forged_plan
+            )
+            assert_rejected_without_effects(
+                "resume",
+                lambda: self.fixture._canonical_resume(
+                    canonical, resume_journal, resume_transport
+                ),
+                resume_transport,
+                resume_journal,
+                resume_before,
+            )
+        finally:
+            canonical.tearDown()
+
     def test_p1_forged_persisted_receipt_bindings_cannot_survive_resume(self) -> None:
         canonical = self.fixture._canonical_fixture()
         try:
