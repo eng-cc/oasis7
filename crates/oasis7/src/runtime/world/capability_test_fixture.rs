@@ -232,16 +232,6 @@ impl World {
         }
 
         let identity = self.install_fixture_agent_identity(agent_id)?;
-        // Cognition leases charge the Runtime-authorized capability owner,
-        // not the Agent subject. Keep the legacy Agent balance for unrelated
-        // fixture consumers while provisioning the explicit payer account.
-        if seed_cognition_balance {
-            self.set_cognition_resource_balance(
-                identity.owner_binding.as_str(),
-                "cognition_units",
-                128,
-            )?;
-        }
         self.install_fixture_authority(
             world_id.as_str(),
             branch_id.as_str(),
@@ -264,11 +254,27 @@ impl World {
             session_id: Some(format!("runtime-test-session:{agent_id}")),
             attestation_ref: None,
         };
-        self.install_capability_invocation_context_for_agent(
+        let invocation = self.install_capability_invocation_context_for_agent(
             agent_id,
             presenter,
             format!("runtime-test-response:{agent_id}"),
-        )
+        )?;
+        // Cognition leases charge the Runtime-authorized capability owner,
+        // not the Agent subject. Keep the legacy Agent balance for unrelated
+        // fixture consumers, but provision the explicit payer account through
+        // the same authority API used by production bootstrap. The companion
+        // `without_cognition_balance` helper intentionally skips both legacy
+        // seeding and this explicit allowance so bootstrap tests can exercise
+        // the provisioning handoff themselves.
+        if seed_cognition_balance {
+            self.provision_cognition_for_agent(
+                agent_id,
+                format!("runtime-test-provision:{agent_id}:{branch_id}:{finality_epoch}"),
+                "runtime-test-authority",
+                128,
+            )?;
+        }
+        Ok(invocation)
     }
 
     fn bound_runtime_identity(&self) -> Result<(String, String, u64, Option<String>), WorldError> {
