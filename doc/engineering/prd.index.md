@@ -14,6 +14,7 @@
 | --- | --- | --- |
 | `doc/engineering/doc-governance/doc-structure-standard.prd.md` | `doc/engineering/doc-governance/doc-structure-standard.design.md`；`documentation-governance.manual.md`（how-to） | GitHub task issue evidence comments |
 | `doc/engineering/doc-governance/product-documentation-standard.prd.md` | `doc/engineering/doc-governance/product-documentation-standard.design.md`；`product-documentation-standard.templates.md` | GitHub task issue evidence comments |
+| 产品文档全量治理（standalone execution design） | `doc/engineering/doc-governance/product-documentation-full-corpus-governance.design.md` | GitHub task issue evidence comments |
 | 系统设计写作规范（standalone content standard） | `doc/engineering/doc-governance/system-design-writing-standard.design.md` | GitHub task issue evidence comments |
 | 项目管理记录规范（standalone content standard） | `doc/engineering/doc-governance/project-management-record-standard.design.md` | GitHub task issue evidence comments |
 | `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md` | n/a（当前契约已收敛到 PRD） | n/a（执行证据归 GitHub task 与 git history） |
