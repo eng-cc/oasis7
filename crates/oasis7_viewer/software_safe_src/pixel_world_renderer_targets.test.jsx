@@ -1,7 +1,7 @@
 import { render, fireEvent } from '@solidjs/testing-library';
 import { describe, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
-import { PixelWorldRendererTargets, rendererEntityTargetStyle } from './pixel_world_renderer_targets.jsx';
+import { PixelWorldRendererTargets, moduleTargetOffsets, rendererEntityTargetStyle } from './pixel_world_renderer_targets.jsx';
 
 describe('real renderer accessible projection', () => {
   it('keeps partially visible hit boxes at each edge until their full bounds leave the canvas', () => {
@@ -190,5 +190,21 @@ describe('real renderer accessible projection', () => {
       [{ kind: 'module_visual', id: 'module-agent-b' }],
       [{ kind: 'module_visual', id: 'module-location-a' }],
     ]);
+  });
+
+  it('keeps deterministic co-anchor slots at the 4096 module capacity', () => {
+    const anchor = { x_cm: 250, y_cm: 600, z_cm: 0 };
+    const modules = Array.from({ length: 4096 }, (_, index) => ({
+      id: `module-${String(index).padStart(4, '0')}`,
+      kind: 'relay',
+      pos: anchor,
+    })).reverse();
+    const offsets = moduleTargetOffsets({ agents: [], locations: [], moduleVisualEntities: modules });
+
+    expect(offsets.size).toBe(4096);
+    expect(offsets.get('module-0000')).toEqual({ x: -48, y: -48 });
+    expect(offsets.get('module-0001')).toEqual({ x: 0, y: -48 });
+    expect(offsets.get('module-0008')).toEqual({ x: -96, y: -96 });
+    expect(offsets.get('module-4095')).toEqual({ x: 24576, y: 24576 });
   });
 });

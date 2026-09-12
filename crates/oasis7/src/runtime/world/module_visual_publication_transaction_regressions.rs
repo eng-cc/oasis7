@@ -1,6 +1,7 @@
 use super::*;
 use crate::geometry::GeoPos;
 use crate::runtime::WorldEventBody;
+use crate::runtime::cognition::{MAX_EXPECTED_VALUE_BYTES, MAX_IDENTIFIER_BYTES};
 use crate::simulator::{ModuleVisualAnchor, ModuleVisualEntity};
 use oasis7_wasm_abi::ModuleEmitEvent;
 
@@ -39,7 +40,7 @@ fn visual_upsert_body_for(entity_id: &str, module_id: &str) -> WorldEventBody {
         payload: serde_json::json!({
             "entity": {
                 "entity_id": entity_id,
-                "module_id": MODULE_ID,
+                "module_id": module_id,
                 "kind": "relay",
                 "label": "Relay",
                 "anchor": {
@@ -66,6 +67,16 @@ fn visual_remove_body_for(entity_id: &str) -> WorldEventBody {
 
 fn visual_remove_body() -> WorldEventBody {
     visual_remove_body_for(ENTITY_ID)
+}
+
+fn set_visual_entity_field(body: &mut WorldEventBody, field: &str, value: &str) {
+    let WorldEventBody::ModuleEmitted(event) = body else {
+        unreachable!()
+    };
+    if field == "module_id" {
+        event.module_id = value.to_string();
+    }
+    event.payload["entity"][field] = serde_json::json!(value);
 }
 
 fn state_json(world: &World) -> serde_json::Value {
@@ -144,6 +155,59 @@ fn production_module_visual_legacy_snapshot_above_cap_remains_loadable_and_drain
     assert_eq!(
         world.state().module_visual_entities.len(),
         MODULE_VISUAL_ENTITY_TEST_CAP
+    );
+}
+
+#[test]
+fn production_module_visual_text_fields_reject_over_limit_atomically() {
+    for (field, max_bytes) in [
+        ("entity_id", MAX_IDENTIFIER_BYTES),
+        ("module_id", MAX_IDENTIFIER_BYTES),
+        ("kind", MAX_IDENTIFIER_BYTES),
+        ("label", MAX_EXPECTED_VALUE_BYTES),
+    ] {
+        let mut world = World::new();
+        let before = world.snapshot();
+        let journal_before = world.journal().clone();
+        let mut body = visual_upsert_body(MODULE_ID);
+        set_visual_entity_field(&mut body, field, &"x".repeat(max_bytes + 1));
+
+        let error = world
+            .append_event_for_test(body, None)
+            .expect_err("oversized visual text must be rejected");
+        assert!(
+            matches!(error, WorldError::Serde(reason) if reason.contains(field) && reason.contains("bytes"))
+        );
+        assert_eq!(world.snapshot(), before);
+        assert_eq!(world.journal(), &journal_before);
+    }
+}
+
+#[test]
+fn production_module_visual_text_fields_accept_exact_byte_limits() {
+    let module_id = "m".repeat(MAX_IDENTIFIER_BYTES);
+    let entity_id = "e".repeat(MAX_IDENTIFIER_BYTES);
+    let kind = "k".repeat(MAX_IDENTIFIER_BYTES);
+    let label = "l".repeat(MAX_EXPECTED_VALUE_BYTES);
+    let mut body = visual_upsert_body_for(&entity_id, &module_id);
+    set_visual_entity_field(&mut body, "kind", &kind);
+    set_visual_entity_field(&mut body, "label", &label);
+    let mut world = World::new();
+
+    world
+        .append_event_for_test(body, None)
+        .expect("visual text at each exact byte limit remains valid");
+    let entity = world
+        .state()
+        .module_visual_entities
+        .get(&entity_id)
+        .expect("bounded visual entity was published");
+    assert_eq!(entity.entity_id.len(), MAX_IDENTIFIER_BYTES);
+    assert_eq!(entity.module_id.len(), MAX_IDENTIFIER_BYTES);
+    assert_eq!(entity.kind.len(), MAX_IDENTIFIER_BYTES);
+    assert_eq!(
+        entity.label.as_deref().map(str::len),
+        Some(MAX_EXPECTED_VALUE_BYTES)
     );
 }
 

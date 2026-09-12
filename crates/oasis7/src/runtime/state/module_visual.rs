@@ -1,3 +1,4 @@
+use super::super::cognition::{MAX_EXPECTED_VALUE_BYTES, MAX_IDENTIFIER_BYTES};
 use super::{WorldError, WorldState};
 use crate::simulator::{ModuleVisualAnchor, ModuleVisualEntity};
 use oasis7_wasm_abi::ModuleEmitEvent;
@@ -66,18 +67,39 @@ pub(crate) fn parse_module_visual_emit(
         }
         _ => return Ok(None),
     };
-    let module_id = non_empty(event.module_id.as_str(), "module_id")?;
+    validate_bounded_non_empty(
+        event.module_id.as_str(),
+        "module_id",
+        MAX_IDENTIFIER_BYTES,
+        kind,
+    )?;
+    let module_id = event.module_id.trim();
     let mutation = if kind == MODULE_VISUAL_ENTITY_UPSERTED_KIND {
         let payload =
             serde_json::from_value::<ModuleVisualEntityUpsertPayload>(event.payload.clone())
                 .map_err(|error| invalid_payload(kind, error))?;
+        validate_bounded_non_empty(
+            payload.entity.entity_id.as_str(),
+            "entity_id",
+            MAX_IDENTIFIER_BYTES,
+            kind,
+        )?;
+        validate_bounded_non_empty(
+            payload.entity.module_id.as_str(),
+            "module_id",
+            MAX_IDENTIFIER_BYTES,
+            kind,
+        )?;
+        validate_bounded_text(
+            payload.entity.kind.as_str(),
+            "kind",
+            MAX_IDENTIFIER_BYTES,
+            kind,
+        )?;
+        if let Some(label) = payload.entity.label.as_deref() {
+            validate_bounded_text(label, "label", MAX_EXPECTED_VALUE_BYTES, kind)?;
+        }
         let entity = payload.entity.into_entity();
-        if entity.entity_id.is_empty() {
-            return Err(invalid_payload(kind, "entity_id is required"));
-        }
-        if entity.module_id.is_empty() {
-            return Err(invalid_payload(kind, "module_id is required"));
-        }
         if entity.module_id != module_id {
             return Err(invalid_payload(
                 kind,
@@ -212,6 +234,33 @@ fn non_empty(value: &str, field: &str) -> Result<String, WorldError> {
         return Err(invalid_payload(field, format!("{field} is required")));
     }
     Ok(value.to_string())
+}
+
+fn validate_bounded_non_empty(
+    value: &str,
+    field: &str,
+    max_bytes: usize,
+    kind: &str,
+) -> Result<(), WorldError> {
+    if value.trim().is_empty() {
+        return Err(invalid_payload(kind, format!("{field} is required")));
+    }
+    validate_bounded_text(value, field, max_bytes, kind)
+}
+
+fn validate_bounded_text(
+    value: &str,
+    field: &str,
+    max_bytes: usize,
+    kind: &str,
+) -> Result<(), WorldError> {
+    if value.len() > max_bytes {
+        return Err(invalid_payload(
+            kind,
+            format!("{field} exceeds maximum of {max_bytes} bytes"),
+        ));
+    }
+    Ok(())
 }
 
 fn invalid_payload(kind: &str, detail: impl std::fmt::Display) -> WorldError {

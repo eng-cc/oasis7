@@ -88,21 +88,51 @@ pub(crate) fn module_co_anchor_offset(index: usize, renderer_to_css_scale: Vec2)
     ) * ring
 }
 
-fn positions_match(left: &Position, right: &Position) -> bool {
-    left.x_cm == right.x_cm && left.y_cm == right.y_cm && left.z_cm == right.z_cm
+pub(crate) type PositionKey = (u64, u64, u64);
+
+fn position_key(position: &Position) -> Option<PositionKey> {
+    if !position.x_cm.is_finite() || !position.y_cm.is_finite() {
+        return None;
+    }
+    let bits = |value: f64| if value == 0.0 { 0 } else { value.to_bits() };
+    let z = if position.z_cm.is_finite() {
+        position.z_cm
+    } else {
+        0.0
+    };
+    Some((bits(position.x_cm), bits(position.y_cm), bits(z)))
 }
 
-fn module_shares_parent_anchor(render_state: &RenderState, position: &Position) -> bool {
+fn parent_position_keys(render_state: &RenderState) -> HashSet<PositionKey> {
     render_state
         .locations
         .iter()
-        .any(|location| positions_match(&location.pos, position))
-        || render_state.agents.iter().any(|agent| {
-            agent
-                .pos
-                .as_ref()
-                .is_some_and(|agent_position| positions_match(agent_position, position))
-        })
+        .filter_map(|location| position_key(&location.pos))
+        .chain(
+            render_state
+                .agents
+                .iter()
+                .filter_map(|agent| agent.pos.as_ref().and_then(position_key)),
+        )
+        .collect()
+}
+
+pub(crate) fn module_co_anchor_slots(
+    position_keys: &[Option<PositionKey>],
+) -> Vec<Option<(usize, usize)>> {
+    let mut groups = HashMap::<PositionKey, Vec<usize>>::new();
+    for (index, key) in position_keys.iter().copied().enumerate() {
+        if let Some(key) = key {
+            groups.entry(key).or_default().push(index);
+        }
+    }
+    let mut slots = vec![None; position_keys.len()];
+    for group in groups.values() {
+        for (index, entity_index) in group.iter().copied().enumerate() {
+            slots[entity_index] = Some((index, group.len()));
+        }
+    }
+    slots
 }
 
 pub(super) fn reconcile_module_visual_entities(
@@ -145,6 +175,12 @@ pub(super) fn reconcile_module_visual_entities(
         .iter()
         .collect::<Vec<_>>();
     entities.sort_by(|left, right| left.id.cmp(&right.id));
+    let module_position_keys = entities
+        .iter()
+        .map(|entity| position_key(&entity.pos))
+        .collect::<Vec<_>>();
+    let module_co_anchor_slots = module_co_anchor_slots(&module_position_keys);
+    let parent_positions = parent_position_keys(render_state);
     let mut active_ids = HashSet::new();
     let mut active_chips = HashSet::new();
     let mut active_labels = HashSet::new();
@@ -155,20 +191,17 @@ pub(super) fn reconcile_module_visual_entities(
         else {
             continue;
         };
-        let co_anchor_index = entities[..index]
-            .iter()
-            .filter(|other| positions_match(&other.pos, &entity.pos))
-            .count();
-        let co_anchor_count = entities
-            .iter()
-            .filter(|other| positions_match(&other.pos, &entity.pos))
-            .count();
-        let co_anchor_offset =
-            if module_shares_parent_anchor(render_state, &entity.pos) || co_anchor_count > 1 {
-                module_co_anchor_offset(co_anchor_index, renderer_to_css_scale)
-            } else {
-                Vec2::ZERO
-            };
+        let co_anchor_slot = module_co_anchor_slots[index];
+        let has_parent =
+            module_position_keys[index].is_some_and(|key| parent_positions.contains(&key));
+        let co_anchor_offset = if has_parent || co_anchor_slot.is_some_and(|(_, count)| count > 1) {
+            module_co_anchor_offset(
+                co_anchor_slot.map_or(index, |(co_anchor_index, _)| co_anchor_index),
+                renderer_to_css_scale,
+            )
+        } else {
+            Vec2::ZERO
+        };
         active_ids.insert(entity.id.clone());
         let mut transform = Transform::from_translation(to_bevy_translation(
             canvas_x + f64::from(co_anchor_offset.x),

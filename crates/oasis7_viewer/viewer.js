@@ -11818,14 +11818,30 @@ function moduleCoAnchorOffset(index) {
 }
 function moduleTargetOffsets(visualState) {
   const modules = visualState.moduleVisualEntities.filter((entity) => entity?.pos).slice().sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
-  const parentPositions = [...visualState.agents.filter((entity) => entity?.pos), ...visualState.locations.filter((entity) => entity?.pos)].map((entity) => positionKey(entity.pos));
+  const parentPositions = new Set([...visualState.agents.filter((entity) => entity?.pos), ...visualState.locations.filter((entity) => entity?.pos)].map((entity) => positionKey(entity.pos)).filter((key) => key !== null));
+  const modulesByPosition = /* @__PURE__ */ new Map();
+  for (const module of modules) {
+    const key = positionKey(module.pos);
+    if (key === null) continue;
+    const group = modulesByPosition.get(key) || [];
+    group.push(module);
+    modulesByPosition.set(key, group);
+  }
+  const coAnchorSlots = /* @__PURE__ */ new Map();
+  for (const [key, group] of modulesByPosition) {
+    group.forEach((module, index) => {
+      coAnchorSlots.set(module, {
+        key,
+        index,
+        count: group.length
+      });
+    });
+  }
   const offsets = /* @__PURE__ */ new Map();
   modules.forEach((module, index) => {
-    const key = positionKey(module.pos);
-    const coAnchoredModules = key === null ? [] : modules.filter((other) => positionKey(other.pos) === key);
-    const coAnchorIndex = coAnchoredModules.findIndex((other) => other.id === module.id);
-    const hasParent = key !== null && parentPositions.includes(key);
-    offsets.set(module.id, hasParent || coAnchoredModules.length > 1 ? moduleCoAnchorOffset(coAnchorIndex >= 0 ? coAnchorIndex : index) : {
+    const slot = coAnchorSlots.get(module);
+    const hasParent = slot ? parentPositions.has(slot.key) : false;
+    offsets.set(module.id, hasParent || slot?.count > 1 ? moduleCoAnchorOffset(slot?.index ?? index) : {
       x: 0,
       y: 0
     });

@@ -2,7 +2,7 @@ use super::*;
 use crate::render::module_visual_entities::{
     MODULE_LABEL_LAYER_Z, MODULE_VISUAL_ENTITY_COLOR, MODULE_VISUAL_ENTITY_SIZE_PX,
     ModuleIdentityChipPart, PixelWorldModuleIdentityChipVisual, PixelWorldModuleVisualEntity,
-    PixelWorldModuleVisualLabel, module_co_anchor_offset,
+    PixelWorldModuleVisualLabel, module_co_anchor_offset, module_co_anchor_slots,
 };
 
 fn module_visual(id: &str, pos: Position) -> ModuleVisualEntity {
@@ -348,6 +348,21 @@ fn co_anchor_renderer_offsets_keep_the_48_css_gap_across_backing_scales() {
         assert!((css_gap_x - 48.0).abs() < f32::EPSILON);
         assert!(css_gap_y.abs() < f32::EPSILON);
     }
+}
+
+#[test]
+fn module_co_anchor_grouping_preserves_deterministic_slots_at_capacity() {
+    let position_keys = vec![Some((1, 2, 3)); 4096];
+    let slots = module_co_anchor_slots(&position_keys);
+
+    assert_eq!(
+        position_keys.iter().filter(|key| key.is_some()).count(),
+        4096
+    );
+    assert_eq!(slots.first().copied().flatten(), Some((0, 4096)));
+    assert_eq!(slots.get(1).copied().flatten(), Some((1, 4096)));
+    assert_eq!(slots.get(8).copied().flatten(), Some((8, 4096)));
+    assert_eq!(slots.last().copied().flatten(), Some((4095, 4096)));
 }
 
 #[test]
