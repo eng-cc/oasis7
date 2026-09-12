@@ -93,6 +93,8 @@ mod continuation_support;
 mod decision;
 #[path = "llm_sidecar_lineage.rs"]
 mod lineage;
+#[path = "llm_sidecar_lineage_generation_recovery.rs"]
+mod lineage_generation_recovery;
 #[path = "llm_sidecar_lineage_persistence.rs"]
 mod lineage_persistence;
 #[path = "llm_sidecar_lineage_recovery.rs"]

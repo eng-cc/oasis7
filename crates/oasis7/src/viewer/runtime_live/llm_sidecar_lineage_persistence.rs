@@ -58,133 +58,6 @@ pub(in crate::viewer::runtime_live) struct ProviderWakeRecoveryPending {
     pub(in crate::viewer::runtime_live) reason: String,
 }
 
-/// Compare the complete provider request identity carried by two sidecar
-/// contexts. Map keys are only routing hints: a restored context is safe to
-/// reuse only when every Runtime correlation field agrees.
-pub(super) fn provider_context_identity_matches(
-    left: &cognition_context::ProviderContextState,
-    right: &cognition_context::ProviderContextState,
-) -> bool {
-    left.request_context.agent_subject == right.request_context.agent_subject
-        && left.request_context.agent_session_id == right.request_context.agent_session_id
-        && left.request_context.agent_turn_id == right.request_context.agent_turn_id
-        && left.request_context.decision_request_id == right.request_context.decision_request_id
-        && left.request_context.request_digest == right.request_context.request_digest
-        && payer_support::provider_payer_id(&left.request_context).ok()
-            == payer_support::provider_payer_id(&right.request_context).ok()
-}
-
-pub(super) fn validate_provider_lease_identity(
-    agent_id: &str,
-    request: &crate::simulator::ContinuousAgentRequestContextV1,
-    lease: &crate::runtime::CognitionLeaseV1,
-) -> Result<(), String> {
-    request
-        .validate()
-        .map_err(|error| format!("provider cognition request invalid: {error}"))?;
-    lease
-        .validate()
-        .map_err(|error| format!("provider cognition lease invalid: {error}"))?;
-    let expected_account = payer_support::provider_payer_id(request)?;
-    if lease.status != crate::runtime::CognitionLeaseStatusV1::Reserved {
-        return Err(format!(
-            "provider cognition lease is not reserved for {agent_id}"
-        ));
-    }
-    let expected_invocation_key = request.provider_invocation_key().to_string();
-    if lease.agent_id != agent_id
-        || request.agent_subject != agent_id
-        || lease.account_id != expected_account
-        || lease.idempotency_key != expected_invocation_key
-        || lease.agent_session_id != request.agent_session_id
-        || lease.agent_turn_id != request.agent_turn_id
-        || lease.decision_request_id != request.decision_request_id
-        || lease.request_digest != request.request_digest.to_string()
-        || lease.quote.resource != "cognition_units"
-        || lease.reserved_amount != 1
-        || lease.quote.payer_id != lease.account_id
-        || lease.quote.resource_version != crate::runtime::COGNITION_RESOURCE_VERSION_V1
-        || lease.quote.purpose != "provider_cognition"
-        || lease.quote.scope != "agent_turn"
-        || lease.quote.policy_revision
-            != crate::runtime::COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION
-        || lease.quote.authority_context != request.capability_invocation_context_digest.to_string()
-        || lease.quote.world_binding != request.runtime_binding.base_world_hash.to_string()
-    {
-        return Err(format!(
-            "provider cognition lease identity mismatch for {agent_id}"
-        ));
-    }
-    Ok(())
-}
-
-pub(super) fn validate_provider_lease_binding(
-    world: &RuntimeWorld,
-    agent_id: &str,
-    request: &crate::simulator::ContinuousAgentRequestContextV1,
-    lease: &crate::runtime::CognitionLeaseV1,
-    operation: &str,
-) -> Result<(), String> {
-    validate_provider_lease_identity(agent_id, request, lease)?;
-    payer_support::runtime_authorized_provider_payer_id(world, request)?;
-    validate_provider_lease_runtime_record(world, agent_id, lease, operation)?;
-    if operation == "dispatch"
-        && (lease.reserved_at_tick > world.state().time
-            || lease
-                .quote
-                .valid_until_tick
-                .is_some_and(|expires| world.state().time > expires))
-    {
-        return Err(format!(
-            "provider cognition lease dispatch is stale for {agent_id}"
-        ));
-    }
-    Ok(())
-}
-
-/// Validate the exact Runtime-owned lease record without projecting its
-/// request through the current capability authority. Generation rotation
-/// deliberately makes an old request's grant obsolete, but the old Reserved
-/// lease still needs a durable release during recovery.
-fn validate_provider_lease_runtime_record(
-    world: &RuntimeWorld,
-    agent_id: &str,
-    lease: &crate::runtime::CognitionLeaseV1,
-    operation: &str,
-) -> Result<(), String> {
-    let economy = world.cognition_economy().map_err(|error| {
-        format!("provider cognition lease {operation} economy read failed: {error:?}")
-    })?;
-    let runtime_lease = economy.leases.get(lease.lease_id.as_str()).ok_or_else(|| {
-        format!(
-            "provider cognition lease {operation} missing from Runtime: {}",
-            lease.lease_id
-        )
-    })?;
-    if runtime_lease.idempotency_key != lease.idempotency_key
-        || runtime_lease.account_id != lease.account_id
-        || runtime_lease.agent_id != lease.agent_id
-        || runtime_lease.agent_session_id != lease.agent_session_id
-        || runtime_lease.agent_turn_id != lease.agent_turn_id
-        || runtime_lease.decision_request_id != lease.decision_request_id
-        || runtime_lease.request_digest != lease.request_digest
-        || runtime_lease.quote != lease.quote
-        || runtime_lease.reserved_amount != lease.reserved_amount
-    {
-        return Err(format!(
-            "provider cognition lease {operation} Runtime identity mismatch for {agent_id}"
-        ));
-    }
-    if operation == "dispatch"
-        && runtime_lease.status != crate::runtime::CognitionLeaseStatusV1::Reserved
-    {
-        return Err(format!(
-            "provider cognition lease dispatch is already closed for {agent_id}"
-        ));
-    }
-    Ok(())
-}
-
 pub(super) fn provider_context_matches_wake(
     context: &cognition_context::ProviderContextState,
     wake: &crate::runtime::SchedulerWakeV1,
@@ -307,23 +180,30 @@ fn validate_persisted_provider_cognition_leases(
             // before a caller can replace a bootstrap world in tests/tools;
             // dispatch and economic cleanup repeat the Runtime lookup below
             // before permitting any effect.
-            validate_provider_lease_identity(agent_id, request, lease)?;
-            let authority_rotated = provider_request_capability_identity(request)
-                .zip(
-                    world
-                        .capability_revocation_state()
-                        .agent_identities
-                        .get(agent_id),
-                )
-                .is_some_and(|(saved, current)| saved != *current);
+            lineage_generation_recovery::validate_provider_lease_identity(
+                agent_id, request, lease,
+            )?;
+            let authority_rotated =
+                lineage_generation_recovery::provider_request_capability_identity(request)
+                    .zip(
+                        world
+                            .capability_revocation_state()
+                            .agent_identities
+                            .get(agent_id),
+                    )
+                    .is_some_and(|(saved, current)| saved != *current);
             let binding_validation = if authority_rotated {
                 // A rotated generation intentionally invalidates the old
                 // grant. Validate the durable Runtime lease record exactly,
                 // but do not ask the new authority to validate an obsolete
                 // request before the recovery pass releases that lease.
-                validate_provider_lease_runtime_record(world, agent_id, lease, "restore")
+                lineage_generation_recovery::validate_provider_lease_runtime_record(
+                    world, agent_id, lease, "restore",
+                )
             } else {
-                validate_provider_lease_binding(world, agent_id, request, lease, "restore")
+                lineage_generation_recovery::validate_provider_lease_binding(
+                    world, agent_id, request, lease, "restore",
+                )
             };
             if let Err(error) = binding_validation {
                 // Runtime removes a lease as part of an authoritative receipt
@@ -343,27 +223,6 @@ fn validate_persisted_provider_cognition_leases(
         }
     }
     Ok(())
-}
-
-pub(super) fn provider_request_capability_identity(
-    request: &crate::simulator::ContinuousAgentRequestContextV1,
-) -> Option<crate::runtime::CapabilityAgentIdentity> {
-    let invocation = request
-        .base_decision_request
-        .capability_invocation_context
-        .as_ref()?;
-    let oasis7_wasm_abi::CapabilitySubject::Agent {
-        agent_id: _,
-        owner_binding,
-        generation,
-    } = &invocation.subject
-    else {
-        return None;
-    };
-    Some(crate::runtime::CapabilityAgentIdentity {
-        owner_binding: owner_binding.clone(),
-        generation: *generation,
-    })
 }
 
 fn decode_provider_lineage_checkpoint(
@@ -500,7 +359,9 @@ impl RuntimeLlmSidecar {
         lease: &crate::runtime::CognitionLeaseV1,
         operation: &str,
     ) -> Result<(), String> {
-        validate_provider_lease_binding(world, agent_id, request, lease, operation)
+        lineage_generation_recovery::validate_provider_lease_binding(
+            world, agent_id, request, lease, operation,
+        )
     }
 
     pub(in crate::viewer::runtime_live) fn validate_provider_cognition_lease_for_agent(
@@ -770,7 +631,9 @@ impl RuntimeLlmSidecar {
             .map(|(agent_id, context)| (agent_id.as_str(), &context.request_context))
             .collect::<Vec<_>>();
         for (agent_id, request) in identity_contexts {
-            if let Some(identity) = provider_request_capability_identity(request) {
+            if let Some(identity) =
+                lineage_generation_recovery::provider_request_capability_identity(request)
+            {
                 if let Some(saved) = self.provider_capability_identities.get(agent_id)
                     && saved != &identity
                 {
@@ -990,8 +853,9 @@ impl RuntimeLlmSidecar {
             .iter()
             .map(|(agent_id, active)| {
                 let context = self.provider_contexts.get(agent_id.as_str());
-                let same_identity = context
-                    .is_some_and(|context| provider_context_identity_matches(context, active));
+                let same_identity = context.is_some_and(|context| {
+                    lineage_generation_recovery::provider_context_identity_matches(context, active)
+                });
                 (
                     agent_id.clone(),
                     active.clone(),
