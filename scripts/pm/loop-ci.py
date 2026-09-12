@@ -97,6 +97,10 @@ import json
 import sys
 from pathlib import Path
 
+# The detached effective tool root must remain byte-for-byte clean until its
+# explicit Git worktree removal. Do not let imports create interpreter caches.
+sys.dont_write_bytecode = True
+
 from loop_ci_content import validate_ci_content
 from loop_traceability import GitHubAuthorityReader, _validate_authority_record
 
