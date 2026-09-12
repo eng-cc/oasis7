@@ -5532,26 +5532,13 @@ def _storage_first_reject_aliases(
     *,
     input_paths: tuple[Path, ...] = (),
 ) -> None:
-    """Reject child output collisions before admission or lock acquisition."""
-    journal_path, ledger_path = Path(journal_path), Path(ledger_path)
-    declared = plan.get("credential_nonce_ledger")
-    declared_path = Path(declared["path"]) if isinstance(declared, Mapping) and isinstance(declared.get("path"), str) else None
-    outputs = [journal_path, Path(f"{journal_path}.lock"), Path(f"{journal_path}.emergency.json")]
-    protected = [ledger_path, Path(CANONICAL_FLEET_LOCK_PATH)]
-    protected.extend(Path(path) for path in input_paths)
-    if declared_path is not None:
-        protected.append(declared_path)
-    try:
-        for index, output in enumerate(outputs):
-            for other in outputs[index + 1:]:
-                if output.resolve() == other.resolve() or (output.exists() and other.exists() and output.samefile(other)):
-                    _fail("storage-first outputs must not alias each other")
-        for output in outputs:
-            for retained in protected:
-                if output.resolve() == retained.resolve() or (output.exists() and retained.exists() and output.samefile(retained)):
-                    _fail("storage-first output must not alias the nonce ledger")
-    except (OSError, RuntimeError):
-        _fail("cannot establish storage-first output and ledger separation")
+    """Reuse the canonical protected-input closure for the storage child."""
+    _reject_journal_input_aliases(
+        Path(journal_path),
+        Path(ledger_path),
+        dict(plan),
+        input_paths=tuple(Path(path) for path in input_paths),
+    )
 
 
 def _storage_first_validate_ledger_readback(ledger_path: Path) -> None:
