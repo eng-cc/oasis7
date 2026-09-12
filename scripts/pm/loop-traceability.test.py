@@ -20,6 +20,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from loop_approval_authority import build_authority_map
+from loop_leaf_result import build_leaf_result, canonical_body, leaf_result_locator
+
 
 HERE = Path(__file__).resolve().parent
 SOURCE_OID = "06d6754b5311bceb2b904d7a17e2991b217f501b"
@@ -29,6 +32,15 @@ SECOND_LEAF_UID = "task_" + "c" * 32
 CHANGE_ID = "change-3671-traceability"
 RECORD_COMMENT_ID = 5636938574
 EQUIVALENCE_APPROVAL_COMMENT_ID = 5636906114
+AUTHORITY_MAP_COMMENT_ID = 5636906120
+LEAF_RESULT_COMMENT_IDS = {
+    LEAF_UID: 5636906121,
+    SECOND_LEAF_UID: 5636906122,
+}
+LEAF_RESULT_ISSUE_NUMBERS = {
+    LEAF_UID: 3672,
+    SECOND_LEAF_UID: 3674,
+}
 REPOSITORY = "eng-cc/oasis7"
 CANDIDATE_FIELDS = (
     "change_id",
@@ -237,6 +249,20 @@ def _evidence_digest(payload):
     return "sha256:" + hashlib.sha256(_canonical(payload).encode()).hexdigest()
 
 
+def _configuration_digest(candidate):
+    return _evidence_digest({
+        field: deepcopy(candidate[field])
+        for field in (
+            "entry",
+            "environment",
+            "effective_policy_identity",
+            "effective_helper_identity",
+            "effective_workflow_identity",
+            "consumed_contracts",
+        )
+    })
+
+
 def _authority_ref(comment_id=5636906114):
     return {"repository": REPOSITORY, "issue_number": 3671, "comment_id": comment_id}
 
@@ -280,6 +306,13 @@ class FixtureReaders:
         self.authority_results = []
         self.contract_calls = []
         self.comment = self._comment(record)
+        self.issue_by_number = {
+            3671: {
+                "number": 3671,
+                "html_url": f"https://github.com/{REPOSITORY}/issues/3671",
+                "body": f"<!-- oasis7-pm-task -->\ntask_uid: {TASK_UID}\n",
+            },
+        }
         self.equivalence_comment = {
             "id": EQUIVALENCE_APPROVAL_COMMENT_ID,
             "issue_url": f"https://api.github.com/repos/{REPOSITORY}/issues/3671",
@@ -290,6 +323,10 @@ class FixtureReaders:
         self.comments = {
             RECORD_COMMENT_ID: self.comment,
             EQUIVALENCE_APPROVAL_COMMENT_ID: self.equivalence_comment,
+        }
+        self.comment_issue_numbers = {
+            RECORD_COMMENT_ID: 3671,
+            EQUIVALENCE_APPROVAL_COMMENT_ID: 3671,
         }
 
     @staticmethod
@@ -321,18 +358,107 @@ class FixtureReaders:
                 "blockers": [f"unknown authority comment {comment_id}"],
                 "reader_kind": "fixture_authority",
             }
+        issue_number = self.comment_issue_numbers.get(comment_id, 3671)
+        issue = self.issue_by_number[issue_number]
+        marker = None
+        try:
+            marker = json.loads(comment.get("body") or "").get("marker")
+        except (TypeError, json.JSONDecodeError):
+            pass
         result = {
-            "reader_kind": "fixture_authority",
+            "reader_kind": "github_live_query" if marker == "oasis7-loop-leaf-result" else "fixture_authority",
             "repository": REPOSITORY,
-            "issue": {
-                "number": 3671,
-                "html_url": f"https://github.com/{REPOSITORY}/issues/3671",
-                "body": f"<!-- oasis7-pm-task -->\ntask_uid: {TASK_UID}\n",
-            },
+            "issue": issue,
             "comment": comment,
         }
+        if marker == "oasis7-loop-leaf-result":
+            result["permission"] = "write"
+        elif marker in {"oasis7-loop-approval-authority", "oasis7-equivalence-approval"}:
+            result["permission"] = "admin"
         self.authority_results.append(result)
         return result
+
+    def install_live_leaf_results(self, candidate, evidence):
+        for row, item in zip(candidate["applicability_matrix"], evidence):
+            leaf_candidate = deepcopy(item["candidate"])
+            verification = {
+                "profile": "fixture_repository_state",
+                "mode": "fixture",
+                "frozen_source_head": leaf_candidate["source_head_oid"],
+                "frozen_source_tree": leaf_candidate["tested_tree_oid"],
+                "repository_fingerprint_before": "1" * 64,
+                "repository_fingerprint_after": "1" * 64,
+                "verification_epoch_stable": True,
+                "verification_exit_code": 0,
+            }
+            result = build_leaf_result(
+                task_uid=item["task_uid"],
+                change_id=candidate["change_id"],
+                obligation_id=row["obligation_id"],
+                mapping_slot=row["mapping_slot"],
+                candidate=leaf_candidate,
+                verification=verification,
+            )
+            body = canonical_body(result)
+            comment_id = LEAF_RESULT_COMMENT_IDS[item["task_uid"]]
+            issue_number = LEAF_RESULT_ISSUE_NUMBERS[item["task_uid"]]
+            self.issue_by_number[issue_number] = {
+                "number": issue_number,
+                "html_url": f"https://github.com/{REPOSITORY}/issues/{issue_number}",
+                "body": f"<!-- oasis7-pm-task -->\ntask_uid: {item['task_uid']}\n",
+            }
+            self.comments[comment_id] = {
+                "id": comment_id,
+                "issue_url": f"https://api.github.com/repos/{REPOSITORY}/issues/{issue_number}",
+                "body": body,
+                "user": {"login": "leaf-result-publisher"},
+                "created_at": "2026-09-11T00:00:00Z",
+            }
+            self.comment_issue_numbers[comment_id] = issue_number
+            locator = leaf_result_locator(REPOSITORY, issue_number, comment_id, body)
+            row["leaf_evidence_locator"] = locator
+            row["leaf_evidence_digest"] = result["evidence_digest"]
+            item["evidence_digest"] = result["evidence_digest"]
+
+    def install_authority_map_and_approval(self, record, candidate, evidence):
+        rule = candidate["equivalence_rules"][0]
+        authority_map = build_authority_map(
+            task_uid=record["task_uid"],
+            role=rule["approver_role"],
+            account="producer-system-designer",
+            permission_floor="admin",
+        )
+        map_body = _canonical(authority_map)
+        authority_map_ref = {
+            "repository": REPOSITORY,
+            "issue_number": 3671,
+            "comment_id": AUTHORITY_MAP_COMMENT_ID,
+            "body_digest": "sha256:" + hashlib.sha256(map_body.encode()).hexdigest(),
+        }
+        rule["authority_map_ref"] = authority_map_ref
+        rule["supporting_evidence_digest"] = evidence[1]["evidence_digest"]
+        self.comments[AUTHORITY_MAP_COMMENT_ID] = {
+            "id": AUTHORITY_MAP_COMMENT_ID,
+            "issue_url": f"https://api.github.com/repos/{REPOSITORY}/issues/3671",
+            "body": map_body,
+            "user": {"login": "map-admin"},
+            "created_at": "2026-09-11T00:00:00Z",
+        }
+        self.comment_issue_numbers[AUTHORITY_MAP_COMMENT_ID] = 3671
+        approval = {
+            "marker": "oasis7-equivalence-approval",
+            "schema": "oasis7.loop-equivalence-approval/v1",
+            "task_uid": record["task_uid"],
+            "change_id": record["change_id"],
+            "approval": "approved",
+            "approver_role": rule["approver_role"],
+            "source_leaf": deepcopy(rule["source_leaf"]),
+            "aggregate_candidate": deepcopy(rule["aggregate_candidate"]),
+            "allowed_to_differ": deepcopy(rule["allowed_to_differ"]),
+            "exact_fields": deepcopy(rule["exact_fields"]),
+            "supporting_evidence_digest": evidence[1]["evidence_digest"],
+        }
+        self.equivalence_comment["body"] = _canonical(approval)
 
     def contract(self, reference, *args, **kwargs):
         self.contract_calls.append((reference, args, kwargs))
@@ -573,6 +699,11 @@ class PinnedCloseoutFixture:
         }
         self.mapping_path.write_text(json.dumps(mapping, sort_keys=True), encoding="utf-8")
 
+    def set_traceability_mode(self, mode):
+        mapping = json.loads(self.mapping_path.read_text(encoding="utf-8"))
+        mapping["tasks"][TASK_UID]["traceability_mode"] = mode
+        self.mapping_path.write_text(json.dumps(mapping, sort_keys=True), encoding="utf-8")
+
     def pin_helper(self, result):
         status, blocker = result
         self.target_script_dir.joinpath("loop_traceability.py").write_text(
@@ -582,6 +713,17 @@ class PinnedCloseoutFixture:
         )
         self._git("add", "scripts/pm/loop_traceability.py")
         self._git("commit", "-qm", "update pinned helper fixture")
+        return self._publish_head()
+
+    def pin_leaf_helper(self, result=("passed", "")):
+        status, blocker = result
+        self.target_script_dir.joinpath("loop_traceability.py").write_text(
+            "def validate_leaf(*args, **kwargs):\n"
+            f"    return {{'status': {status!r}, 'blockers': {[blocker] if blocker else []!r}}}\n",
+            encoding="utf-8",
+        )
+        self._git("add", "scripts/pm/loop_traceability.py")
+        self._git("commit", "-qm", "update pinned leaf helper fixture")
         return self._publish_head()
 
     def shadow_helper(self, result):
@@ -686,6 +828,15 @@ class TraceabilityTests(unittest.TestCase):
         self.assertEqual(result.get("status"), "blocked", result)
         blockers = "\n".join(str(item) for item in result.get("blockers", []))
         self.assertTrue(all(token in blockers for token in tokens), blockers)
+
+    def _sync_candidate_field(self, candidate, evidence, field, value):
+        candidate[field] = deepcopy(value)
+        for row, item in zip(candidate["applicability_matrix"], evidence):
+            item["candidate"][field] = deepcopy(value)
+            if field in row:
+                row[field] = deepcopy(value)
+            item["evidence_digest"] = _evidence_digest(_evidence_payload(item["task_uid"], item["candidate"]))
+            row["leaf_evidence_digest"] = item["evidence_digest"]
 
     def test_qw2_1_unresolved_path_fragment_blocks(self):
         record = deepcopy(self.record)
@@ -970,7 +1121,13 @@ class TraceabilityTests(unittest.TestCase):
     def test_explicit_matrix_and_equivalence_allow_distinct_leaf_heads(self):
         record = deepcopy(self.record)
         candidate, evidence = self.complete_aggregate(record)
+        candidate["configuration_digest"] = _configuration_digest(candidate)
+        for row, item in zip(candidate["applicability_matrix"], evidence):
+            item["candidate"]["configuration_digest"] = candidate["configuration_digest"]
+            row["configuration_digest"] = candidate["configuration_digest"]
         readers = FixtureReaders(record)
+        readers.install_live_leaf_results(candidate, evidence)
+        readers.install_authority_map_and_approval(record, candidate, evidence)
         result = self.aggregate(candidate, evidence, record, readers)
         self.assertEqual(result.get("status"), "passed", result)
         self.assertTrue(readers.authority_calls, "equivalence approval must be read back")
@@ -1083,6 +1240,96 @@ class TraceabilityTests(unittest.TestCase):
         candidate, evidence = self.complete_aggregate()
         evidence[0]["candidate"]["entry"] = "scripts/pm/other.py"
         self.assert_blocked_for(self.aggregate(candidate, evidence), "entry", "evidence")
+
+    def test_aggregate_rejects_forged_leaf_envelope_without_live_readback(self):
+        candidate, evidence = self.complete_aggregate()
+        result = self.aggregate(candidate, evidence)
+        self.assert_blocked_for(result, "live", "leaf")
+
+    def test_aggregate_binds_obligation_slot_and_allowlist_as_one_relation(self):
+        candidate, evidence = self.complete_aggregate()
+        swapped = deepcopy(candidate)
+        swapped["applicability_matrix"][0]["mapping_slot"] = "slot-handoff"
+        swapped["applicability_matrix"][1]["mapping_slot"] = "slot-contract"
+        errors = self.api._validate_matrix(self.record, swapped, evidence)
+        self.assertTrue(any("mapping_slot" in error for error in errors), errors)
+
+        failures = []
+        for label, allowed, uid, should_pass in (
+            ("omitted", None, LEAF_UID, True),
+            ("member", [LEAF_UID], LEAF_UID, True),
+            ("outsider", [SECOND_LEAF_UID], LEAF_UID, False),
+            ("empty", [], LEAF_UID, False),
+        ):
+            record = deepcopy(self.record)
+            if allowed is not None:
+                record["mapping_slots"][0]["allowed_task_uids"] = allowed
+            record["coordination_ref"]["record_digest"] = _record_digest(record)
+            candidate, evidence = self.complete_aggregate(record)
+            candidate["applicability_matrix"][0]["leaf_task_uid"] = uid
+            errors = self.api._validate_matrix(record, candidate, evidence)
+            if (not errors) != should_pass:
+                failures.append({"case": label, "errors": errors})
+        self.assertFalse(failures, failures)
+
+    def test_equivalence_requires_published_role_map_and_current_permission(self):
+        candidate, evidence = self.complete_aggregate()
+        rule = candidate["equivalence_rules"][0]
+        authority_map_ref = {
+            "repository": REPOSITORY,
+            "issue_number": 3671,
+            "comment_id": 5636906120,
+            "body_digest": "sha256:" + "a" * 64,
+        }
+        rule["authority_map_ref"] = authority_map_ref
+        readers = FixtureReaders(self.record)
+        positive = readers.authority(rule["authority_ref"])
+        positive["reader_kind"] = "github_live_query"
+        positive["comment"]["user"] = {"login": "mapped-admin"}
+        positive["permission"] = {"permission": "admin"}
+        positive["authority_map"] = {
+            "marker": "oasis7-loop-approval-authority",
+            "schema": "oasis7.loop-approval-authority/v1",
+            "task_uid": self.record["task_uid"],
+            "role": "producer_system_designer",
+            "account": "mapped-admin",
+            "permission_floor": "admin",
+            "authority_digest": "sha256:" + "b" * 64,
+        }
+        self.assertEqual(
+            self.api._validate_approval_authority(
+                positive, rule, self.record, evidence[1]["evidence_digest"]
+            ),
+            [],
+        )
+        readback = deepcopy(positive)
+        readback["comment"]["user"] = {"login": "attacker"}
+        readback["permission"] = {"permission": "write"}
+        errors = self.api._validate_approval_authority(
+            readback,
+            rule,
+            self.record,
+            evidence[1]["evidence_digest"],
+        )
+        self.assertTrue(errors, readback)
+
+    def test_hosted_candidate_rejects_malformed_typed_metadata(self):
+        variants = [
+            ("null entry", "entry", None),
+            ("null environment", "environment", None),
+            ("malformed window", "evidence_window", {"started_at": "tomorrow", "ended_at": "yesterday"}),
+            ("unsafe helper path", "effective_helper_identity", {"path": "../escape", "commit": SOURCE_OID, "digest": "sha256:" + "4" * 64}),
+            ("arbitrary configuration digest", "configuration_digest", "sha256:" + "9" * 64),
+            ("null consumed contract", "consumed_contracts", [None]),
+        ]
+        failures = []
+        for label, field, value in variants:
+            candidate, evidence = self.complete_aggregate()
+            self._sync_candidate_field(candidate, evidence, field, value)
+            result = self.api.validate_candidate(self.record, candidate, evidence)
+            if result.get("status") != "blocked":
+                failures.append({"case": label, "result": result})
+        self.assertFalse(failures, failures)
 
     def test_equivalence_requires_actual_leaf_candidate_and_exact_critical_fields(self):
         candidate, evidence = self.complete_aggregate()
@@ -1399,18 +1646,91 @@ class TraceabilityTests(unittest.TestCase):
         self.assertIn("coordinating record", output)
         self.assertFalse(fixture.marker.exists(), output)
 
-    def test_closeout_cannot_downgrade_aggregate_context_to_leaf(self):
-        fixture = CloseoutFixture()
-        self.addCleanup(fixture.tmp.cleanup)
-        record = fixture.record(self.record)
-        result = fixture.run(
+    def test_closeout_leaf_preserves_multi_obligation_boundary_and_aggregate_requires_candidate(self):
+        leaf_fixture = PinnedCloseoutFixture()
+        self.addCleanup(leaf_fixture.tmp.cleanup)
+        leaf_fixture.set_traceability_mode("leaf")
+        record = leaf_fixture.record(self.record)
+        pinned_leaf = leaf_fixture.pin_leaf_helper()
+        leaf_fixture.bind(pinned_leaf)
+        positive = leaf_fixture.run(
             "--traceability-mode", "leaf",
             "--traceability-record", str(record),
         )
-        output = result.stdout + result.stderr
-        self.assertNotEqual(result.returncode, 0, output)
-        self.assertIn("cannot downgrade", output)
-        self.assertFalse(fixture.marker.exists(), output)
+        positive_output = positive.stdout + positive.stderr
+        self.assertEqual(positive.returncode, 0, positive_output)
+        self.assertEqual(
+            leaf_fixture.marker.read_text(encoding="utf-8").splitlines(),
+            ["audit", "closeout", "audit"],
+            positive_output,
+        )
+        selected = json.loads(leaf_fixture.mapping_path.read_text(encoding="utf-8"))["tasks"][TASK_UID]
+        self.assertEqual(selected.get("traceability_mode"), "leaf", selected)
+        self.assertNotIn("aggregate_completion", selected, selected)
+
+        aggregate_fixture = CloseoutFixture()
+        self.addCleanup(aggregate_fixture.tmp.cleanup)
+        aggregate_record = aggregate_fixture.record(self.record)
+        negative = aggregate_fixture.run(
+            "--traceability-mode", "aggregate",
+            "--traceability-record", str(aggregate_record),
+        )
+        negative_output = negative.stdout + negative.stderr
+        self.assertNotEqual(negative.returncode, 0, negative_output)
+        self.assertIn("requires aggregate candidate", negative_output)
+        self.assertFalse(aggregate_fixture.marker.exists(), negative_output)
+
+    def test_closeout_live_reader_wrapper_preserves_publication_checks(self):
+        record = deepcopy(self.record)
+        consumed = deepcopy(record["required_obligations"][0]["acceptance_refs"][0])
+        consumed["revision"] = 1
+        consumed["publication_ref"]["comment_id"] += 1
+        record["consumed_clause_refs"] = [consumed]
+        binding = self.refresh_record_binding(record)
+        fixture_readers = FixtureReaders(record)
+
+        class LiveAuthority:
+            reader_kind = "github_live_query"
+
+            def __init__(self):
+                self.coordination_calls = 0
+                self.publication_calls = 0
+                self.publication_comment_ids = []
+
+            def __call__(self, reference):
+                comment_id = reference.get("comment_id") if isinstance(reference, dict) else None
+                if comment_id == record["coordination_ref"]["comment_id"]:
+                    self.coordination_calls += 1
+                    result = fixture_readers.authority(reference)
+                    result["reader_kind"] = self.reader_kind
+                    return result
+                self.publication_calls += 1
+                self.publication_comment_ids.append(comment_id)
+                return {
+                    "reader_kind": self.reader_kind,
+                    "comment": {"body": json.dumps({"marker": "wrong-publication"})},
+                }
+
+        live_authority = LiveAuthority()
+
+        def closeout_reader(reference):
+            # This is the closeout shell's forwarding seam. Its return value
+            # is live, while the callable itself intentionally has no
+            # reader_kind attribute until the production wrapper preserves it.
+            return live_authority(reference)
+
+        result = self.api.validate_leaf(
+            record,
+            binding,
+            authority_reader=closeout_reader,
+            contract_reader=fixture_readers.contract,
+            source_commit=SOURCE_OID,
+        )
+        output = json.dumps(result, sort_keys=True)
+        self.assert_blocked_for(result, "publication marker")
+        self.assertGreaterEqual(live_authority.publication_calls, 2, output)
+        self.assertIn(consumed["publication_ref"]["comment_id"], live_authority.publication_comment_ids, output)
+        self.assertIn(record["required_obligations"][0]["acceptance_refs"][0]["publication_ref"]["comment_id"], live_authority.publication_comment_ids, output)
 
     def test_closeout_failed_aggregate_preflight_blocks_before_remote_mutation(self):
         fixture = PinnedCloseoutFixture()

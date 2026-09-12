@@ -65,6 +65,6 @@ EVENT_LOG="$TMPDIR/profile.events" MUTATION_LOG="$TMPDIR/profile.mutation" PM_RO
     --verification-profile codex_subagent_role_fit \
     --json >"$TMPDIR/profile.out"
 test -f "$TMPDIR/profile.mutation"
-diff -u <(printf 'selected-audit\nclaim\naudit\ntransition\naudit\n') "$TMPDIR/profile.events"
+diff -u <(printf 'claim\naudit\ntransition\naudit\n') "$TMPDIR/profile.events"
 
 echo "task-closeout-profile.test: OK"

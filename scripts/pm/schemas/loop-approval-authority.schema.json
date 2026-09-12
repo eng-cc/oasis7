@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "oasis7.loop-approval-authority/v1",
+  "title": "Oasis7 published aggregate approval authority",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["marker", "schema", "task_uid", "role", "account", "permission_floor", "authority_digest"],
+  "properties": {
+    "marker": {"const": "oasis7-loop-approval-authority"},
+    "schema": {"const": "oasis7.loop-approval-authority/v1"},
+    "task_uid": {"type": "string", "pattern": "^task_[0-9a-f]{32}$"},
+    "role": {"type": "string", "minLength": 1},
+    "account": {"type": "string", "pattern": "^[A-Za-z0-9-]+$"},
+    "permission_floor": {"enum": ["read", "triage", "write", "maintain", "admin"]},
+    "authority_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

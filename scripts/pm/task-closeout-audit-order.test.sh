@@ -70,8 +70,8 @@ assert_review_plan_path_rejected() {
   local rc=$?
   set -e
   [[ "$rc" != "0" ]] || { echo "expected escaping review plan to fail: $plan_ref" >&2; exit 1; }
-  diff -u <(printf 'selected-audit\n') "$T/events" || {
-    echo "escaping review plan reached lifecycle mutation: $plan_ref" >&2
+  diff -u <(printf '') "$T/events" || {
+    echo "escaping review plan reached any lifecycle audit or mutation: $plan_ref" >&2
     exit 1
   }
   grep -qi "escapes repository root" "$T/$slug.err"
@@ -91,8 +91,8 @@ run_case() {
     --to-status "$status" --claim-type "$([[ "$status" == ready ]] && echo ready_for_pr || echo task_complete)" \
     --verification-profile fixture_repository_state "${args[@]}" --json >/dev/null 2>"$T/err")
   local rc=$?; set -e
-  if [[ -z "$kind" ]]; then [[ $rc == 0 ]] || { cat "$T/err"; return 1; }; diff -u <(printf 'selected-audit\nclaim\naudit\ntransition\naudit\n') "$T/events"
-  else [[ $rc != 0 ]]; diff -u <(printf 'selected-audit\nclaim\n') "$T/events"; fi
+  if [[ -z "$kind" ]]; then [[ $rc == 0 ]] || { cat "$T/err"; return 1; }; diff -u <(printf 'claim\naudit\ntransition\naudit\n') "$T/events"
+  else [[ $rc != 0 ]]; diff -u <(printf 'claim\n') "$T/events"; fi
 }
 run_case ready ""; run_case done ""
 for kind in head mapping packet ledger; do

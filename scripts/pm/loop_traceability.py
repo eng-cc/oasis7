@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 from copy import deepcopy
+from datetime import datetime
 import hashlib
 import json
 from pathlib import Path
@@ -20,6 +21,15 @@ from typing import Any, Callable
 
 from loop_contracts import contract_digest as published_contract_digest
 from loop_contracts import resolve_frozen_fragment
+from loop_approval_authority import MARKER as APPROVAL_AUTHORITY_MARKER
+from loop_approval_authority import permission_at_least, validate_authority_map
+from loop_leaf_result import (
+    MARKER as LEAF_RESULT_MARKER,
+    SCHEMA as LEAF_RESULT_SCHEMA,
+    canonical_digest as leaf_canonical_digest,
+    leaf_evidence_digest,
+    verification_digest as leaf_verification_digest,
+)
 
 
 SCHEMA = "oasis7.loop-change/v1"
@@ -219,6 +229,14 @@ class GitHubAuthorityReader:
             payload = json.loads(comment.get("body") or "")
         except (TypeError, json.JSONDecodeError):
             payload = None
+        if isinstance(payload, dict) and payload.get("marker") in {
+            LEAF_RESULT_MARKER, APPROVAL_AUTHORITY_MARKER, APPROVAL_MARKER,
+        }:
+            author = (comment.get("user") or {}).get("login")
+            if not isinstance(author, str) or not author.strip():
+                raise TraceabilityError("live leaf result author is unavailable")
+            permission = self.api(f"repos/{repository}/collaborators/{author}/permission")
+            result["permission"] = permission.get("permission") if isinstance(permission, dict) else None
         if isinstance(payload, dict) and "reverse_consumers" in payload:
             result["reverse_consumers"] = payload["reverse_consumers"]
         elif isinstance(payload, dict) and isinstance(payload.get("contract"), dict) and "reverse_consumers" in payload["contract"]:
@@ -268,6 +286,15 @@ def _reader_result(reader: Callable[..., Any], reference: dict[str, Any], label:
     if value.get("status") == "blocked":
         blockers = value.get("blockers") or [f"{label} blocked"]
         raise TraceabilityError(f"{label}: " + "; ".join(str(item) for item in blockers))
+    # Closeout may pass a forwarding callable around the trusted live reader.
+    # Preserve the canonical identity at that seam when the successful
+    # readback carries the live-reader kind; fixture readbacks remain
+    # intentionally ineligible for publication checks.
+    if getattr(reader, "reader_kind", None) is None and value.get("reader_kind") == "github_live_query":
+        try:
+            setattr(reader, "reader_kind", "github_live_query")
+        except (AttributeError, TypeError):
+            pass
     return value
 
 
@@ -761,20 +788,99 @@ def _candidate_shape(candidate: Any) -> list[str]:
     if not isinstance(candidate, dict):
         return ["candidate must be an object"]
     errors: list[str] = []
+    allowed_fields = set(CANDIDATE_FIELDS) | {"applicability_matrix", "equivalence_rules"}
+    for field in sorted(set(candidate) - allowed_fields):
+        errors.append(f"candidate field is not supported in v1: {field}")
     for field in CANDIDATE_FIELDS:
-        if field not in candidate:
+        if field not in candidate or candidate.get(field) is None:
             errors.append(f"candidate field missing: {field}")
     for field in ("source_head_oid", "integration_base_oid", "tested_tree_oid"):
-        if field in candidate:
-            try:
-                _oid(candidate[field], field)
-            except TraceabilityError as exc:
-                errors.append(str(exc))
-    if "configuration_digest" in candidate:
         try:
-            _digest(candidate["configuration_digest"], "configuration_digest")
+            _oid(candidate.get(field), field)
         except TraceabilityError as exc:
             errors.append(str(exc))
+    for field in ("entry", "environment"):
+        value = candidate.get(field)
+        if not isinstance(value, str) or not value.strip() or any(ord(char) < 32 for char in value):
+            errors.append(f"{field} must be a non-empty printable string")
+    try:
+        _digest(candidate.get("configuration_digest"), "configuration_digest")
+    except TraceabilityError as exc:
+        errors.append(str(exc))
+
+    window = candidate.get("evidence_window")
+    parsed_window: dict[str, datetime] = {}
+    if not isinstance(window, dict):
+        errors.append("evidence_window must be an object")
+    else:
+        for key in ("started_at", "ended_at"):
+            value = window.get(key)
+            if not isinstance(value, str) or not value.strip():
+                errors.append(f"evidence_window {key} is required")
+                continue
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                errors.append(f"evidence_window {key} is not ISO-8601")
+                continue
+            if parsed.tzinfo is None:
+                errors.append(f"evidence_window {key} must include timezone")
+            else:
+                parsed_window[key] = parsed
+        if set(parsed_window) == {"started_at", "ended_at"} and parsed_window["started_at"] > parsed_window["ended_at"]:
+            errors.append("evidence_window is not ordered")
+
+    identity_specs = {
+        "effective_policy_identity": False,
+        "effective_helper_identity": True,
+        "effective_workflow_identity": True,
+    }
+    for field, digest_required in identity_specs.items():
+        identity = candidate.get(field)
+        if not isinstance(identity, dict):
+            errors.append(f"{field} must be an object")
+            continue
+        if not _safe_path(identity.get("path")):
+            errors.append(f"{field}.path is unsafe")
+        try:
+            _oid(identity.get("commit"), f"{field}.commit")
+        except TraceabilityError as exc:
+            errors.append(str(exc))
+        if digest_required or "digest" in identity:
+            try:
+                _digest(identity.get("digest"), f"{field}.digest")
+            except TraceabilityError as exc:
+                errors.append(str(exc))
+
+    contracts = candidate.get("consumed_contracts")
+    if not isinstance(contracts, list):
+        errors.append("consumed_contracts must be an array")
+    else:
+        for index, contract in enumerate(contracts):
+            prefix = f"consumed_contracts[{index}]"
+            if not isinstance(contract, dict):
+                errors.append(f"{prefix} must be an object")
+                continue
+            if contract.get("repository") != REPOSITORY:
+                errors.append(f"{prefix}.repository mismatch")
+            if not isinstance(contract.get("contract_id"), str) or not contract["contract_id"].strip():
+                errors.append(f"{prefix}.contract_id is invalid")
+            revision = contract.get("revision")
+            if not ((type(revision) is int and revision >= 1) or (isinstance(revision, str) and revision.strip())):
+                errors.append(f"{prefix}.revision is invalid")
+            try:
+                _digest(contract.get("digest"), f"{prefix}.digest")
+            except TraceabilityError as exc:
+                errors.append(str(exc))
+            try:
+                _authority_reference(contract.get("publication_ref"), f"{prefix}.publication_ref")
+            except TraceabilityError as exc:
+                errors.append(str(exc))
+
+    if not errors:
+        from loop_leaf_result import configuration_projection
+        if candidate.get("configuration_digest") != leaf_canonical_digest(configuration_projection(candidate)):
+            errors.append("configuration_digest does not match effective metadata")
     return errors
 
 
@@ -801,6 +907,16 @@ def _validate_approval_authority(
     try:
         kind = _reader_kind(readback)
         reference = _authority_reference(rule.get("authority_ref"), "equivalence authority_ref")
+        authority_map_ref = rule.get("authority_map_ref")
+        if authority_map_ref is not None:
+            if not isinstance(authority_map_ref, dict):
+                errors.append("equivalence authority map reference is invalid")
+            else:
+                try:
+                    _authority_reference(authority_map_ref, "authority_map_ref")
+                    _digest(authority_map_ref.get("body_digest"), "authority_map_ref body_digest")
+                except TraceabilityError as exc:
+                    errors.append(str(exc))
         issue = readback.get("issue")
         comment = readback.get("comment")
         if readback.get("repository") != REPOSITORY:
@@ -852,6 +968,25 @@ def _validate_approval_authority(
         duplicate_comments = [item for item in _flatten_comments(readback.get("comments")) if item.get("id") == reference["comment_id"]]
         if len(duplicate_comments) > 1:
             errors.append("duplicate equivalence authority comment")
+        if authority_map_ref is not None:
+            expected_role = rule.get("approver_role")
+            authority_map = readback.get("authority_map")
+            errors.extend(validate_authority_map(authority_map, task_uid=record.get("task_uid"), expected_role=expected_role))
+            if isinstance(authority_map, dict):
+                author = (comment.get("user") or {}).get("login") if isinstance(comment, dict) else None
+                if author != authority_map.get("account"):
+                    errors.append("equivalence approval author does not match published authority map account")
+                permission = readback.get("permission")
+                if isinstance(permission, dict):
+                    permission = permission.get("permission")
+                if not permission_at_least(permission, authority_map.get("permission_floor")):
+                    errors.append("equivalence approval author permission is below published authority map floor")
+                declared_roles = {
+                    item.get("owner_role") for item in record.get("required_obligations", [])
+                    if isinstance(item, dict)
+                }
+                if authority_map.get("role") not in declared_roles:
+                    errors.append("published authority map role is not a declared professional owner")
     except (KeyError, TypeError, TraceabilityError) as exc:
         errors.append(_error_text(exc))
     return errors
@@ -896,19 +1031,63 @@ def _validate_equivalence_rules(
             if rule.get("supporting_evidence_digest") != expected_digest:
                 errors.append("equivalence supporting evidence digest mismatch")
             readback = _reader_result(authority_reader, ref, "equivalence authority readback")
+            authority_map_ref = rule.get("authority_map_ref")
+            if authority_map_ref is not None:
+                map_ref = _authority_reference(authority_map_ref, "authority_map_ref")
+                _digest(map_ref.get("body_digest"), "authority_map_ref body_digest")
+                map_readback = _reader_result(authority_reader, map_ref, "approval authority map readback")
+                map_comment = map_readback.get("comment")
+                if not isinstance(map_comment, dict) or not isinstance(map_comment.get("body"), str):
+                    raise TraceabilityError("approval authority map body is unavailable")
+                if map_ref.get("body_digest") != "sha256:" + hashlib.sha256(map_comment["body"].encode("utf-8")).hexdigest():
+                    raise TraceabilityError("approval authority map body_digest mismatch")
+                map_body = json.loads(map_comment.get("body") or "") if isinstance(map_comment, dict) else None
+                map_payload = map_body.get("authority_map") if isinstance(map_body, dict) else None
+                if map_payload is None and isinstance(map_body, dict) and map_body.get("marker") == APPROVAL_AUTHORITY_MARKER:
+                    map_payload = map_body
+                if isinstance(map_payload, dict):
+                    readback["authority_map"] = map_payload
+                map_permission = map_readback.get("permission")
+                if isinstance(map_permission, dict):
+                    map_permission = map_permission.get("permission")
+                map_author = (map_comment.get("user") or {}).get("login")
+                if not isinstance(map_author, str) or not map_author.strip():
+                    errors.append("approval authority map publisher is unavailable")
+                if not permission_at_least(map_permission, "admin"):
+                    errors.append("approval authority map publisher permission is insufficient")
             errors.extend(_validate_approval_authority(readback, rule, record, expected_digest or ""))
         except TraceabilityError as exc:
             errors.append("equivalence authority: " + str(exc))
     return errors
 
 
-def _validate_matrix(record: dict[str, Any], candidate: dict[str, Any], evidence: list[dict[str, Any]]) -> list[str]:
+def _validate_matrix(
+    record: dict[str, Any], candidate: dict[str, Any], evidence: list[dict[str, Any]],
+    *, require_structured_locator: bool = False,
+) -> list[str]:
     errors: list[str] = []
     matrix = candidate.get("applicability_matrix")
     if not isinstance(matrix, list):
         return ["composition evidence missing: applicability_matrix"]
     obligations = record.get("required_obligations", [])
-    slots = {slot.get("slot_id") for slot in record.get("mapping_slots", []) if isinstance(slot, dict)}
+    obligation_by_id = {
+        item.get("obligation_id"): item for item in obligations if isinstance(item, dict)
+    }
+    slot_values = [item for item in record.get("mapping_slots", []) if isinstance(item, dict)]
+    slot_by_id = {slot.get("slot_id"): slot for slot in slot_values}
+    slots = set(slot_by_id)
+    for slot in slot_values:
+        if "allowed_task_uids" not in slot:
+            continue
+        allowed = slot.get("allowed_task_uids")
+        if not isinstance(allowed, list):
+            errors.append(f"mapping_slot {slot.get('slot_id')} allowlist must be an array")
+            continue
+        if len(set(allowed)) != len(allowed):
+            errors.append(f"mapping_slot {slot.get('slot_id')} allowlist contains duplicates")
+        for uid in allowed:
+            if not isinstance(uid, str) or not UID.fullmatch(uid):
+                errors.append(f"mapping_slot {slot.get('slot_id')} allowlist contains an invalid Task UID")
     evidence_by_uid: dict[str, dict[str, Any]] = {}
     for item in evidence:
         uid = item.get("task_uid") if isinstance(item, dict) else None
@@ -923,23 +1102,39 @@ def _validate_matrix(record: dict[str, Any], candidate: dict[str, Any], evidence
         if not isinstance(row, dict):
             errors.append("applicability_matrix row must be an object")
             continue
-        if not isinstance(row.get("leaf_evidence_locator"), str) or not row["leaf_evidence_locator"].strip():
-            errors.append("leaf_evidence_locator is invalid or missing")
+        if require_structured_locator:
+            try:
+                _leaf_result_locator(row.get("leaf_evidence_locator"))
+            except TraceabilityError as exc:
+                errors.append(f"leaf_evidence_locator: {exc}")
         obligation_id = row.get("obligation_id")
         slot_id = row.get("mapping_slot")
         if obligation_id in by_obligation or slot_id in by_slot:
             errors.append("duplicate applicability_matrix row")
         by_obligation.add(obligation_id)
         by_slot.add(slot_id)
-        if obligation_id not in {item.get("obligation_id") for item in obligations if isinstance(item, dict)}:
+        obligation = obligation_by_id.get(obligation_id)
+        slot = slot_by_id.get(slot_id)
+        if obligation is None:
             errors.append("unknown obligation in applicability_matrix")
         if slot_id not in slots:
             errors.append("unknown mapping_slot in applicability_matrix")
+        if obligation is not None and obligation.get("mapping_slot") != slot_id:
+            errors.append(f"mapping_slot does not match obligation {obligation_id}")
+        if obligation is not None and slot is not None:
+            if slot.get("owner_loop") != obligation.get("owner_loop"):
+                errors.append(f"mapping_slot owner_loop does not match obligation {obligation_id}")
+            if slot.get("owner_role") != obligation.get("owner_role"):
+                errors.append(f"mapping_slot owner_role does not match obligation {obligation_id}")
         uid = row.get("leaf_task_uid")
         item = evidence_by_uid.get(uid)
         if item is None:
             errors.append("unknown Task UID in applicability_matrix")
             continue
+        if slot is not None and "allowed_task_uids" in slot:
+            allowed = slot.get("allowed_task_uids")
+            if isinstance(allowed, list) and uid not in allowed:
+                errors.append(f"Task UID {uid} is not permitted by mapping_slot {slot_id} allowlist")
         leaf_candidate = _evidence_candidate(item)
         if leaf_candidate is None:
             errors.append("matrix leaf evidence candidate is missing")
@@ -947,9 +1142,16 @@ def _validate_matrix(record: dict[str, Any], candidate: dict[str, Any], evidence
         if row.get("leaf_evidence_digest") != item.get("evidence_digest"):
             errors.append("matrix evidence_digest mismatch")
         try:
-            if evidence_digest({"task_uid": uid, "status": item.get("status"), "candidate": _candidate_projection(leaf_candidate)}) != item.get("evidence_digest"):
-                errors.append("leaf evidence_digest recomputation mismatch")
-        except (KeyError, TypeError):
+            _digest(item.get("evidence_digest"), "leaf evidence_digest")
+            verification_digest_value = item.get("verification_digest")
+            if verification_digest_value is not None:
+                _digest(verification_digest_value, "leaf verification_digest")
+                expected = leaf_evidence_digest(
+                    uid, item.get("status"), _candidate_projection(leaf_candidate), verification_digest_value
+                )
+                if expected != item.get("evidence_digest"):
+                    errors.append("leaf evidence_digest recomputation mismatch")
+        except (KeyError, TypeError, TraceabilityError):
             errors.append("leaf evidence candidate is incomplete")
         equivalence = _matching_equivalence(candidate, rules, uid, str(leaf_candidate.get("source_head_oid")))
         for field in CANDIDATE_FIELDS:
@@ -961,8 +1163,14 @@ def _validate_matrix(record: dict[str, Any], candidate: dict[str, Any], evidence
                 errors.append(f"{field} mismatch between matrix and evidence")
             if field in candidate and row.get(field) != candidate.get(field) and field not in (equivalence or {}).get("allowed_to_differ", []):
                 errors.append(f"{field} matrix mismatch")
-    required_obligation_ids = {item.get("obligation_id") for item in obligations if isinstance(item, dict)}
-    required_slots = {item.get("mapping_slot") for item in obligations if isinstance(item, dict)}
+    required_obligation_ids = {
+        item.get("obligation_id") for item in obligations
+        if isinstance(item, dict) and item.get("required") is True
+    }
+    required_slots = {
+        item.get("mapping_slot") for item in obligations
+        if isinstance(item, dict) and item.get("required") is True
+    }
     for missing in sorted(required_obligation_ids - by_obligation):
         errors.append(f"applicability_matrix missing {missing}")
     for missing in sorted(required_slots - by_slot):
@@ -995,11 +1203,148 @@ def _validate_evidence(candidate: dict[str, Any], evidence: Any) -> tuple[list[s
                 if leaf_candidate.get(field) != candidate.get(field) and field not in {"source_head_oid"}:
                     # Explicit equivalence is checked after the complete evidence set is known.
                     pass
-            expected = {"task_uid": uid, "status": item.get("status"), "candidate": _candidate_projection(leaf_candidate)}
-            if item.get("evidence_digest") != evidence_digest(expected):
-                errors.append("evidence_digest mismatch")
+            try:
+                _digest(item.get("evidence_digest"), "evidence_digest")
+                verification_digest_value = item.get("verification_digest")
+                if verification_digest_value is not None:
+                    _digest(verification_digest_value, "verification_digest")
+                    expected = leaf_evidence_digest(
+                        uid, item.get("status"), _candidate_projection(leaf_candidate), verification_digest_value
+                    )
+                    if item.get("evidence_digest") != expected:
+                        errors.append("evidence_digest mismatch")
+            except TraceabilityError as exc:
+                errors.append(str(exc))
         values.append(item)
     return errors, values
+
+
+def _leaf_result_locator(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise TraceabilityError("leaf evidence locator must be a structured live Issue/comment reference")
+    for field in ("repository", "issue_number", "comment_id", "body_digest"):
+        if field not in value:
+            raise TraceabilityError(f"leaf evidence locator missing {field}")
+    _authority_reference(value, "leaf evidence locator")
+    _digest(value.get("body_digest"), "leaf evidence locator body_digest")
+    return value
+
+
+def _validate_leaf_result_readback(
+    readback: dict[str, Any], locator: dict[str, Any], record: dict[str, Any], row: dict[str, Any],
+) -> list[str]:
+    errors: list[str] = []
+    try:
+        kind = _reader_kind(readback)
+        if kind != "github_live_query":
+            errors.append("live leaf result readback requires github_live_query authority")
+        issue = readback.get("issue")
+        comment = readback.get("comment")
+        if not isinstance(issue, dict) or issue.get("number") != locator["issue_number"] or issue.get("html_url") != _issue_url(locator["issue_number"]):
+            errors.append("leaf result Issue identity mismatch")
+        else:
+            try:
+                if _issue_task_uid(issue) != row.get("leaf_task_uid"):
+                    errors.append("leaf result Task UID does not match matrix row")
+            except TraceabilityError as exc:
+                errors.append(str(exc))
+        if not isinstance(comment, dict) or comment.get("id") != locator["comment_id"]:
+            errors.append("leaf result comment identity mismatch")
+        if isinstance(comment, dict) and comment.get("issue_url") != _api_issue_url(locator["issue_number"]):
+            errors.append("leaf result Issue URL mismatch")
+        if not isinstance(comment, dict) or not isinstance(comment.get("body"), str):
+            return errors + ["leaf result body is unavailable"]
+        body_text = comment["body"]
+        try:
+            body = json.loads(body_text)
+        except (TypeError, json.JSONDecodeError):
+            return errors + ["leaf result body is not valid JSON"]
+        if body_text != canonical_bytes(body).decode("utf-8"):
+            errors.append("leaf result body is not canonical JSON")
+        if locator.get("body_digest") != "sha256:" + hashlib.sha256(body_text.encode("utf-8")).hexdigest():
+            errors.append("leaf result body_digest mismatch")
+        if not isinstance(body, dict):
+            return errors + ["leaf result body must be an object"]
+        if body.get("marker") != LEAF_RESULT_MARKER:
+            errors.append("leaf result marker mismatch")
+        if body.get("schema") != LEAF_RESULT_SCHEMA:
+            errors.append("leaf result schema mismatch")
+        if body.get("task_uid") != row.get("leaf_task_uid"):
+            errors.append("leaf result task_uid mismatch")
+        if body.get("change_id") != record.get("change_id"):
+            errors.append("leaf result change_id mismatch")
+        if body.get("obligation_id") != row.get("obligation_id"):
+            errors.append("leaf result obligation_id mismatch")
+        if body.get("mapping_slot") != row.get("mapping_slot"):
+            errors.append("leaf result mapping_slot mismatch")
+        if body.get("status") != "passed":
+            errors.append("leaf result status is not passed")
+        verification = body.get("verification")
+        if not isinstance(verification, dict) or not isinstance(verification.get("profile"), str) or not verification.get("profile").strip():
+            errors.append("leaf result verification profile is missing")
+        else:
+            if verification.get("verification_exit_code") != 0:
+                errors.append("leaf result verification exit code is not zero")
+            if verification.get("verification_epoch_stable") is not True:
+                errors.append("leaf result verification epoch is not stable")
+        if isinstance(verification, dict):
+            if body.get("verification_digest") != leaf_verification_digest(verification):
+                errors.append("leaf result verification_digest mismatch")
+        leaf_candidate = body.get("candidate")
+        errors.extend(_candidate_shape(leaf_candidate))
+        if isinstance(leaf_candidate, dict) and isinstance(verification, dict):
+            expected_evidence_digest = leaf_evidence_digest(
+                body.get("task_uid"), body.get("status"), leaf_candidate, body.get("verification_digest")
+            )
+            if body.get("evidence_digest") != expected_evidence_digest:
+                errors.append("leaf result evidence_digest mismatch")
+            for field in CANDIDATE_FIELDS:
+                if row.get(field) is not None and row.get(field) != leaf_candidate.get(field):
+                    errors.append(f"leaf result {field} mismatch with matrix row")
+        author = (comment.get("user") or {}).get("login")
+        if not isinstance(author, str) or not author.strip():
+            errors.append("leaf result server author is unavailable")
+        if not permission_at_least(readback.get("permission"), "write"):
+            errors.append("leaf result publisher permission is insufficient")
+    except (KeyError, TypeError, TraceabilityError) as exc:
+        errors.append(_error_text(exc))
+    return errors
+
+
+def _validate_live_leaf_results(
+    record: dict[str, Any], candidate: dict[str, Any], evidence: list[dict[str, Any]],
+    authority_reader: Callable[..., Any],
+) -> list[str]:
+    matrix = candidate.get("applicability_matrix")
+    if not isinstance(matrix, list):
+        return []
+    errors: list[str] = []
+    evidence_by_uid = {
+        item.get("task_uid"): item for item in evidence if isinstance(item, dict)
+    }
+    for row in matrix:
+        if not isinstance(row, dict):
+            continue
+        try:
+            locator = _leaf_result_locator(row.get("leaf_evidence_locator"))
+            readback = _reader_result(authority_reader, locator, "leaf result live readback")
+            errors.extend(_validate_leaf_result_readback(readback, locator, record, row))
+            item = evidence_by_uid.get(row.get("leaf_task_uid"))
+            if item is None:
+                continue
+            if item.get("evidence_digest") != readback.get("leaf_result", {}).get("evidence_digest"):
+                # The exact body is authoritative. The optional projection is
+                # populated by the reader adapter below when available.
+                body = readback.get("comment", {}).get("body") if isinstance(readback.get("comment"), dict) else None
+                try:
+                    payload = json.loads(body) if isinstance(body, str) else {}
+                except json.JSONDecodeError:
+                    payload = {}
+                if item.get("evidence_digest") != payload.get("evidence_digest"):
+                    errors.append("caller leaf evidence digest does not match live readback")
+        except TraceabilityError as exc:
+            errors.append(str(exc))
+    return errors
 
 
 def validate_record(record: Any, root: Path | str | None = None) -> dict[str, Any]:
@@ -1024,7 +1369,7 @@ def validate_candidate(
     if not isinstance(candidate.get("applicability_matrix"), list) or not isinstance(candidate.get("equivalence_rules"), list):
         errors.append("composition evidence missing")
     if isinstance(candidate.get("applicability_matrix"), list):
-        errors.extend(_validate_matrix(record, candidate, values))
+        errors.extend(_validate_matrix(record, candidate, values, require_structured_locator=True))
     return _result(errors)
 
 
@@ -1053,9 +1398,10 @@ def validate_aggregate(
         _oid(effective_tool_commit, "effective_tool_commit")
         _oid(record_source_commit, "record_source_commit")
         errors.extend(_validate_record_shape(record))
-        errors.extend(_candidate_shape(candidate))
         if errors:
             return _result(errors)
+        candidate_shape_errors = _candidate_shape(candidate)
+        errors.extend(candidate_shape_errors)
         if candidate.get("change_id") != record.get("change_id"):
             errors.append("candidate change_id mismatch")
         selection = record.get("candidate_selection", {})
@@ -1076,9 +1422,11 @@ def validate_aggregate(
         if not isinstance(candidate.get("applicability_matrix"), list) or not isinstance(candidate.get("equivalence_rules"), list):
             errors.append("composition evidence missing")
         if isinstance(candidate.get("applicability_matrix"), list):
-            errors.extend(_validate_matrix(record, candidate, values))
+            errors.extend(_validate_matrix(record, candidate, values, require_structured_locator=True))
         if isinstance(candidate.get("equivalence_rules"), list):
             errors.extend(_validate_equivalence_rules(record, candidate, values, authority_reader))
+        if isinstance(candidate.get("applicability_matrix"), list) and isinstance(candidate.get("equivalence_rules"), list):
+            errors.extend(_validate_live_leaf_results(record, candidate, evidence, authority_reader))
         for feedback in record.get("feedback", []):
             if isinstance(feedback, dict) and feedback.get("blocking") is True and not feedback.get("clearance"):
                 errors.append("blocking feedback clearance is missing")

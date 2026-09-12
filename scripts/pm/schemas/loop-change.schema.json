@@ -83,7 +83,7 @@
         "slot_id": {"type": "string", "minLength": 1},
         "owner_loop": {"enum": ["product", "system", "code"]},
         "owner_role": {"type": "string", "minLength": 1},
-        "allowed_task_uids": {"type": "array", "items": {"type": "string", "pattern": "^task_[0-9a-f]{32}$"}}
+        "allowed_task_uids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^task_[0-9a-f]{32}$"}}
       }
     },
     "publication_ref": {
@@ -127,6 +127,68 @@
         "comparable_fields": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
         "required_integration_base_oid": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
         "required_tested_tree_oid": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      }
+    },
+    "leaf_evidence_locator": {
+      "type": "object",
+      "required": ["repository", "issue_number", "comment_id", "body_digest"],
+      "additionalProperties": false,
+      "properties": {
+        "repository": {"const": "eng-cc/oasis7"},
+        "issue_number": {"type": "integer", "minimum": 1},
+        "comment_id": {"type": "integer", "minimum": 1},
+        "body_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "authority_map_ref": {
+      "type": "object",
+      "required": ["repository", "issue_number", "comment_id", "body_digest"],
+      "additionalProperties": false,
+      "properties": {
+        "repository": {"const": "eng-cc/oasis7"},
+        "issue_number": {"type": "integer", "minimum": 1},
+        "comment_id": {"type": "integer", "minimum": 1},
+        "body_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "leaf_result_candidate": {
+      "type": "object",
+      "required": [
+        "change_id",
+        "source_head_oid",
+        "integration_base_oid",
+        "tested_tree_oid",
+        "configuration_digest",
+        "entry",
+        "environment",
+        "evidence_window",
+        "effective_policy_identity",
+        "effective_helper_identity",
+        "effective_workflow_identity",
+        "consumed_contracts"
+      ],
+      "properties": {
+        "change_id": {"type": "string", "minLength": 1},
+        "source_head_oid": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "integration_base_oid": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "tested_tree_oid": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "configuration_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "entry": {"type": "string", "minLength": 1},
+        "environment": {"type": "string", "minLength": 1},
+        "evidence_window": {"type": "object", "required": ["started_at", "ended_at"]},
+        "effective_policy_identity": {"$ref": "#/$defs/effective_identity"},
+        "effective_helper_identity": {"$ref": "#/$defs/effective_identity"},
+        "effective_workflow_identity": {"$ref": "#/$defs/effective_identity"},
+        "consumed_contracts": {"type": "array", "items": {"type": "object"}}
+      }
+    },
+    "effective_identity": {
+      "type": "object",
+      "required": ["path", "commit"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
       }
     }
   }

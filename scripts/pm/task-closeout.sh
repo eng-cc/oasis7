@@ -162,15 +162,39 @@ if [[ "$TARGET_STATUS" == "ready" && "$CLAIM_TYPE" != "ready_for_pr" ]]; then
   die "--claim-type must be ready_for_pr when --to-status is ready"
 fi
 
-selected_traceability_context() {
-  # The selected-task audit is read-only. The environment marker lets fixture
-  # callers return context without confusing it with the transition audits.
-  OASIS7_TRACEABILITY_CONTEXT_ONLY=1 \
+# Ordinary lifecycle closeout does not need a traceability context read. A
+# declared binding or traceability field is the local, bounded signal that the
+# transition audit must also provide selected-task traceability context.
+TRACEABILITY_CONTEXT_REQUIRED=0
+if [[ -n "$TRACEABILITY_MODE" || -n "$TRACEABILITY_RECORD" || -n "$TRACEABILITY_CANDIDATE" ]]; then
+  TRACEABILITY_CONTEXT_REQUIRED=1
+else
+  TRACEABILITY_CONTEXT_REQUIRED="$(python3 - "$ROOT_DIR/.pm/github-project-sync/tasks.json" "$TASK_UID" <<'PY'
+import json, sys
+try:
+    mapping = json.load(open(sys.argv[1], encoding='utf-8'))
+    task = (mapping.get('tasks') or {}).get(sys.argv[2]) or {}
+except (OSError, ValueError, TypeError):
+    task = {}
+fields = (
+    task.get('loop_binding'), task.get('traceability_mode'),
+    task.get('traceability_record'), task.get('coordination_record'),
+    task.get('traceability_candidate'), task.get('aggregate_candidate'),
+)
+print('1' if any(fields) or task.get('completion_mode') == 'aggregate' else '0')
+PY
+)" || die "cannot determine whether traceability context is required"
+fi
+
+selected_task_audit() {
+  # The selected-task audit is read-only. The marker lets fixture callers
+  # return traceability context without counting it as a lifecycle audit.
+  local context_only="${1:-0}"
+  OASIS7_TRACEABILITY_CONTEXT_ONLY="$context_only" \
     "$SCRIPT_DIR/github-project-workflow.sh" --json audit --task-uid "$TASK_UID"
 }
 
-SELECTED_TRACEABILITY_CONTEXT_JSON="$(selected_traceability_context)" \
-  || die "selected live task audit failed before traceability context selection"
+SELECTED_TRACEABILITY_CONTEXT_JSON=""
 
 run_traceability_preflight() {
   # This is a projection boundary only. The core helper owns all record,
@@ -260,20 +284,12 @@ if record is not None:
         if isinstance(binding_ref, dict) and record_ref != binding_ref:
             raise SystemExit('coordinating record authority does not match selected task binding')
 
-def aggregate_record(value):
-    if not isinstance(value, dict):
-        return False
-    obligations = value.get('required_obligations')
-    slots = value.get('mapping_slots')
-    return ((isinstance(obligations, list) and len(obligations) > 1)
-            or (isinstance(slots, list) and len(slots) > 1))
-
 declared_aggregate = (
     requested_mode == 'aggregate'
-    or aggregate_record(record)
-    or aggregate_record(declared_record)
     or selected_task.get('traceability_mode') == 'aggregate'
     or selected_task.get('completion_mode') == 'aggregate'
+    or selected_context.get('traceability_mode') == 'aggregate'
+    or selected_context.get('completion_mode') == 'aggregate'
     or task.get('traceability_mode') == 'aggregate'
     or task.get('completion_mode') == 'aggregate'
 )
@@ -368,15 +384,27 @@ def run_pinned_preflight():
                 raise ValueError('effective loop facade lacks trusted_module')
             helper = trusted_loader(tool_root, root, effective_binding, 'loop_traceability')
 
-            def live_authority_reader(reference):
-                factory = getattr(helper, 'live_authority_reader', None)
-                if callable(factory):
-                    return factory(root)(reference)
+            authority_factory = getattr(helper, 'live_authority_reader', None)
+            if callable(authority_factory):
+                raw_authority_reader = authority_factory(root)
+            else:
                 authority = (getattr(helper, 'GitHubAuthorityReader', None)
                              or getattr(helper, 'GitHubAuthority', None))
-                if callable(authority):
-                    return authority(root)(reference)
-                raise RuntimeError('live traceability authority reader unavailable')
+                raw_authority_reader = authority(root) if callable(authority) else None
+            if not callable(raw_authority_reader):
+                def raw_authority_reader(reference):
+                    raise RuntimeError('live traceability authority reader unavailable')
+
+            def live_authority_reader(reference):
+                value = raw_authority_reader(reference)
+                if (getattr(live_authority_reader, 'reader_kind', None) is None
+                        and isinstance(value, dict)
+                        and value.get('reader_kind') == 'github_live_query'):
+                    live_authority_reader.reader_kind = 'github_live_query'
+                return value
+
+            if getattr(raw_authority_reader, 'reader_kind', None) == 'github_live_query':
+                live_authority_reader.reader_kind = 'github_live_query'
 
             def live_contract_reader(reference):
                 factory = getattr(helper, 'live_contract_reader', None)
@@ -456,7 +484,6 @@ PY
   TRACEABILITY_RESULT_JSON="$output"
 }
 
-run_traceability_preflight
 if [[ "$TARGET_STATUS" == "ready" ]]; then
   if [[ "$VERIFICATION_PROFILE" != "fixture_repository_state" ]]; then
     [[ -n "$CI_READY_RECEIPT" && -f "$CI_READY_RECEIPT" ]] || die "ready closeout requires --ci-ready-receipt"
@@ -661,9 +688,6 @@ PY
   fi
 fi
 
-selected_task_audit() {
-  "$SCRIPT_DIR/github-project-workflow.sh" --json audit --task-uid "$TASK_UID"
-}
 closeout_head_fingerprint() {
   git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || printf '%s\n' "non-git-fixture"
 }
@@ -712,9 +736,19 @@ CURRENT_PR_RECEIPT_SHA="$([[ -n "$PR_MERGE_RECEIPT" ]] && sha256_file "$PR_MERGE
    "$CURRENT_REVIEW_SHA" == "$AUDIT_INPUT_REVIEW_SHA" && "$CURRENT_LEDGER_SHA" == "$AUDIT_INPUT_LEDGER_SHA" && \
    "$CURRENT_PR_RECEIPT_SHA" == "$AUDIT_INPUT_PR_RECEIPT_SHA" ]] \
   || die "closeout inputs changed during verification; restart selected-task closeout"
+# Traceability context is a separate read-only projection only for declared
+# bound paths. Ordinary closeout therefore retains exactly the two lifecycle
+# audits below; the transition audit remains the authority consumed by the
+# remote mutation.
+if [[ "$TRACEABILITY_CONTEXT_REQUIRED" == "1" ]]; then
+  SELECTED_TRACEABILITY_CONTEXT_JSON="$(selected_task_audit 1)" \
+    || die "selected live task audit failed before traceability context selection"
+  run_traceability_preflight
+fi
+
 # Run exactly one authoritative selected live audit after claim/evidence inputs
 # are proven stable, immediately before the transition that consumes it.
-TASK_AUDIT_JSON="$(selected_task_audit)" \
+TASK_AUDIT_JSON="$(selected_task_audit 0)" \
   || die "selected-task audit failed at transition"
 TRANSITION_AUDIT_JSON="$TASK_AUDIT_JSON"
 
@@ -727,7 +761,7 @@ fi
 
 # Independent selected-task postcondition readback. This is the second bounded
 # task-scoped audit (after the pre-transition audit), never a broad Project read.
-POSTCONDITION_AUDIT_JSON="$(selected_task_audit)" \
+POSTCONDITION_AUDIT_JSON="$(selected_task_audit 0)" \
   || die "selected-task postcondition readback failed after closeout"
 python3 - "$TASK_UID" "$TARGET_STATUS" "$CLOSEOUT_JSON" "$POSTCONDITION_AUDIT_JSON" "$VERIFICATION_PROFILE" <<'PY'
 import json,sys
