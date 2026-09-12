@@ -42,6 +42,8 @@ mod industrial_progression_readiness;
 mod power_projection;
 mod power_sale_quote;
 mod prompt_control;
+#[path = "tests/prompt_control_enhanced.rs"]
+mod prompt_control_enhanced;
 mod provider_settings;
 mod runtime_live_server_config;
 mod schedule_recipe_quote;

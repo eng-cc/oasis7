@@ -4,24 +4,33 @@ impl RuntimeLlmSidecar {
     pub(in crate::viewer::runtime_live) fn apply_prompt_profile_to_driver(
         &mut self,
         profile: &AgentPromptProfile,
-    ) {
+    ) -> Result<(), String> {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(RuntimeDecisionRunner::Builtin(runner)) = self.runner.as_mut() {
-            let _ = runner.set_prompt_overrides(
-                profile.agent_id.as_str(),
-                profile.system_prompt_override.clone(),
-                profile.short_term_goal_override.clone(),
-                profile.long_term_goal_override.clone(),
-            );
-            return;
+            runner
+                .set_prompt_overrides(
+                    profile.agent_id.as_str(),
+                    profile.system_prompt_override.clone(),
+                    profile.short_term_goal_override.clone(),
+                    profile.long_term_goal_override.clone(),
+                )
+                .map_err(|error| format!("prompt override enqueue failed: {error}"))?;
+            return Ok(());
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(RuntimeDecisionRunner::ProviderBacked(_)) = self.runner.as_mut() {
+            return Err("prompt control is unsupported for ProviderBacked runtime".to_string());
         }
         #[cfg(target_arch = "wasm32")]
         let Some(RuntimeDecisionRunner::Builtin(runner)) = self.runner.as_mut() else {
-            return;
+            return Err("builtin llm runner is not initialized".to_string());
         };
         #[cfg(target_arch = "wasm32")]
         let Some(agent) = runner.get_mut(profile.agent_id.as_str()) else {
-            return;
+            return Err(format!(
+                "agent is not registered in llm runner: {}",
+                profile.agent_id
+            ));
         };
         #[cfg(target_arch = "wasm32")]
         agent.behavior.apply_prompt_overrides(
@@ -29,6 +38,7 @@ impl RuntimeLlmSidecar {
             profile.short_term_goal_override.clone(),
             profile.long_term_goal_override.clone(),
         );
+        Ok(())
     }
 
     pub(super) fn ensure_runner_initialized(&mut self) -> Result<(), String> {

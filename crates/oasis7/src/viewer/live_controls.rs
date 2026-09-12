@@ -490,6 +490,7 @@ impl ViewerLiveSession {
                     capabilities: Vec::new(),
                     world_id: world_id.to_string(),
                     control_profile: ViewerControlProfile::Live,
+                    authority_epoch: None,
                 };
                 send_response(writer, &response)?;
             }

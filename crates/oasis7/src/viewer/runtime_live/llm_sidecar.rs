@@ -295,6 +295,17 @@ pub(in crate::viewer::runtime_live) struct RuntimePlayerBindingPlan {
     agent_public_key_bindings: BTreeMap<String, String>,
     events: Vec<WorldEventKind>,
 }
+
+impl RuntimePlayerBindingPlan {
+    pub(in crate::viewer::runtime_live) fn has_binding_transition(&self) -> bool {
+        self.events.iter().any(|event| {
+            matches!(
+                event,
+                WorldEventKind::AgentPlayerBound { .. } | WorldEventKind::AgentPlayerUnbound { .. }
+            )
+        })
+    }
+}
 impl RuntimeLlmSidecar {
     pub(in crate::viewer::runtime_live) fn pending_actions_empty(&self) -> bool {
         self.pending_actions.is_empty()

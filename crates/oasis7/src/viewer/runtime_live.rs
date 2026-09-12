@@ -9,9 +9,10 @@ use super::protocol::{
     AuthoritativeRollbackRequest, AuthoritativeRollbackV2Request,
     AuthoritativeSessionRegisterRequest, AuthoritativeSessionRevokeRequest,
     AuthoritativeSessionRotateRequest, ControlCompletionAck, ControlCompletionStatus,
-    GameplayActionError, REVOKE_SOCIAL_FACT_QUOTE_CAPABILITY, RollbackAuthorizationEnvelope,
-    RollbackIntent, VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile, ViewerEventKind,
-    ViewerRequest, ViewerResponse, ViewerStream, viewer_event_kind_matches,
+    GameplayActionError, PROMPT_CONTROL_RESULT_CAPABILITY, REVOKE_SOCIAL_FACT_QUOTE_CAPABILITY,
+    RollbackAuthorizationEnvelope, RollbackIntent, VIEWER_PROTOCOL_VERSION, ViewerControl,
+    ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerResponse, ViewerStream,
+    viewer_event_kind_matches, viewer_protocol_supports_prompt_control_result,
     viewer_protocol_supports_revoke_social_fact_quote,
 };
 use crate::geometry::GeoPos;
@@ -82,6 +83,7 @@ mod player_gameplay;
 #[path = "runtime_live/power_projection.rs"]
 mod power_projection;
 mod power_sale_quote;
+mod prompt_control_result;
 mod recovery;
 mod recovery_audit;
 mod recovery_compensation;
@@ -125,6 +127,7 @@ use gameplay_snapshot::{
     player_gameplay_feedback_from_control_ack,
 };
 use mapping::{map_runtime_event, runtime_state_to_simulator_model};
+use prompt_control_result::PromptControlRuntimeAuthority;
 use runtime_script::RuntimeLiveScript;
 use session_policy::{
     RuntimeSessionPolicy, RuntimeSessionRevokeMetadata, location_id_for_pos,
@@ -167,6 +170,7 @@ pub struct ViewerRuntimeLiveServer {
     latest_player_gameplay_causality: Option<PlayerGameplayCausalitySignal>,
     runtime_action_players: BTreeMap<u64, String>,
     consumed_rollback_operator_nonces: BTreeSet<String>,
+    prompt_control_authority: PromptControlRuntimeAuthority,
     authoritative_recovery_write_fence: Option<String>,
     smelter_affordability_debug_agent_id: Option<String>,
     governance_vote_quote_debug_agent_id: Option<String>,
@@ -179,6 +183,14 @@ impl ViewerRuntimeLiveServer {
     pub fn new(
         config: ViewerRuntimeLiveServerConfig,
     ) -> Result<Self, ViewerRuntimeLiveServerError> {
+        config
+            .validate_prompt_result_limits()
+            .map_err(ViewerRuntimeLiveServerError::Init)?;
+        let prompt_control_authority = PromptControlRuntimeAuthority::new(
+            config.prompt_result_cache_capacity,
+            config.prompt_result_receipt_max_bytes,
+        )
+        .map_err(ViewerRuntimeLiveServerError::Init)?;
         let (mut world, snapshot_config, seed_model, chunk_runtime) =
             bootstrap_runtime_live_world(&config).map_err(ViewerRuntimeLiveServerError::Init)?;
         let mut recovered_generation = None;
@@ -358,6 +370,7 @@ impl ViewerRuntimeLiveServer {
                 .as_ref()
                 .map(|generation| generation.consumed_rollback_operator_nonces.clone())
                 .unwrap_or_default(),
+            prompt_control_authority,
             authoritative_recovery_write_fence: None,
             smelter_affordability_debug_agent_id: None,
             governance_vote_quote_debug_agent_id: None,
@@ -596,6 +609,7 @@ impl ViewerRuntimeLiveServer {
                         capabilities,
                         world_id: self.config.world_id.clone(),
                         control_profile: ViewerControlProfile::Live,
+                        authority_epoch: None,
                     },
                 )?;
             }
@@ -623,6 +637,12 @@ impl ViewerRuntimeLiveServer {
                     {
                         selected.push(REVOKE_SOCIAL_FACT_QUOTE_CAPABILITY.to_string());
                     }
+                    if offered
+                        .iter()
+                        .any(|capability| capability == PROMPT_CONTROL_RESULT_CAPABILITY)
+                    {
+                        selected.push(PROMPT_CONTROL_RESULT_CAPABILITY.to_string());
+                    }
                 }
                 session.negotiated_protocol = crate::viewer::protocol::NegotiatedViewerProtocol {
                     version,
@@ -638,6 +658,13 @@ impl ViewerRuntimeLiveServer {
                         capabilities: selected,
                         world_id: self.config.world_id.clone(),
                         control_profile: ViewerControlProfile::Live,
+                        authority_epoch: if viewer_protocol_supports_prompt_control_result(
+                            &session.negotiated_protocol,
+                        ) {
+                            Some(self.prompt_control_authority.authority_epoch.clone())
+                        } else {
+                            None
+                        },
                     },
                 )?;
             }
@@ -689,6 +716,7 @@ impl ViewerRuntimeLiveServer {
                                 session_pubkey: None,
                                 replaced_by_pubkey: None,
                                 session_epoch: None,
+                                binding_epoch: None,
                                 message: Some("snapshot_sync_metadata".to_string()),
                                 revoke_reason: None,
                                 revoked_by: None,
@@ -737,7 +765,9 @@ impl ViewerRuntimeLiveServer {
                 self.apply_control_mode(mode, request_id, session, writer)?;
             }
             ViewerRequest::PromptControl { command } => {
-                match self.handle_prompt_control(*command) {
+                match self
+                    .handle_prompt_control_for_protocol(*command, &session.negotiated_protocol)
+                {
                     Ok(ack) => {
                         send_response(writer, &ViewerResponse::PromptControlAck { ack })?;
                     }

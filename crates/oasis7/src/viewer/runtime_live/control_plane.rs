@@ -2,14 +2,17 @@ use super::*;
 
 use super::super::auth::{
     AGENT_CHAT_AUTHORITY_SCOPE, PromptControlAuthIntent, VerifiedPlayerAuth,
+    normalize_prompt_control_operation_identity, prompt_control_operation_digest,
     verify_agent_chat_auth_proof_with_authority,
     verify_hosted_prompt_control_apply_strong_auth_grant,
     verify_hosted_prompt_control_rollback_strong_auth_grant,
     verify_prompt_control_apply_auth_proof, verify_prompt_control_rollback_auth_proof,
 };
 use super::super::protocol::{
-    AgentChatAck, AgentChatError, AgentChatRequest, PromptControlAck, PromptControlApplyRequest,
-    PromptControlCommand, PromptControlError, PromptControlOperation, PromptControlRollbackRequest,
+    AgentChatAck, AgentChatError, AgentChatRequest, PromptControlAck,
+    PromptControlApplicationScope, PromptControlApplyRequest, PromptControlCommand,
+    PromptControlError, PromptControlOperation, PromptControlResultStatus,
+    PromptControlRollbackRequest, PromptControlValueVisibility,
 };
 use crate::runtime::{
     AgentIntentAuthorityContext, AgentIntentProviderFailureDisposition, AgentIntentV2,
@@ -24,10 +27,15 @@ mod agent_chat_intent;
 #[path = "control_plane/auth_helpers.rs"]
 mod auth_helpers;
 mod llm_sidecar;
+#[path = "control_plane/prompt_control_enhanced.rs"]
+mod prompt_control_enhanced;
+#[path = "control_plane/prompt_control_legacy.rs"]
+mod prompt_control_legacy;
 #[path = "control_plane/prompt_profile.rs"]
 mod prompt_profile;
 #[path = "control_plane/provider_action.rs"]
 mod provider_action;
+use super::prompt_control_result::{PromptControlLedgerInsertError, PromptControlLedgerLookup};
 pub(in crate::viewer::runtime_live) use agent_chat_intent::RuntimePrimaryIntent;
 use agent_chat_intent::{apply_accepted_primary_intent, resolve_agent_chat_intent};
 pub(super) use auth_helpers::map_auth_verify_error_code;
@@ -36,7 +44,6 @@ pub(super) use llm_sidecar::{
     RuntimeChatIntentAckRecord, RuntimeLlmSidecar, RuntimePlayerBindingPlan,
     simulator_action_label, simulator_action_to_runtime,
 };
-
 const RUNTIME_AGENT_CHAT_ECHO_ENV: &str = "OASIS7_RUNTIME_AGENT_CHAT_ECHO";
 const RUNTIME_AGENT_CHAT_ECHO_PREFIX: &str = "[local-mock-receipt]";
 const RUNTIME_AGENT_CHAT_ECHO_NOTICE: &str =
@@ -81,507 +88,6 @@ fn provider_reply_matches_current_intent(
 }
 
 impl ViewerRuntimeLiveServer {
-    pub(super) fn handle_prompt_control(
-        &mut self,
-        command: PromptControlCommand,
-    ) -> Result<PromptControlAck, PromptControlError> {
-        if self.hosted_public_join_mode() {
-            match &command {
-                PromptControlCommand::Preview { request } => {
-                    self.verify_hosted_prompt_control_apply_strong_auth(
-                        PromptControlAuthIntent::Preview,
-                        request,
-                    )?;
-                }
-                PromptControlCommand::Apply { request } => {
-                    self.verify_hosted_prompt_control_apply_strong_auth(
-                        PromptControlAuthIntent::Apply,
-                        request,
-                    )?;
-                }
-                PromptControlCommand::Rollback { request } => {
-                    self.verify_hosted_prompt_control_rollback_strong_auth(request)?;
-                }
-            }
-        }
-        if !self.llm_sidecar.is_llm_mode() {
-            let (agent_id, message) = match command {
-                PromptControlCommand::Preview { request }
-                | PromptControlCommand::Apply { request } => (
-                    request.agent_id,
-                    "prompt_control requires runtime live server running with --llm".to_string(),
-                ),
-                PromptControlCommand::Rollback { request } => (
-                    request.agent_id,
-                    "prompt_control rollback requires runtime live server running with --llm"
-                        .to_string(),
-                ),
-            };
-            return Err(PromptControlError {
-                code: "llm_mode_required".to_string(),
-                message,
-                agent_id: Some(agent_id.clone()),
-                current_version: self.current_prompt_version(agent_id.as_str()),
-            });
-        }
-        if !self.llm_sidecar.supports_prompt_control() {
-            let (agent_id, current_version) = match &command {
-                PromptControlCommand::Preview { request }
-                | PromptControlCommand::Apply { request } => (
-                    request.agent_id.clone(),
-                    self.current_prompt_version(request.agent_id.as_str()),
-                ),
-                PromptControlCommand::Rollback { request } => (
-                    request.agent_id.clone(),
-                    self.current_prompt_version(request.agent_id.as_str()),
-                ),
-            };
-            return Err(PromptControlError {
-                code: "agent_provider_prompt_control_unsupported".to_string(),
-                message:
-                    "prompt_control is not yet supported when runtime live uses ProviderBacked(Local HTTP)"
-                        .to_string(),
-                agent_id: Some(agent_id),
-                current_version,
-            });
-        }
-
-        match command {
-            PromptControlCommand::Preview { request } => self.prompt_control_preview(request),
-            PromptControlCommand::Apply { request } => self.prompt_control_apply(request),
-            PromptControlCommand::Rollback { request } => self.prompt_control_rollback(request),
-        }
-    }
-
-    fn prompt_control_preview(
-        &mut self,
-        request: PromptControlApplyRequest,
-    ) -> Result<PromptControlAck, PromptControlError> {
-        let player_id =
-            normalize_required_player_id(request.player_id.as_str(), request.agent_id.as_str())?;
-        let public_key = normalize_optional_public_key(request.public_key.as_deref());
-        self.verify_and_consume_prompt_control_apply_auth(
-            PromptControlAuthIntent::Preview,
-            &request,
-        )?;
-        ensure_agent_player_access_runtime(
-            &self.world,
-            &self.llm_sidecar,
-            request.agent_id.as_str(),
-            player_id.as_str(),
-            public_key.as_deref(),
-        )?;
-        let current = self.current_prompt_profile(request.agent_id.as_str())?;
-        ensure_expected_prompt_version_runtime(
-            request.agent_id.as_str(),
-            current.version,
-            request.expected_version,
-        )?;
-
-        let mut candidate = current.clone();
-        apply_prompt_patch_runtime(&mut candidate, &request);
-        let applied_fields = changed_prompt_fields_runtime(&current, &candidate);
-        let preview_version = if applied_fields.is_empty() {
-            current.version
-        } else {
-            current.version.saturating_add(1)
-        };
-
-        Ok(PromptControlAck {
-            agent_id: request.agent_id,
-            operation: PromptControlOperation::Apply,
-            preview: true,
-            version: preview_version,
-            updated_at_tick: self.world.state().time,
-            applied_fields,
-            digest: prompt_profile_digest_runtime(&candidate),
-            rolled_back_to_version: None,
-        })
-    }
-
-    fn prompt_control_apply(
-        &mut self,
-        request: PromptControlApplyRequest,
-    ) -> Result<PromptControlAck, PromptControlError> {
-        let player_id =
-            normalize_required_player_id(request.player_id.as_str(), request.agent_id.as_str())?;
-        let public_key = normalize_optional_public_key(request.public_key.as_deref());
-        self.verify_and_consume_prompt_control_apply_auth(
-            PromptControlAuthIntent::Apply,
-            &request,
-        )?;
-        ensure_agent_player_access_runtime(
-            &self.world,
-            &self.llm_sidecar,
-            request.agent_id.as_str(),
-            player_id.as_str(),
-            public_key.as_deref(),
-        )?;
-        let current = self.current_prompt_profile(request.agent_id.as_str())?;
-        ensure_expected_prompt_version_runtime(
-            request.agent_id.as_str(),
-            current.version,
-            request.expected_version,
-        )?;
-        ensure_updated_by_matches_player_runtime(
-            request.updated_by.as_deref(),
-            player_id.as_str(),
-            request.agent_id.as_str(),
-        )?;
-
-        let mut candidate = current.clone();
-        apply_prompt_patch_runtime(&mut candidate, &request);
-        let applied_fields = changed_prompt_fields_runtime(&current, &candidate);
-        let digest = prompt_profile_digest_runtime(&candidate);
-        if request.short_term_goal_override.is_some() {
-            self.record_primary_intent_from_short_term_goal(
-                request.agent_id.as_str(),
-                candidate.short_term_goal_override.as_deref(),
-            );
-        }
-        if applied_fields.is_empty() {
-            return Ok(PromptControlAck {
-                agent_id: request.agent_id,
-                operation: PromptControlOperation::Apply,
-                preview: false,
-                version: current.version,
-                updated_at_tick: current.updated_at_tick,
-                applied_fields,
-                digest,
-                rolled_back_to_version: None,
-            });
-        }
-
-        candidate.version = current.version.saturating_add(1);
-        candidate.updated_at_tick = self.world.state().time;
-        candidate.updated_by = player_id.clone();
-        self.llm_sidecar.upsert_prompt_profile(candidate.clone());
-        self.llm_sidecar.apply_prompt_profile_to_driver(&candidate);
-        self.bind_agent_player_access(
-            request.agent_id.as_str(),
-            player_id.as_str(),
-            public_key.as_deref(),
-        )?;
-        let digest = prompt_profile_digest_runtime(&candidate);
-        self.enqueue_virtual_event(WorldEventKind::AgentPromptUpdated {
-            profile: candidate.clone(),
-            operation: PromptUpdateOperation::Apply,
-            applied_fields: applied_fields.clone(),
-            digest: digest.clone(),
-            rolled_back_to_version: None,
-        });
-        self.llm_sidecar.request_decision();
-        self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
-            action: "prompt_control.apply".to_string(),
-            stage: "completed_advanced".to_string(),
-            effect: format!(
-                "updated prompt guidance for {} to version {}",
-                request.agent_id, candidate.version
-            ),
-            intent_summary: Some(format!("apply updated prompt guidance for {}", request.agent_id)),
-            target_agent_id: Some(request.agent_id.clone()),
-            reason: None,
-            hint: Some(
-                "continue the world and watch whether the new prompt guidance changes the agent's next decision"
-                    .to_string(),
-            ),
-            delta_logical_time: 0,
-            delta_event_seq: 0,
-        });
-
-        Ok(PromptControlAck {
-            agent_id: request.agent_id,
-            operation: PromptControlOperation::Apply,
-            preview: false,
-            version: candidate.version,
-            updated_at_tick: candidate.updated_at_tick,
-            applied_fields,
-            digest,
-            rolled_back_to_version: None,
-        })
-    }
-
-    fn prompt_control_rollback(
-        &mut self,
-        request: PromptControlRollbackRequest,
-    ) -> Result<PromptControlAck, PromptControlError> {
-        let player_id =
-            normalize_required_player_id(request.player_id.as_str(), request.agent_id.as_str())?;
-        let public_key = normalize_optional_public_key(request.public_key.as_deref());
-        self.verify_and_consume_prompt_control_rollback_auth(&request)?;
-        ensure_agent_player_access_runtime(
-            &self.world,
-            &self.llm_sidecar,
-            request.agent_id.as_str(),
-            player_id.as_str(),
-            public_key.as_deref(),
-        )?;
-        let current = self.current_prompt_profile(request.agent_id.as_str())?;
-        ensure_expected_prompt_version_runtime(
-            request.agent_id.as_str(),
-            current.version,
-            request.expected_version,
-        )?;
-        ensure_updated_by_matches_player_runtime(
-            request.updated_by.as_deref(),
-            player_id.as_str(),
-            request.agent_id.as_str(),
-        )?;
-
-        let target = if request.to_version == 0 {
-            AgentPromptProfile::for_agent(request.agent_id.clone())
-        } else {
-            self.lookup_prompt_profile_version(request.agent_id.as_str(), request.to_version)
-                .ok_or_else(|| PromptControlError {
-                    code: "target_version_not_found".to_string(),
-                    message: format!(
-                        "prompt profile version {} not found for {}",
-                        request.to_version, request.agent_id
-                    ),
-                    agent_id: Some(request.agent_id.clone()),
-                    current_version: Some(current.version),
-                })?
-        };
-        let target_short_term_goal = target.short_term_goal_override.clone();
-        let mut candidate = current.clone();
-        candidate.system_prompt_override = target.system_prompt_override;
-        candidate.short_term_goal_override = target.short_term_goal_override;
-        candidate.long_term_goal_override = target.long_term_goal_override;
-        let applied_fields = changed_prompt_fields_runtime(&current, &candidate);
-        if applied_fields.is_empty() {
-            return Err(PromptControlError {
-                code: "rollback_noop".to_string(),
-                message: format!(
-                    "rollback target version {} yields no prompt changes for {}",
-                    request.to_version, request.agent_id
-                ),
-                agent_id: Some(request.agent_id),
-                current_version: Some(current.version),
-            });
-        }
-
-        self.record_primary_intent_from_short_term_goal(
-            request.agent_id.as_str(),
-            target_short_term_goal.as_deref(),
-        );
-
-        candidate.version = current.version.saturating_add(1);
-        candidate.updated_at_tick = self.world.state().time;
-        candidate.updated_by = player_id.clone();
-        self.llm_sidecar.upsert_prompt_profile(candidate.clone());
-        self.llm_sidecar.apply_prompt_profile_to_driver(&candidate);
-        self.bind_agent_player_access(
-            request.agent_id.as_str(),
-            player_id.as_str(),
-            public_key.as_deref(),
-        )?;
-        let digest = prompt_profile_digest_runtime(&candidate);
-        self.enqueue_virtual_event(WorldEventKind::AgentPromptUpdated {
-            profile: candidate.clone(),
-            operation: PromptUpdateOperation::Rollback,
-            applied_fields: applied_fields.clone(),
-            digest: digest.clone(),
-            rolled_back_to_version: Some(request.to_version),
-        });
-        self.llm_sidecar.request_decision();
-        self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
-            action: "prompt_control.rollback".to_string(),
-            stage: "completed_advanced".to_string(),
-            effect: format!(
-                "rolled back prompt guidance for {} to base version {} via version {}",
-                request.agent_id, request.to_version, candidate.version
-            ),
-            intent_summary: Some(format!(
-                "roll back prompt guidance for {}",
-                request.agent_id
-            )),
-            target_agent_id: Some(request.agent_id.clone()),
-            reason: None,
-            hint: Some(
-                "continue the world and confirm the agent now follows the restored guidance"
-                    .to_string(),
-            ),
-            delta_logical_time: 0,
-            delta_event_seq: 0,
-        });
-
-        Ok(PromptControlAck {
-            agent_id: request.agent_id,
-            operation: PromptControlOperation::Rollback,
-            preview: false,
-            version: candidate.version,
-            updated_at_tick: candidate.updated_at_tick,
-            applied_fields,
-            digest,
-            rolled_back_to_version: Some(request.to_version),
-        })
-    }
-
-    fn verify_and_consume_prompt_control_apply_auth(
-        &mut self,
-        intent: PromptControlAuthIntent,
-        request: &PromptControlApplyRequest,
-    ) -> Result<(), PromptControlError> {
-        let Some(auth) = request.auth.as_ref() else {
-            return Err(PromptControlError {
-                code: "auth_proof_required".to_string(),
-                message: "prompt_control requires auth proof".to_string(),
-                agent_id: Some(request.agent_id.clone()),
-                current_version: self.current_prompt_version(request.agent_id.as_str()),
-            });
-        };
-        let verified =
-            verify_prompt_control_apply_auth_proof(intent, request, auth).map_err(|message| {
-                PromptControlError {
-                    code: map_auth_verify_error_code(message.as_str()).to_string(),
-                    message,
-                    agent_id: Some(request.agent_id.clone()),
-                    current_version: self.current_prompt_version(request.agent_id.as_str()),
-                }
-            })?;
-        self.session_policy
-            .validate_known_session_key(verified.player_id.as_str(), verified.public_key.as_str())
-            .map_err(|message| PromptControlError {
-                code: map_session_policy_error_code(message.as_str()).to_string(),
-                message,
-                agent_id: Some(request.agent_id.clone()),
-                current_version: self.current_prompt_version(request.agent_id.as_str()),
-            })?;
-        self.llm_sidecar
-            .consume_player_auth_nonce(verified.player_id.as_str(), verified.nonce)
-            .map_err(|message| PromptControlError {
-                code: "auth_nonce_replay".to_string(),
-                message,
-                agent_id: Some(request.agent_id.clone()),
-                current_version: self.current_prompt_version(request.agent_id.as_str()),
-            })?;
-        Ok(())
-    }
-
-    fn verify_hosted_prompt_control_apply_strong_auth(
-        &self,
-        intent: PromptControlAuthIntent,
-        request: &PromptControlApplyRequest,
-    ) -> Result<(), PromptControlError> {
-        let Some(grant) = request.strong_auth_grant.as_ref() else {
-            return Err(self.hosted_prompt_control_strong_auth_error(
-                "strong_auth_required",
-                request.agent_id.as_str(),
-                "prompt_control requires hosted strong auth grant on hosted_public_join",
-            ));
-        };
-        let signer_public_key =
-            hosted_strong_auth_grant_public_key_from_env().map_err(|message| {
-                self.hosted_prompt_control_strong_auth_error(
-                    "strong_auth_required",
-                    request.agent_id.as_str(),
-                    message.as_str(),
-                )
-            })?;
-        verify_hosted_prompt_control_apply_strong_auth_grant(
-            intent,
-            request,
-            grant,
-            signer_public_key.as_str(),
-            hosted_strong_auth_now_unix_ms(),
-        )
-        .map_err(|message| {
-            self.hosted_prompt_control_strong_auth_error(
-                "strong_auth_grant_invalid",
-                request.agent_id.as_str(),
-                message.as_str(),
-            )
-        })
-    }
-
-    fn verify_and_consume_prompt_control_rollback_auth(
-        &mut self,
-        request: &PromptControlRollbackRequest,
-    ) -> Result<(), PromptControlError> {
-        let Some(auth) = request.auth.as_ref() else {
-            return Err(PromptControlError {
-                code: "auth_proof_required".to_string(),
-                message: "prompt_control rollback requires auth proof".to_string(),
-                agent_id: Some(request.agent_id.clone()),
-                current_version: self.current_prompt_version(request.agent_id.as_str()),
-            });
-        };
-        let verified =
-            verify_prompt_control_rollback_auth_proof(request, auth).map_err(|message| {
-                PromptControlError {
-                    code: map_auth_verify_error_code(message.as_str()).to_string(),
-                    message,
-                    agent_id: Some(request.agent_id.clone()),
-                    current_version: self.current_prompt_version(request.agent_id.as_str()),
-                }
-            })?;
-        self.session_policy
-            .validate_known_session_key(verified.player_id.as_str(), verified.public_key.as_str())
-            .map_err(|message| PromptControlError {
-                code: map_session_policy_error_code(message.as_str()).to_string(),
-                message,
-                agent_id: Some(request.agent_id.clone()),
-                current_version: self.current_prompt_version(request.agent_id.as_str()),
-            })?;
-        self.llm_sidecar
-            .consume_player_auth_nonce(verified.player_id.as_str(), verified.nonce)
-            .map_err(|message| PromptControlError {
-                code: "auth_nonce_replay".to_string(),
-                message,
-                agent_id: Some(request.agent_id.clone()),
-                current_version: self.current_prompt_version(request.agent_id.as_str()),
-            })?;
-        Ok(())
-    }
-
-    fn verify_hosted_prompt_control_rollback_strong_auth(
-        &self,
-        request: &PromptControlRollbackRequest,
-    ) -> Result<(), PromptControlError> {
-        let Some(grant) = request.strong_auth_grant.as_ref() else {
-            return Err(self.hosted_prompt_control_strong_auth_error(
-                "strong_auth_required",
-                request.agent_id.as_str(),
-                "prompt_control rollback requires hosted strong auth grant on hosted_public_join",
-            ));
-        };
-        let signer_public_key =
-            hosted_strong_auth_grant_public_key_from_env().map_err(|message| {
-                self.hosted_prompt_control_strong_auth_error(
-                    "strong_auth_required",
-                    request.agent_id.as_str(),
-                    message.as_str(),
-                )
-            })?;
-        verify_hosted_prompt_control_rollback_strong_auth_grant(
-            request,
-            grant,
-            signer_public_key.as_str(),
-            hosted_strong_auth_now_unix_ms(),
-        )
-        .map_err(|message| {
-            self.hosted_prompt_control_strong_auth_error(
-                "strong_auth_grant_invalid",
-                request.agent_id.as_str(),
-                message.as_str(),
-            )
-        })
-    }
-
-    fn hosted_prompt_control_strong_auth_error(
-        &self,
-        code: &str,
-        agent_id: &str,
-        message: &str,
-    ) -> PromptControlError {
-        PromptControlError {
-            code: code.to_string(),
-            message: message.to_string(),
-            agent_id: Some(agent_id.to_string()),
-            current_version: self.current_prompt_version(agent_id),
-        }
-    }
-
     fn verify_agent_chat_auth(
         &mut self,
         request: &AgentChatRequest,
@@ -629,8 +135,16 @@ impl ViewerRuntimeLiveServer {
                 message,
                 agent_id: Some(agent_id.to_string()),
                 current_version: self.current_prompt_version(agent_id),
+                ..PromptControlError::default_legacy()
             })?;
         for event in events {
+            if matches!(
+                &event,
+                WorldEventKind::AgentPlayerBound { .. } | WorldEventKind::AgentPlayerUnbound { .. }
+            ) {
+                self.prompt_control_authority
+                    .advance_binding_epoch(agent_id);
+            }
             self.enqueue_virtual_event(event);
         }
         Ok(())
@@ -866,9 +380,125 @@ pub(super) fn normalize_required_player_id(
             ),
             agent_id: Some(agent_id.to_string()),
             current_version: None,
+            ..PromptControlError::default_legacy()
         });
     }
     Ok(normalized.to_string())
+}
+
+fn prompt_control_enhanced_error(
+    code: &str,
+    message: &str,
+    request_id: Option<String>,
+    operation: PromptControlOperation,
+    preview: bool,
+    agent_id: Option<String>,
+    player_id: Option<String>,
+    status: PromptControlResultStatus,
+) -> PromptControlError {
+    let mut error = PromptControlError::default_legacy();
+    error.code = code.to_string();
+    error.message = message.to_string();
+    error.request_id = request_id;
+    error.operation = Some(operation);
+    error.preview = Some(preview);
+    error.status = Some(status);
+    if status == PromptControlResultStatus::Blocked {
+        error.value_visibility = Some(PromptControlValueVisibility::Hidden);
+        error.next_step = Some("reauthenticate_and_retry".to_string());
+    }
+    error.agent_id = agent_id;
+    error.player_id = player_id;
+    error.reason_code = Some(code.to_string());
+    error
+}
+
+fn prompt_control_control_lost_error(
+    request_id: &str,
+    operation: PromptControlOperation,
+    preview: bool,
+    agent_id: Option<String>,
+) -> PromptControlError {
+    let mut error = prompt_control_enhanced_error(
+        "control_lost",
+        "prompt control authorization is no longer current",
+        Some(request_id.to_string()),
+        operation,
+        preview,
+        agent_id,
+        None,
+        PromptControlResultStatus::Blocked,
+    );
+    error.next_step = Some("reauthenticate_and_refresh_binding".to_string());
+    error
+}
+
+fn prompt_control_access_error(
+    error: PromptControlError,
+    request_id: &str,
+    operation: PromptControlOperation,
+    preview: bool,
+    agent_id: &str,
+    player_id: &str,
+) -> PromptControlError {
+    if error.code == "agent_not_found" {
+        return prompt_control_enhanced_error(
+            "agent_not_found",
+            "prompt control target Agent was not found",
+            Some(request_id.to_string()),
+            operation,
+            preview,
+            Some(agent_id.to_string()),
+            Some(player_id.to_string()),
+            PromptControlResultStatus::Rejected,
+        );
+    }
+    prompt_control_control_lost_error(request_id, operation, preview, Some(agent_id.to_string()))
+}
+
+fn prompt_control_result_unknown_error(request_id: &str) -> PromptControlError {
+    let mut error = PromptControlError::default_legacy();
+    error.code = "prompt_control_result_unknown".to_string();
+    error.message = "prompt control result is unknown for the current authority epoch".to_string();
+    error.request_id = Some(request_id.to_string());
+    error.status = Some(PromptControlResultStatus::Blocked);
+    error.value_visibility = Some(PromptControlValueVisibility::Hidden);
+    error.reason_code = Some("result_unknown".to_string());
+    error.next_step = Some("refresh_authority_and_retry_with_new_request_id".to_string());
+    error
+}
+
+fn prompt_control_ledger_error(
+    error: PromptControlLedgerInsertError,
+    request_id: &str,
+) -> PromptControlError {
+    let (code, message, status) = match error {
+        PromptControlLedgerInsertError::Full => (
+            "result_cache_full".to_string(),
+            "prompt control result cache is full".to_string(),
+            PromptControlResultStatus::Blocked,
+        ),
+        PromptControlLedgerInsertError::ReceiptTooLarge { actual, limit } => (
+            "result_receipt_too_large".to_string(),
+            format!("prompt control result receipt is {actual} bytes; limit is {limit}"),
+            PromptControlResultStatus::Rejected,
+        ),
+        PromptControlLedgerInsertError::Serialize(message) => (
+            "result_receipt_encode_failed".to_string(),
+            message,
+            PromptControlResultStatus::Blocked,
+        ),
+    };
+    let mut result = PromptControlError::default_legacy();
+    result.code = code.clone();
+    result.message = message;
+    result.request_id = Some(request_id.to_string());
+    result.status = Some(status);
+    if status == PromptControlResultStatus::Blocked {
+        result.value_visibility = Some(PromptControlValueVisibility::Hidden);
+    }
+    result.reason_code = Some(code);
+    result
 }
 
 pub(super) fn normalize_optional_public_key(public_key: Option<&str>) -> Option<String> {
@@ -897,6 +527,7 @@ pub(super) fn ensure_updated_by_matches_player_runtime(
         ),
         agent_id: Some(agent_id.to_string()),
         current_version: None,
+        ..PromptControlError::default_legacy()
     })
 }
 
@@ -934,6 +565,7 @@ fn ensure_agent_player_access_runtime_inner(
             message: format!("agent not found: {agent_id}"),
             agent_id: Some(agent_id.to_string()),
             current_version: None,
+            ..PromptControlError::default_legacy()
         });
     }
     let Some(bound_player_id) = sidecar.agent_player_bindings.get(agent_id) else {
@@ -948,6 +580,7 @@ fn ensure_agent_player_access_runtime_inner(
                 .prompt_profiles
                 .get(agent_id)
                 .map(|entry| entry.version),
+            ..PromptControlError::default_legacy()
         });
     };
     if bound_player_id == player_id {
@@ -977,6 +610,7 @@ fn ensure_agent_player_access_runtime_inner(
                 .prompt_profiles
                 .get(agent_id)
                 .map(|entry| entry.version),
+            ..PromptControlError::default_legacy()
         });
     }
     Err(PromptControlError {
@@ -990,6 +624,7 @@ fn ensure_agent_player_access_runtime_inner(
             .prompt_profiles
             .get(agent_id)
             .map(|entry| entry.version),
+        ..PromptControlError::default_legacy()
     })
 }
 
@@ -1059,6 +694,7 @@ pub(super) fn ensure_expected_prompt_version_runtime(
                 ),
                 agent_id: Some(agent_id.to_string()),
                 current_version: Some(current_version),
+                ..PromptControlError::default_legacy()
             });
         }
     }

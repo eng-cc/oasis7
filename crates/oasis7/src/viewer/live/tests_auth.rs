@@ -20,6 +20,7 @@ fn prompt_control_preview_reports_fields_and_next_version() {
                 system_prompt_override: Some(Some("系统提示".to_string())),
                 short_term_goal_override: None,
                 long_term_goal_override: None,
+                ..Default::default()
             },
             PromptControlAuthIntent::Preview,
             1,
@@ -58,6 +59,7 @@ fn prompt_control_apply_requires_llm_mode() {
                 system_prompt_override: Some(Some("system".to_string())),
                 short_term_goal_override: None,
                 long_term_goal_override: None,
+                ..Default::default()
             },
             PromptControlAuthIntent::Apply,
             2,
@@ -119,6 +121,7 @@ fn prompt_control_preview_requires_non_empty_player_id() {
             system_prompt_override: Some(Some("system".to_string())),
             short_term_goal_override: None,
             long_term_goal_override: None,
+            ..Default::default()
         })
         .expect_err("empty player id should be rejected");
 
@@ -144,6 +147,7 @@ fn prompt_control_preview_requires_auth_proof() {
             system_prompt_override: Some(Some("system".to_string())),
             short_term_goal_override: None,
             long_term_goal_override: None,
+            ..Default::default()
         })
         .expect_err("missing proof should be rejected");
 
@@ -169,6 +173,7 @@ fn prompt_control_preview_rejects_tampered_auth_signature() {
             system_prompt_override: Some(Some("system".to_string())),
             short_term_goal_override: None,
             long_term_goal_override: None,
+            ..Default::default()
         },
         PromptControlAuthIntent::Preview,
         7,
@@ -202,6 +207,7 @@ fn prompt_control_preview_rejects_replayed_nonce() {
             system_prompt_override: Some(Some("system".to_string())),
             short_term_goal_override: None,
             long_term_goal_override: None,
+            ..Default::default()
         },
         PromptControlAuthIntent::Preview,
         8,
@@ -246,6 +252,7 @@ fn prompt_control_preview_rejects_unbound_player_when_agent_already_bound() {
                 system_prompt_override: Some(Some("system".to_string())),
                 short_term_goal_override: None,
                 long_term_goal_override: None,
+                ..Default::default()
             },
             PromptControlAuthIntent::Preview,
             3,
@@ -287,6 +294,7 @@ fn prompt_control_preview_requires_matching_public_key_when_agent_is_key_bound()
             system_prompt_override: Some(Some("system".to_string())),
             short_term_goal_override: None,
             long_term_goal_override: None,
+            ..Default::default()
         })
         .expect_err("missing public key should be rejected");
     assert_eq!(missing_key.code, "auth_proof_required");
@@ -304,6 +312,7 @@ fn prompt_control_preview_requires_matching_public_key_when_agent_is_key_bound()
                 system_prompt_override: Some(Some("system".to_string())),
                 short_term_goal_override: None,
                 long_term_goal_override: None,
+                ..Default::default()
             },
             PromptControlAuthIntent::Preview,
             4,
@@ -326,6 +335,7 @@ fn prompt_control_preview_requires_matching_public_key_when_agent_is_key_bound()
                 system_prompt_override: Some(Some("system".to_string())),
                 short_term_goal_override: None,
                 long_term_goal_override: None,
+                ..Default::default()
             },
             PromptControlAuthIntent::Preview,
             5,

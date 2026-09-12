@@ -43,6 +43,7 @@ impl LiveWorld {
             applied_fields,
             digest: prompt_profile_digest(&candidate),
             rolled_back_to_version: None,
+            ..PromptControlAck::default_legacy()
         })
     }
 
@@ -90,6 +91,7 @@ impl LiveWorld {
                 applied_fields,
                 digest,
                 rolled_back_to_version: None,
+                ..PromptControlAck::default_legacy()
             });
         }
 
@@ -121,6 +123,7 @@ impl LiveWorld {
             applied_fields,
             digest,
             rolled_back_to_version: None,
+            ..PromptControlAck::default_legacy()
         })
     }
 
@@ -162,6 +165,7 @@ impl LiveWorld {
                     ),
                     agent_id: Some(request.agent_id.clone()),
                     current_version: Some(current.version),
+                    ..PromptControlError::default_legacy()
                 })?
         };
 
@@ -179,6 +183,7 @@ impl LiveWorld {
                 ),
                 agent_id: Some(request.agent_id),
                 current_version: Some(current.version),
+                ..PromptControlError::default_legacy()
             });
         }
 
@@ -210,6 +215,7 @@ impl LiveWorld {
             applied_fields,
             digest,
             rolled_back_to_version: Some(request.to_version),
+            ..PromptControlAck::default_legacy()
         })
     }
 
@@ -304,6 +310,7 @@ impl LiveWorld {
                 message: "prompt_control requires auth proof".to_string(),
                 agent_id: Some(request.agent_id.clone()),
                 current_version: self.current_prompt_version(request.agent_id.as_str()),
+                ..PromptControlError::default_legacy()
             });
         };
         let verified =
@@ -313,6 +320,7 @@ impl LiveWorld {
                     message,
                     agent_id: Some(request.agent_id.clone()),
                     current_version: self.current_prompt_version(request.agent_id.as_str()),
+                    ..PromptControlError::default_legacy()
                 }
             })?;
         self.kernel
@@ -322,6 +330,7 @@ impl LiveWorld {
                 message,
                 agent_id: Some(request.agent_id.clone()),
                 current_version: self.current_prompt_version(request.agent_id.as_str()),
+                ..PromptControlError::default_legacy()
             })?;
         Ok(())
     }
@@ -336,6 +345,7 @@ impl LiveWorld {
                 message: "prompt_control rollback requires auth proof".to_string(),
                 agent_id: Some(request.agent_id.clone()),
                 current_version: self.current_prompt_version(request.agent_id.as_str()),
+                ..PromptControlError::default_legacy()
             });
         };
         let verified =
@@ -345,6 +355,7 @@ impl LiveWorld {
                     message,
                     agent_id: Some(request.agent_id.clone()),
                     current_version: self.current_prompt_version(request.agent_id.as_str()),
+                    ..PromptControlError::default_legacy()
                 }
             })?;
         self.kernel
@@ -354,6 +365,7 @@ impl LiveWorld {
                 message,
                 agent_id: Some(request.agent_id.clone()),
                 current_version: self.current_prompt_version(request.agent_id.as_str()),
+                ..PromptControlError::default_legacy()
             })?;
         Ok(())
     }
@@ -403,6 +415,7 @@ impl LiveWorld {
                 message: format!("agent not found: {agent_id}"),
                 agent_id: Some(agent_id.to_string()),
                 current_version: None,
+                ..PromptControlError::default_legacy()
             });
         }
         Ok(self
@@ -452,6 +465,7 @@ impl LiveWorld {
                     .agent_prompt_profiles
                     .get(&profile.agent_id)
                     .map(|entry| entry.version),
+                ..PromptControlError::default_legacy()
             }),
             LiveDriver::Llm(runner) => {
                 let Some(agent) = runner.get_mut(profile.agent_id.as_str()) else {
@@ -466,8 +480,9 @@ impl LiveWorld {
                             .kernel
                             .model()
                             .agent_prompt_profiles
-                            .get(&profile.agent_id)
-                            .map(|entry| entry.version),
+                        .get(&profile.agent_id)
+                        .map(|entry| entry.version),
+                        ..PromptControlError::default_legacy()
                     });
                 };
                 agent.behavior.apply_prompt_overrides(
@@ -503,6 +518,7 @@ impl LiveWorld {
                         .agent_prompt_profiles
                         .get(agent_id)
                         .map(|profile| profile.version),
+                    ..PromptControlError::default_legacy()
                 })?;
         }
         Ok(())

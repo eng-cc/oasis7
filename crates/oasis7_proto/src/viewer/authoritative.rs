@@ -102,6 +102,8 @@ pub struct AuthoritativeRecoveryAck<Time> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_epoch: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub binding_epoch: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revoke_reason: Option<String>,
