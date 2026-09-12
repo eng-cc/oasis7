@@ -3186,11 +3186,22 @@ def validate_storage_first_resume(contract: Mapping[str, Any], journal: Mapping[
         _storage_first_contract_error("resume completed operation prefix is malformed")
     if any(operation not in STORAGE_FIRST_MUTATING_OPERATIONS for operation in completed):
         _storage_first_contract_error("resume journal contains a non-storage operation")
+    operations = list(STORAGE_FIRST_MUTATING_OPERATIONS)
+    expected_completed = operations[:len(completed)]
+    if completed != expected_completed:
+        _storage_first_contract_error("resume completed operations are not an exact storage prefix")
     if journal.get("status") == "storage-205-running" and journal.get("callback_started") and journal.get("callback_receipt") is None:
         _storage_first_contract_error("ambiguous storage callback requires reconciliation")
     next_operation = journal.get("next_operation")
     if next_operation not in STORAGE_FIRST_MUTATING_OPERATIONS and next_operation != "reconciliation-required":
         _storage_first_contract_error("resume next operation is outside the storage phase")
+    expected_next = (
+        operations[len(completed)]
+        if len(completed) < len(operations)
+        else "reconciliation-required"
+    )
+    if next_operation != expected_next:
+        _storage_first_contract_error("resume next operation is not correlated with the completed prefix")
     return True
 
 

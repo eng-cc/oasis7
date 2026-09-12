@@ -5729,6 +5729,7 @@ def _storage_first_run(
     provenance_verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None,
     live_revalidator: Callable[[], Any] | None,
     resume_record: Mapping[str, Any] | None = None,
+    held_guard: _FleetTransactionGuard | None = None,
 ) -> dict[str, Any]:
     _storage_first_require_concrete_plan(plan)
     authority = _storage_first_require_concrete_authority(authority)
@@ -5760,6 +5761,8 @@ def _storage_first_run(
         _fail("storage-first apply requires an injected provider mutate callback")
     if not callable(getattr(transport, "inspect_node", None)) or not callable(getattr(transport, "preflight", None)):
         _fail("storage-first apply requires storage inspect and preflight callbacks")
+    if not callable(getattr(transport, "verify", None)):
+        _fail("storage-first apply requires an injected provider verify callback")
     if provenance_verifier is None or not callable(provenance_verifier):
         _fail("storage-first apply requires the independent provenance verifier callback")
     if not _storage_first_is_shape_fixture(plan):
@@ -5805,13 +5808,18 @@ def _storage_first_run(
     )
     if result.get("bindings") != expected_bindings or not identity_bound:
         _fail("storage-first provenance verifier returned unbound results")
-    lock_token = _STORAGE_FIRST_FIXTURE_LOCK_FALLBACK.set(
-        _storage_first_is_shape_fixture(plan)
-    )
-    try:
-        lock = _acquire_fleet_transaction_guard(Path(journal_path))
-    finally:
-        _STORAGE_FIRST_FIXTURE_LOCK_FALLBACK.reset(lock_token)
+    owns_guard = held_guard is None
+    if held_guard is None:
+        lock_token = _STORAGE_FIRST_FIXTURE_LOCK_FALLBACK.set(
+            _storage_first_is_shape_fixture(plan)
+        )
+        try:
+            lock = _acquire_fleet_transaction_guard(Path(journal_path))
+        finally:
+            _STORAGE_FIRST_FIXTURE_LOCK_FALLBACK.reset(lock_token)
+    else:
+        held_guard.check()
+        lock = held_guard
     guard_token = _ACTIVE_TRANSACTION_GUARD.set(lock)
     try:
         node = admission["storage_node"]
@@ -6077,7 +6085,8 @@ def _storage_first_run(
         }
     finally:
         _ACTIVE_TRANSACTION_GUARD.reset(guard_token)
-        lock.close()
+        if owns_guard:
+            lock.close()
 
 
 def execute_storage_first(
@@ -6138,77 +6147,90 @@ def resume_storage_first(
     _storage_first_validate_admission(
         plan, child_authority, phase=phase, identity_v2_evidence=identity_v2_evidence
     )
-    record = _storage_first_read_journal(Path(journal_path))
-    for field, expected in (
-        ("task_uid", plan.get("task_uid")),
-        ("head_oid", plan.get("head_oid")),
-        ("plan_digest", plan.get("plan_digest")),
-        ("transaction_id", plan.get("transaction_id")),
-        ("capture_window_id", plan.get("capture_window_id")),
-    ):
-        if record.get(field) != expected:
-            _fail("storage-first resume journal binding drifted")
-    if record.get("phase_contract_digest") != _storage_first_phase_digest(
-        plan, identity_v2_evidence
-    ):
-        _fail("storage-first resume phase contract drifted")
-    completed = record.get("completed_operations")
-    receipts = record.get("storage_receipts")
-    if not isinstance(completed, list) or not isinstance(receipts, list):
-        _fail("storage-first resume cursor is incomplete")
-    if len(receipts) != len(completed):
-        _fail("storage-first resume receipt prefix is incomplete")
-    if [
-        receipt.get("operation") for receipt in receipts if isinstance(receipt, Mapping)
-    ] != completed:
-        _fail("storage-first resume receipt operation cursor drifted")
-    _storage_first_validate_receipt_prefix(
-        plan,
-        completed,
-        receipts,
-        record.get("callback_receipt"),
+    lock_token = _STORAGE_FIRST_FIXTURE_LOCK_FALLBACK.set(
+        _storage_first_is_shape_fixture(plan)
     )
-    expected_next = (
-        STORAGE_FIRST_OPERATIONS[len(completed)]
-        if len(completed) < len(STORAGE_FIRST_OPERATIONS)
-        else "reconciliation-required"
-    )
-    if record.get("next_operation") != expected_next:
-        _fail("storage-first resume next-operation cursor drifted")
-    if record.get("status") in {"terminal-failure", "reconciliation-blocked"}:
-        _fail("storage-first journal requires governed reconciliation")
-    if (
-        not _storage_first_is_shape_fixture(plan)
-        and record.get("status")
-        in {"preflight-complete", "storage-205-running", "storage-205-verified"}
-    ):
-        nonce_state = _validate_nonce_reservation_state(
-            dict(plan), record.get("nonce_reservation_state")
+    try:
+        lock = _acquire_fleet_transaction_guard(Path(journal_path))
+    finally:
+        _STORAGE_FIRST_FIXTURE_LOCK_FALLBACK.reset(lock_token)
+    guard_token = _ACTIVE_TRANSACTION_GUARD.set(lock)
+    try:
+        record = _storage_first_read_journal(Path(journal_path))
+        for field, expected in (
+            ("task_uid", plan.get("task_uid")),
+            ("head_oid", plan.get("head_oid")),
+            ("plan_digest", plan.get("plan_digest")),
+            ("transaction_id", plan.get("transaction_id")),
+            ("capture_window_id", plan.get("capture_window_id")),
+        ):
+            if record.get(field) != expected:
+                _fail("storage-first resume journal binding drifted")
+        if record.get("phase_contract_digest") != _storage_first_phase_digest(
+            plan, identity_v2_evidence
+        ):
+            _fail("storage-first resume phase contract drifted")
+        completed = record.get("completed_operations")
+        receipts = record.get("storage_receipts")
+        if not isinstance(completed, list) or not isinstance(receipts, list):
+            _fail("storage-first resume cursor is incomplete")
+        if len(receipts) != len(completed):
+            _fail("storage-first resume receipt prefix is incomplete")
+        if [
+            receipt.get("operation") for receipt in receipts if isinstance(receipt, Mapping)
+        ] != completed:
+            _fail("storage-first resume receipt operation cursor drifted")
+        _storage_first_validate_receipt_prefix(
+            plan,
+            completed,
+            receipts,
+            record.get("callback_receipt"),
         )
-        _validate_committed_nonce_reservations(
-            dict(plan), Path(ledger_path), nonce_state
+        expected_next = (
+            STORAGE_FIRST_OPERATIONS[len(completed)]
+            if len(completed) < len(STORAGE_FIRST_OPERATIONS)
+            else "reconciliation-required"
         )
-    if record.get("status") == "storage-205-verified":
-        return {
-            "schema_version": STORAGE_FIRST_JOURNAL_SCHEMA,
-            "status": "storage-205-verified",
-            "phase_id": STORAGE_FIRST_PHASE_ID,
-            "completion_boundary": STORAGE_FIRST_COMPLETION_BOUNDARY,
-            "provider_mutation_performed": True,
-        }
-    return _storage_first_run(
-        plan,
-        authority,
-        phase=phase,
-        identity_v2_evidence=identity_v2_evidence,
-        journal_path=journal_path,
-        ledger_path=ledger_path,
-        transport=transport,
-        dry_run=dry_run,
-        provenance_verifier=provenance_verifier,
-        live_revalidator=live_revalidator,
-        resume_record=record,
-    )
+        if record.get("next_operation") != expected_next:
+            _fail("storage-first resume next-operation cursor drifted")
+        if record.get("status") in {"terminal-failure", "reconciliation-blocked"}:
+            _fail("storage-first journal requires governed reconciliation")
+        if (
+            not _storage_first_is_shape_fixture(plan)
+            and record.get("status")
+            in {"preflight-complete", "storage-205-running", "storage-205-verified"}
+        ):
+            nonce_state = _validate_nonce_reservation_state(
+                dict(plan), record.get("nonce_reservation_state")
+            )
+            _validate_committed_nonce_reservations(
+                dict(plan), Path(ledger_path), nonce_state
+            )
+        if record.get("status") == "storage-205-verified":
+            return {
+                "schema_version": STORAGE_FIRST_JOURNAL_SCHEMA,
+                "status": "storage-205-verified",
+                "phase_id": STORAGE_FIRST_PHASE_ID,
+                "completion_boundary": STORAGE_FIRST_COMPLETION_BOUNDARY,
+                "provider_mutation_performed": True,
+            }
+        return _storage_first_run(
+            plan,
+            authority,
+            phase=phase,
+            identity_v2_evidence=identity_v2_evidence,
+            journal_path=journal_path,
+            ledger_path=ledger_path,
+            transport=transport,
+            dry_run=dry_run,
+            provenance_verifier=provenance_verifier,
+            live_revalidator=live_revalidator,
+            resume_record=record,
+            held_guard=lock,
+        )
+    finally:
+        _ACTIVE_TRANSACTION_GUARD.reset(guard_token)
+        lock.close()
 
 
 def execute(

@@ -3449,6 +3449,23 @@ class StorageFirstContractRedTests(unittest.TestCase):
             with self.subTest(mutation=mutation), self.assertRaises(Exception):
                 validator(contract, changed)
 
+    def test_storage_first_resume_requires_exact_completed_prefix_and_next_operation(self):
+        contract = self._build()
+        validator = self._resume_validator()
+        operations = list(self.module.STORAGE_FIRST_MUTATING_OPERATIONS)
+        cases = {
+            "reordered-prefix": ([operations[1], operations[0]], operations[2]),
+            "skipped-prefix": ([operations[0], operations[2]], operations[3]),
+            "next-operation-drift": ([operations[0]], operations[4]),
+            "complete-prefix-with-operation-next": (operations, operations[-1]),
+        }
+        for label, (completed, next_operation) in cases.items():
+            changed = copy.deepcopy(contract["journal_template"])
+            changed["completed_operations"] = completed
+            changed["next_operation"] = next_operation
+            with self.subTest(case=label), self.assertRaises(Exception):
+                validator(contract, changed)
+
 
 class StorageFirstParentSecurityRedTests(unittest.TestCase):
     """Finding-specific RED coverage for QA-SF-001 parent admission.

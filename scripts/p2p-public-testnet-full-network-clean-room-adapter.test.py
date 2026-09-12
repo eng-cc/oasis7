@@ -5961,6 +5961,66 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
         finally:
             canonical.tearDown()
 
+    def test_runtime_sf_015_resume_reads_journal_under_guard_and_never_replays_stale_cursor(self) -> None:
+        """Resume must bind the journal read to the fleet transaction guard."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            stale_path = self.fixture._canonical_prefix_journal(
+                canonical, ["stop:storage-205"], name="stale-prefix.json"
+            )
+            stale_record = json.loads(stale_path.read_text(encoding="utf-8"))
+            journal = self.fixture._canonical_prefix_journal(
+                canonical,
+                ["stop:storage-205", "delete:storage-205"],
+                name="resume-race.json",
+            )
+            journal.chmod(0o600)
+            transport = StorageFirstCanonicalTransport(
+                canonical.adapter, canonical.plan
+            )
+            events: list[str] = []
+            read_journal = canonical.adapter._storage_first_read_journal
+            acquire_guard = canonical.adapter._acquire_fleet_transaction_guard
+
+            def read(path: Path):
+                events.append("read")
+                # If resume reads before the guard, expose the stale prefix. A
+                # guarded read must observe the fresh on-disk two-operation prefix.
+                return stale_record if "lock" not in events else read_journal(path)
+
+            def acquire(path: Path):
+                events.append("lock")
+                return acquire_guard(path)
+
+            with mock.patch.object(
+                canonical.adapter, "_storage_first_read_journal", side_effect=read
+            ), mock.patch.object(
+                canonical.adapter, "_acquire_fleet_transaction_guard", side_effect=acquire
+            ):
+                self.fixture._canonical_resume(canonical, journal, transport)
+
+            self.assertLess(events.index("lock"), events.index("read"))
+            self.assertEqual(
+                transport.mutations,
+                ["rebuild:storage-205", "start:storage-205", "verify:storage-205"],
+            )
+        finally:
+            canonical.tearDown()
+
+    def test_runtime_sf_016_storage_apply_requires_callable_verify_before_provider_operations(self) -> None:
+        """The final read-only verify callback must be admitted up front."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            transport = StorageFirstCanonicalTransport(
+                canonical.adapter, canonical.plan
+            )
+            transport.verify = None
+            with self.assertRaises(Exception):
+                self.fixture._canonical_runner(canonical, transport)
+            self.assertEqual(transport.mutations, [])
+        finally:
+            canonical.tearDown()
+
     def test_runtime_sf_009_resume_rejects_receipt_operation_cursor_drift(self) -> None:
         receipt_transport = self.fixture._Transport()
         receipt_transport.plan = self.plan
