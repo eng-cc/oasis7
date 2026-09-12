@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use super::*;
 
 impl CognitionEconomyStateV1 {
@@ -64,6 +66,7 @@ impl CognitionEconomyStateV1 {
             ));
         }
         let mut previous_provision_digest = String::new();
+        let mut provision_event_ids = BTreeSet::new();
         let mut provision_bindings = BTreeMap::new();
         for (provision_id, record) in &self.provisions {
             if provision_id != &record.request.provision_id {
@@ -188,9 +191,20 @@ impl CognitionEconomyStateV1 {
                     "cognition_provisioning_journal_record_mismatch",
                 ));
             }
+            if !provision_event_ids.insert(event.request.provision_id.clone()) {
+                return Err(CognitionEconomyError::InvalidState(
+                    "cognition_provisioning_journal_cardinality_invalid",
+                ));
+            }
             previous_provision_digest.clone_from(&event.event_digest);
         }
-        if self.provisions.len() != self.provision_journal.len() {
+        if self.provisions.len() != self.provision_journal.len()
+            || provision_event_ids.len() != self.provisions.len()
+            || self
+                .provisions
+                .keys()
+                .any(|provision_id| !provision_event_ids.contains(provision_id))
+        {
             return Err(CognitionEconomyError::InvalidState(
                 "cognition_provisioning_journal_cardinality_invalid",
             ));

@@ -4,10 +4,10 @@ use super::*;
 use oasis7::geometry::GeoPos;
 use oasis7::runtime::{Action, ChainResourceDerivationContext, World as RuntimeWorld};
 use oasis7_node::{
-    NodeConsensusAction, NodeExecutionCommitContext, NodeExecutionHook,
-    NodeReplicatedExecutionInputV1, PROVIDER_BACKED_BOOTSTRAP_EXECUTION_INPUT_KIND,
-    REPLICATED_EXECUTION_INPUT_ACTION_ID, REPLICATED_EXECUTION_INPUT_SUBMITTER,
-    compute_consensus_action_root,
+    NodeConfig, NodeConsensusAction, NodeExecutionCommitContext, NodeExecutionHook,
+    NodeReplicatedExecutionInputV1, NodeRole, NodeRuntime,
+    PROVIDER_BACKED_BOOTSTRAP_EXECUTION_INPUT_KIND, REPLICATED_EXECUTION_INPUT_ACTION_ID,
+    REPLICATED_EXECUTION_INPUT_SUBMITTER, compute_consensus_action_root,
 };
 
 fn provider_bootstrap_fixture(
@@ -127,6 +127,79 @@ fn seed_predecessor_commit(
     let _ = fs::remove_dir_all(predecessor_world_dir);
     let _ = fs::remove_dir_all(predecessor_simulator_dir);
     let _ = fs::remove_file(predecessor_state_path);
+}
+
+#[test]
+fn provider_bootstrap_preflight_rejects_stale_bundle_before_queueing() {
+    let dir = temp_dir("provider-bootstrap-preflight");
+    let world_dir = dir.join("world");
+    let input = provider_bootstrap_fixture(world_dir.as_path());
+    let valid_path = dir.join("valid.json");
+    fs::write(
+        valid_path.as_path(),
+        serde_json::to_vec(&input).expect("encode valid provider authority"),
+    )
+    .expect("write valid provider authority");
+
+    let mut mismatches = Vec::new();
+    let mut world_mismatch = input.clone();
+    world_mismatch.world_id = "stale-world".to_string();
+    mismatches.push(("world", world_mismatch));
+    let mut owner_mismatch = input.clone();
+    owner_mismatch.owner_binding = "stale-owner".to_string();
+    mismatches.push(("owner", owner_mismatch));
+    let mut generation_mismatch = input.clone();
+    generation_mismatch.owner_generation = input.owner_generation.saturating_add(1);
+    mismatches.push(("generation", generation_mismatch));
+    let mut digest_mismatch = input.clone();
+    digest_mismatch.authority_digest = "stale-authority-digest".to_string();
+    mismatches.push(("digest", digest_mismatch));
+
+    for (label, mismatch) in mismatches {
+        let invalid_path = dir.join(format!("invalid-{label}.json"));
+        fs::write(
+            invalid_path.as_path(),
+            serde_json::to_vec(&mismatch).expect("encode invalid provider authority"),
+        )
+        .expect("write invalid provider authority");
+        let runtime = NodeRuntime::new(
+            NodeConfig::new("node-a", "bootstrap-world", NodeRole::Sequencer).expect("node config"),
+        );
+
+        let error = super::super::publish_provider_backed_bootstrap_from_paths(
+            &runtime,
+            world_dir.as_path(),
+            std::slice::from_ref(&invalid_path),
+        )
+        .expect_err("stale ProviderBacked authority must fail before queueing");
+        assert!(
+            error.contains("preflight rejected before consensus admission"),
+            "{label} mismatch should be rejected by preflight: {error}"
+        );
+
+        // A valid bundle can be admitted on the same runtime after the
+        // rejected attempt, proving the failed preflight did not leave a
+        // consensus action queued. The second valid submission then proves
+        // that the successful path did queue exactly one action.
+        super::super::publish_provider_backed_bootstrap_from_paths(
+            &runtime,
+            world_dir.as_path(),
+            std::slice::from_ref(&valid_path),
+        )
+        .expect("valid ProviderBacked authority should pass preflight");
+        let duplicate_error = super::super::publish_provider_backed_bootstrap_from_paths(
+            &runtime,
+            world_dir.as_path(),
+            std::slice::from_ref(&valid_path),
+        )
+        .expect_err("only one valid bootstrap action may be queued");
+        assert!(
+            duplicate_error.contains("already queued"),
+            "successful preflight should leave one queued action: {duplicate_error}"
+        );
+    }
+
+    let _ = fs::remove_dir_all(dir);
 }
 
 #[test]
