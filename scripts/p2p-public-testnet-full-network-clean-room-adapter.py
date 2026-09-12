@@ -5954,7 +5954,7 @@ def _storage_first_run(
                 "status": "storage-205-verified" if len(completed) == len(STORAGE_FIRST_OPERATIONS) else "storage-205-running",
                 "next_operation": STORAGE_FIRST_OPERATIONS[len(completed)] if len(completed) < len(STORAGE_FIRST_OPERATIONS) else "reconciliation-required",
                 "completed_operations": list(completed),
-                "receipt_operation_cursor": [*completed, operation],
+                "receipt_operation_cursor": list(completed),
                 "callback_started": False,
                 "callback_receipt": receipt,
                 "rollback_candidates": list(completed),
