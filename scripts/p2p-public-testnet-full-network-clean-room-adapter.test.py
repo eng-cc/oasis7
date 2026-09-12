@@ -6464,6 +6464,131 @@ class StorageFirstBlockchainP1RedTests(unittest.TestCase):
         finally:
             canonical.tearDown()
 
+    def test_ops_p1_storage_journal_cannot_alias_governance_root(self) -> None:
+        """Storage output paths must protect the code-owned governance root."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            trust_root = Path(canonical.adapter.CANONICAL_TRUST_ROOT_PATH)
+            trust_root_before = (
+                trust_root.read_bytes() if trust_root.is_file() else None
+            )
+            fixture_before = canonical.adapter.CANONICAL_TRUST_ROOT_FIXTURE_PATH.read_bytes()
+            prefix = self.fixture._canonical_prefix_journal(
+                canonical,
+                ["stop:storage-205"],
+                name="trust-root-resume-prefix.journal.json",
+            )
+            resume_record = json.loads(prefix.read_text(encoding="utf-8"))
+
+            def run_case(label, invoke, transport, reader=None):
+                effects = {"journal": 0, "lock": 0}
+
+                def trap(effect):
+                    def record(*args, **kwargs):
+                        effects[effect] += 1
+                        raise AssertionError(f"unexpected {effect} effect")
+
+                    return record
+
+                caught = None
+                with mock.patch.object(
+                    canonical.adapter,
+                    "_storage_first_journal_write",
+                    side_effect=trap("journal"),
+                ), mock.patch.object(
+                    canonical.adapter,
+                    "_write_journal",
+                    side_effect=trap("journal"),
+                ), mock.patch.object(
+                    canonical.adapter,
+                    "_acquire_fleet_transaction_guard",
+                    side_effect=trap("lock"),
+                ):
+                    reader_context = (
+                        mock.patch.object(
+                            canonical.adapter,
+                            "_storage_first_read_journal",
+                            side_effect=reader,
+                        )
+                        if reader is not None
+                        else mock.patch.object(
+                            canonical.adapter,
+                            "_storage_first_read_journal",
+                        )
+                    )
+                    with reader_context as read_journal:
+                        try:
+                            invoke()
+                        except Exception as error:
+                            caught = error
+
+                if trust_root_before is None:
+                    self.assertFalse(trust_root.exists())
+                else:
+                    self.assertEqual(trust_root.read_bytes(), trust_root_before)
+                self.assertFalse(Path(f"{trust_root}.lock").exists())
+                self.assertFalse(Path(f"{trust_root}.emergency.json").exists())
+                return {
+                    "caught": caught,
+                    "effects": effects,
+                    "operations": list(transport.operations),
+                    "mutations": list(transport.mutations),
+                    "read_calls": read_journal.call_count,
+                }
+
+            execute_transport = StorageFirstCanonicalTransport(
+                canonical.adapter, canonical.plan
+            )
+            execute_result = run_case(
+                "execute",
+                lambda: self.fixture._canonical_runner(
+                    canonical,
+                    execute_transport,
+                    journal_path=trust_root,
+                ),
+                execute_transport,
+            )
+
+            resume_transport = StorageFirstCanonicalTransport(
+                canonical.adapter, canonical.plan
+            )
+            resume_result = run_case(
+                "resume",
+                lambda: self.fixture._canonical_resume(
+                    canonical,
+                    trust_root,
+                    resume_transport,
+                ),
+                resume_transport,
+                reader=lambda path: resume_record,
+            )
+            for label, result, reader in (
+                ("execute", execute_result, None),
+                ("resume", resume_result, resume_record),
+            ):
+                with self.subTest(case=label):
+                    self.assertIsNotNone(
+                        result["caught"],
+                        f"{label} accepted a protected output alias",
+                    )
+                    self.assertEqual(result["effects"], {"journal": 0, "lock": 0})
+                    self.assertEqual(
+                        result["operations"], [],
+                        f"{label} reached provider callbacks",
+                    )
+                    self.assertEqual(
+                        result["mutations"], [],
+                        f"{label} reached provider mutation",
+                    )
+                    if reader is not None:
+                        self.assertEqual(result["read_calls"], 0)
+            self.assertEqual(
+                canonical.adapter.CANONICAL_TRUST_ROOT_FIXTURE_PATH.read_bytes(),
+                fixture_before,
+            )
+        finally:
+            canonical.tearDown()
+
     def test_p1_forged_persisted_receipt_bindings_cannot_survive_resume(self) -> None:
         canonical = self.fixture._canonical_fixture()
         try:
