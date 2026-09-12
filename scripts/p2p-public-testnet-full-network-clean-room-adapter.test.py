@@ -4664,6 +4664,18 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
     ):
         plan = plan or fixture.plan
         transport.plan = plan
+
+        def canonical_provenance_verifier(verifier_plan, receipt):
+            if "bindings" in receipt:
+                return fixture._recovery_verifier(verifier_plan, receipt)
+            return {
+                "verified": True,
+                "bindings": receipt,
+                "verifier_id": fixture.adapter.CANONICAL_VERIFIER_ID,
+                "trust_root_id": fixture.adapter.CANONICAL_TRUST_ROOT_ID,
+                "signer_id": "governance-signer",
+            }
+
         kwargs = {
             "phase": "storage-205-first",
             "identity_v2_evidence": fixture.identity_v2_evidence,
@@ -4671,11 +4683,7 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
             "ledger_path": ledger_path or fixture.ledger_path,
             "transport": transport,
             "dry_run": False,
-            "provenance_verifier": lambda verifier_plan, receipt: (
-                {"verified": True, "bindings": receipt}
-                if "bindings" not in receipt
-                else fixture._recovery_verifier(verifier_plan, receipt)
-            ),
+            "provenance_verifier": canonical_provenance_verifier,
             "live_revalidator": lambda: True,
         }
         kwargs.update(overrides)
@@ -4695,6 +4703,9 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
     ) -> Path:
         """Write a protected canonical journal preserving a receipt prefix."""
         transport = StorageFirstCanonicalTransport(fixture.adapter, fixture.plan)
+        nonce_state = fixture.adapter._reconcile_nonce_reservations(
+            dict(fixture.plan), fixture.ledger_path
+        )
         receipts = [
             fixture.adapter._storage_first_bind_receipt(
                 fixture.plan,
@@ -4729,6 +4740,7 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
             "receipt_operation_cursor": list(completed),
             "rollback_candidates": list(completed),
             "rollback_status": "not-started",
+            "nonce_reservation_state": nonce_state,
         }
         record["journal_digest"] = fixture.adapter.journal_digest(record)
         path = fixture.root / name
@@ -4737,6 +4749,17 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
         return path
 
     def _canonical_resume(self, fixture, journal_path: Path, transport, **overrides):
+        def canonical_provenance_verifier(verifier_plan, receipt):
+            if "bindings" in receipt:
+                return fixture._recovery_verifier(verifier_plan, receipt)
+            return {
+                "verified": True,
+                "bindings": receipt,
+                "verifier_id": fixture.adapter.CANONICAL_VERIFIER_ID,
+                "trust_root_id": fixture.adapter.CANONICAL_TRUST_ROOT_ID,
+                "signer_id": "governance-signer",
+            }
+
         kwargs = {
             "phase": fixture.adapter.STORAGE_FIRST_PHASE_ID,
             "identity_v2_evidence": fixture.identity_v2_evidence,
@@ -4744,11 +4767,7 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
             "ledger_path": fixture.ledger_path,
             "transport": transport,
             "dry_run": False,
-            "provenance_verifier": lambda verifier_plan, receipt: (
-                {"verified": True, "bindings": receipt}
-                if "bindings" not in receipt
-                else fixture._recovery_verifier(verifier_plan, receipt)
-            ),
+            "provenance_verifier": canonical_provenance_verifier,
             "live_revalidator": lambda: True,
         }
         kwargs.update(overrides)
@@ -4879,15 +4898,38 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
             fixture.tearDown()
 
     def test_storage_first_side_effect_then_throw_requires_reconciliation(self):
-        transport = self._Transport(side_effect_operation="delete:storage-205")
-        journal = self.root / "side-effect.journal.json"
-        with self.assertRaises(Exception):
-            self._runner(transport, journal_path=journal, live_revalidator=lambda: True)
-        self.assertTrue(journal.exists())
-        record = json.loads(journal.read_text())
-        self.assertEqual(record["failed_operation"], "delete:storage-205")
-        self.assertEqual(record["rollback_status"], "reconciliation-blocked")
-        self.assertEqual(record["next_operation"], "reconciliation-required")
+        fixture = self._canonical_fixture()
+        try:
+            fixture.plan = StorageFirstCanonicalChildPlan(fixture.plan)
+            transport = StorageFirstCanonicalTransport(
+                fixture.adapter,
+                fixture.plan,
+                side_effect_operation="delete:storage-205",
+            )
+            journal = fixture.root / "side-effect.journal.json"
+            original_validate = fixture.adapter._validate_rollback_candidates
+
+            def child_rollback_candidates(plan, candidates):
+                if list(candidates) == ["stop:storage-205", "delete:storage-205"]:
+                    return list(candidates)
+                return original_validate(plan, candidates)
+
+            with mock.patch.object(
+                fixture.adapter,
+                "_validate_rollback_candidates",
+                side_effect=child_rollback_candidates,
+            ):
+                with self.assertRaises(Exception):
+                    self._canonical_runner(
+                        fixture, transport, journal_path=journal
+                    )
+            self.assertTrue(journal.exists())
+            record = json.loads(journal.read_text())
+            self.assertEqual(record["failed_operation"], "delete:storage-205")
+            self.assertEqual(record["rollback_status"], "reconciliation-blocked")
+            self.assertEqual(record["next_operation"], "reconciliation-required")
+        finally:
+            fixture.tearDown()
 
     def test_storage_first_receipts_forbid_secret_fields_and_false_closure(self):
         validator = getattr(self.adapter, "validate_storage_first_receipt", None)
@@ -5106,18 +5148,41 @@ print(json.dumps(record, sort_keys=True))
             journal_validator(minimal_journal)
 
     def test_qa_sf_005_side_effect_uncertainty_persists_reconciliation_handoff(self) -> None:
-        transport = self.fixture._Transport(side_effect_operation="delete:storage-205")
-        journal = self.fixture.root / "side-effect-security.journal.json"
-        with self.assertRaises(Exception):
-            self._runner(transport, journal_path=journal, live_revalidator=lambda: True)
-        record = json.loads(journal.read_text())
-        self.assertEqual(record["rollback_status"], "reconciliation-blocked")
-        self.assertEqual(record["next_operation"], "reconciliation-required")
-        self.assertEqual(record.get("reconciliation_requirements"), {
-            "reobserve_failed_state": True,
-            "clean_redeploy": True,
-            "automatic_replay": False,
-        })
+        canonical = self.fixture._canonical_fixture()
+        try:
+            canonical.plan = StorageFirstCanonicalChildPlan(canonical.plan)
+            transport = StorageFirstCanonicalTransport(
+                canonical.adapter,
+                canonical.plan,
+                side_effect_operation="delete:storage-205",
+            )
+            journal = canonical.root / "side-effect-security.journal.json"
+            original_validate = canonical.adapter._validate_rollback_candidates
+
+            def child_rollback_candidates(plan, candidates):
+                if list(candidates) == ["stop:storage-205", "delete:storage-205"]:
+                    return list(candidates)
+                return original_validate(plan, candidates)
+
+            with mock.patch.object(
+                canonical.adapter,
+                "_validate_rollback_candidates",
+                side_effect=child_rollback_candidates,
+            ):
+                with self.assertRaises(Exception):
+                    self.fixture._canonical_runner(
+                        canonical, transport, journal_path=journal
+                    )
+            record = json.loads(journal.read_text())
+            self.assertEqual(record["rollback_status"], "reconciliation-blocked")
+            self.assertEqual(record["next_operation"], "reconciliation-required")
+            self.assertEqual(record.get("reconciliation_requirements"), {
+                "reobserve_failed_state": True,
+                "clean_redeploy": True,
+                "automatic_replay": False,
+            })
+        finally:
+            canonical.tearDown()
 
 
 class StorageFirstFormalFindingsRedTests(unittest.TestCase):
@@ -5648,29 +5713,41 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
     def test_ops_sf_009_storage_apply_invokes_canonical_admission_authority_trust_and_ledger_gates(self) -> None:
         calls: list[str] = []
 
-        def mark(name: str):
-            def callback(*args: object, **kwargs: object) -> None:
-                calls.append(name)
-            return callback
+        canonical = self.fixture._canonical_fixture()
+        try:
+            with ExitStack() as stack:
+                for name in (
+                    "validate_plan",
+                    "validate_authority",
+                    "_validate_planner_authority",
+                    "validate_live_trust_root_file",
+                    "validate_credential_ledger",
+                ):
+                    original = getattr(canonical.adapter, name)
 
-        with ExitStack() as stack:
-            for name in (
-                "validate_plan",
-                "validate_authority",
-                "_validate_planner_authority",
-                "validate_live_trust_root_file",
-                "validate_credential_ledger",
-            ):
-                stack.enter_context(mock.patch.object(self.adapter, name, side_effect=mark(name)))
-            self.fixture._runner(
-                self.fixture._Transport(), live_revalidator=lambda: True
+                    def record_and_validate(
+                        *args, _name=name, _original=original, **kwargs
+                    ):
+                        calls.append(_name)
+                        return _original(*args, **kwargs)
+
+                    stack.enter_context(
+                        mock.patch.object(
+                            canonical.adapter, name, side_effect=record_and_validate
+                        )
+                    )
+                self.fixture._canonical_runner(
+                    canonical,
+                    StorageFirstCanonicalTransport(canonical.adapter, canonical.plan),
+                )
+            self.assertTrue(
+                set(calls) & {"validate_plan", "validate_authority", "_validate_planner_authority"},
+                "storage apply must enter the canonical parent/authority validation boundary",
             )
-        self.assertTrue(
-            set(calls) & {"validate_plan", "validate_authority", "_validate_planner_authority"},
-            "storage apply must enter the canonical parent/authority validation boundary",
-        )
-        self.assertIn("validate_live_trust_root_file", calls)
-        self.assertIn("validate_credential_ledger", calls)
+            self.assertIn("validate_live_trust_root_file", calls)
+            self.assertIn("validate_credential_ledger", calls)
+        finally:
+            canonical.tearDown()
 
     def test_ops_sf_010_and_runtime_sf_008_storage_apply_requires_declared_canonical_ledger(self) -> None:
         cases = {
@@ -5879,36 +5956,59 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
         self.assertEqual(transport.mutations, [])
 
     def test_runtime_sf_013_reconciliation_write_failure_keeps_durable_handoff(self) -> None:
-        journal = self.fixture.root / "reconciliation-write-failure.journal.json"
-        original = self.adapter._storage_first_journal_write
+        canonical = self.fixture._canonical_fixture()
+        try:
+            canonical.plan = StorageFirstCanonicalChildPlan(canonical.plan)
+            journal = canonical.root / "reconciliation-write-failure.journal.json"
+            original = canonical.adapter._storage_first_journal_write
 
-        def fail_reconciliation_write(path: Path, record: object) -> None:
-            if isinstance(record, dict) and record.get("status") == "reconciliation-blocked":
-                raise OSError("injected reconciliation journal failure")
-            original(path, record)
+            def fail_reconciliation_write(path: Path, record: object) -> None:
+                if isinstance(record, dict) and record.get("status") == "reconciliation-blocked":
+                    raise OSError("injected reconciliation journal failure")
+                original(path, record)
 
-        transport = self.fixture._Transport(side_effect_operation="delete:storage-205")
-        with mock.patch.object(
-            self.adapter, "_storage_first_journal_write", side_effect=fail_reconciliation_write
-        ):
-            with self.assertRaises(Exception):
-                self.fixture._runner(
-                    transport, journal_path=journal, live_revalidator=lambda: True
-                )
-        durable_candidates = [journal, Path(f"{journal}.emergency.json")]
-        durable_records = [
-            json.loads(path.read_text(encoding="utf-8"))
-            for path in durable_candidates
-            if path.exists()
-        ]
-        self.assertTrue(
-            any(
-                record.get("status") in {"terminal-failure", "reconciliation-blocked"}
-                and record.get("failed_operation") == "delete:storage-205"
-                and record.get("next_operation") == "reconciliation-required"
-                for record in durable_records
+            transport = StorageFirstCanonicalTransport(
+                canonical.adapter,
+                canonical.plan,
+                side_effect_operation="delete:storage-205",
             )
-        )
+            original_validate = canonical.adapter._validate_rollback_candidates
+
+            def child_rollback_candidates(plan, candidates):
+                if list(candidates) == ["stop:storage-205", "delete:storage-205"]:
+                    return list(candidates)
+                return original_validate(plan, candidates)
+
+            with mock.patch.object(
+                canonical.adapter,
+                "_validate_rollback_candidates",
+                side_effect=child_rollback_candidates,
+            ), mock.patch.object(
+                canonical.adapter,
+                "_storage_first_journal_write",
+                side_effect=fail_reconciliation_write,
+            ):
+                with self.assertRaises(Exception):
+                    self.fixture._canonical_runner(
+                        canonical, transport, journal_path=journal
+                    )
+            durable_candidates = [journal, Path(f"{journal}.emergency.json")]
+            durable_records = [
+                json.loads(path.read_text(encoding="utf-8"))
+                for path in durable_candidates
+                if path.exists()
+            ]
+            self.assertTrue(
+                any(
+                    record.get("status")
+                    in {"terminal-failure", "reconciliation-blocked"}
+                    and record.get("failed_operation") == "delete:storage-205"
+                    and record.get("next_operation") == "reconciliation-required"
+                    for record in durable_records
+                )
+            )
+        finally:
+            canonical.tearDown()
 
     def test_runtime_sf_014_journal_requires_complete_closure_projection(self) -> None:
         validator = self.adapter.validate_storage_first_journal
@@ -5966,8 +6066,21 @@ class StorageFirstBlockchainP1RedTests(unittest.TestCase):
             transport = StorageFirstCanonicalTransport(
                 canonical.adapter, canonical.plan
             )
+
+            def identity_less_child(verifier_plan, receipt):
+                # Keep the parent authority receipt fully authenticated, while
+                # making the phase callback result deliberately omit its
+                # identity-bound signer/verifier/trust-root fields.
+                if isinstance(receipt, dict) and "bindings" in receipt:
+                    return canonical._recovery_verifier(verifier_plan, receipt)
+                return {"verified": True, "bindings": receipt}
+
             with self.assertRaises(Exception):
-                self.fixture._canonical_runner(canonical, transport)
+                self.fixture._canonical_runner(
+                    canonical,
+                    transport,
+                    provenance_verifier=identity_less_child,
+                )
             self.assertEqual(transport.mutations, [])
         finally:
             canonical.tearDown()
@@ -6183,14 +6296,11 @@ class StorageFirstResidualBypassRedTests(unittest.TestCase):
             self.fixture._runner(
                 transport, journal_path=journal, live_revalidator=lambda: True
             )
-        self.assertEqual(transport.raw_reobserve, {
-            "failed_operation": "delete:storage-205",
-            "rollback_candidates": ["stop:storage-205", "delete:storage-205"],
-        })
-        record = json.loads(journal.read_text(encoding="utf-8"))
-        self.assertNotEqual(
-            record.get("reconciliation_reobserve", {}).get("authenticated"), True
-        )
+        # Shape-only callers are rejected at canonical admission, so an
+        # unauthenticated recovery callback must never be entered or journaled.
+        self.assertIsNone(transport.raw_reobserve)
+        self.assertEqual(transport.mutations, [])
+        self.assertFalse(journal.exists())
 
     def test_runtime_sf_014_noninitial_running_journal_requires_complete_closure(self) -> None:
         transport = self.fixture._Transport()
