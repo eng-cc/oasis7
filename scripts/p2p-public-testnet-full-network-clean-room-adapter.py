@@ -36,6 +36,7 @@ import importlib.util
 import json
 import ntpath
 import os
+from collections.abc import Sequence
 from pathlib import Path, PurePosixPath
 import posixpath
 import re
@@ -4553,6 +4554,25 @@ def _storage_first_require_concrete_plan(plan: Mapping[str, Any]) -> None:
     """Reject caller-defined Mapping views before entering storage apply."""
     if type(plan) is not dict:
         _fail("storage-first plan must be a concrete adapter plan object")
+
+    def require_exact_containers(value: Any) -> None:
+        # Only traverse containers whose built-in implementations we have
+        # established. This avoids invoking attacker-controlled ``items``,
+        # iteration, or deepcopy hooks while checking the public plan tree.
+        if type(value) is dict:
+            for child in value.values():
+                require_exact_containers(child)
+            return
+        if type(value) is list:
+            for child in value:
+                require_exact_containers(child)
+            return
+        if isinstance(value, Mapping):
+            _fail("storage-first plan contains a non-concrete nested mapping")
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+            _fail("storage-first plan contains a non-concrete sequence")
+
+    require_exact_containers(plan)
 
 
 def _storage_first_child_projection(
