@@ -10,10 +10,9 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
     clear_runtime_provider_env();
     let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
     let decision_count = Arc::new(Mutex::new(0_usize));
-    // A completed stale replan can overlap with the next async request: the
-    // control pass may start decision #3 while it drains the durable Wait
-    // feedback. Keep capacity for that in-flight request and its feedback
-    // instead of making correctness depend on listener scheduling.
+    // Keep capacity for the stale rejection and replan Wait feedback. The
+    // bounded listener must outlive any request already in flight while the
+    // test observes the durable result.
     let base_url = spawn_runtime_live_mock_http_server(8, {
         let recorded = Arc::clone(&recorded);
         let decision_count = Arc::clone(&decision_count);
@@ -143,22 +142,13 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
     let mut session = RuntimeLiveSession::new();
     session.playing = true;
 
-    let mut stale_feedback_seen = false;
-    let mut replan_request_seen = false;
-    let poll_deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    while std::time::Instant::now() < poll_deadline {
-        server
-            .advance_runtime(&mut session, &mut writer, "play", 1, None, false)
-            .expect("stale provider response should be handled");
+    let read_progress = |world: &crate::runtime::World| {
         let recorded = recorded.lock().expect("recorded lock");
-        let decisions: Vec<crate::simulator::ContinuousAgentRequestContextV1> = recorded
+        let decisions = recorded
             .iter()
             .filter(|request| request.path == "/v1/world-simulator/decision-context")
-            .map(|request| {
-                serde_json::from_slice(request.body.as_slice()).expect("decode decision request")
-            })
-            .collect();
-        stale_feedback_seen = recorded
+            .count();
+        let stale_feedback_seen = recorded
             .iter()
             .filter(|request| request.path == "/v1/world-simulator/feedback-context")
             .map(|request| {
@@ -184,13 +174,51 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
                 feedback.status == "pending"
                     && feedback.reject_reason.as_deref() == Some("retry_scheduled")
             });
-        replan_request_seen = decisions.len() >= 2;
-        if stale_feedback_seen && replan_request_seen && wait_feedback_seen {
-            break;
+        let wait_scheduled = world
+            .cognition()
+            .get("cognition_journal")
+            .and_then(|journal| journal.get("events"))
+            .and_then(serde_json::Value::as_array)
+            .is_some_and(|events| {
+                events.iter().any(|event| {
+                    event.get("event_kind").and_then(serde_json::Value::as_str)
+                        == Some("ContinuationScheduled")
+                        && event.get("agent_id").and_then(serde_json::Value::as_str)
+                            == Some("agent-0")
+                })
+            });
+        (
+            stale_feedback_seen,
+            decisions >= 2,
+            wait_feedback_seen,
+            wait_scheduled,
+        )
+    };
+    let poll_deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while std::time::Instant::now() < poll_deadline {
+        let (stale_feedback_seen, replan_request_seen, wait_feedback_seen, wait_scheduled) =
+            read_progress(&server.world);
+        if stale_feedback_seen && replan_request_seen {
+            if wait_feedback_seen {
+                break;
+            }
+            if wait_scheduled {
+                // The provider outcome has already been admitted durably.
+                // Wait for its feedback request without advancing into the
+                // continuation's next Runtime turn.
+                std::thread::sleep(std::time::Duration::from_millis(5));
+                continue;
+            }
+            // The actor may still be completing its request. Continue
+            // polling until the durable Wait admission is visible.
         }
-        drop(recorded);
+        server
+            .advance_runtime(&mut session, &mut writer, "play", 1, None, false)
+            .expect("stale provider response should be handled");
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
+    let (stale_feedback_seen, replan_request_seen, wait_feedback_seen, _wait_scheduled) =
+        read_progress(&server.world);
     // No provider work remains after the bounded poll. Release the process
     // environment lock before inspecting the recorded evidence so a later
     // assertion failure cannot poison the shared test lock and cascade.
