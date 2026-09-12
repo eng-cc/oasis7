@@ -196,6 +196,7 @@ run_operational_contract_tests() {
   run python3 ./scripts/pm/workflow-bootstrap-fallback.test.py
   run python3 ./scripts/pm/loop-policy.test.py
   run python3 ./scripts/pm/loop-contracts.test.py
+  run python3 ./scripts/pm/loop-traceability.test.py
   run python3 ./scripts/pm/loop_terminal.test.py
   run python3 ./scripts/pm/loop.test.py
   run python3 ./scripts/pm/loop-gate.test.py

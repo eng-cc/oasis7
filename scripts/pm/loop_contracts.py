@@ -6,16 +6,20 @@ No background revocation listener or automatic downstream task is created.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import re
 import subprocess
+import sys
 
 REPOSITORY = "eng-cc/oasis7"
 SCHEMA = "oasis7.loop-contract/v1"
 MARKER = "oasis7-loop-contract"
 OID = re.compile(r"[0-9a-f]{40}\Z")
 UID = re.compile(r"task_[0-9a-f]{32}\Z")
+DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
+FRAGMENT = re.compile(r"[^\s#\x00-\x1f]+\Z")
 
 
 def canonical(value):
@@ -40,6 +44,255 @@ def git(root, *args):
 
 def safe_path(path):
     return isinstance(path,str) and bool(path) and not path.startswith("/") and "\\" not in path and not any(ord(c)<32 for c in path) and not any(p in {"", ".", ".."} for p in path.split("/")) and not re.match(r"^[A-Za-z]:",path)
+
+
+def safe_fragment(fragment):
+    """Accept a repository-stable fragment without interpreting URL syntax."""
+    return (isinstance(fragment, str) and bool(fragment.strip())
+            and "/" not in fragment and bool(FRAGMENT.fullmatch(fragment.strip())))
+
+
+def _markdown_contract_checker():
+    """Load the repository's anchor implementation, rather than parsing twice."""
+    scripts = Path(__file__).resolve().parents[1]
+    checker_path = scripts / "product-doc-content-check.py"
+    if not checker_path.is_file():
+        raise ValueError("shared product-document fragment parser unavailable")
+    scripts_text = str(scripts)
+    if scripts_text not in sys.path:
+        sys.path.insert(0, scripts_text)
+    spec = importlib.util.spec_from_file_location("oasis7_product_doc_content_check", checker_path)
+    if spec is None or spec.loader is None:
+        raise ValueError("shared product-document fragment parser unavailable")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _fragment_occurrences(text, fragment):
+    """Return parser-recognized occurrences for duplicate and missing checks."""
+    checker = _markdown_contract_checker()
+    wanted = fragment.strip().lower()
+    matches = [
+        (anchor, line)
+        for anchor, line in checker.actual_anchor_occurrences(text)
+        if anchor.strip().lower() == wanted
+    ]
+    # An explicit HTML anchor is authoritative even when it precedes a
+    # heading whose GitHub slug happens to be identical.
+    if matches:
+        return matches
+    # CommonMark heading fragments are part of the adopted parser contract.
+    visible = "\n".join(line for _, line in checker.visible_lines(text))
+    for line_number, line in enumerate(visible.splitlines(), start=1):
+        match = re.match(r"^ {0,3}#{1,6}\s+(.+?)\s*#*\s*$", line)
+        if match and checker.github_heading_slug(match.group(1)) == wanted:
+            matches.append((fragment, line_number))
+    return matches
+
+
+def resolve_frozen_fragment(root, commit, path, fragment):
+    """Resolve one path/fragment against one immutable commit.
+
+    The returned bytes are the exact committed object.  A missing or ambiguous
+    anchor is an error; callers must not fall back to worktree content.
+    """
+    if not OID.fullmatch(commit or "") or not safe_path(path) or not safe_fragment(fragment):
+        raise ValueError("invalid immutable contract path or fragment")
+    entry = git(root, "ls-tree", commit, "--", path)
+    if not entry.startswith(b"100644 blob "):
+        raise ValueError(f"contract content must be regular non-executable file: {path}")
+    raw = git(root, "show", f"{commit}:{path}")
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"contract content is not UTF-8: {path}#{fragment}") from exc
+    occurrences = _fragment_occurrences(text, fragment)
+    if not occurrences:
+        raise ValueError(f"unresolved immutable contract fragment: {path}#{fragment}")
+    if len(occurrences) > 1:
+        lines = ", ".join(str(line) for _anchor, line in occurrences)
+        raise ValueError(f"ambiguous immutable contract fragment: {path}#{fragment} (lines {lines})")
+    return raw
+
+
+def coordination_ref_errors(reference):
+    """Validate the additive immutable coordinating-record locator."""
+    if not isinstance(reference, dict):
+        return ["coordination_ref must be an object"]
+    errors = []
+    if reference.get("repository") != REPOSITORY:
+        errors.append("coordination_ref repository must be canonical")
+    if type(reference.get("issue_number")) is not int or reference["issue_number"] < 1:
+        errors.append("coordination_ref issue_number must be positive")
+    if type(reference.get("comment_id")) is not int or reference["comment_id"] < 1:
+        errors.append("coordination_ref comment_id must be positive")
+    if not isinstance(reference.get("record_digest"), str) or not DIGEST.fullmatch(reference["record_digest"]):
+        errors.append("coordination_ref record_digest must be sha256")
+    if "source_commit" in reference and (not isinstance(reference["source_commit"], str) or not OID.fullmatch(reference["source_commit"])):
+        errors.append("coordination_ref source_commit must be an immutable commit OID")
+    return errors
+
+
+def consumed_clause_ref_errors(reference, *, require_identity=False):
+    """Validate one path-qualified consumed clause reference shape."""
+    if not isinstance(reference, dict):
+        return ["consumed clause reference must be an object"]
+    errors = []
+    if reference.get("repository") != REPOSITORY:
+        errors.append("consumed clause repository must be canonical")
+    if not safe_path(reference.get("path")):
+        errors.append("consumed clause path must be repository-relative")
+    if not safe_fragment(reference.get("fragment")):
+        errors.append("consumed clause fragment must be stable")
+    if not isinstance(reference.get("clause_id"), str) or not reference["clause_id"].strip():
+        errors.append("consumed clause_id must be non-empty text")
+    if require_identity:
+        if not isinstance(reference.get("contract_id"), str) or not reference["contract_id"].strip():
+            errors.append("consumed clause contract_id is required for bound input")
+        if type(reference.get("revision")) is not int or reference["revision"] < 1:
+            errors.append("consumed clause revision is required for bound input")
+        if not isinstance(reference.get("contract_digest"), str) or not DIGEST.fullmatch(reference["contract_digest"]):
+            errors.append("consumed clause contract_digest is required for bound input")
+        publication = reference.get("publication_ref")
+        if not isinstance(publication, dict) or any(type(publication.get(key)) is not int or publication[key] < 1 for key in ("issue_number", "comment_id")):
+            errors.append("consumed clause publication_ref is required for bound input")
+    elif "contract_digest" in reference and (not isinstance(reference["contract_digest"], str) or not DIGEST.fullmatch(reference["contract_digest"])):
+        errors.append("consumed clause contract_digest must be sha256")
+    return errors
+
+
+def _content_clause_index(contract):
+    """Index every declared clause while retaining all path candidates."""
+    index = {}
+    for item in contract.get("content_refs", []):
+        if not isinstance(item, dict):
+            continue
+        path = item.get("path")
+        fragments = item.get("fragments") if isinstance(item.get("fragments"), dict) else {}
+        default_fragment = item.get("fragment")
+        for clause in item.get("clauses", []):
+            if not isinstance(clause, str) or not clause.strip():
+                continue
+            fragment = fragments.get(clause, default_fragment)
+            index.setdefault(clause, []).append({"path": path, "fragment": fragment})
+    return index
+
+
+def _content_ref_for_clause(contract, path, clause_id):
+    """Return the uniquely matching immutable content declaration, if any."""
+    matches = [
+        item for item in contract.get("content_refs", [])
+        if isinstance(item, dict)
+        and item.get("path") == path
+        and clause_id in item.get("clauses", [])
+    ]
+    if len(matches) == 1:
+        item = matches[0]
+        fragments = item.get("fragments") if isinstance(item.get("fragments"), dict) else {}
+        return item, fragments.get(clause_id, item.get("fragment"))
+    return None, None
+
+
+def _publication_matches(left, right):
+    if not isinstance(left, dict) or not isinstance(right, dict):
+        return False
+    if left.get("issue_number") != right.get("issue_number") or left.get("comment_id") != right.get("comment_id"):
+        return False
+    # Historical input references omitted repository because the contract's
+    # publication reader already fixed it. New path refs may repeat it.
+    return left.get("repository", REPOSITORY) == REPOSITORY and right.get("repository", REPOSITORY) == REPOSITORY
+
+
+def validate_consumed_clause_refs(
+    contract,
+    reference,
+    *,
+    root=None,
+    bound=False,
+):
+    """Validate legacy and path-qualified clauses against frozen contract bytes.
+
+    Bare strings remain a compatibility format for unbound legacy consumers. A
+    bound reference must carry one path/fragment object per consumed clause and
+    inherit the immutable publication identity from its input reference.
+    """
+    errors = []
+    if not isinstance(contract, dict) or not isinstance(reference, dict):
+        return ["invalid contract clause consumption"]
+    index = _content_clause_index(contract)
+    bare = reference.get("consumed_clauses")
+    qualified = reference.get("consumed_clause_refs")
+    if bare is not None and (
+        not isinstance(bare, list)
+        or not bare
+        or any(not isinstance(clause, str) or not clause.strip() for clause in bare)
+        or len(set(bare)) != len(bare)
+    ):
+        errors.append("consumed clauses must be unique non-empty identifiers")
+        bare = []
+    if qualified is not None and (not isinstance(qualified, list) or not qualified):
+        errors.append("consumed clause refs must be a non-empty list")
+        qualified = []
+    if not bare and not qualified:
+        errors.append("consumed clauses or refs are required")
+    if bound and not qualified:
+        errors.append("bound contract consumption requires path-qualified consumed clause refs")
+    if qualified:
+        identities = [
+            repr((item.get("path"), item.get("fragment"), item.get("clause_id")))
+            for item in qualified if isinstance(item, dict)
+        ]
+        if len(set(identities)) != len(qualified):
+            errors.append("duplicate consumed clause refs")
+        for item in qualified:
+            errors.extend(consumed_clause_ref_errors(item, require_identity=bound))
+            if not isinstance(item, dict):
+                continue
+            clause_id = item.get("clause_id")
+            candidates = index.get(clause_id, [])
+            if not candidates:
+                errors.append(f"unapproved consumed contract clause: {item.get('path')}#{item.get('fragment')}")
+                continue
+            declaration, declared_fragment = _content_ref_for_clause(contract, item.get("path"), clause_id)
+            if declaration is None:
+                paths = ", ".join(sorted({candidate.get("path", "") for candidate in candidates}))
+                errors.append(f"consumed clause path mismatch or ambiguous ID {clause_id}: {paths}")
+                continue
+            if declared_fragment is not None and item.get("fragment") != declared_fragment:
+                errors.append(f"consumed clause fragment mismatch: {item.get('path')}#{item.get('fragment')}")
+            if bound:
+                if item.get("contract_id") != reference.get("contract_id"):
+                    errors.append(f"consumed clause contract identity mismatch: {item.get('path')}#{item.get('fragment')}")
+                if item.get("revision") != reference.get("revision"):
+                    errors.append(f"consumed clause revision mismatch: {item.get('path')}#{item.get('fragment')}")
+                if item.get("contract_digest") != reference.get("contract_digest"):
+                    errors.append(f"consumed clause digest mismatch: {item.get('path')}#{item.get('fragment')}")
+                if not _publication_matches(item.get("publication_ref"), reference.get("publication_ref")):
+                    errors.append(f"consumed clause publication mismatch: {item.get('path')}#{item.get('fragment')}")
+            if root is not None and safe_fragment(item.get("fragment")):
+                for commit in (contract.get("source_head"), contract.get("merged_head")):
+                    try:
+                        raw = resolve_frozen_fragment(root, commit, item["path"], item["fragment"])
+                        expected = declaration.get("sha256")
+                        if isinstance(expected, str) and "sha256:" + hashlib.sha256(raw).hexdigest() != expected:
+                            errors.append(f"approved/published content mismatch: {item['path']}")
+                    except (ValueError, OSError) as exc:
+                        errors.append(str(exc))
+        if bare is not None:
+            qualified_ids = [item.get("clause_id") for item in qualified if isinstance(item, dict)]
+            if sorted(qualified_ids) != sorted(bare):
+                errors.append("consumed clause refs must be one-to-one with consumed clauses")
+    elif bare:
+        for clause_id in bare:
+            candidates = index.get(clause_id, [])
+            if len(candidates) > 1:
+                paths = ", ".join(sorted({candidate.get("path", "") for candidate in candidates}))
+                errors.append(f"ambiguous bare consumed clause {clause_id}; path-qualified refs required: {paths}")
+            elif len(candidates) == 0:
+                errors.append("unapproved or duplicate consumed clauses")
+    return errors
 
 
 def ensure_contract_objects(root, contract):
@@ -99,18 +352,37 @@ def validate_contract_record(contract, root, pr):
         return errors+["contract content references required"]
     seen=set()
     for ref in refs:
-        if not isinstance(ref,dict) or not safe_path(ref.get("path")) or ref["path"] in seen:
+        ref_errors = []
+        if not isinstance(ref,dict) or not safe_path(ref.get("path")) or ref.get("path") in seen:
             errors.append("unsafe or duplicate content path")
             continue
         seen.add(ref["path"])
-        if not isinstance(ref.get("clauses"),list) or not ref["clauses"] or any(not isinstance(c,str) or not c.strip() for c in ref["clauses"]) or len(set(ref["clauses"]))!=len(ref["clauses"]):
+        clauses = ref.get("clauses")
+        valid_clauses = isinstance(clauses, list) and bool(clauses) and all(
+            isinstance(clause, str) and bool(clause.strip()) for clause in clauses
+        )
+        if not valid_clauses or len(set(clauses)) != len(clauses):
             errors.append("content clauses must be explicit unique identifiers")
+        if "fragment" in ref and not safe_fragment(ref.get("fragment")):
+            ref_errors.append("invalid content fragment: " + str(ref.get("path")))
+        fragments = ref.get("fragments")
+        if fragments is not None and (
+            not isinstance(fragments, dict)
+            or not fragments
+            or any(not isinstance(clause, str) or not isinstance(fragment, str) or not safe_fragment(fragment)
+                   for clause, fragment in fragments.items())
+            or any(clause not in (clauses if isinstance(clauses, list) else []) for clause in fragments)
+        ):
+            ref_errors.append("invalid content clause fragments: " + str(ref.get("path")))
         if not isinstance(ref.get("sha256"),str) or not re.fullmatch(r"sha256:[0-9a-f]{64}",ref["sha256"]):
             errors.append("invalid content digest")
             continue
-        if errors:
+        if ref_errors:
+            errors.extend(ref_errors)
             continue
         try:
+            if not all(isinstance(contract.get(key), str) and OID.fullmatch(contract[key]) for key in ("source_head", "merged_head")):
+                continue
             for key in ("source_head","merged_head"):
                 entry=git(root,"ls-tree",contract[key],"--",ref["path"])
                 if not entry.startswith(b"100644 blob "):
@@ -118,6 +390,11 @@ def validate_contract_record(contract, root, pr):
                 raw=git(root,"show",contract[key]+":"+ref["path"])
                 if "sha256:"+hashlib.sha256(raw).hexdigest()!=ref["sha256"]:
                     errors.append("approved/published content mismatch: "+ref["path"])
+                declared_fragments = ref.get("fragments", {}) if isinstance(ref.get("fragments"), dict) else {}
+                for clause in ref.get("clauses", []):
+                    fragment = declared_fragments.get(clause, ref.get("fragment"))
+                    if fragment is not None:
+                        resolve_frozen_fragment(root, contract[key], ref["path"], fragment)
         except (ValueError,OSError) as exc:
             errors.append(str(exc))
     return errors
@@ -265,10 +542,21 @@ def validate_contracts(tool_root,target_repo_root,binding,authority_reader=None,
             errors.extend(validate_contract_record(contract,target_repo_root,record.get("pr",{})))
             if contract.get("eligibility",{}).get(purpose) is not True:
                 errors.append("contract withdrawn or ineligible for "+purpose)
-            clauses=reference.get("consumed_clauses")
-            allowed={c for item in contract.get("content_refs",[]) for c in item.get("clauses",[])}
-            if not isinstance(clauses,list) or not clauses or any(not isinstance(c,str) or c not in allowed for c in clauses) or len(set(clauses))!=len(clauses):
-                errors.append("unapproved or duplicate consumed clauses")
+            bound = ("coordination_ref" in binding and binding.get("coordination_ref") is not None) or "consumed_clause_refs" in reference or "consumed_clause_refs" in binding
+            clause_reference = dict(reference)
+            if "consumed_clause_refs" not in clause_reference and isinstance(binding.get("consumed_clause_refs"), list):
+                # A task-level projection is unambiguous only for one input;
+                # multiple contracts must carry refs on each input object.
+                if len(binding["input_contracts"]) != 1:
+                    errors.append("task-level consumed clause refs are ambiguous across input contracts")
+                else:
+                    clause_reference["consumed_clause_refs"] = binding["consumed_clause_refs"]
+            errors.extend(validate_consumed_clause_refs(
+                contract,
+                clause_reference,
+                root=target_repo_root,
+                bound=bound,
+            ))
             if binding.get("target_delivery") not in contract.get("scope",[]):
                 errors.append("contract does not cover target delivery")
             if key not in visited:
@@ -308,6 +596,25 @@ def publish_contract(tool_root,target_repo_root,binding,contract,authority_reade
             return upstream
         publication=(reader.publish(binding,contract,before_write=before_write) if before_write is not None else reader.publish(binding,contract))
         reference={"contract_id":contract["contract_id"],"revision":contract["revision"],"contract_digest":contract_digest(contract),"publication_ref":publication,"consumed_clauses":[c for item in contract["content_refs"] for c in item["clauses"]]}
+        qualified = []
+        for item in contract["content_refs"]:
+            fragments = item.get("fragments", {}) if isinstance(item.get("fragments"), dict) else {}
+            fragment = item.get("fragment")
+            for clause_id in item["clauses"]:
+                resolved = fragments.get(clause_id, fragment)
+                if resolved is not None:
+                    qualified.append({
+                        "repository": REPOSITORY,
+                        "path": item["path"],
+                        "fragment": resolved,
+                        "clause_id": clause_id,
+                        "contract_id": contract["contract_id"],
+                        "revision": contract["revision"],
+                        "contract_digest": contract_digest(contract),
+                        "publication_ref": {"repository": REPOSITORY, **publication},
+                    })
+        if qualified:
+            reference["consumed_clause_refs"] = qualified
         checked=validate_contracts(tool_root,target_repo_root,{**binding,"input_contracts":[reference]},reader,purpose="new_tasks")
         return {**checked,"publication_ref":publication,"input_contract":reference}
     except (ValueError,OSError,KeyError,TypeError) as exc:

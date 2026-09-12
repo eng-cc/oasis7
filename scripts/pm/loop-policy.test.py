@@ -129,6 +129,20 @@ class PolicyTests(unittest.TestCase):
         del self.binding["manual_request_ref"]
         self.assertEqual(self.api.validate_binding(self.binding)["status"], "blocked")
 
+    def test_optional_coordination_and_path_clause_refs_are_additive(self):
+        self.assertEqual(self.api.validate_binding(self.binding)["status"], "passed")
+        self.binding["coordination_ref"] = {
+            "repository": "eng-cc/oasis7", "issue_number": 3671,
+            "comment_id": 5636938574, "record_digest": "sha256:" + "1" * 64,
+        }
+        self.binding["consumed_clause_refs"] = [{
+            "repository": "eng-cc/oasis7", "path": "doc/engineering/spec.md",
+            "fragment": "section-1", "clause_id": "section-1",
+        }]
+        self.assertEqual(self.api.validate_binding(self.binding)["status"], "passed")
+        self.binding["consumed_clause_refs"][0]["path"] = "../outside.md"
+        self.assertEqual(self.api.validate_binding(self.binding)["status"], "blocked")
+
     def test_policy_digest_drift_rejected(self):
         self.binding["policy_digest"] = "sha256:" + "0"*64
         self.write("doc/product/a.md", "changed")

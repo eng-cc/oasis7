@@ -2,6 +2,7 @@
 """Manual single-task facade. No task discovery, scheduler, or action replay."""
 import argparse
 import hashlib
+import inspect
 import importlib.util
 import json
 from pathlib import Path
@@ -11,6 +12,9 @@ import sys
 
 from loop_recovery import Busy, Reservation, common_dir, recovery_status, reconcile, record_action
 from loop_gate import live_binding
+
+
+TRACEABILITY_BOUNDARY_COMMANDS = {'bind', 'resume-check', 'doctor'}
 
 
 def _git(root, *args):
@@ -119,6 +123,11 @@ def _trusted_module(root, target, binding, name):
     return module
 
 
+def trusted_module(root, target, binding, name):
+    """Expose the single pinned-loader boundary to lifecycle callers."""
+    return _trusted_module(root, target, binding, name)
+
+
 def dependency_issue(repository, uid):
     # Search results are locators, not identity; a full window is not complete.
     hits = json.loads(subprocess.check_output(['gh', 'issue', 'list', '-R', repository, '--state', 'all', '--search', uid + ' in:body', '--json', 'number', '--limit', '100'], text=True))
@@ -186,6 +195,124 @@ def validate_task(root, task, tool_root, base=None, head=None, contracts=True, p
         return {'status': 'blocked', 'blockers': [str(exc)]}
 
 
+def _traceability_adapter(tool_root, target_root, binding, effective_tool_commit):
+    """Load the traceability preflight from the pinned effective helper root."""
+    if effective_tool_commit != binding.get('policy_commit'):
+        raise ValueError('effective tool commit does not match loop binding policy_commit')
+    return _trusted_module(tool_root, target_root, binding, 'loop_traceability')
+
+
+def _traceability_preflight(adapter, command, *, binding, target_root,
+                            effective_tool_commit, record_source_commit):
+    """Invoke the core's live leaf adapter without introducing a second validator.
+
+    ``loop_traceability`` owns record parsing, live GitHub readback, and all
+    checker semantics.  The facade only selects its stable preflight adapter;
+    fixture readers are intentionally unavailable on this production path.
+    """
+    preflight = getattr(adapter, 'preflight_leaf', None)
+    if callable(preflight):
+        return _invoke_traceability_preflight(
+            preflight,
+            command,
+            binding=binding,
+            target_root=target_root,
+            effective_tool_commit=effective_tool_commit,
+            record_source_commit=record_source_commit,
+        )
+    # Keep a narrow compatibility spelling for the first merged core adapter;
+    # this is an adapter call, not a duplicate validation implementation.
+    preflight = getattr(adapter, 'validate_leaf_admission', None)
+    if callable(preflight):
+        return _invoke_traceability_preflight(
+            preflight,
+            command,
+            binding=binding,
+            target_root=target_root,
+            effective_tool_commit=effective_tool_commit,
+            record_source_commit=record_source_commit,
+        )
+    raise ValueError('effective traceability helper lacks preflight_leaf adapter')
+
+
+def _invoke_traceability_preflight(preflight, command, *, binding, target_root,
+                                   effective_tool_commit, record_source_commit):
+    """Call either the split-identity adapter or its first merged spelling."""
+    try:
+        parameters = inspect.signature(preflight).parameters
+    except (TypeError, ValueError):
+        parameters = {}
+    if 'effective_tool_commit' in parameters or 'record_source_commit' in parameters:
+        return preflight(
+            command,
+            binding=binding,
+            target_root=target_root,
+            effective_tool_commit=effective_tool_commit,
+            record_source_commit=record_source_commit,
+        )
+    return preflight(
+        command,
+        binding=binding,
+        target_root=target_root,
+        source_commit=record_source_commit,
+    )
+
+
+def pre_mutation_admission(command, *, binding, target_root, effective_tool_root,
+                           source_commit=None, effective_tool_commit=None,
+                           record_source_commit=None, traceability_loader=None,
+                           mutation=None):
+    """Run bound traceability admission before a lifecycle mutation.
+
+    The gate is deliberately a small ordering boundary.  A legacy/unbound
+    task keeps its existing behavior; a bound task must load the helper from
+    the pinned effective checkout and pass the core's live preflight before
+    the supplied mutation callback is invoked.
+    """
+    if command not in TRACEABILITY_BOUNDARY_COMMANDS:
+        raise ValueError('unsupported pre-mutation admission command: ' + str(command))
+    if not isinstance(binding, dict):
+        raise ValueError('pre-mutation admission requires loop binding')
+    callback = mutation or (lambda: None)
+    # Ordinary legacy leaf lifecycle behavior remains unchanged.  A caller
+    # cannot opt into a bound path by supplying a free-form flag.
+    if binding.get('coordination_ref') is None:
+        return callback()
+    if effective_tool_root is None:
+        raise ValueError('bound traceability admission requires effective --tool-root')
+    effective_tool_commit = effective_tool_commit or source_commit or binding.get('policy_commit')
+    coordination_ref = binding.get('coordination_ref')
+    if record_source_commit is None and isinstance(coordination_ref, dict):
+        record_source_commit = coordination_ref.get('source_commit')
+    record_source_commit = record_source_commit or source_commit
+    if not isinstance(effective_tool_commit, str) or not re.fullmatch(r'[0-9a-f]{40}', effective_tool_commit):
+        raise ValueError('bound traceability admission requires immutable effective_tool_commit')
+    if not isinstance(record_source_commit, str) or not re.fullmatch(r'[0-9a-f]{40}', record_source_commit):
+        raise ValueError('bound traceability admission requires immutable record_source_commit')
+    tool_root = Path(effective_tool_root).resolve()
+    target_root = Path(target_root).resolve()
+    loader = traceability_loader or (
+        lambda effective_root, commit: _traceability_adapter(
+            effective_root, target_root, binding, commit
+        )
+    )
+    adapter = loader(tool_root, effective_tool_commit)
+    result = _traceability_preflight(
+        adapter,
+        command,
+        binding=binding,
+        target_root=target_root,
+        effective_tool_commit=effective_tool_commit,
+        record_source_commit=record_source_commit,
+    )
+    if not isinstance(result, dict):
+        raise ValueError('traceability preflight returned no structured result')
+    if result.get('status') != 'passed':
+        blockers = result.get('blockers') or ['traceability preflight blocked']
+        raise ValueError('; '.join(str(item) for item in blockers))
+    return callback()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['doctor', 'bind', 'status', 'resume-check', 'recover', 'validate-scope', 'validate-contracts', 'publish-contract'])
@@ -217,20 +344,48 @@ def main():
                 if args.migrate_epoch != int(task.get('bootstrap_epoch', 1)) + 1:
                     raise ValueError('migration must advance exactly one bootstrap epoch')
                 proposed['bootstrap_epoch'] = args.migrate_epoch
-            result = validate_task(root, proposed, args.tool_root, contracts=True, purpose='in_flight' if task.get('loop_binding') == binding else 'new_tasks')
-            if result['status'] != 'passed': raise ValueError('; '.join(result['blockers']))
-            command = [sys.executable, str(args.tool_root / 'scripts/pm/github-project-task.py'), 'bind-loop', str(root), '--task-uid', args.task_uid, '--loop-binding', str(args.loop_binding.resolve()), '--manual-request-ref', args.manual_request_ref, '--json']
-            if args.migrate_epoch is not None: command += ['--migrate-epoch', str(args.migrate_epoch)]
             with Reservation(common_dir(root), args.task_uid, binding['write_scope']) as reservation:
                 expected = json.dumps(binding, sort_keys=True)
                 action = {'action_id': 'bind:' + hashlib.sha256(expected.encode()).hexdigest(), 'kind': 'bind_loop', 'expected': expected,
                           'repository': task['repository'], 'issue_number': task['issue_number'],
                           'previous_binding': task.get('loop_binding'), 'previous_epoch': task.get('bootstrap_epoch', 1),
                           'canonical_worktree': str(root), 'task_branch': task.get('task_branch'), 'project_item_id': task.get('project_item_id')}
+                command = [sys.executable, str(args.tool_root / 'scripts/pm/github-project-task.py'), 'bind-loop', str(root), '--task-uid', args.task_uid, '--loop-binding', str(args.loop_binding.resolve()), '--manual-request-ref', args.manual_request_ref, '--json']
+                if args.migrate_epoch is not None: command += ['--migrate-epoch', str(args.migrate_epoch)]
                 command += ['--loop-action-json', json.dumps(action, sort_keys=True)]
-                result = json.loads(subprocess.check_output(command, text=True, pass_fds=(reservation.handle.fileno(),)))
-                if result.get('status') == 'bound':
-                    record_action(common_dir(root), args.task_uid, {**action, 'reconciled': True, 'readback_evidence': result})
+
+                def bind_mutation():
+                    checked = validate_task(
+                        root,
+                        proposed,
+                        args.tool_root,
+                        contracts=True,
+                        purpose='in_flight' if task.get('loop_binding') == binding else 'new_tasks',
+                    )
+                    if checked['status'] != 'passed':
+                        raise ValueError('; '.join(checked['blockers']))
+                    bound = json.loads(subprocess.check_output(
+                        command, text=True, pass_fds=(reservation.handle.fileno(),)
+                    ))
+                    if bound.get('status') == 'bound':
+                        record_action(common_dir(root), args.task_uid, {
+                            **action, 'reconciled': True, 'readback_evidence': bound
+                        })
+                    return bound
+
+                result = pre_mutation_admission(
+                    'bind',
+                    binding=binding,
+                    target_root=root,
+                    effective_tool_root=args.tool_root,
+                    source_commit=binding.get('policy_commit'),
+                    effective_tool_commit=binding.get('policy_commit'),
+                    record_source_commit=(binding.get('coordination_ref') or {}).get('source_commit'),
+                    traceability_loader=lambda effective_root, commit: _traceability_adapter(
+                        effective_root, root, binding, commit
+                    ),
+                    mutation=bind_mutation,
+                )
         else:
             if args.command == 'validate-scope' and not args.base: raise ValueError('--base required')
             if args.command == 'recover':
@@ -241,15 +396,51 @@ def main():
                     print(json.dumps(recovery, sort_keys=True))
                     return 2
                 task = load_task(root, args.task_uid)
-            result = validate_task(root, task, args.tool_root, args.base, args.head)
-            if result['status'] in ('passed', 'legacy') and args.command in ('resume-check', 'recover'):
-                with Reservation(common_dir(root), args.task_uid, (task.get('loop_binding') or {}).get('write_scope', []), recovery=args.command == 'recover') as reservation:
-                    result.update(reconcile(common_dir(root), args.task_uid, root, args.tool_root, reservation_fd=reservation.handle.fileno()) if args.command == 'recover' else recovery_status(common_dir(root), args.task_uid))
-                # Existing workflow-next checks live issue/snapshot/holds; never execute its next_command.
-                command = [sys.executable, str((args.tool_root or root) / 'scripts/pm/workflow-next.py'), '--repo-root', str(root), '--task-uid', args.task_uid, '--json']
-                observed = subprocess.run(command, text=True, capture_output=True)
-                result['workflow'] = json.loads(observed.stdout)
-                if observed.returncode: result['status'] = 'blocked'
+            if args.command in ('resume-check', 'doctor'):
+                binding = task.get('loop_binding')
+                with Reservation(
+                    common_dir(root),
+                    args.task_uid,
+                    (binding or {}).get('write_scope', []),
+                    recovery=False,
+                ):
+                    def continuation_readback():
+                        checked = validate_task(root, task, args.tool_root, args.base, args.head)
+                        if checked['status'] in ('passed', 'legacy') and args.command == 'resume-check':
+                            checked.update(recovery_status(common_dir(root), args.task_uid))
+                            # Existing workflow-next checks live issue/snapshot/holds;
+                            # never execute its next_command.
+                            next_command = [
+                                sys.executable,
+                                str((args.tool_root or root) / 'scripts/pm/workflow-next.py'),
+                                '--repo-root', str(root),
+                                '--task-uid', args.task_uid,
+                                '--json',
+                            ]
+                            observed = subprocess.run(next_command, text=True, capture_output=True)
+                            checked['workflow'] = json.loads(observed.stdout)
+                            if observed.returncode:
+                                checked['status'] = 'blocked'
+                        return checked
+
+                    result = pre_mutation_admission(
+                        args.command,
+                        binding=binding or {},
+                        target_root=root,
+                        effective_tool_root=args.tool_root,
+                        source_commit=(binding or {}).get('policy_commit'),
+                        effective_tool_commit=(binding or {}).get('policy_commit'),
+                        record_source_commit=((binding or {}).get('coordination_ref') or {}).get('source_commit'),
+                        traceability_loader=lambda effective_root, commit: _traceability_adapter(
+                            effective_root, root, binding or {}, commit
+                        ),
+                        mutation=continuation_readback,
+                    )
+            else:
+                result = validate_task(root, task, args.tool_root, args.base, args.head)
+                if result['status'] in ('passed', 'legacy') and args.command == 'recover':
+                    with Reservation(common_dir(root), args.task_uid, (task.get('loop_binding') or {}).get('write_scope', []), recovery=True) as reservation:
+                        result.update(reconcile(common_dir(root), args.task_uid, root, args.tool_root, reservation_fd=reservation.handle.fileno()))
             if args.command == 'publish-contract' and result['status'] == 'passed':
                 if not args.contract: raise ValueError('--contract required')
                 validator = _trusted_module(args.tool_root, root, task['loop_binding'], 'loop_contracts')

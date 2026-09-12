@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "oasis7.loop-leaf-result/v1",
+  "title": "Oasis7 aggregate leaf result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "marker",
+    "schema",
+    "task_uid",
+    "change_id",
+    "obligation_id",
+    "mapping_slot",
+    "status",
+    "candidate",
+    "verification",
+    "verification_digest",
+    "evidence_digest"
+  ],
+  "properties": {
+    "marker": {"const": "oasis7-loop-leaf-result"},
+    "schema": {"const": "oasis7.loop-leaf-result/v1"},
+    "task_uid": {"type": "string", "pattern": "^task_[0-9a-f]{32}$"},
+    "change_id": {"type": "string", "minLength": 1},
+    "obligation_id": {"type": "string", "minLength": 1},
+    "mapping_slot": {"type": "string", "minLength": 1},
+    "status": {"const": "passed"},
+    "candidate": {"type": "object"},
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "mode",
+        "frozen_source_head",
+        "repository_fingerprint_before",
+        "repository_fingerprint_after",
+        "verification_epoch_stable",
+        "verification_exit_code"
+      ],
+      "properties": {
+        "profile": {"enum": ["codex_subagent_role_fit", "workflow_behavior", "repository_required", "fixture_repository_state"]},
+        "mode": {"enum": ["fixture", "live_nonfinal", "detached_frozen_tree"]},
+        "frozen_source_head": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "frozen_source_tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "repository_fingerprint_before": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "repository_fingerprint_after": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "verification_epoch_stable": {"const": true},
+        "verification_exit_code": {"const": 0}
+      }
+    },
+    "verification_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "evidence_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

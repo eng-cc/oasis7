@@ -665,6 +665,24 @@ def command_audit(args: argparse.Namespace) -> int:
             "target": str(task.get("status") or ""),
             "workflow_phase": str(task.get("workflow_phase") or ""),
         }
+        # Preserve selected-task traceability metadata in the bounded audit
+        # readback. These values are producer-owned mapping state; closeout
+        # still binds them against the local record and the pinned helper.
+        for key in (
+            "owner_role",
+            "change_id",
+            "traceability_mode",
+            "completion_mode",
+            "coordination_ref",
+            "traceability_record",
+            "coordination_record",
+            "traceability_candidate",
+            "aggregate_candidate",
+        ):
+            if key in task and task[key] is not None:
+                selected_task[key] = task[key]
+        if isinstance(task.get("loop_binding"), dict):
+            selected_task["loop_binding"] = task["loop_binding"]
     result = {
         "status": "failed" if errors else "ok",
         "project_owner": args.project_owner,

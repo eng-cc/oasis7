@@ -19,16 +19,38 @@
     "target_delivery": {"type": "string", "minLength": 1},
     "policy_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "policy_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "coordination_ref": {"$ref": "#/$defs/coordination_ref"},
+    "consumed_clause_refs": {"type": "array", "items": {"$ref": "#/$defs/clause_ref"}},
     "input_contracts": {"type": "array", "items": {"$ref": "#/$defs/input"}},
     "delivery_obligations": {"type": "array", "items": {"type": "object", "required": ["id", "task_uid", "issue_number"], "properties": {"id": {"type": "string", "minLength": 1}, "task_uid": {"type": "string", "pattern": "^task_[0-9a-f]{32}$"}, "issue_number": {"type": "integer", "minimum": 1}}}}
   },
   "$defs": {
-    "input": {"type": "object", "required": ["contract_id", "revision", "contract_digest", "publication_ref", "consumed_clauses"], "properties": {
+    "coordination_ref": {"type": "object", "required": ["repository", "issue_number", "comment_id", "record_digest"], "properties": {
+      "repository": {"const": "eng-cc/oasis7"},
+      "issue_number": {"type": "integer", "minimum": 1},
+      "comment_id": {"type": "integer", "minimum": 1},
+      "record_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+      "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+    }},
+    "clause_ref": {"type": "object", "required": ["repository", "path", "fragment", "clause_id"], "properties": {
+      "repository": {"const": "eng-cc/oasis7"},
+      "path": {"type": "string", "minLength": 1},
+      "fragment": {"type": "string", "minLength": 1},
+      "clause_id": {"type": "string", "minLength": 1}
+    }},
+    "bound_clause_ref": {"allOf": [{"$ref": "#/$defs/clause_ref"}], "required": ["contract_id", "revision", "contract_digest", "publication_ref"], "properties": {
+      "contract_id": {"type": "string", "minLength": 1},
+      "revision": {"type": "integer", "minimum": 1},
+      "contract_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+      "publication_ref": {"type": "object", "required": ["issue_number", "comment_id"], "properties": {"repository": {"const": "eng-cc/oasis7"}, "issue_number": {"type": "integer", "minimum": 1}, "comment_id": {"type": "integer", "minimum": 1}}}
+    }},
+    "input": {"type": "object", "required": ["contract_id", "revision", "contract_digest", "publication_ref"], "anyOf": [{"required": ["consumed_clauses"]}, {"required": ["consumed_clause_refs"]}], "properties": {
       "contract_id": {"type": "string", "minLength": 1},
       "revision": {"type": "integer", "minimum": 1},
       "contract_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
       "publication_ref": {"type": "object", "required": ["issue_number", "comment_id"], "properties": {"issue_number": {"type": "integer", "minimum": 1}, "comment_id": {"type": "integer", "minimum": 1}}},
-      "consumed_clauses": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      "consumed_clauses": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+      "consumed_clause_refs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/bound_clause_ref"}}
     }}
   }
 }

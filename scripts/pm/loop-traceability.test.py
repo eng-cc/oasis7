@@ -1,0 +1,2066 @@
+#!/usr/bin/env python3
+"""RED contract for the W2 coordinating-record traceability checker.
+
+The implementation is deliberately absent during RED.  The sentinel returned
+by ``_load_api`` turns that absence into a behavioral result so assertions
+identify the missing contract rather than failing at import time.
+"""
+
+from copy import deepcopy
+from contextlib import redirect_stdout
+import hashlib
+import io
+import importlib.util
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from loop_approval_authority import build_authority_map
+from loop_leaf_result import build_leaf_result, canonical_body, leaf_result_locator
+
+
+HERE = Path(__file__).resolve().parent
+SOURCE_OID = "06d6754b5311bceb2b904d7a17e2991b217f501b"
+TASK_UID = "task_" + "a" * 32
+LEAF_UID = "task_" + "b" * 32
+SECOND_LEAF_UID = "task_" + "c" * 32
+CHANGE_ID = "change-3671-traceability"
+RECORD_COMMENT_ID = 5636938574
+EQUIVALENCE_APPROVAL_COMMENT_ID = 5636906114
+AUTHORITY_MAP_COMMENT_ID = 5636906120
+LEAF_RESULT_COMMENT_IDS = {
+    LEAF_UID: 5636906121,
+    SECOND_LEAF_UID: 5636906122,
+}
+LEAF_RESULT_ISSUE_NUMBERS = {
+    LEAF_UID: 3672,
+    SECOND_LEAF_UID: 3674,
+}
+REPOSITORY = "eng-cc/oasis7"
+CANDIDATE_FIELDS = (
+    "change_id",
+    "source_head_oid",
+    "integration_base_oid",
+    "tested_tree_oid",
+    "configuration_digest",
+    "entry",
+    "environment",
+    "evidence_window",
+    "effective_policy_identity",
+    "effective_helper_identity",
+    "effective_workflow_identity",
+    "consumed_contracts",
+)
+
+
+def _canonical(value):
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _record_digest(record):
+    """Digest the record with its self-referential digest slot blanked."""
+    value = deepcopy(record)
+    value["coordination_ref"]["record_digest"] = ""
+    return "sha256:" + hashlib.sha256(_canonical(value).encode()).hexdigest()
+
+
+def _load_api():
+    path = HERE / "loop_traceability.py"
+    if path.exists():
+        spec = importlib.util.spec_from_file_location("loop_traceability", path)
+        if spec is None or spec.loader is None:
+            raise AssertionError("loop_traceability.py has no import loader")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    class MissingTraceabilityImplementation:
+        """Keep RED failures behavioral while the GREEN helper is absent."""
+
+        def __getattr__(self, name):
+            def missing(*args, **kwargs):
+                return {
+                    "status": "blocked",
+                    "blockers": [
+                        f"W2 traceability implementation missing: loop_traceability.{name}"
+                    ],
+                }
+
+            return missing
+
+    return MissingTraceabilityImplementation()
+
+
+def _contract_ref(path="doc/engineering/workflow/source-of-truth.md", fragment="traceability-record-contract", clause_id="QW2-1"):
+    return {
+        "repository": REPOSITORY,
+        "path": path,
+        "fragment": fragment,
+        "contract_id": "engineering-workflow",
+        "revision": "v1.15.2",
+        "contract_digest": "sha256:" + "1" * 64,
+        "publication_ref": {
+            "repository": REPOSITORY,
+            "issue_number": 3671,
+            "comment_id": 5636639918,
+        },
+        "clause_id": clause_id,
+    }
+
+
+def _record():
+    record = {
+        "schema": "oasis7.loop-change/v1",
+        "marker": "oasis7-loop-change-record",
+        "task_uid": TASK_UID,
+        "change_id": CHANGE_ID,
+        "coordination_ref": {
+            "repository": REPOSITORY,
+            "issue_number": 3671,
+            "comment_id": RECORD_COMMENT_ID,
+            "record_digest": "",
+            "source_commit": SOURCE_OID,
+        },
+        "required_obligations": [
+            {
+                "obligation_id": "QW2-1",
+                "mapping_slot": "slot-contract",
+                "required": True,
+                "acceptance_refs": [_contract_ref(clause_id="QW2-1")],
+                "owner_loop": "code",
+                "owner_role": "repository_health_engineer",
+            },
+            {
+                "obligation_id": "QW2-3",
+                "mapping_slot": "slot-handoff",
+                "required": True,
+                "acceptance_refs": [_contract_ref(fragment="manual-three-loop-transition", clause_id="QW2-3")],
+                "owner_loop": "system",
+                "owner_role": "producer_system_designer",
+            },
+        ],
+        "mapping_slots": [
+            {"slot_id": "slot-contract", "owner_loop": "code", "owner_role": "repository_health_engineer"},
+            {"slot_id": "slot-handoff", "owner_loop": "system", "owner_role": "producer_system_designer"},
+        ],
+        "candidate_selection": {
+            "comparable_fields": [
+                "change_id",
+                "source_head_oid",
+                "integration_base_oid",
+                "tested_tree_oid",
+                "configuration_digest",
+                "entry",
+                "environment",
+                "evidence_window",
+                "effective_policy_identity",
+                "effective_helper_identity",
+                "effective_workflow_identity",
+                "consumed_contracts",
+            ],
+            "required_integration_base_oid": "d" * 40,
+            "required_tested_tree_oid": "e" * 40,
+        },
+        "feedback": [],
+    }
+    record["coordination_ref"]["record_digest"] = _record_digest(record)
+    return record
+
+
+def _binding(**updates):
+    binding = {
+        "schema": "oasis7.loop-task/v1",
+        "task_uid": LEAF_UID,
+        "change_id": CHANGE_ID,
+        "loop": "code",
+        "owner_role": "repository_health_engineer",
+        "bootstrap_epoch": 1,
+        "manual_request_ref": "issuecomment-5636639918",
+        "request_key": "change-3671-traceability/slot-contract",
+        "write_scope": ["scripts/pm/**"],
+        "out_of_scope": [],
+        "acceptance_refs": [_contract_ref(clause_id="QW2-1")],
+        "dependencies": [],
+        "target_delivery": "pilot",
+        "coordination_ref": deepcopy(_record()["coordination_ref"]),
+    }
+    binding.update(updates)
+    return binding
+
+
+def _candidate(record, source_head="f" * 40):
+    return {
+        "change_id": record["change_id"],
+        "source_head_oid": source_head,
+        "integration_base_oid": record["candidate_selection"]["required_integration_base_oid"],
+        "tested_tree_oid": record["candidate_selection"]["required_tested_tree_oid"],
+        "configuration_digest": "sha256:" + "2" * 64,
+        "entry": "scripts/pm/loop.py bind",
+        "environment": "local",
+        "evidence_window": {"started_at": "2026-09-11T00:00:00Z", "ended_at": "2026-09-11T00:01:00Z"},
+        "effective_policy_identity": {"path": "scripts/pm/loop_policy.py", "commit": SOURCE_OID},
+        "effective_helper_identity": {"path": "scripts/pm/loop_traceability.py", "commit": SOURCE_OID, "digest": "sha256:" + "4" * 64},
+        "effective_workflow_identity": {"path": "doc/engineering/workflow/source-of-truth.md", "commit": SOURCE_OID, "digest": "sha256:" + "5" * 64},
+        "consumed_contracts": [{
+            "repository": REPOSITORY,
+            "contract_id": "engineering-workflow",
+            "revision": "v1.15.2",
+            "digest": "sha256:" + "1" * 64,
+            "publication_ref": {"repository": REPOSITORY, "issue_number": 3671, "comment_id": 5636906114},
+        }],
+    }
+
+
+def _matrix_row(obligation_id, slot_id, uid, candidate, evidence_digest):
+    return {
+        "obligation_id": obligation_id,
+        "mapping_slot": slot_id,
+        "leaf_task_uid": uid,
+        "leaf_evidence_locator": f"issuecomment-{uid}",
+        "leaf_evidence_digest": evidence_digest,
+        "source_head_oid": candidate["source_head_oid"],
+        "integration_base_oid": candidate["integration_base_oid"],
+        "tested_tree_oid": candidate["tested_tree_oid"],
+        "configuration_digest": candidate["configuration_digest"],
+        "entry": candidate["entry"],
+        "environment": candidate["environment"],
+        "evidence_window": candidate["evidence_window"],
+        "effective_policy_identity": candidate["effective_policy_identity"],
+        "effective_helper_identity": candidate["effective_helper_identity"],
+        "effective_workflow_identity": candidate["effective_workflow_identity"],
+        "consumed_contracts": candidate["consumed_contracts"],
+    }
+
+
+def _candidate_projection(candidate):
+    return {key: deepcopy(candidate[key]) for key in CANDIDATE_FIELDS}
+
+
+def _evidence_payload(uid, candidate):
+    return {"task_uid": uid, "status": "passed", "candidate": _candidate_projection(candidate)}
+
+
+def _evidence_digest(payload):
+    return "sha256:" + hashlib.sha256(_canonical(payload).encode()).hexdigest()
+
+
+def _configuration_digest(candidate):
+    return _evidence_digest({
+        field: deepcopy(candidate[field])
+        for field in (
+            "entry",
+            "environment",
+            "effective_policy_identity",
+            "effective_helper_identity",
+            "effective_workflow_identity",
+            "consumed_contracts",
+        )
+    })
+
+
+def _authority_ref(comment_id=5636906114):
+    return {"repository": REPOSITORY, "issue_number": 3671, "comment_id": comment_id}
+
+
+def _equivalence_approval(record):
+    candidate = _candidate(record, source_head="0" * 40)
+    payload = {
+        "marker": "oasis7-equivalence-approval",
+        "schema": "oasis7.loop-equivalence-approval/v1",
+        "task_uid": record["task_uid"],
+        "change_id": record["change_id"],
+        "approval": "approved",
+        "approver_role": "producer_system_designer",
+        "source_leaf": {"task_uid": SECOND_LEAF_UID, "source_head_oid": "0" * 40},
+        "aggregate_candidate": {"change_id": record["change_id"], "tested_tree_oid": candidate["tested_tree_oid"]},
+        "allowed_to_differ": ["source_head_oid"],
+        "exact_fields": [
+            "change_id",
+            "integration_base_oid",
+            "tested_tree_oid",
+            "configuration_digest",
+            "entry",
+            "environment",
+            "evidence_window",
+        ],
+        "supporting_evidence_digest": _evidence_digest(_evidence_payload(SECOND_LEAF_UID, candidate)),
+    }
+    return payload
+
+
+def _rewrite_comment_body(payload, mutate):
+    body = json.loads(payload["comment"]["body"])
+    mutate(body)
+    payload["comment"]["body"] = _canonical(body)
+
+
+class FixtureReaders:
+    def __init__(self, record):
+        self.record = record
+        self.authority_calls = []
+        self.authority_results = []
+        self.contract_calls = []
+        self.comment = self._comment(record)
+        self.issue_by_number = {
+            3671: {
+                "number": 3671,
+                "html_url": f"https://github.com/{REPOSITORY}/issues/3671",
+                "body": f"<!-- oasis7-pm-task -->\ntask_uid: {TASK_UID}\n",
+            },
+        }
+        self.equivalence_comment = {
+            "id": EQUIVALENCE_APPROVAL_COMMENT_ID,
+            "issue_url": f"https://api.github.com/repos/{REPOSITORY}/issues/3671",
+            "body": _canonical(_equivalence_approval(record)),
+            "user": {"login": "producer-system-designer"},
+            "created_at": "2026-09-11T00:00:00Z",
+        }
+        self.comments = {
+            RECORD_COMMENT_ID: self.comment,
+            EQUIVALENCE_APPROVAL_COMMENT_ID: self.equivalence_comment,
+        }
+        self.comment_issue_numbers = {
+            RECORD_COMMENT_ID: 3671,
+            EQUIVALENCE_APPROVAL_COMMENT_ID: 3671,
+        }
+
+    @staticmethod
+    def _comment(record):
+        body = _canonical({
+            "marker": record["marker"],
+            "schema": record["schema"],
+            "task_uid": record["task_uid"],
+            "change_id": record["change_id"],
+            "record_digest": record["coordination_ref"]["record_digest"],
+            "record": record,
+        })
+        return {
+            "id": RECORD_COMMENT_ID,
+            "issue_url": f"https://api.github.com/repos/{REPOSITORY}/issues/3671",
+            "body": body,
+            "user": {"login": "coordinator"},
+            "created_at": "2026-09-11T00:00:00Z",
+        }
+
+    def authority(self, *args, **kwargs):
+        self.authority_calls.append((args, kwargs))
+        reference = args[0] if args else kwargs.get("coordination_ref") or kwargs.get("authority_ref")
+        comment_id = reference.get("comment_id") if isinstance(reference, dict) else RECORD_COMMENT_ID
+        comment = self.comments.get(comment_id)
+        if comment is None:
+            return {
+                "status": "blocked",
+                "blockers": [f"unknown authority comment {comment_id}"],
+                "reader_kind": "fixture_authority",
+            }
+        issue_number = self.comment_issue_numbers.get(comment_id, 3671)
+        issue = self.issue_by_number[issue_number]
+        marker = None
+        try:
+            marker = json.loads(comment.get("body") or "").get("marker")
+        except (TypeError, json.JSONDecodeError):
+            pass
+        result = {
+            "reader_kind": "github_live_query" if marker == "oasis7-loop-leaf-result" else "fixture_authority",
+            "repository": REPOSITORY,
+            "issue": issue,
+            "comment": comment,
+        }
+        if marker == "oasis7-loop-leaf-result":
+            result["permission"] = "write"
+        elif marker in {"oasis7-loop-approval-authority", "oasis7-equivalence-approval"}:
+            result["permission"] = "admin"
+        self.authority_results.append(result)
+        return result
+
+    def install_live_leaf_results(
+        self, candidate, evidence, *, profile="fixture_repository_state", mode="fixture"
+    ):
+        for row, item in zip(candidate["applicability_matrix"], evidence):
+            leaf_candidate = deepcopy(item["candidate"])
+            verification = {
+                "profile": profile,
+                "mode": mode,
+                "frozen_source_head": leaf_candidate["source_head_oid"],
+                "frozen_source_tree": leaf_candidate["tested_tree_oid"],
+                "repository_fingerprint_before": "1" * 64,
+                "repository_fingerprint_after": "1" * 64,
+                "verification_epoch_stable": True,
+                "verification_exit_code": 0,
+            }
+            result = build_leaf_result(
+                task_uid=item["task_uid"],
+                change_id=candidate["change_id"],
+                obligation_id=row["obligation_id"],
+                mapping_slot=row["mapping_slot"],
+                candidate=leaf_candidate,
+                verification=verification,
+            )
+            body = canonical_body(result)
+            comment_id = LEAF_RESULT_COMMENT_IDS[item["task_uid"]]
+            issue_number = LEAF_RESULT_ISSUE_NUMBERS[item["task_uid"]]
+            self.issue_by_number[issue_number] = {
+                "number": issue_number,
+                "html_url": f"https://github.com/{REPOSITORY}/issues/{issue_number}",
+                "body": f"<!-- oasis7-pm-task -->\ntask_uid: {item['task_uid']}\n",
+            }
+            self.comments[comment_id] = {
+                "id": comment_id,
+                "issue_url": f"https://api.github.com/repos/{REPOSITORY}/issues/{issue_number}",
+                "body": body,
+                "user": {"login": "leaf-result-publisher"},
+                "created_at": "2026-09-11T00:00:00Z",
+            }
+            self.comment_issue_numbers[comment_id] = issue_number
+            locator = leaf_result_locator(REPOSITORY, issue_number, comment_id, body)
+            row["leaf_evidence_locator"] = locator
+            row["leaf_evidence_digest"] = result["evidence_digest"]
+            item["evidence_digest"] = result["evidence_digest"]
+
+    def install_authority_map_and_approval(self, record, candidate, evidence):
+        rule = candidate["equivalence_rules"][0]
+        authority_map = build_authority_map(
+            task_uid=record["task_uid"],
+            role=rule["approver_role"],
+            account="producer-system-designer",
+            permission_floor="admin",
+        )
+        map_body = _canonical(authority_map)
+        authority_map_ref = {
+            "repository": REPOSITORY,
+            "issue_number": 3671,
+            "comment_id": AUTHORITY_MAP_COMMENT_ID,
+            "body_digest": "sha256:" + hashlib.sha256(map_body.encode()).hexdigest(),
+        }
+        rule["authority_map_ref"] = authority_map_ref
+        rule["supporting_evidence_digest"] = evidence[1]["evidence_digest"]
+        self.comments[AUTHORITY_MAP_COMMENT_ID] = {
+            "id": AUTHORITY_MAP_COMMENT_ID,
+            "issue_url": f"https://api.github.com/repos/{REPOSITORY}/issues/3671",
+            "body": map_body,
+            "user": {"login": "map-admin"},
+            "created_at": "2026-09-11T00:00:00Z",
+        }
+        self.comment_issue_numbers[AUTHORITY_MAP_COMMENT_ID] = 3671
+        approval = {
+            "marker": "oasis7-equivalence-approval",
+            "schema": "oasis7.loop-equivalence-approval/v1",
+            "task_uid": record["task_uid"],
+            "change_id": record["change_id"],
+            "approval": "approved",
+            "approver_role": rule["approver_role"],
+            "source_leaf": deepcopy(rule["source_leaf"]),
+            "aggregate_candidate": deepcopy(rule["aggregate_candidate"]),
+            "allowed_to_differ": deepcopy(rule["allowed_to_differ"]),
+            "exact_fields": deepcopy(rule["exact_fields"]),
+            "supporting_evidence_digest": evidence[1]["evidence_digest"],
+        }
+        self.equivalence_comment["body"] = _canonical(approval)
+
+    def contract(self, reference, *args, **kwargs):
+        self.contract_calls.append((reference, args, kwargs))
+        if reference.get("fragment") == "missing-fragment":
+            return {
+                "status": "blocked",
+                "blockers": [
+                    "unapproved consumed contract clause: "
+                    + reference["path"]
+                    + "#"
+                    + reference["fragment"]
+                ],
+            }
+        return {"status": "passed", "repository": REPOSITORY, "path": reference["path"], "fragment": reference["fragment"], "digest": reference["contract_digest"]}
+
+
+class TraceabilityPreflight(Exception):
+    pass
+
+
+class _MissingLoopBoundary:
+    def pre_mutation_admission(self, *args, **kwargs):
+        return {"status": "blocked", "blockers": ["W2 pre-mutation boundary API missing: loop.pre_mutation_admission"]}
+
+
+def _load_loop_boundary():
+    path = HERE / "loop.py"
+    spec = importlib.util.spec_from_file_location("loop_boundary", path)
+    if spec is None or spec.loader is None:
+        raise AssertionError("loop.py has no import loader")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module if hasattr(module, "pre_mutation_admission") else _MissingLoopBoundary()
+
+
+def _load_loop_dispatch():
+    """Load the real loop facade so tests exercise its command branches."""
+    path = HERE / "loop.py"
+    spec = importlib.util.spec_from_file_location("loop_dispatch", path)
+    if spec is None or spec.loader is None:
+        raise AssertionError("loop.py has no import loader")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class CloseoutFixture:
+    """Run the actual closeout entrypoint with only remote mutation stubs."""
+
+    def __init__(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.script_dir = self.root / "scripts" / "pm"
+        self.script_dir.mkdir(parents=True)
+        shutil.copy2(HERE / "task-closeout.sh", self.script_dir / "task-closeout.sh")
+        (self.script_dir / "task-closeout.sh").chmod(0o755)
+        self.marker = self.root / "downstream-mutation.log"
+        self._write_remote_stubs()
+        mapping = self.root / ".pm" / "github-project-sync" / "tasks.json"
+        mapping.parent.mkdir(parents=True)
+        mapping.write_text(json.dumps({
+            "version": 1,
+            "tasks": {
+                TASK_UID: {
+                    "task_uid": TASK_UID,
+                    "repository": REPOSITORY,
+                    "issue_number": 3671,
+                    "owner_role": "repository_health_engineer",
+                    "status": "in_progress",
+                    "workflow_phase": "in_progress",
+                }
+            }}, sort_keys=True
+        ))
+
+    def _write_remote_stubs(self):
+        workflow = self.script_dir / "github-project-workflow.sh"
+        workflow.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -eu\n"
+            "if [[ \"${OASIS7_TRACEABILITY_CONTEXT_ONLY:-0}\" != 1 ]]; then\n"
+            "  printf '%s\\n' audit >> \"$OASIS7_CLOSEOUT_MARKER\"\n"
+            "  printf '%s\\n' '{\"status\":\"ok\"}'\n"
+            "else\n"
+            f"  printf '%s\\n' '{{\"status\":\"ok\",\"task_uid\":\"{TASK_UID}\",\"selected_task\":{{\"task_uid\":\"{TASK_UID}\"}}}}'\n"
+            "fi\n"
+        )
+        workflow.chmod(0o755)
+        closeout = self.script_dir / "github-project-task.py"
+        closeout.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json\n"
+            "import os\n"
+            "import sys\n"
+            "\n"
+            "uid = sys.argv[sys.argv.index('--task-uid') + 1]\n"
+            "with open(os.environ['OASIS7_CLOSEOUT_MARKER'], 'a', encoding='utf-8') as handle:\n"
+            "    handle.write('closeout\\n')\n"
+            "print(json.dumps({'task_uid': uid, 'status': 'deferred', 'issue_url': 'fixture://closeout'}))\n"
+        )
+        closeout.chmod(0o755)
+
+    def record(self, value):
+        return self.write_json("record.json", value)
+
+    def write_json(self, name, value):
+        path = self.root / name
+        path.write_text(json.dumps(value, sort_keys=True))
+        return path
+
+    def run(self, *extra):
+        command = [
+            str(self.script_dir / "task-closeout.sh"),
+            "--role", "repository_health_engineer",
+            "--task-uid", TASK_UID,
+            "--to-status", "deferred",
+            "--verification-profile", "fixture_repository_state",
+            *extra,
+        ]
+        environment = dict(os.environ)
+        environment["PM_ROOT_DIR"] = str(self.root)
+        environment["OASIS7_CLOSEOUT_MARKER"] = str(self.marker)
+        return subprocess.run(command, cwd=self.root, env=environment, text=True, capture_output=True)
+
+
+class PinnedCloseoutFixture:
+    """Use a real Git repository to distinguish pinned code from local shadowing."""
+
+    def __init__(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name) / "target"
+        self.root.mkdir(parents=True)
+        self.target_script_dir = self.root / "scripts" / "pm"
+        self.target_script_dir.mkdir(parents=True)
+        self.script_dir = Path(self.tmp.name) / "entrypoint" / "scripts" / "pm"
+        self.script_dir.mkdir(parents=True)
+        for name in (
+            "task-closeout.sh",
+            "loop.py",
+            "loop_recovery.py",
+            "loop_gate.py",
+            "loop_policy.py",
+            "loop_contracts.py",
+            "loop_traceability.py",
+            "loop-policy.v1.json",
+        ):
+            shutil.copy2(HERE / name, self.target_script_dir / name)
+        shutil.copy2(HERE / "task-closeout.sh", self.script_dir / "task-closeout.sh")
+        (self.target_script_dir / "task-closeout.sh").chmod(0o755)
+        (self.script_dir / "task-closeout.sh").chmod(0o755)
+        (self.root / "doc" / "engineering").mkdir(parents=True)
+        (self.root / "doc" / "engineering" / "spec.md").write_text(
+            "<a id=\"acceptance\"></a>\n# Acceptance\n", encoding="utf-8"
+        )
+        self.marker = self.root / "downstream-mutation.log"
+        self.mapping_path = self.root / ".pm" / "github-project-sync" / "tasks.json"
+        self.mapping_path.parent.mkdir(parents=True)
+        self.mapping_path.write_text(json.dumps({
+            "version": 1,
+            "tasks": {
+                TASK_UID: {
+                    "task_uid": TASK_UID,
+                    "repository": REPOSITORY,
+                    "issue_number": 3671,
+                    "owner_role": "repository_health_engineer",
+                    "status": "in_progress",
+                    "workflow_phase": "in_progress",
+                    "canonical_worktree": str(self.root.resolve()),
+                    "worktree_hint": str(self.root.resolve()),
+                    "task_branch": "main",
+                    "change_id": CHANGE_ID,
+                    "traceability_mode": "aggregate",
+                }
+            },
+        }, sort_keys=True), encoding="utf-8")
+        self._write_remote_stubs()
+        self._git("init", "-q", "-b", "main")
+        self._git("config", "user.name", "Pinned Fixture")
+        self._git("config", "user.email", "pinned@example.invalid")
+        self._git("add", ".")
+        self._git("commit", "-qm", "pinned closeout fixture")
+        self.remote = self.root.parent / "origin.git"
+        subprocess.run(["git", "init", "-q", "--bare", str(self.remote)], check=True)
+        self._git("remote", "add", "origin", str(self.remote))
+        self._publish_head()
+
+    def _git(self, *args):
+        return subprocess.check_output(
+            ["git", "-C", str(self.root), *args], text=True
+        ).strip()
+
+    def _publish_head(self):
+        self._git("push", "-q", "origin", "HEAD:main")
+        head = self._git("rev-parse", "HEAD")
+        self._git("update-ref", "refs/remotes/origin/main", head)
+        return head
+
+    def _write_remote_stubs(self):
+        workflow = self.script_dir / "github-project-workflow.sh"
+        workflow.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -eu\n"
+            "if [[ \"${OASIS7_TRACEABILITY_CONTEXT_ONLY:-0}\" != 1 ]]; then\n"
+            "  printf '%s\\n' audit >> \"$OASIS7_CLOSEOUT_MARKER\"\n"
+            "  printf '%s\\n' '{\"status\":\"ok\"}'\n"
+            "else\n"
+            "  python3 - \"$PM_ROOT_DIR\" \"$@\" <<'PY'\n"
+            "import json, sys\n"
+            "from pathlib import Path\n"
+            "root, uid = Path(sys.argv[1]), sys.argv[-1]\n"
+            "task = json.loads((root / '.pm/github-project-sync/tasks.json').read_text())['tasks'][uid]\n"
+            "print(json.dumps({'status': 'ok', 'task_uid': uid, 'selected_task': task}))\n"
+            "PY\n"
+            "fi\n",
+            encoding="utf-8",
+        )
+        workflow.chmod(0o755)
+        closeout = self.script_dir / "github-project-task.py"
+        closeout.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json\n"
+            "import os\n"
+            "import sys\n"
+            "\n"
+            "uid = sys.argv[sys.argv.index('--task-uid') + 1]\n"
+            "with open(os.environ['OASIS7_CLOSEOUT_MARKER'], 'a', encoding='utf-8') as handle:\n"
+            "    handle.write('closeout\\n')\n"
+            "print(json.dumps({'task_uid': uid, 'status': 'deferred', 'issue_url': 'fixture://closeout'}))\n",
+            encoding="utf-8",
+        )
+        closeout.chmod(0o755)
+
+    def bind(self, policy_commit):
+        mapping = json.loads(self.mapping_path.read_text(encoding="utf-8"))
+        mapping["tasks"][TASK_UID]["loop_binding"] = {
+            "task_uid": TASK_UID,
+            "change_id": CHANGE_ID,
+            "policy_commit": policy_commit,
+        }
+        self.mapping_path.write_text(json.dumps(mapping, sort_keys=True), encoding="utf-8")
+
+    def set_traceability_mode(self, mode):
+        mapping = json.loads(self.mapping_path.read_text(encoding="utf-8"))
+        mapping["tasks"][TASK_UID]["traceability_mode"] = mode
+        self.mapping_path.write_text(json.dumps(mapping, sort_keys=True), encoding="utf-8")
+
+    def pin_helper(self, result):
+        status, blocker = result
+        self.target_script_dir.joinpath("loop_traceability.py").write_text(
+            "def validate_aggregate(*args, **kwargs):\n"
+            f"    return {{'status': {status!r}, 'blockers': {[blocker] if blocker else []!r}}}\n",
+            encoding="utf-8",
+        )
+        self._git("add", "scripts/pm/loop_traceability.py")
+        self._git("commit", "-qm", "update pinned helper fixture")
+        return self._publish_head()
+
+    def pin_leaf_helper(self, result=("passed", "")):
+        status, blocker = result
+        self.target_script_dir.joinpath("loop_traceability.py").write_text(
+            "def validate_leaf(*args, **kwargs):\n"
+            f"    return {{'status': {status!r}, 'blockers': {[blocker] if blocker else []!r}}}\n",
+            encoding="utf-8",
+        )
+        self._git("add", "scripts/pm/loop_traceability.py")
+        self._git("commit", "-qm", "update pinned leaf helper fixture")
+        return self._publish_head()
+
+    def shadow_helper(self, result):
+        status, blocker = result
+        self.script_dir.joinpath("loop_traceability.py").write_text(
+            "def validate_aggregate(*args, **kwargs):\n"
+            f"    return {{'status': {status!r}, 'blockers': {[blocker] if blocker else []!r}}}\n",
+            encoding="utf-8",
+        )
+
+    def record(self, value):
+        return self.write_json("record.json", value)
+
+    def write_json(self, name, value):
+        path = self.root / name
+        path.write_text(json.dumps(value, sort_keys=True), encoding="utf-8")
+        return path
+
+    def run(self, *extra):
+        command = [
+            str(self.script_dir / "task-closeout.sh"),
+            "--role", "repository_health_engineer",
+            "--task-uid", TASK_UID,
+            "--to-status", "deferred",
+            "--verification-profile", "fixture_repository_state",
+            *extra,
+        ]
+        environment = dict(os.environ)
+        environment["PM_ROOT_DIR"] = str(self.root)
+        environment["OASIS7_CLOSEOUT_MARKER"] = str(self.marker)
+        # CI's interpreter writes bytecode beside imported sources. Exercise
+        # that environment so the pinned worktree cleanup cannot rely on the
+        # developer machine's external pycache prefix.
+        environment["PYTHONPYCACHEPREFIX"] = "/"
+        return subprocess.run(
+            command, cwd=self.root, env=environment, text=True, capture_output=True
+        )
+
+
+class TraceabilityTests(unittest.TestCase):
+    def setUp(self):
+        self.api = _load_api()
+        self.record = _record()
+        self.binding = _binding()
+        self.readers = FixtureReaders(self.record)
+
+    def leaf(self, record=None, binding=None, readers=None):
+        readers = readers or (FixtureReaders(record) if record is not None else self.readers)
+        return self.api.validate_leaf(
+            record,
+            binding or self.binding,
+            authority_reader=readers.authority,
+            contract_reader=readers.contract,
+            source_commit=SOURCE_OID,
+        )
+
+    def aggregate(self, candidate, evidence, record=None, readers=None):
+        readers = readers or (FixtureReaders(record) if record is not None else self.readers)
+        return self.api.validate_aggregate(
+            record or self.record,
+            candidate,
+            evidence,
+            authority_reader=readers.authority,
+            contract_reader=readers.contract,
+            source_commit=SOURCE_OID,
+        )
+
+    def refresh_record_binding(self, record):
+        record["coordination_ref"]["record_digest"] = _record_digest(record)
+        binding = _binding(coordination_ref=deepcopy(record["coordination_ref"]))
+        return binding
+
+    def complete_aggregate(self, record=None):
+        record = record or self.record
+        candidate = _candidate(record)
+        second = dict(candidate, source_head_oid="0" * 40)
+        first_payload = _evidence_payload(LEAF_UID, candidate)
+        second_payload = _evidence_payload(SECOND_LEAF_UID, second)
+        first_digest = _evidence_digest(first_payload)
+        second_digest = _evidence_digest(second_payload)
+        candidate["applicability_matrix"] = [
+            _matrix_row("QW2-1", "slot-contract", LEAF_UID, candidate, first_digest),
+            _matrix_row("QW2-3", "slot-handoff", SECOND_LEAF_UID, second, second_digest),
+        ]
+        candidate["equivalence_rules"] = [{
+            "source_leaf": {"task_uid": SECOND_LEAF_UID, "source_head_oid": "0" * 40},
+            "aggregate_candidate": {"change_id": CHANGE_ID, "tested_tree_oid": candidate["tested_tree_oid"]},
+            "allowed_to_differ": ["source_head_oid"],
+            "exact_fields": ["change_id", "integration_base_oid", "tested_tree_oid", "configuration_digest", "entry", "environment", "evidence_window"],
+            "basis": "approved equivalence of independently reviewed leaf heads",
+            "authority_ref": _authority_ref(),
+            "approver_role": "producer_system_designer",
+            "supporting_evidence_digest": second_digest,
+        }]
+        evidence = [
+            {**first_payload, "evidence_digest": first_digest},
+            {**second_payload, "evidence_digest": second_digest},
+        ]
+        return candidate, evidence
+
+    def assert_blocked_for(self, result, *tokens):
+        self.assertEqual(result.get("status"), "blocked", result)
+        blockers = "\n".join(str(item) for item in result.get("blockers", []))
+        self.assertTrue(all(token in blockers for token in tokens), blockers)
+
+    def _sync_candidate_field(self, candidate, evidence, field, value):
+        candidate[field] = deepcopy(value)
+        for row, item in zip(candidate["applicability_matrix"], evidence):
+            item["candidate"][field] = deepcopy(value)
+            if field in row:
+                row[field] = deepcopy(value)
+            item["evidence_digest"] = _evidence_digest(_evidence_payload(item["task_uid"], item["candidate"]))
+            row["leaf_evidence_digest"] = item["evidence_digest"]
+
+    def test_qw2_1_unresolved_path_fragment_blocks(self):
+        record = deepcopy(self.record)
+        record["required_obligations"][0]["acceptance_refs"][0]["fragment"] = "missing-fragment"
+        result = self.leaf(record, self.refresh_record_binding(record))
+        self.assert_blocked_for(result, "doc/engineering/workflow/source-of-truth.md#missing-fragment")
+
+    def test_qw2_2_bare_same_id_consumption_blocks_and_path_refs_pass(self):
+        record = deepcopy(self.record)
+        record["consumed_clause_refs"] = [
+            {"repository": REPOSITORY, "path": "doc/one.md", "fragment": "shared", "clause_id": "shared"},
+            {"repository": REPOSITORY, "path": "doc/two.md", "fragment": "shared", "clause_id": "shared"},
+        ]
+        record["required_obligations"][0]["acceptance_refs"] = ["shared"]
+        result = self.leaf(record, self.refresh_record_binding(record))
+        self.assert_blocked_for(result, "doc/one.md", "doc/two.md", "path-qualified")
+
+        qualified = deepcopy(self.record)
+        qualified["required_obligations"][0]["acceptance_refs"] = [
+            {"repository": REPOSITORY, "path": "doc/one.md", "fragment": "shared", "clause_id": "shared"},
+            {"repository": REPOSITORY, "path": "doc/two.md", "fragment": "shared", "clause_id": "shared"},
+        ]
+        self.assertEqual(self.leaf(qualified, self.refresh_record_binding(qualified)).get("status"), "passed")
+
+    def test_qw2_3_required_acceptance_without_handoff_blocks(self):
+        record = deepcopy(self.record)
+        record["required_obligations"][1]["mapping_slot"] = None
+        result = self.leaf(record, self.refresh_record_binding(record))
+        self.assert_blocked_for(result, "QW2-3", "mapping_slot")
+
+    def test_qw2_4_terminal_leaves_without_composition_block(self):
+        candidate = _candidate(self.record)
+        evidence = [
+            {"task_uid": LEAF_UID, "status": "passed", "candidate": candidate},
+            {"task_uid": SECOND_LEAF_UID, "status": "passed", "candidate": dict(candidate, source_head_oid="0" * 40)},
+        ]
+        result = self.aggregate(candidate, evidence)
+        self.assert_blocked_for(result, "composition evidence missing")
+
+    def test_qw2_5_stale_candidate_field_blocks(self):
+        record = deepcopy(self.record)
+        candidate, evidence = self.complete_aggregate(record)
+        candidate["integration_base_oid"] = "a" * 40
+        result = self.aggregate(candidate, evidence, record)
+        self.assert_blocked_for(result, "integration_base_oid", "stale")
+
+    def test_qw2_6_old_inflight_binding_survives_new_draft_without_dispatch(self):
+        result = self.leaf()
+        self.assertEqual(result.get("status"), "passed", result)
+        self.assertFalse(result.get("downstream_task_created", False))
+        self.assertNotIn("dispatch_request", result)
+
+    def test_qw2_7_revoked_input_blocks_continuation(self):
+        record = deepcopy(self.record)
+        record["input_contracts"] = [{"contract_id": "engineering-workflow", "revision": "v1.15.2", "eligibility": {"in_flight": False}}]
+        result = self.leaf(record, self.refresh_record_binding(record))
+        self.assert_blocked_for(result, "in_flight", "revoked")
+
+    def test_qw2_8_blocking_feedback_keeps_leaf_pass_but_blocks_aggregate(self):
+        record = deepcopy(self.record)
+        record["feedback"] = [{
+            "source_locator": "issuecomment-5636949882",
+            "receiving_owner": "repository_health_engineer",
+            "disposition_authority": "producer_system_designer",
+            "decision": "pending",
+            "basis": "schema review",
+            "authorized_follow_up": "task_3673",
+            "affected_consumer": "aggregate",
+            "blocking": True,
+            "clearance": None,
+        }]
+        self.assertEqual(self.leaf(record, self.refresh_record_binding(record)).get("status"), "passed")
+        candidate, evidence = self.complete_aggregate(record)
+        result = self.aggregate(candidate, evidence, record)
+        self.assert_blocked_for(result, "feedback", "clearance")
+
+    def test_sys_w2_001_traceability_canonical_bytes_preserve_utf8(self):
+        value = {"文本": "玩家"}
+        expected = json.dumps(
+            value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode("utf-8")
+        self.assertEqual(self.api.canonical_bytes(value), expected)
+        self.assertEqual(
+            self.api.canonical_digest(value),
+            "sha256:" + hashlib.sha256(expected).hexdigest(),
+        )
+
+    def test_sys_w2_002_consumed_clause_repository_must_be_canonical(self):
+        record = deepcopy(self.record)
+        consumed = _contract_ref()
+        consumed["revision"] = 1
+        record["consumed_clause_refs"] = [consumed]
+        positive = self.leaf(record, self.refresh_record_binding(record))
+        self.assertEqual(positive.get("status"), "passed", positive)
+
+        foreign = deepcopy(record)
+        foreign["consumed_clause_refs"][0]["repository"] = "foreign/repo"
+        negative = self.leaf(foreign, self.refresh_record_binding(foreign))
+        self.assert_blocked_for(negative, "consumed clause reference", "repository")
+
+    def test_rh_w2_004_present_non_list_consumed_clause_refs_block(self):
+        for invalid in ("bad", {}, 1, True, None):
+            with self.subTest(invalid=invalid):
+                record = deepcopy(self.record)
+                record["consumed_clause_refs"] = invalid
+                result = self.leaf(record, self.refresh_record_binding(record))
+                self.assert_blocked_for(result, "consumed_clause_refs", "list")
+
+        empty = deepcopy(self.record)
+        empty["consumed_clause_refs"] = []
+        result = self.leaf(empty, self.refresh_record_binding(empty))
+        self.assertEqual(result.get("status"), "passed", result)
+
+    def test_rh_w2_005_schema_preserves_generic_and_bound_revision_contracts(self):
+        schema = json.loads((HERE / "schemas" / "loop-change.schema.json").read_text())
+        acceptance_items = schema["$defs"]["obligation"]["properties"]["acceptance_refs"]["items"]["anyOf"]
+        self.assertIn({"$ref": "#/$defs/path_ref"}, acceptance_items)
+        self.assertEqual(
+            schema["$defs"]["path_ref"]["properties"]["revision"],
+            {"anyOf": [{"type": "integer", "minimum": 1}, {"type": "string", "minLength": 1}]},
+        )
+        self.assertEqual(
+            schema["properties"]["consumed_clause_refs"],
+            {"type": "array", "items": {"$ref": "#/$defs/bound_path_ref"}},
+        )
+        self.assertEqual(
+            schema["$defs"]["bound_path_ref"]["properties"]["revision"],
+            {"type": "integer", "minimum": 1},
+        )
+
+        generic_string = deepcopy(self.record)
+        self.assertEqual(self.leaf(generic_string).get("status"), "passed")
+        for invalid in (True, 0, -1, 1.0, ""):
+            with self.subTest(invalid=invalid):
+                record = deepcopy(self.record)
+                record["required_obligations"][0]["acceptance_refs"][0]["revision"] = invalid
+                result = self.leaf(record, self.refresh_record_binding(record))
+                self.assert_blocked_for(result, "acceptance reference", "revision")
+
+    def test_sys_w2_003_published_contract_uses_declared_frozen_source_head(self):
+        source_a = "a" * 40
+        source_b = "b" * 40
+        raw_a = b'<a id="frozen-clause"></a>\n# Contract A\n'
+        raw_b = b'<a id="frozen-clause"></a>\n# Contract B\n'
+        digest_a = "sha256:" + hashlib.sha256(raw_a).hexdigest()
+        digest_b = "sha256:" + hashlib.sha256(raw_b).hexdigest()
+        contract = {
+            "schema": "oasis7.loop-contract/v1",
+            "contract_id": "engineering-workflow",
+            "revision": 1,
+            "source_head": source_b,
+            "merged_head": source_b,
+            "content_refs": [{
+                "path": "contract.md",
+                "fragment": "frozen-clause",
+                "clauses": ["QW2-1"],
+                "sha256": digest_b,
+            }],
+        }
+        publication_digest = self.api.published_contract_digest(contract)
+        reference = _contract_ref(path="contract.md", fragment="frozen-clause", clause_id="QW2-1")
+        reference.update({
+            "revision": 1,
+            "contract_digest": publication_digest,
+            "source_commit": source_a,
+        })
+
+        class PublicationAuthority:
+            reader_kind = "github_live_query"
+
+            def __call__(self, _reference):
+                return {
+                    "reader_kind": self.reader_kind,
+                    "comment": {"body": json.dumps({
+                        "marker": "oasis7-loop-contract",
+                        "contract": contract,
+                        "contract_digest": publication_digest,
+                    })},
+                }
+
+        calls = []
+
+        def contract_reader(observed):
+            calls.append(deepcopy(observed))
+            selected = observed.get("source_commit")
+            return {
+                "status": "passed",
+                "source_commit": selected,
+                "source_digest": digest_b if selected == source_b else digest_a,
+            }
+
+        errors = self.api._validate_published_contract(
+            reference,
+            PublicationAuthority(),
+            contract_reader,
+            source_commit=source_a,
+        )
+        self.assertEqual(errors, [], errors)
+        self.assertTrue(calls, "published content must be read back")
+        self.assertTrue(
+            all(call.get("source_commit") == source_b for call in calls),
+            calls,
+        )
+
+    def test_sys_w2_004_feedback_requires_structured_clearance_chain(self):
+        variants = [
+            ("malformed feedback", {"blocking": True, "clearance": None}),
+            ("missing finding chain", [{"blocking": True, "clearance": {"status": "passed"}}]),
+        ]
+        for label, feedback in variants:
+            with self.subTest(label=label):
+                record = deepcopy(self.record)
+                record["feedback"] = feedback
+                self.refresh_record_binding(record)
+                candidate, evidence = self.complete_aggregate(record)
+                result = self.aggregate(candidate, evidence, record)
+                self.assert_blocked_for(result, "feedback")
+
+    def test_sys_w2_005_reverse_consumers_reject_forged_caller_projection(self):
+        readers = FixtureReaders(self.record)
+        expected = [{"task_uid": LEAF_UID, "change_id": CHANGE_ID}]
+        original = readers.authority
+
+        def authority(*args, **kwargs):
+            result = original(*args, **kwargs)
+            result["reverse_consumers"] = deepcopy(expected)
+            return result
+
+        readers.authority = authority
+        reference = _contract_ref()
+        reference["reverse_consumers"] = deepcopy(expected)
+        positive = self.api.reverse_consumers(
+            reference,
+            authority_reader=readers.authority,
+            reader_kind="fixture_authority",
+        )
+        self.assertEqual(positive.get("status"), "passed", positive)
+        self.assertEqual(positive.get("consumers"), expected)
+
+        forged = deepcopy(reference)
+        forged["reverse_consumers"] = [{
+            "task_uid": "task_" + "d" * 32,
+            "change_id": "forged",
+        }]
+        negative = self.api.reverse_consumers(
+            forged,
+            authority_reader=readers.authority,
+            reader_kind="fixture_authority",
+        )
+        self.assert_blocked_for(negative, "reverse", "consumer")
+
+    def test_sys_w2_006_record_requires_obligation_and_mapping_ownership(self):
+        variants = [
+            ("obligation.required", lambda item: item.pop("required", None), "required"),
+            ("obligation.owner_loop", lambda item: item.pop("owner_loop", None), "owner_loop"),
+            ("obligation.owner_role", lambda item: item.pop("owner_role", None), "owner_role"),
+            ("mapping_slot.owner_loop", lambda item: item.pop("owner_loop", None), "owner_loop"),
+            ("mapping_slot.owner_role", lambda item: item.pop("owner_role", None), "owner_role"),
+        ]
+        for label, mutate, token in variants:
+            with self.subTest(field=label):
+                record = deepcopy(self.record)
+                items = (
+                    record["required_obligations"]
+                    if label.startswith("obligation")
+                    else record["mapping_slots"]
+                )
+                for item in items:
+                    mutate(item)
+                self.refresh_record_binding(record)
+                candidate, evidence = self.complete_aggregate(record)
+                result = self.aggregate(candidate, evidence, record)
+                self.assert_blocked_for(result, token)
+
+    def test_optional_binding_absence_is_valid_for_ordinary_single_leaf(self):
+        binding = _binding()
+        binding.pop("coordination_ref")
+        binding.pop("change_id")
+        result = self.leaf(None, binding)
+        self.assertEqual(result.get("status"), "passed", result)
+
+    def test_explicit_matrix_and_equivalence_allow_distinct_leaf_heads(self):
+        record = deepcopy(self.record)
+        candidate, evidence = self.complete_aggregate(record)
+        candidate["configuration_digest"] = _configuration_digest(candidate)
+        for row, item in zip(candidate["applicability_matrix"], evidence):
+            item["candidate"]["configuration_digest"] = candidate["configuration_digest"]
+            row["configuration_digest"] = candidate["configuration_digest"]
+        readers = FixtureReaders(record)
+        readers.install_live_leaf_results(
+            candidate,
+            evidence,
+            profile="repository_required",
+            mode="live_nonfinal",
+        )
+        readers.install_authority_map_and_approval(record, candidate, evidence)
+        result = self.aggregate(candidate, evidence, record, readers)
+        self.assertEqual(result.get("status"), "passed", result)
+        self.assertTrue(readers.authority_calls, "equivalence approval must be read back")
+        observed_refs = []
+        for args, kwargs in readers.authority_calls:
+            observed = args[0] if args else kwargs.get("authority_ref") or kwargs.get("coordination_ref")
+            if isinstance(observed, dict):
+                observed_refs.append(observed)
+        self.assertIn(candidate["equivalence_rules"][0]["authority_ref"], observed_refs)
+        self.assertIn(EQUIVALENCE_APPROVAL_COMMENT_ID, [ref["comment_id"] for ref in observed_refs])
+        approval_readbacks = [
+            result for result in readers.authority_results
+            if result["comment"]["id"] == EQUIVALENCE_APPROVAL_COMMENT_ID
+        ]
+        self.assertEqual(len(approval_readbacks), 1)
+        readback = approval_readbacks[0]
+        self.assertEqual(readback["reader_kind"], "fixture_authority")
+        self.assertEqual(readback["repository"], REPOSITORY)
+        self.assertEqual(readback["issue"]["number"], 3671)
+        self.assertEqual(readback["issue"]["html_url"], f"https://github.com/{REPOSITORY}/issues/3671")
+        self.assertEqual(readback["comment"]["issue_url"], f"https://api.github.com/repos/{REPOSITORY}/issues/3671")
+        self.assertEqual(readback["comment"]["user"], {"login": "producer-system-designer"})
+        self.assertEqual(readback["comment"]["created_at"], "2026-09-11T00:00:00Z")
+        approval_body = json.loads(readback["comment"]["body"])
+        self.assertEqual(approval_body["marker"], "oasis7-equivalence-approval")
+        self.assertEqual(approval_body["schema"], "oasis7.loop-equivalence-approval/v1")
+        self.assertEqual(approval_body["task_uid"], record["task_uid"])
+        self.assertEqual(approval_body["change_id"], record["change_id"])
+        self.assertEqual(approval_body["approval"], "approved")
+        self.assertEqual(
+            approval_body["supporting_evidence_digest"],
+            candidate["equivalence_rules"][0]["supporting_evidence_digest"],
+        )
+
+    def test_live_leaf_result_requires_repository_owned_verification_profile(self):
+        record = deepcopy(self.record)
+        candidate, evidence = self.complete_aggregate(record)
+        candidate["configuration_digest"] = _configuration_digest(candidate)
+        for row, item in zip(candidate["applicability_matrix"], evidence):
+            item["candidate"]["configuration_digest"] = candidate["configuration_digest"]
+            row["configuration_digest"] = candidate["configuration_digest"]
+
+        readers = FixtureReaders(record)
+        readers.install_live_leaf_results(candidate, evidence)
+        readers.install_authority_map_and_approval(record, candidate, evidence)
+        original_authority = readers.authority
+
+        def authority(*args, **kwargs):
+            reference = args[0] if args else kwargs.get("authority_ref") or kwargs.get("coordination_ref")
+            result = original_authority(*args, **kwargs)
+            if isinstance(reference, dict) and reference.get("comment_id") == LEAF_RESULT_COMMENT_IDS[LEAF_UID]:
+                body = json.loads(result["comment"]["body"])
+                body["verification"]["profile"] = "attacker-profile"
+                body["verification"]["mode"] = "caller-authored"
+                body["verification_digest"] = self.api.leaf_verification_digest(body["verification"])
+                body["evidence_digest"] = self.api.leaf_evidence_digest(
+                    body["task_uid"], body["status"], body["candidate"], body["verification_digest"]
+                )
+                body_text = _canonical(body)
+                result["comment"]["body"] = body_text
+                candidate["applicability_matrix"][0]["leaf_evidence_locator"]["body_digest"] = (
+                    "sha256:" + hashlib.sha256(body_text.encode("utf-8")).hexdigest()
+                )
+                candidate["applicability_matrix"][0]["leaf_evidence_digest"] = body["evidence_digest"]
+                evidence[0]["evidence_digest"] = body["evidence_digest"]
+            return result
+
+        readers.authority = authority
+        result = self.aggregate(candidate, evidence, record, readers)
+        self.assert_blocked_for(result, "verification", "profile")
+
+    def test_live_leaf_result_requires_complete_bound_verification_projection(self):
+        mutations = [
+            ("missing frozen source head", lambda verification: verification.pop("frozen_source_head", None)),
+            ("missing before fingerprint", lambda verification: verification.pop("repository_fingerprint_before", None)),
+            ("missing after fingerprint", lambda verification: verification.pop("repository_fingerprint_after", None)),
+            ("mismatched frozen source head", lambda verification: verification.update({"frozen_source_head": "0" * 40})),
+            ("fabricated before fingerprint", lambda verification: verification.update({"repository_fingerprint_before": "2" * 64})),
+        ]
+        failures = []
+        for label, mutate in mutations:
+            with self.subTest(case=label):
+                record = deepcopy(self.record)
+                candidate, evidence = self.complete_aggregate(record)
+                candidate["configuration_digest"] = _configuration_digest(candidate)
+                for row, item in zip(candidate["applicability_matrix"], evidence):
+                    item["candidate"]["configuration_digest"] = candidate["configuration_digest"]
+                    row["configuration_digest"] = candidate["configuration_digest"]
+
+                readers = FixtureReaders(record)
+                readers.install_live_leaf_results(candidate, evidence)
+                readers.install_authority_map_and_approval(record, candidate, evidence)
+                original_authority = readers.authority
+
+                def authority(*args, **kwargs):
+                    reference = args[0] if args else kwargs.get("authority_ref") or kwargs.get("coordination_ref")
+                    result = original_authority(*args, **kwargs)
+                    if isinstance(reference, dict) and reference.get("comment_id") == LEAF_RESULT_COMMENT_IDS[LEAF_UID]:
+                        body = json.loads(result["comment"]["body"])
+                        body["verification"]["profile"] = "repository_required"
+                        body["verification"]["mode"] = "live_nonfinal"
+                        mutate(body["verification"])
+                        body["verification_digest"] = self.api.leaf_verification_digest(body["verification"])
+                        body["evidence_digest"] = self.api.leaf_evidence_digest(
+                            body["task_uid"], body["status"], body["candidate"], body["verification_digest"]
+                        )
+                        body_text = _canonical(body)
+                        result["comment"]["body"] = body_text
+                        candidate["applicability_matrix"][0]["leaf_evidence_locator"]["body_digest"] = (
+                            "sha256:" + hashlib.sha256(body_text.encode("utf-8")).hexdigest()
+                        )
+                        candidate["applicability_matrix"][0]["leaf_evidence_digest"] = body["evidence_digest"]
+                        evidence[0]["evidence_digest"] = body["evidence_digest"]
+                    return result
+
+                readers.authority = authority
+                result = self.aggregate(candidate, evidence, record, readers)
+                if result.get("status") != "blocked":
+                    failures.append({"case": label, "status": result.get("status"), "blockers": result.get("blockers")})
+        self.assertFalse(failures, failures)
+
+    def test_live_leaf_result_rejects_fixture_profile_on_live_reader(self):
+        record = deepcopy(self.record)
+        candidate, evidence = self.complete_aggregate(record)
+        candidate["configuration_digest"] = _configuration_digest(candidate)
+        for row, item in zip(candidate["applicability_matrix"], evidence):
+            item["candidate"]["configuration_digest"] = candidate["configuration_digest"]
+            row["configuration_digest"] = candidate["configuration_digest"]
+        readers = FixtureReaders(record)
+        readers.install_live_leaf_results(candidate, evidence)
+        readers.install_authority_map_and_approval(record, candidate, evidence)
+        result = self.aggregate(candidate, evidence, record, readers)
+        self.assert_blocked_for(result, "fixture")
+
+    def test_authority_map_rejects_stale_self_digest(self):
+        record = deepcopy(self.record)
+        candidate, evidence = self.complete_aggregate(record)
+        candidate["configuration_digest"] = _configuration_digest(candidate)
+        for row, item in zip(candidate["applicability_matrix"], evidence):
+            item["candidate"]["configuration_digest"] = candidate["configuration_digest"]
+            row["configuration_digest"] = candidate["configuration_digest"]
+        readers = FixtureReaders(record)
+        readers.install_live_leaf_results(candidate, evidence)
+        readers.install_authority_map_and_approval(record, candidate, evidence)
+
+        map_comment = readers.comments[AUTHORITY_MAP_COMMENT_ID]
+        authority_map = json.loads(map_comment["body"])
+        authority_map["authority_digest"] = "sha256:" + "f" * 64
+        map_body = _canonical(authority_map)
+        map_comment["body"] = map_body
+        candidate["equivalence_rules"][0]["authority_map_ref"]["body_digest"] = (
+            "sha256:" + hashlib.sha256(map_body.encode("utf-8")).hexdigest()
+        )
+
+        result = self.aggregate(candidate, evidence, record, readers)
+        self.assert_blocked_for(result, "authority", "digest")
+
+    def test_equivalence_approval_role_matches_source_obligation_owner(self):
+        record = deepcopy(self.record)
+        candidate, evidence = self.complete_aggregate(record)
+        candidate["configuration_digest"] = _configuration_digest(candidate)
+        for row, item in zip(candidate["applicability_matrix"], evidence):
+            item["candidate"]["configuration_digest"] = candidate["configuration_digest"]
+            row["configuration_digest"] = candidate["configuration_digest"]
+
+        # The equivalence source is the second leaf, whose declared owner is
+        # producer_system_designer.  A map for the other declared owner must
+        # not authorize that source leaf.
+        candidate["equivalence_rules"][0]["approver_role"] = "repository_health_engineer"
+        readers = FixtureReaders(record)
+        readers.install_live_leaf_results(candidate, evidence)
+        readers.install_authority_map_and_approval(record, candidate, evidence)
+        result = self.aggregate(candidate, evidence, record, readers)
+        self.assert_blocked_for(result, "role")
+
+    def test_equivalence_requires_published_authority_map_reference(self):
+        record = deepcopy(self.record)
+        candidate, evidence = self.complete_aggregate(record)
+        candidate["configuration_digest"] = _configuration_digest(candidate)
+        for row, item in zip(candidate["applicability_matrix"], evidence):
+            item["candidate"]["configuration_digest"] = candidate["configuration_digest"]
+            row["configuration_digest"] = candidate["configuration_digest"]
+
+        readers = FixtureReaders(record)
+        readers.install_live_leaf_results(candidate, evidence)
+        readers.install_authority_map_and_approval(record, candidate, evidence)
+        candidate["equivalence_rules"][0].pop("authority_map_ref")
+        original_authority = readers.authority
+
+        def authority(*args, **kwargs):
+            reference = args[0] if args else kwargs.get("authority_ref") or kwargs.get("coordination_ref")
+            result = original_authority(*args, **kwargs)
+            if isinstance(reference, dict) and reference.get("comment_id") == EQUIVALENCE_APPROVAL_COMMENT_ID:
+                result["reader_kind"] = "github_live_query"
+                result["comment"]["user"] = {"login": "attacker"}
+                result["permission"] = {"permission": "write"}
+            return result
+
+        readers.authority = authority
+        result = self.aggregate(candidate, evidence, record, readers)
+        self.assert_blocked_for(result, "authority", "map")
+
+    def test_missing_matrix_row_blocks_even_with_terminal_leaf_evidence(self):
+        record = deepcopy(self.record)
+        candidate = _candidate(record)
+        payload = _evidence_payload(LEAF_UID, candidate)
+        digest = _evidence_digest(payload)
+        candidate["applicability_matrix"] = [_matrix_row("QW2-1", "slot-contract", LEAF_UID, candidate, digest)]
+        evidence = [{**payload, "evidence_digest": digest}]
+        result = self.aggregate(candidate, evidence, record)
+        self.assert_blocked_for(result, "applicability_matrix", "slot-handoff")
+
+    def test_matrix_rejects_duplicate_unknown_and_mismatched_rows(self):
+        variants = []
+
+        candidate, evidence = self.complete_aggregate()
+        duplicate = deepcopy(candidate)
+        duplicate["applicability_matrix"].append(deepcopy(duplicate["applicability_matrix"][0]))
+        variants.append((duplicate, evidence, ("duplicate", "applicability_matrix")))
+
+        candidate, evidence = self.complete_aggregate()
+        unknown = deepcopy(candidate)
+        unknown["applicability_matrix"][1]["leaf_task_uid"] = "task_" + "d" * 32
+        variants.append((unknown, evidence, ("unknown", "Task UID")))
+
+        candidate, evidence = self.complete_aggregate()
+        mismatch = deepcopy(candidate)
+        mismatch["applicability_matrix"][0]["tested_tree_oid"] = "9" * 40
+        variants.append((mismatch, evidence, ("tested_tree_oid", "matrix")))
+
+        for candidate, evidence, tokens in variants:
+            with self.subTest(tokens=tokens):
+                self.assert_blocked_for(self.aggregate(candidate, evidence), *tokens)
+
+    def test_matrix_rejects_each_candidate_field_drift(self):
+        mutations = {
+            "source_head_oid": "9" * 40,
+            "integration_base_oid": "8" * 40,
+            "tested_tree_oid": "7" * 40,
+            "configuration_digest": "sha256:" + "6" * 64,
+            "entry": "scripts/pm/other.py",
+            "environment": "hosted",
+            "evidence_window": {"started_at": "2026-09-11T00:02:00Z", "ended_at": "2026-09-11T00:03:00Z"},
+        }
+        for field, value in mutations.items():
+            with self.subTest(field=field):
+                candidate, evidence = self.complete_aggregate()
+                candidate["applicability_matrix"][0][field] = value
+                self.assert_blocked_for(self.aggregate(candidate, evidence), field, "matrix")
+
+    def test_matrix_rejects_unknown_slot_and_evidence_digest_mismatch(self):
+        candidate, evidence = self.complete_aggregate()
+        candidate["applicability_matrix"][0]["mapping_slot"] = "slot-unknown"
+        self.assert_blocked_for(self.aggregate(candidate, evidence), "unknown", "mapping_slot")
+
+        candidate, evidence = self.complete_aggregate()
+        candidate["applicability_matrix"][0]["leaf_evidence_digest"] = "sha256:" + "9" * 64
+        self.assert_blocked_for(self.aggregate(candidate, evidence), "evidence_digest", "matrix")
+
+    def test_rh_w2_003_matrix_requires_stable_leaf_evidence_locator(self):
+        variants = [
+            ("missing", lambda row: row.pop("leaf_evidence_locator", None)),
+            ("empty", lambda row: row.update(leaf_evidence_locator="")),
+            ("non-string", lambda row: row.update(leaf_evidence_locator={"comment_id": 1})),
+        ]
+        for label, mutate in variants:
+            with self.subTest(locator=label):
+                candidate, evidence = self.complete_aggregate()
+                mutate(candidate["applicability_matrix"][0])
+                result = self.aggregate(candidate, evidence)
+                self.assert_blocked_for(result, "leaf_evidence_locator")
+
+    def test_aggregate_rejects_duplicate_evidence_and_evidence_candidate_drift(self):
+        candidate, evidence = self.complete_aggregate()
+        duplicate = evidence + [deepcopy(evidence[0])]
+        self.assert_blocked_for(self.aggregate(candidate, duplicate), "duplicate", "evidence")
+
+        candidate, evidence = self.complete_aggregate()
+        evidence[0]["candidate"]["entry"] = "scripts/pm/other.py"
+        self.assert_blocked_for(self.aggregate(candidate, evidence), "entry", "evidence")
+
+    def test_aggregate_rejects_forged_leaf_envelope_without_live_readback(self):
+        candidate, evidence = self.complete_aggregate()
+        result = self.aggregate(candidate, evidence)
+        self.assert_blocked_for(result, "live", "leaf")
+
+    def test_aggregate_binds_obligation_slot_and_allowlist_as_one_relation(self):
+        candidate, evidence = self.complete_aggregate()
+        swapped = deepcopy(candidate)
+        swapped["applicability_matrix"][0]["mapping_slot"] = "slot-handoff"
+        swapped["applicability_matrix"][1]["mapping_slot"] = "slot-contract"
+        errors = self.api._validate_matrix(self.record, swapped, evidence)
+        self.assertTrue(any("mapping_slot" in error for error in errors), errors)
+
+        failures = []
+        for label, allowed, uid, should_pass in (
+            ("omitted", None, LEAF_UID, True),
+            ("member", [LEAF_UID], LEAF_UID, True),
+            ("outsider", [SECOND_LEAF_UID], LEAF_UID, False),
+            ("empty", [], LEAF_UID, False),
+        ):
+            record = deepcopy(self.record)
+            if allowed is not None:
+                record["mapping_slots"][0]["allowed_task_uids"] = allowed
+            record["coordination_ref"]["record_digest"] = _record_digest(record)
+            candidate, evidence = self.complete_aggregate(record)
+            candidate["applicability_matrix"][0]["leaf_task_uid"] = uid
+            errors = self.api._validate_matrix(record, candidate, evidence)
+            if (not errors) != should_pass:
+                failures.append({"case": label, "errors": errors})
+        self.assertFalse(failures, failures)
+
+    def test_equivalence_requires_published_role_map_and_current_permission(self):
+        candidate, evidence = self.complete_aggregate()
+        rule = candidate["equivalence_rules"][0]
+        authority_map = build_authority_map(
+            task_uid=self.record["task_uid"],
+            role="producer_system_designer",
+            account="mapped-admin",
+            permission_floor="admin",
+        )
+        authority_map_body = _canonical(authority_map)
+        authority_map_ref = {
+            "repository": REPOSITORY,
+            "issue_number": 3671,
+            "comment_id": 5636906120,
+            "body_digest": "sha256:" + hashlib.sha256(authority_map_body.encode()).hexdigest(),
+        }
+        rule["authority_map_ref"] = authority_map_ref
+        readers = FixtureReaders(self.record)
+        positive = readers.authority(rule["authority_ref"])
+        positive["reader_kind"] = "github_live_query"
+        positive["comment"]["user"] = {"login": "mapped-admin"}
+        positive["permission"] = {"permission": "admin"}
+        positive["authority_map"] = authority_map
+        self.assertEqual(
+            self.api._validate_approval_authority(
+                positive, rule, self.record, evidence[1]["evidence_digest"]
+            ),
+            [],
+        )
+        readback = deepcopy(positive)
+        readback["comment"]["user"] = {"login": "attacker"}
+        readback["permission"] = {"permission": "write"}
+        errors = self.api._validate_approval_authority(
+            readback,
+            rule,
+            self.record,
+            evidence[1]["evidence_digest"],
+        )
+        self.assertTrue(errors, readback)
+
+    def test_hosted_candidate_rejects_malformed_typed_metadata(self):
+        variants = [
+            ("null entry", "entry", None),
+            ("null environment", "environment", None),
+            ("malformed window", "evidence_window", {"started_at": "tomorrow", "ended_at": "yesterday"}),
+            ("unsafe helper path", "effective_helper_identity", {"path": "../escape", "commit": SOURCE_OID, "digest": "sha256:" + "4" * 64}),
+            ("arbitrary configuration digest", "configuration_digest", "sha256:" + "9" * 64),
+            ("null consumed contract", "consumed_contracts", [None]),
+        ]
+        failures = []
+        for label, field, value in variants:
+            candidate, evidence = self.complete_aggregate()
+            self._sync_candidate_field(candidate, evidence, field, value)
+            result = self.api.validate_candidate(self.record, candidate, evidence)
+            if result.get("status") != "blocked":
+                failures.append({"case": label, "result": result})
+        self.assertFalse(failures, failures)
+
+    def test_equivalence_requires_actual_leaf_candidate_and_exact_critical_fields(self):
+        candidate, evidence = self.complete_aggregate()
+        wrong_leaf = deepcopy(candidate)
+        wrong_leaf["equivalence_rules"][0]["source_leaf"]["task_uid"] = "task_" + "d" * 32
+        self.assert_blocked_for(self.aggregate(wrong_leaf, evidence), "equivalence", "source leaf")
+
+        candidate, evidence = self.complete_aggregate()
+        critical = deepcopy(candidate)
+        critical["equivalence_rules"][0]["allowed_to_differ"].append("tested_tree_oid")
+        self.assert_blocked_for(self.aggregate(critical, evidence), "tested_tree_oid", "exact")
+
+    def test_equivalence_requires_authority_and_supporting_evidence_digest(self):
+        candidate, evidence = self.complete_aggregate()
+        bad_authority = deepcopy(candidate)
+        bad_authority["equivalence_rules"][0]["authority_ref"]["comment_id"] = 999
+        self.assert_blocked_for(self.aggregate(bad_authority, evidence), "equivalence", "authority")
+
+        candidate, evidence = self.complete_aggregate()
+        bad_digest = deepcopy(candidate)
+        bad_digest["equivalence_rules"][0]["supporting_evidence_digest"] = "sha256:" + "9" * 64
+        self.assert_blocked_for(self.aggregate(bad_digest, evidence), "equivalence", "digest")
+
+    def test_modified_comparable_fields_cannot_exempt_critical_candidate_data(self):
+        record = deepcopy(self.record)
+        record["candidate_selection"]["comparable_fields"].remove("tested_tree_oid")
+        record["coordination_ref"]["record_digest"] = _record_digest(record)
+        candidate, evidence = self.complete_aggregate(record)
+        result = self.aggregate(candidate, evidence, record)
+        self.assert_blocked_for(result, "tested_tree_oid", "comparable")
+
+    def _authority_variant(self, mutate):
+        readers = FixtureReaders(self.record)
+        payload = readers.authority()
+        mutate(payload)
+        readers.authority = lambda *args, **kwargs: payload
+        return readers
+
+    def test_authority_reader_receives_exact_bound_identity(self):
+        readers = FixtureReaders(self.record)
+        result = self.leaf(readers=readers)
+        self.assertEqual(result.get("status"), "passed", result)
+        self.assertEqual(len(readers.authority_calls), 1)
+        args, kwargs = readers.authority_calls[0]
+        observed = args[0] if args else kwargs.get("coordination_ref")
+        self.assertEqual(observed, self.record["coordination_ref"])
+
+    def test_authority_readback_rejects_independent_issue_identity_tamper(self):
+        variants = [
+            (lambda payload: payload["issue"].update({"body": "incidental mention " + TASK_UID}), "canonical task_uid"),
+            (lambda payload: payload["issue"].update({"number": 999}), "Issue identity"),
+            (lambda payload: payload["comment"].update({"id": 999}), "comment identity"),
+            (lambda payload: payload["comment"].update({"issue_url": "https://api.github.com/repos/foreign/repo/issues/3671"}), "Issue URL"),
+        ]
+        for mutate, token in variants:
+            with self.subTest(token=token):
+                result = self.leaf(readers=self._authority_variant(mutate))
+                self.assert_blocked_for(result, token)
+
+    def test_authority_readback_rejects_marker_schema_change_and_change_id_tamper(self):
+        variants = [
+            (lambda payload: _rewrite_comment_body(payload, lambda body: body.update({"marker": "foreign-marker"})), "marker"),
+            (lambda payload: _rewrite_comment_body(payload, lambda body: body.update({"schema": "foreign/v1"})), "schema"),
+            (lambda payload: _rewrite_comment_body(payload, lambda body: body.update({"change_id": "other-change"})), "change_id"),
+        ]
+        for mutate, token in variants:
+            with self.subTest(token=token):
+                result = self.leaf(readers=self._authority_variant(mutate))
+                self.assert_blocked_for(result, token)
+
+    def test_authority_readback_rejects_server_author_and_creation_time_tamper(self):
+        variants = [
+            (lambda payload: payload["comment"].update({"user": {"login": "attacker"}}), "server author"),
+            (lambda payload: payload["comment"].update({"created_at": "2026-09-12T00:00:00Z"}), "creation time"),
+        ]
+        for mutate, token in variants:
+            with self.subTest(token=token):
+                result = self.leaf(readers=self._authority_variant(mutate))
+                self.assert_blocked_for(result, token)
+
+    def test_authority_readback_rejects_caller_author_and_approval_spoof(self):
+        binding = _binding(
+            caller_author="coordinator",
+            caller_approval="approved",
+        )
+
+        def attacker_readback(payload):
+            payload["comment"].update({"user": {"login": "attacker"}})
+
+        readers = self._authority_variant(attacker_readback)
+        result = self.leaf(binding=binding, readers=readers)
+        self.assert_blocked_for(result, "server author")
+
+    def _equivalence_authority_variant(self, record, mutate):
+        readers = FixtureReaders(record)
+        original_authority = readers.authority
+
+        def authority(*args, **kwargs):
+            reference = args[0] if args else kwargs.get("authority_ref") or kwargs.get("coordination_ref")
+            result = original_authority(*args, **kwargs)
+            if isinstance(reference, dict) and reference.get("comment_id") == EQUIVALENCE_APPROVAL_COMMENT_ID:
+                mutate(result)
+            return result
+
+        readers.authority = authority
+        return readers
+
+    def test_equivalence_approval_readback_rejects_author_or_body_tamper(self):
+        variants = [
+            (lambda payload: payload["comment"].update({"user": {"login": "attacker"}}), "server author"),
+            (lambda payload: _rewrite_comment_body(payload, lambda body: body.update({"basis": "tampered"})), "body_digest"),
+        ]
+        for mutate, token in variants:
+            with self.subTest(token=token):
+                record = deepcopy(self.record)
+                candidate, evidence = self.complete_aggregate(record)
+                readers = self._equivalence_authority_variant(record, mutate)
+                result = self.aggregate(candidate, evidence, record, readers)
+                self.assert_blocked_for(result, "equivalence", token)
+
+    def test_authority_readback_recomputes_body_record_and_source_digests(self):
+        readers = FixtureReaders(self.record)
+        readers.comment["body"] += "\ntampered"
+        self.assert_blocked_for(self.leaf(readers=readers), "body_digest")
+
+        changed = deepcopy(self.record)
+        changed["feedback"].append({"source_locator": "late-mutation"})
+        self.assert_blocked_for(self.leaf(changed, readers=readers), "record_digest")
+
+        forged = deepcopy(self.record)
+        forged["coordination_ref"]["record_digest"] = "sha256:" + "9" * 64
+        forged_readers = FixtureReaders(forged)
+        forged_binding = _binding(coordination_ref=deepcopy(forged["coordination_ref"]))
+        self.assert_blocked_for(self.leaf(forged, forged_binding, forged_readers), "record_digest")
+
+        stale_source = deepcopy(self.record)
+        stale_source["coordination_ref"]["source_commit"] = "f" * 40
+        stale_binding = self.refresh_record_binding(stale_source)
+        self.assert_blocked_for(self.leaf(stale_source, stale_binding), "source_commit")
+
+    def test_effective_tool_and_record_source_commits_are_distinct(self):
+        effective_tool_commit = "1" * 40
+        result = self.api.validate_leaf(
+            self.record,
+            self.binding,
+            authority_reader=self.readers.authority,
+            contract_reader=self.readers.contract,
+            source_commit=effective_tool_commit,
+            effective_tool_commit=effective_tool_commit,
+            record_source_commit=SOURCE_OID,
+        )
+        self.assertEqual(result.get("status"), "passed", result)
+        self.assertEqual(result.get("effective_tool_commit"), effective_tool_commit)
+        self.assertEqual(result.get("record_source_commit"), SOURCE_OID)
+
+    def test_duplicate_coordination_comments_block_exact_readback(self):
+        readers = FixtureReaders(self.record)
+        payload = readers.authority()
+        payload["comments"] = [deepcopy(payload["comment"]), deepcopy(readers.comment)]
+        readers.authority = lambda *args, **kwargs: payload
+        result = self.leaf(readers=readers)
+        self.assert_blocked_for(result, "duplicate", "coordination comment")
+
+    def test_bind_resume_and_doctor_block_before_mutation_with_pinned_helper(self):
+        boundary = _load_loop_boundary()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pinned = root / "pinned-tools"
+            candidate = root / "candidate-worktree"
+            pinned.mkdir()
+            candidate.mkdir()
+            for command in ("bind", "resume-check", "doctor"):
+                marker = candidate / (command + ".mutated")
+                loader_calls = []
+
+                def loader(effective_tool_root, source_commit, *, _command=command):
+                    loader_calls.append((Path(effective_tool_root).resolve(), source_commit))
+                    self.assertEqual(Path(effective_tool_root).resolve(), pinned.resolve())
+                    self.assertEqual(source_commit, SOURCE_OID)
+                    raise TraceabilityPreflight(f"forced {_command} preflight sentinel")
+
+                def mutation():
+                    marker.write_text("MUTATED")
+
+                try:
+                    result = boundary.pre_mutation_admission(
+                        command,
+                        binding=_binding(),
+                        target_root=candidate,
+                        effective_tool_root=pinned,
+                        source_commit=SOURCE_OID,
+                        traceability_loader=loader,
+                        mutation=mutation,
+                    )
+                except TraceabilityPreflight as exc:
+                    result = {"status": "blocked", "blockers": [str(exc)]}
+                with self.subTest(command=command):
+                    self.assertEqual(result.get("status"), "blocked", result)
+                    self.assertIn(f"forced {command} preflight sentinel", "\n".join(result.get("blockers", [])))
+                    self.assertEqual(loader_calls, [(pinned.resolve(), SOURCE_OID)])
+                    self.assertFalse(marker.exists(), result)
+
+    def test_loop_main_dispatches_gate_for_bind_resume_and_doctor(self):
+        """The facade commands must call the gate, rather than merely defining it."""
+        loop = _load_loop_dispatch()
+
+        class NoopReservation:
+            def __init__(self, *args, **kwargs):
+                self.handle = self
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def fileno(self):
+                return 0
+
+        for command in ("bind", "resume-check", "doctor"):
+            with self.subTest(command=command), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                pinned = root / "pinned-tools"
+                pinned.mkdir()
+                marker = root / "downstream-mutated"
+                binding = _binding(task_uid=TASK_UID, policy_commit=SOURCE_OID)
+                binding_path = root / "binding.json"
+                binding_path.write_text(json.dumps(binding, sort_keys=True))
+                task = {
+                    "task_uid": TASK_UID,
+                    "repository": REPOSITORY,
+                    "issue_number": 3671,
+                    "owner_role": "repository_health_engineer",
+                    "bootstrap_epoch": 1,
+                    "loop_binding": deepcopy(binding),
+                    "task_branch": "task/engineering-traceability-checker",
+                }
+                gate_calls = []
+                loader_calls = []
+
+                def loader(effective_tool_root, source_commit):
+                    loader_calls.append((Path(effective_tool_root).resolve(), source_commit))
+                    self.assertEqual(Path(effective_tool_root).resolve(), pinned.resolve())
+                    self.assertEqual(source_commit, SOURCE_OID)
+                    raise TraceabilityPreflight(f"forced {command} dispatch sentinel")
+
+                def gate(*args, **kwargs):
+                    observed_command = args[0] if args else kwargs.get("command")
+                    gate_calls.append((observed_command, kwargs))
+                    self.assertEqual(observed_command, command)
+                    self.assertEqual(Path(kwargs["effective_tool_root"]).resolve(), pinned.resolve())
+                    self.assertEqual(kwargs["source_commit"], SOURCE_OID)
+                    self.assertTrue(callable(kwargs["traceability_loader"]))
+                    kwargs["traceability_loader"](kwargs["effective_tool_root"], kwargs["source_commit"])
+
+                def downstream_validate(*args, **kwargs):
+                    marker.write_text(command)
+                    return {"status": "passed", "blockers": []}
+
+                def fake_run(command_args, *args, **kwargs):
+                    command_text = " ".join(str(part) for part in command_args)
+                    if "workflow-next.py" in command_text:
+                        marker.write_text(command)
+                    return subprocess.CompletedProcess(command_args, 0, stdout='{"status":"passed"}\n', stderr="")
+
+                def fake_check_output(command_args, *args, **kwargs):
+                    command_text = " ".join(str(part) for part in command_args)
+                    if "github-project-task.py" in command_text:
+                        marker.write_text(command)
+                        return '{"status":"bound"}\n'
+                    raise AssertionError(f"unexpected command output request: {command_text}")
+
+                argv = [
+                    "loop.py",
+                    command,
+                    "--repo-root", str(root),
+                    "--tool-root", str(pinned),
+                    "--task-uid", TASK_UID,
+                    "--manual-request-ref", "issuecomment-5636639918",
+                    "--json",
+                ]
+                if command == "bind":
+                    argv.extend(["--loop-binding", str(binding_path)])
+
+                with patch.object(loop, "pre_mutation_admission", gate, create=True), \
+                        patch.object(loop, "_traceability_adapter", lambda effective_root, target_root, bound, commit: loader(effective_root, commit)), \
+                        patch.object(loop, "load_task", return_value=task), \
+                        patch.object(loop, "validate_task", side_effect=downstream_validate), \
+                        patch.object(loop, "common_dir", return_value=root), \
+                        patch.object(loop, "Reservation", NoopReservation), \
+                        patch.object(loop, "recovery_status", return_value={"pending_actions": []}), \
+                        patch.object(loop, "record_action"), \
+                        patch.object(loop.subprocess, "run", side_effect=fake_run), \
+                        patch.object(loop.subprocess, "check_output", side_effect=fake_check_output), \
+                        patch.object(loop.sys, "argv", argv), \
+                        redirect_stdout(io.StringIO()):
+                    try:
+                        return_code = loop.main()
+                    except TraceabilityPreflight as exc:
+                        return_code = 2
+                        self.assertIn(f"forced {command} dispatch sentinel", str(exc))
+
+                self.assertEqual(len(gate_calls), 1, gate_calls)
+                self.assertEqual(loader_calls, [(pinned.resolve(), SOURCE_OID)])
+                self.assertEqual(return_code, 2)
+                self.assertFalse(marker.exists(), f"{command} reached downstream mutation")
+
+    def test_closeout_aggregate_omitted_record_blocks_before_remote_mutation(self):
+        fixture = CloseoutFixture()
+        self.addCleanup(fixture.tmp.cleanup)
+        result = fixture.run("--traceability-mode", "aggregate")
+        output = result.stdout + result.stderr
+        self.assertNotEqual(result.returncode, 0, output)
+        self.assertIn("coordinating record", output)
+        self.assertFalse(fixture.marker.exists(), output)
+
+    def test_closeout_leaf_preserves_multi_obligation_boundary_and_aggregate_requires_candidate(self):
+        leaf_fixture = PinnedCloseoutFixture()
+        self.addCleanup(leaf_fixture.tmp.cleanup)
+        leaf_fixture.set_traceability_mode("leaf")
+        record = leaf_fixture.record(self.record)
+        pinned_leaf = leaf_fixture.pin_leaf_helper()
+        leaf_fixture.bind(pinned_leaf)
+        positive = leaf_fixture.run(
+            "--traceability-mode", "leaf",
+            "--traceability-record", str(record),
+        )
+        positive_output = positive.stdout + positive.stderr
+        self.assertEqual(positive.returncode, 0, positive_output)
+        self.assertEqual(
+            leaf_fixture.marker.read_text(encoding="utf-8").splitlines(),
+            ["audit", "closeout", "audit"],
+            positive_output,
+        )
+        selected = json.loads(leaf_fixture.mapping_path.read_text(encoding="utf-8"))["tasks"][TASK_UID]
+        self.assertEqual(selected.get("traceability_mode"), "leaf", selected)
+        self.assertNotIn("aggregate_completion", selected, selected)
+
+        aggregate_fixture = CloseoutFixture()
+        self.addCleanup(aggregate_fixture.tmp.cleanup)
+        aggregate_record = aggregate_fixture.record(self.record)
+        negative = aggregate_fixture.run(
+            "--traceability-mode", "aggregate",
+            "--traceability-record", str(aggregate_record),
+        )
+        negative_output = negative.stdout + negative.stderr
+        self.assertNotEqual(negative.returncode, 0, negative_output)
+        self.assertIn("requires aggregate candidate", negative_output)
+        self.assertFalse(aggregate_fixture.marker.exists(), negative_output)
+
+    def test_closeout_live_reader_wrapper_preserves_publication_checks(self):
+        record = deepcopy(self.record)
+        consumed = deepcopy(record["required_obligations"][0]["acceptance_refs"][0])
+        consumed["revision"] = 1
+        consumed["publication_ref"]["comment_id"] += 1
+        record["consumed_clause_refs"] = [consumed]
+        binding = self.refresh_record_binding(record)
+        fixture_readers = FixtureReaders(record)
+
+        class LiveAuthority:
+            reader_kind = "github_live_query"
+
+            def __init__(self):
+                self.coordination_calls = 0
+                self.publication_calls = 0
+                self.publication_comment_ids = []
+
+            def __call__(self, reference):
+                comment_id = reference.get("comment_id") if isinstance(reference, dict) else None
+                if comment_id == record["coordination_ref"]["comment_id"]:
+                    self.coordination_calls += 1
+                    result = fixture_readers.authority(reference)
+                    result["reader_kind"] = self.reader_kind
+                    return result
+                self.publication_calls += 1
+                self.publication_comment_ids.append(comment_id)
+                return {
+                    "reader_kind": self.reader_kind,
+                    "comment": {"body": json.dumps({"marker": "wrong-publication"})},
+                }
+
+        live_authority = LiveAuthority()
+
+        def closeout_reader(reference):
+            # This is the closeout shell's forwarding seam. Its return value
+            # is live, while the callable itself intentionally has no
+            # reader_kind attribute until the production wrapper preserves it.
+            return live_authority(reference)
+
+        result = self.api.validate_leaf(
+            record,
+            binding,
+            authority_reader=closeout_reader,
+            contract_reader=fixture_readers.contract,
+            source_commit=SOURCE_OID,
+        )
+        output = json.dumps(result, sort_keys=True)
+        self.assert_blocked_for(result, "publication marker")
+        self.assertGreaterEqual(live_authority.publication_calls, 2, output)
+        self.assertIn(consumed["publication_ref"]["comment_id"], live_authority.publication_comment_ids, output)
+        self.assertIn(record["required_obligations"][0]["acceptance_refs"][0]["publication_ref"]["comment_id"], live_authority.publication_comment_ids, output)
+
+    def test_closeout_failed_aggregate_preflight_blocks_before_remote_mutation(self):
+        fixture = PinnedCloseoutFixture()
+        self.addCleanup(fixture.tmp.cleanup)
+        record = fixture.record(self.record)
+        candidate = fixture.write_json("candidate.json", _candidate(self.record))
+        pinned_blocked = fixture.pin_helper(("blocked", "forced aggregate preflight sentinel"))
+        fixture.bind(pinned_blocked)
+        fixture.shadow_helper(("passed", ""))
+        result = fixture.run(
+            "--traceability-mode", "aggregate",
+            "--traceability-record", str(record),
+            "--traceability-candidate", str(candidate),
+        )
+        output = result.stdout + result.stderr
+        self.assertNotEqual(result.returncode, 0, output)
+        self.assertIn("forced aggregate preflight sentinel", output)
+        self.assertFalse(fixture.marker.exists(), output)
+
+    def test_rh_w2_002_closeout_rejects_divergent_unpinned_helper(self):
+        fixture = PinnedCloseoutFixture()
+        self.addCleanup(fixture.tmp.cleanup)
+        record = fixture.record(self.record)
+        candidate, evidence = self.complete_aggregate()
+        candidate_payload = fixture.write_json(
+            "candidate.json", {"candidate": candidate, "evidence": evidence}
+        )
+        pinned_pass = fixture.pin_helper(("passed", ""))
+        fixture.bind(pinned_pass)
+        fixture.shadow_helper(("blocked", "mutable-helper-sentinel"))
+        positive = fixture.run(
+            "--traceability-mode", "aggregate",
+            "--traceability-record", str(record),
+            "--traceability-candidate", str(candidate_payload),
+        )
+        positive_output = positive.stdout + positive.stderr
+        self.assertEqual(positive.returncode, 0, positive_output)
+        self.assertEqual(
+            fixture.marker.read_text(encoding="utf-8").splitlines(),
+            ["audit", "closeout", "audit"],
+            positive_output,
+        )
+
+        fixture.marker.unlink()
+        pinned_blocked = fixture.pin_helper(("blocked", "pinned-helper-sentinel"))
+        fixture.bind(pinned_blocked)
+        fixture.shadow_helper(("passed", ""))
+        negative = fixture.run(
+            "--traceability-mode", "aggregate",
+            "--traceability-record", str(record),
+            "--traceability-candidate", str(candidate_payload),
+        )
+        output = negative.stdout + negative.stderr
+        self.assertNotEqual(negative.returncode, 0, output)
+        self.assertTrue(
+            "pinned-helper-sentinel" in output,
+            output,
+        )
+        self.assertFalse(fixture.marker.exists(), output)
+
+    def test_closeout_rejects_valid_record_for_another_selected_task(self):
+        fixture = CloseoutFixture()
+        self.addCleanup(fixture.tmp.cleanup)
+        other = deepcopy(self.record)
+        other["task_uid"] = "task_" + "b" * 32
+        other["coordination_ref"]["issue_number"] = 3672
+        other["coordination_ref"]["comment_id"] = 5636906115
+        other["coordination_ref"]["record_digest"] = _record_digest(other)
+        record = fixture.record(other)
+        candidate, evidence = self.complete_aggregate(other)
+        candidate_payload = fixture.write_json(
+            "candidate.json", {"candidate": candidate, "evidence": evidence}
+        )
+        result = fixture.run(
+            "--traceability-mode", "aggregate",
+            "--traceability-record", str(record),
+            "--traceability-candidate", str(candidate_payload),
+        )
+        output = result.stdout + result.stderr
+        self.assertNotEqual(result.returncode, 0, output)
+        self.assertIn("selected task", output)
+        self.assertFalse(fixture.marker.exists(), output)
+
+    def test_closeout_ordinary_unbound_leaf_remains_eligible(self):
+        fixture = CloseoutFixture()
+        self.addCleanup(fixture.tmp.cleanup)
+        result = fixture.run()
+        output = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, output)
+        self.assertEqual(fixture.marker.read_text().splitlines(), ["audit", "closeout", "audit"], output)
+
+    def test_reverse_consumer_view_is_readonly_and_authority_bounded(self):
+        result = self.api.reverse_consumers(
+            _contract_ref(),
+            authority_reader=self.readers.authority,
+            reader_kind="fixture_authority",
+        )
+        self.assertEqual(result.get("status"), "passed", result)
+        self.assertIsInstance(result.get("consumers"), list)
+        self.assertEqual(result.get("reader_kind"), "fixture_authority", result)
+        self.assertTrue(result.get("local_live_admission_required"), result)
+        self.assertNotIn("mutation", result)
+        self.assertNotIn("dispatch_request", result)
+
+    def test_immutable_source_reader_uses_frozen_anchor_and_distinct_content_digest(self):
+        """The source proof must resolve committed bytes and exact anchors."""
+        repository_root = HERE.parent.parent
+        frozen = self.api.ImmutableSourceReader(repository_root, SOURCE_OID)
+        published_shape = {
+            "repository": REPOSITORY,
+            "path": "doc/engineering/workflow/source-of-truth.md",
+            "fragment": "traceability-record-contract",
+            "contract_id": "engineering-workflow",
+            "revision": 1,
+        }
+        live_source = frozen(published_shape)
+        self.assertEqual(live_source.get("status"), "passed", live_source)
+        self.assertEqual(live_source.get("source_commit"), SOURCE_OID)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(["git", "-C", str(root), "init", "-q"], check=True)
+            subprocess.run(["git", "-C", str(root), "config", "user.email", "traceability@example.invalid"], check=True)
+            subprocess.run(["git", "-C", str(root), "config", "user.name", "traceability-test"], check=True)
+            document = root / "contract.md"
+            exact = '<a id="traceability-record-contract"></a>\n# Contract\n'
+            document.write_text(exact, encoding="utf-8")
+            subprocess.run(["git", "-C", str(root), "add", "contract.md"], check=True)
+            subprocess.run(["git", "-C", str(root), "commit", "-qm", "exact contract anchor"], check=True)
+            commit = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+            raw_digest = "sha256:" + hashlib.sha256(exact.encode("utf-8")).hexdigest()
+            reference = {
+                "repository": REPOSITORY,
+                "path": "contract.md",
+                "fragment": "traceability-record-contract",
+                "source_digest": raw_digest,
+            }
+            reader = self.api.ImmutableSourceReader(root, commit)
+            result = reader(reference)
+            self.assertEqual(result.get("status"), "passed", result)
+            self.assertEqual(result.get("source_digest"), raw_digest)
+
+            tampered = dict(reference)
+            tampered["source_digest"] = "sha256:" + "9" * 64
+            with self.assertRaises(ValueError) as digest_error:
+                reader(tampered)
+            self.assertIn("digest mismatch", str(digest_error.exception))
+
+            document.write_text("traceability-record-contract is only mentioned\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(root), "add", "contract.md"], check=True)
+            subprocess.run(["git", "-C", str(root), "commit", "-qm", "remove anchor"], check=True)
+            missing_commit = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+            with self.assertRaises(ValueError) as anchor_error:
+                self.api.ImmutableSourceReader(root, missing_commit)(reference)
+            self.assertIn("unresolved immutable contract fragment", str(anchor_error.exception))
+
+
+if __name__ == "__main__":
+    unittest.main()

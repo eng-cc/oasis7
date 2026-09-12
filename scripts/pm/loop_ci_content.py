@@ -1,16 +1,90 @@
 """Hosted repository-only checks; full live admission remains a local gh gate."""
 import json
+import importlib
 import subprocess
 
 from loop_contracts import MARKER, REPOSITORY, contract_digest, validate_contract_record
 from loop_policy import scope_context, validate_binding, validate_scope, validate_tool_root
 
 
+def _validate_hosted_traceability(root, binding, *, record=None, candidate=None,
+                                  evidence=None, source_commit=None):
+    """Check immutable hosted content without manufacturing live admission.
+
+    The hosted path may project the record/candidate shape, but it never
+    supplies a fixture reader to the core validator and never claims Project,
+    eligibility, admin, hold, or completion authority.
+    """
+    if binding.get('coordination_ref') is not None and record is None:
+        return ['bound traceability content requires coordinating record']
+    if record is None:
+        return []
+    try:
+        helper = importlib.import_module('loop_traceability')
+    except (ImportError, OSError) as exc:
+        return ['hosted traceability helper unavailable: ' + str(exc)]
+    validate_record = getattr(helper, 'validate_record', None)
+    if not callable(validate_record):
+        # The initial core projection exposes the shape checker internally;
+        # delegate to it rather than reimplementing record rules here.
+        shape_checker = getattr(helper, '_validate_record_shape', None)
+        if callable(shape_checker):
+            try:
+                shape_errors = shape_checker(record)
+            except (TypeError, ValueError, OSError, KeyError) as exc:
+                return ['hosted traceability record validation failed: ' + str(exc)]
+            blockers = list(shape_errors or [])
+        else:
+            return ['hosted traceability helper lacks validate_record']
+    else:
+        try:
+            checked = validate_record(record, root)
+        except (TypeError, ValueError, OSError, KeyError) as exc:
+            return ['hosted traceability record validation failed: ' + str(exc)]
+        if not isinstance(checked, dict):
+            return ['hosted traceability record validation returned no structured result']
+        blockers = list(checked.get('blockers') or [])
+        if checked.get('status') != 'passed' and not blockers:
+            blockers.append('hosted traceability record is invalid')
+
+    if candidate is not None:
+        validate_candidate = getattr(helper, 'validate_candidate', None)
+        if callable(validate_candidate):
+            try:
+                checked_candidate = validate_candidate(
+                    record,
+                    candidate,
+                    evidence if evidence is not None else [],
+                    source_commit=source_commit,
+                )
+            except (TypeError, ValueError, OSError, KeyError) as exc:
+                return blockers + ['hosted traceability candidate validation failed: ' + str(exc)]
+            if not isinstance(checked_candidate, dict):
+                blockers.append('hosted traceability candidate validation returned no structured result')
+            elif checked_candidate.get('status') != 'passed':
+                blockers.extend(checked_candidate.get('blockers') or ['hosted traceability candidate is invalid'])
+        else:
+            # The current core exports aggregate validation rather than a
+            # standalone candidate validator. Project only its immutable shape
+            # here; evidence, authority, and aggregate eligibility remain a
+            # local live-admission concern.
+            candidate_shape = getattr(helper, '_candidate_shape', None)
+            if not callable(candidate_shape):
+                return blockers + ['hosted traceability helper lacks candidate shape validator']
+            try:
+                blockers.extend(candidate_shape(candidate) or [])
+            except (TypeError, ValueError, OSError, KeyError) as exc:
+                return blockers + ['hosted traceability candidate validation failed: ' + str(exc)]
+    return blockers
+
+
 def repository_json(repository, path):
     return json.loads(subprocess.check_output(['gh', 'api', f'repos/{repository}/{path}'], text=True))
 
 
-def validate_ci_content(tool_root, root, binding, base, head, repository, reader=None):
+def validate_ci_content(tool_root, root, binding, base, head, repository, reader=None,
+                        *, record=None, candidate=None, evidence=None,
+                        source_commit=None):
     blockers = []
     read = reader or repository_json
     context = {}
@@ -18,6 +92,14 @@ def validate_ci_content(tool_root, root, binding, base, head, repository, reader
         context = scope_context(root, base, head)
         for result in (validate_binding(binding), validate_tool_root(tool_root, root, binding), validate_scope(tool_root, root, binding, context['scope_base_oid'], head)):
             blockers.extend(result['blockers'])
+        blockers.extend(_validate_hosted_traceability(
+            root,
+            binding,
+            record=record,
+            candidate=candidate,
+            evidence=evidence,
+            source_commit=source_commit,
+        ))
     except (ValueError, OSError) as exc:
         blockers.append(str(exc))
     active, visited = set(), set()
@@ -67,4 +149,4 @@ def validate_ci_content(tool_root, root, binding, base, head, repository, reader
             'scope_context': context,
             'verification_boundary': 'repository_identity_policy_scope_contract_content',
             'local_live_admission_required': True,
-            'not_verified_here': ['Project terminal truth', 'dependency completion', 'contract eligibility and admin provenance', 'merge hold and authorization']}
+            'not_verified_here': ['Project terminal truth', 'dependency completion', 'contract eligibility and admin provenance', 'merge hold and authorization', 'live coordination readback', 'aggregate completion and merge authorization']}

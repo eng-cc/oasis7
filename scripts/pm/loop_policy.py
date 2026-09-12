@@ -13,6 +13,8 @@ from pathlib import Path, PurePosixPath
 import re
 import subprocess
 
+from loop_contracts import coordination_ref_errors, consumed_clause_ref_errors
+
 SCHEMA = "oasis7.loop-task/v1"
 POLICY_PATH = "scripts/pm/loop-policy.v1.json"
 LOOPS = {"product", "system", "code"}
@@ -64,8 +66,23 @@ def validate_binding(binding):
     for key in ("write_scope", "out_of_scope"):
         if isinstance(binding.get(key), list) and any(not safe_path(p) for p in binding[key]):
             errors.append(f"{key} contains unsafe path pattern")
-    if isinstance(binding.get("acceptance_refs"), list) and any(not isinstance(x, str) or not x.strip() for x in binding["acceptance_refs"]):
-        errors.append("invalid acceptance reference")
+    if isinstance(binding.get("acceptance_refs"), list):
+        for acceptance in binding["acceptance_refs"]:
+            if isinstance(acceptance, str) and acceptance.strip():
+                continue
+            if isinstance(acceptance, dict):
+                errors.extend(consumed_clause_ref_errors(acceptance, require_identity=False))
+                continue
+            errors.append("invalid acceptance reference")
+    if "coordination_ref" in binding and binding.get("coordination_ref") is not None:
+        errors.extend(coordination_ref_errors(binding.get("coordination_ref")))
+    if "consumed_clause_refs" in binding:
+        refs = binding.get("consumed_clause_refs")
+        if not isinstance(refs, list):
+            errors.append("consumed_clause_refs must be a list")
+        else:
+            for reference in refs:
+                errors.extend(consumed_clause_ref_errors(reference, require_identity=False))
     deps = binding.get("dependencies")
     if isinstance(deps, list):
         if any(not isinstance(d, str) or not UID.fullmatch(d) for d in deps):
@@ -74,12 +91,17 @@ def validate_binding(binding):
             errors.append("duplicate or cyclic task dependency")
     if isinstance(binding.get("input_contracts"), list):
         for item in binding["input_contracts"]:
-            if not isinstance(item, dict) or not item.get("contract_id") or type(item.get("revision")) is not int or item["revision"] < 1 or not isinstance(item.get("publication_ref"), dict) or not item.get("consumed_clauses") or not isinstance(item.get("contract_digest"),str) or not DIGEST.fullmatch(item["contract_digest"]):
+            if not isinstance(item, dict) or not item.get("contract_id") or type(item.get("revision")) is not int or item["revision"] < 1 or not isinstance(item.get("publication_ref"), dict) or not isinstance(item.get("contract_digest"),str) or not DIGEST.fullmatch(item["contract_digest"]):
                 errors.append("invalid immutable input contract reference")
                 continue
             ref=item["publication_ref"]
-            clauses=item["consumed_clauses"]
-            if not isinstance(item["contract_id"],str) or any(type(ref.get(k)) is not int or ref[k]<1 for k in ("issue_number","comment_id")) or not isinstance(clauses,list) or any(not isinstance(c,str) or not c.strip() for c in clauses):
+            clauses=item.get("consumed_clauses")
+            clause_refs = item.get("consumed_clause_refs")
+            has_clauses = isinstance(clauses, list) and bool(clauses)
+            has_clause_refs = isinstance(clause_refs, list) and bool(clause_refs)
+            if not has_clauses and not has_clause_refs:
+                errors.append("immutable input contract needs consumed clauses or refs")
+            if not isinstance(item["contract_id"],str) or any(type(ref.get(k)) is not int or ref[k]<1 for k in ("issue_number","comment_id")) or (clauses is not None and (not isinstance(clauses,list) or any(not isinstance(c,str) or not c.strip() for c in clauses))) or (clause_refs is not None and (not isinstance(clause_refs,list) or any(consumed_clause_ref_errors(c, require_identity=True) for c in clause_refs))):
                 errors.append("invalid contract publication identity/clauses")
     obligations = binding.get("delivery_obligations", [])
     if not isinstance(obligations, list) or any(not isinstance(o, dict) or not o.get("id") or not isinstance(o.get("task_uid"), str) or not UID.fullmatch(o["task_uid"]) or type(o.get("issue_number")) is not int or o["issue_number"]<1 for o in obligations):
