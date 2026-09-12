@@ -260,6 +260,11 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     /// separately from the response because provider failures have no response
     /// envelope, while recovery still needs the exact lease identity.
     provider_cognition_leases: BTreeMap<String, crate::runtime::CognitionLeaseV1>,
+    /// Runtime-authorized owner/generation identity used by the provider
+    /// capability subject. RuntimeBindingV1 does not include this identity,
+    /// so it must be persisted separately to fence a rotated Agent after
+    /// restart before a fresh grant is selected.
+    provider_capability_identities: BTreeMap<String, crate::runtime::CapabilityAgentIdentity>,
     /// Exact simulator proposals admitted into the Harness for Runtime-owned
     /// continuations.  Runtime projections alone cannot recreate the
     /// provider-side chain identity after restart.
@@ -381,6 +386,7 @@ impl RuntimeLlmSidecar {
             provider_retry_contexts: BTreeMap::new(),
             provider_active_turns: BTreeMap::new(),
             provider_cognition_leases: BTreeMap::new(),
+            provider_capability_identities: BTreeMap::new(),
             provider_continuation_proposals: BTreeMap::new(),
             provider_continuation_recovery_pending: BTreeMap::new(),
             provider_recovery_pending: BTreeMap::new(),

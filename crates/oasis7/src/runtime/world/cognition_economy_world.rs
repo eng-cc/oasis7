@@ -132,13 +132,6 @@ impl World {
             return Ok(None);
         }
         let binding = self.current_cognition_runtime_binding()?;
-        let account_has_provision = economy.provisions.values().any(|record| {
-            record.request.account_id == request.account_id
-                && record.request.resource == request.quote.resource
-        });
-        if !account_has_provision {
-            return Ok(None);
-        }
         let identity = self
             .capability_revocation_state
             .agent_identities

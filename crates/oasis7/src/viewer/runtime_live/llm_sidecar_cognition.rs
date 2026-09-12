@@ -309,6 +309,12 @@ impl RuntimeLlmSidecar {
                     &self.provider_memory_store,
                     goal_snapshot,
                 )?;
+                if let Some(identity) =
+                    lineage_persistence::provider_request_capability_identity(&request_context)
+                {
+                    self.provider_capability_identities
+                        .insert(agent_id.clone(), identity);
+                }
                 if let (Some(wake), Some(proposal)) =
                     (runtime_wake.as_ref(), runtime_resume_proposal)
                 {
