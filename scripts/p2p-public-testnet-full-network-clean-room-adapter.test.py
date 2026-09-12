@@ -6371,6 +6371,99 @@ class StorageFirstBlockchainP1RedTests(unittest.TestCase):
         finally:
             canonical.tearDown()
 
+    def test_runtime_p1_authority_dict_subclass_cannot_forge_child_authorization(self) -> None:
+        """Child authority reads must use the canonical parent authority view."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            class ForgedChildAuthority(dict):
+                """Expose apply=false to parent gates but true to child reads."""
+
+                def __init__(self, value, plan):
+                    super().__init__(value)
+                    self._child = {
+                        "action": "storage-205-first",
+                        "targets": ["storage-205"],
+                        "task_uid": plan["task_uid"],
+                        "frozen_head_oid": plan["head_oid"],
+                        "plan_digest": plan["plan_digest"],
+                        "transaction_id": plan["transaction_id"],
+                        "capture_window_id": plan["capture_window_id"],
+                        "current_authorization": True,
+                        "signed": True,
+                        "expires_at": "2099-01-01T00:00:00Z",
+                    }
+
+                def get(self, key, default=None):
+                    return self._child.get(key, super().get(key, default))
+
+            forged_authority = ForgedChildAuthority(
+                canonical._authority(False, canonical.plan), canonical.plan
+            )
+            self.assertIs(type(dict(forged_authority)), dict)
+            self.assertFalse(dict(forged_authority)["apply_authorized"])
+            self.assertTrue(forged_authority.get("current_authorization"))
+
+            transport = StorageFirstCanonicalTransport(
+                canonical.adapter, canonical.plan
+            )
+            journal = canonical.root / "authority-dict-subclass.journal.json"
+            effects = {"journal": 0, "lock": 0}
+
+            def trap(effect):
+                def record(*args, **kwargs):
+                    effects[effect] += 1
+                    raise AssertionError(f"unexpected {effect} effect")
+
+                return record
+
+            def canonical_provenance_verifier(verifier_plan, receipt):
+                if "bindings" in receipt:
+                    return canonical._recovery_verifier(verifier_plan, receipt)
+                return {
+                    "verified": True,
+                    "bindings": receipt,
+                    "verifier_id": canonical.adapter.CANONICAL_VERIFIER_ID,
+                    "trust_root_id": canonical.adapter.CANONICAL_TRUST_ROOT_ID,
+                    "signer_id": "governance-signer",
+                }
+
+            caught = None
+            with mock.patch.object(
+                canonical.adapter,
+                "_storage_first_journal_write",
+                side_effect=trap("journal"),
+            ), mock.patch.object(
+                canonical.adapter,
+                "_write_journal",
+                side_effect=trap("journal"),
+            ), mock.patch.object(
+                canonical.adapter,
+                "_acquire_fleet_transaction_guard",
+                side_effect=trap("lock"),
+            ):
+                try:
+                    canonical.adapter.execute_storage_first(
+                        canonical.plan,
+                        forged_authority,
+                        phase="storage-205-first",
+                        identity_v2_evidence=canonical.identity_v2_evidence,
+                        journal_path=journal,
+                        ledger_path=canonical.ledger_path,
+                        transport=transport,
+                        dry_run=False,
+                        provenance_verifier=canonical_provenance_verifier,
+                        live_revalidator=lambda: True,
+                    )
+                except Exception as error:
+                    caught = error
+
+            self.assertIsNotNone(caught, "forged child authority was accepted")
+            self.assertEqual(effects, {"journal": 0, "lock": 0})
+            self.assertEqual(transport.mutations, [])
+            self.assertFalse(journal.exists())
+        finally:
+            canonical.tearDown()
+
     def test_p1_forged_persisted_receipt_bindings_cannot_survive_resume(self) -> None:
         canonical = self.fixture._canonical_fixture()
         try:
