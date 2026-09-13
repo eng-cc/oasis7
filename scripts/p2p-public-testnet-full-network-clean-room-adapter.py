@@ -5290,11 +5290,18 @@ def _storage_first_validate_receipt_prefix(
         provider_envelope = receipt.get("provider_envelope")
         if not _storage_first_is_shape_fixture(plan) and not isinstance(provider_envelope, Mapping):
             _fail("storage-first persisted receipt lacks its signed provider envelope")
-        _verify_receipt_with_verifier(
-            dict(plan),
-            dict(provider_envelope) if isinstance(provider_envelope, Mapping) else receipt,
-            verifier,
-        )
+        if isinstance(provider_envelope, Mapping):
+            canonical = _validate_provider_receipt(
+                dict(plan), operation, "storage-205", dict(provider_envelope), verifier
+            )
+            for field in (
+                "signer_id", "verifier_id", "trust_root_id",
+                "signed_payload_sha256", "signature_hex", "canonical_digest",
+            ):
+                if receipt.get(field) != canonical.get(field):
+                    _fail("storage-first persisted receipt authentication tuple drifted")
+        else:
+            _verify_receipt_with_verifier(dict(plan), receipt, verifier)
     if callback_receipt is not None:
         if not receipts or not isinstance(callback_receipt, Mapping):
             _fail("storage-first callback receipt is not bound to its prefix")
@@ -5329,6 +5336,8 @@ def validate_storage_first_journal(journal: Mapping[str, Any]) -> bool:
         _fail("storage-first journal contains an ambiguous callback")
     if journal.get("status") == "prepared" and completed:
         _fail("storage-first prepared journal cannot contain completed operations")
+    if journal.get("status") == "preflight-complete" and completed:
+        _fail("storage-first preflight journal cannot contain completed operations")
     if journal.get("status") == "reconciliation-blocked" and journal.get("next_operation") != "reconciliation-required":
         _fail("storage-first reconciliation journal lacks its held boundary")
     if "storage_receipts" in journal:
@@ -6016,7 +6025,9 @@ def _storage_first_run(
                         dict(plan), Path(ledger_path)
                     )
                 record["nonce_reservation_state"] = nonce_state
-                record["status"] = "preflight-complete"
+                record["status"] = (
+                    "preflight-complete" if not completed else "storage-205-running"
+                )
                 _storage_first_journal_write(Path(journal_path), record)
             except Exception as error:
                 record.update({

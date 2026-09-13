@@ -6721,6 +6721,46 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
         finally:
             canonical.tearDown()
 
+    def test_runtime_sf_040_resume_rejects_provider_envelope_operation_rebinding(self) -> None:
+        """A signed envelope cannot be wrapped as a different completed operation."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            journal = self.fixture._canonical_prefix_journal(
+                canonical, ["stop:storage-205"], name="provider-envelope-rebind.journal.json"
+            )
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            transport = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+            record["storage_receipts"][0]["provider_envelope"] = transport._receipt(
+                "delete:storage-205", transport._storage_node()
+            )
+            record["callback_receipt"] = copy.deepcopy(record["storage_receipts"][0])
+            record["journal_digest"] = canonical.adapter.journal_digest(record)
+            journal.write_text(json.dumps(record, sort_keys=True), encoding="utf-8")
+            journal.chmod(0o600)
+            with self.assertRaises(Exception):
+                self.fixture._canonical_resume(canonical, journal, transport)
+            self.assertEqual(transport.mutations, [])
+        finally:
+            canonical.tearDown()
+
+    def test_runtime_sf_041_resume_preserves_running_status_after_preflight(self) -> None:
+        """A nonempty completed cursor cannot be downgraded to preflight-complete."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            journal = self.fixture._canonical_prefix_journal(
+                canonical, ["stop:storage-205"], name="resume-running-status.journal.json"
+            )
+            transport = StorageFirstCanonicalTransport(
+                canonical.adapter, canonical.plan, side_effect_operation="delete:storage-205"
+            )
+            with self.assertRaises(Exception):
+                self.fixture._canonical_resume(canonical, journal, transport)
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            self.assertNotEqual(record["status"], "preflight-complete")
+            self.assertEqual(record["completed_operations"], ["stop:storage-205"])
+        finally:
+            canonical.tearDown()
+
     def test_runtime_sf_027_resume_validates_nonce_checkpoint_before_prepared_write(self) -> None:
         """Missing committed nonce state must not replace a resumable journal checkpoint."""
         canonical = self.fixture._canonical_fixture()
