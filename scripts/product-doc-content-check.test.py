@@ -117,6 +117,77 @@ def invoke_full_corpus(root: Path, *extra: str) -> subprocess.CompletedProcess[s
     return subprocess.run(command, check=False, capture_output=True, text=True)
 
 
+REQ_BLOCK = TOPIC_TEXT[
+    TOPIC_TEXT.index('<a id="req-sample-001"></a>') : TOPIC_TEXT.index('<a id="ac-sample-001"></a>')
+]
+AC_BLOCK = TOPIC_TEXT[
+    TOPIC_TEXT.index('<a id="ac-sample-001"></a>') : TOPIC_TEXT.index("### 5.2", TOPIC_TEXT.index('<a id="ac-sample-001"></a>'))
+]
+
+
+def remove_fixture_traceability(text: str, *, requirement: bool = False, acceptance: bool = False) -> str:
+    if requirement:
+        text = text.replace(REQ_BLOCK, "")
+    if acceptance:
+        text = text.replace(AC_BLOCK, "")
+    return text
+
+
+def isolate_topic_full_corpus(root: Path) -> None:
+    (root / DESIGN).unlink()
+    (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
+
+
+def scenario_full_corpus_requires_active_topic_requirement() -> None:
+    root, _base, _head = make_repo()
+    try:
+        isolate_topic_full_corpus(root)
+        updated = remove_fixture_traceability(TOPIC_TEXT, requirement=True, acceptance=True)
+        updated += "\n本主题验收仍受当前入口证据范围约束。\n"
+        (root / TOPIC).write_text(updated, encoding="utf-8")
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 1, output
+        assert f"active-topic-missing-requirement: {TOPIC}" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_full_corpus_requires_active_topic_acceptance() -> None:
+    root, _base, _head = make_repo()
+    try:
+        isolate_topic_full_corpus(root)
+        (root / TOPIC).write_text(
+            remove_fixture_traceability(TOPIC_TEXT, acceptance=True), encoding="utf-8"
+        )
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 1, output
+        assert f"active-topic-missing-acceptance: {TOPIC}" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_full_corpus_exempts_non_active_topic_cardinality() -> None:
+    root, _base, _head = make_repo()
+    try:
+        isolate_topic_full_corpus(root)
+        lifecycle_text = remove_fixture_traceability(TOPIC_TEXT, requirement=True, acceptance=True)
+        lifecycle_text += "\n本主题验收仍受当前入口证据范围约束。\n"
+        for lifecycle in ("superseded", "retired"):
+            (root / f"doc/product/world-rules-core-gameplay/{lifecycle}.prd.md").write_text(
+                lifecycle_text.replace("生命周期：`active`", f"生命周期：`{lifecycle}`"),
+                encoding="utf-8",
+            )
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 0, output
+        assert "active-topic-missing-requirement" not in output, output
+        assert "active-topic-missing-acceptance" not in output, output
+    finally:
+        shutil.rmtree(root)
+
+
 def scenario_full_corpus_includes_unchanged_legacy_and_sorts_diagnostics() -> None:
     root, _base, _head = make_repo()
     try:
@@ -513,6 +584,9 @@ def standalone_requirement_and_acceptance_anchors(root: Path) -> None:
 
 
 def main() -> None:
+    scenario_full_corpus_requires_active_topic_requirement()
+    scenario_full_corpus_requires_active_topic_acceptance()
+    scenario_full_corpus_exempts_non_active_topic_cardinality()
     scenario_full_corpus_includes_unchanged_legacy_and_sorts_diagnostics()
     scenario_full_corpus_accepts_retired_topics_and_reports_lifecycle_errors()
     scenario_full_corpus_rejects_changed_range_arguments()

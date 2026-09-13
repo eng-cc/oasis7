@@ -426,6 +426,24 @@ def check_minimum_design_content(path: str, text: str, errors: list[str]) -> Non
             fail(errors, f"missing-{code}", path, "design minimum content marker")
 
 
+def check_active_topic_cardinality(path: str, text: str, errors: list[str]) -> None:
+    if not path.endswith(".prd.md") or path.endswith("/prd.md"):
+        return
+    identity = document_identity_text("\n".join(line for _, line in visible_lines(text)))
+    lifecycle = metadata_value(identity, "生命周期")
+    if not lifecycle or lifecycle.strip().strip("`").lower() != "active":
+        return
+    declarations = {
+        identifier
+        for _number, line in visible_lines(text)
+        if (identifier := declaration_identifier(line))
+    }
+    if not any(identifier.startswith("REQ-") for identifier in declarations):
+        fail(errors, "active-topic-missing-requirement", path, "active topic must declare at least one REQ-* requirement")
+    if not any(identifier.startswith("AC-") for identifier in declarations):
+        fail(errors, "active-topic-missing-acceptance", path, "active topic must declare at least one AC-* acceptance")
+
+
 def check_requirements(path: str, text: str, errors: list[str]) -> None:
     lines = visible_lines(text)
     anchors_by_line: dict[int, set[str]] = {}
@@ -552,6 +570,7 @@ def check_document(root: Path, head: str, path: str, text: str, errors: list[str
     check_metadata(path, text, errors)
     if path.endswith(".prd.md"):
         check_minimum_topic_content(path, text, errors)
+        check_active_topic_cardinality(path, text, errors)
     if path.endswith(".design.md"):
         check_minimum_design_content(path, text, errors)
         expected_prd = path.removesuffix(".design.md") + ".prd.md"
