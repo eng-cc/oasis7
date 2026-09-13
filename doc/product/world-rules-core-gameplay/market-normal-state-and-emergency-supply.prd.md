@@ -6,6 +6,7 @@
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 
 本文定义常态市场与系统性必需品危机之间的产品状态边界，以及紧急保供的授权、介入和退出语义。它不定义危机阈值、价格、补偿、配给公式、物流算法、runtime 状态机或当前实现结论。

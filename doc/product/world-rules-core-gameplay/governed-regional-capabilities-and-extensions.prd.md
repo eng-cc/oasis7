@@ -6,6 +6,7 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`区域设施合同`](../../game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md)、[`玩家发布实体合同`](../../world-runtime/module/player-published-entities.prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
 本文承载受治理的区域设施与工业能力扩展的长期产品承诺：玩家以有限、可读和可审计的方式改变局部世界，授权创作者也只能经治理把新的可用能力接入同一权威世界。它不把每项设施或每个制成品写成独立产品入口，也不冻结实现合同、数值或当前可用性。

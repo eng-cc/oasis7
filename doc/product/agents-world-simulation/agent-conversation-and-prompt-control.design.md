@@ -6,6 +6,7 @@
 - 上位产品 PRD：[`doc/product/agents-world-simulation/prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`world-simulator` 专业 PRD](../../world-simulator/prd.md)、[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md)
 
 本文定义跨 surface 的产品交互设计，不冻结历史 EGUI 布局或实现字段。当前可用入口、鉴权、协议和操作步骤以 [`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md) 与 [`world-simulator` 专业 PRD](../../world-simulator/prd.md) 为准。

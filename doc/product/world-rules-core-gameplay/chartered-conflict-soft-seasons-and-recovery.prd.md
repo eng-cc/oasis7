@@ -6,6 +6,7 @@
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 
 本文定义成熟世界中区域冲突、实体损失、软赛季与系统性恢复的长期产品结果。它不定义战斗数值、评分、时长、占领算法、资产字段、离线执行、赛季周期、匹配、runtime 状态机或当前战争 MVP 的实现结论。

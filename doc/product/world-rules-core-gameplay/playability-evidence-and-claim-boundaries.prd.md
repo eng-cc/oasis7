@@ -6,6 +6,7 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[`testing-manual.md`](../../../testing-manual.md)
 
 本文承载“玩家为何值得继续、当前能据此作出多强结论”的长期产品边界。它不定义测试脚本、证据字段、产物 schema、角色调度、PRD-TESTING ID、具体玩法数值或当前 release verdict；这些由 `game`、`testing`、相关实现专业域与根 `README.md` 分别拥有。

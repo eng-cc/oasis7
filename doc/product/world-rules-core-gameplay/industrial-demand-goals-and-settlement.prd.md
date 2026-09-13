@@ -7,6 +7,7 @@
 - 配对产品 design：[`industrial-demand-goals-and-settlement.design.md`](industrial-demand-goals-and-settlement.design.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/game/gameplay/gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 - 适用入口：Viewer、pure API、Agent 代办所共享的工业需求目标读面
 

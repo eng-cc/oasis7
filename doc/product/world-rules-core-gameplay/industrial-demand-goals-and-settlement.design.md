@@ -6,6 +6,7 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`gameplay 工业 walkthrough 合同`](../../game/gameplay/gameplay-industrial-representative-execution-walkthrough.prd.md#3-五阶段玩家-walkthrough)、[`world-runtime 专业 PRD`](../../world-runtime/prd.md#consumer-compatibility-industrial-profile-and-stage-execution)、[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md#4-technical-specifications)、[`testing 专业 PRD`](../../testing/prd.md#6-validation-decision-record)
 
 本文说明玩家怎样把一个 demand goal 变成可比较、可追溯、可恢复的工业承诺。配对 PRD 拥有 SC-31 叶子要求和验收；专业 authority 拥有批量、产率、receipt、状态、队列、API 和测试实现。本设计不复制任务状态、实现字段或专业数值。

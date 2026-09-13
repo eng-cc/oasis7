@@ -6,6 +6,7 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`Launcher 专业入口`](../../world-simulator/launcher/README.md)、[`world-runtime PRD`](../../world-runtime/prd.md)、[`testing PRD`](../../testing/prd.md)
 
 配对产品 PRD 的 canonical 路径为 `doc/product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md`。

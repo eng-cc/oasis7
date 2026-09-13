@@ -6,6 +6,7 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`Agent claim 经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
 本文承载玩家取得、维持和结束 Agent 控制权的长期产品承诺。它补充首局与持续游玩、间接控制和成熟世界成长分册，但不冻结经济数值、状态字段、身份实现、界面结构、运营操作、测试步骤或当前放行结论。

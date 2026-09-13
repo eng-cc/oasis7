@@ -6,6 +6,7 @@
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
 本文定义组织持续经营、解散和长期不活跃时的玩家结果与制度边界。它补充成熟世界成长、Agent 所有权与冲突恢复分册；不定义治理权重、身份技术、时长、清算价格、estate schema、链上交易、runtime 状态机、运营处置或当前放行结论。

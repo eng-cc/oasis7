@@ -6,6 +6,7 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`PRD-GAME-014`](../../game/gameplay/gameplay-indirect-control-agency-contract.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
 本文是长期产品分册，承载玩家通过 Agent 间接推动世界时的能动性、因果可读性、干预与续接承诺。它补充 [`首局与持续游玩`](first-session-and-continuation.prd.md)，但不重复后者拥有的首局引导、首次持续能力与成长承接，也不冻结字段、状态枚举、UI/API、runtime/Agent 实现、测试步骤、任务状态或历史 verdict。

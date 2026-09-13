@@ -6,6 +6,7 @@
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
 本文定义普通共同治理可处理的有限事项，以及它与玩家基本保护、系统安全权威和宪制修订之间不可绕过的产品边界。它不定义资格、权重、阈值、锁定时长、身份技术、链上结构、runtime/P2P 状态机或当前可用性结论。

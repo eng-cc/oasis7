@@ -6,6 +6,7 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md)、[`玩家可读渲染`](../../world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md)、[`Viewer 视觉规范`](../../world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md)
 
 本文定义跨 surface 的玩家阅读顺序与视觉语义，不冻结历史 Bevy/EGUI 控件、2D/3D 模式、renderer 算法或布局参数。当前 surface 和视觉实现由 Viewer 手册、视觉规范及对应代码/测试 authority 定义。
