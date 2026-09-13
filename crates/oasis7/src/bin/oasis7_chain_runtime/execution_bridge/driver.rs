@@ -2,9 +2,6 @@ use std::fs;
 use std::time::{Duration, Instant};
 
 use crate::release_security_policy_for_storage_profile;
-use oasis7::consensus_action_payload::{
-    ConsensusActionPayloadBody, decode_consensus_action_payload,
-};
 use oasis7::runtime::{
     BlobStore, ChainResourceDerivationContext, LocalCasStore, RuntimeCommittedTickContext,
     World as RuntimeWorld, WorldError, blake3_hex,
@@ -19,7 +16,6 @@ use oasis7_node::{
 use oasis7_proto::storage_profile::StorageProfileConfig;
 use oasis7_wasm_abi::ModuleSandbox;
 use oasis7_wasm_executor::{WasmExecutor, WasmExecutorConfig};
-use serde::Serialize;
 
 use super::checkpoint::{
     begin_execution_bridge_retention_transaction, complete_execution_bridge_retention_transaction,
@@ -39,6 +35,10 @@ pub(crate) use super::driver_persistence::{
     execution_world_persistence_files_missing, load_execution_bridge_state,
     load_execution_world_with_policy, persist_execution_bridge_state, persist_execution_world,
     remove_partial_execution_world_persistence_files,
+};
+use super::execution_hash::{
+    ExecutionHashPayload, execution_resource_commit_hash, execution_resource_context_hash,
+    execution_resource_created_at_height,
 };
 use super::external_effect::{
     build_execution_external_effect_materialization_with_pre_step_root,
@@ -61,27 +61,6 @@ use super::{
 use crate::{
     EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER, EXECUTION_BRIDGE_RETENTION_IN_PROGRESS_MARKER,
 };
-
-#[derive(Debug, Clone, Serialize)]
-pub(super) struct ExecutionHashPayload<'a> {
-    pub(super) world_id: &'a str,
-    pub(super) height: u64,
-    pub(super) prev_execution_block_hash: &'a str,
-    pub(super) execution_state_root: &'a str,
-    pub(super) journal_len: usize,
-}
-
-pub(super) fn execution_resource_created_at_height(height: u64) -> u64 {
-    if height == 0 { 0 } else { 1 }
-}
-
-pub(super) fn execution_resource_context_hash(world_id: &str) -> String {
-    format!("execution_bridge_runtime_context_v1:{world_id}")
-}
-
-pub(super) fn execution_resource_commit_hash(world_id: &str, height: u64) -> String {
-    blake3_hex(format!("execution_bridge_resource_commit_v1:{world_id}:{height}").as_bytes())
-}
 
 pub(crate) struct NodeRuntimeExecutionDriver {
     pub(super) state_path: std::path::PathBuf,
@@ -704,24 +683,11 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         };
 
         let decode_started_at = Instant::now();
-        let mut decoded_runtime_actions = Vec::with_capacity(context.committed_actions.len());
-        let mut decoded_simulator_actions = Vec::with_capacity(context.committed_actions.len());
-        for action in &context.committed_actions {
-            match decode_consensus_action_payload(action.payload_cbor.as_slice()) {
-                Ok(ConsensusActionPayloadBody::RuntimeAction { action: decoded }) => {
-                    decoded_runtime_actions.push(decoded);
-                }
-                Ok(ConsensusActionPayloadBody::SimulatorAction { action, submitter }) => {
-                    decoded_simulator_actions.push((action, submitter));
-                }
-                Err(err) => {
-                    return Err(format!(
-                        "execution driver decode committed action failed action_id={} err={}",
-                        action.action_id, err
-                    ));
-                }
-            }
-        }
+        let (
+            decoded_runtime_actions,
+            decoded_simulator_actions,
+            replicated_provider_backed_bootstrap,
+        ) = super::driver_replicated_input::decode_committed_actions(&context)?;
         let decode_ms = decode_started_at.elapsed();
         let runtime_action_count = decoded_runtime_actions.len();
 
@@ -748,6 +714,9 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                     }
                 }
             };
+        }
+        if let Some(authorities) = replicated_provider_backed_bootstrap.as_deref() {
+            rollback_on_error!(self.apply_provider_backed_bootstrap(authorities));
         }
         let runtime_step_started_at = Instant::now();
         if !resume_after_product_validation_intent {

@@ -85,6 +85,11 @@ pub struct Snapshot {
     pub module_registry: ModuleRegistry,
     #[serde(default)]
     pub module_artifacts: BTreeSet<String>,
+    /// Artifact bytes are part of the canonical snapshot payload.  The
+    /// on-disk module store remains a convenient hot cache, but recovery must
+    /// never combine an historical state snapshot with a newer cache.
+    #[serde(default)]
+    pub module_artifact_bytes: BTreeMap<String, Vec<u8>>,
     #[serde(default = "module_limits_unbounded")]
     pub module_limits_max: ModuleLimits,
     pub state: WorldState,

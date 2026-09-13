@@ -507,6 +507,12 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     let mut runtime =
         NodeRuntime::new(config).with_consensus_progress_observer(publication_lifecycle_observer);
     if materialize_execution {
+        #[cfg(not(test))]
+        execution_bridge::publish_provider_backed_bootstrap_from_paths(
+            &runtime,
+            paths.execution_world_dir.as_path(),
+            options.provider_backed_bootstrap_authority_paths.as_slice(),
+        )?;
         let execution_driver = NodeRuntimeExecutionDriver::new_with_storage_profile(
             paths.execution_bridge_state_path.clone(),
             paths.execution_world_dir.clone(),

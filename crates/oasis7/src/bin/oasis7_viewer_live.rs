@@ -8,8 +8,8 @@ use oasis7::observability::init_tracing;
 use oasis7::runtime::MajorWorldEventVisibilityPermission;
 use oasis7::simulator::WorldScenario;
 use oasis7::viewer::{
-    ChainLinkPolicy, ViewerLiveDecisionMode, ViewerRuntimeLiveServer,
-    ViewerRuntimeLiveServerConfig, ViewerWebBridge, ViewerWebBridgeConfig,
+    ChainLinkPolicy, ProviderBackedBootstrapAuthorityV1, ViewerLiveDecisionMode,
+    ViewerRuntimeLiveServer, ViewerRuntimeLiveServerConfig, ViewerWebBridge, ViewerWebBridgeConfig,
 };
 use tracing::{error, info, warn};
 
@@ -37,6 +37,7 @@ struct CliOptions {
     major_world_event_visibility: MajorWorldEventVisibilityPermission,
     generated_world_dir: Option<PathBuf>,
     provider_lineage_store: Option<PathBuf>,
+    provider_backed_bootstrap_authority_paths: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,6 +73,7 @@ impl Default for CliOptions {
             major_world_event_visibility: MajorWorldEventVisibilityPermission::Unknown,
             generated_world_dir: None,
             provider_lineage_store: None,
+            provider_backed_bootstrap_authority_paths: Vec::new(),
         }
     }
 }
@@ -116,6 +118,7 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
         major_world_event_visibility = ?options.major_world_event_visibility,
         generated_world_dir = ?options.generated_world_dir,
         provider_lineage_store = ?options.provider_lineage_store,
+        provider_backed_bootstrap_authority_count = options.provider_backed_bootstrap_authority_paths.len(),
         scenario = %options
             .scenario
             .map(|value| value.as_str().to_string())
@@ -189,6 +192,23 @@ fn initialize_viewer_server(options: &CliOptions) -> Result<ViewerRuntimeLiveSer
     } else {
         config
     };
+    let mut config = config;
+    for path in &options.provider_backed_bootstrap_authority_paths {
+        let bytes = std::fs::read(path).map_err(|error| {
+            format!(
+                "failed to read ProviderBacked authority bundle {}: {error}",
+                path.display()
+            )
+        })?;
+        let authority = serde_json::from_slice::<ProviderBackedBootstrapAuthorityV1>(&bytes)
+            .map_err(|error| {
+                format!(
+                    "failed to decode ProviderBacked authority bundle {}: {error}",
+                    path.display()
+                )
+            })?;
+        config = config.with_provider_backed_bootstrap_authority(authority);
+    }
     let mut server = ViewerRuntimeLiveServer::new(config)
         .map_err(|err| format!("failed to create runtime viewer server: {err:?}"))?;
     match options.debug_scenario {
@@ -290,6 +310,14 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
                     &mut iter,
                     "--provider-lineage-store",
                 )?));
+            }
+            "--provider-bootstrap-authority" => {
+                options
+                    .provider_backed_bootstrap_authority_paths
+                    .push(PathBuf::from(parse_required_value(
+                        &mut iter,
+                        "--provider-bootstrap-authority",
+                    )?));
             }
             "--runtime-world" => {
                 return Err(RUNTIME_ALIAS_REMOVAL_HINT.to_string());
@@ -487,6 +515,7 @@ Options:\n\
   --major-world-event-visibility <policy> explicit audience policy: unknown|public|restricted|denied (default: unknown)\n\
   --generated-world-dir <dir> initialize viewer from generated-world/generated-scenario-world and provenance\n\
   --provider-lineage-store <path> explicit durable provider lineage checkpoint (for formal/synthetic restart recovery)\n\
+  --provider-bootstrap-authority <path> explicit JSON Runtime authority bundle; repeat per ProviderBacked agent\n\
   -h, --help                show help\n\n\
 Removed:\n\
   --release-config, --runtime-world, all --node-*, --topology, --triad-*, --reward-runtime-*, --no-node, --viewer-no-consensus-gate\n\
@@ -527,6 +556,7 @@ mod tests {
         assert!(!options.allow_debug_scenario);
         assert_eq!(options.generated_world_dir, None);
         assert_eq!(options.provider_lineage_store, None);
+        assert!(options.provider_backed_bootstrap_authority_paths.is_empty());
     }
 
     #[test]
@@ -552,6 +582,8 @@ mod tests {
                 "hosted_public_join",
                 "--major-world-event-visibility",
                 "restricted",
+                "--provider-bootstrap-authority",
+                "/var/lib/oasis7/provider-authority-agent-a.json",
             ]
             .into_iter(),
         )
@@ -576,6 +608,12 @@ mod tests {
         );
         assert_eq!(options.generated_world_dir, None);
         assert_eq!(options.provider_lineage_store, None);
+        assert_eq!(
+            options.provider_backed_bootstrap_authority_paths,
+            vec![PathBuf::from(
+                "/var/lib/oasis7/provider-authority-agent-a.json"
+            )]
+        );
     }
 
     #[test]

@@ -19,9 +19,13 @@ mod auth_actions_fragment_replenishment;
 mod auth_actions_provider_context;
 #[path = "tests/auth_actions_provider_continuation_restart.rs"]
 mod auth_actions_provider_continuation_restart;
+#[path = "tests/auth_actions_provider_stale.rs"]
+mod auth_actions_provider_stale;
 mod authoritative;
 mod background_play;
 mod chain_sync;
+#[path = "tests/mock_http.rs"]
+mod mock_http;
 #[path = "tests/provider_continuation_drains.rs"]
 mod provider_continuation_drains;
 pub(super) use chain_sync::TestChainStatusServer;

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use super::{RuntimeWorldError, ViewerLiveDecisionMode, WorldScenario};
-use crate::runtime::MajorWorldEventVisibilityPermission;
+use crate::runtime::{MajorWorldEventVisibilityPermission, ProviderBackedBootstrapAuthorityV1};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChainLinkPolicy {
@@ -55,6 +55,9 @@ pub struct ViewerRuntimeLiveServerConfig {
     /// default beside their sidecar; formal/synthetic worlds must opt into a
     /// stable operator-owned path explicitly.
     pub provider_lineage_store: Option<PathBuf>,
+    /// Explicit, pre-verified ProviderBacked authority bundles. Runtime
+    /// derives and validates the payer/economy binding from these records.
+    pub provider_backed_bootstrap_authorities: Vec<ProviderBackedBootstrapAuthorityV1>,
     #[cfg(test)]
     pub(crate) test_cognition_runtime_binding: Option<(String, u64, Option<String>, String, u64)>,
 }

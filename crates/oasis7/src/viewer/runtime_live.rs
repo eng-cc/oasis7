@@ -105,6 +105,7 @@ mod wake_dispatch;
 #[path = "runtime_live/war_declaration_quote.rs"]
 mod war_declaration_quote;
 mod world_feed;
+pub use crate::runtime::ProviderBackedBootstrapAuthorityV1;
 use authoritative::{
     RuntimeAuthoritativeBatchRecord, RuntimeAuthoritativeChallengeRecord,
     RuntimeSettlementRankingGate, RuntimeStableCheckpoint,
@@ -133,7 +134,8 @@ use session_policy::{
 pub use support::bootstrap_formal_release_runtime_world as viewer_bootstrap_formal_release_runtime_world;
 pub use support::bootstrap_generated_sidecar_runtime_world as viewer_bootstrap_generated_sidecar_runtime_world;
 use support::{
-    FORMAL_RELEASE_DEFAULT_WORLD_ID, RuntimeLiveSession, bootstrap_runtime_live_world,
+    FORMAL_RELEASE_DEFAULT_WORLD_ID, RuntimeLiveSession,
+    apply_provider_backed_bootstrap_authorities, bootstrap_runtime_live_world,
     is_expected_disconnect_error, is_timeout_error, latest_runtime_event_seq, lock_shared_server,
     runtime_metrics, send_response,
 };
@@ -250,6 +252,18 @@ impl ViewerRuntimeLiveServer {
             }
         }
         wake_dispatch::ensure_viewer_runtime_binding(&mut world, &config)?;
+        let chain_linked = config
+            .chain_status_bind
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty());
+        if !chain_linked {
+            apply_provider_backed_bootstrap_authorities(
+                &mut world,
+                &config.provider_backed_bootstrap_authorities,
+            )
+            .map_err(ViewerRuntimeLiveServerError::Init)?;
+        }
         let initial_world_time = world.state().time;
         let mut llm_sidecar = match seed_model.as_ref() {
             Some(model) => {

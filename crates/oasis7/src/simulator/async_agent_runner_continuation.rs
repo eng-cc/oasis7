@@ -438,6 +438,7 @@ impl AsyncAgentRunner {
                     observation,
                     Some(dispatch_turn_context),
                     None,
+                    None,
                 )
             },
         )
@@ -506,6 +507,7 @@ impl AsyncAgentRunner {
                     observation,
                     Some(dispatch_turn_context),
                     Some(request_context),
+                    None,
                 )
             },
         )

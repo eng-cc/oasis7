@@ -12,7 +12,7 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -56,9 +56,8 @@ impl Drop for EnvVarGuard {
     }
 }
 
-fn llm_env_lock() -> &'static Mutex<()> {
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
+fn llm_env_lock() -> &'static std::sync::Mutex<()> {
+    crate::viewer::canonical_runtime_provider_env_lock()
 }
 
 fn completion_turn_from_value(value: serde_json::Value) -> LlmCompletionTurn {

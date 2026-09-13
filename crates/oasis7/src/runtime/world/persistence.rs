@@ -353,6 +353,11 @@ impl World {
             latest_chain_resource_delta,
             module_registry: self.module_registry.clone(),
             module_artifacts: self.module_artifacts.clone(),
+            module_artifact_bytes: self
+                .module_artifact_bytes
+                .iter()
+                .map(|(wasm_hash, bytes)| (wasm_hash.clone(), bytes.as_ref().to_vec()))
+                .collect(),
             module_limits_max: self.module_limits_max.clone(),
             state: self.state.clone(),
             journal_len: self.journal.len(),
@@ -520,19 +525,23 @@ impl World {
                 );
                 let journal = Journal::load_json(dir.join(JOURNAL_FILE))?;
                 hydrate_tick_consensus_snapshot_from_archive(dir, &mut json_snapshot)?;
+                let has_inline_module_artifacts = !json_snapshot.module_artifact_bytes.is_empty();
                 let world = Self::from_snapshot(json_snapshot, journal)?;
                 let mut world = Self::recover_loaded_runtime_world(world, dir)?;
-                world.load_module_store_from_dir(dir)?;
+                if !has_inline_module_artifacts {
+                    world.load_module_store_from_dir(dir)?;
+                }
                 return Ok(world);
             }
             if !has_indexed_generation {
                 hydrate_tick_consensus_snapshot_from_archive(dir, &mut snapshot)?;
             }
+            let has_inline_module_artifacts = !snapshot.module_artifact_bytes.is_empty();
             let world = Self::from_snapshot(snapshot, journal)?;
             let mut world = Self::recover_loaded_runtime_world(world, dir)?;
-            if has_indexed_generation {
+            if has_indexed_generation && !has_inline_module_artifacts {
                 world.load_selected_generation_module_artifacts_from_dir(dir)?;
-            } else {
+            } else if !has_inline_module_artifacts {
                 world.load_module_store_from_dir(dir)?;
             }
             return Ok(world);
@@ -542,9 +551,12 @@ impl World {
         let journal = Journal::load_json(journal_path)?;
         let mut snapshot = Snapshot::load_json(snapshot_path)?;
         hydrate_tick_consensus_snapshot_from_archive(dir, &mut snapshot)?;
+        let has_inline_module_artifacts = !snapshot.module_artifact_bytes.is_empty();
         let world = Self::from_snapshot(snapshot, journal)?;
         let mut world = Self::recover_loaded_runtime_world(world, dir)?;
-        world.load_module_store_from_dir(dir)?;
+        if !has_inline_module_artifacts {
+            world.load_module_store_from_dir(dir)?;
+        }
         Ok(world)
     }
 
@@ -556,6 +568,10 @@ impl World {
         *world.persistence_dir.borrow_mut() = Some(dir.to_path_buf());
         let cognition_before = world.cognition.clone();
         world.recover_cognition()?;
+        // The typed economy is a separate durable projection. Validate it on
+        // restore so a malformed lease/receipt prefix cannot enter runtime as
+        // an apparently healthy World.
+        world.cognition_economy()?;
         if world.cognition != cognition_before {
             world.persist_runtime_transaction_if_configured()?;
         }
@@ -656,9 +672,38 @@ impl World {
         world.journal = journal;
         world.manifest = snapshot.manifest;
         world.cognition = snapshot.cognition;
+        // Every reconstruction path, including direct checkpoint/replay
+        // installation, must validate the typed economy before exposing the
+        // candidate world. Directory recovery performs the same check after
+        // cognition projection repair; this call closes the public restore
+        // path that bypasses that post-load hook.
+        world.cognition_economy()?;
         world.module_registry = snapshot.module_registry;
         world.module_artifacts = snapshot.module_artifacts;
-        world.module_artifact_bytes = BTreeMap::new();
+        let module_artifact_bytes = snapshot.module_artifact_bytes;
+        for (wasm_hash, bytes) in &module_artifact_bytes {
+            let actual_hash = super::super::util::sha256_hex(bytes);
+            if actual_hash != *wasm_hash {
+                return Err(WorldError::ModuleChangeInvalid {
+                    reason: format!(
+                        "snapshot module artifact hash mismatch expected {wasm_hash} found {actual_hash}"
+                    ),
+                });
+            }
+        }
+        if !module_artifact_bytes.is_empty() {
+            for record in world.module_registry.records.values() {
+                if !module_artifact_bytes.contains_key(&record.manifest.wasm_hash) {
+                    return Err(WorldError::ModuleStoreArtifactMissing {
+                        wasm_hash: record.manifest.wasm_hash.clone(),
+                    });
+                }
+            }
+        }
+        world.module_artifact_bytes = module_artifact_bytes
+            .into_iter()
+            .map(|(wasm_hash, bytes)| (wasm_hash, bytes.into()))
+            .collect();
         world.module_cache = ModuleCache::default();
         world.module_limits_max = snapshot.module_limits_max;
         world.snapshot_catalog = snapshot.snapshot_catalog;

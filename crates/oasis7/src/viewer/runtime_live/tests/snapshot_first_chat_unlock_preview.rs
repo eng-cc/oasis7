@@ -3,6 +3,7 @@ use super::*;
 
 #[test]
 fn compat_snapshot_projects_first_chat_unlock_preview_only_for_zero_liquid_without_starter_oc() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),

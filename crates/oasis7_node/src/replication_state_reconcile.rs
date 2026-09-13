@@ -284,5 +284,12 @@ fn parse_validated_persisted_commit_payload(
                 height, err
             ),
         })?;
+    validate_replicated_execution_input_actions(payload.actions.as_slice(), payload.height)
+        .map_err(|err| NodeError::Replication {
+            reason: format!(
+                "persisted commit replicated execution input validation failed at height {}: {}",
+                payload.height, err
+            ),
+        })?;
     Ok(payload)
 }

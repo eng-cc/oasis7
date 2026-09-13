@@ -19,6 +19,7 @@ use crate::{
     NodeConsensusProgressObserver, NodeConsensusProgressObserverError, NodeConsensusSnapshot,
     NodeError, NodeExecutionHook, NodeMainTokenControllerBindingConfig,
     NodeMainTokenControllerSignerPolicy, NodeReplicationNetworkHandle, NodeRuntime,
+    REPLICATED_EXECUTION_INPUT_ACTION_ID, REPLICATED_EXECUTION_INPUT_SUBMITTER,
 };
 
 #[derive(Debug, Clone)]
@@ -343,6 +344,14 @@ impl NodeRuntime {
                     "submitter player_id mismatch expected={} actual={}",
                     self.config.player_id, player_id
                 ),
+            });
+        }
+        if action_id == REPLICATED_EXECUTION_INPUT_ACTION_ID
+            || player_id == REPLICATED_EXECUTION_INPUT_SUBMITTER
+        {
+            return Err(NodeError::Consensus {
+                reason: "reserved replicated execution input identity is not available to player actions"
+                    .to_string(),
             });
         }
         if payload_cbor.len() > self.config.max_consensus_action_payload_bytes {

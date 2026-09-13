@@ -1,12 +1,23 @@
 use serde::Deserialize;
 use serde_json::Value as JsonValue;
 
-use crate::{NodeConsensusAction, NodeError};
+use crate::{NodeConsensusAction, NodeError, decode_replicated_execution_input_action};
 
 pub(super) fn should_drop_transfer_action_before_proposal(
     action: &NodeConsensusAction,
     now_ms: i64,
 ) -> Result<bool, NodeError> {
+    if decode_replicated_execution_input_action(action)
+        .map_err(|err| NodeError::Consensus {
+            reason: format!(
+                "decode replicated execution input before proposal action_id={}: {err}",
+                action.action_id
+            ),
+        })?
+        .is_some()
+    {
+        return Ok(false);
+    }
     let Some(action_json) = decode_pending_runtime_action_json(action.payload_cbor.as_slice())
         .map_err(|err| NodeError::Consensus {
             reason: format!(
