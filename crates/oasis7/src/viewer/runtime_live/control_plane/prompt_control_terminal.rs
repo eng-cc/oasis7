@@ -35,6 +35,9 @@ impl ViewerRuntimeLiveServer {
                     )
                 })?;
         }
+        if error.value_visibility == Some(PromptControlValueVisibility::Hidden) {
+            error.operation_digest = None;
+        }
         self.prompt_control_authority
             .result_ledger
             .insert_error(

@@ -194,7 +194,9 @@ fn runtime_prompt_control_enqueue_failure_is_a_replayable_terminal_result() {
         first_error.status,
         Some(crate::viewer::protocol::PromptControlResultStatus::Blocked)
     );
-    assert_eq!(first_error.operation_digest.is_some(), true);
+    assert!(first_error.operation_digest.is_none());
+    let first_error_wire = serde_json::to_string(&first_error).expect("serialize hidden error");
+    assert!(!first_error_wire.contains("operation_digest"));
     assert_eq!(
         server
             .llm_sidecar
@@ -215,6 +217,9 @@ fn runtime_prompt_control_enqueue_failure_is_a_replayable_terminal_result() {
         .expect_err("same enqueue failure must replay its terminal receipt");
     assert_eq!(replay.code, "prompt_override_enqueue_failed");
     assert!(replay.idempotent_replay);
+    assert!(replay.operation_digest.is_none());
+    let replay_wire = serde_json::to_string(&replay).expect("serialize hidden replay");
+    assert!(!replay_wire.contains("operation_digest"));
     assert_eq!(
         server
             .llm_sidecar
