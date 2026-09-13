@@ -287,6 +287,25 @@ def scenario_full_corpus_counts_module_root() -> None:
         shutil.rmtree(root)
 
 
+def scenario_full_corpus_rejects_product_symlinks() -> None:
+    for target_exists in (True, False):
+        root, _base, _head = make_repo()
+        try:
+            (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
+            target = root / "external.prd.md"
+            if target_exists:
+                target.write_text(TOPIC_TEXT, encoding="utf-8")
+            link = root / "doc/product/world-rules-core-gameplay/linked.prd.md"
+            link.symlink_to(target)
+            result = invoke_full_corpus(root)
+            output = result.stdout + result.stderr
+            relative = link.relative_to(root).as_posix()
+            assert result.returncode == 1, output
+            assert f"symlink-not-allowed: {relative}" in output, output
+        finally:
+            shutil.rmtree(root)
+
+
 def scenario_full_corpus_requires_lifecycle_closure() -> None:
     for marker, code in (
         ("- 接收 authority：[`gameplay authority`](../../game/prd.md#authority)\n", "lifecycle-missing-receiving-authority"),
@@ -756,6 +775,7 @@ def main() -> None:
     scenario_full_corpus_includes_unchanged_legacy_and_sorts_diagnostics()
     scenario_full_corpus_accepts_retired_topics_and_reports_lifecycle_errors()
     scenario_full_corpus_counts_module_root()
+    scenario_full_corpus_rejects_product_symlinks()
     scenario_full_corpus_requires_lifecycle_closure()
     scenario_full_corpus_requires_design_decision_or_exemption()
     scenario_full_corpus_accepts_simple_topic_exemption()

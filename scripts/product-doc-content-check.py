@@ -803,14 +803,21 @@ def collect_documents(root: Path, base: str, head: str, worktree: bool) -> tuple
     return documents, None
 
 
-def collect_full_corpus(root: Path) -> list[ChangedDocument]:
-    """Select every current-tree product PRD/design in stable path order."""
+def collect_full_corpus(root: Path) -> tuple[list[ChangedDocument], list[str]]:
+    """Select regular current-tree product PRD/design files in stable path order."""
     documents: list[ChangedDocument] = []
+    errors: list[str] = []
     product_root = root / PRODUCT_ROOT
     for path in sorted(product_root.rglob("*")):
+        relative = path.relative_to(root).as_posix()
+        if path.is_symlink():
+            errors.append(
+                f"product-doc-content: symlink-not-allowed: {relative}: "
+                "product-document corpus entries must be regular files"
+            )
+            continue
         if not path.is_file():
             continue
-        relative = path.relative_to(root).as_posix()
         if not is_product_doc(relative) and not is_product_root(relative):
             continue
         documents.append(
@@ -821,7 +828,7 @@ def collect_full_corpus(root: Path) -> list[ChangedDocument]:
                 new_text=path.read_text(encoding="utf-8"),
             )
         )
-    return documents
+    return documents, errors
 
 
 def main() -> int:
@@ -838,10 +845,13 @@ def main() -> int:
     if args.full_corpus:
         try:
             head = run_git(root, "rev-parse", "--verify", "HEAD^{commit}").strip()
-            documents = collect_full_corpus(root)
+            documents, corpus_errors = collect_full_corpus(root)
         except (OSError, ValueError) as exc:
             print(f"product-doc-content: error: {exc}")
             return 2
+        if corpus_errors:
+            print("\n".join(corpus_errors))
+            return 1
         if not documents:
             print("product-doc-content: checked 0: reason=no current-tree product PRD/design documents")
             return 0
