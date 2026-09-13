@@ -286,6 +286,13 @@ fn session_mutations_roll_back_in_memory_when_recovery_persistence_fails() {
             .player_auth_last_nonce
             .contains_key("player-register-atomic")
     );
+    assert_eq!(
+        register_server
+            .prompt_control_authority
+            .binding_epoch(agent_id.as_str()),
+        0,
+        "failed registration must roll back binding epoch"
+    );
 
     let mutation_dir = std::env::temp_dir().join(format!(
         "oasis7-session-mutation-atomic-{}-{}",
@@ -384,6 +391,13 @@ fn session_mutations_roll_back_in_memory_when_recovery_persistence_fails() {
             .map(String::as_str),
         Some(old_public.as_str())
     );
+    assert_eq!(
+        server
+            .prompt_control_authority
+            .binding_epoch(agent_id.as_str()),
+        1,
+        "failed rotation must restore binding epoch"
+    );
     assert!(
         !server
             .session_revoke_metadata
@@ -423,6 +437,13 @@ fn session_mutations_roll_back_in_memory_when_recovery_persistence_fails() {
             .expect("lookup cached acknowledgement after revoke failure")
             .is_some(),
         "failed revoke must restore chat acknowledgement idempotency state"
+    );
+    assert_eq!(
+        server
+            .prompt_control_authority
+            .binding_epoch(agent_id.as_str()),
+        1,
+        "failed revoke must restore binding epoch"
     );
     assert_eq!(
         server

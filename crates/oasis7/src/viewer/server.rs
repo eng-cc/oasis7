@@ -189,6 +189,7 @@ impl<'a> ViewerSession<'a> {
                     capabilities: Vec::new(),
                     world_id: world_id.to_string(),
                     control_profile: ViewerControlProfile::Playback,
+                    authority_epoch: None,
                 };
                 send_response(writer, &response)?;
             }
@@ -273,6 +274,7 @@ impl<'a> ViewerSession<'a> {
                             message: "prompt_control is only available in live mode".to_string(),
                             agent_id: None,
                             current_version: None,
+                            ..PromptControlError::default_legacy()
                         },
                     },
                 )?;

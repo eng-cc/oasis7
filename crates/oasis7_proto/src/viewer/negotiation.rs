@@ -16,6 +16,7 @@ pub enum PlayerAuthScheme {
 
 pub const SIGNED_AUTHORITATIVE_ROLLBACK_CAPABILITY: &str = "signed_authoritative_rollback_v1";
 pub const GOVERNED_ROLLBACK_REPLAY_CAPABILITY: &str = "governed_rollback_replay_v2";
+pub const PROMPT_CONTROL_RESULT_CAPABILITY: &str = "prompt_control_result_v1";
 
 impl NegotiatedViewerProtocol {
     pub fn v1_without_capabilities() -> Self {
@@ -38,5 +39,13 @@ impl NegotiatedViewerProtocol {
                 .capabilities
                 .iter()
                 .any(|value| value == GOVERNED_ROLLBACK_REPLAY_CAPABILITY)
+    }
+
+    pub fn supports_prompt_control_result(&self) -> bool {
+        self.version >= 2
+            && self
+                .capabilities
+                .iter()
+                .any(|value| value == PROMPT_CONTROL_RESULT_CAPABILITY)
     }
 }

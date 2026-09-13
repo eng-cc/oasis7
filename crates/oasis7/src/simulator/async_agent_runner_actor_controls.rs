@@ -29,7 +29,7 @@ impl AsyncAgentRunner {
                 short_term_goal,
                 long_term_goal,
             })
-            .map_err(|error| error.with_feedback_agent(agent_id))
+            .map_err(|error| error.with_agent(agent_id))
     }
 
     /// Deliver player input to an actor without bypassing the shared Harness

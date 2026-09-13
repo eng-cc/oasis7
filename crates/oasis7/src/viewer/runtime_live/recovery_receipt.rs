@@ -332,6 +332,7 @@ impl ViewerRuntimeLiveServer {
             session_pubkey: None,
             replaced_by_pubkey: None,
             session_epoch: None,
+            binding_epoch: None,
             message: Some("persisted rollback receipt".to_string()),
             revoke_reason: None,
             revoked_by: None,

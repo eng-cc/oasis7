@@ -28,6 +28,7 @@ fn runtime_prompt_control_script_mode_requires_llm_mode() {
             system_prompt_override: Some(Some("system".to_string())),
             short_term_goal_override: None,
             long_term_goal_override: None,
+            ..Default::default()
         },
         crate::viewer::PromptControlAuthIntent::Apply,
         1,
@@ -71,6 +72,7 @@ fn runtime_prompt_control_hosted_public_join_requires_strong_auth() {
             system_prompt_override: Some(Some("system".to_string())),
             short_term_goal_override: None,
             long_term_goal_override: None,
+            ..Default::default()
         },
         crate::viewer::PromptControlAuthIntent::Apply,
         27,
@@ -140,6 +142,7 @@ fn runtime_prompt_control_hosted_public_join_accepts_valid_backend_grant() {
             system_prompt_override: Some(Some("system".to_string())),
             short_term_goal_override: Some(Some("goal".to_string())),
             long_term_goal_override: None,
+            ..Default::default()
         },
         crate::viewer::PromptControlAuthIntent::Apply,
         2,
@@ -219,6 +222,7 @@ fn runtime_prompt_control_hosted_public_join_rejects_expired_backend_grant() {
             system_prompt_override: Some(Some("system".to_string())),
             short_term_goal_override: None,
             long_term_goal_override: None,
+            ..Default::default()
         },
         crate::viewer::PromptControlAuthIntent::Apply,
         2,
@@ -313,6 +317,7 @@ fn runtime_prompt_control_hosted_public_join_rejects_replayed_auth_nonce_even_wi
                 system_prompt_override: Some(Some("system".to_string())),
                 short_term_goal_override: Some(Some("goal".to_string())),
                 long_term_goal_override: None,
+                ..Default::default()
             },
             crate::viewer::PromptControlAuthIntent::Apply,
             2,
@@ -414,6 +419,7 @@ fn runtime_prompt_control_hosted_public_join_rejects_revoked_session_even_with_v
             system_prompt_override: Some(Some("system".to_string())),
             short_term_goal_override: Some(Some("goal".to_string())),
             long_term_goal_override: None,
+            ..Default::default()
         },
         crate::viewer::PromptControlAuthIntent::Apply,
         2,
@@ -470,6 +476,7 @@ fn runtime_prompt_control_provider_mode_reports_unsupported() {
             system_prompt_override: Some(Some("system".to_string())),
             short_term_goal_override: None,
             long_term_goal_override: None,
+            ..Default::default()
         },
         crate::viewer::PromptControlAuthIntent::Apply,
         31,
@@ -512,6 +519,7 @@ fn runtime_prompt_control_apply_updates_snapshot_and_bindings() {
             system_prompt_override: Some(Some("system".to_string())),
             short_term_goal_override: None,
             long_term_goal_override: None,
+            ..Default::default()
         },
         crate::viewer::PromptControlAuthIntent::Apply,
         2,
@@ -616,6 +624,7 @@ fn runtime_prompt_control_keeps_the_canonical_primary_intent_truth() {
                 system_prompt_override: None,
                 short_term_goal_override,
                 long_term_goal_override: None,
+                ..Default::default()
             },
             crate::viewer::PromptControlAuthIntent::Apply,
             nonce,

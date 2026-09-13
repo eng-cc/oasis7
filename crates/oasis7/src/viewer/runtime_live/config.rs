@@ -5,6 +5,9 @@ use std::time::Duration;
 use super::{RuntimeWorldError, ViewerLiveDecisionMode, WorldScenario};
 use crate::runtime::MajorWorldEventVisibilityPermission;
 
+pub(crate) const DEFAULT_PROMPT_RESULT_CACHE_CAPACITY: usize = 256;
+pub(crate) const DEFAULT_PROMPT_RESULT_RECEIPT_MAX_BYTES: usize = 65_536;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChainLinkPolicy {
     Enforcing,
@@ -55,8 +58,24 @@ pub struct ViewerRuntimeLiveServerConfig {
     /// default beside their sidecar; formal/synthetic worlds must opt into a
     /// stable operator-owned path explicitly.
     pub provider_lineage_store: Option<PathBuf>,
+    /// Runtime-only idempotency ledger capacity. A zero value is invalid.
+    pub prompt_result_cache_capacity: usize,
+    /// Maximum serialized result receipt size. A zero value is invalid.
+    pub prompt_result_receipt_max_bytes: usize,
     #[cfg(test)]
     pub(crate) test_cognition_runtime_binding: Option<(String, u64, Option<String>, String, u64)>,
+}
+
+impl ViewerRuntimeLiveServerConfig {
+    pub(crate) fn validate_prompt_result_limits(&self) -> Result<(), String> {
+        if self.prompt_result_cache_capacity == 0 {
+            return Err("prompt result cache capacity must be greater than zero".to_string());
+        }
+        if self.prompt_result_receipt_max_bytes == 0 {
+            return Err("prompt result receipt max bytes must be greater than zero".to_string());
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug)]

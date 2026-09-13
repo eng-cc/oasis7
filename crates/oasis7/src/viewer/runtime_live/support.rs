@@ -39,6 +39,8 @@ impl ViewerRuntimeLiveServerConfig {
             major_world_event_visibility: MajorWorldEventVisibilityPermission::Unknown,
             generated_world_dir: None,
             provider_lineage_store: None,
+            prompt_result_cache_capacity: config::DEFAULT_PROMPT_RESULT_CACHE_CAPACITY,
+            prompt_result_receipt_max_bytes: config::DEFAULT_PROMPT_RESULT_RECEIPT_MAX_BYTES,
             #[cfg(test)]
             test_cognition_runtime_binding: None,
         }
@@ -61,6 +63,8 @@ impl ViewerRuntimeLiveServerConfig {
             major_world_event_visibility: MajorWorldEventVisibilityPermission::Unknown,
             generated_world_dir: None,
             provider_lineage_store: None,
+            prompt_result_cache_capacity: config::DEFAULT_PROMPT_RESULT_CACHE_CAPACITY,
+            prompt_result_receipt_max_bytes: config::DEFAULT_PROMPT_RESULT_RECEIPT_MAX_BYTES,
             #[cfg(test)]
             test_cognition_runtime_binding: None,
         }
@@ -177,6 +181,16 @@ impl ViewerRuntimeLiveServerConfig {
     /// kept beside that world's immutable sidecar.
     pub fn with_provider_lineage_store(mut self, path: impl Into<PathBuf>) -> Self {
         self.provider_lineage_store = Some(path.into());
+        self
+    }
+
+    pub fn with_prompt_result_cache_capacity(mut self, capacity: usize) -> Self {
+        self.prompt_result_cache_capacity = capacity;
+        self
+    }
+
+    pub fn with_prompt_result_receipt_max_bytes(mut self, max_bytes: usize) -> Self {
+        self.prompt_result_receipt_max_bytes = max_bytes;
         self
     }
 

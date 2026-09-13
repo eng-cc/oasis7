@@ -33,6 +33,7 @@ impl ViewerRuntimeLiveServer {
                 message: format!("agent not found: {agent_id}"),
                 agent_id: Some(agent_id.to_string()),
                 current_version: None,
+                ..PromptControlError::default_legacy()
             });
         }
         Ok(self

@@ -101,6 +101,7 @@ fn prompt_control_apply_auth_sign_and_verify_roundtrip() {
         system_prompt_override: Some(Some("system".to_string())),
         short_term_goal_override: Some(None),
         long_term_goal_override: None,
+        ..Default::default()
     };
     let proof = sign_prompt_control_apply_auth_proof(
         PromptControlAuthIntent::Apply,
@@ -132,6 +133,7 @@ fn prompt_control_apply_auth_verify_rejects_tamper() {
         system_prompt_override: Some(Some("system".to_string())),
         short_term_goal_override: None,
         long_term_goal_override: None,
+        ..Default::default()
     };
     let proof = sign_prompt_control_apply_auth_proof(
         PromptControlAuthIntent::Apply,
@@ -151,6 +153,97 @@ fn prompt_control_apply_auth_verify_rejects_tamper() {
 }
 
 #[test]
+fn prompt_control_enhanced_auth_binds_epochs_and_operation_identity() {
+    let (public_key, private_key) = test_signer();
+    let request = PromptControlApplyRequest {
+        agent_id: "agent-0".to_string(),
+        player_id: "player-a".to_string(),
+        request_id: Some("request-a".to_string()),
+        session_epoch: Some(4),
+        binding_epoch: Some(9),
+        expected_authority_epoch: Some("authority-a".to_string()),
+        public_key: Some(public_key.clone()),
+        auth: None,
+        strong_auth_grant: None,
+        expected_version: Some(3),
+        updated_by: Some("player-a".to_string()),
+        system_prompt_override: Some(Some("system".to_string())),
+        short_term_goal_override: Some(None),
+        long_term_goal_override: None,
+    };
+    let proof = sign_prompt_control_apply_auth_proof(
+        PromptControlAuthIntent::Apply,
+        &request,
+        11,
+        public_key.as_str(),
+        private_key.as_str(),
+    )
+    .expect("sign enhanced proof");
+    verify_prompt_control_apply_auth_proof(PromptControlAuthIntent::Apply, &request, &proof)
+        .expect("verify enhanced proof");
+
+    let mut tampered = request.clone();
+    tampered.request_id = Some("request-b".to_string());
+    assert!(
+        verify_prompt_control_apply_auth_proof(PromptControlAuthIntent::Apply, &tampered, &proof)
+            .is_err()
+    );
+    tampered = request.clone();
+    tampered.session_epoch = Some(5);
+    assert!(
+        verify_prompt_control_apply_auth_proof(PromptControlAuthIntent::Apply, &tampered, &proof)
+            .is_err()
+    );
+    tampered = request.clone();
+    tampered.binding_epoch = Some(10);
+    assert!(
+        verify_prompt_control_apply_auth_proof(PromptControlAuthIntent::Apply, &tampered, &proof)
+            .is_err()
+    );
+    tampered = request.clone();
+    tampered.expected_authority_epoch = Some("authority-b".to_string());
+    assert!(
+        verify_prompt_control_apply_auth_proof(PromptControlAuthIntent::Apply, &tampered, &proof)
+            .is_err()
+    );
+    tampered = request.clone();
+    tampered.expected_version = Some(4);
+    assert!(
+        verify_prompt_control_apply_auth_proof(PromptControlAuthIntent::Apply, &tampered, &proof)
+            .is_err()
+    );
+    tampered = request.clone();
+    tampered.updated_by = Some("player-b".to_string());
+    assert!(
+        verify_prompt_control_apply_auth_proof(PromptControlAuthIntent::Apply, &tampered, &proof)
+            .is_err()
+    );
+
+    let identity_a = normalize_prompt_control_operation_identity(
+        "apply",
+        false,
+        "agent-0",
+        "player-a",
+        Some(4),
+        Some(9),
+        Some("authority-a"),
+        Some(3),
+        &request.system_prompt_override,
+        &request.short_term_goal_override,
+        &request.long_term_goal_override,
+        None,
+        request.updated_by.as_deref(),
+    )
+    .expect("normalize identity");
+    let identity_b = identity_a.clone();
+    assert_eq!(
+        prompt_control_operation_digest(&identity_a),
+        prompt_control_operation_digest(&identity_b),
+        "typed operation digest is stable and independent of request id"
+    );
+}
+
+#[test]
 fn hosted_prompt_control_strong_auth_grant_roundtrip() {
     let (player_public_key, _) = test_signer();
     let (backend_public_key, backend_private_key) = test_signer_with_seed(9);
@@ -165,6 +258,7 @@ fn hosted_prompt_control_strong_auth_grant_roundtrip() {
         system_prompt_override: Some(Some("system".to_string())),
         short_term_goal_override: None,
         long_term_goal_override: None,
+        ..Default::default()
     };
     let grant = sign_hosted_prompt_control_strong_auth_grant(
         "prompt_control_apply",
@@ -275,6 +369,7 @@ fn hosted_prompt_control_strong_auth_grant_rejects_request_mismatch() {
         system_prompt_override: Some(Some("system".to_string())),
         short_term_goal_override: None,
         long_term_goal_override: None,
+        ..Default::default()
     };
     let grant = sign_hosted_prompt_control_strong_auth_grant(
         "prompt_control_apply",

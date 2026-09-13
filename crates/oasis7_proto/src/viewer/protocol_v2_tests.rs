@@ -75,6 +75,7 @@ fn viewer_response_round_trip_authoritative_recovery_ack() {
             session_pubkey: Some("old-key".to_string()),
             replaced_by_pubkey: Some("new-key".to_string()),
             session_epoch: Some(5),
+            binding_epoch: None,
             message: Some("session rotated".to_string()),
             revoke_reason: Some("compromised".to_string()),
             revoked_by: Some("ops".to_string()),
@@ -133,6 +134,7 @@ fn viewer_v2_hello_ack_advertises_signed_rollback_capability() {
         capabilities: vec![SIGNED_AUTHORITATIVE_ROLLBACK_CAPABILITY.to_string()],
         world_id: "world-v2".to_string(),
         control_profile: ViewerControlProfile::Live,
+        authority_epoch: None,
     };
     let value = serde_json::to_value(response).expect("serialize hello ack");
 
