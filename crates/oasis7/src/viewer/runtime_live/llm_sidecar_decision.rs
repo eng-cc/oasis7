@@ -68,17 +68,54 @@ impl RuntimeLlmSidecar {
                     return None;
                 }
                 if let Some(context) = self.provider_contexts.get(&agent_id).cloned() {
-                    if let Err(error) = async_support::runtime_provider_prefix(world, &context) {
-                        let _ = async_support::runtime_provider_failure(
+                    if let Some(existing_lease) = self.provider_cognition_lease(agent_id.as_str()) {
+                        if let Err(error) = self.validate_provider_cognition_lease_for_request(
                             world,
-                            &context,
-                            "persistence_failure",
-                        );
+                            agent_id.as_str(),
+                            &context.request_context,
+                            &existing_lease,
+                            "dispatch",
+                        ) {
+                            self.fence_provider_cognition_lease(
+                                agent_id.as_str(),
+                                &context,
+                                error.clone(),
+                            );
+                            self.shadow_kernel = Some(kernel);
+                            return Some(RuntimeLlmDecision::from_agent_error(
+                                world, agent_id, error,
+                            ));
+                        }
+                    }
+                    let cognition_lease =
+                        match async_support::reserve_provider_cognition_lease(world, &context) {
+                            Ok(lease) => lease,
+                            Err(error) => {
+                                self.shadow_kernel = Some(kernel);
+                                return Some(RuntimeLlmDecision::from_agent_error(
+                                    world, agent_id, error,
+                                ));
+                            }
+                        };
+                    self.bind_provider_cognition_lease(agent_id.clone(), cognition_lease.clone());
+                    if let Err(error) = async_support::runtime_provider_prefix(world, &context) {
+                        let release_error = self
+                            .release_provider_lease_before_io_or_fence(
+                                world,
+                                agent_id.as_str(),
+                                &context,
+                                &cognition_lease,
+                            )
+                            .err()
+                            .map(|error| format!("; {error}"));
                         self.shadow_kernel = Some(kernel);
                         return Some(RuntimeLlmDecision::from_agent_error(
                             world,
                             agent_id,
-                            format!("Runtime cognition prefix rejected provider I/O: {error}"),
+                            format!(
+                                "Runtime cognition prefix rejected provider I/O: {error}{}",
+                                release_error.unwrap_or_default()
+                            ),
                         ));
                     }
                     if let Some(RuntimeDecisionRunner::ProviderBacked(runner)) =
@@ -155,6 +192,7 @@ impl RuntimeLlmSidecar {
             .map(|(request, response)| RuntimeProviderActionContext {
                 request,
                 response,
+                cognition_lease: self.provider_cognition_lease(tick.agent_id.as_str()),
                 memory_write_intents: memory_write_intents.clone(),
             });
         if let Some(cognition) = cognition.as_ref() {

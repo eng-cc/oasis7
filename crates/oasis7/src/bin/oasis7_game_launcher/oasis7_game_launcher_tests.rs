@@ -112,6 +112,7 @@ fn parse_options_defaults() {
     assert!(!options.chain_enabled);
     assert_eq!(options.chain_status_bind, DEFAULT_CHAIN_STATUS_BIND);
     assert_eq!(options.chain_link_policy, DEFAULT_CHAIN_LINK_POLICY);
+    assert!(options.provider_bootstrap_authority_paths.is_empty());
     assert!(
         options
             .chain_node_id

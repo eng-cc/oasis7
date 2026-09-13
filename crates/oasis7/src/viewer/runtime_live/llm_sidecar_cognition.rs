@@ -73,6 +73,8 @@ impl RuntimeLlmSidecar {
                 "provider lineage recovery fenced; durable checkpoint must be repaired before dispatch: {error}"
             ));
         }
+        self.settle_committed_provider_cognition_leases(world)?;
+        self.release_binding_changed_provider_leases(world)?;
         #[cfg(not(target_arch = "wasm32"))]
         if let Err(error) = self.recover_pending_provider_wait(world) {
             tracing::warn!(error, "provider Wait recovery remains pending");
@@ -223,6 +225,7 @@ impl RuntimeLlmSidecar {
                     self.provider_contexts.remove(agent_id.as_str());
                     self.provider_active_turns.remove(agent_id.as_str());
                     self.provider_retry_contexts.remove(agent_id.as_str());
+                    self.provider_cognition_leases.remove(agent_id.as_str());
                     self.provider_wait_until.remove(agent_id.as_str());
                     self.persist_provider_lineage_best_effort();
                     continue;
@@ -306,6 +309,14 @@ impl RuntimeLlmSidecar {
                     &self.provider_memory_store,
                     goal_snapshot,
                 )?;
+                if let Some(identity) =
+                    lineage_generation_recovery::provider_request_capability_identity(
+                        &request_context,
+                    )
+                {
+                    self.provider_capability_identities
+                        .insert(agent_id.clone(), identity);
+                }
                 if let (Some(wake), Some(proposal)) =
                     (runtime_wake.as_ref(), runtime_resume_proposal)
                 {
@@ -456,6 +467,7 @@ impl RuntimeLlmSidecar {
         self.provider_contexts.remove(agent_id);
         self.provider_retry_contexts.remove(agent_id);
         self.provider_active_turns.remove(agent_id);
+        self.provider_cognition_leases.remove(agent_id);
         self.provider_recovery_pending.remove(agent_id);
         self.provider_continuation_recovery_pending.remove(agent_id);
         self.provider_continuation_proposals

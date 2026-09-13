@@ -10,7 +10,6 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
-
 mod auth_actions;
 mod auth_actions_collect_data;
 mod auth_actions_feedback;
@@ -19,9 +18,13 @@ mod auth_actions_fragment_replenishment;
 mod auth_actions_provider_context;
 #[path = "tests/auth_actions_provider_continuation_restart.rs"]
 mod auth_actions_provider_continuation_restart;
+#[path = "tests/auth_actions_provider_stale.rs"]
+mod auth_actions_provider_stale;
 mod authoritative;
 mod background_play;
 mod chain_sync;
+#[path = "tests/mock_http.rs"]
+mod mock_http;
 #[path = "tests/provider_continuation_drains.rs"]
 mod provider_continuation_drains;
 pub(super) use chain_sync::TestChainStatusServer;
@@ -64,7 +67,6 @@ mod social_quote_capability;
 mod tests_support;
 mod transfer_material_quote;
 mod wait_resolution_quote;
-
 use tests_support::*;
 
 fn send_runtime_live_request(writer: &mut BufWriter<TcpStream>, request: &ViewerRequest) {
@@ -72,7 +74,6 @@ fn send_runtime_live_request(writer: &mut BufWriter<TcpStream>, request: &Viewer
     writer.write_all(b"\n").expect("write newline");
     writer.flush().expect("flush request");
 }
-
 fn read_runtime_live_snapshot(reader: &mut BufReader<TcpStream>) -> WorldSnapshot {
     loop {
         let response = read_runtime_live_response(reader);
@@ -610,7 +611,6 @@ fn runtime_live_events_subscription_requests_recovery_metadata_without_initial_s
 fn runtime_live_agent_chat_echo_flushes_virtual_event_immediately_over_socket() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
-    // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
         oasis7::env_mut::remove_var(RUNTIME_AGENT_CHAT_ECHO_ENV);
         oasis7::env_mut::remove_var(crate::simulator::ENV_LLM_MODEL);

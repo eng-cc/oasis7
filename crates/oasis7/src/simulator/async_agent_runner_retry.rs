@@ -49,6 +49,10 @@ impl AsyncAgentRunner {
                 "awaiting Runtime turn identity is unavailable".to_string(),
             ));
         };
+        // `poll_completed` moves the lease into the awaiting Runtime outcome.
+        // Put that exact immutable lease back on the transport retry so the
+        // next authoritative outcome cannot silently lose its admission.
+        let cognition_lease = outcome.cognition_lease.clone();
         let expected_context = outcome.prepared_context.clone().ok_or_else(|| {
             AsyncAgentRunnerError::Cognition(
                 "retry requires the awaiting turn's cognition context".to_string(),
@@ -101,6 +105,9 @@ impl AsyncAgentRunner {
                 request_context: Some(retry_request_context),
             })
             .map_err(|error| error.with_agent(agent_id))?;
+        if let Some(lease) = cognition_lease {
+            self.cognition_leases.insert(turn_id, lease);
+        }
         actor.active_turn.store(true, Ordering::Release);
         self.active_turns = self.active_turns.saturating_add(1);
         // The caller has already observed this failed/completed outcome and

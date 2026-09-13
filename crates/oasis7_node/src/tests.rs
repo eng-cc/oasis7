@@ -95,3 +95,4 @@ mod tests_consensus_progress_observer_failure;
 mod tests_fetch_blob_chunking;
 #[path = "tests_hello_throttle.rs"]
 mod tests_hello_throttle;
+include!("tests_replicated_execution_input.rs");

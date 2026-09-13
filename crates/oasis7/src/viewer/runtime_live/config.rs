@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use super::{RuntimeWorldError, ViewerLiveDecisionMode, WorldScenario};
-use crate::runtime::MajorWorldEventVisibilityPermission;
+use crate::runtime::{MajorWorldEventVisibilityPermission, ProviderBackedBootstrapAuthorityV1};
 
 pub(crate) const DEFAULT_PROMPT_RESULT_CACHE_CAPACITY: usize = 256;
 pub(crate) const DEFAULT_PROMPT_RESULT_RECEIPT_MAX_BYTES: usize = 65_536;
@@ -62,6 +62,9 @@ pub struct ViewerRuntimeLiveServerConfig {
     pub prompt_result_cache_capacity: usize,
     /// Maximum serialized result receipt size. A zero value is invalid.
     pub prompt_result_receipt_max_bytes: usize,
+    /// Explicit, pre-verified ProviderBacked authority bundles. Runtime
+    /// derives and validates the payer/economy binding from these records.
+    pub provider_backed_bootstrap_authorities: Vec<ProviderBackedBootstrapAuthorityV1>,
     #[cfg(test)]
     pub(crate) test_cognition_runtime_binding: Option<(String, u64, Option<String>, String, u64)>,
 }

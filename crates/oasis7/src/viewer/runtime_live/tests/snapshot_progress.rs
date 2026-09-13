@@ -184,6 +184,7 @@ fn assert_runtime_provider_alias_snapshot(initialization_delay: Duration) {
 
 #[test]
 fn compat_snapshot_exposes_player_gameplay_snapshot() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
     let server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
             .expect("runtime server");
@@ -232,6 +233,7 @@ fn compat_snapshot_exposes_player_gameplay_snapshot() {
 
 #[test]
 fn compat_snapshot_requires_starter_oc_before_first_agent_chat() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
@@ -272,6 +274,7 @@ fn compat_snapshot_requires_starter_oc_before_first_agent_chat() {
 
 #[test]
 fn compat_snapshot_does_not_publish_player_bound_actions_without_bound_agent() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
@@ -306,6 +309,7 @@ fn compat_snapshot_does_not_publish_player_bound_actions_without_bound_agent() {
 
 #[test]
 fn compat_snapshot_with_unbound_starter_only_publishes_first_agent_claim_for_unbound_player() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
@@ -573,6 +577,7 @@ fn compat_snapshot_surfaces_control_feeling_contract_fields_from_gameplay_feedba
 
 #[test]
 fn compat_snapshot_exposes_player_agent_claim_overview() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
     let mut server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
             .expect("runtime server");
@@ -677,6 +682,7 @@ fn compat_snapshot_exposes_player_agent_claim_overview() {
 
 #[test]
 fn compat_snapshot_flags_restricted_balance_as_ineligible_for_slot_2() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
     let mut server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
             .expect("runtime server");
@@ -757,6 +763,7 @@ fn compat_snapshot_flags_restricted_balance_as_ineligible_for_slot_2() {
 
 #[test]
 fn compat_snapshot_exposes_slot_1_auto_funding_from_dedicated_pool() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
     let mut server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
             .expect("runtime server");

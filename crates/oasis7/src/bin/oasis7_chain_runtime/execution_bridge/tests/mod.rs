@@ -44,6 +44,7 @@ mod driver_checkpoint_transaction;
 mod driver_compacted_checkpoint_recovery;
 mod driver_observability;
 mod driver_storage_profile;
+mod provider_bootstrap;
 mod replay;
 mod retention;
 mod simulator_driver;

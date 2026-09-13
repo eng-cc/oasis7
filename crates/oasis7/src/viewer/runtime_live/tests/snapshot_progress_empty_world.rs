@@ -90,6 +90,9 @@ fn empty_runtime_snapshot_publishes_first_agent_claim_action() {
 
 #[test]
 fn formal_release_empty_runtime_snapshot_publishes_first_agent_claim_action() {
+    let _guard = super::super::canonical_runtime_provider_env_lock()
+        .lock()
+        .expect("env lock");
     let mut server = super::super::ViewerRuntimeLiveServer::new(
         super::super::ViewerRuntimeLiveServerConfig::formal_release_default()
             .with_decision_mode(super::super::ViewerLiveDecisionMode::Llm),
@@ -116,6 +119,9 @@ fn formal_release_empty_runtime_snapshot_publishes_first_agent_claim_action() {
 
 #[test]
 fn stale_starter_binding_without_runtime_agent_keeps_first_agent_claim_action() {
+    let _guard = super::super::canonical_runtime_provider_env_lock()
+        .lock()
+        .expect("env lock");
     let mut server = super::super::ViewerRuntimeLiveServer::new(
         super::super::ViewerRuntimeLiveServerConfig::formal_release_default()
             .with_decision_mode(super::super::ViewerLiveDecisionMode::Llm),

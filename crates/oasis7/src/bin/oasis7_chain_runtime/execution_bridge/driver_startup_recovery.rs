@@ -15,7 +15,7 @@ use super::checkpoint::{
     load_execution_checkpoint_manifest, load_highest_valid_execution_bridge_record,
     persist_execution_bridge_record_only,
 };
-use super::driver::{ExecutionHashPayload, NodeRuntimeExecutionDriver};
+use super::driver::NodeRuntimeExecutionDriver;
 use super::driver_observability::{
     RestoreObservation, emit_stale_height_restore_complete, emit_stale_height_restore_start,
     execution_record_recovery_ref_count,
@@ -24,6 +24,7 @@ use super::driver_persistence::{
     execution_world_persistence_files_missing, persist_execution_bridge_state,
     persist_execution_world_with_chain_resource_context,
 };
+use super::execution_hash::ExecutionHashPayload;
 use super::simulator_mirror::persist_simulator_execution_world;
 use super::{
     EXECUTION_BRIDGE_RECORD_SCHEMA_V3, EXECUTION_CHECKPOINT_MANIFEST_SCHEMA_V2,
@@ -486,6 +487,10 @@ impl NodeRuntimeExecutionDriver {
                 target_height, err
             )
         })?;
+        // Module artifact bytes are restored by `World::from_snapshot` from
+        // the canonical CAS snapshot payload. Do not consult `world_dir`
+        // here: it may contain a newer module-store cache than this
+        // historical execution head.
         restored_world.set_release_security_policy(world_policy);
         let mut rebuild_ms = runtime_rebuild_started_at.elapsed();
         let restored_commit_block_hash = restored_resource_delta

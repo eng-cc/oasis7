@@ -41,6 +41,7 @@ impl ViewerRuntimeLiveServerConfig {
             provider_lineage_store: None,
             prompt_result_cache_capacity: config::DEFAULT_PROMPT_RESULT_CACHE_CAPACITY,
             prompt_result_receipt_max_bytes: config::DEFAULT_PROMPT_RESULT_RECEIPT_MAX_BYTES,
+            provider_backed_bootstrap_authorities: Vec::new(),
             #[cfg(test)]
             test_cognition_runtime_binding: None,
         }
@@ -65,6 +66,7 @@ impl ViewerRuntimeLiveServerConfig {
             provider_lineage_store: None,
             prompt_result_cache_capacity: config::DEFAULT_PROMPT_RESULT_CACHE_CAPACITY,
             prompt_result_receipt_max_bytes: config::DEFAULT_PROMPT_RESULT_RECEIPT_MAX_BYTES,
+            provider_backed_bootstrap_authorities: Vec::new(),
             #[cfg(test)]
             test_cognition_runtime_binding: None,
         }
@@ -194,6 +196,16 @@ impl ViewerRuntimeLiveServerConfig {
         self
     }
 
+    /// Add one explicit, proof-bearing ProviderBacked authority bundle.
+    /// Runtime owns validation, installation, and cognition provisioning.
+    pub fn with_provider_backed_bootstrap_authority(
+        mut self,
+        authority: ProviderBackedBootstrapAuthorityV1,
+    ) -> Self {
+        self.provider_backed_bootstrap_authorities.push(authority);
+        self
+    }
+
     pub(super) fn provider_lineage_store_path(&self) -> Option<PathBuf> {
         self.provider_lineage_store.clone().or_else(|| {
             self.generated_world_dir
@@ -201,6 +213,19 @@ impl ViewerRuntimeLiveServerConfig {
                 .map(|dir| dir.join("runtime-live-provider-lineage.json"))
         })
     }
+}
+
+pub(super) fn apply_provider_backed_bootstrap_authorities(
+    world: &mut RuntimeWorld,
+    authorities: &[ProviderBackedBootstrapAuthorityV1],
+) -> Result<(), String> {
+    if authorities.is_empty() {
+        return Ok(());
+    }
+    world
+        .bootstrap_provider_backed_authorities(authorities)
+        .map(|_| ())
+        .map_err(|error| format!("ProviderBacked authority bootstrap failed: {error:?}"))
 }
 
 pub(super) struct RuntimeLiveSession {

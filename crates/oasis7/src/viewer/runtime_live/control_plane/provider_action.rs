@@ -1,12 +1,9 @@
 use super::super::decision_trace::{is_budget_exhausted_wait, is_trace_only_overflow};
-use super::llm_sidecar::RuntimeProviderActionContext;
 use super::*;
 use crate::runtime::{
-    CognitionCommitRejectReasonV1, RuntimeCognitionBaseBindingV1, RuntimeCognitionCommitRequestV1,
-    RuntimeCognitionResponseArtifactV1, RuntimeFeedbackProjectionV1, RuntimeFeedbackRequestV1,
-    classify_cognition_commit_error,
+    CognitionCommitRejectReasonV1, RuntimeFeedbackProjectionV1, RuntimeFeedbackRequestV1,
 };
-use crate::simulator::{Action as SimulatorAction, AgentDecision, h_v1};
+use crate::simulator::AgentDecision;
 
 impl ViewerRuntimeLiveServer {
     pub(in crate::viewer::runtime_live) fn enqueue_llm_action_from_sidecar(
@@ -28,7 +25,21 @@ impl ViewerRuntimeLiveServer {
             .as_ref()
             .map(|(agent_id, _)| agent_id.as_str());
         if let Some(agent_id) = self.llm_sidecar.provider_stale_replan_exhausted_agent() {
+            // Stale binding recovery owns the old lease. Run that cleanup
+            // before terminalizing an exhausted replan; otherwise the early
+            // return would leave a Reserved mirror and block durable recovery.
+            let stale_replan_cleanup = self
+                .llm_sidecar
+                .release_binding_changed_provider_leases(&mut self.world)
+                .err();
             let mut trace = stale_replan_exhausted_trace(&self.world, agent_id.as_str());
+            if let Some(error) = stale_replan_cleanup {
+                trace.llm_error = Some(format!(
+                    "{}; stale provider lease cleanup remains pending: {error}",
+                    trace.llm_error.take().unwrap_or_default()
+                ));
+                return Err(trace);
+            }
             if let Err(error) = self.handoff_runtime_wake_for_agent(
                 agent_id.as_str(),
                 crate::runtime::ContinuationStatusV1::Rejected,
@@ -45,7 +56,8 @@ impl ViewerRuntimeLiveServer {
             .llm_sidecar
             .provider_transport_exhausted_agent_excluding(unresolved_wake_agent)
         {
-            return Err(self.finish_provider_transport_exhaustion(agent_id, None));
+            let lease = self.llm_sidecar.provider_cognition_lease(agent_id.as_str());
+            return Err(self.finish_provider_transport_exhaustion(agent_id, None, lease));
         }
         if let Some((_, agent_id, _)) = self.llm_sidecar.pending_provider_action_for_recovery() {
             if let Err(error) = self.retry_committed_provider_action() {
@@ -90,7 +102,12 @@ impl ViewerRuntimeLiveServer {
             .llm_sidecar
             .provider_transport_exhausted_agent_excluding(unresolved_wake_agent)
         {
-            return Err(self.finish_provider_transport_exhaustion(agent_id, decision_trace));
+            let lease = decision
+                .cognition
+                .as_ref()
+                .and_then(|cognition| cognition.cognition_lease.clone())
+                .or_else(|| self.llm_sidecar.provider_cognition_lease(agent_id.as_str()));
+            return Err(self.finish_provider_transport_exhaustion(agent_id, decision_trace, lease));
         }
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(trace) = decision_trace.as_ref() {
@@ -110,6 +127,24 @@ impl ViewerRuntimeLiveServer {
                 && !is_budget_exhausted_wait(trace)
             {
                 if !decision_trace_provider_error_retryable(trace).unwrap_or(false) {
+                    self.settle_provider_cognition_lease_for_response_or_release(
+                        decision.agent_id.as_str(),
+                        decision
+                            .cognition
+                            .as_ref()
+                            .and_then(|cognition| cognition.cognition_lease.clone()),
+                        decision
+                            .cognition
+                            .as_ref()
+                            .map(|cognition| &cognition.request.request_context),
+                    )
+                    .map_err(|error| {
+                        wake_handoff_error_trace(
+                            decision.agent_id.as_str(),
+                            self.world.state().time,
+                            error,
+                        )
+                    })?;
                     if let Some(feedback) = self.llm_sidecar.fail_provider_turn_with_feedback(
                         decision.agent_id.as_str(),
                         "failed",
@@ -136,6 +171,24 @@ impl ViewerRuntimeLiveServer {
                 return Err(trace.clone());
             }
             if let Some(message) = trace.parse_error.as_ref() {
+                self.settle_provider_cognition_lease_for_response_or_release(
+                    decision.agent_id.as_str(),
+                    decision
+                        .cognition
+                        .as_ref()
+                        .and_then(|cognition| cognition.cognition_lease.clone()),
+                    decision
+                        .cognition
+                        .as_ref()
+                        .map(|cognition| &cognition.request.request_context),
+                )
+                .map_err(|error| {
+                    wake_handoff_error_trace(
+                        decision.agent_id.as_str(),
+                        self.world.state().time,
+                        error,
+                    )
+                })?;
                 if let Some(feedback) = self.llm_sidecar.fail_provider_turn_with_feedback(
                     decision.agent_id.as_str(),
                     "rejected",
@@ -187,6 +240,18 @@ impl ViewerRuntimeLiveServer {
                                         error.reason(),
                                     ));
                                 }
+                                self.settle_provider_cognition_lease_for_response_or_release(
+                                    cognition.request.request_context.agent_subject.as_str(),
+                                    cognition.cognition_lease.clone(),
+                                    Some(&cognition.request.request_context),
+                                )
+                                .map_err(|release_error| {
+                                    wake_handoff_error_trace(
+                                        cognition.request.request_context.agent_subject.as_str(),
+                                        self.world.state().time,
+                                        release_error,
+                                    )
+                                })?;
                                 let stale_base = error.is_stale_base();
                                 let reason = error.reason();
                                 if stale_base {
@@ -259,6 +324,24 @@ impl ViewerRuntimeLiveServer {
                         "runtime llm bridge cannot map action: {}",
                         simulator_action_label(&action)
                     );
+                    self.settle_provider_cognition_lease_for_response_or_release(
+                        decision.agent_id.as_str(),
+                        decision
+                            .cognition
+                            .as_ref()
+                            .and_then(|cognition| cognition.cognition_lease.clone()),
+                        decision
+                            .cognition
+                            .as_ref()
+                            .map(|cognition| &cognition.request.request_context),
+                    )
+                    .map_err(|error| {
+                        wake_handoff_error_trace(
+                            decision.agent_id.as_str(),
+                            self.world.state().time,
+                            error,
+                        )
+                    })?;
                     self.llm_sidecar
                         .fail_provider_cognition_turn(
                             &mut self.world,
@@ -308,6 +391,39 @@ impl ViewerRuntimeLiveServer {
             },
             AgentDecision::Wait | AgentDecision::WaitTicks(_) => {
                 if let Some(cognition) = decision.cognition {
+                    // A provider response means the fixed cognition unit was
+                    // consumed even when the proposed outcome is Wait.  Keep
+                    // release for no-I/O paths such as a native budget
+                    // denial; successful Wait/WaitTicks must settle exactly
+                    // once so repeated waits cannot run at zero net charge.
+                    if decision_trace
+                        .as_ref()
+                        .is_some_and(is_budget_exhausted_wait)
+                    {
+                        self.release_provider_cognition_lease_for_request(
+                            decision.agent_id.as_str(),
+                            cognition.cognition_lease.clone(),
+                            Some(&cognition.request.request_context),
+                        )
+                    } else {
+                        let settlement = self.settle_provider_cognition_lease_for_request(
+                            decision.agent_id.as_str(),
+                            cognition.cognition_lease.clone(),
+                            Some(&cognition.request.request_context),
+                        );
+                        if settlement.is_ok() {
+                            self.llm_sidecar
+                                .clear_provider_cognition_lease(decision.agent_id.as_str());
+                        }
+                        settlement
+                    }
+                    .map_err(|error| {
+                        wake_handoff_error_trace(
+                            decision.agent_id.as_str(),
+                            self.world.state().time,
+                            error,
+                        )
+                    })?;
                     let ticks = match &decision.decision {
                         AgentDecision::Wait => 1,
                         AgentDecision::WaitTicks(ticks) => (*ticks).max(1),
@@ -371,6 +487,18 @@ impl ViewerRuntimeLiveServer {
             }
             AgentDecision::Query(_) => {
                 if let Some(cognition) = decision.cognition {
+                    self.settle_provider_cognition_lease_for_response_or_release(
+                        decision.agent_id.as_str(),
+                        cognition.cognition_lease.clone(),
+                        Some(&cognition.request.request_context),
+                    )
+                    .map_err(|error| {
+                        wake_handoff_error_trace(
+                            decision.agent_id.as_str(),
+                            self.world.state().time,
+                            error,
+                        )
+                    })?;
                     self.llm_sidecar
                         .fail_provider_cognition_turn(
                             &mut self.world,
@@ -422,6 +550,18 @@ impl ViewerRuntimeLiveServer {
             }
             AgentDecision::ModuleCommand { .. } => {
                 if let Some(cognition) = decision.cognition {
+                    self.settle_provider_cognition_lease_for_response_or_release(
+                        decision.agent_id.as_str(),
+                        cognition.cognition_lease.clone(),
+                        Some(&cognition.request.request_context),
+                    )
+                    .map_err(|error| {
+                        wake_handoff_error_trace(
+                            decision.agent_id.as_str(),
+                            self.world.state().time,
+                            error,
+                        )
+                    })?;
                     self.llm_sidecar
                         .fail_provider_cognition_turn(
                             &mut self.world,
@@ -476,6 +616,7 @@ impl ViewerRuntimeLiveServer {
         &mut self,
         agent_id: String,
         prior_trace: Option<AgentDecisionTrace>,
+        cognition_lease: Option<crate::runtime::CognitionLeaseV1>,
     ) -> AgentDecisionTrace {
         let wake_recovery_context = self.llm_sidecar.provider_recovery_context(&agent_id);
         let reason = "failed_provider: provider transport retry budget exhausted";
@@ -506,6 +647,15 @@ impl ViewerRuntimeLiveServer {
             })
             .to_string(),
         );
+
+        if let Err(error) =
+            self.release_provider_cognition_lease(trace.agent_id.as_str(), cognition_lease)
+        {
+            trace.llm_error = Some(format!(
+                "{reason}; cognition lease release remains pending: {error}"
+            ));
+            return trace;
+        }
 
         if let Err(error) = self.llm_sidecar.fail_provider_cognition_turn(
             &mut self.world,
@@ -603,6 +753,168 @@ impl ViewerRuntimeLiveServer {
         trace
     }
 
+    fn release_provider_cognition_lease(
+        &mut self,
+        agent_id: &str,
+        lease: Option<crate::runtime::CognitionLeaseV1>,
+    ) -> Result<(), String> {
+        self.release_provider_cognition_lease_for_request(agent_id, lease, None)
+    }
+
+    fn settle_provider_cognition_lease_for_response_or_release(
+        &mut self,
+        agent_id: &str,
+        lease: Option<crate::runtime::CognitionLeaseV1>,
+        request: Option<&crate::simulator::ContinuousAgentRequestContextV1>,
+    ) -> Result<(), String> {
+        if let Some(request) = request {
+            self.settle_provider_cognition_lease_for_request(agent_id, lease, Some(request))?;
+            self.llm_sidecar.clear_provider_cognition_lease(agent_id);
+            Ok(())
+        } else {
+            self.release_provider_cognition_lease_for_request(agent_id, lease, None)
+        }
+    }
+
+    fn release_provider_cognition_lease_for_request(
+        &mut self,
+        agent_id: &str,
+        lease: Option<crate::runtime::CognitionLeaseV1>,
+        request: Option<&crate::simulator::ContinuousAgentRequestContextV1>,
+    ) -> Result<(), String> {
+        let lease = lease.or_else(|| self.llm_sidecar.provider_cognition_lease(agent_id));
+        let Some(lease) = lease else {
+            return Ok(());
+        };
+        if let Some(runtime_lease) = self
+            .world
+            .cognition_economy()
+            .map_err(|error| format!("cognition lease release economy read failed: {error:?}"))?
+            .leases
+            .get(lease.lease_id.as_str())
+        {
+            if runtime_lease.lease_id != lease.lease_id
+                || runtime_lease.idempotency_key != lease.idempotency_key
+                || runtime_lease.account_id != lease.account_id
+                || runtime_lease.agent_id != lease.agent_id
+                || runtime_lease.agent_session_id != lease.agent_session_id
+                || runtime_lease.agent_turn_id != lease.agent_turn_id
+                || runtime_lease.decision_request_id != lease.decision_request_id
+                || runtime_lease.request_digest != lease.request_digest
+                || runtime_lease.quote != lease.quote
+                || runtime_lease.reserved_amount != lease.reserved_amount
+            {
+                return Err(format!(
+                    "cognition lease release Runtime identity mismatch for {agent_id}"
+                ));
+            }
+            if runtime_lease.status != crate::runtime::CognitionLeaseStatusV1::Reserved {
+                // A provider Wait compensation or an earlier retry may have
+                // already settled/released this exact lease. Preserve the
+                // terminal Runtime result and only clear the stale sidecar
+                // mirror; never turn a completed provider call into a second
+                // economic release.
+                self.llm_sidecar.clear_provider_cognition_lease(agent_id);
+                return Ok(());
+            }
+        }
+        if let Some(request) = request {
+            self.llm_sidecar
+                .validate_provider_cognition_lease_for_request(
+                    &self.world,
+                    agent_id,
+                    request,
+                    &lease,
+                    "release",
+                )?;
+        } else {
+            self.llm_sidecar
+                .validate_provider_cognition_lease_for_agent(
+                    &self.world,
+                    agent_id,
+                    &lease,
+                    "release",
+                )?;
+        }
+        self.world
+            .release_cognition_lease(lease.lease_id.as_str())
+            .map_err(|error| {
+                format!(
+                    "cognition lease release failed for {}: {error:?}",
+                    lease.lease_id
+                )
+            })?;
+        self.llm_sidecar.clear_provider_cognition_lease(agent_id);
+        Ok(())
+    }
+
+    pub(super) fn settle_provider_cognition_lease_for_request(
+        &mut self,
+        agent_id: &str,
+        lease: Option<crate::runtime::CognitionLeaseV1>,
+        request: Option<&crate::simulator::ContinuousAgentRequestContextV1>,
+    ) -> Result<(), String> {
+        let lease = lease.or_else(|| self.llm_sidecar.provider_cognition_lease(agent_id));
+        let Some(lease) = lease else {
+            return Ok(());
+        };
+        if let Some(request) = request {
+            self.llm_sidecar
+                .validate_provider_cognition_lease_for_request(
+                    &self.world,
+                    agent_id,
+                    request,
+                    &lease,
+                    "settle",
+                )?;
+        } else {
+            self.llm_sidecar
+                .validate_provider_cognition_lease_for_agent(
+                    &self.world,
+                    agent_id,
+                    &lease,
+                    "settle",
+                )?;
+        }
+        let economy = self.world.cognition_economy().map_err(|error| {
+            format!("cognition lease settlement economy read failed: {error:?}")
+        })?;
+        if let Some(runtime_lease) = economy.leases.get(lease.lease_id.as_str()) {
+            if runtime_lease.lease_id != lease.lease_id
+                || runtime_lease.idempotency_key != lease.idempotency_key
+                || runtime_lease.account_id != lease.account_id
+                || runtime_lease.agent_id != lease.agent_id
+                || runtime_lease.agent_session_id != lease.agent_session_id
+                || runtime_lease.agent_turn_id != lease.agent_turn_id
+                || runtime_lease.decision_request_id != lease.decision_request_id
+                || runtime_lease.request_digest != lease.request_digest
+                || runtime_lease.quote != lease.quote
+                || runtime_lease.reserved_amount != lease.reserved_amount
+            {
+                return Err(format!(
+                    "cognition lease settlement Runtime identity mismatch for {agent_id}"
+                ));
+            }
+            if runtime_lease.status == crate::runtime::CognitionLeaseStatusV1::Settled {
+                // A Runtime receipt or a previous idempotent settlement may
+                // have closed this exact lease before the provider response
+                // reaches this control pass. Preserve that economic result
+                // instead of converting it into a transient gameplay block.
+                self.llm_sidecar.clear_provider_cognition_lease(agent_id);
+                return Ok(());
+            }
+        }
+        self.world
+            .settle_cognition_lease(lease.lease_id.as_str(), lease.reserved_amount)
+            .map_err(|error| {
+                format!(
+                    "cognition lease settlement failed for {}: {error:?}",
+                    lease.lease_id
+                )
+            })?;
+        Ok(())
+    }
+
     fn deliver_provider_feedback_best_effort(
         &mut self,
         feedback: crate::simulator::FeedbackEnvelopeV1,
@@ -628,7 +940,7 @@ impl ViewerRuntimeLiveServer {
         self.drain_provider_feedback_outbox();
     }
 
-    fn allocate_runtime_feedback(
+    pub(super) fn allocate_runtime_feedback(
         &mut self,
         feedback: crate::simulator::FeedbackEnvelopeV1,
         projection: RuntimeFeedbackProjectionV1,
@@ -661,7 +973,7 @@ impl ViewerRuntimeLiveServer {
     /// transport part of the World transaction. Claimed records remain
     /// durable and are returned to `pending` on transport failure, including
     /// across a viewer restart.
-    fn drain_provider_feedback_outbox(&mut self) {
+    pub(super) fn drain_provider_feedback_outbox(&mut self) {
         let pending = match self.world.pending_runtime_feedback() {
             Ok(pending) => pending,
             Err(error) => {
@@ -733,126 +1045,6 @@ impl ViewerRuntimeLiveServer {
         }
     }
 
-    /// Retry sidecar finalization from the committed Runtime receipt.
-    fn retry_committed_provider_action(&mut self) -> Result<(), String> {
-        let Some((action_id, _agent_id, cognition)) =
-            self.llm_sidecar.pending_provider_action_for_recovery()
-        else {
-            return Ok(());
-        };
-        let request = &cognition.request.request_context;
-        let marker = self
-            .world
-            .cognition()
-            .get("commit_records")
-            .and_then(serde_json::Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(|value| {
-                serde_json::from_value::<crate::runtime::WorldCommitRecordV1>(value.clone()).ok()
-            })
-            .find(|marker| {
-                marker.status == "committed"
-                    && marker.agent_id == request.agent_subject
-                    && marker.agent_session_id == request.agent_session_id
-                    && marker.agent_turn_id == request.agent_turn_id
-                    && marker.decision_request_id == request.decision_request_id
-                    && marker.request_digest == request.request_digest.to_string()
-            });
-        let Some(marker) = marker else {
-            return Ok(());
-        };
-        let lineage = self
-            .world
-            .read_runtime_receipt_lineage(marker.receipt_id.as_str())
-            .map_err(|error| {
-                format!("Runtime cognition receipt recovery readback failed: {error:?}")
-            })?;
-        self.world
-            .verify_runtime_receipt_lineage(&lineage)
-            .map_err(|error| {
-                format!("Runtime cognition receipt recovery verification failed: {error:?}")
-            })?;
-
-        let existing_feedback = self
-            .world
-            .runtime_feedback_outbox()
-            .map_err(|error| format!("Runtime feedback recovery outbox read failed: {error:?}"))?
-            .into_iter()
-            .find(|record| record.feedback_id == lineage.feedback_id);
-        let feedback = if let Some(record) = existing_feedback {
-            let payload = record
-                .transport_payload()
-                .map_err(|error| format!("Runtime feedback recovery payload invalid: {error}"))?;
-            let feedback = serde_json::from_value::<crate::simulator::FeedbackEnvelopeV1>(payload)
-                .map_err(|error| {
-                    format!("Runtime feedback recovery payload decode failed: {error}")
-                })?;
-            if feedback.status != "committed"
-                || feedback.runtime_receipt_id.as_deref() != Some(lineage.receipt_id.as_str())
-                || feedback.agent_subject != lineage.agent_id
-                || feedback.agent_session_id != lineage.agent_session_id
-                || feedback.agent_turn_id != lineage.agent_turn_id
-                || feedback.decision_request_id != lineage.decision_request_id
-                || feedback.request_digest.to_string() != lineage.request_digest
-            {
-                return Err("Runtime feedback recovery identity mismatch".to_string());
-            }
-            feedback
-        } else {
-            let feedback = self.llm_sidecar.provider_feedback(
-                &cognition,
-                Some(action_id),
-                "committed",
-                Some(lineage.receipt_id.clone()),
-                Some(lineage.feedback_id.clone()),
-                None,
-            );
-            let projection = RuntimeFeedbackProjectionV1 {
-                envelope_digest: Some(lineage.envelope_digest.clone()),
-                emitted_events: Vec::new(),
-                committed_event_summary: Some(format!(
-                    "runtime_receipt_id={} action_id={}",
-                    lineage.receipt_id, lineage.action_id
-                )),
-                world_delta_summary: None,
-            };
-            self.allocate_runtime_feedback(feedback, projection)
-                .map_err(|error| format!("Runtime feedback recovery allocation failed: {error}"))?
-                .transport_payload()
-                .map_err(|error| format!("Runtime feedback recovery payload invalid: {error}"))
-                .and_then(|payload| {
-                    serde_json::from_value(payload).map_err(|error| {
-                        format!("Runtime feedback recovery payload decode failed: {error}")
-                    })
-                })?
-        };
-        self.llm_sidecar
-            .consume_provider_memory_after_receipt(
-                request.agent_subject.as_str(),
-                feedback.clone(),
-                &lineage,
-                cognition.memory_write_intents.as_slice(),
-            )
-            .map_err(|error| {
-                format!("Runtime receipt recovery memory projection failed: {error}")
-            })?;
-        self.llm_sidecar
-            .finalize_provider_action_with_feedback_checked(action_id, feedback)
-            .map_err(|error| format!("Runtime receipt recovery finalization failed: {error}"))?;
-        self.drain_provider_feedback_outbox();
-        if let Err(error) = self.handoff_runtime_wake_for_agent(
-            request.agent_subject.as_str(),
-            crate::runtime::ContinuationStatusV1::Completed,
-            "provider_action_committed",
-        ) {
-            return Err(format!(
-                "Runtime receipt recovery wake handoff failed: {error}"
-            ));
-        }
-        Ok(())
-    }
-
     fn retry_runtime_feedback_outbox(&mut self, feedback_id: &str, reason: impl Into<String>) {
         if let Err(error) = self
             .world
@@ -864,160 +1056,6 @@ impl ViewerRuntimeLiveServer {
                 "Runtime feedback outbox retry transition failed"
             );
         }
-    }
-
-    fn commit_provider_runtime_action(
-        &mut self,
-        runtime_action: &crate::runtime::Action,
-        cognition: &RuntimeProviderActionContext,
-        simulator_action: SimulatorAction,
-    ) -> Result<(), ProviderRuntimeActionCommitError> {
-        if self.world.pending_actions_len() != 0 {
-            return Err(ProviderRuntimeActionCommitError::Message(
-                "Runtime has pending actions; provider cognition action rejected".to_string(),
-            ));
-        }
-
-        let (request, response_artifact) = provider_cognition_commit_inputs(&self.world, cognition)
-            .map_err(ProviderRuntimeActionCommitError::Message)?;
-        let (committed, returned_lineage) = self
-            .world
-            .commit_cognition_action(request, runtime_action.clone(), response_artifact)
-            .map_err(|error| {
-                if matches!(
-                    classify_cognition_commit_error(&error),
-                    Some(CognitionCommitRejectReasonV1::StaleBase)
-                ) {
-                    ProviderRuntimeActionCommitError::StaleBase
-                } else {
-                    ProviderRuntimeActionCommitError::Message(format!(
-                        "Runtime cognition action commit rejected provider action: {error:?}"
-                    ))
-                }
-            })?;
-        let lineage = self
-            .world
-            .read_runtime_receipt_lineage(returned_lineage.receipt_id.as_str())
-            .map_err(|error| {
-                ProviderRuntimeActionCommitError::PostCommit(format!(
-                    "Runtime cognition receipt readback failed: {error:?}"
-                ))
-            })?;
-        self.world
-            .verify_runtime_receipt_lineage(&lineage)
-            .map_err(|error| {
-                ProviderRuntimeActionCommitError::PostCommit(format!(
-                    "Runtime cognition receipt verification failed: {error:?}"
-                ))
-            })?;
-        if lineage != returned_lineage || lineage.receipt_id != committed.receipt_id {
-            return Err(ProviderRuntimeActionCommitError::PostCommit(
-                "Runtime cognition receipt readback identity mismatch".to_string(),
-            ));
-        }
-        let action_id = committed
-            .action_id
-            .strip_prefix("action:")
-            .ok_or_else(|| {
-                ProviderRuntimeActionCommitError::PostCommit(
-                    "Runtime cognition commit returned an invalid action id".to_string(),
-                )
-            })?
-            .parse::<u64>()
-            .map_err(|error| {
-                ProviderRuntimeActionCommitError::PostCommit(format!(
-                    "Runtime cognition action id is not numeric: {error}"
-                ))
-            })?;
-        self.llm_sidecar
-            .clear_provider_stale_replans(cognition.request.request_context.agent_subject.as_str());
-        self.llm_sidecar.track_action(
-            action_id,
-            cognition.request.request_context.agent_subject.clone(),
-            simulator_action,
-            Some(cognition.clone()),
-        );
-        let feedback = self.llm_sidecar.provider_feedback(
-            cognition,
-            Some(action_id),
-            "committed",
-            Some(committed.receipt_id.clone()),
-            Some(lineage.feedback_id.clone()),
-            None,
-        );
-        let feedback_projection = RuntimeFeedbackProjectionV1 {
-            envelope_digest: Some(lineage.envelope_digest.clone()),
-            emitted_events: Vec::new(),
-            committed_event_summary: Some(format!(
-                "runtime_receipt_id={} action_id={}",
-                lineage.receipt_id, lineage.action_id
-            )),
-            world_delta_summary: None,
-        };
-        let queued_feedback = self
-            .allocate_runtime_feedback(feedback.clone(), feedback_projection)
-            .map_err(|error| {
-                tracing::warn!(
-                    error,
-                    "Runtime receipt committed but feedback outbox allocation failed"
-                );
-                ProviderRuntimeActionCommitError::PostCommit(format!(
-                    "Runtime receipt committed but feedback outbox allocation failed: {error}"
-                ))
-            })?;
-        let feedback = queued_feedback
-            .transport_payload()
-            .ok()
-            .and_then(|payload| serde_json::from_value(payload).ok())
-            .unwrap_or(feedback);
-        self.llm_sidecar
-            .consume_provider_memory_after_receipt(
-                cognition.request.request_context.agent_subject.as_str(),
-                feedback.clone(),
-                &lineage,
-                cognition.memory_write_intents.as_slice(),
-            )
-            .map_err(|error| {
-                ProviderRuntimeActionCommitError::PostCommit(format!(
-                    "Runtime receipt committed but provider memory projection failed: {error}"
-                ))
-            })?;
-
-        #[cfg(test)]
-        if std::env::var("OASIS7_TEST_PROVIDER_ACTION_FAULT").as_deref() == Ok("persistence") {
-            let fault_result = self
-                .llm_sidecar
-                .install_test_provider_lineage_checkpoint_blocker();
-            fault_result.map_err(|error| {
-                ProviderRuntimeActionCommitError::PostCommit(format!(
-                    "provider action finalization checkpoint fault setup failed: {error}"
-                ))
-            })?;
-        }
-        self.llm_sidecar
-            .finalize_provider_action_with_feedback_checked(action_id, feedback)
-            .map_err(|error| {
-                ProviderRuntimeActionCommitError::PostCommit(format!(
-                    "provider cognition receipt finalization remains pending: {error}"
-                ))
-            })?;
-        self.drain_provider_feedback_outbox();
-        if let Err(error) = self.handoff_runtime_wake_for_agent(
-            cognition.request.request_context.agent_subject.as_str(),
-            crate::runtime::ContinuationStatusV1::Completed,
-            "provider_action_committed",
-        ) {
-            self.llm_sidecar.retain_provider_wake_recovery_pending(
-                cognition.request.request_context.agent_subject.as_str(),
-                &cognition.request,
-                crate::runtime::ContinuationStatusV1::Completed,
-                "provider_action_committed",
-            );
-            return Err(ProviderRuntimeActionCommitError::WakeHandoff(format!(
-                "Runtime wake handoff failed: {error}"
-            )));
-        }
-        Ok(())
     }
 }
 
@@ -1079,101 +1117,6 @@ fn wake_handoff_error_trace(agent_id: &str, time: u64, error: String) -> AgentDe
         llm_step_trace: Vec::new(),
         llm_prompt_section_trace: Vec::new(),
         llm_chat_messages: Vec::new(),
-    }
-}
-
-fn provider_cognition_commit_inputs(
-    world: &RuntimeWorld,
-    cognition: &RuntimeProviderActionContext,
-) -> Result<
-    (
-        RuntimeCognitionCommitRequestV1,
-        RuntimeCognitionResponseArtifactV1,
-    ),
-    String,
-> {
-    let response = &cognition.response;
-    let request = &cognition.request.request_context;
-    let response_identity = response.response_artifact_identity();
-    response
-        .validate_response_artifact_identity(&response_identity)
-        .map_err(|error| format!("provider response identity rejected: {error}"))?;
-    let capability_root = world.capability_authorization_root().to_string();
-    let capability_snapshot_hash = h_v1("oasis7.runtime.manifest.v1", &capability_root).to_string();
-    let authority_context_hash =
-        h_v1("oasis7.runtime.authority-context.v1", &capability_root).to_string();
-    Ok((
-        RuntimeCognitionCommitRequestV1 {
-            agent_id: request.agent_subject.clone(),
-            agent_session_id: request.agent_session_id.clone(),
-            agent_turn_id: request.agent_turn_id.clone(),
-            decision_request_id: request.decision_request_id.clone(),
-            retry_seq: request.retry_seq,
-            transport_attempt: request.transport_attempt,
-            request_digest: request.request_digest.to_string(),
-            observation_digest: request.observation_digest.to_string(),
-            context_digest: super::llm_sidecar::runtime_provider_context_digest(request),
-            capability_snapshot_hash,
-            authority_context_hash,
-            captured_base_binding: RuntimeCognitionBaseBindingV1 {
-                world_id: request.runtime_binding.world_id.clone(),
-                branch_id: request.runtime_binding.branch_id.clone(),
-                finality_epoch: request.runtime_binding.finality_epoch,
-                finality_block_hash: request
-                    .runtime_binding
-                    .finality_block_hash
-                    .as_ref()
-                    .map(ToString::to_string),
-                finality_status: request.runtime_binding.finality_status.clone(),
-                base_tick: request.runtime_binding.base_tick,
-                base_world_hash: request.runtime_binding.base_world_hash.to_string(),
-                reorg_epoch: request.runtime_binding.reorg_epoch,
-                runtime_manifest_hash: request.runtime_binding.runtime_manifest_hash.to_string(),
-            },
-        },
-        RuntimeCognitionResponseArtifactV1 {
-            schema_version: response.context_version,
-            context_discriminator: response.context_discriminator.clone(),
-            context_version: response.context_version,
-            agent_session_id: response.agent_session_id.clone(),
-            agent_turn_id: response.agent_turn_id.clone(),
-            decision_request_id: response.decision_request_id.clone(),
-            retry_seq: response.retry_seq,
-            transport_attempt: response.transport_attempt,
-            request_digest: response.request_digest.to_string(),
-            response_digest: response.response_digest.to_string(),
-            artifact_digest: response_identity.artifact_digest.to_string(),
-        },
-    ))
-}
-
-enum ProviderRuntimeActionCommitError {
-    StaleBase,
-    WakeHandoff(String),
-    PostCommit(String),
-    Message(String),
-}
-
-impl ProviderRuntimeActionCommitError {
-    fn is_stale_base(&self) -> bool {
-        matches!(self, Self::StaleBase)
-    }
-
-    fn is_wake_handoff(&self) -> bool {
-        matches!(self, Self::WakeHandoff(_))
-    }
-
-    fn is_post_commit(&self) -> bool {
-        matches!(self, Self::PostCommit(_))
-    }
-
-    fn reason(&self) -> String {
-        match self {
-            Self::StaleBase => CognitionCommitRejectReasonV1::StaleBase.code().to_string(),
-            Self::WakeHandoff(reason) => reason.clone(),
-            Self::PostCommit(reason) => reason.clone(),
-            Self::Message(reason) => reason.clone(),
-        }
     }
 }
 
