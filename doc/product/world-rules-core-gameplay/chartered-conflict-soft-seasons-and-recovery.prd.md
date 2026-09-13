@@ -6,7 +6,7 @@
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：2026-09-13
+- Last reviewed：2026-09-14
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 
 本文定义成熟世界中区域冲突、实体损失、软赛季与系统性恢复的长期产品结果。它不定义战斗数值、评分、时长、占领算法、资产字段、离线执行、赛季周期、匹配、runtime 状态机或当前战争 MVP 的实现结论。
@@ -101,6 +101,28 @@
 - 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)。
 - 验收：[AC-6](#ac-6)、[AC-7](#ac-7)。
 
+<a id="req-wr-cc-004"></a>
+### REQ-WR-CC-004：占领与安全提取必须分别结算
+
+- 性质：`目标要求`
+- 适用条件：冲突时间窗口到期，且同时存在 contested occupation、持续 hold、战利品提取和物流中的结果。
+- 要求：产品必须分别判断 contested occupation、持续占有、到期冻结、物理提取和受保护目的地存储；单次进入、最后时刻触碰、发现或短时占有不能替代满足占领条件或安全交割。结算结果必须让玩家读到哪些权利已经成立、哪些物品已安全交割、哪些仍在风险或物流中。
+- 理由：占领和提取承担不同的玩家风险与收益，必须让结算保留可理解的选择和因果，避免把临时占有误报为长期权利或最终战利品。
+- 上位承诺：冲突结果、占领与战利品。
+- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)。
+- 验收：[AC-3](#ac-3)。
+
+<a id="req-wr-cc-005"></a>
+### REQ-WR-CC-005：软赛季刷新必须保持世界连续性
+
+- 性质：`目标要求`
+- 适用条件：软赛季刷新竞争窗口、公共项目、排行榜或部分区域权利/资格时。
+- 要求：产品可以刷新竞争机会和区域性资格，但必须保持同一世界时间线、玩家与 Agent 身份、核心能力、可迁移价值、历史 receipt 和已确认世界因果；不得创建新的权威世界、执行全局资产清零或追溯重写历史。刷新对象、条件、生效边界和恢复/申诉路径必须可读且可审计。
+- 理由：赛季刷新应重新打开竞争机会，同时保留玩家投入、身份和责任的连续性，避免用 reset 或临时运营裁量替代世界因果。
+- 上位承诺：软赛季与世界连续性。
+- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)。
+- 验收：[AC-5](#ac-5)。
+
 ## 9. 组合验收
 
 <a id="ac-1"></a>
@@ -122,7 +144,7 @@
 <a id="ac-3"></a>
 ### AC-3：冲突到期区分占有与安全交割
 
-- 覆盖要求：REQ-WR-CC-001。
+- 覆盖要求：REQ-WR-CC-004。
 - 给定：冲突时间窗口内存在 contested occupation、hold、提取和物流中的不同结果。
 - 当：时间窗口到期并结算结果。
 - 则：样例可区分已满足的 contested occupation/hold/expiry、尚未完成的占据、已安全提取的战利品和仍在风险/物流中的物品。
@@ -138,7 +160,7 @@
 <a id="ac-5"></a>
 ### AC-5：软赛季刷新不切断世界连续性
 
-- 覆盖要求：REQ-WR-CC-003。
+- 覆盖要求：REQ-WR-CC-005。
 - 给定：相邻软赛季存在竞争窗口、公共项目、排行榜或部分区域权利刷新。
 - 当：刷新边界生效并允许玩家继续参与。
 - 则：竞争机会可以刷新，同时保持同一世界时间线、身份、核心能力和历史因果。
@@ -161,12 +183,15 @@
 
 ## 9. 验收追踪
 
-| 产品承诺 | 专业 owner | 权威文档 | 验证证据 | 测试层级 |
+| REQ / AC | owner | authority | evidence | evidence tier |
 | --- | --- | --- | --- | --- |
-| AC-1 / AC-3 | gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 宣战、参战范围、占领/hold、战利品提取/目的地存储和时间窗口结算的组合证据 | test_tier_full |
-| AC-2 | agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 防御 envelope、到期/撤销、阻断/升级与正式玩家 surface 可读性证据 | test_tier_required |
-| AC-4 | gameplay_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 资产损失、身份连续、重建约束与恢复选择的组合证据 | test_tier_full |
-| AC-5 / AC-6 / AC-7 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / agent_engineer / viewer_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 软赛季刷新、同一时间线、containment、恢复项目生命周期、贡献单次生效、范围变化、非参与者保护、失败下一步、审计/申诉与无 reset/bailout 负例 | test_tier_full |
+| [REQ-WR-CC-001](#req-wr-cc-001) / [AC-1](#ac-1) | gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | [`doc/game/prd.md`](../../game/prd.md); [`doc/world-runtime/prd.md`](../../world-runtime/prd.md); [`doc/p2p/prd.md`](../../p2p/prd.md); [`doc/testing/prd.md`](../../testing/prd.md) | 宣战、参战主体、暴露资产、时间窗口和非参与者保护均在承担风险前可读，且未授权主体不会因邻近、物流或关系成为合法目标 | test_tier_full |
+| [REQ-WR-CC-001](#req-wr-cc-001) / [AC-2](#ac-2) | agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | [`doc/world-simulator/prd.md`](../../world-simulator/prd.md); [`doc/world-runtime/prd.md`](../../world-runtime/prd.md); [`doc/testing/prd.md`](../../testing/prd.md) | 防御 envelope 的范围、到期、撤销、可执行防御和拒绝/升级路径可读；无有效 envelope 时不发生静默自动防御或主动升级 | test_tier_required |
+| [REQ-WR-CC-004](#req-wr-cc-004) / [AC-3](#ac-3) | gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | [`doc/game/prd.md`](../../game/prd.md); [`doc/world-runtime/prd.md`](../../world-runtime/prd.md); [`doc/p2p/prd.md`](../../p2p/prd.md); [`doc/testing/prd.md`](../../testing/prd.md) | contested occupation、持续 hold、到期冻结、安全提取、目的地存储和仍在风险/物流中的物品得到分离结算，且没有把短时占有误报为最终权利或战利品 | test_tier_full |
+| [REQ-WR-CC-002](#req-wr-cc-002) / [AC-4](#ac-4) | gameplay_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | [`doc/game/prd.md`](../../game/prd.md); [`doc/world-runtime/prd.md`](../../world-runtime/prd.md); [`doc/world-simulator/prd.md`](../../world-simulator/prd.md); [`doc/testing/prd.md`](../../testing/prd.md) | 资产损失、身份/历史连续、世界内重建投入和 repair/rebuild/pivot 恢复选择同时可读，且 chassis 损坏不被表达为身份删除或免费即时复原 | test_tier_full |
+| [REQ-WR-CC-005](#req-wr-cc-005) / [AC-5](#ac-5) | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | [`doc/game/prd.md`](../../game/prd.md); [`doc/world-runtime/prd.md`](../../world-runtime/prd.md); [`doc/p2p/prd.md`](../../p2p/prd.md); [`doc/testing/prd.md`](../../testing/prd.md) | 竞争窗口、公共项目、排行榜或区域资格可以刷新，同时保留同一时间线、身份、核心能力、历史 receipt 与已确认因果，且无新世界或全局清零 | test_tier_full |
+| [REQ-WR-CC-003](#req-wr-cc-003) / [AC-6](#ac-6) | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / agent_engineer / viewer_engineer / qa_engineer | [`doc/game/prd.md`](../../game/prd.md); [`doc/world-runtime/prd.md`](../../world-runtime/prd.md); [`doc/p2p/prd.md`](../../p2p/prd.md); [`doc/world-simulator/prd.md`](../../world-simulator/prd.md); [`doc/testing/prd.md`](../../testing/prd.md) | containment 限制扩散，恢复项目保留审计和申诉，并且不产生 reset、历史重写或选择性 bailout | test_tier_full |
+| [REQ-WR-CC-003](#req-wr-cc-003) / [AC-7](#ac-7) | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / agent_engineer / viewer_engineer / qa_engineer | [`doc/world-runtime/prd.md`](../../world-runtime/prd.md); [`doc/p2p/prd.md`](../../p2p/prd.md); [`doc/testing/prd.md`](../../testing/prd.md) | 恢复项目生命周期、范围变化、重连/重试/跨入口去重、非参与者保护、失败后的 repair/rebuild/pivot/申诉与至多一次权威效果均有组合证据 | test_tier_full |
 
 ## 10. Non-Goals
 
