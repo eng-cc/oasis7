@@ -6166,9 +6166,17 @@ def _storage_first_run(
                     expected_failed_state_digest = record[
                         "reconciliation_reobserve"
                     ]["failed_state_digest"]
+                    # Rollback is a new destructive authorization boundary.
+                    # Re-observation may take long enough for current
+                    # authority, the capture window, trust root, or consumer
+                    # impact truth to drift after the failed operation.
+                    if not _storage_first_is_shape_fixture(plan):
+                        validate_authority(dict(plan), dict(authority))
+                        validate_live_trust_root_file()
                     recovery_live = _guarded_callback(live_revalidator)
                     if recovery_live is not True:
                         _fail("storage-first recovery live revalidation rejected clean redeploy")
+                    _storage_first_check_impact(child_plan)
                     rollback_plan = _storage_first_callback_plan(plan, node)
                     rollback_started = list(started)
                     rollback_failed_state = copy.deepcopy(record["reconciliation_reobserve"])

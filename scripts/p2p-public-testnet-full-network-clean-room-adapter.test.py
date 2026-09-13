@@ -6467,6 +6467,34 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
         finally:
             canonical.tearDown()
 
+    def test_runtime_sf_030_recovery_revalidates_canonical_mutation_gates(self) -> None:
+        """Authority or trust-root drift after reobserve must block rollback mutation."""
+        for gate_name in ("validate_authority", "validate_live_trust_root_file"):
+            with self.subTest(gate=gate_name):
+                canonical = self.fixture._canonical_fixture()
+                try:
+                    transport = StorageFirstCanonicalTransport(
+                        canonical.adapter,
+                        canonical.plan,
+                        side_effect_operation="stop:storage-205",
+                    )
+                    original_gate = getattr(canonical.adapter, gate_name)
+
+                    def drift_after_reobserve(*args, **kwargs):
+                        if transport.rollback_reobservations:
+                            raise canonical.adapter.AdapterError("current recovery gate drifted")
+                        return original_gate(*args, **kwargs)
+
+                    with mock.patch.object(
+                        canonical.adapter, gate_name, side_effect=drift_after_reobserve
+                    ):
+                        with self.assertRaises(Exception):
+                            self.fixture._canonical_runner(canonical, transport)
+                    self.assertEqual(transport.rollback_reobservations, ["stop:storage-205"])
+                    self.assertEqual(transport.rollback_operations, [])
+                finally:
+                    canonical.tearDown()
+
     def test_runtime_sf_027_resume_validates_nonce_checkpoint_before_prepared_write(self) -> None:
         """Missing committed nonce state must not replace a resumable journal checkpoint."""
         canonical = self.fixture._canonical_fixture()
