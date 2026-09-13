@@ -11,6 +11,11 @@
 
 本文定义普通共同治理可处理的有限事项，以及它与玩家基本保护、系统安全权威和宪制修订之间不可绕过的产品边界。它不定义资格、权重、阈值、锁定时长、身份技术、链上结构、runtime/P2P 状态机或当前可用性结论。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计适用性理由：本 PRD 只定义普通治理、宪制轨道、拒绝和可读结果的制度边界；投票与流程交互仍由专业 authority 决定。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 玩家和组织可以在同一个持续、可审计的世界中共同决定有限的运行事项，而不能把持有、付费、组织章程、普通投票、局部多数或历史声望扩展为无界世界主权。

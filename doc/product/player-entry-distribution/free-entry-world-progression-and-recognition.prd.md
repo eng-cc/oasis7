@@ -11,6 +11,11 @@
 
 本文是长期产品分册，定义免费基础进入、可选服务、世界内成长、认可和区域互赖之间的产品边界。它不定义支付渠道、定价、账户或 onboarding 实现、具体资格算法、奖励数值、OC 发放/兑换、治理字段或当前 preview 放行结论。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计适用性理由：本 PRD 只规定便利服务、独立基线和认可资格的产品边界；独立 design 不会增加不同的玩家操作语义。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 长期产品目标是让玩家无需购买客户端、账户或基础进入资格即可进入受支持世界路径；付费只能购买可选的 hosting、storage、support 等便利服务，不能购买、租用或跳过世界中的实质权力。早期体验应容易进入，并让愿意继续的玩家自愿展开真实的工业、训练、模块、合同、凭证、关系和区域协作深度，而不是用永久账号天赋树或全局战力分替代世界历史。

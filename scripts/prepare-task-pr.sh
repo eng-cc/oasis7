@@ -1506,7 +1506,7 @@ OASIS7_CI_RUN_RUST_BASELINE=$RUN_RUST_BASELINE \
       LOCAL_REQUIRED_COMMAND="git diff --check"
       case "$LOCAL_REQUIRED_CHANGED_PATHS" in
         *".agents/"*|*"AGENTS.md"*|*"doc/engineering/workflow/"*|*"scripts/pm/"*|*"scripts/prepare-task-pr.sh"*|*"scripts/pr-review-thread-closeout.sh"*)
-          LOCAL_REQUIRED_COMMAND="./scripts/lint-skills.sh && ./scripts/pm/lint.sh && ./scripts/doc-governance-check.sh && git diff --check"
+          LOCAL_REQUIRED_COMMAND="./scripts/lint-skills.sh && ./scripts/pm/lint.sh && ./scripts/doc-governance-check.sh && ./scripts/doc-governance-check.sh --full-corpus && git diff --check"
           ;;
       esac
     fi

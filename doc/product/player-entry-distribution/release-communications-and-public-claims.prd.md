@@ -13,6 +13,11 @@
 
 本文是长期产品分册，定义内部候选证据如何形成可审查、可发布、可纠正和可撤回的公开说明。它不保存具体候选 verdict、公告正文、渠道排期、字段模板、任务状态或历史发布记录。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计适用性理由：本 PRD 是公开 claim 的证据与审核生命周期合同；其 authority 在发行与 LiveOps 专业文档，独立 design 不增加玩家交互设计。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 玩家和社区应能明确区分内部候选状态、待审核文案和已经发布的公开事实。任何渠道说明都必须忠实反映同一候选、primary mode 与当前证据范围，并在事实变化时及时纠正，而不能把内部 `go`、QA green 或已批准草稿包装成已经发布或更高阶段。

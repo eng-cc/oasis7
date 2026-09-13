@@ -11,6 +11,11 @@
 
 本文是长期产品分册，定义有限已知世界的 frontier 扩展、pioneer priority 和世界信息可见性的产品边界。它不定义地图生成、相邻判定、物流算法、charter 字段、priority 时长/价格、情报访问控制、数据格式、侦察 UI、runtime 状态机或当前 readiness。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计适用性理由：本 PRD 已直接说明 frontier 选择、期限机会和信息分层的产品边界；空间与情报呈现由专业 authority 决定。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 世界的已知范围是有限但可持续扩展的：玩家、Agent 与组织只能借由受治理的相邻 frontier 探索、物流建立和 charter 扩展进入新区域。扩展不是生成新的独立服务器、经济或历史，而是将新的地点、资源、义务与结果接入同一条权威时间线、同一经济和同一可审计世界历史。

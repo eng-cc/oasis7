@@ -11,6 +11,11 @@
 
 本文是长期产品分册，定义 Agent/provider 切换时玩家体验连续性的产品承诺。它不声明任何 provider 当前受支持、可用、默认或已就绪；具体 provider 组合的场景范围、评估、技术合同和结论仅由专业域权威文档维护。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计适用性理由：本 PRD 的 provider 场景边界、切换和在途意图规则已由产品要求与专业 authority 直接表达；独立 design 会重复跨 provider 的产品合同。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 当玩家在专业域已明确场景范围的 provider 组合间切换时，切换不能带来无法解释的、实质性的体验退化。连续性以玩家可感知的目标结果、等待体验、多轮记忆与意图延续、问题可诊断性及恢复路径为准，而不要求内部实现相同。

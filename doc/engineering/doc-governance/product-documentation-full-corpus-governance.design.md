@@ -62,6 +62,26 @@
 
 如果专业角色判断专题足够简单而不需要 design，必须在 PRD 中保留简短设计说明，并在当前 GitHub task evidence 记录不适用理由。产品树不保存长期例外台账。
 
+### 4.1 设计适用性与生命周期闭合字段
+
+每个 active 专题 PRD 都必须在产品正文中明确一个 `设计判定`：
+
+- `paired-design`：PRD 的“配对产品设计”链接指向同名 `*.design.md`；配对 design 只承接产品语义，不复制需求或取得专业实现 authority。
+- `simple-topic-exemption`：PRD 保留简短的设计说明、`设计适用性理由` 和当前 GitHub task evidence 链接，说明为什么独立 design 不增加新的信息分层、交互状态编排或策略取舍。该字段是本次判定的稳定结果，不是产品树中的长期例外台账。
+
+每个 paired design 必须同时具备可解析的 PRD backlink，以及至少一组带 fragment 的 PRD `REQ-*` 和 `AC-*` 链接；完整映射应覆盖该 design 承接的每个产品义务。裸 token、只写文件路径、反引号中的 ID 或无 fragment 的泛化链接都不能满足这一字段。
+
+`superseded` 与 `retired` 专题不参与 active design 判定，但必须在“生命周期闭合”段落中逐项提供以下字段：
+
+| 字段 | `superseded` | `retired` |
+| --- | --- | --- |
+| `接收 authority` | 指向当前接收产品或专业 authority 的真实路径与 fragment | 指向保留历史语义的当前 authority 或专业 authority |
+| `剩余语义` | 列出仍未被接收的产品语义、验收或引用 | 说明仍需保留的历史含义与不可再作 active 输入的边界；无剩余语义时明确写无 |
+| `稳定引用` | 保留接收路径和本页仍被需要的稳定引用 | 保留历史/专业引用与当前可达入口 |
+| `删除条件` | 语义完整接收、authority 可达、活跃引用修复且无未决阻塞 | 历史/专业语义有可达接收 authority、活跃引用修复且保留理由不再成立 |
+
+上述字段只描述 authority 与迁移闭合，不复制任务状态、review ledger 或发布证据；任务证据仍由 GitHub task truth 维护。
+
 ## 5. 外部语义迁移
 
 每个 `doc/product/` 外候选文件按段落分成四类：产品承诺、专业合同、历史过程、未迁移语义。
@@ -84,6 +104,8 @@ full-corpus 模式必须：
 - 输出确定的文件顺序、检查数量和稳定诊断；
 - 检查身份字段、生命周期、authority、复核日期、最低内容、REQ/AC、anchor、跨文件 fragment、回链和追踪关系；
 - 对 active、superseded、retired 应用各自生命周期合同；
+- 对 active 专题检查 `设计判定` 的 paired-design 或 simple-topic-exemption 闭合；对 superseded/retired 检查生命周期闭合四字段，并禁止它们冒充 active authority；
+- 对每个 paired design 检查 PRD REQ/AC fragment 映射可解析且至少覆盖一组 REQ 与 AC；
 - 不使用 allowlist、作者标签或任务评论绕过内容要求；
 - 明确说明通过只证明机械合同，不证明产品质量、实现或发行状态。
 

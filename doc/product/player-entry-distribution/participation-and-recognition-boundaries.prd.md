@@ -12,6 +12,11 @@
 
 本文是长期产品分册，定义有限预览中参与、贡献、认可与权益之间的产品边界。它不定义奖励金额、比例、兑换、资格评分、审批字段、发放流程、渠道活动或历史记录的字段、存储与归档实现；具体 intake、审核、台账和对外执行状态仍由适用专业权威定义。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计适用性理由：本 PRD 直接表达贡献信号、审核、失效和补救边界；独立 design 会重复该资格与 claim 分离合同。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 有限预览中的参与者可以通过反馈、测试、建设、文档或其他可验证的协作行为，形成可由团队审核的贡献信号。玩家应能理解：参与和贡献可以被认真对待，但产品不会把进入、游玩、互动或贡献本身表述为自动取得任何权益。

@@ -15,6 +15,11 @@
 
 配对产品设计的 canonical 路径为 `doc/product/player-entry-distribution/local-launch-session-continuity-and-recovery.design.md`。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`paired-design`。
+- 配对关系：[local-launch-session-continuity-and-recovery.design.md](local-launch-session-continuity-and-recovery.design.md) 承接本 PRD 的玩家经历、信息层级、状态反馈与恢复解释；产品真值仍由本 PRD 拥有。
+- 设计适用性理由：本地 session 的状态优先级、恢复动作和 blocked 边界由同名 design 承接。
 ## 1. 目标
 
 玩家通过受支持的本地 Launcher 进入已声明的 `viewer` 或 `pure_api` 路径时，能够理解当前会话是在准备、可用、阻塞、停止还是恢复中；发生中断、陈旧状态或配置问题时，能够采取真实的恢复下一步，而不是把已启动进程、旧本地状态、浏览器页面或设置编辑误认为当前世界已经健康、已连接或可玩。

@@ -136,3 +136,11 @@ Location、Facility、Territory、Organization、Depot 和 Module 不得复用 A
 - 不承诺 `Locate Agent`、尺寸检查面板、复制面板、2D/3D 切换或 overview-map 控件存在。
 - 不定义 centimetre 字段、比例/clamp、marker 几何、箭头、LOD 阈值、标签容量或截图基线。
 - 不把历史完成状态、EGUI/Bevy 组件、测试命令或截图提升为当前产品能力。
+## PRD REQ/AC fragment mapping
+
+This design delegates product requirements and acceptance semantics to its paired PRD. Every row below is a navigable fragment mapping; this design does not create a second requirement authority.
+
+| PRD requirement | PRD acceptance |
+| --- | --- |
+| [REQ-AGENT-STAGE-001](player-readable-world-stage.prd.md#req-agent-stage-001) | [AC-AGENT-STAGE-001](player-readable-world-stage.prd.md#ac-agent-stage-001) |
+| [REQ-AGENT-STAGE-002](player-readable-world-stage.prd.md#req-agent-stage-002) | [AC-AGENT-STAGE-002](player-readable-world-stage.prd.md#ac-agent-stage-002) |

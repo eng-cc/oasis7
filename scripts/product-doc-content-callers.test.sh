@@ -41,6 +41,16 @@ valid_range="$(unset OASIS7_PRODUCT_DOC_BASE OASIS7_PRODUCT_DOC_HEAD; GITHUB_EVE
 [[ "$valid_range" == "$base_oid
 $head_oid" ]]
 
+governance_function="$(sed -n '/^run_product_doc_governance_check()/,/^run_standalone_tool_lockfiles_checks()/p' ./scripts/ci-tests.sh | sed '$d')"
+eval "$governance_function"
+run() {
+  printf '%s\n' "$*" >>"$tmp_dir/governance-calls.out"
+}
+GITHUB_EVENT_PATH="$tmp_dir/pull_request.json" GITHUB_EVENT_NAME=pull_request GITHUB_SHA="$head_oid" \
+  run_product_doc_governance_check
+grep -Fqx './scripts/doc-governance-check.sh' "$tmp_dir/governance-calls.out"
+grep -Fqx './scripts/doc-governance-check.sh --full-corpus' "$tmp_dir/governance-calls.out"
+
 printf '{}\n' >"$tmp_dir/empty.json"
 if (unset OASIS7_PRODUCT_DOC_BASE OASIS7_PRODUCT_DOC_HEAD; GITHUB_EVENT_PATH="$tmp_dir/empty.json" GITHUB_EVENT_NAME=unknown GITHUB_SHA="$head_oid" product_doc_range) >"$tmp_dir/event.out" 2>&1; then
   echo "product-doc-content-callers.test: malformed CI event unexpectedly fell back" >&2
@@ -76,6 +86,7 @@ fi
 grep -Fq "CI requires explicit base/head OIDs" "$tmp_dir/no-event.out"
 
 grep -Fq -- '--head "$SOURCE_HEAD" --worktree' ./scripts/prepare-task-pr.sh
+grep -Fq './scripts/doc-governance-check.sh --full-corpus' ./scripts/prepare-task-pr.sh
 
 sed -n '/^  full-regression:/,/^  full-escalation:/p' .github/workflows/rust.yml >"$tmp_dir/full-regression.yml"
 sed -n '/^  full-escalation:/,$p' .github/workflows/rust.yml >"$tmp_dir/full-escalation.yml"

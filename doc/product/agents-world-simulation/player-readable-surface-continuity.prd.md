@@ -12,6 +12,11 @@
 
 本文定义正式玩家表面在 viewport、信息密度、语言与连接状态变化时保持可理解、可操作和可恢复的长期产品承诺。它不冻结 Viewer 布局、组件、Web/EGUI/Bevy 实现、协议字段、缓存、字体资产或当前发布结论。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`paired-design`。
+- 配对关系：[player-readable-surface-continuity.design.md](player-readable-surface-continuity.design.md) 承接本 PRD 的玩家经历、信息层级、状态反馈与恢复解释；产品真值仍由本 PRD 拥有。
+- 设计适用性理由：跨 surface 的阅读锚点、连接状态、fallback 与行动反馈由同名 design 承接。
 ## 1. 目标与产品承诺
 
 玩家在受支持的表面中能够持续找到当前目标、主要 blocker、已接受行动的反馈和下一决策。viewport、信息密度、语言或连接状态变化可以改变呈现方式，但不能让玩家失去这条决策链，也不能把恢复中的界面或后台活动表达为已经取得进展。

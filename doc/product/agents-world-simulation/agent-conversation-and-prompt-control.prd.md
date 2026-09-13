@@ -12,6 +12,11 @@
 
 本文承载玩家与 Agent 对话、复用 Prompt 草稿以及在受支持时调整 Agent Prompt/目标的长期产品承诺。它不声明某个历史 EGUI 面板仍存在，也不拥有协议字段、前端状态、patch 算法、鉴权、持久化或测试步骤。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`paired-design`。
+- 配对关系：[agent-conversation-and-prompt-control.design.md](agent-conversation-and-prompt-control.design.md) 承接本 PRD 的玩家经历、信息层级、状态反馈与恢复解释；产品真值仍由本 PRD 拥有。
+- 设计适用性理由：对话、草稿、控制权和提交反馈由同名 design 承接信息层级、状态模型与恢复路径。
 ## 1. 目标
 
 ### 1.1 代表性情境

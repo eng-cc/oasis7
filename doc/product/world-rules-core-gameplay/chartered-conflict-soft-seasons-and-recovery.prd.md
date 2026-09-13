@@ -11,6 +11,11 @@
 
 本文定义成熟世界中区域冲突、实体损失、软赛季与系统性恢复的长期产品结果。它不定义战斗数值、评分、时长、占领算法、资产字段、离线执行、赛季周期、匹配、runtime 状态机或当前战争 MVP 的实现结论。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计适用性理由：本 PRD 已完整表达授权冲突、损失连续性和 repair/rebuild/pivot 恢复边界；具体冲突交互由 gameplay/runtime/Viewer authority 负责。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 竞争应制造真实的区域风险、战利品和重建选择，而不是让所有玩家永久安全或把失败等同于删除身份和历史。冲突是有界、可预期且可恢复的区域事件；玩家可以主动承担风险或支持参战者，非参与者、新玩家和无关区域仍保有基本发展与恢复空间。

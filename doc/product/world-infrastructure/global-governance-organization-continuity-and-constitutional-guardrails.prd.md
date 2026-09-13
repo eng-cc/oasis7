@@ -16,6 +16,12 @@
 
 本文是长期产品分册，定义普通全局治理的有限产品范围、组织连续性和不可由普通治理改写的宪制保护。它不定义阈值、锁定/解锁时长、身份技术、控制人计算、链上或智能合约结构、runtime 状态机、签名/custody 实现、当前候选 verdict 或发行就绪。
 
+## 生命周期闭合
+
+- 接收 authority：[普通共同决策与宪制边界](../world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md#1-产品目标) 与 [组织连续性、解散与长期不活跃保护](../world-rules-core-gameplay/organization-continuity-dissolution-and-dormancy-protection.prd.md#1-产品承诺)。
+- 剩余语义：GG-2 资格/控制权公平与 GG-3 外部 OC、游戏内权利分离仍需在接收专题中保留稳定 REQ/AC 与活跃引用。
+- 稳定引用：本页的 GG-1 至 GG-5 验收及其专业 authority 仍可由本页和 [普通共同决策与宪制边界](../world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md#1-产品目标) 定位；本页保持只读迁移引用。
+- 删除条件：接收专题完成剩余语义、建立 REQ/AC 与专业 authority 追踪、修复全部活跃引用且无未决阻塞后，才可删除本页。
 ## 1. 产品目标
 
 玩家和组织可以在一个持续、可审计的世界中处理有限的共同运行事项，而不能把持有、付费、匿名账户、组织章程或普通投票扩展为无界的世界主权。普通治理服务于政策、财库和 charter 的运行；它与宪制保护、玩家基本权利、安全、validator/finality、signer 和 custody 分层。组织可以按自身目的协作、重组或退出，但个人资产、合同、退出、历史和 Agent 身份保有不可穿透的最低保护。

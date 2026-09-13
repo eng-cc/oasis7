@@ -11,6 +11,11 @@
 
 本文承载“玩家为何值得继续、当前能据此作出多强结论”的长期产品边界。它不定义测试脚本、证据字段、产物 schema、角色调度、PRD-TESTING ID、具体玩法数值或当前 release verdict；这些由 `game`、`testing`、相关实现专业域与根 `README.md` 分别拥有。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计适用性理由：本 PRD 是证据层级与产品 claim 的判断合同，不定义独立玩家交互；测试、LiveOps 和发行 authority 保留相应实现与证据职责。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 oasis7 的持续世界、自动化回归或活跃模拟本身都不是可玩性的替代品。产品需要让玩家从自己的行动中获得可理解、可归因且能打开下一决策的世界后果，并在此基础上形成继续游玩的理由。

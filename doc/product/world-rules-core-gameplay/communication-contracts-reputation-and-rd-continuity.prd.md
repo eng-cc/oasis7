@@ -11,6 +11,11 @@
 
 本文是长期产品分册，定义沟通、合同、争端、情境声誉与研究开发归因的产品边界。它不定义聊天/Agent UI、合同字段、抵押数值、争端随机算法、证据格式、仲裁规则、声誉分数、身份技术、专利/法律结论、版税比例或当前实现/readiness。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计适用性理由：本 PRD 的合同、服务失败、声誉和 R&D 连续性是产品结果合同；独立 design 不增加另一层玩家信息或控件语义。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 玩家可以自由协商、委托 Agent 并在同一世界中形成可信协作，但非绑定交流不能被误当作已成交或强制义务。只有经有效授权、明确接受和权威校验的 Agent-rendered 合同才产生绑定世界后果。持续服务允许有成本的违约、证据和救济，而争端、声誉与 R&D 归因保持局部、可审计、可更新且不把身份永久污名化或私有化。

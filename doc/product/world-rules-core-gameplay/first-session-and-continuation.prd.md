@@ -12,6 +12,11 @@
 
 本文是长期产品分册，承载首局微循环、后引导承接与首次持续能力的玩家承诺。它不冻结 UI 字段、tick、数值阈值、任务状态或实现方案。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`paired-design`。
+- 配对关系：[first-session-and-continuation.design.md](first-session-and-continuation.design.md) 承接本 PRD 的玩家经历、信息层级、状态反馈与恢复解释；产品真值仍由本 PRD 拥有。
+- 设计适用性理由：首局工业因果链、持续循环、失败恢复和跨入口阅读由同名 design 承接。
 ## 1. 产品目标
 
 ### 1.1 代表性情境

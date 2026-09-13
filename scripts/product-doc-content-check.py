@@ -78,6 +78,16 @@ def is_product_doc(path: str) -> bool:
     return path.startswith(f"{PRODUCT_ROOT.as_posix()}/") and path.endswith(PRODUCT_SUFFIXES)
 
 
+def is_product_root(path: str) -> bool:
+    if not path.startswith(f"{PRODUCT_ROOT.as_posix()}/") or not path.endswith("/prd.md"):
+        return False
+    try:
+        relative = Path(path).relative_to(PRODUCT_ROOT)
+    except ValueError:
+        return False
+    return len(relative.parts) == 2 and relative.parts[-1] == "prd.md"
+
+
 def parse_name_status(output: str) -> dict[str, str]:
     changed: dict[str, str] = {}
     for line in output.splitlines():
@@ -444,6 +454,93 @@ def check_active_topic_cardinality(path: str, text: str, errors: list[str]) -> N
         fail(errors, "active-topic-missing-acceptance", path, "active topic must declare at least one AC-* acceptance")
 
 
+def check_lifecycle_closure(path: str, text: str, errors: list[str]) -> None:
+    if not path.endswith(".prd.md") or path.endswith("/prd.md"):
+        return
+    identity = document_identity_text("\n".join(line for _, line in visible_lines(text)))
+    lifecycle = metadata_value(identity, "生命周期")
+    if not lifecycle or lifecycle.strip().strip("`").lower() not in {"superseded", "retired"}:
+        return
+    visible = "\n".join(line for _, line in visible_lines(text)).lower()
+    required_fields = {
+        "receiving-authority": r"^\s*(?:[-+*]\s*)?(?:接收|承接)\s*(?:authority|owner|方|责任)\s*[:：]",
+        "remaining-semantics": r"^\s*(?:[-+*]\s*)?(?:剩余语义|保留语义|仍然适用|剩余范围)\s*[:：]",
+        "stable-reference": r"^\s*(?:[-+*]\s*)?稳定(?:引用|链接)\s*[:：]",
+        "deletion-condition": r"^\s*(?:[-+*]\s*)?(?:删除条件|删除时机|可删除|清理条件)\s*[:：]",
+    }
+    codes = {
+        "receiving-authority": "lifecycle-missing-receiving-authority",
+        "remaining-semantics": "lifecycle-missing-remaining-semantics",
+        "stable-reference": "lifecycle-missing-stable-reference",
+        "deletion-condition": "lifecycle-missing-deletion-condition",
+    }
+    for field, pattern in required_fields.items():
+        if not re.search(pattern, visible, re.IGNORECASE | re.MULTILINE):
+            fail(errors, codes[field], path, f"{lifecycle.strip().strip('`')} topic requires lifecycle closure field {field}")
+
+
+def linked_repository_paths(
+    root: Path,
+    source: Path,
+    text: str,
+    use_worktree_content: bool,
+) -> set[str]:
+    paths: set[str] = set()
+    for _number, _raw, target in markdown_links(text):
+        target_path, _fragment = split_link_target(target)
+        if not target_path or is_external_link_target(target_path):
+            continue
+        resolved = resolve_link_path(source, target_path, use_worktree_content)
+        try:
+            paths.add(resolved.relative_to(root).as_posix())
+        except ValueError:
+            continue
+    return paths
+
+
+def check_active_topic_design_contract(
+    root: Path,
+    path: str,
+    text: str,
+    errors: list[str],
+    use_worktree_content: bool,
+) -> None:
+    identity = document_identity_text("\n".join(line for _, line in visible_lines(text)))
+    lifecycle = metadata_value(identity, "生命周期")
+    if not lifecycle or lifecycle.strip().strip("`").lower() != "active":
+        return
+    visible = "\n".join(line for _, line in visible_lines(text))
+    decision = re.search(
+        r"设计判定\s*[:：]\s*`?([a-z][a-z-]+)`?",
+        visible,
+        re.IGNORECASE,
+    )
+    source = root / path
+    expected_design = path.removesuffix(".prd.md") + ".design.md"
+    expected_design_exists = (root / expected_design).is_file()
+    if not decision:
+        code = "missing-design-decision" if expected_design_exists else "missing-design-or-exemption"
+        fail(errors, code, path, "active topic must declare paired-design or simple-topic-exemption")
+        return
+    mode = decision.group(1).lower()
+    if mode == "paired-design":
+        if expected_design not in linked_repository_paths(root, source, text, use_worktree_content):
+            fail(errors, "missing-paired-design-link", path, expected_design)
+        return
+    if mode == "simple-topic-exemption":
+        if not re.search(r"设计适用性理由\s*[:：]", visible):
+            fail(errors, "missing-design-exemption-reason", path, "simple-topic-exemption requires 设计适用性理由")
+        evidence_link = any(
+            is_external_link_target(split_link_target(target)[0])
+            and re.search(r"github\.com/[^)]+(?:issues|pull)/", split_link_target(target)[0], re.IGNORECASE)
+            for _number, _raw, target in markdown_links(text)
+        )
+        if not re.search(r"当前\s+GitHub\s+task\s+evidence\s*[:：]", visible, re.IGNORECASE) or not evidence_link:
+            fail(errors, "missing-design-exemption-evidence", path, "simple-topic-exemption requires current GitHub task evidence link")
+        return
+    fail(errors, "missing-design-or-exemption", path, "active topic design decision must be paired-design or simple-topic-exemption")
+
+
 def check_requirements(path: str, text: str, errors: list[str]) -> None:
     lines = visible_lines(text)
     anchors_by_line: dict[int, set[str]] = {}
@@ -560,32 +657,96 @@ def check_requirements(path: str, text: str, errors: list[str]) -> None:
                     fail(errors, "unresolved-requirement", path, f"{identifier} -> {reference}")
 
 
-def check_document(root: Path, head: str, path: str, text: str, errors: list[str], use_worktree_content: bool) -> None:
+def check_root_document(path: str, text: str, errors: list[str]) -> None:
+    """Validate the root identity/content subset owned by the full-corpus contract."""
+    identity = document_identity_text("\n".join(line for _, line in visible_lines(text)))
+    slug = Path(path).parent.name
+    expected = {
+        "产品模块 slug": slug,
+        "产品层唯一 PRD": path,
+        "产品模块总入口": "doc/product/README.md",
+        "生命周期": "active",
+        "Owner role": "producer_system_designer",
+        "后继文档": "无",
+    }
+    for label, value in expected.items():
+        actual = metadata_value(identity, label)
+        if not actual or actual.strip().strip("`") != value:
+            fail(errors, "root-metadata-contract", path, f"{label} expected {value!r}, got {actual!r}")
+    prd_id = metadata_value(identity, "Product PRD-ID")
+    if not prd_id or not re.fullmatch(r"`?PRD-PRODUCT-\d{3}`?", prd_id.strip()):
+        fail(errors, "root-metadata-contract", path, f"Product PRD-ID is missing or invalid: {prd_id!r}")
+    if not metadata_value(identity, "产品模块"):
+        fail(errors, "root-metadata-contract", path, "产品模块 is required")
+    if not metadata_value(identity, "Last reviewed"):
+        fail(errors, "root-metadata-contract", path, "Last reviewed is required")
+    if not re.search(r"^- 下层专业域：.+", identity, re.MULTILINE):
+        fail(errors, "root-authority-contract", path, "下层专业域 is required")
+    for heading in (
+        "## 1. 产品承诺",
+        "## 2. 范围",
+        "## 3. 权威与冲突处理",
+        "## 4. 路线图",
+        "## 5. Done：成功标准与验收",
+        "### 5.1 验收追踪",
+        "## 6. Non-Goals",
+    ):
+        if heading not in text:
+            fail(errors, "root-section-contract", path, f"missing heading prefix {heading!r}")
+
+
+def check_document(
+    root: Path,
+    head: str,
+    path: str,
+    text: str,
+    errors: list[str],
+    use_worktree_content: bool,
+    full_corpus: bool = False,
+) -> None:
     source = root / path
     if path.endswith("/prd.md"):
-        # Canonical module roots retain their existing identity/SC contract;
-        # product-doc-governance-check.py is their owner.
+        if full_corpus:
+            check_root_document(path, text, errors)
         return
     lines = visible_lines(text)
     check_metadata(path, text, errors)
+    check_lifecycle_closure(path, text, errors)
+    identity = document_identity_text("\n".join(line for _, line in lines))
+    lifecycle = metadata_value(identity, "生命周期")
+    inactive_lifecycle = lifecycle and lifecycle.strip().strip("`").lower() in {"superseded", "retired"}
     if path.endswith(".prd.md"):
-        check_minimum_topic_content(path, text, errors)
-        check_active_topic_cardinality(path, text, errors)
+        if not inactive_lifecycle:
+            check_minimum_topic_content(path, text, errors)
+            check_active_topic_cardinality(path, text, errors)
+            if full_corpus:
+                check_active_topic_design_contract(root, path, text, errors, use_worktree_content)
     if path.endswith(".design.md"):
-        check_minimum_design_content(path, text, errors)
+        if not inactive_lifecycle:
+            check_minimum_design_content(path, text, errors)
         expected_prd = path.removesuffix(".design.md") + ".prd.md"
         pair_targets = []
         links = markdown_links(text)
+        prd_requirement_fragment = False
+        prd_acceptance_fragment = False
         for _number, _raw, target in links:
-            target_path, _fragment = split_link_target(target)
+            target_path, fragment = split_link_target(target)
             if target_path:
                 resolved = resolve_link_path(source, target_path, use_worktree_content)
                 try:
-                    pair_targets.append(resolved.relative_to(root).as_posix())
+                    relative = resolved.relative_to(root).as_posix()
+                    pair_targets.append(relative)
+                    if relative == expected_prd and fragment:
+                        if re.fullmatch(r"req-[a-z0-9][a-z0-9_-]*", fragment, re.IGNORECASE):
+                            prd_requirement_fragment = True
+                        if re.fullmatch(r"ac-[a-z0-9][a-z0-9_-]*", fragment, re.IGNORECASE):
+                            prd_acceptance_fragment = True
                 except ValueError:
                     pass
         if expected_prd not in pair_targets:
             fail(errors, "missing-paired-prd-link", path, expected_prd)
+        if not inactive_lifecycle and not (prd_requirement_fragment and prd_acceptance_fragment):
+            fail(errors, "design-missing-prd-trace-fragment", path, "paired design requires PRD REQ-* and AC-* fragment links")
     links = markdown_links(text)
     for number, line in authority_lines(lines):
         authority_targets = [target for line_number, _raw, target in links if line_number == number]
@@ -650,7 +811,7 @@ def collect_full_corpus(root: Path) -> list[ChangedDocument]:
         if not path.is_file():
             continue
         relative = path.relative_to(root).as_posix()
-        if not is_product_doc(relative):
+        if not is_product_doc(relative) and not is_product_root(relative):
             continue
         documents.append(
             ChangedDocument(
@@ -686,7 +847,7 @@ def main() -> int:
             return 0
         errors: list[str] = []
         for document in documents:
-            check_document(root, head, document.path, document.new_text, errors, True)
+            check_document(root, head, document.path, document.new_text, errors, True, full_corpus=True)
         if errors:
             print("\n".join(errors))
             return 1

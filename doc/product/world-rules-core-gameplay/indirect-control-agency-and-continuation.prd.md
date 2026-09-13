@@ -11,6 +11,11 @@
 
 本文是长期产品分册，承载玩家通过 Agent 间接推动世界时的能动性、因果可读性、干预与续接承诺。它补充 [`首局与持续游玩`](first-session-and-continuation.prd.md)，但不重复后者拥有的首局引导、首次持续能力与成长承接，也不冻结字段、状态枚举、UI/API、runtime/Agent 实现、测试步骤、任务状态或历史 verdict。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计适用性理由：本 PRD 直接承载意图、Agent 自主行动、阻塞、回流和因果解释边界；Agent/Viewer 专业 authority 负责具体表达。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品承诺
 
 玩家通过目标与 Agent 间接推动持续世界时，始终能理解自己正在追求什么、系统是否接受并如何推进、当前后果或阻塞为何发生，以及现在可以如何继续、改道或恢复；离开后返回仍可从这一决策链继续，而不是旁观不可解释的自动行为。

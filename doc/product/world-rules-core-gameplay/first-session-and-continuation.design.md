@@ -78,3 +78,14 @@ Viewer 与 pure API 共享权威事实和玩家语义；每个入口分别证明
 ## 10. 相邻权威与未决边界
 
 详细玩法顺序、profile 完成边界、receipt 与稳定窗口由 [`工业 walkthrough 合同`](../../game/gameplay/gameplay-industrial-representative-execution-walkthrough.prd.md#3-五阶段玩家-walkthrough) 和 [`首产物结算合同`](../../game/gameplay/gameplay-industrial-starter-completion-contract.prd.md#3-五阶段结算表) 拥有；批次、物流、容量、终端和守恒由 [`M4 合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md#4-technical-specifications) 拥有；实现和入口证据由 [`world-runtime 专业 PRD`](../../world-runtime/prd.md#consumer-compatibility-industrial-profile-and-stage-execution)、Viewer、Agent、[`testing 专业 PRD`](../../testing/prd.md#6-validation-decision-record) 等专业 authority 拥有。任何专业规则变化都应重新核对本设计的产品边界和证据窗口。
+## PRD REQ/AC fragment mapping
+
+This design delegates product requirements and acceptance semantics to its paired PRD. Every row below is a navigable fragment mapping; this design does not create a second requirement authority.
+
+| PRD requirement | PRD acceptance |
+| --- | --- |
+| [REQ-FIRST-INDUSTRIAL-001](first-session-and-continuation.prd.md#req-first-industrial-001) | [AC-FIRST-INDUSTRIAL-001](first-session-and-continuation.prd.md#ac-first-industrial-001) |
+| [REQ-FIRST-INDUSTRIAL-002](first-session-and-continuation.prd.md#req-first-industrial-002) | [AC-FIRST-INDUSTRIAL-002](first-session-and-continuation.prd.md#ac-first-industrial-002) |
+| [REQ-FIRST-INDUSTRIAL-003](first-session-and-continuation.prd.md#req-first-industrial-003) | [AC-FIRST-INDUSTRIAL-003](first-session-and-continuation.prd.md#ac-first-industrial-003) |
+| [REQ-FIRST-INDUSTRIAL-004](first-session-and-continuation.prd.md#req-first-industrial-004) | [AC-FIRST-INDUSTRIAL-004](first-session-and-continuation.prd.md#ac-first-industrial-004) |
+| [REQ-FIRST-INDUSTRIAL-005](first-session-and-continuation.prd.md#req-first-industrial-005) | [AC-FIRST-INDUSTRIAL-005](first-session-and-continuation.prd.md#ac-first-industrial-005) |

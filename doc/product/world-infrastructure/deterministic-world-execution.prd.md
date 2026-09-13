@@ -11,6 +11,11 @@
 
 本文定义分布式共识底层之上的确定性世界执行层。它是基础设施内部的上层：接收已签名意图、在版本化规则边界内确定性重执行、提交已最终化结果，并向游戏、Agent 与玩家入口提供稳定协议；它不定义那些消费者的规则、行为或界面。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计适用性理由：本 PRD 只定义确定性提交、待决恢复、幂等和版本边界；执行流程与状态呈现由 runtime/P2P 专业 authority 负责。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 执行与共识边界
 
 - 每个活动验证者在 attestation 前完整重执行同一输入。权威世界结果只在 verified commit certificate 后生效；未最终化的 signed intent 不改变世界。

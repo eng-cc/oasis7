@@ -11,6 +11,11 @@
 
 本文是长期产品分册，承载玩家完成首个持续能力后，在已有组织、治理和历史的成熟世界中继续形成独立价值的产品承诺。长期目标不是世界通关，而是持续完成有边界、可审计并留下世界后果的阶段成果。它不冻结状态字段、数值、Agent 决策顺序、界面结构、任务状态或当前放行结论。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计适用性理由：本 PRD 直接表达成熟世界成长路线、repair/rebuild/pivot 和区域价值边界；它不另立玩家信息或控件 authority。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品问题
 
 世界持续发展以后，新玩家、小规模玩家和回流玩家不能只在“立即依附强组织”与“退化为旁观者”之间选择。产品必须让资源和影响力有限的玩家仍能靠自己的行动形成可读、可恢复且对区域有用的成长路线。

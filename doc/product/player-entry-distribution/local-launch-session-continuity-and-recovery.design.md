@@ -71,3 +71,11 @@
 - 不规定 Launcher 界面、按钮、步骤、CLI、子进程、signal、目录、文件、端口或浏览器 API。
 - 不规定 LLM/provider 字段、secret 存储、WASM 时间实现、错误签名、重试次数、自动恢复策略或测试证据格式。
 - 不把 Launcher 状态或当前技术表面提升为 primary-mode 可玩性、发布就绪或公开 claim。
+## PRD REQ/AC fragment mapping
+
+This design delegates product requirements and acceptance semantics to its paired PRD. Every row below is a navigable fragment mapping; this design does not create a second requirement authority.
+
+| PRD requirement | PRD acceptance |
+| --- | --- |
+| [REQ-ENTRY-LAUNCH-001](local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-001) | [AC-ENTRY-LAUNCH-001](local-launch-session-continuity-and-recovery.prd.md#ac-entry-launch-001) |
+| [REQ-ENTRY-LAUNCH-002](local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-002) | [AC-ENTRY-LAUNCH-002](local-launch-session-continuity-and-recovery.prd.md#ac-entry-launch-002) |

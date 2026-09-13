@@ -16,6 +16,12 @@
 
 本文是长期产品分册，承载统一持久世界在分布式运行、治理变化、故障与恢复中的产品承诺。它不定义证书字段、共识算法、拓扑、阈值、测试命令、运行手册或历史候选结论。
 
+## 生命周期闭合
+
+- 接收 authority：[分布式共识与状态可用性](distributed-consensus-and-state-availability.prd.md#1-基础承诺)、[确定性世界执行](deterministic-world-execution.prd.md#1-执行与共识边界)、[区域冲突、软赛季与可恢复损失](../world-rules-core-gameplay/chartered-conflict-soft-seasons-and-recovery.prd.md#1-产品目标)以及 [世界规则与核心玩法](../world-rules-core-gameplay/prd.md#活跃产品专题)。
+- 剩余语义：原第 4–6 节的玩家治理、惩罚/申诉和长期经济/发行产品语义仍待世界规则接收；CR-1 至 CR-3 的基础执行语义已有接收路径，CR-4 至 CR-6 仍需按接收范围核对。
+- 稳定引用：本页保留 CR-1 至 CR-6、历史连续性和专业 authority 入口，并链接 [分布式共识与状态可用性](distributed-consensus-and-state-availability.prd.md#1-基础承诺)；本页不能作为 active authority 或当前 readiness 证据。
+- 删除条件：所有剩余语义完成接收、专业 authority 与历史引用可达、活跃引用修复且无未决迁移语义后，才可删除本页。
 ## 1. 产品目标
 
 玩家始终面对同一个权威世界：节点传播、网络分区、治理变化、故障处置或恢复不会产生第二条玩家历史，也不会静默丢失、重复或改写已确认结果。服务退化时进入受控保护与可解释恢复，恢复后能够证明世界连续性。

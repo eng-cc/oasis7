@@ -11,6 +11,11 @@
 
 本文定义 oasis7 区块链/分布式系统底层向上层确定性世界执行提供的产品级保证。它不定义共识消息、密码学、网络协议、节点配置、存储格式或运行步骤；这些由 P2P、共识和运维专业权威拥有。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计适用性理由：本 PRD 只定义 canonical history、可用性、权限隔离和 fail-closed 产品结果；它不声明独立玩家信息架构。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 基础承诺
 
 基础层为一个 `world_id` 提供唯一的可验证提交序列：只有经验证的共识最终性才使输入成为世界历史。它提供节点间复制、状态同步、可验证的数据可用性、故障恢复与证明服务；它不定义游戏规则、Agent 行为、玩家交互或发行体验。

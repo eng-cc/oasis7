@@ -13,6 +13,11 @@
 
 本文把需求目标变成玩家可以比较、提交、复盘和继续规划的工业循环。它承载玩家可观察的目标、数量层次、机会成本、结算边界和恢复选择；正式配方、批量、产率、价格、物流、电力、终端容量、receipt、runtime schema、队列和 UI 由上列专业权威负责。首局工业 walkthrough 仍由[`首局与持续游玩`](first-session-and-continuation.prd.md)负责；本专题定义可在首局之后反复使用的 demand-goal 语义，不重复首局引导。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`paired-design`。
+- 配对关系：[industrial-demand-goals-and-settlement.design.md](industrial-demand-goals-and-settlement.design.md) 承接本 PRD 的玩家经历、信息层级、状态反馈与恢复解释；产品真值仍由本 PRD 拥有。
+- 设计适用性理由：需求比较、结算分层、补产、漂移和多入口同义由同名 design 承接。
 ## 1. 玩家问题与目标
 
 ### 1.1 代表性情境

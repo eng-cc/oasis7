@@ -25,6 +25,8 @@ TOPIC_TEXT = """# Sample topic
 - Owner role：`producer_system_designer`
 - 专业域权威：[`gameplay authority`](../../game/prd.md#authority)
 - Last reviewed：2026-09-10
+- 设计判定：`paired-design`
+- 配对产品设计：[`sample.design.md`](sample.design.md)
 
 本文从一个玩家的首局工业情境出发，说明当前产品承诺与专业边界。
 
@@ -81,6 +83,29 @@ DESIGN_TEXT = """# Sample topic design
 | [`REQ-SAMPLE-001`](sample.prd.md#req-sample-001) | [`AC-SAMPLE-001`](sample.prd.md#ac-sample-001) |
 """
 
+ROOT_TEXT = """# 世界规则与核心玩法 PRD
+
+## 文档身份
+- 产品模块：世界规则与核心玩法
+- 产品模块 slug：`world-rules-core-gameplay`
+- 产品层唯一 PRD：`doc/product/world-rules-core-gameplay/prd.md`
+- 产品模块总入口：`doc/product/README.md`
+- Product PRD-ID：`PRD-PRODUCT-001`
+- 生命周期：`active`
+- Owner role：`producer_system_designer`
+- Last reviewed：`2026-09-10`
+- 后继文档：`无`
+- 下层专业域：[`gameplay`](../../game/prd.md)
+
+## 1. 产品承诺
+## 2. 范围
+## 3. 权威与冲突处理
+## 4. 路线图
+## 5. Done：成功标准与验收
+### 5.1 验收追踪
+## 6. Non-Goals
+"""
+
 
 def run_git(root: Path, *args: str) -> None:
     subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, text=True)
@@ -91,7 +116,7 @@ def make_repo() -> tuple[Path, str, str]:
     (root / "doc/product/world-rules-core-gameplay").mkdir(parents=True)
     (root / "doc/game").mkdir(parents=True)
     (root / "doc/game/prd.md").write_text("# Gameplay\n<a id=\"authority\"></a>\n## Authority\n", encoding="utf-8")
-    (root / "doc/product/world-rules-core-gameplay/prd.md").write_text("# Root\n", encoding="utf-8")
+    (root / "doc/product/world-rules-core-gameplay/prd.md").write_text(ROOT_TEXT, encoding="utf-8")
     (root / TOPIC).write_text(TOPIC_TEXT, encoding="utf-8")
     (root / DESIGN).write_text(DESIGN_TEXT, encoding="utf-8")
     (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").write_text("broken legacy\n", encoding="utf-8")
@@ -135,8 +160,22 @@ def remove_fixture_traceability(text: str, *, requirement: bool = False, accepta
 
 
 def isolate_topic_full_corpus(root: Path) -> None:
-    (root / DESIGN).unlink()
     (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
+
+
+LIFECYCLE_CLOSURE = """
+
+## 生命周期闭合
+- 接收 authority：[`gameplay authority`](../../game/prd.md#authority)
+- 剩余语义：保留历史验收含义与仍需可达的引用。
+- 稳定引用：[`gameplay authority`](../../game/prd.md#authority)
+- 删除条件：接收 authority 可达、活跃引用修复且无未决阻塞。
+"""
+
+
+def lifecycle_topic_text(lifecycle: str) -> str:
+    text = TOPIC_TEXT.replace("生命周期：`active`", f"生命周期：`{lifecycle}`")
+    return text + LIFECYCLE_CLOSURE
 
 
 def scenario_full_corpus_requires_active_topic_requirement() -> None:
@@ -173,11 +212,12 @@ def scenario_full_corpus_exempts_non_active_topic_cardinality() -> None:
     root, _base, _head = make_repo()
     try:
         isolate_topic_full_corpus(root)
-        lifecycle_text = remove_fixture_traceability(TOPIC_TEXT, requirement=True, acceptance=True)
-        lifecycle_text += "\n本主题验收仍受当前入口证据范围约束。\n"
         for lifecycle in ("superseded", "retired"):
             (root / f"doc/product/world-rules-core-gameplay/{lifecycle}.prd.md").write_text(
-                lifecycle_text.replace("生命周期：`active`", f"生命周期：`{lifecycle}`"),
+                remove_fixture_traceability(
+                    lifecycle_topic_text(lifecycle), requirement=True, acceptance=True
+                )
+                + "\n本主题验收仍受当前入口证据范围约束。\n",
                 encoding="utf-8",
             )
         result = invoke_full_corpus(root)
@@ -215,14 +255,14 @@ def scenario_full_corpus_accepts_retired_topics_and_reports_lifecycle_errors() -
     retired = root / "doc/product/world-rules-core-gameplay/retired.prd.md"
     try:
         (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
-        retired.write_text(TOPIC_TEXT.replace("生命周期：`active`", "生命周期：`retired`"), encoding="utf-8")
+        retired.write_text(lifecycle_topic_text("retired"), encoding="utf-8")
         result = invoke_full_corpus(root)
         output = result.stdout + result.stderr
         assert result.returncode == 0, output
         assert "product-doc-content:" in output and "full-corpus" in output, output
 
         retired.write_text(
-            TOPIC_TEXT.replace("生命周期：`active`", "生命周期：`retired`").replace(
+            lifecycle_topic_text("retired").replace(
                 "- 专业域权威：[`gameplay authority`](../../game/prd.md#authority)\n", ""
             ),
             encoding="utf-8",
@@ -231,6 +271,117 @@ def scenario_full_corpus_accepts_retired_topics_and_reports_lifecycle_errors() -
         output = result.stdout + result.stderr
         assert result.returncode == 1, output
         assert "retired.prd.md" in output and "missing-metadata" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_full_corpus_counts_module_root() -> None:
+    root, _base, _head = make_repo()
+    try:
+        (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 0, output
+        assert "full-corpus checked 3 current-tree product documents" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_full_corpus_requires_lifecycle_closure() -> None:
+    for marker, code in (
+        ("- 接收 authority：[`gameplay authority`](../../game/prd.md#authority)\n", "lifecycle-missing-receiving-authority"),
+        ("- 剩余语义：保留历史验收含义与仍需可达的引用。\n", "lifecycle-missing-remaining-semantics"),
+        ("- 稳定引用：[`gameplay authority`](../../game/prd.md#authority)\n", "lifecycle-missing-stable-reference"),
+        ("- 删除条件：接收 authority 可达、活跃引用修复且无未决阻塞。\n", "lifecycle-missing-deletion-condition"),
+    ):
+        root, _base, _head = make_repo()
+        try:
+            (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
+            retired = lifecycle_topic_text("retired").replace(marker, "")
+            (root / "doc/product/world-rules-core-gameplay/retired.prd.md").write_text(
+                retired, encoding="utf-8"
+            )
+            result = invoke_full_corpus(root)
+            output = result.stdout + result.stderr
+            assert result.returncode == 1, output
+            assert f"{code}: doc/product/world-rules-core-gameplay/retired.prd.md" in output, output
+        finally:
+            shutil.rmtree(root)
+
+
+def scenario_full_corpus_requires_design_decision_or_exemption() -> None:
+    root, _base, _head = make_repo()
+    try:
+        (root / DESIGN).unlink()
+        (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
+        (root / TOPIC).write_text(
+            TOPIC_TEXT.replace("- 设计判定：`paired-design`\n", "")
+            .replace("- 配对产品设计：[`sample.design.md`](sample.design.md)\n", ""),
+            encoding="utf-8",
+        )
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 1, output
+        assert f"missing-design-or-exemption: {TOPIC}" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_full_corpus_accepts_simple_topic_exemption() -> None:
+    root, _base, _head = make_repo()
+    try:
+        (root / DESIGN).unlink()
+        (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
+        exemption = """
+
+## 设计判定
+- 设计判定：`simple-topic-exemption`
+- 设计适用性理由：这是简单专题，不增加新的信息分层、交互状态编排或策略取舍。
+- 当前 GitHub task evidence：[`issue evidence`](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)
+"""
+        (root / TOPIC).write_text(
+            TOPIC_TEXT.replace("- 设计判定：`paired-design`\n", "")
+            .replace("- 配对产品设计：[`sample.design.md`](sample.design.md)\n", "")
+            + exemption,
+            encoding="utf-8",
+        )
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 0, output
+        assert "full-corpus checked 2 current-tree product documents" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_full_corpus_requires_paired_design_link() -> None:
+    root, _base, _head = make_repo()
+    try:
+        (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
+        (root / TOPIC).write_text(
+            TOPIC_TEXT.replace("- 配对产品设计：[`sample.design.md`](sample.design.md)\n", ""),
+            encoding="utf-8",
+        )
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 1, output
+        assert f"missing-paired-design-link: {TOPIC}" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_full_corpus_requires_prd_trace_fragments() -> None:
+    root, _base, _head = make_repo()
+    try:
+        (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
+        (root / DESIGN).write_text(
+            DESIGN_TEXT.replace("sample.prd.md#req-sample-001", "sample.prd.md")
+            .replace("sample.prd.md#ac-sample-001", "sample.prd.md"),
+            encoding="utf-8",
+        )
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 1, output
+        assert f"design-missing-prd-trace-fragment: {DESIGN}" in output, output
     finally:
         shutil.rmtree(root)
 
@@ -253,6 +404,20 @@ def scenario_full_corpus_rejects_changed_range_arguments() -> None:
                 or "not allowed with" in output
                 or "mutually exclusive" in output
             ), output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_full_corpus_validates_module_root() -> None:
+    root, _base, _head = make_repo()
+    try:
+        root_prd = root / "doc/product/world-rules-core-gameplay/prd.md"
+        root_prd.write_text(ROOT_TEXT.replace("- Product PRD-ID：`PRD-PRODUCT-001`\n", ""), encoding="utf-8")
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 1, output
+        assert "root-metadata-contract" in output, output
+        assert "Product PRD-ID" in output, output
     finally:
         shutil.rmtree(root)
 
@@ -590,6 +755,13 @@ def main() -> None:
     scenario_full_corpus_exempts_non_active_topic_cardinality()
     scenario_full_corpus_includes_unchanged_legacy_and_sorts_diagnostics()
     scenario_full_corpus_accepts_retired_topics_and_reports_lifecycle_errors()
+    scenario_full_corpus_counts_module_root()
+    scenario_full_corpus_requires_lifecycle_closure()
+    scenario_full_corpus_requires_design_decision_or_exemption()
+    scenario_full_corpus_accepts_simple_topic_exemption()
+    scenario_full_corpus_requires_paired_design_link()
+    scenario_full_corpus_requires_prd_trace_fragments()
+    scenario_full_corpus_validates_module_root()
     scenario_full_corpus_rejects_changed_range_arguments()
     scenario(None, lambda _root: None)
     scenario("missing-anchor", legacy_declarations_missing_anchors)

@@ -50,3 +50,11 @@
 
 - 验证证据应覆盖目标、blocker、可信反馈和恢复入口在受支持 desktop、窄屏、低高度及双语 fallback 下的可读性，并区分 surface 局部状态与权威世界结果；结构存在、自动刷新或历史截图不能单独证明产品能力。
 - 未决：各受支持 surface 的具体控件、断点、翻译资源和恢复动作仍由 Viewer、WASM 与 QA authority 结合当前证据决定；在对应 authority 尚未确认前，产品层保持能力边界与安全返回语义，不把候选布局当作已支持入口。
+## PRD REQ/AC fragment mapping
+
+This design delegates product requirements and acceptance semantics to its paired PRD. Every row below is a navigable fragment mapping; this design does not create a second requirement authority.
+
+| PRD requirement | PRD acceptance |
+| --- | --- |
+| [REQ-AGENT-SURFACE-001](player-readable-surface-continuity.prd.md#req-agent-surface-001) | [AC-AGENT-SURFACE-001](player-readable-surface-continuity.prd.md#ac-agent-surface-001) |
+| [REQ-AGENT-SURFACE-002](player-readable-surface-continuity.prd.md#req-agent-surface-002) | [AC-AGENT-SURFACE-002](player-readable-surface-continuity.prd.md#ac-agent-surface-002) |

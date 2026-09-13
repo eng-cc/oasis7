@@ -11,6 +11,11 @@
 
 本文定义玩家或组织拥有 Agent 的长期产品承诺：授权如何持续、资产如何扩张和转让、Agent 如何提出异议，以及结果如何归因。它不定义 runtime 状态机、授权字段、签名、模型行为、界面、数值成本或测试步骤。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计适用性理由：本 PRD 已直接承载授权、转让、责任与恢复的产品决策和验收；独立 design 不会增加另一套玩家信息层级或交互 authority。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 玩家经营的不是只能逐项等待确认的遥控单位，也不是无法纠正的黑箱。一个 Agent 可在玩家选择的高自治或有界授权模式下持续推进世界目标；玩家始终能理解授权范围、主要风险、实际结果与下一次纠正或撤销机会。
