@@ -32,6 +32,8 @@ mod llm_sidecar;
 mod prompt_control_enhanced;
 #[path = "control_plane/prompt_control_legacy.rs"]
 mod prompt_control_legacy;
+#[path = "control_plane/prompt_control_terminal.rs"]
+mod prompt_control_terminal;
 #[path = "control_plane/prompt_profile.rs"]
 mod prompt_profile;
 #[path = "control_plane/provider_action.rs"]
@@ -413,6 +415,25 @@ fn prompt_control_enhanced_error(
     error.agent_id = agent_id;
     error.player_id = player_id;
     error.reason_code = Some(code.to_string());
+    error
+}
+
+fn prompt_control_result_cache_full_error(
+    request_id: Option<String>,
+    operation: PromptControlOperation,
+    preview: bool,
+) -> PromptControlError {
+    let mut error = prompt_control_enhanced_error(
+        "result_cache_full",
+        "prompt control result cache is full",
+        request_id,
+        operation,
+        preview,
+        None,
+        None,
+        PromptControlResultStatus::Blocked,
+    );
+    error.next_step = Some("refresh_authority_and_retry_with_new_request_id".to_string());
     error
 }
 

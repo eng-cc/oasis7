@@ -408,15 +408,10 @@ impl ViewerRuntimeLiveServer {
             PromptControlLedgerLookup::Missing => {}
         }
         if self.prompt_control_authority.result_ledger.is_full() {
-            return Err(prompt_control_enhanced_error(
-                "result_cache_full",
-                "prompt control result cache is full",
+            return Err(prompt_control_result_cache_full_error(
                 Some(request_id),
                 operation,
                 preview,
-                None,
-                None,
-                PromptControlResultStatus::Blocked,
             ));
         }
         if self.hosted_public_join_mode() {
@@ -551,12 +546,26 @@ impl ViewerRuntimeLiveServer {
             }),
             persistence_scope: Some(PromptControlApplicationScope::None),
             sync_scope: Some(PromptControlApplicationScope::None),
-            reason_code: Some(if changed { "applied" } else { "no_change" }.to_string()),
-            next_step: Some(if changed {
-                "continue_runtime".to_string()
-            } else {
-                "no_action_required".to_string()
-            }),
+            reason_code: Some(
+                if preview && changed {
+                    "preview_only"
+                } else if changed {
+                    "applied"
+                } else {
+                    "no_change"
+                }
+                .to_string(),
+            ),
+            next_step: Some(
+                if preview && changed {
+                    "confirm_apply"
+                } else if changed {
+                    "continue_runtime"
+                } else {
+                    "no_action_required"
+                }
+                .to_string(),
+            ),
             operation_digest: Some(operation_digest.clone()),
             idempotent_replay: false,
             mutation_count: Some(u64::from(changed && !preview)),
@@ -597,9 +606,8 @@ impl ViewerRuntimeLiveServer {
         )
         .map_err(|_| prompt_control_result_unknown_error(&request_id))?;
         if !preview && changed {
-            self.llm_sidecar
-                .apply_prompt_profile_to_driver(&candidate)
-                .map_err(|message| PromptControlError {
+            if let Err(message) = self.llm_sidecar.apply_prompt_profile_to_driver(&candidate) {
+                let enqueue_error = PromptControlError {
                     code: "prompt_override_enqueue_failed".to_string(),
                     message,
                     request_id: Some(request_id.clone()),
@@ -612,8 +620,20 @@ impl ViewerRuntimeLiveServer {
                     player_id: Some(player_id.clone()),
                     expected_version: Some(expected_version),
                     current_version: Some(current.version),
+                    reason_code: Some("prompt_override_enqueue_failed".to_string()),
                     ..PromptControlError::default_legacy()
-                })?;
+                };
+                let recorded = self.record_enhanced_prompt_control_error(
+                    verified.player_id.as_str(),
+                    verified.nonce,
+                    player_id.as_str(),
+                    request_id.as_str(),
+                    operation_digest.clone(),
+                    enqueue_error,
+                    true,
+                )?;
+                return Err(recorded);
+            }
             self.llm_sidecar.upsert_prompt_profile(candidate.clone());
             self.bind_agent_player_access(
                 agent_id.as_str(),
@@ -700,11 +720,11 @@ impl ViewerRuntimeLiveServer {
             return Err(prompt_control_enhanced_error(
                 "agent_provider_prompt_control_unsupported",
                 "prompt_control is not supported when runtime live uses ProviderBacked(Local HTTP)",
-                Some(request_id),
+                Some(request_id.clone()),
                 operation,
                 false,
                 Some(agent_id),
-                Some(player_id),
+                Some(player_id.clone()),
                 PromptControlResultStatus::Rejected,
             ));
         }
@@ -882,15 +902,10 @@ impl ViewerRuntimeLiveServer {
             PromptControlLedgerLookup::Missing => {}
         }
         if self.prompt_control_authority.result_ledger.is_full() {
-            return Err(prompt_control_enhanced_error(
-                "result_cache_full",
-                "prompt control result cache is full",
+            return Err(prompt_control_result_cache_full_error(
                 Some(request_id),
                 operation,
                 false,
-                None,
-                None,
-                PromptControlResultStatus::Blocked,
             ));
         }
         if self.hosted_public_join_mode() {
@@ -979,19 +994,31 @@ impl ViewerRuntimeLiveServer {
         let target = if request.to_version == 0 {
             AgentPromptProfile::for_agent(agent_id.clone())
         } else {
-            self.lookup_prompt_profile_version(agent_id.as_str(), request.to_version)
-                .ok_or_else(|| {
-                    prompt_control_enhanced_error(
-                        "target_version_not_found",
-                        "prompt control rollback target version was not found",
-                        Some(request_id.clone()),
-                        operation,
-                        false,
-                        Some(agent_id.clone()),
-                        Some(player_id.clone()),
-                        PromptControlResultStatus::Rejected,
-                    )
-                })?
+            let Some(target) =
+                self.lookup_prompt_profile_version(agent_id.as_str(), request.to_version)
+            else {
+                let target_error = prompt_control_enhanced_error(
+                    "target_version_not_found",
+                    "prompt control rollback target version was not found",
+                    Some(request_id.clone()),
+                    operation,
+                    false,
+                    Some(agent_id.clone()),
+                    Some(player_id.clone()),
+                    PromptControlResultStatus::Rejected,
+                );
+                let recorded = self.record_enhanced_prompt_control_error(
+                    verified.player_id.as_str(),
+                    verified.nonce,
+                    player_id.as_str(),
+                    request_id.as_str(),
+                    operation_digest.clone(),
+                    target_error,
+                    false,
+                )?;
+                return Err(recorded);
+            };
+            target
         };
         let mut candidate = current.clone();
         candidate.system_prompt_override = target.system_prompt_override;
@@ -999,16 +1026,26 @@ impl ViewerRuntimeLiveServer {
         candidate.long_term_goal_override = target.long_term_goal_override;
         let applied_fields = changed_prompt_fields_runtime(&current, &candidate);
         if applied_fields.is_empty() {
-            return Err(prompt_control_enhanced_error(
+            let noop_error = prompt_control_enhanced_error(
                 "rollback_noop",
                 "prompt control rollback would not change the current profile",
-                Some(request_id),
+                Some(request_id.clone()),
                 operation,
                 false,
-                Some(agent_id),
-                Some(player_id),
+                Some(agent_id.clone()),
+                Some(player_id.clone()),
                 PromptControlResultStatus::Rejected,
-            ));
+            );
+            let recorded = self.record_enhanced_prompt_control_error(
+                verified.player_id.as_str(),
+                verified.nonce,
+                player_id.as_str(),
+                request_id.as_str(),
+                operation_digest.clone(),
+                noop_error,
+                false,
+            )?;
+            return Err(recorded);
         }
         candidate.version = current.version.saturating_add(1);
         candidate.updated_at_tick = self.world.state().time;
@@ -1066,9 +1103,8 @@ impl ViewerRuntimeLiveServer {
         {
             return Err(prompt_control_result_unknown_error(&request_id));
         }
-        self.llm_sidecar
-            .apply_prompt_profile_to_driver(&candidate)
-            .map_err(|message| PromptControlError {
+        if let Err(message) = self.llm_sidecar.apply_prompt_profile_to_driver(&candidate) {
+            let enqueue_error = PromptControlError {
                 code: "prompt_override_enqueue_failed".to_string(),
                 message,
                 request_id: Some(request_id.clone()),
@@ -1081,8 +1117,20 @@ impl ViewerRuntimeLiveServer {
                 player_id: Some(player_id.clone()),
                 expected_version: Some(expected_version),
                 current_version: Some(current.version),
+                reason_code: Some("prompt_override_enqueue_failed".to_string()),
                 ..PromptControlError::default_legacy()
-            })?;
+            };
+            let recorded = self.record_enhanced_prompt_control_error(
+                verified.player_id.as_str(),
+                verified.nonce,
+                player_id.as_str(),
+                request_id.as_str(),
+                operation_digest.clone(),
+                enqueue_error,
+                true,
+            )?;
+            return Err(recorded);
+        }
         self.llm_sidecar.upsert_prompt_profile(candidate.clone());
         self.bind_agent_player_access(
             agent_id.as_str(),

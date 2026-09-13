@@ -1,6 +1,14 @@
 use super::*;
 
 impl RuntimeLlmSidecar {
+    #[cfg(all(test, not(target_arch = "wasm32")))]
+    pub(in crate::viewer::runtime_live) fn replace_builtin_runner_for_test(
+        &mut self,
+        runner: AsyncAgentRunner,
+    ) {
+        self.runner = Some(RuntimeDecisionRunner::Builtin(runner));
+    }
+
     pub(in crate::viewer::runtime_live) fn apply_prompt_profile_to_driver(
         &mut self,
         profile: &AgentPromptProfile,
