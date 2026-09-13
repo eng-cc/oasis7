@@ -80,6 +80,8 @@ mod memory;
 mod micro_depot_install_acceptance;
 mod micro_depot_measured_supply;
 mod micro_depot_schema_compatibility;
+#[cfg(not(target_arch = "wasm32"))]
+mod model_provider;
 mod module_lifecycle;
 mod module_visual;
 mod monotonicity;
@@ -100,3 +102,5 @@ mod social;
 mod social_persist;
 mod social_revoke_quote;
 mod submitter_access;
+#[cfg(not(target_arch = "wasm32"))]
+mod turn_engine;
