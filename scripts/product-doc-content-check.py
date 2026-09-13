@@ -830,6 +830,324 @@ def check_active_topic_design_contract(
     fail(errors, "missing-design-or-exemption", path, "active topic design decision must be paired-design or simple-topic-exemption")
 
 
+def trace_table_cells(line: str) -> list[str]:
+    stripped = line.strip()
+    if not stripped.startswith("|"):
+        return []
+    if stripped.endswith("|"):
+        stripped = stripped[:-1]
+    stripped = stripped[1:]
+    return [cell.strip() for cell in re.split(r"(?<!\\)\|", stripped)]
+
+
+def is_trace_table_separator(line: str) -> bool:
+    cells = trace_table_cells(line)
+    if not cells:
+        return False
+    return all(bool(re.fullmatch(r":?\s*-{3,}\s*:?", cell)) for cell in cells)
+
+
+def normalized_trace_header(cell: str) -> str:
+    value = html.unescape(cell)
+    value = re.sub(r"`([^`]*)`", r"\1", value)
+    value = HTML_TAG_RE.sub("", value)
+    return value.strip().lower()
+
+
+def trace_header_has_id(header: str, identifier: str) -> bool:
+    return bool(re.search(rf"(?<![a-z0-9]){identifier}(?![a-z0-9])", header, re.IGNORECASE))
+
+
+def trace_heading_is_explicit(line: str) -> bool:
+    if not HEADING_PREFIX_RE.match(line):
+        return False
+    return (
+        bool(re.search(r"追踪|trace", line, re.IGNORECASE))
+        and bool(re.search(r"owner|authority|测试层级|test[_ ]?tier", line, re.IGNORECASE))
+    )
+
+
+def trace_table_semantics(
+    text: str,
+) -> list[tuple[int, dict[str, tuple[int, ...]], list[tuple[int, list[str]]]]]:
+    """Return explicitly structured semantic trace tables.
+
+    Ordinary two-column REQ/AC mapping tables are intentionally ignored.  A
+    table is a semantic trace table only when it declares a relation header
+    plus at least one trace field, or sits under an explicit owner/authority/
+    test-tier trace heading.  This keeps prose and legacy mapping tables out
+    of the row-level contract.
+    """
+    lines = visible_lines(text)
+    tables: list[tuple[int, dict[str, tuple[int, ...]], list[tuple[int, list[str]]]]] = []
+    for index in range(len(lines) - 1):
+        header_number, header_line = lines[index]
+        headers = trace_table_cells(header_line)
+        if not headers or not is_trace_table_separator(lines[index + 1][1]):
+            continue
+        rows: list[tuple[int, list[str]]] = []
+        row_index = index + 2
+        while row_index < len(lines):
+            number, line = lines[row_index]
+            cells = trace_table_cells(line)
+            if not cells:
+                break
+            rows.append((number, cells))
+            row_index += 1
+
+        normalized = [normalized_trace_header(header) for header in headers]
+        req_columns = tuple(
+            index for index, header in enumerate(normalized) if trace_header_has_id(header, "REQ")
+        )
+        ac_columns = tuple(
+            index for index, header in enumerate(normalized) if trace_header_has_id(header, "AC")
+        )
+        relation_columns = tuple(
+            index for index in req_columns if index in ac_columns
+        )
+        if not relation_columns and req_columns and ac_columns:
+            relation_columns = tuple(sorted(set(req_columns + ac_columns)))
+        semantic_columns = {
+            "owner": tuple(
+                index
+                for index, header in enumerate(normalized)
+                if re.search(r"\bowner\b|专业\s*(?:owner|负责人|责任)", header, re.IGNORECASE)
+            ),
+            "authority": tuple(
+                index
+                for index, header in enumerate(normalized)
+                if re.search(r"\bauthority\b|权威", header, re.IGNORECASE)
+            ),
+            "evidence": tuple(
+                index
+                for index, header in enumerate(normalized)
+                if re.search(r"\bevidence\b|证据", header, re.IGNORECASE)
+            ),
+            "tier": tuple(
+                index
+                for index, header in enumerate(normalized)
+                if re.search(r"测试层级|test[_ ]?tier|\btier\b", header, re.IGNORECASE)
+            ),
+        }
+        relation_signal = bool(req_columns or ac_columns or relation_columns)
+        semantic_signal = any(semantic_columns.values())
+        explicit_heading = False
+        for heading_index in range(index - 1, -1, -1):
+            if HEADING_PREFIX_RE.match(lines[heading_index][1]):
+                explicit_heading = trace_heading_is_explicit(lines[heading_index][1])
+                break
+        if (relation_signal and semantic_signal) or explicit_heading:
+            tables.append(
+                (
+                    header_number,
+                    {
+                        "req": req_columns,
+                        "ac": ac_columns,
+                        "relation": relation_columns,
+                        **semantic_columns,
+                    },
+                    rows,
+                )
+            )
+    return tables
+
+
+def trace_cell_text(cell: str) -> str:
+    value = re.sub(r"!\[([^]]*)\]\([^)]*\)", r"\1", cell)
+    value = re.sub(r"\[([^]]+)\]\([^)]*\)", r"\1", value)
+    value = re.sub(r"`([^`]*)`", r"\1", value)
+    value = HTML_TAG_RE.sub("", html.unescape(value))
+    return re.sub(r"\s+", " ", value).strip()
+
+
+TRACE_EMPTY_VALUES = frozenset(
+    {
+        "",
+        "-",
+        "—",
+        "–",
+        "n/a",
+        "na",
+        "none",
+        "tbd",
+        "todo",
+        "待补",
+        "待定",
+        "未定",
+        "证据",
+        "evidence",
+    }
+)
+
+
+def trace_cell_is_nonempty(cell: str) -> bool:
+    value = trace_cell_text(cell)
+    return value.casefold() not in TRACE_EMPTY_VALUES and bool(value)
+
+
+def strict_trace_ids(value: str) -> set[str]:
+    return {
+        token
+        for token in id_tokens(value)
+        if re.fullmatch(r"(?:REQ|AC)-[A-Z0-9][A-Z0-9_-]*", token, re.IGNORECASE)
+    }
+
+
+def trace_navigable_ids(cell: str) -> set[str]:
+    identifiers: set[str] = set()
+    for link in parse_markdown_links(cell):
+        target_path, fragment = split_link_target(link.target)
+        if not fragment or is_external_link_target(target_path):
+            continue
+        if target_path and not target_path.lower().endswith(".md"):
+            continue
+        identifier = fragment.upper()
+        if re.fullmatch(r"(?:REQ|AC)-[A-Z0-9][A-Z0-9_-]*", identifier, re.IGNORECASE):
+            identifiers.add(identifier)
+    return identifiers
+
+
+def check_paired_trace_tables(
+    path: str,
+    text: str,
+    errors: list[str],
+) -> None:
+    if not path.endswith(".prd.md") or path.endswith("/prd.md"):
+        return
+    identity = document_identity_text("\n".join(line for _, line in visible_lines(text)))
+    lifecycle = metadata_value(identity, "生命周期")
+    decision = re.search(
+        r"设计判定\s*[:：]\s*`?([a-z][a-z-]+)`?",
+        identity,
+        re.IGNORECASE,
+    )
+    if (
+        not lifecycle
+        or lifecycle.strip().strip("`").lower() != "active"
+        or not decision
+        or decision.group(1).lower() != "paired-design"
+    ):
+        return
+
+    traced_relations: set[tuple[str, str]] = set()
+    for header_line, columns, rows in trace_table_semantics(text):
+        missing_columns = []
+        if not columns["req"] or not columns["ac"] or not columns["relation"]:
+            missing_columns.append("REQ/AC relation")
+        for field in ("owner", "authority", "evidence", "tier"):
+            if not columns[field]:
+                missing_columns.append(field)
+        if missing_columns:
+            fail(
+                errors,
+                "paired-trace-missing-column",
+                path,
+                f"trace table at line {header_line} requires {', '.join(missing_columns)} column(s)",
+            )
+
+        for number, cells in rows:
+            relation_cells = [
+                cells[index]
+                for index in columns["relation"]
+                if index < len(cells)
+            ]
+            relation_text = " ".join(relation_cells)
+            declared_ids = strict_trace_ids(relation_text)
+            linked_ids = set().union(*(trace_navigable_ids(cell) for cell in relation_cells))
+            requirement_ids = {
+                identifier
+                for identifier in declared_ids | linked_ids
+                if identifier.startswith("REQ-")
+            }
+            acceptance_ids = {
+                identifier
+                for identifier in declared_ids | linked_ids
+                if identifier.startswith("AC-")
+            }
+            if not requirement_ids or not acceptance_ids:
+                fail(
+                    errors,
+                    "paired-trace-missing-relation",
+                    path,
+                    f"trace row at line {number} must contain REQ and AC in the same row",
+                )
+            unlinked_ids = declared_ids - linked_ids
+            if unlinked_ids:
+                fail(
+                    errors,
+                    "paired-trace-unlinked-relation",
+                    path,
+                    f"trace row at line {number} requires navigable links for {', '.join(sorted(unlinked_ids))}",
+                )
+            traced_relations.update(
+                (requirement, acceptance)
+                for requirement in requirement_ids
+                for acceptance in acceptance_ids
+            )
+
+            for field in ("owner", "evidence"):
+                indices = columns[field]
+                values = [cells[index] for index in indices if index < len(cells)]
+                if not values or not any(trace_cell_is_nonempty(value) for value in values):
+                    fail(
+                        errors,
+                        f"paired-trace-empty-{field}",
+                        path,
+                        f"trace row at line {number} requires non-empty {field}",
+                    )
+
+            authority_values = [
+                cells[index] for index in columns["authority"] if index < len(cells)
+            ]
+            authority_link = False
+            for cell in authority_values:
+                for link in parse_markdown_links(cell):
+                    target_path, _fragment = split_link_target(link.target)
+                    if (
+                        target_path
+                        and not is_external_link_target(target_path)
+                        and target_path.lower().endswith(".md")
+                    ):
+                        authority_link = True
+                        break
+                if authority_link:
+                    break
+            if not authority_link:
+                fail(
+                    errors,
+                    "paired-trace-authority-not-link",
+                    path,
+                    f"trace row at line {number} requires a repository-relative authority Markdown link",
+                )
+
+            tier_values = [cells[index] for index in columns["tier"] if index < len(cells)]
+            tier_text = " ".join(tier_values)
+            if not re.search(
+                r"(?<![A-Za-z0-9_])test_tier_(?:required|full)(?![A-Za-z0-9_])",
+                tier_text,
+            ):
+                fail(
+                    errors,
+                    "paired-trace-invalid-test-tier",
+                    path,
+                    f"trace row at line {number} requires exact test_tier_required or test_tier_full",
+                )
+
+    _requirements, _acceptances, expected_relations = declared_prd_relations(text)
+    missing_relations = expected_relations - traced_relations
+    if missing_relations:
+        fail(
+            errors,
+            "paired-trace-missing-relation",
+            path,
+            "declared REQ/AC relations lack same-row trace: "
+            + ", ".join(
+                f"{requirement}->{acceptance}"
+                for requirement, acceptance in sorted(missing_relations)
+            ),
+        )
+
+
 def check_requirements(path: str, text: str, errors: list[str]) -> None:
     lines = visible_lines(text)
     anchors_by_line: dict[int, set[str]] = {}
@@ -1008,6 +1326,7 @@ def check_document(
         if not inactive_lifecycle:
             check_minimum_topic_content(path, text, errors)
             check_active_topic_cardinality(path, text, errors)
+            check_paired_trace_tables(path, text, errors)
             if full_corpus:
                 check_active_topic_design_contract(root, path, text, errors, use_worktree_content)
     if path.endswith(".design.md"):

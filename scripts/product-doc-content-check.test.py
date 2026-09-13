@@ -57,6 +57,12 @@ TOPIC_TEXT = """# Sample topic
 ### 5.2 效果与证据范围
 不能由该场景证明真实留存或发行就绪。
 
+## 6. 专业 owner、authority 与测试层级追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-SAMPLE-001](#req-sample-001) / [AC-SAMPLE-001](#ac-sample-001) | `producer_system_designer` | [gameplay authority](../../game/prd.md#authority) | 当前入口的可观察结果与恢复边界证据 | `test_tier_required`；`test_tier_full` 覆盖跨入口与恢复复核 |
+
 ## 7. 设计取舍与未决问题
 尚未决定：后续入口如何承接，解决触发条件由产品 owner 裁定。
 """
@@ -149,6 +155,9 @@ REQ_BLOCK = TOPIC_TEXT[
 AC_BLOCK = TOPIC_TEXT[
     TOPIC_TEXT.index('<a id="ac-sample-001"></a>') : TOPIC_TEXT.index("### 5.2", TOPIC_TEXT.index('<a id="ac-sample-001"></a>'))
 ]
+TRACE_BLOCK = TOPIC_TEXT[
+    TOPIC_TEXT.index("## 6. 专业 owner、authority 与测试层级追踪") : TOPIC_TEXT.index("## 7. 设计取舍与未决问题")
+]
 
 
 def remove_fixture_traceability(text: str, *, requirement: bool = False, acceptance: bool = False) -> str:
@@ -156,6 +165,8 @@ def remove_fixture_traceability(text: str, *, requirement: bool = False, accepta
         text = text.replace(REQ_BLOCK, "")
     if acceptance:
         text = text.replace(AC_BLOCK, "")
+    if requirement and acceptance:
+        text = text.replace(TRACE_BLOCK, "")
     return text
 
 
@@ -554,6 +565,51 @@ def scenario_full_corpus_requires_prd_trace_fragments() -> None:
         assert f"design-missing-prd-trace-fragment: {DESIGN}" in output, output
     finally:
         shutil.rmtree(root)
+
+
+def scenario_paired_trace_missing_column() -> None:
+    scenario(
+        "paired-trace-missing-column",
+        lambda root: (root / TOPIC).write_text(
+            TOPIC_TEXT.replace("| 验证证据 |", "| 说明 |"), encoding="utf-8"
+        ),
+    )
+
+
+def scenario_paired_trace_missing_relation() -> None:
+    scenario(
+        "paired-trace-missing-relation",
+        lambda root: (root / TOPIC).write_text(
+            TOPIC_TEXT.replace(
+                " / [AC-SAMPLE-001](#ac-sample-001)", ""
+            ),
+            encoding="utf-8",
+        ),
+    )
+
+
+def scenario_paired_trace_empty_evidence() -> None:
+    scenario(
+        "paired-trace-empty-evidence",
+        lambda root: (root / TOPIC).write_text(
+            TOPIC_TEXT.replace(
+                "当前入口的可观察结果与恢复边界证据", ""
+            ),
+            encoding="utf-8",
+        ),
+    )
+
+
+def scenario_paired_trace_requires_strict_test_tier_tokens() -> None:
+    scenario(
+        "paired-trace-invalid-test-tier",
+        lambda root: (root / TOPIC).write_text(
+            TOPIC_TEXT.replace("test_tier_required", "required").replace(
+                "test_tier_full", "full"
+            ),
+            encoding="utf-8",
+        ),
+    )
 
 
 def scenario_full_corpus_rejects_changed_range_arguments() -> None:
@@ -970,6 +1026,10 @@ def main() -> None:
     scenario("duplicate-anchor", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("<a id=\"ac-sample-001\"></a>", "<a id=\"req-sample-001\"></a>\n<a id=\"ac-sample-001\"></a>"), encoding="utf-8"))
     scenario("unresolved-cross-file-id", lambda root: (root / DESIGN).write_text(DESIGN_TEXT.replace("sample.prd.md#req-sample-001", "sample.prd.md#req-missing"), encoding="utf-8"))
     scenario("external-cross-file-id", external_requirement_links)
+    scenario_paired_trace_missing_column()
+    scenario_paired_trace_missing_relation()
+    scenario_paired_trace_empty_evidence()
+    scenario_paired_trace_requires_strict_test_tier_tokens()
     scenario("req-missing-acceptance", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("- 验收：AC-SAMPLE-001\n", ""), encoding="utf-8"))
     scenario("ac-missing-requirement", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("- 覆盖要求：REQ-SAMPLE-001\n", ""), encoding="utf-8"))
     scenario("unresolved-id-reference", lambda root: (root / TOPIC).write_text(
