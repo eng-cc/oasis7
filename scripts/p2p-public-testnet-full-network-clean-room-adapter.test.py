@@ -5713,6 +5713,93 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.fixture.tearDown()
 
+    def test_planner_identity_v2_map_projects_to_current_storage_admission(self) -> None:
+        """The planner's retained map must yield the child-only admission view."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            retained = canonical.plan["identity_v2_evidence"]
+            self.assertNotIn("mode", retained)
+            self.assertNotIn("digest", retained)
+            projected = self.adapter._storage_first_child_projection(
+                canonical.plan, retained
+            )
+            admission = projected["identity_v2_evidence"]
+            self.assertEqual(admission["mode"], "current_admission")
+            self.assertEqual(
+                admission["digest"],
+                hashlib.sha256(
+                    json.dumps(
+                        retained,
+                        ensure_ascii=True,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode()
+                ).hexdigest(),
+            )
+        finally:
+            canonical.tearDown()
+
+    def test_storage_callbacks_receive_isolated_transport_node_projections(self) -> None:
+        """A callback mutation must not poison a later host binding."""
+        transport = self.fixture._Transport()
+        original_inspect = transport.inspect_node
+        original_preflight = transport.preflight
+        original_mutate = transport.mutate
+        original_verify = transport.verify
+
+        def inspect(node):
+            self.assertEqual(node["name"], "storage-205")
+            result = original_inspect(node)
+            node["name"] = "poisoned-by-inspect"
+            return result
+
+        def preflight(operation, node):
+            self.assertEqual(node["name"], "storage-205")
+            result = original_preflight(operation, node)
+            node["name"] = "poisoned-by-preflight"
+            return result
+
+        def mutate(operation, node):
+            self.assertEqual(node["name"], "storage-205")
+            result = original_mutate(operation, node)
+            node["name"] = "poisoned-by-mutate"
+            return result
+
+        def verify(operation, node):
+            self.assertEqual(node["name"], "storage-205")
+            result = original_verify(operation, node)
+            node["name"] = "poisoned-by-verify"
+            return result
+
+        transport.inspect_node = inspect
+        transport.preflight = preflight
+        transport.mutate = mutate
+        transport.verify = verify
+        self.plan["capture_window"] = {"ends_at": "2099-01-01T00:00:00Z"}
+
+        def bound_provenance(plan, receipt):
+            result = self.fixture._bound_provenance(plan, receipt)
+            result.update({
+                "verifier_id": self.adapter.CANONICAL_VERIFIER_ID,
+                "trust_root_id": self.adapter.CANONICAL_TRUST_ROOT_ID,
+                "signer_id": "governance-signer",
+            })
+            return result
+
+        with mock.patch.object(self.adapter, "_storage_first_reject_aliases"), \
+                mock.patch.object(
+                    self.adapter,
+                    "_storage_first_canonical_gates",
+                    return_value={"apply_authorized": True},
+                ), \
+                mock.patch.object(self.adapter, "_storage_first_validate_ledger_binding"):
+            result = self.fixture._runner(
+                transport,
+                live_revalidator=lambda: True,
+                provenance_verifier=bound_provenance,
+            )
+        self.assertEqual(result["status"], "storage-205-verified")
+
     def _prefix_journal(
         self,
         completed: list[str],

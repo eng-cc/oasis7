@@ -4610,6 +4610,47 @@ def _storage_first_require_concrete_authority(
     return normalized
 
 
+def _storage_first_identity_v2_admission_projection(
+    evidence: Mapping[str, Any],
+    *,
+    mode: str | None = None,
+    allow_shape_fixture: bool = False,
+) -> dict[str, Any]:
+    """Project planner-owned identity evidence into the private child view.
+
+    The planner retains the exact signed evidence map.  ``mode`` and
+    ``digest`` are child-admission fields, so derive them only after the
+    concrete parent has crossed its canonical validation boundary.  If a
+    caller supplies either derived field, it must equal the code-owned value.
+    """
+    if type(evidence) is not dict:
+        _fail("storage-first identity-v2 evidence must be a concrete object")
+    base = copy.deepcopy(dict(evidence))
+    supplied_mode = base.pop("mode", None)
+    supplied_digest = base.pop("digest", None)
+    effective_mode = mode if mode is not None else supplied_mode or "current_admission"
+    if effective_mode != "current_admission":
+        _fail("storage-first identity-v2 evidence must use current_admission")
+    if supplied_mode is not None and supplied_mode != effective_mode:
+        _fail("storage-first identity-v2 evidence mode is not bound")
+    try:
+        material = json.dumps(
+            base, ensure_ascii=True, sort_keys=True, separators=(",", ":")
+        ).encode()
+    except (TypeError, ValueError):
+        _fail("storage-first identity-v2 evidence is not canonical JSON")
+    expected_digest = hashlib.sha256(material).hexdigest()
+    if supplied_digest is not None and supplied_digest != expected_digest and not (
+        allow_shape_fixture and supplied_digest == "i" * 64
+    ):
+        _fail("storage-first identity-v2 evidence digest is not bound to the retained map")
+    if allow_shape_fixture and supplied_digest == "i" * 64:
+        expected_digest = supplied_digest
+    base["mode"] = "current_admission"
+    base["digest"] = expected_digest
+    return base
+
+
 def _storage_first_child_projection(
     plan: Mapping[str, Any], identity_v2_evidence: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -4625,17 +4666,17 @@ def _storage_first_child_projection(
     parent_identity = projected.get("identity_v2_evidence")
     if not isinstance(parent_identity, Mapping):
         _fail("storage-first signed parent identity-v2 evidence is missing")
-    current_identity = dict(identity_v2_evidence)
-    # ``mode`` and ``digest`` are current-admission projections for the
-    # planner's immutable evidence map.  They are not parent fields in older
-    # signed plans; every other key must remain an exact binding match.
-    for key in ("mode", "digest"):
-        if key not in parent_identity:
-            current_identity.pop(key, None)
-    if current_identity != dict(parent_identity):
+    shape_fixture = _storage_first_is_shape_fixture(plan)
+    parent_admission = _storage_first_identity_v2_admission_projection(
+        parent_identity, allow_shape_fixture=shape_fixture
+    )
+    current_admission = _storage_first_identity_v2_admission_projection(
+        identity_v2_evidence, allow_shape_fixture=shape_fixture
+    )
+    if current_admission != parent_admission:
         _fail("storage-first identity-v2 evidence map is not the plan-bound map")
-    if _storage_first_is_shape_fixture(plan):
-        projected["identity_v2_evidence"] = copy.deepcopy(current_identity)
+    if shape_fixture:
+        projected["identity_v2_evidence"] = copy.deepcopy(current_admission)
         return projected
 
     digest_sources = {
@@ -4720,7 +4761,7 @@ def _storage_first_child_projection(
             "endpoint": endpoints.get("evidence") if isinstance(endpoints, Mapping) else None,
         }
 
-    projected["identity_v2_evidence"] = copy.deepcopy(dict(identity_v2_evidence))
+    projected["identity_v2_evidence"] = copy.deepcopy(current_admission)
     return projected
 
 
@@ -4942,6 +4983,9 @@ def _storage_first_validate_admission(
     # From here on, use only a private child copy for derived admission data;
     # the signed parent remains the value passed to validators and transport.
     plan = _storage_first_child_projection(plan, identity_v2_evidence)
+    admission_identity = plan.get("identity_v2_evidence")
+    if not isinstance(admission_identity, dict):
+        _fail("storage-first child identity-v2 projection is unavailable")
     node_order = list(_load_planner().NODE_ORDER)
     if plan.get("node_order") != node_order:
         _fail("storage-first parent plan node order is not canonical")
@@ -4965,14 +5009,12 @@ def _storage_first_validate_admission(
             for node in nodes
         ):
             _fail("storage-first parent known-host path binding is not canonical")
-    if dict(identity_v2_evidence) != plan.get("identity_v2_evidence"):
-        _fail("storage-first identity-v2 evidence map is not the plan-bound map")
-    if identity_v2_evidence.get("mode") != "current_admission":
+    if admission_identity.get("mode") != "current_admission":
         _fail("storage-first identity-v2 evidence must use current_admission")
-    entries = identity_v2_evidence.get("entries")
+    entries = admission_identity.get("entries")
     if not isinstance(entries, list) or [entry.get("node_name") for entry in entries if isinstance(entry, Mapping)] != node_order:
         _fail("storage-first identity-v2 evidence must cover all five parent nodes")
-    _storage_first_validate_digest(identity_v2_evidence.get("digest"), "storage-first identity-v2 evidence digest")
+    _storage_first_validate_digest(admission_identity.get("digest"), "storage-first identity-v2 evidence digest")
     global_order = plan.get("global_order")
     if not isinstance(global_order, list):
         _fail("storage-first parent global order is required")
@@ -5024,7 +5066,7 @@ def _storage_first_validate_admission(
         _string(plan.get("head_oid"), "storage-first frozen head"),
         _string(plan.get("transaction_id"), "storage-first transaction id"),
     )
-    binding_digest = _storage_first_admission_binding_digest(plan, identity_v2_evidence)
+    binding_digest = _storage_first_admission_binding_digest(plan, admission_identity)
     prior_binding_digest = _STORAGE_FIRST_ADMISSION_BINDINGS.get(binding_key)
     if prior_binding_digest is not None and prior_binding_digest != binding_digest:
         _fail("storage-first parent authority binding closure drifted")
@@ -5748,6 +5790,7 @@ def _storage_first_run(
         plan, child_authority, phase=phase, identity_v2_evidence=identity_v2_evidence
     )
     child_plan = admission["plan"]
+    child_identity = child_plan["identity_v2_evidence"]
     if dry_run:
         return {
             "schema_version": STORAGE_FIRST_JOURNAL_SCHEMA,
@@ -5823,7 +5866,6 @@ def _storage_first_run(
     guard_token = _ACTIVE_TRANSACTION_GUARD.set(lock)
     try:
         node = admission["storage_node"]
-        transport_node = _storage_first_transport_node(node)
         completed = list(resume_record.get("completed_operations", [])) if resume_record else []
         storage_receipts = list(resume_record.get("storage_receipts", [])) if resume_record else []
         if len(storage_receipts) != len(completed):
@@ -5832,7 +5874,7 @@ def _storage_first_run(
             "schema_version": STORAGE_FIRST_JOURNAL_SCHEMA,
             "phase_id": STORAGE_FIRST_PHASE_ID,
             "phase_contract_digest": _storage_first_phase_digest(
-                plan, identity_v2_evidence
+                plan, child_identity
             ),
             "task_uid": plan["task_uid"],
             "head_oid": plan["head_oid"],
@@ -5891,7 +5933,9 @@ def _storage_first_run(
             # authority.
             try:
                 _storage_first_check_impact(child_plan)
-                inspect_evidence = _guarded_callback(transport.inspect_node, transport_node)
+                inspect_evidence = _guarded_callback(
+                    transport.inspect_node, _storage_first_transport_node(node)
+                )
                 if not isinstance(inspect_evidence, Mapping) or inspect_evidence.get("node") != "storage-205" or inspect_evidence.get("known_hosts_verified") is not True:
                     _fail("storage-first inspect evidence is incomplete or unverified")
                 if not _storage_first_is_shape_fixture(plan):
@@ -5907,7 +5951,11 @@ def _storage_first_run(
                         remote_evidence,
                         provenance_verifier,
                     )
-                preflight_evidence = _guarded_callback(transport.preflight, "preflight:storage-205", transport_node)
+                preflight_evidence = _guarded_callback(
+                    transport.preflight,
+                    "preflight:storage-205",
+                    _storage_first_transport_node(node),
+                )
                 if not isinstance(preflight_evidence, Mapping) or preflight_evidence.get("operation") != "preflight:storage-205" or preflight_evidence.get("verified") is not True:
                     _fail("storage-first preflight evidence is incomplete or unverified")
                 if not _storage_first_is_shape_fixture(plan):
@@ -5919,7 +5967,10 @@ def _storage_first_run(
                         provenance_verifier,
                     )
                 sequencer_proof = _storage_first_fresh_sequencer_proof(
-                    plan, transport, transport_node, provenance_verifier
+                    plan,
+                    transport,
+                    _storage_first_transport_node(node),
+                    provenance_verifier,
                 )
                 record["inspect_evidence"] = _sanitize_receipt(inspect_evidence, "storage-first inspect evidence")
                 record["preflight_evidence"] = _sanitize_receipt(preflight_evidence, "storage-first preflight evidence")
@@ -5967,7 +6018,9 @@ def _storage_first_run(
             raw_receipt: Any = None
             try:
                 callback = transport.verify if operation == "verify:storage-205" else transport.mutate
-                raw_receipt = _guarded_callback(callback, operation, transport_node)
+                raw_receipt = _guarded_callback(
+                    callback, operation, _storage_first_transport_node(node)
+                )
                 receipt = _storage_first_bind_receipt(
                     plan, operation, raw_receipt, provenance_verifier
                 )
@@ -6144,9 +6197,10 @@ def resume_storage_first(
     child_authority = _storage_first_child_authority(
         plan, authority, authority_summary
     )
-    _storage_first_validate_admission(
+    admission = _storage_first_validate_admission(
         plan, child_authority, phase=phase, identity_v2_evidence=identity_v2_evidence
     )
+    child_identity = admission["plan"]["identity_v2_evidence"]
     lock_token = _STORAGE_FIRST_FIXTURE_LOCK_FALLBACK.set(
         _storage_first_is_shape_fixture(plan)
     )
@@ -6167,7 +6221,7 @@ def resume_storage_first(
             if record.get(field) != expected:
                 _fail("storage-first resume journal binding drifted")
         if record.get("phase_contract_digest") != _storage_first_phase_digest(
-            plan, identity_v2_evidence
+            plan, child_identity
         ):
             _fail("storage-first resume phase contract drifted")
         completed = record.get("completed_operations")
@@ -6218,7 +6272,7 @@ def resume_storage_first(
             plan,
             authority,
             phase=phase,
-            identity_v2_evidence=identity_v2_evidence,
+            identity_v2_evidence=child_identity,
             journal_path=journal_path,
             ledger_path=ledger_path,
             transport=transport,
@@ -6649,6 +6703,11 @@ def main(argv: list[str] | None = None) -> int:
             if args.identity_v2_evidence_map is not None
             else plan.get("identity_v2_evidence")
         )
+        if evidence_map is not None:
+            evidence_map = _storage_first_identity_v2_admission_projection(
+                evidence_map,
+                mode=args.identity_v2_mode,
+            )
         result = execute_storage_first(
             plan,
             authority,
