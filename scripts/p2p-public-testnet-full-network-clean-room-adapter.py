@@ -5338,6 +5338,8 @@ def validate_storage_first_journal(journal: Mapping[str, Any]) -> bool:
         _fail("storage-first prepared journal cannot contain completed operations")
     if journal.get("status") == "preflight-complete" and completed:
         _fail("storage-first preflight journal cannot contain completed operations")
+    if journal.get("status") == "storage-205-running" and len(completed) == len(STORAGE_FIRST_OPERATIONS):
+        _fail("storage-first running journal cannot contain the complete operation cursor")
     if journal.get("status") == "reconciliation-blocked" and journal.get("next_operation") != "reconciliation-required":
         _fail("storage-first reconciliation journal lacks its held boundary")
     if "storage_receipts" in journal:

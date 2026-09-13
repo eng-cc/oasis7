@@ -6761,6 +6761,24 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
         finally:
             canonical.tearDown()
 
+    def test_runtime_sf_042_resume_rejects_running_complete_cursor(self) -> None:
+        """A complete cursor cannot retain an impossible running status."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            journal = self.fixture._canonical_prefix_journal(
+                canonical,
+                list(STORAGE_FIRST_CHILD_OPERATIONS),
+                status="storage-205-running",
+                name="running-complete-cursor.journal.json",
+            )
+            transport = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+            with self.assertRaises(Exception):
+                self.fixture._canonical_resume(canonical, journal, transport)
+            self.assertEqual(transport.mutations, [])
+            self.assertEqual(transport.verify_operations, [])
+        finally:
+            canonical.tearDown()
+
     def test_runtime_sf_027_resume_validates_nonce_checkpoint_before_prepared_write(self) -> None:
         """Missing committed nonce state must not replace a resumable journal checkpoint."""
         canonical = self.fixture._canonical_fixture()
