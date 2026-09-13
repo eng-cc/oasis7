@@ -112,7 +112,16 @@ fn load_provider_backed_bootstrap_authorities(
 /// retain the exact current snapshot/journal/module state while preventing a
 /// successful preflight from publishing any runtime or cognition changes.
 fn detached_execution_world_for_bootstrap(world_dir: &Path) -> Result<RuntimeWorld, String> {
-    let current = super::driver::load_execution_world(world_dir)?;
+    // Load the durable world exactly as it was persisted. The execution
+    // driver's `load_execution_world` helper applies a storage-profile
+    // normalization (including production main-token defaults) after load;
+    // applying that policy here would change the state root before preflight
+    // and reject an otherwise valid current world as stale.
+    let current = RuntimeWorld::load_from_dir(world_dir).map_err(|error| {
+        format!(
+            "load current execution world for ProviderBacked bootstrap preflight failed: {error:?}"
+        )
+    })?;
     let snapshot = current.snapshot();
     let has_inline_module_artifacts = !snapshot.module_artifact_bytes.is_empty();
     let journal = current.journal().clone();
