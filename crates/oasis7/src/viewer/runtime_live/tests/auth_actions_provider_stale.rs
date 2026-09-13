@@ -101,6 +101,13 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
     unsafe {
         oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
         oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
+        // The loopback callback is served by a helper thread. Required-tier
+        // runs can temporarily starve that thread while many Rust tests are
+        // active; keep the mock request alive long enough to observe the
+        // response instead of turning scheduler pressure into a gameplay
+        // retry failure.
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV, "15000");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_DECISION_TIMEOUT_MS_ENV, "15000");
         oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
         oasis7::env_mut::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
     }
@@ -194,7 +201,7 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
             wait_scheduled,
         )
     };
-    let poll_deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let poll_deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
     while std::time::Instant::now() < poll_deadline {
         let (stale_feedback_seen, replan_request_seen, wait_feedback_seen, wait_scheduled) =
             read_progress(&server.world);
