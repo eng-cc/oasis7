@@ -60,6 +60,7 @@ AGENT_PROVIDER_AUTH_TOKEN="${OASIS7_AGENT_PROVIDER_AUTH_TOKEN:-}"
 AGENT_PROVIDER_CONNECT_TIMEOUT_MS="${OASIS7_AGENT_PROVIDER_CONNECT_TIMEOUT_MS:-15000}"
 AGENT_PROVIDER_PROFILE="${OASIS7_AGENT_PROVIDER_PROFILE:-oasis7_p0_low_freq_npc}"
 AGENT_EXECUTION_LANE="${OASIS7_AGENT_EXECUTION_LANE:-headless_agent}"
+PROVIDER_BOOTSTRAP_AUTHORITY_PATHS=()
 AGENT_PROVIDER_PROD_URL="${OASIS7_AGENT_PROVIDER_PROD_URL:-https://t2t.oasis7.tech}"
 AGENT_PROVIDER_TEST_URL="${OASIS7_AGENT_PROVIDER_TEST_URL:-}"
 PRINT_AGENT_PROVIDER_CONFIG="0"
@@ -144,6 +145,8 @@ Options:
                            loopback_http (default) or remote_https
   --agent-execution-lane <lane>
                            headless_agent (default) or player_parity
+  --provider-bootstrap-authority <path>
+                           Explicit JSON Runtime authority bundle; repeat per ProviderBacked agent
   --with-llm               Enable LLM mode (default: enabled; required for gameplay)
   --no-llm                 Negative-path only; this launcher stack now fails fast without LLM
   --auto-play              Start gameplay/world progression on viewer connection (default)
@@ -261,6 +264,15 @@ while [[ $# -gt 0 ]]; do
       ;;
     --agent-execution-lane)
       AGENT_EXECUTION_LANE="${2:-}"
+      shift 2
+      ;;
+    --provider-bootstrap-authority)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "error: --provider-bootstrap-authority requires a path" >&2
+        usage >&2
+        exit 1
+      fi
+      PROVIDER_BOOTSTRAP_AUTHORITY_PATHS+=("$2")
       shift 2
       ;;
     --chain-enable)
@@ -485,6 +497,7 @@ payload = {
     "agent_provider_connect_timeout_ms": "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS",
     "agent_provider_profile": "$AGENT_PROVIDER_PROFILE",
     "agent_execution_lane": "$AGENT_EXECUTION_LANE",
+    "provider_bootstrap_authority_count": "${#PROVIDER_BOOTSTRAP_AUTHORITY_PATHS[@]}",
     "chain_link_policy": "$CHAIN_LINK_POLICY",
     "agent_chat_echo": "$AGENT_CHAT_ECHO",
 }
@@ -819,6 +832,7 @@ write_session_meta() {
     printf 'LLM_PROVIDER_PROBE_JSON=%s\n' "$LLM_PROVIDER_PROBE_JSON"
     printf 'LLM_PROVIDER_PROBE_LOG=%s\n' "$LLM_PROVIDER_PROBE_LOG"
     printf 'PROVIDER_LINEAGE_STORE_PATH=%s\n' "$OUTPUT_DIR/viewer-provider-lineage.json"
+    printf 'PROVIDER_BOOTSTRAP_AUTHORITY_COUNT=%s\n' "${#PROVIDER_BOOTSTRAP_AUTHORITY_PATHS[@]}"
     printf 'HOSTED_ACCOUNT_STORE_PATH=%s\n' "$HOSTED_ACCOUNT_STORE_PATH"
     printf 'STACK_READY=%s\n' "$stack_ready"
     if [[ "$stack_ready" == "1" ]]; then
@@ -895,6 +909,9 @@ else
   WORLD_ARGS+=(--chain-disable)
 fi
 WORLD_ARGS+=(--with-llm)
+for authority_path in "${PROVIDER_BOOTSTRAP_AUTHORITY_PATHS[@]}"; do
+  WORLD_ARGS+=(--provider-bootstrap-authority "$authority_path")
+done
 if [[ "$AUTO_PLAY" == "1" ]]; then
   WORLD_ARGS+=(--auto-play)
 else
