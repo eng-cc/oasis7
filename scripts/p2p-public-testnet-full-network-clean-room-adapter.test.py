@@ -4931,7 +4931,8 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
             journal_path.write_text(json.dumps(valid, sort_keys=True), encoding="utf-8")
             journal_path.chmod(0o600)
             self.assertEqual(journal_path.stat().st_mode & 0o777, 0o600)
-            self.assertTrue(validator(json.loads(journal_path.read_text(encoding="utf-8"))))
+            with self.assertRaisesRegex(Exception, "unfinished|reconciliation"):
+                validator(json.loads(journal_path.read_text(encoding="utf-8")))
             for mutation in (
                 {"status": "unknown_status"},
                 {"next_operation": "stop:sequencer-204"},
@@ -8050,6 +8051,86 @@ class StorageFirstExactHeadFindingTests(unittest.TestCase):
                 )
             self.assertEqual(transport.mutations, [])
             self.assertEqual(json.loads(journal.read_text()), {"retained": True})
+        finally:
+            canonical.tearDown()
+
+    def test_public_validator_rejects_every_unfinished_resume_state(self) -> None:
+        base = {
+            "schema_version": self.adapter.STORAGE_FIRST_JOURNAL_SCHEMA,
+            "phase_id": self.adapter.STORAGE_FIRST_PHASE_ID,
+            "next_operation": "stop:storage-205",
+            "completed_operations": [],
+            "task_uid": "task-fixture",
+            "head_oid": "a" * 40,
+            "plan_digest": "b" * 64,
+            "transaction_id": "transaction-fixture",
+            "capture_window_id": "capture-fixture",
+            "phase_contract_digest": "c" * 64,
+            "ledger_path": "/tmp/fixture-ledger",
+            "callback_started": False,
+            "callback_receipt": None,
+            "storage_receipts": [],
+            "receipt_operation_cursor": [],
+            "rollback_candidates": [],
+            "rollback_status": "not-started",
+        }
+        for status in ("prepared", "preflight-complete", "storage-205-running"):
+            journal = {**base, "status": status}
+            journal["journal_digest"] = self.adapter.journal_digest(journal)
+            with self.subTest(status=status), self.assertRaisesRegex(
+                Exception, "unfinished|reconciliation"
+            ):
+                self.adapter.validate_storage_first_journal(journal)
+
+    def test_recovery_receipt_requires_a_concrete_dictionary_tree(self) -> None:
+        class DualView(dict):
+            pass
+
+        fixture = StorageFirstAdapterRedTests("runTest")
+        fixture.adapter = self.adapter
+        fixture.setUp()
+        try:
+            with self.assertRaisesRegex(Exception, "concrete|mapping"):
+                self.adapter._storage_first_recovery_receipt(
+                    fixture.plan,
+                    DualView(),
+                    "reobserve-failed-state",
+                    "stop:storage-205",
+                    ["stop:storage-205"],
+                )
+        finally:
+            fixture.tearDown()
+
+    def test_second_live_check_is_followed_by_final_local_admission(self) -> None:
+        helper = StorageFirstAdapterRedTests("runTest")
+        helper.adapter = self.adapter
+        canonical = helper._canonical_fixture()
+        events: list[str] = []
+        try:
+            transport = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+            original_mutate = transport.mutate
+
+            def mutate(operation, node):
+                events.append("mutate")
+                return original_mutate(operation, node)
+
+            transport.mutate = mutate
+            original_validate = canonical.adapter.validate_authority
+
+            def validate(*args, **kwargs):
+                events.append("authority")
+                return original_validate(*args, **kwargs)
+
+            def live():
+                events.append("live")
+                return True
+
+            with mock.patch.object(canonical.adapter, "validate_authority", side_effect=validate):
+                helper._canonical_runner(
+                    canonical, transport, live_revalidator=live
+                )
+            first_mutation = events.index("mutate")
+            self.assertEqual(events[first_mutation - 2:first_mutation], ["live", "authority"])
         finally:
             canonical.tearDown()
 

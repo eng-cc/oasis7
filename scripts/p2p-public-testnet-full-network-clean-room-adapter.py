@@ -5334,7 +5334,9 @@ def _storage_first_validate_receipt_prefix(
             _fail("storage-first callback receipt is not the persisted prefix tail")
 
 
-def validate_storage_first_journal(journal: Mapping[str, Any]) -> bool:
+def validate_storage_first_journal(
+    journal: Mapping[str, Any], *, _allow_unfinished: bool = False
+) -> bool:
     """Validate the closed storage-first journal state/cursor projection."""
     journal = _object(journal, "storage-first journal")
     if journal.get("schema_version") != STORAGE_FIRST_JOURNAL_SCHEMA:
@@ -5343,6 +5345,11 @@ def validate_storage_first_journal(journal: Mapping[str, Any]) -> bool:
         _fail("storage-first journal phase is not storage-205-first")
     if journal.get("status") not in STORAGE_FIRST_STATUSES:
         _fail("storage-first journal status is unsupported")
+    if (
+        not _allow_unfinished
+        and journal.get("status") in {"prepared", "preflight-complete", "storage-205-running"}
+    ):
+        _fail("storage-first unfinished journal requires governed reconciliation")
     completed = journal.get("completed_operations", [])
     if "completed_operations" not in journal or not isinstance(completed, list) or completed != list(completed):
         _fail("storage-first journal completed operations are malformed")
@@ -5503,26 +5510,34 @@ def _storage_first_journal_write(path: Path, record: Mapping[str, Any]) -> None:
         raise
 
 
+def _storage_first_require_concrete_receipt(value: Any, label: str) -> dict[str, Any]:
+    """Materialize one trusted receipt view and reject custom nested mappings."""
+    if type(value) is not dict:
+        _fail(f"{label} must be a concrete dictionary")
+    receipt = copy.deepcopy(value)
+
+    def require_concrete_tree(child: Any) -> None:
+        if type(child) is dict:
+            for nested in child.values():
+                require_concrete_tree(nested)
+        elif type(child) is list:
+            for nested in child:
+                require_concrete_tree(nested)
+        elif isinstance(child, Mapping):
+            _fail(f"{label} contains a non-concrete mapping")
+
+    require_concrete_tree(receipt)
+    return receipt
+
+
 def _storage_first_bind_receipt(
     plan: Mapping[str, Any], operation: str, raw_receipt: Any,
     verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Bind a provider's non-secret receipt to this exact child transaction."""
-    if type(raw_receipt) is not dict:
-        _fail(f"storage-first {operation} receipt must be a concrete dictionary")
-    receipt = copy.deepcopy(raw_receipt)
-
-    def require_concrete_tree(value: Any) -> None:
-        if type(value) is dict:
-            for child in value.values():
-                require_concrete_tree(child)
-        elif type(value) is list:
-            for child in value:
-                require_concrete_tree(child)
-        elif isinstance(value, Mapping):
-            _fail(f"storage-first {operation} receipt contains a non-concrete mapping")
-
-    require_concrete_tree(receipt)
+    receipt = _storage_first_require_concrete_receipt(
+        raw_receipt, f"storage-first {operation} receipt"
+    )
     if not _storage_first_is_shape_fixture(plan):
         # Production provider envelopes use the repository-wide phase schema;
         # validate that envelope first, then project only the storage-child
@@ -5710,7 +5725,7 @@ def _storage_first_read_journal(path: Path) -> dict[str, Any]:
         record = _object(json.loads(path.read_text(encoding="utf-8")), "storage-first journal")
     except (OSError, json.JSONDecodeError):
         _fail("storage-first journal is unreadable")
-    validate_storage_first_journal(record)
+    validate_storage_first_journal(record, _allow_unfinished=True)
     return record
 
 
@@ -5828,7 +5843,9 @@ def _storage_first_recovery_receipt(
     expected_failed_state_digest: str | None = None,
 ) -> dict[str, Any]:
     """Require an authenticated, transaction-bound recovery receipt."""
-    receipt = _object(raw, f"storage-first {operation} receipt")
+    receipt = _storage_first_require_concrete_receipt(
+        raw, f"storage-first {operation} receipt"
+    )
     _reject_secret_fields(receipt, f"storage-first {operation} receipt")
     required = {
         "authenticated": True,
@@ -6221,15 +6238,19 @@ def _storage_first_run(
                     Path(journal_path), record, primary_error=checkpoint_error
                 )
                 raise
+            if _guarded_callback(live_revalidator) is not True:
+                _fail("storage-first live revalidation rejected the started mutation")
             if not _storage_first_is_shape_fixture(plan):
+                # The second external revalidator runs after the durable
+                # callback-started checkpoint. Re-admit every local authority
+                # immediately afterward so it cannot consume the lease or
+                # race trust/impact drift before the destructive callback.
                 validate_authority(dict(plan), dict(authority))
                 capture_start, capture_end = _capture_window_bounds(plan)
                 if not capture_start <= dt.datetime.now(dt.timezone.utc) < capture_end:
                     _fail("storage-first mutation capture lease is expired or not yet active")
                 validate_live_trust_root_file()
                 _storage_first_check_impact(child_plan)
-            if _guarded_callback(live_revalidator) is not True:
-                _fail("storage-first live revalidation rejected the started mutation")
             raw_receipt: Any = None
             try:
                 callback = transport.verify if operation == "verify:storage-205" else transport.mutate
