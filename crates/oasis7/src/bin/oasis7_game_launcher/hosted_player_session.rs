@@ -391,6 +391,14 @@ impl HostedPlayerSessionIssuer {
         self.issue_internal(deployment_mode, None, None)
     }
 
+    pub(super) fn issue_with_key(
+        &mut self,
+        deployment_mode: DeploymentMode,
+        public_key: &str,
+    ) -> HostedPlayerSessionIssueResponse {
+        self.issue_internal(deployment_mode, None, Some(public_key))
+    }
+
     pub(super) fn issue_for_player(
         &mut self,
         deployment_mode: DeploymentMode,

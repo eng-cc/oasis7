@@ -106,12 +106,13 @@ function bindFirstSnapshotAgentForTest(core, snapshot) {
 async function renderViewerApp({
   snapshot = sampleSnapshot(),
   selection = null,
+  search = viewerUrl(),
   setupAfterMount = null,
 } = {}) {
   activeCleanup?.();
   activeCleanup = null;
   vi.resetModules();
-  window.history.replaceState({}, "", viewerUrl());
+  window.history.replaceState({}, "", search);
   window.localStorage.clear();
   document.body.innerHTML = "";
 
@@ -162,6 +163,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   vi.useRealTimers();
   activeCleanup?.();
   activeCleanup = null;
@@ -266,6 +268,60 @@ describe("focused viewer UI contracts", () => {
     expect(advancedDetails).not.toHaveTextContent("digest-secret");
     expect(advancedDetails).not.toHaveTextContent("latest secret prompt");
     expect(container.querySelector('[data-feedback-kind="prompt"][data-prompt-value-visibility="hidden"]')).toBeTruthy();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("keeps email-free test login hidden by default and consumes an issuer grant when opted in", async () => {
+    const { core } = await renderViewerApp({
+      snapshot: null,
+      search: `${viewerUrl()}&hosted_test_login=1`,
+      setupAfterMount(core) {
+        core.state.hostedAccess = { deployment_mode: "hosted_public_join", action_matrix: [] };
+        core.state.auth.available = false;
+        vi.stubGlobal("fetch", vi.fn(async (route, options) => {
+          expect(route).toBe("/api/public/hosted-account/test-login");
+          expect(JSON.parse(options.body)).toEqual({
+            public_key: "0909090909090909090909090909090909090909090909090909090909090909",
+          });
+          return {
+            ok: true,
+            async json() {
+              return {
+                ok: true,
+                deployment_mode: "hosted_public_join",
+                grant: {
+                  player_id: "hosted-player-test-login",
+                  device_session_id: "hosted-device-session-test-login",
+                  issued_at_unix_ms: 123,
+                  auth_mode: "browser_local_ephemeral_ed25519",
+                  release_token: "a".repeat(64),
+                  registration_grant: "issuer-signed-registration-grant",
+                },
+              };
+            },
+          };
+        }));
+      },
+    });
+
+    expect(screen.queryByRole("button", { name: /email-free test login/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /email-free test login/i }));
+    await waitFor(() => {
+      expect(core.state.auth.available).toBe(true);
+      expect(core.state.auth.source).toBe("hosted_test_login");
+      expect(core.state.auth.playerId).toBe("hosted-player-test-login");
+      expect(core.state.auth.registrationGrant).toBe("issuer-signed-registration-grant");
+    });
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("does not expose the email-free test login without its explicit URL opt-in", async () => {
+    await renderViewerApp({
+      snapshot: null,
+      setupAfterMount(core) {
+        core.state.hostedAccess = { deployment_mode: "hosted_public_join", action_matrix: [] };
+        core.state.auth.available = false;
+      },
+    });
+    expect(screen.queryByRole("button", { name: /email-free test login/i })).not.toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("uses readable entity identity and semantic selection state in Targets", async () => {

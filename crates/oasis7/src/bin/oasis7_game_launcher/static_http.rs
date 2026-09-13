@@ -1,8 +1,8 @@
 use super::director_capability::{DIRECTOR_CAPABILITY_ROUTE, director_capability_unavailable};
 use super::hosted_account_identity::{
     HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE, HOSTED_ACCOUNT_LOGIN_START_ROUTE,
-    HostedAccountIdentityBroker, HostedAccountLoginCompleteResponse,
-    HostedAccountLoginStartResponse,
+    HOSTED_ACCOUNT_TEST_LOGIN_ROUTE, HostedAccountIdentityBroker,
+    HostedAccountLoginCompleteResponse, HostedAccountLoginStartResponse,
 };
 use super::hosted_player_session::{
     HOSTED_PLAYER_SESSION_ADMISSION_ROUTE, HOSTED_PLAYER_SESSION_ISSUE_ROUTE,
@@ -20,11 +20,13 @@ use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
 use std::fs;
 use std::io::{ErrorKind, Read};
+use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 const MAX_HTTP_REQUEST_BYTES: usize = 64 * 1024;
+const HOSTED_TEST_LOGIN_ENABLED_ENV: &str = "OASIS7_HOSTED_TEST_LOGIN_ENABLED";
 
 #[derive(Debug, Default, Deserialize)]
 struct HostedAccountLoginStartRequest {
@@ -54,10 +56,17 @@ struct HostedPlayerSessionRefreshRequest {
     public_key: String,
 }
 
+#[derive(Debug, Default, Deserialize)]
+struct HostedTestLoginRequest {
+    #[serde(default)]
+    public_key: String,
+}
+
 pub(super) fn handle_http_connection(
     mut stream: TcpStream,
     root_dir: &Path,
     live_bind: &str,
+    allow_hosted_test_login: bool,
     default_viewer_player_id: Option<&str>,
     deployment_mode: DeploymentMode,
     hosted_session_issuer: &Arc<Mutex<HostedPlayerSessionIssuer>>,
@@ -92,6 +101,7 @@ pub(super) fn handle_http_connection(
     let is_release_route = path_only == HOSTED_PLAYER_SESSION_RELEASE_ROUTE;
     let is_login_start_route = path_only == HOSTED_ACCOUNT_LOGIN_START_ROUTE;
     let is_login_complete_route = path_only == HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE;
+    let is_test_login_route = path_only == HOSTED_ACCOUNT_TEST_LOGIN_ROUTE;
     let is_strong_auth_grant_route = path_only == HOSTED_STRONG_AUTH_GRANT_ROUTE
         || path_only == HOSTED_PROMPT_CONTROL_STRONG_AUTH_GRANT_ROUTE;
     let is_director_capability_route = path_only == DIRECTOR_CAPABILITY_ROUTE;
@@ -101,18 +111,21 @@ pub(super) fn handle_http_connection(
         || is_release_route
         || is_login_start_route
         || is_login_complete_route
+        || is_test_login_route
         || is_strong_auth_grant_route
         || is_director_capability_route;
     let post_only_route = is_issue_route
         || is_release_route
         || is_refresh_route
         || is_login_start_route
-        || is_login_complete_route;
+        || is_login_complete_route
+        || is_test_login_route;
     let head_mutation_route = is_issue_route
         || is_release_route
         || is_refresh_route
         || is_login_start_route
         || is_login_complete_route
+        || is_test_login_route
         || is_strong_auth_grant_route;
     let get_allowed = method.eq_ignore_ascii_case("GET") && !post_only_route;
     let post_allowed = method.eq_ignore_ascii_case("POST") && post_only_route;
@@ -226,6 +239,37 @@ pub(super) fn handle_http_connection(
         })?;
         return Ok(());
     }
+    if is_test_login_route {
+        let enabled = deployment_mode == DeploymentMode::HostedPublicJoin
+            && allow_hosted_test_login
+            && std::env::var(HOSTED_TEST_LOGIN_ENABLED_ENV).ok().as_deref() == Some("1");
+        if !enabled {
+            write_http_response(&mut stream, 404, "text/plain", b"Not Found", head_only).map_err(
+                |err| format!("failed to write hosted test login disabled response: {err}"),
+            )?;
+            return Ok(());
+        }
+        let payload: HostedTestLoginRequest =
+            serde_json::from_str(request_body).unwrap_or_default();
+        let public_key = payload.public_key.trim();
+        if public_key.is_empty() {
+            write_http_response(
+                &mut stream,
+                400,
+                "text/plain",
+                b"public_key is required",
+                head_only,
+            )
+            .map_err(|err| {
+                format!("failed to write hosted test login validation response: {err}")
+            })?;
+            return Ok(());
+        }
+        let response = issue_hosted_test_login(deployment_mode, public_key, hosted_session_issuer)?;
+        write_json_response(&mut stream, 200, &response, head_only)
+            .map_err(|err| format!("failed to write hosted test login response: {err}"))?;
+        return Ok(());
+    }
     if is_strong_auth_grant_route {
         let player_id = parse_query_value(target, "player_id").unwrap_or_default();
         let public_key = parse_query_value(target, "public_key").unwrap_or_default();
@@ -293,6 +337,18 @@ pub(super) fn handle_http_connection(
     }
 
     Ok(())
+}
+
+pub(super) fn hosted_test_login_allowed_on_host(host: &str) -> bool {
+    let trimmed = host.trim();
+    if trimmed.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    trimmed
+        .trim_matches(|character| character == '[' || character == ']')
+        .parse::<IpAddr>()
+        .map(|address| address.is_loopback())
+        .unwrap_or(false)
 }
 
 fn start_hosted_account_login(
@@ -394,6 +450,17 @@ fn issue_hosted_player_session(
         .lock()
         .map_err(|_| "hosted session issuer lock poisoned".to_string())?;
     Ok(issuer.issue(deployment_mode))
+}
+
+fn issue_hosted_test_login(
+    deployment_mode: DeploymentMode,
+    public_key: &str,
+    hosted_session_issuer: &Arc<Mutex<HostedPlayerSessionIssuer>>,
+) -> Result<HostedPlayerSessionIssueResponse, String> {
+    let mut issuer = hosted_session_issuer
+        .lock()
+        .map_err(|_| "hosted session issuer lock poisoned".to_string())?;
+    Ok(issuer.issue_with_key(deployment_mode, public_key))
 }
 
 fn refresh_hosted_player_session(

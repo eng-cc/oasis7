@@ -1,6 +1,7 @@
 import { createViewerAuthSurfaceModule } from "./viewer_auth_surface_module.js";
 import { createViewerFeedbackModule } from "./viewer_feedback_module.js";
 import { createViewerHostedAuthStateModule } from "./viewer_hosted_auth_state_module.js";
+import { createViewerHostedTestLoginModule } from "./viewer_hosted_test_login_module.js";
 import { createViewerHostedSessionRefreshModule } from "./viewer_hosted_session_refresh_module.js";
 import { createViewerPromptControlModule } from "./viewer_prompt_control_module.js";
 import { resetHostedLoginChallenge as resetHostedLoginChallengeState } from "./viewer_hosted_login_state_module.js";
@@ -22,6 +23,7 @@ import {
   DEFAULT_WS_ADDR,
   HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE,
   HOSTED_ACCOUNT_LOGIN_START_ROUTE,
+  HOSTED_ACCOUNT_TEST_LOGIN_ROUTE,
   HOSTED_PLAYER_SESSION_ADMISSION_ROUTE,
   HOSTED_PLAYER_SESSION_REFRESH_INTERVAL_MS,
   HOSTED_PLAYER_SESSION_REFRESH_ROUTE,
@@ -347,6 +349,8 @@ const {
 function resetHostedLoginChallenge() {
   resetHostedLoginChallengeState(state.hostedLogin);
 }
+
+const { start: startHostedTestLogin } = createViewerHostedTestLoginModule({ clone, fetchImpl: (...args) => fetch(...args), generateEphemeralEd25519Keypair, getSearchParams, isHostedPublicJoinDeploymentMode, persistHostedPlayerSession, render, resetHostedLoginChallenge, route: HOSTED_ACCOUNT_TEST_LOGIN_ROUTE, state });
 
 async function ensureHostedAuthSigningKey(auth = state.auth) {
   if (!auth?.available || auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
@@ -4262,6 +4266,7 @@ function installTestApi() {
     logoutHostedPlayerSession,
     startHostedAccountLogin,
     completeHostedAccountLogin,
+    startHostedTestLogin,
     retryHostedPlayerIdentityIssue,
     refreshPromptControlBinding,
     registerPlayerSessionForTest,
@@ -4399,6 +4404,7 @@ export {
   resourceSummary,
   startHostedAccountLogin,
   completeHostedAccountLogin,
+  startHostedTestLogin,
   retryHostedPlayerIdentityIssue,
   refreshPromptControlBinding,
   registerPlayerSessionForTest,

@@ -23,7 +23,7 @@ import {
   isHostedPublicJoinDeploymentMode,
 } from "./software_safe_constants.js";
 import { recoveryOptionVisualFixture } from "./viewer_recovery_option_fixture.js";
-import { AgentActivitySurface } from "./agent_activity_surface.jsx";
+import { AgentActivitySurface } from "./agent_activity_surface.jsx"; import { HostedTestLoginOptIn } from "./viewer_hosted_test_login_view.jsx";
 import { AgentIntentSurface } from "./agent_intent_surface.jsx";
 import { FactoryProductionFailureDispositionCard } from "./factory_production_failure_disposition_card.jsx";
 import { AgentContextLite } from "./agent_context_lite.jsx";
@@ -794,6 +794,7 @@ function HostedLoginGate() {
             handleId="gate-hosted-login-handle"
             codeId="gate-hosted-login-code"
           />
+          <HostedTestLoginOptIn core={core} locale={locale} tr={tr} />
           <Show when={core.state.auth.rebindNotice || core.state.auth.error}>
             <EmptyState>{core.state.auth.rebindNotice || core.state.auth.error}</EmptyState>
           </Show>

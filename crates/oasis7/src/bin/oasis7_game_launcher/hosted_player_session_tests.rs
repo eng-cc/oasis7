@@ -29,6 +29,36 @@ fn hosted_player_session_issue_returns_structured_grant() {
 }
 
 #[test]
+fn hosted_player_session_test_login_issues_identity_and_registration_grant_for_browser_key() {
+    unsafe {
+        std::env::set_var(
+            oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV,
+            hex::encode([71_u8; 32]),
+        );
+    }
+    let browser_key = hex::encode([72_u8; 32]);
+    let mut issuer = HostedPlayerSessionIssuer::default();
+    let response = issuer.issue_with_key(DeploymentMode::HostedPublicJoin, &browser_key);
+    unsafe {
+        std::env::remove_var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV);
+    }
+    assert!(
+        response.ok,
+        "test login must use the real hosted issuer: {response:?}"
+    );
+    let grant = response.grant.expect("test login grant");
+    assert!(grant.player_id.starts_with("hosted-player-"));
+    assert!(
+        grant
+            .device_session_id
+            .starts_with("hosted-device-session-")
+    );
+    assert_eq!(grant.auth_mode, "browser_local_ephemeral_ed25519");
+    assert!(grant.registration_grant.is_some());
+    assert_eq!(grant.release_token.len(), 64);
+}
+
+#[test]
 fn hosted_player_session_issue_for_player_reuses_stable_player_id() {
     let mut issuer = HostedPlayerSessionIssuer::default();
     let first = issuer.issue_for_player(DeploymentMode::HostedPublicJoin, "stable-player-1");

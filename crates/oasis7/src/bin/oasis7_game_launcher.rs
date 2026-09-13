@@ -579,6 +579,7 @@ fn start_static_http_server(
 ) -> Result<StaticHttpServer, String> {
     let listener = TcpListener::bind((host, port))
         .map_err(|err| format!("failed to bind static HTTP server at {host}:{port}: {err}"))?;
+    let allow_hosted_test_login = static_http::hosted_test_login_allowed_on_host(host);
     listener
         .set_nonblocking(true)
         .map_err(|err| format!("failed to set static HTTP listener nonblocking: {err}"))?;
@@ -635,6 +636,7 @@ fn start_static_http_server(
             default_viewer_player_id,
             hosted_session_issuer,
             hosted_account_broker,
+            allow_hosted_test_login,
             stop_rx,
         ) {
             let _ = error_tx.send(err);
@@ -658,6 +660,7 @@ fn run_static_http_loop(
     default_viewer_player_id: Arc<Option<String>>,
     hosted_session_issuer: Arc<Mutex<HostedPlayerSessionIssuer>>,
     hosted_account_broker: Arc<Mutex<HostedAccountIdentityBroker>>,
+    allow_hosted_test_login: bool,
     stop_rx: Receiver<()>,
 ) -> Result<(), String> {
     loop {
@@ -681,6 +684,7 @@ fn run_static_http_loop(
                         stream,
                         root_dir.as_path(),
                         live_bind.as_str(),
+                        allow_hosted_test_login,
                         default_viewer_player_id.as_deref(),
                         deployment_mode,
                         &hosted_session_issuer,

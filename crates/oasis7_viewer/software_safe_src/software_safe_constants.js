@@ -16,6 +16,7 @@ export const HOSTED_PLAYER_SESSION_REFRESH_ROUTE = "/api/public/player-session/r
 export const HOSTED_PLAYER_SESSION_RELEASE_ROUTE = "/api/public/player-session/release";
 export const HOSTED_ACCOUNT_LOGIN_START_ROUTE = "/api/public/hosted-account/login/start";
 export const HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE = "/api/public/hosted-account/login/complete";
+export const HOSTED_ACCOUNT_TEST_LOGIN_ROUTE = "/api/public/hosted-account/test-login";
 export const HOSTED_STRONG_AUTH_GRANT_ROUTE = "/api/public/strong-auth/grant";
 export const HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE = "hosted_public_join";
 export const HOSTED_PLAYER_SESSION_REFRESH_INTERVAL_MS = 30000;
