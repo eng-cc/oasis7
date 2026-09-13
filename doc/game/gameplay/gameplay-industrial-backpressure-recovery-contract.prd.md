@@ -1,6 +1,7 @@
 # 工业流水线背压恢复合同
 
 - 上层产品映射：本合同承接 `doc/product/world-rules-core-gameplay/prd.md` 的下游阻塞、机会成本与恢复表达，并消费 `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md` 的有限 buffer、allocation、hold 与 backpressure 权威事实。
+- 产品语义入口：[`多阶段工业流水线与中间品背压`](../../product/world-rules-core-gameplay/prd.md#多阶段工业流水线与中间品背压)；本合同保留背压下玩家选择、机会成本与恢复权威。
 - 主题 authority：本文件只拥有“下游容量不足时玩家如何比较暂停、降载、持有、合法改道或等待，以及容量恢复后如何继续”的玩法节奏、机会成本与验收语义。
 - 可变执行状态：对应 GitHub Project task 与 issue evidence comments；本文是 target gameplay contract，不声明 runtime、Viewer、pure API 或 Agent 已完成。
 

@@ -1,9 +1,21 @@
 # Gameplay Agent 认领经济合同设计
 
 - 对应需求文档: `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`
+- 产品承诺入口：[`Agent 所有权与持续经营`](../../product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#req-wr-aos-001)
 - 可变执行状态: 对应 GitHub Project task 与 issue evidence comments
 
 审计轮次: 2
+
+<a id="public-claim-boundary"></a>
+## Public claim boundary
+
+本设计文件只负责 claim 状态机、成本、资金来源和 provenance 的专业设计，不拥有发行状态或公开 claim。其消费合同是玩家入口与发行模块的 [`REQ-ENTRY-CLAIM-003`](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#req-entry-claim-003) 与 [`四层口径分离`](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#public-claim-four-layer-model)。
+
+- 当前事实（current fact）：设计中明确的是状态和约束的设计事实；它不能证明实现已经部署、某个账户已经获准、某个渠道已发布或当前可公开体验。
+- 产品目标（product goal）：让首个 claim 有明确成本，让受限 starter balance 只用于 `slot-1`，并让回收、退款和失败边界可审计、可向玩家解释。
+- 假设（assumption）：受控运营窗口会提供与设计一致的 runtime、viewer、QA 和 operator evidence；若任一条件不成立，不能继续沿用设计文案作为当前状态。
+- 证据边界（evidence limit）：设计只支持规则解释和候选 claim 的限制说明，不支持 public launch、production settlement、一般账户资格、无条件可用性或资产价值承诺。
+- 可发布公开 claim（releasable public claim）：只有产品 PRD、根 README、同一证据窗口和对应 [`restricted grant LiveOps runbook`](gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md#public-claim-boundary) 一致时，才可引用本设计的受限规则；否则必须标记为 draft、blocked 或 stale。
 
 ## 1. 设计目标
 - 把 agent 认领从“谁先点到谁拿到”的弱规则，提升为一条有成本、有维护、有回收的正式 gameplay 经济链路。

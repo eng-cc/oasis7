@@ -8,6 +8,8 @@
 
 所属产品模块：[`世界规则与核心玩法`](../../product/world-rules-core-gameplay/prd.md)。
 
+产品边界入口：[`区域冲突、软赛季与可恢复损失`](../../product/world-rules-core-gameplay/chartered-conflict-soft-seasons-and-recovery.prd.md#req-wr-cc-001)；本页保留战争/政治的成本、收益、冷却与反支配数值权威。
+
 ## 目标
 
 - 为 Gameplay 战争与政治玩法提供可执行、可验证、可回归的首轮数值基线。

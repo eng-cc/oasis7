@@ -8,6 +8,7 @@
 
 ## 文档 authority 与适用范围
 - 本文件是核心玩法骨架及 `PRD-GAME-012` early-retention 专业合同的 topic authority：定义跨循环体验脊柱、早期体验判断和本专题的可玩性验收。
+- 产品承诺入口：[`首局与持续游玩`](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-industrial-001)、[`可玩性证据与承诺边界`](../../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-001)；本文保留玩法骨架与专业验收，不复制产品承诺。
 - `doc/game/prd.md` 是 game 模块的活跃基线与路由根入口，拥有 PRD-ID、默认首读路径和当前状态指针；本文件不发布模块级状态，也不取得 gameplay 的模块级 authority。
 - 其他 gameplay 专题在其声明范围内拥有详细合同；本文件只在上述玩法骨架/`PRD-GAME-012` 范围内优先，不能覆盖 agent claim、agency、区域设施等专题，亦不能覆盖 `doc/product/` 四模块的产品承诺。
 - 历史 ROUND-002 的主从表述仅是历史治理记录，不再用于判断现行 authority。

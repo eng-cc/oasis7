@@ -5,7 +5,8 @@
 - 对应任务证据: GitHub issue / task `task_3c55fc4c17ea44aa850adf7a6a4463f4`；退役前 `.pm/tasks/*` execution log 仅通过 `.pm/github-project-sync/task-archive.jsonl` 作 migration/audit 追溯
 - 关联玩法真值:
   - `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`
-  - `doc/product/world-rules-core-gameplay/prd.md`（产品承诺）与 `doc/game/gameplay/gameplay-top-level-design.prd.md`（玩法合同）
+- `doc/product/world-rules-core-gameplay/prd.md`（产品承诺）与 `doc/game/gameplay/gameplay-top-level-design.prd.md`（玩法合同）
+- [`受治理的区域能力与扩展`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-001) 是本设计的产品语义入口。
   - `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md`
   - `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md`
   - `doc/world-simulator/viewer/viewer-pixel-world-player-leverage-production-readability-2026-05-28.brainstorm.md`

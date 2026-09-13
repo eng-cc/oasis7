@@ -1,6 +1,7 @@
 # 成熟世界小玩家成长合同
 
 - 上层产品映射：本合同承接 `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md` 的成熟世界产品承诺与 `doc/game/prd.md` 的 `PRD-GAME-015`。
+- 产品叶子入口：[`REQ-WR-MW-001`](../../product/world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-001)；本文保留 mature-world lane、checkpoint、专业化和恢复的玩法权威。
 - 主题 authority：本文件拥有 mature-world lane、checkpoint、专业化、恢复选择与 anti-grind 的详细玩法语义；不覆盖产品承诺、runtime schema、数值或 Viewer 布局。
 - 可变执行状态：对应 GitHub Project task 与 issue evidence comments；当前实现完成度不得由本合同单独宣称。
 

@@ -9,6 +9,7 @@
 
 - 将 `micro_depot` 从 design-only 补充提升为正式 `PRD-GAME-016` topic truth。
 - 定义玩家通过小型、可审计、带 upkeep 的区域设施改变一次 repair / logistics quote 的体验承诺。
+- 产品承诺入口：[`受治理的区域能力与扩展`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-001)；本合同保留设施生命周期、费用、失败恢复与实现权威。
 - 明确 WASM proposal 与 runtime authority 的边界，防止自由建造、任意 WASM 上传或 global governance 权力漂移。
 
 ## 范围

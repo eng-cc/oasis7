@@ -1,6 +1,7 @@
 # 工业首产物结算合同
 
 - 上层产品映射：本合同承接 `doc/game/gameplay/gameplay-top-level-design.prd.md` §2.5 的首个工业目标，并与 `doc/product/world-rules-core-gameplay/prd.md` 的资源/生产权威边界、`doc/world-simulator/m4/industrial-resource-flow-contract.prd.md` 的生产与终端结算边界对齐。
+- 产品叶子入口：[`REQ-FIRST-INDUSTRIAL-001`](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-industrial-001)；本文保留首个工业目标的详细玩法合同，不将 target-only 能力写成当前可玩结论。
 - 主题 authority：本文件只拥有“首个工业目标如何完成、失败后如何恢复、如何打开下一步”的详细玩法语义；不覆盖上层产品承诺、runtime schema 或终端实现。
 - 可变执行状态：对应 GitHub Project task 与 issue evidence comments；当前实现完成度不得由本合同单独宣称。
 

@@ -1,6 +1,7 @@
 # 工业配方生命周期决策合同
 
 - 上层产品映射：本合同承接 `doc/product/world-rules-core-gameplay/prd.md` 的 SC-24 配方生命周期、版本兼容与受控退役产品承诺；六状态及其转换条件以 Product SC-24 为唯一产品 authority。
+- 产品语义入口：[`配方生命周期、版本兼容与受控退役`](../../product/world-rules-core-gameplay/prd.md#配方生命周期、版本兼容与受控退役)；本合同保留六状态向玩家选择、机会成本与恢复的专业权威。
 - 主题 authority：本文件只拥有六状态到玩家选择、机会成本、失败恢复、旧工作处置、progression 与 gameplay 验收的投影；不创建第二套状态或转换规则。
 - 专业边界：M4/Recipe/Factory profile 拥有 recipe/factory fit、批次适用性、executable cycle、output bundle、cutover 与 disposition；runtime 拥有状态、事件、sink、receipt、持久化、replay 与幂等。
 
