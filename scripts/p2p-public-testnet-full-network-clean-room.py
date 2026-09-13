@@ -3239,6 +3239,13 @@ def validate_storage_first_resume(contract: Mapping[str, Any], journal: Mapping[
     )
     if next_operation != expected_next:
         _storage_first_contract_error("resume next operation is not correlated with the completed prefix")
+    status = journal.get("status")
+    if status == "storage-205-verified" and len(completed) != len(operations):
+        _storage_first_contract_error("verified resume status requires the complete operation prefix")
+    if status in {"prepared", "preflight-complete"} and completed:
+        _storage_first_contract_error("pre-mutation resume status cannot contain completed operations")
+    if status == "storage-205-running" and len(completed) == len(operations):
+        _storage_first_contract_error("running resume status cannot claim the complete operation prefix")
     return True
 
 

@@ -5178,9 +5178,12 @@ def validate_storage_first_receipt(receipt: Mapping[str, Any]) -> bool:
         "transaction_id",
         "capture_window_id",
         "bindings",
+        "provider_envelope",
     }
     if set(receipt) - allowed:
         _fail("storage-first receipt contains a field outside the safe projection")
+    if "provider_envelope" in receipt:
+        _object(receipt.get("provider_envelope"), "storage-first provider envelope")
     if (
         receipt.get("schema_version") != STORAGE_FIRST_RECEIPT_SCHEMA
         or receipt.get("phase_id") != STORAGE_FIRST_PHASE_ID
@@ -5284,7 +5287,14 @@ def _storage_first_validate_receipt_prefix(
             receipt.get("canonical_digest"), HEX64_RE,
             "storage-first persisted canonical digest",
         )
-        _verify_receipt_with_verifier(dict(plan), receipt, verifier)
+        provider_envelope = receipt.get("provider_envelope")
+        if not _storage_first_is_shape_fixture(plan) and not isinstance(provider_envelope, Mapping):
+            _fail("storage-first persisted receipt lacks its signed provider envelope")
+        _verify_receipt_with_verifier(
+            dict(plan),
+            dict(provider_envelope) if isinstance(provider_envelope, Mapping) else receipt,
+            verifier,
+        )
     if callback_receipt is not None:
         if not receipts or not isinstance(callback_receipt, Mapping):
             _fail("storage-first callback receipt is not bound to its prefix")
@@ -5484,6 +5494,7 @@ def _storage_first_bind_receipt(
             "signed_payload_sha256": canonical["signed_payload_sha256"],
             "signature_hex": canonical["signature_hex"],
             "canonical_digest": canonical["canonical_digest"],
+            "provider_envelope": copy.deepcopy(canonical),
             "transaction_id": plan["transaction_id"],
             "capture_window_id": plan["capture_window_id"],
             "bindings": {
@@ -5905,39 +5916,45 @@ def _storage_first_run(
             lock.close()
         raise
     try:
-        callback_plan = _storage_first_callback_plan(plan, admission["storage_node"])
-        result = _guarded_callback(
-            provenance_verifier,
-            callback_plan,
-            {
-                "phase_id": STORAGE_FIRST_PHASE_ID,
-                "transaction_id": plan.get("transaction_id"),
-                "capture_window_id": plan.get("capture_window_id"),
-                "plan_digest": plan.get("plan_digest"),
-                "target": "storage-205",
-            },
+        try:
+            callback_plan = _storage_first_callback_plan(plan, admission["storage_node"])
+            result = _guarded_callback(
+                provenance_verifier,
+                callback_plan,
+                {
+                    "phase_id": STORAGE_FIRST_PHASE_ID,
+                    "transaction_id": plan.get("transaction_id"),
+                    "capture_window_id": plan.get("capture_window_id"),
+                    "plan_digest": plan.get("plan_digest"),
+                    "target": "storage-205",
+                },
+            )
+        except Exception as error:
+            _fail(f"storage-first provenance verifier failed: {error.__class__.__name__}")
+        if not isinstance(result, Mapping) or result.get("verified") is not True:
+            _fail("storage-first provenance verifier did not verify the phase")
+        # The governed callback contract is a named verifier returning bound
+        # fields. Every failure before the main lock-owning try must release
+        # the fleet guard so a long-lived orchestrator is not wedged.
+        expected_bindings = {
+            "phase_id": STORAGE_FIRST_PHASE_ID,
+            "transaction_id": plan.get("transaction_id"),
+            "capture_window_id": plan.get("capture_window_id"),
+            "plan_digest": plan.get("plan_digest"),
+            "target": "storage-205",
+        }
+        identity_bound = (
+            result.get("verifier_id") == CANONICAL_VERIFIER_ID
+            and result.get("trust_root_id") == CANONICAL_TRUST_ROOT_ID
+            and result.get("signer_id") in CANONICAL_SIGNER_ALLOWLIST
         )
-    except Exception as error:
-        _fail(f"storage-first provenance verifier failed: {error.__class__.__name__}")
-    if not isinstance(result, Mapping) or result.get("verified") is not True:
-        _fail("storage-first provenance verifier did not verify the phase")
-    # The governed callback contract is a named verifier returning bound
-    # fields.  Every caller, including a child-phase projection, must return
-    # the exact non-secret binding closure and code-owned identity fields.
-    expected_bindings = {
-        "phase_id": STORAGE_FIRST_PHASE_ID,
-        "transaction_id": plan.get("transaction_id"),
-        "capture_window_id": plan.get("capture_window_id"),
-        "plan_digest": plan.get("plan_digest"),
-        "target": "storage-205",
-    }
-    identity_bound = (
-        result.get("verifier_id") == CANONICAL_VERIFIER_ID
-        and result.get("trust_root_id") == CANONICAL_TRUST_ROOT_ID
-        and result.get("signer_id") in CANONICAL_SIGNER_ALLOWLIST
-    )
-    if result.get("bindings") != expected_bindings or not identity_bound:
-        _fail("storage-first provenance verifier returned unbound results")
+        if result.get("bindings") != expected_bindings or not identity_bound:
+            _fail("storage-first provenance verifier returned unbound results")
+    except BaseException:
+        _ACTIVE_TRANSACTION_GUARD.reset(guard_token)
+        if owns_guard:
+            lock.close()
+        raise
     try:
         node = admission["storage_node"]
         completed = list(resume_record.get("completed_operations", [])) if resume_record else []
@@ -5990,10 +6007,16 @@ def _storage_first_run(
                 if validated_resume_nonce_state is not None:
                     nonce_state = validated_resume_nonce_state
                 else:
+                    existing_reservations = _read_plan_nonce_reservations(
+                        dict(plan), Path(ledger_path)
+                    )
+                    if resume_record is not None and existing_reservations:
+                        _fail("prepared resume cannot reuse committed transaction nonces")
                     nonce_state = _reconcile_nonce_reservations(
                         dict(plan), Path(ledger_path)
                     )
                 record["nonce_reservation_state"] = nonce_state
+                record["status"] = "preflight-complete"
                 _storage_first_journal_write(Path(journal_path), record)
             except Exception as error:
                 record.update({
@@ -6065,13 +6088,20 @@ def _storage_first_run(
                 # terminal boundary rather than leaving a prepared journal
                 # that could be mistaken for an actionable cursor.
                 record.update({
-                    "status": "terminal-failure",
+                    "status": "reconciliation-blocked" if completed else "terminal-failure",
                     "next_operation": "reconciliation-required",
                     "callback_started": False,
                     "callback_receipt": None,
                     "terminal_error": error.__class__.__name__,
-                    "rollback_status": "not-started",
+                    "rollback_status": "reconciliation-blocked" if completed else "not-started",
+                    "rollback_candidates": _storage_first_rollback_candidates(completed),
                 })
+                if completed:
+                    record["reconciliation_requirements"] = {
+                        "reobserve_failed_state": True,
+                        "clean_redeploy": True,
+                        "automatic_replay": False,
+                    }
                 try:
                     _storage_first_journal_write(Path(journal_path), record)
                 except Exception as journal_error:
@@ -6118,15 +6148,6 @@ def _storage_first_run(
                 receipt = _storage_first_bind_receipt(
                     plan, operation, raw_receipt, provenance_verifier
                 )
-                # Preserve the historical diagnostic list on the original
-                # storage fixture only; the actual provider callback remains
-                # the read-only verify method above.
-                if (
-                    operation == "verify:storage-205"
-                    and hasattr(transport, "mutations")
-                    and not hasattr(transport, "verify_operations")
-                ):
-                    transport.mutations.append(operation)
             except Exception as error:
                 # A rejected provider envelope is not an accepted mutation
                 # result.  Keep the in-process diagnostic double consistent

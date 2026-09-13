@@ -3483,6 +3483,24 @@ class StorageFirstContractRedTests(unittest.TestCase):
             with self.subTest(case=label), self.assertRaises(Exception):
                 validator(contract, changed)
 
+    def test_storage_first_resume_status_must_match_cursor(self):
+        contract = self._build()
+        validator = self._resume_validator()
+        operations = list(self.module.STORAGE_FIRST_MUTATING_OPERATIONS)
+        cases = {
+            "verified-empty": ("storage-205-verified", [], operations[0]),
+            "prepared-complete": ("prepared", operations, "reconciliation-required"),
+            "preflight-after-mutation": ("preflight-complete", operations[:1], operations[1]),
+            "running-complete": ("storage-205-running", operations, "reconciliation-required"),
+        }
+        for label, (status, completed, next_operation) in cases.items():
+            changed = copy.deepcopy(contract["journal_template"])
+            changed["status"] = status
+            changed["completed_operations"] = completed
+            changed["next_operation"] = next_operation
+            with self.subTest(case=label), self.assertRaises(Exception):
+                validator(contract, changed)
+
 
 class StorageFirstParentSecurityRedTests(unittest.TestCase):
     """Finding-specific RED coverage for QA-SF-001 parent admission.

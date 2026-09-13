@@ -333,6 +333,7 @@ class StorageFirstCanonicalTransport(ApplyTransport):
     def __init__(self, adapter, plan, **kwargs):
         super().__init__(adapter, plan, **kwargs)
         self.mutations: list[str] = []
+        self.verify_operations: list[str] = []
 
     def inspect_node(self, node: dict[str, object]) -> dict[str, object]:
         evidence = super().inspect_node(node)
@@ -346,6 +347,10 @@ class StorageFirstCanonicalTransport(ApplyTransport):
         except Exception:
             self.mutations.pop()
             raise
+
+    def verify(self, operation: str, node: dict[str, object] | None) -> dict[str, object]:
+        self.verify_operations.append(operation)
+        return super().verify(operation, node)
 
     def reobserve_failed_state(
         self, plan: dict[str, object], started: list[str], failed_operation: str
@@ -4806,8 +4811,9 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
             fixture.tearDown()
         self.assertEqual(transport.mutations, [
             "stop:storage-205", "delete:storage-205", "rebuild:storage-205",
-            "start:storage-205", "verify:storage-205",
+            "start:storage-205",
         ])
+        self.assertEqual(transport.verify_operations, ["verify:storage-205"])
         unexpected_fleet_callbacks = [
             call for call in transport.operations
             if ("sequencer" in call or "observer" in call)
@@ -4859,7 +4865,7 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
             )
         finally:
             fixture.tearDown()
-        self.assertEqual(len(checks), len(transport.mutations))
+        self.assertEqual(len(checks), len(transport.mutations) + len(transport.verify_operations))
 
     def test_storage_first_resume_does_not_reuse_persisted_receipt_as_authority(self):
         self.assertTrue(
@@ -6094,8 +6100,9 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
             self.assertLess(events.index("lock"), events.index("read"))
             self.assertEqual(
                 transport.mutations,
-                ["rebuild:storage-205", "start:storage-205", "verify:storage-205"],
+                ["rebuild:storage-205", "start:storage-205"],
             )
+            self.assertEqual(transport.verify_operations, ["verify:storage-205"])
         finally:
             canonical.tearDown()
 
@@ -6594,6 +6601,123 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
                     self.fixture._canonical_runner(canonical, transport)
             self.assertEqual(transport.rollback_reobservations, ["stop:storage-205"])
             self.assertEqual(transport.rollback_operations, [])
+        finally:
+            canonical.tearDown()
+
+    def test_runtime_sf_034_phase_verifier_failure_releases_fleet_guard(self) -> None:
+        """A verifier rejection before execution must not wedge later transactions."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            transport = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+
+            def rejected_verifier(*_args):
+                raise RuntimeError("rejected")
+
+            with mock.patch.object(canonical.adapter, "_verify_provenance", return_value=True):
+                with self.assertRaises(Exception):
+                    self.fixture._canonical_runner(
+                        canonical,
+                        transport,
+                        provenance_verifier=rejected_verifier,
+                    )
+            self.assertIsNone(canonical.adapter._ACTIVE_TRANSACTION_GUARD.get())
+        finally:
+            canonical.tearDown()
+
+    def test_runtime_sf_035_persisted_receipt_retains_original_provider_envelope(self) -> None:
+        """Resume verification must receive the provider envelope that was signed."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            journal = self.fixture._canonical_prefix_journal(
+                canonical,
+                ["stop:storage-205"],
+                name="signed-provider-envelope.journal.json",
+            )
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            receipt = record["storage_receipts"][0]
+            envelope = receipt.get("provider_envelope")
+            self.assertIsInstance(envelope, dict)
+            self.assertEqual(envelope["schema_version"], canonical.adapter.PHASE_RECEIPT_SCHEMAS["apply"])
+            self.assertEqual(envelope["operation"], "stop:storage-205")
+            self.assertNotEqual(envelope["bindings"], receipt["bindings"])
+        finally:
+            canonical.tearDown()
+
+    def test_runtime_sf_036_empty_cursor_downgrade_cannot_reuse_committed_nonces(self) -> None:
+        """Clearing a completed journal cannot replay the destructive sequence."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            journal = self.fixture._canonical_prefix_journal(
+                canonical,
+                list(STORAGE_FIRST_CHILD_OPERATIONS),
+                status="storage-205-verified",
+                name="downgraded-empty-cursor.journal.json",
+            )
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            record.update({
+                "status": "prepared",
+                "next_operation": "stop:storage-205",
+                "completed_operations": [],
+                "storage_receipts": [],
+                "receipt_operation_cursor": [],
+                "callback_receipt": None,
+                "rollback_candidates": [],
+            })
+            record.pop("nonce_reservation_state", None)
+            record["journal_digest"] = canonical.adapter.journal_digest(record)
+            journal.write_text(json.dumps(record, sort_keys=True), encoding="utf-8")
+            journal.chmod(0o600)
+            transport = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+            with self.assertRaises(Exception):
+                self.fixture._canonical_resume(canonical, journal, transport)
+            self.assertEqual(transport.mutations, [])
+        finally:
+            canonical.tearDown()
+
+    def test_runtime_sf_037_fresh_preflight_checkpoint_is_not_prepared(self) -> None:
+        """After nonce commit, a preflight crash must retain committed-reservation semantics."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            transport = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+            transport.preflight = mock.Mock(side_effect=RuntimeError("preflight failed"))
+            journal = canonical.root / "fresh-preflight-failure.journal.json"
+            with self.assertRaises(Exception):
+                self.fixture._canonical_runner(canonical, transport, journal_path=journal)
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            self.assertEqual(record["status"], "terminal-failure")
+            self.assertIn("nonce_reservation_state", record)
+        finally:
+            canonical.tearDown()
+
+    def test_runtime_sf_038_resumed_preflight_failure_preserves_reconciliation_cursor(self) -> None:
+        """Completed mutations remain recoverable when resume preflight drifts."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            journal = self.fixture._canonical_prefix_journal(
+                canonical,
+                ["stop:storage-205"],
+                name="resume-preflight-failure.journal.json",
+            )
+            transport = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+            transport.preflight = mock.Mock(side_effect=RuntimeError("preflight drift"))
+            with self.assertRaises(Exception):
+                self.fixture._canonical_resume(canonical, journal, transport)
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            self.assertEqual(record["status"], "reconciliation-blocked")
+            self.assertEqual(record["completed_operations"], ["stop:storage-205"])
+            self.assertEqual(record["rollback_candidates"], ["stop:storage-205"])
+            self.assertEqual(record["reconciliation_requirements"]["automatic_replay"], False)
+            self.assertEqual(transport.mutations, [])
+        finally:
+            canonical.tearDown()
+
+    def test_runtime_sf_039_verify_does_not_mutate_transport_bookkeeping(self) -> None:
+        """Production code must not append read-only verification to caller mutation state."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            transport = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+            self.fixture._canonical_runner(canonical, transport)
+            self.assertNotIn("verify:storage-205", transport.mutations)
         finally:
             canonical.tearDown()
 
