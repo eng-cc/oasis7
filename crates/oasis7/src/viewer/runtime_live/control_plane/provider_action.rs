@@ -876,6 +876,34 @@ impl ViewerRuntimeLiveServer {
                     "settle",
                 )?;
         }
+        let economy = self.world.cognition_economy().map_err(|error| {
+            format!("cognition lease settlement economy read failed: {error:?}")
+        })?;
+        if let Some(runtime_lease) = economy.leases.get(lease.lease_id.as_str()) {
+            if runtime_lease.lease_id != lease.lease_id
+                || runtime_lease.idempotency_key != lease.idempotency_key
+                || runtime_lease.account_id != lease.account_id
+                || runtime_lease.agent_id != lease.agent_id
+                || runtime_lease.agent_session_id != lease.agent_session_id
+                || runtime_lease.agent_turn_id != lease.agent_turn_id
+                || runtime_lease.decision_request_id != lease.decision_request_id
+                || runtime_lease.request_digest != lease.request_digest
+                || runtime_lease.quote != lease.quote
+                || runtime_lease.reserved_amount != lease.reserved_amount
+            {
+                return Err(format!(
+                    "cognition lease settlement Runtime identity mismatch for {agent_id}"
+                ));
+            }
+            if runtime_lease.status == crate::runtime::CognitionLeaseStatusV1::Settled {
+                // A Runtime receipt or a previous idempotent settlement may
+                // have closed this exact lease before the provider response
+                // reaches this control pass. Preserve that economic result
+                // instead of converting it into a transient gameplay block.
+                self.llm_sidecar.clear_provider_cognition_lease(agent_id);
+                return Ok(());
+            }
+        }
         self.world
             .settle_cognition_lease(lease.lease_id.as_str(), lease.reserved_amount)
             .map_err(|error| {
