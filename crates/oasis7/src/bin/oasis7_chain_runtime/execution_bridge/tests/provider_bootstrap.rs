@@ -1,6 +1,9 @@
 use super::super::checkpoint::{execution_bridge_record_path, load_execution_bridge_record};
 use super::super::driver::{NodeRuntimeExecutionDriver, load_execution_world};
 use super::*;
+use oasis7::consensus_action_payload::{
+    ConsensusActionPayloadEnvelope, encode_consensus_action_payload,
+};
 use oasis7::geometry::GeoPos;
 use oasis7::runtime::{Action, ChainResourceDerivationContext, World as RuntimeWorld};
 use oasis7_node::{
@@ -127,6 +130,130 @@ fn seed_predecessor_commit(
     let _ = fs::remove_dir_all(predecessor_world_dir);
     let _ = fs::remove_dir_all(predecessor_simulator_dir);
     let _ = fs::remove_file(predecessor_state_path);
+}
+
+#[test]
+fn provider_bootstrap_preflight_reconciles_record_ahead_of_world_cache() {
+    let dir = temp_dir("provider-bootstrap-record-before-cache");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    provider_bootstrap_fixture(world_dir.as_path());
+
+    let mut driver = NodeRuntimeExecutionDriver::new(
+        state_path.clone(),
+        world_dir.clone(),
+        records_dir.clone(),
+        storage_root.clone(),
+    )
+    .expect("driver");
+    seed_predecessor_commit(
+        &mut driver,
+        state_path.as_path(),
+        world_dir.as_path(),
+        records_dir.as_path(),
+        storage_root.as_path(),
+    );
+
+    let register_agent_b = NodeConsensusAction::from_payload(
+        1,
+        "node-a",
+        encode_consensus_action_payload(&ConsensusActionPayloadEnvelope::from_runtime_action(
+            Action::RegisterAgent {
+                agent_id: "agent-b".to_string(),
+                pos: GeoPos::new(1, 1, 0),
+            },
+        ))
+        .expect("encode agent registration"),
+    )
+    .expect("build agent registration action");
+    driver
+        .on_commit(commit_context_with_actions(2, vec![register_agent_b]))
+        .expect("commit agent registration");
+    let stale_cache_snapshot =
+        fs::read(world_dir.join("snapshot.json")).expect("read stale snapshot");
+    let stale_cache_journal = fs::read(world_dir.join("journal.json")).expect("read stale journal");
+
+    // Build the authoritative post-registration state in a clean fixture so
+    // its existing finality authority can be reused for agent-b. The regular
+    // fixture installer intentionally rejects replacing an immutable
+    // authority record, which is exactly what the production state must do.
+    let mut authoritative_fixture = RuntimeWorld::new();
+    authoritative_fixture.submit_action(Action::RegisterAgent {
+        agent_id: "agent-b".to_string(),
+        pos: GeoPos::new(1, 1, 0),
+    });
+    authoritative_fixture
+        .step()
+        .expect("register authoritative fixture agent-b");
+    authoritative_fixture
+        .bind_cognition_runtime("bootstrap-world", "main", 0, None, "pending", 0)
+        .expect("bind authoritative fixture cognition");
+    authoritative_fixture
+        .install_test_provider_capability_fixture_without_cognition_balance("agent-b")
+        .expect("install authoritative fixture agent-b provider");
+    driver.execution_world = authoritative_fixture;
+    let input = driver
+        .execution_world
+        .test_provider_backed_bootstrap_authority(
+            "agent-b",
+            "provider-bootstrap-after-restart",
+            "provider-bootstrap-authority-after-restart",
+            7,
+        )
+        .expect("build authoritative provider bootstrap input");
+    driver
+        .on_commit(commit_context(3))
+        .expect("commit authoritative provider fixture state");
+
+    // Model a crash window where the durable record was published but the
+    // execution world cache still contains the prior committed head.
+    fs::write(world_dir.join("snapshot.json"), stale_cache_snapshot)
+        .expect("restore stale snapshot");
+    fs::write(world_dir.join("journal.json"), stale_cache_journal).expect("restore stale journal");
+    let input_path = dir.join("authoritative.json");
+    fs::write(
+        input_path.as_path(),
+        serde_json::to_vec(&input).expect("encode provider bootstrap input"),
+    )
+    .expect("write provider bootstrap input");
+
+    let runtime = NodeRuntime::new(
+        NodeConfig::new("node-a", "bootstrap-world", NodeRole::Sequencer).expect("node config"),
+    );
+    let stale_error = super::super::publish_provider_backed_bootstrap_from_paths(
+        &runtime,
+        world_dir.as_path(),
+        std::slice::from_ref(&input_path),
+    )
+    .expect_err("preflight must reject the stale world cache");
+    assert!(
+        stale_error.contains("preflight rejected before consensus admission"),
+        "stale cache should fail before queueing: {stale_error}"
+    );
+
+    let restarted =
+        NodeRuntimeExecutionDriver::new(state_path, world_dir.clone(), records_dir, storage_root)
+            .expect("restart must restore the authoritative record before preflight");
+    assert_eq!(restarted.execution_world.state().time, 3);
+    assert!(
+        restarted
+            .execution_world
+            .state()
+            .agents
+            .contains_key("agent-b"),
+        "restart should restore the agent introduced before the authoritative head"
+    );
+
+    super::super::publish_provider_backed_bootstrap_from_paths(
+        &runtime,
+        world_dir.as_path(),
+        std::slice::from_ref(&input_path),
+    )
+    .expect("authoritative head should pass preflight after restart reconciliation");
+
+    let _ = fs::remove_dir_all(dir);
 }
 
 #[test]
