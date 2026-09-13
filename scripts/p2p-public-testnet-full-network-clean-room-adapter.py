@@ -4960,9 +4960,25 @@ def _storage_first_callback_plan(
         "package_provenance_digest": plan.get("package_provenance_digest"),
         "deployment_inventory_digest": plan.get("deployment_inventory_digest"),
         "independent_verifier": copy.deepcopy(plan.get("independent_verifier")),
+        "rollback": _storage_first_rollback_policy(plan),
     }
     _reject_secret_fields(projected, "storage-first callback plan")
     _reject_transport_auth_aliases(projected, "storage-first callback plan")
+    return projected
+
+
+def _storage_first_rollback_policy(plan: Mapping[str, Any]) -> dict[str, Any]:
+    """Project the full-network rollback contract onto the storage child."""
+    raw = plan.get("rollback")
+    if raw is None and _storage_first_is_shape_fixture(plan):
+        raw = _canonical_rollback_policy()
+    rollback = _object(raw, "storage-first rollback policy")
+    projected = copy.deepcopy(dict(rollback))
+    projected["steps"] = [
+        step for step in rollback.get("steps", [])
+        if step != "rerun-fresh-root-probe"
+    ]
+    projected["rerun_fresh_root_probe"] = False
     return projected
 
 
@@ -5335,7 +5351,7 @@ def validate_storage_first_journal(journal: Mapping[str, Any]) -> bool:
     next_operation = journal.get("next_operation")
     if next_operation not in STORAGE_FIRST_OPERATIONS and next_operation != "reconciliation-required":
         _fail("storage-first journal next operation is outside the storage phase")
-    if journal.get("status") == "storage-205-running" and journal.get("callback_started") and journal.get("callback_receipt") is None:
+    if journal.get("status") == "storage-205-running" and journal.get("callback_started") is True:
         _fail("storage-first journal contains an ambiguous callback")
     if journal.get("status") == "prepared" and completed:
         _fail("storage-first prepared journal cannot contain completed operations")
@@ -5459,6 +5475,7 @@ def _storage_first_journal_write(path: Path, record: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary: Path | None = None
     payload = dict(record)
+    payload.pop("journal_digest", None)
     payload["journal_digest"] = hashlib.sha256(
         json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
@@ -5485,7 +5502,21 @@ def _storage_first_bind_receipt(
     verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Bind a provider's non-secret receipt to this exact child transaction."""
-    receipt = _object(raw_receipt, f"storage-first {operation} receipt")
+    if type(raw_receipt) is not dict:
+        _fail(f"storage-first {operation} receipt must be a concrete dictionary")
+    receipt = copy.deepcopy(raw_receipt)
+
+    def require_concrete_tree(value: Any) -> None:
+        if type(value) is dict:
+            for child in value.values():
+                require_concrete_tree(child)
+        elif type(value) is list:
+            for child in value:
+                require_concrete_tree(child)
+        elif isinstance(value, Mapping):
+            _fail(f"storage-first {operation} receipt contains a non-concrete mapping")
+
+    require_concrete_tree(receipt)
     if not _storage_first_is_shape_fixture(plan):
         # Production provider envelopes use the repository-wide phase schema;
         # validate that envelope first, then project only the storage-child
@@ -5571,6 +5602,7 @@ def _storage_first_reconciliation_write(path: Path, record: Mapping[str, Any]) -
         ):
             _fail("storage-first reconciliation journal owner or mode is invalid")
     payload = dict(record)
+    payload.pop("journal_digest", None)
     payload["journal_digest"] = hashlib.sha256(
         json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
@@ -5799,8 +5831,10 @@ def _storage_first_recovery_receipt(
     }
     fixture = _storage_first_is_shape_fixture(plan)
     if not fixture:
+        recovery_plan = copy.deepcopy(dict(plan))
+        recovery_plan["rollback"] = _storage_first_rollback_policy(plan)
         bound = _validate_provider_receipt(
-            dict(plan), operation, "storage-205", receipt, verifier,
+            recovery_plan, operation, "storage-205", receipt, verifier,
             rollback_candidates=started,
             rollback_order=[
                 phase for phase in STORAGE_FIRST_OPERATIONS if _rollback_candidate(phase)
@@ -5931,7 +5965,7 @@ def _storage_first_run(
         raise
     try:
         try:
-            callback_plan = _storage_first_callback_plan(plan, admission["storage_node"])
+            callback_plan = _storage_first_callback_plan(child_plan, admission["storage_node"])
             result = _guarded_callback(
                 provenance_verifier,
                 callback_plan,
@@ -5970,6 +6004,8 @@ def _storage_first_run(
             lock.close()
         raise
     try:
+        if resume_record is None and Path(journal_path).exists():
+            _fail("storage-first fresh execution refuses to overwrite an existing journal")
         node = admission["storage_node"]
         completed = list(resume_record.get("completed_operations", [])) if resume_record else []
         storage_receipts = list(resume_record.get("storage_receipts", [])) if resume_record else []
@@ -6180,6 +6216,15 @@ def _storage_first_run(
                     Path(journal_path), record, primary_error=checkpoint_error
                 )
                 raise
+            if not _storage_first_is_shape_fixture(plan):
+                validate_authority(dict(plan), dict(authority))
+                capture_start, capture_end = _capture_window_bounds(plan)
+                if not capture_start <= dt.datetime.now(dt.timezone.utc) < capture_end:
+                    _fail("storage-first mutation capture lease is expired or not yet active")
+                validate_live_trust_root_file()
+                _storage_first_check_impact(child_plan)
+            if _guarded_callback(live_revalidator) is not True:
+                _fail("storage-first live revalidation rejected the started mutation")
             raw_receipt: Any = None
             try:
                 callback = transport.verify if operation == "verify:storage-205" else transport.mutate
@@ -6404,6 +6449,19 @@ def resume_storage_first(
             plan, child_identity
         ):
             _fail("storage-first resume phase contract drifted")
+        if record.get("status") in {"prepared", "preflight-complete", "storage-205-running"}:
+            record.update({
+                "status": "reconciliation-blocked",
+                "next_operation": "reconciliation-required",
+                "rollback_status": "reconciliation-blocked",
+                "reconciliation_requirements": {
+                    "reobserve_failed_state": True,
+                    "clean_redeploy": True,
+                    "automatic_replay": False,
+                },
+            })
+            _storage_first_journal_write(Path(journal_path), record)
+            _fail("storage-first unfinished cursor requires governed reconciliation")
         completed = record.get("completed_operations")
         receipts = record.get("storage_receipts")
         if not isinstance(completed, list) or not isinstance(receipts, list):

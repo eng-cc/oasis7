@@ -3284,7 +3284,7 @@ def validate_storage_first_resume(contract: Mapping[str, Any], journal: Mapping[
     expected_completed = operations[:len(completed)]
     if completed != expected_completed:
         _storage_first_contract_error("resume completed operations are not an exact storage prefix")
-    if journal.get("status") == "storage-205-running" and journal.get("callback_started") and journal.get("callback_receipt") is None:
+    if journal.get("status") == "storage-205-running" and journal.get("callback_started") is True:
         _storage_first_contract_error("ambiguous storage callback requires reconciliation")
     next_operation = journal.get("next_operation")
     if next_operation not in STORAGE_FIRST_MUTATING_OPERATIONS and next_operation != "reconciliation-required":

@@ -359,6 +359,7 @@ class StorageFirstCanonicalTransport(ApplyTransport):
         self.failed_operation = failed_operation
         receipt = self._receipt("reobserve-failed-state", self._storage_node())
         receipt["bindings"]["rollback_candidates"] = list(started)
+        receipt["rollback_steps"] = list(plan["rollback"]["steps"])
         return receipt
 
     def rollback_clean_redeploy(
@@ -370,6 +371,7 @@ class StorageFirstCanonicalTransport(ApplyTransport):
         self.rollback_operations.append("rollback")
         receipt = self._receipt("rollback-clean-redeploy", self._storage_node())
         receipt["bindings"]["rollback_candidates"] = list(started)
+        receipt["rollback_steps"] = list(plan["rollback"]["steps"])
         return receipt
 
 
@@ -4865,7 +4867,12 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
             )
         finally:
             fixture.tearDown()
-        self.assertEqual(len(checks), len(transport.mutations) + len(transport.verify_operations))
+        # Revalidation runs before admission and again after the durable
+        # callback-started checkpoint, immediately before provider execution.
+        self.assertEqual(
+            len(checks),
+            2 * (len(transport.mutations) + len(transport.verify_operations)),
+        )
 
     def test_storage_first_resume_does_not_reuse_persisted_receipt_as_authority(self):
         self.assertTrue(
@@ -7915,6 +7922,130 @@ class StorageFirstResidualBypassRedTests(unittest.TestCase):
                         "--phase", "storage-205-first",
                     ])
             child.assert_not_called()
+
+
+class StorageFirstExactHeadFindingTests(unittest.TestCase):
+    """Regressions for the exact-head review findings on PR 3677."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.adapter = load_module("storage_first_exact_head_adapter_under_test", ADAPTER_PATH)
+
+    def test_loaded_journal_rewrite_discards_the_prior_digest(self) -> None:
+        for writer_name in (
+            "_storage_first_journal_write",
+            "_storage_first_reconciliation_write",
+        ):
+            with self.subTest(writer=writer_name), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "journal.json"
+                writer = getattr(self.adapter, writer_name)
+                record = {
+                    "schema_version": self.adapter.STORAGE_FIRST_JOURNAL_SCHEMA,
+                    "phase_id": self.adapter.STORAGE_FIRST_PHASE_ID,
+                    "status": "reconciliation-blocked",
+                    "next_operation": "reconciliation-required",
+                    "completed_operations": [],
+                    "rollback_candidates": [],
+                    "reconciliation_requirements": {
+                        "reobserve_failed_state": True,
+                        "clean_redeploy": True,
+                        "automatic_replay": False,
+                    },
+                    "journal_digest": "0" * 64,
+                }
+                writer(path, record)
+                self.assertTrue(
+                    self.adapter.validate_storage_first_journal(
+                        json.loads(path.read_text(encoding="utf-8"))
+                    )
+                )
+
+    def test_every_started_incomplete_cursor_is_ambiguous(self) -> None:
+        journal = {
+            "schema_version": self.adapter.STORAGE_FIRST_JOURNAL_SCHEMA,
+            "phase_id": self.adapter.STORAGE_FIRST_PHASE_ID,
+            "status": "storage-205-running",
+            "next_operation": "stop:storage-205",
+            "completed_operations": [],
+            "callback_started": True,
+            "callback_receipt": {"verified": True},
+            "rollback_candidates": [],
+        }
+        with self.assertRaisesRegex(Exception, "ambiguous|reconciliation"):
+            self.adapter.validate_storage_first_journal(journal)
+
+    def test_phase_verifier_projection_uses_derived_child_fields(self) -> None:
+        fixture = StorageFirstAdapterRedTests("runTest")
+        fixture.adapter = self.adapter
+        fixture.setUp()
+        try:
+            child = self.adapter._storage_first_child_projection(
+                fixture.plan, fixture.identity_map
+            )
+            node = next(node for node in child["nodes"] if node["name"] == "storage-205")
+            dto = self.adapter._storage_first_callback_plan(child, node)
+            self.assertIsNotNone(dto["package_provenance_digest"])
+            self.assertIsNotNone(dto["deployment_inventory_digest"])
+            self.assertIsNotNone(dto["independent_verifier"])
+            self.assertFalse(dto["rollback"]["rerun_fresh_root_probe"])
+            self.assertNotIn("rerun-fresh-root-probe", dto["rollback"]["steps"])
+        finally:
+            fixture.tearDown()
+
+    def test_provider_receipt_rejects_dual_view_mapping(self) -> None:
+        class DualView(dict):
+            def get(self, key, default=None):
+                if key == "operation":
+                    return "stop:storage-205"
+                return super().get(key, default)
+
+            def items(self):
+                changed = dict(super().items())
+                changed["operation"] = "delete:storage-205"
+                return changed.items()
+
+        with self.assertRaisesRegex(Exception, "concrete|mapping|receipt"):
+            self.adapter._storage_first_bind_receipt(
+                {"schema_version": "not-a-fixture"},
+                "stop:storage-205",
+                DualView(operation="delete:storage-205"),
+            )
+
+    def test_empty_preflight_resume_requires_reconciliation(self) -> None:
+        helper = StorageFirstAdapterRedTests("runTest")
+        helper.adapter = self.adapter
+        canonical = helper._canonical_fixture()
+        try:
+            journal = helper._canonical_prefix_journal(
+                canonical, [], status="preflight-complete", name="empty-preflight.json"
+            )
+            transport = StorageFirstCanonicalTransport(self.adapter, canonical.plan)
+            with self.assertRaisesRegex(Exception, "unfinished|reconciliation"):
+                helper._canonical_resume(canonical, journal, transport)
+            self.assertEqual(transport.mutations, [])
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            self.assertEqual(record["status"], "reconciliation-blocked")
+            self.assertTrue(self.adapter.validate_storage_first_journal(record))
+        finally:
+            canonical.tearDown()
+
+    def test_fresh_execution_refuses_an_existing_journal(self) -> None:
+        helper = StorageFirstAdapterRedTests("runTest")
+        helper.adapter = self.adapter
+        canonical = helper._canonical_fixture()
+        try:
+            journal = canonical.root / "existing-storage-first.json"
+            journal.write_text('{"retained":true}\n', encoding="utf-8")
+            journal.chmod(0o600)
+            transport = StorageFirstCanonicalTransport(self.adapter, canonical.plan)
+            with self.assertRaisesRegex(Exception, "refuses|existing journal"):
+                helper._canonical_runner(
+                    canonical, transport, journal_path=journal
+                )
+            self.assertEqual(transport.mutations, [])
+            self.assertEqual(json.loads(journal.read_text()), {"retained": True})
+        finally:
+            canonical.tearDown()
 
 
 if __name__ == "__main__":

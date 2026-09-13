@@ -3468,15 +3468,20 @@ class StorageFirstContractRedTests(unittest.TestCase):
         validator = self._resume_validator()
         journal = copy.deepcopy(contract["journal_template"])
         self.assertTrue(validator(contract, journal))
-        for mutation in ("plan_digest", "transaction_id", "phase_contract_digest", "unknown_status", "ambiguous"):
+        for mutation in (
+            "plan_digest", "transaction_id", "phase_contract_digest",
+            "unknown_status", "ambiguous", "ambiguous-with-receipt",
+        ):
             changed = copy.deepcopy(journal)
             if mutation == "unknown_status":
                 changed["status"] = "unknown_status"
-            elif mutation == "ambiguous":
+            elif mutation in {"ambiguous", "ambiguous-with-receipt"}:
                 changed["status"] = "storage-205-running"
                 changed["next_operation"] = "stop:storage-205"
                 changed["callback_started"] = True
-                changed["callback_receipt"] = None
+                changed["callback_receipt"] = (
+                    None if mutation == "ambiguous" else {"forged": True}
+                )
             else:
                 changed[mutation] = "drifted"
             with self.subTest(mutation=mutation), self.assertRaises(Exception):
