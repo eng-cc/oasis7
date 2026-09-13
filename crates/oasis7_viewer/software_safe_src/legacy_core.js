@@ -2,6 +2,7 @@ import { createViewerAuthSurfaceModule } from "./viewer_auth_surface_module.js";
 import { createViewerFeedbackModule } from "./viewer_feedback_module.js";
 import { createViewerHostedAuthStateModule } from "./viewer_hosted_auth_state_module.js";
 import { createViewerHostedTestLoginModule } from "./viewer_hosted_test_login_module.js";
+import { createViewerAgentChatAuthModule } from "./viewer_agent_chat_auth_module.js";
 import { createViewerHostedSessionRefreshModule } from "./viewer_hosted_session_refresh_module.js";
 import { createViewerPromptControlModule } from "./viewer_prompt_control_module.js";
 import { resetHostedLoginChallenge as resetHostedLoginChallengeState } from "./viewer_hosted_login_state_module.js";
@@ -437,6 +438,8 @@ function nextAuthNonce() {
   authNonceCounter += 1;
   return Date.now() + authNonceCounter;
 }
+
+const viewerAgentChatAuthModule = createViewerAgentChatAuthModule({ buildAuthEnvelope, nextAuthNonce, signAuthPayload, state });
 
 function resetViewerProtocolForConnection() { viewerPromptControlModule?.resetForConnection(); }
 function promptControlCapabilitySelected() { return viewerPromptControlModule?.capabilitySelected() === true; }
@@ -1641,29 +1644,7 @@ function handleControlCompletionAck(ack) {
 }
 
 async function buildAgentChatAuthProof(request, auth) {
-  const nonce = nextAuthNonce();
-  const payload = {
-    operation: "agent_chat",
-    agent_id: request.agent_id,
-    player_id: auth.playerId,
-    public_key: auth.publicKey,
-    nonce,
-    message: request.message,
-  };
-  if (request.intent_tick != null) {
-    payload.intent_tick = request.intent_tick;
-  }
-  if (request.intent_seq != null) {
-    payload.intent_seq = request.intent_seq;
-  }
-  const signingPayload = buildAuthEnvelope(payload);
-  return {
-    scheme: "ed25519",
-    player_id: auth.playerId,
-    public_key: auth.publicKey,
-    nonce,
-    signature: await signAuthPayload(signingPayload, auth),
-  };
+  return viewerAgentChatAuthModule.buildAuthProof(request, auth);
 }
 
 function promptPatchFromDraft(currentValue, draftValue) {
