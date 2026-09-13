@@ -3741,6 +3741,11 @@ def _rollback_candidate(operation: str) -> bool:
     return operation.startswith(("stop:", "delete:", "rebuild:", "start:"))
 
 
+def _storage_first_rollback_candidates(operations: Sequence[str]) -> list[str]:
+    """Persist only storage mutation phases as rollback candidates."""
+    return [operation for operation in operations if _rollback_candidate(operation)]
+
+
 def _validate_rollback_candidates(
     plan: dict[str, Any], value: Any, *, order: Sequence[str] | None = None
 ) -> list[str]:
@@ -4938,18 +4943,6 @@ def _storage_first_callback_plan(
     plan: Mapping[str, Any], node: Mapping[str, Any]
 ) -> dict[str, Any]:
     """Build the narrow plan projection used by recovery callbacks."""
-    if not _storage_first_is_shape_fixture(plan):
-        projected = _transport_plan(dict(plan))
-        projected.update(
-            {
-                "phase_id": STORAGE_FIRST_PHASE_ID,
-                "target_nodes": ["storage-205"],
-                "node": _storage_first_transport_node(node),
-            }
-        )
-        _reject_secret_fields(projected, "storage-first callback plan")
-        _reject_transport_auth_aliases(projected, "storage-first callback plan")
-        return projected
     projected = {
         "schema_version": plan.get("schema_version"),
         "phase_id": STORAGE_FIRST_PHASE_ID,
@@ -4959,7 +4952,6 @@ def _storage_first_callback_plan(
         "transaction_id": plan.get("transaction_id"),
         "capture_window_id": plan.get("capture_window_id"),
         "target_nodes": ["storage-205"],
-        "node_order": list(_load_planner().NODE_ORDER),
         "node": _storage_first_transport_node(node),
         "consumer_impact_record": copy.deepcopy(plan.get("consumer_impact_record")),
         "package_provenance_digest": plan.get("package_provenance_digest"),
@@ -5292,6 +5284,10 @@ def validate_storage_first_journal(journal: Mapping[str, Any]) -> bool:
         _fail("storage-first journal contains a non-storage operation")
     if completed != list(STORAGE_FIRST_OPERATIONS[: len(completed)]):
         _fail("storage-first journal progress is not a storage operation prefix")
+    if "rollback_candidates" in journal:
+        rollback_candidates = journal.get("rollback_candidates")
+        if rollback_candidates != _storage_first_rollback_candidates(completed):
+            _fail("storage-first journal rollback candidates contain non-mutation work")
     next_operation = journal.get("next_operation")
     if next_operation not in STORAGE_FIRST_OPERATIONS and next_operation != "reconciliation-required":
         _fail("storage-first journal next operation is outside the storage phase")
@@ -5736,6 +5732,8 @@ def _storage_first_recovery_receipt(
     failed_operation: str,
     started: list[str],
     verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None,
+    *,
+    expected_failed_state_digest: str | None = None,
 ) -> dict[str, Any]:
     """Require an authenticated, transaction-bound recovery receipt."""
     receipt = _object(raw, f"storage-first {operation} receipt")
@@ -5747,25 +5745,39 @@ def _storage_first_recovery_receipt(
     }
     fixture = _storage_first_is_shape_fixture(plan)
     if not fixture:
-        return _validate_provider_receipt(
+        bound = _validate_provider_receipt(
             dict(plan), operation, "storage-205", receipt, verifier,
             rollback_candidates=started,
             rollback_order=[
                 phase for phase in STORAGE_FIRST_OPERATIONS if _rollback_candidate(phase)
             ],
         )
-    if any(receipt.get(key) != value for key, value in required.items()):
-        _fail(f"storage-first {operation} receipt is not authenticated")
-    if receipt.get("signer_id") not in CANONICAL_SIGNER_ALLOWLIST:
-        _fail(f"storage-first {operation} receipt signer is not code-owned")
-    if receipt.get("verifier_id") != CANONICAL_VERIFIER_ID or receipt.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID:
-        _fail(f"storage-first {operation} receipt verifier or trust root is not code-owned")
-    if receipt.get("transaction_id") != plan.get("transaction_id") or receipt.get("capture_window_id") != plan.get("capture_window_id"):
-        _fail(f"storage-first {operation} receipt transaction binding drifted")
-    bindings = receipt.get("bindings")
-    if not isinstance(bindings, Mapping) or bindings.get("plan_digest") != plan.get("plan_digest"):
-        _fail(f"storage-first {operation} receipt bindings are incomplete")
-    return dict(receipt)
+    else:
+        if any(receipt.get(key) != value for key, value in required.items()):
+            _fail(f"storage-first {operation} receipt is not authenticated")
+        if receipt.get("signer_id") not in CANONICAL_SIGNER_ALLOWLIST:
+            _fail(f"storage-first {operation} receipt signer is not code-owned")
+        if receipt.get("verifier_id") != CANONICAL_VERIFIER_ID or receipt.get("trust_root_id") != CANONICAL_TRUST_ROOT_ID:
+            _fail(f"storage-first {operation} receipt verifier or trust root is not code-owned")
+        if receipt.get("transaction_id") != plan.get("transaction_id") or receipt.get("capture_window_id") != plan.get("capture_window_id"):
+            _fail(f"storage-first {operation} receipt transaction binding drifted")
+        bindings = receipt.get("bindings")
+        if not isinstance(bindings, Mapping) or bindings.get("plan_digest") != plan.get("plan_digest"):
+            _fail(f"storage-first {operation} receipt bindings are incomplete")
+        bound = dict(receipt)
+    if bound.get("failed_operation") != failed_operation:
+        _fail(f"storage-first {operation} receipt failed-operation binding drifted")
+    bound_failed_state_digest = _nonzero_hex(
+        bound.get("failed_state_digest"),
+        HEX64_RE,
+        f"storage-first {operation} failed state digest",
+    )
+    if (
+        expected_failed_state_digest is not None
+        and bound_failed_state_digest != expected_failed_state_digest
+    ):
+        _fail(f"storage-first {operation} receipt failed-state binding drifted")
+    return bound
 
 
 def _storage_first_run(
@@ -5902,7 +5914,7 @@ def _storage_first_run(
             "callback_receipt": None,
             "storage_receipts": storage_receipts,
             "receipt_operation_cursor": list(completed),
-            "rollback_candidates": list(completed),
+            "rollback_candidates": _storage_first_rollback_candidates(completed),
             "rollback_status": "not-started",
             "ledger_path": str(ledger_path),
         }
@@ -6025,7 +6037,9 @@ def _storage_first_run(
                 "next_operation": operation,
                 "callback_started": True,
                 "callback_receipt": None,
-                "rollback_candidates": [*completed, operation],
+                "rollback_candidates": _storage_first_rollback_candidates(
+                    [*completed, operation]
+                ),
                 "rollback_status": "not-started",
             })
             _storage_first_journal_write(Path(journal_path), record)
@@ -6092,6 +6106,9 @@ def _storage_first_run(
                         plan, reobserve_receipt, "reobserve-failed-state", operation, started,
                         provenance_verifier,
                     )
+                    expected_failed_state_digest = record[
+                        "reconciliation_reobserve"
+                    ]["failed_state_digest"]
                     recovery_live = _guarded_callback(live_revalidator)
                     if recovery_live is not True:
                         _fail("storage-first recovery live revalidation rejected clean redeploy")
@@ -6104,6 +6121,7 @@ def _storage_first_run(
                     record["reconciliation_handoff"] = _storage_first_recovery_receipt(
                         plan, rollback_receipt, "rollback-clean-redeploy", operation, started,
                         provenance_verifier,
+                        expected_failed_state_digest=expected_failed_state_digest,
                     )
                 except Exception as reconciliation_error:
                     record["reconciliation_error"] = reconciliation_error.__class__.__name__
@@ -6125,7 +6143,7 @@ def _storage_first_run(
                 "receipt_operation_cursor": list(completed),
                 "callback_started": False,
                 "callback_receipt": receipt,
-                "rollback_candidates": list(completed),
+                "rollback_candidates": _storage_first_rollback_candidates(completed),
             })
             try:
                 _storage_first_journal_write(Path(journal_path), record)

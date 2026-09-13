@@ -6115,6 +6115,7 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
         try:
             started = ["stop:storage-205", "delete:storage-205"]
             transport = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+            transport.failed_operation = "delete:storage-205"
             receipt = transport._receipt(
                 "reobserve-failed-state", transport._storage_node()
             )
@@ -6190,6 +6191,120 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
             self.assertIsNot(
                 transport.reobserve_seen[0], transport.rollback_seen[0]
             )
+        finally:
+            canonical.tearDown()
+
+    def test_runtime_sf_020_reobserve_receipt_must_bind_actual_failed_operation(self) -> None:
+        """A mismatched re-observation must stop before rollback is invoked."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            class MismatchedReobserveTransport(StorageFirstCanonicalTransport):
+                def __init__(self, adapter, plan):
+                    super().__init__(adapter, plan, side_effect_operation="delete:storage-205")
+                    self.rollback_called = False
+
+                def reobserve_failed_state(self, callback_plan, started, failed_operation):
+                    receipt = super().reobserve_failed_state(
+                        callback_plan, started, failed_operation
+                    )
+                    receipt["failed_operation"] = "stop:storage-205"
+                    return receipt
+
+                def rollback_clean_redeploy(self, callback_plan, started, failed_state=None):
+                    self.rollback_called = True
+                    return super().rollback_clean_redeploy(
+                        callback_plan, started, failed_state
+                    )
+
+            transport = MismatchedReobserveTransport(canonical.adapter, canonical.plan)
+            journal = canonical.root / "mismatched-reobserve-operation.journal.json"
+            with self.assertRaises(Exception):
+                self.fixture._canonical_runner(canonical, transport, journal_path=journal)
+            self.assertFalse(transport.rollback_called)
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            self.assertNotIn("reconciliation_handoff", record)
+        finally:
+            canonical.tearDown()
+
+    def test_runtime_sf_021_rollback_receipt_must_bind_reobserved_state_digest(self) -> None:
+        """Rollback acceptance must be bound to the accepted re-observation digest."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            class MismatchedRollbackTransport(StorageFirstCanonicalTransport):
+                def __init__(self, adapter, plan):
+                    super().__init__(adapter, plan, side_effect_operation="delete:storage-205")
+
+                def rollback_clean_redeploy(self, callback_plan, started, failed_state=None):
+                    receipt = super().rollback_clean_redeploy(
+                        callback_plan, started, failed_state
+                    )
+                    receipt["failed_state_digest"] = "e" * 64
+                    return receipt
+
+            transport = MismatchedRollbackTransport(canonical.adapter, canonical.plan)
+            journal = canonical.root / "mismatched-rollback-state.journal.json"
+            with self.assertRaises(Exception):
+                self.fixture._canonical_runner(canonical, transport, journal_path=journal)
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            self.assertIn("reconciliation_reobserve", record)
+            self.assertNotIn("reconciliation_handoff", record)
+        finally:
+            canonical.tearDown()
+
+    def test_runtime_sf_022_storage_callback_plan_excludes_fleet_capabilities(self) -> None:
+        """Recovery callbacks receive only storage-child data, never fleet controls."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            storage_node = next(
+                node for node in canonical.plan["nodes"] if node["name"] == "storage-205"
+            )
+            callback_plan = self.adapter._storage_first_callback_plan(
+                canonical.plan, storage_node
+            )
+            self.assertEqual(callback_plan["target_nodes"], ["storage-205"])
+            self.assertEqual(callback_plan["node"]["name"], "storage-205")
+            for field in (
+                "nodes",
+                "node_order",
+                "global_order",
+                "operations",
+                "operation_journal_contract",
+                "forensic_backup",
+                "reset",
+                "rollback",
+            ):
+                self.assertNotIn(field, callback_plan)
+        finally:
+            canonical.tearDown()
+
+    def test_runtime_sf_023_persisted_rollback_candidates_exclude_verify_after_failure(self) -> None:
+        """A verify or later journal failure must never persist verify as rollback work."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            transport = StorageFirstCanonicalTransport(
+                canonical.adapter,
+                canonical.plan,
+                invalid_operation="verify:storage-205",
+            )
+            journal = canonical.root / "verify-failure-rollback-candidates.journal.json"
+            with self.assertRaises(Exception):
+                self.fixture._canonical_runner(canonical, transport, journal_path=journal)
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            self.assertEqual(
+                record["rollback_candidates"],
+                [
+                    "stop:storage-205",
+                    "delete:storage-205",
+                    "rebuild:storage-205",
+                    "start:storage-205",
+                ],
+            )
+            self.assertNotIn("verify:storage-205", record["rollback_candidates"])
+            forged = copy.deepcopy(record)
+            forged["rollback_candidates"].append("verify:storage-205")
+            forged["journal_digest"] = canonical.adapter.journal_digest(forged)
+            with self.assertRaises(Exception):
+                canonical.adapter.validate_storage_first_journal(forged)
         finally:
             canonical.tearDown()
 
