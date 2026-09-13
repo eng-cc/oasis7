@@ -2699,6 +2699,7 @@ def _validate_provider_receipt(
     *,
     evidence: dict[str, Any] | None = None,
     rollback_candidates: list[str] | None = None,
+    rollback_order: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """Validate and sanitize every provider receipt before phase advance."""
     # A provider callback may return a receipt only after the exact impact
@@ -2803,7 +2804,9 @@ def _validate_provider_receipt(
         "consumer_impact_record": _consumer_impact_locator(plan),
     }
     if operation in {"reobserve-failed-state", "rollback-clean-redeploy"}:
-        candidates = _validate_rollback_candidates(plan, rollback_candidates)
+        candidates = _validate_rollback_candidates(
+            plan, rollback_candidates, order=rollback_order
+        )
         if not candidates:
             _fail("recovery receipt rollback candidates must not be empty")
         if bindings.get("rollback_candidates") != candidates:
@@ -3738,10 +3741,14 @@ def _rollback_candidate(operation: str) -> bool:
     return operation.startswith(("stop:", "delete:", "rebuild:", "start:"))
 
 
-def _validate_rollback_candidates(plan: dict[str, Any], value: Any) -> list[str]:
+def _validate_rollback_candidates(
+    plan: dict[str, Any], value: Any, *, order: Sequence[str] | None = None
+) -> list[str]:
     """Candidate scope is a unique, ordered prefix of admitted mutation phases."""
-    order = [operation for operation in plan["global_order"] if _rollback_candidate(operation)]
-    if not isinstance(value, list) or value != order[:len(value)]:
+    rollback_order = list(order) if order is not None else [
+        operation for operation in plan["global_order"] if _rollback_candidate(operation)
+    ]
+    if not isinstance(value, list) or value != rollback_order[:len(value)]:
         _fail("rollback candidates are not an exact ordered mutation prefix")
     return list(value)
 
@@ -5743,6 +5750,9 @@ def _storage_first_recovery_receipt(
         return _validate_provider_receipt(
             dict(plan), operation, "storage-205", receipt, verifier,
             rollback_candidates=started,
+            rollback_order=[
+                phase for phase in STORAGE_FIRST_OPERATIONS if _rollback_candidate(phase)
+            ],
         )
     if any(receipt.get(key) != value for key, value in required.items()):
         _fail(f"storage-first {operation} receipt is not authenticated")
@@ -5806,6 +5816,10 @@ def _storage_first_run(
         _fail("storage-first apply requires storage inspect and preflight callbacks")
     if not callable(getattr(transport, "verify", None)):
         _fail("storage-first apply requires an injected provider verify callback")
+    if not callable(getattr(transport, "reobserve_failed_state", None)) or not callable(
+        getattr(transport, "rollback_clean_redeploy", None)
+    ):
+        _fail("storage-first apply requires governed recovery callbacks before mutation")
     if provenance_verifier is None or not callable(provenance_verifier):
         _fail("storage-first apply requires the independent provenance verifier callback")
     if not _storage_first_is_shape_fixture(plan):
@@ -6060,18 +6074,19 @@ def _storage_first_run(
                     "terminal_error": error.__class__.__name__,
                     "reconciliation_requirements": reconciliation_requirements,
                 })
-                started = [*completed, operation]
-                callback_plan = _storage_first_callback_plan(plan, node)
+                started = [*completed]
+                if _rollback_candidate(operation):
+                    started.append(operation)
                 try:
                     reobserve = getattr(transport, "reobserve_failed_state", None)
                     rollback = getattr(transport, "rollback_clean_redeploy", None)
-                    if not callable(reobserve) or not callable(rollback):
-                        _fail("storage-first reconciliation callbacks are required")
                     recovery_live = _guarded_callback(live_revalidator)
                     if recovery_live is not True:
                         _fail("storage-first recovery live revalidation rejected the failed state")
+                    reobserve_plan = _storage_first_callback_plan(plan, node)
+                    reobserve_started = list(started)
                     reobserve_receipt = _guarded_callback(
-                        reobserve, callback_plan, started, operation
+                        reobserve, reobserve_plan, reobserve_started, operation
                     )
                     record["reconciliation_reobserve"] = _storage_first_recovery_receipt(
                         plan, reobserve_receipt, "reobserve-failed-state", operation, started,
@@ -6080,8 +6095,11 @@ def _storage_first_run(
                     recovery_live = _guarded_callback(live_revalidator)
                     if recovery_live is not True:
                         _fail("storage-first recovery live revalidation rejected clean redeploy")
+                    rollback_plan = _storage_first_callback_plan(plan, node)
+                    rollback_started = list(started)
+                    rollback_failed_state = copy.deepcopy(record["reconciliation_reobserve"])
                     rollback_receipt = _guarded_callback(
-                        rollback, callback_plan, started, reobserve_receipt
+                        rollback, rollback_plan, rollback_started, rollback_failed_state
                     )
                     record["reconciliation_handoff"] = _storage_first_recovery_receipt(
                         plan, rollback_receipt, "rollback-clean-redeploy", operation, started,

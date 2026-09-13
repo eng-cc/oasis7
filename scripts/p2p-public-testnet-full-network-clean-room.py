@@ -2912,6 +2912,41 @@ def _storage_first_contract_digest(value: Mapping[str, Any]) -> str:
     return hashlib.sha256(material).hexdigest()
 
 
+def _storage_first_identity_admission_projection(
+    evidence: Mapping[str, Any],
+) -> tuple[str, str]:
+    """Derive child admission fields from the retained signed identity map."""
+    if type(evidence) is not dict:
+        _storage_first_contract_error(
+            "parent identity-v2 evidence must be a concrete retained map"
+        )
+    retained = copy.deepcopy(dict(evidence))
+    supplied_mode = retained.pop("mode", None)
+    supplied_digest = retained.pop("digest", None)
+    if supplied_mode is not None and supplied_mode != "current_admission":
+        _storage_first_contract_error(
+            "parent identity-v2 evidence must be current_admission"
+        )
+    expected_digest = _storage_first_contract_digest(retained)
+    if supplied_digest is None:
+        return "current_admission", expected_digest
+    supplied_digest = _storage_first_digest(
+        supplied_digest, "parent identity-v2 evidence digest"
+    )
+    # Shape-only fixtures use the explicit alphabetic sentinel; an admitted
+    # canonical retained map must carry the digest derived from its exact
+    # bytes.  The sentinel remains only for the existing pure projection API.
+    if supplied_digest != "i" * 64 and supplied_digest != expected_digest:
+        _storage_first_contract_error(
+            "parent identity-v2 evidence digest is not bound to the retained map"
+        )
+    # ``mode`` and ``digest`` are adapter-private annotations rather than
+    # signed parent-map fields.  Always derive the child binding from the
+    # retained map so adding or removing those annotations cannot rebind an
+    # otherwise identical parent plan.
+    return "current_admission", expected_digest
+
+
 def _storage_first_parent_binding_digest(parent: Mapping[str, Any]) -> str:
     """Digest the immutable parent closure before projecting a child phase.
 
@@ -2944,7 +2979,11 @@ def _storage_first_parent_binding_digest(parent: Mapping[str, Any]) -> str:
             }
             for node in (nodes if isinstance(nodes, list) else [])
         ],
-        "identity_v2_evidence": copy.deepcopy(evidence),
+        "identity_v2_evidence": {
+            key: copy.deepcopy(value)
+            for key, value in evidence.items()
+            if key not in {"mode", "digest"}
+        } if isinstance(evidence, Mapping) else copy.deepcopy(evidence),
         "credential_nonce_ledger": copy.deepcopy(ledger),
         "known_hosts_digest": parent.get("known_hosts_digest"),
         "sequencer_proof": copy.deepcopy(proof),
@@ -3002,12 +3041,10 @@ def _storage_first_validate_parent(parent: Mapping[str, Any]) -> dict[str, Any]:
     evidence = parent.get("identity_v2_evidence")
     if not isinstance(evidence, Mapping):
         _storage_first_contract_error("parent identity-v2 evidence is required")
-    if evidence.get("mode") != "current_admission":
-        _storage_first_contract_error("parent identity-v2 evidence must be current_admission")
+    _, identity_digest = _storage_first_identity_admission_projection(evidence)
     entries = evidence.get("entries")
     if not isinstance(entries, list) or [entry.get("node_name") for entry in entries if isinstance(entry, Mapping)] != list(NODE_ORDER):
         _storage_first_contract_error("parent identity-v2 evidence must cover all five nodes in order")
-    identity_digest = _storage_first_digest(evidence.get("digest"), "parent identity-v2 evidence digest")
     # The normal planner's plan digest is the durable integrity binding.  Keep
     # a process-local consistency guard for shape-only callers that cannot
     # provide signed plan bytes: rebinding the same transaction/head to a new

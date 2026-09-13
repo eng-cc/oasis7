@@ -3383,6 +3383,23 @@ class StorageFirstContractRedTests(unittest.TestCase):
             with self.subTest(mutation=mutation), self.assertRaises(Exception):
                 self._build(changed)
 
+    def test_storage_first_accepts_retained_identity_map_and_derives_child_fields(self):
+        """The child derives mode/digest without widening signed parent evidence."""
+        parent = self._parent_plan()
+        retained = parent["identity_v2_evidence"]
+        retained.pop("mode")
+        retained.pop("digest")
+        contract = self._build(parent)
+        expected_digest = hashlib.sha256(
+            json.dumps(
+                retained,
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        self.assertEqual(contract["identity_v2_digest"], expected_digest)
+
     def test_storage_first_requires_distinct_signed_no_backup_scope(self):
         contract = self._build()
         scope = contract["no_backup_authority_scope"]

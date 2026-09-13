@@ -4939,10 +4939,10 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
             journal = fixture.root / "side-effect.journal.json"
             original_validate = fixture.adapter._validate_rollback_candidates
 
-            def child_rollback_candidates(plan, candidates):
+            def child_rollback_candidates(plan, candidates, *, order=None):
                 if list(candidates) == ["stop:storage-205", "delete:storage-205"]:
                     return list(candidates)
-                return original_validate(plan, candidates)
+                return original_validate(plan, candidates, order=order)
 
             with mock.patch.object(
                 fixture.adapter,
@@ -5189,10 +5189,10 @@ print(json.dumps(record, sort_keys=True))
             journal = canonical.root / "side-effect-security.journal.json"
             original_validate = canonical.adapter._validate_rollback_candidates
 
-            def child_rollback_candidates(plan, candidates):
+            def child_rollback_candidates(plan, candidates, *, order=None):
                 if list(candidates) == ["stop:storage-205", "delete:storage-205"]:
                     return list(candidates)
-                return original_validate(plan, candidates)
+                return original_validate(plan, candidates, order=order)
 
             with mock.patch.object(
                 canonical.adapter,
@@ -5993,10 +5993,10 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
             journal = canonical.root / "recovery-auth.journal.json"
             original_validate = canonical.adapter._validate_rollback_candidates
 
-            def child_rollback_candidates(plan, candidates):
+            def child_rollback_candidates(plan, candidates, *, order=None):
                 if list(candidates) == ["stop:storage-205", "delete:storage-205"]:
                     return list(candidates)
-                return original_validate(plan, candidates)
+                return original_validate(plan, candidates, order=order)
 
             with mock.patch.object(
                 canonical.adapter,
@@ -6013,6 +6013,7 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
             record = json.loads(journal.read_text(encoding="utf-8"))
             self.assertEqual(record["failed_operation"], "delete:storage-205")
             for field in ("reconciliation_reobserve", "reconciliation_handoff"):
+                self.assertIn(field, record, record)
                 receipt = record[field]
                 self.assertIs(receipt.get("authenticated"), True)
                 self.assertIs(receipt.get("verified"), True)
@@ -6108,6 +6109,90 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
         finally:
             canonical.tearDown()
 
+    def test_runtime_sf_017_recovery_receipts_use_storage_child_rollback_prefix(self) -> None:
+        """Recovery receipts bind only the storage mutation prefix, never verify."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            started = ["stop:storage-205", "delete:storage-205"]
+            transport = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+            receipt = transport._receipt(
+                "reobserve-failed-state", transport._storage_node()
+            )
+            receipt["bindings"]["rollback_candidates"] = list(started)
+            bound = canonical.adapter._storage_first_recovery_receipt(
+                canonical.plan,
+                receipt,
+                "reobserve-failed-state",
+                "delete:storage-205",
+                started,
+                canonical._recovery_verifier,
+            )
+            self.assertEqual(bound["bindings"]["rollback_candidates"], started)
+            self.assertNotIn("verify:storage-205", bound["bindings"]["rollback_candidates"])
+        finally:
+            canonical.tearDown()
+
+    def test_runtime_sf_018_recovery_callbacks_are_required_before_first_mutation(self) -> None:
+        """Both governed recovery callbacks must be present before provider mutation."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            class MissingRecoveryCallbacks(StorageFirstCanonicalTransport):
+                reobserve_failed_state = None
+                rollback_clean_redeploy = None
+
+            transport = MissingRecoveryCallbacks(canonical.adapter, canonical.plan)
+            with self.assertRaises(Exception):
+                self.fixture._canonical_runner(canonical, transport)
+            self.assertEqual(transport.mutations, [])
+        finally:
+            canonical.tearDown()
+
+    def test_runtime_sf_019_recovery_callbacks_receive_fresh_plan_and_cursor_snapshots(self) -> None:
+        """A re-observer cannot poison the subsequent rollback callback inputs."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            class PoisoningRecoveryTransport(StorageFirstCanonicalTransport):
+                def __init__(self, adapter, plan):
+                    super().__init__(adapter, plan, side_effect_operation="delete:storage-205")
+                    self.reobserve_seen = None
+                    self.rollback_seen = None
+
+                def reobserve_failed_state(self, callback_plan, started, failed_operation):
+                    receipt = super().reobserve_failed_state(
+                        callback_plan, started, failed_operation
+                    )
+                    self.reobserve_seen = (callback_plan, started)
+                    callback_plan["node"]["name"] = "poisoned-by-reobserve"
+                    started.append("poisoned-by-reobserve")
+                    return receipt
+
+                def rollback_clean_redeploy(self, callback_plan, started, failed_state=None):
+                    self.rollback_seen = (
+                        copy.deepcopy(callback_plan),
+                        list(started),
+                        copy.deepcopy(failed_state),
+                    )
+                    return super().rollback_clean_redeploy(
+                        callback_plan, started, failed_state
+                    )
+
+            transport = PoisoningRecoveryTransport(canonical.adapter, canonical.plan)
+            with self.assertRaises(Exception):
+                self.fixture._canonical_runner(canonical, transport)
+            self.assertIsNotNone(transport.reobserve_seen)
+            self.assertIsNotNone(transport.rollback_seen)
+            rollback_plan, rollback_started, _ = transport.rollback_seen
+            self.assertEqual(rollback_plan["node"]["name"], "storage-205")
+            self.assertEqual(
+                rollback_started,
+                ["stop:storage-205", "delete:storage-205"],
+            )
+            self.assertIsNot(
+                transport.reobserve_seen[0], transport.rollback_seen[0]
+            )
+        finally:
+            canonical.tearDown()
+
     def test_runtime_sf_009_resume_rejects_receipt_operation_cursor_drift(self) -> None:
         receipt_transport = self.fixture._Transport()
         receipt_transport.plan = self.plan
@@ -6180,10 +6265,10 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
             )
             original_validate = canonical.adapter._validate_rollback_candidates
 
-            def child_rollback_candidates(plan, candidates):
+            def child_rollback_candidates(plan, candidates, *, order=None):
                 if list(candidates) == ["stop:storage-205", "delete:storage-205"]:
                     return list(candidates)
-                return original_validate(plan, candidates)
+                return original_validate(plan, candidates, order=order)
 
             with mock.patch.object(
                 canonical.adapter,
@@ -6869,10 +6954,10 @@ class StorageFirstBlockchainP1RedTests(unittest.TestCase):
             )
             original_validate = canonical.adapter._validate_rollback_candidates
 
-            def child_rollback_candidates(plan, candidates):
+            def child_rollback_candidates(plan, candidates, *, order=None):
                 if list(candidates) == ["stop:storage-205", "delete:storage-205"]:
                     return list(candidates)
-                return original_validate(plan, candidates)
+                return original_validate(plan, candidates, order=order)
 
             with mock.patch.object(
                 canonical.adapter,
