@@ -275,6 +275,22 @@ def scenario_full_corpus_accepts_retired_topics_and_reports_lifecycle_errors() -
         shutil.rmtree(root)
 
 
+def scenario_full_corpus_requires_exact_lifecycle_enum() -> None:
+    root, _base, _head = make_repo()
+    try:
+        (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
+        (root / TOPIC).write_text(
+            TOPIC_TEXT.replace("生命周期：`active`", "生命周期：`active-ish`"),
+            encoding="utf-8",
+        )
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 1, output
+        assert f"invalid-lifecycle: {TOPIC}: `active-ish`" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
 def scenario_full_corpus_counts_module_root() -> None:
     root, _base, _head = make_repo()
     try:
@@ -328,6 +344,46 @@ def scenario_full_corpus_requires_lifecycle_closure() -> None:
             shutil.rmtree(root)
 
 
+def scenario_full_corpus_rejects_lifecycle_closure_placeholders_and_unlinked_fields() -> None:
+    cases = (
+        (
+            LIFECYCLE_CLOSURE.replace(
+                "- 剩余语义：保留历史验收含义与仍需可达的引用。",
+                "- 剩余语义：TBD",
+            ),
+            "lifecycle-placeholder",
+        ),
+        (
+            LIFECYCLE_CLOSURE.replace(
+                "- 接收 authority：[`gameplay authority`](../../game/prd.md#authority)",
+                "- 接收 authority：gameplay authority",
+            ),
+            "lifecycle-missing-receiving-authority-link",
+        ),
+        (
+            LIFECYCLE_CLOSURE.replace(
+                "- 稳定引用：[`gameplay authority`](../../game/prd.md#authority)",
+                "- 稳定引用：[`gameplay authority`](../../game/prd.md#missing)",
+            ),
+            "lifecycle-invalid-stable-reference-link",
+        ),
+    )
+    for closure, code in cases:
+        root, _base, _head = make_repo()
+        try:
+            (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
+            (root / "doc/product/world-rules-core-gameplay/retired.prd.md").write_text(
+                lifecycle_topic_text("retired").replace(LIFECYCLE_CLOSURE, closure),
+                encoding="utf-8",
+            )
+            result = invoke_full_corpus(root)
+            output = result.stdout + result.stderr
+            assert result.returncode == 1, output
+            assert f"{code}: doc/product/world-rules-core-gameplay/retired.prd.md" in output, output
+        finally:
+            shutil.rmtree(root)
+
+
 def scenario_full_corpus_requires_design_decision_or_exemption() -> None:
     root, _base, _head = make_repo()
     try:
@@ -370,6 +426,101 @@ def scenario_full_corpus_accepts_simple_topic_exemption() -> None:
         assert "full-corpus checked 2 current-tree product documents" in output, output
     finally:
         shutil.rmtree(root)
+
+
+def scenario_full_corpus_requires_bound_repository_task_evidence() -> None:
+    cases = (
+        """
+
+## 设计判定
+- 设计判定：`simple-topic-exemption`
+- 设计适用性理由：这是简单专题，不增加新的信息分层、交互状态编排或策略取舍。
+- 当前 GitHub task evidence：见下一行。
+- [issue evidence](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)
+""",
+        """
+
+## 设计判定
+- 设计判定：`simple-topic-exemption`
+- 设计适用性理由：这是简单专题，不增加新的信息分层、交互状态编排或策略取舍。
+- 当前 GitHub task evidence：[`issue evidence`](https://github.com/example-owner/example-repo/issues/3680#issuecomment-5652870280)
+""",
+    )
+    for exemption in cases:
+        root, _base, _head = make_repo()
+        try:
+            (root / DESIGN).unlink()
+            (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
+            (root / TOPIC).write_text(
+                TOPIC_TEXT.replace("- 设计判定：`paired-design`\n", "")
+                .replace("- 配对产品设计：[`sample.design.md`](sample.design.md)\n", "")
+                + exemption,
+                encoding="utf-8",
+            )
+            result = invoke_full_corpus(root)
+            output = result.stdout + result.stderr
+            assert result.returncode == 1, output
+            assert f"missing-design-exemption-evidence: {TOPIC}" in output, output
+        finally:
+            shutil.rmtree(root)
+
+
+def mapping_topic_text() -> str:
+    return TOPIC_TEXT.replace(
+        "### 5.2 效果与证据范围",
+        """<a id="req-sample-002"></a>
+### REQ-SAMPLE-002：可恢复的选择
+- 要求：玩家必须（MUST）获得一条恢复路径。
+- 验收：AC-SAMPLE-002
+
+<a id="ac-sample-002"></a>
+### AC-SAMPLE-002：恢复路径
+- 覆盖要求：REQ-SAMPLE-002
+
+### 5.2 效果与证据范围""",
+    )
+
+
+def mapping_design_text(*, inconsistent: bool = False, incomplete: bool = False) -> str:
+    second_row = ""
+    if not incomplete:
+        if inconsistent:
+            second_row = (
+                "| [`REQ-SAMPLE-002`](sample.prd.md#req-sample-002) | "
+                "[`AC-SAMPLE-001`](sample.prd.md#ac-sample-001) / "
+                "[`AC-SAMPLE-002`](sample.prd.md#ac-sample-002) |\n"
+            )
+        else:
+            second_row = (
+                "| [`REQ-SAMPLE-002`](sample.prd.md#req-sample-002) | "
+                "[`AC-SAMPLE-002`](sample.prd.md#ac-sample-002) |\n"
+            )
+    return DESIGN_TEXT.replace(
+        "| [`REQ-SAMPLE-001`](sample.prd.md#req-sample-001) | [`AC-SAMPLE-001`](sample.prd.md#ac-sample-001) |\n",
+        "| [`REQ-SAMPLE-001`](sample.prd.md#req-sample-001) | [`AC-SAMPLE-001`](sample.prd.md#ac-sample-001) |\n"
+        + second_row,
+    )
+
+
+def scenario_full_corpus_requires_complete_prd_consistent_design_mapping() -> None:
+    for inconsistent, incomplete, code in (
+        (False, True, "design-prd-mapping-incomplete"),
+        (True, False, "design-prd-mapping-inconsistent"),
+    ):
+        root, _base, _head = make_repo()
+        try:
+            (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
+            (root / TOPIC).write_text(mapping_topic_text(), encoding="utf-8")
+            (root / DESIGN).write_text(
+                mapping_design_text(inconsistent=inconsistent, incomplete=incomplete),
+                encoding="utf-8",
+            )
+            result = invoke_full_corpus(root)
+            output = result.stdout + result.stderr
+            assert result.returncode == 1, output
+            assert f"{code}: {DESIGN}" in output, output
+        finally:
+            shutil.rmtree(root)
 
 
 def scenario_full_corpus_requires_paired_design_link() -> None:
@@ -774,11 +925,15 @@ def main() -> None:
     scenario_full_corpus_exempts_non_active_topic_cardinality()
     scenario_full_corpus_includes_unchanged_legacy_and_sorts_diagnostics()
     scenario_full_corpus_accepts_retired_topics_and_reports_lifecycle_errors()
+    scenario_full_corpus_requires_exact_lifecycle_enum()
     scenario_full_corpus_counts_module_root()
     scenario_full_corpus_rejects_product_symlinks()
     scenario_full_corpus_requires_lifecycle_closure()
+    scenario_full_corpus_rejects_lifecycle_closure_placeholders_and_unlinked_fields()
     scenario_full_corpus_requires_design_decision_or_exemption()
     scenario_full_corpus_accepts_simple_topic_exemption()
+    scenario_full_corpus_requires_bound_repository_task_evidence()
+    scenario_full_corpus_requires_complete_prd_consistent_design_mapping()
     scenario_full_corpus_requires_paired_design_link()
     scenario_full_corpus_requires_prd_trace_fragments()
     scenario_full_corpus_validates_module_root()

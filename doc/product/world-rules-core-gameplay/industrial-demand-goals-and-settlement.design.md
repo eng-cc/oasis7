@@ -90,8 +90,8 @@ This design delegates product requirements and acceptance semantics to its paire
 | [REQ-SC31-001](industrial-demand-goals-and-settlement.prd.md#req-sc31-001) | [AC-SC31-001](industrial-demand-goals-and-settlement.prd.md#ac-sc31-001) |
 | [REQ-SC31-002](industrial-demand-goals-and-settlement.prd.md#req-sc31-002) | [AC-SC31-002](industrial-demand-goals-and-settlement.prd.md#ac-sc31-002) |
 | [REQ-SC31-003](industrial-demand-goals-and-settlement.prd.md#req-sc31-003) | [AC-SC31-003](industrial-demand-goals-and-settlement.prd.md#ac-sc31-003) |
-| [REQ-SC31-004](industrial-demand-goals-and-settlement.prd.md#req-sc31-004) | [AC-SC31-004](industrial-demand-goals-and-settlement.prd.md#ac-sc31-004) |
-| [REQ-SC31-005](industrial-demand-goals-and-settlement.prd.md#req-sc31-005) | [AC-SC31-005](industrial-demand-goals-and-settlement.prd.md#ac-sc31-005) |
-| [REQ-SC31-006](industrial-demand-goals-and-settlement.prd.md#req-sc31-006) | [AC-SC31-006](industrial-demand-goals-and-settlement.prd.md#ac-sc31-006) |
-| [REQ-SC31-007](industrial-demand-goals-and-settlement.prd.md#req-sc31-007) | [AC-SC31-007](industrial-demand-goals-and-settlement.prd.md#ac-sc31-007) |
-| [REQ-SC31-008](industrial-demand-goals-and-settlement.prd.md#req-sc31-008) | [AC-SC31-008](industrial-demand-goals-and-settlement.prd.md#ac-sc31-008) |
+| [REQ-SC31-004](industrial-demand-goals-and-settlement.prd.md#req-sc31-004) | [AC-SC31-004](industrial-demand-goals-and-settlement.prd.md#ac-sc31-004) / [AC-SC31-005](industrial-demand-goals-and-settlement.prd.md#ac-sc31-005) |
+| [REQ-SC31-005](industrial-demand-goals-and-settlement.prd.md#req-sc31-005) | [AC-SC31-006](industrial-demand-goals-and-settlement.prd.md#ac-sc31-006) |
+| [REQ-SC31-006](industrial-demand-goals-and-settlement.prd.md#req-sc31-006) | [AC-SC31-007](industrial-demand-goals-and-settlement.prd.md#ac-sc31-007) |
+| [REQ-SC31-007](industrial-demand-goals-and-settlement.prd.md#req-sc31-007) | [AC-SC31-008](industrial-demand-goals-and-settlement.prd.md#ac-sc31-008) |
+| [REQ-SC31-008](industrial-demand-goals-and-settlement.prd.md#req-sc31-008) | [AC-SC31-009](industrial-demand-goals-and-settlement.prd.md#ac-sc31-009) |
