@@ -105,6 +105,70 @@ tenure 的续期、转让、收回、迁移、补偿或申诉请求必须绑定�
 | FI-3 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 探索数据私有范围、最低安全/通行披露、公共 baseline、来源与 freshness 证据 | test_tier_required |
 | FI-4 / FI-5 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `README.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 公共/实时信息分层、侦察/关系/购买/授权、freshness/恢复和当前 claim 分离审计 | test_tier_required |
 
+## 5.2 产品要求、叶子验收与未决问题
+
+<a id="req-wr-fi-001"></a>
+### REQ-WR-FI-001：frontier 扩展必须保持相邻、同世界和可恢复
+
+- 性质：`目标要求`
+- 适用条件：玩家、Agent 或组织尝试进入未知相邻区域。
+- 要求：产品必须把探索、物流和 charter 作为可读的组合前置，并将新区域接入同一世界时间线、经济与历史；任一跳跃、私有副本或旁路不得制造独立世界结果。
+- 理由：扩展应带来有代价的探索与协作机会，而不是重置风险或绕过既有权利。
+- 上位承诺：frontier 扩展与世界连续性。
+- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)。
+- 验收：[AC-WR-FI-001](#ac-wr-fi-001)。
+
+<a id="req-wr-fi-002"></a>
+### REQ-WR-FI-002：pioneer priority 必须是有期限、有范围的机会
+
+- 性质：`目标要求`
+- 适用条件：探索或开发里程碑产生先行机会、转让或到期。
+- 要求：产品必须区分 priority 与 tenure/主权，说明地点/用途、未完成里程碑、剩余期限、受让人资格结果和到期/撤销后的下一步；重连、重复、关联倒手或历史 receipt 重放不得产生第二次机会。
+- 理由：玩家可以承担先行开发风险，但不能把限时机会套利成永久排他或隐性治理权。
+- 上位承诺：pioneer priority 与 tenure 的独立边界。
+- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)。
+- 验收：[AC-WR-FI-002](#ac-wr-fi-002)。
+
+<a id="req-wr-fi-003"></a>
+### REQ-WR-FI-003：信息分层必须同时保护公共安全与不确定性
+
+- 性质：`目标要求`
+- 适用条件：玩家或 Agent 读取探索数据、公共事实或实时运营信息。
+- 要求：产品必须让玩家区分可审计公共事实、最低公共安全披露和需要侦察/关系/购买/授权取得的实时信息，并显示来源、范围、freshness 与不确定性；证据不足时不得把局部观察包装成完整实时真值。
+- 理由：信息优势应产生有界选择，而不是让安全事实被隐藏或让缓存伪装为可靠情报。
+- 上位承诺：探索数据与公共安全基线。
+- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)。
+- 验收：[AC-WR-FI-003](#ac-wr-fi-003)。
+
+<a id="ac-wr-fi-001"></a>
+### AC-WR-FI-001：frontier 进入保持同一世界边界
+
+- 覆盖要求：REQ-WR-FI-001。
+- 给定：一个待探索的相邻 frontier。
+- 当：玩家依次尝试探索、建立物流并进入 charter 扩展路径，同时提交跳跃或私有副本请求。
+- 则：只有满足受治理组合前置的路径接入同一时间线、经济和历史；跳跃或旁路被拒绝或清楚说明原因。
+
+<a id="ac-wr-fi-002"></a>
+### AC-WR-FI-002：priority 转让与到期不制造主权
+
+- 覆盖要求：REQ-WR-FI-002。
+- 给定：一个尚未到期、带有地点/用途和开发里程碑的 pioneer priority。
+- 当：发生转让、受让人资格变化、到期、撤销、并发提交或重连重试。
+- 则：受影响主体能读到资格结果、剩余范围/期限和下一步；最多一个权威结果改变归属或消费，priority 不创建 tenure、主权、永久排他或延长期限。
+
+<a id="ac-wr-fi-003"></a>
+### AC-WR-FI-003：实时情报不会冒充公共真值
+
+- 覆盖要求：REQ-WR-FI-003。
+- 给定：同一 frontier 同时存在已结算公共事实、最低安全披露和 live inventory/route 状态。
+- 当：玩家或 Agent 查看这些信息，或授权、freshness、观察范围发生变化。
+- 则：公共事实可审计；实时信息要求真实授权并显示来源、范围、freshness 与不确定性；授权失效、证据冲突或过期时提供刷新、替代、等待或停止路径。
+
+### 5.3 未决问题与证据边界
+
+- 尚未决定：frontier 的具体地图、邻接、物流和侦察能力何时进入可验证实现；影响 FI-1 至 FI-5 的当前 verdict，决策负责角色为 `producer_system_designer` 联合 gameplay、runtime、Agent、Viewer 与 QA，触发条件是进入相应实现或公开 claim 审查前，解决前临时不承诺当前存在可进入 frontier 或实时情报能力。
+- 本分册证据只能证明指定候选、入口、版本/窗口和环境中的扩展与信息边界；局部探索样本、缓存或文档建档不能证明当前地图、公共 baseline、公开 API 或发行 readiness。
+
 ## 6. Non-Goals
 
 - 不定义地图、相邻、路线、侦察、库存、部署、计划、charter、priority、数据权限或 freshness 的算法、数值、字段、UI 或 runtime 实现。

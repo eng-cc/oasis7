@@ -61,6 +61,70 @@
 | IA-6 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 同候选跨域组合审计；产品文档、局部测试或世界 tick 不得代签 | test_tier_full |
 | IA-7 | gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 跨动作 causal-decision receipt、请求/提案接受与权威应用边界、纠正生效与结果的组合证据 | test_tier_required |
 
+## 4.2 产品要求与叶子验收
+
+<a id="req-wr-ia-001"></a>
+### REQ-WR-IA-001：间接控制必须区分意图接受与世界生效
+
+- 性质：`目标要求`
+- 适用条件：玩家通过 Agent 提交目标、行动、step、社交、治理或冲突意图。
+- 要求：产品必须让玩家分别看到意图被接受/拒绝、当前推进或阻塞、权威世界后果和下一步；接受或排队不得被表达为行动已发生或结果已结算。
+- 理由：玩家需要知道自己的行动是否仍有机会改变世界，避免把等待、空结果或界面计数误认成推进。
+- 上位承诺：间接控制下的玩家能动性与续接。
+- 专业权威：[`PRD-GAME-014`](../../game/gameplay/gameplay-indirect-control-agency-contract.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)。
+- 验收：[AC-WR-IA-001](#ac-wr-ia-001)。
+
+<a id="req-wr-ia-002"></a>
+### REQ-WR-IA-002：阻塞、离开与回流必须保留下一次决策
+
+- 性质：`目标要求`
+- 适用条件：路线不可行、被改道、玩家暂时离开或重新连接。
+- 要求：产品必须保留当前目标、主要阻塞、最近后果和可执行下一步，并允许玩家等待、修复、改道、重新聚焦或安全结束意图；无安全路径时必须返回新的决策面。
+- 理由：持续世界可以自主运行，但不能把玩家降格为无法解释的旁观者。
+- 上位承诺：玩家续接、恢复与可干预性。
+- 专业权威：[`PRD-GAME-014`](../../game/gameplay/gameplay-indirect-control-agency-contract.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)。
+- 验收：[AC-WR-IA-002](#ac-wr-ia-002)。
+
+<a id="req-wr-ia-003"></a>
+### REQ-WR-IA-003：关键间接决策必须保留可读因果与纠正结果
+
+- 性质：`目标要求`
+- 适用条件：记忆驱动、社交、治理或冲突等会改变玩家取舍的 Agent 决策。
+- 要求：产品必须让玩家沿同一因果链理解被接受的意图、Agent 理由/证据、stakes、预期后果、替代方向、打断/纠正点及纠正后的结果；提案接受不得被表达为权威规则已应用。
+- 理由：高层控制仍应让玩家能修正方向并理解代价，而不是只看到自动化结果。
+- 上位承诺：可理解、可干预、可恢复的玩家能动性。
+- 专业权威：[`PRD-GAME-014`](../../game/gameplay/gameplay-indirect-control-agency-contract.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)。
+- 验收：[AC-WR-IA-003](#ac-wr-ia-003)。
+
+<a id="ac-wr-ia-001"></a>
+### AC-WR-IA-001：接受、推进、后果和下一步保持可区分
+
+- 覆盖要求：REQ-WR-IA-001。
+- 给定：一个玩家提交的目标或 step 意图。
+- 当：请求被接受、排队、处理、产生空结果或被阻塞。
+- 则：正式入口分别表达接受/拒绝、推进/阻塞、可读后果和下一步；等待、空结果、自动调度、界面计数或重新加载不被包装为世界已推进。
+
+<a id="ac-wr-ia-002"></a>
+### AC-WR-IA-002：阻塞和回流保留有效恢复动作
+
+- 覆盖要求：REQ-WR-IA-002。
+- 给定：玩家离开后路线失效、被替换、改道或当前目标受到阻塞。
+- 当：玩家返回、重连或主动查看当前意图。
+- 则：玩家能看到当前目标、主要阻塞、最近后果和可执行下一步，并能等待、修复、改道、重新聚焦或安全结束；没有安全路径时返回新的决策面。
+
+<a id="ac-wr-ia-003"></a>
+### AC-WR-IA-003：因果解释和纠正结果可追溯
+
+- 覆盖要求：REQ-WR-IA-003。
+- 给定：一次记忆驱动、社交、治理或冲突决策及其替代方向。
+- 当：玩家查看 Agent 理由、提交纠正或打断，并等待权威结果。
+- 则：同一 causal-decision receipt 能说明意图、理由/证据、stakes、预期后果、替代、最早生效点和纠正结果，并明确请求/提案接受与权威应用的边界。
+
+### 4.3 未决问题与证据边界
+
+- 尚未决定：哪些间接控制路径进入当前可验证产品入口，以及各入口何时具备同候选的 Agent、runtime、Viewer 和 QA 证据；影响 IA-1 至 IA-7 的当前 verdict，决策负责角色为 `producer_system_designer` 联合 gameplay、Agent、runtime、Viewer 与 QA，触发条件是进入实现或公开 claim 审查前，解决前临时不承诺所有间接控制路径均已支持。
+- 本分册证据只能证明指定意图类型、入口、版本/窗口和环境中的因果与续接行为；单次 Agent 行动、持续 world tick、文档建档或局部 green 不能证明玩家理解、完整 API parity 或发行 readiness。
+
 ## 5. Non-Goals
 
 - 不把 oasis7 改成第一人称逐帧操控、逐块建造或以增加动作数量代替能动性。

@@ -125,6 +125,70 @@
 | MW-9 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-007 / PRD-GAME-014 / PRD-GAME-015 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 三条长期推荐轴、单一主目标、继续/分支/换向、文明项目自愿性与后台护栏组合证据 | test_tier_required |
 | MW-10 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / viewer_engineer / qa_engineer | PRD-GAME-015 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 自愿服务费/有界 levy 分类、完整授权、原子拒绝、无隐性独立路径门槛、结算状态与失效后的申诉/恢复组合证据 | test_tier_full |
 
+## 6.2 产品要求、叶子验收与未决问题
+
+<a id="req-wr-mw-001"></a>
+### REQ-WR-MW-001：成熟世界成长必须提供独立且有后果的区域价值
+
+- 性质：`目标要求`
+- 适用条件：玩家完成首次持续能力后，在已有组织、治理和历史的成熟世界继续游玩。
+- 要求：产品必须围绕本地立足、区域专业化贡献和有限区域影响提供可归因的玩家行动、世界变化、新能力/区域用途和下一次决策；不能只以产量、库存或重复次数增长作为成长。
+- 理由：成熟世界需要让小玩家和回流玩家仍能形成独立价值，而不是只能投靠 major power 或旁观。
+- 上位承诺：成熟世界成长主线与 anti-grind 判据。
+- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`gameplay-mature-world-progression-contract.prd.md`](../../game/gameplay/gameplay-mature-world-progression-contract.prd.md)。
+- 验收：[AC-WR-MW-001](#ac-wr-mw-001)。
+
+<a id="req-wr-mw-002"></a>
+### REQ-WR-MW-002：失败后必须比较 repair、rebuild 与 pivot
+
+- 性质：`目标要求`
+- 适用条件：局部停机、资源短缺、据点受压或路线失效，且玩家仍有一个当前主目标。
+- 要求：产品必须在同一当前目标下比较 repair、rebuild 与 pivot 的时间/阶段成本、资源成本、保留/失去价值、主要风险、推荐理由和独立 lane 可行性；外部依赖只有在独立路径确实不可行时才可标为受迫路径。
+- 理由：恢复是下一次有意义的选择，不能把最低眼前成本或加入强组织伪装成唯一答案。
+- 上位承诺：失败、恢复与独立性。
+- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`gameplay-mature-world-progression-contract.prd.md`](../../game/gameplay/gameplay-mature-world-progression-contract.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)。
+- 验收：[AC-WR-MW-002](#ac-wr-mw-002)。
+
+<a id="req-wr-mw-003"></a>
+### REQ-WR-MW-003：区域筹资不得变成独立成长的隐性租金
+
+- 性质：`目标要求`
+- 适用条件：区域服务费、维护费或公共品 levy 的提案、授权、结算、失效和复核。
+- 要求：产品必须让玩家区分自愿费用与有界 levy，并在征费前说明用途、受益范围、上限/预算、到期、公开账目和复核；授权缺失、过期或无法核验时原子拒绝且不阻断基本独立、通行或恢复路径。
+- 理由：公共服务可以产生真实成本，但不能借收费把独立成长、一般资格或治理权变成隐性租金。
+- 上位承诺：区域服务筹资与独立路线边界。
+- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)。
+- 验收：[AC-WR-MW-003](#ac-wr-mw-003)。
+
+<a id="ac-wr-mw-001"></a>
+### AC-WR-MW-001：阶段成果形成可归因的区域价值
+
+- 覆盖要求：REQ-WR-MW-001。
+- 给定：资源和影响力有限的玩家在成熟世界完成一次本地服务或区域专业化贡献。
+- 当：贡献结算并进入下一次游玩。
+- 则：玩家能读到行动、可归因的世界变化、新增选择/恢复弹性/议价位置/区域用途和回访理由；只有吞吐、库存或重复次数增加的样例不能通过。
+
+<a id="ac-wr-mw-002"></a>
+### AC-WR-MW-002：恢复选择服务同一当前目标
+
+- 覆盖要求：REQ-WR-MW-002。
+- 给定：同一 active goal 下发生 disruption，且 repair、rebuild、pivot 至少有两条候选或明确说明独立路径不可行。
+- 当：玩家比较恢复方向并作出选择。
+- 则：每条路径显示时间/阶段成本、资源成本、保留/失去价值、主要风险、推荐理由和独立 lane 可行性；外部依赖说明其必要约束与重新比较条件。
+
+<a id="ac-wr-mw-003"></a>
+### AC-WR-MW-003：失效筹资不会产生隐性世界效果
+
+- 覆盖要求：REQ-WR-MW-003。
+- 给定：一个可排他服务费提案和一个缺少 charter 授权、用途/范围、预算/上限、到期、账目或复核条件的 levy 请求。
+- 当：玩家查看、提交、续费或遇到授权失效/撤销。
+- 则：自愿费用和有界 levy 的状态可区分；不完整或失效授权的征费原子拒绝，不重试、不累积欠费、不产生资格/治理旁路，也不阻断基本独立、通行或恢复路径。
+
+### 6.3 未决问题与证据边界
+
+- 尚未决定：成熟世界三条推荐轴和 fresh mature-world sample 何时具备同一候选的 gameplay、runtime、Agent、Viewer 与 QA 证据；影响 MW-1 至 MW-10 的当前路线 verdict，决策负责角色为 `producer_system_designer` 联合 gameplay、runtime、Agent、Viewer 与 QA，触发条件是进入相应实现或公开 claim 审查前，解决前临时不承诺 mature-world 体验已通过。
+- 本分册证据只能证明指定成熟世界样本、入口、版本/窗口和环境中的成长与恢复行为；历史完成态、文档迁移或局部专业 green 不能证明真实留存、完整区域经济或发行 readiness。
+
 具体字段、状态转换、Agent 决策顺序、界面呈现和 pass/watch/block 证据由专业域文档与 GitHub task issue evidence 维护，不复制到本产品分册。
 
 ## 7. Non-Goals

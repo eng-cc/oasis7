@@ -53,6 +53,12 @@
 
 Compatibility declaration 只证明客户端能理解当前 manifest，不能选择或锁定 governing version；manifest 缺失、冲突或无法与当前 committed/finality-verified block 对账时，前述可服务语义不成立。
 
+## 4.1 正常路径与消费者选择
+
+正常路径从消费者读取同一 `world_id` 的已验证状态开始：消费者确认当前等级、最后可信边界和适用的版本/最终性条件，再选择等待、重新验证或提交一个 intent。只有在“已验证可服务”成立时才进入专业合同定义的提交路径；提交后仍须等待可验证的 committed receipt，消费者再据此更新自己的世界结论。已验证只读、陈旧/追赶中或不可用/隔离时，路径停留在查看历史、等待恢复、重新规划或安全返回，不把本地排队和界面反馈包装成世界效果。
+
+该选择的代价是明确的：等待或重新规划可能延迟行动，但提交未经证明的状态会造成重复、错误授权或把临时读面误认为权威历史。基础设施产品层只规定这种可观察的选择和风险边界；提交顺序、去重、receipt 字段和具体恢复步骤仍由 P2P、world-runtime、消费者与测试专业权威定义。
+
 ## 5. 当前与目标的分离
 
 当前实现是 stake-weighted proposer/attestation threshold prototype，不是已经具备完整 BFT 最终性的公开承诺。目标仍缺持久且可复验的 quorum certificate、prevote/precommit 锁定、round timeout/view-change、验证者转换证明、复制端证书复验与对抗性恢复证据。本文不因目标描述而宣称 mainnet、去中心化规模、SLA 或发行 readiness。
