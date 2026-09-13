@@ -32,6 +32,8 @@ mod kernel;
 mod llm_agent;
 mod llm_defaults;
 mod memory;
+#[cfg(not(target_arch = "wasm32"))]
+mod model_provider;
 mod module_visual;
 mod native_resolution;
 pub(crate) mod persist;
@@ -44,6 +46,8 @@ mod runner;
 pub(crate) mod runtime_perf;
 mod scenario;
 mod social;
+#[cfg(not(target_arch = "wasm32"))]
+mod turn_engine;
 mod types;
 mod world_model;
 
@@ -183,6 +187,12 @@ pub use llm_defaults::{
 pub use memory::{
     AgentMemory, LongTermMemory, LongTermMemoryEntry, MemoryEntry, MemoryEntryKind, ShortTermMemory,
 };
+#[cfg(not(target_arch = "wasm32"))]
+pub use model_provider::{
+    LlmCompletionModelProvider, ModelProvider, ModelProviderError, ModelProviderRequest,
+    ModelProviderResponse, ModelProviderTool, ModelProviderTrace, ModelProviderTraceEntry,
+    ModelProviderTurn, ModelProviderUsage,
+};
 pub use module_visual::{ModuleVisualAnchor, ModuleVisualEntity};
 pub use native_resolution::{
     CmMappingRule, NativeResolutionDeclaration, NativeResolutionKind, NativeResolutionValue,
@@ -218,6 +228,11 @@ pub use scenario::{ScenarioSpecError, WorldScenario, WorldScenarioSpec};
 pub use social::{
     SocialAdjudicationDecision, SocialChallengeState, SocialEdgeLifecycleState, SocialEdgeState,
     SocialFactImpactQuote, SocialFactLifecycleState, SocialFactState, SocialStake,
+};
+#[cfg(not(target_arch = "wasm32"))]
+pub use turn_engine::{
+    RuntimeReadbackProof, TurnEngine, TurnEngineError, TurnEngineEvent, TurnEnginePhase,
+    TurnRequest,
 };
 pub use types::{
     Action, ActionEnvelope, ActionId, ActionSubmitter, AgentId, AssetId,
