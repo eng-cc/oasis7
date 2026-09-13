@@ -5317,6 +5317,8 @@ def validate_storage_first_journal(journal: Mapping[str, Any]) -> bool:
         _fail("storage-first journal next operation is outside the storage phase")
     if journal.get("status") == "storage-205-running" and journal.get("callback_started") and journal.get("callback_receipt") is None:
         _fail("storage-first journal contains an ambiguous callback")
+    if journal.get("status") == "prepared" and completed:
+        _fail("storage-first prepared journal cannot contain completed operations")
     if journal.get("status") == "reconciliation-blocked" and journal.get("next_operation") != "reconciliation-required":
         _fail("storage-first reconciliation journal lacks its held boundary")
     if "storage_receipts" in journal:
@@ -5980,6 +5982,8 @@ def _storage_first_run(
                     dict(plan), resume_record.get("nonce_reservation_state")
                 ),
             )
+            record["status"] = str(resume_record.get("status"))
+            record["nonce_reservation_state"] = validated_resume_nonce_state
         _storage_first_journal_write(Path(journal_path), record)
         if not _storage_first_is_shape_fixture(plan):
             try:
@@ -6274,6 +6278,11 @@ def resume_storage_first(
 ) -> dict[str, Any]:
     """Resume a storage-only journal after revalidating current admission."""
     _storage_first_require_concrete_plan(plan)
+    if (
+        not _storage_first_is_shape_fixture(plan)
+        and (provenance_verifier is None or not callable(provenance_verifier))
+    ):
+        _fail("storage-first resume requires the independent provenance verifier callback")
     authority = _storage_first_require_concrete_authority(authority)
     _storage_first_reject_aliases(Path(journal_path), Path(ledger_path), plan)
     _storage_first_validate_ledger_binding(plan, Path(ledger_path))

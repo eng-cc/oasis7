@@ -6428,6 +6428,45 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
         finally:
             canonical.tearDown()
 
+    def test_runtime_sf_028_completed_resume_requires_independent_verifier(self) -> None:
+        """Signed-looking persisted bytes cannot authorize completion without a verifier."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            journal = self.fixture._canonical_prefix_journal(
+                canonical,
+                list(STORAGE_FIRST_CHILD_OPERATIONS),
+                status="storage-205-verified",
+                name="completed-without-verifier.journal.json",
+            )
+            transport = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+            with self.assertRaises(Exception):
+                self.fixture._canonical_resume(
+                    canonical,
+                    journal,
+                    transport,
+                    provenance_verifier=None,
+                )
+            self.assertEqual(transport.mutations, [])
+        finally:
+            canonical.tearDown()
+
+    def test_runtime_sf_029_prepared_journal_rejects_completed_cursor(self) -> None:
+        """A prepared checkpoint cannot erase nonce proof for completed mutation work."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            journal = self.fixture._canonical_prefix_journal(
+                canonical,
+                ["stop:storage-205"],
+                status="prepared",
+                name="prepared-completed-cursor.journal.json",
+            )
+            transport = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+            with self.assertRaises(Exception):
+                self.fixture._canonical_resume(canonical, journal, transport)
+            self.assertEqual(transport.mutations, [])
+        finally:
+            canonical.tearDown()
+
     def test_runtime_sf_027_resume_validates_nonce_checkpoint_before_prepared_write(self) -> None:
         """Missing committed nonce state must not replace a resumable journal checkpoint."""
         canonical = self.fixture._canonical_fixture()
