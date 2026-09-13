@@ -103,6 +103,8 @@ mod capability_grant_v2_lifecycle;
 mod capability_grant_v2_recovery_regressions;
 mod capability_grant_v2_regressions;
 mod capability_grant_v2_selector_authz_regressions;
+mod cognition_economy;
+mod cognition_economy_binding_regressions;
 mod core_policy_publication_transaction_regressions;
 mod data_access_control;
 mod direct_module_output_transaction;

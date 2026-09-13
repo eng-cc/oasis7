@@ -229,6 +229,199 @@ fn chain_linked_runtime_sync_advances_without_play() {
 }
 
 #[test]
+fn chain_linked_provider_authority_is_chain_published_across_tick_and_restart() {
+    let execution_world_dir = runtime_live_temp_dir("chain_sync_provider_authority");
+    let mut execution_world = crate::runtime::World::new_production_hardened();
+    execution_world.submit_action(RuntimeAction::RegisterAgent {
+        agent_id: "chain-provider-agent".to_string(),
+        pos: crate::geometry::GeoPos::new(1, 2, 0),
+    });
+    execution_world
+        .step()
+        .expect("register provider chain agent");
+    execution_world
+        .bind_cognition_runtime(
+            "chain-provider-world",
+            "main",
+            1,
+            Some(
+                "blake3:1111111111111111111111111111111111111111111111111111111111111111"
+                    .to_string(),
+            ),
+            "verified",
+            0,
+        )
+        .expect("bind provider chain world");
+    execution_world
+        .install_test_provider_capability_fixture_without_cognition_balance("chain-provider-agent")
+        .expect("install provider capability authority");
+    let authority = execution_world
+        .test_provider_backed_bootstrap_authority(
+            "chain-provider-agent",
+            "chain-provider-provision-1",
+            "chain-provider-authority",
+            7,
+        )
+        .expect("build provider authority bundle");
+    // The chain writer has not published the authority yet. The viewer
+    // receives the bundle as an admission proof but cannot apply it itself.
+    execution_world
+        .save_to_dir_with_chain_resource_context(
+            execution_world_dir.as_path(),
+            crate::chain_resource_schema::ChainResourceDerivationContext {
+                world_id: "chain-provider-world",
+                chain_id: "runtime-chain",
+                genesis_ref: None,
+                created_at_height: 1,
+                manifest_height: 1,
+                commit_block_hash: Some("chain-provider-block-1"),
+                tick: execution_world.state().time,
+            },
+            "chain-provider-world-config",
+            "chain-provider-generation",
+        )
+        .expect("persist chain provider world before authority publication");
+
+    let persisted_before = crate::runtime::World::load_from_dir(execution_world_dir.as_path())
+        .expect("load chain-published provider world");
+    let economy_before = persisted_before
+        .cognition_economy()
+        .expect("read persisted provider economy");
+    assert!(economy_before.provision_journal.is_empty());
+
+    let chain_status = TestChainStatusServer::start(execution_world_dir.clone());
+    chain_status.committed_height.store(1, Ordering::SeqCst);
+    let config = ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+        .with_chain_status_bind(chain_status.addr.clone())
+        .with_provider_backed_bootstrap_authority(authority.clone());
+    let mut viewer = ViewerRuntimeLiveServer::new(config.clone()).expect("start chain viewer");
+    let mut session = RuntimeLiveSession::new();
+    session.subscribed.insert(ViewerStream::Events);
+    let (mut writer, peer) = test_writer_pair();
+    let error = viewer
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect_err("viewer must wait for chain-owned authority publication");
+    assert!(
+        format!("{error:?}").contains("not durably committed"),
+        "missing canonical provisioning must fail closed: {error:?}"
+    );
+    let _ = read_response_line(&peer, Duration::from_millis(50));
+    let persisted_after_rejection =
+        crate::runtime::World::load_from_dir(execution_world_dir.as_path())
+            .expect("reload provider world after rejected viewer sync");
+    assert_eq!(
+        persisted_after_rejection
+            .cognition_economy()
+            .expect("read economy after rejected viewer sync"),
+        economy_before,
+        "a rejected observer sync must not publish a local allowance"
+    );
+
+    // Simulate the chain writer's canonical publication. The next viewer poll
+    // must retry the same input and observe the durable Runtime transaction.
+    let mut chain_writer = persisted_after_rejection;
+    chain_writer
+        .bootstrap_provider_backed_authority(authority.clone())
+        .expect("publish provider authority through Runtime");
+    chain_writer
+        .save_to_dir_with_chain_resource_context(
+            execution_world_dir.as_path(),
+            crate::chain_resource_schema::ChainResourceDerivationContext {
+                world_id: "chain-provider-world",
+                chain_id: "runtime-chain",
+                genesis_ref: None,
+                created_at_height: 1,
+                manifest_height: 1,
+                commit_block_hash: Some("chain-provider-block-1"),
+                tick: chain_writer.state().time,
+            },
+            "chain-provider-world-config",
+            "chain-provider-generation",
+        )
+        .expect("persist chain-published provider world");
+    let economy_after_publication =
+        crate::runtime::World::load_from_dir(execution_world_dir.as_path())
+            .expect("reload chain-published provider world")
+            .cognition_economy()
+            .expect("read published provider economy");
+    assert_eq!(economy_after_publication.provision_journal.len(), 1);
+
+    let (mut writer, peer) = test_writer_pair();
+    viewer
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect("admit chain-published authority");
+    let _ = read_response_line(&peer, Duration::from_millis(200));
+
+    let persisted_after_viewer =
+        crate::runtime::World::load_from_dir(execution_world_dir.as_path())
+            .expect("reload provider world after viewer sync");
+    assert_eq!(
+        persisted_after_viewer
+            .cognition_economy()
+            .expect("read economy after viewer sync"),
+        economy_after_publication,
+        "observer bootstrap must not mutate the chain writer's canonical world"
+    );
+
+    // A later canonical chain tick must retain the original one-time
+    // provisioning record and allowance. This is the durable handoff the
+    // viewer observes on every subsequent poll.
+    let mut chain_tick = persisted_after_viewer;
+    chain_tick.step().expect("advance canonical chain tick");
+    chain_tick
+        .save_to_dir_with_chain_resource_context(
+            execution_world_dir.as_path(),
+            crate::chain_resource_schema::ChainResourceDerivationContext {
+                world_id: "chain-provider-world",
+                chain_id: "runtime-chain",
+                genesis_ref: None,
+                created_at_height: 1,
+                manifest_height: 2,
+                commit_block_hash: Some("chain-provider-block-2"),
+                tick: chain_tick.state().time,
+            },
+            "chain-provider-world-config",
+            "chain-provider-generation",
+        )
+        .expect("persist canonical chain tick");
+    chain_status.committed_height.store(2, Ordering::SeqCst);
+    let (mut writer, peer) = test_writer_pair();
+    viewer
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect("admit authority on later chain tick");
+    let _ = read_response_line(&peer, Duration::from_millis(200));
+    let persisted_after_tick = crate::runtime::World::load_from_dir(execution_world_dir.as_path())
+        .expect("reload canonical chain tick");
+    assert_eq!(
+        persisted_after_tick
+            .cognition_economy()
+            .expect("read economy after chain tick"),
+        economy_after_publication,
+        "a later chain tick must not refill or rewrite the one-time allowance"
+    );
+
+    drop(viewer);
+    let mut restarted_viewer = ViewerRuntimeLiveServer::new(config).expect("restart chain viewer");
+    let mut restart_session = RuntimeLiveSession::new();
+    restart_session.subscribed.insert(ViewerStream::Events);
+    let (mut writer, peer) = test_writer_pair();
+    restarted_viewer
+        .sync_chain_linked_runtime(&mut restart_session, &mut writer)
+        .expect("replay chain-published authority after viewer restart");
+    let _ = read_response_line(&peer, Duration::from_millis(200));
+    let persisted_after_restart =
+        crate::runtime::World::load_from_dir(execution_world_dir.as_path())
+            .expect("reload canonical world after viewer restart");
+    assert_eq!(
+        persisted_after_restart
+            .cognition_economy()
+            .expect("read economy after viewer restart"),
+        economy_after_publication,
+        "viewer restart must not refill or rewrite canonical provisioning"
+    );
+}
+
+#[test]
 fn chain_linked_runtime_primes_initial_snapshot() {
     let execution_world_dir = runtime_live_temp_dir("chain_sync_initial_snapshot");
     let mut execution_world = crate::runtime::World::new_production_hardened();

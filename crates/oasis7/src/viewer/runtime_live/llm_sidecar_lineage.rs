@@ -145,6 +145,93 @@ impl RuntimeLlmSidecar {
         self.persist_provider_lineage_best_effort();
     }
 
+    /// Close a lease restored for an old Runtime binding before a stale
+    /// replan can build a new request identity. Restore itself accepts an
+    /// immutable world reference so it remains usable during bootstrap; the
+    /// first mutable prepare pass performs this cleanup before dispatch.
+    pub(in crate::viewer::runtime_live) fn release_binding_changed_provider_leases(
+        &mut self,
+        world: &mut RuntimeWorld,
+    ) -> Result<(), String> {
+        let stale_agents = self
+            .provider_stale_replans
+            .iter()
+            // Once the replan request has been dispatched, the marker keeps
+            // only its bounded count until the replacement response clears
+            // it. Releasing the lease in that state would close the new
+            // request's lease before its response can settle it.
+            .filter(|(_, state)| state.pending_cause.is_some())
+            .map(|(agent_id, _)| agent_id.clone())
+            .collect::<Vec<_>>();
+        let mut leases_to_clear = Vec::new();
+        for agent_id in stale_agents {
+            let Some(lease) = self.provider_cognition_leases.get(&agent_id).cloned() else {
+                continue;
+            };
+            lease
+                .validate()
+                .map_err(|error| format!("stale provider cognition lease invalid: {error}"))?;
+            let economy = world.cognition_economy().map_err(|error| {
+                format!(
+                    "stale provider cognition lease economy read failed for {agent_id}: {error:?}"
+                )
+            })?;
+            let Some(runtime_lease) = economy.leases.get(lease.lease_id.as_str()) else {
+                // Runtime already closed or discarded the old lease. There is
+                // no economic effect left to release, so clear only this
+                // sidecar mirror and continue the replan.
+                leases_to_clear.push(agent_id);
+                continue;
+            };
+            if runtime_lease.lease_id != lease.lease_id
+                || runtime_lease.idempotency_key != lease.idempotency_key
+                || runtime_lease.account_id != lease.account_id
+                || runtime_lease.agent_id != lease.agent_id
+                || runtime_lease.agent_session_id != lease.agent_session_id
+                || runtime_lease.agent_turn_id != lease.agent_turn_id
+                || runtime_lease.decision_request_id != lease.decision_request_id
+                || runtime_lease.request_digest != lease.request_digest
+                || runtime_lease.quote != lease.quote
+                || runtime_lease.reserved_amount != lease.reserved_amount
+            {
+                return Err(format!(
+                    "stale provider cognition lease Runtime identity mismatch for {agent_id}"
+                ));
+            }
+            if runtime_lease.status == crate::runtime::CognitionLeaseStatusV1::Reserved {
+                world
+                    .release_cognition_lease(lease.lease_id.as_str())
+                    .map_err(|error| {
+                        format!(
+                            "stale provider cognition lease release failed for {}: {error:?}",
+                            lease.lease_id
+                        )
+                    })?;
+            }
+            leases_to_clear.push(agent_id);
+        }
+        if leases_to_clear.is_empty() {
+            return Ok(());
+        }
+        let backups = leases_to_clear
+            .iter()
+            .filter_map(|agent_id| {
+                self.provider_cognition_leases
+                    .remove(agent_id)
+                    .map(|lease| (agent_id.clone(), lease))
+            })
+            .collect::<Vec<_>>();
+        if let Err(error) = self.persist_provider_lineage() {
+            for (agent_id, lease) in backups {
+                self.provider_cognition_leases.insert(agent_id, lease);
+            }
+            return Err(format!(
+                "stale provider cognition lease cleanup persistence failed: {error}"
+            ));
+        }
+        Ok(())
+    }
+
     pub(in crate::viewer::runtime_live) fn provider_transport_exhausted_agent(
         &self,
     ) -> Option<String> {
@@ -240,6 +327,7 @@ impl RuntimeLlmSidecar {
         let wait_backup = self.provider_wait_until.get(agent_id).copied();
         let held_backup = self.provider_held_decisions.get(agent_id).cloned();
         let exhausted_backup = self.provider_transport_exhausted.contains(agent_id);
+        let cognition_lease_backup = self.provider_cognition_leases.get(agent_id).cloned();
         self.provider_wake_recovery_pending.remove(agent_id);
         self.provider_contexts.remove(agent_id);
         self.provider_active_turns.remove(agent_id);
@@ -247,6 +335,7 @@ impl RuntimeLlmSidecar {
         self.provider_wait_until.remove(agent_id);
         self.provider_held_decisions.remove(agent_id);
         self.provider_transport_exhausted.remove(agent_id);
+        self.provider_cognition_leases.remove(agent_id);
         if let Err(error) = self.persist_provider_lineage() {
             if let Some(wake) = wake_backup {
                 self.provider_wake_recovery_pending
@@ -274,6 +363,10 @@ impl RuntimeLlmSidecar {
             if exhausted_backup {
                 self.provider_transport_exhausted
                     .insert(agent_id.to_string());
+            }
+            if let Some(lease) = cognition_lease_backup {
+                self.provider_cognition_leases
+                    .insert(agent_id.to_string(), lease);
             }
             return Err(format!(
                 "provider wake recovery cleanup persistence failed: {error}"

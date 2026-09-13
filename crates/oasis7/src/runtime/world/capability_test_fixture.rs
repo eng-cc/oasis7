@@ -9,11 +9,12 @@ use super::super::capability_authorization::{
 };
 use super::super::governance::GovernanceFinalityEpochSnapshot;
 use super::super::{
-    CapabilityInvocationContext, GovernanceFinalityCertificate, Manifest, ModuleAbiContract,
-    ModuleActivation, ModuleChangeSet, ModuleKind, ModuleLimits, ModuleManifest, ModuleRole,
-    ProposalDecision, WorldError,
+    CapabilityInvocationContext, CognitionProvisioningRequestV1, GovernanceFinalityCertificate,
+    Manifest, ModuleAbiContract, ModuleActivation, ModuleArtifactIdentity, ModuleChangeSet,
+    ModuleKind, ModuleLimits, ModuleManifest, ModuleRole, ProposalDecision, WorldError,
 };
 use super::World;
+use super::provider_backed_bootstrap::ProviderBackedBootstrapAuthorityV1;
 use crate::runtime::capability_authorization::CapabilityAgentIdentity;
 use ed25519_dalek::{Signer, SigningKey};
 use oasis7_wasm_abi::{
@@ -30,31 +31,188 @@ const FINALITY_SIGNER_SEED: &[u8] = b"oasis7-governance-local-finality-signer-2-
 const MODULE_ID: &str = "module.runtime.provider-fixture";
 const MODULE_VERSION: &str = "1.0.0";
 const MODULE_SCHEMA_HASH: &str = "0000000000000000000000000000000000000000000000000000000000000000";
+const MODULE_WASM_HASH: &str = "d794dc476ae52ee4ca78f9ee1662b6f384a5185124db90495f6a64ee579ff4a3";
+const MODULE_WASM_BYTES: &[u8] = b"runtime-provider-capability-fixture-v1";
 
 impl World {
     /// Install a complete, proof-bearing provider capability fixture for an
     /// already-bound in-crate live test World.  Viewer only opts into this
     /// seam; it does not construct authority, grant, or invocation fields.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test_tier_required"))]
     pub fn install_test_provider_capability_fixture(
         &mut self,
         agent_id: &str,
     ) -> Result<CapabilityInvocationContext, WorldError> {
         let mut staged = self.clone();
-        let invocation = staged.install_test_provider_capability_fixture_inner(agent_id)?;
+        let invocation = staged.install_test_provider_capability_fixture_inner(agent_id, true)?;
         *self = staged;
         Ok(invocation)
+    }
+
+    /// Install the same proof-bearing provider capability fixture without a
+    /// legacy cognition balance. This lets Runtime bootstrap tests exercise
+    /// the explicit provisioning path while keeping the production fixture
+    /// behavior unchanged.
+    #[cfg(any(test, feature = "test_tier_required"))]
+    pub fn install_test_provider_capability_fixture_without_cognition_balance(
+        &mut self,
+        agent_id: &str,
+    ) -> Result<CapabilityInvocationContext, WorldError> {
+        let mut staged = self.clone();
+        let invocation = staged.install_test_provider_capability_fixture_inner(agent_id, false)?;
+        *self = staged;
+        Ok(invocation)
+    }
+
+    /// Build a complete explicit ProviderBacked bootstrap bundle from the
+    /// proof-bearing in-crate fixture. The helper is test-only; production
+    /// bundles must come from the externally governed authority path.
+    #[cfg(any(test, feature = "test_tier_required"))]
+    pub fn test_provider_backed_bootstrap_authority(
+        &self,
+        agent_id: &str,
+        provision_id: &str,
+        authority_context: &str,
+        allowance: u64,
+    ) -> Result<ProviderBackedBootstrapAuthorityV1, WorldError> {
+        let identity = self
+            .capability_revocation_state
+            .agent_identities
+            .get(agent_id)
+            .cloned()
+            .ok_or_else(|| fixture_error("fixture identity is missing"))?;
+        let invocation_context = self
+            .capability_invocation_contexts
+            .values()
+            .find(|context| {
+                context.grant_id
+                    == self
+                        .capability_grants_v2
+                        .values()
+                        .find_map(|encoded| {
+                            serde_json::from_value::<CapabilityGrantV2>(encoded.clone())
+                                .ok()
+                                .filter(|grant| {
+                                    matches!(
+                                        &grant.subject,
+                                        CapabilitySubject::Agent { agent_id: subject_id, .. }
+                                            if subject_id == agent_id
+                                    )
+                                })
+                                .map(|grant| grant.grant_id)
+                        })
+                        .unwrap_or_default()
+            })
+            .cloned()
+            .ok_or_else(|| fixture_error("fixture invocation context is missing"))?;
+        let grant: CapabilityGrantV2 = self
+            .capability_grants_v2
+            .get(&invocation_context.grant_id)
+            .cloned()
+            .ok_or_else(|| fixture_error("fixture grant is missing"))
+            .and_then(|encoded| {
+                serde_json::from_value(encoded)
+                    .map_err(|error| fixture_error(format!("fixture grant decode: {error}")))
+            })?;
+        let authority_record = self
+            .capability_revocation_state
+            .authority_records
+            .get(&grant.issuer.issuer_id)
+            .cloned()
+            .ok_or_else(|| fixture_error("fixture authority record is missing"))?;
+        let authority_finality_proof = self
+            .capability_revocation_state
+            .authority_finality_proofs
+            .get(&grant.issuer.issuer_id)
+            .cloned()
+            .ok_or_else(|| fixture_error("fixture authority proof is missing"))?;
+        let binding = self
+            .current_cognition_runtime_binding()
+            .map_err(|error| fixture_error(format!("fixture Runtime binding: {error:?}")))?;
+        let request = CognitionProvisioningRequestV1::new(
+            provision_id,
+            identity.owner_binding.clone(),
+            identity.owner_binding.clone(),
+            identity.generation,
+            binding.world_id.clone(),
+            binding.branch_id.clone(),
+            binding.reorg_epoch,
+            allowance,
+            authority_context,
+        );
+        Ok(ProviderBackedBootstrapAuthorityV1 {
+            agent_id: agent_id.to_string(),
+            owner_binding: identity.owner_binding.clone(),
+            owner_generation: identity.generation,
+            world_id: binding.world_id,
+            branch_id: binding.branch_id,
+            reorg_epoch: binding.reorg_epoch,
+            identity,
+            authority_record,
+            authority_finality_proof,
+            grant,
+            invocation_context,
+            provision_id: request.provision_id,
+            authority_context: request.authority_context,
+            authority_digest: request.authority_digest,
+            provisioning_digest: request.provisioning_digest,
+            allowance: request.allowance,
+        })
+    }
+
+    /// Install one additional valid command grant for a provider fixture.
+    ///
+    /// The grant deliberately shares the agent, authority, audience, and
+    /// command scope with the primary fixture grant while carrying a distinct
+    /// nonce. This lets bootstrap tests exercise the ambiguity boundary where
+    /// catalog selection must not silently replace the caller-supplied grant.
+    #[cfg(any(test, feature = "test_tier_required"))]
+    pub fn install_test_provider_additional_capability_grant(
+        &mut self,
+        agent_id: &str,
+        nonce_suffix: &str,
+    ) -> Result<CapabilityGrantV2, WorldError> {
+        let mut staged = self.clone();
+        let identity = staged
+            .capability_revocation_state
+            .agent_identities
+            .get(agent_id)
+            .cloned()
+            .ok_or_else(|| fixture_error("fixture identity is missing"))?;
+        let (world_id, branch_id, finality_epoch, _) = staged.bound_runtime_identity()?;
+        if nonce_suffix.trim().is_empty() {
+            return Err(fixture_error("fixture additional grant nonce is required"));
+        }
+        let grant = staged.fixture_command_grant_with_nonce(
+            agent_id,
+            &identity,
+            world_id.as_str(),
+            branch_id.as_str(),
+            finality_epoch,
+            format!("runtime-test-provider:{agent_id}:additional:{nonce_suffix}"),
+        )?;
+        staged.register_capability_grant_v2(grant.clone())?;
+        *self = staged;
+        Ok(grant)
     }
 
     fn install_test_provider_capability_fixture_inner(
         &mut self,
         agent_id: &str,
+        seed_cognition_balance: bool,
     ) -> Result<CapabilityInvocationContext, WorldError> {
         self.verify_capability_authorization_root()?;
         let (world_id, branch_id, finality_epoch, finality_block_hash) =
             self.bound_runtime_identity()?;
         if !self.state.agents.contains_key(agent_id) {
             return Err(fixture_error("provider fixture requires a live agent"));
+        }
+        // Provider caller tests exercise the real Runtime lease admission
+        // path. Seed their account explicitly in the test fixture; production
+        // worlds must provision cognition units through their own authority
+        // and never receive an implicit dispatch-time refill.
+        if seed_cognition_balance {
+            self.set_cognition_resource_balance(agent_id, "cognition_units", 128)?;
         }
         if let Some(existing) = self
             .capability_invocation_contexts
@@ -96,11 +254,27 @@ impl World {
             session_id: Some(format!("runtime-test-session:{agent_id}")),
             attestation_ref: None,
         };
-        self.install_capability_invocation_context_for_agent(
+        let invocation = self.install_capability_invocation_context_for_agent(
             agent_id,
             presenter,
             format!("runtime-test-response:{agent_id}"),
-        )
+        )?;
+        // Cognition leases charge the Runtime-authorized capability owner,
+        // not the Agent subject. Keep the legacy Agent balance for unrelated
+        // fixture consumers, but provision the explicit payer account through
+        // the same authority API used by production bootstrap. The companion
+        // `without_cognition_balance` helper intentionally skips both legacy
+        // seeding and this explicit allowance so bootstrap tests can exercise
+        // the provisioning handoff themselves.
+        if seed_cognition_balance {
+            self.provision_cognition_for_agent(
+                agent_id,
+                format!("runtime-test-provision:{agent_id}:{branch_id}:{finality_epoch}"),
+                "runtime-test-authority",
+                128,
+            )?;
+        }
+        Ok(invocation)
     }
 
     fn bound_runtime_identity(&self) -> Result<(String, String, u64, Option<String>), WorldError> {
@@ -303,7 +477,7 @@ impl World {
             version: MODULE_VERSION.to_string(),
             kind: ModuleKind::Pure,
             role: ModuleRole::AgentInternal,
-            wasm_hash: "runtime-provider-capability-fixture".to_string(),
+            wasm_hash: MODULE_WASM_HASH.to_string(),
             interface_version: "wasm-1".to_string(),
             exports: vec!["call".to_string()],
             subscriptions: Vec::new(),
@@ -320,7 +494,7 @@ impl World {
                 },
                 ..ModuleAbiContract::default()
             },
-            artifact_identity: None,
+            artifact_identity: Some(fixture_module_artifact_identity()),
             limits: ModuleLimits {
                 max_mem_bytes: 64 * 1024,
                 max_gas: 100_000,
@@ -338,7 +512,10 @@ impl World {
             }],
             ..ModuleChangeSet::default()
         };
-        self.apply_module_changes_for_test(0, &changes, "runtime-test-fixture")
+        self.apply_module_changes_for_test(0, &changes, "runtime-test-fixture")?;
+        self.module_artifact_bytes
+            .insert(MODULE_WASM_HASH.to_string(), MODULE_WASM_BYTES.into());
+        Ok(())
     }
 
     fn fixture_command_grant(
@@ -348,6 +525,25 @@ impl World {
         world_id: &str,
         branch_id: &str,
         finality_epoch: u64,
+    ) -> Result<CapabilityGrantV2, WorldError> {
+        self.fixture_command_grant_with_nonce(
+            agent_id,
+            identity,
+            world_id,
+            branch_id,
+            finality_epoch,
+            format!("runtime-test-provider:{agent_id}:{branch_id}:{finality_epoch}"),
+        )
+    }
+
+    fn fixture_command_grant_with_nonce(
+        &self,
+        agent_id: &str,
+        identity: &CapabilityAgentIdentity,
+        world_id: &str,
+        branch_id: &str,
+        finality_epoch: u64,
+        grant_nonce: String,
     ) -> Result<CapabilityGrantV2, WorldError> {
         let issuer_key = fixture_signing_key(ISSUER_SEED);
         let finalized_receipt_id =
@@ -391,7 +587,7 @@ impl World {
             },
             issued_at_tick: self.state.time,
             expires_at_tick: Some(self.state.time.saturating_add(100)),
-            grant_nonce: format!("runtime-test-provider:{agent_id}:{branch_id}:{finality_epoch}"),
+            grant_nonce,
             parent_grant_id: None,
             delegation_depth: 0,
             revocation_epoch: 0,
@@ -414,6 +610,31 @@ impl World {
         grant.issuer.signature = signature.clone();
         grant.issuance_signature = signature;
         Ok(grant)
+    }
+}
+
+fn fixture_module_artifact_identity() -> ModuleArtifactIdentity {
+    let source_hash =
+        crate::runtime::util::sha256_hex(b"runtime-provider-capability-fixture-source-v1");
+    let build_manifest_hash =
+        crate::runtime::util::sha256_hex(b"runtime-provider-capability-fixture-build-v1");
+    let payload = ModuleArtifactIdentity::signing_payload_v1(
+        MODULE_WASM_HASH,
+        source_hash.as_str(),
+        build_manifest_hash.as_str(),
+        ISSUER_ID,
+    );
+    let signature = fixture_signing_key(ISSUER_SEED).sign(payload.as_slice());
+    ModuleArtifactIdentity {
+        source_hash,
+        build_manifest_hash,
+        signer_node_id: ISSUER_ID.to_string(),
+        signature_scheme: ModuleArtifactIdentity::SIGNATURE_SCHEME_ED25519.to_string(),
+        artifact_signature: format!(
+            "{}{}",
+            ModuleArtifactIdentity::SIGNATURE_PREFIX_ED25519_V1,
+            hex::encode(signature.to_bytes())
+        ),
     }
 }
 

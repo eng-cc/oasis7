@@ -1,0 +1,91 @@
+{
+  "schema": "oasis7.storage_first_contract_green.v1",
+  "status": "verified",
+  "identity": {
+    "task_uid": "task_90c2722f6e1c48c3aebb6283cee471ce",
+    "issue": 3675,
+    "role": "blockchain_ops_engineer",
+    "slice_id": "storage-first-contract-green-20260912",
+    "integration_order": 7,
+    "packet_digest": "1e108ac4c929a3b6ea39ba2344fac073fde960d631f50a79cb6e70c20084edbc",
+    "packet_sha256": "4cacb054ff54af6b557c3720e9fe6f88407a3529fe5e9f5ba7693ccc1eac53b7",
+    "design_artifact_sha256": "579c33a7af8e5caa17bc6bcebaaae895582a19f2286fbe1098f9ac7eab07f4d7",
+    "base_head_oid": "551c6631418b7d8e498cf81fb68ddcdd9aeb2041",
+    "runtime_evidence": "adapter inactive on this surface; intended configuration inherits parent selection; actual model/reasoning unverified"
+  },
+  "implementation": {
+    "changed_files": [
+      "scripts/p2p-public-testnet-full-network-clean-room.py",
+      "scripts/p2p-public-testnet-full-network-clean-room-adapter.py"
+    ],
+    "unchanged_test_files": true,
+    "planner": [
+      "Added code-owned storage-205-first child-plan builder.",
+      "Requires canonical five-node parent order and complete current identity-v2 closure.",
+      "Retains full parent no-backup, nonce-ledger, known-hosts, bounded sequencer proof, consumer-impact, provenance, and verifier bindings.",
+      "Emits exactly the five storage-205 mutating operations, held completion boundary, and secret-free journal template.",
+      "Rejects identity/parent order drift and ambiguous resume journals."
+    ],
+    "adapter": [
+      "Added explicit storage-205-first admission, receipt, journal, execute, and resume APIs.",
+      "Admission occurs before journal lock or provider callback and rejects missing phase/map/current authority or non-canonical scope.",
+      "Execution calls only storage-205 inspect/preflight/mutate callbacks and never sequencer, observer, fresh-root, or fleet-health callbacks.",
+      "Live revalidator runs before every storage mutation when supplied; provenance verifier is required for apply.",
+      "Atomic owner-protected journal records the exact cursor and rollback prefix without credential or nonce values.",
+      "Side-effect uncertainty is persisted as reconciliation-blocked and is never automatically replayed."
+    ]
+  },
+  "focused_verification": {
+    "planner_command": "python3 scripts/p2p-public-testnet-full-network-clean-room.test.py StorageFirstContractRedTests",
+    "planner_result": "9 tests, 9 passed, exit 0",
+    "adapter_command": "python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py StorageFirstAdapterRedTests",
+    "adapter_result": "7 tests, 7 passed, exit 0",
+    "scope_result": "16/16 GREEN"
+  },
+  "regression_verification": {
+    "planner_command": "python3 scripts/p2p-public-testnet-full-network-clean-room.test.py",
+    "planner_result": "83 tests in 475.751s, OK, exit 0",
+    "adapter_command": "python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py",
+    "adapter_result": "132 tests in 438.413s, OK, exit 0",
+    "pm_lint_command": "./scripts/pm/lint.sh",
+    "pm_lint_result": "pm-lint: OK, exit 0",
+    "syntax_command": "python3 -c 'import ast, pathlib; [ast.parse(pathlib.Path(p).read_text()) for p in (\"scripts/p2p-public-testnet-full-network-clean-room.py\", \"scripts/p2p-public-testnet-full-network-clean-room-adapter.py\")]'",
+    "syntax_result": "exit 0",
+    "diff_check_command": "git diff --check",
+    "diff_check_result": "exit 0"
+  },
+  "invariants_verified": [
+    "Parent node order remains storage-205, sequencer-204, linux-lan-observer, windows-observer, macos-observer.",
+    "Storage child target set is exactly storage-205; no caller node subset is accepted.",
+    "Current identity-v2 mode and all five parent evidence entries remain required.",
+    "Storage child authority is distinct and exact-target; existing full-network authority is not relabeled.",
+    "Parent nonce ledger remains five-node one-shot metadata and journal stores no nonce or credential values.",
+    "Bounded sequencer proof rejects full /v1/chain/status.",
+    "No storage receipt can claim full-network, fresh-root, or fleet-health closure.",
+    "Ambiguous callback state requires governed reconciliation and clean-redeploy; restore/copy paths remain absent.",
+    "No node, remote, SSH, credential, deployment, provider, or authority mutation occurred."
+  ],
+  "changed_path_allowlist": {
+    "production": [
+      "scripts/p2p-public-testnet-full-network-clean-room.py",
+      "scripts/p2p-public-testnet-full-network-clean-room-adapter.py"
+    ],
+    "evidence": [
+      ".pm/scratch/task_90c2722f6e1c48c3aebb6283cee471ce/tdd/storage-first-green-20260912.json"
+    ],
+    "forbidden_changes": [
+      "scripts/p2p-public-testnet-full-network-clean-room.test.py",
+      "scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py",
+      "third_party",
+      "node state",
+      "credential material",
+      "authority inputs"
+    ]
+  },
+  "residual_external_inputs": [
+    "The production provider transport remains explicitly injected and is not supplied by this repository slice.",
+    "Runtime execution still requires provisioned signed governance/trust/identity-v2/no-backup/nonce/known-host inputs.",
+    "TPM integration, QA review, and downstream fresh-root/sequencer/observer phases remain pending; this slice does not authorize them."
+  ],
+  "commit_status": "committed"
+}

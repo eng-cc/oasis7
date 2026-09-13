@@ -27,6 +27,11 @@ pub(super) fn build_oasis7_viewer_live_command(
             .arg("--provider-lineage-store")
             .arg(options.provider_lineage_store.as_str());
     }
+    for path in &options.provider_bootstrap_authority_paths {
+        command
+            .arg("--provider-bootstrap-authority")
+            .arg(path.as_str());
+    }
     // Hosted public join may deliberately run without a launcher-managed chain.
     // Only pass the viewer's chain client endpoint when the chain is enabled or
     // the operator explicitly supplied an external status endpoint. Passing the

@@ -109,6 +109,7 @@ pub(super) struct CliOptions {
     pub execution_bridge_state_path: Option<PathBuf>,
     pub execution_world_dir: Option<PathBuf>,
     pub execution_records_dir: Option<PathBuf>,
+    pub provider_backed_bootstrap_authority_paths: Vec<PathBuf>,
     pub storage_root: Option<PathBuf>,
     pub replication_root: Option<PathBuf>,
     pub reward_runtime_enabled: bool,
@@ -171,6 +172,7 @@ impl Default for CliOptions {
             execution_bridge_state_path: None,
             execution_world_dir: None,
             execution_records_dir: None,
+            provider_backed_bootstrap_authority_paths: Vec::new(),
             storage_root: None,
             replication_root: None,
             reward_runtime_enabled: true,
@@ -413,6 +415,12 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             "--execution-records-dir" => {
                 let raw = parse_required_value(&mut iter, "--execution-records-dir")?;
                 options.execution_records_dir = Some(PathBuf::from(raw));
+            }
+            "--provider-bootstrap-authority" => {
+                let raw = parse_required_value(&mut iter, "--provider-bootstrap-authority")?;
+                options
+                    .provider_backed_bootstrap_authority_paths
+                    .push(PathBuf::from(raw));
             }
             "--storage-root" => {
                 let raw = parse_required_value(&mut iter, "--storage-root")?;
@@ -987,6 +995,8 @@ Options:\n\
   --execution-bridge-state <path>   override execution bridge state file path\n\
   --execution-world-dir <path>      override execution world directory\n\
   --execution-records-dir <path>    override execution records directory\n\
+  --provider-bootstrap-authority <path>\n\
+                                    explicit JSON Runtime authority bundle; repeat per ProviderBacked agent\n\
   --storage-root <path>             override execution CAS/storage root\n\
   --replication-root <path>         override replication root directory\n\
   --reward-runtime-enable           enable reward runtime worker (default)\n\

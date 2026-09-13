@@ -1,0 +1,137 @@
+{
+  "schema": "oasis7.storage_first_security_red.v1",
+  "status": "red",
+  "identity": {
+    "task_uid": "task_90c2722f6e1c48c3aebb6283cee471ce",
+    "issue": 3675,
+    "repository": "eng-cc/oasis7",
+    "worktree": "/Users/scc/ccwork/oasis7/.worktrees/oasis7-engineering-public-testnet-observer-closure-rollout-20260912",
+    "branch": "task/engineering-public-testnet-observer-closure-rollout-20260912",
+    "frozen_head_oid": "6973557dbdc7616bc71a0c44f8be20f1be79c74c",
+    "slice_id": "storage-first-security-red-20260912",
+    "role": "qa_engineer",
+    "owner_role": "blockchain_ops_engineer",
+    "integration_order": 9,
+    "packet_digest": "97cdb4da404ebb56ac19ea6f9cdf4d92c36a0873b9223490c9e82657bd65eeaa",
+    "packet_sha256": "19b2e8f55f0c506069ea2db5198c6dbee0fc17819f22c37a11f653bc868e1d6b",
+    "design_artifact_sha256": "579c33a7af8e5caa17bc6bcebaaae895582a19f2286fbe1098f9ac7eab07f4d7",
+    "prior_qa_artifact_sha256": "cbc7ad27a015eafcdc33b89167d203f72cc7c3e73bf98e63e66ae6d4b534a778",
+    "package_run": "34622549547"
+  },
+  "scope": {
+    "changed_files": [
+      "scripts/p2p-public-testnet-full-network-clean-room.test.py",
+      "scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py",
+      ".pm/scratch/task_90c2722f6e1c48c3aebb6283cee471ce/tdd/storage-first-security-red-20260912.json"
+    ],
+    "production_files_changed": false,
+    "node_or_provider_access": false,
+    "credential_access": false,
+    "authority_mutation": false,
+    "remote_mutation": false,
+    "unrelated_dirty_path_preserved": ".pm/roles/tpm/backlog/committed.yaml"
+  },
+  "finding_matrix": {
+    "QA-SF-001": {
+      "finding": "Storage-first admission accepts stale authority and rebound plan, identity, known-host, bounded-proof, nonce-ledger, and consumer-impact bindings.",
+      "tests": [
+        "StorageFirstParentSecurityRedTests.test_qa_sf_001_parent_binding_rebinds_fail_closed",
+        "StorageFirstSecurityRedTests.test_qa_sf_001_authority_and_parent_bindings_are_fresh_and_exact"
+      ],
+      "mutations": [
+        "known-host-path",
+        "known-host-digest",
+        "missing-ledger-path",
+        "impact-digest",
+        "plan-digest",
+        "expired-authority",
+        "identity-digest-rebound",
+        "known-host-digest-rebound",
+        "known-host-path-rebound",
+        "missing-bounded-proof",
+        "missing-ledger-path",
+        "impact-digest-rebound",
+        "plan-digest-rebound"
+      ],
+      "observed": "RED: planner 1 test with 5 subfailures and adapter 1 test with 8 subfailures; every mutated admission was accepted, producing AssertionError: Exception not raised."
+    },
+    "QA-SF-002": {
+      "finding": "Storage-first provider callbacks receive the raw node projection and can observe credential_seam.",
+      "tests": [
+        "StorageFirstSecurityRedTests.test_qa_sf_002_provider_callbacks_receive_secret_free_node_projection"
+      ],
+      "observed": "RED: callback recorder observed credential_seam; assertion failed with provider callbacks must receive the credential-free transport projection."
+    },
+    "QA-SF-003": {
+      "finding": "Live trust-root, identity, authority, known-host, nonce-ledger, and impact revalidation is optional rather than mandatory before every mutation.",
+      "tests": [
+        "StorageFirstSecurityRedTests.test_qa_sf_003_live_trust_revalidation_is_mandatory_before_mutation"
+      ],
+      "observed": "RED: execute_storage_first without live_revalidator did not raise and recorded provider mutations; assertion failed with Exception not raised."
+    },
+    "QA-SF-004": {
+      "finding": "Minimal receipts and journals without required transaction, capture-window, trust, authority, and binding evidence are accepted.",
+      "tests": [
+        "StorageFirstSecurityRedTests.test_qa_sf_004_receipts_require_complete_bindings",
+        "StorageFirstSecurityRedTests.test_qa_sf_004_journals_require_complete_bindings"
+      ],
+      "observed": "RED: both minimal receipt and minimal prepared journal were accepted; each assertion failed with Exception not raised."
+    },
+    "QA-SF-005": {
+      "finding": "Side-effect-then-throw persists reconciliation-blocked but omits the governed reobserve plus clean-redeploy handoff.",
+      "tests": [
+        "StorageFirstSecurityRedTests.test_qa_sf_005_side_effect_uncertainty_persists_reconciliation_handoff"
+      ],
+      "observed": "RED: journal retained reconciliation-blocked and reconciliation-required, but reconciliation_requirements was absent (None != expected handoff)."
+    }
+  },
+  "verification": {
+    "packet_hash_command": "rtk sha256sum .pm/scratch/task_90c2722f6e1c48c3aebb6283cee471ce/slice-packets/storage-first-security-red-20260912.json",
+    "packet_hash_result": "19b2e8f55f0c506069ea2db5198c6dbee0fc17819f22c37a11f653bc868e1d6b, exact packet match",
+    "head_command": "rtk git rev-parse HEAD",
+    "head_result": "6973557dbdc7616bc71a0c44f8be20f1be79c74c before this test-only commit",
+    "planner_red_command": "rtk python3 scripts/p2p-public-testnet-full-network-clean-room.test.py StorageFirstParentSecurityRedTests -v",
+    "planner_red_result": "RED: Ran 1 test in 0.002s; FAILED (failures=5), exit 1; all five binding subtests reported AssertionError: Exception not raised.",
+    "adapter_red_command": "rtk python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py StorageFirstSecurityRedTests -v",
+    "adapter_red_result": "RED: Ran 6 tests in 0.023s; FAILED (failures=12), exit 1; authority matrix 8 subfailures plus QA-SF-002/003/004 receipt/004 journal/005 failures.",
+    "planner_existing_green_command": "rtk python3 scripts/p2p-public-testnet-full-network-clean-room.test.py StorageFirstContractRedTests -q",
+    "planner_existing_green_result": "Ran 9 tests in 0.003s, OK, exit 0",
+    "adapter_existing_green_command": "rtk python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py StorageFirstAdapterRedTests -q",
+    "adapter_existing_green_result": "Ran 7 tests in 0.022s, OK, exit 0",
+    "syntax_command": "rtk python3 -m py_compile scripts/p2p-public-testnet-full-network-clean-room.test.py scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py",
+    "syntax_result": "pass, exit 0",
+    "diff_check_command": "rtk git diff --check",
+    "diff_check_result": "pass, no output"
+  },
+  "red_contract": {
+    "planner_security_tests": 1,
+    "adapter_security_tests": 6,
+    "qa_findings_mapped": 5,
+    "expected_green_gate": "All finding-specific tests must pass only after strict admission/binding checks, secret-free callback projection, mandatory live revalidation, closed receipt/journal schemas, and governed reconciliation handoff are implemented.",
+    "no_production_fix_in_slice": true
+  },
+  "release_assessment": {
+    "verdict": "blocked",
+    "release_confidence": "none for storage-first security closure until all twelve current RED failure points are GREEN at the frozen implementation head",
+    "residual_risks": [
+      "These tests intentionally specify RED behavior and do not claim production security closure.",
+      "No real node/provider transport, credential seam, signed authority, trust-root file, or remote package was accessed.",
+      "Downstream implementation must rerun this exact focused suite and the relevant release-gate suites at the resulting immutable head.",
+      "Matching blockchain-ops specialist review is required before any release or external apply decision."
+    ]
+  },
+  "commit": {
+    "status": "test-only-committed",
+    "sha": "8c07368",
+    "message": "test: add storage-first security red coverage"
+  },
+  "mutation_confirmation": {
+    "source_mutation": false,
+    "node_mutation": false,
+    "provider_mutation": false,
+    "credential_mutation": false,
+    "authority_mutation": false,
+    "remote_mutation": false,
+    "external_issue_evidence_authorized_by_packet": true
+  }
+}

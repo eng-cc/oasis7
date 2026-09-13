@@ -2,6 +2,7 @@ use super::*;
 
 #[test]
 fn smelter_affordability_debug_seed_publishes_real_factory_and_disabled_replenish_action() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),

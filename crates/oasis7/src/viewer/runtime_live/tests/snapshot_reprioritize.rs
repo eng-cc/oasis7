@@ -16,6 +16,7 @@ fn bind_agent_for_snapshot(server: &mut ViewerRuntimeLiveServer, agent_id: &str)
 
 #[test]
 fn compat_snapshot_publishes_enabled_reprioritize_for_the_bound_player_agent() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
@@ -57,6 +58,7 @@ fn compat_snapshot_publishes_enabled_reprioritize_for_the_bound_player_agent() {
 
 #[test]
 fn compat_snapshot_explains_when_bound_player_reprioritize_is_unavailable() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
     let mut server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
             .expect("runtime server");

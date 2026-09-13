@@ -7,6 +7,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 #[path = "persistence_generation_tests.rs"]
 mod generation_tests;
+#[path = "persistence_module_artifact_tests.rs"]
+mod module_artifact_tests;
 #[path = "persistence_recovery_exact_retry_tests.rs"]
 mod recovery_exact_retry_tests;
 #[path = "persistence_recovery_tests.rs"]
@@ -133,7 +135,7 @@ fn persist_and_restore_world_defaults_to_module_store_roundtrip() {
 }
 
 #[test]
-fn load_from_dir_rejects_tampered_module_artifact_bytes() {
+fn load_from_dir_ignores_tampered_module_cache_when_snapshot_has_inline_bytes() {
     let mut world = World::new();
     let wasm_hash = install_test_module(&mut world, "m.persistence.tamper", b"persist-tamper");
     let dir = temp_dir("persist-module-store-tamper");
@@ -145,17 +147,17 @@ fn load_from_dir_rejects_tampered_module_artifact_bytes() {
     )
     .expect("tamper module artifact");
 
-    let err = World::load_from_dir(&dir).expect_err("tampered module artifact should be rejected");
-    assert!(matches!(
-        err,
-        WorldError::ModuleStoreManifestMismatch { .. }
-    ));
+    let mut restored = World::load_from_dir(&dir).expect("snapshot artifact remains canonical");
+    let artifact = restored
+        .load_module(&wasm_hash)
+        .expect("inline snapshot bytes should be used");
+    assert_eq!(artifact.bytes, b"persist-tamper".to_vec().into());
 
     let _ = fs::remove_dir_all(&dir);
 }
 
 #[test]
-fn load_from_dir_without_module_store_keeps_legacy_compatibility() {
+fn load_from_dir_without_module_store_restores_inline_module_artifacts() {
     let mut world = World::new();
     let wasm_hash = install_test_module(&mut world, "m.persistence.legacy", b"persist-legacy");
     let module_record_key = ModuleRegistry::record_key("m.persistence.legacy", "0.1.0");
@@ -165,17 +167,17 @@ fn load_from_dir_without_module_store_keeps_legacy_compatibility() {
     fs::remove_file(dir.join("module_registry.json")).expect("remove module registry");
     fs::remove_dir_all(dir.join("modules")).expect("remove module store modules dir");
 
-    let mut restored = World::load_from_dir(&dir).expect("legacy load without module store");
+    let mut restored = World::load_from_dir(&dir).expect("load without module store");
     assert!(
         restored
             .module_registry()
             .records
             .contains_key(&module_record_key)
     );
-    let err = restored
+    let artifact = restored
         .load_module(&wasm_hash)
-        .expect_err("legacy world should load without hydrated module bytes");
-    assert!(matches!(err, WorldError::ModuleChangeInvalid { .. }));
+        .expect("inline snapshot should hydrate module bytes");
+    assert_eq!(artifact.bytes, b"persist-legacy".to_vec().into());
 
     let _ = fs::remove_dir_all(&dir);
 }

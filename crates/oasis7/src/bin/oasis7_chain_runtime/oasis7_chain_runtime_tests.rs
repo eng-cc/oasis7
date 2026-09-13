@@ -96,6 +96,7 @@ fn parse_options_defaults() {
     assert!(options.replication_network_listen_addrs.is_empty());
     assert!(options.replication_network_bootstrap_peers.is_empty());
     assert!(options.replication_remote_writer_public_keys.is_empty());
+    assert!(options.provider_backed_bootstrap_authority_paths.is_empty());
     assert!(options.runtime_root.is_none());
     assert!(options.replication_root.is_none());
     assert_eq!(options.p2p_max_ipv4_subnet_active_peers, None);
@@ -139,6 +140,10 @@ fn parse_options_reads_custom_values() {
             "3",
             "--execution-world-dir",
             "custom/world",
+            "--provider-bootstrap-authority",
+            "authority-a.json",
+            "--provider-bootstrap-authority",
+            "authority-b.json",
             "--runtime-root",
             "custom/runtime",
             "--replication-root",
@@ -181,6 +186,13 @@ fn parse_options_reads_custom_values() {
     assert_eq!(options.reward_points_per_credit, 100);
     assert!(options.reward_runtime_auto_redeem);
     assert_eq!(options.reward_initial_reserve_power_units, 50_000);
+    assert_eq!(
+        options.provider_backed_bootstrap_authority_paths,
+        vec![
+            Path::new("authority-a.json").to_path_buf(),
+            Path::new("authority-b.json").to_path_buf(),
+        ]
+    );
     assert_eq!(
         options
             .execution_world_dir

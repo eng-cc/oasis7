@@ -29,9 +29,12 @@ mod capability_authorization_transaction;
 mod capability_authorization_validation;
 mod capability_catalog;
 mod capability_effect_receipt_projection;
-#[cfg(test)]
+#[cfg(any(test, feature = "test_tier_required"))]
 mod capability_test_fixture;
 mod cognition_command;
+mod cognition_economy;
+#[path = "cognition_economy_world.rs"]
+mod cognition_economy_world;
 mod cognition_feedback;
 mod cognition_gpd;
 mod cognition_orchestration;
@@ -115,6 +118,7 @@ mod module_tick_runtime;
 mod operability_release_gate;
 mod persistence;
 mod prepared_base_head;
+mod provider_backed_bootstrap;
 pub use persistence::{
     AuthoritativeRecoveryCommitError, AuthoritativeRecoveryCommitStatus,
     CommittedAuthoritativeRecoveryGeneration,
@@ -135,10 +139,24 @@ mod tick_consensus;
 mod tick_consensus_state_root;
 mod transition;
 
+pub use provider_backed_bootstrap::ProviderBackedBootstrapAuthorityV1;
 pub use transition::{
     ExecutionTransaction, PreparedCommit, TransitionBaseHead, TransitionBuffer,
     TransitionCommitError, TransitionKernelEntriesView, TransitionKernelState,
     TransitionKernelView, TransitionPrepareError, TransitionRollbackError, TransitionSavepoint,
+};
+
+pub use cognition_economy::{
+    COGNITION_ECONOMY_SCHEMA_VERSION, COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION,
+    COGNITION_LEASE_SCHEMA_VERSION, COGNITION_PROVISIONING_EVENT_SCHEMA_VERSION,
+    COGNITION_PROVISIONING_RECEIPT_SCHEMA_VERSION, COGNITION_PROVISIONING_SCHEMA_VERSION,
+    COGNITION_RECEIPT_SCHEMA_VERSION, COGNITION_RESOURCE_VERSION_V1, CognitionEconomyError,
+    CognitionEconomyEventV1, CognitionEconomyIdempotencyRecordV1,
+    CognitionEconomyOperationRecordV1, CognitionEconomyStateV1, CognitionEconomyV1, CognitionLease,
+    CognitionLeaseQuoteV1, CognitionLeaseRequestV1, CognitionLeaseStatusV1, CognitionLeaseV1,
+    CognitionProvisioningEventV1, CognitionProvisioningReceiptV1, CognitionProvisioningRecordV1,
+    CognitionProvisioningRequestV1, CognitionQuoteV1, CognitionReceipt, CognitionReceiptV1,
+    CognitionResourceBalanceV1,
 };
 
 #[cfg(all(test, feature = "wasmtime", feature = "test_tier_full"))]

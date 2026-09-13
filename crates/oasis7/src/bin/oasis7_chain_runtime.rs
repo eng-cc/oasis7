@@ -515,6 +515,12 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
             &storage_profile_config,
         )
         .map_err(|err| format!("failed to initialize execution driver: {err}"))?;
+        #[cfg(not(test))]
+        execution_bridge::publish_provider_backed_bootstrap_from_paths(
+            &runtime,
+            paths.execution_world_dir.as_path(),
+            options.provider_backed_bootstrap_authority_paths.as_slice(),
+        )?;
         runtime = runtime.with_execution_hook(execution_driver);
     }
     let (mut runtime, replication_network) =

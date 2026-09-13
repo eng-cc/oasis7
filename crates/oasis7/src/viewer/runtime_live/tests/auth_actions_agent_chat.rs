@@ -88,7 +88,7 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
     let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
-    let base_url = spawn_runtime_live_mock_http_server(6, {
+    let base_url = spawn_runtime_live_mock_http_server_with_provider_probes(6, {
         let recorded = Arc::clone(&recorded);
         move |request| {
             recorded
@@ -252,7 +252,7 @@ fn runtime_agent_chat_provider_mode_surfaces_async_reply_failure_after_ack() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
     let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
-    let base_url = spawn_runtime_live_mock_http_server(4, {
+    let base_url = spawn_runtime_live_mock_http_server_with_provider_probes(4, {
         let recorded = Arc::clone(&recorded);
         move |request| {
             recorded
@@ -448,7 +448,7 @@ fn runtime_agent_chat_provider_mode_persists_rejection_without_agent_chat_capabi
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
     let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
-    let base_url = spawn_runtime_live_mock_http_server(1, {
+    let base_url = spawn_runtime_live_mock_http_server_with_provider_probes(1, {
         let recorded = Arc::clone(&recorded);
         move |request| {
             recorded

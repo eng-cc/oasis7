@@ -48,6 +48,52 @@ pub(crate) fn runtime_provider_context_digest(
     crate::simulator::h_v1("oasis7.cognition.context.v1", &logical_request).to_string()
 }
 
+const COGNITION_LEASE_RESOURCE: &str = "cognition_units";
+
+/// Construct the immutable economy request from the same logical provider
+/// identity used by Runtime cognition dispatch. The request key deliberately
+/// excludes transport attempt so retries reuse one reserved lease.
+pub(super) fn reserve_provider_cognition_lease(
+    world: &mut RuntimeWorld,
+    context: &cognition_context::ProviderContextState,
+) -> Result<crate::runtime::CognitionLeaseV1, String> {
+    let request = &context.request_context;
+    let runtime_binding = world
+        .current_cognition_runtime_binding()
+        .map_err(|error| format!("provider cognition Runtime binding unavailable: {error:?}"))?;
+    if runtime_binding != request.runtime_binding {
+        return Err("provider cognition Runtime binding changed before lease reserve".to_string());
+    }
+    let payer_id = payer_support::runtime_authorized_provider_payer_id(world, request)?;
+    let invocation_key = request.provider_invocation_key().to_string();
+    let quote = crate::runtime::CognitionLeaseQuoteV1::new(
+        format!("cognition-quote:{invocation_key}"),
+        COGNITION_LEASE_RESOURCE,
+        1,
+    )
+    .with_authority(
+        payer_id.clone(),
+        crate::runtime::COGNITION_RESOURCE_VERSION_V1,
+        "provider_cognition",
+        "agent_turn",
+        crate::runtime::COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION,
+        request.capability_invocation_context_digest.to_string(),
+        runtime_binding.base_world_hash.to_string(),
+    );
+    world
+        .reserve_cognition_lease(crate::runtime::CognitionLeaseRequestV1::new(
+            invocation_key,
+            payer_id,
+            request.agent_subject.clone(),
+            request.agent_session_id.clone(),
+            request.agent_turn_id.clone(),
+            request.decision_request_id.clone(),
+            request.request_digest.to_string(),
+            quote,
+        ))
+        .map_err(|error| format!("cognition lease admission rejected: {error:?}"))
+}
+
 impl RuntimeLlmDecision {
     pub(super) fn from_error(world: &RuntimeWorld, message: String) -> Self {
         let agent_id = world
@@ -195,6 +241,18 @@ impl RuntimeLlmSidecar {
             let Some(context) = self.provider_contexts.get(&agent_id).cloned() else {
                 continue;
             };
+            if let Some(existing_lease) = self.provider_cognition_lease(agent_id.as_str()) {
+                if let Err(error) = self.validate_provider_cognition_lease_for_request(
+                    world,
+                    agent_id.as_str(),
+                    &context.request_context,
+                    &existing_lease,
+                    "dispatch",
+                ) {
+                    self.fence_provider_cognition_lease(agent_id.as_str(), &context, error.clone());
+                    return Some(RuntimeLlmDecision::from_agent_error(world, agent_id, error));
+                }
+            }
             let observation = match kernel.observe(agent_id.as_str()) {
                 Ok(observation) => observation,
                 Err(error) => {
@@ -205,12 +263,30 @@ impl RuntimeLlmSidecar {
                     ));
                 }
             };
+            let cognition_lease = match reserve_provider_cognition_lease(world, &context) {
+                Ok(lease) => lease,
+                Err(error) => {
+                    return Some(RuntimeLlmDecision::from_agent_error(world, agent_id, error));
+                }
+            };
+            self.bind_provider_cognition_lease(agent_id.clone(), cognition_lease.clone());
             if let Err(error) = runtime_provider_prefix(world, &context) {
-                let _ = runtime_provider_failure(world, &context, "persistence_failure");
+                let release_error = self
+                    .release_provider_lease_before_io_or_fence(
+                        world,
+                        agent_id.as_str(),
+                        &context,
+                        &cognition_lease,
+                    )
+                    .err()
+                    .map(|error| format!("; {error}"));
                 return Some(RuntimeLlmDecision::from_agent_error(
                     world,
                     agent_id,
-                    format!("Runtime cognition prefix rejected provider I/O: {error}"),
+                    format!(
+                        "Runtime cognition prefix rejected provider I/O: {error}{}",
+                        release_error.unwrap_or_default()
+                    ),
                 ));
             }
             // The Runtime prefix above is durable evidence that this exact
@@ -222,11 +298,23 @@ impl RuntimeLlmSidecar {
                 .insert(agent_id.clone(), context.clone());
             if let Err(error) = self.persist_provider_lineage() {
                 self.provider_active_turns.remove(agent_id.as_str());
+                let release_error = self
+                    .release_provider_lease_before_io_or_fence(
+                        world,
+                        agent_id.as_str(),
+                        &context,
+                        &cognition_lease,
+                    )
+                    .err()
+                    .map(|error| format!("; {error}"));
                 let _ = runtime_provider_failure(world, &context, "persistence_failure");
                 return Some(RuntimeLlmDecision::from_agent_error(
                     world,
                     agent_id,
-                    format!("provider dispatch marker persistence failed: {error}"),
+                    format!(
+                        "provider dispatch marker persistence failed: {error}{}",
+                        release_error.unwrap_or_default()
+                    ),
                 ));
             }
             let Some(runner) = self
@@ -234,19 +322,43 @@ impl RuntimeLlmSidecar {
                 .as_mut()
                 .and_then(RuntimeDecisionRunner::async_runner_mut)
             else {
+                let release_error = self
+                    .release_provider_lease_before_io_or_fence(
+                        world,
+                        agent_id.as_str(),
+                        &context,
+                        &cognition_lease,
+                    )
+                    .err()
+                    .map(|error| format!("; {error}"))
+                    .unwrap_or_default();
+                let _ = runtime_provider_failure(world, &context, "provider_failure");
                 return Some(RuntimeLlmDecision::from_error(
                     world,
-                    "provider runner disappeared while starting an async turn".to_string(),
+                    format!(
+                        "provider runner disappeared while starting an async turn{release_error}"
+                    ),
                 ));
             };
-            let start_result = runner.start_turn_with_request_context_and_observation(
+            runner.sync_logical_tick(world.state().time);
+            let start_result = runner.start_turn_with_request_context_and_observation_and_lease(
                 agent_id.as_str(),
                 observation,
                 context.turn_context.clone(),
                 context.request_context.clone(),
+                cognition_lease.clone(),
             );
             if let Err(error) = start_result {
                 self.provider_active_turns.remove(agent_id.as_str());
+                let release_error = self
+                    .release_provider_lease_before_io_or_fence(
+                        world,
+                        agent_id.as_str(),
+                        &context,
+                        &cognition_lease,
+                    )
+                    .err()
+                    .map(|error| format!("; {error}"));
                 // If this cleanup cannot be persisted, retaining the durable
                 // marker is the safe outcome: restart recovery will fence the
                 // identity rather than risk a duplicate provider call.
@@ -255,7 +367,10 @@ impl RuntimeLlmSidecar {
                 return Some(RuntimeLlmDecision::from_agent_error(
                     world,
                     agent_id,
-                    format!("async provider turn start failed: {error}"),
+                    format!(
+                        "async provider turn start failed: {error}{}",
+                        release_error.unwrap_or_default()
+                    ),
                 ));
             }
             // The actor now owns the provider call. Returning without a
@@ -266,13 +381,20 @@ impl RuntimeLlmSidecar {
         None
     }
 
-    fn provider_decision_from_async_outcome(
+    pub(super) fn provider_decision_from_async_outcome(
         &mut self,
         world: &mut RuntimeWorld,
         kernel: &mut WorldKernel,
         outcome: AsyncAgentTurnOutcome,
     ) -> RuntimeLlmDecision {
         let agent_id = outcome.agent_id.clone();
+        let cognition_lease = outcome
+            .cognition_lease
+            .clone()
+            .or_else(|| self.provider_cognition_lease(agent_id.as_str()));
+        if let Some(lease) = cognition_lease.as_ref() {
+            self.bind_provider_cognition_lease(agent_id.clone(), lease.clone());
+        }
         let context = outcome
             .prepared_context
             .clone()
@@ -294,8 +416,29 @@ impl RuntimeLlmSidecar {
             .map(|(request, response)| RuntimeProviderActionContext {
                 request,
                 response,
+                cognition_lease: cognition_lease.clone(),
                 memory_write_intents: outcome.memory_write_intents.clone(),
             });
+        if let Some(context) = context.as_ref() {
+            let Some(lease) = cognition_lease.as_ref() else {
+                let error = format!(
+                    "provider cognition lease missing for {}",
+                    context.request_context.agent_subject
+                );
+                self.fence_provider_cognition_lease(agent_id.as_str(), context, error.clone());
+                return RuntimeLlmDecision::from_agent_error(world, agent_id, error);
+            };
+            if let Err(error) = self.validate_provider_cognition_lease_for_request(
+                world,
+                agent_id.as_str(),
+                &context.request_context,
+                lease,
+                "outcome",
+            ) {
+                self.fence_provider_cognition_lease(agent_id.as_str(), context, error.clone());
+                return RuntimeLlmDecision::from_agent_error(world, agent_id, error);
+            }
+        }
         let decision = outcome.decision.unwrap_or(AgentDecision::Wait);
         let mut decision_trace = outcome.decision_trace.or_else(|| {
             (outcome.lifecycle == AsyncTurnLifecycle::Failed).then(|| AgentDecisionTrace {
@@ -317,6 +460,21 @@ impl RuntimeLlmSidecar {
                 llm_chat_messages: Vec::new(),
             })
         });
+        if cognition.is_none()
+            && decision_trace
+                .as_ref()
+                .is_some_and(is_budget_exhausted_wait)
+            && context.is_some()
+        {
+            // The actor's budget normalizer intentionally emits a no-effect
+            // Wait, but custom/provider lanes may not produce a response
+            // artifact for that denial.  Keep the request/lease in the
+            // sidecar recovery maps and route it through the same terminal
+            // cleanup pass as an exhausted transport; otherwise the control
+            // plane sees a bare Wait and leaves the awaiting Runtime turn
+            // occupied forever.
+            self.mark_provider_transport_exhausted(agent_id.clone());
+        }
         let mut continuation_admitted = false;
         if let Some(cognition) = cognition.as_ref() {
             if decision_trace.as_ref().is_none_or(|trace| {

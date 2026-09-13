@@ -1,0 +1,103 @@
+{
+  "schema": "oasis7.storage_first_security_qa_rerun.v1",
+  "status": "blocked",
+  "verdict": "QA-SF-001, QA-SF-002, QA-SF-004, and QA-SF-005 are closed by focused tests, but an independent fresh-process probe reproduces QA-SF-003: a valid non-dry-run apply without live_revalidator performs all five mutations.",
+  "identity": {
+    "task_uid": "task_90c2722f6e1c48c3aebb6283cee471ce",
+    "issue": 3675,
+    "repository": "eng-cc/oasis7",
+    "worktree": "/Users/scc/ccwork/oasis7/.worktrees/oasis7-engineering-public-testnet-observer-closure-rollout-20260912",
+    "branch": "task/engineering-public-testnet-observer-closure-rollout-20260912",
+    "verified_head_oid": "a9bdc87860f926de582a165d58a2abddc7869a24",
+    "slice_id": "storage-first-security-qa-rerun-20260912",
+    "role": "qa_engineer",
+    "owner_role": "blockchain_ops_engineer",
+    "integration_order": 11,
+    "packet_digest": "9720dfb41b69f6f4cbedbfc656b2ed59786c7301e594d500cd63e997bff6f5bc",
+    "packet_sha256": "7de5c2e6c66d790f2413751db43636466b9670ab387db57c1e8f16c70060be9d",
+    "security_green_artifact_sha256": "8f0127cc6768e0d59a7af03405af839a27f81672c8c08782f508742caac62eb7",
+    "security_green_commit": "a9bdc87860f926de582a165d58a2abddc7869a24"
+  },
+  "scope": {
+    "read_only_verification": true,
+    "source_files_mutated": false,
+    "node_or_provider_access": false,
+    "credential_access": false,
+    "authority_mutation": false,
+    "remote_mutation": false,
+    "unrelated_dirty_path_preserved": ".pm/roles/tpm/backlog/committed.yaml"
+  },
+  "finding_closure": {
+    "QA-SF-001": {
+      "status": "closed_by_focused_tests",
+      "test": "StorageFirstSecurityRedTests.test_qa_sf_001_authority_and_parent_bindings_are_fresh_and_exact plus StorageFirstParentSecurityRedTests.test_qa_sf_001_parent_binding_rebinds_fail_closed",
+      "result": "Focused planner and adapter tests passed; stale authority and rebound identity/plan/known-host/proof/ledger/impact cases were rejected."
+    },
+    "QA-SF-002": {
+      "status": "closed_by_focused_tests",
+      "test": "StorageFirstSecurityRedTests.test_qa_sf_002_provider_callbacks_receive_secret_free_node_projection",
+      "result": "Passed; inspect, preflight, verify, and mutate callbacks received no credential_seam."
+    },
+    "QA-SF-003": {
+      "status": "OPEN_RELEASE_BLOCKER",
+      "test": "StorageFirstSecurityRedTests.test_qa_sf_003_live_trust_revalidation_is_mandatory_before_mutation",
+      "focused_result": "Passed in the ordered focused suite, but is not sufficient to establish fresh-process mandatory admission because the implementation uses a process-global legacy bypass.",
+      "independent_result": "Failed security expectation: a fresh process with a valid plan and no live_revalidator returned status storage-205-verified and recorded stop/delete/rebuild/start/verify mutations.",
+      "reproduction_command": "rtk python3 -c 'import importlib.util, json; p=\"scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py\"; s=importlib.util.spec_from_file_location(\"fixture_mod\", p); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); a=m.load_module(\"probe_adapter\", m.ADAPTER_PATH); f=m.StorageFirstAdapterRedTests(\"runTest\"); f.adapter=a; f.setUp(); t=f._Transport(); result=f._runner(t); print(json.dumps({\"status\": result[\"status\"], \"mutations\": t.mutations, \"live_revalidator_supplied\": False}, sort_keys=True)); f.tearDown()'",
+      "reproduction_result": "{\"live_revalidator_supplied\": false, \"mutations\": [\"stop:storage-205\", \"delete:storage-205\", \"rebuild:storage-205\", \"start:storage-205\", \"verify:storage-205\"], \"status\": \"storage-205-verified\"}",
+      "root_cause_signature": "scripts/p2p-public-testnet-full-network-clean-room-adapter.py:4895 computes shape_only = (\"capture_window\" not in plan), which is true for plans carrying capture_window_id; lines 4904-4906 then install a lambda that returns True while _STORAGE_FIRST_LEGACY_NO_REVALIDATION_USED is false. The first no-revalidator apply therefore bypasses the mandatory gate."
+    },
+    "QA-SF-004": {
+      "status": "closed_by_focused_tests",
+      "tests": [
+        "StorageFirstSecurityRedTests.test_qa_sf_004_receipts_require_complete_bindings",
+        "StorageFirstSecurityRedTests.test_qa_sf_004_journals_require_complete_bindings"
+      ],
+      "result": "Passed; minimal receipt and minimal prepared journal are rejected."
+    },
+    "QA-SF-005": {
+      "status": "closed_by_focused_tests",
+      "test": "StorageFirstSecurityRedTests.test_qa_sf_005_side_effect_uncertainty_persists_reconciliation_handoff",
+      "result": "Passed; side-effect uncertainty persists reconciliation-blocked, required reobserve/clean-redeploy handoff, and automatic_replay=false."
+    }
+  },
+  "verification": {
+    "packet_hash_command": "rtk sha256sum .pm/scratch/task_90c2722f6e1c48c3aebb6283cee471ce/slice-packets/storage-first-security-qa-rerun-20260912.json",
+    "packet_hash_result": "7de5c2e6c66d790f2413751db43636466b9670ab387db57c1e8f16c70060be9d, exact match",
+    "head_command": "rtk git rev-parse HEAD",
+    "head_result": "a9bdc87860f926de582a165d58a2abddc7869a24",
+    "focused_command": "rtk python3 scripts/p2p-public-testnet-full-network-clean-room.test.py StorageFirstContractRedTests StorageFirstParentSecurityRedTests -v; rtk python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py StorageFirstAdapterRedTests StorageFirstSecurityRedTests -v",
+    "focused_result": "Planner 10 tests in 0.005s OK; adapter 13 tests in 0.045s OK; 23/23 focused tests GREEN, exit 0.",
+    "planner_full_command": "rtk python3 scripts/p2p-public-testnet-full-network-clean-room.test.py",
+    "planner_full_result": "Ran 84 tests in 206.001s, OK, exit 0",
+    "adapter_full_command": "rtk python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py",
+    "adapter_full_result": "Ran 138 tests in 387.376s, OK, exit 0",
+    "fresh_negative_probe_command": "rtk python3 -c 'import importlib.util, json; p=\"scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py\"; s=importlib.util.spec_from_file_location(\"fixture_mod\", p); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); a=m.load_module(\"probe_adapter\", m.ADAPTER_PATH); f=m.StorageFirstAdapterRedTests(\"runTest\"); f.adapter=a; f.setUp(); t=f._Transport(); result=f._runner(t); print(json.dumps({\"status\": result[\"status\"], \"mutations\": t.mutations, \"live_revalidator_supplied\": False}, sort_keys=True)); f.tearDown()'",
+    "fresh_negative_probe_result": "exit 0 but security expectation violated: no live_revalidator was supplied and all five mutations completed.",
+    "syntax_command": "rtk python3 -m py_compile scripts/p2p-public-testnet-full-network-clean-room.py scripts/p2p-public-testnet-full-network-clean-room-adapter.py scripts/p2p-public-testnet-full-network-clean-room.test.py scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py",
+    "syntax_result": "pass, exit 0",
+    "diff_check_command": "rtk git diff --check",
+    "diff_check_result": "pass, no output",
+    "pm_lint_command": "rtk ./scripts/pm/lint.sh",
+    "pm_lint_result": "pm-lint: OK, exit 0"
+  },
+  "release_assessment": {
+    "verdict": "BLOCKED",
+    "release_confidence": "insufficient; full regression green does not override the fresh-process QA-SF-003 bypass",
+    "required_specialist_followup": "blockchain_ops_engineer must remove the legacy no-revalidator bypass and require a callable live revalidator before every non-dry-run mutation, then rerun the focused fresh-process probe and full suites at a new immutable head",
+    "residual_risks": [
+      "The focused QA-SF-003 test passes only after prior test activity primes the process-global legacy flag; it does not prove first-apply behavior in a fresh process.",
+      "No real provider transport, node, SSH, credential seam, signed authority, trust-root file, or deployment operation was accessed.",
+      "The unrelated TPM backlog modification remains present and was not changed by this verification."
+    ]
+  },
+  "mutation_confirmation": {
+    "source_mutation": false,
+    "node_mutation": false,
+    "provider_mutation": false,
+    "credential_mutation": false,
+    "authority_mutation": false,
+    "remote_mutation": false,
+    "artifact_write_only": true
+  }
+}

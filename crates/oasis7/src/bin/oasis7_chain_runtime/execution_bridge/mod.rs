@@ -6,7 +6,9 @@ use oasis7_proto::distributed::{BlobRef, WIRE_ENCODING_CBOR, WorldBlock, WorldHe
 use serde::{Deserialize, Serialize};
 
 mod driver_startup_recovery;
+mod execution_hash;
 mod product_validation_intent;
+mod provider_bootstrap;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct ExecutionBridgeState {
@@ -800,6 +802,7 @@ mod driver_checkpoint_install;
 mod driver_committed_heights;
 mod driver_observability;
 mod driver_persistence;
+mod driver_replicated_input;
 mod durable_transaction;
 mod external_effect;
 mod simulator_mirror;
@@ -820,3 +823,4 @@ pub(crate) use self::driver_observability::{
     ExecutionBridgeCommitTimingSnapshot, record_execution_bridge_module_tick_routing_metrics,
     snapshot_execution_bridge_commit_timing, snapshot_execution_bridge_module_tick_routing_metrics,
 };
+pub(super) use self::provider_bootstrap::publish_provider_backed_bootstrap_from_paths;
