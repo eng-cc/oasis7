@@ -7,6 +7,7 @@
 - 配对产品设计：[`local-launch-session-continuity-and-recovery.design.md`](local-launch-session-continuity-and-recovery.design.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 公开状态权威：[`README.md`](../../../README.md)
 - 专业域权威：[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`Launcher 子域入口`](../../world-simulator/launcher/README.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
@@ -42,6 +43,34 @@
 
 - 当 Launcher 的 Web 表面不可初始化、不可轮询或发生致命错误时，玩家得到可理解的失败或恢复状态，而不是无限加载、假连接或假成功。
 - native 与 Web 可以使用不同的表现、存储和恢复机制，但不能因入口不同而把配置编辑、本地 session 或诊断成功表达为不同的 primary-mode 或权威世界结果。
+
+## 2.5 叶级产品要求与验收
+
+<a id="req-entry-launch-001"></a>
+### REQ-ENTRY-LAUNCH-001：本地 session 可用不得代签世界结果
+
+- 要求：Launcher 必须把入口、primary mode、本地 session、配置和当前 authority 的可用性与 Agent/world 行动结果分开表达；进程存在、页面可见、本地保存或请求受理不能单独证明可玩或世界行动成功。
+- 验收：AC-ENTRY-LAUNCH-001
+
+<a id="ac-entry-launch-001"></a>
+### AC-ENTRY-LAUNCH-001：启动子步骤成功仍保持结果边界
+
+- 覆盖要求：REQ-ENTRY-LAUNCH-001
+- 场景与结果：启动、配置应用、Web 初始化或控制面局部成功但权威条件未确认时，玩家看到准备/恢复中/blocked/未知语义；世界行动保持未确认，且玩家能查看原因和适用下一步。
+- 证据边界：进程、配置、Web/WASM、runtime 和 world 结果由专业 authority/QA 分别验证；产品层不定义命令、字段或错误码。
+
+<a id="req-entry-launch-002"></a>
+### REQ-ENTRY-LAUNCH-002：停止、陈旧和失败恢复必须重新验证
+
+- 要求：停止、重启、清理、陈旧状态或启动失败后的重新进入必须重新验证当前 authority、session、配置和 primary mode，不得静默复用旧上下文、权限或待决行动。
+- 验收：AC-ENTRY-LAUNCH-002
+
+<a id="ac-entry-launch-002"></a>
+### AC-ENTRY-LAUNCH-002：没有安全路径时保持 blocked
+
+- 覆盖要求：REQ-ENTRY-LAUNCH-002
+- 场景与结果：停止后重入、陈旧本地状态、Web 初始化失败和恢复证据冲突的样例只进入重新验证、blocked、未知/中断或安全返回；重启、刷新或自动恢复不确认、回滚、保存或重放世界结果。
+- 证据边界：恢复协议、存储、时钟、Web API 和 session 分类由 Launcher/runtime/WASM/Viewer/QA authority 决定；产品层只规定禁止推断和安全下一步。
 
 ## 3. 组合验收
 

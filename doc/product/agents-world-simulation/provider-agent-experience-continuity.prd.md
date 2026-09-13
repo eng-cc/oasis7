@@ -7,6 +7,7 @@
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
 - 专业域权威：[Local Provider 与内置 Agent 体验等价（parity）验收方案](../../world-simulator/llm/provider-agent-experience-parity.prd.md)
+- Last reviewed：2026-09-13
 
 本文是长期产品分册，定义 Agent/provider 切换时玩家体验连续性的产品承诺。它不声明任何 provider 当前受支持、可用、默认或已就绪；具体 provider 组合的场景范围、评估、技术合同和结论仅由专业域权威文档维护。
 
@@ -30,6 +31,34 @@
 - 切换发生时，玩家必须仍能区分：尚未被权威系统接受的候选、仍无世界效果的待决请求、已有 committed receipt 的结果，以及已拒绝、失效或需要重新规划的请求。切换、重连或体验降级本身不把其中任何状态变成成功、取消、失败或新的世界效果。
 - 已接受或待决的意图只按同一权威世界链和其专业合同继续、拒绝、过期或结算；后续切换不能追溯改写其来源、成本、权限、排序或世界后果。若专业域支持安全的撤回或替换，玩家只能使用该明确能力；否则产品表面只可提供查看、等待或重新规划，不能把普通重试伪装成取消。
 - 当切换前后的建议指向相同目标时，产品表面仍须避免暗示两者已自动去重、合并或同时获授权。任何额外提交都必须重新经过当时有效的授权与权威裁决；重复、竞争或重放的实际处理由 Agent、runtime 和测试专业合同定义，产品层不冻结其实现或 receipt schema。
+
+## 2.2 叶级产品要求与验收
+
+<a id="req-agent-parity-001"></a>
+### REQ-AGENT-PARITY-001：体验连续性必须限定在已声明场景
+
+- 要求：provider 切换的连续性只能在专业 authority 已声明的 provider 组合、玩家场景、权限和证据范围内作出产品承诺；技术接通、一次成功或历史样本不能扩大当前支持、默认或发布结论。
+- 验收：AC-AGENT-PARITY-001
+
+<a id="ac-agent-parity-001"></a>
+### AC-AGENT-PARITY-001：未覆盖组合保持窄承诺
+
+- 覆盖要求：REQ-AGENT-PARITY-001
+- 场景与结果：当组合超出适用范围或证据不足时，玩家看到受限、退化或 blocked 语义及真实下一步；产品不会把回退、静默替代或局部技术通路呈现为等价体验或当前可用 provider。
+- 证据边界：场景范围、评估和具体 parity 结论由 provider 专业 authority 提供；产品层不定义 provider 矩阵、评分或阈值。
+
+<a id="req-agent-parity-002"></a>
+### REQ-AGENT-PARITY-002：provider 切换不得重放在途意图
+
+- 要求：provider 切换、重连或体验降级必须保留候选、待决、已结算和已拒绝请求的真实区别，不得自动重放旧请求、伪造取消或产生第二次世界效果。
+- 验收：AC-AGENT-PARITY-002
+
+<a id="ac-agent-parity-002"></a>
+### AC-AGENT-PARITY-002：切换只影响后续新意图
+
+- 覆盖要求：REQ-AGENT-PARITY-002
+- 场景与结果：切换前候选不自动交给新 provider 重试；待决请求按原权威合同继续、拒绝、过期、取消或明确重新规划；只有 committed receipt 表达世界后果，受支持的撤回/替换必须走专业路径。
+- 证据边界：意图 lineage、去重、receipt 和撤回/替换状态机由 Agent/runtime/QA authority 验证；产品层不冻结 schema。
 
 ## 3. 产品验收
 

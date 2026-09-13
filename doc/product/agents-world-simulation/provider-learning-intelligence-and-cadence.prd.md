@@ -7,6 +7,7 @@
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
 - 专业域权威：[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
+- Last reviewed：2026-09-13
 
 本文是长期产品分册，定义 provider 选择、准入与固定权威节奏，及 Agent 学习/认证和情报连续性的产品边界。它不定义模型、profile 字段、评测方法或阈值、训练算法、模块 ABI、情报分类技术、action slot 实现、当前 provider 支持矩阵或 readiness verdict。
 
@@ -66,6 +67,34 @@ provider profile 的产品基础状态依次为 `证据不足 -> 评估中 -> �
 2. 同一世界节奏：使所有 provider 在固定权威 cadence 和 action slots 下竞争与协作。
 3. 可追溯学习：把经验、训练、认证、模块和重训接入同一可审计历史。
 4. 有效情报：在有限私有、最小安全披露、最终公共 baseline 与 freshness 之间维持可解释平衡。
+
+## 4.1 叶级产品要求与验收
+
+<a id="req-agent-learning-001"></a>
+### REQ-AGENT-LEARNING-001：provider 准入必须受范围与固定节奏约束
+
+- 要求：provider profile 只有在适用场景、权限、tier 和证据范围内才可被选择或形成新的权威意图来源；所有 provider 共享同一权威 cadence 与 action slots，不因性能、调用量或付费便利获得额外世界机会。
+- 验收：AC-AGENT-LEARNING-001
+
+<a id="ac-agent-learning-001"></a>
+### AC-AGENT-LEARNING-001：暂停、撤销与恢复不绕过权威节奏
+
+- 覆盖要求：REQ-AGENT-LEARNING-001
+- 场景与结果：证据不足、超出范围、暂停或撤销的 profile 不能提交新的权威意图；恢复只进入新的已证实范围，重新确认后的请求仍按正常 slot 进入，不增加排序优先级或额外世界效果。
+- 证据边界：准入状态、slot、公平排序和请求再评估由 Agent/runtime/QA authority 验证；产品层不定义状态字段或阈值。
+
+<a id="req-agent-learning-002"></a>
+### REQ-AGENT-LEARNING-002：训练与认证变化必须保留能力范围和历史
+
+- 要求：训练、认证、模块和重训只能在新证据明确支持的范围内改变能力；复核、失败、到期或撤销期间必须显示当前有效范围与受影响行动，并保留既有 provenance、责任和已结算结果。
+- 验收：AC-AGENT-LEARNING-002
+
+<a id="ac-agent-learning-002"></a>
+### AC-AGENT-LEARNING-002：重训成功不会自动恢复旧待决请求
+
+- 覆盖要求：REQ-AGENT-LEARNING-002
+- 场景与结果：能力复核/重训/撤销期间，超出当前范围的请求进入 Wait、拒绝、过期或明确低风险替代；后续训练成功也不自动恢复旧待决请求，必须在当前 scope 重新确认或以关联新请求提交，且不产生重复世界效果。
+- 证据边界：训练/认证 provenance、scope、guardrail、重训成本和待决请求处理由 Agent/runtime/QA authority 定义；产品层不声称当前能力已实现。
 
 ## 5. Done：成功标准与验收
 

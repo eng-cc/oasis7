@@ -8,6 +8,7 @@
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
 - 专业域权威：[`语义定位`](../../world-simulator/viewer/viewer-pixel-world-semantic-positioning.prd.md)、[`Fragment LOD`](../../world-simulator/viewer/viewer-pixel-world-fragment-lod.prd.md)、[`玩家因果优先的渲染闭环`](../../world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md)
+- Last reviewed：2026-09-13
 
 本文是长期产品分册，定义玩家观察 Agent 与世界模拟时的首读层级、空间关系、可归因因果与诊断边界。它不指定 Viewer 组件、DTO、派生算法、LOD 阈值、渲染管线、视觉资产或当前发布结论。
 
@@ -164,7 +165,35 @@ Agent Context Lite 只允许组合以下已经发布且适用于该 Agent 的语
 - 玩家当前目标、blocker 与行动回执应能以可访问的文本或等价方式被读取；这不承诺专用复制面板、剪贴板功能或默认暴露原始诊断文本。
 - mock、fallback、截图或仅本地可见的调试表面不能单独证明正式玩家表面已经满足本产品承诺。
 
-## 5. 组合验收
+## 5. 叶级产品要求与验收
+
+<a id="req-agent-stage-001"></a>
+### REQ-AGENT-STAGE-001：世界舞台必须先呈现目的与因果
+
+- 要求：正式玩家 surface 必须优先呈现当前目的、相关 Agent/地点/路线、关键 blocker、下一步和已接受行动的主要结果；环境装饰与诊断不能代替玩家因果。
+- 验收：AC-AGENT-STAGE-001
+
+<a id="ac-agent-stage-001"></a>
+### AC-AGENT-STAGE-001：玩家能从舞台读到下一决策
+
+- 覆盖要求：REQ-AGENT-STAGE-001
+- 场景与结果：代表性目标、相关对象、阻塞和已接受行动结果在主舞台及密度变化后仍可读，并能到达继续、纠正、中断或恢复路径；视觉邻近、环境活动和诊断不会被误读为玩家行动结果。
+- 证据边界：空间位置、LOD、renderer 和控件由 Viewer/视觉交互 authority 验证；产品层只规定阅读顺序与事实来源边界。
+
+<a id="req-agent-stage-002"></a>
+### REQ-AGENT-STAGE-002：动态观察必须保留来源、时效与未知
+
+- 要求：当动态对象观察过期、冲突、范围外或尚未取得时，产品必须保留当前确认、最近已知、未知/冲突和来源时效的区别，并为影响行动的非当前信息提供刷新、等待、改道或停止路径。
+- 验收：AC-AGENT-STAGE-002
+
+<a id="ac-agent-stage-002"></a>
+### AC-AGENT-STAGE-002：陈旧或冲突观察不会代签真值
+
+- 覆盖要求：REQ-AGENT-STAGE-002
+- 场景与结果：旧响应晚到、刷新竞态或提交前信息失效时，surface 保留冲突/来源/时效语义；低后果动作最多是带不确定性预览，高后果动作重新取得当前权威确认或明确阻断。
+- 证据边界：动态观察来源、时效、提交校验和最终结果由 Agent/runtime/Viewer/QA authority 定义；产品层不定义 DTO、TTL 或排序。
+
+## 5.1 组合验收
 
 - RW-1：代表性正式玩家表面中，玩家无需阅读诊断信息即可识别世界上下文、当前目标、相关行动者或路线、关键 blocker 和下一决策。
 - RW-2：用于说明决策的空间关系可读；任何派生或抽象位置都不会被表达为其并不具备的权威精度、资源事实或交互能力。

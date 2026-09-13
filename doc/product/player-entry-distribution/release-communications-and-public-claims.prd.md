@@ -9,6 +9,7 @@
 - 专业域权威：[`readme 产品与治理 PRD`](../../readme/prd.md)、[`testing PRD`](../../testing/prd.md)、[`README.md`](../../../README.md)
 - 公开状态权威：[`README.md`](../../../README.md)
 - 专业与执行入口：[`doc/readme/prd.md`](../../readme/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
+- Last reviewed：2026-09-13
 
 本文是长期产品分册，定义内部候选证据如何形成可审查、可发布、可纠正和可撤回的公开说明。它不保存具体候选 verdict、公告正文、渠道排期、字段模板、任务状态或历史发布记录。
 
@@ -59,6 +60,34 @@
 - rollback communication 必须来自权威 rollback/incident 决策；LiveOps 不独立决定技术回滚、发布时间或恢复承诺。
 - 公开内容只披露理解影响和采取行动所需的最小信息，不暴露内部运行目录、命令、敏感配置、私密 issue/comment、账号标识、未脱敏事故报告或不必要的个人复现数据。
 - 内部 evidence link 与可公开 source link 必须区分；内部审核路径不得原样外发。
+
+## 5.1 叶级产品要求与验收
+
+<a id="req-entry-claim-001"></a>
+### REQ-ENTRY-CLAIM-001：公开 claim 必须绑定同一证据窗口
+
+- 要求：每条发行沟通必须绑定同一候选或版本、primary mode、适用入口、证据范围、更新时间和根 README claim envelope；内部 readiness、QA green、草稿或历史 verdict 不得单独生成公开事实。
+- 验收：AC-ENTRY-CLAIM-001
+
+<a id="ac-entry-claim-001"></a>
+### AC-ENTRY-CLAIM-001：局部 green 不会升级公开状态
+
+- 覆盖要求：REQ-ENTRY-CLAIM-001
+- 场景与结果：代表性候选文案能区分已证实事实、适用限制、未承诺内容/风险和下一步；入口、专业 authority、QA 与根 README 不一致时采用更窄 claim，不能把局部进程、帖子、认证或历史样本写成当前集成、发行就绪或可用性。
+- 证据边界：公开状态由根 README 与同一证据窗口拥有；LiveOps、产品、QA 和专业 authority 提供输入与审核，产品层不保存公告正文或发布记录。
+
+<a id="req-entry-claim-002"></a>
+### REQ-ENTRY-CLAIM-002：事实漂移必须触发纠正或撤回
+
+- 要求：当前事实、证据或限制漂移时，所有 active public surfaces 必须同步纠正、降级或撤回受影响文案；messaging rollback 不得被表达为软件回滚、QA 放行或事故恢复。
+- 验收：AC-ENTRY-CLAIM-002
+
+<a id="ac-entry-claim-002"></a>
+### AC-ENTRY-CLAIM-002：撤回只改变 claim 状态
+
+- 覆盖要求：REQ-ENTRY-CLAIM-002
+- 场景与结果：证据失效、blocker 或事故回退后，旧文案标记 stale/withdrawn 或收窄并引回根 README；公开说明只陈述确认影响、受影响入口、当前恢复动作和可信下一步，不承诺恢复时间或泄露内部证据。
+- 证据边界：LiveOps 执行渠道同步，QA 复核证据，专业 owner 决定产品边界，技术 rollback/incident 由对应 authority 决定；产品层不越权代签。
 
 ## 6. 组合验收
 

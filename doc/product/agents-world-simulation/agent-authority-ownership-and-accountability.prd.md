@@ -7,6 +7,7 @@
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)
+- Last reviewed：2026-09-13
 
 本文定义玩家或组织拥有 Agent 的长期产品承诺：授权如何持续、资产如何扩张和转让、Agent 如何提出异议，以及结果如何归因。它不定义 runtime 状态机、授权字段、签名、模型行为、界面、数值成本或测试步骤。
 
@@ -63,7 +64,35 @@ Agent 是可长期持有、扩张和转让的经营资产，但其身份、来�
 
 `game` 拥有玩法成长、团队成本与反支配平衡；`world-runtime` 拥有授权、转让、执行、receipt、审计与恢复的确定性规则；`world-simulator` 拥有 Agent 行为、Prompt、provider 与玩家 surface；QA 拥有具体证据和验证方法。产品层不以本承诺声称任何机制当前已实现或可对外发布。
 
-## 7. 组合验收
+## 7. 叶级产品要求与验收
+
+<a id="req-agent-auth-001"></a>
+### REQ-AGENT-AUTH-001：高后果授权必须按有效期累计约束
+
+- 要求：当玩家或组织提前授权会消耗资源、占用容量、转移权利或累积风险的行动时，产品必须让玩家知道授权的对象范围、来源、有效期和剩余额度；拆分、并发、重试、重连或控制权切换不得扩大同一授权。
+- 验收：AC-AGENT-AUTH-001
+
+<a id="ac-agent-auth-001"></a>
+### AC-AGENT-AUTH-001：授权额度不会因重试或切换复制
+
+- 覆盖要求：REQ-AGENT-AUTH-001
+- 场景与结果：在同一授权下重复提交、并发提交、重连后重试或切换 owner 时，权威结果至多消费有效累计额度一次；额度不足、来源/对象不匹配或授权失效时，玩家能看到 blocker 与等待、改道、取消或重新确认路径。
+- 证据边界：只验证产品层可读的授权范围、累计限制与结果语义；授权字段、去重、receipt 和执行合同由 runtime/world-simulator authority 验证。
+
+<a id="req-agent-auth-002"></a>
+### REQ-AGENT-AUTH-002：转让与处置必须保留身份和责任历史
+
+- 要求：Agent 转让、重配置、退休或报废后，产品必须把新 owner 的生效点与既有身份、来源、审计历史和已生效世界结果区分呈现，不得以处置抹除责任或历史。
+- 验收：AC-AGENT-AUTH-002
+
+<a id="ac-agent-auth-002"></a>
+### AC-AGENT-AUTH-002：新策略不会改写既有因果
+
+- 覆盖要求：REQ-AGENT-AUTH-002
+- 场景与结果：转让后新 owner 可以在有效权限内配置新目标或策略；玩家仍能追溯转让生效点、旧配置、来源和既有结果，且撤销、退休或报废不把已生效结果显示为未发生。
+- 证据边界：责任分层、控制权生效、receipt 和审计记录由 runtime、Agent 与 QA 专业 authority 共同确认；产品层不定义字段或实现。
+
+## 7.1 组合验收
 
 <a id="ac-1"></a>
 - AC-1：代表性目标可在高自治和有界授权两种模式下运行，玩家均能读到授权范围、当前状态、主要风险、实际结果及撤销、纠正、改道或恢复的下一步。

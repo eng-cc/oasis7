@@ -6,6 +6,7 @@
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：`2026-09-13`
 - 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)（共识最终性、证明与 freshness）、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)（版本化执行、manifest/head、pending、receipt 与去重）、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)（消费者/Viewer/入口状态反馈）、[`doc/testing/prd.md`](../../testing/prd.md)（组合验证与证据）。
 
 本文定义 oasis7 区块链/分布式系统底层向上层确定性世界执行提供的产品级保证。它不定义共识消息、密码学、网络协议、节点配置、存储格式或运行步骤；这些由 P2P、共识和运维专业权威拥有。
@@ -63,7 +64,86 @@ Compatibility declaration 只证明客户端能理解当前 manifest，不能选
 
 当前实现是 stake-weighted proposer/attestation threshold prototype，不是已经具备完整 BFT 最终性的公开承诺。目标仍缺持久且可复验的 quorum certificate、prevote/precommit 锁定、round timeout/view-change、验证者转换证明、复制端证书复验与对抗性恢复证据。本文不因目标描述而宣称 mainnet、去中心化规模、SLA 或发行 readiness。
 
-## 6. 组合验收
+## 6. 叶子需求与可观察验收
+
+这些叶子把本专题的五类可独立失败义务映射到现有 DC 汇总标准；它们保留 P2P、runtime 和 QA 的专业 authority，不把证书、拓扑或节点运行步骤复制到产品层。
+
+<a id="req-dcs-001"></a>
+### REQ-DCS-001：单一 canonical history 与最终性
+
+同一 `world_id` 只能由适用的、可验证的 finality/commit certificate 推进唯一 canonical order；副本、缓存、非权威 peer 或未最终化输入不能成为玩家世界结果。
+
+- 对应验收：[AC-DCS-001](#ac-dcs-001)。
+- 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)。
+
+<a id="ac-dcs-001"></a>
+### AC-DCS-001：非权威材料不能代签
+
+同一候选的服务节点、full node、light companion 和消费者只能依据验证过的最终性证明及 hash-bound 材料得出世界状态；冲突、缺证或非权威写入被拒绝且不进入玩家可见历史。证据必须覆盖适用的 P2P/runtime 组合边界，transport 成功不能代签。
+
+- 对应需求：[REQ-DCS-001](#req-dcs-001)。
+
+<a id="req-dcs-002"></a>
+### REQ-DCS-002：状态可用性与恢复链连续
+
+恢复只能沿同一 `world_id` 的 genesis/manifest、finalized checkpoint certificate、hash-bound snapshot、canonical replay 和 verified state root 建立连续历史；材料缺失、冲突、回退或指向其他世界时必须保持隔离或只读。
+
+- 对应验收：[AC-DCS-002](#ac-dcs-002)。
+- 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)。
+
+<a id="ac-dcs-002"></a>
+### AC-DCS-002：分区、重启与恢复不产生第二世界
+
+分区、重启、落后追赶、snapshot/state sync 或 pruning 样例能证明同一 `world_id` 的唯一顺序、可重建性和 state-root 连续；任一恢复材料不匹配时停止服务/投票或降为明确只读，不能把替代 endpoint、缓存或本地世界包装成原世界恢复。
+
+- 对应需求：[REQ-DCS-002](#req-dcs-002)。
+
+<a id="req-dcs-003"></a>
+### REQ-DCS-003：共识权限与服务角色隔离
+
+验证者集合及其轮换保有受治理的共识权威；sentry、relay、full/state-sync/archive、RPC/proof gateway 等非权威服务只能提供传播、存储或证明材料，不能通过暴露面、缓存或服务被攻破取得最终写入权。
+
+- 对应验收：[AC-DCS-003](#ac-dcs-003)。
+- 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)。
+
+<a id="ac-dcs-003"></a>
+### AC-DCS-003：非权威节点不能扩大权限
+
+验证者注册/轮换、网络暴露和服务角色的组合样例证明非权威节点不能推进 canonical history、签发最终性或代替受治理验证者完成高影响状态变化；被攻破的服务节点只能导致隔离/缺证等可观察结果，不能产生权威写入。
+
+- 对应需求：[REQ-DCS-003](#req-dcs-003)。
+
+<a id="req-dcs-004"></a>
+### REQ-DCS-004：commit certificate 的安全推进边界
+
+目标 BFT commit 只有在活动、治理注册的验证者集合满足产品要求的最终性证据时才能推进；equivocation、缺证、错误验证者集合或 round 故障不得产生部分或可见权威历史。
+
+- 对应验收：[AC-DCS-004](#ac-dcs-004)。
+- 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)。
+
+<a id="ac-dcs-004"></a>
+### AC-DCS-004：错误证明和 round 故障 fail closed
+
+BFT 实现样例证明符合产品最终性条件的 commit certificate 才能推进历史；equivocation、缺证、错误验证者集合和 round 故障全部被拒绝或保持无效果，不以 prototype 状态宣称完整 BFT readiness。具体阈值、签名和 round 状态由 P2P authority 定义。
+
+- 对应需求：[REQ-DCS-004](#req-dcs-004)。
+
+<a id="req-dcs-005"></a>
+### REQ-DCS-005：消费者可读的可用性与 fail-closed
+
+只有“已验证可服务”同时满足 `world_id`、checkpoint/head、hash-bound 状态、finality/追加条件、manifest compatibility 和单调 head continuity 时，消费者才可提交新的权威 intent；其他等级必须保持只读、无效果待决或不可用/隔离，并说明 blocker 与下一步。
+
+- 对应验收：[AC-DCS-005](#ac-dcs-005)。
+- 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)。
+
+<a id="ac-dcs-005"></a>
+### AC-DCS-005：状态转换不伪造世界效果
+
+同一候选覆盖“已验证可服务 -> 陈旧/追赶中 -> 已验证只读 -> 已验证可服务”和证明冲突进入“不可用/隔离”的转换；非可服务等级的新 intent 的 committed receipt 为 `0`，正式消费者能读到当前等级、受影响操作、最后可信边界、blocker 和真实下一步。重连、重复提交和跨入口重试不产生第二次世界效果。
+
+- 对应需求：[REQ-DCS-005](#req-dcs-005)。
+
+## 7. 组合验收
 
 - DC-1：任何服务、full node 或 light companion 都只能从已验证的最终性证明和 hash-bound 材料得出世界状态；非权威 peer/缓存/快照不能代签。
 - DC-2：分区、重启、落后追赶、恢复和 pruning 样例证明相同 `world_id` 的唯一顺序、可重建性与 state-root 一致；不满足证据时停止服务或投票。
@@ -71,7 +151,7 @@ Compatibility declaration 只证明客户端能理解当前 manifest，不能选
 - DC-4：BFT 实现样例证明超过三分之二活动质押预提交形成可验证 commit certificate，且 equivocation、缺证、错误验证者集合和 round 故障均不得推进权威历史。
 - DC-5：同一候选至少覆盖“已验证可服务 -> 陈旧/追赶中 -> 已验证只读 -> 已验证可服务”以及证明冲突进入“不可用/隔离”的转换；仅在已验证可服务且当前 governing manifest/compatibility 与单调 head continuity 证据均成立时接受新的权威 intent，其他等级或版本/连续性证据缺失、冲突时新 intent 的 committed receipt 数为 `0`。陈旧内容带有最后可信边界与 blocker，不被表述为当前权限、价格或成功；冲突/替代世界不被当作原世界恢复；重连、重复提交和跨入口重试不产生第二次世界效果。正式消费者能读到当前等级、受影响操作与真实下一步。测试层级：`test_tier_full`。证据追踪必须将根产品 PRD 的 SC-7 恢复闸门与 [`Game World State Sync and Commit Closure` 计划](../../testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md) 作为执行 lane，将 [`state-sync closure evidence packet` 模板](../../testing/templates/state-sync-closure-evidence-packet-template.md) 作为 evidence envelope，并在同一候选的 linked structured attachment/schema 中提供状态转换、manifest/head 负例、每个 intent 的 receipt `0/1` 与消费者 blocker/next-step 字段；缺少该 attachment/schema 或任一字段时，DC-5 不得判定通过。
 
-## 7. Non-Goals
+## 8. Non-Goals
 
 - 不定义区域设施、市场、工业、charter、frontier、普通治理或玩家资源经济；这些是世界规则与核心玩法模块的产品语义。
 - 不定义 deterministic world runtime 的规则解释；该上层基础子层由本模块的执行专题和 `doc/world-runtime/` 专业权威承载。

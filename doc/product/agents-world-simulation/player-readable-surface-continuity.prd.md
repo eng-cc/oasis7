@@ -8,6 +8,7 @@
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
 - 专业域权威：[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md)、[`world-simulator PRD`](../../world-simulator/prd.md)、[`Web 语义测试 API`](../../world-simulator/viewer/viewer-web-semantic-test-api.prd.md)
+- Last reviewed：2026-09-13
 
 本文定义正式玩家表面在 viewport、信息密度、语言与连接状态变化时保持可理解、可操作和可恢复的长期产品承诺。它不冻结 Viewer 布局、组件、Web/EGUI/Bevy 实现、协议字段、缓存、字体资产或当前发布结论。
 
@@ -58,7 +59,35 @@
 
 该优先级只规定玩家的默认首要解释，不冻结字段、状态枚举或 UI 排版。任何新的提交仍须按当前权威条件独立校验；重连、刷新和跨入口查看不能产生第二次世界效果。
 
-## 5. 组合验收
+## 5. 叶级产品要求与验收
+
+<a id="req-agent-surface-001"></a>
+### REQ-AGENT-SURFACE-001：跨 surface 保留同一决策锚点
+
+- 要求：在受支持 viewport、语言和连接状态下，玩家必须能找到当前目标、主要 blocker、最近可信反馈和下一决策或恢复入口；呈现变化不得改写权限或世界结果。
+- 验收：AC-AGENT-SURFACE-001
+
+<a id="ac-agent-surface-001"></a>
+### AC-AGENT-SURFACE-001：窄屏、fallback 与恢复状态仍可读
+
+- 覆盖要求：REQ-AGENT-SURFACE-001
+- 场景与结果：代表性 desktop、窄屏、低高度和双语 fallback 样例中，四个决策锚点仍可辨认；中断、恢复中、恢复失败和已接受结果保持不同语义，并提供真实下一步。
+- 证据边界：只证明玩家可读语义和不误导边界；具体布局、控件、locale 资源和连接字段由 Viewer/WASM/QA authority 验证。
+
+<a id="req-agent-surface-002"></a>
+### REQ-AGENT-SURFACE-002：不支持行动不得伪装成传输失败
+
+- 要求：当当前模式不支持某行动、权限/规则阻塞或请求已被接受时，surface 必须与连接中断和未确认请求区分，并给出适用的替代、等待、返回或重新验证路径。
+- 验收：AC-AGENT-SURFACE-002
+
+<a id="ac-agent-surface-002"></a>
+### AC-AGENT-SURFACE-002：重连不会创造能力或世界效果
+
+- 覆盖要求：REQ-AGENT-SURFACE-002
+- 场景与结果：不支持行动、权限阻塞、已接受未结算请求和断连同时出现时，首要解释按当前权威语义呈现；重连、刷新、后台 tick 或跨入口查看不会把请求变成成功、取消或第二次世界效果。
+- 证据边界：请求 acceptance、世界结果、去重与恢复合同由 runtime/Agent 专业 authority 提供；产品层不冻结 transport 或 UI 实现。
+
+## 5.1 组合验收
 
 - PSC-1：代表性 desktop、窄屏和低高度 viewport 中，当前目标、主要 blocker、接受/结果反馈与下一步保持可读且可恢复。
 - PSC-2：信息密度或 panel 可见性改变后，玩家仍能找到主要决策面；隐藏次级内容不会制造权限、结果或世界事实变化。
