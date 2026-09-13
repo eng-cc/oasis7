@@ -67,6 +67,7 @@ DESIGN_TEXT = """# Sample topic design
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
 - 专业域权威：[`gameplay authority`](../../game/prd.md#authority)
+- Last reviewed：2026-09-10
 
 ## 1. 设计命题
 玩家在一次选择中理解后果和下一步。
@@ -595,6 +596,8 @@ def main() -> None:
     scenario(None, legacy_declarations_with_anchors)
     scenario("invalid-fragment", inline_code_anchor_is_not_fragment)
     scenario("missing-metadata", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("- Owner role：`producer_system_designer`\n", ""), encoding="utf-8"))
+    scenario("missing-metadata", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("- Last reviewed：2026-09-10\n", ""), encoding="utf-8"))
+    scenario("missing-metadata", lambda root: (root / DESIGN).write_text(DESIGN_TEXT.replace("- Last reviewed：2026-09-10\n", ""), encoding="utf-8"))
     scenario("missing-normal-path", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("正常路径", "体验").replace("路径", "方向").replace("流程", "方向").replace("循环", "方向").replace("链路", "方向"), encoding="utf-8"))
     scenario("missing-evidence-boundary", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("证据", "范围证明"), encoding="utf-8"))
     scenario("authority-not-link", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("[`gameplay authority`](../../game/prd.md#authority)", "`doc/game` authority", 1), encoding="utf-8"))

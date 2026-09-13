@@ -380,7 +380,7 @@ def heading_identifier(line: str) -> str | None:
 
 def check_metadata(path: str, text: str, errors: list[str]) -> None:
     text = document_identity_text("\n".join(line for _, line in visible_lines(text)))
-    required = ["生命周期", "Owner role"]
+    required = ["生命周期", "Owner role", "Last reviewed"]
     authority_labels = ("专业域权威", "专业权威")
     if path.endswith(".prd.md"):
         required.extend(["所属产品模块", "上位产品 PRD"])
