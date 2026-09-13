@@ -6141,6 +6141,9 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
                 "reobserve-failed-state", transport._storage_node()
             )
             receipt["bindings"]["rollback_candidates"] = list(started)
+            receipt["rollback_steps"] = canonical.adapter._storage_first_rollback_policy(
+                canonical.plan
+            )["steps"]
             bound = canonical.adapter._storage_first_recovery_receipt(
                 canonical.plan,
                 receipt,
@@ -6328,9 +6331,12 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
                 "operation_journal_contract",
                 "forensic_backup",
                 "reset",
-                "rollback",
             ):
                 self.assertNotIn(field, callback_plan)
+            self.assertFalse(callback_plan["rollback"]["rerun_fresh_root_probe"])
+            self.assertNotIn(
+                "rerun-fresh-root-probe", callback_plan["rollback"]["steps"]
+            )
         finally:
             canonical.tearDown()
 

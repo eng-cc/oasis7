@@ -2700,6 +2700,7 @@ def _validate_provider_receipt(
     evidence: dict[str, Any] | None = None,
     rollback_candidates: list[str] | None = None,
     rollback_order: Sequence[str] | None = None,
+    expected_rollback_steps: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """Validate and sanitize every provider receipt before phase advance."""
     # A provider callback may return a receipt only after the exact impact
@@ -2840,7 +2841,12 @@ def _validate_provider_receipt(
             _fail(f"{operation} receipt lacks a fresh failed-state re-observation")
         _string(receipt.get("failed_operation"), f"{operation} failed operation")
         _nonzero_hex(receipt.get("failed_state_digest"), HEX64_RE, f"{operation} failed state digest")
-        if receipt.get("rollback_steps") != plan["rollback"]["steps"]:
+        rollback_steps = (
+            list(expected_rollback_steps)
+            if expected_rollback_steps is not None
+            else plan["rollback"]["steps"]
+        )
+        if receipt.get("rollback_steps") != rollback_steps:
             _fail(f"{operation} receipt clean-redeploy steps are not exact")
     if phase in {"backup", "apply"}:
         if plan["forensic_backup"]["required_before_reset"] is True:
@@ -5831,14 +5837,13 @@ def _storage_first_recovery_receipt(
     }
     fixture = _storage_first_is_shape_fixture(plan)
     if not fixture:
-        recovery_plan = copy.deepcopy(dict(plan))
-        recovery_plan["rollback"] = _storage_first_rollback_policy(plan)
         bound = _validate_provider_receipt(
-            recovery_plan, operation, "storage-205", receipt, verifier,
+            dict(plan), operation, "storage-205", receipt, verifier,
             rollback_candidates=started,
             rollback_order=[
                 phase for phase in STORAGE_FIRST_OPERATIONS if _rollback_candidate(phase)
             ],
+            expected_rollback_steps=_storage_first_rollback_policy(plan)["steps"],
         )
     else:
         if any(receipt.get(key) != value for key, value in required.items()):
