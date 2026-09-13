@@ -1,0 +1,96 @@
+{
+  "schema": "oasis7.storage_first_fixture_repair.v1",
+  "status": "verified",
+  "identity": {
+    "task_uid": "task_90c2722f6e1c48c3aebb6283cee471ce",
+    "issue": 3675,
+    "repository": "eng-cc/oasis7",
+    "worktree": "/Users/scc/ccwork/oasis7/.worktrees/oasis7-engineering-public-testnet-observer-closure-rollout-20260912",
+    "branch": "task/engineering-public-testnet-observer-closure-rollout-20260912",
+    "frozen_head_oid": "dd7c859c25b87d048eecd411fc05d99241991ce3",
+    "slice_id": "storage-first-fixture-repair-20260912",
+    "role": "qa_engineer",
+    "owner_role": "blockchain_ops_engineer",
+    "integration_order": 14,
+    "packet_digest": "bc204ee405fd62ab5de466d4776a227f31ef9529488ff30b1ce0aa77030de401",
+    "packet_sha256": "09f081429a1d22146e081c4cd24712049541384232361a098dca7b5a6971ee4e",
+    "prior_green_artifact_sha256": "d8f444ee0f79bb489d0dd7125e8bac0ea5dee2ab24907a84bf4cc92141c783a2",
+    "production_fix_head": "dd7c859c25b87d048eecd411fc05d99241991ce3"
+  },
+  "scope": {
+    "changed_files": [
+      "scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py",
+      ".pm/scratch/task_90c2722f6e1c48c3aebb6283cee471ce/tdd/storage-first-fixture-repair-20260912.json"
+    ],
+    "fixture_changes": 4,
+    "production_files_changed": false,
+    "negative_tests_changed": false,
+    "node_or_provider_access": false,
+    "credential_access": false,
+    "authority_mutation": false,
+    "remote_mutation": false,
+    "unrelated_dirty_path_preserved": ".pm/roles/tpm/backlog/committed.yaml"
+  },
+  "fixture_repairs": [
+    {
+      "test": "StorageFirstAdapterRedTests.test_storage_first_apply_calls_only_storage_callbacks",
+      "repair": "Pass live_revalidator=lambda: True to the successful non-dry-run fixture."
+    },
+    {
+      "test": "StorageFirstAdapterRedTests.test_storage_first_side_effect_then_throw_requires_reconciliation",
+      "repair": "Pass live_revalidator=lambda: True so the fixture reaches the intended side-effect failure/reconciliation path."
+    },
+    {
+      "test": "StorageFirstSecurityRedTests.test_qa_sf_002_provider_callbacks_receive_secret_free_node_projection",
+      "repair": "Pass live_revalidator=lambda: True so callback projection is tested after the mandatory live gate."
+    },
+    {
+      "test": "StorageFirstSecurityRedTests.test_qa_sf_005_side_effect_uncertainty_persists_reconciliation_handoff",
+      "repair": "Pass live_revalidator=lambda: True so reconciliation handoff assertions exercise the mutation failure path."
+    }
+  ],
+  "verification": {
+    "focused_command": "rtk python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py StorageFirstAdapterRedTests StorageFirstSecurityRedTests -v",
+    "focused_result": "Ran 14 tests in 0.131s, OK, exit 0; prior 7 adapter fixtures plus 7 security tests GREEN, including the fresh-process negative gate.",
+    "full_adapter_command": "rtk python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py",
+    "full_adapter_result": "Ran 139 tests in 355.033s, OK, exit 0",
+    "syntax_command": "rtk python3 -m py_compile scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py",
+    "syntax_result": "pass, exit 0",
+    "diff_check_command": "rtk git diff --check",
+    "diff_check_result": "pass, no output",
+    "pm_lint_command": "rtk ./scripts/pm/lint.sh",
+    "pm_lint_result": "pm-lint: OK, exit 0",
+    "diff_scope_command": "rtk git diff --stat -- scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py",
+    "diff_scope_result": "4 insertions, 4 deletions; only the four intended fixture call sites changed"
+  },
+  "no_weakening_assessment": {
+    "negative_fresh_process_test_unchanged": true,
+    "negative_security_tests_unchanged": true,
+    "production_files_unchanged": true,
+    "assessment": "Repairs supply the now-required live revalidator only to successful-path fixtures; they do not remove assertions, alter expected failures, or weaken the fresh-process gate."
+  },
+  "release_assessment": {
+    "verdict": "focused_and_full_adapter_tests_green",
+    "release_confidence": "sufficient for this fixture-contract slice; production release still requires the parent task's role-complete review and release gates",
+    "residual_risks": [
+      "No real node/provider transport, credential seam, signed authority, trust-root file, or deployment operation was accessed.",
+      "Planner/full cross-module validation is inherited from the preceding exact-head verification and was not changed by this adapter-test-only slice.",
+      "The unrelated TPM backlog modification remains untouched."
+    ]
+  },
+  "commit": {
+    "status": "test_committed_artifact_pending",
+    "test_commit": "4a42e11",
+    "artifact_commit": null
+  },
+  "mutation_confirmation": {
+    "source_mutation": false,
+    "production_mutation": false,
+    "node_mutation": false,
+    "provider_mutation": false,
+    "credential_mutation": false,
+    "authority_mutation": false,
+    "remote_mutation": false,
+    "artifact_write_only": true
+  }
+}

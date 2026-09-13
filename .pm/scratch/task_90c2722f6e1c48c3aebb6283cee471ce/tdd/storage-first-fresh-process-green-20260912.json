@@ -1,0 +1,91 @@
+{
+  "schema": "oasis7.storage_first_fresh_process_green.v1",
+  "status": "verified_with_residual_test_gate",
+  "identity": {
+    "task_uid": "task_90c2722f6e1c48c3aebb6283cee471ce",
+    "issue": 3675,
+    "repository": "eng-cc/oasis7",
+    "worktree": "/Users/scc/ccwork/oasis7/.worktrees/oasis7-engineering-public-testnet-observer-closure-rollout-20260912",
+    "branch": "task/engineering-public-testnet-observer-closure-rollout-20260912",
+    "role": "blockchain_ops_engineer",
+    "owner_role": "blockchain_ops_engineer",
+    "slice_id": "storage-first-fresh-process-green-20260912",
+    "integration_order": 13,
+    "packet_digest": "a17befacec71091b7b2baab44709d68341c9f8eb318716670213a028c6b460d6",
+    "packet_sha256": "67701998ca3ba74d515c713f0c4e5d6ced230fa6de1b2c7fe9dcad8376d6b0af",
+    "base_head_oid": "68106b5011bf1dd1f5e4600740a48a385af75a79",
+    "runtime_evidence": "adapter inactive on this surface; intended configuration inherits current parent selection; actual model/reasoning unverified"
+  },
+  "implementation": {
+    "changed_files": [
+      "scripts/p2p-public-testnet-full-network-clean-room-adapter.py"
+    ],
+    "unchanged_test_files": true,
+    "fix": "Removed the process-global legacy no-revalidator state and all shape-only fixture-dependent permissive branches. Every non-dry-run storage-205-first invocation now rejects a missing or non-callable live_revalidator before the first mutation; supplied callbacks still run immediately before each mutation and on resume.",
+    "removed_symbols": [
+      "_STORAGE_FIRST_LEGACY_NO_REVALIDATION_USED"
+    ]
+  },
+  "targeted_verification": {
+    "command": "python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py StorageFirstSecurityRedTests.test_qa_sf_003_fresh_process_requires_live_revalidation_before_mutation -v",
+    "result": "Ran 1 test in 0.088s, OK, exit 0",
+    "observed_child": {
+      "outcome": "rejected",
+      "error": "AdapterError",
+      "mutations": []
+    },
+    "acceptance": "GREEN: a clean interpreter without live_revalidator rejects before provider mutation."
+  },
+  "focused_regression": {
+    "planner_security_command": "python3 scripts/p2p-public-testnet-full-network-clean-room.test.py StorageFirstParentSecurityRedTests -q",
+    "planner_security_result": "Ran 1 test in 0.002s, OK, exit 0",
+    "adapter_security_command": "python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py StorageFirstSecurityRedTests -q",
+    "adapter_security_result": "Ran 7 tests in 0.070s, FAILED (failures=1, errors=1), exit 1",
+    "adapter_security_failures": [
+      "QA-SF-002 callback projection fixture omits live_revalidator and now fails at the mandatory gate",
+      "QA-SF-005 side-effect fixture omits live_revalidator and therefore persists only prepared state rather than entering the mutation failure path"
+    ],
+    "prior_planner_command": "python3 scripts/p2p-public-testnet-full-network-clean-room.test.py StorageFirstContractRedTests -q",
+    "prior_planner_result": "Ran 9 tests in 0.004s, OK, exit 0",
+    "prior_adapter_command": "python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py StorageFirstAdapterRedTests -q",
+    "prior_adapter_result": "Ran 7 tests in 0.017s, FAILED (errors=2), exit 1",
+    "scope_result": "Fresh-process acceptance GREEN; legacy callback-omitting fixtures remain a residual test-contract gate."
+  },
+  "full_regression": {
+    "planner_command": "python3 scripts/p2p-public-testnet-full-network-clean-room.test.py",
+    "planner_result": "Ran 84 tests in 205.370s, OK, exit 0",
+    "adapter_command": "python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py",
+    "adapter_result": "Ran 139 tests in 355.466s, FAILED (failures=1, errors=3), exit 1",
+    "adapter_residual": "Unchanged legacy shape-fixture tests call non-dry-run storage-first execution without live_revalidator: test_storage_first_apply_calls_only_storage_callbacks, test_storage_first_side_effect_then_throw_requires_reconciliation, test_qa_sf_002_provider_callbacks_receive_secret_free_node_projection, and test_qa_sf_005_side_effect_uncertainty_persists_reconciliation_handoff."
+  },
+  "repository_gates": {
+    "syntax_command": "python3 -m py_compile scripts/p2p-public-testnet-full-network-clean-room-adapter.py",
+    "syntax_result": "pass, exit 0",
+    "diff_check_command": "git diff --check",
+    "diff_check_result": "pass, no output",
+    "pm_lint_command": "./scripts/pm/lint.sh",
+    "pm_lint_result": "pm-lint: OK, exit 0",
+    "stage_lint_command": "./scripts/pm/stage-lint.sh",
+    "stage_lint_result": "stage-lint: OK, exit 0",
+    "workflow_lint_command": "./scripts/pm/workflow-lint.sh --task-uid task_90c2722f6e1c48c3aebb6283cee471ce --phase current",
+    "workflow_lint_result": "workflow-lint: OK, github-backed",
+    "task_audit_result": "identity bound before edit; status committed; workflow phase execution; no blockers"
+  },
+  "scope_and_risk": {
+    "node_or_provider_access": false,
+    "credential_access": false,
+    "authority_mutation": false,
+    "remote_mutation": false,
+    "unrelated_dirty_path_preserved": ".pm/roles/tpm/backlog/committed.yaml",
+    "residual_risks": [
+      "Prior focused and full adapter suites cannot be fully green without changing their immutable fixtures to supply the now-required live_revalidator; test edits are explicitly out of scope for this slice.",
+      "No runtime node/provider evidence was obtained; signed authority, trust-root, nonce, known-host, impact, independent verifier, and live revalidator remain required for real apply.",
+      "The full adapter regression must be rerun after any separately authorized test-contract alignment."
+    ]
+  },
+  "commit": {
+    "status": "committed",
+    "message": "fix: require storage-first live revalidation"
+  },
+  "commit_status": "committed"
+}

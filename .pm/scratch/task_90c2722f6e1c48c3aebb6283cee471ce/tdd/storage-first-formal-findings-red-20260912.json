@@ -1,0 +1,152 @@
+{
+  "schema": "oasis7.storage_first_formal_findings_red.v1",
+  "status": "red",
+  "identity": {
+    "task_uid": "task_90c2722f6e1c48c3aebb6283cee471ce",
+    "issue": 3675,
+    "repository": "eng-cc/oasis7",
+    "worktree": "/Users/scc/ccwork/oasis7/.worktrees/oasis7-engineering-public-testnet-observer-closure-rollout-20260912",
+    "branch": "task/engineering-public-testnet-observer-closure-rollout-20260912",
+    "frozen_head_oid": "efd9d23ef7e338b947533a1763341cd3b85c4e74",
+    "slice_id": "storage-first-formal-findings-red-20260912",
+    "role": "qa_engineer",
+    "owner_role": "blockchain_ops_engineer",
+    "integration_order": 15,
+    "packet_digest": "438bc7f92811d3145a16dd8c89a01dc42d689cbc5ce1bddcb7ad22826002e022",
+    "packet_sha256": "3f264c4fab2e95ae0de71a4021d96ef39d5cf30d03840afc86d3a78a20f7ec8f",
+    "formal_review_epoch": "e06a4168faac272336c5584f385735c42c810ff78946e08d2e3f763aff9c41e4",
+    "package_run": "34622549547"
+  },
+  "scope": {
+    "changed_files": [
+      "scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py",
+      ".pm/scratch/task_90c2722f6e1c48c3aebb6283cee471ce/tdd/storage-first-formal-findings-red-20260912.json"
+    ],
+    "production_files_changed": false,
+    "planner_source_changed": false,
+    "node_or_provider_access": false,
+    "credential_access": false,
+    "authority_mutation": false,
+    "remote_mutation": false,
+    "unrelated_work_preserved": true
+  },
+  "finding_to_test_map": [
+    {
+      "blocker": "Fleet-wide serialization is absent for storage-first transactions.",
+      "formal_findings": ["OPS-SF-001", "RUNTIME-SF-001", "QA-SF-005"],
+      "tests": ["StorageFirstFormalFindingsRedTests.test_formal_ops_sf_001_distinct_journals_cannot_bypass_fleet_guard"],
+      "observed": "RED: a second transaction reached inspect_node while the first held a mutation; intrusions=['storage-205']."
+    },
+    {
+      "blocker": "Journal output is not protected from journal/ledger aliasing.",
+      "formal_findings": ["OPS-SF-002", "QA-SF-005"],
+      "tests": ["StorageFirstFormalFindingsRedTests.test_formal_ops_sf_002_journal_and_ledger_alias_is_rejected_before_mutation"],
+      "observed": "RED: same-path journal and retained ledger completed instead of rejecting before mutation."
+    },
+    {
+      "blocker": "Forged or incomplete receipts/journals can authorize verified resume completion.",
+      "formal_findings": ["OPS-SF-003", "RUNTIME-SF-002", "QA-SF-003"],
+      "tests": [
+        "StorageFirstFormalFindingsRedTests.test_formal_ops_sf_003_forged_receipt_cannot_authorize_completion",
+        "StorageFirstFormalFindingsRedTests.test_formal_ops_sf_003_forged_verified_journal_cannot_skip_cursor"
+      ],
+      "observed": "RED: forged receipt validator accepted missing signer/verifier/bindings; forged storage-205-verified journal resumed with incomplete receipts."
+    },
+    {
+      "blocker": "Provider evidence and provenance results are not fully bound before advancing.",
+      "formal_findings": ["OPS-SF-004", "OPS-SF-006", "RUNTIME-SF-003", "QA-SF-004"],
+      "tests": [
+        "StorageFirstFormalFindingsRedTests.test_formal_ops_sf_004_provider_evidence_is_required_before_next_operation",
+        "StorageFirstFormalFindingsRedTests.test_formal_ops_sf_006_provenance_verifier_gets_sanitized_plan_and_bound_result"
+      ],
+      "observed": "RED: bare inspect/preflight evidence and an under-bound verifier result reached provider mutation; provenance callback observed credential_seam/raw plan."
+    },
+    {
+      "blocker": "Verify is routed through the mutating callback instead of a read-only verify callback.",
+      "formal_findings": ["OPS-SF-005", "RUNTIME-SF-007", "QA-SF-006"],
+      "tests": ["StorageFirstFormalFindingsRedTests.test_formal_ops_sf_005_verify_uses_read_only_callback_not_mutate"],
+      "observed": "RED: verify_operations=[] while verify:storage-205 was recorded in mutations."
+    },
+    {
+      "blocker": "Non-boolean live revalidation fails open.",
+      "formal_findings": ["OPS-SF-007", "RUNTIME-SF-004", "QA-SF-004"],
+      "tests": ["StorageFirstFormalFindingsRedTests.test_formal_ops_sf_007_non_boolean_live_revalidation_fails_closed"],
+      "observed": "RED: live_revalidator returning 'verified' did not reject and provider mutations were recorded."
+    },
+    {
+      "blocker": "Child admission accepts cryptographically unbound parent, identity, known-host, no-backup, and authority fields.",
+      "formal_findings": ["OPS-SF-008", "QA-SF-002"],
+      "tests": ["StorageFirstFormalFindingsRedTests.test_formal_qa_sf_002_cryptographically_unbound_parent_and_authority_reject"],
+      "mutations": ["identity digest", "known-host digest", "no-backup receipt", "authority signature"],
+      "observed": "RED: all four independent mutations were accepted; each subtest reports AssertionError: Exception not raised."
+    },
+    {
+      "blocker": "Post-provider journal durability failure does not persist reconciliation handoff.",
+      "formal_findings": ["RUNTIME-SF-005"],
+      "tests": ["StorageFirstFormalFindingsRedTests.test_formal_runtime_sf_005_journal_write_failure_persists_reconciliation"],
+      "observed": "RED: injected write failure after stop left journal next_operation=stop:storage-205 instead of reconciliation-required."
+    },
+    {
+      "blocker": "Nonce ledger path is not cryptographically bound and read back before mutation.",
+      "formal_findings": ["RUNTIME-SF-006"],
+      "tests": ["StorageFirstFormalFindingsRedTests.test_formal_runtime_sf_006_nonce_ledger_path_requires_bound_readback"],
+      "observed": "RED: an empty unbound ledger path was accepted and provider mutation proceeded."
+    },
+    {
+      "blocker": "Canonical planner output with per-node known-host paths and bounded proof is rejected by child projection/admission.",
+      "formal_findings": ["QA-SF-001", "HEALTH-SF-001", "HEALTH-SF-004"],
+      "tests": ["StorageFirstFormalFindingsRedTests.test_formal_qa_sf_001_canonical_parent_projection_accepts_per_node_bindings"],
+      "observed": "RED: planner build_storage_first_contract rejected code-owned inventory projection with ValueError: parent known-host path binding is not canonical."
+    },
+    {
+      "blocker": "Explicit storage-first phase is not reachable from the adapter CLI.",
+      "formal_findings": ["QA-SF-007", "HEALTH-SF-002"],
+      "tests": ["StorageFirstFormalFindingsRedTests.test_formal_qa_sf_007_cli_exposes_explicit_storage_phase"],
+      "observed": "RED: argparse rejected --phase storage-205-first with SystemExit: 2."
+    }
+  ],
+  "verification": {
+    "packet_hash_command": "rtk sha256sum .pm/scratch/task_90c2722f6e1c48c3aebb6283cee471ce/slice-packets/storage-first-formal-findings-red-20260912.json",
+    "packet_hash_result": "3f264c4fab2e95ae0de71a4021d96ef39d5cf30d03840afc86d3a78a20f7ec8f, exact packet match",
+    "head_command": "rtk git rev-parse HEAD",
+    "head_result": "efd9d23ef7e338b947533a1763341cd3b85c4e74 before test-only commit",
+    "red_command": "rtk python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py StorageFirstFormalFindingsRedTests",
+    "red_result": "Ran 13 tests in 0.063s; FAILED (failures=13), exit 1; all new tests are intentionally RED at the frozen implementation.",
+    "prior_adapter_command": "rtk python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py StorageFirstAdapterRedTests StorageFirstSecurityRedTests",
+    "prior_adapter_result": "Ran 14 tests across the two prior focused classes (7 + 7), both invocations OK, exit 0.",
+    "prior_planner_command": "rtk python3 scripts/p2p-public-testnet-full-network-clean-room.test.py StorageFirstContractRedTests StorageFirstParentSecurityRedTests",
+    "prior_planner_result": "Ran 9 and 1 tests respectively; both invocations OK, exit 0.",
+    "syntax_command": "rtk python3 -m py_compile scripts/p2p-public-testnet-full-network-clean-room.test.py scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py",
+    "syntax_result": "pass, exit 0",
+    "diff_check_command": "rtk git diff --check",
+    "diff_check_result": "pass, no output",
+    "full_suite_note": "Not run per TPM instruction to stop expansive/slow tests; the prior full adapter suite was green at the preceding fixture-repair head."
+  },
+  "commit": {
+    "test_commit": "487e6aa85b6b3d80c11544eeb55fa6f46c349489",
+    "artifact_commit": null,
+    "message": "test: add formal storage-first blocker coverage"
+  },
+  "release_assessment": {
+    "verdict": "blocked",
+    "release_confidence": "none for storage-first formal-findings closure until all 13 RED tests are GREEN at a new immutable head",
+    "residual_risks": [
+      "The canonical projection test uses code-owned planner inventories in a bounded in-process fixture; a full cryptographic build_plan integration run was not repeated because the fixture exceeded the requested bounded runtime.",
+      "No real node/provider transport, credential, authority, trust-root, package, or remote runtime was accessed.",
+      "The RED suite specifies contracts only; it does not claim production closure.",
+      "Blockchain-ops and runtime specialists must close their matching findings and rerun the focused plus release-gate suites at the resulting frozen head.",
+      "Evidence-only HEALTH-SF-003 overclaim and deferred duplicate-source HEALTH-SF-005 remain release-process follow-ups; this packet explicitly excludes deferred schema consolidation."
+    ]
+  },
+  "mutation_confirmation": {
+    "source_mutation": false,
+    "production_mutation": false,
+    "node_mutation": false,
+    "provider_mutation": false,
+    "credential_mutation": false,
+    "authority_mutation": false,
+    "remote_mutation": false,
+    "issue_evidence_authorized_by_packet": true,
+    "only_test_and_scoped_artifact_written": true
+  }
+}

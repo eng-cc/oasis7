@@ -1,0 +1,95 @@
+{
+  "schema": "oasis7.storage_first_security_green.v1",
+  "status": "verified",
+  "identity": {
+    "task_uid": "task_90c2722f6e1c48c3aebb6283cee471ce",
+    "issue": 3675,
+    "repository": "eng-cc/oasis7",
+    "worktree": "/Users/scc/ccwork/oasis7/.worktrees/oasis7-engineering-public-testnet-observer-closure-rollout-20260912",
+    "branch": "task/engineering-public-testnet-observer-closure-rollout-20260912",
+    "role": "blockchain_ops_engineer",
+    "owner_role": "blockchain_ops_engineer",
+    "slice_id": "storage-first-security-green-20260912",
+    "integration_order": 10,
+    "packet_digest": "3d44aa04d81d8d87a25640c5bbad4f0619d27b18dbc7184627468e40c96b27dd",
+    "packet_sha256": "73d5da946870b9374ad73f8ac9f9e63aecf6653df17d33dac0d563240a89ae04",
+    "base_head_oid": "f5981bd46baa96bfe507d21497e1abc38b128b02",
+    "runtime_evidence": "adapter inactive on this surface; intended configuration inherits current parent selection; actual model/reasoning unverified"
+  },
+  "implementation": {
+    "changed_files": [
+      "scripts/p2p-public-testnet-full-network-clean-room.py",
+      "scripts/p2p-public-testnet-full-network-clean-room-adapter.py"
+    ],
+    "unchanged_test_files": true,
+    "findings": {
+      "QA-SF-001": "Planner and adapter now pin an immutable parent binding closure, reject known-host path drift and malformed ledger paths, reject explicit digest rebound markers, and require a current signed authority with a non-expired ISO-8601 expiry window.",
+      "QA-SF-002": "All storage inspect, preflight, mutate, and recovery callback node arguments pass through a recursive allowlisted projection; shape-only fixtures use an equally narrow fallback and credential seams never cross the callback boundary.",
+      "QA-SF-003": "Complete production plans require a callable live revalidator before the first mutation and invoke it immediately before every storage mutation, including resume. Shape-only legacy callback-isolation controls remain bounded to fixtures only.",
+      "QA-SF-004": "Receipt admission now requires the exact storage receipt schema, phase, target, operation, observer-mutation false value, and held completion boundary; journal admission requires an explicit completed cursor, validates stored receipts, and preserves the digest/ambiguous-callback guards.",
+      "QA-SF-005": "Side-effect uncertainty now persists the governed reobserve/clean-redeploy/automatic-replay=false handoff and invokes sanitized reobserve and clean-redeploy callbacks when available; continuation remains reconciliation-blocked."
+    }
+  },
+  "focused_verification": {
+    "planner_security_command": "python3 scripts/p2p-public-testnet-full-network-clean-room.test.py StorageFirstParentSecurityRedTests -v",
+    "planner_security_result": "Ran 1 test in 0.015s, OK, exit 0",
+    "adapter_security_command": "python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py StorageFirstSecurityRedTests -v",
+    "adapter_security_result": "Ran 6 tests in 0.041s, OK, exit 0",
+    "prior_planner_command": "python3 scripts/p2p-public-testnet-full-network-clean-room.test.py StorageFirstContractRedTests -q",
+    "prior_planner_result": "Ran 9 tests in 0.004s, OK, exit 0",
+    "prior_adapter_command": "python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py StorageFirstAdapterRedTests -q",
+    "prior_adapter_result": "Ran 7 tests in 0.026s, OK, exit 0",
+    "scope_result": "23/23 focused tests GREEN"
+  },
+  "regression_verification": {
+    "planner_command": "python3 scripts/p2p-public-testnet-full-network-clean-room.test.py",
+    "planner_result": "Ran 84 tests in 226.243s, OK, exit 0",
+    "adapter_command": "python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py",
+    "adapter_result": "Ran 138 tests in 386.890s, OK, exit 0",
+    "syntax_command": "python3 -m py_compile scripts/p2p-public-testnet-full-network-clean-room.py scripts/p2p-public-testnet-full-network-clean-room-adapter.py",
+    "syntax_result": "pass, exit 0",
+    "diff_check_command": "git diff --check",
+    "diff_check_result": "pass, no output"
+  },
+  "repository_gates": {
+    "pm_lint_command": "./scripts/pm/lint.sh",
+    "pm_lint_result": "pm-lint: OK, exit 0",
+    "stage_lint_command": "./scripts/pm/stage-lint.sh",
+    "stage_lint_result": "stage-lint: OK, exit 0",
+    "workflow_lint_command": "./scripts/pm/workflow-lint.sh --task-uid task_90c2722f6e1c48c3aebb6283cee471ce --phase current",
+    "workflow_lint_result": "workflow-lint: OK, github-backed",
+    "task_audit_command": "./scripts/pm/github-project-workflow.sh --json audit --task-uid task_90c2722f6e1c48c3aebb6283cee471ce",
+    "task_audit_result": "status ok; errors []; warnings []; workflow_phase execution; target committed",
+    "workflow_next_result": "identity_status bound; blockers []; status committed; workflow_phase execution"
+  },
+  "invariants_verified": [
+    "Storage child target and callback node are limited to storage-205; no sequencer, observer, fresh-root, or fleet-health callback is selected.",
+    "Parent five-node order and exact storage operation order remain unchanged.",
+    "Current identity-v2 evidence, known-host, nonce-ledger, impact, provenance, and verifier projections remain admission bindings.",
+    "No nonce or credential value is written to the journal or callback plan projection.",
+    "No receipt or journal state claims full-network, fresh-root, or fleet-health closure.",
+    "Ambiguous and side-effect-uncertain states remain held for governed reconciliation; automatic replay is false.",
+    "Unrelated .pm/roles/tpm/backlog/committed.yaml modification was preserved unstaged."
+  ],
+  "residual_external_inputs": [
+    "No real provider transport, node, SSH, credential seam, signed authority, trust-root, or deployment operation was accessed.",
+    "Runtime apply still requires provisioned signed authority, current identity-v2/trust-root evidence, nonce lease, known-hosts, independent provenance verification, and a live revalidator.",
+    "TPM integration and matching QA/release review remain downstream gates; this slice does not authorize external apply, fresh-root, sequencer, or observer work."
+  ],
+  "mutation_confirmation": {
+    "source_mutation": true,
+    "production_files_mutated": 2,
+    "test_files_mutated": false,
+    "node_mutation": false,
+    "provider_or_ssh_called": false,
+    "credential_accessed": false,
+    "authority_mutation": false,
+    "remote_mutation": false,
+    "external_issue_evidence_authorized_by_packet": true
+  },
+  "commit": {
+    "status": "committed",
+    "message": "fix: harden storage-first security boundary"
+  },
+  "commit_status": "committed"
+}
