@@ -8134,6 +8134,13 @@ class StorageFirstExactHeadFindingTests(unittest.TestCase):
         finally:
             canonical.tearDown()
 
+    def test_fresh_empty_nonce_ledger_is_valid_initial_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = Path(directory) / "validator-pair-nonces.jsonl"
+            ledger.write_bytes(b"")
+            ledger.chmod(0o600)
+            self.adapter._storage_first_validate_ledger_readback(ledger)
+
 
 if __name__ == "__main__":
     unittest.main()

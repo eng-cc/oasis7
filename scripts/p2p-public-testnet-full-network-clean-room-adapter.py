@@ -5694,19 +5694,16 @@ def _storage_first_reject_aliases(
 
 
 def _storage_first_validate_ledger_readback(ledger_path: Path) -> None:
-    """An existing nonce ledger must contain a bound readback, never empty bytes."""
+    """An existing nonce ledger must be a valid external append-only ledger."""
     path = Path(ledger_path)
     _reject_symlink_ancestors(path, "storage-first nonce ledger")
     if not path.exists():
         return
-    try:
-        metadata = path.stat()
-        if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid():
-            _fail("storage-first nonce ledger is not an owner regular file")
-        if not path.read_bytes().strip():
-            _fail("storage-first nonce ledger readback is empty")
-    except OSError:
-        _fail("storage-first nonce ledger readback is unavailable")
+    # A freshly provisioned 0600 ledger legitimately has zero rows before the
+    # first one-shot reservation. Reuse the canonical reader so the empty
+    # initial state is accepted without weakening owner, mode, external-path,
+    # symlink, readability, or row-format validation.
+    _read_ledger(path)
 
 
 def _storage_first_read_journal(path: Path) -> dict[str, Any]:
