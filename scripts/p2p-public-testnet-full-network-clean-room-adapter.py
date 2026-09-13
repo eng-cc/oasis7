@@ -6089,6 +6089,15 @@ def _storage_first_run(
             if live_result is not True:
                 _fail("storage-first live revalidation rejected the next mutation")
             _storage_first_check_impact(child_plan)
+            if not _storage_first_is_shape_fixture(plan):
+                # The external live/impact checks may consume the remaining
+                # lease. Re-admit the destructive callback at its last local
+                # boundary instead of relying on the earlier timestamp.
+                validate_authority(dict(plan), dict(authority))
+                capture_start, capture_end = _capture_window_bounds(plan)
+                if not capture_start <= dt.datetime.now(dt.timezone.utc) < capture_end:
+                    _fail("storage-first mutation capture lease is expired or not yet active")
+                validate_live_trust_root_file()
             record.update({
                 "status": "storage-205-running",
                 "next_operation": operation,
@@ -6180,6 +6189,14 @@ def _storage_first_run(
                     if recovery_live is not True:
                         _fail("storage-first recovery live revalidation rejected clean redeploy")
                     _storage_first_check_impact(child_plan)
+                    if not _storage_first_is_shape_fixture(plan):
+                        # The external live/impact checks are not part of the
+                        # lease authority. Re-admit immediately before rollback.
+                        validate_authority(dict(plan), dict(authority))
+                        capture_start, capture_end = _capture_window_bounds(plan)
+                        if not capture_start <= dt.datetime.now(dt.timezone.utc) < capture_end:
+                            _fail("storage-first recovery capture lease is expired or not yet active")
+                        validate_live_trust_root_file()
                     rollback_plan = _storage_first_callback_plan(plan, node)
                     rollback_started = list(started)
                     rollback_failed_state = copy.deepcopy(record["reconciliation_reobserve"])

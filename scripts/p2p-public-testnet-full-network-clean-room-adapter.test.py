@@ -6524,6 +6524,79 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
         finally:
             canonical.tearDown()
 
+    def test_runtime_sf_032_mutation_rejects_capture_window_expiry_during_live_check(self) -> None:
+        """A live check cannot authorize a provider callback after consuming the lease."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            transport = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+            original_datetime = canonical.adapter.dt.datetime
+            capture_end = original_datetime.fromisoformat(
+                canonical.plan["capture_window"]["ends_at"].replace("Z", "+00:00")
+            )
+            expired = False
+
+            class MutationClock(original_datetime):
+                @classmethod
+                def now(cls, tz=None):
+                    if expired:
+                        return capture_end if tz is not None else capture_end.replace(tzinfo=None)
+                    return original_datetime.now(tz)
+
+            def live_revalidator():
+                nonlocal expired
+                expired = True
+                return True
+
+            with mock.patch.object(canonical.adapter.dt, "datetime", MutationClock):
+                with self.assertRaises(Exception):
+                    self.fixture._canonical_runner(
+                        canonical,
+                        transport,
+                        live_revalidator=live_revalidator,
+                    )
+            self.assertEqual(transport.mutations, [])
+        finally:
+            canonical.tearDown()
+
+    def test_runtime_sf_033_rollback_rejects_capture_window_expiry_during_impact_check(self) -> None:
+        """Recovery impact validation cannot outlive the rollback capture lease."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            transport = StorageFirstCanonicalTransport(
+                canonical.adapter,
+                canonical.plan,
+                side_effect_operation="stop:storage-205",
+            )
+            original_datetime = canonical.adapter.dt.datetime
+            capture_end = original_datetime.fromisoformat(
+                canonical.plan["capture_window"]["ends_at"].replace("Z", "+00:00")
+            )
+            expired = False
+            original_impact = canonical.adapter._storage_first_check_impact
+
+            class RecoveryImpactClock(original_datetime):
+                @classmethod
+                def now(cls, tz=None):
+                    if expired:
+                        return capture_end if tz is not None else capture_end.replace(tzinfo=None)
+                    return original_datetime.now(tz)
+
+            def impact(child_plan):
+                nonlocal expired
+                result = original_impact(child_plan)
+                if transport.rollback_reobservations:
+                    expired = True
+                return result
+
+            with mock.patch.object(canonical.adapter.dt, "datetime", RecoveryImpactClock), \
+                    mock.patch.object(canonical.adapter, "_storage_first_check_impact", side_effect=impact):
+                with self.assertRaises(Exception):
+                    self.fixture._canonical_runner(canonical, transport)
+            self.assertEqual(transport.rollback_reobservations, ["stop:storage-205"])
+            self.assertEqual(transport.rollback_operations, [])
+        finally:
+            canonical.tearDown()
+
     def test_runtime_sf_027_resume_validates_nonce_checkpoint_before_prepared_write(self) -> None:
         """Missing committed nonce state must not replace a resumable journal checkpoint."""
         canonical = self.fixture._canonical_fixture()
