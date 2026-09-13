@@ -10,6 +10,15 @@ use super::protocol::{
 
 mod collect_data;
 pub use collect_data::{sign_collect_data_auth_proof, verify_collect_data_auth_proof};
+#[path = "auth/prompt_control.rs"]
+mod prompt_control;
+pub use prompt_control::{
+    PromptControlAuthIntent, sign_hosted_prompt_control_strong_auth_grant,
+    sign_prompt_control_apply_auth_proof, sign_prompt_control_rollback_auth_proof,
+    verify_hosted_prompt_control_apply_strong_auth_grant,
+    verify_hosted_prompt_control_rollback_strong_auth_grant,
+    verify_prompt_control_apply_auth_proof, verify_prompt_control_rollback_auth_proof,
+};
 mod fragment_refill_preview;
 pub use fragment_refill_preview::{
     sign_fragment_refill_preview_auth_proof, verify_fragment_refill_preview_auth_proof,
@@ -92,12 +101,6 @@ pub const AGENT_CHAT_AUTHORITY_SCOPE: &str = "player_agent_chat";
 const VIEWER_HOSTED_STRONG_AUTH_GRANT_PAYLOAD_VERSION: u8 = 1;
 pub const VIEWER_HOSTED_STRONG_AUTH_GRANT_SIGNATURE_V1_PREFIX: &str = "awhostedgrant:v1:";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PromptControlAuthIntent {
-    Preview,
-    Apply,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VerifiedPlayerAuth {
     pub player_id: String,
@@ -119,6 +122,51 @@ struct PromptFieldPatch<'a> {
     mode: PromptFieldMode,
     #[serde(skip_serializing_if = "Option::is_none")]
     value: Option<&'a str>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum PromptFieldPatchV1 {
+    Unchanged,
+    Clear,
+    Set(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct PromptControlOperationIdentityV1 {
+    operation: String,
+    preview: bool,
+    agent_id: String,
+    player_id: String,
+    session_epoch: u64,
+    binding_epoch: u64,
+    expected_authority_epoch: String,
+    expected_version: u64,
+    system_prompt: PromptFieldPatchV1,
+    short_term_goal: PromptFieldPatchV1,
+    long_term_goal: PromptFieldPatchV1,
+    rollback_target: Option<u64>,
+    updated_by: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct PromptControlEnhancedSigningPayload<'a> {
+    operation: &'static str,
+    preview: bool,
+    request_id: &'a str,
+    agent_id: &'a str,
+    player_id: &'a str,
+    public_key: &'a str,
+    nonce: u64,
+    session_epoch: u64,
+    binding_epoch: u64,
+    expected_authority_epoch: &'a str,
+    expected_version: u64,
+    system_prompt: PromptFieldPatchV1,
+    short_term_goal: PromptFieldPatchV1,
+    long_term_goal: PromptFieldPatchV1,
+    rollback_target: Option<u64>,
+    updated_by: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -273,283 +321,6 @@ where
 {
     version: u8,
     payload: T,
-}
-
-pub fn sign_prompt_control_apply_auth_proof(
-    intent: PromptControlAuthIntent,
-    request: &PromptControlApplyRequest,
-    nonce: u64,
-    signer_public_key_hex: &str,
-    signer_private_key_hex: &str,
-) -> Result<PlayerAuthProof, String> {
-    if nonce == 0 {
-        return Err("auth nonce must be greater than zero".to_string());
-    }
-    let player_id =
-        normalize_required_field(request.player_id.as_str(), "prompt_control player_id")?;
-    let request_public_key = normalize_required_optional_public_key(
-        request.public_key.as_deref(),
-        "prompt_control public_key",
-    )?;
-    let signer_public_key =
-        normalize_public_key_field(signer_public_key_hex, "prompt_control signer public key")?;
-    if signer_public_key != request_public_key {
-        return Err("prompt_control public_key does not match signer public key".to_string());
-    }
-
-    let signing_key =
-        signing_key_from_hex(signer_private_key_hex, "prompt_control signer private key")?;
-    verify_keypair_match(
-        &signing_key,
-        signer_public_key.as_str(),
-        "prompt_control signer public key",
-    )?;
-
-    let signing_payload = build_prompt_control_apply_signing_payload(
-        intent,
-        request,
-        player_id.as_str(),
-        request_public_key.as_str(),
-        nonce,
-    )?;
-    sign_player_auth_proof(
-        signing_key,
-        player_id,
-        signer_public_key,
-        nonce,
-        signing_payload,
-    )
-}
-
-pub fn verify_prompt_control_apply_auth_proof(
-    intent: PromptControlAuthIntent,
-    request: &PromptControlApplyRequest,
-    proof: &PlayerAuthProof,
-) -> Result<VerifiedPlayerAuth, String> {
-    verify_proof_scheme(proof)?;
-    let request_player_id =
-        normalize_required_field(request.player_id.as_str(), "prompt_control player_id")?;
-    let request_public_key = normalize_required_optional_public_key(
-        request.public_key.as_deref(),
-        "prompt_control public_key",
-    )?;
-    let proof_player_id =
-        normalize_required_field(proof.player_id.as_str(), "auth proof player_id")?;
-    let proof_public_key =
-        normalize_public_key_field(proof.public_key.as_str(), "auth proof public key")?;
-    if request_player_id != proof_player_id {
-        return Err("auth proof player_id does not match request player_id".to_string());
-    }
-    if request_public_key != proof_public_key {
-        return Err("auth proof public_key does not match request public_key".to_string());
-    }
-    if proof.nonce == 0 {
-        return Err("auth nonce must be greater than zero".to_string());
-    }
-    let signing_payload = build_prompt_control_apply_signing_payload(
-        intent,
-        request,
-        proof_player_id.as_str(),
-        proof_public_key.as_str(),
-        proof.nonce,
-    )?;
-    verify_player_auth_signature(
-        proof_public_key.as_str(),
-        proof.signature.as_str(),
-        signing_payload.as_slice(),
-    )?;
-    Ok(VerifiedPlayerAuth {
-        player_id: proof_player_id,
-        public_key: proof_public_key,
-        nonce: proof.nonce,
-        hosted_registration_nonce: None,
-    })
-}
-
-pub fn sign_prompt_control_rollback_auth_proof(
-    request: &PromptControlRollbackRequest,
-    nonce: u64,
-    signer_public_key_hex: &str,
-    signer_private_key_hex: &str,
-) -> Result<PlayerAuthProof, String> {
-    if nonce == 0 {
-        return Err("auth nonce must be greater than zero".to_string());
-    }
-    let player_id =
-        normalize_required_field(request.player_id.as_str(), "prompt_control player_id")?;
-    let request_public_key = normalize_required_optional_public_key(
-        request.public_key.as_deref(),
-        "prompt_control public_key",
-    )?;
-    let signer_public_key =
-        normalize_public_key_field(signer_public_key_hex, "prompt_control signer public key")?;
-    if signer_public_key != request_public_key {
-        return Err("prompt_control public_key does not match signer public key".to_string());
-    }
-
-    let signing_key =
-        signing_key_from_hex(signer_private_key_hex, "prompt_control signer private key")?;
-    verify_keypair_match(
-        &signing_key,
-        signer_public_key.as_str(),
-        "prompt_control signer public key",
-    )?;
-
-    let signing_payload = build_prompt_control_rollback_signing_payload(
-        request,
-        player_id.as_str(),
-        request_public_key.as_str(),
-        nonce,
-    )?;
-    sign_player_auth_proof(
-        signing_key,
-        player_id,
-        signer_public_key,
-        nonce,
-        signing_payload,
-    )
-}
-
-pub fn verify_prompt_control_rollback_auth_proof(
-    request: &PromptControlRollbackRequest,
-    proof: &PlayerAuthProof,
-) -> Result<VerifiedPlayerAuth, String> {
-    verify_proof_scheme(proof)?;
-    let request_player_id =
-        normalize_required_field(request.player_id.as_str(), "prompt_control player_id")?;
-    let request_public_key = normalize_required_optional_public_key(
-        request.public_key.as_deref(),
-        "prompt_control public_key",
-    )?;
-    let proof_player_id =
-        normalize_required_field(proof.player_id.as_str(), "auth proof player_id")?;
-    let proof_public_key =
-        normalize_public_key_field(proof.public_key.as_str(), "auth proof public key")?;
-    if request_player_id != proof_player_id {
-        return Err("auth proof player_id does not match request player_id".to_string());
-    }
-    if request_public_key != proof_public_key {
-        return Err("auth proof public_key does not match request public_key".to_string());
-    }
-    if proof.nonce == 0 {
-        return Err("auth nonce must be greater than zero".to_string());
-    }
-    let signing_payload = build_prompt_control_rollback_signing_payload(
-        request,
-        proof_player_id.as_str(),
-        proof_public_key.as_str(),
-        proof.nonce,
-    )?;
-    verify_player_auth_signature(
-        proof_public_key.as_str(),
-        proof.signature.as_str(),
-        signing_payload.as_slice(),
-    )?;
-    Ok(VerifiedPlayerAuth {
-        player_id: proof_player_id,
-        public_key: proof_public_key,
-        nonce: proof.nonce,
-        hosted_registration_nonce: None,
-    })
-}
-
-pub fn sign_hosted_prompt_control_strong_auth_grant(
-    action_id: &str,
-    player_id: &str,
-    player_public_key: &str,
-    agent_id: &str,
-    issued_at_unix_ms: u64,
-    expires_at_unix_ms: u64,
-    signer_public_key_hex: &str,
-    signer_private_key_hex: &str,
-) -> Result<HostedStrongAuthGrant, String> {
-    if issued_at_unix_ms == 0 {
-        return Err(
-            "hosted strong-auth grant issued_at_unix_ms must be greater than zero".to_string(),
-        );
-    }
-    if expires_at_unix_ms <= issued_at_unix_ms {
-        return Err(
-            "hosted strong-auth grant expires_at_unix_ms must be greater than issued_at_unix_ms"
-                .to_string(),
-        );
-    }
-    let operation = normalize_prompt_control_grant_operation(action_id)?;
-    let player_id = normalize_required_field(player_id, "hosted strong-auth player_id")?;
-    let player_public_key =
-        normalize_public_key_field(player_public_key, "hosted strong-auth player_public_key")?;
-    let agent_id = normalize_required_field(agent_id, "hosted strong-auth agent_id")?;
-    let signer_public_key = normalize_public_key_field(
-        signer_public_key_hex,
-        "hosted strong-auth signer public key",
-    )?;
-    let signing_key = signing_key_from_hex(
-        signer_private_key_hex,
-        "hosted strong-auth signer private key",
-    )?;
-    verify_keypair_match(
-        &signing_key,
-        signer_public_key.as_str(),
-        "hosted strong-auth signer public key",
-    )?;
-    let signing_payload = build_hosted_prompt_control_strong_auth_grant_payload(
-        operation,
-        player_id.as_str(),
-        player_public_key.as_str(),
-        agent_id.as_str(),
-        issued_at_unix_ms,
-        expires_at_unix_ms,
-    )?;
-    let signature = signing_key.sign(signing_payload.as_slice());
-    Ok(HostedStrongAuthGrant {
-        version: VIEWER_HOSTED_STRONG_AUTH_GRANT_PAYLOAD_VERSION,
-        action_id: operation.to_string(),
-        player_id,
-        player_public_key,
-        agent_id,
-        issued_at_unix_ms,
-        expires_at_unix_ms,
-        signer_public_key,
-        signature: format!(
-            "{VIEWER_HOSTED_STRONG_AUTH_GRANT_SIGNATURE_V1_PREFIX}{}",
-            hex::encode(signature.to_bytes())
-        ),
-    })
-}
-
-pub fn verify_hosted_prompt_control_apply_strong_auth_grant(
-    intent: PromptControlAuthIntent,
-    request: &PromptControlApplyRequest,
-    grant: &HostedStrongAuthGrant,
-    required_signer_public_key: &str,
-    now_unix_ms: u64,
-) -> Result<(), String> {
-    verify_hosted_prompt_control_strong_auth_grant(
-        prompt_control_intent_operation(intent),
-        request.agent_id.as_str(),
-        request.player_id.as_str(),
-        request.public_key.as_deref(),
-        grant,
-        required_signer_public_key,
-        now_unix_ms,
-    )
-}
-
-pub fn verify_hosted_prompt_control_rollback_strong_auth_grant(
-    request: &PromptControlRollbackRequest,
-    grant: &HostedStrongAuthGrant,
-    required_signer_public_key: &str,
-    now_unix_ms: u64,
-) -> Result<(), String> {
-    verify_hosted_prompt_control_strong_auth_grant(
-        "prompt_control_rollback",
-        request.agent_id.as_str(),
-        request.player_id.as_str(),
-        request.public_key.as_deref(),
-        grant,
-        required_signer_public_key,
-        now_unix_ms,
-    )
 }
 
 pub fn sign_gameplay_action_auth_proof(
@@ -838,6 +609,52 @@ fn build_prompt_control_apply_signing_payload(
     public_key: &str,
     nonce: u64,
 ) -> Result<Vec<u8>, String> {
+    if has_enhanced_prompt_identity_apply(request) {
+        let request_id = normalize_required_field(
+            request
+                .request_id
+                .as_deref()
+                .ok_or_else(|| "prompt_control request_id is required".to_string())?,
+            "prompt_control request_id",
+        )?;
+        if request_id.len() > 128 {
+            return Err("prompt_control request_id exceeds 128 UTF-8 bytes".to_string());
+        }
+        let identity = normalize_prompt_control_operation_identity(
+            prompt_control_intent_operation(intent),
+            matches!(intent, PromptControlAuthIntent::Preview),
+            request.agent_id.as_str(),
+            player_id,
+            request.session_epoch,
+            request.binding_epoch,
+            request.expected_authority_epoch.as_deref(),
+            request.expected_version,
+            &request.system_prompt_override,
+            &request.short_term_goal_override,
+            &request.long_term_goal_override,
+            None,
+            request.updated_by.as_deref(),
+        )?;
+        let payload = PromptControlEnhancedSigningPayload {
+            operation: prompt_control_intent_operation(intent),
+            preview: matches!(intent, PromptControlAuthIntent::Preview),
+            request_id: request_id.as_str(),
+            agent_id: identity.agent_id.as_str(),
+            player_id: identity.player_id.as_str(),
+            public_key,
+            nonce,
+            session_epoch: identity.session_epoch,
+            binding_epoch: identity.binding_epoch,
+            expected_authority_epoch: identity.expected_authority_epoch.as_str(),
+            expected_version: identity.expected_version,
+            system_prompt: identity.system_prompt,
+            short_term_goal: identity.short_term_goal,
+            long_term_goal: identity.long_term_goal,
+            rollback_target: identity.rollback_target,
+            updated_by: identity.updated_by.as_deref(),
+        };
+        return encode_signing_payload(payload);
+    }
     let payload = PromptControlApplySigningPayload {
         operation: prompt_control_intent_operation(intent),
         agent_id: request.agent_id.as_str(),
@@ -859,6 +676,52 @@ fn build_prompt_control_rollback_signing_payload(
     public_key: &str,
     nonce: u64,
 ) -> Result<Vec<u8>, String> {
+    if has_enhanced_prompt_identity_rollback(request) {
+        let request_id = normalize_required_field(
+            request
+                .request_id
+                .as_deref()
+                .ok_or_else(|| "prompt_control request_id is required".to_string())?,
+            "prompt_control request_id",
+        )?;
+        if request_id.len() > 128 {
+            return Err("prompt_control request_id exceeds 128 UTF-8 bytes".to_string());
+        }
+        let identity = normalize_prompt_control_operation_identity(
+            "rollback",
+            false,
+            request.agent_id.as_str(),
+            player_id,
+            request.session_epoch,
+            request.binding_epoch,
+            request.expected_authority_epoch.as_deref(),
+            request.expected_version,
+            &None,
+            &None,
+            &None,
+            Some(request.to_version),
+            request.updated_by.as_deref(),
+        )?;
+        let payload = PromptControlEnhancedSigningPayload {
+            operation: "prompt_control_rollback",
+            preview: false,
+            request_id: request_id.as_str(),
+            agent_id: identity.agent_id.as_str(),
+            player_id: identity.player_id.as_str(),
+            public_key,
+            nonce,
+            session_epoch: identity.session_epoch,
+            binding_epoch: identity.binding_epoch,
+            expected_authority_epoch: identity.expected_authority_epoch.as_str(),
+            expected_version: identity.expected_version,
+            system_prompt: identity.system_prompt,
+            short_term_goal: identity.short_term_goal,
+            long_term_goal: identity.long_term_goal,
+            rollback_target: identity.rollback_target,
+            updated_by: identity.updated_by.as_deref(),
+        };
+        return encode_signing_payload(payload);
+    }
     let payload = PromptControlRollbackSigningPayload {
         operation: "prompt_control_rollback",
         agent_id: request.agent_id.as_str(),
@@ -1051,6 +914,88 @@ fn prompt_field_patch(value: &Option<Option<String>>) -> PromptFieldPatch<'_> {
             value: Some(next.as_str()),
         },
     }
+}
+
+fn prompt_field_patch_v1(value: &Option<Option<String>>) -> PromptFieldPatchV1 {
+    match value {
+        None => PromptFieldPatchV1::Unchanged,
+        Some(None) => PromptFieldPatchV1::Clear,
+        Some(Some(raw)) => {
+            let value = raw.trim();
+            if value.is_empty() {
+                PromptFieldPatchV1::Clear
+            } else {
+                PromptFieldPatchV1::Set(value.to_string())
+            }
+        }
+    }
+}
+
+pub(crate) fn has_enhanced_prompt_identity_apply(request: &PromptControlApplyRequest) -> bool {
+    request.request_id.is_some()
+        || request.session_epoch.is_some()
+        || request.binding_epoch.is_some()
+        || request.expected_authority_epoch.is_some()
+}
+
+pub(crate) fn has_enhanced_prompt_identity_rollback(
+    request: &PromptControlRollbackRequest,
+) -> bool {
+    request.request_id.is_some()
+        || request.session_epoch.is_some()
+        || request.binding_epoch.is_some()
+        || request.expected_authority_epoch.is_some()
+}
+
+pub(crate) fn normalize_prompt_control_operation_identity(
+    operation: &str,
+    preview: bool,
+    agent_id: &str,
+    player_id: &str,
+    session_epoch: Option<u64>,
+    binding_epoch: Option<u64>,
+    expected_authority_epoch: Option<&str>,
+    expected_version: Option<u64>,
+    system_prompt: &Option<Option<String>>,
+    short_term_goal: &Option<Option<String>>,
+    long_term_goal: &Option<Option<String>>,
+    rollback_target: Option<u64>,
+    updated_by: Option<&str>,
+) -> Result<PromptControlOperationIdentityV1, String> {
+    let agent_id = normalize_required_field(agent_id, "prompt_control agent_id")?;
+    let player_id = normalize_required_field(player_id, "prompt_control player_id")?;
+    let expected_authority_epoch = normalize_required_field(
+        expected_authority_epoch
+            .ok_or_else(|| "prompt_control expected_authority_epoch is required".to_string())?,
+        "prompt_control expected_authority_epoch",
+    )?;
+    let updated_by = updated_by
+        .map(|value| normalize_required_field(value, "prompt_control updated_by"))
+        .transpose()?;
+    Ok(PromptControlOperationIdentityV1 {
+        operation: operation.to_string(),
+        preview,
+        agent_id,
+        player_id,
+        session_epoch: session_epoch
+            .ok_or_else(|| "prompt_control session_epoch is required".to_string())?,
+        binding_epoch: binding_epoch
+            .ok_or_else(|| "prompt_control binding_epoch is required".to_string())?,
+        expected_authority_epoch,
+        expected_version: expected_version
+            .ok_or_else(|| "prompt_control expected_version is required".to_string())?,
+        system_prompt: prompt_field_patch_v1(system_prompt),
+        short_term_goal: prompt_field_patch_v1(short_term_goal),
+        long_term_goal: prompt_field_patch_v1(long_term_goal),
+        rollback_target,
+        updated_by,
+    })
+}
+
+pub(crate) fn prompt_control_operation_digest(
+    identity: &PromptControlOperationIdentityV1,
+) -> String {
+    crate::simulator::h_v1("oasis7.viewer.prompt-control.operation.v1", identity).to_string()
 }
 
 fn sign_player_auth_proof(

@@ -141,6 +141,10 @@ pub(super) fn build_signed_prompt_apply_request(
         system_prompt_override,
         short_term_goal_override,
         long_term_goal_override,
+        request_id: None,
+        session_epoch: None,
+        binding_epoch: None,
+        expected_authority_epoch: None,
     };
     let intent = if preview {
         PromptControlAuthIntent::Preview
@@ -180,6 +184,10 @@ pub(super) fn build_signed_prompt_rollback_request(
         to_version,
         expected_version,
         updated_by,
+        request_id: None,
+        session_epoch: None,
+        binding_epoch: None,
+        expected_authority_epoch: None,
     };
     let proof = sign_prompt_control_rollback_auth_proof(
         &request,

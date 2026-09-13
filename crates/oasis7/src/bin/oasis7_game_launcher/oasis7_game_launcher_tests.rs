@@ -859,6 +859,7 @@ fn query_runtime_bound_players_reads_snapshot_bindings() {
                 capabilities: Vec::new(),
                 world_id: "test-world".to_string(),
                 control_profile: oasis7::viewer::ViewerControlProfile::Playback,
+                authority_epoch: None,
             },
         )
         .expect("write hello ack");

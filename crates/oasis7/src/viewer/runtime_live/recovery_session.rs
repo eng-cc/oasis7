@@ -1,6 +1,7 @@
 use super::authoritative::compute_runtime_snapshot_hash;
 use super::session_policy::RuntimeRecoveryCursor;
 use super::*;
+use crate::simulator::WorldEventKind;
 
 pub(super) struct RuntimeSessionMutationSnapshot {
     session_policy: RuntimeSessionPolicy,
@@ -12,6 +13,7 @@ pub(super) struct RuntimeSessionMutationSnapshot {
     player_chat_intent_acks:
         BTreeMap<(String, String, u64), super::control_plane::RuntimeChatIntentAckRecord>,
     primary_intents: BTreeMap<String, super::control_plane::RuntimePrimaryIntent>,
+    binding_epoch_by_agent: BTreeMap<String, u64>,
     pending_virtual_events: VecDeque<WorldEvent>,
 }
 
@@ -106,6 +108,7 @@ impl ViewerRuntimeLiveServer {
             player_auth_last_nonce: self.llm_sidecar.player_auth_last_nonce.clone(),
             player_chat_intent_acks: self.llm_sidecar.player_chat_intent_acks.clone(),
             primary_intents: self.llm_sidecar.primary_intents.clone(),
+            binding_epoch_by_agent: self.prompt_control_authority.binding_epoch_by_agent.clone(),
             pending_virtual_events: self.pending_virtual_events.clone(),
         }
     }
@@ -122,6 +125,7 @@ impl ViewerRuntimeLiveServer {
         self.llm_sidecar.player_auth_last_nonce = snapshot.player_auth_last_nonce;
         self.llm_sidecar.player_chat_intent_acks = snapshot.player_chat_intent_acks;
         self.llm_sidecar.primary_intents = snapshot.primary_intents;
+        self.prompt_control_authority.binding_epoch_by_agent = snapshot.binding_epoch_by_agent;
         self.pending_virtual_events = snapshot.pending_virtual_events;
     }
 
@@ -150,6 +154,10 @@ impl ViewerRuntimeLiveServer {
 
     pub(super) fn apply_session_revoke_binding(&mut self, player_id: &str, _revoked_pubkey: &str) {
         if let Some(event) = self.llm_sidecar.clear_player_binding(player_id) {
+            if let WorldEventKind::AgentPlayerUnbound { agent_id, .. } = &event {
+                self.prompt_control_authority
+                    .advance_binding_epoch(agent_id.as_str());
+            }
             self.enqueue_virtual_event(event);
         }
     }
@@ -176,7 +184,9 @@ impl ViewerRuntimeLiveServer {
             if should_replace {
                 self.llm_sidecar
                     .agent_public_key_bindings
-                    .insert(agent_id, new_pubkey.to_string());
+                    .insert(agent_id.clone(), new_pubkey.to_string());
+                self.prompt_control_authority
+                    .advance_binding_epoch(agent_id.as_str());
             }
         }
     }

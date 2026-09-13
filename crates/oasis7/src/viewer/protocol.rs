@@ -53,13 +53,15 @@ pub use proto::{
     GOVERNED_ROLLBACK_REPLAY_CAPABILITY, GameplayActionError, GameplayActionRequest,
     GovernanceVoteQuotePreflight, GovernanceVoteQuoteRequest, HostedStrongAuthGrant, LiveControl,
     MarketQuoteDecisionPreflight, MarketQuoteDecisionRequest, MarketQuoteMaterialContribution,
-    MarketQuoteMaterialRequest, NegotiatedViewerProtocol, PlaybackControl, PlayerActionDisposition,
-    PlayerAuthProof, PlayerAuthScheme, PlayerCompensationState, PlayerCompensationStatus,
-    PlayerRollbackDisposition, PowerSaleQuotePreflight, PowerSaleQuoteRequest,
-    PowerSurvivalQuotePreflight, PowerSurvivalQuoteRequest, PowerSurvivalRecoveryAction,
-    ProductValidationQuotePreflight, ProductValidationQuoteRequest, PromptControlApplyRequest,
-    PromptControlCommand, PromptControlError, PromptControlOperation, PromptControlRollbackRequest,
-    PublishSocialFactQuotePreflight, PublishSocialFactQuoteRequest, PublishSocialFactQuoteStake,
+    MarketQuoteMaterialRequest, NegotiatedViewerProtocol, PROMPT_CONTROL_RESULT_CAPABILITY,
+    PlaybackControl, PlayerActionDisposition, PlayerAuthProof, PlayerAuthScheme,
+    PlayerCompensationState, PlayerCompensationStatus, PlayerRollbackDisposition,
+    PowerSaleQuotePreflight, PowerSaleQuoteRequest, PowerSurvivalQuotePreflight,
+    PowerSurvivalQuoteRequest, PowerSurvivalRecoveryAction, ProductValidationQuotePreflight,
+    ProductValidationQuoteRequest, PromptControlApplicationScope, PromptControlApplyRequest,
+    PromptControlCommand, PromptControlError, PromptControlOperation, PromptControlResultStatus,
+    PromptControlRollbackRequest, PromptControlValueVisibility, PublishSocialFactQuotePreflight,
+    PublishSocialFactQuoteRequest, PublishSocialFactQuoteStake,
     REVOKE_SOCIAL_FACT_QUOTE_CAPABILITY, RefineQuotePreflight, RefineQuoteRequest,
     RevokeSocialFactQuotePreflight, RevokeSocialFactQuoteRequest, RollbackApprovalSignature,
     RollbackAttributionResolution, RollbackAttributionResolutionRequest, RollbackAuthorityRole,
@@ -97,6 +99,14 @@ pub fn viewer_protocol_supports_revoke_social_fact_quote(
             .capabilities
             .iter()
             .any(|value| value == REVOKE_SOCIAL_FACT_QUOTE_CAPABILITY)
+}
+
+pub fn viewer_protocol_supports_prompt_control_result(protocol: &NegotiatedViewerProtocol) -> bool {
+    protocol.version >= VIEWER_PROTOCOL_VERSION
+        && protocol
+            .capabilities
+            .iter()
+            .any(|value| value == PROMPT_CONTROL_RESULT_CAPABILITY)
 }
 
 /// A signed, read-only request for the current chunk's fragment-replenishment forecast.

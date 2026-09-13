@@ -28,6 +28,7 @@ pub(super) fn normalize_required_player_id(
             ),
             agent_id: Some(agent_id.to_string()),
             current_version: None,
+            ..PromptControlError::default_legacy()
         });
     }
     Ok(normalized.to_string())
@@ -59,6 +60,7 @@ pub(super) fn ensure_updated_by_matches_player(
         ),
         agent_id: Some(agent_id.to_string()),
         current_version: None,
+        ..PromptControlError::default_legacy()
     })
 }
 
@@ -74,6 +76,7 @@ pub(super) fn ensure_agent_player_access(
             message: format!("agent not found: {agent_id}"),
             agent_id: Some(agent_id.to_string()),
             current_version: None,
+            ..PromptControlError::default_legacy()
         });
     }
     let Some(bound_player_id) = kernel.player_binding_for_agent(agent_id) else {
@@ -107,6 +110,7 @@ pub(super) fn ensure_agent_player_access(
                 .agent_prompt_profiles
                 .get(agent_id)
                 .map(|profile| profile.version),
+            ..PromptControlError::default_legacy()
         });
     }
     Err(PromptControlError {
@@ -121,6 +125,7 @@ pub(super) fn ensure_agent_player_access(
             .agent_prompt_profiles
             .get(agent_id)
             .map(|profile| profile.version),
+        ..PromptControlError::default_legacy()
     })
 }
 
@@ -190,6 +195,7 @@ pub(super) fn ensure_expected_prompt_version(
                 ),
                 agent_id: Some(agent_id.to_string()),
                 current_version: Some(current_version),
+                ..PromptControlError::default_legacy()
             });
         }
     }
