@@ -188,6 +188,86 @@ describe("focused viewer UI contracts", () => {
     expect(advancedDetails).toContainElement(screen.getByRole("button", { name: "Preview Prompt" }));
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("gates prompt actions on the negotiated capability and current epochs", async () => {
+    const { core, container } = await renderViewerApp({
+      selection: { kind: "agent", id: "agent-0" },
+      setupAfterMount(core) {
+        bindLocalTestAgent(core, "agent-0");
+        core.state.viewerProtocol = {
+          negotiated: true,
+          version: 2,
+          capabilities: ["prompt_control_result_v1"],
+          authorityEpoch: "authority-test-1",
+        };
+      },
+    });
+
+    core.togglePromptOverridesVisible();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Preview Prompt" })).toBeDisabled();
+      expect(container.querySelector('[data-prompt-readiness="blocked"]')).toHaveTextContent("prompt control is waiting for a current registered player session");
+    });
+
+    core.state.auth.sessionEpoch = 12;
+    core.state.auth.bindingEpoch = 9;
+    core.state.auth.authorityEpoch = "authority-test-1";
+    core.requestRender();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Preview Prompt" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Apply Prompt" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Rollback Prompt" })).toBeEnabled();
+    });
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("keeps hidden prompt-control metadata out of the result card and offers binding recovery", async () => {
+    const { core, container } = await renderViewerApp({
+      selection: { kind: "agent", id: "agent-0" },
+      setupAfterMount(core) {
+        bindLocalTestAgent(core, "agent-0");
+        core.state.viewerProtocol = {
+          negotiated: true,
+          version: 2,
+          capabilities: ["prompt_control_result_v1"],
+          authorityEpoch: "authority-test-1",
+        };
+        core.state.auth.sessionEpoch = 12;
+        core.state.auth.bindingEpoch = 9;
+        core.state.auth.authorityEpoch = "authority-test-1";
+        core.state.lastPromptFeedback = {
+          id: "hidden-result",
+          kind: "prompt",
+          action: "prompt_control_apply",
+          agentId: "agent-0",
+          accepted: false,
+          ok: false,
+          stage: "blocked",
+          response: {
+            status: "blocked",
+            value_visibility: "hidden",
+            reason_code: "control_lost",
+            next_step: "reauthenticate_and_refresh_binding",
+            player_id: "player-secret",
+            binding_epoch: 12,
+            version: 9,
+            digest: "digest-secret",
+            system_prompt: "latest secret prompt",
+          },
+        };
+      },
+    });
+
+    core.togglePromptOverridesVisible();
+    await waitFor(() => {
+      expect(screen.getByTestId("prompt-recovery-cta")).toBeInTheDocument();
+    });
+    const advancedDetails = screen.getByText("Advanced Prompt Settings").closest("details");
+    expect(advancedDetails).toHaveTextContent("Re-authenticate and refresh the current binding");
+    expect(advancedDetails).not.toHaveTextContent("player-secret");
+    expect(advancedDetails).not.toHaveTextContent("digest-secret");
+    expect(advancedDetails).not.toHaveTextContent("latest secret prompt");
+    expect(container.querySelector('[data-feedback-kind="prompt"][data-prompt-value-visibility="hidden"]')).toBeTruthy();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("uses readable entity identity and semantic selection state in Targets", async () => {
     const base = sampleSnapshot();
     const snapshot = sampleSnapshot({

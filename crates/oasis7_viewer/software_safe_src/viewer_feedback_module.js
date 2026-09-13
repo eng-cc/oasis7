@@ -4,15 +4,14 @@ import { buildValidationUnlockPreviewDisplayModel } from "./viewer_validation_un
 import { buildWaitResolutionQuoteDisplayModel } from "./viewer_wait_resolution_quote_display_model.js";
 import { normalizeFirstDeliveryPreview } from "./first_delivery_preview_display_model.js";
 import { normalizeFactoryProductionFailureDisposition } from "./viewer_factory_failure_disposition_display_model.js";
+import { createViewerPromptFeedbackModule } from "./viewer_prompt_feedback_module.js";
+
 function isRecord(value) {
   return value != null && typeof value === "object" && !Array.isArray(value);
 }
 function displayableStrings(value) {
   return Array.isArray(value)
-    ? value
-      .filter((entry) => typeof entry === "string")
-      .map((entry) => entry.trim())
-      .filter(Boolean)
+    ? value.filter((entry) => typeof entry === "string").map((entry) => entry.trim()).filter(Boolean)
     : [];
 }
 function displayableString(value) {
@@ -27,6 +26,7 @@ export function createViewerFeedbackModule({
   localeText,
   state,
 }) {
+  const promptFeedback = createViewerPromptFeedbackModule({ feedbackBadgeClass, isLocaleZh, localeText });
   function snapshotControlFeedback(feedback) {
     if (!feedback) return null;
     return {
@@ -44,20 +44,30 @@ export function createViewerFeedbackModule({
   }
   function snapshotSemanticFeedback(feedback) {
     if (!feedback) return null;
+    const response = feedback.kind === "prompt"
+      ? promptFeedback.redactPromptControlResponse(feedback.response)
+      : feedback.response;
     return {
       id: feedback.id,
       kind: feedback.kind,
       action: feedback.action,
       agentId: feedback.agentId || null,
+      requestId: feedback.requestId || response?.request_id || null,
       accepted: feedback.accepted,
       stage: feedback.stage,
       ok: feedback.ok,
       reason: feedback.reason || null,
       effect: feedback.effect || null,
-      response: clone(feedback.response) || null,
+      response: clone(response) || null,
     };
   }
   function semanticFeedbackCode(feedback) {
+    if (feedback?.kind === "prompt") {
+      const resultCode = promptFeedback.semanticPromptFeedbackCode(feedback);
+      if (resultCode) {
+        return resultCode;
+      }
+    }
     if (feedback?.stage !== "error") {
       return null;
     }
@@ -79,23 +89,6 @@ export function createViewerFeedbackModule({
   function formatPromptVersionLabel(value) {
     return `v${Math.max(0, Math.floor(Number(value || 0)))}`;
   }
-  function humanizePromptField(field) {
-    return String(field || "")
-      .trim()
-      .replaceAll("_", " ");
-  }
-  function summarizeAppliedFields(feedback) {
-    const fields = Array.isArray(feedback?.response?.applied_fields)
-      ? feedback.response.applied_fields
-          .map(humanizePromptField)
-          .filter(Boolean)
-      : [];
-    if (!fields.length) {
-      return null;
-    }
-    return fields.join(", ");
-  }
-
   function describeSemanticFeedback(feedback, locale = state.uiLocale) {
     if (!feedback) {
       return null;
@@ -194,8 +187,14 @@ export function createViewerFeedbackModule({
     }
 
     if (feedback.kind === "prompt") {
+      const promptResultDescription = promptFeedback.describePromptResult(feedback, locale);
+      if (promptResultDescription) {
+        return promptResultDescription;
+      }
       const version = Number(feedback?.response?.version || 0);
-      const appliedFields = summarizeAppliedFields(feedback);
+      const appliedFields = Array.isArray(feedback?.response?.applied_fields)
+        ? feedback.response.applied_fields.map((field) => String(field || "").trim().replaceAll("_", " ")).filter(Boolean).join(", ") || null
+        : null;
       if (feedback.stage === "preview_ack") {
         description.label = isLocaleZh(locale) ? "预览已就绪" : "Preview ready";
         description.summary = isLocaleZh(locale)

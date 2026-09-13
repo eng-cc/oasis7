@@ -17,6 +17,8 @@ function buildDefaultAuthState(overrides = {}) {
     source: "guest_only",
     registrationStatus: "guest",
     sessionEpoch: null,
+    bindingEpoch: null,
+    authorityEpoch: null,
     issuedAtUnixMs: null,
     recoveryErrorCode: null,
     recoveryErrorMessage: null,

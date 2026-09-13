@@ -496,6 +496,7 @@ function FeedbackCard(props) {
     <div
       class="feedback-card"
       data-feedback-stage={feedbackStage()}
+      data-feedback-kind={props.feedback?.kind} data-prompt-value-visibility={props.feedback?.kind === "prompt" ? props.feedback?.response?.value_visibility : undefined}
       role={props.liveRegion ? "status" : undefined}
       aria-live={props.liveRegion ? "polite" : undefined}
     >
@@ -3348,10 +3349,13 @@ function InteractionPanel() {
       "当前 Agent 已绑定到你的本地玩家会话。可以直接发送第一条聊天指令；提示词和资产治理能力先收在后置区域。",
       "This Agent is bound to your local player session. Send the first chat command here; prompt and asset/governance controls stay in the deferred area.",
     );
-  const commandBoundaryCopy = () =>
-    canControlSelectedAgent()
-      ? playerSessionReadyCopy()
-      : selectedAgentControlReason();
+  const commandBoundaryCopy = () => canControlSelectedAgent() ? (interactionEnabled() ? playerSessionReadyCopy() : promptCapability().reason) : selectedAgentControlReason();
+  const promptControlDisabledReason = () => canControlSelectedAgent() ? promptCapability().reason : selectedAgentControlReason();
+  const promptRecoveryRequired = () => {
+    const feedback = promptFeedback();
+    return feedback?.kind === "prompt" && feedback?.stage === "blocked"
+      && (feedback?.response?.value_visibility === "hidden" || !!String(feedback?.response?.next_step || "").trim());
+  };
   return (
     <Show
       when={agentId()}
@@ -3535,6 +3539,9 @@ function InteractionPanel() {
         <PanelSection title={tr(locale(), "提示词覆盖", "Prompt Overrides")}>
           <div class="feedback-detail">{promptVersionState().summary}</div>
           <div class="feedback-detail">{promptVersionState().detail}</div>
+          <Show when={!promptControlsEnabled()}>
+            <div class="feedback-detail" data-prompt-readiness="blocked" role="status" aria-live="polite">{promptControlDisabledReason()}</div>
+          </Show>
           <Show
             when={
               authSurface().capabilities.prompt_control.enabled
@@ -3640,6 +3647,9 @@ function InteractionPanel() {
           </div>
           <Show when={promptFeedback()} fallback={<EmptyState>{tr(locale(), "还没有提示词反馈。", "No prompt feedback yet.")}</EmptyState>}>
             {(feedback) => <FeedbackCard feedback={feedback()} display={promptFeedbackDisplay()} />}
+          </Show>
+          <Show when={promptRecoveryRequired()}>
+            <div class="toolbar" data-prompt-recovery="binding"><button type="button" data-testid="prompt-recovery-cta" data-prompt-recovery-action="refresh-binding" onClick={() => void core.refreshPromptControlBinding()}>{tr(locale(), "刷新权限与 Agent 绑定", "Refresh authority and Agent binding")}</button></div>
           </Show>
           <Show when={core.state.strongAuth.lastGrantActionId}>
             <EmptyState>

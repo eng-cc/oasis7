@@ -1022,29 +1022,82 @@ function createViewerAuthSurfaceModule({
     }
     return actionId === "prompt_control" || actionId === "main_token_transfer";
   }
+  function promptControlProtocolGate() {
+    const protocol = state2.viewerProtocol;
+    if (!protocol || protocol.negotiated == null) {
+      return null;
+    }
+    if (protocol.negotiated === false) {
+      return {
+        code: "prompt_protocol_negotiating",
+        reason: "waiting for runtime hello_v2 prompt-control capability negotiation"
+      };
+    }
+    const capabilities = Array.isArray(protocol.capabilities) ? protocol.capabilities : [];
+    if (!capabilities.includes("prompt_control_result_v1")) {
+      return null;
+    }
+    if (!String(protocol.authorityEpoch || state2.auth.authorityEpoch || "").trim()) {
+      return {
+        code: "prompt_authority_epoch_unavailable",
+        reason: "prompt control is waiting for a current runtime authority epoch"
+      };
+    }
+    if (state2.auth.registrationStatus !== "registered" || state2.auth.sessionEpoch == null) {
+      return {
+        code: "prompt_session_not_ready",
+        reason: "prompt control is waiting for a current registered player session"
+      };
+    }
+    if (!String(state2.auth.boundAgentId || "").trim() || state2.auth.bindingEpoch == null) {
+      return {
+        code: "prompt_binding_not_ready",
+        reason: "prompt control is waiting for a current Agent binding recovery ack"
+      };
+    }
+    if (!Number.isSafeInteger(Number(state2.promptDraft?.currentVersion))) {
+      return {
+        code: "prompt_version_unavailable",
+        reason: "prompt control is waiting for the authorized prompt version"
+      };
+    }
+    return null;
+  }
   function buildSemanticCapability2(actionId) {
     const deploymentHint = authDeploymentHint(state2.auth);
     const strongAuthSensitive = isStrongAuthSensitiveAction(actionId);
     const policy = hostedActionPolicy2(actionId);
+    const protocolGate = actionId === "prompt_control" ? promptControlProtocolGate() : null;
+    const finalize = (result) => {
+      if (protocolGate && result.enabled) {
+        return {
+          ...result,
+          enabled: false,
+          code: protocolGate.code,
+          reason: protocolGate.reason
+        };
+      }
+      return result;
+    };
     if (policy) {
       if (policy.required_auth === "strong_auth") {
         const isLocalPreviewOnly = policy.availability === "trusted_local_preview_only";
         const isBackendGrantPreview = policy.availability === "public_player_plane_with_backend_reauth_preview";
         if (isLocalPreviewOnly && state2.auth.available && !isHostedPublicJoinHint(deploymentHint)) {
-          return {
+          return finalize({
             actionId,
             enabled: true,
             code: null,
             reason: policy.reason || "trusted local preview currently allows this strong-auth-marked action through preview bootstrap"
-          };
+          });
         }
         if (isBackendGrantPreview && state2.auth.available) {
-          return {
+          return finalize({
             actionId,
             enabled: true,
             code: null,
             reason: policy.reason || `${actionId} is available through browser-local player auth plus backend re-authorization`
-          };
+          });
         }
         if (isBackendGrantPreview && !state2.auth.available) {
           return {
@@ -1054,60 +1107,60 @@ function createViewerAuthSurfaceModule({
             reason: `${actionId} requires player_session before backend re-authorization can upgrade it to strong_auth`
           };
         }
-        return {
+        return finalize({
           actionId,
           enabled: false,
           code: "strong_auth_required",
           reason: policy.reason || strongAuthReason()
-        };
+        });
       }
       if (!state2.auth.available) {
-        return {
+        return finalize({
           actionId,
           enabled: false,
           code: "auth_level_insufficient",
           reason: `${actionId} requires ${policy.required_auth}; current browser remains guest_session only`
-        };
+        });
       }
-      return {
+      return finalize({
         actionId,
         enabled: true,
         code: null,
         reason: policy.reason || `${actionId} is allowed on the ${policy.required_auth} lane`
-      };
+      });
     }
     if (strongAuthSensitive && isHostedPublicJoinHint(deploymentHint)) {
       const hostedStrongAuthReason = state2.auth.available ? `${actionId} still requires strong_auth on the hosted public join path; this browser only has a legacy preview player_session, so backend re-authorization or a private operator plane must take over` : `${actionId} requires strong_auth on the hosted public join path; acquire a player_session first, then complete the hosted re-authorization step for this action`;
-      return {
+      return finalize({
         actionId,
         enabled: false,
         code: "strong_auth_required",
         reason: hostedStrongAuthReason
-      };
+      });
     }
     if (strongAuthSensitive && state2.auth.available && deploymentHint === "remote_origin_legacy_bootstrap") {
-      return {
+      return finalize({
         actionId,
         enabled: false,
         code: "strong_auth_required",
         reason: `${actionId} is blocked on remote-origin legacy bootstrap; hosted/public prompt control must move to strong_auth or private operator plane`
-      };
+      });
     }
     if (!state2.auth.available) {
       const reason = isHostedPublicJoinHint(deploymentHint) ? `${actionId} requires player_session; this browser is still guest_session only on the hosted public join path` : `${actionId} requires viewer auth bootstrap; current status: ${state2.auth.error || "missing"}`;
-      return {
+      return finalize({
         actionId,
         enabled: false,
         code: "auth_level_insufficient",
         reason
-      };
+      });
     }
-    return {
+    return finalize({
       actionId,
       enabled: true,
       code: null,
       reason: strongAuthSensitive ? "prompt_control stays enabled only in trusted_local_preview via legacy viewer auth bootstrap; hosted/public strong_auth remains pending" : "player_session is active via legacy viewer auth bootstrap preview"
-    };
+    });
   }
   function buildAuthSurfaceModel2() {
     const deploymentHint = authDeploymentHint(state2.auth);
@@ -1498,7 +1551,7 @@ function buildGameplayEconomicSurface({
     blockerLabel: blockerLabel || null
   };
 }
-function isRecord$4(value2) {
+function isRecord$5(value2) {
   return value2 != null && typeof value2 === "object" && !Array.isArray(value2);
 }
 function stageLabel$1(stage) {
@@ -1511,7 +1564,7 @@ function stageLabel$1(stage) {
   }[stage] || stage;
 }
 function buildValidationUnlockPreviewDisplayModel(rawPreview, locale, isLocaleZh2) {
-  if (!isRecord$4(rawPreview)) {
+  if (!isRecord$5(rawPreview)) {
     return null;
   }
   const productId = rawPreview.product_id || rawPreview.productId || null;
@@ -1563,18 +1616,18 @@ function buildValidationUnlockPreviewDisplayModel(rawPreview, locale, isLocaleZh
     localizedNextStepHint
   };
 }
-function displayableString$3(value2) {
+function displayableString$4(value2) {
   return typeof value2 === "string" && value2.trim() ? value2.trim() : null;
 }
 function buildWaitResolutionQuoteDisplayModel(rawQuote, locale, localeText2) {
   if (!rawQuote || typeof rawQuote !== "object" || Array.isArray(rawQuote)) {
     return null;
   }
-  const resolutionTrigger = displayableString$3(rawQuote.resolution_trigger ?? rawQuote.resolutionTrigger);
-  const recheckTickOrEvent = displayableString$3(rawQuote.recheck_tick_or_event ?? rawQuote.recheckTickOrEvent);
-  const expectedChange = displayableString$3(rawQuote.expected_change ?? rawQuote.expectedChange);
-  const unresolvedRisk = displayableString$3(rawQuote.unresolved_risk ?? rawQuote.unresolvedRisk);
-  const alternativeUnlockCondition = displayableString$3(
+  const resolutionTrigger = displayableString$4(rawQuote.resolution_trigger ?? rawQuote.resolutionTrigger);
+  const recheckTickOrEvent = displayableString$4(rawQuote.recheck_tick_or_event ?? rawQuote.recheckTickOrEvent);
+  const expectedChange = displayableString$4(rawQuote.expected_change ?? rawQuote.expectedChange);
+  const unresolvedRisk = displayableString$4(rawQuote.unresolved_risk ?? rawQuote.unresolvedRisk);
+  const alternativeUnlockCondition = displayableString$4(
     rawQuote.alternative_unlock_condition ?? rawQuote.alternativeUnlockCondition
   );
   if (![resolutionTrigger, recheckTickOrEvent, expectedChange, unresolvedRisk, alternativeUnlockCondition].some(Boolean)) {
@@ -1605,7 +1658,7 @@ function buildWaitResolutionQuoteDisplayModel(rawQuote, locale, localeText2) {
 function displayableStrings$2(value2) {
   return Array.isArray(value2) ? value2.filter((entry) => typeof entry === "string").map((entry) => entry.trim()).filter(Boolean) : [];
 }
-function displayableString$2(value2) {
+function displayableString$3(value2) {
   return typeof value2 === "string" && value2.trim() ? value2.trim() : null;
 }
 function humanizeIdentifier(value2) {
@@ -1622,21 +1675,21 @@ function normalizeFirstDeliveryPreview(value2) {
     return null;
   }
   return {
-    localNeed: displayableString$2(value2.local_need || value2.localNeed),
-    expectedOutput: displayableString$2(value2.expected_output || value2.expectedOutput),
+    localNeed: displayableString$3(value2.local_need || value2.localNeed),
+    expectedOutput: displayableString$3(value2.expected_output || value2.expectedOutput),
     requiredInputs: displayableStrings$2(value2.required_inputs || value2.requiredInputs).map(humanizeRequiredInput),
-    valueTiming: displayableString$2(value2.value_timing || value2.valueTiming),
+    valueTiming: displayableString$3(value2.value_timing || value2.valueTiming),
     leverageClassUnlocked: (() => {
-      const valueToDisplay = displayableString$2(value2.leverage_class_unlocked || value2.leverageClassUnlocked);
+      const valueToDisplay = displayableString$3(value2.leverage_class_unlocked || value2.leverageClassUnlocked);
       return valueToDisplay ? humanizeIdentifier(valueToDisplay) : null;
     })(),
-    returnVisitHook: displayableString$2(value2.return_visit_hook || value2.returnVisitHook)
+    returnVisitHook: displayableString$3(value2.return_visit_hook || value2.returnVisitHook)
   };
 }
-function isRecord$3(value2) {
+function isRecord$4(value2) {
   return value2 != null && typeof value2 === "object" && !Array.isArray(value2);
 }
-function displayableString$1(value2) {
+function displayableString$2(value2) {
   if (typeof value2 === "string" && value2.trim()) {
     return value2.trim();
   }
@@ -1653,7 +1706,7 @@ function finiteNumber(value2) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 function normalizedCode(value2) {
-  return displayableString$1(value2)?.toLowerCase() || null;
+  return displayableString$2(value2)?.toLowerCase() || null;
 }
 function normalizedActionToken(value2) {
   return normalizedCode(value2)?.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || null;
@@ -1678,7 +1731,7 @@ function recoveryActionForDisposition(value2, availableActions, locale, localeTe
     return null;
   };
   const isExecutable = (action2) => ["gameplay_action", "request_snapshot", "step", "play", "reprioritize"].includes(executeKind(action2));
-  const isEnabled = (action2) => isExecutable(action2) && !displayableString$1(
+  const isEnabled = (action2) => isExecutable(action2) && !displayableString$2(
     actionField(action2, "disabled_reason", "disabledReason")
   );
   const matchingScheduleAction = actions.find((action2) => {
@@ -1712,14 +1765,14 @@ function recoveryActionForDisposition(value2, availableActions, locale, localeTe
     ),
     executeKind: "none"
   };
-  const actionId = displayableString$1(actionField(selected, "action_id", "actionId")) || "no_safe_path";
-  const label = displayableString$1(selected.label) || localeText2(locale, "暂无安全恢复路径", "No safe recovery path");
+  const actionId = displayableString$2(actionField(selected, "action_id", "actionId")) || "no_safe_path";
+  const label = displayableString$2(selected.label) || localeText2(locale, "暂无安全恢复路径", "No safe recovery path");
   return {
     actionId,
     label,
-    protocolAction: displayableString$1(actionField(selected, "protocol_action", "protocolAction")),
-    targetAgentId: displayableString$1(actionField(selected, "target_agent_id", "targetAgentId")),
-    disabledReason: displayableString$1(actionField(selected, "disabled_reason", "disabledReason")),
+    protocolAction: displayableString$2(actionField(selected, "protocol_action", "protocolAction")),
+    targetAgentId: displayableString$2(actionField(selected, "target_agent_id", "targetAgentId")),
+    disabledReason: displayableString$2(actionField(selected, "disabled_reason", "disabledReason")),
     executeKind: executeKind(selected) || "none"
   };
 }
@@ -1731,8 +1784,8 @@ function normalizeInputs(value2) {
   if (!Array.isArray(value2)) {
     return [];
   }
-  return value2.filter(isRecord$3).map((stack) => {
-    const kind = displayableString$1(stack.kind ?? stack.material_kind ?? stack.materialKind);
+  return value2.filter(isRecord$4).map((stack) => {
+    const kind = displayableString$2(stack.kind ?? stack.material_kind ?? stack.materialKind);
     if (!kind) {
       return null;
     }
@@ -1750,7 +1803,7 @@ const DISPOSITION_LABELS = {
   consumed_lost: ["投入已消费且损失", "Inputs consumed and lost"]
 };
 function normalizeFactoryProductionFailureDisposition(value2, locale, localeText2, availableActions = []) {
-  if (!isRecord$3(value2)) {
+  if (!isRecord$4(value2)) {
     return null;
   }
   const blockerCode = normalizedCode(value2.blocker_kind ?? value2.blockerKind);
@@ -1758,10 +1811,10 @@ function normalizeFactoryProductionFailureDisposition(value2, locale, localeText
   const recoveryAction = recoveryActionForDisposition(value2, availableActions, locale, localeText2);
   const nextRecheck = finiteNumber(value2.next_recheck ?? value2.nextRecheck);
   return {
-    actionId: displayableString$1(value2.action_id ?? value2.actionId),
-    requesterAgentId: displayableString$1(value2.requester_agent_id ?? value2.requesterAgentId),
-    factoryId: displayableString$1(value2.factory_id ?? value2.factoryId),
-    recipeId: displayableString$1(value2.recipe_id ?? value2.recipeId),
+    actionId: displayableString$2(value2.action_id ?? value2.actionId),
+    requesterAgentId: displayableString$2(value2.requester_agent_id ?? value2.requesterAgentId),
+    factoryId: displayableString$2(value2.factory_id ?? value2.factoryId),
+    recipeId: displayableString$2(value2.recipe_id ?? value2.recipeId),
     blockerKind: localizedCodeLabel(
       blockerCode,
       locale,
@@ -1770,7 +1823,7 @@ function normalizeFactoryProductionFailureDisposition(value2, locale, localeText
       "生产受阻",
       "Production blocked"
     ),
-    blockerDetail: displayableString$1(value2.blocker_detail ?? value2.blockerDetail),
+    blockerDetail: displayableString$2(value2.blocker_detail ?? value2.blockerDetail),
     dispositionKind: localizedCodeLabel(
       dispositionCode,
       locale,
@@ -1792,6 +1845,147 @@ function normalizeFactoryProductionFailureDisposition(value2, locale, localeText
     nextRecheckBoundary: nextRecheck == null ? localeText2(locale, "下一次 committed 快照", "next committed snapshot") : localeText2(locale, `世界时刻 ${nextRecheck}`, `world tick ${nextRecheck}`)
   };
 }
+function isRecord$3(value2) {
+  return value2 != null && typeof value2 === "object" && !Array.isArray(value2);
+}
+function displayableString$1(value2) {
+  return typeof value2 === "string" && value2.trim() ? value2.trim() : null;
+}
+const PROMPT_RESULT_STATUSES$1 = /* @__PURE__ */ new Set(["accepted", "applied", "stale", "rejected", "blocked"]);
+function createViewerPromptFeedbackModule({ feedbackBadgeClass: feedbackBadgeClass2, isLocaleZh: isLocaleZh2, localeText: localeText2 }) {
+  function promptResultStatus(feedback) {
+    const status = String(feedback?.response?.status || "").trim().toLowerCase();
+    return PROMPT_RESULT_STATUSES$1.has(status) ? status : null;
+  }
+  function redactPromptControlResponse(response) {
+    if (!isRecord$3(response) || String(response.value_visibility || "").trim().toLowerCase() !== "hidden") {
+      return response;
+    }
+    const safeKeys = [
+      "code",
+      "message",
+      "request_id",
+      "operation",
+      "preview",
+      "status",
+      "value_visibility",
+      "reason_code",
+      "next_step",
+      "idempotent_replay"
+    ];
+    return safeKeys.reduce((safe, key) => {
+      if (response[key] !== void 0 && response[key] !== null) {
+        safe[key] = response[key];
+      }
+      return safe;
+    }, {});
+  }
+  function semanticPromptFeedbackCode(feedback) {
+    const responseStatus = String(feedback?.response?.status || "").trim().toLowerCase();
+    const enhanced = PROMPT_RESULT_STATUSES$1.has(responseStatus) || feedback?.response?.request_id != null || feedback?.response?.authority_epoch != null;
+    if (!enhanced) {
+      return null;
+    }
+    return displayableString$1(feedback?.response?.reason_code) || displayableString$1(feedback?.response?.code);
+  }
+  function promptFeedbackStatusLabel(status, locale) {
+    const labels = {
+      accepted: localeText2(locale, "已接受", "Accepted"),
+      applied: localeText2(locale, "已应用", "Applied"),
+      stale: localeText2(locale, "版本已过期", "Stale"),
+      rejected: localeText2(locale, "已拒绝", "Rejected"),
+      blocked: localeText2(locale, "已阻塞", "Blocked")
+    };
+    return labels[status] || status;
+  }
+  function promptFeedbackNextStep(response, locale) {
+    const nextStep = displayableString$1(response?.next_step);
+    const nextStepLabels = {
+      no_action_required: localeText2(locale, "无需进一步操作。", "No further action is required."),
+      continue_runtime: localeText2(locale, "继续观察当前运行时。", "Continue observing the current runtime."),
+      refresh_version_and_retry: localeText2(locale, "刷新当前版本，保留草稿后重新编辑。", "Refresh the current version, keep the draft, and re-edit before retrying."),
+      reauthenticate_and_refresh_binding: localeText2(locale, "重新认证并刷新当前绑定后再试。", "Re-authenticate and refresh the current binding before retrying."),
+      refresh_authority_and_retry_with_new_request_id: localeText2(locale, "刷新权限后使用新的请求编号重试。", "Refresh authority, then retry with a new request id."),
+      correct_request_and_retry: localeText2(locale, "修正请求内容后重试。", "Correct the request and retry."),
+      switch_to_supported_mode: localeText2(locale, "切换到支持提示词控制的运行模式。", "Switch to a runtime mode that supports prompt control."),
+      refresh_and_retry: localeText2(locale, "刷新当前状态后重试。", "Refresh the current state and retry.")
+    };
+    if (nextStep && nextStepLabels[nextStep]) {
+      return nextStepLabels[nextStep];
+    }
+    if (nextStep) {
+      return nextStep.replaceAll("_", " ");
+    }
+    const status = String(response?.status || "").trim().toLowerCase();
+    if (status === "stale") {
+      return nextStepLabels.refresh_version_and_retry;
+    }
+    if (status === "blocked") {
+      return nextStepLabels.reauthenticate_and_refresh_binding;
+    }
+    return null;
+  }
+  function humanizePromptField(field) {
+    return String(field || "").trim().replaceAll("_", " ");
+  }
+  function summarizeAppliedFields(feedback) {
+    const fields = Array.isArray(feedback?.response?.applied_fields) ? feedback.response.applied_fields.map(humanizePromptField).filter(Boolean) : [];
+    return fields.length ? fields.join(", ") : null;
+  }
+  function describePromptResult(feedback, locale) {
+    const resultStatus = promptResultStatus(feedback);
+    if (!resultStatus) {
+      return null;
+    }
+    const response = feedback.response || {};
+    const version = Number(response.version);
+    const versionLabel = Number.isFinite(version) ? `v${Math.max(0, Math.floor(version))}` : null;
+    const operation = String(response.operation || feedback.action || "prompt").trim().toLowerCase();
+    const replay = response.idempotent_replay === true ? isLocaleZh2(locale) ? "这是已完成收据的重放，没有产生第二次变更。" : "This is a replay of the completed receipt; no second mutation was made." : null;
+    const description = {
+      label: promptFeedbackStatusLabel(resultStatus, locale),
+      summary: null,
+      detail: null,
+      code: semanticPromptFeedbackCode(feedback),
+      diagnostics: displayableString$1(response.message),
+      badgeClass: feedbackBadgeClass2(feedback)
+    };
+    if (resultStatus === "accepted") {
+      description.summary = response.preview === true ? isLocaleZh2(locale) ? "提示词预览已接受，尚未应用变更。" : "Prompt preview accepted; no changes were applied." : isLocaleZh2(locale) ? "提示词请求已接受。" : "Prompt request accepted.";
+    } else if (resultStatus === "applied") {
+      const action2 = operation === "rollback" ? isLocaleZh2(locale) ? "提示词回滚已在当前运行时应用" : "Prompt rollback applied to the current runtime" : isLocaleZh2(locale) ? "提示词已在当前运行时应用" : "Prompt applied to the current runtime";
+      description.summary = versionLabel ? `${action2} (${versionLabel})。` : `${action2}。`;
+    } else if (resultStatus === "stale") {
+      description.summary = isLocaleZh2(locale) ? "提示词草稿基于过期版本。" : "The prompt draft is based on a stale version.";
+    } else if (resultStatus === "rejected") {
+      description.summary = isLocaleZh2(locale) ? "提示词请求被运行时拒绝。" : "The runtime rejected the prompt request.";
+    } else {
+      description.summary = isLocaleZh2(locale) ? "提示词控制已阻塞。" : "Prompt control is blocked.";
+    }
+    const details = [];
+    if (resultStatus === "applied" && Array.isArray(response.applied_fields) && response.applied_fields.length) {
+      details.push(isLocaleZh2(locale) ? `已应用字段：${summarizeAppliedFields(feedback)}。` : `Applied fields: ${summarizeAppliedFields(feedback)}.`);
+    }
+    if (resultStatus === "applied" && response.applied_scope) {
+      details.push(isLocaleZh2(locale) ? `作用范围：${response.applied_scope}；持久化：${response.persistence_scope || "none"}；同步：${response.sync_scope || "none"}。` : `Scope: ${response.applied_scope}; persistence: ${response.persistence_scope || "none"}; sync: ${response.sync_scope || "none"}.`);
+    }
+    const nextStep = promptFeedbackNextStep(response, locale);
+    if (nextStep) {
+      details.push(isLocaleZh2(locale) ? `下一步：${nextStep}` : `Next step: ${nextStep}`);
+    }
+    if (replay) {
+      details.push(replay);
+    }
+    description.detail = details.join(" ") || null;
+    return description;
+  }
+  return {
+    describePromptResult,
+    promptResultStatus,
+    redactPromptControlResponse,
+    semanticPromptFeedbackCode
+  };
+}
 function isRecord$2(value2) {
   return value2 != null && typeof value2 === "object" && !Array.isArray(value2);
 }
@@ -1810,6 +2004,7 @@ function createViewerFeedbackModule({
   localeText: localeText2,
   state: state2
 }) {
+  const promptFeedback = createViewerPromptFeedbackModule({ feedbackBadgeClass: feedbackBadgeClass2, isLocaleZh: isLocaleZh2, localeText: localeText2 });
   function snapshotControlFeedback2(feedback) {
     if (!feedback) return null;
     return {
@@ -1827,20 +2022,28 @@ function createViewerFeedbackModule({
   }
   function snapshotSemanticFeedback2(feedback) {
     if (!feedback) return null;
+    const response = feedback.kind === "prompt" ? promptFeedback.redactPromptControlResponse(feedback.response) : feedback.response;
     return {
       id: feedback.id,
       kind: feedback.kind,
       action: feedback.action,
       agentId: feedback.agentId || null,
+      requestId: feedback.requestId || response?.request_id || null,
       accepted: feedback.accepted,
       stage: feedback.stage,
       ok: feedback.ok,
       reason: feedback.reason || null,
       effect: feedback.effect || null,
-      response: clone2(feedback.response) || null
+      response: clone2(response) || null
     };
   }
   function semanticFeedbackCode(feedback) {
+    if (feedback?.kind === "prompt") {
+      const resultCode = promptFeedback.semanticPromptFeedbackCode(feedback);
+      if (resultCode) {
+        return resultCode;
+      }
+    }
     if (feedback?.stage !== "error") {
       return null;
     }
@@ -1861,16 +2064,6 @@ function createViewerFeedbackModule({
   }
   function formatPromptVersionLabel(value2) {
     return `v${Math.max(0, Math.floor(Number(value2 || 0)))}`;
-  }
-  function humanizePromptField(field) {
-    return String(field || "").trim().replaceAll("_", " ");
-  }
-  function summarizeAppliedFields(feedback) {
-    const fields = Array.isArray(feedback?.response?.applied_fields) ? feedback.response.applied_fields.map(humanizePromptField).filter(Boolean) : [];
-    if (!fields.length) {
-      return null;
-    }
-    return fields.join(", ");
   }
   function describeSemanticFeedback2(feedback, locale = state2.uiLocale) {
     if (!feedback) {
@@ -1952,8 +2145,12 @@ function createViewerFeedbackModule({
       return description;
     }
     if (feedback.kind === "prompt") {
+      const promptResultDescription = promptFeedback.describePromptResult(feedback, locale);
+      if (promptResultDescription) {
+        return promptResultDescription;
+      }
       const version = Number(feedback?.response?.version || 0);
-      const appliedFields = summarizeAppliedFields(feedback);
+      const appliedFields = Array.isArray(feedback?.response?.applied_fields) ? feedback.response.applied_fields.map((field) => String(field || "").trim().replaceAll("_", " ")).filter(Boolean).join(", ") || null : null;
       if (feedback.stage === "preview_ack") {
         description.label = isLocaleZh2(locale) ? "预览已就绪" : "Preview ready";
         description.summary = isLocaleZh2(locale) ? `Prompt 预览已基于 ${formatPromptVersionLabel(version)} 准备完成。` : `Prompt preview is ready from ${formatPromptVersionLabel(version)}.`;
@@ -2741,6 +2938,8 @@ function buildDefaultAuthState(overrides = {}) {
     source: "guest_only",
     registrationStatus: "guest",
     sessionEpoch: null,
+    bindingEpoch: null,
+    authorityEpoch: null,
     issuedAtUnixMs: null,
     recoveryErrorCode: null,
     recoveryErrorMessage: null,
@@ -2951,6 +3150,259 @@ function createViewerHostedSessionRefreshModule({
     }
   }
   return { refreshHostedPlayerLease: refreshHostedPlayerLease2 };
+}
+const PROMPT_RESULT_STATUSES = /* @__PURE__ */ new Set(["accepted", "applied", "stale", "rejected", "blocked"]);
+function createViewerPromptControlModule({
+  applyPromptAckLocally: applyPromptAckLocally2,
+  assertPromptFeedbackActive: assertPromptFeedbackActive2,
+  buildAuthEnvelope: buildAuthEnvelope2,
+  buildPromptControlSigningPayload: buildPromptControlSigningPayload2,
+  clearPendingPromptControlAckTimer: clearPendingPromptControlAckTimer2,
+  clearPendingSessionRegisterWaiter: clearPendingSessionRegisterWaiter2,
+  clone: clone2,
+  createSemanticFeedback: createSemanticFeedback2,
+  ensureHostedPlayerAuthAvailable: ensureHostedPlayerAuthAvailable2,
+  ensureRegisteredPlayerSession: ensureRegisteredPlayerSession2,
+  nextRequestId: nextRequestId2,
+  nextAuthNonce: nextAuthNonce2,
+  render: render2,
+  requestSnapshotSafe: requestSnapshotSafe2,
+  selectedAgentId: selectedAgentId2,
+  selectedAgentPromptProfile: selectedAgentPromptProfile2,
+  signAuthPayload: signAuthPayload2,
+  state: state2
+}) {
+  let pendingAuthoritativeRefresh = null;
+  function resetForConnection() {
+    pendingAuthoritativeRefresh = null;
+    state2.viewerProtocol = {
+      negotiated: false,
+      version: null,
+      capabilities: [],
+      authorityEpoch: null
+    };
+    state2.auth.authorityEpoch = null;
+    state2.auth.bindingEpoch = null;
+    state2.auth.sessionEpoch = null;
+  }
+  function handleHelloAck(message) {
+    state2.viewerProtocol.negotiated = true;
+    state2.viewerProtocol.version = Number(message.version || message.max_version || 1);
+    state2.viewerProtocol.capabilities = Array.isArray(message.capabilities) ? message.capabilities.map((capability) => String(capability || "").trim()).filter(Boolean) : [];
+    state2.viewerProtocol.authorityEpoch = state2.viewerProtocol.capabilities.includes("prompt_control_result_v1") ? String(message.authority_epoch || "").trim() || null : null;
+    state2.auth.authorityEpoch = state2.viewerProtocol.authorityEpoch;
+  }
+  function capabilitySelected() {
+    return state2.viewerProtocol?.negotiated === true && Array.isArray(state2.viewerProtocol.capabilities) && state2.viewerProtocol.capabilities.includes("prompt_control_result_v1");
+  }
+  function resultSelected() {
+    return capabilitySelected() && !!String(state2.viewerProtocol.authorityEpoch || "").trim();
+  }
+  function readinessError(agentId) {
+    if (!capabilitySelected()) return null;
+    if (!String(state2.viewerProtocol.authorityEpoch || "").trim()) {
+      return "prompt control is waiting for a current runtime authority epoch";
+    }
+    if (state2.auth.registrationStatus !== "registered" || state2.auth.sessionEpoch == null) {
+      return "prompt control is waiting for a current registered player session";
+    }
+    if (String(state2.auth.boundAgentId || "").trim() !== String(agentId || "").trim() || state2.auth.bindingEpoch == null) {
+      return "prompt control is waiting for a current Agent binding recovery ack";
+    }
+    if (!Number.isSafeInteger(Number(selectedAgentPromptProfile2()?.version))) {
+      return "prompt control is waiting for the authorized prompt version";
+    }
+    return null;
+  }
+  function attachIdentity(request) {
+    if (!resultSelected()) return request;
+    request.request_id = request.request_id || `pc-${String(nextRequestId2()).padStart(8, "0")}`;
+    request.session_epoch = Number(state2.auth.sessionEpoch);
+    request.binding_epoch = Number(state2.auth.bindingEpoch);
+    request.expected_authority_epoch = String(state2.viewerProtocol.authorityEpoch || "").trim();
+    return request;
+  }
+  async function buildAuthProof(mode, request, auth) {
+    const nonce = nextAuthNonce2();
+    request.nonce = nonce;
+    const payload = resultSelected() ? buildPromptControlSigningPayload2(mode, request, auth) : {
+      operation: mode === "preview" ? "prompt_control_preview" : "prompt_control_apply",
+      agent_id: request.agent_id,
+      player_id: auth.playerId,
+      public_key: auth.publicKey,
+      nonce,
+      expected_version: request.expected_version ?? null,
+      updated_by: request.updated_by ?? null,
+      system_prompt_override: request.system_prompt_override,
+      short_term_goal_override: request.short_term_goal_override,
+      long_term_goal_override: request.long_term_goal_override
+    };
+    const signingPayload = buildAuthEnvelope2(payload);
+    return {
+      scheme: "ed25519",
+      player_id: auth.playerId,
+      public_key: auth.publicKey,
+      nonce,
+      signature: await signAuthPayload2(signingPayload, auth)
+    };
+  }
+  async function buildRollbackAuthProof(request, auth) {
+    const nonce = nextAuthNonce2();
+    request.nonce = nonce;
+    const payload = resultSelected() ? buildPromptControlSigningPayload2("rollback", request, auth) : {
+      operation: "prompt_control_rollback",
+      agent_id: request.agent_id,
+      player_id: auth.playerId,
+      public_key: auth.publicKey,
+      nonce,
+      to_version: request.to_version,
+      expected_version: request.expected_version ?? null,
+      updated_by: request.updated_by ?? null
+    };
+    const signingPayload = buildAuthEnvelope2(payload);
+    return {
+      scheme: "ed25519",
+      player_id: auth.playerId,
+      public_key: auth.publicKey,
+      nonce,
+      signature: await signAuthPayload2(signingPayload, auth)
+    };
+  }
+  function draftValuesForRequest(request) {
+    const valueForPatch = (patch, fallback) => patch?.mode === "clear" ? "" : patch?.mode === "set" ? String(patch.value || "") : String(fallback || "");
+    return {
+      agentId: String(request?.agent_id || "").trim(),
+      systemPrompt: valueForPatch(request?.system_prompt_override, state2.promptDraft.systemPrompt),
+      shortTermGoal: valueForPatch(request?.short_term_goal_override, state2.promptDraft.shortTermGoal),
+      longTermGoal: valueForPatch(request?.long_term_goal_override, state2.promptDraft.longTermGoal)
+    };
+  }
+  function reconcilePendingAuthoritativeRefresh(snapshot) {
+    const pending = pendingAuthoritativeRefresh;
+    if (!pending) return false;
+    const profile = snapshot?.model?.agent_prompt_profiles?.[pending.agentId];
+    const version = Number(profile?.version);
+    if (!Number.isFinite(version) || version < pending.version) return false;
+    pendingAuthoritativeRefresh = null;
+    if (selectedAgentId2() !== pending.agentId) return false;
+    const submitted = pending.submittedDraft;
+    const draftChangedAfterSubmit = state2.promptDraft.dirty && submitted && (String(state2.promptDraft.systemPrompt || "") !== String(submitted.systemPrompt || "") || String(state2.promptDraft.shortTermGoal || "") !== String(submitted.shortTermGoal || "") || String(state2.promptDraft.longTermGoal || "") !== String(submitted.longTermGoal || ""));
+    return !draftChangedAfterSubmit;
+  }
+  async function refreshBinding() {
+    const agentId = String(state2.auth.boundAgentId || selectedAgentId2() || "").trim();
+    if (!agentId) return { ok: false, reason: "prompt control recovery requires a selected Agent" };
+    await ensureHostedPlayerAuthAvailable2();
+    if (!state2.auth.available) {
+      return { ok: false, reason: state2.auth.error || "player session auth is unavailable" };
+    }
+    pendingAuthoritativeRefresh = null;
+    state2.auth.sessionEpoch = null;
+    state2.auth.bindingEpoch = null;
+    state2.auth.registrationStatus = "issued";
+    state2.auth.runtimeStatus = "recovery_pending_binding";
+    state2.auth.syncInFlight = false;
+    state2.auth.recoveryErrorCode = null;
+    state2.auth.recoveryErrorMessage = null;
+    state2.auth.error = null;
+    state2.auth.pendingRequestedAgentId = agentId;
+    render2();
+    try {
+      await ensureRegisteredPlayerSession2(agentId);
+      requestSnapshotSafe2();
+      render2();
+      return { ok: true, agentId, sessionEpoch: state2.auth.sessionEpoch, bindingEpoch: state2.auth.bindingEpoch };
+    } catch (error) {
+      state2.auth.recoveryErrorCode = "prompt_binding_refresh_failed";
+      state2.auth.recoveryErrorMessage = String(error);
+      state2.auth.error = String(error);
+      render2();
+      return { ok: false, agentId, reason: String(error) };
+    }
+  }
+  function handleAck(ack) {
+    clearPendingPromptControlAckTimer2();
+    const feedback = state2.lastPromptFeedback || createSemanticFeedback2("prompt", "prompt_ack", ack?.agent_id || null);
+    const operation = String(ack?.operation || (ack?.preview ? "preview" : "apply"));
+    const enhanced = ack?.status != null || ack?.request_id != null || ack?.authority_epoch != null;
+    const resultStatus = String(ack?.status || "").trim().toLowerCase();
+    if (enhanced && PROMPT_RESULT_STATUSES.has(resultStatus)) {
+      feedback.stage = resultStatus;
+      feedback.ok = resultStatus === "accepted" || resultStatus === "applied";
+      feedback.accepted = feedback.ok;
+      feedback.reason = ack?.reason_code || null;
+      feedback.effect = `prompt ${resultStatus}; request=${ack?.request_id || feedback.requestId || "-"}`;
+    } else {
+      feedback.stage = ack?.preview ? "preview_ack" : operation === "rollback" ? "rollback_ack" : "apply_ack";
+      feedback.ok = true;
+      feedback.accepted = true;
+      feedback.reason = null;
+      feedback.effect = ack?.preview ? `prompt preview ready: version=${ack.version}` : operation === "rollback" ? `prompt rolled back via version=${ack.version} → target=${Number(ack?.rolled_back_to_version || 0)}` : `prompt applied: version=${ack.version}`;
+    }
+    if (ack?.request_id) feedback.requestId = ack.request_id;
+    feedback.response = clone2(ack);
+    state2.lastPromptFeedback = feedback;
+    if (enhanced && resultStatus === "applied") {
+      const version = Number(ack?.version);
+      if (Number.isFinite(version)) {
+        pendingAuthoritativeRefresh = {
+          agentId: String(ack?.agent_id || feedback.agentId || "").trim(),
+          requestId: ack?.request_id || feedback.requestId || null,
+          version,
+          submittedDraft: feedback.submittedDraft || null
+        };
+        requestSnapshotSafe2();
+      }
+    }
+    if (ack?.preview || PROMPT_RESULT_STATUSES.has(resultStatus)) return;
+    if (operation === "rollback") {
+      if (enhanced) {
+        requestSnapshotSafe2();
+        return;
+      }
+      state2.promptDraft.currentVersion = Number(ack?.version || state2.promptDraft.currentVersion || 0);
+      state2.promptDraft.rollbackTargetVersion = Math.max(0, state2.promptDraft.currentVersion - 1);
+      state2.promptDraft.dirty = false;
+      requestSnapshotSafe2();
+      return;
+    }
+    if (enhanced) requestSnapshotSafe2();
+    else applyPromptAckLocally2(ack);
+  }
+  function handleError2(error) {
+    clearPendingPromptControlAckTimer2();
+    const feedback = state2.lastPromptFeedback || createSemanticFeedback2("prompt", "prompt_error", error?.agent_id || selectedAgentId2());
+    const status = String(error?.status || "").trim().toLowerCase();
+    const hidden = String(error?.value_visibility || "").trim().toLowerCase() === "hidden";
+    const enhanced = !!status || !!error?.request_id || !!error?.reason_code || hidden;
+    const normalizedStatus = PROMPT_RESULT_STATUSES.has(status) ? status : enhanced && hidden ? "blocked" : "error";
+    feedback.stage = normalizedStatus;
+    feedback.ok = normalizedStatus === "accepted" || normalizedStatus === "applied";
+    feedback.accepted = feedback.ok;
+    feedback.reason = error?.reason_code || error?.code || error?.message || "prompt control failed";
+    feedback.effect = enhanced ? `prompt ${normalizedStatus}` : error?.code || "prompt control error";
+    if (error?.request_id) feedback.requestId = error.request_id;
+    feedback.response = clone2(error);
+    state2.lastPromptFeedback = feedback;
+  }
+  return {
+    attachIdentity,
+    buildAuthProof,
+    buildRollbackAuthProof,
+    capabilitySelected,
+    draftValuesForRequest,
+    handleAck,
+    handleError: handleError2,
+    handleHelloAck,
+    readinessError,
+    reconcilePendingAuthoritativeRefresh,
+    refreshBinding,
+    resetForConnection,
+    resultSelected,
+    clearPendingAuthoritativeRefresh() {
+      pendingAuthoritativeRefresh = null;
+    }
+  };
 }
 function createInitialHostedLoginState() {
   return {
@@ -5136,6 +5588,12 @@ function createSoftwareSafeState() {
     uiLocale: "en",
     promptOverridesVisible: false,
     connectionStatus: "connecting",
+    viewerProtocol: {
+      negotiated: null,
+      version: null,
+      capabilities: [],
+      authorityEpoch: null
+    },
     logicalTime: 0,
     eventSeq: 0,
     tick: 0,
@@ -5217,6 +5675,8 @@ function createSoftwareSafeState() {
       source: "guest_only",
       registrationStatus: "guest",
       sessionEpoch: null,
+      bindingEpoch: null,
+      authorityEpoch: null,
       issuedAtUnixMs: null,
       recoveryErrorCode: null,
       recoveryErrorMessage: null,
@@ -5571,6 +6031,39 @@ function buildAuthEnvelope(payload) {
     payload
   });
 }
+function promptFieldPatchV1(patch) {
+  if (!patch || patch.mode === "unchanged") {
+    return "unchanged";
+  }
+  if (patch.mode === "clear") {
+    return "clear";
+  }
+  const value2 = String(patch.value ?? "").trim();
+  return value2 ? { set: value2 } : "clear";
+}
+function buildPromptControlSigningPayload(mode, request, auth) {
+  const normalizedMode = String(mode || "").trim().toLowerCase();
+  const rollback = normalizedMode === "rollback";
+  const preview = normalizedMode === "preview";
+  return {
+    operation: rollback ? "prompt_control_rollback" : preview ? "prompt_control_preview" : "prompt_control_apply",
+    preview,
+    request_id: String(request?.request_id || "").trim(),
+    agent_id: String(request?.agent_id || "").trim(),
+    player_id: String(auth?.playerId || request?.player_id || "").trim(),
+    public_key: String(auth?.publicKey || request?.public_key || "").trim().toLowerCase(),
+    nonce: request?.nonce,
+    session_epoch: Number(request?.session_epoch),
+    binding_epoch: Number(request?.binding_epoch),
+    expected_authority_epoch: String(request?.expected_authority_epoch || "").trim(),
+    expected_version: Number(request?.expected_version),
+    system_prompt: rollback ? "unchanged" : promptFieldPatchV1(request?.system_prompt_override),
+    short_term_goal: rollback ? "unchanged" : promptFieldPatchV1(request?.short_term_goal_override),
+    long_term_goal: rollback ? "unchanged" : promptFieldPatchV1(request?.long_term_goal_override),
+    rollback_target: rollback ? Number(request?.to_version) : null,
+    updated_by: String(request?.updated_by || "").trim() || void 0
+  };
+}
 const state = createSoftwareSafeState();
 let socket = null;
 let reconnectTimer = null;
@@ -5589,6 +6082,7 @@ let firstAgentClaimAutoAdvanceTimer = null;
 let firstAgentClaimAutoRefreshTimer = null;
 let requestId = 0;
 let authNonceCounter = 0;
+let viewerPromptControlModule = null;
 let semanticSendLoop = null;
 const pendingControlFeedback = /* @__PURE__ */ new Map();
 const pendingSemanticCommands = [];
@@ -5616,6 +6110,7 @@ const CHAT_HISTORY_STORAGE_PREFIX = "oasis7.viewer.chatHistory.v1";
 const CHAT_HISTORY_LIMIT = 40;
 const STARTER_AGENT_ID = "starter-agent-0";
 const LOCAL_TEST_PLAYER_ID_PREFIX = "local-test-player-";
+const PROMPT_CONTROL_RESULT_CAPABILITY = "prompt_control_result_v1";
 let localTestStarterRebindAttemptKey = null;
 function normalizeUiLocale(raw2) {
   const value2 = String(raw2 || "").trim().toLowerCase();
@@ -5851,6 +6346,8 @@ async function ensureHostedAuthSigningKey(auth = state.auth) {
   auth.publicKey = keypair.publicKey;
   auth.privateKey = keypair.privateKey;
   auth.registrationStatus = "issued";
+  auth.sessionEpoch = auth.bindingEpoch = auth.authorityEpoch = auth.boundAgentId = null;
+  viewerPromptControlModule?.clearPendingAuthoritativeRefresh();
   auth.runtimeStatus = "recovery_pending_key";
   auth.syncInFlight = false;
   auth.recoveryErrorCode = null;
@@ -5913,6 +6410,18 @@ function nextAuthNonce() {
   authNonceCounter += 1;
   return Date.now() + authNonceCounter;
 }
+function resetViewerProtocolForConnection() {
+  viewerPromptControlModule?.resetForConnection();
+}
+function promptControlCapabilitySelected() {
+  return viewerPromptControlModule?.capabilitySelected() === true;
+}
+function promptControlReadinessError(agentId) {
+  return viewerPromptControlModule?.readinessError(agentId) || null;
+}
+function attachPromptControlIdentity(request) {
+  return viewerPromptControlModule?.attachIdentity(request) || request;
+}
 function getState() {
   const authSurface = buildAuthSurfaceModel();
   const hostedActionMatrixView = buildHostedActionMatrixView();
@@ -5920,6 +6429,7 @@ function getState() {
   const gameplaySummary = buildGameplaySummary();
   return {
     connectionStatus: state.connectionStatus,
+    viewerProtocol: clone(state.viewerProtocol),
     logicalTime: state.logicalTime,
     eventSeq: state.eventSeq,
     tick: state.tick,
@@ -5962,6 +6472,8 @@ function getState() {
     authRevokedBy: state.auth.revokedBy,
     authRegistrationStatus: state.auth.registrationStatus,
     authSessionEpoch: state.auth.sessionEpoch,
+    authBindingEpoch: state.auth.bindingEpoch,
+    authAuthorityEpoch: state.auth.authorityEpoch,
     authRecoveryErrorCode: state.auth.recoveryErrorCode,
     authRecoveryErrorMessage: state.auth.recoveryErrorMessage,
     authRuntimeStatus: state.auth.runtimeStatus,
@@ -6149,6 +6661,12 @@ function syncAgentInteractionDrafts(force = false) {
       dirty: false
     };
   }
+}
+function promptDraftValuesForRequest(request) {
+  return viewerPromptControlModule?.draftValuesForRequest(request) || null;
+}
+function reconcilePendingPromptAuthoritativeRefresh(snapshot) {
+  return viewerPromptControlModule?.reconcilePendingAuthoritativeRefresh(snapshot) === true;
 }
 function applySelection(selection) {
   if (!selection) return null;
@@ -6796,7 +7314,7 @@ function handleSnapshot(snapshot) {
     }
   }
   hydrateChatHistoryFromStorage();
-  syncAgentInteractionDrafts(false);
+  syncAgentInteractionDrafts(reconcilePendingPromptAuthoritativeRefresh(snapshot));
   syncEmptyEntitySnapshotRefreshLoop();
   if (snapshot?.model?.agents?.[STARTER_AGENT_ID]) {
     clearFirstAgentClaimAutoAdvanceTimers();
@@ -7045,48 +7563,10 @@ function promptPatchFromDraft(currentValue, draftValue) {
   return { mode: "set", value: draft };
 }
 async function buildPromptControlAuthProof(mode, request, auth) {
-  const nonce = nextAuthNonce();
-  const payload = {
-    operation: mode === "preview" ? "prompt_control_preview" : "prompt_control_apply",
-    agent_id: request.agent_id,
-    player_id: auth.playerId,
-    public_key: auth.publicKey,
-    nonce,
-    expected_version: request.expected_version ?? null,
-    updated_by: request.updated_by ?? null,
-    system_prompt_override: request.system_prompt_override,
-    short_term_goal_override: request.short_term_goal_override,
-    long_term_goal_override: request.long_term_goal_override
-  };
-  const signingPayload = buildAuthEnvelope(payload);
-  return {
-    scheme: "ed25519",
-    player_id: auth.playerId,
-    public_key: auth.publicKey,
-    nonce,
-    signature: await signAuthPayload(signingPayload, auth)
-  };
+  return viewerPromptControlModule?.buildAuthProof(mode, request, auth);
 }
 async function buildPromptRollbackAuthProof(request, auth) {
-  const nonce = nextAuthNonce();
-  const payload = {
-    operation: "prompt_control_rollback",
-    agent_id: request.agent_id,
-    player_id: auth.playerId,
-    public_key: auth.publicKey,
-    nonce,
-    to_version: request.to_version,
-    expected_version: request.expected_version ?? null,
-    updated_by: request.updated_by ?? null
-  };
-  const signingPayload = buildAuthEnvelope(payload);
-  return {
-    scheme: "ed25519",
-    player_id: auth.playerId,
-    public_key: auth.publicKey,
-    nonce,
-    signature: await signAuthPayload(signingPayload, auth)
-  };
+  return viewerPromptControlModule?.buildRollbackAuthProof(request, auth);
 }
 async function buildSessionRegisterAuthProof(request, auth) {
   const nonce = nextAuthNonce();
@@ -7375,6 +7855,8 @@ async function completeHostedAccountLogin() {
       source: "hosted_browser_storage",
       registrationStatus: "issued",
       sessionEpoch: null,
+      bindingEpoch: null,
+      authorityEpoch: null,
       issuedAtUnixMs: payload?.grant?.issued_at_unix_ms == null ? Date.now() : Number(payload.grant.issued_at_unix_ms),
       recoveryErrorCode: null,
       recoveryErrorMessage: null,
@@ -7421,6 +7903,9 @@ async function retryHostedPlayerIdentityIssue() {
     playerId: auth?.playerId || null,
     error: auth?.error || state.hostedLogin.error
   };
+}
+async function refreshPromptControlBinding() {
+  return viewerPromptControlModule?.refreshBinding() || { ok: false, reason: "prompt control module is not ready" };
 }
 async function requestHostedStrongAuthGrant(actionId, agentId) {
   const auth = await ensureHostedAuthSigningKey(state.auth);
@@ -7617,6 +8102,10 @@ function recoverConnectedSessionStateAfterRuntimeAck(ack = null) {
   if (ack?.session_epoch != null) {
     state.auth.sessionEpoch = Number(ack.session_epoch);
   }
+  if (Object.prototype.hasOwnProperty.call(ack || {}, "binding_epoch")) {
+    state.auth.bindingEpoch = ack.binding_epoch == null ? null : Number(ack.binding_epoch);
+  }
+  state.auth.authorityEpoch = state.viewerProtocol.authorityEpoch || null;
 }
 function resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack = null) {
   recoverConnectedSessionStateAfterRuntimeAck(ack);
@@ -7794,7 +8283,7 @@ function buildPromptRequestFromDraft(agentId, draftOverrides) {
   if (!agentId || !currentProfile) {
     throw new Error("select an agent before editing prompt overrides");
   }
-  return {
+  const request = {
     agent_id: agentId,
     player_id: state.auth.playerId,
     public_key: state.auth.publicKey,
@@ -7804,6 +8293,8 @@ function buildPromptRequestFromDraft(agentId, draftOverrides) {
     short_term_goal_override: promptPatchFromDraft(currentProfile.short_term_goal_override, draftOverrides.shortTermGoal),
     long_term_goal_override: promptPatchFromDraft(currentProfile.long_term_goal_override, draftOverrides.longTermGoal)
   };
+  if (promptControlCapabilitySelected()) request.request_id = `pc-${String(nextRequestId()).padStart(8, "0")}`;
+  return request;
 }
 function encodePromptRequestForJson(request) {
   const encodePatch = (patch) => {
@@ -7818,6 +8309,10 @@ function encodePromptRequestForJson(request) {
   return {
     agent_id: request.agent_id,
     player_id: request.player_id,
+    ...request.request_id ? { request_id: request.request_id } : {},
+    ...request.session_epoch != null ? { session_epoch: request.session_epoch } : {},
+    ...request.binding_epoch != null ? { binding_epoch: request.binding_epoch } : {},
+    ...request.expected_authority_epoch ? { expected_authority_epoch: request.expected_authority_epoch } : {},
     public_key: request.public_key,
     expected_version: request.expected_version,
     updated_by: request.updated_by,
@@ -7835,7 +8330,7 @@ function buildPromptRollbackRequest(agentId, toVersion) {
   if (!Number.isInteger(targetVersion) || targetVersion < 0) {
     throw new Error("prompt rollback requires integer toVersion >= 0");
   }
-  return {
+  const request = {
     agent_id: agentId,
     player_id: state.auth.playerId,
     public_key: state.auth.publicKey,
@@ -7843,6 +8338,8 @@ function buildPromptRollbackRequest(agentId, toVersion) {
     expected_version: Number(profile.version || 0),
     updated_by: state.auth.playerId
   };
+  if (promptControlCapabilitySelected()) request.request_id = `pc-${String(nextRequestId()).padStart(8, "0")}`;
+  return request;
 }
 function pushChatHistory(entry) {
   const normalized2 = normalizeChatHistoryEntry(entry);
@@ -8064,6 +8561,10 @@ function sendPromptControl(mode, payload = null) {
   if (controlError) {
     return { ok: false, reason: controlError };
   }
+  const protocolError = promptControlReadinessError(agentId);
+  if (protocolError) {
+    return { ok: false, reason: protocolError };
+  }
   let request;
   try {
     if (normalizedMode === "rollback") {
@@ -8083,7 +8584,8 @@ function sendPromptControl(mode, payload = null) {
   }
   const feedback = createSemanticFeedback("prompt", `prompt_${normalizedMode}`, agentId, {
     effect: "queued for signing and send",
-    toVersion: request.to_version ?? null
+    toVersion: request.to_version ?? null,
+    requestId: request.request_id || null
   });
   state.lastPromptFeedback = feedback;
   enqueueSemanticCommand({
@@ -8099,6 +8601,7 @@ function sendPromptControl(mode, payload = null) {
       render();
       await ensureRegisteredPlayerSession(agentId);
       assertPromptFeedbackActive(feedback);
+      attachPromptControlIdentity(request);
       let strongAuthGrant = null;
       if (isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)) {
         feedback.stage = "authorizing";
@@ -8133,6 +8636,8 @@ function sendPromptControl(mode, payload = null) {
       feedback.stage = "sent";
       feedback.effect = `prompt ${normalizedMode} request sent; waiting for ack`;
       state.lastPromptFeedback = feedback;
+      feedback.requestId = request.request_id || null;
+      feedback.submittedDraft = promptDraftValuesForRequest(request);
       sendJson({
         type: "prompt_control",
         command: {
@@ -8433,38 +8938,10 @@ function applyPromptAckLocally(ack) {
   }
 }
 function handlePromptControlAck(ack) {
-  clearPendingPromptControlAckTimer();
-  const feedback = state.lastPromptFeedback || createSemanticFeedback("prompt", "prompt_ack", ack?.agent_id || null);
-  const operation = String(ack?.operation || (ack?.preview ? "preview" : "apply"));
-  feedback.stage = ack?.preview ? "preview_ack" : operation === "rollback" ? "rollback_ack" : "apply_ack";
-  feedback.ok = true;
-  feedback.accepted = true;
-  feedback.reason = null;
-  feedback.effect = ack?.preview ? `prompt preview ready: version=${ack.version}` : operation === "rollback" ? `prompt rolled back via version=${ack.version} → target=${Number(ack?.rolled_back_to_version || 0)}` : `prompt applied: version=${ack.version}`;
-  feedback.response = clone(ack);
-  state.lastPromptFeedback = feedback;
-  if (ack?.preview) {
-    return;
-  }
-  if (operation === "rollback") {
-    state.promptDraft.currentVersion = Number(ack?.version || state.promptDraft.currentVersion || 0);
-    state.promptDraft.rollbackTargetVersion = Math.max(0, state.promptDraft.currentVersion - 1);
-    state.promptDraft.dirty = false;
-    requestSnapshotSafe();
-    return;
-  }
-  applyPromptAckLocally(ack);
+  viewerPromptControlModule?.handleAck(ack);
 }
 function handlePromptControlError(error) {
-  clearPendingPromptControlAckTimer();
-  const feedback = state.lastPromptFeedback || createSemanticFeedback("prompt", "prompt_error", error?.agent_id || selectedAgentId());
-  feedback.stage = "error";
-  feedback.ok = false;
-  feedback.accepted = false;
-  feedback.reason = error?.message || error?.code || "prompt control failed";
-  feedback.effect = error?.code || "prompt control error";
-  feedback.response = clone(error);
-  state.lastPromptFeedback = feedback;
+  viewerPromptControlModule?.handleError(error);
 }
 function handleAgentChatAck(ack) {
   clearPendingAgentChatAckTimer();
@@ -8523,7 +9000,7 @@ function adoptHostedRecoveryAck(ack) {
   const usesLegacyPreviewBootstrap = state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE;
   const hadPendingForceRebind = state.auth.pendingForceRebind === true;
   const previousRequestedAgentId = state.auth.pendingRequestedAgentId;
-  const nextBoundAgentId = ack.agent_id || state.auth.boundAgentId || null;
+  const nextBoundAgentId = Object.prototype.hasOwnProperty.call(ack, "agent_id") ? ack.agent_id || null : state.auth.boundAgentId || null;
   const nextRequestedAgentId = ack.agent_id || state.auth.pendingRequestedAgentId || state.auth.boundAgentId || null;
   state.auth.syncInFlight = false;
   state.auth.recoveryErrorCode = null;
@@ -8539,6 +9016,9 @@ function adoptHostedRecoveryAck(ack) {
   }
   if (ack.session_epoch != null) {
     state.auth.sessionEpoch = Number(ack.session_epoch);
+  }
+  if (Object.prototype.hasOwnProperty.call(ack, "binding_epoch")) {
+    state.auth.bindingEpoch = ack.binding_epoch == null ? null : Number(ack.binding_epoch);
   }
   state.auth.boundAgentId = nextBoundAgentId;
   state.auth.pendingRequestedAgentId = nextRequestedAgentId;
@@ -8704,6 +9184,7 @@ function handleViewerMessage(message, sourceSocket = null) {
   switch (message?.type) {
     case "hello_ack":
       clearHelloAckTimer();
+      viewerPromptControlModule?.handleHelloAck(message);
       state.server = message.server || null;
       state.worldId = message.world_id || null;
       state.controlProfile = message.control_profile || "playback";
@@ -8779,6 +9260,7 @@ function attachSocket(ws) {
   ws.addEventListener("open", () => {
     if (socket !== ws) return;
     worldFeedTransport.resetGeneration(ws);
+    resetViewerProtocolForConnection();
     state.connectionStatus = "connected";
     state.lastError = null;
     state.server = null;
@@ -8787,7 +9269,7 @@ function attachSocket(ws) {
     initialSnapshotRetryCount = 0;
     clearHelloAckTimer();
     clearInitialSnapshotRetryTimer();
-    sendJson({ type: "hello", client: "viewer", version: 1 });
+    sendJson({ type: "hello_v2", client: "viewer", version: 2, capabilities: [PROMPT_CONTROL_RESULT_CAPABILITY] });
     scheduleHelloAckTimeout(ws);
     syncHostedSessionRefreshLoop();
     render();
@@ -8808,6 +9290,7 @@ function attachSocket(ws) {
   ws.addEventListener("close", () => {
     if (socket !== ws) return;
     worldFeedTransport.markDisconnected(ws);
+    resetViewerProtocolForConnection();
     state.connectionStatus = "connecting";
     clearHostedRuntimeSyncTimer();
     if (state.auth.available && state.auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
@@ -9438,6 +9921,7 @@ function installTestApi() {
     startHostedAccountLogin,
     completeHostedAccountLogin,
     retryHostedPlayerIdentityIssue,
+    refreshPromptControlBinding,
     registerPlayerSessionForTest,
     expirePendingSessionRegisterWaiterForTest,
     expireHostedRuntimeSyncTimeoutForTest,
@@ -9446,6 +9930,26 @@ function installTestApi() {
     reportFatalError
   };
 }
+viewerPromptControlModule = createViewerPromptControlModule({
+  applyPromptAckLocally,
+  assertPromptFeedbackActive,
+  buildAuthEnvelope,
+  buildPromptControlSigningPayload,
+  clearPendingPromptControlAckTimer,
+  clearPendingSessionRegisterWaiter,
+  clone,
+  createSemanticFeedback,
+  ensureHostedPlayerAuthAvailable,
+  ensureRegisteredPlayerSession,
+  nextRequestId,
+  nextAuthNonce,
+  render,
+  requestSnapshotSafe,
+  selectedAgentId,
+  selectedAgentPromptProfile,
+  signAuthPayload,
+  state
+});
 function bootstrap() {
   state.uiLocale = resolveInitialUiLocale();
   state.promptOverridesVisible = resolveStoredPromptOverridesVisibility();
@@ -9568,6 +10072,7 @@ const core = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty
   needsEmptyEntitySnapshotRefreshForTest,
   pushChatHistory,
   refreshHostedAdmissionState,
+  refreshPromptControlBinding,
   registerPlayerSessionForTest,
   reloadWorldFeedFromAuthoritativeSnapshot,
   renderDetails,
@@ -19545,7 +20050,7 @@ function buildAgentContextDisplayModel(input = {}) {
     control: firstValue(input.controlState, candidateIntent?.control_state, candidateIntent?.controlState) || "unknown"
   };
 }
-var _tmpl$ = /* @__PURE__ */ template(`<span>`), _tmpl$2 = /* @__PURE__ */ template(`<div>`), _tmpl$3 = /* @__PURE__ */ template(`<div class=entity-list-pending__progress>`), _tmpl$4 = /* @__PURE__ */ template(`<div class=entity-list-pending aria-live=polite aria-busy=true><div class=entity-list-pending__row><span class=entity-list-pending__spinner aria-hidden=true></span><span></span></div><div class=entity-list-pending__skeleton aria-hidden=true><span></span><span></span><span>`), _tmpl$5 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$6 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$7 = /* @__PURE__ */ template(`<details class=diagnostic><summary></summary><div class="stack flow-top">`), _tmpl$8 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$9 = /* @__PURE__ */ template(`<div class=feedback-summary>`), _tmpl$0 = /* @__PURE__ */ template(`<div class=summary-grid>`), _tmpl$1 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$10 = /* @__PURE__ */ template(`<div class=action-grid>`), _tmpl$11 = /* @__PURE__ */ template(`<div class=feedback-detail><div class=metric__label>`), _tmpl$12 = /* @__PURE__ */ template(`<div class=inline-help-tip><button type=button class=inline-help-tip__button>?</button><div class=inline-help-tip__panel><div class=inline-help-tip__title></div><div class=inline-help-tip__body>`), _tmpl$13 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row></div><div class=feedback-summary>`), _tmpl$14 = /* @__PURE__ */ template(`<div class="feedback-detail flow-top--tight">`), _tmpl$15 = /* @__PURE__ */ template(`<div class="badge-row badge-row--tight">`), _tmpl$16 = /* @__PURE__ */ template(`<div><div class=metric__label></div><div class=metric__value>`), _tmpl$17 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$18 = /* @__PURE__ */ template(`<div><div class=event-card__title><span>`), _tmpl$19 = /* @__PURE__ */ template(`<div class=panel__eyebrow>`), _tmpl$20 = /* @__PURE__ */ template(`<div class=panel__meta-copy>`), _tmpl$21 = /* @__PURE__ */ template(`<div><div class=panel__header><div class="stack stack--compact"><div class=panel__title></div></div></div><div class="panel__body stack">`), _tmpl$22 = /* @__PURE__ */ template(`<div><div class=callout__header><div class=callout__title></div></div><div class=callout__body>`), _tmpl$23 = /* @__PURE__ */ template(`<div class=field><label></label><input type=text autocomplete=off>`), _tmpl$24 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=complete-login>`), _tmpl$25 = /* @__PURE__ */ template(`<div class=stack>`), _tmpl$26 = /* @__PURE__ */ template(`<div class=stack><div class=control-grid><div class=field><label></label><input type=email autocomplete=email></div></div><div class=toolbar><button data-auth-action=start-login>`), _tmpl$27 = /* @__PURE__ */ template(`<div class=auth-gate data-viewer-fixture-state=hosted_login_gate role=dialog aria-modal=true aria-labelledby=hosted-login-gate-title tabindex=-1><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=hosted-login-gate-title class=auth-gate__title></h1></div></div><div class=feedback-summary>`), _tmpl$28 = /* @__PURE__ */ template(`<details class=entry-menu><summary class=entry-menu__toggle></summary><div class="entry-menu__panel stack"><div><div class="panel__title panel__title--spaced"></div><div class=feedback-detail></div></div><div class=toolbar><button data-locale=zh>中文</button><button data-locale=en>English</button></div><div class=badge-row></div><div class=feedback-detail>`), _tmpl$29 = /* @__PURE__ */ template(`<div class="stack stack--compact"><div class=feedback-summary></div><div class=summary-grid><div class=metric><div class=metric__label></div><div class=metric__value></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div></div><div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$30 = /* @__PURE__ */ template(`<div class="stack stack--compact">`), _tmpl$31 = /* @__PURE__ */ template(`<div class=toolbar><button>`), _tmpl$32 = /* @__PURE__ */ template(`<button>`), _tmpl$33 = /* @__PURE__ */ template(`<div class=auth-gate role=dialog aria-modal=true aria-labelledby=starter-oc-gate-title data-viewer-fixture-state=starter_oc_required_gate><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=starter-oc-gate-title class=auth-gate__title></h1></div></div><div class=toolbar>`), _tmpl$34 = /* @__PURE__ */ template(`<button data-testid=viewer-playthrough-action-claim-starter-oc>`), _tmpl$35 = /* @__PURE__ */ template(`<div class=control-grid><div class=field><label for=agent-claim-target></label><select id=agent-claim-target>`), _tmpl$36 = /* @__PURE__ */ template(`<option>`), _tmpl$37 = /* @__PURE__ */ template(`<div class="stage-hero stage-hero--compact"><div class=stage-hero__topline><div class="stack stack--hero"><div class=stage-hero__eyebrow-row><div class=stage-hero__eyebrow></div></div><div class=stage-hero__title></div><div class=stage-hero__lede></div></div></div><div class="hero-focus-grid hero-focus-grid--compact"><div class=hero-focus-card><div class=hero-focus-card__label></div><div></div><div class=hero-focus-card__detail></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div></div><div class="hero-focus-card hero-focus-card--next-step"data-testid=viewer-next-step-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div></div><div class=hero-focus-card data-testid=viewer-identity-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div><div class=hero-focus-card__detail></div></div></div><div class=stage-hero__mobile-shortcuts><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel>`), _tmpl$38 = /* @__PURE__ */ template(`<div class="badge-row stage-hero__selection">`), _tmpl$39 = /* @__PURE__ */ template(`<div class=toolbar><button type=button>`), _tmpl$40 = /* @__PURE__ */ template(`<div class=stage-hero__secondary-action data-hero-secondary-action=true>`), _tmpl$41 = /* @__PURE__ */ template(`<div class=stack><div class=field><label for=entity-search></label><input id=entity-search type=search></div><div><div class="panel__title panel__title--spaced"></div><div class=list></div></div><div><div class="panel__title panel__title--spaced"></div><div class=list>`), _tmpl$42 = /* @__PURE__ */ template(`<span class=list-item__selected-label>`), _tmpl$43 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=agent><div class=list-item__header><div class=list-item__title></div></div><div class=list-item__meta><span class=entity-id></span></div><div class=badge-row></div><div class=list-item__meta></div><div class=list-item__meta>`), _tmpl$44 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=location><div class=list-item__header><div class=list-item__title></div></div><div class=list-item__meta>`), _tmpl$45 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=logout>`), _tmpl$46 = /* @__PURE__ */ template(`<button data-auth-action=logout>`), _tmpl$47 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$48 = /* @__PURE__ */ template(`<div data-viewer-overlay=world-summary><details class=gameplay-details-surface id=viewer-gameplay-details><summary class=gameplay-details-surface__summary><div class=diagnostic-surface__title><span></span><span class=diagnostic-surface__meta></span></div></summary><div class="stack flow-top"><details id=viewer-diagnostics-panel class="panel diagnostic-surface"data-viewer-surface=diagnostics><summary class="panel__header diagnostic-surface__summary"><div class=diagnostic-surface__title><div class=panel__title></div><div class=diagnostic-surface__meta></div></div><div class=badge-row></div></summary><div class="panel__body stack"><div class=badge-row></div><div class=badge-row></div><div class=toolbar></div><div class=summary-grid></div><div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$49 = /* @__PURE__ */ template(`<div class="badge-row badge-row--spaced">`), _tmpl$50 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced"></div><div class=action-grid>`), _tmpl$51 = /* @__PURE__ */ template(`<div class=feedback-summary data-testid=validation-unlock-preview>`), _tmpl$52 = /* @__PURE__ */ template(`<div class=feedback-summary><a href=#viewer-details-panel>`), _tmpl$53 = /* @__PURE__ */ template(`<div class="badge-row command-surface__auth-boundary">`), _tmpl$54 = /* @__PURE__ */ template(`<div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=4>`), _tmpl$55 = /* @__PURE__ */ template(`<div class=toolbar><button data-chat-send=1>`), _tmpl$56 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-visibility-toggle=1>`), _tmpl$57 = /* @__PURE__ */ template(`<div class=field><label for=strong-auth-approval-code></label><input id=strong-auth-approval-code type=password autocomplete=off>`), _tmpl$58 = /* @__PURE__ */ template(`<div class=field><label for=prompt-system></label><textarea id=prompt-system rows=4>`), _tmpl$59 = /* @__PURE__ */ template(`<div class=field><label for=prompt-short></label><textarea id=prompt-short rows=3>`), _tmpl$60 = /* @__PURE__ */ template(`<div class=field><label for=prompt-long></label><textarea id=prompt-long rows=3>`), _tmpl$61 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-action=preview></button><button data-prompt-action=apply>`), _tmpl$62 = /* @__PURE__ */ template(`<div class=toolbar><div class="field field--inline-flex"><label for=prompt-rollback-version></label><input id=prompt-rollback-version type=number min=0 step=1></div><button data-prompt-action=rollback>`), _tmpl$63 = /* @__PURE__ */ template(`<div class=toolbar><button disabled>`), _tmpl$64 = /* @__PURE__ */ template(`<div class="stack command-surface"><div class="badge-row command-surface__target-row"data-command-continuity=target><div class=command-surface__continuity-summary data-command-continuity=summary role=group><span><span class=metric__label></span> </span><span><span class=metric__label></span> </span><span class=command-surface__continuity-objective><span class=metric__label></span> </span></div></div><details class="diagnostic command-surface__capability-details"><summary></summary><div class="badge-row command-surface__capability-row command-surface__diagnostic-strip"></div></details><details class="diagnostic command-surface__advanced-details"><summary></summary></details><details class="diagnostic command-surface__asset-details"><summary>`), _tmpl$65 = /* @__PURE__ */ template(`<div class="stack command-surface command-surface--non-agent"data-command-target-kind=location><div class="badge-row command-surface__target-row"data-command-continuity=target>`), _tmpl$66 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced panel__title--danger"></div><pre class=json>`), _tmpl$67 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div><div class="panel__title panel__title--spaced"></div><div class=badge-row></div><div class="feedback-detail flow-top">`), _tmpl$68 = /* @__PURE__ */ template(`<div class=viewer-module-details data-viewer-module-details=true><div class="panel__title panel__title--spaced"></div><div class=badge-row></div><div class=feedback-detail><strong></strong>: </div><div class=feedback-detail><strong></strong>: </div><div class=feedback-detail><strong></strong>: `), _tmpl$69 = /* @__PURE__ */ template(`<div class=viewer-shell data-viewer-shell=player-fullscreen><section class="panel panel--targets"id=viewer-targets-panel data-viewer-route-panel=targets data-viewer-overlay=targets tabindex=-1 data-viewer-surface=targets><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div><a class=panel__route-close href=#viewer-stage-panel></a></div><div class=panel__body></div></section><section class="panel panel--stage"id=viewer-stage-panel tabindex=-1 data-viewer-map-layer=base data-viewer-surface=stage><div class="panel__body panel__body--stage"><div class=stack></div></div></section><section class="panel panel--details"id=viewer-details-panel data-viewer-route-panel=command data-viewer-overlay=command tabindex=-1 data-viewer-surface=command><div class="panel__header panel__header--stack command-route-chrome"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div><a class=panel__route-close href=#viewer-stage-panel></a></div><div class=panel__body>`);
+var _tmpl$ = /* @__PURE__ */ template(`<span>`), _tmpl$2 = /* @__PURE__ */ template(`<div>`), _tmpl$3 = /* @__PURE__ */ template(`<div class=entity-list-pending__progress>`), _tmpl$4 = /* @__PURE__ */ template(`<div class=entity-list-pending aria-live=polite aria-busy=true><div class=entity-list-pending__row><span class=entity-list-pending__spinner aria-hidden=true></span><span></span></div><div class=entity-list-pending__skeleton aria-hidden=true><span></span><span></span><span>`), _tmpl$5 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$6 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$7 = /* @__PURE__ */ template(`<details class=diagnostic><summary></summary><div class="stack flow-top">`), _tmpl$8 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$9 = /* @__PURE__ */ template(`<div class=feedback-summary>`), _tmpl$0 = /* @__PURE__ */ template(`<div class=summary-grid>`), _tmpl$1 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$10 = /* @__PURE__ */ template(`<div class=action-grid>`), _tmpl$11 = /* @__PURE__ */ template(`<div class=feedback-detail><div class=metric__label>`), _tmpl$12 = /* @__PURE__ */ template(`<div class=inline-help-tip><button type=button class=inline-help-tip__button>?</button><div class=inline-help-tip__panel><div class=inline-help-tip__title></div><div class=inline-help-tip__body>`), _tmpl$13 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row></div><div class=feedback-summary>`), _tmpl$14 = /* @__PURE__ */ template(`<div class="feedback-detail flow-top--tight">`), _tmpl$15 = /* @__PURE__ */ template(`<div class="badge-row badge-row--tight">`), _tmpl$16 = /* @__PURE__ */ template(`<div><div class=metric__label></div><div class=metric__value>`), _tmpl$17 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$18 = /* @__PURE__ */ template(`<div><div class=event-card__title><span>`), _tmpl$19 = /* @__PURE__ */ template(`<div class=panel__eyebrow>`), _tmpl$20 = /* @__PURE__ */ template(`<div class=panel__meta-copy>`), _tmpl$21 = /* @__PURE__ */ template(`<div><div class=panel__header><div class="stack stack--compact"><div class=panel__title></div></div></div><div class="panel__body stack">`), _tmpl$22 = /* @__PURE__ */ template(`<div><div class=callout__header><div class=callout__title></div></div><div class=callout__body>`), _tmpl$23 = /* @__PURE__ */ template(`<div class=field><label></label><input type=text autocomplete=off>`), _tmpl$24 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=complete-login>`), _tmpl$25 = /* @__PURE__ */ template(`<div class=stack>`), _tmpl$26 = /* @__PURE__ */ template(`<div class=stack><div class=control-grid><div class=field><label></label><input type=email autocomplete=email></div></div><div class=toolbar><button data-auth-action=start-login>`), _tmpl$27 = /* @__PURE__ */ template(`<div class=auth-gate data-viewer-fixture-state=hosted_login_gate role=dialog aria-modal=true aria-labelledby=hosted-login-gate-title tabindex=-1><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=hosted-login-gate-title class=auth-gate__title></h1></div></div><div class=feedback-summary>`), _tmpl$28 = /* @__PURE__ */ template(`<details class=entry-menu><summary class=entry-menu__toggle></summary><div class="entry-menu__panel stack"><div><div class="panel__title panel__title--spaced"></div><div class=feedback-detail></div></div><div class=toolbar><button data-locale=zh>中文</button><button data-locale=en>English</button></div><div class=badge-row></div><div class=feedback-detail>`), _tmpl$29 = /* @__PURE__ */ template(`<div class="stack stack--compact"><div class=feedback-summary></div><div class=summary-grid><div class=metric><div class=metric__label></div><div class=metric__value></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div></div><div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$30 = /* @__PURE__ */ template(`<div class="stack stack--compact">`), _tmpl$31 = /* @__PURE__ */ template(`<div class=toolbar><button>`), _tmpl$32 = /* @__PURE__ */ template(`<button>`), _tmpl$33 = /* @__PURE__ */ template(`<div class=auth-gate role=dialog aria-modal=true aria-labelledby=starter-oc-gate-title data-viewer-fixture-state=starter_oc_required_gate><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=starter-oc-gate-title class=auth-gate__title></h1></div></div><div class=toolbar>`), _tmpl$34 = /* @__PURE__ */ template(`<button data-testid=viewer-playthrough-action-claim-starter-oc>`), _tmpl$35 = /* @__PURE__ */ template(`<div class=control-grid><div class=field><label for=agent-claim-target></label><select id=agent-claim-target>`), _tmpl$36 = /* @__PURE__ */ template(`<option>`), _tmpl$37 = /* @__PURE__ */ template(`<div class="stage-hero stage-hero--compact"><div class=stage-hero__topline><div class="stack stack--hero"><div class=stage-hero__eyebrow-row><div class=stage-hero__eyebrow></div></div><div class=stage-hero__title></div><div class=stage-hero__lede></div></div></div><div class="hero-focus-grid hero-focus-grid--compact"><div class=hero-focus-card><div class=hero-focus-card__label></div><div></div><div class=hero-focus-card__detail></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div></div><div class="hero-focus-card hero-focus-card--next-step"data-testid=viewer-next-step-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div></div><div class=hero-focus-card data-testid=viewer-identity-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div><div class=hero-focus-card__detail></div></div></div><div class=stage-hero__mobile-shortcuts><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel>`), _tmpl$38 = /* @__PURE__ */ template(`<div class="badge-row stage-hero__selection">`), _tmpl$39 = /* @__PURE__ */ template(`<div class=toolbar><button type=button>`), _tmpl$40 = /* @__PURE__ */ template(`<div class=stage-hero__secondary-action data-hero-secondary-action=true>`), _tmpl$41 = /* @__PURE__ */ template(`<div class=stack><div class=field><label for=entity-search></label><input id=entity-search type=search></div><div><div class="panel__title panel__title--spaced"></div><div class=list></div></div><div><div class="panel__title panel__title--spaced"></div><div class=list>`), _tmpl$42 = /* @__PURE__ */ template(`<span class=list-item__selected-label>`), _tmpl$43 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=agent><div class=list-item__header><div class=list-item__title></div></div><div class=list-item__meta><span class=entity-id></span></div><div class=badge-row></div><div class=list-item__meta></div><div class=list-item__meta>`), _tmpl$44 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=location><div class=list-item__header><div class=list-item__title></div></div><div class=list-item__meta>`), _tmpl$45 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=logout>`), _tmpl$46 = /* @__PURE__ */ template(`<button data-auth-action=logout>`), _tmpl$47 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$48 = /* @__PURE__ */ template(`<div data-viewer-overlay=world-summary><details class=gameplay-details-surface id=viewer-gameplay-details><summary class=gameplay-details-surface__summary><div class=diagnostic-surface__title><span></span><span class=diagnostic-surface__meta></span></div></summary><div class="stack flow-top"><details id=viewer-diagnostics-panel class="panel diagnostic-surface"data-viewer-surface=diagnostics><summary class="panel__header diagnostic-surface__summary"><div class=diagnostic-surface__title><div class=panel__title></div><div class=diagnostic-surface__meta></div></div><div class=badge-row></div></summary><div class="panel__body stack"><div class=badge-row></div><div class=badge-row></div><div class=toolbar></div><div class=summary-grid></div><div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$49 = /* @__PURE__ */ template(`<div class="badge-row badge-row--spaced">`), _tmpl$50 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced"></div><div class=action-grid>`), _tmpl$51 = /* @__PURE__ */ template(`<div class=feedback-summary data-testid=validation-unlock-preview>`), _tmpl$52 = /* @__PURE__ */ template(`<div class=feedback-summary><a href=#viewer-details-panel>`), _tmpl$53 = /* @__PURE__ */ template(`<div class="badge-row command-surface__auth-boundary">`), _tmpl$54 = /* @__PURE__ */ template(`<div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=4>`), _tmpl$55 = /* @__PURE__ */ template(`<div class=toolbar><button data-chat-send=1>`), _tmpl$56 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-visibility-toggle=1>`), _tmpl$57 = /* @__PURE__ */ template(`<div class=feedback-detail data-prompt-readiness=blocked role=status aria-live=polite>`), _tmpl$58 = /* @__PURE__ */ template(`<div class=field><label for=strong-auth-approval-code></label><input id=strong-auth-approval-code type=password autocomplete=off>`), _tmpl$59 = /* @__PURE__ */ template(`<div class=field><label for=prompt-system></label><textarea id=prompt-system rows=4>`), _tmpl$60 = /* @__PURE__ */ template(`<div class=field><label for=prompt-short></label><textarea id=prompt-short rows=3>`), _tmpl$61 = /* @__PURE__ */ template(`<div class=field><label for=prompt-long></label><textarea id=prompt-long rows=3>`), _tmpl$62 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-action=preview></button><button data-prompt-action=apply>`), _tmpl$63 = /* @__PURE__ */ template(`<div class=toolbar><div class="field field--inline-flex"><label for=prompt-rollback-version></label><input id=prompt-rollback-version type=number min=0 step=1></div><button data-prompt-action=rollback>`), _tmpl$64 = /* @__PURE__ */ template(`<div class=toolbar data-prompt-recovery=binding><button type=button data-testid=prompt-recovery-cta data-prompt-recovery-action=refresh-binding>`), _tmpl$65 = /* @__PURE__ */ template(`<div class=toolbar><button disabled>`), _tmpl$66 = /* @__PURE__ */ template(`<div class="stack command-surface"><div class="badge-row command-surface__target-row"data-command-continuity=target><div class=command-surface__continuity-summary data-command-continuity=summary role=group><span><span class=metric__label></span> </span><span><span class=metric__label></span> </span><span class=command-surface__continuity-objective><span class=metric__label></span> </span></div></div><details class="diagnostic command-surface__capability-details"><summary></summary><div class="badge-row command-surface__capability-row command-surface__diagnostic-strip"></div></details><details class="diagnostic command-surface__advanced-details"><summary></summary></details><details class="diagnostic command-surface__asset-details"><summary>`), _tmpl$67 = /* @__PURE__ */ template(`<div class="stack command-surface command-surface--non-agent"data-command-target-kind=location><div class="badge-row command-surface__target-row"data-command-continuity=target>`), _tmpl$68 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced panel__title--danger"></div><pre class=json>`), _tmpl$69 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div><div class="panel__title panel__title--spaced"></div><div class=badge-row></div><div class="feedback-detail flow-top">`), _tmpl$70 = /* @__PURE__ */ template(`<div class=viewer-module-details data-viewer-module-details=true><div class="panel__title panel__title--spaced"></div><div class=badge-row></div><div class=feedback-detail><strong></strong>: </div><div class=feedback-detail><strong></strong>: </div><div class=feedback-detail><strong></strong>: `), _tmpl$71 = /* @__PURE__ */ template(`<div class=viewer-shell data-viewer-shell=player-fullscreen><section class="panel panel--targets"id=viewer-targets-panel data-viewer-route-panel=targets data-viewer-overlay=targets tabindex=-1 data-viewer-surface=targets><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div><a class=panel__route-close href=#viewer-stage-panel></a></div><div class=panel__body></div></section><section class="panel panel--stage"id=viewer-stage-panel tabindex=-1 data-viewer-map-layer=base data-viewer-surface=stage><div class="panel__body panel__body--stage"><div class=stack></div></div></section><section class="panel panel--details"id=viewer-details-panel data-viewer-route-panel=command data-viewer-overlay=command tabindex=-1 data-viewer-surface=command><div class="panel__header panel__header--stack command-route-chrome"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div><a class=panel__route-close href=#viewer-stage-panel></a></div><div class=panel__body>`);
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
 const [viewerStateRevision, setViewerStateRevision] = createSignal(0);
 function observeViewerStateRevision() {
@@ -20138,15 +20643,19 @@ function FeedbackCard(props) {
       }
     }), null);
     createRenderEffect((_p$) => {
-      var _v$0 = feedbackStage(), _v$1 = props.liveRegion ? "status" : void 0, _v$10 = props.liveRegion ? "polite" : void 0;
+      var _v$0 = feedbackStage(), _v$1 = props.feedback?.kind, _v$10 = props.feedback?.kind === "prompt" ? props.feedback?.response?.value_visibility : void 0, _v$11 = props.liveRegion ? "status" : void 0, _v$12 = props.liveRegion ? "polite" : void 0;
       _v$0 !== _p$.e && setAttribute(_el$41, "data-feedback-stage", _p$.e = _v$0);
-      _v$1 !== _p$.t && setAttribute(_el$41, "role", _p$.t = _v$1);
-      _v$10 !== _p$.a && setAttribute(_el$41, "aria-live", _p$.a = _v$10);
+      _v$1 !== _p$.t && setAttribute(_el$41, "data-feedback-kind", _p$.t = _v$1);
+      _v$10 !== _p$.a && setAttribute(_el$41, "data-prompt-value-visibility", _p$.a = _v$10);
+      _v$11 !== _p$.o && setAttribute(_el$41, "role", _p$.o = _v$11);
+      _v$12 !== _p$.i && setAttribute(_el$41, "aria-live", _p$.i = _v$12);
       return _p$;
     }, {
       e: void 0,
       t: void 0,
-      a: void 0
+      a: void 0,
+      o: void 0,
+      i: void 0
     });
     return _el$41;
   })();
@@ -20227,12 +20736,12 @@ function EventCard(props) {
     }), null);
     insert(_el$50, () => props.children, null);
     createRenderEffect((_p$) => {
-      var _v$11 = props.class ?? "event-card", _v$12 = props.actionState, _v$13 = props.testId, _v$14 = props.role, _v$15 = props.ariaLive;
-      _v$11 !== _p$.e && className(_el$50, _p$.e = _v$11);
-      _v$12 !== _p$.t && setAttribute(_el$50, "data-action-state", _p$.t = _v$12);
-      _v$13 !== _p$.a && setAttribute(_el$50, "data-testid", _p$.a = _v$13);
-      _v$14 !== _p$.o && setAttribute(_el$50, "role", _p$.o = _v$14);
-      _v$15 !== _p$.i && setAttribute(_el$50, "aria-live", _p$.i = _v$15);
+      var _v$13 = props.class ?? "event-card", _v$14 = props.actionState, _v$15 = props.testId, _v$16 = props.role, _v$17 = props.ariaLive;
+      _v$13 !== _p$.e && className(_el$50, _p$.e = _v$13);
+      _v$14 !== _p$.t && setAttribute(_el$50, "data-action-state", _p$.t = _v$14);
+      _v$15 !== _p$.a && setAttribute(_el$50, "data-testid", _p$.a = _v$15);
+      _v$16 !== _p$.o && setAttribute(_el$50, "role", _p$.o = _v$16);
+      _v$17 !== _p$.i && setAttribute(_el$50, "aria-live", _p$.i = _v$17);
       return _p$;
     }, {
       e: void 0,
@@ -20294,9 +20803,9 @@ function CalloutCard(props) {
     }), null);
     insert(_el$65, () => props.children);
     createRenderEffect((_p$) => {
-      var _v$16 = `callout ${props.variant === "warn" ? "callout--warn" : ""} ${props.class ?? ""}`, _v$17 = props.kind ?? "";
-      _v$16 !== _p$.e && className(_el$62, _p$.e = _v$16);
-      _v$17 !== _p$.t && setAttribute(_el$62, "data-callout-kind", _p$.t = _v$17);
+      var _v$18 = `callout ${props.variant === "warn" ? "callout--warn" : ""} ${props.class ?? ""}`, _v$19 = props.kind ?? "";
+      _v$18 !== _p$.e && className(_el$62, _p$.e = _v$18);
+      _v$19 !== _p$.t && setAttribute(_el$62, "data-callout-kind", _p$.t = _v$19);
       return _p$;
     }, {
       e: void 0,
@@ -20361,9 +20870,9 @@ function HostedLoginForm(props) {
             clearHostedLoginError();
           };
           createRenderEffect((_p$) => {
-            var _v$18 = props.codeId ?? "hosted-login-code", _v$19 = props.codeId ?? "hosted-login-code";
-            _v$18 !== _p$.e && setAttribute(_el$75, "for", _p$.e = _v$18);
-            _v$19 !== _p$.t && setAttribute(_el$76, "id", _p$.t = _v$19);
+            var _v$20 = props.codeId ?? "hosted-login-code", _v$21 = props.codeId ?? "hosted-login-code";
+            _v$20 !== _p$.e && setAttribute(_el$75, "for", _p$.e = _v$20);
+            _v$21 !== _p$.t && setAttribute(_el$76, "id", _p$.t = _v$21);
             return _p$;
           }, {
             e: void 0,
@@ -20411,10 +20920,10 @@ function HostedLoginForm(props) {
       }
     }), null);
     createRenderEffect((_p$) => {
-      var _v$20 = props.handleId ?? "hosted-login-handle", _v$21 = props.handleId ?? "hosted-login-handle", _v$22 = state.hostedLogin.startInFlight;
-      _v$20 !== _p$.e && setAttribute(_el$69, "for", _p$.e = _v$20);
-      _v$21 !== _p$.t && setAttribute(_el$70, "id", _p$.t = _v$21);
-      _v$22 !== _p$.a && (_el$72.disabled = _p$.a = _v$22);
+      var _v$22 = props.handleId ?? "hosted-login-handle", _v$23 = props.handleId ?? "hosted-login-handle", _v$24 = state.hostedLogin.startInFlight;
+      _v$22 !== _p$.e && setAttribute(_el$69, "for", _p$.e = _v$22);
+      _v$23 !== _p$.t && setAttribute(_el$70, "id", _p$.t = _v$23);
+      _v$24 !== _p$.a && (_el$72.disabled = _p$.a = _v$24);
       return _p$;
     }, {
       e: void 0,
@@ -20583,9 +21092,9 @@ function ViewerEntryMenu() {
     }));
     insert(_el$102, () => viewerEntryUrls().softwareSafeUrl);
     createRenderEffect((_p$) => {
-      var _v$23 = locale() === "zh", _v$24 = locale() === "en";
-      _v$23 !== _p$.e && (_el$99.disabled = _p$.e = _v$23);
-      _v$24 !== _p$.t && (_el$100.disabled = _p$.t = _v$24);
+      var _v$25 = locale() === "zh", _v$26 = locale() === "en";
+      _v$25 !== _p$.e && (_el$99.disabled = _p$.e = _v$25);
+      _v$26 !== _p$.t && (_el$100.disabled = _p$.t = _v$26);
       return _p$;
     }, {
       e: void 0,
@@ -20999,10 +21508,10 @@ function StarterOcOnboardingPanel(props) {
             _el$119.$$click = () => renderGameplayAction(starterAction());
             insert(_el$119, () => gameplayActionDisplayLabel(starterAction(), locale()));
             createRenderEffect((_p$) => {
-              var _v$25 = gameplayActionButtonClass(starterAction()), _v$26 = gameplayActionButtonBusyAttrs(starterAction()), _v$27 = gameplayActionButtonDisabled(starterAction(), gameplay(), locale());
-              _v$25 !== _p$.e && className(_el$119, _p$.e = _v$25);
-              _v$26 !== _p$.t && setAttribute(_el$119, "aria-busy", _p$.t = _v$26);
-              _v$27 !== _p$.a && (_el$119.disabled = _p$.a = _v$27);
+              var _v$27 = gameplayActionButtonClass(starterAction()), _v$28 = gameplayActionButtonBusyAttrs(starterAction()), _v$29 = gameplayActionButtonDisabled(starterAction(), gameplay(), locale());
+              _v$27 !== _p$.e && className(_el$119, _p$.e = _v$27);
+              _v$28 !== _p$.t && setAttribute(_el$119, "aria-busy", _p$.t = _v$28);
+              _v$29 !== _p$.a && (_el$119.disabled = _p$.a = _v$29);
               return _p$;
             }, {
               e: void 0,
@@ -21275,10 +21784,10 @@ function StarterOcRequiredGate() {
           typeof _ref$4 === "function" ? use(_ref$4, _el$141) : primaryButtonRef = _el$141;
           insert(_el$141, () => gameplayActionDisplayLabel(nextAction(), locale(), creditConfirmed() ? tr(locale(), "开始第一次 Agent 聊天", "Start First Agent Chat") : pendingCredit() ? tr(locale(), "手动再确认一次", "Retry Confirmation") : gameplayActionButtonLabel(nextAction(), locale())));
           createRenderEffect((_p$) => {
-            var _v$28 = gameplayActionButtonClass(nextAction()), _v$29 = gameplayActionButtonBusyAttrs(nextAction()), _v$30 = gameplayActionButtonDisabled(nextAction(), gameplay(), locale());
-            _v$28 !== _p$.e && className(_el$141, _p$.e = _v$28);
-            _v$29 !== _p$.t && setAttribute(_el$141, "aria-busy", _p$.t = _v$29);
-            _v$30 !== _p$.a && (_el$141.disabled = _p$.a = _v$30);
+            var _v$30 = gameplayActionButtonClass(nextAction()), _v$31 = gameplayActionButtonBusyAttrs(nextAction()), _v$32 = gameplayActionButtonDisabled(nextAction(), gameplay(), locale());
+            _v$30 !== _p$.e && className(_el$141, _p$.e = _v$30);
+            _v$31 !== _p$.t && setAttribute(_el$141, "aria-busy", _p$.t = _v$31);
+            _v$32 !== _p$.a && (_el$141.disabled = _p$.a = _v$32);
             return _p$;
           }, {
             e: void 0,
@@ -21481,10 +21990,10 @@ function AgentClaimPanel(props) {
         };
         insert(_el$153, () => gameplayActionDisplayLabel(claimAction(), locale(), tr(locale(), "认领 Agent", "Claim Agent")));
         createRenderEffect((_p$) => {
-          var _v$31 = gameplayActionButtonClass(claimAction()), _v$32 = gameplayActionButtonBusyAttrs(claimAction()), _v$33 = Boolean(disabledReason()) || gameplayActionPendingFor(claimAction());
-          _v$31 !== _p$.e && className(_el$153, _p$.e = _v$31);
-          _v$32 !== _p$.t && setAttribute(_el$153, "aria-busy", _p$.t = _v$32);
-          _v$33 !== _p$.a && (_el$153.disabled = _p$.a = _v$33);
+          var _v$33 = gameplayActionButtonClass(claimAction()), _v$34 = gameplayActionButtonBusyAttrs(claimAction()), _v$35 = Boolean(disabledReason()) || gameplayActionPendingFor(claimAction());
+          _v$33 !== _p$.e && className(_el$153, _p$.e = _v$33);
+          _v$34 !== _p$.t && setAttribute(_el$153, "aria-busy", _p$.t = _v$34);
+          _v$35 !== _p$.a && (_el$153.disabled = _p$.a = _v$35);
           return _p$;
         }, {
           e: void 0,
@@ -21660,13 +22169,13 @@ function WorldStageHero() {
               _el$188.$$click = () => renderGameplayAction(action2());
               insert(_el$188, () => gameplayActionDisplayLabel(action2(), locale()));
               createRenderEffect((_p$) => {
-                var _v$37 = tr(locale(), "下一步动作", "Next Move action"), _v$38 = gameplayActionTestId(action2(), "recommended"), _v$39 = gameplayActionButtonClass(action2()), _v$40 = gameplayActionButtonBusyAttrs(action2()), _v$41 = gameplayActionButtonDisabled(action2(), gameplaySummary(), locale()), _v$42 = gameplayActionDisabledReason(action2(), gameplaySummary(), locale()) ? gameplayActionBlockedReasonId(action2()) : void 0;
-                _v$37 !== _p$.e && setAttribute(_el$187, "aria-label", _p$.e = _v$37);
-                _v$38 !== _p$.t && setAttribute(_el$188, "data-testid", _p$.t = _v$38);
-                _v$39 !== _p$.a && className(_el$188, _p$.a = _v$39);
-                _v$40 !== _p$.o && setAttribute(_el$188, "aria-busy", _p$.o = _v$40);
-                _v$41 !== _p$.i && (_el$188.disabled = _p$.i = _v$41);
-                _v$42 !== _p$.n && setAttribute(_el$188, "aria-describedby", _p$.n = _v$42);
+                var _v$39 = tr(locale(), "下一步动作", "Next Move action"), _v$40 = gameplayActionTestId(action2(), "recommended"), _v$41 = gameplayActionButtonClass(action2()), _v$42 = gameplayActionButtonBusyAttrs(action2()), _v$43 = gameplayActionButtonDisabled(action2(), gameplaySummary(), locale()), _v$44 = gameplayActionDisabledReason(action2(), gameplaySummary(), locale()) ? gameplayActionBlockedReasonId(action2()) : void 0;
+                _v$39 !== _p$.e && setAttribute(_el$187, "aria-label", _p$.e = _v$39);
+                _v$40 !== _p$.t && setAttribute(_el$188, "data-testid", _p$.t = _v$40);
+                _v$41 !== _p$.a && className(_el$188, _p$.a = _v$41);
+                _v$42 !== _p$.o && setAttribute(_el$188, "aria-busy", _p$.o = _v$42);
+                _v$43 !== _p$.i && (_el$188.disabled = _p$.i = _v$43);
+                _v$44 !== _p$.n && setAttribute(_el$188, "aria-describedby", _p$.n = _v$44);
                 return _p$;
               }, {
                 e: void 0,
@@ -21728,10 +22237,10 @@ function WorldStageHero() {
       }
     }), null);
     createRenderEffect((_p$) => {
-      var _v$34 = gameplaySummary()?.blockerKind || "ready", _v$35 = gameplayStageToneClass(gameplaySummary()?.stageStatus), _v$36 = tr(locale(), "移动端快速入口", "Mobile quick actions");
-      _v$34 !== _p$.e && setAttribute(_el$155, "data-stage-state", _p$.e = _v$34);
-      _v$35 !== _p$.t && className(_el$165, _p$.t = _v$35);
-      _v$36 !== _p$.a && setAttribute(_el$179, "aria-label", _p$.a = _v$36);
+      var _v$36 = gameplaySummary()?.blockerKind || "ready", _v$37 = gameplayStageToneClass(gameplaySummary()?.stageStatus), _v$38 = tr(locale(), "移动端快速入口", "Mobile quick actions");
+      _v$36 !== _p$.e && setAttribute(_el$155, "data-stage-state", _p$.e = _v$36);
+      _v$37 !== _p$.t && className(_el$165, _p$.t = _v$37);
+      _v$38 !== _p$.a && setAttribute(_el$179, "aria-label", _p$.a = _v$38);
       return _p$;
     }, {
       e: void 0,
@@ -21832,10 +22341,10 @@ function TargetsPanel() {
             _el$202.$$click = () => renderGameplayAction(action2());
             insert(_el$202, () => gameplayActionDisplayLabel(action2(), locale()));
             createRenderEffect((_p$) => {
-              var _v$43 = gameplayActionButtonClass(action2()), _v$44 = gameplayActionButtonBusyAttrs(action2()), _v$45 = gameplayActionButtonDisabled(action2(), gameplaySummary(), locale());
-              _v$43 !== _p$.e && className(_el$202, _p$.e = _v$43);
-              _v$44 !== _p$.t && setAttribute(_el$202, "aria-busy", _p$.t = _v$44);
-              _v$45 !== _p$.a && (_el$202.disabled = _p$.a = _v$45);
+              var _v$45 = gameplayActionButtonClass(action2()), _v$46 = gameplayActionButtonBusyAttrs(action2()), _v$47 = gameplayActionButtonDisabled(action2(), gameplaySummary(), locale());
+              _v$45 !== _p$.e && className(_el$202, _p$.e = _v$45);
+              _v$46 !== _p$.t && setAttribute(_el$202, "aria-busy", _p$.t = _v$46);
+              _v$47 !== _p$.a && (_el$202.disabled = _p$.a = _v$47);
               return _p$;
             }, {
               e: void 0,
@@ -21925,12 +22434,12 @@ function TargetsPanel() {
               }), _el$211);
               insert(_el$211, () => status().detail);
               createRenderEffect((_p$) => {
-                var _v$46 = index() === 0 ? "viewer-playthrough-select-agent" : `viewer-select-agent-${agent.id}`, _v$47 = agent.id, _v$48 = status().kind, _v$49 = isSelectedTarget("agent", agent.id), _v$50 = isSelectedTarget("agent", agent.id) ? "true" : "false";
-                _v$46 !== _p$.e && setAttribute(_el$203, "data-testid", _p$.e = _v$46);
-                _v$47 !== _p$.t && setAttribute(_el$203, "data-select-id", _p$.t = _v$47);
-                _v$48 !== _p$.a && setAttribute(_el$203, "data-agent-session-status", _p$.a = _v$48);
-                _v$49 !== _p$.o && setAttribute(_el$203, "data-selected", _p$.o = _v$49);
-                _v$50 !== _p$.i && setAttribute(_el$203, "aria-pressed", _p$.i = _v$50);
+                var _v$48 = index() === 0 ? "viewer-playthrough-select-agent" : `viewer-select-agent-${agent.id}`, _v$49 = agent.id, _v$50 = status().kind, _v$51 = isSelectedTarget("agent", agent.id), _v$52 = isSelectedTarget("agent", agent.id) ? "true" : "false";
+                _v$48 !== _p$.e && setAttribute(_el$203, "data-testid", _p$.e = _v$48);
+                _v$49 !== _p$.t && setAttribute(_el$203, "data-select-id", _p$.t = _v$49);
+                _v$50 !== _p$.a && setAttribute(_el$203, "data-agent-session-status", _p$.a = _v$50);
+                _v$51 !== _p$.o && setAttribute(_el$203, "data-selected", _p$.o = _v$51);
+                _v$52 !== _p$.i && setAttribute(_el$203, "aria-pressed", _p$.i = _v$52);
                 return _p$;
               }, {
                 e: void 0,
@@ -21988,11 +22497,11 @@ function TargetsPanel() {
             }), null);
             insert(_el$216, () => `id=${location.id} · ${tr(locale(), "半径", "radius")}=${formatPhysicalDistanceCm(location.profile?.radius_cm, locale()) || "-"} · ${tr(locale(), "资源", "resources")}=${renderResourceSummary(location.resources)}`);
             createRenderEffect((_p$) => {
-              var _v$51 = `viewer-select-location-${location.id}`, _v$52 = location.id, _v$53 = isSelectedTarget("location", location.id), _v$54 = isSelectedTarget("location", location.id) ? "true" : "false";
-              _v$51 !== _p$.e && setAttribute(_el$212, "data-testid", _p$.e = _v$51);
-              _v$52 !== _p$.t && setAttribute(_el$212, "data-select-id", _p$.t = _v$52);
-              _v$53 !== _p$.a && setAttribute(_el$212, "data-selected", _p$.a = _v$53);
-              _v$54 !== _p$.o && setAttribute(_el$212, "aria-pressed", _p$.o = _v$54);
+              var _v$53 = `viewer-select-location-${location.id}`, _v$54 = location.id, _v$55 = isSelectedTarget("location", location.id), _v$56 = isSelectedTarget("location", location.id) ? "true" : "false";
+              _v$53 !== _p$.e && setAttribute(_el$212, "data-testid", _p$.e = _v$53);
+              _v$54 !== _p$.t && setAttribute(_el$212, "data-select-id", _p$.t = _v$54);
+              _v$55 !== _p$.a && setAttribute(_el$212, "data-selected", _p$.a = _v$55);
+              _v$56 !== _p$.o && setAttribute(_el$212, "aria-pressed", _p$.o = _v$56);
               return _p$;
             }, {
               e: void 0,
@@ -22995,13 +23504,13 @@ function WorldSummaryPanel(props = {}) {
                             _el$293.$$click = () => renderGameplayAction(action2);
                             insert(_el$293, () => gameplayActionDisplayLabel(action2, locale()));
                             createRenderEffect((_p$) => {
-                              var _v$55 = gameplayActionTestId(action2), _v$56 = action2.label || action2.actionId || void 0, _v$57 = gameplayActionButtonClass(action2), _v$58 = gameplayActionButtonBusyAttrs(action2), _v$59 = gameplayActionButtonDisabled(action2, gameplay(), locale()), _v$60 = disabledReason() ? blockedReasonId : void 0;
-                              _v$55 !== _p$.e && setAttribute(_el$293, "data-testid", _p$.e = _v$55);
-                              _v$56 !== _p$.t && setAttribute(_el$293, "aria-label", _p$.t = _v$56);
-                              _v$57 !== _p$.a && className(_el$293, _p$.a = _v$57);
-                              _v$58 !== _p$.o && setAttribute(_el$293, "aria-busy", _p$.o = _v$58);
-                              _v$59 !== _p$.i && (_el$293.disabled = _p$.i = _v$59);
-                              _v$60 !== _p$.n && setAttribute(_el$293, "aria-describedby", _p$.n = _v$60);
+                              var _v$57 = gameplayActionTestId(action2), _v$58 = action2.label || action2.actionId || void 0, _v$59 = gameplayActionButtonClass(action2), _v$60 = gameplayActionButtonBusyAttrs(action2), _v$61 = gameplayActionButtonDisabled(action2, gameplay(), locale()), _v$62 = disabledReason() ? blockedReasonId : void 0;
+                              _v$57 !== _p$.e && setAttribute(_el$293, "data-testid", _p$.e = _v$57);
+                              _v$58 !== _p$.t && setAttribute(_el$293, "aria-label", _p$.t = _v$58);
+                              _v$59 !== _p$.a && className(_el$293, _p$.a = _v$59);
+                              _v$60 !== _p$.o && setAttribute(_el$293, "aria-busy", _p$.o = _v$60);
+                              _v$61 !== _p$.i && (_el$293.disabled = _p$.i = _v$61);
+                              _v$62 !== _p$.n && setAttribute(_el$293, "aria-describedby", _p$.n = _v$62);
                               return _p$;
                             }, {
                               e: void 0,
@@ -23036,13 +23545,13 @@ function WorldSummaryPanel(props = {}) {
                             _el$295.$$click = () => renderGameplayAction(action2);
                             insert(_el$295, () => gameplayActionDisplayLabel(action2, locale()));
                             createRenderEffect((_p$) => {
-                              var _v$61 = gameplayActionTestId(action2), _v$62 = action2.label || action2.actionId || void 0, _v$63 = gameplayActionButtonClass(action2), _v$64 = gameplayActionButtonBusyAttrs(action2), _v$65 = gameplayActionButtonDisabled(action2, gameplay(), locale()), _v$66 = disabledReason() ? blockedReasonId : void 0;
-                              _v$61 !== _p$.e && setAttribute(_el$295, "data-testid", _p$.e = _v$61);
-                              _v$62 !== _p$.t && setAttribute(_el$295, "aria-label", _p$.t = _v$62);
-                              _v$63 !== _p$.a && className(_el$295, _p$.a = _v$63);
-                              _v$64 !== _p$.o && setAttribute(_el$295, "aria-busy", _p$.o = _v$64);
-                              _v$65 !== _p$.i && (_el$295.disabled = _p$.i = _v$65);
-                              _v$66 !== _p$.n && setAttribute(_el$295, "aria-describedby", _p$.n = _v$66);
+                              var _v$63 = gameplayActionTestId(action2), _v$64 = action2.label || action2.actionId || void 0, _v$65 = gameplayActionButtonClass(action2), _v$66 = gameplayActionButtonBusyAttrs(action2), _v$67 = gameplayActionButtonDisabled(action2, gameplay(), locale()), _v$68 = disabledReason() ? blockedReasonId : void 0;
+                              _v$63 !== _p$.e && setAttribute(_el$295, "data-testid", _p$.e = _v$63);
+                              _v$64 !== _p$.t && setAttribute(_el$295, "aria-label", _p$.t = _v$64);
+                              _v$65 !== _p$.a && className(_el$295, _p$.a = _v$65);
+                              _v$66 !== _p$.o && setAttribute(_el$295, "aria-busy", _p$.o = _v$66);
+                              _v$67 !== _p$.i && (_el$295.disabled = _p$.i = _v$67);
+                              _v$68 !== _p$.n && setAttribute(_el$295, "aria-describedby", _p$.n = _v$68);
                               return _p$;
                             }, {
                               e: void 0,
@@ -23871,31 +24380,36 @@ function InteractionPanel() {
   const promptSettingsSummary = () => promptOverridesVisible() ? tr(locale(), "高级提示词设置已展开；你可以继续做预览、应用、回滚，页面也会显示最近一次反馈。", "Advanced prompt settings are expanded; preview/apply/rollback and the latest prompt feedback are visible.") : tr(locale(), "提示词覆盖默认收起，避免把操作员级编辑控件直接堆在主入口。显式展开后仍可做预览、应用、回滚，`__AW_TEST__.sendPromptControl(...)` 也保持可用。", "Prompt Overrides stay hidden by default so operator-level editing controls do not dominate the primary entry. Expanding them keeps preview/apply/rollback available, and `__AW_TEST__.sendPromptControl(...)` remains available.");
   const promptSettingsButtonLabel = () => promptOverridesVisible() ? tr(locale(), "收起提示词覆盖", "Hide Prompt Overrides") : tr(locale(), "显示提示词覆盖", "Show Prompt Overrides");
   const playerSessionReadyCopy = () => tr(locale(), "当前 Agent 已绑定到你的本地玩家会话。可以直接发送第一条聊天指令；提示词和资产治理能力先收在后置区域。", "This Agent is bound to your local player session. Send the first chat command here; prompt and asset/governance controls stay in the deferred area.");
-  const commandBoundaryCopy = () => canControlSelectedAgent() ? playerSessionReadyCopy() : selectedAgentControlReason();
+  const commandBoundaryCopy = () => canControlSelectedAgent() ? interactionEnabled() ? playerSessionReadyCopy() : promptCapability().reason : selectedAgentControlReason();
+  const promptControlDisabledReason = () => canControlSelectedAgent() ? promptCapability().reason : selectedAgentControlReason();
+  const promptRecoveryRequired = () => {
+    const feedback = promptFeedback();
+    return feedback?.kind === "prompt" && feedback?.stage === "blocked" && (feedback?.response?.value_visibility === "hidden" || !!String(feedback?.response?.next_step || "").trim());
+  };
   return createComponent(Show, {
     get when() {
       return agentId();
     },
     get fallback() {
       return memo(() => selectedTarget()?.kind === "location")() ? (() => {
-        var _el$358 = _tmpl$65(), _el$359 = _el$358.firstChild;
-        insert(_el$359, createComponent(Badge, {
+        var _el$361 = _tmpl$67(), _el$362 = _el$361.firstChild;
+        insert(_el$362, createComponent(Badge, {
           "class": "badge badge--accent",
           get children() {
             return tr(locale(), "当前核查目标", "Current Inspect Target");
           }
         }), null);
-        insert(_el$359, createComponent(Badge, {
+        insert(_el$362, createComponent(Badge, {
           get children() {
             return selectedTargetLabel();
           }
         }), null);
-        insert(_el$359, createComponent(Badge, {
+        insert(_el$362, createComponent(Badge, {
           get children() {
             return `location=${selectedTarget()?.id}`;
           }
         }), null);
-        insert(_el$358, createComponent(AgentContextLite, {
+        insert(_el$361, createComponent(AgentContextLite, {
           get model() {
             return selectedAgentContextModel();
           },
@@ -23906,7 +24420,7 @@ function InteractionPanel() {
             return selectedAgentContextFixtureMetadata();
           }
         }), null);
-        return _el$358;
+        return _el$361;
       })() : createComponent(Show, {
         get when() {
           return selectedAgentId$1();
@@ -23943,13 +24457,13 @@ function InteractionPanel() {
       });
     },
     get children() {
-      var _el$302 = _tmpl$64(), _el$303 = _el$302.firstChild, _el$304 = _el$303.firstChild, _el$305 = _el$304.firstChild, _el$306 = _el$305.firstChild;
+      var _el$302 = _tmpl$66(), _el$303 = _el$302.firstChild, _el$304 = _el$303.firstChild, _el$305 = _el$304.firstChild, _el$306 = _el$305.firstChild;
       _el$306.nextSibling;
       var _el$308 = _el$305.nextSibling, _el$309 = _el$308.firstChild;
       _el$309.nextSibling;
       var _el$311 = _el$308.nextSibling, _el$312 = _el$311.firstChild;
       _el$312.nextSibling;
-      var _el$315 = _el$303.nextSibling, _el$316 = _el$315.firstChild, _el$317 = _el$316.nextSibling, _el$326 = _el$315.nextSibling, _el$327 = _el$326.firstChild, _el$353 = _el$326.nextSibling, _el$354 = _el$353.firstChild;
+      var _el$315 = _el$303.nextSibling, _el$316 = _el$315.firstChild, _el$317 = _el$316.nextSibling, _el$326 = _el$315.nextSibling, _el$327 = _el$326.firstChild, _el$356 = _el$326.nextSibling, _el$357 = _el$356.firstChild;
       insert(_el$303, createComponent(Badge, {
         "class": "badge badge--accent command-surface__target-secondary",
         get children() {
@@ -24085,21 +24599,21 @@ function InteractionPanel() {
           return memo(() => !!(!starterOcGateOpen() && canControlSelectedAgent()))() && commandStarterOcAction();
         },
         children: (action2) => (() => {
-          var _el$360 = _tmpl$31(), _el$361 = _el$360.firstChild;
-          _el$361.$$click = () => renderGameplayAction(action2());
-          insert(_el$361, () => gameplayActionDisplayLabel(action2(), locale()));
+          var _el$363 = _tmpl$31(), _el$364 = _el$363.firstChild;
+          _el$364.$$click = () => renderGameplayAction(action2());
+          insert(_el$364, () => gameplayActionDisplayLabel(action2(), locale()));
           createRenderEffect((_p$) => {
-            var _v$76 = gameplayActionButtonClass(action2()), _v$77 = gameplayActionButtonBusyAttrs(action2()), _v$78 = gameplayActionButtonDisabled(action2(), gameplaySummary(), locale());
-            _v$76 !== _p$.e && className(_el$361, _p$.e = _v$76);
-            _v$77 !== _p$.t && setAttribute(_el$361, "aria-busy", _p$.t = _v$77);
-            _v$78 !== _p$.a && (_el$361.disabled = _p$.a = _v$78);
+            var _v$78 = gameplayActionButtonClass(action2()), _v$79 = gameplayActionButtonBusyAttrs(action2()), _v$80 = gameplayActionButtonDisabled(action2(), gameplaySummary(), locale());
+            _v$78 !== _p$.e && className(_el$364, _p$.e = _v$78);
+            _v$79 !== _p$.t && setAttribute(_el$364, "aria-busy", _p$.t = _v$79);
+            _v$80 !== _p$.a && (_el$364.disabled = _p$.a = _v$80);
             return _p$;
           }, {
             e: void 0,
             t: void 0,
             a: void 0
           });
-          return _el$360;
+          return _el$363;
         })()
       }), _el$326);
       insert(_el$302, createComponent(PanelSection, {
@@ -24122,9 +24636,9 @@ function InteractionPanel() {
               state.chatDraft.dirty = true;
             };
             createRenderEffect((_p$) => {
-              var _v$67 = tr(locale(), "给当前选中的行动体发一条消息", "Send a message to the selected agent"), _v$68 = !chatControlsEnabled();
-              _v$67 !== _p$.e && setAttribute(_el$320, "placeholder", _p$.e = _v$67);
-              _v$68 !== _p$.t && (_el$320.disabled = _p$.t = _v$68);
+              var _v$69 = tr(locale(), "给当前选中的行动体发一条消息", "Send a message to the selected agent"), _v$70 = !chatControlsEnabled();
+              _v$69 !== _p$.e && setAttribute(_el$320, "placeholder", _p$.e = _v$69);
+              _v$70 !== _p$.t && (_el$320.disabled = _p$.t = _v$70);
               return _p$;
             }, {
               e: void 0,
@@ -24191,9 +24705,9 @@ function InteractionPanel() {
                     },
                     get children() {
                       return [(() => {
-                        var _el$362 = _tmpl$9();
-                        insert(_el$362, () => chatEntryMessage(entry, locale()));
-                        return _el$362;
+                        var _el$365 = _tmpl$9();
+                        insert(_el$365, () => chatEntryMessage(entry, locale()));
+                        return _el$365;
                       })(), createComponent(DiagnosticDetails, {
                         value: entry
                       })];
@@ -24284,88 +24798,97 @@ function InteractionPanel() {
                 return _el$332;
               })(), createComponent(Show, {
                 get when() {
+                  return !promptControlsEnabled();
+                },
+                get children() {
+                  var _el$333 = _tmpl$57();
+                  insert(_el$333, promptControlDisabledReason);
+                  return _el$333;
+                }
+              }), createComponent(Show, {
+                get when() {
                   return memo(() => !!authSurface().capabilities.prompt_control.enabled)() && isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode);
                 },
                 get children() {
-                  var _el$333 = _tmpl$57(), _el$334 = _el$333.firstChild, _el$335 = _el$334.nextSibling;
-                  insert(_el$334, () => tr(locale(), "后端审批码", "Backend Approval Code"));
-                  _el$335.$$input = (event) => {
+                  var _el$334 = _tmpl$58(), _el$335 = _el$334.firstChild, _el$336 = _el$335.nextSibling;
+                  insert(_el$335, () => tr(locale(), "后端审批码", "Backend Approval Code"));
+                  _el$336.$$input = (event) => {
                     state.strongAuth.approvalCode = String(event.currentTarget.value || "");
                   };
-                  createRenderEffect(() => _el$335.value = state.strongAuth.approvalCode || "");
-                  return _el$333;
+                  createRenderEffect(() => _el$336.value = state.strongAuth.approvalCode || "");
+                  return _el$334;
                 }
               }), (() => {
-                var _el$336 = _tmpl$58(), _el$337 = _el$336.firstChild, _el$338 = _el$337.nextSibling;
-                insert(_el$337, () => tr(locale(), "系统提示词覆盖", "System Prompt Override"));
-                _el$338.$$input = (event) => {
+                var _el$337 = _tmpl$59(), _el$338 = _el$337.firstChild, _el$339 = _el$338.nextSibling;
+                insert(_el$338, () => tr(locale(), "系统提示词覆盖", "System Prompt Override"));
+                _el$339.$$input = (event) => {
                   state.promptDraft.systemPrompt = String(event.currentTarget.value || "");
                   state.promptDraft.dirty = true;
                 };
-                createRenderEffect(() => _el$338.disabled = !promptControlsEnabled());
-                createRenderEffect(() => _el$338.value = state.promptDraft.systemPrompt);
-                return _el$336;
+                createRenderEffect(() => _el$339.disabled = !promptControlsEnabled());
+                createRenderEffect(() => _el$339.value = state.promptDraft.systemPrompt);
+                return _el$337;
               })(), (() => {
-                var _el$339 = _tmpl$59(), _el$340 = _el$339.firstChild, _el$341 = _el$340.nextSibling;
-                insert(_el$340, () => tr(locale(), "短期目标覆盖", "Short-Term Goal Override"));
-                _el$341.$$input = (event) => {
+                var _el$340 = _tmpl$60(), _el$341 = _el$340.firstChild, _el$342 = _el$341.nextSibling;
+                insert(_el$341, () => tr(locale(), "短期目标覆盖", "Short-Term Goal Override"));
+                _el$342.$$input = (event) => {
                   state.promptDraft.shortTermGoal = String(event.currentTarget.value || "");
                   state.promptDraft.dirty = true;
                 };
-                createRenderEffect(() => _el$341.disabled = !promptControlsEnabled());
-                createRenderEffect(() => _el$341.value = state.promptDraft.shortTermGoal);
-                return _el$339;
+                createRenderEffect(() => _el$342.disabled = !promptControlsEnabled());
+                createRenderEffect(() => _el$342.value = state.promptDraft.shortTermGoal);
+                return _el$340;
               })(), (() => {
-                var _el$342 = _tmpl$60(), _el$343 = _el$342.firstChild, _el$344 = _el$343.nextSibling;
-                insert(_el$343, () => tr(locale(), "长期目标覆盖", "Long-Term Goal Override"));
-                _el$344.$$input = (event) => {
+                var _el$343 = _tmpl$61(), _el$344 = _el$343.firstChild, _el$345 = _el$344.nextSibling;
+                insert(_el$344, () => tr(locale(), "长期目标覆盖", "Long-Term Goal Override"));
+                _el$345.$$input = (event) => {
                   state.promptDraft.longTermGoal = String(event.currentTarget.value || "");
                   state.promptDraft.dirty = true;
                 };
-                createRenderEffect(() => _el$344.disabled = !promptControlsEnabled());
-                createRenderEffect(() => _el$344.value = state.promptDraft.longTermGoal);
-                return _el$342;
+                createRenderEffect(() => _el$345.disabled = !promptControlsEnabled());
+                createRenderEffect(() => _el$345.value = state.promptDraft.longTermGoal);
+                return _el$343;
               })(), (() => {
-                var _el$345 = _tmpl$61(), _el$346 = _el$345.firstChild, _el$347 = _el$346.nextSibling;
-                _el$346.$$click = () => sendPromptControl("preview", null);
-                insert(_el$346, () => tr(locale(), "预览提示词", "Preview Prompt"));
-                _el$347.$$click = () => sendPromptControl("apply", null);
-                insert(_el$347, () => tr(locale(), "应用提示词", "Apply Prompt"));
+                var _el$346 = _tmpl$62(), _el$347 = _el$346.firstChild, _el$348 = _el$347.nextSibling;
+                _el$347.$$click = () => sendPromptControl("preview", null);
+                insert(_el$347, () => tr(locale(), "预览提示词", "Preview Prompt"));
+                _el$348.$$click = () => sendPromptControl("apply", null);
+                insert(_el$348, () => tr(locale(), "应用提示词", "Apply Prompt"));
                 createRenderEffect((_p$) => {
-                  var _v$69 = !promptControlsEnabled(), _v$70 = !promptControlsEnabled();
-                  _v$69 !== _p$.e && (_el$346.disabled = _p$.e = _v$69);
-                  _v$70 !== _p$.t && (_el$347.disabled = _p$.t = _v$70);
+                  var _v$71 = !promptControlsEnabled(), _v$72 = !promptControlsEnabled();
+                  _v$71 !== _p$.e && (_el$347.disabled = _p$.e = _v$71);
+                  _v$72 !== _p$.t && (_el$348.disabled = _p$.t = _v$72);
                   return _p$;
                 }, {
                   e: void 0,
                   t: void 0
                 });
-                return _el$345;
+                return _el$346;
               })(), (() => {
-                var _el$348 = _tmpl$62(), _el$349 = _el$348.firstChild, _el$350 = _el$349.firstChild, _el$351 = _el$350.nextSibling, _el$352 = _el$349.nextSibling;
-                insert(_el$350, () => tr(locale(), "下一次回滚目标版本", "Next Rollback Target Version"));
-                _el$351.$$input = (event) => {
+                var _el$349 = _tmpl$63(), _el$350 = _el$349.firstChild, _el$351 = _el$350.firstChild, _el$352 = _el$351.nextSibling, _el$353 = _el$350.nextSibling;
+                insert(_el$351, () => tr(locale(), "下一次回滚目标版本", "Next Rollback Target Version"));
+                _el$352.$$input = (event) => {
                   const nextValue = Number(event.currentTarget.value || 0);
                   state.promptDraft.rollbackTargetVersion = Math.max(0, Math.floor(nextValue || 0));
                   requestRender();
                 };
-                _el$352.$$click = () => {
+                _el$353.$$click = () => {
                   sendPromptControl("rollback", {
                     toVersion: Number(state.promptDraft.rollbackTargetVersion || 0)
                   });
                 };
-                insert(_el$352, () => tr(locale(), "回滚提示词", "Rollback Prompt"));
+                insert(_el$353, () => tr(locale(), "回滚提示词", "Rollback Prompt"));
                 createRenderEffect((_p$) => {
-                  var _v$71 = !promptControlsEnabled(), _v$72 = !promptControlsEnabled();
-                  _v$71 !== _p$.e && (_el$351.disabled = _p$.e = _v$71);
-                  _v$72 !== _p$.t && (_el$352.disabled = _p$.t = _v$72);
+                  var _v$73 = !promptControlsEnabled(), _v$74 = !promptControlsEnabled();
+                  _v$73 !== _p$.e && (_el$352.disabled = _p$.e = _v$73);
+                  _v$74 !== _p$.t && (_el$353.disabled = _p$.t = _v$74);
                   return _p$;
                 }, {
                   e: void 0,
                   t: void 0
                 });
-                createRenderEffect(() => _el$351.value = Number(state.promptDraft.rollbackTargetVersion || 0));
-                return _el$348;
+                createRenderEffect(() => _el$352.value = Number(state.promptDraft.rollbackTargetVersion || 0));
+                return _el$349;
               })(), createComponent(Show, {
                 get when() {
                   return promptFeedback();
@@ -24385,6 +24908,16 @@ function InteractionPanel() {
                     return promptFeedbackDisplay();
                   }
                 })
+              }), createComponent(Show, {
+                get when() {
+                  return promptRecoveryRequired();
+                },
+                get children() {
+                  var _el$354 = _tmpl$64(), _el$355 = _el$354.firstChild;
+                  _el$355.$$click = () => void refreshPromptControlBinding();
+                  insert(_el$355, () => tr(locale(), "刷新权限与 Agent 绑定", "Refresh authority and Agent binding"));
+                  return _el$354;
+                }
               }), createComponent(Show, {
                 get when() {
                   return state.strongAuth.lastGrantActionId;
@@ -24413,16 +24946,16 @@ function InteractionPanel() {
           });
         }
       }), null);
-      insert(_el$354, () => tr(locale(), "资产 / 治理通道", "Asset / Governance Lane"));
-      insert(_el$353, createComponent(PanelSection, {
+      insert(_el$357, () => tr(locale(), "资产 / 治理通道", "Asset / Governance Lane"));
+      insert(_el$356, createComponent(PanelSection, {
         "class": "command-surface__asset-panel",
         get title() {
           return tr(locale(), "后置能力", "Deferred Surface");
         },
         get children() {
           return [(() => {
-            var _el$355 = _tmpl$8();
-            insert(_el$355, createComponent(Badge, {
+            var _el$358 = _tmpl$8();
+            insert(_el$358, createComponent(Badge, {
               get ["class"]() {
                 return mainTokenTransferCapability().enabled ? "badge badge--good" : "badge badge--warn";
               },
@@ -24430,17 +24963,17 @@ function InteractionPanel() {
                 return `main_token_transfer=${assetLaneStatusText()}`;
               }
             }), null);
-            insert(_el$355, createComponent(Badge, {
+            insert(_el$358, createComponent(Badge, {
               get children() {
                 return `required_auth=${mainTokenTransferPolicy()?.required_auth || "-"}`;
               }
             }), null);
-            insert(_el$355, createComponent(Badge, {
+            insert(_el$358, createComponent(Badge, {
               get children() {
                 return `availability=${mainTokenTransferPolicy()?.availability || "-"}`;
               }
             }), null);
-            return _el$355;
+            return _el$358;
           })(), createComponent(EmptyState, {
             get children() {
               return assetLaneDetail();
@@ -24450,17 +24983,17 @@ function InteractionPanel() {
               return mainTokenTransferPolicy()?.reason || tr(locale(), "当前通道没有 main_token_transfer 的托管动作策略。", "No hosted action policy is available for main_token_transfer on this lane.");
             }
           }), (() => {
-            var _el$356 = _tmpl$63(), _el$357 = _el$356.firstChild;
-            insert(_el$357, () => tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)"));
-            return _el$356;
+            var _el$359 = _tmpl$65(), _el$360 = _el$359.firstChild;
+            insert(_el$360, () => tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)"));
+            return _el$359;
           })()];
         }
       }), null);
       createRenderEffect((_p$) => {
-        var _v$73 = agentId(), _v$74 = String(chatHistory().length), _v$75 = tr(locale(), "指挥连续性摘要", "Command continuity summary");
-        _v$73 !== _p$.e && setAttribute(_el$302, "data-command-agent", _p$.e = _v$73);
-        _v$74 !== _p$.t && setAttribute(_el$302, "data-command-chat-history", _p$.t = _v$74);
-        _v$75 !== _p$.a && setAttribute(_el$304, "aria-label", _p$.a = _v$75);
+        var _v$75 = agentId(), _v$76 = String(chatHistory().length), _v$77 = tr(locale(), "指挥连续性摘要", "Command continuity summary");
+        _v$75 !== _p$.e && setAttribute(_el$302, "data-command-agent", _p$.e = _v$75);
+        _v$76 !== _p$.t && setAttribute(_el$302, "data-command-chat-history", _p$.t = _v$76);
+        _v$77 !== _p$.a && setAttribute(_el$304, "aria-label", _p$.a = _v$77);
         return _p$;
       }, {
         e: void 0,
@@ -24534,19 +25067,19 @@ function DetailsPanel() {
   });
   const hasSnapshotDiagnostics = () => !!state.snapshot || !!state.metrics || !!state.hostedAccess;
   return (() => {
-    var _el$363 = _tmpl$67(), _el$364 = _el$363.firstChild, _el$365 = _el$364.nextSibling, _el$366 = _el$365.firstChild, _el$367 = _el$366.nextSibling, _el$368 = _el$367.nextSibling;
-    insert(_el$364, createComponent(Badge, {
+    var _el$366 = _tmpl$69(), _el$367 = _el$366.firstChild, _el$368 = _el$367.nextSibling, _el$369 = _el$368.firstChild, _el$370 = _el$369.nextSibling, _el$371 = _el$370.nextSibling;
+    insert(_el$367, createComponent(Badge, {
       "class": "badge badge--accent",
       get children() {
         return tr(locale(), "当前命令目标", "Current Command Target");
       }
     }), null);
-    insert(_el$364, createComponent(Badge, {
+    insert(_el$367, createComponent(Badge, {
       get children() {
         return selectedLabel();
       }
     }), null);
-    insert(_el$363, createComponent(Show, {
+    insert(_el$366, createComponent(Show, {
       get when() {
         return memo(() => !!!hiddenSelectedAgent())() && state.selectedKind !== "module_visual";
       },
@@ -24567,8 +25100,8 @@ function DetailsPanel() {
       get children() {
         return createComponent(InteractionPanel, {});
       }
-    }), _el$365);
-    insert(_el$363, createComponent(Show, {
+    }), _el$368);
+    insert(_el$366, createComponent(Show, {
       get when() {
         return hasVisibleSelectedObject();
       },
@@ -24599,67 +25132,67 @@ function DetailsPanel() {
         },
         value: () => clone(selected())
       })
-    }), _el$365);
-    insert(_el$363, createComponent(Show, {
+    }), _el$368);
+    insert(_el$366, createComponent(Show, {
       get when() {
         return selectedModule();
       },
       children: (module) => (() => {
-        var _el$372 = _tmpl$68(), _el$373 = _el$372.firstChild, _el$374 = _el$373.nextSibling, _el$375 = _el$374.nextSibling, _el$376 = _el$375.firstChild;
-        _el$376.nextSibling;
-        var _el$378 = _el$375.nextSibling, _el$379 = _el$378.firstChild;
+        var _el$375 = _tmpl$70(), _el$376 = _el$375.firstChild, _el$377 = _el$376.nextSibling, _el$378 = _el$377.nextSibling, _el$379 = _el$378.firstChild;
         _el$379.nextSibling;
         var _el$381 = _el$378.nextSibling, _el$382 = _el$381.firstChild;
         _el$382.nextSibling;
-        insert(_el$373, () => tr(locale(), "模块明细", "Module Details"));
-        insert(_el$374, createComponent(Badge, {
+        var _el$384 = _el$381.nextSibling, _el$385 = _el$384.firstChild;
+        _el$385.nextSibling;
+        insert(_el$376, () => tr(locale(), "模块明细", "Module Details"));
+        insert(_el$377, createComponent(Badge, {
           "class": "badge badge--accent",
           get children() {
             return pixelWorldReadableModuleLabel(module(), module().id, isLocaleZh(locale()));
           }
         }), null);
-        insert(_el$374, createComponent(Badge, {
+        insert(_el$377, createComponent(Badge, {
           get children() {
             return `module=${module().module_id || "-"}`;
           }
         }), null);
-        insert(_el$376, () => tr(locale(), "类型", "Kind"));
-        insert(_el$375, () => module().kind || "artifact", null);
-        insert(_el$379, () => tr(locale(), "标签", "Label"));
-        insert(_el$378, () => pixelWorldReadableModuleLabel(module(), module().id, isLocaleZh(locale())), null);
-        insert(_el$382, () => tr(locale(), "锚点", "Anchor"));
-        insert(_el$381, selectedModuleAnchor, null);
-        return _el$372;
+        insert(_el$379, () => tr(locale(), "类型", "Kind"));
+        insert(_el$378, () => module().kind || "artifact", null);
+        insert(_el$382, () => tr(locale(), "标签", "Label"));
+        insert(_el$381, () => pixelWorldReadableModuleLabel(module(), module().id, isLocaleZh(locale())), null);
+        insert(_el$385, () => tr(locale(), "锚点", "Anchor"));
+        insert(_el$384, selectedModuleAnchor, null);
+        return _el$375;
       })()
-    }), _el$365);
-    insert(_el$366, () => tr(locale(), "世界规模", "World Scale"));
-    insert(_el$367, createComponent(Badge, {
+    }), _el$368);
+    insert(_el$369, () => tr(locale(), "世界规模", "World Scale"));
+    insert(_el$370, createComponent(Badge, {
       get children() {
         return `agents=${snapshotCounts().agents}`;
       }
     }), null);
-    insert(_el$367, createComponent(Badge, {
+    insert(_el$370, createComponent(Badge, {
       get children() {
         return `locations=${snapshotCounts().locations}`;
       }
     }), null);
-    insert(_el$367, createComponent(Badge, {
+    insert(_el$370, createComponent(Badge, {
       get children() {
         return `promptProfiles=${snapshotCounts().promptProfiles}`;
       }
     }), null);
-    insert(_el$367, createComponent(Badge, {
+    insert(_el$370, createComponent(Badge, {
       get children() {
         return `debugContexts=${snapshotCounts().executionDebugContexts}`;
       }
     }), null);
-    insert(_el$367, createComponent(Badge, {
+    insert(_el$370, createComponent(Badge, {
       get children() {
         return tr(locale(), "snapshot.config.space", "snapshot.config.space");
       }
     }), null);
-    insert(_el$368, worldMetaSummary);
-    insert(_el$365, createComponent(Show, {
+    insert(_el$371, worldMetaSummary);
+    insert(_el$368, createComponent(Show, {
       get when() {
         return hasSnapshotDiagnostics();
       },
@@ -24678,18 +25211,18 @@ function DetailsPanel() {
         });
       }
     }), null);
-    insert(_el$363, createComponent(Show, {
+    insert(_el$366, createComponent(Show, {
       get when() {
         return state.lastError;
       },
       get children() {
-        var _el$369 = _tmpl$66(), _el$370 = _el$369.firstChild, _el$371 = _el$370.nextSibling;
-        insert(_el$370, () => tr(locale(), "最近错误", "Last Error"));
-        insert(_el$371, () => state.lastError);
-        return _el$369;
+        var _el$372 = _tmpl$68(), _el$373 = _el$372.firstChild, _el$374 = _el$373.nextSibling;
+        insert(_el$373, () => tr(locale(), "最近错误", "Last Error"));
+        insert(_el$374, () => state.lastError);
+        return _el$372;
       }
     }), null);
-    return _el$363;
+    return _el$366;
   })();
 }
 function AppShell() {
@@ -24707,25 +25240,25 @@ function AppShell() {
   const starterOcGateOpen = () => shouldShowStarterOcRequiredGate(buildGameplaySummary(locale()));
   onMount(() => onCleanup(installViewerRouteController()));
   return (() => {
-    var _el$384 = _tmpl$69(), _el$385 = _el$384.firstChild, _el$386 = _el$385.firstChild, _el$387 = _el$386.firstChild, _el$388 = _el$387.nextSibling, _el$389 = _el$388.nextSibling, _el$390 = _el$389.nextSibling, _el$391 = _el$386.nextSibling, _el$392 = _el$385.nextSibling, _el$393 = _el$392.firstChild, _el$394 = _el$393.firstChild, _el$395 = _el$392.nextSibling, _el$396 = _el$395.firstChild, _el$397 = _el$396.firstChild, _el$398 = _el$397.nextSibling, _el$399 = _el$398.nextSibling, _el$400 = _el$399.nextSibling, _el$401 = _el$396.nextSibling;
-    insert(_el$384, createComponent(MobileJumpRail, {
+    var _el$387 = _tmpl$71(), _el$388 = _el$387.firstChild, _el$389 = _el$388.firstChild, _el$390 = _el$389.firstChild, _el$391 = _el$390.nextSibling, _el$392 = _el$391.nextSibling, _el$393 = _el$392.nextSibling, _el$394 = _el$389.nextSibling, _el$395 = _el$388.nextSibling, _el$396 = _el$395.firstChild, _el$397 = _el$396.firstChild, _el$398 = _el$395.nextSibling, _el$399 = _el$398.firstChild, _el$400 = _el$399.firstChild, _el$401 = _el$400.nextSibling, _el$402 = _el$401.nextSibling, _el$403 = _el$402.nextSibling, _el$404 = _el$399.nextSibling;
+    insert(_el$387, createComponent(MobileJumpRail, {
       locale,
       tr,
       "data-viewer-overlay": "navigation"
-    }), _el$385);
-    insert(_el$384, createComponent(SecondaryViewerNavigation, {
+    }), _el$388);
+    insert(_el$387, createComponent(SecondaryViewerNavigation, {
       locale,
       tr
-    }), _el$385);
-    insert(_el$384, createComponent(HostedLoginGate, {}), _el$385);
-    insert(_el$384, createComponent(StarterOcRequiredGate, {}), _el$385);
-    insert(_el$387, () => tr(locale(), "导航", "Navigate"));
-    insert(_el$388, () => tr(locale(), "目标", "Targets"));
-    insert(_el$389, () => tr(locale(), "先在 Targets 中锁定对象，再进入世界舞台或指挥面板。", "Lock onto a target in Targets first, then move into the stage or command surface."));
-    addEventListener(_el$390, "click", focusViewerAnchor);
-    insert(_el$390, () => tr(locale(), "返回世界", "Back to World"));
-    insert(_el$391, createComponent(TargetsPanel, {}));
-    insert(_el$394, createComponent(Show, {
+    }), _el$388);
+    insert(_el$387, createComponent(HostedLoginGate, {}), _el$388);
+    insert(_el$387, createComponent(StarterOcRequiredGate, {}), _el$388);
+    insert(_el$390, () => tr(locale(), "导航", "Navigate"));
+    insert(_el$391, () => tr(locale(), "目标", "Targets"));
+    insert(_el$392, () => tr(locale(), "先在 Targets 中锁定对象，再进入世界舞台或指挥面板。", "Lock onto a target in Targets first, then move into the stage or command surface."));
+    addEventListener(_el$393, "click", focusViewerAnchor);
+    insert(_el$393, () => tr(locale(), "返回世界", "Back to World"));
+    insert(_el$394, createComponent(TargetsPanel, {}));
+    insert(_el$397, createComponent(Show, {
       get when() {
         return diagnosticsVisualFixture();
       },
@@ -24740,13 +25273,13 @@ function AppShell() {
         });
       }
     }), null);
-    insert(_el$394, createComponent(WorldStageHero, {}), null);
-    insert(_el$394, createComponent(PixelWorldHost, {
+    insert(_el$397, createComponent(WorldStageHero, {}), null);
+    insert(_el$397, createComponent(PixelWorldHost, {
       get locale() {
         return locale();
       }
     }), null);
-    insert(_el$394, createComponent(Show, {
+    insert(_el$397, createComponent(Show, {
       get when() {
         return !diagnosticsVisualFixture();
       },
@@ -24761,20 +25294,20 @@ function AppShell() {
         });
       }
     }), null);
-    insert(_el$394, createComponent(WorldFeedSurface, {
+    insert(_el$397, createComponent(WorldFeedSurface, {
       core,
       locale,
       tr,
       observeState: observeViewerStateRevision,
       onReloadSnapshot: () => reloadWorldFeedFromAuthoritativeSnapshot()
     }), null);
-    insert(_el$397, () => tr(locale(), "指挥与核查", "Command and Inspect"));
-    insert(_el$398, () => tr(locale(), "交互与明细", "Interact and Inspect"));
-    insert(_el$399, () => tr(locale(), "只有锁定目标后才进入 Command。聊天优先，提示词与对象核查继续后置。", "Enter Command only after locking a target. Chat comes first; prompt controls and raw inspection stay behind it."));
-    addEventListener(_el$400, "click", focusViewerAnchor);
-    insert(_el$400, () => tr(locale(), "返回世界", "Back to World"));
-    insert(_el$401, createComponent(DetailsPanel, {}));
-    insert(_el$384, createComponent(DirectorSurface, {
+    insert(_el$400, () => tr(locale(), "指挥与核查", "Command and Inspect"));
+    insert(_el$401, () => tr(locale(), "交互与明细", "Interact and Inspect"));
+    insert(_el$402, () => tr(locale(), "只有锁定目标后才进入 Command。聊天优先，提示词与对象核查继续后置。", "Enter Command only after locking a target. Chat comes first; prompt controls and raw inspection stay behind it."));
+    addEventListener(_el$403, "click", focusViewerAnchor);
+    insert(_el$403, () => tr(locale(), "返回世界", "Back to World"));
+    insert(_el$404, createComponent(DetailsPanel, {}));
+    insert(_el$387, createComponent(DirectorSurface, {
       get controller() {
         return directorSession.controller;
       },
@@ -24782,13 +25315,13 @@ function AppShell() {
       locale
     }), null);
     createRenderEffect((_p$) => {
-      var _v$79 = starterOcGateOpen() ? "true" : void 0, _v$80 = starterOcGateOpen() ? true : void 0, _v$81 = starterOcGateOpen() ? "true" : void 0, _v$82 = starterOcGateOpen() ? true : void 0, _v$83 = starterOcGateOpen() ? "true" : void 0, _v$84 = starterOcGateOpen() ? true : void 0;
-      _v$79 !== _p$.e && setAttribute(_el$385, "aria-hidden", _p$.e = _v$79);
-      _v$80 !== _p$.t && (_el$385.inert = _p$.t = _v$80);
-      _v$81 !== _p$.a && setAttribute(_el$392, "aria-hidden", _p$.a = _v$81);
-      _v$82 !== _p$.o && (_el$392.inert = _p$.o = _v$82);
-      _v$83 !== _p$.i && setAttribute(_el$395, "aria-hidden", _p$.i = _v$83);
-      _v$84 !== _p$.n && (_el$395.inert = _p$.n = _v$84);
+      var _v$81 = starterOcGateOpen() ? "true" : void 0, _v$82 = starterOcGateOpen() ? true : void 0, _v$83 = starterOcGateOpen() ? "true" : void 0, _v$84 = starterOcGateOpen() ? true : void 0, _v$85 = starterOcGateOpen() ? "true" : void 0, _v$86 = starterOcGateOpen() ? true : void 0;
+      _v$81 !== _p$.e && setAttribute(_el$388, "aria-hidden", _p$.e = _v$81);
+      _v$82 !== _p$.t && (_el$388.inert = _p$.t = _v$82);
+      _v$83 !== _p$.a && setAttribute(_el$395, "aria-hidden", _p$.a = _v$83);
+      _v$84 !== _p$.o && (_el$395.inert = _p$.o = _v$84);
+      _v$85 !== _p$.i && setAttribute(_el$398, "aria-hidden", _p$.i = _v$85);
+      _v$86 !== _p$.n && (_el$398.inert = _p$.n = _v$86);
       return _p$;
     }, {
       e: void 0,
@@ -24798,7 +25331,7 @@ function AppShell() {
       i: void 0,
       n: void 0
     });
-    return _el$384;
+    return _el$387;
   })();
 }
 function viewerVisualFixtureNameFromQuery() {
