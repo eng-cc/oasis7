@@ -6172,6 +6172,9 @@ def _storage_first_run(
                     # impact truth to drift after the failed operation.
                     if not _storage_first_is_shape_fixture(plan):
                         validate_authority(dict(plan), dict(authority))
+                        capture_start, capture_end = _capture_window_bounds(plan)
+                        if not capture_start <= dt.datetime.now(dt.timezone.utc) < capture_end:
+                            _fail("storage-first recovery capture lease is expired or not yet active")
                         validate_live_trust_root_file()
                     recovery_live = _guarded_callback(live_revalidator)
                     if recovery_live is not True:
