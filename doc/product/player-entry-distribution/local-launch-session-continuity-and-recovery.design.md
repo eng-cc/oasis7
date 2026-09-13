@@ -6,6 +6,7 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- 专业域权威：[`Launcher 专业入口`](../../world-simulator/launcher/README.md)、[`world-runtime PRD`](../../world-runtime/prd.md)、[`testing PRD`](../../testing/prd.md)
 
 配对产品 PRD 的 canonical 路径为 `doc/product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md`。
 
@@ -58,6 +59,11 @@
 
 - 初始化、轮询或渲染失败必须从加载/可用状态中分离，并给出当前 authority 支持的重试、返回或其他恢复入口。
 - 自动恢复、重新打开页面或重新启动本地服务只能说明该本地步骤已尝试；不能形成世界已健康或可玩的视觉暗示。
+
+### 4.1 验证边界与未决
+
+- 验证证据必须把本地 session、primary mode、当前 authority 与世界结果分别对账，覆盖启动失败、陈旧状态、Web 初始化失败、停止后重新进入和没有安全恢复路径的 blocked 样例；进程存在或页面可见不能单独证明可用。
+- 未决：具体 Launcher 控件、错误分类、存储和恢复协议仍由 Launcher、runtime、WASM、Viewer 与 QA authority 决定；产品层只保留可理解状态、禁止推断和安全下一步。
 
 ## 5. 非承诺
 

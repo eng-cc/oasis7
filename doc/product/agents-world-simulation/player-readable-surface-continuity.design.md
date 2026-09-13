@@ -6,6 +6,7 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- 专业域权威：[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md)、[`world-simulator PRD`](../../world-simulator/prd.md)、[`Web 语义测试 API`](../../world-simulator/viewer/viewer-web-semantic-test-api.prd.md)
 
 本文定义跨 surface 的稳定设计语义，不把历史 Viewer 布局或控件提升为当前实现要求。
 
@@ -43,3 +44,8 @@
 - 不承诺旧 EGUI 右栏、模块可见性缓存、专用 fullscreen toggle、固定断点或历史 Web 布局。
 - 不定义 control profile、动作枚举、seek/step、逻辑时间/事件游标、ack 字段、字体、翻译键、localStorage/JSON 路径、WebSocket callback/backoff、viewport hit test 或 Test API。
 - 不以历史截图、旧测试、mock、software-safe 或局部 DOM 存在代签当前产品能力。
+
+## 7. 验证边界与未决
+
+- 验证证据应覆盖目标、blocker、可信反馈和恢复入口在受支持 desktop、窄屏、低高度及双语 fallback 下的可读性，并区分 surface 局部状态与权威世界结果；结构存在、自动刷新或历史截图不能单独证明产品能力。
+- 未决：各受支持 surface 的具体控件、断点、翻译资源和恢复动作仍由 Viewer、WASM 与 QA authority 结合当前证据决定；在对应 authority 尚未确认前，产品层保持能力边界与安全返回语义，不把候选布局当作已支持入口。

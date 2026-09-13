@@ -213,3 +213,8 @@ Agent Context Lite 只允许组合以下已经发布且适用于该 Agent 的语
 - 不承诺生产线、吞吐、队列、瓶颈、action preview、设施流、里程碑动画、直接地图操作、2D overview、top-down/orthographic board 或 semantic zoom 已经存在；历史 2D overview/zoom 退役不能被反向引用为当前能力。
 - 不产生新的玩法控制权、世界规则、资源事实、发布等级或可玩性 claim。
 - 2026-05-28 的 player-leverage / production-readability brainstorm 仅是未来输入，不是本分册的当前产品权威。
+
+## 11. 未决问题与假设
+
+- 未决：世界舞台在具体 surface 上采用的对象来源、密度层级、可访问文本和恢复入口，待 Viewer、视觉交互与 QA authority 依据当前支持范围和证据共同裁决；本分册不把候选布局或历史渲染能力当作默认能力。
+- 假设：在缺少当前权威位置、关系、因果或时效证据时，玩家表面会保留未知/待验证语义，并提供等待、刷新、改道或安全返回，而不是用视觉邻近或缓存值填补事实。

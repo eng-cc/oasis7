@@ -6,6 +6,7 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- 专业域权威：[`readme 产品与治理 PRD`](../../readme/prd.md)、[`testing PRD`](../../testing/prd.md)、[`README.md`](../../../README.md)
 - 公开状态权威：[`README.md`](../../../README.md)
 - 专业与执行入口：[`doc/readme/prd.md`](../../readme/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
@@ -91,3 +92,8 @@
 - 不定义具体模板字段、渠道排期、运营 runbook、事故流程或技术回滚步骤。
 - 不替代根 README、正式 changelog、GitHub task evidence、QA gate 或 LiveOps 执行记录。
 - 不把内部审批、草稿完成或互动量当作 publication evidence。
+
+## 8. 未决问题与假设
+
+- 未决：具体候选的公开 verdict、渠道排期、公告正文和纠正/撤回记录，必须由 LiveOps、QA、产品与根 README 在同一证据窗口内确认；本分册不预先替代这些记录。
+- 假设：当公开 surface、专业权威和证据窗口不一致时，采用更窄 claim，标记 draft/review/blocked 或撤回，并把读者引回当前根 README，而不是沿用旧文案。
