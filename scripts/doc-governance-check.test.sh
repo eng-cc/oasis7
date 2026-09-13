@@ -44,6 +44,13 @@ raise SystemExit(0)
 PY
 cat >"$FIXTURE/scripts/product-doc-content-check.py" <<'PY'
 #!/usr/bin/env python3
+import os
+from pathlib import Path
+import sys
+
+args_file = os.environ.get("PRODUCT_DOC_CONTENT_ARGS")
+if args_file:
+    Path(args_file).write_text("\n".join(sys.argv[1:]) + "\n", encoding="utf-8")
 print("product-doc-content: checked 0: reason=fixture")
 PY
 chmod +x "$FIXTURE/scripts/doc-governance-check.sh"
@@ -147,6 +154,17 @@ if ! grep -Fqx 'doc-governance-check: OK' "$TMPDIR/check.out"; then
   cat "$TMPDIR/check.err" >&2
   exit 1
 fi
+
+if ! (
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" PRODUCT_DOC_CONTENT_ARGS="$TMPDIR/product-doc-content.args" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh --full-corpus
+) >"$TMPDIR/full-corpus.out" 2>"$TMPDIR/full-corpus.err"; then
+  echo "doc-governance-check.test: --full-corpus caller integration unexpectedly failed" >&2
+  cat "$TMPDIR/full-corpus.out" >&2
+  cat "$TMPDIR/full-corpus.err" >&2
+  exit 1
+fi
+grep -Fxq -- '--full-corpus' "$TMPDIR/product-doc-content.args"
 
 REGISTRY_BASE="$TMPDIR/top-level-directory-registry.json"
 cp "$FIXTURE/doc/.governance/top-level-directory-registry.json" "$REGISTRY_BASE"

@@ -9,6 +9,17 @@ head_oid="$(git rev-parse HEAD)"
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
+if python3 ./scripts/product-doc-content-check.py --repo-root "$PWD" --full-corpus >"$tmp_dir/full-corpus.out" 2>&1; then
+  echo "product-doc-content-callers.test: full-corpus unexpectedly reported a clean current corpus" >&2
+  exit 1
+fi
+if grep -Fq 'unrecognized arguments: --full-corpus' "$tmp_dir/full-corpus.out"; then
+  echo "product-doc-content-callers.test: full-corpus option is not wired to the checker" >&2
+  cat "$tmp_dir/full-corpus.out" >&2
+  exit 1
+fi
+grep -Fq 'product-doc-content:' "$tmp_dir/full-corpus.out"
+
 if (unset OASIS7_PRODUCT_DOC_BASE OASIS7_PRODUCT_DOC_HEAD; OASIS7_PRODUCT_DOC_BASE="$base_oid" ./scripts/doc-governance-check.sh) >"$tmp_dir/partial.out" 2>&1; then
   echo "product-doc-content-callers.test: partial local base/head unexpectedly passed" >&2
   exit 1

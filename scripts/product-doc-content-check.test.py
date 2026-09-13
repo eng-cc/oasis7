@@ -112,6 +112,79 @@ def invoke(root: Path, base: str, head: str, *, worktree: bool = False) -> subpr
     return subprocess.run(command, check=False, capture_output=True, text=True)
 
 
+def invoke_full_corpus(root: Path, *extra: str) -> subprocess.CompletedProcess[str]:
+    command = ["python3", str(CHECKER), "--repo-root", str(root), "--full-corpus", *extra]
+    return subprocess.run(command, check=False, capture_output=True, text=True)
+
+
+def scenario_full_corpus_includes_unchanged_legacy_and_sorts_diagnostics() -> None:
+    root, _base, _head = make_repo()
+    try:
+        early = root / "doc/product/world-rules-core-gameplay/aaa-legacy.prd.md"
+        late = root / "doc/product/world-rules-core-gameplay/zzz-legacy.prd.md"
+        early.write_text("broken early legacy\n", encoding="utf-8")
+        late.write_text("broken late legacy\n", encoding="utf-8")
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 1, output
+        assert str(early.relative_to(root)) in output, output
+        assert "doc/product/world-rules-core-gameplay/legacy.prd.md" in output, output
+        assert str(late.relative_to(root)) in output, output
+        assert "missing-metadata" in output, output
+        assert output.index(str(early.relative_to(root))) < output.index(
+            "doc/product/world-rules-core-gameplay/legacy.prd.md"
+        ) < output.index(str(late.relative_to(root))), output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_full_corpus_accepts_retired_topics_and_reports_lifecycle_errors() -> None:
+    root, _base, _head = make_repo()
+    retired = root / "doc/product/world-rules-core-gameplay/retired.prd.md"
+    try:
+        (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
+        retired.write_text(TOPIC_TEXT.replace("生命周期：`active`", "生命周期：`retired`"), encoding="utf-8")
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 0, output
+        assert "product-doc-content:" in output and "full-corpus" in output, output
+
+        retired.write_text(
+            TOPIC_TEXT.replace("生命周期：`active`", "生命周期：`retired`").replace(
+                "- 专业域权威：[`gameplay authority`](../../game/prd.md#authority)\n", ""
+            ),
+            encoding="utf-8",
+        )
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 1, output
+        assert "retired.prd.md" in output and "missing-metadata" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_full_corpus_rejects_changed_range_arguments() -> None:
+    root, base, head = make_repo()
+    try:
+        for extra in (
+            ("--base", base),
+            ("--head", head),
+            ("--worktree",),
+            ("--base", base, "--head", head),
+            ("--base", base, "--head", head, "--worktree"),
+        ):
+            result = invoke_full_corpus(root, *extra)
+            output = result.stdout + result.stderr
+            assert result.returncode == 2, output
+            assert (
+                "cannot be combined" in output
+                or "not allowed with" in output
+                or "mutually exclusive" in output
+            ), output
+    finally:
+        shutil.rmtree(root)
+
+
 def scenario(expected: str | None, mutate) -> None:
     root, base, _head = make_repo()
     try:
@@ -440,6 +513,9 @@ def standalone_requirement_and_acceptance_anchors(root: Path) -> None:
 
 
 def main() -> None:
+    scenario_full_corpus_includes_unchanged_legacy_and_sorts_diagnostics()
+    scenario_full_corpus_accepts_retired_topics_and_reports_lifecycle_errors()
+    scenario_full_corpus_rejects_changed_range_arguments()
     scenario(None, lambda _root: None)
     scenario("missing-anchor", legacy_declarations_missing_anchors)
     scenario(None, legacy_declarations_with_anchors)
