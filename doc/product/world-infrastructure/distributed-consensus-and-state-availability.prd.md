@@ -6,10 +6,12 @@
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：`2026-09-13`
+- Last reviewed：`2026-09-14`
 - 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)（共识最终性、证明与 freshness）、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)（版本化执行、manifest/head、pending、receipt 与去重）、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)（消费者/Viewer/入口状态反馈）、[`doc/testing/prd.md`](../../testing/prd.md)（组合验证与证据）。
+- 运维 authority：[`node triad 运维与可观测性`](../../p2p/node/node-triad-operations-observability.prd.md#权威边界)（节点 inventory、topology、health/status 与运维证据边界）、[`public-testnet governed bootstrap runbook`](../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md#stable-authority-and-evidence-boundary)（deployment truth、恢复/回滚演练与同窗口事实捕获）。
+- 状态同步 evidence envelope：[`state-sync closure evidence packet`](../../testing/templates/state-sync-closure-evidence-packet-template.md#claim-boundary)（topology/node truth、peer heads、gap sync、observer catch-up 与 blob closure；`module_full` 证据，不单独证明 readiness）。
 
-本文定义 oasis7 区块链/分布式系统底层向上层确定性世界执行提供的产品级保证。它不定义共识消息、密码学、网络协议、节点配置、存储格式或运行步骤；这些由 P2P、共识和运维专业权威拥有。
+本文定义 oasis7 区块链/分布式系统底层向上层确定性世界执行提供的产品级保证。它不定义共识消息、密码学、网络协议、节点配置、存储格式或运行步骤；这些由 P2P、共识和运维专业权威拥有。运维证据的采集与解释由 `blockchain_ops_engineer` 负责，不能单独把模块证据解释为 release、public testnet 或 mainnet readiness。
 
 ## 设计适用性与生命周期闭合
 
@@ -71,7 +73,7 @@ Compatibility declaration 只证明客户端能理解当前 manifest，不能选
 
 ## 6. 叶子需求与可观察验收
 
-这些叶子把本专题的五类可独立失败义务映射到现有 DC 汇总标准；它们保留 P2P、runtime 和 QA 的专业 authority，不把证书、拓扑或节点运行步骤复制到产品层。
+这些叶子把本专题的五类可独立失败义务映射到现有 DC 汇总标准；它们保留 P2P、runtime、blockchain ops 和 QA 的专业 authority，不把证书、拓扑或节点运行步骤复制到产品层。
 
 <a id="req-dcs-001"></a>
 ### REQ-DCS-001：单一 canonical history 与最终性
@@ -94,7 +96,8 @@ Compatibility declaration 只证明客户端能理解当前 manifest，不能选
 恢复只能沿同一 `world_id` 的 genesis/manifest、finalized checkpoint certificate、hash-bound snapshot、canonical replay 和 verified state root 建立连续历史；材料缺失、冲突、回退或指向其他世界时必须保持隔离或只读。
 
 - 对应验收：[AC-DCS-002](#ac-dcs-002)。
-- 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)。
+- 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[`node triad 运维与可观测性`](../../p2p/node/node-triad-operations-observability.prd.md#inventory-与采样合同)、[`public-testnet governed bootstrap runbook`](../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md#stable-authority-and-evidence-boundary)、[`state-sync closure evidence packet`](../../testing/templates/state-sync-closure-evidence-packet-template.md#topology-and-node-truth)。
+- 证据层级与 owner：`test_tier_full`；`blockchain_ops_engineer` 负责同一证据窗口的 topology/inventory、`/healthz` 与 `/v1/chain/status`、peer-head/replication、state-sync closure 及 restore/rollback 事实，`runtime_engineer` 负责 replay/state-root 连续性，QA 负责 verdict。缺少任一适用证据时保持隔离或只读，不得解释为 readiness。
 
 <a id="ac-dcs-002"></a>
 ### AC-DCS-002：分区、重启与恢复不产生第二世界
@@ -103,13 +106,17 @@ Compatibility declaration 只证明客户端能理解当前 manifest，不能选
 
 - 对应需求：[REQ-DCS-002](#req-dcs-002)。
 
+- 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[`node triad 运维与可观测性`](../../p2p/node/node-triad-operations-observability.prd.md#权威边界)、[`public-testnet governed bootstrap runbook`](../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md#4-hard-rules)、[`state-sync closure evidence packet`](../../testing/templates/state-sync-closure-evidence-packet-template.md#peer-heads-and-gap-sync)。
+- 证据层级与 owner：`test_tier_full`；`blockchain_ops_engineer` 负责同一窗口的 topology/inventory、health/status、peer-head/replication、state-sync 与 restore/rollback 事实，`runtime_engineer` 负责 replay/state-root 连续性，QA 负责 verdict。缺少任一适用证据时保持隔离或只读，不得解释为 readiness。
+- 运维证据边界：[`public-testnet governed bootstrap runbook`](../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md#4-hard-rules) 的 deployment truth 与恢复约束，以及 [`state-sync closure evidence packet`](../../testing/templates/state-sync-closure-evidence-packet-template.md#peer-heads-and-gap-sync) 的 peer-head、gap sync、observer catch-up 与 blob closure 字段；产品层只消费同一窗口的结果，不复制运行步骤。
+
 <a id="req-dcs-003"></a>
 ### REQ-DCS-003：共识权限与服务角色隔离
 
 验证者集合及其轮换保有受治理的共识权威；sentry、relay、full/state-sync/archive、RPC/proof gateway 等非权威服务只能提供传播、存储或证明材料，不能通过暴露面、缓存或服务被攻破取得最终写入权。
 
 - 对应验收：[AC-DCS-003](#ac-dcs-003)。
-- 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)。
+- 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[`node triad 运维与可观测性`](../../p2p/node/node-triad-operations-observability.prd.md#权威边界)、[`public-testnet governed bootstrap runbook`](../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md#stable-authority-and-evidence-boundary)。
 
 <a id="ac-dcs-003"></a>
 ### AC-DCS-003：非权威节点不能扩大权限
@@ -117,6 +124,8 @@ Compatibility declaration 只证明客户端能理解当前 manifest，不能选
 验证者注册/轮换、网络暴露和服务角色的组合样例证明非权威节点不能推进 canonical history、签发最终性或代替受治理验证者完成高影响状态变化；被攻破的服务节点只能导致隔离/缺证等可观察结果，不能产生权威写入。
 
 - 对应需求：[REQ-DCS-003](#req-dcs-003)。
+
+- 证据层级与 owner：`test_tier_full`；`blockchain_ops_engineer` 负责同一 topology/inventory 与 health/status 窗口中的 validator/service-role 隔离、网络暴露和停止 serving/voting 的运维证据，P2P 保有权限/最终性语义，QA 负责 verdict。该映射只证明 fail-closed 结果，不证明部署或发行 readiness。
 
 <a id="req-dcs-004"></a>
 ### REQ-DCS-004：commit certificate 的安全推进边界
@@ -139,7 +148,7 @@ BFT 实现样例证明符合产品最终性条件的 commit certificate 才能�
 只有“已验证可服务”同时满足 `world_id`、checkpoint/head、hash-bound 状态、finality/追加条件、manifest compatibility 和单调 head continuity 时，消费者才可提交新的权威 intent；其他等级必须保持只读、无效果待决或不可用/隔离，并说明 blocker 与下一步。
 
 - 对应验收：[AC-DCS-005](#ac-dcs-005)。
-- 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)。
+- 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[`node triad 运维与可观测性`](../../p2p/node/node-triad-operations-observability.prd.md#inventory-与采样合同)、[`public-testnet governed bootstrap runbook`](../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md#stable-authority-and-evidence-boundary)、[`state-sync closure evidence packet`](../../testing/templates/state-sync-closure-evidence-packet-template.md#peer-heads-and-gap-sync)。
 
 <a id="ac-dcs-005"></a>
 ### AC-DCS-005：状态转换不伪造世界效果
@@ -147,6 +156,8 @@ BFT 实现样例证明符合产品最终性条件的 commit certificate 才能�
 同一候选覆盖“已验证可服务 -> 陈旧/追赶中 -> 已验证只读 -> 已验证可服务”和证明冲突进入“不可用/隔离”的转换；非可服务等级的新 intent 的 committed receipt 为 `0`，正式消费者能读到当前等级、受影响操作、最后可信边界、blocker 和真实下一步。重连、重复提交和跨入口重试不产生第二次世界效果。
 
 - 对应需求：[REQ-DCS-005](#req-dcs-005)。
+
+- 证据层级与 owner：`test_tier_full`；`blockchain_ops_engineer` 负责 topology、inventory、`/healthz`、`/v1/chain/status`、peer-head/replication 与 state-sync/恢复窗口的事实捕获，runtime/P2P 负责执行、manifest/head 与 finality 语义，world-simulator 负责消费者投影，QA 负责 verdict。health endpoint、transport green 或一次重连不能单独升级可服务状态。
 
 ## 7. 组合验收
 
