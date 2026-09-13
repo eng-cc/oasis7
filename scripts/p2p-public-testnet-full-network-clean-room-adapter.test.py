@@ -4752,7 +4752,11 @@ class StorageFirstAdapterRedTests(unittest.TestCase):
             "callback_receipt": receipts[-1] if receipts else None,
             "storage_receipts": receipts,
             "receipt_operation_cursor": list(completed),
-            "rollback_candidates": list(completed),
+            "rollback_candidates": [
+                operation
+                for operation in completed
+                if fixture.adapter._rollback_candidate(operation)
+            ],
             "rollback_status": "not-started",
             "nonce_reservation_state": nonce_state,
         }
@@ -6305,6 +6309,157 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
             forged["journal_digest"] = canonical.adapter.journal_digest(forged)
             with self.assertRaises(Exception):
                 canonical.adapter.validate_storage_first_journal(forged)
+        finally:
+            canonical.tearDown()
+
+    def test_runtime_sf_024_fresh_same_plan_execution_is_locked_before_admission(self) -> None:
+        """A concurrent same-plan caller must fail before ledger/provenance admission."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            first = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+            second = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+            entered = threading.Event()
+            release = threading.Event()
+            original_mutate = first.mutate
+
+            def hold_first(operation, node):
+                if operation == "stop:storage-205":
+                    entered.set()
+                    if not release.wait(30):
+                        raise RuntimeError("test release timeout")
+                return original_mutate(operation, node)
+
+            first.mutate = hold_first
+            first_results: list[object] = []
+
+            def run_first() -> None:
+                try:
+                    first_results.append(
+                        self.fixture._canonical_runner(
+                            canonical,
+                            first,
+                            journal_path=canonical.root / "same-plan-first.json",
+                        )
+                    )
+                except BaseException as error:
+                    first_results.append(error)
+
+            worker = threading.Thread(target=run_first)
+            worker.start()
+            self.assertTrue(entered.wait(30), first_results)
+            admission_after_contention: list[str] = []
+            original_gates = canonical.adapter._storage_first_canonical_gates
+
+            def observe_gates(*args, **kwargs):
+                admission_after_contention.append("gate")
+                return original_gates(*args, **kwargs)
+
+            try:
+                with mock.patch.object(
+                    canonical.adapter,
+                    "_storage_first_canonical_gates",
+                    side_effect=observe_gates,
+                ):
+                    with self.assertRaises(Exception):
+                        self.fixture._canonical_runner(
+                            canonical,
+                            second,
+                            journal_path=canonical.root / "same-plan-second.json",
+                        )
+            finally:
+                release.set()
+                worker.join(30)
+            self.assertFalse(worker.is_alive())
+            self.assertEqual(admission_after_contention, [])
+            self.assertEqual(len(first_results), 1)
+            self.assertIsInstance(first_results[0], dict, first_results)
+        finally:
+            canonical.tearDown()
+
+    def test_runtime_sf_025_completed_resume_revalidates_each_persisted_receipt(self) -> None:
+        """A completed child journal must cryptographically revalidate every receipt on resume."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            journal = self.fixture._canonical_prefix_journal(
+                canonical,
+                list(STORAGE_FIRST_CHILD_OPERATIONS),
+                status="storage-205-verified",
+                name="completed-revalidation.journal.json",
+            )
+            transport = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+            operations: list[str] = []
+
+            def verifier(verifier_plan, receipt):
+                operations.append(receipt.get("operation"))
+                return canonical._recovery_verifier(verifier_plan, receipt)
+
+            result = self.fixture._canonical_resume(
+                canonical,
+                journal,
+                transport,
+                provenance_verifier=verifier,
+            )
+            self.assertEqual(result["status"], "storage-205-verified")
+            self.assertEqual(operations, list(STORAGE_FIRST_CHILD_OPERATIONS))
+            self.assertEqual(transport.mutations, [])
+        finally:
+            canonical.tearDown()
+
+    def test_runtime_sf_026_completed_resume_rejects_unkeyed_persisted_receipt(self) -> None:
+        """An owner-written child receipt without signed material cannot claim completion."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            journal = self.fixture._canonical_prefix_journal(
+                canonical,
+                list(STORAGE_FIRST_CHILD_OPERATIONS),
+                status="storage-205-verified",
+                name="unkeyed-completed.journal.json",
+            )
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            for field in ("signed_payload_sha256", "signature_hex", "canonical_digest"):
+                record["storage_receipts"][0].pop(field, None)
+            record["journal_digest"] = canonical.adapter.journal_digest(record)
+            journal.write_text(json.dumps(record, sort_keys=True), encoding="utf-8")
+            journal.chmod(0o600)
+            transport = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+            with self.assertRaises(Exception):
+                self.fixture._canonical_resume(canonical, journal, transport)
+            self.assertEqual(transport.mutations, [])
+        finally:
+            canonical.tearDown()
+
+    def test_runtime_sf_027_resume_validates_nonce_checkpoint_before_prepared_write(self) -> None:
+        """Missing committed nonce state must not replace a resumable journal checkpoint."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            journal = self.fixture._canonical_prefix_journal(
+                canonical,
+                ["stop:storage-205"],
+                status="preflight-complete",
+                name="nonce-checkpoint.journal.json",
+            )
+            before = journal.read_bytes()
+            original_validate = canonical.adapter._validate_committed_nonce_reservations
+            calls = 0
+
+            def remove_on_second_validation(plan, path, state):
+                nonlocal calls
+                calls += 1
+                if calls == 2:
+                    Path(path).unlink()
+                return original_validate(plan, path, state)
+
+            transport = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+            with mock.patch.object(
+                canonical.adapter,
+                "_validate_committed_nonce_reservations",
+                side_effect=remove_on_second_validation,
+            ):
+                with self.assertRaises(Exception):
+                    self.fixture._canonical_resume(canonical, journal, transport)
+            self.assertGreaterEqual(calls, 2)
+            self.assertEqual(journal.read_bytes(), before)
+            self.assertEqual(transport.mutations, [])
         finally:
             canonical.tearDown()
 

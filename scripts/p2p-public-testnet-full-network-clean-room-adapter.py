@@ -5172,6 +5172,9 @@ def validate_storage_first_receipt(receipt: Mapping[str, Any]) -> bool:
         "signer_id",
         "verifier_id",
         "trust_root_id",
+        "signed_payload_sha256",
+        "signature_hex",
+        "canonical_digest",
         "transaction_id",
         "capture_window_id",
         "bindings",
@@ -5219,6 +5222,13 @@ def validate_storage_first_receipt(receipt: Mapping[str, Any]) -> bool:
             _fail("storage-first receipt signer is not code-owned")
         _string(receipt.get("transaction_id"), "storage-first receipt transaction_id")
         _string(receipt.get("capture_window_id"), "storage-first receipt capture_window_id")
+        for field, pattern, label in (
+            ("signed_payload_sha256", HEX64_RE, "storage-first signed payload"),
+            ("signature_hex", SIGNATURE_RE, "storage-first signature"),
+            ("canonical_digest", HEX64_RE, "storage-first canonical digest"),
+        ):
+            if field in receipt:
+                _nonzero_hex(receipt.get(field), pattern, label)
     return True
 
 
@@ -5227,6 +5237,7 @@ def _storage_first_validate_receipt_prefix(
     completed: list[str],
     receipts: list[Mapping[str, Any]],
     callback_receipt: Any,
+    verifier: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None,
 ) -> None:
     """Re-bind every persisted child receipt before it can authorize resume."""
     if len(receipts) != len(completed):
@@ -5261,6 +5272,19 @@ def _storage_first_validate_receipt_prefix(
             _fail("storage-first persisted receipt is not exactly plan-bound")
         if receipt.get("signer_id") not in CANONICAL_SIGNER_ALLOWLIST:
             _fail("storage-first persisted receipt signer is not code-owned")
+        _nonzero_hex(
+            receipt.get("signed_payload_sha256"), HEX64_RE,
+            "storage-first persisted signed payload",
+        )
+        _nonzero_hex(
+            receipt.get("signature_hex"), SIGNATURE_RE,
+            "storage-first persisted signature",
+        )
+        _nonzero_hex(
+            receipt.get("canonical_digest"), HEX64_RE,
+            "storage-first persisted canonical digest",
+        )
+        _verify_receipt_with_verifier(dict(plan), receipt, verifier)
     if callback_receipt is not None:
         if not receipts or not isinstance(callback_receipt, Mapping):
             _fail("storage-first callback receipt is not bound to its prefix")
@@ -5455,6 +5479,9 @@ def _storage_first_bind_receipt(
             "signer_id": canonical["signer_id"],
             "verifier_id": canonical["verifier_id"],
             "trust_root_id": canonical["trust_root_id"],
+            "signed_payload_sha256": canonical["signed_payload_sha256"],
+            "signature_hex": canonical["signature_hex"],
+            "canonical_digest": canonical["canonical_digest"],
             "transaction_id": plan["transaction_id"],
             "capture_window_id": plan["capture_window_id"],
             "bindings": {
@@ -5797,52 +5824,84 @@ def _storage_first_run(
 ) -> dict[str, Any]:
     _storage_first_require_concrete_plan(plan)
     authority = _storage_first_require_concrete_authority(authority)
+    if (
+        not _storage_first_is_shape_fixture(plan)
+        and (not isinstance(authority, dict) or authority.get("apply_authorized") is not True)
+    ):
+        _fail("storage-first current authority does not grant apply authorization")
     _storage_first_reject_aliases(Path(journal_path), Path(ledger_path), plan)
     _storage_first_validate_ledger_binding(plan, Path(ledger_path))
-    authority_summary = _storage_first_canonical_gates(
-        plan,
-        authority,
-        Path(ledger_path),
-        allow_committed_reservations=resume_record is not None,
-    )
-    child_authority = _storage_first_child_authority(
-        plan, authority, authority_summary
-    )
-    admission = _storage_first_validate_admission(
-        plan, child_authority, phase=phase, identity_v2_evidence=identity_v2_evidence
-    )
-    child_plan = admission["plan"]
-    child_identity = child_plan["identity_v2_evidence"]
-    if dry_run:
-        return {
-            "schema_version": STORAGE_FIRST_JOURNAL_SCHEMA,
-            "status": "planned",
-            "phase_id": STORAGE_FIRST_PHASE_ID,
-            "target_nodes": ["storage-205"],
-            "operations": list(STORAGE_FIRST_OPERATIONS),
-            "provider_mutation_performed": False,
-        }
-    if transport is None or not callable(getattr(transport, "mutate", None)):
-        _fail("storage-first apply requires an injected provider mutate callback")
-    if not callable(getattr(transport, "inspect_node", None)) or not callable(getattr(transport, "preflight", None)):
-        _fail("storage-first apply requires storage inspect and preflight callbacks")
-    if not callable(getattr(transport, "verify", None)):
-        _fail("storage-first apply requires an injected provider verify callback")
-    if not callable(getattr(transport, "reobserve_failed_state", None)) or not callable(
-        getattr(transport, "rollback_clean_redeploy", None)
-    ):
-        _fail("storage-first apply requires governed recovery callbacks before mutation")
-    if provenance_verifier is None or not callable(provenance_verifier):
-        _fail("storage-first apply requires the independent provenance verifier callback")
-    if not _storage_first_is_shape_fixture(plan):
+    # Fresh executions must serialize the entire admission boundary.  Waiting
+    # until after canonical ledger/provenance checks permits a concurrent
+    # same-plan caller to observe the pre-reservation ledger and then replay
+    # the one-shot transaction after the first caller releases the fleet lock.
+    owns_guard = held_guard is None and not dry_run
+    lock: _FleetTransactionGuard | None = None
+    guard_token: contextvars.Token[Any] | None = None
+    if held_guard is not None:
+        held_guard.check()
+        lock = held_guard
+        guard_token = _ACTIVE_TRANSACTION_GUARD.set(lock)
+    elif not dry_run:
+        lock_token = _STORAGE_FIRST_FIXTURE_LOCK_FALLBACK.set(
+            _storage_first_is_shape_fixture(plan)
+        )
         try:
-            provenance_verified = _verify_provenance(
-                dict(plan), child_authority, provenance_verifier
-            )
-        except Exception as error:
-            _fail(f"storage-first parent provenance verification failed: {error.__class__.__name__}")
-        if provenance_verified is not True:
-            _fail("storage-first parent provenance was not independently verified")
+            lock = _acquire_fleet_transaction_guard(Path(journal_path))
+        finally:
+            _STORAGE_FIRST_FIXTURE_LOCK_FALLBACK.reset(lock_token)
+        guard_token = _ACTIVE_TRANSACTION_GUARD.set(lock)
+    try:
+        authority_summary = _storage_first_canonical_gates(
+            plan,
+            authority,
+            Path(ledger_path),
+            allow_committed_reservations=resume_record is not None,
+        )
+        child_authority = _storage_first_child_authority(
+            plan, authority, authority_summary
+        )
+        admission = _storage_first_validate_admission(
+            plan, child_authority, phase=phase, identity_v2_evidence=identity_v2_evidence
+        )
+        child_plan = admission["plan"]
+        child_identity = child_plan["identity_v2_evidence"]
+        if dry_run:
+            return {
+                "schema_version": STORAGE_FIRST_JOURNAL_SCHEMA,
+                "status": "planned",
+                "phase_id": STORAGE_FIRST_PHASE_ID,
+                "target_nodes": ["storage-205"],
+                "operations": list(STORAGE_FIRST_OPERATIONS),
+                "provider_mutation_performed": False,
+            }
+        if transport is None or not callable(getattr(transport, "mutate", None)):
+            _fail("storage-first apply requires an injected provider mutate callback")
+        if not callable(getattr(transport, "inspect_node", None)) or not callable(getattr(transport, "preflight", None)):
+            _fail("storage-first apply requires storage inspect and preflight callbacks")
+        if not callable(getattr(transport, "verify", None)):
+            _fail("storage-first apply requires an injected provider verify callback")
+        if not callable(getattr(transport, "reobserve_failed_state", None)) or not callable(
+            getattr(transport, "rollback_clean_redeploy", None)
+        ):
+            _fail("storage-first apply requires governed recovery callbacks before mutation")
+        if provenance_verifier is None or not callable(provenance_verifier):
+            _fail("storage-first apply requires the independent provenance verifier callback")
+        if not _storage_first_is_shape_fixture(plan):
+            try:
+                provenance_verified = _verify_provenance(
+                    dict(plan), child_authority, provenance_verifier
+                )
+            except Exception as error:
+                _fail(f"storage-first parent provenance verification failed: {error.__class__.__name__}")
+            if provenance_verified is not True:
+                _fail("storage-first parent provenance was not independently verified")
+    except BaseException:
+        if guard_token is not None:
+            _ACTIVE_TRANSACTION_GUARD.reset(guard_token)
+        if owns_guard and lock is not None:
+            lock.close()
+        raise
     try:
         callback_plan = _storage_first_callback_plan(plan, admission["storage_node"])
         result = _guarded_callback(
@@ -5877,19 +5936,6 @@ def _storage_first_run(
     )
     if result.get("bindings") != expected_bindings or not identity_bound:
         _fail("storage-first provenance verifier returned unbound results")
-    owns_guard = held_guard is None
-    if held_guard is None:
-        lock_token = _STORAGE_FIRST_FIXTURE_LOCK_FALLBACK.set(
-            _storage_first_is_shape_fixture(plan)
-        )
-        try:
-            lock = _acquire_fleet_transaction_guard(Path(journal_path))
-        finally:
-            _STORAGE_FIRST_FIXTURE_LOCK_FALLBACK.reset(lock_token)
-    else:
-        held_guard.check()
-        lock = held_guard
-    guard_token = _ACTIVE_TRANSACTION_GUARD.set(lock)
     try:
         node = admission["storage_node"]
         completed = list(resume_record.get("completed_operations", [])) if resume_record else []
@@ -5918,20 +5964,27 @@ def _storage_first_run(
             "rollback_status": "not-started",
             "ledger_path": str(ledger_path),
         }
+        validated_resume_nonce_state: dict[str, Any] | None = None
+        if (
+            not _storage_first_is_shape_fixture(plan)
+            and resume_record is not None
+            and resume_record.get("status") != "prepared"
+        ):
+            # Validate the durable checkpoint before replacing it with a new
+            # prepared record.  Otherwise a missing committed ledger row can
+            # destroy the only resumable nonce evidence before fail-closed.
+            validated_resume_nonce_state = _validate_committed_nonce_reservations(
+                dict(plan),
+                Path(ledger_path),
+                _validate_nonce_reservation_state(
+                    dict(plan), resume_record.get("nonce_reservation_state")
+                ),
+            )
         _storage_first_journal_write(Path(journal_path), record)
         if not _storage_first_is_shape_fixture(plan):
             try:
-                if (
-                    resume_record is not None
-                    and resume_record.get("status") != "prepared"
-                ):
-                    nonce_state = _validate_committed_nonce_reservations(
-                        dict(plan),
-                        Path(ledger_path),
-                        _validate_nonce_reservation_state(
-                            dict(plan), resume_record.get("nonce_reservation_state")
-                        ),
-                    )
+                if validated_resume_nonce_state is not None:
+                    nonce_state = validated_resume_nonce_state
                 else:
                     nonce_state = _reconcile_nonce_reservations(
                         dict(plan), Path(ledger_path)
@@ -6275,6 +6328,7 @@ def resume_storage_first(
             completed,
             receipts,
             record.get("callback_receipt"),
+            provenance_verifier,
         )
         expected_next = (
             STORAGE_FIRST_OPERATIONS[len(completed)]
