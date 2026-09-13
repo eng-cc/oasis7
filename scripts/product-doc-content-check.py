@@ -209,6 +209,11 @@ def metadata_any(text: str, labels: tuple[str, ...]) -> str | None:
     return None
 
 
+def document_identity_text(text: str) -> str:
+    match = re.search(r"^## 文档身份\s*$([\s\S]*?)(?=^##\s|\Z)", text, re.MULTILINE)
+    return match.group(1) if match else text
+
+
 def split_link_target(raw: str) -> tuple[str, str | None]:
     target = raw.strip().split(None, 1)[0].strip("<>")
     if "#" not in target:
@@ -374,7 +379,7 @@ def heading_identifier(line: str) -> str | None:
 
 
 def check_metadata(path: str, text: str, errors: list[str]) -> None:
-    text = "\n".join(line for _, line in visible_lines(text))
+    text = document_identity_text("\n".join(line for _, line in visible_lines(text)))
     required = ["生命周期", "Owner role"]
     authority_labels = ("专业域权威", "专业权威")
     if path.endswith(".prd.md"):
@@ -618,14 +623,56 @@ def collect_documents(root: Path, base: str, head: str, worktree: bool) -> tuple
     return documents, None
 
 
+def collect_full_corpus(root: Path) -> list[ChangedDocument]:
+    """Select every current-tree product PRD/design in stable path order."""
+    documents: list[ChangedDocument] = []
+    product_root = root / PRODUCT_ROOT
+    for path in sorted(product_root.rglob("*")):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(root).as_posix()
+        if not is_product_doc(relative):
+            continue
+        documents.append(
+            ChangedDocument(
+                path=relative,
+                status="full-corpus",
+                old_text=None,
+                new_text=path.read_text(encoding="utf-8"),
+            )
+        )
+    return documents
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parent.parent)
     parser.add_argument("--base")
     parser.add_argument("--head")
     parser.add_argument("--worktree", action="store_true")
+    parser.add_argument("--full-corpus", action="store_true")
     args = parser.parse_args()
     root = args.repo_root.resolve()
+    if args.full_corpus and (args.base is not None or args.head is not None or args.worktree):
+        parser.error("--full-corpus cannot be combined with --base, --head, or --worktree")
+    if args.full_corpus:
+        try:
+            head = run_git(root, "rev-parse", "--verify", "HEAD^{commit}").strip()
+            documents = collect_full_corpus(root)
+        except (OSError, ValueError) as exc:
+            print(f"product-doc-content: error: {exc}")
+            return 2
+        if not documents:
+            print("product-doc-content: checked 0: reason=no current-tree product PRD/design documents")
+            return 0
+        errors: list[str] = []
+        for document in documents:
+            check_document(root, head, document.path, document.new_text, errors, True)
+        if errors:
+            print("\n".join(errors))
+            return 1
+        print(f"product-doc-content: OK (full-corpus checked {len(documents)} current-tree product documents)")
+        return 0
     if args.worktree and not (args.base and args.head):
         print("product-doc-content: error: --worktree requires explicit --base and --head commit OIDs")
         return 2
