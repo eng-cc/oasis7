@@ -6148,6 +6148,7 @@ def _storage_first_run(
                 if not capture_start <= dt.datetime.now(dt.timezone.utc) < capture_end:
                     _fail("storage-first mutation capture lease is expired or not yet active")
                 validate_live_trust_root_file()
+                _storage_first_check_impact(child_plan)
             record.update({
                 "status": "storage-205-running",
                 "next_operation": operation,
@@ -6158,7 +6159,24 @@ def _storage_first_run(
                 ),
                 "rollback_status": "not-started",
             })
-            _storage_first_journal_write(Path(journal_path), record)
+            try:
+                _storage_first_journal_write(Path(journal_path), record)
+            except Exception as checkpoint_error:
+                record.update({
+                    "status": "reconciliation-blocked",
+                    "next_operation": "reconciliation-required",
+                    "terminal_error": checkpoint_error.__class__.__name__,
+                    "rollback_status": "reconciliation-blocked",
+                    "reconciliation_requirements": {
+                        "reobserve_failed_state": True,
+                        "clean_redeploy": True,
+                        "automatic_replay": False,
+                    },
+                })
+                _storage_first_persist_reconciliation(
+                    Path(journal_path), record, primary_error=checkpoint_error
+                )
+                raise
             raw_receipt: Any = None
             try:
                 callback = transport.verify if operation == "verify:storage-205" else transport.mutate
@@ -6226,6 +6244,7 @@ def _storage_first_run(
                         if not capture_start <= dt.datetime.now(dt.timezone.utc) < capture_end:
                             _fail("storage-first recovery capture lease is expired or not yet active")
                         validate_live_trust_root_file()
+                        _storage_first_check_impact(child_plan)
                     recovery_live = _guarded_callback(live_revalidator)
                     if recovery_live is not True:
                         _fail("storage-first recovery live revalidation rejected clean redeploy")

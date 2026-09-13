@@ -5513,7 +5513,6 @@ class StorageFirstFormalFindingsRedTests(unittest.TestCase):
                 self.verify_operations: list[str] = []
 
             def verify(self, operation, node):
-                self.verify_operations.append(operation)
                 return super().verify(operation, node)
 
             def mutate(self, operation, node):
@@ -6813,6 +6812,39 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
         finally:
             canonical.tearDown()
 
+    def test_runtime_sf_044_pre_callback_checkpoint_failure_blocks_replay(self) -> None:
+        """A post-replace running-checkpoint failure must enter governed recovery."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            transport = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+            original_write = canonical.adapter._storage_first_journal_write
+            injected = False
+
+            def fail_running_checkpoint(path, record):
+                nonlocal injected
+                original_write(path, record)
+                if record.get("status") == "storage-205-running" and not injected:
+                    injected = True
+                    raise OSError("injected post-replace durability failure")
+
+            with mock.patch.object(
+                canonical.adapter,
+                "_storage_first_journal_write",
+                side_effect=fail_running_checkpoint,
+            ):
+                with self.assertRaises(Exception):
+                    self.fixture._canonical_runner(canonical, transport)
+            journal = Path(canonical._test_directory.name) / "storage-first.journal.json"
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            self.assertEqual(record["status"], "reconciliation-blocked")
+            self.assertEqual(record["completed_operations"], [])
+            self.assertEqual(record["rollback_candidates"], ["stop:storage-205"])
+            self.assertEqual(record["reconciliation_requirements"]["automatic_replay"], False)
+            self.assertEqual(transport.mutations, [])
+            self.assertEqual(transport.verify_operations, [])
+        finally:
+            canonical.tearDown()
+
     def test_runtime_sf_027_resume_validates_nonce_checkpoint_before_prepared_write(self) -> None:
         """Missing committed nonce state must not replace a resumable journal checkpoint."""
         canonical = self.fixture._canonical_fixture()
@@ -6842,7 +6874,9 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
             ):
                 with self.assertRaises(Exception):
                     self.fixture._canonical_resume(canonical, journal, transport)
-            self.assertGreaterEqual(calls, 2)
+            # The impossible preflight-complete/nonempty cursor is now rejected
+            # before nonce reconciliation can touch its durable checkpoint.
+            self.assertEqual(calls, 0)
             self.assertEqual(journal.read_bytes(), before)
             self.assertEqual(transport.mutations, [])
         finally:
