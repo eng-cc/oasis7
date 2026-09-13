@@ -1,0 +1,87 @@
+{
+  "schema": "oasis7.storage_first_fresh_process_red.v1",
+  "status": "red",
+  "identity": {
+    "task_uid": "task_90c2722f6e1c48c3aebb6283cee471ce",
+    "issue": 3675,
+    "repository": "eng-cc/oasis7",
+    "worktree": "/Users/scc/ccwork/oasis7/.worktrees/oasis7-engineering-public-testnet-observer-closure-rollout-20260912",
+    "branch": "task/engineering-public-testnet-observer-closure-rollout-20260912",
+    "frozen_head_oid": "4242e43baf32f9597353938ff92d668dd16b78d3",
+    "slice_id": "storage-first-fresh-process-red-20260912",
+    "role": "qa_engineer",
+    "owner_role": "blockchain_ops_engineer",
+    "integration_order": 12,
+    "packet_digest": "3e0cd53a655924c54e20fa6bf9c9f2055ccc35bb80abede09925dd0155606a8c",
+    "packet_sha256": "378f4b69fb1ed8e6009ab1cd8951eee966ff5253899fe5b687e9e86c14ffb392",
+    "prior_qa_artifact_sha256": "b9141f374476f2b36ee307561771d300ceb2bef791188c513d0e4adf8b8f24f7",
+    "open_issue_comment": "5641639488",
+    "test_commit": "339a55f"
+  },
+  "scope": {
+    "changed_files": [
+      "scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py",
+      ".pm/scratch/task_90c2722f6e1c48c3aebb6283cee471ce/tdd/storage-first-fresh-process-red-20260912.json"
+    ],
+    "production_files_changed": false,
+    "node_or_provider_access": false,
+    "credential_access": false,
+    "authority_mutation": false,
+    "remote_mutation": false,
+    "unrelated_dirty_path_preserved": ".pm/roles/tpm/backlog/committed.yaml"
+  },
+  "red_test": {
+    "finding": "QA-SF-003: every non-dry-run storage-205-first apply must require callable live trust revalidation before the first mutation, including in a fresh process.",
+    "test": "StorageFirstSecurityRedTests.test_qa_sf_003_fresh_process_requires_live_revalidation_before_mutation",
+    "behavior": "The test launches a clean Python interpreter, constructs the valid in-process storage fixture, omits live_revalidator, and requires rejection with zero transport.mutations.",
+    "command": "rtk python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py StorageFirstSecurityRedTests.test_qa_sf_003_fresh_process_requires_live_revalidation_before_mutation -v",
+    "result": "RED: Ran 1 test in 0.089s; FAILED (failures=1), exit 1.",
+    "failure_signature": "AssertionError: Lists differ: ['stop:storage-205', 'delete:storage-205', 'rebuild:storage-205', 'start:storage-205', 'verify:storage-205'] != []",
+    "observed_child_result": {
+      "outcome": "completed",
+      "status": "storage-205-verified",
+      "live_revalidator_supplied": false,
+      "callback_mutation_count": 5,
+      "mutations": [
+        "stop:storage-205",
+        "delete:storage-205",
+        "rebuild:storage-205",
+        "start:storage-205",
+        "verify:storage-205"
+      ]
+    }
+  },
+  "verification": {
+    "packet_hash_command": "rtk sha256sum .pm/scratch/task_90c2722f6e1c48c3aebb6283cee471ce/slice-packets/storage-first-fresh-process-red-20260912.json",
+    "packet_hash_result": "378f4b69fb1ed8e6009ab1cd8951eee966ff5253899fe5b687e9e86c14ffb392, exact match",
+    "head_command": "rtk git rev-parse HEAD",
+    "head_result": "4242e43baf32f9597353938ff92d668dd16b78d3",
+    "syntax_command": "rtk python3 -m py_compile scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py",
+    "syntax_result": "pass, exit 0",
+    "diff_check_command": "rtk git diff --check",
+    "diff_check_result": "pass, no output"
+  },
+  "expected_fix": {
+    "required": "Remove the process-global legacy no-revalidator fallback and reject before any provider mutation whenever live_revalidator is absent or non-callable.",
+    "green_gate": "Rerun this exact fresh-process test and require rejection with callback_mutation_count=0, then rerun prior focused and full adapter/planner suites at the new immutable head."
+  },
+  "release_assessment": {
+    "verdict": "BLOCKED",
+    "release_confidence": "none for QA-SF-003 until this fresh-process test is GREEN",
+    "residual_risks": [
+      "This slice intentionally adds RED coverage only and does not implement the production fix.",
+      "No real node/provider transport, credential seam, signed authority, or remote runtime was accessed.",
+      "The pre-existing TPM backlog modification remains untouched."
+    ]
+  },
+  "mutation_confirmation": {
+    "source_mutation": false,
+    "production_mutation": false,
+    "node_mutation": false,
+    "provider_mutation": false,
+    "credential_mutation": false,
+    "authority_mutation": false,
+    "remote_mutation": false,
+    "artifact_write_only": true
+  }
+}

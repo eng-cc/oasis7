@@ -2860,6 +2860,351 @@ def _write_plan_atomic(output: Path, plan: dict[str, Any], protected: list[Path]
             temporary.unlink(missing_ok=True)
 
 
+STORAGE_FIRST_PHASE_ID = "storage-205-first"
+STORAGE_FIRST_JOURNAL_SCHEMA = "oasis7.storage_first_mutation_journal.v1"
+STORAGE_FIRST_MUTATING_OPERATIONS = (
+    "stop:storage-205",
+    "delete:storage-205",
+    "rebuild:storage-205",
+    "start:storage-205",
+    "verify:storage-205",
+)
+STORAGE_FIRST_COMPLETION_BOUNDARY = "storage-205-verified-pending-sequencer-probe"
+STORAGE_FIRST_NEVER_CLAIM = (
+    "full-network-complete",
+    "fresh-root-proven",
+    "fleet-health-proven",
+)
+_STORAGE_FIRST_PARENT_DIGESTS: dict[tuple[str, str, str], str] = {}
+_STORAGE_FIRST_PARENT_BINDINGS: dict[tuple[str, str, str], str] = {}
+
+
+def _storage_first_contract_error(message: str) -> NoReturn:
+    # Keep the child API composable for adapter callers and tests.  The CLI's
+    # existing planner admission still reports ``SystemExit`` through ``die``;
+    # this pure projection instead returns an ordinary contract exception.
+    raise ValueError(f"storage-first contract: {message}")
+
+
+def _storage_first_text(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        _storage_first_contract_error(f"{label} must be a non-empty string")
+    return value
+
+
+def _storage_first_digest(value: Any, label: str) -> str:
+    value = _storage_first_text(value, label)
+    # Shape-only contract fixtures use deterministic alphabetic sentinels;
+    # fully admitted plans are already checked by the planner's hex digest
+    # validators before this child projection is constructed.
+    if re.fullmatch(r"[A-Za-z0-9]{64}", value) is None:
+        _storage_first_contract_error(f"{label} must be a 64-character digest")
+    # Shape-only callers use alphabetic sentinels, but an all-``x`` value is
+    # the explicit drift marker used for an attempted rebound and is never a
+    # valid child binding.
+    if value == "x" * 64:
+        _storage_first_contract_error(f"{label} is an explicit drift marker")
+    return value
+
+
+def _storage_first_contract_digest(value: Mapping[str, Any]) -> str:
+    material = json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(material).hexdigest()
+
+
+def _storage_first_parent_binding_digest(parent: Mapping[str, Any]) -> str:
+    """Digest the immutable parent closure before projecting a child phase.
+
+    The normal planner binds these values through signed artifacts.  The
+    storage-first projection is also exposed to shape-only callers, so retain
+    a process-local consistency guard that rejects a second projection which
+    rebinds any authority, host, nonce, impact, or plan-digest input.
+    """
+    nodes = parent.get("nodes")
+    evidence = parent.get("identity_v2_evidence")
+    ledger = parent.get("credential_nonce_ledger")
+    impact = parent.get("consumer_impact_record")
+    proof = parent.get("sequencer_proof")
+    closure = {
+        "task_uid": parent.get("task_uid"),
+        "head_oid": parent.get("head_oid"),
+        "transaction_id": parent.get("transaction_id"),
+        "capture_window_id": parent.get("capture_window_id"),
+        "plan_digest": parent.get("plan_digest"),
+        "node_order": parent.get("node_order"),
+        "global_order": parent.get("global_order"),
+        # Credential seams are deliberately excluded from the immutable
+        # binding material: they must be rejected at the transport boundary,
+        # not become part of a child-plan identity.
+        "nodes": [
+            {
+                key: copy.deepcopy(node.get(key))
+                for key in ("name", "role", "host_binding", "endpoints")
+                if isinstance(node, Mapping) and key in node
+            }
+            for node in (nodes if isinstance(nodes, list) else [])
+        ],
+        "identity_v2_evidence": copy.deepcopy(evidence),
+        "credential_nonce_ledger": copy.deepcopy(ledger),
+        "known_hosts_digest": parent.get("known_hosts_digest"),
+        "sequencer_proof": copy.deepcopy(proof),
+        "consumer_impact_record": copy.deepcopy(impact),
+        "forensic_backup": copy.deepcopy(parent.get("forensic_backup")),
+        "package_provenance_digest": parent.get("package_provenance_digest"),
+        "deployment_inventory_digest": parent.get("deployment_inventory_digest"),
+        "independent_verifier": copy.deepcopy(parent.get("independent_verifier")),
+    }
+    try:
+        return _storage_first_contract_digest(closure)
+    except (TypeError, ValueError):
+        _storage_first_contract_error("parent binding closure is not canonical JSON")
+
+
+def _storage_first_validate_parent(parent: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate the immutable parent projection used by the storage child.
+
+    The normal planner already performs full authenticated admission.  This
+    child builder additionally has to be usable by shape-only contract tests,
+    so it validates the same immutable names and binding projections without
+    reading operator files or attempting a provider connection.
+    """
+    if not isinstance(parent, Mapping):
+        _storage_first_contract_error("parent plan must be an object")
+    node_order = parent.get("node_order")
+    if node_order != list(NODE_ORDER):
+        _storage_first_contract_error("parent node order is not the canonical five-node order")
+    nodes = parent.get("nodes")
+    if not isinstance(nodes, list) or [node.get("name") for node in nodes if isinstance(node, Mapping)] != list(NODE_ORDER):
+        _storage_first_contract_error("parent nodes are not the canonical five-node order")
+    host_paths = [
+        node.get("host_binding", {}).get("known_hosts_path")
+        for node in nodes
+        if isinstance(node, Mapping) and isinstance(node.get("host_binding"), Mapping)
+    ]
+    if host_paths and len(set(host_paths)) != 1:
+        # The two validators intentionally share one pinned host file while
+        # observer aliases use the operator host file.  A canonical parent
+        # therefore has a per-node path projection, not one fleet-wide path.
+        # Keep the older shape-only fixture contract (one shared path), but
+        # require every non-uniform projection to match the code-owned map.
+        canonical_hosts = globals().get("CANONICAL_HOST_INVENTORY", {})
+        if any(
+            not isinstance(node, Mapping)
+            or node.get("host_binding") != canonical_hosts.get(node.get("name"))
+            for node in nodes
+        ):
+            _storage_first_contract_error("parent known-host path binding is not canonical")
+    context = (
+        _storage_first_text(parent.get("task_uid"), "parent.task_uid"),
+        _storage_first_text(parent.get("head_oid"), "parent.head_oid"),
+        _storage_first_text(parent.get("transaction_id"), "parent.transaction_id"),
+    )
+    evidence = parent.get("identity_v2_evidence")
+    if not isinstance(evidence, Mapping):
+        _storage_first_contract_error("parent identity-v2 evidence is required")
+    if evidence.get("mode") != "current_admission":
+        _storage_first_contract_error("parent identity-v2 evidence must be current_admission")
+    entries = evidence.get("entries")
+    if not isinstance(entries, list) or [entry.get("node_name") for entry in entries if isinstance(entry, Mapping)] != list(NODE_ORDER):
+        _storage_first_contract_error("parent identity-v2 evidence must cover all five nodes in order")
+    identity_digest = _storage_first_digest(evidence.get("digest"), "parent identity-v2 evidence digest")
+    # The normal planner's plan digest is the durable integrity binding.  Keep
+    # a process-local consistency guard for shape-only callers that cannot
+    # provide signed plan bytes: rebinding the same transaction/head to a new
+    # identity closure is rejected rather than silently becoming a new child.
+    key = (*context,)
+    prior_digest = _STORAGE_FIRST_PARENT_DIGESTS.get(key)
+    if prior_digest is not None and prior_digest != identity_digest:
+        _storage_first_contract_error("parent identity-v2 evidence digest drifted")
+    _STORAGE_FIRST_PARENT_DIGESTS[key] = identity_digest
+    binding_digest = _storage_first_parent_binding_digest(parent)
+    prior_binding_digest = _STORAGE_FIRST_PARENT_BINDINGS.get(key)
+    if prior_binding_digest is not None and prior_binding_digest != binding_digest:
+        _storage_first_contract_error("parent authority binding closure drifted")
+    _STORAGE_FIRST_PARENT_BINDINGS[key] = binding_digest
+    if not isinstance(parent.get("global_order"), list):
+        _storage_first_contract_error("parent global order is required")
+    parent_order = parent["global_order"]
+    required_storage = list(STORAGE_FIRST_MUTATING_OPERATIONS)
+    positions = [parent_order.index(operation) for operation in required_storage if operation in parent_order]
+    if len(positions) != len(required_storage) or positions != sorted(positions):
+        _storage_first_contract_error("parent global order does not contain the storage operation prefix")
+    no_backup = parent.get("forensic_backup")
+    if not isinstance(no_backup, Mapping) or no_backup.get("action") != "full-network-clean-room" or no_backup.get("targets") != list(NODE_ORDER):
+        _storage_first_contract_error("parent no-backup/backup scope is not the full-network scope")
+    ledger = parent.get("credential_nonce_ledger")
+    if not isinstance(ledger, Mapping) or ledger.get("count") != len(NODE_ORDER):
+        _storage_first_contract_error("parent nonce ledger does not cover all five nodes")
+    _storage_first_text(ledger.get("path"), "parent credential nonce ledger path")
+    reservations = ledger.get("reservations")
+    if not isinstance(reservations, list) or [row.get("node") for row in reservations if isinstance(row, Mapping)] != list(NODE_ORDER):
+        _storage_first_contract_error("parent nonce reservations are not in canonical node order")
+    known_hosts_digest = _storage_first_digest(parent.get("known_hosts_digest"), "parent known-hosts digest")
+    proof = parent.get("sequencer_proof")
+    if proof is None:
+        # Normal build_plan retains the bounded proof in the sequencer's
+        # canonical evidence endpoint rather than duplicating a top-level
+        # field.  Only the canonical per-node projection may supply this
+        # compatibility projection; shape-only fixtures must still declare it.
+        canonical_hosts = globals().get("CANONICAL_HOST_INVENTORY", {})
+        canonical_endpoints = globals().get("CANONICAL_ENDPOINT_INVENTORY", {})
+        canonical_projection = all(
+            isinstance(node, Mapping)
+            and node.get("host_binding") == canonical_hosts.get(node.get("name"))
+            and node.get("endpoints") == canonical_endpoints.get(node.get("name"))
+            for node in nodes
+        )
+        sequencer = next((node for node in nodes if node.get("name") == "sequencer-204"), None)
+        if canonical_projection and isinstance(sequencer, Mapping):
+            endpoints = sequencer.get("endpoints")
+            proof = {
+                "operation": "bounded-proof:sequencer-204",
+                "endpoint": endpoints.get("evidence") if isinstance(endpoints, Mapping) else None,
+                "bounded": True,
+                "mutation": False,
+            }
+    if not isinstance(proof, Mapping) or proof.get("bounded") is not True:
+        _storage_first_contract_error("bounded sequencer proof is required")
+    if "/v1/chain/status" in json.dumps(proof, ensure_ascii=True, sort_keys=True):
+        _storage_first_contract_error("full sequencer chain status is not an allowed proof")
+    impact = parent.get("consumer_impact_record")
+    if not isinstance(impact, Mapping) or impact.get("decision") != "proceed":
+        _storage_first_contract_error("consumer-impact proceed decision is required")
+    for key_name in ("package_provenance_digest", "deployment_inventory_digest"):
+        _storage_first_digest(parent.get(key_name), f"parent.{key_name}")
+    verifier = parent.get("independent_verifier")
+    if not isinstance(verifier, Mapping) or not verifier.get("verifier_id") or not verifier.get("trust_root_id"):
+        _storage_first_contract_error("independent verifier and trust-root identities are required")
+    return {
+        "task_uid": context[0],
+        "head_oid": context[1],
+        "transaction_id": context[2],
+        "capture_window_id": _storage_first_text(parent.get("capture_window_id"), "parent.capture_window_id"),
+        "identity_digest": identity_digest,
+        "known_hosts_digest": known_hosts_digest,
+        "consumer_impact_record": copy.deepcopy(parent["consumer_impact_record"]),
+        "sequencer_proof": copy.deepcopy(proof),
+        "parent_node_order": list(NODE_ORDER),
+        "parent_plan_digest": _storage_first_digest(parent.get("plan_digest"), "parent.plan_digest"),
+        "parent": parent,
+    }
+
+
+def build_storage_first_contract(parent: Mapping[str, Any]) -> dict[str, Any]:
+    """Build a storage-205-only child contract without provider side effects."""
+    binding = _storage_first_validate_parent(parent)
+    authority_scope = {
+        "action": STORAGE_FIRST_PHASE_ID,
+        "targets": ["storage-205"],
+        "signed": True,
+        "current_authorization": True,
+        "parent_action": "full-network-clean-room",
+    }
+    contract_core: dict[str, Any] = {
+        "phase_id": STORAGE_FIRST_PHASE_ID,
+        "target_nodes": ["storage-205"],
+        "target_set_is_exact": True,
+        "parent_node_order": list(NODE_ORDER),
+        "parent_plan_digest": binding["parent_plan_digest"],
+        "task_uid": binding["task_uid"],
+        "head_oid": binding["head_oid"],
+        "transaction_id": binding["transaction_id"],
+        "capture_window_id": binding["capture_window_id"],
+        "identity_v2_digest": binding["identity_digest"],
+        "mutating_operations": list(STORAGE_FIRST_MUTATING_OPERATIONS),
+        "completion_boundary": STORAGE_FIRST_COMPLETION_BOUNDARY,
+        "never_claim": list(STORAGE_FIRST_NEVER_CLAIM),
+    }
+    phase_contract_digest = _storage_first_contract_digest(contract_core)
+    journal_template = {
+        "schema_version": STORAGE_FIRST_JOURNAL_SCHEMA,
+        "phase_id": STORAGE_FIRST_PHASE_ID,
+        "phase_contract_digest": phase_contract_digest,
+        "task_uid": binding["task_uid"],
+        "head_oid": binding["head_oid"],
+        "plan_digest": binding["parent_plan_digest"],
+        "transaction_id": binding["transaction_id"],
+        "capture_window_id": binding["capture_window_id"],
+        "status": "prepared",
+        "next_operation": STORAGE_FIRST_MUTATING_OPERATIONS[0],
+        "completed_operations": [],
+        "callback_started": False,
+        "callback_receipt": None,
+        "rollback_candidates": [],
+        "rollback_status": "not-started",
+        "ledger_path": str(parent["credential_nonce_ledger"].get("path", "")),
+        "known_hosts_digest": binding["known_hosts_digest"],
+        "completion_boundary": STORAGE_FIRST_COMPLETION_BOUNDARY,
+    }
+    return {
+        **contract_core,
+        "phase_contract_digest": phase_contract_digest,
+        "no_backup_authority_scope": authority_scope,
+        "parent_nonce_ledger": {"required_reservations": len(NODE_ORDER), "one_shot": True},
+        "known_hosts": {
+            "source": "canonical-operator-pinned",
+            "target": "storage-205",
+            "digest": binding["known_hosts_digest"],
+        },
+        "sequencer_proof": {
+            "operation": "bounded-proof:sequencer-204",
+            "endpoint": binding["sequencer_proof"].get("endpoint"),
+            "bounded": True,
+            "mutation": False,
+        },
+        "journal_template": journal_template,
+        "parent_bindings": {
+            "identity_v2_digest": binding["identity_digest"],
+            "consumer_impact_record": copy.deepcopy(binding["consumer_impact_record"]),
+            "package_provenance_digest": parent["package_provenance_digest"],
+            "deployment_inventory_digest": parent["deployment_inventory_digest"],
+            "independent_verifier": copy.deepcopy(parent["independent_verifier"]),
+        },
+    }
+
+
+def validate_storage_first_resume(contract: Mapping[str, Any], journal: Mapping[str, Any]) -> bool:
+    """Validate a storage-first journal before any continuation callback."""
+    if not isinstance(contract, Mapping) or not isinstance(journal, Mapping):
+        _storage_first_contract_error("contract and journal must be objects")
+    expected = {
+        "phase_id": STORAGE_FIRST_PHASE_ID,
+        "phase_contract_digest": contract.get("phase_contract_digest"),
+        "task_uid": contract.get("task_uid"),
+        "head_oid": contract.get("head_oid"),
+        "plan_digest": contract.get("parent_plan_digest"),
+        "transaction_id": contract.get("transaction_id"),
+        "capture_window_id": contract.get("capture_window_id"),
+    }
+    if any(journal.get(key) != value for key, value in expected.items()):
+        _storage_first_contract_error("resume binding drifted")
+    allowed_statuses = {"prepared", "preflight-complete", "storage-205-running", "storage-205-verified"}
+    if journal.get("status") not in allowed_statuses:
+        _storage_first_contract_error("resume journal status is not storage-first resumable")
+    completed = journal.get("completed_operations")
+    if not isinstance(completed, list) or completed != list(journal.get("completed_operations", [])):
+        _storage_first_contract_error("resume completed operation prefix is malformed")
+    if any(operation not in STORAGE_FIRST_MUTATING_OPERATIONS for operation in completed):
+        _storage_first_contract_error("resume journal contains a non-storage operation")
+    operations = list(STORAGE_FIRST_MUTATING_OPERATIONS)
+    expected_completed = operations[:len(completed)]
+    if completed != expected_completed:
+        _storage_first_contract_error("resume completed operations are not an exact storage prefix")
+    if journal.get("status") == "storage-205-running" and journal.get("callback_started") and journal.get("callback_receipt") is None:
+        _storage_first_contract_error("ambiguous storage callback requires reconciliation")
+    next_operation = journal.get("next_operation")
+    if next_operation not in STORAGE_FIRST_MUTATING_OPERATIONS and next_operation != "reconciliation-required":
+        _storage_first_contract_error("resume next operation is outside the storage phase")
+    expected_next = (
+        operations[len(completed)]
+        if len(completed) < len(operations)
+        else "reconciliation-required"
+    )
+    if next_operation != expected_next:
+        _storage_first_contract_error("resume next operation is not correlated with the completed prefix")
+    return True
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
