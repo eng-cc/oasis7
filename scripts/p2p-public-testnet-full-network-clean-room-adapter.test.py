@@ -6779,6 +6779,40 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
         finally:
             canonical.tearDown()
 
+    def test_runtime_sf_043_resume_checkpoint_write_failure_preserves_reconciliation(self) -> None:
+        """A durability failure after completed work must retain governed recovery."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            journal = self.fixture._canonical_prefix_journal(
+                canonical, ["stop:storage-205"], name="resume-checkpoint-write-failure.json"
+            )
+            transport = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+            original_write = canonical.adapter._storage_first_journal_write
+            writes = 0
+
+            def fail_second_write(path, record):
+                nonlocal writes
+                writes += 1
+                if writes == 2:
+                    raise OSError("injected checkpoint durability failure")
+                return original_write(path, record)
+
+            with mock.patch.object(
+                canonical.adapter,
+                "_storage_first_journal_write",
+                side_effect=fail_second_write,
+            ):
+                with self.assertRaises(Exception):
+                    self.fixture._canonical_resume(canonical, journal, transport)
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            self.assertEqual(record["status"], "reconciliation-blocked")
+            self.assertEqual(record["completed_operations"], ["stop:storage-205"])
+            self.assertEqual(record["rollback_candidates"], ["stop:storage-205"])
+            self.assertEqual(record["reconciliation_requirements"]["automatic_replay"], False)
+            self.assertEqual(transport.mutations, [])
+        finally:
+            canonical.tearDown()
+
     def test_runtime_sf_027_resume_validates_nonce_checkpoint_before_prepared_write(self) -> None:
         """Missing committed nonce state must not replace a resumable journal checkpoint."""
         canonical = self.fixture._canonical_fixture()

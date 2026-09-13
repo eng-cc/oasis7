@@ -6033,12 +6033,19 @@ def _storage_first_run(
                 _storage_first_journal_write(Path(journal_path), record)
             except Exception as error:
                 record.update({
-                    "status": "terminal-failure",
+                    "status": "reconciliation-blocked" if completed else "terminal-failure",
                     "next_operation": "reconciliation-required",
                     "callback_started": False,
                     "terminal_error": error.__class__.__name__,
-                    "rollback_status": "not-started",
+                    "rollback_status": "reconciliation-blocked" if completed else "not-started",
+                    "rollback_candidates": _storage_first_rollback_candidates(completed),
                 })
+                if completed:
+                    record["reconciliation_requirements"] = {
+                        "reobserve_failed_state": True,
+                        "clean_redeploy": True,
+                        "automatic_replay": False,
+                    }
                 try:
                     _storage_first_journal_write(Path(journal_path), record)
                 except Exception as journal_error:
