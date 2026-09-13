@@ -2,6 +2,7 @@ use super::*;
 
 use super::super::auth::{
     AGENT_CHAT_AUTHORITY_SCOPE, PromptControlAuthIntent, VerifiedPlayerAuth,
+    has_enhanced_prompt_identity_apply, has_enhanced_prompt_identity_rollback,
     normalize_prompt_control_operation_identity, prompt_control_operation_digest,
     verify_agent_chat_auth_proof_with_authority,
     verify_hosted_prompt_control_apply_strong_auth_grant,
@@ -35,7 +36,9 @@ mod prompt_control_legacy;
 mod prompt_profile;
 #[path = "control_plane/provider_action.rs"]
 mod provider_action;
-use super::prompt_control_result::{PromptControlLedgerInsertError, PromptControlLedgerLookup};
+use super::prompt_control_result::{
+    PromptControlLedgerInsertError, PromptControlLedgerLookup, PromptControlLedgerReceipt,
+};
 pub(in crate::viewer::runtime_live) use agent_chat_intent::RuntimePrimaryIntent;
 use agent_chat_intent::{apply_accepted_primary_intent, resolve_agent_chat_intent};
 pub(super) use auth_helpers::map_auth_verify_error_code;

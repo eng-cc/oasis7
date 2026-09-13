@@ -1,17 +1,23 @@
 use std::collections::BTreeMap;
 
-use crate::viewer::protocol::PromptControlAck;
+use crate::viewer::protocol::{PromptControlAck, PromptControlError};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum PromptControlLedgerReceipt {
+    Ack(PromptControlAck),
+    Error(PromptControlError),
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct PromptControlResultLedgerEntry {
     pub(super) digest: String,
-    pub(super) ack: PromptControlAck,
+    pub(super) receipt: PromptControlLedgerReceipt,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum PromptControlLedgerLookup {
     Missing,
-    Replay(PromptControlAck),
+    Replay(PromptControlLedgerReceipt),
     Conflict,
 }
 
@@ -52,7 +58,7 @@ impl PromptControlResultLedger {
         match self.entries.get(&key) {
             None => PromptControlLedgerLookup::Missing,
             Some(entry) if entry.digest == digest => {
-                PromptControlLedgerLookup::Replay(entry.ack.clone())
+                PromptControlLedgerLookup::Replay(entry.receipt.clone())
             }
             Some(_) => PromptControlLedgerLookup::Conflict,
         }
@@ -66,7 +72,21 @@ impl PromptControlResultLedger {
         &self,
         ack: &PromptControlAck,
     ) -> Result<(), PromptControlLedgerInsertError> {
-        let receipt_size = serde_json::to_vec(ack)
+        self.validate_serialized_receipt(ack)
+    }
+
+    pub(super) fn validate_error(
+        &self,
+        error: &PromptControlError,
+    ) -> Result<(), PromptControlLedgerInsertError> {
+        self.validate_serialized_receipt(error)
+    }
+
+    fn validate_serialized_receipt<T: serde::Serialize>(
+        &self,
+        receipt: &T,
+    ) -> Result<(), PromptControlLedgerInsertError> {
+        let receipt_size = serde_json::to_vec(receipt)
             .map_err(|error| PromptControlLedgerInsertError::Serialize(error.to_string()))?
             .len();
         if receipt_size > self.receipt_max_bytes {
@@ -86,7 +106,44 @@ impl PromptControlResultLedger {
         digest: String,
         ack: PromptControlAck,
     ) -> Result<(), PromptControlLedgerInsertError> {
-        self.validate_receipt(&ack)?;
+        self.insert_receipt(
+            authority_epoch,
+            player_id,
+            request_id,
+            digest,
+            PromptControlLedgerReceipt::Ack(ack),
+        )
+    }
+
+    pub(super) fn insert_error(
+        &mut self,
+        authority_epoch: &str,
+        player_id: &str,
+        request_id: &str,
+        digest: String,
+        error: PromptControlError,
+    ) -> Result<(), PromptControlLedgerInsertError> {
+        self.insert_receipt(
+            authority_epoch,
+            player_id,
+            request_id,
+            digest,
+            PromptControlLedgerReceipt::Error(error),
+        )
+    }
+
+    fn insert_receipt(
+        &mut self,
+        authority_epoch: &str,
+        player_id: &str,
+        request_id: &str,
+        digest: String,
+        receipt: PromptControlLedgerReceipt,
+    ) -> Result<(), PromptControlLedgerInsertError> {
+        match &receipt {
+            PromptControlLedgerReceipt::Ack(ack) => self.validate_receipt(ack)?,
+            PromptControlLedgerReceipt::Error(error) => self.validate_error(error)?,
+        }
         if self.is_full() {
             return Err(PromptControlLedgerInsertError::Full);
         }
@@ -96,7 +153,7 @@ impl PromptControlResultLedger {
                 player_id.to_string(),
                 request_id.to_string(),
             ),
-            PromptControlResultLedgerEntry { digest, ack },
+            PromptControlResultLedgerEntry { digest, receipt },
         );
         Ok(())
     }

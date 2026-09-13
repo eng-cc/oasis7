@@ -931,14 +931,16 @@ fn prompt_field_patch_v1(value: &Option<Option<String>>) -> PromptFieldPatchV1 {
     }
 }
 
-fn has_enhanced_prompt_identity_apply(request: &PromptControlApplyRequest) -> bool {
+pub(crate) fn has_enhanced_prompt_identity_apply(request: &PromptControlApplyRequest) -> bool {
     request.request_id.is_some()
         || request.session_epoch.is_some()
         || request.binding_epoch.is_some()
         || request.expected_authority_epoch.is_some()
 }
 
-fn has_enhanced_prompt_identity_rollback(request: &PromptControlRollbackRequest) -> bool {
+pub(crate) fn has_enhanced_prompt_identity_rollback(
+    request: &PromptControlRollbackRequest,
+) -> bool {
     request.request_id.is_some()
         || request.session_epoch.is_some()
         || request.binding_epoch.is_some()

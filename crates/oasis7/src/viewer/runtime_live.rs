@@ -637,9 +637,10 @@ impl ViewerRuntimeLiveServer {
                     {
                         selected.push(REVOKE_SOCIAL_FACT_QUOTE_CAPABILITY.to_string());
                     }
-                    if offered
-                        .iter()
-                        .any(|capability| capability == PROMPT_CONTROL_RESULT_CAPABILITY)
+                    if self.llm_sidecar.supports_prompt_control_result()
+                        && offered
+                            .iter()
+                            .any(|capability| capability == PROMPT_CONTROL_RESULT_CAPABILITY)
                     {
                         selected.push(PROMPT_CONTROL_RESULT_CAPABILITY.to_string());
                     }

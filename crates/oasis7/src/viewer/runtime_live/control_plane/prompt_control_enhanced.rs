@@ -6,30 +6,57 @@ impl ViewerRuntimeLiveServer {
         command: PromptControlCommand,
         negotiated: &crate::viewer::protocol::NegotiatedViewerProtocol,
     ) -> Result<PromptControlAck, PromptControlError> {
+        let capability_selected =
+            crate::viewer::protocol::viewer_protocol_supports_prompt_control_result(negotiated);
         let enhanced = match &command {
             PromptControlCommand::Preview { request } | PromptControlCommand::Apply { request } => {
-                request.request_id.is_some()
-                    || request.session_epoch.is_some()
-                    || request.binding_epoch.is_some()
-                    || request.expected_authority_epoch.is_some()
+                has_enhanced_prompt_identity_apply(request)
             }
             PromptControlCommand::Rollback { request } => {
-                request.request_id.is_some()
-                    || request.session_epoch.is_some()
-                    || request.binding_epoch.is_some()
-                    || request.expected_authority_epoch.is_some()
+                has_enhanced_prompt_identity_rollback(request)
             }
         };
-        if !enhanced {
-            return self.handle_prompt_control(command);
-        }
-        if !crate::viewer::protocol::viewer_protocol_supports_prompt_control_result(negotiated) {
+        if capability_selected {
+            let missing_field = match &command {
+                PromptControlCommand::Preview { request }
+                | PromptControlCommand::Apply { request } => {
+                    Self::missing_enhanced_apply_field(request)
+                }
+                PromptControlCommand::Rollback { request } => {
+                    Self::missing_enhanced_rollback_field(request)
+                }
+            };
+            if let Some(field) = missing_field {
+                let (request_id, operation, preview) = match &command {
+                    PromptControlCommand::Preview { request } => (
+                        request.request_id.clone(),
+                        PromptControlOperation::Apply,
+                        true,
+                    ),
+                    PromptControlCommand::Apply { request } => (
+                        request.request_id.clone(),
+                        PromptControlOperation::Apply,
+                        false,
+                    ),
+                    PromptControlCommand::Rollback { request } => (
+                        request.request_id.clone(),
+                        PromptControlOperation::Rollback,
+                        false,
+                    ),
+                };
+                return Err(Self::prompt_control_field_required_error(
+                    request_id, operation, preview, field,
+                ));
+            }
+        } else if enhanced {
             return Err(PromptControlError {
                 code: "prompt_control_capability_required".to_string(),
                 message: "prompt_control result capability is required for enhanced requests"
                     .to_string(),
                 ..PromptControlError::default_legacy()
             });
+        } else {
+            return self.handle_prompt_control(command);
         }
         match command {
             PromptControlCommand::Preview { request } => {
@@ -42,6 +69,80 @@ impl ViewerRuntimeLiveServer {
                 self.handle_enhanced_prompt_rollback(request)
             }
         }
+    }
+
+    fn missing_enhanced_apply_field(request: &PromptControlApplyRequest) -> Option<&'static str> {
+        if request
+            .request_id
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+        {
+            return Some("request_id");
+        }
+        if request.session_epoch.is_none() {
+            return Some("session_epoch");
+        }
+        if request.binding_epoch.is_none() {
+            return Some("binding_epoch");
+        }
+        if request
+            .expected_authority_epoch
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+        {
+            return Some("expected_authority_epoch");
+        }
+        if request.expected_version.is_none() {
+            return Some("expected_version");
+        }
+        None
+    }
+
+    fn missing_enhanced_rollback_field(
+        request: &PromptControlRollbackRequest,
+    ) -> Option<&'static str> {
+        if request
+            .request_id
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+        {
+            return Some("request_id");
+        }
+        if request.session_epoch.is_none() {
+            return Some("session_epoch");
+        }
+        if request.binding_epoch.is_none() {
+            return Some("binding_epoch");
+        }
+        if request
+            .expected_authority_epoch
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+        {
+            return Some("expected_authority_epoch");
+        }
+        if request.expected_version.is_none() {
+            return Some("expected_version");
+        }
+        None
+    }
+
+    fn prompt_control_field_required_error(
+        request_id: Option<String>,
+        operation: PromptControlOperation,
+        preview: bool,
+        field: &str,
+    ) -> PromptControlError {
+        prompt_control_enhanced_error(
+            "prompt_control_field_required",
+            &format!("prompt_control {field} is required when the result capability is selected"),
+            request_id,
+            operation,
+            preview,
+            None,
+            None,
+            PromptControlResultStatus::Rejected,
+        )
     }
 
     fn handle_enhanced_prompt_apply(
@@ -77,32 +178,6 @@ impl ViewerRuntimeLiveServer {
                 ));
             }
         };
-        if self.hosted_public_join_mode() {
-            self.verify_hosted_prompt_control_apply_strong_auth(
-                if preview {
-                    PromptControlAuthIntent::Preview
-                } else {
-                    PromptControlAuthIntent::Apply
-                },
-                &request,
-            )
-            .map_err(|error| {
-                prompt_control_enhanced_error(
-                    if error.code == "strong_auth_required" {
-                        "auth_required"
-                    } else {
-                        "auth_invalid"
-                    },
-                    "prompt_control authentication failed",
-                    Some(request_id.clone()),
-                    operation,
-                    preview,
-                    None,
-                    None,
-                    PromptControlResultStatus::Blocked,
-                )
-            })?;
-        }
         let agent_id = request.agent_id.trim().to_string();
         let player_id =
             normalize_required_player_id(request.player_id.as_str(), agent_id.as_str())?;
@@ -310,9 +385,13 @@ impl ViewerRuntimeLiveServer {
             request_id.as_str(),
             operation_digest.as_str(),
         ) {
-            PromptControlLedgerLookup::Replay(mut ack) => {
+            PromptControlLedgerLookup::Replay(PromptControlLedgerReceipt::Ack(mut ack)) => {
                 ack.idempotent_replay = true;
                 return Ok(ack);
+            }
+            PromptControlLedgerLookup::Replay(PromptControlLedgerReceipt::Error(mut error)) => {
+                error.idempotent_replay = true;
+                return Err(error);
             }
             PromptControlLedgerLookup::Conflict => {
                 return Err(prompt_control_enhanced_error(
@@ -340,6 +419,32 @@ impl ViewerRuntimeLiveServer {
                 PromptControlResultStatus::Blocked,
             ));
         }
+        if self.hosted_public_join_mode() {
+            self.verify_hosted_prompt_control_apply_strong_auth(
+                if preview {
+                    PromptControlAuthIntent::Preview
+                } else {
+                    PromptControlAuthIntent::Apply
+                },
+                &request,
+            )
+            .map_err(|error| {
+                prompt_control_enhanced_error(
+                    if error.code == "strong_auth_required" {
+                        "auth_required"
+                    } else {
+                        "auth_invalid"
+                    },
+                    "prompt control authentication failed",
+                    Some(request_id.clone()),
+                    operation,
+                    preview,
+                    None,
+                    None,
+                    PromptControlResultStatus::Blocked,
+                )
+            })?;
+        }
         let current = self
             .current_prompt_profile(agent_id.as_str())
             .map_err(|_| {
@@ -355,16 +460,54 @@ impl ViewerRuntimeLiveServer {
                 )
             })?;
         if current.version != expected_version {
-            return Err(prompt_control_enhanced_error(
+            let mut stale = prompt_control_enhanced_error(
                 "version_conflict",
                 "prompt control expected_version does not match current version",
-                Some(request_id),
+                Some(request_id.clone()),
                 operation,
                 preview,
                 Some(agent_id.clone()),
-                Some(player_id),
+                Some(player_id.clone()),
                 PromptControlResultStatus::Stale,
-            ));
+            );
+            stale.authority_epoch = Some(self.prompt_control_authority.authority_epoch.clone());
+            stale.session_epoch = request.session_epoch;
+            stale.binding_epoch = request.binding_epoch;
+            stale.expected_version = Some(expected_version);
+            stale.current_version = Some(current.version);
+            stale.version = Some(current.version);
+            stale.value_visibility = Some(PromptControlValueVisibility::LatestAllowed);
+            stale.next_step = Some("refresh_prompt_version".to_string());
+            stale.operation_digest = Some(operation_digest.clone());
+            self.prompt_control_authority
+                .result_ledger
+                .validate_error(&stale)
+                .map_err(|error| prompt_control_ledger_error(error, &request_id))?;
+            self.llm_sidecar
+                .consume_player_auth_nonce(verified.player_id.as_str(), verified.nonce)
+                .map_err(|_message| {
+                    prompt_control_enhanced_error(
+                        "auth_invalid",
+                        "prompt control authentication failed",
+                        Some(request_id.clone()),
+                        operation,
+                        preview,
+                        None,
+                        None,
+                        PromptControlResultStatus::Blocked,
+                    )
+                })?;
+            self.prompt_control_authority
+                .result_ledger
+                .insert_error(
+                    self.prompt_control_authority.authority_epoch.as_str(),
+                    player_id.as_str(),
+                    request_id.as_str(),
+                    operation_digest,
+                    stale.clone(),
+                )
+                .map_err(|error| prompt_control_ledger_error(error, &request_id))?;
+            return Err(stale);
         }
         let mut candidate = current.clone();
         apply_prompt_patch_runtime(&mut candidate, &request);
@@ -538,25 +681,6 @@ impl ViewerRuntimeLiveServer {
                 ));
             }
         };
-        if self.hosted_public_join_mode() {
-            self.verify_hosted_prompt_control_rollback_strong_auth(&request)
-                .map_err(|error| {
-                    prompt_control_enhanced_error(
-                        if error.code == "strong_auth_required" {
-                            "auth_required"
-                        } else {
-                            "auth_invalid"
-                        },
-                        "prompt_control authentication failed",
-                        Some(request_id.clone()),
-                        operation,
-                        false,
-                        None,
-                        None,
-                        PromptControlResultStatus::Blocked,
-                    )
-                })?;
-        }
         let agent_id = request.agent_id.trim().to_string();
         let player_id =
             normalize_required_player_id(request.player_id.as_str(), agent_id.as_str())?;
@@ -735,9 +859,13 @@ impl ViewerRuntimeLiveServer {
             request_id.as_str(),
             operation_digest.as_str(),
         ) {
-            PromptControlLedgerLookup::Replay(mut ack) => {
+            PromptControlLedgerLookup::Replay(PromptControlLedgerReceipt::Ack(mut ack)) => {
                 ack.idempotent_replay = true;
                 return Ok(ack);
+            }
+            PromptControlLedgerLookup::Replay(PromptControlLedgerReceipt::Error(mut error)) => {
+                error.idempotent_replay = true;
+                return Err(error);
             }
             PromptControlLedgerLookup::Conflict => {
                 return Err(prompt_control_enhanced_error(
@@ -765,6 +893,25 @@ impl ViewerRuntimeLiveServer {
                 PromptControlResultStatus::Blocked,
             ));
         }
+        if self.hosted_public_join_mode() {
+            self.verify_hosted_prompt_control_rollback_strong_auth(&request)
+                .map_err(|error| {
+                    prompt_control_enhanced_error(
+                        if error.code == "strong_auth_required" {
+                            "auth_required"
+                        } else {
+                            "auth_invalid"
+                        },
+                        "prompt_control authentication failed",
+                        Some(request_id.clone()),
+                        operation,
+                        false,
+                        None,
+                        None,
+                        PromptControlResultStatus::Blocked,
+                    )
+                })?;
+        }
         let current = self
             .current_prompt_profile(agent_id.as_str())
             .map_err(|_| {
@@ -780,16 +927,54 @@ impl ViewerRuntimeLiveServer {
                 )
             })?;
         if current.version != expected_version {
-            return Err(prompt_control_enhanced_error(
+            let mut stale = prompt_control_enhanced_error(
                 "version_conflict",
                 "prompt control expected_version does not match current version",
-                Some(request_id),
+                Some(request_id.clone()),
                 operation,
                 false,
-                Some(agent_id),
-                Some(player_id),
+                Some(agent_id.clone()),
+                Some(player_id.clone()),
                 PromptControlResultStatus::Stale,
-            ));
+            );
+            stale.authority_epoch = Some(self.prompt_control_authority.authority_epoch.clone());
+            stale.session_epoch = request.session_epoch;
+            stale.binding_epoch = request.binding_epoch;
+            stale.expected_version = Some(expected_version);
+            stale.current_version = Some(current.version);
+            stale.version = Some(current.version);
+            stale.value_visibility = Some(PromptControlValueVisibility::LatestAllowed);
+            stale.next_step = Some("refresh_prompt_version".to_string());
+            stale.operation_digest = Some(operation_digest.clone());
+            self.prompt_control_authority
+                .result_ledger
+                .validate_error(&stale)
+                .map_err(|error| prompt_control_ledger_error(error, &request_id))?;
+            self.llm_sidecar
+                .consume_player_auth_nonce(verified.player_id.as_str(), verified.nonce)
+                .map_err(|_message| {
+                    prompt_control_enhanced_error(
+                        "auth_invalid",
+                        "prompt control authentication failed",
+                        Some(request_id.clone()),
+                        operation,
+                        false,
+                        None,
+                        None,
+                        PromptControlResultStatus::Blocked,
+                    )
+                })?;
+            self.prompt_control_authority
+                .result_ledger
+                .insert_error(
+                    self.prompt_control_authority.authority_epoch.as_str(),
+                    player_id.as_str(),
+                    request_id.as_str(),
+                    operation_digest,
+                    stale.clone(),
+                )
+                .map_err(|error| prompt_control_ledger_error(error, &request_id))?;
+            return Err(stale);
         }
         let target = if request.to_version == 0 {
             AgentPromptProfile::for_agent(agent_id.clone())

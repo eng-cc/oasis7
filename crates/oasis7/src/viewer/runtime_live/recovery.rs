@@ -5,6 +5,7 @@ use sha2::{Digest, Sha256};
 
 #[cfg(test)]
 pub(super) use super::recovery_persistence::RuntimeRecoveryFaultInjection;
+use crate::simulator::WorldEventKind;
 use crate::viewer::{
     claim_registration_grant_nonce_for_recovery, consume_registration_grant_nonce,
 };
@@ -903,13 +904,27 @@ impl ViewerRuntimeLiveServer {
         if let Some(plan) = binding_plan {
             let binding_transition =
                 request.force_rebind || rotates_session_key || plan.has_binding_transition();
-            for event in self.llm_sidecar.apply_agent_player_binding_plan(plan) {
+            let binding_events = self.llm_sidecar.apply_agent_player_binding_plan(plan);
+            let mut affected_agents = BTreeSet::new();
+            for event in binding_events {
+                match &event {
+                    WorldEventKind::AgentPlayerBound { agent_id, .. }
+                    | WorldEventKind::AgentPlayerUnbound { agent_id, .. } => {
+                        affected_agents.insert(agent_id.clone());
+                    }
+                    _ => {}
+                }
                 self.enqueue_virtual_event(event);
             }
             if binding_transition {
-                if let Some(agent_id) = bound_agent_id.as_deref() {
+                if affected_agents.is_empty() {
+                    if let Some(agent_id) = bound_agent_id.as_deref() {
+                        affected_agents.insert(agent_id.to_string());
+                    }
+                }
+                for agent_id in affected_agents {
                     self.prompt_control_authority
-                        .advance_binding_epoch(agent_id);
+                        .advance_binding_epoch(agent_id.as_str());
                 }
             }
         }

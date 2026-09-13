@@ -144,6 +144,134 @@ fn runtime_prompt_control_enhanced_requires_negotiated_result_capability() {
 }
 
 #[test]
+fn runtime_prompt_control_selected_capability_rejects_legacy_shaped_requests() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(47);
+    let registration = register_runtime_session(
+        &mut server,
+        "player-shape",
+        Some(agent_id.as_str()),
+        1,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let negotiated = crate::viewer::protocol::NegotiatedViewerProtocol {
+        version: crate::viewer::VIEWER_PROTOCOL_VERSION,
+        capabilities: vec![crate::viewer::protocol::PROMPT_CONTROL_RESULT_CAPABILITY.to_string()],
+    };
+    let legacy_shaped = signed_prompt_control_apply_request(
+        crate::viewer::PromptControlApplyRequest {
+            agent_id: agent_id.clone(),
+            player_id: "player-shape".to_string(),
+            expected_version: Some(0),
+            updated_by: Some("player-shape".to_string()),
+            system_prompt_override: Some(Some("must not apply".to_string())),
+            ..Default::default()
+        },
+        crate::viewer::PromptControlAuthIntent::Apply,
+        2,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let error = server
+        .handle_prompt_control_for_protocol(
+            crate::viewer::PromptControlCommand::Apply {
+                request: legacy_shaped,
+            },
+            &negotiated,
+        )
+        .expect_err("selected enhanced capability must reject legacy shape");
+    assert_eq!(error.code, "prompt_control_field_required");
+    assert_eq!(
+        error.status,
+        Some(crate::viewer::protocol::PromptControlResultStatus::Rejected)
+    );
+    assert!(server.llm_sidecar.prompt_profiles.is_empty());
+    assert_eq!(
+        server
+            .llm_sidecar
+            .player_auth_last_nonce
+            .get("player-shape"),
+        Some(&1)
+    );
+
+    let partial = crate::viewer::PromptControlApplyRequest {
+        agent_id,
+        player_id: "player-shape".to_string(),
+        request_id: Some("partial-shape".to_string()),
+        expected_version: Some(0),
+        ..Default::default()
+    };
+    let error = server
+        .handle_prompt_control_for_protocol(
+            crate::viewer::PromptControlCommand::Preview { request: partial },
+            &negotiated,
+        )
+        .expect_err("partial enhanced shape must fail before proof verification");
+    assert_eq!(error.code, "prompt_control_field_required");
+    assert_eq!(error.request_id.as_deref(), Some("partial-shape"));
+}
+
+#[test]
+fn runtime_prompt_control_result_capability_is_not_advertised_in_script_mode() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Script),
+    )
+    .expect("runtime server");
+    let mut session = RuntimeLiveSession::new();
+    let (mut writer, peer) = test_writer_pair();
+    server
+        .handle_request(
+            ViewerRequest::HelloV2 {
+                client: "script-capability-probe".to_string(),
+                version: crate::viewer::VIEWER_PROTOCOL_VERSION,
+                capabilities: vec![
+                    crate::viewer::protocol::PROMPT_CONTROL_RESULT_CAPABILITY.to_string(),
+                ],
+            },
+            &mut session,
+            &mut writer,
+        )
+        .expect("handle script v2 hello");
+    let responses = read_available_runtime_live_responses(&peer, Duration::from_millis(25));
+    let ViewerResponse::HelloAck {
+        capabilities,
+        authority_epoch,
+        ..
+    } = responses.first().expect("missing script hello ack")
+    else {
+        panic!("expected hello ack, got {responses:?}");
+    };
+    assert!(
+        !capabilities
+            .iter()
+            .any(|capability| capability
+                == crate::viewer::protocol::PROMPT_CONTROL_RESULT_CAPABILITY)
+    );
+    assert!(authority_epoch.is_none());
+    assert!(
+        !crate::viewer::protocol::viewer_protocol_supports_prompt_control_result(
+            &session.negotiated_protocol
+        )
+    );
+}
+
+#[test]
 fn runtime_prompt_control_enhanced_applied_then_stale_is_serialized() {
     let _guard = lock_test_llm_env();
     let mut server = ViewerRuntimeLiveServer::new(
@@ -231,7 +359,7 @@ fn runtime_prompt_control_enhanced_applied_then_stale_is_serialized() {
     let stale = server
         .handle_prompt_control_for_protocol(
             crate::viewer::PromptControlCommand::Apply {
-                request: stale_request,
+                request: stale_request.clone(),
             },
             &negotiated,
         )
@@ -246,8 +374,150 @@ fn runtime_prompt_control_enhanced_applied_then_stale_is_serialized() {
             .llm_sidecar
             .player_auth_last_nonce
             .get("player-serialized"),
-        Some(&2)
+        Some(&3)
     );
+    let stale_replay = server
+        .handle_prompt_control_for_protocol(
+            crate::viewer::PromptControlCommand::Apply {
+                request: stale_request.clone(),
+            },
+            &negotiated,
+        )
+        .expect_err("same stale request must replay its terminal result");
+    assert_eq!(stale_replay.code, "version_conflict");
+    assert!(stale_replay.idempotent_replay);
+    assert_eq!(
+        server
+            .llm_sidecar
+            .player_auth_last_nonce
+            .get("player-serialized"),
+        Some(&3)
+    );
+
+    let mut conflict_request = stale_request;
+    conflict_request.system_prompt_override = Some(Some("different operation".to_string()));
+    conflict_request.auth = None;
+    conflict_request = signed_prompt_control_apply_request(
+        conflict_request,
+        crate::viewer::PromptControlAuthIntent::Apply,
+        4,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let conflict = server
+        .handle_prompt_control_for_protocol(
+            crate::viewer::PromptControlCommand::Apply {
+                request: conflict_request,
+            },
+            &negotiated,
+        )
+        .expect_err("same request id with a different digest must conflict");
+    assert_eq!(conflict.code, "request_id_conflict");
+    assert!(!conflict.idempotent_replay);
+    assert_eq!(
+        server
+            .llm_sidecar
+            .player_auth_last_nonce
+            .get("player-serialized"),
+        Some(&3)
+    );
+}
+
+#[test]
+fn runtime_prompt_control_hosted_control_loss_precedes_missing_grant() {
+    let _llm_guard = lock_test_llm_env();
+    let _strong_auth_guard = lock_test_hosted_strong_auth_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::TwoBases)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm)
+            .with_hosted_public_join_mode(true),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let rebound_agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .find(|candidate| *candidate != &agent_id)
+        .cloned()
+        .expect("second seed agent");
+    let (public_key, private_key) = test_signer(48);
+    let registration = register_runtime_session(
+        &mut server,
+        "player-hosted-loss",
+        Some(agent_id.as_str()),
+        1,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let request = signed_prompt_control_apply_request(
+        crate::viewer::PromptControlApplyRequest {
+            agent_id: agent_id.clone(),
+            player_id: "player-hosted-loss".to_string(),
+            expected_version: Some(0),
+            updated_by: Some("player-hosted-loss".to_string()),
+            system_prompt_override: Some(Some("lost control".to_string())),
+            request_id: Some("hosted-control-loss".to_string()),
+            session_epoch: registration.session_epoch,
+            binding_epoch: registration.binding_epoch,
+            expected_authority_epoch: Some(server.prompt_control_authority.authority_epoch.clone()),
+            strong_auth_grant: None,
+            ..Default::default()
+        },
+        crate::viewer::PromptControlAuthIntent::Apply,
+        2,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let rebound = register_runtime_session_with_options(
+        &mut server,
+        "player-hosted-loss",
+        Some(rebound_agent_id.as_str()),
+        true,
+        3,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(rebound.binding_epoch, Some(1));
+    assert_eq!(
+        server
+            .prompt_control_authority
+            .binding_epoch(agent_id.as_str()),
+        registration.binding_epoch.unwrap_or_default() + 1
+    );
+
+    let negotiated = crate::viewer::protocol::NegotiatedViewerProtocol {
+        version: crate::viewer::VIEWER_PROTOCOL_VERSION,
+        capabilities: vec![crate::viewer::protocol::PROMPT_CONTROL_RESULT_CAPABILITY.to_string()],
+    };
+    let error = server
+        .handle_prompt_control_for_protocol(
+            crate::viewer::PromptControlCommand::Apply { request },
+            &negotiated,
+        )
+        .expect_err("lost hosted control must be reported before grant status");
+    assert_eq!(error.code, "control_lost");
+    assert_eq!(error.reason_code.as_deref(), Some("control_lost"));
+    assert_eq!(
+        error.status,
+        Some(crate::viewer::protocol::PromptControlResultStatus::Blocked)
+    );
+    assert_eq!(
+        error.value_visibility,
+        Some(crate::viewer::protocol::PromptControlValueVisibility::Hidden)
+    );
+    assert!(error.player_id.is_none());
+    assert!(error.binding_epoch.is_none());
+    assert!(server.llm_sidecar.prompt_profiles.is_empty());
+    clear_hosted_strong_auth_env();
 }
 
 #[test]

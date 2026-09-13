@@ -401,6 +401,9 @@ impl RuntimeLlmSidecar {
     pub(in crate::viewer::runtime_live) fn supports_prompt_control(&self) -> bool {
         !env_requests_provider_backend()
     }
+    pub(in crate::viewer::runtime_live) fn supports_prompt_control_result(&self) -> bool {
+        self.is_llm_mode() && self.supports_prompt_control()
+    }
     pub(in crate::viewer::runtime_live) fn supports_agent_chat(&self) -> bool {
         true
     }
