@@ -61,6 +61,13 @@ AGENT_PROVIDER_CONNECT_TIMEOUT_MS="${OASIS7_AGENT_PROVIDER_CONNECT_TIMEOUT_MS:-1
 AGENT_PROVIDER_PROFILE="${OASIS7_AGENT_PROVIDER_PROFILE:-oasis7_p0_low_freq_npc}"
 AGENT_EXECUTION_LANE="${OASIS7_AGENT_EXECUTION_LANE:-headless_agent}"
 PROVIDER_BOOTSTRAP_AUTHORITY_PATHS=()
+LOCAL_TEST_PROVIDER_AUTHORITY_PATH="${OASIS7_LOCAL_TEST_PROVIDER_AUTHORITY_PATH:-}"
+LOCAL_TEST_PROVIDER_WASM_PATH="${OASIS7_LOCAL_TEST_PROVIDER_WASM_PATH:-}"
+LOCAL_TEST_PROVIDER_METADATA_PATH="${OASIS7_LOCAL_TEST_PROVIDER_METADATA_PATH:-}"
+LOCAL_TEST_PROVIDER_AGENT_ID="${OASIS7_LOCAL_TEST_PROVIDER_AGENT_ID:-starter-agent-0}"
+LOCAL_TEST_PROVIDER_OWNER_BINDING="${OASIS7_LOCAL_TEST_PROVIDER_OWNER_BINDING:-local-test-owner-0}"
+LOCAL_TEST_PROVIDER_FINALITY_BLOCK_HASH="${OASIS7_LOCAL_TEST_PROVIDER_FINALITY_BLOCK_HASH:-}"
+LOCAL_TEST_PROVIDER_SESSION_MODE="${OASIS7_LOCAL_TEST_PROVIDER_SESSION_MODE:-hosted_public_join}"
 AGENT_PROVIDER_PROD_URL="${OASIS7_AGENT_PROVIDER_PROD_URL:-https://t2t.oasis7.tech}"
 AGENT_PROVIDER_TEST_URL="${OASIS7_AGENT_PROVIDER_TEST_URL:-}"
 PRINT_AGENT_PROVIDER_CONFIG="0"
@@ -147,6 +154,20 @@ Options:
                            headless_agent (default) or player_parity
   --provider-bootstrap-authority <path>
                            Explicit JSON Runtime authority bundle; repeat per ProviderBacked agent
+  --local-test-provider-authority <path>
+                           Explicit DevLocal authority output bundle (requires local standalone + builtin_llm mode)
+  --local-test-provider-wasm <path>
+                           Real WASM artifact for the explicit DevLocal provider setup
+  --local-test-provider-metadata <path>
+                           Canonical build-suite metadata JSON for the WASM artifact
+  --local-test-provider-agent-id <id>
+                           Starter agent to provision (default: starter-agent-0)
+  --local-test-provider-owner-binding <id>
+                           Stable local session owner binding (default: local-test-owner-0)
+  --local-test-provider-finality-block-hash <hash>
+                           Explicit local finality marker, blake3:<64 lowercase hex>
+  --local-test-provider-session-mode <mode>
+                           hosted_public_join|loopback (default: hosted_public_join)
   --with-llm               Enable LLM mode (default: enabled; required for gameplay)
   --no-llm                 Negative-path only; this launcher stack now fails fast without LLM
   --auto-play              Start gameplay/world progression on viewer connection (default)
@@ -273,6 +294,34 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       PROVIDER_BOOTSTRAP_AUTHORITY_PATHS+=("$2")
+      shift 2
+      ;;
+    --local-test-provider-authority)
+      LOCAL_TEST_PROVIDER_AUTHORITY_PATH="${2:-}"
+      shift 2
+      ;;
+    --local-test-provider-wasm)
+      LOCAL_TEST_PROVIDER_WASM_PATH="${2:-}"
+      shift 2
+      ;;
+    --local-test-provider-metadata)
+      LOCAL_TEST_PROVIDER_METADATA_PATH="${2:-}"
+      shift 2
+      ;;
+    --local-test-provider-agent-id)
+      LOCAL_TEST_PROVIDER_AGENT_ID="${2:-}"
+      shift 2
+      ;;
+    --local-test-provider-owner-binding)
+      LOCAL_TEST_PROVIDER_OWNER_BINDING="${2:-}"
+      shift 2
+      ;;
+    --local-test-provider-finality-block-hash)
+      LOCAL_TEST_PROVIDER_FINALITY_BLOCK_HASH="${2:-}"
+      shift 2
+      ;;
+    --local-test-provider-session-mode)
+      LOCAL_TEST_PROVIDER_SESSION_MODE="${2:-}"
       shift 2
       ;;
     --chain-enable)
@@ -480,6 +529,57 @@ case "$CHAIN_LINK_POLICY" in
     ;;
 esac
 
+LOCAL_TEST_PROVIDER_SETUP_ENABLED="0"
+if [[ -n "$LOCAL_TEST_PROVIDER_AUTHORITY_PATH" || -n "$LOCAL_TEST_PROVIDER_WASM_PATH" || -n "$LOCAL_TEST_PROVIDER_METADATA_PATH" || -n "$LOCAL_TEST_PROVIDER_FINALITY_BLOCK_HASH" ]]; then
+  LOCAL_TEST_PROVIDER_SETUP_ENABLED="1"
+  for local_provider_path_name in LOCAL_TEST_PROVIDER_AUTHORITY_PATH LOCAL_TEST_PROVIDER_WASM_PATH LOCAL_TEST_PROVIDER_METADATA_PATH; do
+    local_provider_path_value="${!local_provider_path_name}"
+    if [[ -n "$local_provider_path_value" && "$local_provider_path_value" != /* ]]; then
+      printf -v "$local_provider_path_name" '%s/%s' "$ROOT_DIR" "$local_provider_path_value"
+    fi
+  done
+  if [[ "$CHAIN_ENABLED" != "1" ]]; then
+    echo "error: local test authority setup requires --chain-enable" >&2
+    exit 1
+  fi
+  if [[ "$CHAIN_LOCAL_STANDALONE_TEST" != "1" ]]; then
+    echo "error: local test authority setup requires --chain-local-standalone-test" >&2
+    exit 1
+  fi
+  if [[ "$AGENT_DECISION_SOURCE" != "builtin_llm" ]]; then
+    echo "error: local test provider authority setup requires --agent-decision-source builtin_llm" >&2
+    exit 1
+  fi
+  if [[ -z "$LOCAL_TEST_PROVIDER_AUTHORITY_PATH" || -z "$LOCAL_TEST_PROVIDER_WASM_PATH" || -z "$LOCAL_TEST_PROVIDER_METADATA_PATH" || -z "$LOCAL_TEST_PROVIDER_FINALITY_BLOCK_HASH" ]]; then
+    echo "error: local test authority setup requires authority, wasm, metadata, and finality marker paths" >&2
+    exit 1
+  fi
+  if [[ ! -f "$LOCAL_TEST_PROVIDER_WASM_PATH" ]]; then
+    echo "error: local test WASM artifact not found: $LOCAL_TEST_PROVIDER_WASM_PATH" >&2
+    exit 1
+  fi
+  if [[ ! -f "$LOCAL_TEST_PROVIDER_METADATA_PATH" ]]; then
+    echo "error: local test build metadata not found: $LOCAL_TEST_PROVIDER_METADATA_PATH" >&2
+    exit 1
+  fi
+  if [[ ! "$LOCAL_TEST_PROVIDER_FINALITY_BLOCK_HASH" =~ ^blake3:[0-9a-f]{64}$ ]]; then
+    echo "error: --local-test-provider-finality-block-hash must be blake3:<64 lowercase hex characters>" >&2
+    exit 1
+  fi
+  case "$LOCAL_TEST_PROVIDER_SESSION_MODE" in
+    hosted_public_join|loopback)
+      ;;
+    *)
+      echo "error: --local-test-provider-session-mode must be hosted_public_join or loopback" >&2
+      exit 1
+      ;;
+  esac
+  if [[ -z "$LOCAL_TEST_PROVIDER_AGENT_ID" || -z "$LOCAL_TEST_PROVIDER_OWNER_BINDING" ]]; then
+    echo "error: local test agent and owner binding must be non-empty" >&2
+    exit 1
+  fi
+fi
+
 if [[ "$PRINT_AGENT_PROVIDER_CONFIG" == "1" ]]; then
   python3 - <<PY
 import json
@@ -498,6 +598,8 @@ payload = {
     "agent_provider_profile": "$AGENT_PROVIDER_PROFILE",
     "agent_execution_lane": "$AGENT_EXECUTION_LANE",
     "provider_bootstrap_authority_count": "${#PROVIDER_BOOTSTRAP_AUTHORITY_PATHS[@]}",
+    "local_test_provider_setup_enabled": "$LOCAL_TEST_PROVIDER_SETUP_ENABLED",
+    "local_test_provider_session_mode": "$LOCAL_TEST_PROVIDER_SESSION_MODE",
     "chain_link_policy": "$CHAIN_LINK_POLICY",
     "agent_chat_echo": "$AGENT_CHAT_ECHO",
 }
@@ -833,6 +935,9 @@ write_session_meta() {
     printf 'LLM_PROVIDER_PROBE_LOG=%s\n' "$LLM_PROVIDER_PROBE_LOG"
     printf 'PROVIDER_LINEAGE_STORE_PATH=%s\n' "$OUTPUT_DIR/viewer-provider-lineage.json"
     printf 'PROVIDER_BOOTSTRAP_AUTHORITY_COUNT=%s\n' "${#PROVIDER_BOOTSTRAP_AUTHORITY_PATHS[@]}"
+    printf 'LOCAL_TEST_PROVIDER_SETUP_ENABLED=%s\n' "$LOCAL_TEST_PROVIDER_SETUP_ENABLED"
+    printf 'LOCAL_TEST_PROVIDER_AUTHORITY_PATH=%s\n' "$LOCAL_TEST_PROVIDER_AUTHORITY_PATH"
+    printf 'LOCAL_TEST_PROVIDER_SESSION_MODE=%s\n' "$LOCAL_TEST_PROVIDER_SESSION_MODE"
     printf 'HOSTED_ACCOUNT_STORE_PATH=%s\n' "$HOSTED_ACCOUNT_STORE_PATH"
     printf 'STACK_READY=%s\n' "$stack_ready"
     if [[ "$stack_ready" == "1" ]]; then
@@ -912,6 +1017,17 @@ WORLD_ARGS+=(--with-llm)
 for authority_path in "${PROVIDER_BOOTSTRAP_AUTHORITY_PATHS[@]}"; do
   WORLD_ARGS+=(--provider-bootstrap-authority "$authority_path")
 done
+if [[ "$LOCAL_TEST_PROVIDER_SETUP_ENABLED" == "1" ]]; then
+  WORLD_ARGS+=(
+    --local-test-provider-authority "$LOCAL_TEST_PROVIDER_AUTHORITY_PATH"
+    --local-test-provider-wasm "$LOCAL_TEST_PROVIDER_WASM_PATH"
+    --local-test-provider-metadata "$LOCAL_TEST_PROVIDER_METADATA_PATH"
+    --local-test-provider-agent-id "$LOCAL_TEST_PROVIDER_AGENT_ID"
+    --local-test-provider-owner-binding "$LOCAL_TEST_PROVIDER_OWNER_BINDING"
+    --local-test-provider-finality-block-hash "$LOCAL_TEST_PROVIDER_FINALITY_BLOCK_HASH"
+    --local-test-provider-session-mode "$LOCAL_TEST_PROVIDER_SESSION_MODE"
+  )
+fi
 if [[ "$AUTO_PLAY" == "1" ]]; then
   WORLD_ARGS+=(--auto-play)
 else

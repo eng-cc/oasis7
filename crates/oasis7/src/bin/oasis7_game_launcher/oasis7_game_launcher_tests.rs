@@ -24,7 +24,7 @@ use super::{
     query_runtime_bound_players, resolve_static_asset_path,
     resolve_viewer_static_dir_with_override, sanitize_index_html_for_embedded_server,
     sanitize_relative_request_path, start_static_http_server, stop_static_http_server,
-    viewer_dev_dist_candidates,
+    viewer_deployment_mode_from_options, viewer_dev_dist_candidates,
 };
 use oasis7::launcher_bootstrap_peers::DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS;
 use oasis7::simulator::ProviderExecutionMode;
@@ -475,6 +475,83 @@ fn parse_options_accepts_agent_direct_connect_alias() {
         options.agent_provider_transport,
         LOOPBACK_HTTP_PROVIDER_TRANSPORT
     );
+}
+
+#[test]
+fn parse_options_accepts_local_test_authority_for_builtin_llm() {
+    let options = parse_options(
+        [
+            "--deployment-mode",
+            "trusted_local_only",
+            "--allow-trusted-local-playtest",
+            "--chain-local-standalone-test",
+            "--agent-decision-source",
+            "builtin_llm",
+            "--local-test-provider-authority",
+            "/tmp/local-test-provider-authority.json",
+            "--local-test-provider-wasm",
+            "/tmp/local-test-provider.wasm",
+            "--local-test-provider-metadata",
+            "/tmp/local-test-provider.metadata.json",
+            "--local-test-provider-finality-block-hash",
+            "blake3:0000000000000000000000000000000000000000000000000000000000000000",
+        ]
+        .into_iter(),
+    )
+    .expect("local authority setup should accept the native Builtin LLM lane");
+
+    assert_eq!(options.agent_decision_source, BUILTIN_LLM_DECISION_SOURCE);
+    assert!(options.chain_enabled);
+    assert!(options.chain_local_standalone_test);
+    assert_eq!(options.local_test_provider_agent_id, "starter-agent-0");
+    assert_eq!(
+        options.local_test_provider_session_mode,
+        "hosted_public_join"
+    );
+    assert_eq!(
+        viewer_deployment_mode_from_options(&options),
+        DeploymentMode::HostedPublicJoin
+    );
+    let viewer_command =
+        build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
+    let viewer_args = viewer_command
+        .get_args()
+        .map(|value| value.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    let deployment_mode_index = viewer_args
+        .iter()
+        .position(|value| value == "--deployment-mode")
+        .expect("viewer deployment mode argument");
+    assert_eq!(
+        viewer_args
+            .get(deployment_mode_index + 1)
+            .map(String::as_str),
+        Some("hosted_public_join")
+    );
+}
+
+#[test]
+fn parse_options_rejects_local_test_authority_for_provider_backed_lane() {
+    let err = parse_options(
+        [
+            "--deployment-mode",
+            "trusted_local_only",
+            "--allow-trusted-local-playtest",
+            "--chain-local-standalone-test",
+            "--local-test-provider-authority",
+            "/tmp/local-test-provider-authority.json",
+            "--local-test-provider-wasm",
+            "/tmp/local-test-provider.wasm",
+            "--local-test-provider-metadata",
+            "/tmp/local-test-provider.metadata.json",
+            "--local-test-provider-finality-block-hash",
+            "blake3:0000000000000000000000000000000000000000000000000000000000000000",
+        ]
+        .into_iter(),
+    )
+    .expect_err("local authority setup must stay on the native Builtin LLM lane");
+
+    assert!(err.contains("builtin_llm"));
 }
 
 #[test]

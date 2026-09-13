@@ -103,6 +103,7 @@ mod logistics;
 pub use logistics::LogisticsTransferQuote;
 mod market_quote_decision_preview;
 pub use market_quote_decision_preview::{MarketQuoteDecisionPreview, MarketQuoteSupplyDelta};
+mod local_test_provider_bootstrap;
 mod main_token_economy_audit;
 mod module_actions;
 mod module_artifact_retirement;
@@ -139,6 +140,10 @@ mod tick_consensus;
 mod tick_consensus_state_root;
 mod transition;
 
+pub use local_test_provider_bootstrap::{
+    LocalTestProviderAuthorityConfig, LocalTestProviderAuthorityMode,
+    LocalTestProviderModuleArtifact, LocalTestProviderProvisioning, LocalTestProviderSessionMode,
+};
 pub use provider_backed_bootstrap::ProviderBackedBootstrapAuthorityV1;
 pub use transition::{
     ExecutionTransaction, PreparedCommit, TransitionBaseHead, TransitionBuffer,

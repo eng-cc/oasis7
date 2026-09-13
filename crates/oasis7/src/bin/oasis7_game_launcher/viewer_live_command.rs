@@ -16,7 +16,7 @@ pub(super) fn build_oasis7_viewer_live_command(
         .arg("--web-bind")
         .arg(options.web_bind.as_str())
         .arg("--deployment-mode")
-        .arg(options.deployment_mode.as_str());
+        .arg(viewer_deployment_mode_from_options(options).as_str());
     if !options.generated_world_dir.trim().is_empty() {
         command
             .arg("--generated-world-dir")
@@ -44,7 +44,7 @@ pub(super) fn build_oasis7_viewer_live_command(
             .arg("--chain-link-policy")
             .arg(options.chain_link_policy.as_str());
     }
-    if options.deployment_mode == "hosted_public_join" {
+    if viewer_deployment_mode_from_options(options) == DeploymentMode::HostedPublicJoin {
         command.env_remove(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV);
         if let Ok(issuer_private_key) =
             std::env::var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV)

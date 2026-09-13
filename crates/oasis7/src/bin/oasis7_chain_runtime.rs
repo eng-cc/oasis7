@@ -55,6 +55,8 @@ mod identity_receipt;
 #[cfg(test)]
 #[path = "oasis7_chain_runtime/identity_receipt_tests.rs"]
 mod identity_receipt_tests;
+#[path = "oasis7_chain_runtime/local_provider_setup.rs"]
+mod local_provider_setup;
 #[path = "oasis7_chain_runtime/main_token_submit_api.rs"]
 mod main_token_submit_api;
 #[path = "oasis7_chain_runtime/module_release_attestation_submit_api.rs"]
@@ -458,6 +460,12 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         config,
         paths.execution_world_dir.as_path(),
     )?;
+    if options.local_test_provider_authority_path.is_some() {
+        local_provider_setup::ensure_local_test_provider_authority(
+            &options,
+            paths.execution_world_dir.as_path(),
+        )?;
+    }
     let effective_validator_signer_bindings =
         config.pos_config.validator_signer_public_keys.clone();
     let replication_remote_writer_allowlist =
@@ -516,10 +524,19 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         )
         .map_err(|err| format!("failed to initialize execution driver: {err}"))?;
         #[cfg(not(test))]
+        let mut provider_bootstrap_authority_paths =
+            options.provider_backed_bootstrap_authority_paths.clone();
+        #[cfg(not(test))]
+        if let Some(local_authority_path) = options.local_test_provider_authority_path.as_ref()
+            && !provider_bootstrap_authority_paths.contains(local_authority_path)
+        {
+            provider_bootstrap_authority_paths.push(local_authority_path.clone());
+        }
+        #[cfg(not(test))]
         execution_bridge::publish_provider_backed_bootstrap_from_paths(
             &runtime,
             paths.execution_world_dir.as_path(),
-            options.provider_backed_bootstrap_authority_paths.as_slice(),
+            provider_bootstrap_authority_paths.as_slice(),
         )?;
         runtime = runtime.with_execution_hook(execution_driver);
     }

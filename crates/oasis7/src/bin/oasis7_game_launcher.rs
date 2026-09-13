@@ -42,8 +42,8 @@ mod url_encoding;
 #[path = "oasis7_game_launcher/viewer_live_command.rs"]
 mod viewer_live_command;
 use cli::{
-    deployment_mode_from_options, parse_host_port, parse_options, print_help,
-    uses_provider_http_transport,
+    parse_host_port, parse_options, print_help, uses_provider_http_transport,
+    viewer_deployment_mode_from_options,
 };
 use hosted_access::{DEFAULT_DEPLOYMENT_MODE, DeploymentMode};
 use hosted_account_identity::HostedAccountIdentityBroker;
@@ -188,6 +188,13 @@ struct CliOptions {
     chain_p2p_accept_public_entry: bool,
     chain_replication_bootstrap_peers: Vec<String>,
     provider_bootstrap_authority_paths: Vec<String>,
+    local_test_provider_authority_path: Option<String>,
+    local_test_provider_wasm_path: Option<String>,
+    local_test_provider_metadata_path: Option<String>,
+    local_test_provider_agent_id: String,
+    local_test_provider_owner_binding: String,
+    local_test_provider_finality_block_hash: Option<String>,
+    local_test_provider_session_mode: String,
     chain_local_standalone_test: bool,
     chain_node_tick_ms: u64,
     chain_pos_slot_duration_ms: u64,
@@ -240,6 +247,13 @@ impl Default for CliOptions {
             chain_p2p_accept_public_entry: false,
             chain_replication_bootstrap_peers: default_chain_replication_bootstrap_peers_vec(),
             provider_bootstrap_authority_paths: Vec::new(),
+            local_test_provider_authority_path: None,
+            local_test_provider_wasm_path: None,
+            local_test_provider_metadata_path: None,
+            local_test_provider_agent_id: "starter-agent-0".to_string(),
+            local_test_provider_owner_binding: "local-test-owner-0".to_string(),
+            local_test_provider_finality_block_hash: None,
+            local_test_provider_session_mode: "hosted_public_join".to_string(),
             chain_local_standalone_test: false,
             chain_node_tick_ms: DEFAULT_CHAIN_NODE_TICK_MS,
             chain_pos_slot_duration_ms: pos_defaults.slot_duration_ms,
@@ -305,7 +319,7 @@ fn run_launcher(options: &CliOptions, trace_session_id: &str) -> Result<(), Stri
                 .to_string(),
         );
     }
-    if options.deployment_mode == "hosted_public_join" {
+    if viewer_deployment_mode_from_options(options) == DeploymentMode::HostedPublicJoin {
         let issuer_private_key =
             env::var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV)
                 .map_err(|_| "hosted registration issuer private key is required".to_string())?;
@@ -342,7 +356,7 @@ fn run_launcher(options: &CliOptions, trace_session_id: &str) -> Result<(), Stri
             }
         };
     let mut server = match start_static_http_server(
-        deployment_mode_from_options(options),
+        viewer_deployment_mode_from_options(options),
         options.live_bind.as_str(),
         options.viewer_host.as_str(),
         options.viewer_port,
@@ -574,6 +588,40 @@ fn build_oasis7_chain_runtime_args(options: &CliOptions) -> Vec<String> {
         for path in &options.provider_bootstrap_authority_paths {
             args.push("--provider-bootstrap-authority".to_string());
             args.push(path.clone());
+        }
+        if let Some(path) = options.local_test_provider_authority_path.as_ref() {
+            args.push("--local-test-provider-authority".to_string());
+            args.push(path.clone());
+            args.push("--local-test-provider-wasm".to_string());
+            args.push(
+                options
+                    .local_test_provider_wasm_path
+                    .as_deref()
+                    .expect("validated local provider WASM path")
+                    .to_string(),
+            );
+            args.push("--local-test-provider-metadata".to_string());
+            args.push(
+                options
+                    .local_test_provider_metadata_path
+                    .as_deref()
+                    .expect("validated local provider metadata path")
+                    .to_string(),
+            );
+            args.push("--local-test-provider-agent-id".to_string());
+            args.push(options.local_test_provider_agent_id.clone());
+            args.push("--local-test-provider-owner-binding".to_string());
+            args.push(options.local_test_provider_owner_binding.clone());
+            args.push("--local-test-provider-finality-block-hash".to_string());
+            args.push(
+                options
+                    .local_test_provider_finality_block_hash
+                    .as_deref()
+                    .expect("validated local provider finality marker")
+                    .to_string(),
+            );
+            args.push("--local-test-provider-session-mode".to_string());
+            args.push(options.local_test_provider_session_mode.clone());
         }
     }
     args
@@ -1003,7 +1051,7 @@ fn build_game_url(options: &CliOptions) -> String {
     let bridge_host = host_for_url(bridge_host.as_str());
     let ws_url = format!("ws://{bridge_host}:{bridge_port}");
     let hosted_access_hint = serde_json::to_string(&hosted_access::hosted_viewer_access_hint(
-        deployment_mode_from_options(options),
+        viewer_deployment_mode_from_options(options),
     ))
     .unwrap_or_else(|_| "{}".to_string());
     format!(

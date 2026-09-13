@@ -42,6 +42,22 @@ pub(super) fn local_governance_finality_signer_public_keys() -> Vec<(String, Str
     keys
 }
 
+/// Return the deterministic signer material used only by the explicit
+/// DevLocal authority initializer. The keys are never serialized into a
+/// bundle; production worlds reject the initializer before this function is
+/// reached.
+pub(super) fn local_governance_finality_signing_keys() -> Vec<(String, SigningKey)> {
+    LOCAL_GOVERNANCE_FINALITY_SIGNERS
+        .iter()
+        .map(|(node_id, seed_label)| {
+            (
+                (*node_id).to_string(),
+                local_governance_finality_signing_key(seed_label),
+            )
+        })
+        .collect()
+}
+
 fn local_governance_finality_signing_key(seed_label: &str) -> SigningKey {
     let seed = sha256_hex(seed_label.as_bytes());
     let seed_bytes = hex::decode(seed).expect("decode governance finality seed");

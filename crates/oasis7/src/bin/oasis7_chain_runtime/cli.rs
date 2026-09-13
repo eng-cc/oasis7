@@ -33,6 +33,9 @@ pub(super) const DEFAULT_REWARD_RUNTIME_REPORT_DIR: &str = "reward-runtime-repor
 pub(super) const DEFAULT_REWARD_RUNTIME_STORAGE_METRICS_FILE: &str =
     "reward-runtime-storage-metrics.json";
 pub(super) const DEFAULT_REWARD_RUNTIME_RESERVE_UNITS: i64 = 100_000;
+pub(super) const DEFAULT_LOCAL_TEST_PROVIDER_AGENT_ID: &str = "starter-agent-0";
+pub(super) const DEFAULT_LOCAL_TEST_PROVIDER_OWNER_BINDING: &str = "local-test-owner-0";
+pub(super) const DEFAULT_LOCAL_TEST_PROVIDER_SESSION_MODE: &str = "hosted_public_join";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum TrafficProfile {
@@ -110,6 +113,13 @@ pub(super) struct CliOptions {
     pub execution_world_dir: Option<PathBuf>,
     pub execution_records_dir: Option<PathBuf>,
     pub provider_backed_bootstrap_authority_paths: Vec<PathBuf>,
+    pub local_test_provider_authority_path: Option<PathBuf>,
+    pub local_test_provider_wasm_path: Option<PathBuf>,
+    pub local_test_provider_metadata_path: Option<PathBuf>,
+    pub local_test_provider_agent_id: String,
+    pub local_test_provider_owner_binding: String,
+    pub local_test_provider_finality_block_hash: Option<String>,
+    pub local_test_provider_session_mode: String,
     pub storage_root: Option<PathBuf>,
     pub replication_root: Option<PathBuf>,
     pub reward_runtime_enabled: bool,
@@ -173,6 +183,14 @@ impl Default for CliOptions {
             execution_world_dir: None,
             execution_records_dir: None,
             provider_backed_bootstrap_authority_paths: Vec::new(),
+            local_test_provider_authority_path: None,
+            local_test_provider_wasm_path: None,
+            local_test_provider_metadata_path: None,
+            local_test_provider_agent_id: DEFAULT_LOCAL_TEST_PROVIDER_AGENT_ID.to_string(),
+            local_test_provider_owner_binding: DEFAULT_LOCAL_TEST_PROVIDER_OWNER_BINDING
+                .to_string(),
+            local_test_provider_finality_block_hash: None,
+            local_test_provider_session_mode: DEFAULT_LOCAL_TEST_PROVIDER_SESSION_MODE.to_string(),
             storage_root: None,
             replication_root: None,
             reward_runtime_enabled: true,
@@ -422,6 +440,40 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                     .provider_backed_bootstrap_authority_paths
                     .push(PathBuf::from(raw));
             }
+            "--local-test-provider-authority" => {
+                options.local_test_provider_authority_path = Some(PathBuf::from(
+                    parse_required_value(&mut iter, "--local-test-provider-authority")?,
+                ));
+            }
+            "--local-test-provider-wasm" => {
+                options.local_test_provider_wasm_path = Some(PathBuf::from(parse_required_value(
+                    &mut iter,
+                    "--local-test-provider-wasm",
+                )?));
+            }
+            "--local-test-provider-metadata" => {
+                options.local_test_provider_metadata_path = Some(PathBuf::from(
+                    parse_required_value(&mut iter, "--local-test-provider-metadata")?,
+                ));
+            }
+            "--local-test-provider-agent-id" => {
+                options.local_test_provider_agent_id =
+                    parse_required_value(&mut iter, "--local-test-provider-agent-id")?;
+            }
+            "--local-test-provider-owner-binding" => {
+                options.local_test_provider_owner_binding =
+                    parse_required_value(&mut iter, "--local-test-provider-owner-binding")?;
+            }
+            "--local-test-provider-finality-block-hash" => {
+                options.local_test_provider_finality_block_hash = Some(parse_required_value(
+                    &mut iter,
+                    "--local-test-provider-finality-block-hash",
+                )?);
+            }
+            "--local-test-provider-session-mode" => {
+                options.local_test_provider_session_mode =
+                    parse_required_value(&mut iter, "--local-test-provider-session-mode")?;
+            }
             "--storage-root" => {
                 let raw = parse_required_value(&mut iter, "--storage-root")?;
                 options.storage_root = Some(PathBuf::from(raw));
@@ -503,6 +555,7 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
     if !options.node_gossip_peers.is_empty() && options.node_gossip_bind.is_none() {
         return Err("--node-gossip-peer requires --node-gossip-bind".to_string());
     }
+    validate_local_test_provider_options(&options)?;
     if let Some(manifest_path) = options.network_tier_manifest_path.as_ref() {
         let loaded = LoadedNetworkTierManifest::load(manifest_path.as_path())?;
         validate_current_runtime_hash_against_network_tier_bundle(
@@ -513,6 +566,85 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
     }
 
     Ok(options)
+}
+
+fn validate_local_test_provider_options(options: &CliOptions) -> Result<(), String> {
+    let any_setup_option = options.local_test_provider_authority_path.is_some()
+        || options.local_test_provider_wasm_path.is_some()
+        || options.local_test_provider_metadata_path.is_some()
+        || options.local_test_provider_finality_block_hash.is_some()
+        || options.local_test_provider_agent_id != DEFAULT_LOCAL_TEST_PROVIDER_AGENT_ID
+        || options.local_test_provider_owner_binding != DEFAULT_LOCAL_TEST_PROVIDER_OWNER_BINDING
+        || options.local_test_provider_session_mode != DEFAULT_LOCAL_TEST_PROVIDER_SESSION_MODE;
+    if !any_setup_option {
+        return Ok(());
+    }
+    if options.storage_profile != StorageProfile::DevLocal {
+        return Err("local test authority setup requires --storage-profile dev_local".to_string());
+    }
+    if options.network_tier_manifest_path.is_some() {
+        return Err("local test authority setup cannot use --network-tier-manifest".to_string());
+    }
+    let required = [
+        (
+            "--local-test-provider-authority",
+            options.local_test_provider_authority_path.is_some(),
+        ),
+        (
+            "--local-test-provider-wasm",
+            options.local_test_provider_wasm_path.is_some(),
+        ),
+        (
+            "--local-test-provider-metadata",
+            options.local_test_provider_metadata_path.is_some(),
+        ),
+        (
+            "--local-test-provider-finality-block-hash",
+            options.local_test_provider_finality_block_hash.is_some(),
+        ),
+    ];
+    for (flag, present) in required {
+        if !present {
+            return Err(format!(
+                "{flag} is required when local test authority setup is enabled"
+            ));
+        }
+    }
+    if options.local_test_provider_agent_id.trim().is_empty() {
+        return Err("--local-test-provider-agent-id requires a non-empty value".to_string());
+    }
+    if options.local_test_provider_owner_binding.trim().is_empty() {
+        return Err("--local-test-provider-owner-binding requires a non-empty value".to_string());
+    }
+    if !matches!(
+        options.local_test_provider_session_mode.as_str(),
+        "hosted_public_join" | "loopback"
+    ) {
+        return Err(
+            "--local-test-provider-session-mode must be hosted_public_join or loopback".to_string(),
+        );
+    }
+    let finality = options
+        .local_test_provider_finality_block_hash
+        .as_deref()
+        .unwrap_or_default();
+    if !valid_blake3_digest(finality) {
+        return Err(
+            "--local-test-provider-finality-block-hash must be blake3:<64 lowercase hex characters>"
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
+fn valid_blake3_digest(value: &str) -> bool {
+    let Some(hex) = value.strip_prefix("blake3:") else {
+        return false;
+    };
+    hex.len() == 64
+        && hex
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 #[derive(Debug, Deserialize)]
@@ -996,7 +1128,21 @@ Options:\n\
   --execution-world-dir <path>      override execution world directory\n\
   --execution-records-dir <path>    override execution records directory\n\
   --provider-bootstrap-authority <path>\n\
-                                    explicit JSON Runtime authority bundle; repeat per ProviderBacked agent\n\
+                                    explicit JSON Runtime authority bundle; repeat per provider-backed agent\n\
+  --local-test-provider-authority <path>\n\
+                                    explicit DevLocal output JSON authority bundle (opt-in setup)\n\
+  --local-test-provider-wasm <path>\n\
+                                    real WASM artifact for the explicit DevLocal provider setup\n\
+  --local-test-provider-metadata <path>\n\
+                                    canonical build-suite metadata JSON for the WASM artifact\n\
+  --local-test-provider-agent-id <id>\n\
+                                    live starter agent to provision (default: {DEFAULT_LOCAL_TEST_PROVIDER_AGENT_ID})\n\
+  --local-test-provider-owner-binding <id>\n\
+                                    stable local session owner binding (default: {DEFAULT_LOCAL_TEST_PROVIDER_OWNER_BINDING})\n\
+  --local-test-provider-finality-block-hash <hash>\n\
+                                    explicit local finality marker, blake3:<64 lowercase hex>\n\
+  --local-test-provider-session-mode <mode>\n\
+                                    hosted_public_join|loopback (default: {DEFAULT_LOCAL_TEST_PROVIDER_SESSION_MODE})\n\
   --storage-root <path>             override execution CAS/storage root\n\
   --replication-root <path>         override replication root directory\n\
   --reward-runtime-enable           enable reward runtime worker (default)\n\
