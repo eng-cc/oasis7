@@ -5943,7 +5943,7 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
         finally:
             canonical.tearDown()
 
-    def test_ops_sf_011_and_ops_sf_014_resume_requires_fresh_sequencer_proof(self) -> None:
+    def test_ops_sf_011_and_ops_sf_014_nonempty_resume_blocks_before_proof(self) -> None:
         canonical = self.fixture._canonical_fixture()
         try:
             journal = self.fixture._canonical_prefix_journal(
@@ -5963,7 +5963,9 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
             with self.assertRaises(Exception):
                 self.fixture._canonical_resume(canonical, journal, transport)
             self.assertEqual(transport.mutations, [])
-            self.assertEqual(transport.proof_calls, ["fetch-sequencer-proof"])
+            self.assertEqual(transport.proof_calls, [])
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            self.assertEqual(record["status"], "reconciliation-blocked")
         finally:
             canonical.tearDown()
 
@@ -6031,7 +6033,7 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
         finally:
             canonical.tearDown()
 
-    def test_ops_sf_014_resume_rechecks_storage_preflight_after_partial_prefix(self) -> None:
+    def test_ops_sf_014_nonempty_resume_blocks_before_storage_preflight(self) -> None:
         canonical = self.fixture._canonical_fixture()
         try:
             journal = self.fixture._canonical_prefix_journal(
@@ -6052,9 +6054,11 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
                     return super().preflight(operation, node)
 
             transport = RecordingTransport()
-            self.fixture._canonical_resume(canonical, journal, transport)
-            self.assertIn("inspect:storage-205", transport.calls)
-            self.assertIn("preflight:storage-205", transport.calls)
+            with self.assertRaises(Exception):
+                self.fixture._canonical_resume(canonical, journal, transport)
+            self.assertEqual(transport.calls, [])
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            self.assertEqual(record["status"], "reconciliation-blocked")
         finally:
             canonical.tearDown()
 
@@ -6094,14 +6098,14 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
             ), mock.patch.object(
                 canonical.adapter, "_acquire_fleet_transaction_guard", side_effect=acquire
             ):
-                self.fixture._canonical_resume(canonical, journal, transport)
+                with self.assertRaises(Exception):
+                    self.fixture._canonical_resume(canonical, journal, transport)
 
             self.assertLess(events.index("lock"), events.index("read"))
-            self.assertEqual(
-                transport.mutations,
-                ["rebuild:storage-205", "start:storage-205"],
-            )
-            self.assertEqual(transport.verify_operations, ["verify:storage-205"])
+            self.assertEqual(transport.mutations, [])
+            self.assertEqual(transport.verify_operations, [])
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            self.assertEqual(record["status"], "reconciliation-blocked")
         finally:
             canonical.tearDown()
 
