@@ -27,7 +27,12 @@ pub(super) fn build_oasis7_viewer_live_command(
             .arg("--provider-lineage-store")
             .arg(options.provider_lineage_store.as_str());
     }
-    if options.chain_enabled || options.deployment_mode == "hosted_public_join" {
+    // Hosted public join may deliberately run without a launcher-managed chain.
+    // Only pass the viewer's chain client endpoint when the chain is enabled or
+    // the operator explicitly supplied an external status endpoint. Passing the
+    // launcher's default here makes a chain-disabled stack try an absent service
+    // during the first snapshot and close the client after ConnectionRefused.
+    if options.chain_enabled || options.chain_status_bind_explicit {
         command
             .arg("--chain-status-bind")
             .arg(options.chain_status_bind.as_str())

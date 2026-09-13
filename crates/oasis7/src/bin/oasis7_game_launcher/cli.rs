@@ -122,6 +122,7 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             }
             "--chain-status-bind" => {
                 options.chain_status_bind = parse_required_value(&mut iter, "--chain-status-bind")?;
+                options.chain_status_bind_explicit = true;
             }
             "--chain-link-policy" => {
                 let raw = parse_required_value(&mut iter, "--chain-link-policy")?;
