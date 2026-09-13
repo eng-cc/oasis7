@@ -155,8 +155,13 @@ impl RuntimeLlmSidecar {
     ) -> Result<(), String> {
         let stale_agents = self
             .provider_stale_replans
-            .keys()
-            .cloned()
+            .iter()
+            // Once the replan request has been dispatched, the marker keeps
+            // only its bounded count until the replacement response clears
+            // it. Releasing the lease in that state would close the new
+            // request's lease before its response can settle it.
+            .filter(|(_, state)| state.pending_cause.is_some())
+            .map(|(agent_id, _)| agent_id.clone())
             .collect::<Vec<_>>();
         let mut leases_to_clear = Vec::new();
         for agent_id in stale_agents {
