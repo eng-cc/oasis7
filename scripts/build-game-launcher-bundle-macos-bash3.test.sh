@@ -19,6 +19,7 @@ mkdir -p \
 cp "$ROOT_DIR/scripts/build-game-launcher-bundle.sh" "$FIXTURE_ROOT/scripts/"
 cp "$ROOT_DIR/scripts/bundle-freshness-lib.sh" "$FIXTURE_ROOT/scripts/"
 cp "$ROOT_DIR/scripts/validate-release-platform-entrypoints.sh" "$FIXTURE_ROOT/scripts/"
+cp "$ROOT_DIR/scripts/service-readback" "$FIXTURE_ROOT/scripts/"
 
 cat >"$FIXTURE_ROOT/crates/oasis7_proto/src/viewer.rs" <<'EOF'
 pub const VIEWER_PROTOCOL_VERSION: u32 = 1;

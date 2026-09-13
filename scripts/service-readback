@@ -1,0 +1,164 @@
+#!/usr/bin/env python3
+"""Bounded read-only validator service/listener observation.
+
+This executable is the only production implementation of the
+service-readback --read-only command used by the governed direct-SSH
+provider. It accepts one code-owned validator role and target contract,
+executes fixed read-only probes without a shell, and emits one strict JSON
+object. It never starts, stops, restarts, resets, stages, deletes, or queries
+the full chain-status endpoint.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+from typing import NoReturn
+
+
+CANONICAL_ROOT = "/opt/oasis7/p2p-testnet"
+SERVICES = {
+    "sequencer": {
+        "service": "oasis7-triad-sequencer.service",
+        "ports": frozenset({"6631", "6831"}),
+    },
+    "storage": {
+        "service": "oasis7-triad-storage.service",
+        "ports": frozenset({"6632", "6832"}),
+    },
+}
+READBACK_SCHEMA = "oasis7.human_direct_ssh_readback.v1"
+COMMAND_TIMEOUT_SECONDS = 5
+PORT_RE = re.compile(r":([0-9]{1,5})(?=\s|$)")
+
+
+def fail(message: str) -> NoReturn:
+    print(f"error: service-readback: {message}", file=sys.stderr)
+    raise SystemExit(2)
+
+
+def _physical_root_is_safe(root: str) -> None:
+    """Reject a redirecting root when the fixed path is present."""
+    path = Path(root)
+    if not path.exists():
+        # The helper runs on the target host. A missing root is reported by
+        # the read-only service probe, but does not turn the fixed string into
+        # a caller-controlled path in tests or before host provisioning.
+        return
+    current = Path(path.anchor or "/")
+    for component in path.parts[1:]:
+        current /= component
+        if current.is_symlink():
+            fail("root contains a symlink path component")
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="service-readback",
+        allow_abbrev=False,
+        description="Emit bounded read-only validator service state.",
+    )
+    parser.add_argument("--read-only", action="store_true", required=True)
+    parser.add_argument("--role", choices=sorted(SERVICES), required=True)
+    parser.add_argument("--root", required=True)
+    parser.add_argument("--service", required=True)
+    args = parser.parse_args(argv)
+    if args.root != CANONICAL_ROOT:
+        parser.error(f"--root must be exactly {CANONICAL_ROOT}")
+    expected = SERVICES[args.role]
+    if args.service != expected["service"]:
+        parser.error(f"--service does not match --role {args.role}")
+    _physical_root_is_safe(args.root)
+    return args
+
+
+def run_read_only(command: list[str], label: str) -> str:
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=COMMAND_TIMEOUT_SECONDS,
+            shell=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        fail(f"{label} read-only probe unavailable: {error.__class__.__name__}")
+    if result.returncode != 0:
+        fail(f"{label} read-only probe failed with exit {result.returncode}")
+    return result.stdout
+
+
+def service_state(service: str) -> tuple[bool, bool]:
+    output = run_read_only(
+        [
+            "systemctl",
+            "show",
+            "--no-page",
+            "--property=ActiveState",
+            "--property=SubState",
+            "--property=NRestarts",
+            service,
+        ],
+        "service",
+    )
+    values: dict[str, str] = {}
+    for line in output.splitlines():
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key] = value.strip()
+    if not {"ActiveState", "SubState", "NRestarts"}.issubset(values):
+        fail("service read-only probe returned incomplete state")
+    try:
+        restarts = int(values["NRestarts"])
+    except ValueError:
+        fail("service read-only probe returned malformed restart count")
+    if restarts != 0:
+        fail("service read-only probe reports a nonzero restart count")
+    active = values["ActiveState"] == "active"
+    running = active and values["SubState"] in {"running", "listening", "exited"}
+    return active, running
+
+
+def process_running() -> bool:
+    output = run_read_only(["ps", "-eo", "pid=,args="], "process")
+    return any(
+        marker in line
+        for line in output.splitlines()
+        for marker in ("oasis7_chain_runtime", "start-node.sh")
+    )
+
+
+def listener_ports(expected_ports: frozenset[str]) -> list[str]:
+    output = run_read_only(["ss", "-ltn"], "listener")
+    observed = {port for port in PORT_RE.findall(output) if port in expected_ports}
+    return sorted(observed, key=int)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(list(sys.argv[1:] if argv is None else argv))
+    expected = SERVICES[args.role]
+    active, service_running = service_state(args.service)
+    process_is_running = process_running()
+    listeners = listener_ports(expected["ports"])
+    running = service_running or process_is_running or bool(listeners)
+    payload = {
+        "schema_version": READBACK_SCHEMA,
+        "active": active,
+        "running": running,
+        "service_state": "running" if running else "stopped",
+        "independently_observed": True,
+        "listeners": listeners,
+    }
+    print(json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+

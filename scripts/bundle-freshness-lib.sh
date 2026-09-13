@@ -50,6 +50,7 @@ scope = [
     "crates/oasis7_viewer/favicon.ico",
     "scripts/copy-viewer-web-dist.sh",
     "scripts/viewer-web-dist-contract.sh",
+    "scripts/service-readback",
     "crates/oasis7_client_launcher/Cargo.toml",
     "crates/oasis7_client_launcher/Trunk.toml",
     "crates/oasis7_client_launcher/index.html",

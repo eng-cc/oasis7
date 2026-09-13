@@ -303,7 +303,7 @@ require_file "$ops_bundle_root/SHA256SUMS"
   cd "$ops_bundle_root"
   shasum -a 256 -c SHA256SUMS >/dev/null || die "ops-tools checksum verification failed"
 )
-for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
+for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit service-readback; do
   [[ -x "$ops_bundle_root/bin/$binary" ]] || die "ops-tools archive missing executable: $binary"
 done
 require_dir "$bundle_root"
@@ -313,7 +313,7 @@ cp -a "$ops_bundle_root/bin/." "$bundle_root/bin/"
 python3 "$SCRIPT_DIR/p2p-rebuild-linux-bundle-checksums.py" "$bundle_root" \
   || die "deployed player/ops checksum closure rebuild failed"
 require_dir "$bundle_root"
-for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
+for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit service-readback; do
   [[ -x "$bundle_root/bin/$binary" ]] || die "bundle missing required executable: $binary"
 done
 
@@ -392,7 +392,7 @@ build_commit=$(sed -n 's/^commit=//p' "$release_dir/BUILDINFO" | head -n1)
 build_version=$(sed -n 's/^package_version=//p' "$release_dir/BUILDINFO" | head -n1)
 build_run_id=$(sed -n 's/^run_id=//p' "$release_dir/BUILDINFO" | head -n1)
 binaries_json='[]'
-for binary in oasis7_chain_runtime oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
+for binary in oasis7_chain_runtime oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit service-readback; do
   binary_path="$stack_root/current/bin/$binary"
   binaries_json=$(jq -c --arg path "$binary_path" --arg sha256 "$(sha256_file "$binary_path")" \
     --argjson size "$(file_size "$binary_path")" --argjson executable true \

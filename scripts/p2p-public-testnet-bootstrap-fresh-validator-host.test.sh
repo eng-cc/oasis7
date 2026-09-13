@@ -49,6 +49,12 @@ fi
 SH
   chmod +x "$ops_bundle_dir/bin/$binary"
 done
+cat >"$ops_bundle_dir/bin/service-readback" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' '{"schema_version":"oasis7.human_direct_ssh_readback.v1","active":false,"running":false,"service_state":"stopped","independently_observed":true,"listeners":[]}'
+SH
+chmod +x "$ops_bundle_dir/bin/service-readback"
 cat >"$bundle_dir/bin/oasis7_chain_runtime" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
