@@ -6204,6 +6204,42 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
         finally:
             canonical.tearDown()
 
+    def test_runtime_sf_045_recovery_callbacks_receive_derived_child_bindings(self) -> None:
+        """Canonical recovery DTOs must carry the admitted child artifact bindings."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            class BindingCaptureTransport(StorageFirstCanonicalTransport):
+                def __init__(self, adapter, plan):
+                    super().__init__(adapter, plan, side_effect_operation="delete:storage-205")
+                    self.reobserve_plan = None
+                    self.rollback_plan = None
+
+                def reobserve_failed_state(self, callback_plan, started, failed_operation):
+                    self.reobserve_plan = copy.deepcopy(callback_plan)
+                    return super().reobserve_failed_state(
+                        callback_plan, started, failed_operation
+                    )
+
+                def rollback_clean_redeploy(self, callback_plan, started, failed_state=None):
+                    self.rollback_plan = copy.deepcopy(callback_plan)
+                    return super().rollback_clean_redeploy(
+                        callback_plan, started, failed_state
+                    )
+
+            transport = BindingCaptureTransport(canonical.adapter, canonical.plan)
+            with self.assertRaises(Exception):
+                self.fixture._canonical_runner(canonical, transport)
+            for callback_plan in (transport.reobserve_plan, transport.rollback_plan):
+                self.assertIsNotNone(callback_plan)
+                for field in (
+                    "package_provenance_digest",
+                    "deployment_inventory_digest",
+                    "independent_verifier",
+                ):
+                    self.assertTrue(callback_plan[field], field)
+        finally:
+            canonical.tearDown()
+
     def test_runtime_sf_020_reobserve_receipt_must_bind_actual_failed_operation(self) -> None:
         """A mismatched re-observation must stop before rollback is invoked."""
         canonical = self.fixture._canonical_fixture()
@@ -6842,6 +6878,54 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
             self.assertEqual(record["reconciliation_requirements"]["automatic_replay"], False)
             self.assertEqual(transport.mutations, [])
             self.assertEqual(transport.verify_operations, [])
+        finally:
+            canonical.tearDown()
+
+    def test_runtime_sf_054_nonempty_running_resume_requires_reconciliation(self) -> None:
+        """A replaceable nonempty journal prefix must never authorize replay."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            journal = self.fixture._canonical_prefix_journal(
+                canonical,
+                ["stop:storage-205"],
+                name="truncated-nonempty-prefix.journal.json",
+            )
+            transport = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+            with self.assertRaises(Exception):
+                self.fixture._canonical_resume(canonical, journal, transport)
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            self.assertEqual(record["status"], "reconciliation-blocked")
+            self.assertEqual(record["completed_operations"], ["stop:storage-205"])
+            self.assertEqual(record["next_operation"], "reconciliation-required")
+            self.assertEqual(
+                record["reconciliation_requirements"]["automatic_replay"], False
+            )
+            self.assertEqual(transport.mutations, [])
+            self.assertEqual(transport.verify_operations, [])
+        finally:
+            canonical.tearDown()
+
+    def test_runtime_sf_055_rejected_receipt_preserves_mutation_audit(self) -> None:
+        """A performed callback remains visible when its receipt is rejected."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            transport = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+            original_mutate = transport.mutate
+
+            def mutate_with_rejected_receipt(operation, node):
+                receipt = original_mutate(operation, node)
+                receipt["signature_hex"] = "0" * 128
+                return receipt
+
+            transport.mutate = mutate_with_rejected_receipt
+            with self.assertRaises(Exception):
+                self.fixture._canonical_runner(canonical, transport)
+            self.assertEqual(transport.mutations, ["stop:storage-205"])
+            record = json.loads(
+                (canonical.root / "storage-first.journal.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(record["failed_operation"], "stop:storage-205")
+            self.assertEqual(record["rollback_candidates"], ["stop:storage-205"])
         finally:
             canonical.tearDown()
 

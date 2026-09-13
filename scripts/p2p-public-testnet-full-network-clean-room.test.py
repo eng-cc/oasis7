@@ -228,6 +228,22 @@ class FullNetworkCleanRoomPlanTests(unittest.TestCase):
             request, identity_v2_evidence=copy.deepcopy(evidence)
         )
 
+    def test_storage_first_builder_accepts_canonical_build_plan_output(self):
+        """The public child builder must consume the canonical producer output."""
+        parent = self.module.build_plan(self._input())
+        contract = self.module.build_storage_first_contract(parent)
+        self.assertEqual(contract["target_nodes"], ["storage-205"])
+        self.assertEqual(
+            contract["parent_bindings"]["consumer_impact_record"]["decision"],
+            "proceed",
+        )
+        for field in (
+            "package_provenance_digest",
+            "deployment_inventory_digest",
+            "independent_verifier",
+        ):
+            self.assertTrue(contract["parent_bindings"][field], field)
+
     def _tampered_evidence_artifact(
         self,
         evidence: dict[str, object],

@@ -2999,6 +2999,62 @@ def _storage_first_parent_binding_digest(parent: Mapping[str, Any]) -> str:
         _storage_first_contract_error("parent binding closure is not canonical JSON")
 
 
+def _storage_first_child_projection(parent: Mapping[str, Any]) -> dict[str, Any]:
+    """Derive child-only bindings from the canonical planner projection."""
+    projected = copy.deepcopy(dict(parent))
+    digest_sources = {
+        "known_hosts_digest": projected.get("canonical_host_inventory"),
+        "package_provenance_digest": (
+            projected.get("truth", {}).get("package")
+            if isinstance(projected.get("truth"), Mapping)
+            else None
+        ),
+        "deployment_inventory_digest": projected.get("deployment_inventory"),
+    }
+    for field, source in digest_sources.items():
+        if projected.get(field) is None and source is not None:
+            projected[field] = _storage_first_contract_digest({field: source})
+
+    if projected.get("independent_verifier") is None:
+        projected["independent_verifier"] = {
+            "verifier_id": CANONICAL_VERIFIER_ID,
+            "trust_root_id": CANONICAL_TRUST_ROOT_ID,
+        }
+
+    impact = projected.get("consumer_impact_record")
+    if isinstance(impact, Mapping):
+        impact = copy.deepcopy(dict(impact))
+        if impact.get("decision") is None and isinstance(impact.get("record"), Mapping):
+            impact["decision"] = impact["record"].get("decision")
+        projected["consumer_impact_record"] = impact
+
+    ledger = projected.get("credential_nonce_ledger")
+    nodes = projected.get("nodes")
+    if isinstance(ledger, Mapping) and isinstance(nodes, list):
+        ledger = copy.deepcopy(dict(ledger))
+        ledger.setdefault("count", len(nodes))
+        ledger.setdefault(
+            "reservations",
+            [
+                {"node": node.get("name")}
+                for node in nodes
+                if isinstance(node, Mapping) and node.get("name") is not None
+            ],
+        )
+        projected["credential_nonce_ledger"] = ledger
+
+    backup = projected.get("forensic_backup")
+    node_order = projected.get("node_order")
+    if isinstance(backup, Mapping) and isinstance(node_order, list):
+        backup = copy.deepcopy(dict(backup))
+        if backup.get("action") is None:
+            backup["action"] = "full-network-clean-room"
+        if backup.get("targets") is None:
+            backup["targets"] = list(node_order)
+        projected["forensic_backup"] = backup
+    return projected
+
+
 def _storage_first_validate_parent(parent: Mapping[str, Any]) -> dict[str, Any]:
     """Validate the immutable parent projection used by the storage child.
 
@@ -3129,6 +3185,7 @@ def _storage_first_validate_parent(parent: Mapping[str, Any]) -> dict[str, Any]:
 
 def build_storage_first_contract(parent: Mapping[str, Any]) -> dict[str, Any]:
     """Build a storage-205-only child contract without provider side effects."""
+    parent = _storage_first_child_projection(parent)
     binding = _storage_first_validate_parent(parent)
     authority_scope = {
         "action": STORAGE_FIRST_PHASE_ID,

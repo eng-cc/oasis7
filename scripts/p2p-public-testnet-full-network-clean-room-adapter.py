@@ -6187,18 +6187,9 @@ def _storage_first_run(
                     plan, operation, raw_receipt, provenance_verifier
                 )
             except Exception as error:
-                # A rejected provider envelope is not an accepted mutation
-                # result.  Keep the in-process diagnostic double consistent
-                # with that admission boundary; the durable journal still
-                # records the operation as started and requires reconciliation.
-                if (
-                    isinstance(raw_receipt, Mapping)
-                    and hasattr(transport, "mutations")
-                    and isinstance(getattr(transport, "mutations"), list)
-                    and getattr(transport, "mutations")
-                    and getattr(transport, "mutations")[-1] == operation
-                ):
-                    getattr(transport, "mutations").pop()
+                # Receipt admission does not undo a callback that already ran.
+                # Preserve caller-owned mutation audit evidence and require
+                # reconciliation from the durable started-operation boundary.
                 reconciliation_requirements = {
                     "reobserve_failed_state": True,
                     "clean_redeploy": True,
@@ -6222,7 +6213,7 @@ def _storage_first_run(
                     recovery_live = _guarded_callback(live_revalidator)
                     if recovery_live is not True:
                         _fail("storage-first recovery live revalidation rejected the failed state")
-                    reobserve_plan = _storage_first_callback_plan(plan, node)
+                    reobserve_plan = _storage_first_callback_plan(child_plan, node)
                     reobserve_started = list(started)
                     reobserve_receipt = _guarded_callback(
                         reobserve, reobserve_plan, reobserve_started, operation
@@ -6257,7 +6248,7 @@ def _storage_first_run(
                         if not capture_start <= dt.datetime.now(dt.timezone.utc) < capture_end:
                             _fail("storage-first recovery capture lease is expired or not yet active")
                         validate_live_trust_root_file()
-                    rollback_plan = _storage_first_callback_plan(plan, node)
+                    rollback_plan = _storage_first_callback_plan(child_plan, node)
                     rollback_started = list(started)
                     rollback_failed_state = copy.deepcopy(record["reconciliation_reobserve"])
                     rollback_receipt = _guarded_callback(
@@ -6436,6 +6427,22 @@ def resume_storage_first(
             _fail("storage-first resume next-operation cursor drifted")
         if record.get("status") in {"terminal-failure", "reconciliation-blocked"}:
             _fail("storage-first journal requires governed reconciliation")
+        if record.get("status") == "storage-205-running" and completed:
+            # The journal is replaceable and has no independent durable cursor
+            # that can prove a nonempty prefix is the latest one.  A valid but
+            # truncated prefix could otherwise replay later destructive work.
+            record.update({
+                "status": "reconciliation-blocked",
+                "next_operation": "reconciliation-required",
+                "rollback_status": "reconciliation-blocked",
+                "reconciliation_requirements": {
+                    "reobserve_failed_state": True,
+                    "clean_redeploy": True,
+                    "automatic_replay": False,
+                },
+            })
+            _storage_first_journal_write(Path(journal_path), record)
+            _fail("storage-first nonempty running cursor requires governed reconciliation")
         if (
             not _storage_first_is_shape_fixture(plan)
             and record.get("status")
