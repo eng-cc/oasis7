@@ -2918,7 +2918,10 @@ def _validate_provider_receipt(
         for name, node_heights in heights.items():
             if any(value != validator_head for value in node_heights.values()):
                 _fail(f"fleet-health snapshot {name} heights do not equal the sequencer head")
-    _verify_receipt_with_verifier(plan, receipt, verifier)
+    # The verifier is an injected trust boundary.  It may inspect its input,
+    # but it must never be able to rewrite the provider envelope that passed
+    # the canonical checks above and will be persisted by the caller.
+    _verify_receipt_with_verifier(plan, copy.deepcopy(receipt), verifier)
     return _sanitize_receipt(receipt, f"{operation} provider receipt")
 
 

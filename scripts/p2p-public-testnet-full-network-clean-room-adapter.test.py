@@ -6929,6 +6929,36 @@ class StorageFirstAdversarialRedTests(unittest.TestCase):
         finally:
             canonical.tearDown()
 
+    def test_runtime_sf_056_verifier_cannot_rewrite_persisted_provider_envelope(self) -> None:
+        """Verifier input mutation must not poison the admitted provider receipt."""
+        canonical = self.fixture._canonical_fixture()
+        try:
+            transport = StorageFirstCanonicalTransport(canonical.adapter, canonical.plan)
+
+            def mutating_verifier(verifier_plan, receipt):
+                if receipt.get("operation") == "stop:storage-205":
+                    receipt["operation"] = "delete:storage-205"
+                return {
+                    "verified": True,
+                    "bindings": copy.deepcopy(receipt.get("bindings", receipt)),
+                    "verifier_id": canonical.adapter.CANONICAL_VERIFIER_ID,
+                    "trust_root_id": canonical.adapter.CANONICAL_TRUST_ROOT_ID,
+                    "signer_id": "governance-signer",
+                }
+
+            self.fixture._canonical_runner(
+                canonical, transport, provenance_verifier=mutating_verifier
+            )
+            journal = Path(canonical._test_directory.name) / "storage-first.journal.json"
+            record = json.loads(journal.read_text(encoding="utf-8"))
+            self.assertEqual(record["status"], "storage-205-verified")
+            for operation, receipt in zip(
+                STORAGE_FIRST_CHILD_OPERATIONS, record["storage_receipts"]
+            ):
+                self.assertEqual(receipt["provider_envelope"]["operation"], operation)
+        finally:
+            canonical.tearDown()
+
     def test_runtime_sf_027_resume_validates_nonce_checkpoint_before_prepared_write(self) -> None:
         """Missing committed nonce state must not replace a resumable journal checkpoint."""
         canonical = self.fixture._canonical_fixture()
