@@ -782,8 +782,12 @@ if secret and any(secret in value for value in args):
 state = os.environ.get("HUMAN_DIRECT_SSH_FAKE_STATE", "quiet")
 count = len(command_log.read_text(encoding="utf-8").splitlines())
 service_active = state == "active"
-process_active = state in ("active", "active-process")
-listener_active = state in ("active", "active-listener")
+process_active = state in ("active", "active-process") or (
+    state == "canonical-process-flapping" and count >= 8
+)
+listener_active = state in ("active", "active-listener") or (
+    state == "canonical-listener-flapping" and count >= 9
+)
 if "ps -eo" in command or "pgrep" in command:
     print("1234 oasis7_chain_runtime --active" if process_active else (f"quiet-observation-{count}" if state == "flapping" else ""))
 elif "ss -ltn" in command or "lsof" in command:
@@ -1338,11 +1342,18 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
         self.assertNotEqual(result.returncode, 0)
         self.assertRegex(result.stderr, r"(?i)(active.*listener|listener|quiescen)")
 
-    def test_human_direct_ssh_requires_stable_quiet_window(self) -> None:
+    def test_human_direct_ssh_ignores_unrelated_process_noise_during_quiet_window(self) -> None:
         fixture = self._write_human_direct_ssh_fixture(state="flapping")
         result = self._run_human_direct_ssh(fixture)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertRegex(result.stderr, r"(?i)(quiet|quiescen|stable|window|changed)")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_human_direct_ssh_rejects_canonical_state_changes_during_quiet_window(self) -> None:
+        for state in ("canonical-process-flapping", "canonical-listener-flapping"):
+            with self.subTest(state=state):
+                fixture = self._write_human_direct_ssh_fixture(state=state)
+                result = self._run_human_direct_ssh(fixture)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertRegex(result.stderr, r"(?i)(active|listener|process|quiescen|running)")
 
     def test_human_direct_ssh_quiesce_never_uses_systemctl_or_mutation_commands(self) -> None:
         fixture = self._write_human_direct_ssh_fixture()
