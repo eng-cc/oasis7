@@ -198,7 +198,16 @@ Agent Context Lite 只允许组合以下已经发布且适用于该 Agent 的语
 - 场景与结果：旧响应晚到、刷新竞态或提交前信息失效时，surface 保留冲突/来源/时效语义；低后果动作最多是带不确定性预览，高后果动作重新取得当前权威确认或明确阻断。
 - 证据边界：动态观察来源、时效、提交校验和最终结果由 Agent/runtime/Viewer/QA authority 定义；产品层不定义 DTO、TTL 或排序。
 
-## 5.1 组合验收
+## 5.1 叶级 owner、authority、evidence 与 test tier 追踪
+
+本表把每个新叶级产品关系导航到专业 owner、权威文档和未来验证证据；它不把舞台方向、历史交付或局部截图提升为当前 Viewer readiness。
+
+| REQ / AC 关系 | 专业 owner 与真实边界 | 专业域 PRD-ID | 专业权威（可导航） | 验证证据（应提供，不预示当前结果） | 测试层级 |
+| --- | --- | --- | --- | --- | --- |
+| [REQ-AGENT-STAGE-001](#req-agent-stage-001) / [AC-AGENT-STAGE-001](#ac-agent-stage-001) | `producer_system_designer`：primary read、事实来源和非直接编辑边界；`game_visual_interaction_designer`：层级、可读性和交互边界；`viewer_engineer`：正式 surface 的位置/LOD/控件实现；`gameplay_designer`：玩家目的与因果语义；`runtime_engineer`：接受结果与权威世界后果；`qa_engineer`：跨 surface 验收证据；专业实现不由产品表格代签 readiness。 | `PRD-WORLD_SIMULATOR-039/041/046` / `PRD-WORLD_RUNTIME-001` / `PRD-TESTING-003` | [`world-simulator PRD`](../../world-simulator/prd.md); [`semantic positioning`](../../world-simulator/viewer/viewer-pixel-world-semantic-positioning.prd.md); [`fragment LOD`](../../world-simulator/viewer/viewer-pixel-world-fragment-lod.prd.md); [`player-readable rendering`](../../world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md); [`testing PRD`](../../testing/prd.md) | 未来 required-tier 正式 surface 证据覆盖目标、相关对象/路线、blocker、下一步和已接受结果在密度变化下的 primary read；验证环境活动、视觉邻近和诊断不代签玩家因果，并保留受支持 command path。 | `test_tier_required` |
+| [REQ-AGENT-STAGE-002](#req-agent-stage-002) / [AC-AGENT-STAGE-002](#ac-agent-stage-002) | `producer_system_designer`：观察来源、时效和未知边界；`agent_engineer`：观察与推断的 Agent 语义；`runtime_engineer`：提交前权威校验与结果；`viewer_engineer`：来源/时效/冲突状态的可读表达；`qa_engineer`：刷新竞态、过期和高后果阻断证据；产品层不定义 DTO、TTL、排序或 renderer。 | `PRD-WORLD_SIMULATOR-016/039/041/046` / `PRD-WORLD_RUNTIME-001/031/033` / `PRD-TESTING-003` | [`world-simulator PRD`](../../world-simulator/prd.md); [`world-runtime PRD`](../../world-runtime/prd.md); [`testing PRD`](../../testing/prd.md) | 未来 full-tier 覆盖范围外/未知、过期缓存、冲突观察、旧刷新响应晚到和提交前失效；验证公共事实、当前确认、最近已知和未知/冲突保持区分，高后果动作重新校验或阻断，并能对账最终接受/拒绝原因。 | `test_tier_full` |
+
+## 5.2 组合验收
 
 - RW-1：代表性正式玩家表面中，玩家无需阅读诊断信息即可识别世界上下文、当前目标、相关行动者或路线、关键 blocker 和下一决策。
 - RW-2：用于说明决策的空间关系可读；任何派生或抽象位置都不会被表达为其并不具备的权威精度、资源事实或交互能力。
@@ -210,7 +219,7 @@ Agent Context Lite 只允许组合以下已经发布且适用于该 Agent 的语
 - RW-8：代表性动态信息场景证明正式玩家表面能区分公共已结算事实、当前确认、最近已知和未知/失效观察；范围外或缓存对象不会被表现为当前精确事实，且影响行动的非当前信息提供刷新、等待、改道或停止路径。
 - RW-9：同一动态对象出现互相矛盾的观察、刷新竞态（旧响应晚到）或提交前时效失效时，surface 保留冲突/来源/时效语义，不以客户端“最新响应”代签真值；低后果动作至多提供带不确定性标注的预览，高后果动作必须重新取得当前权威确认或明确阻断，并能读到冲突原因与下一步。
 
-### 5.1 验收权威与证据边界
+### 5.2.1 验收权威与证据边界
 
 | 产品承诺 | 专业 owner | 专业域权威 | 证据边界 | 测试层级 |
 | --- | --- | --- | --- | --- |

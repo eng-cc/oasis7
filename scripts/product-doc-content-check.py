@@ -46,6 +46,9 @@ LIFECYCLE_PLACEHOLDERS = frozenset(
 )
 HTML_COMMENT_RE = re.compile(r"<!--[\s\S]*?-->")
 ID_RE = re.compile(r"\b((?:REQ|AC)-[A-Z0-9][A-Z0-9_*-]*)", re.IGNORECASE)
+# Aggregate trace tables use short domain-specific criterion IDs (for example
+# PL-6). REQ/AC and professional PRD IDs have separate contracts.
+TRACE_CRITERION_ID_RE = re.compile(r"\b[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+(?:[A-Z])?\b")
 HEADING_PREFIX_RE = re.compile(r"^ {0,3}#{2,6}\s+")
 DECLARATION_PREFIX_RE = re.compile(r"^\s*(?:[-+*]\s+|\|\s*)")
 TABLE_ID_CELL_RE = re.compile(r"^\s*((?:REQ|AC)-[A-Z0-9][A-Z0-9_*-]*)\s*$", re.IGNORECASE)
@@ -872,11 +875,13 @@ def trace_table_semantics(
 ) -> list[tuple[int, dict[str, tuple[int, ...]], list[tuple[int, list[str]]]]]:
     """Return explicitly structured semantic trace tables.
 
-    Ordinary two-column REQ/AC mapping tables are intentionally ignored.  A
+    Ordinary two-column REQ/AC mapping tables are intentionally ignored. A
     table is a semantic trace table only when it declares a relation header
-    plus at least one trace field, or sits under an explicit owner/authority/
-    test-tier trace heading.  This keeps prose and legacy mapping tables out
-    of the row-level contract.
+    plus at least one trace field, declares aggregate criteria plus at least
+    one trace field, or sits under an explicit owner/authority/test-tier trace
+    heading. This keeps prose and legacy mapping tables out of the row-level
+    contract while allowing aggregate criterion definitions to be checked
+    separately.
     """
     lines = visible_lines(text)
     tables: list[tuple[int, dict[str, tuple[int, ...]], list[tuple[int, list[str]]]]] = []
@@ -929,14 +934,32 @@ def trace_table_semantics(
                 if re.search(r"测试层级|test[_ ]?tier|\btier\b", header, re.IGNORECASE)
             ),
         }
+        criterion_columns = tuple(
+            index
+            for index, header in enumerate(normalized)
+            if re.search(
+                r"成功标准|产品承诺|验收标准|\bcriterion\b|\bcriteria\b",
+                header,
+                re.IGNORECASE,
+            )
+        )
         relation_signal = bool(req_columns or ac_columns or relation_columns)
         semantic_signal = any(semantic_columns.values())
+        criterion_signal = bool(
+            criterion_columns
+            and any(
+                trace_criterion_ids(cells[index])
+                for _number, cells in rows
+                for index in criterion_columns
+                if index < len(cells)
+            )
+        )
         explicit_heading = False
         for heading_index in range(index - 1, -1, -1):
             if HEADING_PREFIX_RE.match(lines[heading_index][1]):
                 explicit_heading = trace_heading_is_explicit(lines[heading_index][1])
                 break
-        if (relation_signal and semantic_signal) or explicit_heading:
+        if ((relation_signal or criterion_signal) and semantic_signal) or explicit_heading:
             tables.append(
                 (
                     header_number,
@@ -944,6 +967,7 @@ def trace_table_semantics(
                         "req": req_columns,
                         "ac": ac_columns,
                         "relation": relation_columns,
+                        "criterion": criterion_columns,
                         **semantic_columns,
                     },
                     rows,
@@ -958,6 +982,15 @@ def trace_cell_text(cell: str) -> str:
     value = re.sub(r"`([^`]*)`", r"\1", value)
     value = HTML_TAG_RE.sub("", html.unescape(value))
     return re.sub(r"\s+", " ", value).strip()
+
+
+def trace_criterion_ids(value: str) -> set[str]:
+    """Return aggregate criterion IDs from a trace-table cell."""
+    return {
+        match.group(0).upper()
+        for match in TRACE_CRITERION_ID_RE.finditer(trace_cell_text(value))
+        if not match.group(0).upper().startswith(("REQ-", "AC-", "PRD-"))
+    }
 
 
 TRACE_EMPTY_VALUES = frozenset(
@@ -1007,30 +1040,61 @@ def trace_navigable_ids(cell: str) -> set[str]:
     return identifiers
 
 
-def check_paired_trace_tables(
+def check_active_topic_trace_tables(
     path: str,
     text: str,
     errors: list[str],
 ) -> None:
+    """Check active-topic leaf traces and aggregate criterion definitions.
+
+    Existing error codes retain the ``paired-trace`` prefix for compatibility
+    with the focused gate and its consumers; the contract now applies to
+    every active topic that declares a row-level REQ/AC trace table.
+    """
     if not path.endswith(".prd.md") or path.endswith("/prd.md"):
         return
     identity = document_identity_text("\n".join(line for _, line in visible_lines(text)))
     lifecycle = metadata_value(identity, "生命周期")
-    decision = re.search(
-        r"设计判定\s*[:：]\s*`?([a-z][a-z-]+)`?",
-        identity,
-        re.IGNORECASE,
-    )
     if (
         not lifecycle
         or lifecycle.strip().strip("`").lower() != "active"
-        or not decision
-        or decision.group(1).lower() != "paired-design"
     ):
         return
 
     traced_relations: set[tuple[str, str]] = set()
+    relation_table_seen = False
     for header_line, columns, rows in trace_table_semantics(text):
+        criterion_ids = {
+            criterion_id
+            for _number, cells in rows
+            for index in columns["criterion"]
+            if index < len(cells)
+            for criterion_id in trace_criterion_ids(cells[index])
+        }
+        if criterion_ids:
+            body_text = "\n".join(
+                line
+                for _number, line in visible_lines(text)
+                if not line.lstrip().startswith("|")
+            )
+            for criterion_id in sorted(criterion_ids):
+                if not re.search(
+                    rf"(?<![A-Z0-9]){re.escape(criterion_id)}(?![A-Z0-9])",
+                    body_text,
+                ):
+                    fail(
+                        errors,
+                        "trace-criterion-missing-body-definition",
+                        path,
+                        f"aggregate criterion {criterion_id} must be defined outside its trace table",
+                    )
+
+        # Existing aggregate contracts intentionally remain valid without
+        # REQ/AC columns. Only relation tables enter the same-row leaf
+        # contract below.
+        if not (columns["req"] or columns["ac"] or columns["relation"]):
+            continue
+        relation_table_seen = True
         missing_columns = []
         if not columns["req"] or not columns["ac"] or not columns["relation"]:
             missing_columns.append("REQ/AC relation")
@@ -1132,6 +1196,9 @@ def check_paired_trace_tables(
                     path,
                     f"trace row at line {number} requires exact test_tier_required or test_tier_full",
                 )
+
+    if not relation_table_seen:
+        return
 
     _requirements, _acceptances, expected_relations = declared_prd_relations(text)
     missing_relations = expected_relations - traced_relations
@@ -1326,7 +1393,7 @@ def check_document(
         if not inactive_lifecycle:
             check_minimum_topic_content(path, text, errors)
             check_active_topic_cardinality(path, text, errors)
-            check_paired_trace_tables(path, text, errors)
+            check_active_topic_trace_tables(path, text, errors)
             if full_corpus:
                 check_active_topic_design_contract(root, path, text, errors, use_worktree_content)
     if path.endswith(".design.md"):

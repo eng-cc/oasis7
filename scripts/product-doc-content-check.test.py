@@ -160,6 +160,31 @@ TRACE_BLOCK = TOPIC_TEXT[
 ]
 
 
+def simple_topic_text() -> str:
+    exemption = """
+
+## 设计判定
+- 设计判定：`simple-topic-exemption`
+- 设计适用性理由：这是简单专题，不增加新的信息分层、交互状态编排或策略取舍。
+- 当前 GitHub task evidence：[`issue evidence`](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)
+"""
+    return (
+        TOPIC_TEXT.replace("- 设计判定：`paired-design`\n", "")
+        .replace("- 配对产品设计：[`sample.design.md`](sample.design.md)\n", "")
+        + exemption
+    )
+
+
+AGGREGATE_TRACE_TABLE = """
+
+### 5.1 验收追踪
+
+| 成功标准 | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| PL-6 | `agent_engineer` | [`gameplay authority`](../../game/prd.md#authority) | full-tier scope and recovery evidence | `test_tier_full` |
+"""
+
+
 def remove_fixture_traceability(text: str, *, requirement: bool = False, acceptance: bool = False) -> str:
     if requirement:
         text = text.replace(REQ_BLOCK, "")
@@ -418,17 +443,8 @@ def scenario_full_corpus_accepts_simple_topic_exemption() -> None:
     try:
         (root / DESIGN).unlink()
         (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
-        exemption = """
-
-## 设计判定
-- 设计判定：`simple-topic-exemption`
-- 设计适用性理由：这是简单专题，不增加新的信息分层、交互状态编排或策略取舍。
-- 当前 GitHub task evidence：[`issue evidence`](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)
-"""
         (root / TOPIC).write_text(
-            TOPIC_TEXT.replace("- 设计判定：`paired-design`\n", "")
-            .replace("- 配对产品设计：[`sample.design.md`](sample.design.md)\n", "")
-            + exemption,
+            simple_topic_text(),
             encoding="utf-8",
         )
         result = invoke_full_corpus(root)
@@ -437,6 +453,36 @@ def scenario_full_corpus_accepts_simple_topic_exemption() -> None:
         assert "full-corpus checked 2 current-tree product documents" in output, output
     finally:
         shutil.rmtree(root)
+
+
+def scenario_active_simple_topic_trace_requires_row_contract() -> None:
+    scenario(
+        "paired-trace-missing-column",
+        lambda root: (root / TOPIC).write_text(
+            simple_topic_text().replace("| 验证证据 |", "| 说明 |"),
+            encoding="utf-8",
+        ),
+    )
+
+
+def scenario_aggregate_criterion_requires_body_definition() -> None:
+    scenario(
+        "trace-criterion-missing-body-definition",
+        lambda root: (root / TOPIC).write_text(
+            TOPIC_TEXT + AGGREGATE_TRACE_TABLE,
+            encoding="utf-8",
+        ),
+    )
+
+
+def scenario_aggregate_criterion_accepts_body_definition() -> None:
+    scenario(
+        None,
+        lambda root: (root / TOPIC).write_text(
+            TOPIC_TEXT + "\n- PL-6：当前能力边界与未来复核范围。\n" + AGGREGATE_TRACE_TABLE,
+            encoding="utf-8",
+        ),
+    )
 
 
 def scenario_full_corpus_requires_bound_repository_task_evidence() -> None:
@@ -988,6 +1034,9 @@ def main() -> None:
     scenario_full_corpus_rejects_lifecycle_closure_placeholders_and_unlinked_fields()
     scenario_full_corpus_requires_design_decision_or_exemption()
     scenario_full_corpus_accepts_simple_topic_exemption()
+    scenario_active_simple_topic_trace_requires_row_contract()
+    scenario_aggregate_criterion_requires_body_definition()
+    scenario_aggregate_criterion_accepts_body_definition()
     scenario_full_corpus_requires_bound_repository_task_evidence()
     scenario_full_corpus_requires_complete_prd_consistent_design_mapping()
     scenario_full_corpus_requires_paired_design_link()

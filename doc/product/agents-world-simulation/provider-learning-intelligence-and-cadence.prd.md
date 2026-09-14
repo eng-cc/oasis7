@@ -108,6 +108,8 @@ provider profile 的产品基础状态依次为 `证据不足 -> 评估中 -> �
 - PL-3：训练、认证、受治理模块、撤销和重训样例可追溯来源、适用范围、成本和历史；重训不会洗去责任、失败或 provenance。
 - PL-4：情报样例区分有界私有期、必要安全披露、可公开的最终 baseline 与不应公开的敏感内容，并在决策时显示 freshness/uncertainty 与刷新或纠正路径。
 - PL-5：所有说明将长期目标与当前 Local Provider parity、社交事实或产业专业真值分开；没有新鲜专业证据时不宣称 provider、学习或情报能力已实现或已就绪。
+<a id="pl-6"></a>
+- PL-6：能力复核、重训、到期、撤销或证据失败期间，Agent 只能在当前仍有效且有证据支持的范围内继续；否则必须进入 Wait、拒绝、过期、暂停或明确合规的低风险替代。待决请求按当前范围重新评估，已结算结果、责任和 provenance 保持可查询；后续训练成功不得自动恢复旧待决请求，必须在当前 scope 重新确认或以关联新请求提交，且不产生重复世界效果、额外 action slot 或隐藏权限。该成功标准是未来产品验收目标，不表示当前能力、provider 支持或 readiness 已成立。
 
 以下为**未来需要补齐的** `test_tier_full` 证据场景，而不是本分支已存在或已通过的测试。每个场景必须记录初始准入状态/范围、操作、权威提交结果、slot 数量与排序，以及 committed 结果：
 
@@ -125,7 +127,16 @@ provider profile 的产品基础状态依次为 `证据不足 -> 评估中 -> �
 | PL-3 | producer_system_designer / agent_engineer / wasm_platform_engineer / runtime_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 训练/认证/模块/重训的 provenance、成本、撤销和历史连续性证据 | test_tier_full |
 | PL-4 | producer_system_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 私有/安全披露/公共 baseline、freshness/uncertainty 和刷新/纠正组合证据 | test_tier_required |
 | PL-5 | producer_system_designer / agent_engineer / qa_engineer / liveops_community | PRD-WORLD_SIMULATOR-016 / PRD-TESTING-003 | `README.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | Local Provider/social-fact/industry 现状与长期专题 claim 分离审计 | test_tier_required |
-| PL-6 | producer_system_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 复核/重训、到期/撤销/失败期间的能力范围、待决请求再评估、已结算 provenance 连续性、恢复范围与 slot 公平的组合证据；后续训练成功不自动恢复旧待决请求，须当前 scope 重新确认或新 linked request 且无重复/第二次世界效果；guardrail 缺失、catalog 非法、fallback 过期/越界时 Wait/拒绝、无世界效果/额外 slot，并可读原因与当前有效范围 | test_tier_full |
+| [PL-6](#pl-6) | producer_system_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | [`world-simulator PRD`](../../world-simulator/prd.md); [`world-runtime PRD`](../../world-runtime/prd.md); [`testing PRD`](../../testing/prd.md) | 见 [REQ-AGENT-LEARNING-001](#req-agent-learning-001) / [AC-AGENT-LEARNING-001](#ac-agent-learning-001) 与 [REQ-AGENT-LEARNING-002](#req-agent-learning-002) / [AC-AGENT-LEARNING-002](#ac-agent-learning-002) 的未来 full-tier 组合证据：当前有效 scope、guardrail/catalog/fallback 边界、待决再评估、provenance 连续性、slot 公平、重新确认和无重复世界效果；不以局部训练成功或界面显示代签当前 readiness。 | `test_tier_full` |
+
+### 5.2 叶级 owner、authority、evidence 与 test tier 追踪
+
+本表把每个新叶级产品关系导航到专业 owner、权威文档和未来验证证据；它不定义 profile 字段、评测阈值、训练算法、action slot 实现或当前 provider 支持。
+
+| REQ / AC 关系 | 专业 owner 与真实边界 | 专业域 PRD-ID | 专业权威（可导航） | 验证证据（应提供，不预示当前结果） | 测试层级 |
+| --- | --- | --- | --- | --- | --- |
+| [REQ-AGENT-LEARNING-001](#req-agent-learning-001) / [AC-AGENT-LEARNING-001](#ac-agent-learning-001) | `producer_system_designer`：准入范围、固定 cadence 和公平语义；`agent_engineer`：profile/Agent 意图与状态反馈；`runtime_engineer`：资格、slot、请求再评估与权威提交；`qa_engineer`：准入、暂停、撤销和恢复证据；任何角色都不把局部演示或性能优势提升为额外世界权力。 | `PRD-WORLD_SIMULATOR-016` / `PRD-WORLD_RUNTIME-001/031/033` / `PRD-TESTING-003` | [`world-simulator PRD`](../../world-simulator/prd.md); [`world-runtime PRD`](../../world-runtime/prd.md); [`testing PRD`](../../testing/prd.md) | 未来 full-tier 对相同 eligible actor、场景和 slot 输入覆盖证据不足/超范围拒绝、暂停/撤销阻断、恢复范围和重新确认；对账 slot 数量/排序、无额外世界效果与玩家可读原因。 | `test_tier_full` |
+| [REQ-AGENT-LEARNING-002](#req-agent-learning-002) / [AC-AGENT-LEARNING-002](#ac-agent-learning-002) | `producer_system_designer`：能力范围、历史与成本边界；`agent_engineer`：训练/认证/能力 provenance 与 Agent 反馈；`wasm_platform_engineer`：受治理模块的工件/能力边界；`runtime_engineer`：有效 scope、待决请求和 committed receipt；`qa_engineer`：重训、撤销、失败与恢复组合证据；产品层不裁定实现字段或 readiness。 | `PRD-WORLD_SIMULATOR-016` / `PRD-WORLD_RUNTIME-001/031/033` / `PRD-TESTING-003` | [`world-simulator PRD`](../../world-simulator/prd.md); [`world-runtime PRD`](../../world-runtime/prd.md); [`testing PRD`](../../testing/prd.md) | 未来 full-tier 覆盖复核/重训、到期/撤销/失败期间的当前有效 scope、guardrail/catalog/fallback 检查、待决请求重新评估、已结算 provenance 保留、重新确认或关联新请求，以及无重复世界效果/额外 slot。 | `test_tier_full` |
 
 ## 6. Non-Goals
 

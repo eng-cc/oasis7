@@ -65,6 +65,15 @@
 - 场景与结果：切换前候选不自动交给新 provider 重试；待决请求按原权威合同继续、拒绝、过期、取消或明确重新规划；只有 committed receipt 表达世界后果，受支持的撤回/替换必须走专业路径。
 - 证据边界：意图 lineage、去重、receipt 和撤回/替换状态机由 Agent/runtime/QA authority 验证；产品层不冻结 schema。
 
+## 2.3 叶级 owner、authority、evidence 与 test tier 追踪
+
+本表把 provider 连续性的每个新叶级关系导航到专业 owner、权威文档和未来验证证据；它不声明任何 provider 当前受支持、默认或已就绪。
+
+| REQ / AC 关系 | 专业 owner 与真实边界 | 专业域 PRD-ID | 专业权威（可导航） | 验证证据（应提供，不预示当前结果） | 测试层级 |
+| --- | --- | --- | --- | --- | --- |
+| [REQ-AGENT-PARITY-001](#req-agent-parity-001) / [AC-AGENT-PARITY-001](#ac-agent-parity-001) | `producer_system_designer`：场景范围、窄承诺和 readiness 边界；`agent_engineer`：provider/Agent 行为与失败反馈；`viewer_engineer`：受限、退化和下一步的真实表达；`qa_engineer`：适用组合的 parity 证据；专业角色各自不把技术接通或局部样本提升为产品准入。 | `PRD-WORLD_SIMULATOR-038` / `PRD-WORLD_SIMULATOR-016` / `PRD-TESTING-003` | [`provider parity authority`](../../world-simulator/llm/provider-agent-experience-parity.prd.md); [`world-simulator PRD`](../../world-simulator/prd.md); [`testing PRD`](../../testing/prd.md) | 未来 full-tier 的已声明 provider 组合/场景样例，以及超出范围或证据不足的负例；对比目标、等待、诊断和恢复语义，并确认 blocked/limited 表达不被包装成等价体验或当前支持。 | `test_tier_full` |
+| [REQ-AGENT-PARITY-002](#req-agent-parity-002) / [AC-AGENT-PARITY-002](#ac-agent-parity-002) | `producer_system_designer`：切换窗口的产品边界；`agent_engineer`：意图 lineage、provider failure 和重试语义；`runtime_engineer`：接受/结算、去重和单一世界效果；`viewer_engineer`：候选、待决、已结算和拒绝状态可读性；`qa_engineer`：切换/重连/退化组合对账。 | `PRD-WORLD_SIMULATOR-038` / `PRD-WORLD_RUNTIME-001/031/033` / `PRD-TESTING-003` | [`provider parity authority`](../../world-simulator/llm/provider-agent-experience-parity.prd.md); [`world-simulator PRD`](../../world-simulator/prd.md); [`world-runtime PRD`](../../world-runtime/prd.md); [`testing PRD`](../../testing/prd.md) | 未来 full-tier 切换窗口覆盖候选不重放、待决请求真实结算/拒绝/过期、重连与退化不产生第二次提交，以及撤回/替换仅走专业支持路径；只有 committed receipt 表达世界后果。 | `test_tier_full` |
+
 ## 3. 产品验收
 
 - PC-1：在专业域明确的场景范围内，provider 切换后的玩家可感知目标结果、等待体验、多轮记忆与意图延续、可诊断性和恢复路径不存在无法解释的实质性退化。
