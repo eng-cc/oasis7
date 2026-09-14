@@ -345,6 +345,63 @@ def scenario_full_corpus_requires_exact_lifecycle_enum() -> None:
         shutil.rmtree(root)
 
 
+def scenario_full_corpus_requires_real_review_date() -> None:
+    for value in ("TBD", "2026-9-10", "2026-02-30"):
+        root, _base, _head = make_repo()
+        try:
+            (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
+            (root / TOPIC).write_text(
+                TOPIC_TEXT.replace("Last reviewed：2026-09-10", f"Last reviewed：{value}"),
+                encoding="utf-8",
+            )
+            result = invoke_full_corpus(root)
+            output = result.stdout + result.stderr
+            assert result.returncode == 1, output
+            assert f"invalid-review-date: {TOPIC}" in output, output
+        finally:
+            shutil.rmtree(root)
+
+    root, _base, _head = make_repo()
+    try:
+        (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
+        (root / "doc/product/world-rules-core-gameplay/prd.md").write_text(
+            ROOT_TEXT.replace("Last reviewed：`2026-09-10`", "Last reviewed：`2026-02-30`"),
+            encoding="utf-8",
+        )
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 1, output
+        assert "root-metadata-contract: doc/product/world-rules-core-gameplay/prd.md" in output, output
+        assert "Last reviewed is invalid" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_trace_fragments_must_target_current_topic() -> None:
+    root, _base, _head = make_repo()
+    try:
+        (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
+        other = root / "doc/game/other-topic.md"
+        other.write_text(
+            '<a id="req-sample-001"></a>\n<a id="ac-sample-001"></a>\n',
+            encoding="utf-8",
+        )
+        trace = TRACE_BLOCK.replace(
+            "[REQ-SAMPLE-001](#req-sample-001)",
+            "[REQ-SAMPLE-001](../../game/other-topic.md#req-sample-001)",
+        ).replace(
+            "[AC-SAMPLE-001](#ac-sample-001)",
+            "[AC-SAMPLE-001](../../game/other-topic.md#ac-sample-001)",
+        )
+        (root / TOPIC).write_text(TOPIC_TEXT.replace(TRACE_BLOCK, trace), encoding="utf-8")
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 1, output
+        assert f"paired-trace-missing-relation: {TOPIC}" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
 def scenario_full_corpus_counts_module_root() -> None:
     root, _base, _head = make_repo()
     try:
@@ -534,6 +591,54 @@ def scenario_simple_exemption_requires_trace_rows_for_unlinked_declarations() ->
         assert f"paired-trace-missing-relation: {TOPIC}" in output, output
         assert "REQ-UNLINKED-001" in output, output
         assert "AC-UNLINKED-001" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_paired_design_requires_trace_rows_for_unlinked_declarations() -> None:
+    root, _base, _head = make_repo()
+    try:
+        (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
+        extra_declarations = """
+
+## 8. Additional accepted declarations
+<a id="req-paired-unlinked-001"></a>
+- REQ-PAIRED-UNLINKED-001：配对主题的新增要求没有正文内联 AC 引用。
+<a id="ac-paired-unlinked-001"></a>
+- AC-PAIRED-UNLINKED-001：配对主题的新增验收没有正文内联 REQ 引用。
+
+<a id="req-paired-table-001"></a>
+| REQ-PAIRED-TABLE-001 | requirement declaration without an inline AC reference |
+| --- | --- |
+<a id="ac-paired-table-001"></a>
+| AC-PAIRED-TABLE-001 | acceptance declaration without an inline REQ reference |
+"""
+        mapping_rows = """
+| [`REQ-PAIRED-UNLINKED-001`](sample.prd.md#req-paired-unlinked-001) | |
+| | [`AC-PAIRED-UNLINKED-001`](sample.prd.md#ac-paired-unlinked-001) |
+| [`REQ-PAIRED-TABLE-001`](sample.prd.md#req-paired-table-001) | |
+| | [`AC-PAIRED-TABLE-001`](sample.prd.md#ac-paired-table-001) |
+"""
+        (root / TOPIC).write_text(TOPIC_TEXT + extra_declarations, encoding="utf-8")
+        (root / DESIGN).write_text(
+            DESIGN_TEXT.replace(
+                "| [`REQ-SAMPLE-001`](sample.prd.md#req-sample-001) | [`AC-SAMPLE-001`](sample.prd.md#ac-sample-001) |\n",
+                "| [`REQ-SAMPLE-001`](sample.prd.md#req-sample-001) | [`AC-SAMPLE-001`](sample.prd.md#ac-sample-001) |\n"
+                + mapping_rows,
+            ),
+            encoding="utf-8",
+        )
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 1, output
+        assert f"paired-trace-missing-relation: {TOPIC}" in output, output
+        for identifier in (
+            "REQ-PAIRED-UNLINKED-001",
+            "AC-PAIRED-UNLINKED-001",
+            "REQ-PAIRED-TABLE-001",
+            "AC-PAIRED-TABLE-001",
+        ):
+            assert identifier in output, output
     finally:
         shutil.rmtree(root)
 
@@ -1264,6 +1369,7 @@ def main() -> None:
     scenario_full_corpus_accepts_retired_topics_and_reports_lifecycle_errors()
     scenario_full_corpus_accepts_empty_retired_remainder()
     scenario_full_corpus_requires_exact_lifecycle_enum()
+    scenario_full_corpus_requires_real_review_date()
     scenario_full_corpus_counts_module_root()
     scenario_full_corpus_rejects_product_symlinks()
     scenario_full_corpus_ignores_unrelated_symlinks()
@@ -1273,6 +1379,7 @@ def main() -> None:
     scenario_full_corpus_accepts_simple_topic_exemption()
     scenario_full_corpus_rejects_empty_or_placeholder_exemption_reason()
     scenario_simple_exemption_requires_trace_rows_for_unlinked_declarations()
+    scenario_paired_design_requires_trace_rows_for_unlinked_declarations()
     scenario_active_simple_topic_trace_requires_row_contract()
     scenario_aggregate_criterion_requires_body_definition()
     scenario_aggregate_criterion_accepts_body_definition()
@@ -1288,7 +1395,7 @@ def main() -> None:
     scenario_full_corpus_rejects_changed_range_arguments()
     scenario(None, lambda _root: None)
     scenario("missing-anchor", legacy_declarations_missing_anchors)
-    scenario(None, legacy_declarations_with_anchors)
+    scenario("paired-trace-missing-relation", legacy_declarations_with_anchors)
     scenario("invalid-fragment", inline_code_anchor_is_not_fragment)
     scenario("missing-metadata", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("- Owner role：`producer_system_designer`\n", ""), encoding="utf-8"))
     scenario("missing-metadata", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("- Last reviewed：2026-09-10\n", ""), encoding="utf-8"))
@@ -1323,6 +1430,7 @@ def main() -> None:
     scenario_paired_trace_empty_evidence()
     scenario_paired_trace_requires_strict_test_tier_tokens()
     scenario_paired_trace_requires_authority_fragment()
+    scenario_trace_fragments_must_target_current_topic()
     scenario_non_heading_relations_require_trace()
     scenario_active_topic_rejects_inactive_design()
     scenario_active_topic_rejects_missing_design_file()

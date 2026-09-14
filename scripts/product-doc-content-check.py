@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+from datetime import date
 import html
 import os
 from pathlib import Path
@@ -244,6 +245,16 @@ def metadata_any(text: str, labels: tuple[str, ...]) -> str | None:
     return None
 
 
+def is_review_date(raw_value: str) -> bool:
+    """Accept only a zero-padded, real ISO calendar date."""
+    value = raw_value.strip().strip("`").strip()
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError:
+        return False
+    return value == parsed.isoformat()
+
+
 def document_identity_text(text: str) -> str:
     match = re.search(r"^## 文档身份\s*$([\s\S]*?)(?=^##\s|\Z)", text, re.MULTILINE)
     return match.group(1) if match else text
@@ -424,6 +435,9 @@ def check_metadata(path: str, text: str, errors: list[str]) -> None:
     for label in required:
         if not metadata_value(text, label):
             fail(errors, "missing-metadata", path, label)
+    review_date = metadata_value(text, "Last reviewed")
+    if review_date and not is_review_date(review_date):
+        fail(errors, "invalid-review-date", path, review_date)
     if not metadata_any(text, authority_labels):
         fail(errors, "missing-metadata", path, "专业域权威 or 专业权威")
     lifecycle = metadata_value(text, "生命周期")
@@ -1083,13 +1097,21 @@ def strict_trace_ids(value: str) -> set[str]:
     }
 
 
-def trace_navigable_ids(cell: str) -> set[str]:
+def trace_navigable_ids(source: Path, cell: str) -> set[str]:
+    """Return only fragment IDs that navigate within the current topic."""
     identifiers: set[str] = set()
     for link in parse_markdown_links(cell):
         target_path, fragment = split_link_target(link.target)
         if not fragment or is_external_link_target(target_path):
             continue
         if target_path and not target_path.lower().endswith(".md"):
+            continue
+        resolved_target = (
+            source
+            if not target_path
+            else resolve_link_path(source, target_path, use_worktree_content=True)
+        )
+        if resolved_target.resolve() != source.resolve():
             continue
         identifier = fragment.upper()
         if re.fullmatch(r"(?:REQ|AC)-[A-Z0-9][A-Z0-9_-]*", identifier, re.IGNORECASE):
@@ -1098,6 +1120,7 @@ def trace_navigable_ids(cell: str) -> set[str]:
 
 
 def check_active_topic_trace_tables(
+    root: Path,
     path: str,
     text: str,
     errors: list[str],
@@ -1117,17 +1140,10 @@ def check_active_topic_trace_tables(
         or lifecycle.strip().strip("`").lower() != "active"
     ):
         return
-    simple_topic_exemption = bool(
-        re.search(
-            r"设计判定\s*[:：]\s*`?simple-topic-exemption`?",
-            "\n".join(line for _, line in visible_lines(text)),
-            re.IGNORECASE,
-        )
-    )
-
     traced_relations: set[tuple[str, str]] = set()
     traced_ids: set[str] = set()
     relation_table_seen = False
+    source = root / path
     for header_line, columns, rows in trace_table_semantics(text):
         trace_id_columns = tuple(
             sorted(set(columns["relation"] + columns["criterion"]))
@@ -1189,16 +1205,14 @@ def check_active_topic_trace_tables(
             ]
             relation_text = " ".join(relation_cells)
             declared_ids = strict_trace_ids(relation_text)
-            linked_ids = set().union(*(trace_navigable_ids(cell) for cell in relation_cells))
+            linked_ids = set().union(
+                *(trace_navigable_ids(source, cell) for cell in relation_cells)
+            )
             requirement_ids = {
-                identifier
-                for identifier in declared_ids | linked_ids
-                if identifier.startswith("REQ-")
+                identifier for identifier in linked_ids if identifier.startswith("REQ-")
             }
             acceptance_ids = {
-                identifier
-                for identifier in declared_ids | linked_ids
-                if identifier.startswith("AC-")
+                identifier for identifier in linked_ids if identifier.startswith("AC-")
             }
             if not requirement_ids or not acceptance_ids:
                 fail(
@@ -1292,15 +1306,14 @@ def check_active_topic_trace_tables(
                 for requirement, acceptance in sorted(missing_relations)
             ),
         )
-    if simple_topic_exemption:
-        missing_ids = (declared_requirements | declared_acceptances) - traced_ids
-        if missing_ids:
-            fail(
-                errors,
-                "paired-trace-missing-relation",
-                path,
-                "declared REQ/AC IDs lack same-row trace: " + ", ".join(sorted(missing_ids)),
-            )
+    missing_ids = (declared_requirements | declared_acceptances) - traced_ids
+    if missing_ids:
+        fail(
+            errors,
+            "paired-trace-missing-relation",
+            path,
+            "declared REQ/AC IDs lack same-row trace: " + ", ".join(sorted(missing_ids)),
+        )
 
 
 def check_requirements(path: str, text: str, errors: list[str]) -> None:
@@ -1440,8 +1453,11 @@ def check_root_document(path: str, text: str, errors: list[str]) -> None:
         fail(errors, "root-metadata-contract", path, f"Product PRD-ID is missing or invalid: {prd_id!r}")
     if not metadata_value(identity, "产品模块"):
         fail(errors, "root-metadata-contract", path, "产品模块 is required")
-    if not metadata_value(identity, "Last reviewed"):
+    review_date = metadata_value(identity, "Last reviewed")
+    if not review_date:
         fail(errors, "root-metadata-contract", path, "Last reviewed is required")
+    elif not is_review_date(review_date):
+        fail(errors, "root-metadata-contract", path, f"Last reviewed is invalid: {review_date}")
     if not re.search(r"^- 下层专业域：.+", identity, re.MULTILINE):
         fail(errors, "root-authority-contract", path, "下层专业域 is required")
     for heading in (
@@ -1487,7 +1503,7 @@ def check_document(
         if path.endswith(".prd.md") and not inactive_lifecycle:
             check_minimum_topic_content(path, text, errors)
             check_active_topic_cardinality(path, text, errors)
-            check_active_topic_trace_tables(path, text, errors)
+            check_active_topic_trace_tables(root, path, text, errors)
             if full_corpus:
                 check_active_topic_design_contract(root, head, path, text, errors, use_worktree_content)
     if not is_root_document and path.endswith(".design.md"):
