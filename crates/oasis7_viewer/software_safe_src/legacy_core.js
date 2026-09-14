@@ -4,6 +4,7 @@ import { createViewerHostedAuthStateModule } from "./viewer_hosted_auth_state_mo
 import { createViewerHostedTestLoginModule } from "./viewer_hosted_test_login_module.js";
 import { createViewerAgentChatAuthModule } from "./viewer_agent_chat_auth_module.js";
 import { createViewerHostedSessionRefreshModule } from "./viewer_hosted_session_refresh_module.js";
+import { createViewerHostedSessionReconnectModule } from "./viewer_hosted_session_reconnect_module.js";
 import { createViewerPromptControlModule } from "./viewer_prompt_control_module.js";
 import { resetHostedLoginChallenge as resetHostedLoginChallengeState } from "./viewer_hosted_login_state_module.js";
 import { createViewerLocalePreferencesModule } from "./viewer_locale_preferences_module.js";
@@ -2202,12 +2203,24 @@ async function logoutHostedPlayerSession() {
   return { ok: true };
 }
 
-function syncHostedPlayerSessionOnConnect() {
-  if (!state.auth.available || state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE || state.auth.syncInFlight) {
-    return;
-  }
-  void sendReconnectSync();
+function markHostedSessionRefreshFailure() {
+  state.auth.syncInFlight = false;
+  state.auth.registrationStatus = "issued";
+  state.auth.runtimeStatus = "error";
+  state.auth.recoveryErrorCode = "session_refresh_failed";
+  state.auth.recoveryErrorMessage = state.auth.error || "hosted player session refresh failed; retry to recover this browser session";
+  render();
 }
+
+const { syncHostedPlayerSessionOnConnect } = createViewerHostedSessionReconnectModule({
+  authHasSigningKeyMaterial,
+  legacyViewerAuthBootstrapSource: LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE,
+  onRefreshFailure: markHostedSessionRefreshFailure,
+  refreshHostedPlayerLease,
+  registerHostedPlayerSession: () => ensureRegisteredPlayerSession(latestRequestedAgentId()),
+  sendReconnectSync,
+  state,
+});
 
 function clearPendingSessionRegisterWaiter(error = null, options = {}) {
   if (!pendingSessionRegisterWaiter) {

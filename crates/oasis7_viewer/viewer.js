@@ -3299,6 +3299,40 @@ function createViewerHostedSessionRefreshModule({
   }
   return { refreshHostedPlayerLease: refreshHostedPlayerLease2 };
 }
+function createViewerHostedSessionReconnectModule({
+  authHasSigningKeyMaterial: authHasSigningKeyMaterial2,
+  legacyViewerAuthBootstrapSource,
+  onRefreshFailure,
+  refreshHostedPlayerLease: refreshHostedPlayerLease2,
+  registerHostedPlayerSession,
+  sendReconnectSync: sendReconnectSync2,
+  state: state2
+}) {
+  function needsHostedKeyRecovery() {
+    const auth = state2.auth;
+    return auth?.available && auth.source !== legacyViewerAuthBootstrapSource && !!String(auth.releaseToken || "").trim() && !authHasSigningKeyMaterial2(auth);
+  }
+  async function syncHostedPlayerSessionOnConnect2() {
+    if (!state2.auth.available || state2.auth.source === legacyViewerAuthBootstrapSource || state2.auth.syncInFlight) {
+      return { ok: false, skipped: true };
+    }
+    if (needsHostedKeyRecovery()) {
+      const payload = await refreshHostedPlayerLease2();
+      if (!payload?.ok) {
+        onRefreshFailure?.();
+        return { ok: false, reason: "session_refresh_failed" };
+      }
+      await registerHostedPlayerSession();
+      return { ok: true, mode: "registration" };
+    }
+    await sendReconnectSync2();
+    return { ok: true, mode: "reconnect" };
+  }
+  return {
+    needsHostedKeyRecovery,
+    syncHostedPlayerSessionOnConnect: syncHostedPlayerSessionOnConnect2
+  };
+}
 const PROMPT_RESULT_STATUSES = /* @__PURE__ */ new Set(["accepted", "applied", "stale", "rejected", "blocked"]);
 function createViewerPromptControlModule({
   applyPromptAckLocally: applyPromptAckLocally2,
@@ -8193,12 +8227,23 @@ async function logoutHostedPlayerSession() {
   }
   return { ok: true };
 }
-function syncHostedPlayerSessionOnConnect() {
-  if (!state.auth.available || state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE || state.auth.syncInFlight) {
-    return;
-  }
-  void sendReconnectSync();
+function markHostedSessionRefreshFailure() {
+  state.auth.syncInFlight = false;
+  state.auth.registrationStatus = "issued";
+  state.auth.runtimeStatus = "error";
+  state.auth.recoveryErrorCode = "session_refresh_failed";
+  state.auth.recoveryErrorMessage = state.auth.error || "hosted player session refresh failed; retry to recover this browser session";
+  render();
 }
+const { syncHostedPlayerSessionOnConnect } = createViewerHostedSessionReconnectModule({
+  authHasSigningKeyMaterial,
+  legacyViewerAuthBootstrapSource: LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE,
+  onRefreshFailure: markHostedSessionRefreshFailure,
+  refreshHostedPlayerLease,
+  registerHostedPlayerSession: () => ensureRegisteredPlayerSession(latestRequestedAgentId()),
+  sendReconnectSync,
+  state
+});
 function clearPendingSessionRegisterWaiter(error = null, options = {}) {
   if (!pendingSessionRegisterWaiter) {
     return;
