@@ -86,6 +86,7 @@ DEPLOYMENT_INVENTORY_RELATIVE = "scripts/public-testnet-validator-pair-inventory
 DEPLOYMENT_INVENTORY = REPOSITORY_ROOT / DEPLOYMENT_INVENTORY_RELATIVE
 DEPLOYMENT_INVENTORY_SCHEMA = "oasis7.public_testnet_validator_pair_inventory.v1"
 PRODUCTION_STACK_ROOT = "/opt/oasis7/p2p-testnet"
+SERVICE_READBACK_COMMAND = f"{PRODUCTION_STACK_ROOT}/current/bin/service-readback --read-only"
 PRODUCTION_KNOWN_HOSTS_PATH = "/opt/oasis7/p2p-testnet/config/public-testnet-validator-pair-known-hosts"
 # Kept separate from the inventory assertion so hermetic unit tests can
 # replace the executor module's canonical path without changing production
@@ -1256,7 +1257,7 @@ def _validate_direct_inventory_request(
         fail("human_direct_ssh fixed readback contract is missing")
     if readback.get("process_command") != "ps -eo pid=,args=" or readback.get("listener_command") != "ss -ltn":
         fail("human_direct_ssh process/listener command allowlist mismatch")
-    if readback.get("service_readback_command") not in {None, "service-readback --read-only"}:
+    if readback.get("service_readback_command") != SERVICE_READBACK_COMMAND:
         fail("human_direct_ssh service command allowlist mismatch")
     try:
         quiet_window = float(readback.get("quiet_window_seconds", HUMAN_DIRECT_SSH_QUIET_WINDOW_SECONDS))
@@ -1644,7 +1645,7 @@ def _direct_service_readback(
     env: dict[str, str],
     use_credential: bool,
 ) -> dict[str, Any]:
-    command = f"service-readback --read-only --role {role} --root {shlex.quote(root)} --service {shlex.quote(service)}"
+    command = f"{SERVICE_READBACK_COMMAND} --role {role} --root {shlex.quote(root)} --service {shlex.quote(service)}"
     raw = _direct_ssh_call(target, known_hosts, command, env, use_credential)
     try:
         value = json.loads(raw)
@@ -1701,7 +1702,7 @@ def _direct_observe_node(
         "listeners": [],
         "process_command": process_command,
         "listener_command": listener_command,
-        "service_readback_command": f"service-readback --read-only --role {request_role} --root {shlex.quote(root)} --service {shlex.quote(service)}",
+        "service_readback_command": f"{SERVICE_READBACK_COMMAND} --role {request_role} --root {shlex.quote(root)} --service {shlex.quote(service)}",
         "readback_sha256": hashlib.sha256(
             json.dumps(
                 {"service": service_value, "process": process_output, "listeners": listener_output},
@@ -1765,7 +1766,7 @@ def run_human_direct_ssh(args: argparse.Namespace, *, emit: bool = True) -> dict
         fail("human_direct_ssh fixed readback contract is missing")
     if readback.get("process_command") != "ps -eo pid=,args=" or readback.get("listener_command") != "ss -ltn":
         fail("human_direct_ssh process/listener command allowlist mismatch")
-    if readback.get("service_readback_command") not in {None, "service-readback --read-only"}:
+    if readback.get("service_readback_command") != SERVICE_READBACK_COMMAND:
         fail("human_direct_ssh service command allowlist mismatch")
     try:
         quiet_window = float(readback.get("quiet_window_seconds", HUMAN_DIRECT_SSH_QUIET_WINDOW_SECONDS))

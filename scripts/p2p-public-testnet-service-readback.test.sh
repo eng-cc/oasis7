@@ -31,6 +31,7 @@ case "${1:-}" in
   is-enabled) printf '%s\n' disabled ;;
   show)
     printf '%s\n' \
+      LoadState="${FAKE_SERVICE_LOAD_STATE:-loaded}" \
       ActiveState=inactive \
       SubState=dead \
       UnitFileState=disabled \
@@ -89,6 +90,37 @@ assert value["independently_observed"] is True, value
 assert value["listeners"] == [], value
 PY
 
+if FAKE_SERVICE_LOAD_STATE=not-found run_readback >"$TMP_DIR/not-found.out" 2>&1; then
+  printf 'expected missing systemd unit to be rejected\n' >&2
+  exit 1
+fi
+
+python3 - "$HELPER" <<'PY'
+import importlib.machinery
+import importlib.util
+import sys
+
+loader = importlib.machinery.SourceFileLoader("service_readback", sys.argv[1])
+spec = importlib.util.spec_from_loader(loader.name, loader)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+class MissingRoot:
+    def __init__(self, _value):
+        self.anchor = "/"
+        self.parts = ("/", "opt", "oasis7", "p2p-testnet")
+    def exists(self):
+        return False
+
+module.Path = MissingRoot
+try:
+    module._physical_root_is_safe(module.CANONICAL_ROOT)
+except SystemExit:
+    pass
+else:
+    raise AssertionError("missing canonical root was accepted")
+PY
+
 expect_rejected() {
   local label="$1"
   shift
@@ -127,6 +159,10 @@ expect_rejected symlink-root \
 # the fresh-host deployment copies that bundle into the active validator bin.
 grep -Fq 'service-readback' "$BUNDLE_BUILDER"
 grep -Fq 'service-readback' "$FRESH_HOST_BOOTSTRAP"
+grep -Fq 'SERVICE_READBACK_COMMAND = f"{PRODUCTION_STACK_ROOT}/current/bin/service-readback --read-only"' \
+  "$ROOT_DIR/scripts/p2p-public-testnet-validator-pair-rebuild.py"
+grep -Fq 'command = f"{SERVICE_READBACK_COMMAND} --role' \
+  "$ROOT_DIR/scripts/p2p-public-testnet-validator-pair-rebuild.py"
 dry_run_output="$TMP_DIR/linux-bundle-dry-run.out"
 PATH="$FAKE_BIN:$PATH" "$BUNDLE_BUILDER" \
   --dry-run \

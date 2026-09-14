@@ -66,7 +66,7 @@ make_bundle() {
     >"$bundle_dir/oasis7-linux-x64/BUILDINFO"
   (cd "$bundle_dir/oasis7-linux-x64" && shasum -a 256 BUILDINFO bin/oasis7_chain_runtime >SHA256SUMS)
   mkdir -p "$bundle_dir/oasis7-linux-x64-ops-tools/bin"
-  for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
+  for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit service-readback; do
     printf '#!/usr/bin/env bash\n' >"$bundle_dir/oasis7-linux-x64-ops-tools/bin/$binary"
     chmod +x "$bundle_dir/oasis7-linux-x64-ops-tools/bin/$binary"
   done

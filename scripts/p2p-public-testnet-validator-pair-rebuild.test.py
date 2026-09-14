@@ -673,7 +673,7 @@ os.execv({sys.executable!r}, [{sys.executable!r}, *args])
             "readback": {
                 "process_command": "ps -eo pid=,args=",
                 "listener_command": "ss -ltn",
-                "service_readback_command": "service-readback --read-only",
+                "service_readback_command": "/opt/oasis7/p2p-testnet/current/bin/service-readback --read-only",
                 "quiet_window_seconds": 2,
             },
         }

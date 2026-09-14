@@ -40,7 +40,7 @@ EOF
   )
   printf 'deb-placeholder\n' >"$root/oasis7-linux-x64.deb"
   mkdir -p "$root/oasis7-linux-x64-ops-tools/bin"
-  for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
+  for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit service-readback; do
     printf '%s\n' "$binary" >"$root/oasis7-linux-x64-ops-tools/bin/$binary"
     chmod +x "$root/oasis7-linux-x64-ops-tools/bin/$binary"
   done

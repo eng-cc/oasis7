@@ -42,13 +42,12 @@ def fail(message: str) -> NoReturn:
 
 
 def _physical_root_is_safe(root: str) -> None:
-    """Reject a redirecting root when the fixed path is present."""
+    """Require the canonical root and reject redirecting path components."""
     path = Path(root)
     if not path.exists():
-        # The helper runs on the target host. A missing root is reported by
-        # the read-only service probe, but does not turn the fixed string into
-        # a caller-controlled path in tests or before host provisioning.
-        return
+        fail("canonical root does not exist")
+    if not path.is_dir():
+        fail("canonical root is not a directory")
     current = Path(path.anchor or "/")
     for component in path.parts[1:]:
         current /= component
@@ -100,6 +99,7 @@ def service_state(service: str) -> tuple[bool, bool]:
             "show",
             "--no-page",
             "--property=ActiveState",
+            "--property=LoadState",
             "--property=SubState",
             "--property=NRestarts",
             service,
@@ -112,14 +112,18 @@ def service_state(service: str) -> tuple[bool, bool]:
             continue
         key, value = line.split("=", 1)
         values[key] = value.strip()
-    if not {"ActiveState", "SubState", "NRestarts"}.issubset(values):
+    if not {"LoadState", "ActiveState", "SubState", "NRestarts"}.issubset(values):
         fail("service read-only probe returned incomplete state")
+    if values["LoadState"] != "loaded":
+        fail("service unit is not loaded")
     try:
         restarts = int(values["NRestarts"])
     except ValueError:
         fail("service read-only probe returned malformed restart count")
     if restarts != 0:
         fail("service read-only probe reports a nonzero restart count")
+    if values["ActiveState"] != "inactive" or values["SubState"] != "dead":
+        fail("service unit is not in the expected inactive/dead state")
     active = values["ActiveState"] == "active"
     running = active and values["SubState"] in {"running", "listening", "exited"}
     return active, running
@@ -161,4 +165,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
