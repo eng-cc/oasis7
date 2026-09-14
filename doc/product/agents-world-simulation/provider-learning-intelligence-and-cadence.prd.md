@@ -14,6 +14,7 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
 - 设计适用性理由：本 PRD 只定义准入、节奏、暂停、训练和能力范围的产品边界；具体学习交互由专业 authority 决定，独立 design 会复制产品或实现 authority。
 - 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标

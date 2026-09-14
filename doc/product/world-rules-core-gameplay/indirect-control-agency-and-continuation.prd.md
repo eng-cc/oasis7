@@ -14,6 +14,7 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
 - 设计适用性理由：本 PRD 直接承载意图、Agent 自主行动、阻塞、回流和因果解释边界；Agent/Viewer 专业 authority 负责具体表达。
 - 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品承诺
@@ -137,3 +138,11 @@
 - 不冻结 UI 布局、API 字段、状态枚举、tick、数值、runtime/Agent 实现、测试矩阵或任务状态。
 - 不把本分册或 `PRD-GAME-014` 建档包装成留存、active-LLM readiness、QA gate 或公开发行已经通过。
 - 不承诺复杂预测、完整分支模拟或完整记忆编辑系统。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-WR-IA-001](#req-wr-ia-001) / [AC-WR-IA-001](#ac-wr-ia-001) | `producer_system_designer` | [`PRD-GAME-014`](../../game/gameplay/gameplay-indirect-control-agency-contract.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-IA-002](#req-wr-ia-002) / [AC-WR-IA-002](#ac-wr-ia-002) | `producer_system_designer` | [`PRD-GAME-014`](../../game/gameplay/gameplay-indirect-control-agency-contract.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-IA-003](#req-wr-ia-003) / [AC-WR-IA-003](#ac-wr-ia-003) | `producer_system_designer` | [`PRD-GAME-014`](../../game/gameplay/gameplay-indirect-control-agency-contract.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

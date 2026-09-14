@@ -121,3 +121,11 @@ This design delegates product requirements and acceptance semantics to its paire
 | [REQ-PROMPT-009](agent-conversation-and-prompt-control.prd.md#req-prompt-009) | [AC-PROMPT-009](agent-conversation-and-prompt-control.prd.md#ac-prompt-009) |
 | [REQ-PROMPT-010](agent-conversation-and-prompt-control.prd.md#req-prompt-010) | [AC-PROMPT-010](agent-conversation-and-prompt-control.prd.md#ac-prompt-010) |
 | [REQ-PROMPT-011](agent-conversation-and-prompt-control.prd.md#req-prompt-011) | [AC-PROMPT-011](agent-conversation-and-prompt-control.prd.md#ac-prompt-011) |
+|  | [AC-1](agent-conversation-and-prompt-control.prd.md#ac-1) |
+|  | [AC-2](agent-conversation-and-prompt-control.prd.md#ac-2) |
+|  | [AC-3](agent-conversation-and-prompt-control.prd.md#ac-3) |
+|  | [AC-4](agent-conversation-and-prompt-control.prd.md#ac-4) |
+|  | [AC-5](agent-conversation-and-prompt-control.prd.md#ac-5) |
+|  | [AC-6](agent-conversation-and-prompt-control.prd.md#ac-6) |
+|  | [AC-7](agent-conversation-and-prompt-control.prd.md#ac-7) |
+|  | [AC-8](agent-conversation-and-prompt-control.prd.md#ac-8) |

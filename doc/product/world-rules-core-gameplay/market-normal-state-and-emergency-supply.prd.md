@@ -14,6 +14,7 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
 - 设计适用性理由：本 PRD 只定义常态/紧急分界、冻结批次、结果类别和退出边界；分配算法与界面由专业 authority 决定。
 - 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
@@ -156,3 +157,11 @@
 - 不实现市场撮合、物流、存储、治理授权、采购、补偿、分配、rationing、申诉或 runtime 状态机。
 - 不允许紧急状态成为永久治理权、管理员裁量、无偿没收、选择性 bailout、通用货币或绕过世界恢复程序的入口。
 - 不改变 OC、地方经济记录、区域 charter、土地 tenure 或玩家账户/身份的专业权威。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-WR-ES-001](#req-wr-es-001) / [AC-WR-ES-001](#ac-wr-es-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-ES-002](#req-wr-es-002) / [AC-WR-ES-002](#ac-wr-es-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-ES-003](#req-wr-es-003) / [AC-WR-ES-003](#ac-wr-es-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

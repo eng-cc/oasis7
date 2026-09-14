@@ -14,6 +14,7 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
 - 设计适用性理由：本 PRD 直接承载控制权确认、失去控制后的连续性和重认领的产品承诺；独立 design 会重复 ownership authority。
 - 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品承诺
@@ -138,3 +139,10 @@
 - 不把主动结束、短暂退出、候选切换或历史 receipt 视为重置首次支持、逃避既有义务、取得额外容量或转移控制权的机制。
 - 不冻结恢复路径的数值成本、时长、成功率、排序算法、状态字段、API、界面布局或翻译字典，也不把比较卡或 Agent 推荐承诺为动作已提交、资源已保留或结果必然成功。
 - 不以本文或历史任务状态声明当前 preview、可玩性或公开发行已经通过。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-WR-AOS-001](#req-wr-aos-001) / [AC-WR-AOS-001](#ac-wr-aos-001) | `producer_system_designer` | [`Agent claim 经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-AOS-002](#req-wr-aos-002) / [AC-WR-AOS-002](#ac-wr-aos-002) | `producer_system_designer` | [`Agent claim 经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

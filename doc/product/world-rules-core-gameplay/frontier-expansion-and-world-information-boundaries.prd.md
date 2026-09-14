@@ -14,6 +14,7 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
 - 设计适用性理由：本 PRD 已直接说明 frontier 选择、期限机会和信息分层的产品边界；空间与情报呈现由专业 authority 决定。
 - 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
@@ -180,3 +181,11 @@ tenure 的续期、转让、收回、迁移、补偿或申诉请求必须绑定�
 - 不定义地图、相邻、路线、侦察、库存、部署、计划、charter、priority、数据权限或 freshness 的算法、数值、字段、UI 或 runtime 实现。
 - 不把 pioneer priority、探索数据或 frontier 开发扩写为主权、永久排他、全局治理权、免费实时情报或经济旁路。
 - 不承诺当前存在任何可进入 frontier、地图扩展、信息商业权、公共 baseline 或公开 API。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-WR-FI-001](#req-wr-fi-001) / [AC-WR-FI-001](#ac-wr-fi-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-FI-002](#req-wr-fi-002) / [AC-WR-FI-002](#ac-wr-fi-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-FI-003](#req-wr-fi-003) / [AC-WR-FI-003](#ac-wr-fi-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

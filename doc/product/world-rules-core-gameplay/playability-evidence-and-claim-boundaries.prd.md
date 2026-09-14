@@ -14,6 +14,7 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
 - 设计适用性理由：本 PRD 是证据层级与产品 claim 的判断合同，不定义独立玩家交互；测试、LiveOps 和发行 authority 保留相应实现与证据职责。
 - 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
@@ -145,3 +146,11 @@ oasis7 的持续世界、自动化回归或活跃模拟本身都不是可玩性�
 - 不把内部评审、Agent 试玩或外部信号变成新的正式玩家角色、发行等级或默认 release gate。
 - 不定义玩法数值、UI 表现、Agent 行为、测试脚本、证据 schema 或人工/自动化执行顺序。
 - 不以本产品分册、历史任务完成态或旧样例宣称当前版本已证明好玩、已可公开发行或已具备长期留存。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-WR-PE-001](#req-wr-pe-001) / [AC-WR-PE-001](#ac-wr-pe-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[`testing-manual.md`](../../../testing-manual.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-PE-002](#req-wr-pe-002) / [AC-WR-PE-002](#ac-wr-pe-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[`testing-manual.md`](../../../testing-manual.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-PE-003](#req-wr-pe-003) / [AC-WR-PE-003](#ac-wr-pe-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[`testing-manual.md`](../../../testing-manual.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

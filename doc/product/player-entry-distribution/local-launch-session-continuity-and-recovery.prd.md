@@ -126,3 +126,10 @@
 
 - 未决：具体 Launcher、Web/WASM、runtime 和 Viewer 的状态分类、恢复路径与证据组合仍由对应专业 authority 与 QA 在同一候选窗口内确认；本分册不预先宣称跨入口恢复或可玩结论。
 - 假设：当本地 session 证据缺失、过期或互相冲突时，玩家看到未知/中断或 blocked，并重新验证当前 authority；本地重启、页面可见或保存成功不改变这一边界。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-ENTRY-LAUNCH-001](#req-entry-launch-001) / [AC-ENTRY-LAUNCH-001](#ac-entry-launch-001) | `producer_system_designer` | [`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`Launcher 子域入口`](../../world-simulator/launcher/README.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-ENTRY-LAUNCH-002](#req-entry-launch-002) / [AC-ENTRY-LAUNCH-002](#ac-entry-launch-002) | `producer_system_designer` | [`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`Launcher 子域入口`](../../world-simulator/launcher/README.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

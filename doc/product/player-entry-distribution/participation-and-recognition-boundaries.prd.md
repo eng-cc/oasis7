@@ -15,6 +15,7 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
 - 设计适用性理由：本 PRD 直接表达贡献信号、审核、失效和补救边界；独立 design 会重复该资格与 claim 分离合同。
 - 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
@@ -104,3 +105,10 @@
 - 不定义贡献评分、资格阈值、金额、比例、代币兑换或发放机制。
 - 不替代治理计划、渠道运营包、审核台账、执行记录或公开沟通流程。
 - 不把有限预览参与包装为投资、收益计划、空投、登录奖励、时长奖励或 play-to-earn。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-ENTRY-PART-001](#req-entry-part-001) / [AC-ENTRY-PART-001](#ac-entry-part-001) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md)、[`testing PRD`](../../testing/prd.md)、[`README.md`](../../../README.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-ENTRY-PART-002](#req-entry-part-002) / [AC-ENTRY-PART-002](#ac-entry-part-002) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md)、[`testing PRD`](../../testing/prd.md)、[`README.md`](../../../README.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

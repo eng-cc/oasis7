@@ -14,6 +14,7 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
 - 设计适用性理由：本 PRD 只定义确定性提交、待决恢复、幂等和版本边界；执行流程与状态呈现由 runtime/P2P 专业 authority 负责。
 - 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 执行与共识边界
@@ -123,3 +124,12 @@ intent 的 governing version 必须由其首次进入已 committed、finality-ve
 
 - 不定义配方、设施、市场、区域/组织治理、Agent 决策、玩家动作、UX 或数值平衡。
 - 不定义 BFT 消息、签名格式、存储实现、节点部署或具体运行手册。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-DWE-001](#req-dwe-001) / [AC-DWE-001](#ac-dwe-001) | `producer_system_designer` | [`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、Agent 与入口/Viewer 的 [`doc/world-simulator/prd.md`](../../world-simulator/prd.md)；入口动作的具体跨表面契约见 [`客户端启动器跨表面受控动作契约`](../../world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-DWE-002](#req-dwe-002) / [AC-DWE-002](#ac-dwe-002) | `producer_system_designer` | [`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、Agent 与入口/Viewer 的 [`doc/world-simulator/prd.md`](../../world-simulator/prd.md)；入口动作的具体跨表面契约见 [`客户端启动器跨表面受控动作契约`](../../world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-DWE-003](#req-dwe-003) / [AC-DWE-003](#ac-dwe-003) | `producer_system_designer` | [`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、Agent 与入口/Viewer 的 [`doc/world-simulator/prd.md`](../../world-simulator/prd.md)；入口动作的具体跨表面契约见 [`客户端启动器跨表面受控动作契约`](../../world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-DWE-004](#req-dwe-004) / [AC-DWE-004](#ac-dwe-004) | `producer_system_designer` | [`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、Agent 与入口/Viewer 的 [`doc/world-simulator/prd.md`](../../world-simulator/prd.md)；入口动作的具体跨表面契约见 [`客户端启动器跨表面受控动作契约`](../../world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

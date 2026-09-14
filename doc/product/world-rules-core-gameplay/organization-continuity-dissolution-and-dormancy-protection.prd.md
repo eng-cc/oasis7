@@ -14,6 +14,7 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
 - 设计适用性理由：本 PRD 已完整表达组织解散、不活跃保护、交接和 reclaim 的产品阶段边界；具体 lifecycle surface 由专业 authority 决定。
 - 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品承诺
@@ -138,3 +139,11 @@
 - 不实现 charter、estate、delegation、reclaim、申诉、资产处置、账户/身份聚合、签名、runtime/P2P 状态机、Viewer 控件或运营 runbook。
 - 不允许组织、普通治理、紧急机制或运营便利越过本文保护底线，制造静默没收、历史重写、身份删除、无审计处置或重复世界效果。
 - 不以本文、历史任务状态或局部证据声称组织连续性能力当前已实现、已平衡、可玩或可公开发布。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-WR-OC-001](#req-wr-oc-001) / [AC-WR-OC-001](#ac-wr-oc-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-OC-002](#req-wr-oc-002) / [AC-WR-OC-002](#ac-wr-oc-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-OC-003](#req-wr-oc-003) / [AC-WR-OC-003](#ac-wr-oc-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

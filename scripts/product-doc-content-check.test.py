@@ -165,6 +165,7 @@ def simple_topic_text() -> str:
 
 ## 设计判定
 - 设计判定：`simple-topic-exemption`
+- 设计判定 task issue：#3680
 - 设计适用性理由：这是简单专题，不增加新的信息分层、交互状态编排或策略取舍。
 - 当前 GitHub task evidence：[`issue evidence`](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)
 """
@@ -227,7 +228,6 @@ def scenario_full_corpus_requires_active_topic_requirement() -> None:
         assert f"active-topic-missing-requirement: {TOPIC}" in output, output
     finally:
         shutil.rmtree(root)
-
 
 def scenario_full_corpus_requires_active_topic_acceptance() -> None:
     root, _base, _head = make_repo()
@@ -307,6 +307,24 @@ def scenario_full_corpus_accepts_retired_topics_and_reports_lifecycle_errors() -
         output = result.stdout + result.stderr
         assert result.returncode == 1, output
         assert "retired.prd.md" in output and "missing-metadata" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_full_corpus_accepts_empty_retired_remainder() -> None:
+    root, _base, _head = make_repo()
+    try:
+        isolate_topic_full_corpus(root)
+        (root / TOPIC).write_text(
+            lifecycle_topic_text("retired").replace(
+                "- 剩余语义：保留历史验收含义与仍需可达的引用。",
+                "- 剩余语义：无",
+            ),
+            encoding="utf-8",
+        )
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 0, output
     finally:
         shutil.rmtree(root)
 
@@ -491,6 +509,7 @@ def scenario_full_corpus_requires_bound_repository_task_evidence() -> None:
 
 ## 设计判定
 - 设计判定：`simple-topic-exemption`
+- 设计判定 task issue：#3680
 - 设计适用性理由：这是简单专题，不增加新的信息分层、交互状态编排或策略取舍。
 - 当前 GitHub task evidence：见下一行。
 - [issue evidence](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)
@@ -499,6 +518,7 @@ def scenario_full_corpus_requires_bound_repository_task_evidence() -> None:
 
 ## 设计判定
 - 设计判定：`simple-topic-exemption`
+- 设计判定 task issue：#3680
 - 设计适用性理由：这是简单专题，不增加新的信息分层、交互状态编排或策略取舍。
 - 当前 GitHub task evidence：[`issue evidence`](https://github.com/example-owner/example-repo/issues/3680#issuecomment-5652870280)
 """,
@@ -520,6 +540,42 @@ def scenario_full_corpus_requires_bound_repository_task_evidence() -> None:
             assert f"missing-design-exemption-evidence: {TOPIC}" in output, output
         finally:
             shutil.rmtree(root)
+
+    root, _base, _head = make_repo()
+    try:
+        (root / DESIGN).unlink()
+        isolate_topic_full_corpus(root)
+        mixed = simple_topic_text().replace(
+            "https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)",
+            "https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280) and "
+            "[other task](https://github.com/eng-cc/oasis7/issues/12#issuecomment-99)",
+        )
+        (root / TOPIC).write_text(mixed, encoding="utf-8")
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 1, output
+        assert f"ambiguous-design-exemption-task: {TOPIC}" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_full_corpus_rejects_mismatched_task_evidence() -> None:
+    root, _base, _head = make_repo()
+    try:
+        (root / DESIGN).unlink()
+        isolate_topic_full_corpus(root)
+        (root / TOPIC).write_text(
+            simple_topic_text().replace(
+                "设计判定 task issue：#3680", "设计判定 task issue：#12"
+            ),
+            encoding="utf-8",
+        )
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 1, output
+        assert f"mismatched-design-exemption-task: {TOPIC}" in output, output
+    finally:
+        shutil.rmtree(root)
 
 
 def mapping_topic_text() -> str:
@@ -690,6 +746,52 @@ def scenario_full_corpus_validates_module_root() -> None:
         assert result.returncode == 1, output
         assert "root-metadata-contract" in output, output
         assert "Product PRD-ID" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_full_corpus_validates_module_root_fragments() -> None:
+    root, _base, _head = make_repo()
+    try:
+        isolate_topic_full_corpus(root)
+        root_prd = root / "doc/product/world-rules-core-gameplay/prd.md"
+        root_prd.write_text(
+            ROOT_TEXT.replace("../../game/prd.md)", "../../game/prd.md#missing)"),
+            encoding="utf-8",
+        )
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 1, output
+        assert "invalid-fragment: doc/product/world-rules-core-gameplay/prd.md" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_active_topic_requires_trace_table() -> None:
+    scenario(
+        "paired-trace-missing-table",
+        lambda root: (root / TOPIC).write_text(
+            TOPIC_TEXT.replace(TRACE_BLOCK, ""), encoding="utf-8"
+        ),
+    )
+
+
+def scenario_design_mapping_includes_bullet_declarations() -> None:
+    bullet = """
+<a id="req-bullet-001"></a>
+- REQ-BULLET-001：补充要求说明。
+<a id="ac-bullet-001"></a>
+- AC-BULLET-001：补充验收条件。
+"""
+    root, _base, _head = make_repo()
+    try:
+        isolate_topic_full_corpus(root)
+        (root / TOPIC).write_text(TOPIC_TEXT + bullet, encoding="utf-8")
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 1, output
+        assert "design-prd-mapping-incomplete" in output, output
+        assert "REQ-BULLET-001" in output and "AC-BULLET-001" in output, output
     finally:
         shutil.rmtree(root)
 
@@ -1027,6 +1129,7 @@ def main() -> None:
     scenario_full_corpus_exempts_non_active_topic_cardinality()
     scenario_full_corpus_includes_unchanged_legacy_and_sorts_diagnostics()
     scenario_full_corpus_accepts_retired_topics_and_reports_lifecycle_errors()
+    scenario_full_corpus_accepts_empty_retired_remainder()
     scenario_full_corpus_requires_exact_lifecycle_enum()
     scenario_full_corpus_counts_module_root()
     scenario_full_corpus_rejects_product_symlinks()
@@ -1038,10 +1141,14 @@ def main() -> None:
     scenario_aggregate_criterion_requires_body_definition()
     scenario_aggregate_criterion_accepts_body_definition()
     scenario_full_corpus_requires_bound_repository_task_evidence()
+    scenario_full_corpus_rejects_mismatched_task_evidence()
     scenario_full_corpus_requires_complete_prd_consistent_design_mapping()
     scenario_full_corpus_requires_paired_design_link()
     scenario_full_corpus_requires_prd_trace_fragments()
     scenario_full_corpus_validates_module_root()
+    scenario_full_corpus_validates_module_root_fragments()
+    scenario_active_topic_requires_trace_table()
+    scenario_design_mapping_includes_bullet_declarations()
     scenario_full_corpus_rejects_changed_range_arguments()
     scenario(None, lambda _root: None)
     scenario("missing-anchor", legacy_declarations_missing_anchors)

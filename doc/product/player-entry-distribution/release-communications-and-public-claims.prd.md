@@ -16,6 +16,7 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
 - 设计适用性理由：本 PRD 是公开 claim 的证据与审核生命周期合同；其 authority 在发行与 LiveOps 专业文档，独立 design 不增加玩家交互设计。
 - 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
@@ -160,3 +161,11 @@
 
 - 未决：具体候选的公开 verdict、渠道排期、公告正文和纠正/撤回记录，必须由 LiveOps、QA、产品与根 README 在同一证据窗口内确认；本分册不预先替代这些记录。
 - 假设：当公开 surface、专业权威和证据窗口不一致时，采用更窄 claim，标记 draft/review/blocked 或撤回，并把读者引回当前根 README，而不是沿用旧文案。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-ENTRY-CLAIM-001](#req-entry-claim-001) / [AC-ENTRY-CLAIM-001](#ac-entry-claim-001) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md)、[`testing PRD`](../../testing/prd.md)、[`Gameplay Agent 认领经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md#public-claim-boundary)、[`Gameplay Agent 认领经济合同 design`](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#public-claim-boundary)、[`restricted grant LiveOps runbook`](../../game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md#public-claim-boundary)、[`README.md`](../../../README.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-ENTRY-CLAIM-002](#req-entry-claim-002) / [AC-ENTRY-CLAIM-002](#ac-entry-claim-002) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md)、[`testing PRD`](../../testing/prd.md)、[`Gameplay Agent 认领经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md#public-claim-boundary)、[`Gameplay Agent 认领经济合同 design`](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#public-claim-boundary)、[`restricted grant LiveOps runbook`](../../game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md#public-claim-boundary)、[`README.md`](../../../README.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-ENTRY-CLAIM-003](#req-entry-claim-003) / [AC-ENTRY-CLAIM-003](#ac-entry-claim-003) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md)、[`testing PRD`](../../testing/prd.md)、[`Gameplay Agent 认领经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md#public-claim-boundary)、[`Gameplay Agent 认领经济合同 design`](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#public-claim-boundary)、[`restricted grant LiveOps runbook`](../../game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md#public-claim-boundary)、[`README.md`](../../../README.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

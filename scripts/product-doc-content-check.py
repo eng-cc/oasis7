@@ -564,7 +564,11 @@ def check_lifecycle_closure(
             fail(errors, codes[field], path, f"{lifecycle.strip().strip('`')} topic requires lifecycle closure field {field}")
             continue
         raw_value = match.group("value")
-        if is_lifecycle_placeholder(raw_value):
+        if is_lifecycle_placeholder(raw_value) and not (
+            field == "remaining-semantics"
+            and lifecycle.strip().strip("`").lower() == "retired"
+            and lifecycle_field_value(raw_value) == "无"
+        ):
             fail(errors, "lifecycle-placeholder", path, f"lifecycle closure field {field} has a placeholder value")
             continue
         if field not in {"receiving-authority", "stable-reference"}:
@@ -619,7 +623,7 @@ def declared_prd_relations(text: str) -> tuple[set[str], set[str], set[tuple[str
     declarations = {
         identifier
         for _number, line in lines
-        if (identifier := heading_identifier(line))
+        if (identifier := declaration_identifier(line))
     }
     anchors_by_line: dict[int, set[str]] = {}
     for anchor, number in actual_anchor_occurrences(text):
@@ -809,26 +813,39 @@ def check_active_topic_design_contract(
     if mode == "simple-topic-exemption":
         if not re.search(r"设计适用性理由\s*[:：]", visible):
             fail(errors, "missing-design-exemption-reason", path, "simple-topic-exemption requires 设计适用性理由")
+        task_binding = re.search(
+            r"设计判定\s+task\s+issue\s*[:：]\s*#?([0-9]+)",
+            visible,
+            re.IGNORECASE,
+        )
+        if not task_binding:
+            fail(errors, "missing-design-exemption-task", path, "simple-topic-exemption requires an explicit 设计判定 task issue binding")
         evidence_lines = [
             number
             for number, line in visible_lines(text)
             if re.search(r"当前\s+GitHub\s+task\s+evidence\s*[:：]", line, re.IGNORECASE)
         ]
         valid_evidence_link = False
+        evidence_issue_numbers: set[str] = set()
         for number, _raw, target in markdown_links(text):
             if number not in evidence_lines:
                 continue
             link_path, fragment = split_link_target(target)
             locator = link_path + (f"#{fragment}" if fragment else "")
-            if re.fullmatch(
-                r"https://github\.com/eng-cc/oasis7/(?:issues|pull)/[0-9]+(?:#issuecomment-[0-9]+)?",
+            evidence_match = re.fullmatch(
+                r"https://github\.com/eng-cc/oasis7/issues/([0-9]+)#issuecomment-[0-9]+",
                 locator,
                 re.IGNORECASE,
-            ):
+            )
+            if evidence_match:
                 valid_evidence_link = True
-                break
+                evidence_issue_numbers.add(evidence_match.group(1))
         if not valid_evidence_link:
-            fail(errors, "missing-design-exemption-evidence", path, "simple-topic-exemption requires current GitHub task evidence link")
+            fail(errors, "missing-design-exemption-evidence", path, "simple-topic-exemption requires a current GitHub task issue-comment evidence link")
+        elif len(evidence_issue_numbers) != 1:
+            fail(errors, "ambiguous-design-exemption-task", path, "simple-topic-exemption evidence links must bind to one task issue")
+        elif task_binding and task_binding.group(1) not in evidence_issue_numbers:
+            fail(errors, "mismatched-design-exemption-task", path, "simple-topic-exemption evidence must match its bound task issue")
         return
     fail(errors, "missing-design-or-exemption", path, "active topic design decision must be paired-design or simple-topic-exemption")
 
@@ -1198,6 +1215,12 @@ def check_active_topic_trace_tables(
                 )
 
     if not relation_table_seen:
+        fail(
+            errors,
+            "paired-trace-missing-table",
+            path,
+            "active topic requires a semantic REQ/AC trace table",
+        )
         return
 
     _requirements, _acceptances, expected_relations = declared_prd_relations(text)
@@ -1379,24 +1402,30 @@ def check_document(
     full_corpus: bool = False,
 ) -> None:
     source = root / path
-    if path.endswith("/prd.md"):
+    is_root_document = path.endswith("/prd.md")
+    if is_root_document:
         if full_corpus:
             check_root_document(path, text, errors)
-        return
+        else:
+            return
     lines = visible_lines(text)
-    check_metadata(path, text, errors)
-    check_lifecycle_closure(root, head, path, text, errors, use_worktree_content)
-    identity = document_identity_text("\n".join(line for _, line in lines))
-    lifecycle = metadata_value(identity, "生命周期")
-    inactive_lifecycle = lifecycle and lifecycle.strip().strip("`").lower() in {"superseded", "retired"}
-    if path.endswith(".prd.md"):
-        if not inactive_lifecycle:
+    inactive_lifecycle = False
+    if not is_root_document:
+        check_metadata(path, text, errors)
+        check_lifecycle_closure(root, head, path, text, errors, use_worktree_content)
+        identity = document_identity_text("\n".join(line for _, line in lines))
+        lifecycle = metadata_value(identity, "生命周期")
+        inactive_lifecycle = bool(
+            lifecycle
+            and lifecycle.strip().strip("`").lower() in {"superseded", "retired"}
+        )
+        if path.endswith(".prd.md") and not inactive_lifecycle:
             check_minimum_topic_content(path, text, errors)
             check_active_topic_cardinality(path, text, errors)
             check_active_topic_trace_tables(path, text, errors)
             if full_corpus:
                 check_active_topic_design_contract(root, path, text, errors, use_worktree_content)
-    if path.endswith(".design.md"):
+    if not is_root_document and path.endswith(".design.md"):
         if not inactive_lifecycle:
             check_minimum_design_content(path, text, errors)
         expected_prd = path.removesuffix(".design.md") + ".prd.md"

@@ -15,6 +15,7 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
 - 设计适用性理由：本 PRD 以入口能力、证据边界和失败恢复为单一产品合同；它不新增独立的信息架构或交互状态编排。
 - 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
@@ -143,3 +144,10 @@ UI 私有聚合或 API 客户端自行推导不能成为第二事实源。协议
 
 - 未决：每个候选版本的具体入口、primary mode、恢复证据和公开 claim 仍由 runtime、Viewer、QA 与 LiveOps 在同一证据窗口内确认；本分册不预先宣称任何当前模式可玩或可发行。
 - 假设：当入口证据缺失、状态冲突或恢复路径未经当前 authority 支持时，产品结论保持 blocked/observer 或更窄范围，并等待重新验证、修复或重新评估。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-ENTRY-MODE-001](#req-entry-mode-001) / [AC-ENTRY-MODE-001](#ac-entry-mode-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-ENTRY-MODE-002](#req-entry-mode-002) / [AC-ENTRY-MODE-002](#ac-entry-mode-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

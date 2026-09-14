@@ -14,6 +14,7 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
 - 设计适用性理由：本 PRD 直接表达成熟世界成长路线、repair/rebuild/pivot 和区域价值边界；它不另立玩家信息或控件 authority。
 - 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品问题
@@ -205,3 +206,11 @@
 - 不规定服务费、levy、预算、上限、期限、受益计算、资格、账目格式、申诉程序或任何扣减/结算实现。
 - 不把文明尺度共同项目、目标作用域、canonical 转译或治理校验包装成逐动作的玩家表单、重复确认或默认主线。
 - 不用历史任务完成态、旧样本或本次文档整理声称当前 mature-world 体验已经通过。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-WR-MW-001](#req-wr-mw-001) / [AC-WR-MW-001](#ac-wr-mw-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`gameplay-mature-world-progression-contract.prd.md`](../../game/gameplay/gameplay-mature-world-progression-contract.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-MW-002](#req-wr-mw-002) / [AC-WR-MW-002](#ac-wr-mw-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`gameplay-mature-world-progression-contract.prd.md`](../../game/gameplay/gameplay-mature-world-progression-contract.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-MW-003](#req-wr-mw-003) / [AC-WR-MW-003](#ac-wr-mw-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`gameplay-mature-world-progression-contract.prd.md`](../../game/gameplay/gameplay-mature-world-progression-contract.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
