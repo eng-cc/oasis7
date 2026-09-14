@@ -714,6 +714,61 @@ def scenario_paired_trace_requires_strict_test_tier_tokens() -> None:
     )
 
 
+def scenario_paired_trace_requires_authority_fragment() -> None:
+    scenario(
+        "paired-trace-authority-not-link",
+        lambda root: (root / TOPIC).write_text(
+            TOPIC_TEXT.replace(
+                "[gameplay authority](../../game/prd.md#authority) | 当前入口",
+                "[gameplay authority](../../game/prd.md) | 当前入口",
+            ),
+            encoding="utf-8",
+        ),
+    )
+
+
+def scenario_non_heading_relations_require_trace() -> None:
+    declarations = """
+<a id="req-bullet-related-001"></a>
+- REQ-BULLET-RELATED-001：关联 AC-BULLET-RELATED-001 的要求。
+<a id="ac-bullet-related-001"></a>
+- AC-BULLET-RELATED-001：覆盖 REQ-BULLET-RELATED-001 的验收。
+"""
+    mapping = (
+        "| [REQ-BULLET-RELATED-001](sample.prd.md#req-bullet-related-001) | "
+        "[AC-BULLET-RELATED-001](sample.prd.md#ac-bullet-related-001) |\n"
+    )
+    scenario(
+        "paired-trace-missing-relation",
+        lambda root: (
+            (root / TOPIC).write_text(TOPIC_TEXT + declarations, encoding="utf-8"),
+            (root / DESIGN).write_text(
+                DESIGN_TEXT.replace(
+                    "| [REQ-SAMPLE-001](sample.prd.md#req-sample-001) | [AC-SAMPLE-001](sample.prd.md#ac-sample-001) |\n",
+                    "| [REQ-SAMPLE-001](sample.prd.md#req-sample-001) | [AC-SAMPLE-001](sample.prd.md#ac-sample-001) |\n" + mapping,
+                ),
+                encoding="utf-8",
+            ),
+        ),
+    )
+
+
+def scenario_active_topic_rejects_inactive_design() -> None:
+    root, _base, _head = make_repo()
+    try:
+        isolate_topic_full_corpus(root)
+        (root / DESIGN).write_text(
+            DESIGN_TEXT.replace("生命周期：`active`", "生命周期：`retired`"),
+            encoding="utf-8",
+        )
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 1, output
+        assert f"inactive-paired-design: {TOPIC}" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
 def scenario_full_corpus_rejects_changed_range_arguments() -> None:
     root, base, head = make_repo()
     try:
@@ -1186,6 +1241,9 @@ def main() -> None:
     scenario_paired_trace_missing_relation()
     scenario_paired_trace_empty_evidence()
     scenario_paired_trace_requires_strict_test_tier_tokens()
+    scenario_paired_trace_requires_authority_fragment()
+    scenario_non_heading_relations_require_trace()
+    scenario_active_topic_rejects_inactive_design()
     scenario("req-missing-acceptance", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("- 验收：AC-SAMPLE-001\n", ""), encoding="utf-8"))
     scenario("ac-missing-requirement", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("- 覆盖要求：REQ-SAMPLE-001\n", ""), encoding="utf-8"))
     scenario("unresolved-id-reference", lambda root: (root / TOPIC).write_text(

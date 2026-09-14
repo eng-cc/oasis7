@@ -110,5 +110,5 @@
 
 | REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- |
-| [REQ-ENTRY-PART-001](#req-entry-part-001) / [AC-ENTRY-PART-001](#ac-entry-part-001) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md)、[`testing PRD`](../../testing/prd.md)、[`README.md`](../../../README.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
-| [REQ-ENTRY-PART-002](#req-entry-part-002) / [AC-ENTRY-PART-002](#ac-entry-part-002) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md)、[`testing PRD`](../../testing/prd.md)、[`README.md`](../../../README.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-ENTRY-PART-001](#req-entry-part-001) / [AC-ENTRY-PART-001](#ac-entry-part-001) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md#目标)、[`testing PRD`](../../testing/prd.md)、[`README.md`](../../../README.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-ENTRY-PART-002](#req-entry-part-002) / [AC-ENTRY-PART-002](#ac-entry-part-002) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md#目标)、[`testing PRD`](../../testing/prd.md)、[`README.md`](../../../README.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

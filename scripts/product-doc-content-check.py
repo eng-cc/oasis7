@@ -631,6 +631,21 @@ def declared_prd_relations(text: str) -> tuple[set[str], set[str], set[tuple[str
     requirements = {identifier for identifier in declarations if identifier.startswith("REQ-")}
     acceptances = {identifier for identifier in declarations if identifier.startswith("AC-")}
     relations: set[tuple[str, str]] = set()
+    for _number, line in lines:
+        identifier = declaration_identifier(line)
+        if not identifier or heading_identifier(line):
+            continue
+        references = id_tokens(line) - {identifier}
+        if identifier in requirements:
+            relations.update(
+                (identifier, acceptance)
+                for acceptance in references & acceptances
+            )
+        elif identifier in acceptances:
+            relations.update(
+                (requirement, identifier)
+                for requirement in references & requirements
+            )
     headings: list[tuple[int, str | None, int]] = []
     for index, (_number, line) in enumerate(lines):
         heading = HEADING_PREFIX_RE.match(line)
@@ -809,6 +824,14 @@ def check_active_topic_design_contract(
     if mode == "paired-design":
         if expected_design not in linked_repository_paths(root, source, text, use_worktree_content):
             fail(errors, "missing-paired-design-link", path, expected_design)
+            return
+        design_text = (root / expected_design).read_text(encoding="utf-8")
+        design_identity = document_identity_text(
+            "\n".join(line for _, line in visible_lines(design_text))
+        )
+        design_lifecycle = metadata_value(design_identity, "生命周期")
+        if not design_lifecycle or design_lifecycle.strip().strip("`").lower() != "active":
+            fail(errors, "inactive-paired-design", path, f"active topic requires active design: {expected_design}")
         return
     if mode == "simple-topic-exemption":
         if not re.search(r"设计适用性理由\s*[:：]", visible):
@@ -1183,11 +1206,12 @@ def check_active_topic_trace_tables(
             authority_link = False
             for cell in authority_values:
                 for link in parse_markdown_links(cell):
-                    target_path, _fragment = split_link_target(link.target)
+                    target_path, fragment = split_link_target(link.target)
                     if (
                         target_path
                         and not is_external_link_target(target_path)
                         and target_path.lower().endswith(".md")
+                        and fragment
                     ):
                         authority_link = True
                         break

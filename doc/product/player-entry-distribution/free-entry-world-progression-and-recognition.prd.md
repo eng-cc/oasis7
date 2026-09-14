@@ -148,5 +148,5 @@
 
 | REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- |
-| [REQ-ENTRY-FREE-001](#req-entry-free-001) / [AC-ENTRY-FREE-001](#ac-entry-free-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
-| [REQ-ENTRY-FREE-002](#req-entry-free-002) / [AC-ENTRY-FREE-002](#ac-entry-free-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-ENTRY-FREE-001](#req-entry-free-001) / [AC-ENTRY-FREE-001](#ac-entry-free-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-ENTRY-FREE-002](#req-entry-free-002) / [AC-ENTRY-FREE-002](#ac-entry-free-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

@@ -162,6 +162,6 @@
 
 | REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- |
-| [REQ-WR-ES-001](#req-wr-es-001) / [AC-WR-ES-001](#ac-wr-es-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
-| [REQ-WR-ES-002](#req-wr-es-002) / [AC-WR-ES-002](#ac-wr-es-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
-| [REQ-WR-ES-003](#req-wr-es-003) / [AC-WR-ES-003](#ac-wr-es-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-ES-001](#req-wr-es-001) / [AC-WR-ES-001](#ac-wr-es-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-ES-002](#req-wr-es-002) / [AC-WR-ES-002](#ac-wr-es-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-ES-003](#req-wr-es-003) / [AC-WR-ES-003](#ac-wr-es-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

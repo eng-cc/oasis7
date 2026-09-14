@@ -151,6 +151,6 @@ oasis7 的持续世界、自动化回归或活跃模拟本身都不是可玩性�
 
 | REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- |
-| [REQ-WR-PE-001](#req-wr-pe-001) / [AC-WR-PE-001](#ac-wr-pe-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[`testing-manual.md`](../../../testing-manual.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
-| [REQ-WR-PE-002](#req-wr-pe-002) / [AC-WR-PE-002](#ac-wr-pe-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[`testing-manual.md`](../../../testing-manual.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
-| [REQ-WR-PE-003](#req-wr-pe-003) / [AC-WR-PE-003](#ac-wr-pe-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[`testing-manual.md`](../../../testing-manual.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-PE-001](#req-wr-pe-001) / [AC-WR-PE-001](#ac-wr-pe-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/testing/prd.md`](../../testing/prd.md)、[`testing-manual.md`](../../../testing-manual.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-PE-002](#req-wr-pe-002) / [AC-WR-PE-002](#ac-wr-pe-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/testing/prd.md`](../../testing/prd.md)、[`testing-manual.md`](../../../testing-manual.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-PE-003](#req-wr-pe-003) / [AC-WR-PE-003](#ac-wr-pe-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/testing/prd.md`](../../testing/prd.md)、[`testing-manual.md`](../../../testing-manual.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
