@@ -91,6 +91,8 @@ mod cognition_context;
 mod continuation_support;
 #[path = "llm_sidecar_decision.rs"]
 mod decision;
+#[path = "llm_sidecar_lease_continuity.rs"]
+mod lease_continuity;
 #[path = "llm_sidecar_lineage.rs"]
 mod lineage;
 #[path = "llm_sidecar_lineage_generation_recovery.rs"]
