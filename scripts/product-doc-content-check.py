@@ -44,6 +44,7 @@ LIFECYCLE_PLACEHOLDERS = frozenset(
         "无",
     }
 )
+DESIGN_EXEMPTION_REASON_PLACEHOLDERS = LIFECYCLE_PLACEHOLDERS | frozenset({"-", "—", "–"})
 HTML_COMMENT_RE = re.compile(r"<!--[\s\S]*?-->")
 ID_RE = re.compile(r"\b((?:REQ|AC)-[A-Z0-9][A-Z0-9_*-]*)", re.IGNORECASE)
 # Aggregate trace tables use short domain-specific criterion IDs (for example
@@ -845,7 +846,8 @@ def check_active_topic_design_contract(
             fail(errors, "inactive-paired-design", path, f"active topic requires active design: {expected_design}")
         return
     if mode == "simple-topic-exemption":
-        if not re.search(r"设计适用性理由\s*[:：]", visible):
+        reason_match = re.search(r"设计适用性理由[ \t]*[:：][ \t]*(.*)", visible)
+        if not reason_match or lifecycle_field_value(reason_match.group(1)) in DESIGN_EXEMPTION_REASON_PLACEHOLDERS:
             fail(errors, "missing-design-exemption-reason", path, "simple-topic-exemption requires 设计适用性理由")
         task_binding = re.search(
             r"设计判定\s+task\s+issue\s*[:：]\s*#?([0-9]+)",
@@ -1551,6 +1553,8 @@ def collect_full_corpus(root: Path) -> tuple[list[ChangedDocument], list[str]]:
     product_root = root / PRODUCT_ROOT
     for path in sorted(product_root.rglob("*")):
         relative = path.relative_to(root).as_posix()
+        if not is_product_doc(relative) and not is_product_root(relative):
+            continue
         if path.is_symlink():
             errors.append(
                 f"product-doc-content: symlink-not-allowed: {relative}: "
@@ -1558,8 +1562,6 @@ def collect_full_corpus(root: Path) -> tuple[list[ChangedDocument], list[str]]:
             )
             continue
         if not path.is_file():
-            continue
-        if not is_product_doc(relative) and not is_product_root(relative):
             continue
         documents.append(
             ChangedDocument(

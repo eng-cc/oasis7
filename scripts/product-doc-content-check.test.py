@@ -358,22 +358,40 @@ def scenario_full_corpus_counts_module_root() -> None:
 
 
 def scenario_full_corpus_rejects_product_symlinks() -> None:
-    for target_exists in (True, False):
-        root, _base, _head = make_repo()
-        try:
-            (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
-            target = root / "external.prd.md"
-            if target_exists:
-                target.write_text(TOPIC_TEXT, encoding="utf-8")
-            link = root / "doc/product/world-rules-core-gameplay/linked.prd.md"
-            link.symlink_to(target)
-            result = invoke_full_corpus(root)
-            output = result.stdout + result.stderr
-            relative = link.relative_to(root).as_posix()
-            assert result.returncode == 1, output
-            assert f"symlink-not-allowed: {relative}" in output, output
-        finally:
-            shutil.rmtree(root)
+    for suffix, target_text in ((".prd.md", TOPIC_TEXT), (".design.md", DESIGN_TEXT)):
+        for target_exists in (True, False):
+            root, _base, _head = make_repo()
+            try:
+                (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
+                target = root / f"external{suffix}"
+                if target_exists:
+                    target.write_text(target_text, encoding="utf-8")
+                link = root / f"doc/product/world-rules-core-gameplay/linked{suffix}"
+                link.symlink_to(target)
+                result = invoke_full_corpus(root)
+                output = result.stdout + result.stderr
+                relative = link.relative_to(root).as_posix()
+                assert result.returncode == 1, output
+                assert f"symlink-not-allowed: {relative}" in output, output
+            finally:
+                shutil.rmtree(root)
+
+
+def scenario_full_corpus_ignores_unrelated_symlinks() -> None:
+    root, _base, _head = make_repo()
+    try:
+        (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
+        target = root / "external-notes.txt"
+        target.write_text("not a governed product document\n", encoding="utf-8")
+        link = root / "doc/product/world-rules-core-gameplay/notes.txt"
+        link.symlink_to(target)
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 0, output
+        assert "full-corpus checked 3 current-tree product documents" in output, output
+        assert "symlink-not-allowed" not in output, output
+    finally:
+        shutil.rmtree(root)
 
 
 def scenario_full_corpus_requires_lifecycle_closure() -> None:
@@ -471,6 +489,27 @@ def scenario_full_corpus_accepts_simple_topic_exemption() -> None:
         assert "full-corpus checked 2 current-tree product documents" in output, output
     finally:
         shutil.rmtree(root)
+
+
+def scenario_full_corpus_rejects_empty_or_placeholder_exemption_reason() -> None:
+    for reason in ("", "TBD", "TODO", "待定"):
+        root, _base, _head = make_repo()
+        try:
+            (root / DESIGN).unlink()
+            (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
+            (root / TOPIC).write_text(
+                simple_topic_text().replace(
+                    "设计适用性理由：这是简单专题，不增加新的信息分层、交互状态编排或策略取舍。",
+                    f"设计适用性理由：{reason}",
+                ),
+                encoding="utf-8",
+            )
+            result = invoke_full_corpus(root)
+            output = result.stdout + result.stderr
+            assert result.returncode == 1, output
+            assert f"missing-design-exemption-reason: {TOPIC}" in output, output
+        finally:
+            shutil.rmtree(root)
 
 
 def scenario_active_simple_topic_trace_requires_row_contract() -> None:
@@ -1201,10 +1240,12 @@ def main() -> None:
     scenario_full_corpus_requires_exact_lifecycle_enum()
     scenario_full_corpus_counts_module_root()
     scenario_full_corpus_rejects_product_symlinks()
+    scenario_full_corpus_ignores_unrelated_symlinks()
     scenario_full_corpus_requires_lifecycle_closure()
     scenario_full_corpus_rejects_lifecycle_closure_placeholders_and_unlinked_fields()
     scenario_full_corpus_requires_design_decision_or_exemption()
     scenario_full_corpus_accepts_simple_topic_exemption()
+    scenario_full_corpus_rejects_empty_or_placeholder_exemption_reason()
     scenario_active_simple_topic_trace_requires_row_contract()
     scenario_aggregate_criterion_requires_body_definition()
     scenario_aggregate_criterion_accepts_body_definition()
