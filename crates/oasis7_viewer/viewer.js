@@ -7885,6 +7885,9 @@ async function issueLocalTestPlayerSession() {
     return state.auth;
   }
   const keypair = await generateEphemeralEd25519Keypair();
+  if (state.auth.available) {
+    return state.auth;
+  }
   const playerId = `local-test-player-${Date.now().toString(36)}-${authNonceCounter + 1}`;
   state.auth = {
     available: true,

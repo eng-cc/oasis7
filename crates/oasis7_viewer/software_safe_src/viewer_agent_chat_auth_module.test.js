@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildTaskGame076ScenarioSnapshot } from "./gameplay_attraction_scenario.js";
 import { createViewerAgentChatAuthModule } from "./viewer_agent_chat_auth_module.js";
+import { settleLocalTestAuthStartup } from "./viewer_test_startup.js";
 
 const originalCryptoDescriptor = Object.getOwnPropertyDescriptor(window, "crypto");
 const originalWebSocketDescriptor = Object.getOwnPropertyDescriptor(window, "WebSocket");
@@ -61,7 +62,6 @@ function installMockWebSocket() {
   Object.defineProperty(window, "WebSocket", { configurable: true, value: MockWebSocket });
   return { sentMessages, sockets };
 }
-
 afterEach(() => {
   vi.restoreAllMocks();
   if (originalCryptoDescriptor) {
@@ -72,7 +72,6 @@ afterEach(() => {
   }
   document.body.innerHTML = "";
 });
-
 describe("viewer agent chat auth", () => {
   it("projects current world-feed authority into the request and exact signing payload", async () => {
     const state = {
@@ -196,6 +195,8 @@ describe("viewer agent chat auth", () => {
     core.initializeSoftwareSafeCore();
     sockets[0].open();
     sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "runtime-world-7" });
+    await settleLocalTestAuthStartup(core, sentMessages);
+    sentMessages.length = 0;
     core.injectSnapshot(buildTaskGame076ScenarioSnapshot());
     core.applySelection({ kind: "agent", id: "agent-0" });
     core.state.auth = {

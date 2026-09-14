@@ -23,13 +23,18 @@ use super::World;
 use super::governance::local_governance_finality_signing_keys;
 use ed25519_dalek::Signer;
 use oasis7_proto::storage_profile::StorageProfile;
-use oasis7_wasm_abi::{
-    CapabilityAudience, CapabilityGrantV2, CapabilityIssuer, CapabilityPresenter, CapabilityScope,
-    CapabilitySubject, ModuleCommandDeclaration, ModuleSchemaDeclarations,
-};
+use oasis7_wasm_abi::{CapabilityPresenter, ModuleCommandDeclaration, ModuleSchemaDeclarations};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
+
+#[path = "local_test_provider_grant_lifecycle.rs"]
+mod grant_lifecycle;
+use grant_lifecycle::local_test_provider_grant;
+pub use grant_lifecycle::{
+    LOCAL_TEST_PROVIDER_GRANT_RENEWAL_THRESHOLD_TICKS, LOCAL_TEST_PROVIDER_GRANT_TTL_TICKS,
+    LocalTestProviderGrantStatus,
+};
 
 pub const LOCAL_TEST_PROVIDER_MODULE_ID: &str = "module.runtime.local-test-provider";
 pub const LOCAL_TEST_PROVIDER_MODULE_VERSION: &str = "1.0.0";
@@ -339,7 +344,18 @@ impl World {
         artifact: LocalTestProviderModuleArtifact,
     ) -> Result<LocalTestProviderProvisioning, WorldError> {
         let binding = self.current_cognition_runtime_binding()?;
-        if binding.finality_epoch != self.current_governance_epoch() {
+        let has_existing_local_authority = self
+            .capability_revocation_state
+            .authority_records
+            .contains_key(LOCAL_TEST_PROVIDER_ISSUER_ID);
+        if binding.finality_epoch != self.current_governance_epoch()
+            && !has_existing_local_authority
+        {
+            // A fresh authority must be certified in the current governance
+            // epoch. Once that authority is installed, its finalized record
+            // is immutable; startup-only grant renewal may reuse that
+            // historical finality while the world advances through later
+            // governance epochs.
             return Err(local_test_error(
                 "local provider requires Runtime finality and governance epochs to match",
             ));
@@ -948,83 +964,6 @@ fn local_test_authority_proof(
         .get(&record.finality_epoch)
         .ok_or_else(|| local_test_error("local finality snapshot is missing"))?;
     Ok(proof)
-}
-
-fn local_test_provider_grant(
-    identity: &CapabilityAgentIdentity,
-    agent_id: &str,
-    binding: &crate::simulator::RuntimeBindingV1,
-    authority: &CapabilityAuthorityRecord,
-    issued_at_tick: u64,
-    grant_nonce: &str,
-) -> Result<CapabilityGrantV2, WorldError> {
-    let mut grant = CapabilityGrantV2 {
-        grant_id: String::new(),
-        grant_version: 2,
-        subject: CapabilitySubject::Agent {
-            agent_id: agent_id.to_string(),
-            owner_binding: identity.owner_binding.clone(),
-            generation: identity.generation,
-        },
-        audience: CapabilityAudience {
-            world_id: binding.world_id.clone(),
-            branch_id: binding.branch_id.clone(),
-            finality_epoch: binding.finality_epoch,
-            target_kind: "world".to_string(),
-            target_id: None,
-        },
-        issuer: CapabilityIssuer {
-            issuer_id: authority.issuer_id.clone(),
-            issuer_kind: authority.issuer_kind.clone(),
-            governance_epoch: authority.governance_epoch,
-            finalized_receipt_id: authority.finalized_receipt_id.clone(),
-            key_id: authority.key_id.clone(),
-            issuer_key_epoch: authority.issuer_key_epoch,
-            authority_rotation_receipt_id: authority.authority_rotation_receipt_id.clone(),
-            signature: String::new(),
-        },
-        scope: CapabilityScope {
-            module_id: LOCAL_TEST_PROVIDER_MODULE_ID.to_string(),
-            module_version: LOCAL_TEST_PROVIDER_MODULE_VERSION.to_string(),
-            namespace: LOCAL_TEST_PROVIDER_NAMESPACE.to_string(),
-            object_kind: "command".to_string(),
-            object_name: LOCAL_TEST_PROVIDER_COMMAND.to_string(),
-            operation: "execute".to_string(),
-            entity_selector: None,
-            resource_selector: None,
-            max_payload_bytes: Some(1024),
-            policy_class: Some("read-only".to_string()),
-        },
-        issued_at_tick,
-        expires_at_tick: Some(issued_at_tick.saturating_add(100)),
-        grant_nonce: grant_nonce.to_string(),
-        parent_grant_id: None,
-        delegation_depth: 0,
-        revocation_epoch: authority.revocation_epoch,
-        status: "verified".to_string(),
-        canonical_body_hash: String::new(),
-        issuance_signature: String::new(),
-    };
-    let body_hash = grant
-        .canonical_body_hash()
-        .map_err(|error| local_test_error(error.to_string()))?;
-    grant.grant_id = body_hash.clone();
-    grant.canonical_body_hash = body_hash;
-    let signer = local_governance_finality_signing_keys()
-        .into_iter()
-        .find(|(node_id, _)| *node_id == authority.issuer_id)
-        .map(|(_, key)| key)
-        .ok_or_else(|| local_test_error("local issuer signing material is unavailable"))?;
-    let signature = signer.sign(
-        grant
-            .canonical_body_bytes()
-            .map_err(|error| local_test_error(error.to_string()))?
-            .as_slice(),
-    );
-    let signature = format!("ed25519:{}", hex::encode(signature.to_bytes()));
-    grant.issuer.signature = signature.clone();
-    grant.issuance_signature = signature;
-    Ok(grant)
 }
 
 fn validate_existing_local_authority(

@@ -58,6 +58,9 @@ OUTPUT_DIR="$ROOT_DIR/.pm/scratch/w3-real-qa/$RUN_ID"
 mkdir -p "$OUTPUT_DIR"
 export OASIS7_HOSTED_TEST_LOGIN_ENABLED=1
 export OASIS7_LOCAL_TEST_PROVIDER_SESSION_MODE=hosted_public_join
+test -n "${OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY:-}"
+test -n "${OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY:-}"
+test -n "${OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE:-}"
 
 ./scripts/run-launcher-stack.sh \
   --run-id "$RUN_ID" \
@@ -68,6 +71,7 @@ export OASIS7_LOCAL_TEST_PROVIDER_SESSION_MODE=hosted_public_join
   --web-bind 127.0.0.1:5289 \
   --deployment-mode trusted_local_only \
   --allow-trusted-local-playtest \
+  --major-world-event-visibility restricted \
   --chain-enable \
   --chain-local-standalone-test \
   --agent-decision-source builtin_llm \
@@ -89,7 +93,12 @@ The launcher defaults its chain storage profile to `dev_local`; direct
 The wrapper creates run-scoped file account/session/replay ledgers and a local issuer key in
 the process environment; do not replace those with values copied into a command, report, or
 task log. Keep `--agent-decision-source builtin_llm`: the local authority opt-in is rejected
-for `provider_backed`.
+for `provider_backed`. The DevLocal provider command grant has a finite 300-tick lifetime.
+Startup reuses it only when at least 240 ticks remain; otherwise startup issues one fresh
+canonical grant through Runtime admission and atomically persists the new authority/context.
+The prior grant remains immutable. This is a startup-only local lifecycle: HostedPublicJoin
+login, browser refresh, Prompt strong-auth, and periodic timers do not renew it, and it grants
+no clock/time capability.
 
 Check the output `session.meta` for `STACK_READY=1`, then verify the actual chain process and
 the email-free issuer route:
@@ -113,6 +122,14 @@ immutable funding journal and does not refill a spent balance. A subsequent rest
 restore height 3 and advance to height 4. This process
 smoke is separate from the focused Rust driver regression and is required before browser
 claims for ordinary starter completion.
+
+Before browser interaction, read the execution-world snapshot and record only safe structural
+fields: current `state.time`; active local provider module/version; matching identity, owner
+binding, and generation; a matching grant with `state.time < expires_at_tick`; invocation
+context grant identity equality; available cognition allowance; and matching world/branch/
+finality audience. If the grant is expired or below the 240-tick startup margin, discard the
+generated run outputs and start a fresh run-scoped root. Do not edit snapshots, authority JSON,
+signatures, or expiry values.
 
 ## 底层 Viewer Debug 闭环
 

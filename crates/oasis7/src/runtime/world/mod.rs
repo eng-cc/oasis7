@@ -141,7 +141,8 @@ mod tick_consensus_state_root;
 mod transition;
 
 pub use local_test_provider_bootstrap::{
-    LocalTestProviderAuthorityConfig, LocalTestProviderAuthorityMode,
+    LOCAL_TEST_PROVIDER_GRANT_RENEWAL_THRESHOLD_TICKS, LOCAL_TEST_PROVIDER_GRANT_TTL_TICKS,
+    LocalTestProviderAuthorityConfig, LocalTestProviderAuthorityMode, LocalTestProviderGrantStatus,
     LocalTestProviderModuleArtifact, LocalTestProviderProvisioning, LocalTestProviderSessionMode,
 };
 pub use provider_backed_bootstrap::ProviderBackedBootstrapAuthorityV1;

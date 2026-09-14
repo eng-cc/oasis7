@@ -1811,6 +1811,12 @@ async function issueLocalTestPlayerSession() {
     return state.auth;
   }
   const keypair = await generateEphemeralEd25519Keypair();
+  // Auth can be installed by a test fixture or another login path while key
+  // generation is suspended. Preserve that newer session instead of replacing
+  // it with the stale local-test issuance that started from guest state.
+  if (state.auth.available) {
+    return state.auth;
+  }
   const playerId = `local-test-player-${Date.now().toString(36)}-${authNonceCounter + 1}`;
   state.auth = {
     available: true,
