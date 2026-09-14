@@ -1,4 +1,6 @@
-use super::checkpoint::list_execution_bridge_record_heights;
+use super::checkpoint::{
+    list_execution_bridge_record_heights, load_highest_valid_execution_bridge_record,
+};
 use super::driver::{NodeRuntimeExecutionDriver, persist_execution_bridge_state};
 use super::execution_hash::ExecutionHashPayload;
 use super::external_effect::execution_world_snapshot_root;
@@ -13,6 +15,7 @@ use oasis7_proto::storage_profile::StorageProfileConfig;
 /// validator. The first consensus commit must use its successor height.
 pub(crate) fn derive_local_execution_bootstrap(
     world_dir: &std::path::Path,
+    records_dir: &std::path::Path,
     world_id: &str,
     height: u64,
     consensus_block_hash: &str,
@@ -34,6 +37,45 @@ pub(crate) fn derive_local_execution_bootstrap(
     }
     if consensus_block_hash.trim().is_empty() {
         return Err("local execution bootstrap consensus block hash must not be empty".to_string());
+    }
+    if let Some(record) = load_highest_valid_execution_bridge_record(records_dir)? {
+        if record.height != height {
+            return Err(format!(
+                "local execution bootstrap durable head does not match world boundary: durable_height={} world_height={}",
+                record.height, height
+            ));
+        }
+        if record.world_id != world_id {
+            return Err(format!(
+                "local execution bootstrap durable head world mismatch: durable_world={} expected_world={}",
+                record.world_id, world_id
+            ));
+        }
+        if record.journal_len != execution_world.journal().len() {
+            return Err(format!(
+                "local execution bootstrap durable head journal length mismatch: durable={} world={}",
+                record.journal_len,
+                execution_world.journal().len()
+            ));
+        }
+        let consensus_block_hash = record.node_block_hash.ok_or_else(|| {
+            format!(
+                "local execution bootstrap durable head is missing node block hash at height {}",
+                height
+            )
+        })?;
+        if consensus_block_hash.trim().is_empty() || record.execution_block_hash.trim().is_empty() {
+            return Err(format!(
+                "local execution bootstrap durable head has incomplete hashes at height {}",
+                height
+            ));
+        }
+        return Ok(NodeExecutionBootstrap {
+            height,
+            consensus_block_hash,
+            execution_block_hash: record.execution_block_hash,
+            execution_state_root: record.execution_state_root,
+        });
     }
     let execution_state_root = execution_world_snapshot_root(&execution_world)?;
     let hash_payload = ExecutionHashPayload {
@@ -101,12 +143,24 @@ impl NodeRuntimeExecutionDriver {
                 baseline.height
             ));
         }
-        let actual_state_root = execution_world_snapshot_root(&self.execution_world)?;
-        if actual_state_root != baseline.execution_state_root {
-            return Err(format!(
-                "local execution bootstrap snapshot root mismatch: expected={} actual={}",
-                baseline.execution_state_root, actual_state_root
-            ));
+        let durable_boundary_matches = load_highest_valid_execution_bridge_record(
+            self.records_dir.as_path(),
+        )?
+        .is_some_and(|record| {
+            record.height == baseline.height
+                && record.execution_block_hash == baseline.execution_block_hash
+                && record.execution_state_root == baseline.execution_state_root
+                && record.node_block_hash.as_deref() == Some(baseline.consensus_block_hash.as_str())
+                && record.journal_len == self.execution_world.journal().len()
+        });
+        if !durable_boundary_matches {
+            let actual_state_root = execution_world_snapshot_root(&self.execution_world)?;
+            if actual_state_root != baseline.execution_state_root {
+                return Err(format!(
+                    "local execution bootstrap snapshot root mismatch: expected={} actual={}",
+                    baseline.execution_state_root, actual_state_root
+                ));
+            }
         }
         if self.state.last_applied_committed_height == 0 {
             self.state.last_applied_committed_height = baseline.height;

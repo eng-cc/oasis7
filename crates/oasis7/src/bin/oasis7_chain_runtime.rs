@@ -40,6 +40,8 @@ mod distfs_probe_runtime;
 #[allow(dead_code)]
 #[path = "oasis7_chain_runtime/execution_bridge/mod.rs"]
 mod execution_bridge;
+#[path = "oasis7_chain_runtime/execution_role.rs"]
+mod execution_role;
 #[path = "oasis7_chain_runtime/explorer_p0_api.rs"]
 mod explorer_p0_api;
 #[path = "oasis7_chain_runtime/feedback_submit_api.rs"]
@@ -109,6 +111,7 @@ use cli::{
     DEFAULT_REWARD_RUNTIME_STORAGE_METRICS_FILE, parse_host_port, parse_options, print_help,
 };
 use execution_bridge::NodeRuntimeExecutionDriver;
+use execution_role::{node_role_materializes_execution_state, node_role_requires_execution_commit};
 use feedback_submit_api::{
     ChainFeedbackSubmitResponse, FeedbackSubmitSigner, build_feedback_create_request,
     extract_http_json_body, parse_feedback_submit_request, write_feedback_submit_error,
@@ -138,17 +141,6 @@ use traffic_profile::{
 use traffic_status::ChainTrafficStatus;
 use traffic_status::build_chain_traffic_status;
 use wasm_status::build_chain_wasm_status;
-
-fn node_role_requires_execution_commit(role: NodeRole) -> bool {
-    matches!(role, NodeRole::Sequencer)
-}
-
-fn node_role_materializes_execution_state(role: NodeRole) -> bool {
-    matches!(
-        role,
-        NodeRole::Sequencer | NodeRole::Storage | NodeRole::Observer
-    )
-}
 
 #[cfg(test)]
 mod execution_bridge {
@@ -481,6 +473,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
                 .ok_or_else(|| "local test finality marker is missing".to_string())?;
             execution_bridge::derive_local_execution_bootstrap(
                 paths.execution_world_dir.as_path(),
+                paths.execution_records_dir.as_path(),
                 options.world_id.as_str(),
                 world.state().time,
                 finality_block_hash,

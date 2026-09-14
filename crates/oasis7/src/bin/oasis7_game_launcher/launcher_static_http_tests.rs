@@ -7,12 +7,12 @@ use std::thread;
 
 static HOSTED_TEST_LOGIN_ENV_LOCK: Mutex<()> = Mutex::new(());
 
-use super::{
-    DeploymentMode, make_temp_dir, missing_execution_world_persistence_files,
-    sanitize_index_html_for_embedded_server, sanitize_relative_request_path,
-    start_static_http_server, stop_static_http_server,
+use super::super::{content_type_for_path, resolve_static_asset_path};
+use super::super::{
+    missing_execution_world_persistence_files, sanitize_index_html_for_embedded_server,
+    sanitize_relative_request_path, start_static_http_server, stop_static_http_server,
 };
-use super::{content_type_for_path, resolve_static_asset_path};
+use super::{DeploymentMode, make_temp_dir};
 use crate::static_http;
 
 #[test]

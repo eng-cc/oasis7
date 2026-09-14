@@ -342,6 +342,7 @@ fn local_execution_bootstrap_accepts_first_successor_and_recovers_durable_head()
 
     let baseline = derive_local_execution_bootstrap(
         world_dir.as_path(),
+        records_dir.as_path(),
         world_id,
         2,
         "local-finality-h2",
@@ -386,10 +387,10 @@ fn local_execution_bootstrap_accepts_first_successor_and_recovers_durable_head()
     drop(driver);
 
     let mut restarted = NodeRuntimeExecutionDriver::new_with_local_bootstrap(
-        state_path,
+        state_path.clone(),
         world_dir.clone(),
-        records_dir,
-        storage_root,
+        records_dir.clone(),
+        storage_root.clone(),
         &storage_profile,
         baseline,
     )
@@ -416,6 +417,27 @@ fn local_execution_bootstrap_accepts_first_successor_and_recovers_durable_head()
             .time,
         4
     );
+
+    drop(restarted);
+    let durable_baseline = derive_local_execution_bootstrap(
+        world_dir.as_path(),
+        records_dir.as_path(),
+        world_id,
+        4,
+        "local-finality-h4",
+        &ReleaseSecurityPolicy::default(),
+    )
+    .expect("derive durable later-height execution boundary");
+    assert_eq!(durable_baseline.consensus_block_hash, "node-h4");
+    let _durable_restarted = NodeRuntimeExecutionDriver::new_with_local_bootstrap(
+        state_path,
+        world_dir,
+        records_dir,
+        storage_root,
+        &storage_profile,
+        durable_baseline,
+    )
+    .expect("restore durable later-height execution head");
 
     let _ = fs::remove_dir_all(dir);
 }
