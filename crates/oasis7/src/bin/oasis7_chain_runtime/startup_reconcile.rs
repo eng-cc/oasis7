@@ -1,5 +1,6 @@
 use std::fs;
 use std::io::ErrorKind;
+use std::net::{IpAddr, SocketAddr, TcpListener, UdpSocket};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -47,6 +48,71 @@ struct NodePosStateSnapshot {
 pub(super) struct StartupReconcileReport {
     pub(super) previous_committed_height: u64,
     pub(super) reconciled_height: u64,
+}
+
+pub(super) fn reserve_replication_listen_addr(
+    listen_addr: &str,
+    tcp_listeners: &mut Vec<TcpListener>,
+    udp_sockets: &mut Vec<UdpSocket>,
+) -> Result<(), String> {
+    let segments = listen_addr
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    let Some(ip_index) = segments
+        .iter()
+        .position(|segment| *segment == "ip4" || *segment == "ip6")
+    else {
+        return Err(format!(
+            "startup reconcile preflight failed: unsupported replication listen address {listen_addr}"
+        ));
+    };
+    let Some(host) = segments.get(ip_index + 1) else {
+        return Err(format!(
+            "startup reconcile preflight failed: unsupported replication listen address {listen_addr}"
+        ));
+    };
+    let ip = host.parse::<IpAddr>().map_err(|err| {
+        format!(
+            "startup reconcile preflight failed: unsupported replication listen address {listen_addr}: {err}"
+        )
+    })?;
+    if let Some(tcp_index) = segments.iter().position(|segment| *segment == "tcp") {
+        let Some(port) = segments
+            .get(tcp_index + 1)
+            .and_then(|raw| raw.parse::<u16>().ok())
+        else {
+            return Err(format!(
+                "startup reconcile preflight failed: unsupported replication tcp listen {listen_addr}"
+            ));
+        };
+        tcp_listeners
+            .push(TcpListener::bind(SocketAddr::new(ip, port)).map_err(|err| {
+                format!(
+                    "startup reconcile preflight failed: replication tcp listen {listen_addr} unavailable: {err}"
+                )
+            })?);
+        return Ok(());
+    }
+    if let Some(udp_index) = segments.iter().position(|segment| *segment == "udp") {
+        let Some(port) = segments
+            .get(udp_index + 1)
+            .and_then(|raw| raw.parse::<u16>().ok())
+        else {
+            return Err(format!(
+                "startup reconcile preflight failed: unsupported replication udp listen {listen_addr}"
+            ));
+        };
+        udp_sockets.push(UdpSocket::bind(SocketAddr::new(ip, port)).map_err(|err| {
+            format!(
+                "startup reconcile preflight failed: replication udp listen {listen_addr} unavailable: {err}"
+            )
+        })?);
+        return Ok(());
+    }
+    Err(format!(
+        "startup reconcile preflight failed: unsupported replication listen address {listen_addr}"
+    ))
 }
 
 pub(super) fn reconcile_startup_state_from_execution_latest(

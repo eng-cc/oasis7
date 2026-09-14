@@ -185,6 +185,20 @@ pub struct NodeExecutionCommitResult {
     pub execution_state_root: String,
 }
 
+/// A durable execution boundary established by an explicit local bootstrap.
+///
+/// The boundary is derived from the persisted runtime world and is not a
+/// consensus block. It lets a DevLocal chain whose setup ticks already
+/// advanced the world start its first consensus proposal at the successor
+/// height without weakening committed execution validation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NodeExecutionBootstrap {
+    pub height: u64,
+    pub consensus_block_hash: String,
+    pub execution_block_hash: String,
+    pub execution_state_root: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeExecutionCheckpointBlob {
     pub content_hash: String,

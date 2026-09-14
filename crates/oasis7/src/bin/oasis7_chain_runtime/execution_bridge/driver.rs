@@ -8,10 +8,10 @@ use oasis7::runtime::{
 };
 use oasis7::simulator::{Action as SimulatorAction, ActionSubmitter, WorldEventKind, WorldKernel};
 use oasis7_node::{
-    EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE, NodeExecutionCheckpointBlob,
-    NodeExecutionCheckpointBundle, NodeExecutionCheckpointInstallContext,
-    NodeExecutionCommitContext, NodeExecutionCommitResult, NodeExecutionHook,
-    compute_consensus_action_root,
+    EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE, NodeExecutionBootstrap,
+    NodeExecutionCheckpointBlob, NodeExecutionCheckpointBundle,
+    NodeExecutionCheckpointInstallContext, NodeExecutionCommitContext, NodeExecutionCommitResult,
+    NodeExecutionHook, compute_consensus_action_root,
 };
 use oasis7_proto::storage_profile::StorageProfileConfig;
 use oasis7_wasm_abi::ModuleSandbox;
@@ -46,6 +46,7 @@ use super::external_effect::{
     persist_execution_external_effect_materialization,
     validate_execution_external_effect_for_context,
 };
+pub(crate) use super::local_bootstrap::derive_local_execution_bootstrap;
 use super::product_validation_intent::{
     ProductValidationIntentMarkerV1, build_product_validation_intent_marker,
     clear_product_validation_intent, load_product_validation_intent,
@@ -61,7 +62,6 @@ use super::{
 use crate::{
     EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER, EXECUTION_BRIDGE_RETENTION_IN_PROGRESS_MARKER,
 };
-
 pub(crate) struct NodeRuntimeExecutionDriver {
     pub(super) state_path: std::path::PathBuf,
     pub(super) world_dir: std::path::PathBuf,
@@ -81,6 +81,7 @@ pub(crate) struct NodeRuntimeExecutionDriver {
     /// It is deliberately outside the runtime state root and is cleared after
     /// the authoritative per-height record is published.
     pub(super) pending_product_validation_intent: Option<ProductValidationIntentMarkerV1>,
+    pub(super) local_execution_bootstrap: Option<NodeExecutionBootstrap>,
 }
 
 impl NodeRuntimeExecutionDriver {
@@ -244,6 +245,24 @@ impl NodeRuntimeExecutionDriver {
         storage_root: std::path::PathBuf,
         storage_profile: &StorageProfileConfig,
     ) -> Result<Self, String> {
+        Self::new_with_storage_profile_and_local_bootstrap(
+            state_path,
+            world_dir,
+            records_dir,
+            storage_root,
+            storage_profile,
+            None,
+        )
+    }
+
+    pub(super) fn new_with_storage_profile_and_local_bootstrap(
+        state_path: std::path::PathBuf,
+        world_dir: std::path::PathBuf,
+        records_dir: std::path::PathBuf,
+        storage_root: std::path::PathBuf,
+        storage_profile: &StorageProfileConfig,
+        local_execution_bootstrap: Option<NodeExecutionBootstrap>,
+    ) -> Result<Self, String> {
         let checkpoint_install_transaction =
             super::driver_checkpoint_install::load_checkpoint_install_transaction(
                 records_dir.as_path(),
@@ -275,6 +294,10 @@ impl NodeRuntimeExecutionDriver {
             storage_profile.execution_checkpoint_keep as usize,
         );
         driver.pending_product_validation_intent = durable_product_validation_intent;
+        driver.local_execution_bootstrap = local_execution_bootstrap;
+        if let Some(baseline) = driver.local_execution_bootstrap.clone() {
+            driver.apply_local_execution_bootstrap(&baseline)?;
+        }
         if let Some(marker) = driver.pending_product_validation_intent.clone() {
             let authoritative_record_exists =
                 execution_bridge_record_path(driver.records_dir.as_path(), marker.height).exists();
@@ -316,11 +339,15 @@ impl NodeRuntimeExecutionDriver {
         let has_execution_records =
             !list_execution_bridge_record_heights(driver.records_dir.as_path())?.is_empty()
                 || driver.records_dir.join("latest.json").exists();
+        let unmaterialized_local_bootstrap =
+            driver.is_unmaterialized_local_execution_bootstrap()?;
         if driver.pending_product_validation_intent.is_some() {
             // The world directory is the crash-safe continuation for the
             // pre-call intent. The authoritative height record does not exist
             // yet, so restoring it here would erase the intent.
-        } else if driver.state.last_applied_committed_height > 0 || has_execution_records {
+        } else if (driver.state.last_applied_committed_height > 0 || has_execution_records)
+            && !unmaterialized_local_bootstrap
+        {
             driver.restore_startup_execution_head()?;
         } else {
             if execution_world_bootstrap_required {
@@ -374,6 +401,7 @@ impl NodeRuntimeExecutionDriver {
             retention_reconcile_pending,
             retention_reconcile_next_height,
             pending_product_validation_intent: None,
+            local_execution_bootstrap: None,
         }
     }
 
@@ -801,6 +829,10 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                     })
             );
         }
+        rollback_on_error!(persist_execution_world(
+            self.world_dir.as_path(),
+            &self.execution_world
+        ));
         let runtime_step_ms = runtime_step_started_at.elapsed();
         let simulator_step_started_at = Instant::now();
         let (simulator_mirror, simulator_observation) = rollback_on_error!(

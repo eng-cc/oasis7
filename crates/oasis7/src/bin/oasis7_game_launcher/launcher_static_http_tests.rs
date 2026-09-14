@@ -8,9 +8,11 @@ use std::thread;
 static HOSTED_TEST_LOGIN_ENV_LOCK: Mutex<()> = Mutex::new(());
 
 use super::{
-    DeploymentMode, make_temp_dir, sanitize_index_html_for_embedded_server,
+    DeploymentMode, make_temp_dir, missing_execution_world_persistence_files,
+    sanitize_index_html_for_embedded_server, sanitize_relative_request_path,
     start_static_http_server, stop_static_http_server,
 };
+use super::{content_type_for_path, resolve_static_asset_path};
 use crate::static_http;
 
 #[test]
@@ -30,6 +32,81 @@ fn sanitize_index_html_for_embedded_server_keeps_non_index_files_unchanged() {
     let body = b"<script>.well-known/trunk/ws</script>";
     let sanitized = sanitize_index_html_for_embedded_server(Path::new("app.js"), body, None);
     assert_eq!(sanitized, body);
+}
+
+#[test]
+fn missing_execution_world_persistence_files_reports_snapshot_and_journal() {
+    let temp_dir = make_temp_dir("execution_world_missing");
+    let missing = missing_execution_world_persistence_files(temp_dir.as_path());
+    assert_eq!(missing.len(), 2);
+    assert!(missing.iter().any(|path| path.ends_with("snapshot.json")));
+    assert!(missing.iter().any(|path| path.ends_with("journal.json")));
+    let _ = fs::remove_dir_all(temp_dir);
+}
+
+#[test]
+fn missing_execution_world_persistence_files_ignores_ready_world_dir() {
+    let temp_dir = make_temp_dir("execution_world_ready");
+    fs::write(temp_dir.join("snapshot.json"), "{}").expect("write snapshot");
+    fs::write(temp_dir.join("journal.json"), "{}").expect("write journal");
+    let missing = missing_execution_world_persistence_files(temp_dir.as_path());
+    assert!(missing.is_empty());
+    let _ = fs::remove_dir_all(temp_dir);
+}
+
+#[test]
+fn sanitize_relative_request_path_rejects_traversal() {
+    let err = sanitize_relative_request_path("/../etc/passwd").expect_err("should fail");
+    assert!(err.contains("traversal"));
+}
+
+#[test]
+fn resolve_static_asset_path_supports_spa_fallback() {
+    let temp_dir = make_temp_dir("spa_fallback");
+    fs::write(temp_dir.join("index.html"), "<html>ok</html>").expect("write index");
+    let resolved = resolve_static_asset_path(temp_dir.as_path(), "/app/route?x=1")
+        .expect("resolve should succeed")
+        .expect("should fallback to index");
+    assert_eq!(resolved, temp_dir.join("index.html"));
+    let _ = fs::remove_dir_all(temp_dir);
+}
+
+#[test]
+fn resolve_static_asset_path_returns_none_for_missing_static_asset() {
+    let temp_dir = make_temp_dir("missing_asset");
+    fs::write(temp_dir.join("index.html"), "<html>ok</html>").expect("write index");
+    let resolved = resolve_static_asset_path(temp_dir.as_path(), "/assets/missing.js")
+        .expect("resolve should succeed");
+    assert!(resolved.is_none());
+    let _ = fs::remove_dir_all(temp_dir);
+}
+
+#[test]
+fn content_type_for_path_covers_wasm_and_js() {
+    assert_eq!(
+        content_type_for_path(Path::new("a.wasm")),
+        "application/wasm"
+    );
+    assert_eq!(
+        content_type_for_path(Path::new("a.js")),
+        "text/javascript; charset=utf-8"
+    );
+}
+
+#[test]
+fn sanitize_index_html_for_embedded_server_removes_trunk_reload_script() {
+    let html = concat!(
+        "<html><body>",
+        "<script>window.bootstrap = true;</script>",
+        "<script>const url = 'ws://{{__TRUNK_ADDRESS__}}{{__TRUNK_WS_BASE__}}.well-known/trunk/ws';</script>",
+        "</body></html>"
+    );
+    let sanitized =
+        sanitize_index_html_for_embedded_server(Path::new("index.html"), html.as_bytes(), None);
+    let sanitized = String::from_utf8(sanitized).expect("utf-8");
+    assert!(sanitized.contains("window.bootstrap = true"));
+    assert!(!sanitized.contains(".well-known/trunk/ws"));
+    assert!(!sanitized.contains("__TRUNK_ADDRESS__"));
 }
 
 #[test]

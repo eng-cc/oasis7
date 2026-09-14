@@ -805,12 +805,14 @@ mod driver_persistence;
 mod driver_replicated_input;
 mod durable_transaction;
 mod external_effect;
+mod local_bootstrap;
 mod simulator_mirror;
 #[cfg(test)]
 mod tests;
 
 #[allow(unused_imports)]
 pub(super) use self::driver::NodeRuntimeExecutionDriver;
+pub(super) use self::driver::derive_local_execution_bootstrap;
 #[allow(unused_imports)]
 pub(crate) use self::driver::load_execution_world;
 #[allow(unused_imports)]

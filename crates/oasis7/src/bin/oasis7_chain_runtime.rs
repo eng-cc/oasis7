@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::io::{Read, Write};
-use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream, UdpSocket};
+use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::path::{Path, PathBuf};
 use std::process;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
@@ -466,6 +466,30 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
             paths.execution_world_dir.as_path(),
         )?;
     }
+    #[cfg(not(test))]
+    let local_execution_bootstrap = options
+        .local_test_provider_authority_path
+        .as_ref()
+        .map(|_| {
+            let world = execution_bridge::load_execution_world_with_policy(
+                paths.execution_world_dir.as_path(),
+                release_security_policy.clone(),
+            )?;
+            let finality_block_hash = options
+                .local_test_provider_finality_block_hash
+                .as_deref()
+                .ok_or_else(|| "local test finality marker is missing".to_string())?;
+            execution_bridge::derive_local_execution_bootstrap(
+                paths.execution_world_dir.as_path(),
+                options.world_id.as_str(),
+                world.state().time,
+                finality_block_hash,
+                &release_security_policy,
+            )
+        })
+        .transpose()?;
+    #[cfg(test)]
+    let local_execution_bootstrap: Option<oasis7_node::NodeExecutionBootstrap> = None;
     let effective_validator_signer_bindings =
         config.pos_config.validator_signer_public_keys.clone();
     let replication_remote_writer_allowlist =
@@ -514,14 +538,41 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     );
     let mut runtime =
         NodeRuntime::new(config).with_consensus_progress_observer(publication_lifecycle_observer);
+    if let Some(baseline) = local_execution_bootstrap.as_ref() {
+        runtime = runtime.with_local_execution_bootstrap(baseline.clone());
+    }
     if materialize_execution {
-        let execution_driver = NodeRuntimeExecutionDriver::new_with_storage_profile(
-            paths.execution_bridge_state_path.clone(),
-            paths.execution_world_dir.clone(),
-            paths.execution_records_dir.clone(),
-            paths.storage_root.clone(),
-            &storage_profile_config,
-        )
+        let execution_driver = if let Some(baseline) = local_execution_bootstrap {
+            #[cfg(not(test))]
+            {
+                NodeRuntimeExecutionDriver::new_with_local_bootstrap(
+                    paths.execution_bridge_state_path.clone(),
+                    paths.execution_world_dir.clone(),
+                    paths.execution_records_dir.clone(),
+                    paths.storage_root.clone(),
+                    &storage_profile_config,
+                    baseline,
+                )
+            }
+            #[cfg(test)]
+            {
+                NodeRuntimeExecutionDriver::new_with_storage_profile(
+                    paths.execution_bridge_state_path.clone(),
+                    paths.execution_world_dir.clone(),
+                    paths.execution_records_dir.clone(),
+                    paths.storage_root.clone(),
+                    &storage_profile_config,
+                )
+            }
+        } else {
+            NodeRuntimeExecutionDriver::new_with_storage_profile(
+                paths.execution_bridge_state_path.clone(),
+                paths.execution_world_dir.clone(),
+                paths.execution_records_dir.clone(),
+                paths.storage_root.clone(),
+                &storage_profile_config,
+            )
+        }
         .map_err(|err| format!("failed to initialize execution driver: {err}"))?;
         #[cfg(not(test))]
         let mut provider_bootstrap_authority_paths =
@@ -717,7 +768,7 @@ fn reserve_startup_reconcile_bind_guard(
         options.replication_network_listen_addrs.clone()
     };
     for listen_addr in listen_addrs {
-        reserve_replication_listen_addr_for_startup_reconcile(
+        startup_reconcile::reserve_replication_listen_addr(
             listen_addr.as_str(),
             &mut tcp_listeners,
             &mut udp_sockets,
@@ -727,71 +778,6 @@ fn reserve_startup_reconcile_bind_guard(
         _tcp_listeners: tcp_listeners,
         _udp_sockets: udp_sockets,
     })
-}
-
-fn reserve_replication_listen_addr_for_startup_reconcile(
-    listen_addr: &str,
-    tcp_listeners: &mut Vec<TcpListener>,
-    udp_sockets: &mut Vec<UdpSocket>,
-) -> Result<(), String> {
-    let segments = listen_addr
-        .split('/')
-        .filter(|segment| !segment.is_empty())
-        .collect::<Vec<_>>();
-    let Some(ip_index) = segments
-        .iter()
-        .position(|segment| *segment == "ip4" || *segment == "ip6")
-    else {
-        return Err(format!(
-            "startup reconcile preflight failed: unsupported replication listen address {listen_addr}"
-        ));
-    };
-    let Some(host) = segments.get(ip_index + 1) else {
-        return Err(format!(
-            "startup reconcile preflight failed: unsupported replication listen address {listen_addr}"
-        ));
-    };
-    let ip = host.parse::<IpAddr>().map_err(|err| {
-        format!(
-            "startup reconcile preflight failed: unsupported replication listen address {listen_addr}: {err}"
-        )
-    })?;
-    if let Some(tcp_index) = segments.iter().position(|segment| *segment == "tcp") {
-        let Some(port) = segments
-            .get(tcp_index + 1)
-            .and_then(|raw| raw.parse::<u16>().ok())
-        else {
-            return Err(format!(
-                "startup reconcile preflight failed: unsupported replication tcp listen {listen_addr}"
-            ));
-        };
-        tcp_listeners
-            .push(TcpListener::bind(SocketAddr::new(ip, port)).map_err(|err| {
-                format!(
-                    "startup reconcile preflight failed: replication tcp listen {listen_addr} unavailable: {err}"
-                )
-            })?);
-        return Ok(());
-    }
-    if let Some(udp_index) = segments.iter().position(|segment| *segment == "udp") {
-        let Some(port) = segments
-            .get(udp_index + 1)
-            .and_then(|raw| raw.parse::<u16>().ok())
-        else {
-            return Err(format!(
-                "startup reconcile preflight failed: unsupported replication udp listen {listen_addr}"
-            ));
-        };
-        udp_sockets.push(UdpSocket::bind(SocketAddr::new(ip, port)).map_err(|err| {
-            format!(
-                "startup reconcile preflight failed: replication udp listen {listen_addr} unavailable: {err}"
-            )
-        })?);
-        return Ok(());
-    }
-    Err(format!(
-        "startup reconcile preflight failed: unsupported replication listen address {listen_addr}"
-    ))
 }
 
 fn resolve_runtime_paths(options: &CliOptions) -> RuntimePaths {
