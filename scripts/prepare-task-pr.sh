@@ -273,6 +273,22 @@ append_unique_token() {
   esac
 }
 
+is_governed_product_document_path() {
+  local path="$1"
+  case "$path" in
+    doc/product/*.prd.md|doc/product/*.design.md)
+      return 0
+      ;;
+    doc/product/*/prd.md)
+      local relative="${path#doc/product/}"
+      local module="${relative%/prd.md}"
+      [[ -n "$module" && "$module" != */* ]]
+      return
+      ;;
+  esac
+  return 1
+}
+
 required_review_roles_from_paths() {
   local changed_paths_raw="$1"
   local roles=""
@@ -1461,6 +1477,32 @@ if [[ -x "$PLANNER_SCRIPT" ]]; then
     LOCAL_REQUIRED_REASON_SUMMARY="$(plan_kv_get "$RUST_SCOPE_OUTPUT" "reason_summary")"
     LOCAL_REQUIRED_SELECTED_CAPABILITIES="$(plan_kv_get "$RUST_SCOPE_OUTPUT" "selected_capabilities")"
     LOCAL_REQUIRED_PLANNER_CONFIG_SHA256="$(plan_kv_get "$RUST_SCOPE_OUTPUT" "planner_config_sha256")"
+
+    PRODUCT_DOC_CHANGE_FOUND=0
+    while IFS= read -r changed_path; do
+      [[ -n "$changed_path" ]] || continue
+      if is_governed_product_document_path "$changed_path"; then
+        PRODUCT_DOC_CHANGE_FOUND=1
+        break
+      fi
+    done < <(
+      {
+        printf '%s\n' "$LOCAL_REQUIRED_CHANGED_PATHS" | tr ';' '\n'
+        git -C "$SOURCE_WORKTREE" diff --name-only "$SOURCE_HEAD" 2>/dev/null || true
+        git -C "$SOURCE_WORKTREE" ls-files --others --exclude-standard 2>/dev/null || true
+      } | sort -u
+    )
+    if [[ "$PRODUCT_DOC_CHANGE_FOUND" == "1" ]]; then
+      PRODUCT_DOC_FULL_CORPUS_COMMAND="$(render_cmd "$PRODUCT_DOC_PYTHON" "$PRODUCT_DOC_CONTENT_CHECKER" \
+        --repo-root "$SOURCE_WORKTREE" --full-corpus)"
+      if ! PRODUCT_DOC_FULL_CORPUS_OUTPUT="$(cd "$SOURCE_WORKTREE" && "$PRODUCT_DOC_PYTHON" "$PRODUCT_DOC_CONTENT_CHECKER" \
+        --repo-root "$SOURCE_WORKTREE" --full-corpus 2>&1)"; then
+        printf '%s\n' "$PRODUCT_DOC_FULL_CORPUS_OUTPUT" >&2
+        die "full-corpus product document content gate failed for product-document changes"
+      fi
+      LOCAL_REQUIRED_EXTRA_COMMANDS+=("$PRODUCT_DOC_FULL_CORPUS_COMMAND")
+    fi
+
     if [[ "$LOCAL_REQUIRED_SCOPE" != "minimal" ]]; then
       RUN_OASIS7_REQUIRED_TESTS="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_oasis7_required_tests" "false")"
       RUN_SCENARIO_REGRESSION="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_scenario_regression" "false")"

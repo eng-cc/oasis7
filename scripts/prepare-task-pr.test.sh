@@ -2359,4 +2359,28 @@ docs_required_json="$TMPDIR/docs-required.json"
 run_prepare "$TMPDIR/gh-docs-required.log" "$TMPDIR/git-docs-required.log" --json >"$docs_required_json"
 assert_planner_selector_evidence "$docs_required_json" "site_quality" "$ROOT_DIR" "OASIS7_CI_RUN_SITE_CONTRACT_TESTS"
 
+reset_smoke_branch_to_base
+write_changed_path_fixture "doc/product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md"
+product_only_json="$TMPDIR/product-only.json"
+run_prepare "$TMPDIR/gh-product-only.log" "$TMPDIR/git-product-only.log" --json >"$product_only_json"
+python3 - "$product_only_json" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+required = payload["local_required_validation"]
+if required["scope"] != "minimal":
+    raise SystemExit(f"product-only documentation should remain minimal scope: {required}")
+if "doc/product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md" not in required["changed_paths"]:
+    raise SystemExit(f"product-only fixture path missing from changed paths: {required}")
+if not any("--full-corpus" in command for command in required["recommended_extra_commands"]):
+    raise SystemExit(
+        "product-only PR preparation must recommend full-corpus product-document validation: "
+        f"{required}"
+    )
+PY
+
 echo "prepare-task-pr.test: OK"

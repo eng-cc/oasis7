@@ -417,14 +417,16 @@ def scenario_full_corpus_requires_lifecycle_closure() -> None:
 
 
 def scenario_full_corpus_rejects_lifecycle_closure_placeholders_and_unlinked_fields() -> None:
-    cases = (
+    cases = tuple(
         (
             LIFECYCLE_CLOSURE.replace(
                 "- 剩余语义：保留历史验收含义与仍需可达的引用。",
-                "- 剩余语义：TBD",
+                f"- 剩余语义：{placeholder}",
             ),
             "lifecycle-placeholder",
-        ),
+        )
+        for placeholder in ("TBD", "-", "—", "–")
+    ) + (
         (
             LIFECYCLE_CLOSURE.replace(
                 "- 接收 authority：[`gameplay authority`](../../game/prd.md#authority)",
@@ -510,6 +512,30 @@ def scenario_full_corpus_rejects_empty_or_placeholder_exemption_reason() -> None
             assert f"missing-design-exemption-reason: {TOPIC}" in output, output
         finally:
             shutil.rmtree(root)
+
+
+def scenario_simple_exemption_requires_trace_rows_for_unlinked_declarations() -> None:
+    root, _base, _head = make_repo()
+    try:
+        (root / DESIGN).unlink()
+        (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
+        extra_declarations = """
+
+## 8. Additional accepted declarations
+<a id="req-unlinked-001"></a>
+- REQ-UNLINKED-001：这个声明没有在正文中内联 AC 引用。
+<a id="ac-unlinked-001"></a>
+- AC-UNLINKED-001：这个声明没有在正文中内联 REQ 引用。
+"""
+        (root / TOPIC).write_text(simple_topic_text() + extra_declarations, encoding="utf-8")
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 1, output
+        assert f"paired-trace-missing-relation: {TOPIC}" in output, output
+        assert "REQ-UNLINKED-001" in output, output
+        assert "AC-UNLINKED-001" in output, output
+    finally:
+        shutil.rmtree(root)
 
 
 def scenario_active_simple_topic_trace_requires_row_contract() -> None:
@@ -1246,6 +1272,7 @@ def main() -> None:
     scenario_full_corpus_requires_design_decision_or_exemption()
     scenario_full_corpus_accepts_simple_topic_exemption()
     scenario_full_corpus_rejects_empty_or_placeholder_exemption_reason()
+    scenario_simple_exemption_requires_trace_rows_for_unlinked_declarations()
     scenario_active_simple_topic_trace_requires_row_contract()
     scenario_aggregate_criterion_requires_body_definition()
     scenario_aggregate_criterion_accepts_body_definition()

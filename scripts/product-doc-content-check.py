@@ -30,6 +30,9 @@ LIFECYCLE_VALUES = frozenset({"proposed", "draft", "active", "superseded", "reti
 LIFECYCLE_PLACEHOLDERS = frozenset(
     {
         "",
+        "-",
+        "—",
+        "–",
         "n/a",
         "na",
         "none",
@@ -44,7 +47,7 @@ LIFECYCLE_PLACEHOLDERS = frozenset(
         "无",
     }
 )
-DESIGN_EXEMPTION_REASON_PLACEHOLDERS = LIFECYCLE_PLACEHOLDERS | frozenset({"-", "—", "–"})
+DESIGN_EXEMPTION_REASON_PLACEHOLDERS = LIFECYCLE_PLACEHOLDERS
 HTML_COMMENT_RE = re.compile(r"<!--[\s\S]*?-->")
 ID_RE = re.compile(r"\b((?:REQ|AC)-[A-Z0-9][A-Z0-9_*-]*)", re.IGNORECASE)
 # Aggregate trace tables use short domain-specific criterion IDs (for example
@@ -1002,6 +1005,7 @@ def trace_table_semantics(
             criterion_columns
             and any(
                 trace_criterion_ids(cells[index])
+                or strict_trace_ids(cells[index])
                 for _number, cells in rows
                 for index in criterion_columns
                 if index < len(cells)
@@ -1113,10 +1117,25 @@ def check_active_topic_trace_tables(
         or lifecycle.strip().strip("`").lower() != "active"
     ):
         return
+    simple_topic_exemption = bool(
+        re.search(
+            r"设计判定\s*[:：]\s*`?simple-topic-exemption`?",
+            "\n".join(line for _, line in visible_lines(text)),
+            re.IGNORECASE,
+        )
+    )
 
     traced_relations: set[tuple[str, str]] = set()
+    traced_ids: set[str] = set()
     relation_table_seen = False
     for header_line, columns, rows in trace_table_semantics(text):
+        trace_id_columns = tuple(
+            sorted(set(columns["relation"] + columns["criterion"]))
+        )
+        for _number, cells in rows:
+            for index in trace_id_columns:
+                if index < len(cells):
+                    traced_ids.update(strict_trace_ids(cells[index]))
         criterion_ids = {
             criterion_id
             for _number, cells in rows
@@ -1260,7 +1279,7 @@ def check_active_topic_trace_tables(
         )
         return
 
-    _requirements, _acceptances, expected_relations = declared_prd_relations(text)
+    declared_requirements, declared_acceptances, expected_relations = declared_prd_relations(text)
     missing_relations = expected_relations - traced_relations
     if missing_relations:
         fail(
@@ -1273,6 +1292,15 @@ def check_active_topic_trace_tables(
                 for requirement, acceptance in sorted(missing_relations)
             ),
         )
+    if simple_topic_exemption:
+        missing_ids = (declared_requirements | declared_acceptances) - traced_ids
+        if missing_ids:
+            fail(
+                errors,
+                "paired-trace-missing-relation",
+                path,
+                "declared REQ/AC IDs lack same-row trace: " + ", ".join(sorted(missing_ids)),
+            )
 
 
 def check_requirements(path: str, text: str, errors: list[str]) -> None:
