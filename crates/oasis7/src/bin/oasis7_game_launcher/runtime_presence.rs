@@ -1,6 +1,8 @@
 use super::*;
+#[cfg(test)]
 use oasis7::simulator::WorldSnapshot;
 use oasis7::viewer::{VIEWER_PROTOCOL_VERSION, ViewerRequest, ViewerResponse};
+use std::collections::BTreeMap;
 
 // Runtime snapshots in the hosted W3 world are approximately 400 KiB and
 // are produced behind the live runtime lock. The observed commit path takes
@@ -104,11 +106,8 @@ impl ViewerRuntimeProbeClient {
     fn wait_for_snapshot(&mut self) -> Result<BTreeSet<String>, String> {
         loop {
             match self.read_response_line()? {
-                ViewerResponseLine::Response(response) => {
-                    if let Some(active_players) = runtime_players_from_response(&response) {
-                        return Ok(active_players);
-                    }
-                }
+                ViewerResponseLine::Snapshot(active_players) => return Ok(active_players),
+                ViewerResponseLine::Response(_) => {}
                 ViewerResponseLine::Timeout => {
                     return Err("runtime probe timed out waiting for snapshot".to_string());
                 }
@@ -124,6 +123,7 @@ impl ViewerRuntimeProbeClient {
             match self.read_response_line()? {
                 ViewerResponseLine::Response(ViewerResponse::HelloAck { .. }) => return Ok(()),
                 ViewerResponseLine::Response(_) => {}
+                ViewerResponseLine::Snapshot(_) => {}
                 ViewerResponseLine::Timeout => {
                     return Err("runtime probe timed out waiting for hello_ack".to_string());
                 }
@@ -152,9 +152,7 @@ impl ViewerRuntimeProbeClient {
         let mut line = String::new();
         match self.reader.read_line(&mut line) {
             Ok(0) => Ok(ViewerResponseLine::Closed),
-            Ok(_) => serde_json::from_str(line.trim_end())
-                .map(ViewerResponseLine::Response)
-                .map_err(|err| format!("decode runtime presence response failed: {err}")),
+            Ok(_) => decode_runtime_presence_response(line.trim_end()),
             Err(err) if is_timeout_error(&err) => Ok(ViewerResponseLine::Timeout),
             Err(err) => Err(format!("read runtime presence response failed: {err}")),
         }
@@ -163,10 +161,51 @@ impl ViewerRuntimeProbeClient {
 
 enum ViewerResponseLine {
     Response(ViewerResponse),
+    Snapshot(BTreeSet<String>),
     Timeout,
     Closed,
 }
 
+fn decode_runtime_presence_response(line: &str) -> Result<ViewerResponseLine, String> {
+    let value: serde_json::Value = serde_json::from_str(line)
+        .map_err(|err| format!("decode runtime presence response failed: {err}"))?;
+    if value.get("type").and_then(serde_json::Value::as_str) == Some("snapshot") {
+        return decode_runtime_presence_snapshot(&value).map(ViewerResponseLine::Snapshot);
+    }
+    serde_json::from_value(value)
+        .map(ViewerResponseLine::Response)
+        .map_err(|err| format!("decode runtime presence response failed: {err}"))
+}
+
+fn decode_runtime_presence_snapshot(
+    response: &serde_json::Value,
+) -> Result<BTreeSet<String>, String> {
+    let snapshot = response
+        .get("snapshot")
+        .ok_or_else(|| "runtime presence snapshot is missing snapshot payload".to_string())?;
+    let wire: RuntimePresenceSnapshotWire = serde_json::from_value(snapshot.clone())
+        .map_err(|err| format!("decode runtime presence snapshot structure failed: {err}"))?;
+    Ok(wire
+        .model
+        .agent_player_bindings
+        .values()
+        .map(|player_id| player_id.trim())
+        .filter(|player_id| !player_id.is_empty())
+        .map(ToOwned::to_owned)
+        .collect())
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct RuntimePresenceSnapshotWire {
+    model: RuntimePresenceModelWire,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct RuntimePresenceModelWire {
+    agent_player_bindings: BTreeMap<String, String>,
+}
+
+#[cfg(test)]
 fn runtime_players_from_response(response: &ViewerResponse) -> Option<BTreeSet<String>> {
     let ViewerResponse::Snapshot { snapshot } = response else {
         return None;
@@ -174,6 +213,7 @@ fn runtime_players_from_response(response: &ViewerResponse) -> Option<BTreeSet<S
     Some(runtime_players_from_snapshot(snapshot))
 }
 
+#[cfg(test)]
 fn runtime_players_from_snapshot(snapshot: &WorldSnapshot) -> BTreeSet<String> {
     snapshot
         .model
@@ -218,6 +258,32 @@ mod tests {
     use std::io::{BufRead, BufReader, BufWriter, Write};
     use std::net::{TcpListener, TcpStream};
     use std::thread;
+
+    #[test]
+    fn runtime_presence_decoder_accepts_decimal_string_snapshot_numbers() {
+        let response = serde_json::json!({
+            "type": "snapshot",
+            "snapshot": {
+                "version": 1,
+                "time": "0",
+                "next_event_id": "0",
+                "journal_len": "0",
+                "model": {
+                    "agent_player_bindings": {
+                        "agent-0": "player-wire",
+                        "agent-empty": "  "
+                    }
+                }
+            }
+        });
+
+        let decoded = decode_runtime_presence_response(response.to_string().as_str())
+            .expect("decode runtime presence snapshot");
+        let ViewerResponseLine::Snapshot(active_players) = decoded else {
+            panic!("expected snapshot response");
+        };
+        assert_eq!(active_players, BTreeSet::from(["player-wire".to_string()]));
+    }
 
     #[test]
     fn query_runtime_bound_players_reads_snapshot() {
