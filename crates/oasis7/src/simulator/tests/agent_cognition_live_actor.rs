@@ -495,19 +495,24 @@ fn runtime_release_and_expiry_reject_digest_only_collisions() {
     let wrong_digest = "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
     let mut expiring = AsyncAgentRunner::builtin_fixture(AGENT_ID);
-    expiring
+    let expiry_turn_id = expiring
         .start_turn_with_context(AGENT_ID, context.clone())
         .expect("open expiry collision turn");
-    for _ in 0..1024 {
-        if !expiring
+    let expiry_outcome = loop {
+        if let Some(outcome) = expiring
             .poll_completed()
             .expect("poll expiry collision turn")
-            .is_empty()
+            .into_iter()
+            .find(|outcome| outcome.turn_id == expiry_turn_id)
         {
-            break;
+            break outcome;
         }
         std::thread::yield_now();
-    }
+    };
+    assert!(
+        expiry_outcome.prepared_context.is_some(),
+        "expiry collision turn must retain its Runtime context"
+    );
     let expiry_error = expiring
         .expire_runtime_turn(
             AGENT_ID,
@@ -533,19 +538,24 @@ fn runtime_release_and_expiry_reject_digest_only_collisions() {
         .expect("matching expiry identity releases the turn");
 
     let mut releasing = AsyncAgentRunner::builtin_fixture(AGENT_ID);
-    releasing
+    let release_turn_id = releasing
         .start_turn_with_context(AGENT_ID, context.clone())
         .expect("open release collision turn");
-    for _ in 0..1024 {
-        if !releasing
+    let release_outcome = loop {
+        if let Some(outcome) = releasing
             .poll_completed()
             .expect("poll release collision turn")
-            .is_empty()
+            .into_iter()
+            .find(|outcome| outcome.turn_id == release_turn_id)
         {
-            break;
+            break outcome;
         }
         std::thread::yield_now();
-    }
+    };
+    assert!(
+        release_outcome.prepared_context.is_some(),
+        "release collision turn must retain its Runtime context"
+    );
     let release_error = releasing
         .release_runtime_turn_for_continuation(
             AGENT_ID,
