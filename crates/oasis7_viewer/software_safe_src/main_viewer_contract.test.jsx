@@ -221,6 +221,30 @@ describe("focused viewer UI contracts", () => {
     });
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("fails chat explicitly when the current world authority is unavailable", async () => {
+    const { core } = await renderViewerApp({
+      selection: { kind: "agent", id: "agent-0" },
+      setupAfterMount(core) {
+        bindLocalTestAgent(core, "agent-0");
+        core.state.worldFeed = {
+          ...core.state.worldFeed,
+          status: "unavailable",
+          stale: true,
+          unavailableReason: "source_unavailable",
+        };
+      },
+    });
+
+    expect(core.sendAgentChat("agent-0", "hello while world authority is unavailable"))
+      .toEqual(expect.objectContaining({ ok: true }));
+    await waitFor(() => {
+      expect(core.state.lastChatFeedback.stage).toBe("error");
+      expect(core.state.lastChatFeedback.accepted).toBe(false);
+      expect(core.state.lastChatFeedback.reason)
+        .toBe("Error: agent_chat requires the current runtime world authority");
+    });
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("keeps hidden prompt-control metadata out of the result card and offers binding recovery", async () => {
     const { core, container } = await renderViewerApp({
       selection: { kind: "agent", id: "agent-0" },
