@@ -16,7 +16,11 @@ pub(super) fn build_oasis7_viewer_live_command(
         .arg("--web-bind")
         .arg(options.web_bind.as_str())
         .arg("--deployment-mode")
-        .arg(viewer_deployment_mode_from_options(options).as_str());
+        .arg(viewer_deployment_mode_from_options(options).as_str())
+        .arg("--major-world-event-visibility")
+        .arg(major_world_event_visibility_as_str(
+            options.major_world_event_visibility,
+        ));
     if !options.generated_world_dir.trim().is_empty() {
         command
             .arg("--generated-world-dir")

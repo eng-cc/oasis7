@@ -3,6 +3,7 @@ use oasis7::launcher_bootstrap_peers::default_chain_replication_bootstrap_peers_
 use oasis7::observability::{
     TRACE_SESSION_ID_ENV, emit_stderr_or_event, init_tracing, resolve_trace_session_id,
 };
+use oasis7::runtime::MajorWorldEventVisibilityPermission;
 use oasis7::simulator::{ProviderExecutionMode, WorldScenario};
 use oasis7_proto::storage_profile::StorageProfile;
 use std::collections::BTreeSet;
@@ -48,8 +49,8 @@ use chain_command::{
     missing_execution_world_persistence_files,
 };
 use cli::{
-    parse_host_port, parse_options, print_help, uses_provider_http_transport,
-    viewer_deployment_mode_from_options,
+    major_world_event_visibility_as_str, parse_host_port, parse_options, print_help,
+    uses_provider_http_transport, viewer_deployment_mode_from_options,
 };
 use hosted_access::{DEFAULT_DEPLOYMENT_MODE, DeploymentMode};
 use hosted_account_identity::HostedAccountIdentityBroker;
@@ -185,6 +186,7 @@ struct CliOptions {
     chain_status_bind: String,
     chain_status_bind_explicit: bool,
     chain_link_policy: String,
+    major_world_event_visibility: MajorWorldEventVisibilityPermission,
     chain_node_id: String,
     chain_network_tier_manifest: String,
     chain_storage_profile: StorageProfile,
@@ -244,6 +246,7 @@ impl Default for CliOptions {
             chain_status_bind: DEFAULT_CHAIN_STATUS_BIND.to_string(),
             chain_status_bind_explicit: false,
             chain_link_policy: DEFAULT_CHAIN_LINK_POLICY.to_string(),
+            major_world_event_visibility: MajorWorldEventVisibilityPermission::Unknown,
             chain_node_id: default_chain_node_id(),
             chain_network_tier_manifest: DEFAULT_CHAIN_NETWORK_TIER_MANIFEST.to_string(),
             chain_storage_profile: StorageProfile::DevLocal,

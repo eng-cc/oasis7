@@ -24,6 +24,7 @@ use super::{
     viewer_dev_dist_candidates,
 };
 use oasis7::launcher_bootstrap_peers::DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS;
+use oasis7::runtime::MajorWorldEventVisibilityPermission;
 use oasis7::simulator::ProviderExecutionMode;
 use oasis7::simulator::{WorldConfig, WorldModel, WorldSnapshot};
 use oasis7::viewer::{VIEWER_PROTOCOL_VERSION, ViewerRequest, ViewerResponse};
@@ -109,6 +110,10 @@ fn parse_options_defaults() {
     assert!(!options.chain_enabled);
     assert_eq!(options.chain_status_bind, DEFAULT_CHAIN_STATUS_BIND);
     assert_eq!(options.chain_link_policy, DEFAULT_CHAIN_LINK_POLICY);
+    assert_eq!(
+        options.major_world_event_visibility,
+        MajorWorldEventVisibilityPermission::Unknown
+    );
     assert!(options.provider_bootstrap_authority_paths.is_empty());
     assert!(
         options
@@ -154,6 +159,30 @@ fn parse_options_defaults() {
 fn parse_options_supports_no_auto_play() {
     let options = parse_options(["--no-auto-play"].into_iter()).expect("parse should succeed");
     assert!(!options.auto_play);
+}
+
+#[test]
+fn parse_options_accepts_major_world_event_visibility() {
+    for (raw, expected) in [
+        ("unknown", MajorWorldEventVisibilityPermission::Unknown),
+        ("public", MajorWorldEventVisibilityPermission::Public),
+        (
+            "restricted",
+            MajorWorldEventVisibilityPermission::Restricted,
+        ),
+        ("denied", MajorWorldEventVisibilityPermission::Denied),
+    ] {
+        let options = parse_options(["--major-world-event-visibility", raw].into_iter())
+            .expect("visibility policy should parse");
+        assert_eq!(options.major_world_event_visibility, expected);
+    }
+}
+
+#[test]
+fn parse_options_rejects_invalid_major_world_event_visibility() {
+    let err = parse_options(["--major-world-event-visibility", "internal"].into_iter())
+        .expect_err("invalid visibility policy should fail");
+    assert!(err.contains("unknown|public|restricted|denied"));
 }
 
 #[test]
@@ -712,6 +741,42 @@ fn build_viewer_live_command_wires_auto_play_flags() {
     let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
     assert!(command.get_args().any(|arg| arg == "--no-auto-play"));
     assert!(!command.get_args().any(|arg| arg == "--auto-play"));
+}
+
+#[test]
+fn build_viewer_live_command_wires_major_world_event_visibility() {
+    let mut options = CliOptions {
+        major_world_event_visibility: MajorWorldEventVisibilityPermission::Restricted,
+        ..CliOptions::default()
+    };
+    let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
+    let args: Vec<String> = command
+        .get_args()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    let visibility_index = args
+        .iter()
+        .position(|arg| arg == "--major-world-event-visibility")
+        .expect("visibility flag should be forwarded");
+    assert_eq!(
+        args.get(visibility_index + 1).map(String::as_str),
+        Some("restricted")
+    );
+
+    options.major_world_event_visibility = MajorWorldEventVisibilityPermission::Unknown;
+    let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
+    let args: Vec<String> = command
+        .get_args()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    let visibility_index = args
+        .iter()
+        .position(|arg| arg == "--major-world-event-visibility")
+        .expect("default visibility flag should be forwarded");
+    assert_eq!(
+        args.get(visibility_index + 1).map(String::as_str),
+        Some("unknown")
+    );
 }
 
 #[test]

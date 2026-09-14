@@ -128,6 +128,11 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                 let raw = parse_required_value(&mut iter, "--chain-link-policy")?;
                 options.chain_link_policy = parse_chain_link_policy(raw.as_str())?.to_string();
             }
+            "--major-world-event-visibility" => {
+                let raw = parse_required_value(&mut iter, "--major-world-event-visibility")?;
+                options.major_world_event_visibility =
+                    parse_major_world_event_visibility(raw.as_str())?;
+            }
             "--chain-node-id" => {
                 options.chain_node_id = parse_required_value(&mut iter, "--chain-node-id")?;
             }
@@ -654,6 +659,31 @@ fn parse_chain_link_policy(raw: &str) -> Result<&'static str, String> {
         })
 }
 
+fn parse_major_world_event_visibility(
+    raw: &str,
+) -> Result<oasis7::runtime::MajorWorldEventVisibilityPermission, String> {
+    match raw.trim() {
+        "unknown" => Ok(oasis7::runtime::MajorWorldEventVisibilityPermission::Unknown),
+        "public" => Ok(oasis7::runtime::MajorWorldEventVisibilityPermission::Public),
+        "restricted" => Ok(oasis7::runtime::MajorWorldEventVisibilityPermission::Restricted),
+        "denied" => Ok(oasis7::runtime::MajorWorldEventVisibilityPermission::Denied),
+        value => Err(format!(
+            "--major-world-event-visibility must be one of unknown|public|restricted|denied, got `{value}`"
+        )),
+    }
+}
+
+pub(super) fn major_world_event_visibility_as_str(
+    visibility: oasis7::runtime::MajorWorldEventVisibilityPermission,
+) -> &'static str {
+    match visibility {
+        oasis7::runtime::MajorWorldEventVisibilityPermission::Unknown => "unknown",
+        oasis7::runtime::MajorWorldEventVisibilityPermission::Public => "public",
+        oasis7::runtime::MajorWorldEventVisibilityPermission::Restricted => "restricted",
+        oasis7::runtime::MajorWorldEventVisibilityPermission::Denied => "denied",
+    }
+}
+
 pub(super) fn print_help() {
     let pos_defaults = oasis7::chain_pos_defaults::defaults();
     println!(
@@ -678,6 +708,8 @@ Options:\n\
   --chain-disable              disable oasis7_chain_runtime\n\
   --chain-status-bind <addr>   oasis7_chain_runtime status bind (default: {DEFAULT_CHAIN_STATUS_BIND})\n\
   --chain-link-policy <mode>   viewer chain sync policy: enforcing|shadow (default: {DEFAULT_CHAIN_LINK_POLICY})\n\
+  --major-world-event-visibility <policy>\n\
+                               explicit audience policy: unknown|public|restricted|denied (default: unknown)\n\
   --chain-node-id <id>         oasis7_chain_runtime node id (default: {DEFAULT_CHAIN_NODE_ID})\n\
   --chain-network-tier-manifest <path>\n\
                                formal network tier manifest json; when set, chain bootstrap peers/status tier metadata load from manifest and explicit storage profile becomes optional\n\
