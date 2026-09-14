@@ -71,7 +71,7 @@ cat >"$node_root/config/doc/testing/evidence/public-testnet-governed-bootstrap-b
 }
 EOF
 mkdir -p "$ops_bundle_root/bin"
-for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
+for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit service-readback; do
   printf '#!/usr/bin/env bash\n' >"$ops_bundle_root/bin/$binary"
   chmod +x "$ops_bundle_root/bin/$binary"
 done

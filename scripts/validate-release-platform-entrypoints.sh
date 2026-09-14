@@ -191,6 +191,9 @@ if [[ -n "$OPS_BUNDLE_DIR" ]]; then
       require_path "$OPS_BUNDLE_DIR/bin/oasis7_world_repair_rebuild" executable
       require_path "$OPS_BUNDLE_DIR/bin/oasis7_governance_registry_import" executable
       require_path "$OPS_BUNDLE_DIR/bin/oasis7_governance_registry_audit" executable
+      if [[ "$PLATFORM" == "linux-x64" ]]; then
+        require_path "$OPS_BUNDLE_DIR/bin/service-readback" executable
+      fi
       ;;
   esac
 fi

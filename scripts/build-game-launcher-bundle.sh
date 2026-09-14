@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/scripts/bundle-freshness-lib.sh"
 OUT_DIR=""
 OPS_OUT_DIR=""
+PLATFORM_OVERRIDE=""
 PROFILE="packaging"
 TARGET_TRIPLE="native"
 WEB_DIST_SOURCE=""
@@ -32,6 +33,8 @@ Options:
   --out-dir <path>       output directory (default: output/release/game-launcher-<timestamp>)
   --ops-out-dir <path>   optional output directory for operator repair/governance tools;
                          omitted by default from the player bundle
+  --platform <id>        optional platform assertion: linux-x64 | macos-x64 |
+                         macos-arm64 | windows-x64
   --profile <name>       cargo profile: packaging|dev (default: packaging)
   --target-triple <id>   rust target triple (default: native)
   --web-dist <path>      use existing prebuilt viewer web dist instead of trunk build
@@ -152,6 +155,10 @@ while [[ $# -gt 0 ]]; do
       OPS_OUT_DIR="${2:-}"
       shift 2
       ;;
+    --platform)
+      PLATFORM_OVERRIDE="${2:-}"
+      shift 2
+      ;;
     --profile)
       PROFILE="${2:-}"
       shift 2
@@ -244,6 +251,19 @@ if [[ "$TARGET_TRIPLE" != "native" ]]; then
   CARGO_TARGET_ARGS=(--target "$TARGET_TRIPLE")
 fi
 BUNDLE_PLATFORM_ID="$(bundle_platform_id "$TARGET_TRIPLE")"
+if [[ -n "$PLATFORM_OVERRIDE" ]]; then
+  case "$PLATFORM_OVERRIDE" in
+    linux-x64|macos-x64|macos-arm64|windows-x64) ;;
+    *)
+      echo "error: --platform must be one of linux-x64|macos-x64|macos-arm64|windows-x64" >&2
+      exit 1
+      ;;
+  esac
+  if [[ "$PLATFORM_OVERRIDE" != "$BUNDLE_PLATFORM_ID" ]]; then
+    echo "error: --platform does not match target triple: $PLATFORM_OVERRIDE != $BUNDLE_PLATFORM_ID" >&2
+    exit 1
+  fi
+fi
 
 BUNDLE_BIN_DIR="$OUT_DIR/bin"
 BUNDLE_WEB_DIR="$OUT_DIR/web"
@@ -251,8 +271,8 @@ BUNDLE_WEB_LAUNCHER_DIR="$OUT_DIR/web-launcher"
 if [[ -n "$OPS_OUT_DIR" ]]; then
   OPS_BIN_DIR="$OPS_OUT_DIR/bin"
 else
-  # The default output is the player/runtime bundle. Operator repair and
-  # governance tools are intentionally omitted unless an explicit ops output
+  # The default output is the player/runtime bundle. Operator repair,
+  # governance, and read-only service tools are intentionally omitted unless an explicit ops output
   # directory is requested by the release packaging path.
   OPS_BIN_DIR=""
 fi
@@ -292,6 +312,7 @@ WORLD_REPAIR_REBUILD_SRC="$ROOT_DIR/target/$TARGET_OUTPUT_SUBDIR/$WORLD_REPAIR_R
 GOVERNANCE_REGISTRY_IMPORT_SRC="$ROOT_DIR/target/$TARGET_OUTPUT_SUBDIR/$GOVERNANCE_REGISTRY_IMPORT_BIN_NAME"
 GOVERNANCE_REGISTRY_AUDIT_SRC="$ROOT_DIR/target/$TARGET_OUTPUT_SUBDIR/$GOVERNANCE_REGISTRY_AUDIT_BIN_NAME"
 CLIENT_LAUNCHER_SRC="$ROOT_DIR/target/$TARGET_OUTPUT_SUBDIR/$CLIENT_LAUNCHER_BIN_NAME"
+SERVICE_READBACK_SRC="$ROOT_DIR/scripts/service-readback"
 
 if [[ "$DRY_RUN" != "1" ]]; then
   [[ -f "$LAUNCHER_SRC" ]] || { echo "error: launcher binary not found: $LAUNCHER_SRC" >&2; exit 1; }
@@ -313,6 +334,7 @@ if [[ -n "$OPS_OUT_DIR" ]]; then
   replace_file "$WORLD_REPAIR_REBUILD_SRC" "$OPS_BIN_DIR/$WORLD_REPAIR_REBUILD_BIN_NAME"
   replace_file "$GOVERNANCE_REGISTRY_IMPORT_SRC" "$OPS_BIN_DIR/$GOVERNANCE_REGISTRY_IMPORT_BIN_NAME"
   replace_file "$GOVERNANCE_REGISTRY_AUDIT_SRC" "$OPS_BIN_DIR/$GOVERNANCE_REGISTRY_AUDIT_BIN_NAME"
+  replace_file "$SERVICE_READBACK_SRC" "$OPS_BIN_DIR/service-readback"
 fi
 
 # 2) Prepare viewer web dist (viewer canonical static bundle, with software_safe compat alias).
@@ -547,8 +569,9 @@ Bundle layout:
 - run-game.cmd (Windows bundle only)
 - run-chain-runtime.cmd (Windows bundle only)
 - oasis7 Client Launcher.app (macOS bundle only)
-- Operator repair/recovery tools are published separately in the optional
-  oasis7-${BUNDLE_PLATFORM_ID}-ops-tools bundle when --ops-out-dir is used.
+- Operator repair/recovery and read-only service tools are published separately
+  in the optional oasis7-${BUNDLE_PLATFORM_ID}-ops-tools bundle when
+  --ops-out-dir is used.
 README"
 
 if [[ -n "$OPS_OUT_DIR" ]]; then
@@ -569,6 +592,7 @@ Contents:
 - bin/oasis7_world_repair_rebuild
 - bin/oasis7_governance_registry_import
 - bin/oasis7_governance_registry_audit
+- bin/service-readback
 - .oasis7-ops-tools-manifest.json
 - SHA256SUMS
 README
@@ -600,6 +624,7 @@ expected = {
     "oasis7_world_repair_rebuild",
     "oasis7_governance_registry_import",
     "oasis7_governance_registry_audit",
+    "service-readback",
 }
 actual = {Path(item["path"]).stem.removesuffix(".exe") for item in tools}
 if actual != expected:

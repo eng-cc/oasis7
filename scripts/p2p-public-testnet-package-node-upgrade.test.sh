@@ -2,6 +2,11 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+grep -Fq 'oasis7_governance_registry_audit service-readback' \
+  "$ROOT_DIR/scripts/p2p-public-testnet-package-node-upgrade.sh" || {
+  printf 'upgrade preflight must require service-readback in the ops archive\n' >&2
+  exit 1
+}
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-package-node-upgrade-test.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -114,7 +119,7 @@ read -r buildinfo_uid buildinfo_gid buildinfo_mode \
 
 touch -t 202001010000 "$bundle_root"
 mkdir -p "$ops_bundle_root/bin"
-for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
+for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit service-readback; do
   printf '#!/usr/bin/env bash\n' >"$ops_bundle_root/bin/$binary"
   chmod +x "$ops_bundle_root/bin/$binary"
 done

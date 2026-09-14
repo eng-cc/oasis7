@@ -853,7 +853,7 @@ ops_bundle_root="$tmp_dir/oasis7-linux-x64-ops-tools"
     shasum -a 256 -c SHA256SUMS >/dev/null 2>&1 || die "ops-tools checksum verification failed"
   fi
 )
-for ops_binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
+for ops_binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit service-readback; do
   [[ -x "$ops_bundle_root/bin/$ops_binary" ]] || die "ops-tools archive missing executable: $ops_binary"
 done
 mkdir -p "$bundle_root/bin"
