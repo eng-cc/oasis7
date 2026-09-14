@@ -1960,6 +1960,40 @@ describe("viewer web ui automation baseline", () => {
 	    expect(core.state.lastChatFeedback.effect).not.toBe("agent_chat overall timeout");
 	  }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("fails chat explicitly when the current world authority is unavailable", async () => {
+    const { core } = await renderViewerApp({
+      selection: { kind: "agent", id: "agent-0" },
+      setupAfterMount(core) {
+        core.state.auth = {
+          ...core.state.auth,
+          available: true,
+          playerId: "local-test-player-bound",
+          publicKey: "09".repeat(32),
+          privateKey: "07".repeat(32),
+          source: LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE,
+          registrationStatus: "registered",
+          runtimeStatus: "registered",
+          boundAgentId: "agent-0",
+        };
+        core.state.worldFeed = {
+          ...core.state.worldFeed,
+          status: "unavailable",
+          stale: true,
+          unavailableReason: "source_unavailable",
+        };
+      },
+    });
+
+    expect(core.sendAgentChat("agent-0", "hello while world authority is unavailable"))
+      .toEqual(expect.objectContaining({ ok: true }));
+    await waitFor(() => {
+      expect(core.state.lastChatFeedback.stage).toBe("error");
+      expect(core.state.lastChatFeedback.accepted).toBe(false);
+      expect(core.state.lastChatFeedback.reason)
+        .toBe("Error: agent_chat requires the current runtime world authority");
+    });
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("does not start agent chat overall timeout while queued behind another semantic command", async () => {
     vi.useFakeTimers();
     window.history.replaceState(

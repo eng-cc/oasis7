@@ -2617,15 +2617,12 @@ function handleSemanticCommandError(command, error) {
     }
     clearPendingPromptControlAckTimer();
   }
-  command.feedback.stage = "error";
-  command.feedback.ok = false;
-  command.feedback.reason = String(error);
-  command.feedback.effect = "request build/send failed";
-  if (command.kind === "chat") {
-    state.lastChatFeedback = command.feedback;
-  } else {
-    state.lastPromptFeedback = command.feedback;
-  }
+  const feedback = command.kind === "chat" ? state.lastChatFeedback : state.lastPromptFeedback;
+  feedback.stage = "error";
+  feedback.ok = false;
+  feedback.accepted = false;
+  feedback.reason = String(error);
+  feedback.effect = "request build/send failed";
   render();
 }
 
