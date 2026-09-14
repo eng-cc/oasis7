@@ -52,6 +52,11 @@ set `public` or `restricted` only when its operator/session policy has supplied 
 `denied` explicitly suppresses the event. Login, Agent selection/control, hosted join, and Director
 diagnostics never change this option implicitly.
 
+For the isolated synthetic loopback DevLocal W3 recipe, pass
+`--major-world-event-visibility restricted` explicitly. This is an operator policy for that
+synthetic lane only; the launcher default remains `unknown`, and hosted/public runs must not
+inherit this value without their own authority decision.
+
 - `oasis7_viewer_live` 当前默认走 runtime/world 链路。
 - `oasis7_viewer_live` 负责 Viewer live server 与可选 Web bridge，不内嵌 node、consensus、reward runtime、topology 或 execution-world persistence，也不提供 `--tick-ms` 作为外部推进时钟。它仍可通过 `--chain-status-bind` 观察 committed world，并在配置 status bind 时通过 `--chain-submit-bind` 提交 chain-linked action；这些是 client endpoints，不授予 node ownership。Viewer event delivery 不能等同于 node/consensus tick。
 - 正式 gameplay 要求已配置且可连通的 LLM provider。
@@ -83,6 +88,7 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 
 - 启用条件同时满足：launcher 使用 `hosted_public_join`；Viewer 静态 HTTP 只绑定 loopback（`127.0.0.1`、`::1` 或 `localhost`）；并显式设置 `OASIS7_HOSTED_TEST_LOGIN_ENABLED=1`。未满足任一条件时，test-login route 返回 `404`。
 - 页面还必须在 URL 中显式加入 `hosted_test_login=1`；浏览器随后生成正常的临时 Ed25519 device key，只提交 public key，并消费后端实际签发的 player/session/release/registration grant。浏览器不生成 player id、release token、grant 或签名。
+- 若验证 W3 的 hosted `prompt_control` strong-auth，启动前只检查以下三个变量均已存在且非空：`OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY`、`OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY`、`OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE`。检查只输出 presence，不输出任何值；缺少任一项时保持 blocked，不能用占位值或伪造批准继续。
 - 本地 QA 启动 recipe（沿用现有 launcher/provider 前置条件）：
 
 ```bash
