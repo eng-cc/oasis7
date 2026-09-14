@@ -414,6 +414,37 @@ fn hosted_player_session_runtime_probe_failure_surfaces_in_admission() {
 }
 
 #[test]
+fn hosted_player_session_probe_failure_keeps_pending_slot_within_bounded_lease() {
+    let mut issuer = HostedPlayerSessionIssuer::default();
+    let grant = issuer
+        .issue(DeploymentMode::HostedPublicJoin)
+        .grant
+        .expect("grant");
+    issuer.record_runtime_probe_failure("runtime snapshot timed out".to_string());
+    issuer.last_seen_unix_ms_by_release_token.insert(
+        release_token_digest(grant.release_token.as_str()),
+        now_unix_ms()
+            .saturating_sub(PENDING_REGISTRATION_TTL_MS)
+            .saturating_sub(1),
+    );
+
+    let admission = issuer.admission(DeploymentMode::HostedPublicJoin);
+    assert_eq!(admission.admission.active_player_sessions, 1);
+    assert_eq!(admission.admission.runtime_probe_status, "error");
+    assert!(
+        issuer
+            .refresh(
+                DeploymentMode::HostedPublicJoin,
+                grant.player_id.as_str(),
+                grant.release_token.as_str(),
+                None,
+            )
+            .ok,
+        "a probe failure must not turn an unobserved slot into an invalid token"
+    );
+}
+
+#[test]
 fn hosted_player_session_admission_reports_runtime_only_occupancy_separately() {
     let mut issuer = HostedPlayerSessionIssuer::default();
     let issue = issuer.issue(DeploymentMode::HostedPublicJoin);

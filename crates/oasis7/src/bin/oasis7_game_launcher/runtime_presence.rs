@@ -2,7 +2,10 @@ use super::*;
 use oasis7::simulator::WorldSnapshot;
 use oasis7::viewer::{VIEWER_PROTOCOL_VERSION, ViewerRequest, ViewerResponse};
 
-const HOSTED_SESSION_RUNTIME_PROBE_TIMEOUT_MS: u64 = 300;
+// Runtime snapshots in the hosted W3 world are approximately 400 KiB and
+// are produced behind the live runtime lock. The observed commit path takes
+// up to about 1 second, so 300 ms expires probes while the runtime is healthy.
+const HOSTED_SESSION_RUNTIME_PROBE_TIMEOUT_MS: u64 = 2_000;
 const HOSTED_SESSION_RUNTIME_PROBE_INTERVAL_MS: u64 = 1_000;
 const RUNTIME_PRESENCE_PROBE_CLIENT: &str = "oasis7_game_launcher_hosted_session_probe";
 
@@ -266,6 +269,59 @@ mod tests {
             BTreeSet::from(["player-a".to_string(), "player-b".to_string()])
         );
 
+        handle.join().expect("join mock");
+    }
+
+    #[test]
+    fn query_runtime_bound_players_allows_runtime_snapshot_generation_delay() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind mock");
+        let addr = listener.local_addr().expect("local addr");
+        let handle = thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("accept");
+            let reader_stream = stream.try_clone().expect("clone");
+            let mut reader = BufReader::new(reader_stream);
+            let mut writer = BufWriter::new(stream);
+
+            expect_request_type(&mut reader, |request| {
+                matches!(
+                    request,
+                    ViewerRequest::Hello {
+                        version: VIEWER_PROTOCOL_VERSION,
+                        ..
+                    }
+                )
+            });
+            write_response(
+                &mut writer,
+                &ViewerResponse::HelloAck {
+                    server: "oasis7".to_string(),
+                    version: VIEWER_PROTOCOL_VERSION,
+                    min_version: 1,
+                    max_version: VIEWER_PROTOCOL_VERSION,
+                    capabilities: Vec::new(),
+                    world_id: "test-world".to_string(),
+                    control_profile: oasis7::viewer::ViewerControlProfile::Live,
+                    authority_epoch: None,
+                },
+            );
+            expect_request_type(&mut reader, |request| {
+                matches!(request, ViewerRequest::RequestSnapshot)
+            });
+            thread::sleep(Duration::from_millis(350));
+            write_response(
+                &mut writer,
+                &ViewerResponse::Snapshot {
+                    snapshot: world_snapshot(["player-delayed"]),
+                },
+            );
+        });
+
+        let active_players =
+            query_runtime_bound_players(format!("{addr}").as_str()).expect("delayed snapshot");
+        assert_eq!(
+            active_players,
+            BTreeSet::from(["player-delayed".to_string()])
+        );
         handle.join().expect("join mock");
     }
 

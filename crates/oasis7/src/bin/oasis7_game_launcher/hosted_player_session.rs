@@ -703,7 +703,13 @@ impl HostedPlayerSessionIssuer {
                 expired_tokens.push(token.clone());
                 continue;
             };
-            let ttl_ms = if self.runtime_seen_players.contains(player_id.as_str()) {
+            // A failed presence probe cannot establish that a pending player
+            // left the runtime. Keep the slot within the bounded lease while
+            // the probe is uncertain; a successful empty snapshot still
+            // retains the short pending-registration expiry below.
+            let ttl_ms = if self.runtime_seen_players.contains(player_id.as_str())
+                || self.last_runtime_probe_error.is_some()
+            {
                 SLOT_LEASE_TTL_MS
             } else {
                 PENDING_REGISTRATION_TTL_MS
