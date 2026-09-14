@@ -222,6 +222,7 @@ run_operational_contract_tests() {
   run bash ./scripts/testnet-packages-windows-governed-closure.test.sh
   run_provider_remote_https_smoke
   run bash ./scripts/p2p-public-testnet-bootstrap-fresh-validator-host.test.sh
+  run bash ./scripts/p2p-public-testnet-service-readback.test.sh
   run bash ./scripts/p2p-public-testnet-package-node-upgrade.test.sh
   run bash ./scripts/p2p-public-testnet-package-node-upgrade-health.test.sh
   run bash ./scripts/p2p-public-testnet-package-node-upgrade-order.test.sh

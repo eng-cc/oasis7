@@ -14,9 +14,11 @@ if [[ ! -f "$HELPER" || ! -x "$HELPER" ]]; then
 fi
 
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-service-readback.XXXXXX")"
+TMP_DIR="$(cd "$TMP_DIR" && pwd -P)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 FAKE_BIN="$TMP_DIR/bin"
-mkdir -p "$FAKE_BIN" "$TMP_DIR/web" "$TMP_DIR/web-launcher"
+TEST_ROOT="$TMP_DIR/canonical-root"
+mkdir -p "$FAKE_BIN" "$TEST_ROOT" "$TMP_DIR/web" "$TMP_DIR/web-launcher"
 printf '<!doctype html>\n' >"$TMP_DIR/web/index.html"
 printf '<!doctype html>\n' >"$TMP_DIR/web-launcher/index.html"
 
@@ -60,11 +62,28 @@ exit 1
 EOF
 chmod +x "$FAKE_BIN/systemctl" "$FAKE_BIN/ps" "$FAKE_BIN/ss" "$FAKE_BIN/pgrep"
 
+invoke_readback() {
+  PATH="$FAKE_BIN:$PATH" READBACK_CANONICAL_ROOT="${READBACK_CANONICAL_ROOT:-$TEST_ROOT}" \
+    python3 - "$HELPER" "$@" <<'PY'
+import importlib.machinery
+import importlib.util
+import os
+import sys
+
+loader = importlib.machinery.SourceFileLoader("service_readback_test_target", sys.argv[1])
+spec = importlib.util.spec_from_loader(loader.name, loader)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module.CANONICAL_ROOT = os.environ["READBACK_CANONICAL_ROOT"]
+raise SystemExit(module.main(sys.argv[2:]))
+PY
+}
+
 run_readback() {
-  PATH="$FAKE_BIN:$PATH" "$HELPER" \
+  invoke_readback \
     --read-only \
     --role storage \
-    --root /opt/oasis7/p2p-testnet \
+    --root "$TEST_ROOT" \
     --service oasis7-triad-storage.service
 }
 
@@ -95,36 +114,17 @@ if FAKE_SERVICE_LOAD_STATE=not-found run_readback >"$TMP_DIR/not-found.out" 2>&1
   exit 1
 fi
 
-python3 - "$HELPER" <<'PY'
-import importlib.machinery
-import importlib.util
-import sys
-
-loader = importlib.machinery.SourceFileLoader("service_readback", sys.argv[1])
-spec = importlib.util.spec_from_loader(loader.name, loader)
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-
-class MissingRoot:
-    def __init__(self, _value):
-        self.anchor = "/"
-        self.parts = ("/", "opt", "oasis7", "p2p-testnet")
-    def exists(self):
-        return False
-
-module.Path = MissingRoot
-try:
-    module._physical_root_is_safe(module.CANONICAL_ROOT)
-except SystemExit:
-    pass
-else:
-    raise AssertionError("missing canonical root was accepted")
-PY
+if READBACK_CANONICAL_ROOT="$TMP_DIR/missing-root" invoke_readback \
+  --read-only --role storage --root "$TMP_DIR/missing-root" \
+  --service oasis7-triad-storage.service >"$TMP_DIR/missing-root.out" 2>&1; then
+  printf 'expected missing canonical root to be rejected\n' >&2
+  exit 1
+fi
 
 expect_rejected() {
   local label="$1"
   shift
-  if PATH="$FAKE_BIN:$PATH" "$HELPER" "$@" >"$TMP_DIR/$label.out" 2>&1; then
+  if invoke_readback "$@" >"$TMP_DIR/$label.out" 2>&1; then
     printf 'expected service-readback rejection: %s\n' "$label" >&2
     cat "$TMP_DIR/$label.out" >&2
     exit 1
@@ -133,27 +133,31 @@ expect_rejected() {
 
 # Fixed role/root/service binding rejects target drift and command injection.
 expect_rejected wrong-role \
-  --read-only --role sequencer --root /opt/oasis7/p2p-testnet --service oasis7-triad-storage.service
+  --read-only --role sequencer --root "$TEST_ROOT" --service oasis7-triad-storage.service
 expect_rejected wrong-root \
   --read-only --role storage --root /tmp/oasis7-testnet --service oasis7-triad-storage.service
 expect_rejected wrong-service \
-  --read-only --role storage --root /opt/oasis7/p2p-testnet --service oasis7-triad-sequencer.service
+  --read-only --role storage --root "$TEST_ROOT" --service oasis7-triad-sequencer.service
 expect_rejected unsafe-service \
-  --read-only --role storage --root /opt/oasis7/p2p-testnet --service 'oasis7-triad-storage.service;systemctl stop'
+  --read-only --role storage --root "$TEST_ROOT" --service 'oasis7-triad-storage.service;systemctl stop'
 
 # Mutation-like or unrecognized arguments must never reach a host command.
 expect_rejected start-flag \
-  --read-only --role storage --root /opt/oasis7/p2p-testnet --service oasis7-triad-storage.service --start
+  --read-only --role storage --root "$TEST_ROOT" --service oasis7-triad-storage.service --start
 expect_rejected stop-flag \
-  --read-only --role storage --root /opt/oasis7/p2p-testnet --service oasis7-triad-storage.service --stop
+  --read-only --role storage --root "$TEST_ROOT" --service oasis7-triad-storage.service --stop
 expect_rejected systemctl-flag \
-  --read-only --role storage --root /opt/oasis7/p2p-testnet --service oasis7-triad-storage.service --systemctl stop
+  --read-only --role storage --root "$TEST_ROOT" --service oasis7-triad-storage.service --systemctl stop
 
 # A symlink/unsafe root is rejected even though the fixed production root is
 # already outside this temporary test tree.
-ln -s /opt/oasis7/p2p-testnet "$TMP_DIR/root-link"
-expect_rejected symlink-root \
-  --read-only --role storage --root "$TMP_DIR/root-link" --service oasis7-triad-storage.service
+ln -s "$TEST_ROOT" "$TMP_DIR/root-link"
+if READBACK_CANONICAL_ROOT="$TMP_DIR/root-link" invoke_readback \
+  --read-only --role storage --root "$TMP_DIR/root-link" \
+  --service oasis7-triad-storage.service >"$TMP_DIR/symlink-root.out" 2>&1; then
+  printf 'expected symlink canonical root to be rejected\n' >&2
+  exit 1
+fi
 
 # Packaging contract: the helper is staged in the Linux ops-tools bundle and
 # the fresh-host deployment copies that bundle into the active validator bin.
@@ -175,5 +179,7 @@ PATH="$FAKE_BIN:$PATH" "$BUNDLE_BUILDER" \
   >"$dry_run_output"
 grep -Fq 'service-readback' "$dry_run_output"
 grep -Fq 'oasis7-linux-x64-ops-tools/bin/service-readback' "$dry_run_output"
+grep -Fqx '  run bash ./scripts/p2p-public-testnet-service-readback.test.sh' \
+  "$ROOT_DIR/scripts/ci-tests.sh"
 
 printf '%s\n' 'ok: production service-readback contract and Linux staging'
