@@ -469,11 +469,10 @@ impl World {
         {
             return Err(local_test_error("local provider module is not active"));
         }
-        if self
+        if !self
             .capability_revocation_state
             .authority_records
-            .get(LOCAL_TEST_PROVIDER_ISSUER_ID)
-            .is_none()
+            .contains_key(LOCAL_TEST_PROVIDER_ISSUER_ID)
         {
             self.install_capability_authority_record_with_finality_proof(
                 authority_record.clone(),
