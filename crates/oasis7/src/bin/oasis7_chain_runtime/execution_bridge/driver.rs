@@ -829,10 +829,10 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                     })
             );
         }
-        rollback_on_error!(persist_execution_world(
-            self.world_dir.as_path(),
-            &self.execution_world
-        ));
+        // Publish the ordinary cache only after peer-hash/CAS acceptance;
+        // otherwise rejects persist mutation and startup can prefer an
+        // uncommitted cache. Product-validation intents use the explicit
+        // staged-world callback above.
         let runtime_step_ms = runtime_step_started_at.elapsed();
         let simulator_step_started_at = Instant::now();
         let (simulator_mirror, simulator_observation) = rollback_on_error!(

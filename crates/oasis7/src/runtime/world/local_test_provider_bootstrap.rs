@@ -12,10 +12,12 @@ use super::super::capability_authorization::{
 };
 use super::super::governance::GovernanceFinalityEpochSnapshot;
 use super::super::{
-    CognitionProvisioningReceiptV1, CognitionProvisioningRequestV1, GovernanceFinalityCertificate,
-    Manifest, ModuleAbiContract, ModuleActivation, ModuleArtifactIdentity, ModuleChangeSet,
-    ModuleKind, ModuleLimits, ModuleManifest, ModuleRole, ProposalDecision,
-    ProviderBackedBootstrapAuthorityV1, WorldError,
+    Action, ActionEnvelope, CausedBy, CognitionProvisioningReceiptV1,
+    CognitionProvisioningRequestV1, DomainEvent, GovernanceFinalityCertificate, MainTokenConfig,
+    MainTokenGenesisAllocationBucketState, MainTokenGenesisAllocationPlan, Manifest,
+    ModuleAbiContract, ModuleActivation, ModuleArtifactIdentity, ModuleChangeSet, ModuleKind,
+    ModuleLimits, ModuleManifest, ModuleRole, ProposalDecision, ProviderBackedBootstrapAuthorityV1,
+    WorldError,
 };
 use super::World;
 use super::governance::local_governance_finality_signing_keys;
@@ -36,6 +38,10 @@ pub const LOCAL_TEST_PROVIDER_COMMAND: &str = "observe";
 pub const LOCAL_TEST_PROVIDER_ISSUER_ID: &str = "governance.local.finality.signer.1";
 pub const LOCAL_TEST_PROVIDER_KEY_ID: &str = "governance-local-finality-key-1";
 pub const LOCAL_TEST_PROVIDER_MODULE_SCHEMA: &str = "provider.observe@1";
+
+const LOCAL_W3_STARTER_MAIN_TOKEN_SUPPLY: u64 = 325;
+const LOCAL_W3_STARTER_VESTING_BUCKET: &str = "dev_local_w3_starter_vesting";
+const LOCAL_W3_STARTER_CLAIM_NONCE: u64 = 1;
 
 /// Trust source selected by the caller. There is deliberately no remote
 /// variant: remote authority provisioning remains an external governed path.
@@ -165,6 +171,166 @@ impl World {
         staged.persist_runtime_transaction_if_configured()?;
         *self = staged;
         Ok(result)
+    }
+
+    /// Seed the bounded W3 DevLocal starter economy through the ordinary
+    /// action evaluator and prepared monetary publication path. The fixture
+    /// is deliberately fresh-only: callers must establish local authority
+    /// first, and an existing token ledger is never topped up or rewritten.
+    pub fn initialize_local_test_main_token_funding(
+        &mut self,
+        config: &LocalTestProviderAuthorityConfig,
+    ) -> Result<(), WorldError> {
+        validate_local_test_funding_config(self, config)?;
+        if self.current_cognition_runtime_binding().is_err() {
+            return Err(local_test_error(
+                "local main-token funding requires an established Runtime binding",
+            ));
+        }
+        if self
+            .module_registry
+            .active
+            .get(LOCAL_TEST_PROVIDER_MODULE_ID)
+            != Some(&LOCAL_TEST_PROVIDER_MODULE_VERSION.to_string())
+        {
+            return Err(local_test_error(
+                "local main-token funding requires the active local provider module",
+            ));
+        }
+        if !self
+            .capability_revocation_state
+            .authority_records
+            .contains_key(LOCAL_TEST_PROVIDER_ISSUER_ID)
+        {
+            return Err(local_test_error(
+                "local main-token funding requires admitted local provider authority",
+            ));
+        }
+        let default_config = MainTokenConfig::default();
+        if self.main_token_config() != &default_config
+            || !self.state.main_token_genesis_buckets.is_empty()
+            || !self.state.main_token_balances.is_empty()
+            || !self.state.main_token_claim_nonces.is_empty()
+            || !self.state.main_token_transfer_nonces.is_empty()
+            || self.main_token_supply() != &Default::default()
+        {
+            return Err(local_test_error(
+                "local main-token funding requires a pristine token ledger",
+            ));
+        }
+
+        let mut staged = self.clone();
+        let mut local_config = default_config;
+        local_config.initial_supply = LOCAL_W3_STARTER_MAIN_TOKEN_SUPPLY;
+        staged.set_main_token_config(local_config);
+        staged.apply_local_test_main_token_action(Action::InitializeMainTokenGenesis {
+            allocations: vec![MainTokenGenesisAllocationPlan {
+                bucket_id: LOCAL_W3_STARTER_VESTING_BUCKET.to_string(),
+                ratio_bps: 10_000,
+                recipient: config.agent_id.clone(),
+                cliff_epochs: 0,
+                linear_unlock_epochs: 0,
+                start_epoch: 0,
+            }],
+        })?;
+        staged.apply_local_test_main_token_action(Action::ClaimMainTokenVesting {
+            bucket_id: LOCAL_W3_STARTER_VESTING_BUCKET.to_string(),
+            beneficiary: config.agent_id.clone(),
+            nonce: LOCAL_W3_STARTER_CLAIM_NONCE,
+        })?;
+        *self = staged;
+        Ok(())
+    }
+
+    /// Validate the immutable local funding provenance on an existing output.
+    /// Current balances are intentionally left to normal replay and may have
+    /// changed through later accepted gameplay actions.
+    pub fn validate_local_test_main_token_funding(&self, agent_id: &str) -> Result<(), WorldError> {
+        let expected_config = MainTokenConfig {
+            initial_supply: LOCAL_W3_STARTER_MAIN_TOKEN_SUPPLY,
+            ..MainTokenConfig::default()
+        };
+        if self.main_token_config() != &expected_config {
+            return Err(local_test_error(
+                "existing local world has no canonical W3 token configuration",
+            ));
+        }
+        let funding_events = self
+            .journal
+            .events
+            .iter()
+            .filter_map(|event| match &event.body {
+                super::super::WorldEventBody::Domain(
+                    event @ (DomainEvent::MainTokenGenesisInitialized { .. }
+                    | DomainEvent::MainTokenVestingClaimed { .. }),
+                ) => Some(event),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        if !matches!(
+            funding_events.as_slice(),
+            [DomainEvent::MainTokenGenesisInitialized { total_supply, allocations },
+                DomainEvent::MainTokenVestingClaimed {
+                    bucket_id,
+                    beneficiary,
+                    amount,
+                    nonce,
+                }]
+            if *total_supply == LOCAL_W3_STARTER_MAIN_TOKEN_SUPPLY
+                && allocations.as_slice() == [MainTokenGenesisAllocationBucketState {
+                    bucket_id: LOCAL_W3_STARTER_VESTING_BUCKET.to_string(),
+                    ratio_bps: 10_000,
+                    recipient: agent_id.to_string(),
+                    cliff_epochs: 0,
+                    linear_unlock_epochs: 0,
+                    start_epoch: 0,
+                    allocated_amount: LOCAL_W3_STARTER_MAIN_TOKEN_SUPPLY,
+                    claimed_amount: 0,
+                }]
+                && bucket_id == LOCAL_W3_STARTER_VESTING_BUCKET
+                && beneficiary == agent_id
+                && *amount == LOCAL_W3_STARTER_MAIN_TOKEN_SUPPLY
+                && *nonce == LOCAL_W3_STARTER_CLAIM_NONCE
+        ) {
+            return Err(local_test_error(
+                "existing local world is missing canonical W3 token funding provenance",
+            ));
+        }
+        let Some(bucket) = self.main_token_genesis_bucket(LOCAL_W3_STARTER_VESTING_BUCKET) else {
+            return Err(local_test_error(
+                "existing local world is missing the W3 vesting bucket",
+            ));
+        };
+        if bucket.recipient != agent_id
+            || bucket.ratio_bps != 10_000
+            || bucket.allocated_amount != LOCAL_W3_STARTER_MAIN_TOKEN_SUPPLY
+            || bucket.claimed_amount != LOCAL_W3_STARTER_MAIN_TOKEN_SUPPLY
+            || bucket.cliff_epochs != 0
+            || bucket.linear_unlock_epochs != 0
+            || bucket.start_epoch != 0
+            || self.main_token_supply().total_supply != LOCAL_W3_STARTER_MAIN_TOKEN_SUPPLY
+            || self.main_token_supply().circulating_supply != LOCAL_W3_STARTER_MAIN_TOKEN_SUPPLY
+            || self.main_token_supply().total_issued != 0
+            || self.main_token_supply().total_burned != 0
+            || self.main_token_last_claim_nonce(agent_id) != Some(LOCAL_W3_STARTER_CLAIM_NONCE)
+        {
+            return Err(local_test_error(
+                "existing local world W3 token funding state does not match replayed provenance",
+            ));
+        }
+        Ok(())
+    }
+
+    fn apply_local_test_main_token_action(&mut self, action: Action) -> Result<(), WorldError> {
+        let action_id = self.allocate_next_action_id();
+        let envelope = ActionEnvelope {
+            id: action_id,
+            action,
+        };
+        let body = self.action_to_event(&envelope)?;
+        self.preflight_domain_event(&body)?;
+        self.append_event(body, Some(CausedBy::Action(action_id)))?;
+        Ok(())
     }
 
     fn initialize_local_test_provider_authority_inner(
@@ -597,6 +763,48 @@ fn validate_local_test_config(
     Ok(())
 }
 
+fn validate_local_test_funding_config(
+    world: &World,
+    config: &LocalTestProviderAuthorityConfig,
+) -> Result<(), WorldError> {
+    if config.authority_mode != LocalTestProviderAuthorityMode::DevLocal {
+        return Err(local_test_error(
+            "local main-token funding mode is not DevLocal",
+        ));
+    }
+    if config.storage_profile != StorageProfile::DevLocal {
+        return Err(local_test_error(
+            "local main-token funding requires the DevLocal storage profile",
+        ));
+    }
+    if world.release_security_policy().is_production_hardened()
+        || !world.release_security_policy().allow_local_finality_signing
+    {
+        return Err(local_test_error(
+            "local main-token funding is disabled by the release security policy",
+        ));
+    }
+    if world.governance_finality_signer_registry().is_some() {
+        return Err(local_test_error(
+            "local main-token funding cannot replace an external finality signer registry",
+        ));
+    }
+    if config.agent_id.trim().is_empty() {
+        return Err(local_test_error(
+            "local main-token funding beneficiary cannot be empty",
+        ));
+    }
+    for (node_id, signing_key) in local_governance_finality_signing_keys() {
+        let expected = hex::encode(signing_key.verifying_key().to_bytes());
+        if world.node_identity_public_key(node_id.as_str()) != Some(expected.as_str()) {
+            return Err(local_test_error(format!(
+                "local finality signer identity is not the canonical DevLocal key: {node_id}"
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn ensure_local_finality_snapshot(world: &mut World, epoch_id: u64) -> Result<(), WorldError> {
     let signers = local_governance_finality_signing_keys();
     let signer_node_ids: Vec<String> = signers.iter().map(|(id, _)| id.clone()).collect();
@@ -922,6 +1130,15 @@ mod tests {
         let error = validate_local_test_config(&world, &config, &artifact())
             .expect_err("release profile must be rejected");
         assert!(format!("{error:?}").contains("DevLocal storage profile"));
+    }
+
+    #[test]
+    fn local_main_token_funding_rejects_production_world() {
+        let mut world = World::new_production_hardened();
+        let error = world
+            .initialize_local_test_main_token_funding(&config())
+            .expect_err("production world must reject local funding");
+        assert!(format!("{error:?}").contains("release security policy"));
     }
 
     #[test]

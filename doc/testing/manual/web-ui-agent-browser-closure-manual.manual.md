@@ -107,7 +107,10 @@ The chain process smoke is green only when status is `ok=true`, readiness is `re
 committed height advances to at least 3, and the persisted execution snapshot time matches
 that height. The local authority setup leaves the persisted world at baseline height 2, so
 the first real proposal is height 3; do not synthesize a height-2 record or reset the world
-clock. A subsequent restart should restore height 3 and advance to height 4. This process
+clock. A fresh DevLocal setup also applies the canonical 325 OC genesis and immediate vesting
+claim for `starter-agent-0` at that baseline without advancing the clock; reuse validates the
+immutable funding journal and does not refill a spent balance. A subsequent restart should
+restore height 3 and advance to height 4. This process
 smoke is separate from the focused Rust driver regression and is required before browser
 claims for ordinary starter completion.
 

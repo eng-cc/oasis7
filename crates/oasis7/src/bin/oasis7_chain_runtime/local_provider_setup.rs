@@ -92,6 +92,15 @@ pub(super) fn ensure_local_test_provider_authority(
                 authority_path.display()
             ));
         }
+        world
+            .validate_local_test_main_token_funding(
+                options.local_test_provider_agent_id.as_str(),
+            )
+            .map_err(|error| {
+                format!(
+                    "existing local execution world is missing canonical W3 starter funding; choose a fresh runtime root: {error:?}"
+                )
+            })?;
         return Ok(());
     }
 
@@ -154,11 +163,15 @@ pub(super) fn ensure_local_test_provider_authority(
             0,
         )
         .map_err(|error| format!("bind local Runtime cognition authority failed: {error:?}"))?;
+    let funding_config = config.clone();
     let provisioning = world
         .initialize_local_test_provider_authority(config, artifact)
         .map_err(|error| {
             format!("initialize local test authority through Runtime admission failed: {error:?}")
         })?;
+    world
+        .initialize_local_test_main_token_funding(&funding_config)
+        .map_err(|error| format!("initialize local W3 starter funding failed: {error:?}"))?;
 
     let world_config_hash = world.current_manifest_hash().map_err(|error| {
         format!("derive local test world manifest hash before persistence failed: {error:?}")
@@ -245,6 +258,7 @@ fn temporary_authority_path(path: &Path) -> PathBuf {
 mod tests {
     use super::*;
     use crate::cli::CliOptions;
+    use oasis7::runtime::{Action, DomainEvent, WorldEventBody};
 
     #[test]
     fn local_setup_persists_real_runtime_order_and_reuses_durable_bundle() {
@@ -284,7 +298,7 @@ mod tests {
             authority_bytes.as_slice(),
         )
         .expect("decode authority output");
-        let world = RuntimeWorld::load_from_dir(&world_dir).expect("load world");
+        let mut world = RuntimeWorld::load_from_dir(&world_dir).expect("load world");
         assert!(world.current_cognition_runtime_binding().is_ok());
         assert!(
             world
@@ -293,8 +307,98 @@ mod tests {
                 .contains_key("module.runtime.local-test-provider")
         );
         assert_eq!(authority.agent_id, options.local_test_provider_agent_id);
+        assert_eq!(
+            world.state().time,
+            2,
+            "funding must preserve baseline tick 2"
+        );
+        assert_eq!(world.main_token_config().initial_supply, 325);
+        assert_eq!(world.main_token_supply().total_supply, 325);
+        assert_eq!(world.main_token_supply().circulating_supply, 325);
+        assert_eq!(world.main_token_liquid_balance("starter-agent-0"), 325);
+        assert_eq!(
+            world.main_token_last_claim_nonce("starter-agent-0"),
+            Some(1)
+        );
+        let funding_events = world
+            .journal()
+            .events
+            .iter()
+            .filter_map(|event| match &event.body {
+                WorldEventBody::Domain(
+                    event @ (DomainEvent::MainTokenGenesisInitialized { .. }
+                    | DomainEvent::MainTokenVestingClaimed { .. }),
+                ) => Some(event),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert!(matches!(
+            funding_events.as_slice(),
+            [DomainEvent::MainTokenGenesisInitialized { total_supply: 325, allocations },
+                DomainEvent::MainTokenVestingClaimed {
+                    bucket_id,
+                    beneficiary,
+                    amount: 325,
+                    nonce: 1,
+                }]
+            if allocations.len() == 1
+                && allocations[0].bucket_id == "dev_local_w3_starter_vesting"
+                && allocations[0].ratio_bps == 10_000
+                && allocations[0].recipient == "starter-agent-0"
+                && allocations[0].cliff_epochs == 0
+                && allocations[0].linear_unlock_epochs == 0
+                && allocations[0].start_epoch == 0
+                && bucket_id == "dev_local_w3_starter_vesting"
+                && beneficiary == "starter-agent-0"
+        ));
+        assert_eq!(
+            world
+                .cognition_economy()
+                .expect("cognition economy")
+                .available_balance(
+                    options.local_test_provider_owner_binding.as_str(),
+                    "cognition_units"
+                ),
+            128,
+            "Builtin cognition allowance is independent from OC"
+        );
+        world.submit_action(Action::TransferMainToken {
+            from_account_id: "starter-agent-0".to_string(),
+            to_account_id: "local-test-recipient".to_string(),
+            amount: 325,
+            nonce: 1,
+            asset_id: Some("main_token".to_string()),
+            memo: Some("w3-local-post-spend-restart".to_string()),
+            chain_id: None,
+            network_id: None,
+            tx_version: None,
+            tx_type: None,
+            valid_until_unix_ms: None,
+            max_fee: None,
+            fee_asset_id: None,
+            application_payload_hash: None,
+            client_request_id: None,
+        });
+        world.step().expect("normal post-funding spend");
+        world
+            .save_to_dir(&world_dir)
+            .expect("persist post-spend world");
+        let restarted = RuntimeWorld::load_from_dir(&world_dir).expect("restart post-spend world");
+        assert_eq!(restarted.main_token_liquid_balance("starter-agent-0"), 0);
+        assert_eq!(
+            restarted.main_token_liquid_balance("local-test-recipient"),
+            325
+        );
+        let journal_len_after_spend = restarted.journal().events.len();
         ensure_local_test_provider_authority(&options, world_dir.as_path())
             .expect("durable setup should be idempotent");
+        let reused = RuntimeWorld::load_from_dir(&world_dir).expect("reload reused world");
+        assert_eq!(reused.journal().events.len(), journal_len_after_spend);
+        assert_eq!(reused.main_token_liquid_balance("starter-agent-0"), 0);
+        assert_eq!(
+            reused.main_token_liquid_balance("local-test-recipient"),
+            325
+        );
         let mut mismatched_options = options.clone();
         mismatched_options.local_test_provider_finality_block_hash =
             Some(format!("blake3:{}", "1".repeat(64)));
