@@ -1688,7 +1688,8 @@ def _direct_observe_node(
     listener_command = "ss -ltn"
     listener_output = _direct_ssh_call(target, known_hosts, listener_command, env, use_credential)
     observed_ports = set(re.findall(r":([0-9]{1,5})(?:\s|$)", listener_output))
-    if "LISTEN" in listener_output.upper() and ports.intersection(observed_ports):
+    canonical_listeners = sorted(ports.intersection(observed_ports))
+    if "LISTEN" in listener_output.upper() and canonical_listeners:
         fail(f"human_direct_ssh active listener detected for {canonical_role}")
     if set(service_value["listeners"]).intersection(ports):
         fail(f"human_direct_ssh service readback reports an active listener for {canonical_role}")
@@ -1705,7 +1706,11 @@ def _direct_observe_node(
         "service_readback_command": f"{SERVICE_READBACK_COMMAND} --role {request_role} --root {shlex.quote(root)} --service {shlex.quote(service)}",
         "readback_sha256": hashlib.sha256(
             json.dumps(
-                {"service": service_value, "process": process_output, "listeners": listener_output},
+                {
+                    "service": service_value,
+                    "stack_process_present": False,
+                    "canonical_listener_ports": canonical_listeners,
+                },
                 ensure_ascii=True,
                 sort_keys=True,
                 separators=(",", ":"),
