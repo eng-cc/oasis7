@@ -798,6 +798,7 @@ def check_design_prd_mapping(
 
 def check_active_topic_design_contract(
     root: Path,
+    head: str,
     path: str,
     text: str,
     errors: list[str],
@@ -825,7 +826,17 @@ def check_active_topic_design_contract(
         if expected_design not in linked_repository_paths(root, source, text, use_worktree_content):
             fail(errors, "missing-paired-design-link", path, expected_design)
             return
-        design_text = (root / expected_design).read_text(encoding="utf-8")
+        design_text = selected_target_text(
+            root,
+            head,
+            source,
+            root / expected_design,
+            text,
+            use_worktree_content,
+        )
+        if design_text is None:
+            fail(errors, "missing-paired-design-link", path, expected_design)
+            return
         design_identity = document_identity_text(
             "\n".join(line for _, line in visible_lines(design_text))
         )
@@ -1448,7 +1459,7 @@ def check_document(
             check_active_topic_cardinality(path, text, errors)
             check_active_topic_trace_tables(path, text, errors)
             if full_corpus:
-                check_active_topic_design_contract(root, path, text, errors, use_worktree_content)
+                check_active_topic_design_contract(root, head, path, text, errors, use_worktree_content)
     if not is_root_document and path.endswith(".design.md"):
         if not inactive_lifecycle:
             check_minimum_design_content(path, text, errors)

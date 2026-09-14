@@ -769,6 +769,19 @@ def scenario_active_topic_rejects_inactive_design() -> None:
         shutil.rmtree(root)
 
 
+def scenario_active_topic_rejects_missing_design_file() -> None:
+    root, _base, _head = make_repo()
+    try:
+        isolate_topic_full_corpus(root)
+        (root / DESIGN).unlink()
+        result = invoke_full_corpus(root)
+        output = result.stdout + result.stderr
+        assert result.returncode == 1, output
+        assert f"missing-paired-design-link: {TOPIC}" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
 def scenario_full_corpus_rejects_changed_range_arguments() -> None:
     root, base, head = make_repo()
     try:
@@ -1244,6 +1257,7 @@ def main() -> None:
     scenario_paired_trace_requires_authority_fragment()
     scenario_non_heading_relations_require_trace()
     scenario_active_topic_rejects_inactive_design()
+    scenario_active_topic_rejects_missing_design_file()
     scenario("req-missing-acceptance", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("- 验收：AC-SAMPLE-001\n", ""), encoding="utf-8"))
     scenario("ac-missing-requirement", lambda root: (root / TOPIC).write_text(TOPIC_TEXT.replace("- 覆盖要求：REQ-SAMPLE-001\n", ""), encoding="utf-8"))
     scenario("unresolved-id-reference", lambda root: (root / TOPIC).write_text(
