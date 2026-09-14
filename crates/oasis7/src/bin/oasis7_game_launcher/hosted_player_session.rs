@@ -14,6 +14,47 @@ pub(super) const HOSTED_PLAYER_SESSION_REFRESH_ROUTE: &str = "/api/public/player
 const ISSUE_WINDOW_MS: u64 = 60_000;
 const PENDING_REGISTRATION_TTL_MS: u64 = 30_000;
 const SLOT_LEASE_TTL_MS: u64 = 120_000;
+// Registration and runtime commits can straddle one snapshot; require a second
+// successful absence before presence reconciliation revokes a seen lease.
+const RUNTIME_MISSING_SNAPSHOT_CONFIRMATIONS: u8 = 2;
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub(super) struct HostedPlayerSessionReleaseTelemetry {
+    pub(super) reason_counts: BTreeMap<String, u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) last_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) last_release_unix_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) last_probe_sequence: Option<u64>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum SlotReleaseReason {
+    ExplicitRelease,
+    PendingExpiry,
+    SeenExpiry,
+    RuntimeAbsence,
+    Reissue,
+    PersistenceRollback,
+}
+
+impl SlotReleaseReason {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::ExplicitRelease => "explicit_release",
+            Self::PendingExpiry => "pending_expiry",
+            Self::SeenExpiry => "seen_expiry",
+            Self::RuntimeAbsence => "runtime_absence",
+            Self::Reissue => "reissue",
+            Self::PersistenceRollback => "persistence_rollback",
+        }
+    }
+
+    fn marks_runtime_revoked(self) -> bool {
+        matches!(self, Self::RuntimeAbsence | Self::Reissue)
+    }
+}
 
 #[derive(Debug, Clone, Serialize)]
 pub(super) struct HostedPlayerSessionAdmissionSnapshot {
@@ -34,6 +75,8 @@ pub(super) struct HostedPlayerSessionAdmissionSnapshot {
     pub(super) released_players_total: u64,
     pub(super) issued_in_current_window: u64,
     pub(super) remaining_issue_budget: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) release_telemetry: Option<HostedPlayerSessionReleaseTelemetry>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -92,6 +135,8 @@ struct HostedPlayerSessionLedger {
     issued_players_total: u64,
     released_players_total: u64,
     issue_timestamps_unix_ms: VecDeque<u64>,
+    #[serde(default)]
+    release_telemetry: HostedPlayerSessionReleaseTelemetry,
     active_release_tokens_by_player: BTreeMap<String, String>,
     active_players_by_release_token: BTreeMap<String, String>,
     last_seen_unix_ms_by_release_token: BTreeMap<String, u64>,
@@ -105,14 +150,17 @@ pub(super) struct HostedPlayerSessionIssuer {
     issued_players_total: u64,
     released_players_total: u64,
     issue_timestamps_unix_ms: VecDeque<u64>,
+    release_telemetry: HostedPlayerSessionReleaseTelemetry,
     active_release_tokens_by_player: BTreeMap<String, String>,
     active_players_by_release_token: BTreeMap<String, String>,
     last_seen_unix_ms_by_release_token: BTreeMap<String, u64>,
     last_observed_runtime_bound_player_sessions: u64,
     last_runtime_probe_unix_ms: Option<u64>,
     last_runtime_probe_error: Option<String>,
+    last_runtime_probe_sequence: Option<u64>,
     last_runtime_active_players: BTreeSet<String>,
     runtime_seen_players: BTreeSet<String>,
+    runtime_missing_snapshot_counts: BTreeMap<String, u8>,
     runtime_revoked_players: BTreeSet<String>,
     ledger_path: Option<PathBuf>,
 }
@@ -132,6 +180,7 @@ impl HostedPlayerSessionIssuer {
             issued_players_total: ledger.issued_players_total,
             released_players_total: ledger.released_players_total,
             issue_timestamps_unix_ms: ledger.issue_timestamps_unix_ms,
+            release_telemetry: ledger.release_telemetry,
             active_release_tokens_by_player: ledger.active_release_tokens_by_player,
             active_players_by_release_token: ledger.active_players_by_release_token,
             last_seen_unix_ms_by_release_token: ledger.last_seen_unix_ms_by_release_token,
@@ -155,6 +204,7 @@ impl HostedPlayerSessionIssuer {
             issued_players_total: self.issued_players_total,
             released_players_total: self.released_players_total,
             issue_timestamps_unix_ms: self.issue_timestamps_unix_ms.clone(),
+            release_telemetry: self.release_telemetry.clone(),
             active_release_tokens_by_player: self.active_release_tokens_by_player.clone(),
             active_players_by_release_token: self.active_players_by_release_token.clone(),
             last_seen_unix_ms_by_release_token: self.last_seen_unix_ms_by_release_token.clone(),
@@ -168,6 +218,24 @@ impl HostedPlayerSessionIssuer {
     where
         I: IntoIterator<Item = &'a str>,
     {
+        let probe_sequence = self
+            .last_runtime_probe_sequence
+            .unwrap_or_default()
+            .saturating_add(1);
+        self.observe_runtime_active_players_for_probe(probe_sequence, active_players);
+    }
+
+    pub(super) fn observe_runtime_active_players_for_probe<'a, I>(
+        &mut self,
+        probe_sequence: u64,
+        active_players: I,
+    ) where
+        I: IntoIterator<Item = &'a str>,
+    {
+        if self.last_runtime_probe_sequence == Some(probe_sequence) {
+            return;
+        }
+        self.last_runtime_probe_sequence = Some(probe_sequence);
         self.prune_old_timestamps();
         let runtime_active_players: BTreeSet<String> = active_players
             .into_iter()
@@ -186,6 +254,7 @@ impl HostedPlayerSessionIssuer {
                 self.active_release_tokens_by_player.get(player_id).cloned()
             {
                 self.runtime_seen_players.insert(player_id.clone());
+                self.runtime_missing_snapshot_counts.remove(player_id);
                 self.runtime_revoked_players.remove(player_id);
                 self.last_seen_unix_ms_by_release_token
                     .insert(release_token, observed_at_unix_ms);
@@ -193,6 +262,17 @@ impl HostedPlayerSessionIssuer {
         }
         self.prune_expired_slots();
 
+        for player_id in self.runtime_seen_players.iter().filter(|player_id| {
+            self.active_release_tokens_by_player
+                .contains_key(player_id.as_str())
+                && !runtime_active_players.contains(player_id.as_str())
+        }) {
+            let count = self
+                .runtime_missing_snapshot_counts
+                .entry(player_id.clone())
+                .or_default();
+            *count = count.saturating_add(1);
+        }
         let stale_players: Vec<String> = self
             .runtime_seen_players
             .iter()
@@ -200,16 +280,27 @@ impl HostedPlayerSessionIssuer {
                 self.active_release_tokens_by_player
                     .contains_key(player_id.as_str())
                     && !runtime_active_players.contains(player_id.as_str())
+                    && self
+                        .runtime_missing_snapshot_counts
+                        .get(player_id.as_str())
+                        .copied()
+                        .unwrap_or_default()
+                        >= RUNTIME_MISSING_SNAPSHOT_CONFIRMATIONS
             })
             .cloned()
             .collect();
         for player_id in stale_players {
-            let _ = self.release_slot_for_player(player_id.as_str(), true);
+            let _ = self.release_slot_for_player_with_reason(
+                player_id.as_str(),
+                SlotReleaseReason::RuntimeAbsence,
+                Some(probe_sequence),
+            );
         }
         let _ = self.persist_ledger();
     }
 
     pub(super) fn record_runtime_probe_failure(&mut self, error: String) {
+        self.runtime_missing_snapshot_counts.clear();
         self.last_runtime_probe_unix_ms = Some(now_unix_ms());
         self.last_runtime_probe_error = Some(error);
     }
@@ -464,7 +555,11 @@ impl HostedPlayerSessionIssuer {
             .filter(|value| !value.is_empty())
             .map(ToOwned::to_owned)
             .unwrap_or_else(|| build_player_id(issued_at_unix_ms, self.next_sequence));
-        let _ = self.release_slot_for_player(player_id.as_str(), true);
+        let _ = self.release_slot_for_player_with_reason(
+            player_id.as_str(),
+            SlotReleaseReason::Reissue,
+            None,
+        );
         admission = self.admission_snapshot(
             contract.admission.issue_rate_limit_per_minute,
             contract.admission.max_player_sessions,
@@ -545,7 +640,11 @@ impl HostedPlayerSessionIssuer {
         self.runtime_seen_players.remove(player_id.as_str());
         self.runtime_revoked_players.remove(player_id.as_str());
         if let Err(error) = self.persist_ledger() {
-            let _ = self.release_slot_for_player(player_id.as_str(), false);
+            let _ = self.release_slot_for_player_with_reason(
+                player_id.as_str(),
+                SlotReleaseReason::PersistenceRollback,
+                None,
+            );
             return HostedPlayerSessionIssueResponse {
                 ok: false,
                 error_code: Some("session_ledger_persist_failed".to_string()),
@@ -659,7 +758,11 @@ impl HostedPlayerSessionIssuer {
                 admission,
             };
         }
-        let _ = self.release_slot_for_player(bound_player_id.as_str(), false);
+        let _ = self.release_slot_for_player_with_reason(
+            bound_player_id.as_str(),
+            SlotReleaseReason::ExplicitRelease,
+            None,
+        );
         if let Err(error) = self.persist_ledger() {
             return HostedPlayerSessionReleaseResponse {
                 ok: false,
@@ -700,7 +803,7 @@ impl HostedPlayerSessionIssuer {
         let mut expired_tokens = Vec::new();
         for (token, last_seen) in &self.last_seen_unix_ms_by_release_token {
             let Some(player_id) = self.active_players_by_release_token.get(token.as_str()) else {
-                expired_tokens.push(token.clone());
+                expired_tokens.push((token.clone(), SlotReleaseReason::PendingExpiry));
                 continue;
             };
             // A failed presence probe cannot establish that a pending player
@@ -715,23 +818,40 @@ impl HostedPlayerSessionIssuer {
                 PENDING_REGISTRATION_TTL_MS
             };
             if now_unix_ms.saturating_sub(*last_seen) > ttl_ms {
-                expired_tokens.push(token.clone());
+                let reason = if self.runtime_seen_players.contains(player_id.as_str()) {
+                    SlotReleaseReason::SeenExpiry
+                } else {
+                    SlotReleaseReason::PendingExpiry
+                };
+                expired_tokens.push((token.clone(), reason));
             }
         }
-        for token in expired_tokens {
+        let had_expired_tokens = !expired_tokens.is_empty();
+        for (token, reason) in expired_tokens {
             if let Some(player_id) = self.active_players_by_release_token.remove(token.as_str()) {
                 self.active_release_tokens_by_player
                     .remove(player_id.as_str());
                 self.runtime_seen_players.remove(player_id.as_str());
+                self.runtime_missing_snapshot_counts
+                    .remove(player_id.as_str());
                 self.runtime_revoked_players.remove(player_id.as_str());
                 self.released_players_total = self.released_players_total.saturating_add(1);
+                self.record_release(reason, None);
             }
             self.last_seen_unix_ms_by_release_token
                 .remove(token.as_str());
         }
+        if had_expired_tokens {
+            let _ = self.persist_ledger();
+        }
     }
 
-    fn release_slot_for_player(&mut self, player_id: &str, runtime_revoked: bool) -> bool {
+    fn release_slot_for_player_with_reason(
+        &mut self,
+        player_id: &str,
+        reason: SlotReleaseReason,
+        probe_sequence: Option<u64>,
+    ) -> bool {
         let player_id = player_id.trim();
         let Some(token) = self.active_release_tokens_by_player.remove(player_id) else {
             return false;
@@ -740,13 +860,27 @@ impl HostedPlayerSessionIssuer {
         self.last_seen_unix_ms_by_release_token
             .remove(token.as_str());
         self.runtime_seen_players.remove(player_id);
-        if runtime_revoked {
+        self.runtime_missing_snapshot_counts.remove(player_id);
+        if reason.marks_runtime_revoked() {
             self.runtime_revoked_players.insert(player_id.to_string());
         } else {
             self.runtime_revoked_players.remove(player_id);
         }
         self.released_players_total = self.released_players_total.saturating_add(1);
+        self.record_release(reason, probe_sequence);
         true
+    }
+
+    fn record_release(&mut self, reason: SlotReleaseReason, probe_sequence: Option<u64>) {
+        let reason_name = reason.as_str().to_string();
+        self.release_telemetry
+            .reason_counts
+            .entry(reason_name.clone())
+            .and_modify(|count| *count = count.saturating_add(1))
+            .or_insert(1);
+        self.release_telemetry.last_reason = Some(reason_name);
+        self.release_telemetry.last_release_unix_ms = Some(now_unix_ms());
+        self.release_telemetry.last_probe_sequence = probe_sequence;
     }
 
     fn admission_snapshot(
@@ -791,6 +925,8 @@ impl HostedPlayerSessionIssuer {
             issued_in_current_window,
             remaining_issue_budget: issue_rate_limit_per_minute
                 .saturating_sub(issued_in_current_window),
+            release_telemetry: (!self.release_telemetry.reason_counts.is_empty())
+                .then(|| self.release_telemetry.clone()),
         }
     }
 }

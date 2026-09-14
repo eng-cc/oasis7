@@ -14,7 +14,7 @@ use super::hosted_strong_auth::{
     HOSTED_PROMPT_CONTROL_STRONG_AUTH_GRANT_ROUTE, HOSTED_STRONG_AUTH_GRANT_ROUTE,
     HostedStrongAuthGrantResponse, issue_hosted_strong_auth_grant,
 };
-use super::runtime_presence::query_runtime_bound_players;
+use super::runtime_presence::query_runtime_bound_players_with_probe_sequence;
 use super::*;
 use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
@@ -420,13 +420,16 @@ fn reconcile_hosted_runtime_presence(
     live_bind: &str,
     hosted_session_issuer: &Arc<Mutex<HostedPlayerSessionIssuer>>,
 ) {
-    let probe_result = query_runtime_bound_players(live_bind);
+    let probe_result = query_runtime_bound_players_with_probe_sequence(live_bind);
     let Ok(mut issuer) = hosted_session_issuer.lock() else {
         return;
     };
     match probe_result {
-        Ok(active_players) => {
-            issuer.observe_runtime_active_players(active_players.iter().map(String::as_str));
+        Ok((probe_sequence, active_players)) => {
+            issuer.observe_runtime_active_players_for_probe(
+                probe_sequence,
+                active_players.iter().map(String::as_str),
+            );
         }
         Err(err) => issuer.record_runtime_probe_failure(err),
     }

@@ -3,6 +3,7 @@ use super::*;
 use oasis7::simulator::WorldSnapshot;
 use oasis7::viewer::{VIEWER_PROTOCOL_VERSION, ViewerRequest, ViewerResponse};
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 // Runtime snapshots in the hosted W3 world are approximately 400 KiB and
 // are produced behind the live runtime lock. The observed commit path takes
@@ -10,6 +11,7 @@ use std::collections::BTreeMap;
 const HOSTED_SESSION_RUNTIME_PROBE_TIMEOUT_MS: u64 = 2_000;
 const HOSTED_SESSION_RUNTIME_PROBE_INTERVAL_MS: u64 = 1_000;
 const RUNTIME_PRESENCE_PROBE_CLIENT: &str = "oasis7_game_launcher_hosted_session_probe";
+static NEXT_RUNTIME_PRESENCE_PROBE_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 pub(super) fn run_runtime_presence_monitor(
     stop_requested: Arc<AtomicBool>,
@@ -25,13 +27,22 @@ pub(super) fn run_runtime_presence_monitor(
 }
 
 pub(super) fn query_runtime_bound_players(live_bind: &str) -> Result<BTreeSet<String>, String> {
+    query_runtime_bound_players_with_probe_sequence(live_bind).map(|(_, players)| players)
+}
+
+pub(super) fn query_runtime_bound_players_with_probe_sequence(
+    live_bind: &str,
+) -> Result<(u64, BTreeSet<String>), String> {
+    let probe_sequence = NEXT_RUNTIME_PRESENCE_PROBE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
     let mut client = ViewerRuntimeProbeClient::connect(
         live_bind,
         Duration::from_millis(HOSTED_SESSION_RUNTIME_PROBE_TIMEOUT_MS),
         RUNTIME_PRESENCE_PROBE_CLIENT,
     )?;
     client.request_snapshot()?;
-    client.wait_for_snapshot()
+    client
+        .wait_for_snapshot()
+        .map(|players| (probe_sequence, players))
 }
 
 fn run_runtime_presence_monitor_with_interval(
@@ -42,9 +53,13 @@ fn run_runtime_presence_monitor_with_interval(
 ) {
     while !stop_requested.load(Ordering::SeqCst) {
         let probe_started_at = Instant::now();
-        match query_runtime_bound_players(live_bind.as_str()) {
-            Ok(active_players) => {
-                observe_runtime_presence_snapshot(&hosted_session_issuer, &active_players);
+        match query_runtime_bound_players_with_probe_sequence(live_bind.as_str()) {
+            Ok((probe_sequence, active_players)) => {
+                observe_runtime_presence_snapshot(
+                    &hosted_session_issuer,
+                    probe_sequence,
+                    &active_players,
+                );
             }
             Err(err) => {
                 if let Ok(mut issuer) = hosted_session_issuer.lock() {
@@ -58,10 +73,14 @@ fn run_runtime_presence_monitor_with_interval(
 
 fn observe_runtime_presence_snapshot(
     hosted_session_issuer: &Arc<Mutex<HostedPlayerSessionIssuer>>,
+    probe_sequence: u64,
     active_players: &BTreeSet<String>,
 ) {
     if let Ok(mut issuer) = hosted_session_issuer.lock() {
-        issuer.observe_runtime_active_players(active_players.iter().map(String::as_str));
+        issuer.observe_runtime_active_players_for_probe(
+            probe_sequence,
+            active_players.iter().map(String::as_str),
+        );
     }
 }
 
