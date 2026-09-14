@@ -352,7 +352,7 @@ function resetHostedLoginChallenge() {
   resetHostedLoginChallengeState(state.hostedLogin);
 }
 
-const { start: startHostedTestLogin } = createViewerHostedTestLoginModule({ clone, fetchImpl: (...args) => fetch(...args), generateEphemeralEd25519Keypair, getSearchParams, isHostedPublicJoinDeploymentMode, persistHostedPlayerSession, render, resetHostedLoginChallenge, route: HOSTED_ACCOUNT_TEST_LOGIN_ROUTE, state });
+const { start: startHostedTestLogin, waitForStart: waitForHostedTestLogin } = createViewerHostedTestLoginModule({ clone, fetchImpl: (...args) => fetch(...args), generateEphemeralEd25519Keypair, getSearchParams, isHostedPublicJoinDeploymentMode, persistHostedPlayerSession, render, resetHostedLoginChallenge, route: HOSTED_ACCOUNT_TEST_LOGIN_ROUTE, state });
 
 async function ensureHostedAuthSigningKey(auth = state.auth) {
   if (!auth?.available || auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
@@ -2378,6 +2378,7 @@ function recoveryErrorRequiresExplicitRebind(error) {
 }
 
 async function ensureRegisteredPlayerSession(requestedAgentId = null, options = {}) {
+  await waitForHostedTestLogin();
   await ensureHostedPlayerAuthAvailable();
   if (!state.auth.available) {
     throw new Error(state.auth.error || "player session auth is unavailable");

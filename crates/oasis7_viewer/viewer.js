@@ -3120,11 +3120,12 @@ function createViewerHostedTestLoginModule({
   route,
   state: state2
 }) {
+  let startInFlightPromise = null;
   function isOptedIn() {
     const value2 = String(getSearchParams2().get("hosted_test_login") || "").trim().toLowerCase();
     return value2 === "1" || value2 === "true" || value2 === "yes" || value2 === "on";
   }
-  async function start() {
+  async function startOnce() {
     if (!isOptedIn() || !isHostedPublicJoinDeploymentMode2(state2.hostedAccess?.deployment_mode) || state2.auth.available) {
       return { ok: false, reason: "hosted test login is unavailable on this lane" };
     }
@@ -3195,7 +3196,27 @@ function createViewerHostedTestLoginModule({
       return { ok: false, reason: state2.hostedLogin.error };
     }
   }
-  return { isOptedIn, start };
+  function start() {
+    if (!startInFlightPromise) {
+      startInFlightPromise = startOnce();
+      void startInFlightPromise.then(
+        () => {
+          startInFlightPromise = null;
+        },
+        () => {
+          startInFlightPromise = null;
+        }
+      );
+    }
+    return startInFlightPromise;
+  }
+  async function waitForStart() {
+    if (startInFlightPromise) {
+      await startInFlightPromise;
+    }
+    return state2.auth;
+  }
+  return { isOptedIn, start, waitForStart };
 }
 const CURRENT_WORLD_FEED_STATUSES = /* @__PURE__ */ new Set(["ready", "replay", "empty"]);
 const AGENT_CHAT_AUTHORITY_SCOPE = "player_agent_chat";
@@ -6517,7 +6538,7 @@ const {
 function resetHostedLoginChallenge() {
   resetHostedLoginChallenge$1(state.hostedLogin);
 }
-const { start: startHostedTestLogin } = createViewerHostedTestLoginModule({ clone, fetchImpl: (...args) => fetch(...args), generateEphemeralEd25519Keypair, getSearchParams, isHostedPublicJoinDeploymentMode, persistHostedPlayerSession, render, resetHostedLoginChallenge, route: HOSTED_ACCOUNT_TEST_LOGIN_ROUTE, state });
+const { start: startHostedTestLogin, waitForStart: waitForHostedTestLogin } = createViewerHostedTestLoginModule({ clone, fetchImpl: (...args) => fetch(...args), generateEphemeralEd25519Keypair, getSearchParams, isHostedPublicJoinDeploymentMode, persistHostedPlayerSession, render, resetHostedLoginChallenge, route: HOSTED_ACCOUNT_TEST_LOGIN_ROUTE, state });
 async function ensureHostedAuthSigningKey(auth = state.auth) {
   if (!auth?.available || auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
     return auth;
@@ -8385,6 +8406,7 @@ function recoveryErrorRequiresExplicitRebind(error) {
   return message.includes("explicit rebind required") || /^agent\s+\S+\s+is bound to player\s+\S+,\s+not\s+\S+/.test(message);
 }
 async function ensureRegisteredPlayerSession(requestedAgentId = null, options = {}) {
+  await waitForHostedTestLogin();
   await ensureHostedPlayerAuthAvailable();
   if (!state.auth.available) {
     throw new Error(state.auth.error || "player session auth is unavailable");

@@ -1082,5 +1082,8 @@ fn open_browser(url: &str) -> Result<(), String> {
 }
 
 #[cfg(test)]
+#[path = "oasis7_game_launcher/launcher_visibility_policy_tests.rs"]
+mod launcher_visibility_policy_tests;
+#[cfg(test)]
 #[path = "oasis7_game_launcher/oasis7_game_launcher_tests.rs"]
 mod oasis7_game_launcher_tests;

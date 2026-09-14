@@ -10,12 +10,14 @@ export function createViewerHostedTestLoginModule({
   route,
   state,
 }) {
+  let startInFlightPromise = null;
+
   function isOptedIn() {
     const value = String(getSearchParams().get("hosted_test_login") || "").trim().toLowerCase();
     return value === "1" || value === "true" || value === "yes" || value === "on";
   }
 
-  async function start() {
+  async function startOnce() {
     if (
       !isOptedIn()
       || !isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)
@@ -98,5 +100,27 @@ export function createViewerHostedTestLoginModule({
     }
   }
 
-  return { isOptedIn, start };
+  function start() {
+    if (!startInFlightPromise) {
+      startInFlightPromise = startOnce();
+      void startInFlightPromise.then(
+        () => {
+          startInFlightPromise = null;
+        },
+        () => {
+          startInFlightPromise = null;
+        },
+      );
+    }
+    return startInFlightPromise;
+  }
+
+  async function waitForStart() {
+    if (startInFlightPromise) {
+      await startInFlightPromise;
+    }
+    return state.auth;
+  }
+
+  return { isOptedIn, start, waitForStart };
 }
