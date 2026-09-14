@@ -80,6 +80,13 @@ export function createViewerPromptFeedbackModule({ feedbackBadgeClass, isLocaleZ
       return nextStep.replaceAll("_", " ");
     }
     const status = String(response?.status || "").trim().toLowerCase();
+    const reasonCode = String(response?.reason_code || response?.code || "").trim().toLowerCase();
+    if (reasonCode === "request_id_conflict") {
+      return nextStepLabels.refresh_authority_and_retry_with_new_request_id;
+    }
+    if (reasonCode === "version_conflict") {
+      return nextStepLabels.refresh_version_and_retry;
+    }
     if (status === "stale") {
       return nextStepLabels.refresh_version_and_retry;
     }

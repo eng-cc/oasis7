@@ -153,6 +153,81 @@ afterEach(() => {
 });
 
 describe("viewer prompt control protocol", () => {
+  it("projects a stale chat authority refusal and clears it after binding recovery", async () => {
+    const { core, sockets } = await setupConnectedSemanticCore();
+    core.state.auth.releaseToken = "release-token-must-survive";
+    core.state.auth.sessionEpoch = 12;
+    core.state.auth.bindingEpoch = 9;
+
+    sockets[0].receive({
+      type: "agent_chat_error",
+      error: {
+        code: "agent_control_forbidden",
+        agent_id: "agent-0",
+        message: "internal stale authority detail",
+        player_id: "player-secret",
+        binding_epoch: 8,
+      },
+    });
+
+    expect(core.state.auth.controlLostAgentId).toBe("agent-0");
+    expect(core.state.auth.available).toBe(true);
+    expect(core.state.auth.releaseToken).toBe("release-token-must-survive");
+    expect(core.state.auth.sessionEpoch).toBeNull();
+    expect(core.state.auth.bindingEpoch).toBeNull();
+    expect(core.state.auth.runtimeStatus).toBe("control_lost");
+    expect(core.state.lastChatFeedback.response).toEqual(expect.objectContaining({
+      status: "blocked",
+      value_visibility: "hidden",
+      reason_code: "control_lost",
+      next_step: "reauthenticate_and_refresh_binding",
+    }));
+    expect(JSON.stringify(core.getState().lastChatFeedback)).not.toContain("internal stale authority detail");
+    expect(core.sendAgentChat("agent-0", "retry after stale authority")).toEqual(expect.objectContaining({ ok: false }));
+
+    sockets[0].receive({
+      type: "authoritative_recovery_ack",
+      ack: {
+        status: "session_registered",
+        player_id: "local-test-player-bound",
+        session_pubkey: "abcdef0123456789abcdef0123456789",
+        agent_id: "agent-0",
+        session_epoch: 13,
+        binding_epoch: 10,
+      },
+    });
+    expect(core.state.auth.controlLostAgentId).toBeNull();
+    expect(core.state.auth.sessionEpoch).toBe(13);
+    expect(core.state.auth.bindingEpoch).toBe(10);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("maps real prompt-control conflict receipts to safe retry guidance", async () => {
+    const { core, sockets } = await setupConnectedSemanticCore();
+    sockets[0].receive({
+      type: "prompt_control_error",
+      error: {
+        request_id: "pc-replay",
+        reason_code: "request_id_conflict",
+        message: "request identity was already used for another operation",
+      },
+    });
+    expect(core.state.lastPromptFeedback.stage).toBe("rejected");
+    expect(core.describeSemanticFeedback(core.state.lastPromptFeedback, "en").detail)
+      .toContain("Refresh authority, then retry with a new request id");
+
+    sockets[0].receive({
+      type: "prompt_control_error",
+      error: {
+        request_id: "pc-version",
+        reason_code: "version_conflict",
+        message: "prompt version is stale",
+      },
+    });
+    expect(core.state.lastPromptFeedback.stage).toBe("stale");
+    expect(core.describeSemanticFeedback(core.state.lastPromptFeedback, "en").detail)
+      .toContain("Refresh the current version, keep the draft, and re-edit before retrying");
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("consumes the enhanced prompt-control handshake, epochs, and request identity", async () => {
     const { core, sockets, sentMessages } = await setupConnectedSemanticCore();
     expect(sentMessages[0]).toEqual({

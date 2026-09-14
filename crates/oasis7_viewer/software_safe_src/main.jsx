@@ -489,7 +489,6 @@ function InlineHelpTip(props) {
     </div>
   );
 }
-
 function FeedbackCard(props) {
   const feedbackStage = () => normalizedFeedbackStage(props.feedbackStage);
   return (
@@ -513,6 +512,7 @@ function FeedbackCard(props) {
       <Show when={props.feedback}>
         <DiagnosticDetails value={props.feedback} />
       </Show>
+      <Show when={props.recoveryAction && props.display.code === "control_lost"}><div class="toolbar" data-control-loss-recovery="binding"><button type="button" data-testid="control-loss-recovery" onClick={props.recoveryAction}>{props.recoveryLabel}</button></div></Show>
     </div>
   );
 }
@@ -3486,7 +3486,7 @@ function InteractionPanel() {
           </button>
         </div>
         <Show when={chatFeedback()} fallback={<EmptyState>{tr(locale(), "还没有聊天反馈。", "No chat feedback yet.")}</EmptyState>}>
-          {(feedback) => <FeedbackCard feedback={feedback()} display={chatFeedbackDisplay()} />}
+          {(feedback) => <FeedbackCard feedback={feedback()} display={chatFeedbackDisplay()} recoveryAction={() => void core.refreshPromptControlBinding()} recoveryLabel={tr(locale(), "刷新权限与 Agent 绑定", "Refresh authority and Agent binding")} />}
         </Show>
         <div>
           <div class="panel__title panel__title--spaced">{tr(locale(), "消息流", "Message Flow")}</div>

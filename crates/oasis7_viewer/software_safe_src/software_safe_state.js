@@ -104,6 +104,7 @@ export function createSoftwareSafeState() {
       syncInFlight: false,
       runtimeStatus: "guest",
       boundAgentId: null,
+      controlLostAgentId: null,
       pendingRequestedAgentId: null,
       pendingForceRebind: false,
       rebindNotice: null,

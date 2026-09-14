@@ -13,6 +13,7 @@ export function createViewerPromptControlModule({
   ensureRegisteredPlayerSession,
   nextRequestId,
   nextAuthNonce,
+  onControlLost,
   render,
   requestSnapshotSafe,
   selectedAgentId,
@@ -252,18 +253,32 @@ export function createViewerPromptControlModule({
 
   function handleError(error) {
     clearPendingPromptControlAckTimer();
+    const controlLost = String(error?.code || error?.reason_code || "").trim().toLowerCase() === "agent_control_forbidden"
+      || String(error?.code || error?.reason_code || "").trim().toLowerCase() === "control_lost";
     const feedback = state.lastPromptFeedback || createSemanticFeedback("prompt", "prompt_error", error?.agent_id || selectedAgentId());
     const status = String(error?.status || "").trim().toLowerCase();
+    const reasonCode = String(error?.reason_code || error?.code || "").trim().toLowerCase();
     const hidden = String(error?.value_visibility || "").trim().toLowerCase() === "hidden";
     const enhanced = !!status || !!error?.request_id || !!error?.reason_code || hidden;
-    const normalizedStatus = PROMPT_RESULT_STATUSES.has(status) ? status : enhanced && hidden ? "blocked" : "error";
+    const normalizedStatus = PROMPT_RESULT_STATUSES.has(status)
+      ? status
+      : reasonCode === "version_conflict"
+        ? "stale"
+      : reasonCode === "request_id_conflict"
+        ? "rejected"
+        : controlLost || (enhanced && hidden) ? "blocked" : "error";
     feedback.stage = normalizedStatus;
     feedback.ok = normalizedStatus === "accepted" || normalizedStatus === "applied";
     feedback.accepted = feedback.ok;
     feedback.reason = error?.reason_code || error?.code || error?.message || "prompt control failed";
     feedback.effect = enhanced ? `prompt ${normalizedStatus}` : error?.code || "prompt control error";
     if (error?.request_id) feedback.requestId = error.request_id;
-    feedback.response = clone(error);
+    feedback.response = controlLost && onControlLost
+      ? onControlLost(error?.agent_id || feedback.agentId || selectedAgentId())
+      : clone(error);
+    if (feedback.response && !feedback.response.status && ["stale", "rejected"].includes(normalizedStatus)) {
+      feedback.response.status = normalizedStatus;
+    }
     state.lastPromptFeedback = feedback;
   }
 

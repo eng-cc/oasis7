@@ -6,6 +6,7 @@ import { createViewerAgentChatAuthModule } from "./viewer_agent_chat_auth_module
 import { createViewerHostedSessionRefreshModule } from "./viewer_hosted_session_refresh_module.js";
 import { createViewerHostedSessionReconnectModule } from "./viewer_hosted_session_reconnect_module.js";
 import { createViewerPromptControlModule } from "./viewer_prompt_control_module.js";
+import { createViewerControlLossModule } from "./viewer_control_loss_module.js";
 import { resetHostedLoginChallenge as resetHostedLoginChallengeState } from "./viewer_hosted_login_state_module.js";
 import { createViewerLocalePreferencesModule } from "./viewer_locale_preferences_module.js";
 import { createViewerBrowserPersistenceModule } from "./viewer_browser_persistence_module.js";
@@ -74,6 +75,7 @@ let firstAgentClaimAutoRefreshTimer = null;
 let requestId = 0;
 let authNonceCounter = 0;
 let viewerPromptControlModule = null;
+let viewerControlLossModule = null;
 let semanticSendLoop = null;
 const pendingControlFeedback = new Map();
 const pendingSemanticCommands = [];
@@ -219,7 +221,6 @@ function normalizeU64Display(value) {
   }
   return /^\d+$/.test(text) ? text : `invalid_u64(${text})`;
 }
-
 function normalizeFiniteNumber(value) {
   if (value == null) {
     return null;
@@ -227,7 +228,6 @@ function normalizeFiniteNumber(value) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
 }
-
 function finitePositionComponents(pos) {
   if (!pos || typeof pos !== "object") {
     return null;
@@ -240,7 +240,6 @@ function finitePositionComponents(pos) {
   }
   return { x, y, z };
 }
-
 function trimFixed(value, digits) {
   if (!Number.isFinite(value)) {
     return null;
@@ -248,7 +247,6 @@ function trimFixed(value, digits) {
   const fixed = value.toFixed(digits);
   return fixed.replace(/\.0+$/, "").replace(/(\.\d*[1-9])0+$/, "$1");
 }
-
 const {
   formatPhysicalDistanceCm,
   formatWorldPositionCm,
@@ -266,7 +264,6 @@ const {
   softwareSafeRenderModeAlias: SOFTWARE_SAFE_RENDER_MODE_ALIAS,
   viewerRenderMode: VIEWER_RENDER_MODE,
 });
-
 const {
   authDeploymentHint,
   buildAuthSurfaceModel,
@@ -281,7 +278,6 @@ const {
   state,
   windowRef: window,
 });
-
 const {
   buildGameplaySummary,
   describePromptVersionState,
@@ -297,12 +293,10 @@ const {
   localeText,
   state,
 });
-
 function initialWsUrl() {
   const params = getSearchParams();
   return normalizeWsAddr(params.get("ws") || params.get("addr") || DEFAULT_WS_ADDR);
 }
-
 const {
   chatHistoryStorageKey,
   hydrateChatHistoryFromStorage,
@@ -321,17 +315,14 @@ const {
   state,
   windowRef: window,
 });
-
 function shouldConnectViewerWs() {
   const mode = String(getSearchParams().get("connect") || "").trim().toLowerCase();
   return mode !== "0" && mode !== "false" && mode !== "off";
 }
-
 function shouldRunHostedBootstrap() {
   const mode = String(getSearchParams().get("hosted_bootstrap") || "").trim().toLowerCase();
   return mode !== "0" && mode !== "false" && mode !== "off";
 }
-
 const {
   authHasSigningKeyMaterial,
   clearHostedPlayerSession,
@@ -347,13 +338,10 @@ const {
   viewerPlayerIdKey: VIEWER_PLAYER_ID_KEY,
   windowRef: window,
 });
-
 function resetHostedLoginChallenge() {
   resetHostedLoginChallengeState(state.hostedLogin);
 }
-
 const { start: startHostedTestLogin, waitForStart: waitForHostedTestLogin } = createViewerHostedTestLoginModule({ clone, fetchImpl: (...args) => fetch(...args), generateEphemeralEd25519Keypair, getSearchParams, isHostedPublicJoinDeploymentMode, persistHostedPlayerSession, render, resetHostedLoginChallenge, route: HOSTED_ACCOUNT_TEST_LOGIN_ROUTE, state });
-
 async function ensureHostedAuthSigningKey(auth = state.auth) {
   if (!auth?.available || auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
     return auth;
@@ -374,7 +362,6 @@ async function ensureHostedAuthSigningKey(auth = state.auth) {
   persistHostedPlayerSession(auth);
   return auth;
 }
-
 async function refreshHostedAdmissionState() {
   if (!isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)) {
     state.hostedAdmission = null;
@@ -393,7 +380,6 @@ async function refreshHostedAdmissionState() {
     return state.hostedAdmission;
   }
 }
-
 const { refreshHostedPlayerLease } = createViewerHostedSessionRefreshModule({
   clone,
   ensureHostedAuthSigningKey,
@@ -403,7 +389,6 @@ const { refreshHostedPlayerLease } = createViewerHostedSessionRefreshModule({
   refreshRoute: HOSTED_PLAYER_SESSION_REFRESH_ROUTE,
   state,
 });
-
 function stopHostedSessionRefreshLoop() {
   if (hostedSessionRefreshTimer) {
     window.clearInterval(hostedSessionRefreshTimer);
@@ -502,6 +487,7 @@ function getState() {
     authRecoveryErrorMessage: state.auth.recoveryErrorMessage,
     authRuntimeStatus: state.auth.runtimeStatus,
     authBoundAgentId: state.auth.boundAgentId,
+    authControlLostAgentId: state.auth.controlLostAgentId,
     authPendingRequestedAgentId: state.auth.pendingRequestedAgentId,
     authPendingForceRebind: state.auth.pendingForceRebind,
     authRebindNotice: state.auth.rebindNotice,
@@ -625,7 +611,14 @@ function currentBoundAgentControlError(agentId, actionLabel = "agent action") {
   if (id !== boundAgentId) {
     return `${actionLabel} target ${id} does not match current bound Agent ${boundAgentId}`;
   }
+  if (viewerControlLossModule?.isControlLost(id)) {
+    return `${actionLabel} control was lost; re-authenticate and refresh the current Agent binding`;
+  }
   return null;
+}
+
+function isAgentControlLost(agentId) {
+  return viewerControlLossModule?.isControlLost(agentId) === true;
 }
 
 function selectedAgentId() {
@@ -1841,6 +1834,7 @@ async function issueLocalTestPlayerSession() {
     syncInFlight: false,
     runtimeStatus: "issued",
     boundAgentId: null,
+    controlLostAgentId: null,
     pendingRequestedAgentId: null,
     pendingForceRebind: false,
     rebindNotice: null,
@@ -1985,6 +1979,7 @@ async function completeHostedAccountLogin() {
       syncInFlight: false,
       runtimeStatus: "issued",
       boundAgentId: null,
+      controlLostAgentId: null,
       pendingRequestedAgentId: null,
       pendingForceRebind: false,
       rebindNotice: null,
@@ -2171,6 +2166,7 @@ function resetHostedPlayerAuthState(errorMessage = null, revocationMeta = null) 
         syncInFlight: false,
         runtimeStatus: "guest",
         boundAgentId: null,
+        controlLostAgentId: null,
         pendingRequestedAgentId: null,
         pendingForceRebind: false,
         rebindNotice: null,
@@ -3195,25 +3191,28 @@ function handleAgentChatError(error) {
   clearPendingAgentChatAckTimer();
   clearPendingAgentChatOverallTimer();
   const feedback = state.lastChatFeedback || createSemanticFeedback("chat", "agent_chat", error?.agent_id || selectedAgentId());
+  const agentId = error?.agent_id || feedback.agentId || selectedAgentId() || null;
+  const controlLost = viewerControlLossModule?.isControlLossError(error) === true;
+  const response = controlLost ? viewerControlLossModule.markControlLost(agentId) : clone(error);
   feedback.stage = "error";
   feedback.ok = false;
   feedback.accepted = false;
-  feedback.reason = error?.message || error?.code || "agent chat failed";
-  feedback.effect = error?.code || "agent chat error";
-  feedback.response = clone(error);
+  feedback.reason = controlLost ? "control_lost" : error?.message || error?.code || "agent chat failed";
+  feedback.effect = controlLost ? "control_lost" : error?.code || "agent chat error";
+  feedback.response = response;
   state.lastChatFeedback = feedback;
   pushChatHistory({
     id: `chat-error-${feedback.id}`,
     source: "error",
-    agentId: error?.agent_id || feedback.agentId || selectedAgentId() || null,
-    targetAgentId: error?.agent_id || feedback.agentId || selectedAgentId() || null,
+    agentId,
+    targetAgentId: agentId,
     playerId: feedback.pendingPlayerId || state.auth.playerId || null,
     speaker: "runtime",
     message: feedback.reason,
-    code: error?.code || null,
+    code: controlLost ? "control_lost" : error?.code || null,
     tick: Number(error?.accepted_at_tick || state.logicalTime || 0),
     locationId: error?.location_id || null,
-    response: clone(error),
+    response,
   });
 }
 
@@ -3248,6 +3247,9 @@ function adoptHostedRecoveryAck(ack) {
     state.auth.bindingEpoch = ack.binding_epoch == null ? null : Number(ack.binding_epoch);
   }
   state.auth.boundAgentId = nextBoundAgentId;
+  if (ack.status === "session_registered" || ack.status === "catch_up_ready") {
+    viewerControlLossModule?.clearControlLost(nextBoundAgentId);
+  }
   state.auth.pendingRequestedAgentId = nextRequestedAgentId;
   state.auth.pendingForceRebind = false;
   if (ack.status === "session_registered" && hadPendingForceRebind) {
@@ -4276,10 +4278,11 @@ function installTestApi() {
   };
 }
 
+viewerControlLossModule = createViewerControlLossModule({ render, state });
 viewerPromptControlModule = createViewerPromptControlModule({
   applyPromptAckLocally, assertPromptFeedbackActive, buildAuthEnvelope, buildPromptControlSigningPayload, clearPendingPromptControlAckTimer,
   clearPendingSessionRegisterWaiter, clone, createSemanticFeedback, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession,
-  nextRequestId, nextAuthNonce, render, requestSnapshotSafe, selectedAgentId, selectedAgentPromptProfile, signAuthPayload, state,
+  nextRequestId, nextAuthNonce, onControlLost: (agentId) => viewerControlLossModule?.markControlLost(agentId), render, requestSnapshotSafe, selectedAgentId, selectedAgentPromptProfile, signAuthPayload, state,
 });
 
 function bootstrap() {
@@ -4388,6 +4391,7 @@ export {
   injectPowerSaleQuoteForTest, injectPowerSurvivalQuoteForTest, injectWarDeclarationQuoteForTest, injectScheduleRecipeQuoteForTest, injectTransferMaterialQuoteForTest,
   isEmptyEntitySnapshotRefreshPendingForTest,
   isAgentChatInFlight,
+  isAgentControlLost,
   isAgentVisibleToCurrentSession,
   modelLists,
   needsEmptyEntitySnapshotRefreshForTest,

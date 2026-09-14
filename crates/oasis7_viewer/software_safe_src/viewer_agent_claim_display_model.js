@@ -68,6 +68,14 @@ export function createViewerAgentClaimDisplayModel({ state, tr }) {
     const boundPlayerId = normalizedId(binding.playerId);
     const isCurrentBoundAgent = Boolean(id && boundAgentId && id === boundAgentId);
     const isBoundToCurrentPlayer = Boolean(boundPlayerId && playerId && boundPlayerId === playerId);
+    if (id && id === normalizedId(state.auth.controlLostAgentId)) {
+      return {
+        kind: "control_lost", isCurrentSessionAgent: false,
+        badge: tr(locale, "控制已丢失", "Control lost"),
+        detail: tr(locale, "当前 Agent 控制权已失效。请重新认证并刷新当前绑定后再试。", "Control of this Agent is no longer available. Re-authenticate and refresh the current binding before retrying."),
+        badgeClass: "badge badge--warn", binding,
+      };
+    }
 
     if (isCurrentBoundAgent) {
       return {

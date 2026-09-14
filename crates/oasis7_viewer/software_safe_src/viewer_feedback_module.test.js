@@ -113,6 +113,40 @@ describe("viewer feedback module", () => {
     expect(description.detail).toContain("no second mutation");
   });
 
+  it("projects a hidden chat authority refusal as safe control-loss recovery", () => {
+    const module = createFeedbackModule({ uiLocale: "en" });
+    const snapshot = module.snapshotSemanticFeedback({
+      id: "chat-control-lost",
+      kind: "chat",
+      action: "agent_chat",
+      agentId: "agent-0",
+      accepted: false,
+      ok: false,
+      stage: "error",
+      response: {
+        status: "blocked",
+        value_visibility: "hidden",
+        reason_code: "control_lost",
+        next_step: "reauthenticate_and_refresh_binding",
+        message: "Agent control was lost; re-authenticate and refresh the current binding before retrying.",
+        player_id: "player-secret",
+        provider_trace: "trace-secret",
+      },
+    });
+
+    expect(snapshot.response).toEqual(expect.objectContaining({
+      status: "blocked",
+      value_visibility: "hidden",
+      reason_code: "control_lost",
+      next_step: "reauthenticate_and_refresh_binding",
+    }));
+    expect(JSON.stringify(snapshot)).not.toContain("player-secret");
+    expect(JSON.stringify(snapshot)).not.toContain("trace-secret");
+    const description = module.describeSemanticFeedback(snapshot, "en");
+    expect(description.label).toBe("Control lost");
+    expect(description.detail).toContain("Re-authenticate and refresh the current binding");
+  });
+
   it.each([
     ["en", "unknown_internal_code", "Current blocker"],
     ["zh", "unknown_internal_code", "当前阻塞"],

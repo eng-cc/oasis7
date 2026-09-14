@@ -245,6 +245,46 @@ describe("focused viewer UI contracts", () => {
     });
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("shows safe control-loss recovery for a stale chat refusal", async () => {
+    const { core, container } = await renderViewerApp({
+      selection: { kind: "agent", id: "agent-0" },
+      setupAfterMount(core) {
+        bindLocalTestAgent(core, "agent-0");
+        core.state.auth.controlLostAgentId = "agent-0";
+        core.state.auth.runtimeStatus = "control_lost";
+        core.state.auth.sessionEpoch = null;
+        core.state.auth.bindingEpoch = null;
+        core.state.lastChatFeedback = {
+          id: "chat-control-lost",
+          kind: "chat",
+          action: "agent_chat",
+          agentId: "agent-0",
+          accepted: false,
+          ok: false,
+          stage: "error",
+          reason: "control_lost",
+          response: {
+            status: "blocked",
+            value_visibility: "hidden",
+            reason_code: "control_lost",
+            next_step: "reauthenticate_and_refresh_binding",
+            message: "Agent control was lost; re-authenticate and refresh the current binding before retrying.",
+            binding_epoch: 99,
+            provider_trace: "trace-secret",
+          },
+        };
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("control-loss-recovery")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Send Chat" })).toBeDisabled();
+    });
+    expect(container).toHaveTextContent("Control lost");
+    expect(container).toHaveTextContent("Re-authenticate and refresh the current binding");
+    expect(container).not.toHaveTextContent("trace-secret");
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("keeps hidden prompt-control metadata out of the result card and offers binding recovery", async () => {
     const { core, container } = await renderViewerApp({
       selection: { kind: "agent", id: "agent-0" },

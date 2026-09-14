@@ -81,6 +81,7 @@ export function createViewerHostedTestLoginModule({
         syncInFlight: false,
         runtimeStatus: "issued",
         boundAgentId: null,
+        controlLostAgentId: null,
         pendingRequestedAgentId: null,
         pendingForceRebind: false,
         rebindNotice: null,
