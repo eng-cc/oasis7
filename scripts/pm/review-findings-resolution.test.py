@@ -85,7 +85,11 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
         self.fake_gh.chmod(0o755)
 
     def _write_fixture(self) -> None:
-        finding = {"id": "P1", "summary": "evidence-backed finding"}
+        finding = {
+            "id": "P1",
+            "summary": "evidence-backed finding",
+            "triage": {"classification": "blocking", "basis": "fixture"},
+        }
         self.findings = [finding]
         self.findings_digest = digest(self.findings)
         self.finding_digest = digest(finding)
@@ -143,6 +147,37 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
             "epoch": EPOCH, "status": "completed", "findings": "findings",
             "artifact_digest": artifact_digest, "artifacts": [str(self.artifact)],
         }, sort_keys=True) + "\n")
+
+    def _rewrite_fixture(self, *, finding: dict[str, object] | None = None,
+                         disposition: str | None = None) -> None:
+        if finding is not None:
+            self.findings = [finding]
+            artifact = json.loads(self.artifact.read_text())
+            artifact["findings"] = self.findings
+            self.artifact.write_text(json.dumps(artifact, sort_keys=True) + "\n")
+            ledger = json.loads(self.ledger.read_text())
+            ledger["artifact_digest"] = hashlib.sha256(self.artifact.read_bytes()).hexdigest()
+            self.ledger.write_text(json.dumps(ledger, sort_keys=True) + "\n")
+
+        manifest = json.loads(self.manifest.read_text())
+        record = manifest["role_records"][0]
+        record["findings_digest"] = digest(self.findings)
+        entry = record["entries"][0]
+        entry["finding_digest"] = digest(self.findings[0])
+        if disposition is not None:
+            entry["disposition"] = disposition
+        entry["entry_digest"] = digest({key: value for key, value in entry.items() if key != "entry_digest"})
+        payload = {key: value for key, value in manifest.items() if key != "manifest_digest"}
+        manifest["manifest_digest"] = digest(payload)
+        self.manifest.write_text(json.dumps(manifest, sort_keys=True) + "\n")
+
+        self.body_payload["manifest_digest"] = manifest["manifest_digest"]
+        self.body = json.dumps(self.body_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        readback = json.loads(self.readback.read_text())
+        readback["manifest_digest"] = manifest["manifest_digest"]
+        readback["body_digest"] = hashlib.sha256(self.body.encode()).hexdigest()
+        self.readback.write_text(json.dumps(readback, sort_keys=True) + "\n")
+        self._write_fake_gh(permission="admin", body=self.body)
 
     def run_script(self, *extra: str, ok: bool = True) -> subprocess.CompletedProcess[str]:
         env = {**os.environ, "PATH": f"{self.bin}:{os.environ['PATH']}", "GH_LOG": str(self.gh_log)}
@@ -238,6 +273,21 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
         self._write_fake_gh(permission="admin", body=self.body)
         failure = self.run_script(ok=False)
         self.assertIn("evidence kind", failure.stderr.lower())
+
+    def test_structured_finding_missing_triage_fails_closed(self) -> None:
+        finding = {key: value for key, value in self.findings[0].items() if key != "triage"}
+        self._rewrite_fixture(finding=finding)
+        before = self.ledger.read_bytes()
+        failure = self.run_script(ok=False)
+        self.assertIn("triage", failure.stderr.lower())
+        self.assertEqual(before, self.ledger.read_bytes())
+
+    def test_blocking_finding_cannot_resolve_as_non_actionable(self) -> None:
+        self._rewrite_fixture(disposition="non_actionable")
+        before = self.ledger.read_bytes()
+        failure = self.run_script(ok=False)
+        self.assertRegex(failure.stderr.lower(), r"blocking|non.?actionable|disposition")
+        self.assertEqual(before, self.ledger.read_bytes())
 
     def test_task_issue_must_match_canonical_mapping(self) -> None:
         readback = json.loads(self.readback.read_text())

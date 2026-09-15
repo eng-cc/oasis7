@@ -21,6 +21,14 @@ SHA_RE = re.compile(r"[0-9a-f]{64}\Z")
 SCHEMA = "oasis7-review-plan/v1"
 V2_SCHEMA = "oasis7-review-plan/v2"
 INCREMENTAL_CONTEXT_SCHEMA = "oasis7-review-context/v1"
+TRIAGE_CLASSIFICATIONS = {"blocking", "nonblocking"}
+CANONICAL_REVIEW_ROLES = {
+    "producer_system_designer", "gameplay_designer",
+    "game_visual_interaction_designer", "runtime_engineer",
+    "blockchain_ops_engineer", "wasm_platform_engineer",
+    "agent_engineer", "viewer_engineer", "qa_engineer",
+    "repository_health_engineer", "liveops_community",
+}
 
 
 class ContractError(ValueError):
@@ -37,6 +45,18 @@ def digest(value: object) -> str:
 
 def sha256_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
+
+
+def validate_finding_triage(finding: object, role: str) -> None:
+    if not isinstance(finding, dict):
+        raise ContractError(f"review finding is not an object for role {role}")
+    triage = finding.get("triage")
+    if not isinstance(triage, dict) or set(triage) != {"classification", "basis"}:
+        raise ContractError(f"review finding triage is missing or invalid for role {role}")
+    if triage.get("classification") not in TRIAGE_CLASSIFICATIONS:
+        raise ContractError(f"review finding triage classification is invalid for role {role}")
+    if not isinstance(triage.get("basis"), str) or not triage["basis"].strip():
+        raise ContractError(f"review finding triage basis is missing for role {role}")
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -172,6 +192,9 @@ def validate_collected_ledger(root: Path, batch: dict[str, Any], ledger_path: Pa
             raise ContractError(f"prior review artifact findings are invalid for role {role}")
         if disposition == "no_findings" and findings:
             raise ContractError(f"prior review no_findings artifact contains findings for role {role}")
+        if disposition == "findings":
+            for finding in findings:
+                validate_finding_triage(finding, str(role))
         if not isinstance(residual_risk, str) or not residual_risk.strip():
             raise ContractError(f"prior review artifact residual_risk is missing for role {role}")
     missing = expected - seen
@@ -261,7 +284,8 @@ def validate_prior_plan(root: Path, path: Path, task_uid: str) -> tuple[dict[str
     }
 
 
-def prior_review_context(root: Path, path: str, task_uid: str, current_head: str) -> dict[str, Any]:
+def prior_review_context(root: Path, path: str, task_uid: str, current_head: str,
+                         current_roles: list[str], impacted_roles: list[str]) -> dict[str, Any]:
     plan, prior_plan_digest, collection = validate_prior_plan(root, Path(path), task_uid)
     prior_head = plan.get("frozen_head")
     if not isinstance(prior_head, str) or not HEAD_RE.fullmatch(prior_head):
@@ -279,6 +303,43 @@ def prior_review_context(root: Path, path: str, task_uid: str, current_head: str
     delta_paths = sorted(line for line in git_text(root, "diff", "--name-only", "--no-renames", prior_head, current_head).splitlines() if line)
     if len(delta_paths) != len(set(delta_paths)):
         raise ContractError("prior review delta contains duplicate paths")
+    prior_roles = plan.get("roles")
+    if not isinstance(prior_roles, list) or not prior_roles or any(not isinstance(role, str) for role in prior_roles):
+        raise ContractError("prior review plan roles are invalid")
+    prior_role_set = set(prior_roles)
+    if not impacted_roles:
+        review_scope = "full"
+        escalation_reasons = ["unknown_impact"]
+        role_review_modes = {role: "full_review" for role in current_roles}
+    else:
+        review_scope = "scoped"
+        escalation_reasons = []
+        role_review_modes = {}
+        for role in current_roles:
+            if role in impacted_roles or role not in prior_role_set:
+                role_review_modes[role] = "full_review"
+                if role not in prior_role_set:
+                    escalation_reasons.append("new_required_role")
+            else:
+                role_review_modes[role] = "impact_confirmation"
+    delta_paths_digest = digest(sorted(delta_paths))
+    role_review_modes_digest = digest(role_review_modes)
+    scope_digest = digest({
+        "prior_head_oid": prior_head,
+        "current_head_oid": current_head,
+        "delta_paths_digest": delta_paths_digest,
+        "role_review_modes_digest": role_review_modes_digest,
+    })
+    role_review_obligations = {
+        role: {
+            "mode": mode,
+            "prior_head_oid": prior_head,
+            "current_head_oid": current_head,
+            "delta_paths_digest": delta_paths_digest,
+            "scope_digest": scope_digest,
+        }
+        for role, mode in role_review_modes.items()
+    }
     relative_path = Path(path).resolve().relative_to(root.resolve()).as_posix()
     return {
         "schema": INCREMENTAL_CONTEXT_SCHEMA,
@@ -291,15 +352,37 @@ def prior_review_context(root: Path, path: str, task_uid: str, current_head: str
         "current_head_oid": current_head,
         "prior_source_review_digest": plan.get("source_review_digest", plan.get("relevant_evidence_digest")),
         "prior_integration_ci_digest": plan.get("integration_ci_digest"),
-        "prior_roles": plan.get("roles"),
+        "prior_roles": prior_roles,
         "prior_collection_path": collection["path"],
         "prior_collection_digest": collection["digest"],
         "prior_collection_ledger_digest": collection["ledger_digest"],
         "delta_paths": delta_paths,
-        "delta_paths_digest": digest(sorted(delta_paths)),
+        "delta_paths_digest": delta_paths_digest,
         "delta_patch_digest": binary_diff_digest(root, prior_head, current_head),
-        "reviewer_guidance": "Use this diff to focus assessment; confirm impact explicitly and escalate to full review for uncertainty or authority drift.",
+        "review_scope": review_scope,
+        "escalation_reasons": escalation_reasons,
+        "role_review_modes": role_review_modes,
+        "role_review_modes_digest": role_review_modes_digest,
+        "scope_digest": scope_digest,
+        "role_review_obligations": role_review_obligations,
+        "reviewer_guidance": "Use this diff to focus assessment; affected roles perform full review, while impact_confirmation roles must confirm no impact against the bound delta; uncertainty or authority drift escalates to full review.",
     }
+
+
+def validate_impacted_roles(impacted_roles: list[str], current_roles: list[str],
+                            has_prior_plan: bool) -> list[str]:
+    seen: set[str] = set()
+    for role in impacted_roles:
+        if role not in CANONICAL_REVIEW_ROLES:
+            raise ContractError(f"--impacted-role is not a canonical review role: {role}")
+        if role in seen:
+            raise ContractError(f"duplicate --impacted-role: {role}")
+        if role not in current_roles:
+            raise ContractError(f"--impacted-role is not a required role for this plan: {role}")
+        seen.add(role)
+    if impacted_roles and not has_prior_plan:
+        raise ContractError("--impacted-role requires --prior-review-plan")
+    return impacted_roles
 
 
 def ci_receipt_authority(path: Path, task_uid: str, frozen_head: str) -> tuple[str, str, str | None]:
@@ -661,6 +744,8 @@ def main() -> int:
     parser.add_argument("--review-policy-digest")
     parser.add_argument("--input-contract-digest")
     parser.add_argument("--prior-review-plan", help="canonical prior plan used only as incremental review context")
+    parser.add_argument("--impacted-role", action="append", default=[],
+                        help="canonical required role affected by the prior-plan delta; repeatable")
     args = parser.parse_args()
     try:
         if not TASK_RE.fullmatch(args.task_uid):
@@ -715,6 +800,7 @@ def main() -> int:
         except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as exc:
             raise ContractError(str(exc)) from exc
         roles = selector_roles(args)
+        impacted_roles = validate_impacted_roles(args.impacted_role, roles, bool(args.prior_review_plan))
         source_identity: dict[str, Any] | None = None
         integration_identity: dict[str, Any] | None = None
         source_digest = evidence_digest
@@ -744,7 +830,8 @@ def main() -> int:
                 raise ContractError("v2 integration CI identity does not match task/source head")
             source_digest = identity_module.source_review_digest(source_identity)
         incremental_context = (
-            prior_review_context(root, args.prior_review_plan, args.task_uid, args.head)
+            prior_review_context(root, args.prior_review_plan, args.task_uid, args.head,
+                                 roles, impacted_roles)
             if args.prior_review_plan else None
         )
         slices = expected_slices(args.task_uid, args.head, source_digest, comparison_ref, comparison_oid, roles)
