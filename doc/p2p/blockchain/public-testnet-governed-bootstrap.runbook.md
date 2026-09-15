@@ -976,8 +976,7 @@ Use the Phase A bounded proof/status capture and the governed bootstrap-peer
 artifact; do not derive peer IDs from an unverified status projection.
 
 ### Seed closure
-Use the Phase E closure command and retain its receipt; this checklist does not
-duplicate the recovery command.
+Use the Phase E closure command and retain its receipt; this checklist does not duplicate the recovery command.
 
 ## 16. Open Design Follow-Ups
 这份 runbook 可以让部署更稳，但它也明确保留两项后续硬化方向：
