@@ -19,7 +19,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 INVENTORY = ROOT / "scripts/public-testnet-validator-triad-inventory.v1.json"
 AUTHORITY = ROOT / "doc/testing/evidence/public-testnet-validator-triad-authority-2026-09-15.json"
-REGISTRY = ROOT / "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json"
+SOURCE_REGISTRY = ROOT / "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json"
 PEERS = ROOT / "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-bootstrap-peers-2026-09-15.txt"
 BASE_MANIFEST = ROOT / "doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json"
 BASE_GENESIS = ROOT / "doc/testing/evidence/public-testnet-governed-bootstrap-genesis-2026-06-06.json"
@@ -73,7 +73,7 @@ class PublicTestnetValidatorTriadAuthorityTest(unittest.TestCase):
             self.assertEqual(node[field], VALIDATOR_47[field])
 
     def test_registry_is_exact_three_member_public_finality_authority(self) -> None:
-        registry = load_json(REGISTRY)
+        registry = load_json(SOURCE_REGISTRY)
         self.assertEqual(registry["network_tier"], "public_testnet")
         self.assertEqual(registry["topology"], "three_equal_validator")
         self.assertEqual(registry["threshold"], 2)
@@ -95,13 +95,25 @@ class PublicTestnetValidatorTriadAuthorityTest(unittest.TestCase):
         bindings = authority["bindings"]
         expected = {
             "inventory": INVENTORY,
-            "registry": REGISTRY,
+            "source_registry": SOURCE_REGISTRY,
             "manifest": BASE_MANIFEST,
             "genesis": BASE_GENESIS,
             "bootstrap_peers": PEERS,
         }
         for name, path in expected.items():
             self.assertEqual(bindings[name]["sha256"], sha256(path), name)  # type: ignore[index]
+        inventory = load_json(INVENTORY)
+        inventory_authority = inventory["authority"]
+        self.assertEqual(
+            bindings["registry"]["sha256"],
+            inventory_authority["generated_registry_sha256"],  # type: ignore[index]
+        )
+        self.assertEqual(
+            bindings["registry"]["semantic_sha256"],
+            inventory_authority["generated_registry_semantic_sha256"],  # type: ignore[index]
+        )
+        self.assertEqual(bindings["registry"]["role"], "generated_deployment_registry")  # type: ignore[index]
+        self.assertEqual(bindings["source_registry"]["role"], "source_registry_input")  # type: ignore[index]
         self.assertEqual(bindings["manifest"]["role"], "historical_base_input")  # type: ignore[index]
         self.assertTrue(bindings["manifest"]["requires_regeneration_for_triad"])  # type: ignore[index]
         self.assertEqual(bindings["genesis"]["role"], "historical_base_input")  # type: ignore[index]
@@ -114,6 +126,20 @@ class PublicTestnetValidatorTriadAuthorityTest(unittest.TestCase):
         self.assertTrue(any("39.104.205.67/tcp/6832" in peer for peer in peers))
         self.assertTrue(any("47.111.225.27/tcp/6834" in peer for peer in peers))
         self.assertTrue(any(VALIDATOR_47["libp2p_peer_id"] in peer for peer in peers))
+
+    def test_inventory_authority_refs_and_digests_are_current(self) -> None:
+        inventory = load_json(INVENTORY)
+        authority = inventory["authority"]
+        self.assertEqual(
+            authority["source_registry_ref"],
+            "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json",
+        )
+        self.assertEqual(authority["source_registry_sha256"], sha256(SOURCE_REGISTRY))
+        self.assertEqual(
+            authority["bootstrap_peer_ref"],
+            "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-bootstrap-peers-2026-09-15.txt",
+        )
+        self.assertEqual(authority["bootstrap_peer_sha256"], sha256(PEERS))
 
 
 if __name__ == "__main__":

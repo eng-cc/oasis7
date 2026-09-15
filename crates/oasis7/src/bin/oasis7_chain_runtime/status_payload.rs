@@ -981,6 +981,7 @@ pub(super) fn build_chain_status_payload_with_storage_root_and_authority(
         &chain_proof,
         &storage_metrics,
         &replication,
+        authority_binding,
     );
     let execution_bridge_commit_timing = snapshot_execution_bridge_commit_timing();
     let pending_proposal = snapshot

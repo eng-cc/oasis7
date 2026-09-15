@@ -54,13 +54,37 @@ GOVERNANCE_THRESHOLD = 2
 GOVERNANCE_THRESHOLD_BPS = 6667
 VALIDATOR_47_SERVICE = "oasis7-triad-validator-47.service"
 VALIDATOR_47_PORTS = {"6634", "6834"}
-TRIAD_VALIDATOR_47_FIXTURE_SIGNER = hashlib.sha256(
-    b"oasis7-test-fixture-third-validator-signer"
-).hexdigest()
-TRIAD_REGISTRY_FIXTURE_DIGEST = hashlib.sha256(b"oasis7-test-fixture-triad-registry").hexdigest()
+TRIAD_SIGNERS = {
+    "triad-testnet-sequencer": "e01e5c34dee2da3087653bc4cec02be01632f56250a800994c96ea44ae6f3690",
+    "triad-testnet-storage": "1f530cae002d7adb9a6c3dd8f4bc861226f112f88fdd252b28b6494019e21c33",
+    "triad-testnet-validator-47": "cf8c9c2b5637d20d0efa585f0fb7f503b19a1aaba02fb807637e67ed40919fc2",
+}
+TRIAD_ROOT_PUBLIC_KEY = "b21137667506c6c9d5eb30e2cefac73950396d1a58e70665cfdb5afec8943ec6"
+TRIAD_VALIDATOR_47_PEER_ID = "12D3KooWCdQLY6Qm9sWqPqEhJTmPdY3Ykw1w5QnTh7qmSgYDazQZ"
+TRIAD_VALIDATOR_47_FIXTURE_SIGNER = TRIAD_SIGNERS["triad-testnet-validator-47"]
+TRIAD_REGISTRY_FIXTURE_DIGEST = "8bfb4411f3895ab5f1a2a3de1bcaa08ce97567202d4198444b323ef437a88f78"
 TRIAD_INVENTORY_DIGEST = hashlib.sha256(INVENTORY.read_bytes()).hexdigest()
 TRIAD_WORLD_ID = "oasis7-public-testnet-governed-20260606"
 TRIAD_MANIFEST_HASH = hashlib.sha256(b"oasis7-test-fixture-triad-manifest").hexdigest()
+TRIAD_REGISTRY_SEMANTIC_DIGEST = hashlib.sha256(
+    json.dumps(
+        {
+            "signer_bindings": {
+                f"governance.finality.v1.{node_id}": signer
+                for node_id, signer in sorted(TRIAD_SIGNERS.items())
+            },
+            "slot_id": "governance.finality.v1",
+            "threshold": 2,
+            "threshold_bps": 0,
+            "validator_stakes": {
+                f"governance.finality.v1.{node_id}": 100
+                for node_id in sorted(TRIAD_SIGNERS)
+            },
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+).hexdigest()
 
 
 def load_python_module(path: Path, name: str) -> Any:
@@ -119,9 +143,7 @@ def node_emitted_triad_status(node_name: str, *, provider: bool = False, head: i
     node_id = TRIAD_NODE_IDS[node_name]
     runtime_role = "sequencer" if node_name == "sequencer-204" else "storage"
     p2p_role = "validator_core" if node_name == "sequencer-204" else "full_storage"
-    signer = (
-        hashlib.sha256(f"oasis7-test-fixture-signer:{node_id}".encode("utf-8")).hexdigest()
-    )
+    signer = TRIAD_SIGNERS[node_id]
     validator_set_hash = "runtime-validator-set-hash"
     stake_root = hashlib.sha256(b"oasis7-test-fixture-triad-stake-root").hexdigest()
     checkpoint_id = "checkpoint-42"
@@ -186,13 +208,18 @@ def node_emitted_triad_status(node_name: str, *, provider: bool = False, head: i
             "stake_root": stake_root,
             "registry_ref": "config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json",
             "registry_sha256": TRIAD_REGISTRY_FIXTURE_DIGEST,
+            "registry_semantic_sha256": TRIAD_REGISTRY_SEMANTIC_DIGEST,
             "inventory_ref": "scripts/public-testnet-validator-triad-inventory.v1.json",
             "inventory_sha256": TRIAD_INVENTORY_DIGEST,
         },
         "provider": {
             "schema_version": "oasis7.chain_validator_provider_status.v1",
             "node_id": node_id,
-            "provider_id": f"peer-{node_id}",
+            "provider_id": (
+                "12D3KooWCdQLY6Qm9sWqPqEhJTmPdY3Ykw1w5QnTh7qmSgYDazQZ"
+                if node_id == TRIAD_NODE_IDS["validator-47"]
+                else f"peer-{node_id}"
+            ),
             "checkpoint": provider,
             "full_storage": provider,
             "checkpoint_proof": (
@@ -211,7 +238,11 @@ def node_emitted_triad_status(node_name: str, *, provider: bool = False, head: i
             "full_storage_proof": (
                 {
                     "status": "ready",
-                    "provider_id": f"peer-{node_id}",
+                    "provider_id": (
+                        "12D3KooWCdQLY6Qm9sWqPqEhJTmPdY3Ykw1w5QnTh7qmSgYDazQZ"
+                        if node_id == TRIAD_NODE_IDS["validator-47"]
+                        else f"peer-{node_id}"
+                    ),
                     "world_id": TRIAD_WORLD_ID,
                     "chain_id": TRIAD_WORLD_ID,
                     "manifest_hash": TRIAD_MANIFEST_HASH,
@@ -310,7 +341,7 @@ class ThirdValidatorAdmissionContractTest(unittest.TestCase):
                 "config_dir = pathlib.Path(sys.argv[1])\n"
                 "node_id = sys.argv[2]\n"
                 "key_path = config_dir / 'node-keypair.toml'\n"
-                "print(json.dumps({'schema_version':'oasis7.identity_receipt.v1', 'node_id':node_id, 'peer_id':'validator-47-peer', 'key_path':str(key_path), 'key_sha256':hashlib.sha256(key_path.read_bytes()).hexdigest(), 'key_size_bytes':key_path.stat().st_size, 'key_mode':384, 'key_uid':key_path.stat().st_uid, 'key_gid':key_path.stat().st_gid}))\n"
+                "print(json.dumps({'schema_version':'oasis7.identity_receipt.v1', 'node_id':node_id, 'peer_id':'12D3KooWCdQLY6Qm9sWqPqEhJTmPdY3Ykw1w5QnTh7qmSgYDazQZ', 'key_path':str(key_path), 'key_sha256':hashlib.sha256(key_path.read_bytes()).hexdigest(), 'key_size_bytes':key_path.stat().st_size, 'key_mode':384, 'key_uid':key_path.stat().st_uid, 'key_gid':key_path.stat().st_gid}))\n"
                 "PY\n",
                 encoding="utf-8",
             )
@@ -326,9 +357,9 @@ class ThirdValidatorAdmissionContractTest(unittest.TestCase):
                     {
                         "schema_version": "oasis7.identity_provision.v1",
                         "node_id": "triad-testnet-validator-47",
-                        "root_public_key": "aa" * 32,
+                        "root_public_key": TRIAD_ROOT_PUBLIC_KEY,
                         "finality_public_key": TRIAD_VALIDATOR_47_FIXTURE_SIGNER,
-                        "libp2p_peer_id": "validator-47-peer",
+                        "libp2p_peer_id": TRIAD_VALIDATOR_47_PEER_ID,
                     }
                 )
                 + "\n",
@@ -336,10 +367,8 @@ class ThirdValidatorAdmissionContractTest(unittest.TestCase):
             )
             (identity_dir / "identity-receipt.json").chmod(0o600)
             peers = temp / "bootstrap-peers.txt"
-            peers.write_text(
-                "/ip4/127.0.0.1/tcp/6831/p2p/12D3KooWTestSequencer\n"
-                "/ip4/127.0.0.1/tcp/6832/p2p/12D3KooWTestStorage\n",
-                encoding="utf-8",
+            peers.write_bytes(
+                (ROOT / "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-bootstrap-peers-2026-09-15.txt").read_bytes()
             )
             output = temp / "stage"
             result = subprocess.run(
@@ -350,9 +379,9 @@ class ThirdValidatorAdmissionContractTest(unittest.TestCase):
                     "--bootstrap-peers-file",
                     str(peers),
                     "--sequencer-finality-public-key",
-                    "65c27d898af9c528ebd6a3762373faef110bb7bb515dfa88c447f292474aac16",
+                    TRIAD_SIGNERS["triad-testnet-sequencer"],
                     "--storage-finality-public-key",
-                    "858e97be96f238ef3f6e07ec36d4ba5f503755ecb232d06a80ef1ab8aaca44f6",
+                    TRIAD_SIGNERS["triad-testnet-storage"],
                     "--extra-validator",
                     f"triad-testnet-validator-47:{TRIAD_VALIDATOR_47_FIXTURE_SIGNER}:100",
                     "--validator-47-identity-dir",

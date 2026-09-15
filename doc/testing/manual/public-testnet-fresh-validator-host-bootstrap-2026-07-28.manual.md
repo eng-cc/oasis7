@@ -54,6 +54,16 @@ inventory digest:
 The inventory role is `validator`; the runtime mapping is the supported
 `NODE_ROLE=storage` plus independent `P2P_NODE_ROLE=full_storage`. Do not
 emit the unsupported runtime value `NODE_ROLE=validator`.
+The bootstrap peer input is governed bytes, not a caller-selected topology:
+use the exact evidence file
+`doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-bootstrap-peers-2026-09-15.txt`
+with SHA-256 `c7d0b977937adb5d27733ed0ad3e2212ccd0f3ac1b2273214e8cc57df110e5d6`.
+Stage rejects wrong or stale peer files and source-registry digest drift before
+creating the stage directory.
+The source registry digest is only the immutable build-input link. The staged
+deployment registry has its own exact-byte `generated_registry_sha256` and
+canonical `generated_registry_semantic_sha256`; runtime status must report the
+generated digest, never the source-input digest.
 
 ```bash
 ./scripts/p2p-public-testnet-build-deployment-stage.sh \
@@ -86,6 +96,10 @@ enabled or started. Readback must independently prove
 `UnitFileState=disabled`, inactive/dead service state, `no_process=true`, and
 `no_listener=true` for both validator-47 ports. A stale pair identity or any
 wrong `node.env` field is rejected before materialization.
+The no-start preflight and independent readback also reject a stack-local
+`start-node.sh`/`oasis7_chain_runtime` orphan under the canonical root even
+when systemd reports `MainPID=0`; unrelated processes outside that root are
+outside this bounded check.
 The bootstrap uses the runtime's read-only `identity-receipt` probe against the
 imported key and records only public identities and SHA-256 digests; it does
 not invoke `provision-identity` for validator-47.

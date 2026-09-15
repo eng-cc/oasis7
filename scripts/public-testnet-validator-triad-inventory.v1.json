@@ -35,8 +35,11 @@
     "genesis_ref": "config/public-testnet-governed-bootstrap-genesis-2026-06-06.json",
     "registry_ref": "config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json",
     "source_registry_ref": "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json",
-    "source_registry_sha256": "c5d79099d82d60c44ec4454c3f0bd82311100abe3968e5e1ee4e5e6f2fa619bd",
-    "bootstrap_peer_ref": "config/public-testnet-governed-bootstrap-validator-triad-bootstrap-peers-2026-09-15.txt",
+    "source_registry_sha256": "a6bfa524e32f2f54c4665d58f18e87b5fa21845e17c14269be1cb1f978adb50f",
+    "generated_registry_sha256": "8bfb4411f3895ab5f1a2a3de1bcaa08ce97567202d4198444b323ef437a88f78",
+    "generated_registry_semantic_sha256": "aa6f6f7f367470d3b2c7282d489422d3eef14370446aa1fe8420fc94d776950d",
+    "bootstrap_peer_ref": "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-bootstrap-peers-2026-09-15.txt",
+    "bootstrap_peer_sha256": "c7d0b977937adb5d27733ed0ad3e2212ccd0f3ac1b2273214e8cc57df110e5d6",
     "digest_policy": "Every staged artifact records the sha256 of its exact bytes; missing or mismatched links keep the triad blocked."
   },
   "governance": {

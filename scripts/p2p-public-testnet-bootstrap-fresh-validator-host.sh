@@ -12,6 +12,13 @@ readonly VALIDATOR_47_PRODUCTION_UNIT=/etc/systemd/system/oasis7-triad-validator
 readonly VALIDATOR_47_SERVICE_NAME=oasis7-triad-validator-47.service
 readonly TRIAD_INVENTORY_RELATIVE=scripts/public-testnet-validator-triad-inventory.v1.json
 readonly TRIAD_INVENTORY_FILE=public-testnet-validator-triad-inventory.v1.json
+readonly TRIAD_INVENTORY_SHA256=3313a899630e3013d623adfee252556a124c25d059406bcf98a541ae2fcdacd5
+readonly TRIAD_SOURCE_REGISTRY_RELATIVE=doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json
+readonly TRIAD_SOURCE_REGISTRY_SHA256=a6bfa524e32f2f54c4665d58f18e87b5fa21845e17c14269be1cb1f978adb50f
+readonly TRIAD_GENERATED_REGISTRY_RELATIVE=config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json
+readonly TRIAD_GENERATED_REGISTRY_SHA256=8bfb4411f3895ab5f1a2a3de1bcaa08ce97567202d4198444b323ef437a88f78
+readonly TRIAD_BOOTSTRAP_PEER_RELATIVE=doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-bootstrap-peers-2026-09-15.txt
+readonly TRIAD_BOOTSTRAP_PEER_SHA256=c7d0b977937adb5d27733ed0ad3e2212ccd0f3ac1b2273214e8cc57df110e5d6
 readonly VALIDATOR_47_NODE_ID=triad-testnet-validator-47
 # Inventory role is validator.  The runtime role is storage and its independent
 # P2P provider role is full_storage; PoS identity comes from consensus truth.
@@ -60,6 +67,16 @@ require_file() { [[ -f "$1" ]] || die "missing file: $1"; }
 require_dir() { [[ -d "$1" ]] || die "missing directory: $1"; }
 sha256_file() { shasum -a 256 "$1" | awk '{print $1}'; }
 file_size() { wc -c <"$1" | tr -d ' '; }
+assert_no_stack_orphans() {
+  local root=$1 process_listing
+  process_listing=$(ps -eo pid=,args=) || die "cannot read process table for no-start preflight"
+  while IFS= read -r line; do
+    [[ "$line" == *"$root"* ]] || continue
+    if [[ "$line" == *"/bin/start-node.sh"* || "$line" == *"/bin/oasis7_chain_runtime"* ]]; then
+      die "stack-local runtime/start-node orphan detected"
+    fi
+  done <<<"$process_listing"
+}
 public_file_json() {
   local path=$1
   if [[ ! -f "$path" ]]; then
@@ -182,13 +199,18 @@ verify_bundle() {
 
 validate_validator_47_stage() {
   local inventory_path="$config_dir/$TRIAD_INVENTORY_FILE"
+  local bootstrap_peer_path="$config_dir/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt"
   require_file "$inventory_path"
+  require_file "$bootstrap_peer_path"
   [[ ! -L "$inventory_path" ]] || die "triad inventory authority must not be a symlink"
   triad_inventory_sha256=$(sha256_file "$inventory_path")
   python3 - "$inventory_path" "$config_dir/node.env" \
     "$config_dir/public-testnet-governed-bootstrap-manifest-2026-06-06.json" \
     "$config_dir/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json" \
-    "$triad_inventory_sha256" <<'PY'
+    "$bootstrap_peer_path" "$triad_inventory_sha256" "$TRIAD_INVENTORY_SHA256" \
+    "$TRIAD_SOURCE_REGISTRY_RELATIVE" "$TRIAD_SOURCE_REGISTRY_SHA256" \
+    "$TRIAD_GENERATED_REGISTRY_RELATIVE" "$TRIAD_GENERATED_REGISTRY_SHA256" \
+    "$TRIAD_BOOTSTRAP_PEER_RELATIVE" "$TRIAD_BOOTSTRAP_PEER_SHA256" <<'PY'
 import hashlib
 import json
 import pathlib
@@ -198,16 +220,39 @@ inventory_path = pathlib.Path(sys.argv[1])
 env_path = pathlib.Path(sys.argv[2])
 manifest_path = pathlib.Path(sys.argv[3])
 registry_path = pathlib.Path(sys.argv[4])
-expected_inventory_sha256 = sys.argv[5]
+bootstrap_peer_path = pathlib.Path(sys.argv[5])
+expected_inventory_sha256 = sys.argv[6]
+canonical_inventory_sha256 = sys.argv[7]
+canonical_source_registry_ref = sys.argv[8]
+canonical_source_registry_sha256 = sys.argv[9]
+canonical_generated_registry_ref = sys.argv[10]
+canonical_generated_registry_sha256 = sys.argv[11]
+canonical_bootstrap_peer_ref = sys.argv[12]
+canonical_bootstrap_peer_sha256 = sys.argv[13]
 actual_inventory_sha256 = hashlib.sha256(inventory_path.read_bytes()).hexdigest()
 if actual_inventory_sha256 != expected_inventory_sha256:
     raise SystemExit("triad inventory digest mismatch")
+if actual_inventory_sha256 != canonical_inventory_sha256:
+    raise SystemExit("triad inventory is not the canonical governed authority")
 
 inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
 if inventory.get("schema_version") != "oasis7.public_testnet_validator_triad_inventory.v1":
     raise SystemExit("triad inventory schema mismatch")
 if inventory.get("network_tier") != "public_testnet" or inventory.get("topology") != "three_equal_validator":
     raise SystemExit("triad inventory network/topology mismatch")
+authority = inventory.get("authority")
+if not isinstance(authority, dict):
+    raise SystemExit("triad inventory authority missing")
+if authority.get("source_registry_ref") != canonical_source_registry_ref:
+    raise SystemExit("triad inventory source registry reference drift")
+if authority.get("source_registry_sha256") != canonical_source_registry_sha256:
+    raise SystemExit("triad inventory source registry digest drift")
+if authority.get("generated_registry_sha256") != canonical_generated_registry_sha256:
+    raise SystemExit("triad inventory generated registry digest drift")
+if authority.get("bootstrap_peer_ref") != canonical_bootstrap_peer_ref:
+    raise SystemExit("triad inventory bootstrap peer reference drift")
+if authority.get("bootstrap_peer_sha256") != canonical_bootstrap_peer_sha256:
+    raise SystemExit("triad inventory bootstrap peer digest drift")
 target = inventory.get("nodes", {}).get("validator-47")
 if not isinstance(target, dict):
     raise SystemExit("triad inventory validator-47 binding missing")
@@ -243,9 +288,13 @@ expected_env = {
     "WORLD_ID": "oasis7-public-testnet-governed-20260606",
     "NETWORK_TIER_MANIFEST_PATH": "config/public-testnet-governed-bootstrap-manifest-2026-06-06.json",
     "GENESIS_VALIDATOR_REGISTRY_PATH": "config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json",
+    "GENESIS_VALIDATOR_REGISTRY_SHA256": canonical_generated_registry_sha256,
+    "GENESIS_VALIDATOR_REGISTRY_SEMANTIC_SHA256": authority.get("generated_registry_semantic_sha256"),
     "EXECUTION_WORLD_DIR": "staged-world",
     "DEPLOYMENT_INVENTORY_PATH": "config/public-testnet-validator-triad-inventory.v1.json",
     "DEPLOYMENT_INVENTORY_SHA256": actual_inventory_sha256,
+    "BOOTSTRAP_PEER_PATH": "config/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt",
+    "BOOTSTRAP_PEER_SHA256": canonical_bootstrap_peer_sha256,
 }
 for key, expected in expected_env.items():
     if values.get(key) != expected:
@@ -261,11 +310,58 @@ if manifest.get("tier") != "public_testnet":
 inventory_binding = manifest.get("deployment_inventory")
 if inventory_binding != {"ref": "scripts/public-testnet-validator-triad-inventory.v1.json", "sha256": actual_inventory_sha256}:
     raise SystemExit("validator-47 manifest inventory binding mismatch")
+if manifest.get("bootstrap_peer_authority") != {
+    "ref": "public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt",
+    "sha256": canonical_bootstrap_peer_sha256,
+}:
+    raise SystemExit("validator-47 manifest bootstrap peer authority mismatch")
+if manifest.get("deployment_validator_registry") != {
+    "ref": canonical_generated_registry_ref,
+    "sha256": canonical_generated_registry_sha256,
+    "semantic_sha256": authority.get("generated_registry_semantic_sha256"),
+}:
+    raise SystemExit("validator-47 manifest generated registry authority mismatch")
+
+actual_bootstrap_peer_sha256 = hashlib.sha256(bootstrap_peer_path.read_bytes()).hexdigest()
+if actual_bootstrap_peer_sha256 != canonical_bootstrap_peer_sha256:
+    raise SystemExit("validator-47 bootstrap peer file digest mismatch")
+peer_lines = [line.strip() for line in bootstrap_peer_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+if len(peer_lines) != 3:
+    raise SystemExit("validator-47 bootstrap peer file must contain exactly three peers")
+for name, node in inventory["nodes"].items():
+    host = str(node.get("host", "")).removeprefix("root@")
+    ports = node.get("ports")
+    prefix = f"/ip4/{host}/tcp/{ports[1]}/p2p/"
+    matches = [line for line in peer_lines if line.startswith(prefix)]
+    if len(matches) != 1:
+        raise SystemExit(f"validator-47 bootstrap peer topology mismatch: {name}")
+    if node.get("libp2p_peer_id") and not matches[0].endswith(f"/p2p/{node['libp2p_peer_id']}"):
+        raise SystemExit(f"validator-47 bootstrap peer identity mismatch: {name}")
 
 registry = json.loads(registry_path.read_text(encoding="utf-8"))
+if hashlib.sha256(registry_path.read_bytes()).hexdigest() != canonical_generated_registry_sha256:
+    raise SystemExit("validator-47 generated registry digest mismatch")
 validators = registry.get("validators")
 if not isinstance(validators, list):
     raise SystemExit("validator-47 registry validators missing")
+canonical_registry = {
+    "signer_bindings": {
+        f"governance.finality.v1.{item['node_id']}": str(item["finality_signer_public_key"]).lower()
+        for item in validators
+    },
+    "slot_id": registry.get("slot_id"),
+    "threshold": registry.get("threshold"),
+    "threshold_bps": registry.get("threshold_bps"),
+    "validator_stakes": {
+        f"governance.finality.v1.{item['node_id']}": item["stake"]
+        for item in validators
+    },
+}
+actual_registry_semantic_sha256 = hashlib.sha256(
+    json.dumps(canonical_registry, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+).hexdigest()
+if actual_registry_semantic_sha256 != authority.get("generated_registry_semantic_sha256"):
+    raise SystemExit("validator-47 generated registry semantic digest mismatch")
 if len(validators) != 3:
     raise SystemExit("validator-47 registry validator count mismatch")
 if sorted(item.get("node_id") for item in validators) != sorted(
@@ -274,6 +370,14 @@ if sorted(item.get("node_id") for item in validators) != sorted(
     raise SystemExit("validator-47 registry identity mismatch")
 if any(item.get("stake") != 100 for item in validators):
     raise SystemExit("validator-47 registry stake mismatch")
+expected_by_id = {node["node_id"]: node for node in inventory["nodes"].values()}
+for item in validators:
+    expected = expected_by_id[item["node_id"]]
+    if item.get("finality_signer_public_key", "").lower() != expected["finality_signer_public_key"].lower():
+        raise SystemExit(f"validator-47 registry signer mismatch: {item['node_id']}")
+    for field in ("root_public_key", "finality_public_key", "libp2p_peer_id"):
+        if field in expected and item.get(field) != expected[field]:
+            raise SystemExit(f"validator-47 registry {field} mismatch: {item['node_id']}")
 PY
 }
 
@@ -282,7 +386,7 @@ validate_validator_47_identity_source() {
   [[ -n "$identity_dir" ]] || die "validator-47 requires --identity-dir for an already-staged identity"
   [[ ! -e "$config_dir/$VALIDATOR_47_IDENTITY_KEY_FILE" ]] \
     || die "validator-47 config stage contains a stale node-keypair.toml; use --identity-dir"
-  python3 - "$identity_dir" "$config_dir/node.env" "$config_dir/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json" <<'PY'
+  python3 - "$identity_dir" "$config_dir/node.env" "$config_dir/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json" "$config_dir/$TRIAD_INVENTORY_FILE" <<'PY'
 import hashlib
 import json
 import os
@@ -293,6 +397,7 @@ from pathlib import Path
 identity_dir = Path(sys.argv[1])
 node_env_path = Path(sys.argv[2])
 registry_path = Path(sys.argv[3])
+inventory_path = Path(sys.argv[4])
 current = Path(identity_dir.anchor or "/")
 for component in identity_dir.parts[1:]:
     current /= component
@@ -326,6 +431,7 @@ receipt_metadata = secure_regular(receipt_path, "identity source receipt")
 try:
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
 except (OSError, UnicodeError, ValueError) as error:
     raise SystemExit(f"validator-47 identity or registry JSON is malformed: {error.__class__.__name__}")
 if receipt.get("schema_version") != "oasis7.identity_provision.v1":
@@ -335,6 +441,12 @@ if receipt.get("node_id") != "triad-testnet-validator-47":
 for field in ("root_public_key", "finality_public_key", "libp2p_peer_id"):
     if not isinstance(receipt.get(field), str) or not receipt[field].strip():
         raise SystemExit(f"validator-47 staged identity receipt missing {field}")
+expected_identity = inventory.get("nodes", {}).get("validator-47")
+if not isinstance(expected_identity, dict):
+    raise SystemExit("validator-47 inventory identity binding missing")
+for field in ("root_public_key", "finality_public_key", "libp2p_peer_id"):
+    if receipt.get(field) != expected_identity.get(field):
+        raise SystemExit(f"validator-47 staged public identity does not match governed inventory: {field}")
 if "private_key" in json.dumps(receipt, ensure_ascii=False).lower():
     raise SystemExit("validator-47 public identity receipt must not contain private key material")
 node_env_values = {}
@@ -361,6 +473,9 @@ if len(matches) != 1:
     raise SystemExit("validator-47 staged identity node is absent or duplicated in governed registry")
 if matches[0].get("finality_signer_public_key", "").lower() != receipt["finality_public_key"].lower():
     raise SystemExit("validator-47 staged public identity does not match governed registry")
+for field in ("root_public_key", "finality_public_key", "libp2p_peer_id"):
+    if matches[0].get(field) != expected_identity.get(field):
+        raise SystemExit(f"validator-47 governed registry identity mismatch: {field}")
 PY
 }
 
@@ -431,7 +546,7 @@ for required in package_deb ops_tools_tar config_dir world_dir node_id receipt; 
   [[ -n ${!required} ]] || die "missing required option: --${required//_/-}"
 done
 [[ "$node_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "invalid node-id"
-for command in tar shasum jq python3 install find; do require_command "$command"; done
+for command in tar shasum jq python3 install find ps; do require_command "$command"; done
 
 stack_root=$(absolute_path "$stack_root")
 systemd_unit_dir=$(absolute_path "$systemd_unit_dir")
@@ -516,6 +631,7 @@ fi
 
 [[ ! -e "$stack_root" ]] || [[ -d "$stack_root" && -z "$(find "$stack_root" -mindepth 1 -print -quit)" ]] \
   || die "stack root must be empty: $stack_root"
+assert_no_stack_orphans "$stack_root"
 
 template_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 template="$template_dir/p2p-public-testnet-triad-sequencer.service"
