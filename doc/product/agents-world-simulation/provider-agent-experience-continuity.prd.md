@@ -7,9 +7,16 @@
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
 - 专业域权威：[Local Provider 与内置 Agent 体验等价（parity）验收方案](../../world-simulator/llm/provider-agent-experience-parity.prd.md)
+- Last reviewed：2026-09-13
 
 本文是长期产品分册，定义 Agent/provider 切换时玩家体验连续性的产品承诺。它不声明任何 provider 当前受支持、可用、默认或已就绪；具体 provider 组合的场景范围、评估、技术合同和结论仅由专业域权威文档维护。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
+- 设计适用性理由：本 PRD 的 provider 场景边界、切换和在途意图规则已由产品要求与专业 authority 直接表达；独立 design 会重复跨 provider 的产品合同。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 当玩家在专业域已明确场景范围的 provider 组合间切换时，切换不能带来无法解释的、实质性的体验退化。连续性以玩家可感知的目标结果、等待体验、多轮记忆与意图延续、问题可诊断性及恢复路径为准，而不要求内部实现相同。
@@ -30,6 +37,43 @@
 - 切换发生时，玩家必须仍能区分：尚未被权威系统接受的候选、仍无世界效果的待决请求、已有 committed receipt 的结果，以及已拒绝、失效或需要重新规划的请求。切换、重连或体验降级本身不把其中任何状态变成成功、取消、失败或新的世界效果。
 - 已接受或待决的意图只按同一权威世界链和其专业合同继续、拒绝、过期或结算；后续切换不能追溯改写其来源、成本、权限、排序或世界后果。若专业域支持安全的撤回或替换，玩家只能使用该明确能力；否则产品表面只可提供查看、等待或重新规划，不能把普通重试伪装成取消。
 - 当切换前后的建议指向相同目标时，产品表面仍须避免暗示两者已自动去重、合并或同时获授权。任何额外提交都必须重新经过当时有效的授权与权威裁决；重复、竞争或重放的实际处理由 Agent、runtime 和测试专业合同定义，产品层不冻结其实现或 receipt schema。
+
+## 2.2 叶级产品要求与验收
+
+<a id="req-agent-parity-001"></a>
+### REQ-AGENT-PARITY-001：体验连续性必须限定在已声明场景
+
+- 要求：provider 切换的连续性只能在专业 authority 已声明的 provider 组合、玩家场景、权限和证据范围内作出产品承诺；技术接通、一次成功或历史样本不能扩大当前支持、默认或发布结论。
+- 验收：AC-AGENT-PARITY-001
+
+<a id="ac-agent-parity-001"></a>
+### AC-AGENT-PARITY-001：未覆盖组合保持窄承诺
+
+- 覆盖要求：REQ-AGENT-PARITY-001
+- 场景与结果：当组合超出适用范围或证据不足时，玩家看到受限、退化或 blocked 语义及真实下一步；产品不会把回退、静默替代或局部技术通路呈现为等价体验或当前可用 provider。
+- 证据边界：场景范围、评估和具体 parity 结论由 provider 专业 authority 提供；产品层不定义 provider 矩阵、评分或阈值。
+
+<a id="req-agent-parity-002"></a>
+### REQ-AGENT-PARITY-002：provider 切换不得重放在途意图
+
+- 要求：provider 切换、重连或体验降级必须保留候选、待决、已结算和已拒绝请求的真实区别，不得自动重放旧请求、伪造取消或产生第二次世界效果。
+- 验收：AC-AGENT-PARITY-002
+
+<a id="ac-agent-parity-002"></a>
+### AC-AGENT-PARITY-002：切换只影响后续新意图
+
+- 覆盖要求：REQ-AGENT-PARITY-002
+- 场景与结果：切换前候选不自动交给新 provider 重试；待决请求按原权威合同继续、拒绝、过期、取消或明确重新规划；只有 committed receipt 表达世界后果，受支持的撤回/替换必须走专业路径。
+- 证据边界：意图 lineage、去重、receipt 和撤回/替换状态机由 Agent/runtime/QA authority 验证；产品层不冻结 schema。
+
+## 2.3 叶级 owner、authority、evidence 与 test tier 追踪
+
+本表把 provider 连续性的每个新叶级关系导航到专业 owner、权威文档和未来验证证据；它不声明任何 provider 当前受支持、默认或已就绪。
+
+| REQ / AC 关系 | 专业 owner 与真实边界 | 专业域 PRD-ID | 专业权威（可导航） | 验证证据（应提供，不预示当前结果） | 测试层级 |
+| --- | --- | --- | --- | --- | --- |
+| [REQ-AGENT-PARITY-001](#req-agent-parity-001) / [AC-AGENT-PARITY-001](#ac-agent-parity-001) | `producer_system_designer`：场景范围、窄承诺和 readiness 边界；`agent_engineer`：provider/Agent 行为与失败反馈；`viewer_engineer`：受限、退化和下一步的真实表达；`qa_engineer`：适用组合的 parity 证据；专业角色各自不把技术接通或局部样本提升为产品准入。 | `PRD-WORLD_SIMULATOR-038` / `PRD-WORLD_SIMULATOR-016` / `PRD-TESTING-003` | [`provider parity authority`](../../world-simulator/llm/provider-agent-experience-parity.prd.md#1-executive-summary); [`world-simulator PRD`](../../world-simulator/prd.md); [`testing PRD`](../../testing/prd.md) | 未来 full-tier 的已声明 provider 组合/场景样例，以及超出范围或证据不足的负例；对比目标、等待、诊断和恢复语义，并确认 blocked/limited 表达不被包装成等价体验或当前支持。 | `test_tier_full` |
+| [REQ-AGENT-PARITY-002](#req-agent-parity-002) / [AC-AGENT-PARITY-002](#ac-agent-parity-002) | `producer_system_designer`：切换窗口的产品边界；`agent_engineer`：意图 lineage、provider failure 和重试语义；`runtime_engineer`：接受/结算、去重和单一世界效果；`viewer_engineer`：候选、待决、已结算和拒绝状态可读性；`qa_engineer`：切换/重连/退化组合对账。 | `PRD-WORLD_SIMULATOR-038` / `PRD-WORLD_RUNTIME-001/031/033` / `PRD-TESTING-003` | [`provider parity authority`](../../world-simulator/llm/provider-agent-experience-parity.prd.md#1-executive-summary); [`world-simulator PRD`](../../world-simulator/prd.md); [`world-runtime PRD`](../../world-runtime/prd.md); [`testing PRD`](../../testing/prd.md) | 未来 full-tier 切换窗口覆盖候选不重放、待决请求真实结算/拒绝/过期、重连与退化不产生第二次提交，以及撤回/替换仅走专业支持路径；只有 committed receipt 表达世界后果。 | `test_tier_full` |
 
 ## 3. 产品验收
 

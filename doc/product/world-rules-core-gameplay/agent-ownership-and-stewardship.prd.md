@@ -6,10 +6,17 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`Agent claim 经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
 本文承载玩家取得、维持和结束 Agent 控制权的长期产品承诺。它补充首局与持续游玩、间接控制和成熟世界成长分册，但不冻结经济数值、状态字段、身份实现、界面结构、运营操作、测试步骤或当前放行结论。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
+- 设计适用性理由：本 PRD 直接承载控制权确认、失去控制后的连续性和重认领的产品承诺；独立 design 会重复 ownership authority。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品承诺
 
 玩家以明确、非零且可理解的承诺取得自己的 Agent 控制权，并持续看见这份控制权的成本、义务、风险和下一次选择。首个支持路径可以降低进入门槛，但不会把 Agent 所有权变成免费、可套现或可无限复制的能力。
@@ -58,6 +65,38 @@
 
 这一边界保持 world-first：控制权变化以权威世界事实而非客户端叙述为准；保持 emergence-first：玩家可在同一规则下重建关系和策略，而不能复制补贴或权限；保持 persistent / auditable：结束、未决义务和新选择连续可追溯；保持 extensible：未来的恢复或争议机制可以增加受限路径，但必须满足同样的资格重评、非重置和可读结果包。
 
+### 2.4 可验证的控制权与恢复要求
+
+<a id="req-wr-aos-001"></a>
+### REQ-WR-AOS-001：首个控制权确认必须是可比较的非零承诺
+
+- 要求：玩家在确认首个 Agent 前必须能比较候选用途与差异、非零 upfront 成本、确认后的 upkeep runway、失去控制权的可读触发，以及等待、补足或选择其他候选的替代路径；预览或本地提交不能单独产生控制权、自由财富或持久义务。
+- 专业权威：[`Agent claim 经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)
+- 验收：[AC-WR-AOS-001](#ac-wr-aos-001)
+
+<a id="ac-wr-aos-001"></a>
+### AC-WR-AOS-001：确认前显示承诺包且不产生旁路效果
+
+- 覆盖要求：REQ-WR-AOS-001
+- 给定：玩家看到一个仍可比较的首个 Agent 候选，其授权、成本、upkeep、失去控制权触发和替代路径均已声明。
+- 当：玩家尚未完成权威确认，或确认时任一前置条件已发生变化。
+- 则：玩家能读到非零承诺、持续成本和下一步；系统保持待决或原子拒绝并返回当前 blocker，不产生控制权、自由余额、容量豁免或部分扣减。
+
+<a id="req-wr-aos-002"></a>
+### REQ-WR-AOS-002：失去控制权后的恢复不能重置世界承诺
+
+- 要求：主动结束、到期、回收和争议限制必须区分原因与范围，保留已确认结果和未决义务，并只提供按当前资格重新评估的恢复、重新选择、申诉或安全停止路径。
+- 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)
+- 验收：[AC-WR-AOS-002](#ac-wr-aos-002)
+
+<a id="ac-wr-aos-002"></a>
+### AC-WR-AOS-002：结束与重认领保持连续且不可套利
+
+- 覆盖要求：REQ-WR-AOS-002
+- 给定：一个已生效的 Agent 控制关系进入主动结束、到期、回收或争议限制之一。
+- 当：玩家查看结果并尝试恢复或重新认领。
+- 则：结果显示原因、范围、历史 receipt、未决义务和真实可用路径；新的控制权必须重新通过当前资格、资源、容量和反滥用校验，重复请求不能重放支持、权限、财富或世界效果。
+
 ## 3. 权威边界
 
 | 层级 | 本产品分册拥有 | 下层专业域拥有 |
@@ -100,3 +139,10 @@
 - 不把主动结束、短暂退出、候选切换或历史 receipt 视为重置首次支持、逃避既有义务、取得额外容量或转移控制权的机制。
 - 不冻结恢复路径的数值成本、时长、成功率、排序算法、状态字段、API、界面布局或翻译字典，也不把比较卡或 Agent 推荐承诺为动作已提交、资源已保留或结果必然成功。
 - 不以本文或历史任务状态声明当前 preview、可玩性或公开发行已经通过。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-WR-AOS-001](#req-wr-aos-001) / [AC-WR-AOS-001](#ac-wr-aos-001) | `producer_system_designer` | [`Agent claim 经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md#public-claim-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-AOS-002](#req-wr-aos-002) / [AC-WR-AOS-002](#ac-wr-aos-002) | `producer_system_designer` | [`Agent claim 经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md#public-claim-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

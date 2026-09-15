@@ -10,6 +10,7 @@ Lifecycle: current controlled operator procedure; the date is its establishment 
 - Document Type: `How-to / Runbook`
 - Scope: `TASK-GAME-050` / `TASK-GAMEPLAY-AGC-012`
 - Related PRD: `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`
+- Product boundary: [`Agent 所有权与持续经营`](../../product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#req-wr-aos-001)；本 runbook 保留受限 grant 的运营执行权威，只有在该产品义务被完整吸收且无 live reference 后才可删除。
 - Related gameplay authority: `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`; mutable execution history is in the GitHub task issue evidence.
 - Runtime Dependencies:
   - `crates/oasis7/src/runtime/world/event_processing/action_to_event_core.rs`
@@ -17,6 +18,17 @@ Lifecycle: current controlled operator procedure; the date is its establishment 
   - `crates/oasis7/src/runtime/state/apply_domain_event_main_token.rs`
   - `crates/oasis7/src/runtime/world/governance.rs`
   - `crates/oasis7/src/runtime/tests/agent_claims.rs`
+
+<a id="public-claim-boundary"></a>
+## Public claim boundary
+
+本 runbook 是受控 restricted grant 的运营执行权威，不是公开发行公告，也不把一次成功执行变成普遍可用性或公开 entitlement。它必须遵守玩家入口与发行模块的 [`REQ-ENTRY-CLAIM-003`](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#req-entry-claim-003) 与 [`四层口径分离`](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#public-claim-four-layer-model)。
+
+- 当前事实（current fact）：本 runbook 只能记录某个具体窗口、账户、权限和 world-state 检查实际得到的结果；runbook 本身不证明已执行、已发布或所有玩家均可获得 grant。
+- 产品目标（product goal）：在受控窗口中让运营可以用正式 runtime 真值发放、检查、到期和撤销 restricted grant，并保持资金用途、权限、过期和回收可审计。
+- 假设（assumption）：执行前的 admin registry、signer policy、专用池、beneficiary 状态和证据窗口均已通过当前 authority 复核；任一条件不满足时，动作必须停止或记录 blocker。
+- 证据边界（evidence limit）：单次 issue/status/revoke 结果只覆盖该账户、该 world-state、该时间窗口和该 issuance reason；它不证明 public launch、开放资格、可转账资产、未来排期或其他账户可用性。
+- 可发布公开 claim（releasable public claim）：只有相同窗口的执行记录、产品 PRD、根 [`README.md`](../../../README.md) 和相关专业/QA authority 一致，并且产品审核将候选标记为 `publish_ready` 时，才可把 runbook 结果用于公开说明；否则只保留为内部 evidence 或 `draft/blocked`。
 
 ## 1. 目的
 - 这份 runbook 用于把 `restricted starter claim grant` 的发放、到期、撤销和事故回退固定成一套运营可执行 SOP。

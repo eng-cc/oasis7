@@ -370,6 +370,7 @@ run_product_doc_governance_check() {
   else
     run ./scripts/doc-governance-check.sh
   fi
+  run ./scripts/doc-governance-check.sh --full-corpus
 }
 
 run_standalone_tool_lockfiles_checks() {

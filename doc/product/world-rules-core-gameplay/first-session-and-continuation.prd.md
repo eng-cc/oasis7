@@ -7,10 +7,16 @@
 - 配对产品 design：[`first-session-and-continuation.design.md`](first-session-and-continuation.design.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md)
 
 本文是长期产品分册，承载首局微循环、后引导承接与首次持续能力的玩家承诺。它不冻结 UI 字段、tick、数值阈值、任务状态或实现方案。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`paired-design`。
+- 配对关系：[first-session-and-continuation.design.md](first-session-and-continuation.design.md) 承接本 PRD 的玩家经历、信息层级、状态反馈与恢复解释；产品真值仍由本 PRD 拥有。
+- 设计适用性理由：首局工业因果链、持续循环、失败恢复和跨入口阅读由同名 design 承接。
 ## 1. 产品目标
 
 ### 1.1 代表性情境
@@ -382,3 +388,19 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 - 不以历史任务完成态或旧版本样本声明当前体验已经通过。
 - 本 walkthrough 不新增配方、产能、物流损耗、运输时限、队列、库存或价格数值，不冻结 runtime 字段、事件/receipt schema、UI 布局或具体任务文案；这些仍由 `doc/game`、M4/runtime、Viewer 与 QA 专业权威承接。
 - 本 walkthrough 不承诺每座工厂、每个配方或每条路线都可在首局完成；它要求当前被选中的代表性链路能解释可达性、阻塞与恢复，并在不可达时返回安全的替代或重新定目标路径。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-FIRST-INDUSTRIAL-001](#req-first-industrial-001) / [AC-FIRST-INDUSTRIAL-001](#ac-first-industrial-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-FIRST-INDUSTRIAL-001](#req-first-industrial-001) / [AC-FIRST-INDUSTRIAL-002](#ac-first-industrial-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-FIRST-INDUSTRIAL-002](#req-first-industrial-002) / [AC-FIRST-INDUSTRIAL-001](#ac-first-industrial-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-FIRST-INDUSTRIAL-003](#req-first-industrial-003) / [AC-FIRST-INDUSTRIAL-001](#ac-first-industrial-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-FIRST-INDUSTRIAL-003](#req-first-industrial-003) / [AC-FIRST-INDUSTRIAL-002](#ac-first-industrial-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-FIRST-INDUSTRIAL-004](#req-first-industrial-004) / [AC-FIRST-INDUSTRIAL-001](#ac-first-industrial-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-FIRST-INDUSTRIAL-004](#req-first-industrial-004) / [AC-FIRST-INDUSTRIAL-005](#ac-first-industrial-005) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-FIRST-INDUSTRIAL-005](#req-first-industrial-005) / [AC-FIRST-INDUSTRIAL-003](#ac-first-industrial-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-FIRST-INDUSTRIAL-006](#req-first-industrial-006) / [AC-FIRST-INDUSTRIAL-002](#ac-first-industrial-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-FIRST-INDUSTRIAL-007](#req-first-industrial-007) / [AC-FIRST-INDUSTRIAL-004](#ac-first-industrial-004) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-FIRST-INDUSTRIAL-008](#req-first-industrial-008) / [AC-FIRST-INDUSTRIAL-004](#ac-first-industrial-004) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

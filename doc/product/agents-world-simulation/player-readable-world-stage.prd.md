@@ -8,9 +8,15 @@
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
 - 专业域权威：[`语义定位`](../../world-simulator/viewer/viewer-pixel-world-semantic-positioning.prd.md)、[`Fragment LOD`](../../world-simulator/viewer/viewer-pixel-world-fragment-lod.prd.md)、[`玩家因果优先的渲染闭环`](../../world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md)
+- Last reviewed：2026-09-13
 
 本文是长期产品分册，定义玩家观察 Agent 与世界模拟时的首读层级、空间关系、可归因因果与诊断边界。它不指定 Viewer 组件、DTO、派生算法、LOD 阈值、渲染管线、视觉资产或当前发布结论。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`paired-design`。
+- 配对关系：[player-readable-world-stage.design.md](player-readable-world-stage.design.md) 承接本 PRD 的玩家经历、信息层级、状态反馈与恢复解释；产品真值仍由本 PRD 拥有。
+- 设计适用性理由：世界舞台的阅读顺序、空间比例、来源与诊断边界由同名 design 承接。
 ## 1. 目标
 
 玩家进入正式世界表面后，应先读懂当前目标、相关 Agent 与地点或路线、关键阻塞、可采取的下一步，以及已接受行动造成的可理解世界反馈。环境、地形与世界活动提供必要背景，但不能压过玩家行动和因果。
@@ -164,7 +170,44 @@ Agent Context Lite 只允许组合以下已经发布且适用于该 Agent 的语
 - 玩家当前目标、blocker 与行动回执应能以可访问的文本或等价方式被读取；这不承诺专用复制面板、剪贴板功能或默认暴露原始诊断文本。
 - mock、fallback、截图或仅本地可见的调试表面不能单独证明正式玩家表面已经满足本产品承诺。
 
-## 5. 组合验收
+## 5. 叶级产品要求与验收
+
+<a id="req-agent-stage-001"></a>
+### REQ-AGENT-STAGE-001：世界舞台必须先呈现目的与因果
+
+- 要求：正式玩家 surface 必须优先呈现当前目的、相关 Agent/地点/路线、关键 blocker、下一步和已接受行动的主要结果；环境装饰与诊断不能代替玩家因果。
+- 验收：AC-AGENT-STAGE-001
+
+<a id="ac-agent-stage-001"></a>
+### AC-AGENT-STAGE-001：玩家能从舞台读到下一决策
+
+- 覆盖要求：REQ-AGENT-STAGE-001
+- 场景与结果：代表性目标、相关对象、阻塞和已接受行动结果在主舞台及密度变化后仍可读，并能到达继续、纠正、中断或恢复路径；视觉邻近、环境活动和诊断不会被误读为玩家行动结果。
+- 证据边界：空间位置、LOD、renderer 和控件由 Viewer/视觉交互 authority 验证；产品层只规定阅读顺序与事实来源边界。
+
+<a id="req-agent-stage-002"></a>
+### REQ-AGENT-STAGE-002：动态观察必须保留来源、时效与未知
+
+- 要求：当动态对象观察过期、冲突、范围外或尚未取得时，产品必须保留当前确认、最近已知、未知/冲突和来源时效的区别，并为影响行动的非当前信息提供刷新、等待、改道或停止路径。
+- 验收：AC-AGENT-STAGE-002
+
+<a id="ac-agent-stage-002"></a>
+### AC-AGENT-STAGE-002：陈旧或冲突观察不会代签真值
+
+- 覆盖要求：REQ-AGENT-STAGE-002
+- 场景与结果：旧响应晚到、刷新竞态或提交前信息失效时，surface 保留冲突/来源/时效语义；低后果动作最多是带不确定性预览，高后果动作重新取得当前权威确认或明确阻断。
+- 证据边界：动态观察来源、时效、提交校验和最终结果由 Agent/runtime/Viewer/QA authority 定义；产品层不定义 DTO、TTL 或排序。
+
+## 5.1 叶级 owner、authority、evidence 与 test tier 追踪
+
+本表把每个新叶级产品关系导航到专业 owner、权威文档和未来验证证据；它不把舞台方向、历史交付或局部截图提升为当前 Viewer readiness。
+
+| REQ / AC 关系 | 专业 owner 与真实边界 | 专业域 PRD-ID | 专业权威（可导航） | 验证证据（应提供，不预示当前结果） | 测试层级 |
+| --- | --- | --- | --- | --- | --- |
+| [REQ-AGENT-STAGE-001](#req-agent-stage-001) / [AC-AGENT-STAGE-001](#ac-agent-stage-001) | `producer_system_designer`：primary read、事实来源和非直接编辑边界；`game_visual_interaction_designer`：层级、可读性和交互边界；`viewer_engineer`：正式 surface 的位置/LOD/控件实现；`gameplay_designer`：玩家目的与因果语义；`runtime_engineer`：接受结果与权威世界后果；`qa_engineer`：跨 surface 验收证据；专业实现不由产品表格代签 readiness。 | `PRD-WORLD_SIMULATOR-039/041/046` / `PRD-WORLD_RUNTIME-001` / `PRD-TESTING-003` | [`world-simulator PRD`](../../world-simulator/prd.md#目标); [`semantic positioning`](../../world-simulator/viewer/viewer-pixel-world-semantic-positioning.prd.md); [`fragment LOD`](../../world-simulator/viewer/viewer-pixel-world-fragment-lod.prd.md); [`player-readable rendering`](../../world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md); [`testing PRD`](../../testing/prd.md) | 未来 required-tier 正式 surface 证据覆盖目标、相关对象/路线、blocker、下一步和已接受结果在密度变化下的 primary read；验证环境活动、视觉邻近和诊断不代签玩家因果，并保留受支持 command path。 | `test_tier_required` |
+| [REQ-AGENT-STAGE-002](#req-agent-stage-002) / [AC-AGENT-STAGE-002](#ac-agent-stage-002) | `producer_system_designer`：观察来源、时效和未知边界；`agent_engineer`：观察与推断的 Agent 语义；`runtime_engineer`：提交前权威校验与结果；`viewer_engineer`：来源/时效/冲突状态的可读表达；`qa_engineer`：刷新竞态、过期和高后果阻断证据；产品层不定义 DTO、TTL、排序或 renderer。 | `PRD-WORLD_SIMULATOR-016/039/041/046` / `PRD-WORLD_RUNTIME-001/031/033` / `PRD-TESTING-003` | [`world-simulator PRD`](../../world-simulator/prd.md#目标); [`world-runtime PRD`](../../world-runtime/prd.md); [`testing PRD`](../../testing/prd.md) | 未来 full-tier 覆盖范围外/未知、过期缓存、冲突观察、旧刷新响应晚到和提交前失效；验证公共事实、当前确认、最近已知和未知/冲突保持区分，高后果动作重新校验或阻断，并能对账最终接受/拒绝原因。 | `test_tier_full` |
+
+## 5.2 组合验收
 
 - RW-1：代表性正式玩家表面中，玩家无需阅读诊断信息即可识别世界上下文、当前目标、相关行动者或路线、关键 blocker 和下一决策。
 - RW-2：用于说明决策的空间关系可读；任何派生或抽象位置都不会被表达为其并不具备的权威精度、资源事实或交互能力。
@@ -176,7 +219,7 @@ Agent Context Lite 只允许组合以下已经发布且适用于该 Agent 的语
 - RW-8：代表性动态信息场景证明正式玩家表面能区分公共已结算事实、当前确认、最近已知和未知/失效观察；范围外或缓存对象不会被表现为当前精确事实，且影响行动的非当前信息提供刷新、等待、改道或停止路径。
 - RW-9：同一动态对象出现互相矛盾的观察、刷新竞态（旧响应晚到）或提交前时效失效时，surface 保留冲突/来源/时效语义，不以客户端“最新响应”代签真值；低后果动作至多提供带不确定性标注的预览，高后果动作必须重新取得当前权威确认或明确阻断，并能读到冲突原因与下一步。
 
-### 5.1 验收权威与证据边界
+### 5.2.1 验收权威与证据边界
 
 | 产品承诺 | 专业 owner | 专业域权威 | 证据边界 | 测试层级 |
 | --- | --- | --- | --- | --- |
@@ -213,3 +256,8 @@ Agent Context Lite 只允许组合以下已经发布且适用于该 Agent 的语
 - 不承诺生产线、吞吐、队列、瓶颈、action preview、设施流、里程碑动画、直接地图操作、2D overview、top-down/orthographic board 或 semantic zoom 已经存在；历史 2D overview/zoom 退役不能被反向引用为当前能力。
 - 不产生新的玩法控制权、世界规则、资源事实、发布等级或可玩性 claim。
 - 2026-05-28 的 player-leverage / production-readability brainstorm 仅是未来输入，不是本分册的当前产品权威。
+
+## 11. 未决问题与假设
+
+- 未决：世界舞台在具体 surface 上采用的对象来源、密度层级、可访问文本和恢复入口，待 Viewer、视觉交互与 QA authority 依据当前支持范围和证据共同裁决；本分册不把候选布局或历史渲染能力当作默认能力。
+- 假设：在缺少当前权威位置、关系、因果或时效证据时，玩家表面会保留未知/待验证语义，并提供等待、刷新、改道或安全返回，而不是用视觉邻近或缓存值填补事实。

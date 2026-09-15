@@ -6,10 +6,17 @@
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 
 本文定义常态市场与系统性必需品危机之间的产品状态边界，以及紧急保供的授权、介入和退出语义。它不定义危机阈值、价格、补偿、配给公式、物流算法、runtime 状态机或当前实现结论。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
+- 设计适用性理由：本 PRD 只定义常态/紧急分界、冻结批次、结果类别和退出边界；分配算法与界面由专业 authority 决定。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 市场常态由玩家、Agent、合约、供需和物理物流共同形成。价格波动、区域差异、局部故障和一般竞争是常态市场需要吸收的信号，不应被治理方随意改写为紧急状态。
@@ -69,6 +76,53 @@
 - **拒绝、撤销、到期或复核后变更**：玩家必须看到结果类别、仍适用的常态规则、未使用临时资格已失效的事实，以及在适用时可执行的申诉、补证、常态替代或重新规划路径。不得静默保留旧资格、自动重提已失效请求，或把历史授权记录当成新的紧急权利。
 - **退出后的连续性**：回归常态不会抹去已发生的交付、补偿、异议或裁决。玩家可追溯其授权、receipt 和复核结果；若先前预期未获最终确认，surface 必须明确其未生效而非以回溯方式制造损失或债务。
 
+### 5.1 可验证的市场状态与保供要求
+
+<a id="req-wr-es-001"></a>
+### REQ-WR-ES-001：常态市场与紧急保供必须按证据分界
+
+- 要求：普通价格波动、局部故障和暂时短缺维持常态市场；只有预声明的系统性必需品危机具备证据、范围、授权来源、起止时间、介入方式和复核入口的最小授权包时，才可产生紧急世界效果。
+- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)
+- 验收：[AC-WR-ES-001](#ac-wr-es-001)
+
+<a id="ac-wr-es-001"></a>
+### AC-WR-ES-001：缺失授权包不改变常态交易
+
+- 覆盖要求：REQ-WR-ES-001
+- 给定：一个普通价格波动、局部设施故障或证据完整的系统性必需品危机。
+- 当：系统评估是否启动紧急采购、补偿、分配或 rationing。
+- 则：前两类继续按常态规则处理；危机只有在最小授权包完整且经权威确认后才可在声明范围内介入，缺任一项则原子拒绝且不产生部分效果。
+
+<a id="req-wr-es-002"></a>
+### REQ-WR-ES-002：稀缺分配必须依据冻结快照并可确定回放
+
+- 要求：同一授权批次必须冻结资格、需求、范围、资源和政策快照，使用已声明的优先依据与 tie resolution；快照漂移只能原子拒绝或形成新批次，不能以隐藏到达顺序追溯重排。
+- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
+- 验收：[AC-WR-ES-002](#ac-wr-es-002)
+
+<a id="ac-wr-es-002"></a>
+### AC-WR-ES-002：重复投递不改变冻结批次结果
+
+- 覆盖要求：REQ-WR-ES-002
+- 给定：一个供给不足且已冻结快照的授权批次，包含多个等资格请求。
+- 当：请求以不同到达顺序重复投递、重连或在快照漂移后重试。
+- 则：等价重排序和回放得到同一 `allocated`/`partial`/`denied`/`expired` 语义结果；漂移时旧请求原子拒绝或重新评估，retry/reconnect 不产生第二次分配、补偿或资格。
+
+<a id="req-wr-es-003"></a>
+### REQ-WR-ES-003：紧急授权到期后恢复常态且不迁移待决请求
+
+- 要求：紧急授权到期、撤销或范围改变时，未确认的请求不能自动跨入新授权；未使用资格失效，已确认 receipt 与历史结果保留，玩家可见常态替代、补证、申诉或重新规划路径。
+- 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
+- 验收：[AC-WR-ES-003](#ac-wr-es-003)
+
+<a id="ac-wr-es-003"></a>
+### AC-WR-ES-003：授权边界切换不制造第二次保供结果
+
+- 覆盖要求：REQ-WR-ES-003
+- 给定：一个旧授权下登记、排队或在途但未取得最终 receipt 的采购或配给请求。
+- 当：授权到期、撤销或被不同范围的续期替代。
+- 则：请求保持原授权结果、明确拒绝或由玩家显式新提；不能继承旧优先级、资格、补偿承诺或世界效果，市场回归常态，已确认历史仍可追溯。
+
 ## 6. 范围与权威边界
 
 产品层定义 `常态市场 -> 危机证据 -> 最小授权包 -> 有界介入 -> 到期/撤销/复核 -> 常态恢复` 的玩家与制度语义。
@@ -103,3 +157,11 @@
 - 不实现市场撮合、物流、存储、治理授权、采购、补偿、分配、rationing、申诉或 runtime 状态机。
 - 不允许紧急状态成为永久治理权、管理员裁量、无偿没收、选择性 bailout、通用货币或绕过世界恢复程序的入口。
 - 不改变 OC、地方经济记录、区域 charter、土地 tenure 或玩家账户/身份的专业权威。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-WR-ES-001](#req-wr-es-001) / [AC-WR-ES-001](#ac-wr-es-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-ES-002](#req-wr-es-002) / [AC-WR-ES-002](#ac-wr-es-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-ES-003](#req-wr-es-003) / [AC-WR-ES-003](#ac-wr-es-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

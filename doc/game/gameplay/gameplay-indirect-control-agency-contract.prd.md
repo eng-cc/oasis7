@@ -3,6 +3,7 @@
 - 对应设计文档: `doc/game/gameplay/gameplay-indirect-control-agency-contract.design.md`
 - 可变执行状态: 对应 GitHub Project task 与 issue evidence comments
 - 产品层长期承诺: [`doc/product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md`](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md)；本文继续拥有保证项字段、状态与失败签名，以及 gameplay、runtime、Viewer/API、Agent 和 QA 的专业合同与任务证据。
+- 产品叶子入口：[`REQ-WR-IA-001`](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-001)；本文件保留字段、状态、失败签名与专业证据权威。
 
 审计轮次: 1
 

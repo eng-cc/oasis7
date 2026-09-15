@@ -1,6 +1,7 @@
 # 工厂能力生命周期合同
 
 - 上层产品映射：承接产品 SC-25 对已建工厂 capability 的升级、重配置、继续运行、降载/延期、退役重建与延期选择；本合同只把既有产品承诺转为玩家可比较的工业经营循环。
+- 产品语义入口：[`工业流水线生命周期到玩家决策的收口`](../../product/world-rules-core-gameplay/prd.md#工业流水线生命周期到玩家决策的收口)；本合同保留工厂 capability 的选择、节奏与恢复权威。
 - Authority 分工：产品层拥有 capability profile、作用域与完成承诺；M4/domain 拥有 factory/recipe fit、物流/容量/终端事实及旧工作处置 profile；world-runtime 拥有状态、cutover、事件、持久化与 replay；gameplay 拥有玩家动作、节奏、收益、机会成本、失败恢复与 progression 表达。
 - 边界：动作标签是玩家选择，不是新增 runtime transition。工厂 capability lifecycle 与 recipe lifecycle、site selection、batch/externality、maintenance 数值和 systemic governance 分离；本合同不得把扩容、重配置或退役写成统一迁移能力。
 

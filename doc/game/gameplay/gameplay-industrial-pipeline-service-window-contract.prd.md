@@ -2,6 +2,7 @@
 
 - 状态：`target-contract`；当前没有 service-window/power continuity 的 runtime、Viewer、pure API 与 Agent 组合证据，不得由本文宣称 current implementation 或 release readiness。
 - 权威：Product 拥有 service-window 与 power mode 的玩家承诺；M4/Power/runtime 拥有 owner-held electricity、stage/edge/buffer/terminal obligation、lease/admission、hold/debit/release/revalidation、receipt、持久化与 replay 真值；本文只拥有玩家选择、机会成本、失败恢复和 gameplay 验收投影。
+- 产品语义入口：[`多阶段工业流水线与中间品背压`](../../product/world-rules-core-gameplay/prd.md#多阶段工业流水线与中间品背压)；本合同保留 service-window、lease/expiry 与 power continuity 的专业玩法权威。
 - 边界：本合同不吸收维护/计划停机、battery/storage、capacity allocator、queue/fairness 或 terminal settlement authority；维护决策继续见 [`工业维护与计划停机合同`](gameplay-industrial-maintenance-planned-downtime-contract.prd.md)。
 
 ## 1. Conditional service window

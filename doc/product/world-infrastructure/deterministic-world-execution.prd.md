@@ -6,10 +6,17 @@
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：`2026-09-13`
 - 专业域权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、Agent 与入口/Viewer 的 [`doc/world-simulator/prd.md`](../../world-simulator/prd.md)；入口动作的具体跨表面契约见 [`客户端启动器跨表面受控动作契约`](../../world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md)
 
 本文定义分布式共识底层之上的确定性世界执行层。它是基础设施内部的上层：接收已签名意图、在版本化规则边界内确定性重执行、提交已最终化结果，并向游戏、Agent 与玩家入口提供稳定协议；它不定义那些消费者的规则、行为或界面。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
+- 设计适用性理由：本 PRD 只定义确定性提交、待决恢复、幂等和版本边界；执行流程与状态呈现由 runtime/P2P 专业 authority 负责。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 执行与共识边界
 
 - 每个活动验证者在 attestation 前完整重执行同一输入。权威世界结果只在 verified commit certificate 后生效；未最终化的 signed intent 不改变世界。
@@ -42,14 +49,87 @@
 
 当前 runtime/consensus 集成不得因本产品目标自动被表述为 BFT-ready、分区恢复完成或可公开发行。完整目标需要 runtime version activation、certificate-gated execution/replication、replay compatibility、恢复后的 root verification，以及与 P2P 相同候选版本的对抗性证据。
 
-## 4. 组合验收
+## 4. 叶子需求与可观察验收
+
+这些叶子把本专题的四类可独立失败义务映射到现有 DE 汇总标准；它们只表达产品可观察结果和证据边界，不复制 runtime/P2P 的字段、状态机或 schema。
+
+<a id="req-dwe-001"></a>
+### REQ-DWE-001：同输入确定性提交
+
+同一 execution version、已排序输入和 parent committed world state 必须产生同一权威结果；缺少适用证明、输入冲突、越权或版本不匹配时，执行不得产生部分世界效果。
+
+- 对应验收：[AC-DWE-001](#ac-dwe-001)。
+- 专业域权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)。
+
+<a id="ac-dwe-001"></a>
+### AC-DWE-001：验证者重执行与拒绝边界
+
+在同一候选中，活动验证者和适用 replay 对相同版本、输入和世界状态得到一致结果；缺证、冲突、越权或版本不匹配的样例被原子拒绝且没有部分 receipt、资源或状态变化。该验收由 runtime 的执行/回放合同与 P2P/QA 的组合证据共同判定，单节点成功不能代签。
+
+- 对应需求：[REQ-DWE-001](#req-dwe-001)。
+
+<a id="req-dwe-002"></a>
+### REQ-DWE-002：finality 缺失时保持无效果待决
+
+签名 intent 在 finality 不可用、陈旧或无法验证时必须保持可读的无效果待决；恢复后按当时有效权限和前置条件重新裁决，只有 committed receipt 才能更新玩家、Agent 或入口的世界结论。
+
+- 对应验收：[AC-DWE-002](#ac-dwe-002)。
+- 专业域权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)。
+
+<a id="ac-dwe-002"></a>
+### AC-DWE-002：待决请求恢复重审
+
+finality 中断样例能区分仍待决、被拒绝/过期、须重新规划和已生效；本地排队、重连、提交回执或界面成功不产生资源、资格、控制权或阶段完成，恢复后的结论只由对应 committed receipt 改变。证据必须覆盖恢复重审和消费者可读状态，不把 transport green 当作世界结果。
+
+- 对应需求：[REQ-DWE-002](#req-dwe-002)。
+
+<a id="req-dwe-003"></a>
+### REQ-DWE-003：同一 intent lineage 至多一次效果
+
+被专业域标记为互斥成员的原请求、撤回或 replacement 必须共享可读 lineage，并由首个有效 committed receipt 原子决定唯一胜者；拒绝或过期只终止自身，独立且未标记互斥的 intent 不被无故取消。
+
+- 对应验收：[AC-DWE-003](#ac-dwe-003)。
+- 专业域权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)。
+
+<a id="ac-dwe-003"></a>
+### AC-DWE-003：替代、重试与 receipt 重放
+
+竞态中的 linked replacement/withdrawal、重复提交和 receipt replay 样例至多产生一个有效世界效果；未获胜成员被明确终止，独立 intent 仍可按专业合同并发。验收关注单次效果和可追溯关联，不冻结 lineage、去重或 receipt 的实现字段。
+
+- 对应需求：[REQ-DWE-003](#req-dwe-003)。
+
+<a id="req-dwe-004"></a>
+### REQ-DWE-004：canonical block 决定 governing version
+
+intent 的 governing version 必须由其首次进入已 committed、finality-verified 的 canonical execution block 与 manifest activation boundary 决定；客户端 compatibility declaration、提交时间、本地版本或 candidate block 不能选择世界规则。已确认历史按原 block 的 manifest replay，激活证据缺失或冲突时 fail closed。
+
+- 对应验收：[AC-DWE-004](#ac-dwe-004)。
+- 专业域权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)。
+
+<a id="ac-dwe-004"></a>
+### AC-DWE-004：版本激活窗口与历史回放
+
+激活窗口样例证明待决 intent 在激活后按新 manifest 重新校验，不兼容时原子拒绝/过期或由主体明确重提；不能静默翻译 payload、沿用旧报价/资格或产生部分副作用。旧 receipt 仍按原 block manifest replay，缺失或冲突的激活证据阻断执行和恢复，消费者能区分待决、拒绝/过期、重规划与已结算。
+
+- 对应需求：[REQ-DWE-004](#req-dwe-004)。
+
+## 5. 组合验收
 
 - DE-1：相同 execution version、已排序输入和 world state 在全部活动验证者上产生相同结果；缺证、冲突、越权或版本不匹配的输入不产生部分副作用。
 - DE-2：游戏/Agent/入口通过稳定协议仅见 committed state，能验证或获得适用证明，并在 finality 缺失时将 pending 表达为无世界效果的待决请求，而非结果。恢复样例必须证明待决请求按当时条件重审、只有 committed receipt 更新结论，并能区分待决、无效/拒绝、须重新规划及已生效；对明确互斥的同 lineage 成员，竞态、替代/撤回、重复重试和 receipt 重放至多产生一个有效世界效果，拒绝/过期不取消独立 intent。
 - DE-3：执行升级、snapshot/replay、node recovery 与版本混合的样例证明同一 `world_id` 历史和 state root 连续；未证明则 fail closed。
 - DE-4：版本激活窗口样例证明 intent 的 governing version 由首次进入**已 committed/finalized 的 canonical block** 与激活边界确定，而不是由提交端的非权威 compatibility declaration、提交时间或本地版本决定；candidate/proposed block 不产生世界效果。激活前待决请求在激活后按新 manifest 重新校验，不能兼容时原子拒绝/过期或经明确的新版本请求重提，不能静默翻译、沿用旧报价或产生部分副作用。旧请求与明确 linked replacement 的新请求发生竞态时，必须进入 2.1 的同一 intent lineage/互斥成员规则，由首个有效 committed receipt 原子胜出，另一方无效果，合计至多一次世界效果；未关联且专业域确认独立的新 intent 才可并发。历史 receipt 按原 block 的 manifest replay，激活证据缺失/冲突时 fail closed。玩家可区分待决、拒绝/过期、重规划与已结算结果。测试层级：`test_tier_full`。
 
-## 5. Non-Goals
+## 6. Non-Goals
 
 - 不定义配方、设施、市场、区域/组织治理、Agent 决策、玩家动作、UX 或数值平衡。
 - 不定义 BFT 消息、签名格式、存储实现、节点部署或具体运行手册。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-DWE-001](#req-dwe-001) / [AC-DWE-001](#ac-dwe-001) | `producer_system_designer` | [`doc/world-runtime/prd.md`](../../world-runtime/prd.md#industrial-execution-status-and-authority-matrix)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、Agent 与入口/Viewer 的 [`doc/world-simulator/prd.md`](../../world-simulator/prd.md)；入口动作的具体跨表面契约见 [`客户端启动器跨表面受控动作契约`](../../world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-DWE-002](#req-dwe-002) / [AC-DWE-002](#ac-dwe-002) | `producer_system_designer` | [`doc/world-runtime/prd.md`](../../world-runtime/prd.md#industrial-execution-status-and-authority-matrix)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、Agent 与入口/Viewer 的 [`doc/world-simulator/prd.md`](../../world-simulator/prd.md)；入口动作的具体跨表面契约见 [`客户端启动器跨表面受控动作契约`](../../world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-DWE-003](#req-dwe-003) / [AC-DWE-003](#ac-dwe-003) | `producer_system_designer` | [`doc/world-runtime/prd.md`](../../world-runtime/prd.md#industrial-execution-status-and-authority-matrix)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、Agent 与入口/Viewer 的 [`doc/world-simulator/prd.md`](../../world-simulator/prd.md)；入口动作的具体跨表面契约见 [`客户端启动器跨表面受控动作契约`](../../world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-DWE-004](#req-dwe-004) / [AC-DWE-004](#ac-dwe-004) | `producer_system_designer` | [`doc/world-runtime/prd.md`](../../world-runtime/prd.md#industrial-execution-status-and-authority-matrix)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、Agent 与入口/Viewer 的 [`doc/world-simulator/prd.md`](../../world-simulator/prd.md)；入口动作的具体跨表面契约见 [`客户端启动器跨表面受控动作契约`](../../world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

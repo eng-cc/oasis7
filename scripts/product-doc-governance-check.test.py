@@ -69,6 +69,12 @@ def replace(path: Path, before: str, after: str) -> None:
     path.write_text(text.replace(before, after, 1), encoding="utf-8")
 
 
+def replace_all(path: Path, before: str, after: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    assert before in text, f"fixture source missing {before!r} in {path}"
+    path.write_text(text.replace(before, after), encoding="utf-8")
+
+
 def remove_paired_design_links(root: Path, *, fence: str | None = None) -> None:
     """Remove every live paired-PRD target while preserving a fenced negative case."""
     path = root / "doc/product/agents-world-simulation/agent-conversation-and-prompt-control.design.md"
@@ -280,16 +286,13 @@ def main() -> None:
     )
     scenario(
         "topic-professional-authority",
-        lambda root: [
-            replace(
-                root / "doc/product/agents-world-simulation/provider-agent-experience-continuity.prd.md",
-                "../../world-simulator/llm/provider-agent-experience-parity.prd.md",
-                "../../world-simulator/llm/"
-                + "llm-provider-agent-experience-parity"
-                + "-2026-03-12.prd.md",
-            )
-            for _ in range(2)
-        ],
+        lambda root: replace_all(
+            root / "doc/product/agents-world-simulation/provider-agent-experience-continuity.prd.md",
+            "../../world-simulator/llm/provider-agent-experience-parity.prd.md",
+            "../../world-simulator/llm/"
+            + "llm-provider-agent-experience-parity"
+            + "-2026-03-12.prd.md",
+        ),
     )
     scenario(
         "topic-pair-backlink",

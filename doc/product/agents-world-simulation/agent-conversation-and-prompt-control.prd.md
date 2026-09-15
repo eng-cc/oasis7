@@ -7,10 +7,16 @@
 - 配对产品设计：[`doc/product/agents-world-simulation/agent-conversation-and-prompt-control.design.md`](agent-conversation-and-prompt-control.design.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md)
 
 本文承载玩家与 Agent 对话、复用 Prompt 草稿以及在受支持时调整 Agent Prompt/目标的长期产品承诺。它不声明某个历史 EGUI 面板仍存在，也不拥有协议字段、前端状态、patch 算法、鉴权、持久化或测试步骤。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`paired-design`。
+- 配对关系：[agent-conversation-and-prompt-control.design.md](agent-conversation-and-prompt-control.design.md) 承接本 PRD 的玩家经历、信息层级、状态反馈与恢复解释；产品真值仍由本 PRD 拥有。
+- 设计适用性理由：对话、草稿、控制权和提交反馈由同名 design 承接信息层级、状态模型与恢复路径。
 ## 1. 目标
 
 ### 1.1 代表性情境
@@ -350,3 +356,19 @@
 - 不定义 `AgentChat`、`PromptControl`、profile 字段、patch、鉴权或持久化实现。
 - 不承诺当前所有入口都支持预设编辑、Prompt apply、preview、rollback 或跨会话保存。
 - 不保存历史任务状态、截图 verdict、测试命令或已退役 surface 的能力说明；这类可变追溯只进入 GitHub task issue evidence。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-PROMPT-001](#req-prompt-001) / [AC-PROMPT-001](#ac-prompt-001) | `producer_system_designer` | [`doc/world-simulator/prd.md`](../../world-simulator/prd.md#目标)、[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-PROMPT-002](#req-prompt-002) / [AC-PROMPT-002](#ac-prompt-002) | `producer_system_designer` | [`doc/world-simulator/prd.md`](../../world-simulator/prd.md#目标)、[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-PROMPT-003](#req-prompt-003) / [AC-PROMPT-003](#ac-prompt-003) | `producer_system_designer` | [`doc/world-simulator/prd.md`](../../world-simulator/prd.md#目标)、[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-PROMPT-004](#req-prompt-004) / [AC-PROMPT-004](#ac-prompt-004) | `producer_system_designer` | [`doc/world-simulator/prd.md`](../../world-simulator/prd.md#目标)、[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-PROMPT-005](#req-prompt-005) / [AC-PROMPT-005](#ac-prompt-005) | `producer_system_designer` | [`doc/world-simulator/prd.md`](../../world-simulator/prd.md#目标)、[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-PROMPT-006](#req-prompt-006) / [AC-PROMPT-006](#ac-prompt-006) / [AC-7](#ac-7) | `producer_system_designer` | [`doc/world-simulator/prd.md`](../../world-simulator/prd.md#目标)、[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md) | 桌面、窄屏和低高度下的目标/草稿/主动作/结果/恢复可达性，以及正常文本编辑、换行、发送、IME/焦点边界；未验证的快捷键、IME 组合态或自动聚焦不作为当前保证 | `test_tier_required` |
+| [REQ-PROMPT-007](#req-prompt-007) / [AC-PROMPT-007](#ac-prompt-007) | `producer_system_designer` | [`doc/world-simulator/prd.md`](../../world-simulator/prd.md#目标)、[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-PROMPT-008](#req-prompt-008) / [AC-PROMPT-008](#ac-prompt-008) | `producer_system_designer` | [`doc/world-simulator/prd.md`](../../world-simulator/prd.md#目标)、[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-PROMPT-009](#req-prompt-009) / [AC-PROMPT-009](#ac-prompt-009) | `producer_system_designer` | [`doc/world-simulator/prd.md`](../../world-simulator/prd.md#目标)、[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-PROMPT-010](#req-prompt-010) / [AC-PROMPT-010](#ac-prompt-010) | `producer_system_designer` | [`doc/world-simulator/prd.md`](../../world-simulator/prd.md#目标)、[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-PROMPT-011](#req-prompt-011) / [AC-PROMPT-011](#ac-prompt-011) | `producer_system_designer` | [`doc/world-simulator/prd.md`](../../world-simulator/prd.md#目标)、[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

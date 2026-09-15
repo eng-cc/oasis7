@@ -6,6 +6,7 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`superseded`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
 ## 迁移状态
@@ -15,6 +16,12 @@
 
 本文是长期产品分册，定义普通全局治理的有限产品范围、组织连续性和不可由普通治理改写的宪制保护。它不定义阈值、锁定/解锁时长、身份技术、控制人计算、链上或智能合约结构、runtime 状态机、签名/custody 实现、当前候选 verdict 或发行就绪。
 
+## 生命周期闭合
+
+- 接收 authority：[普通共同决策与宪制边界](../world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md#1-产品目标) 与 [组织连续性、解散与长期不活跃保护](../world-rules-core-gameplay/organization-continuity-dissolution-and-dormancy-protection.prd.md#1-产品承诺)。
+- 剩余语义：GG-2 资格/控制权公平与 GG-3 外部 OC、游戏内权利分离仍需在接收专题中保留稳定 REQ/AC 与活跃引用。
+- 稳定引用：本页的 GG-1 至 GG-5 验收及其专业 authority 仍可由本页和 [普通共同决策与宪制边界](../world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md#1-产品目标) 定位；本页保持只读迁移引用。
+- 删除条件：接收专题完成剩余语义、建立 REQ/AC 与专业 authority 追踪、修复全部活跃引用且无未决阻塞后，才可删除本页。
 ## 1. 产品目标
 
 玩家和组织可以在一个持续、可审计的世界中处理有限的共同运行事项，而不能把持有、付费、匿名账户、组织章程或普通投票扩展为无界的世界主权。普通治理服务于政策、财库和 charter 的运行；它与宪制保护、玩家基本权利、安全、validator/finality、signer 和 custody 分层。组织可以按自身目的协作、重组或退出，但个人资产、合同、退出、历史和 Agent 身份保有不可穿透的最低保护。
@@ -65,6 +72,13 @@
 2. 可持续组织：使可配置 charter、个人底线、退出、解散和长期不活跃在同一历史中可预期处理。
 3. 宪制护栏：将普通运行决策与不可穿透保护和双轨宪制修订分离。
 4. 诚实证据：仅在同一候选的专业实现和 QA 证据成立时，声明其中任一能力的当前可用性。
+
+## 4.1 未决问题与迁移边界
+
+- 未决产品问题：GG-2 的资格/控制权公平与 GG-3 的外部 OC、游戏内权利分离，仍需由接收模块确认完整语义、局部验收和活跃引用是否已覆盖；本页不把现有专业实现或历史材料视为已完成接收。
+- 决策 role：`producer_system_designer` 负责产品接收决定，`gameplay_designer` 负责规则与经济边界，`blockchain_ops_engineer` 与 `runtime_engineer` 负责相应专业合同和证据边界。
+- 解决触发条件：接收 authority 回填剩余语义、建立稳定追踪和验收引用，并修复所有活跃来源引用后，才可复核删除本页；在此之前，本页保持 `superseded`、只读和非权威状态。
+- 临时排除范围：本页不新增普通治理能力、不修改 OC/身份/资格规则、不宣称当前实现或发行 readiness；专业权威继续承担技术真值和当前证据。
 
 ## 5. Done：成功标准与验收
 

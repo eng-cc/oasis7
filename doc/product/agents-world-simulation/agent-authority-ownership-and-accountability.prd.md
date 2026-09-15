@@ -7,9 +7,16 @@
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)
+- Last reviewed：2026-09-13
 
 本文定义玩家或组织拥有 Agent 的长期产品承诺：授权如何持续、资产如何扩张和转让、Agent 如何提出异议，以及结果如何归因。它不定义 runtime 状态机、授权字段、签名、模型行为、界面、数值成本或测试步骤。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
+- 设计适用性理由：本 PRD 已直接承载授权、转让、责任与恢复的产品决策和验收；独立 design 不会增加另一套玩家信息层级或交互 authority。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 玩家经营的不是只能逐项等待确认的遥控单位，也不是无法纠正的黑箱。一个 Agent 可在玩家选择的高自治或有界授权模式下持续推进世界目标；玩家始终能理解授权范围、主要风险、实际结果与下一次纠正或撤销机会。
@@ -63,16 +70,62 @@ Agent 是可长期持有、扩张和转让的经营资产，但其身份、来�
 
 `game` 拥有玩法成长、团队成本与反支配平衡；`world-runtime` 拥有授权、转让、执行、receipt、审计与恢复的确定性规则；`world-simulator` 拥有 Agent 行为、Prompt、provider 与玩家 surface；QA 拥有具体证据和验证方法。产品层不以本承诺声称任何机制当前已实现或可对外发布。
 
-## 7. 组合验收
+## 7. 叶级产品要求与验收
 
+<a id="req-agent-auth-001"></a>
+### REQ-AGENT-AUTH-001：高后果授权必须按有效期累计约束
+
+- 要求：当玩家或组织提前授权会消耗资源、占用容量、转移权利或累积风险的行动时，产品必须让玩家知道授权的对象范围、来源、有效期和剩余额度；拆分、并发、重试、重连或控制权切换不得扩大同一授权。
+- 验收：AC-AGENT-AUTH-001
+
+<a id="ac-agent-auth-001"></a>
+### AC-AGENT-AUTH-001：授权额度不会因重试或切换复制
+
+- 覆盖要求：REQ-AGENT-AUTH-001
+- 场景与结果：在同一授权下重复提交、并发提交、重连后重试或切换 owner 时，权威结果至多消费有效累计额度一次；额度不足、来源/对象不匹配或授权失效时，玩家能看到 blocker 与等待、改道、取消或重新确认路径。
+- 证据边界：只验证产品层可读的授权范围、累计限制与结果语义；授权字段、去重、receipt 和执行合同由 runtime/world-simulator authority 验证。
+
+<a id="req-agent-auth-002"></a>
+### REQ-AGENT-AUTH-002：转让与处置必须保留身份和责任历史
+
+- 要求：Agent 转让、重配置、退休或报废后，产品必须把新 owner 的生效点与既有身份、来源、审计历史和已生效世界结果区分呈现，不得以处置抹除责任或历史。
+- 验收：AC-AGENT-AUTH-002
+
+<a id="ac-agent-auth-002"></a>
+### AC-AGENT-AUTH-002：新策略不会改写既有因果
+
+- 覆盖要求：REQ-AGENT-AUTH-002
+- 场景与结果：转让后新 owner 可以在有效权限内配置新目标或策略；玩家仍能追溯转让生效点、旧配置、来源和既有结果，且撤销、退休或报废不把已生效结果显示为未发生。
+- 证据边界：责任分层、控制权生效、receipt 和审计记录由 runtime、Agent 与 QA 专业 authority 共同确认；产品层不定义字段或实现。
+
+## 7.1 叶级 owner、authority、evidence 与 test tier 追踪
+
+本表把每个新叶级产品关系导航到专业 owner、权威文档和未来验证证据；它不把产品语义提升为当前实现、支持或发布/readiness 结论。
+
+| REQ / AC 关系 | 专业 owner 与真实边界 | 专业域 PRD-ID | 专业权威（可导航） | 验证证据（应提供，不预示当前结果） | 测试层级 |
+| --- | --- | --- | --- | --- | --- |
+| [REQ-AGENT-AUTH-001](#req-agent-auth-001) / [AC-AGENT-AUTH-001](#ac-agent-auth-001) | `producer_system_designer`：累计授权、来源/对象范围与责任语义，不拥有字段、去重实现或 readiness；`agent_engineer`：Agent 意图和请求来源；`runtime_engineer`：授权再校验、资源/容量、去重、receipt 与权威结果；`viewer_engineer`：blocker、额度和恢复路径的可读表达；`qa_engineer`：跨角色证据对账。 | `PRD-GAME-001` / `PRD-WORLD_RUNTIME-001/031/033` / `PRD-WORLD_SIMULATOR-016` / `PRD-TESTING-003` | [`game PRD`](../../game/prd.md#3-player-facing-authority-boundary); [`world-runtime PRD`](../../world-runtime/prd.md); [`world-simulator PRD`](../../world-simulator/prd.md); [`testing PRD`](../../testing/prd.md) | 未来 full-tier 累计授权场景覆盖同一来源/对象范围的拆分、并发、重试、重连和 owner 切换；提交与接受时余额再校验、至多一次实际消费、无隐藏债务/第二次效果，并读出 blocker 与恢复路径。 | `test_tier_full` |
+| [REQ-AGENT-AUTH-002](#req-agent-auth-002) / [AC-AGENT-AUTH-002](#ac-agent-auth-002) | `producer_system_designer`：转让后的身份、责任与历史连续性语义，不拥有转让状态机或审计字段；`runtime_engineer`：控制权生效、结果与 receipt；`agent_engineer`：Agent 配置/行为 provenance；`viewer_engineer`：生效点、旧配置和历史的可读表达；`qa_engineer`：转让、处置与历史不可洗除证据。 | `PRD-WORLD_RUNTIME-001/031/033` / `PRD-WORLD_SIMULATOR-016` / `PRD-TESTING-003` | [`world-runtime PRD`](../../world-runtime/prd.md#industrial-execution-status-and-authority-matrix); [`world-simulator PRD`](../../world-simulator/prd.md); [`testing PRD`](../../testing/prd.md) | 未来 full-tier 转让、重配置、退休/报废场景对账生效点、旧配置、身份/来源、既有世界结果和责任 receipt；验证处置不会制造历史删除或把已生效结果改写为未发生。 | `test_tier_full` |
+
+## 7.2 组合验收
+
+<a id="ac-1"></a>
 - AC-1：代表性目标可在高自治和有界授权两种模式下运行，玩家均能读到授权范围、当前状态、主要风险、实际结果及撤销、纠正、改道或恢复的下一步。
+<a id="ac-2"></a>
 - AC-2：高后果行动缺少有效提前授权或确认、超出范围、到期或撤销后，不会静默执行；正式结果能区分授权拒绝、世界规则拒绝、资源/竞争阻塞和可用替代路径。
+<a id="ac-9"></a>
 - AC-9：代表性资源消耗、可争用容量、经济权利或累积风险行动证明，高后果授权的预算/数量上限在整个有效期内按同一资源/权利来源和对象范围累计执行；拆分、并发、重试、重连或控制权切换不能重置、复制或绕过剩余额度，也不会产生隐藏债务、额外优先权或第二次世界效果。余额不足、来源/对象不匹配或授权失效时，玩家能读到实际 blocker 与升级、改道、等待或重新确认中的适用下一步。
+<a id="ac-8"></a>
 - AC-8：待决高后果行动样例能区分“已发起但尚未生效”与权威世界结果；授权到期/撤销、控制权转让和新硬边界仅使未生效请求重新评估或明确终止，不能静默续行、重放或追溯改写已生效结果。玩家可读到后续可执行的取消、重新确认或调整路径及其 blocker。
+<a id="ac-3"></a>
 - AC-3：从一个主 Agent 扩张到团队的样例表明额外 Agent 带来取得、维护、授权和协调约束，而非无成本的自动产能或世界权力；小规模独立路线仍可继续。
+<a id="ac-7"></a>
 - AC-7：额外 Agent 的样例证明玩家或组织通过世界内工业订单承担资源、产能和交付时间，并在取得后继续承担维护、授权与协调成本；普通治理 quota 既不直接发放 Agent，也不替代工业供给约束，且早期一个主 Agent 的经营锚点保持不变。
+<a id="ac-4"></a>
 - AC-4：转让样例同时证明控制/经济/角色策略可从生效点重配置，以及身份、来源、审计历史和既有决策历史保持可追溯；处置不会伪装成历史删除。
+<a id="ac-5"></a>
 - AC-5：异议、世界/安全硬阻断和有效 owner override 在正式世界结果中可区分；有效 override 的 receipt 关联异议、授权、执行结果和恢复路径。
+<a id="ac-6"></a>
 - AC-6：高影响结果可追溯到 Agent 建议/执行、owner 决定、组织策略和执行载体中的适用因素；责任表达不把 Agent 当作 owner 或组织的替罪对象。
 
 ## 8. 验收追踪

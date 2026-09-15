@@ -12,7 +12,7 @@ fi
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/doc-governance-check.sh
+Usage: ./scripts/doc-governance-check.sh [--full-corpus]
 
 Checks:
   1. Repository-owned documentation must not reintroduce project.md / *.project.md
@@ -34,6 +34,12 @@ Checks:
      content contract with the selected base/head and worktree changes.
 USAGE
 }
+
+full_corpus=0
+if [[ "${1:-}" == "--full-corpus" ]]; then
+  full_corpus=1
+  shift
+fi
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   usage
@@ -64,6 +70,11 @@ fail() {
 }
 
 run_product_doc_content_check() {
+  if ((full_corpus == 1)); then
+    "$PYTHON_BIN" scripts/product-doc-content-check.py \
+      --repo-root "$repo_root" --full-corpus
+    return
+  fi
   local base_oid="${OASIS7_PRODUCT_DOC_BASE:-}"
   local head_oid="${OASIS7_PRODUCT_DOC_HEAD:-}"
   if [[ -n "$base_oid" || -n "$head_oid" ]]; then

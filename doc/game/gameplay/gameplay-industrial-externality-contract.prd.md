@@ -1,6 +1,7 @@
 # 工业外部性与运营缓解合同
 
 - 上层产品映射：承接产品层可选的 `industrial_externality` profile；本合同只把 profile 约束转成生产前的玩家取舍，不把污染/环境效果写成当前普遍能力。
+- 产品语义入口：[`工业外部性与操作性缓释 profile`](../../product/world-rules-core-gameplay/prd.md#工业外部性与操作性缓释-profile（target-only）)；本合同保留 target-only profile 的玩家取舍与证据边界。
 - Authority 分工：产品层拥有 profile 是否存在、作用范围与完成承诺；M4/domain 拥有实际 externality fact、`operational_mitigation` 容量、ledger/impact disposition；`world-runtime` 拥有事件、状态、持久化、排序与 replay；gameplay 拥有玩家动作、机会成本、失败恢复与 progression。
 - 边界：`industrial_externality` 是工厂/配方/operation 的可选运营 facet，独立于 batch quality/custody、byproduct identity/disposition、maintenance、production/delivery finality 与 systemic-crisis containment；不得把本合同的 operational mitigation 解释成区域治理权或危机处置权。
 

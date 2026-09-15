@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+from datetime import date
 import html
 import os
 from pathlib import Path
@@ -26,8 +27,33 @@ except RuntimeError as exc:
 
 PRODUCT_ROOT = Path("doc/product")
 PRODUCT_SUFFIXES = (".prd.md", ".design.md")
+LIFECYCLE_VALUES = frozenset({"proposed", "draft", "active", "superseded", "retired"})
+LIFECYCLE_PLACEHOLDERS = frozenset(
+    {
+        "",
+        "-",
+        "—",
+        "–",
+        "n/a",
+        "na",
+        "none",
+        "tbd",
+        "todo",
+        "to be determined",
+        "later",
+        "待定",
+        "待补",
+        "待填写",
+        "未定",
+        "无",
+    }
+)
+DESIGN_EXEMPTION_REASON_PLACEHOLDERS = LIFECYCLE_PLACEHOLDERS
 HTML_COMMENT_RE = re.compile(r"<!--[\s\S]*?-->")
 ID_RE = re.compile(r"\b((?:REQ|AC)-[A-Z0-9][A-Z0-9_*-]*)", re.IGNORECASE)
+# Aggregate trace tables use short domain-specific criterion IDs (for example
+# PL-6). REQ/AC and professional PRD IDs have separate contracts.
+TRACE_CRITERION_ID_RE = re.compile(r"\b[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+(?:[A-Z])?\b")
 HEADING_PREFIX_RE = re.compile(r"^ {0,3}#{2,6}\s+")
 DECLARATION_PREFIX_RE = re.compile(r"^\s*(?:[-+*]\s+|\|\s*)")
 TABLE_ID_CELL_RE = re.compile(r"^\s*((?:REQ|AC)-[A-Z0-9][A-Z0-9_*-]*)\s*$", re.IGNORECASE)
@@ -76,6 +102,16 @@ def resolve_commit(root: Path, value: str | None, label: str) -> str:
 
 def is_product_doc(path: str) -> bool:
     return path.startswith(f"{PRODUCT_ROOT.as_posix()}/") and path.endswith(PRODUCT_SUFFIXES)
+
+
+def is_product_root(path: str) -> bool:
+    if not path.startswith(f"{PRODUCT_ROOT.as_posix()}/") or not path.endswith("/prd.md"):
+        return False
+    try:
+        relative = Path(path).relative_to(PRODUCT_ROOT)
+    except ValueError:
+        return False
+    return len(relative.parts) == 2 and relative.parts[-1] == "prd.md"
 
 
 def parse_name_status(output: str) -> dict[str, str]:
@@ -207,6 +243,21 @@ def metadata_any(text: str, labels: tuple[str, ...]) -> str | None:
         if value:
             return value
     return None
+
+
+def is_review_date(raw_value: str) -> bool:
+    """Accept only a zero-padded, real ISO calendar date."""
+    value = raw_value.strip().strip("`").strip()
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError:
+        return False
+    return value == parsed.isoformat()
+
+
+def document_identity_text(text: str) -> str:
+    match = re.search(r"^## 文档身份\s*$([\s\S]*?)(?=^##\s|\Z)", text, re.MULTILINE)
+    return match.group(1) if match else text
 
 
 def split_link_target(raw: str) -> tuple[str, str | None]:
@@ -374,8 +425,8 @@ def heading_identifier(line: str) -> str | None:
 
 
 def check_metadata(path: str, text: str, errors: list[str]) -> None:
-    text = "\n".join(line for _, line in visible_lines(text))
-    required = ["生命周期", "Owner role"]
+    text = document_identity_text("\n".join(line for _, line in visible_lines(text)))
+    required = ["生命周期", "Owner role", "Last reviewed"]
     authority_labels = ("专业域权威", "专业权威")
     if path.endswith(".prd.md"):
         required.extend(["所属产品模块", "上位产品 PRD"])
@@ -384,10 +435,14 @@ def check_metadata(path: str, text: str, errors: list[str]) -> None:
     for label in required:
         if not metadata_value(text, label):
             fail(errors, "missing-metadata", path, label)
+    review_date = metadata_value(text, "Last reviewed")
+    if review_date and not is_review_date(review_date):
+        fail(errors, "invalid-review-date", path, review_date)
     if not metadata_any(text, authority_labels):
         fail(errors, "missing-metadata", path, "专业域权威 or 专业权威")
     lifecycle = metadata_value(text, "生命周期")
-    if lifecycle and not re.search(r"\b(?:proposed|draft|active|superseded|retired)\b", lifecycle):
+    normalized_lifecycle = lifecycle.strip().strip("`").lower() if lifecycle else None
+    if lifecycle and normalized_lifecycle not in LIFECYCLE_VALUES:
         fail(errors, "invalid-lifecycle", path, lifecycle)
 
 
@@ -419,6 +474,859 @@ def check_minimum_design_content(path: str, text: str, errors: list[str]) -> Non
     for code, needles in required_groups.items():
         if not any(needle.lower() in visible.lower() for needle in needles):
             fail(errors, f"missing-{code}", path, "design minimum content marker")
+
+
+def check_active_topic_cardinality(path: str, text: str, errors: list[str]) -> None:
+    if not path.endswith(".prd.md") or path.endswith("/prd.md"):
+        return
+    identity = document_identity_text("\n".join(line for _, line in visible_lines(text)))
+    lifecycle = metadata_value(identity, "生命周期")
+    if not lifecycle or lifecycle.strip().strip("`").lower() != "active":
+        return
+    declarations = {
+        identifier
+        for _number, line in visible_lines(text)
+        if (identifier := declaration_identifier(line))
+    }
+    if not any(identifier.startswith("REQ-") for identifier in declarations):
+        fail(errors, "active-topic-missing-requirement", path, "active topic must declare at least one REQ-* requirement")
+    if not any(identifier.startswith("AC-") for identifier in declarations):
+        fail(errors, "active-topic-missing-acceptance", path, "active topic must declare at least one AC-* acceptance")
+
+
+def lifecycle_field_value(raw_value: str) -> str:
+    value = re.sub(r"!\[([^\]]*)\]\([^)]*\)", r"\1", raw_value)
+    value = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", value)
+    value = HTML_TAG_RE.sub("", value)
+    return value.strip().strip("`").strip().lower()
+
+
+def is_lifecycle_placeholder(raw_value: str) -> bool:
+    return lifecycle_field_value(raw_value) in LIFECYCLE_PLACEHOLDERS
+
+
+def lifecycle_repository_fragment_link(
+    root: Path,
+    head: str,
+    source: Path,
+    source_text: str,
+    path: str,
+    field: str,
+    raw_target: str,
+    errors: list[str],
+    use_worktree_content: bool,
+) -> bool:
+    target, fragment = split_link_target(raw_target)
+    code = f"lifecycle-invalid-{field}-link"
+    if not target or is_external_link_target(target) or not fragment:
+        return False
+    target_path = resolve_link_path(source, target, use_worktree_content)
+    try:
+        target_rel = target_path.relative_to(root)
+    except ValueError:
+        return False
+    target_text = selected_target_text(
+        root,
+        head,
+        source,
+        target_path,
+        source_text,
+        use_worktree_content,
+    )
+    if target_text is None:
+        fail(errors, code, path, f"lifecycle {field} link target is missing: {target_rel.as_posix()}")
+        return False
+    if not fragment_exists(target_text, fragment):
+        fail(errors, code, path, f"lifecycle {field} link fragment is unresolved: {target_rel.as_posix()}#{fragment}")
+        return False
+    return True
+
+
+def check_lifecycle_closure(
+    root: Path,
+    head: str,
+    path: str,
+    text: str,
+    errors: list[str],
+    use_worktree_content: bool,
+) -> None:
+    if not path.endswith(".prd.md") or path.endswith("/prd.md"):
+        return
+    identity = document_identity_text("\n".join(line for _, line in visible_lines(text)))
+    lifecycle = metadata_value(identity, "生命周期")
+    if not lifecycle or lifecycle.strip().strip("`").lower() not in {"superseded", "retired"}:
+        return
+    lines = visible_lines(text)
+    required_fields = {
+        "receiving-authority": r"^\s*(?:[-+*]\s*)?(?:接收|承接)\s*(?:authority|owner|方|责任)\s*[:：]\s*(?P<value>.*)$",
+        "remaining-semantics": r"^\s*(?:[-+*]\s*)?(?:剩余语义|保留语义|仍然适用|剩余范围)\s*[:：]\s*(?P<value>.*)$",
+        "stable-reference": r"^\s*(?:[-+*]\s*)?稳定(?:引用|链接)\s*[:：]\s*(?P<value>.*)$",
+        "deletion-condition": r"^\s*(?:[-+*]\s*)?(?:删除条件|删除时机|可删除|清理条件)\s*[:：]\s*(?P<value>.*)$",
+    }
+    codes = {
+        "receiving-authority": "lifecycle-missing-receiving-authority",
+        "remaining-semantics": "lifecycle-missing-remaining-semantics",
+        "stable-reference": "lifecycle-missing-stable-reference",
+        "deletion-condition": "lifecycle-missing-deletion-condition",
+    }
+    links_by_line: dict[int, list[str]] = {}
+    for number, _raw, target in markdown_links(text):
+        links_by_line.setdefault(number, []).append(target)
+    source = root / path
+    for field, pattern in required_fields.items():
+        match = next(
+            (pattern_match for _number, line in lines if (pattern_match := re.match(pattern, line, re.IGNORECASE))),
+            None,
+        )
+        if not match:
+            fail(errors, codes[field], path, f"{lifecycle.strip().strip('`')} topic requires lifecycle closure field {field}")
+            continue
+        raw_value = match.group("value")
+        if is_lifecycle_placeholder(raw_value) and not (
+            field == "remaining-semantics"
+            and lifecycle.strip().strip("`").lower() == "retired"
+            and lifecycle_field_value(raw_value) == "无"
+        ):
+            fail(errors, "lifecycle-placeholder", path, f"lifecycle closure field {field} has a placeholder value")
+            continue
+        if field not in {"receiving-authority", "stable-reference"}:
+            continue
+        field_line = next(
+            number for number, line in lines if re.match(pattern, line, re.IGNORECASE)
+        )
+        candidates = links_by_line.get(field_line, [])
+        if not candidates:
+            fail(errors, f"lifecycle-missing-{field}-link", path, f"lifecycle closure field {field} requires a repository-relative fragment link")
+            continue
+        if not any(
+            lifecycle_repository_fragment_link(
+                root,
+                head,
+                source,
+                text,
+                path,
+                field,
+                candidate,
+                errors,
+                use_worktree_content,
+            )
+            for candidate in candidates
+        ):
+            if not any(error.startswith(f"product-doc-content: lifecycle-invalid-{field}-link: {path}:") for error in errors):
+                fail(errors, f"lifecycle-invalid-{field}-link", path, f"lifecycle closure field {field} requires a resolvable repository-relative fragment link")
+
+
+def linked_repository_paths(
+    root: Path,
+    source: Path,
+    text: str,
+    use_worktree_content: bool,
+) -> set[str]:
+    paths: set[str] = set()
+    for _number, _raw, target in markdown_links(text):
+        target_path, _fragment = split_link_target(target)
+        if not target_path or is_external_link_target(target_path):
+            continue
+        resolved = resolve_link_path(source, target_path, use_worktree_content)
+        try:
+            paths.add(resolved.relative_to(root).as_posix())
+        except ValueError:
+            continue
+    return paths
+
+
+def declared_prd_relations(text: str) -> tuple[set[str], set[str], set[tuple[str, str]]]:
+    """Return declared REQ/AC IDs and their local heading-level relations."""
+    lines = visible_lines(text)
+    declarations = {
+        identifier
+        for _number, line in lines
+        if (identifier := declaration_identifier(line))
+    }
+    anchors_by_line: dict[int, set[str]] = {}
+    for anchor, number in actual_anchor_occurrences(text):
+        anchors_by_line.setdefault(number, set()).add(anchor.strip().lower())
+    requirements = {identifier for identifier in declarations if identifier.startswith("REQ-")}
+    acceptances = {identifier for identifier in declarations if identifier.startswith("AC-")}
+    relations: set[tuple[str, str]] = set()
+    for _number, line in lines:
+        identifier = declaration_identifier(line)
+        if not identifier or heading_identifier(line):
+            continue
+        references = id_tokens(line) - {identifier}
+        if identifier in requirements:
+            relations.update(
+                (identifier, acceptance)
+                for acceptance in references & acceptances
+            )
+        elif identifier in acceptances:
+            relations.update(
+                (requirement, identifier)
+                for requirement in references & requirements
+            )
+    headings: list[tuple[int, str | None, int]] = []
+    for index, (_number, line) in enumerate(lines):
+        heading = HEADING_PREFIX_RE.match(line)
+        if not heading:
+            continue
+        headings.append(
+            (
+                index,
+                heading_identifier(line),
+                len(heading.group(0).lstrip().split()[0]),
+            )
+        )
+    for heading_index, (index, identifier, level) in enumerate(headings):
+        if not identifier:
+            continue
+        end = len(lines)
+        for next_index, _next_identifier, next_level in headings[heading_index + 1 :]:
+            if next_level <= level:
+                end = next_index
+                break
+        block = "\n".join(
+            strip_actual_anchors(number, line, anchors_by_line)
+            for number, line in lines[index + 1 : end]
+        )
+        if identifier in requirements:
+            relations.update((identifier, acceptance) for acceptance in id_tokens(block) & acceptances)
+        elif identifier in acceptances:
+            relations.update((requirement, identifier) for requirement in id_tokens(block) & requirements)
+    return requirements, acceptances, relations
+
+
+def design_mapping_relations(
+    root: Path,
+    source: Path,
+    expected_prd: str,
+    text: str,
+    use_worktree_content: bool,
+) -> tuple[set[str], set[str], set[tuple[str, str]]]:
+    """Extract same-row REQ/AC links targeting the paired PRD."""
+    lines = visible_lines(text)
+    marker_indexes = [
+        index
+        for index, (_number, line) in enumerate(lines)
+        if re.match(r"^##\s+PRD REQ/AC fragment mapping\s*$", line, re.IGNORECASE)
+    ]
+    if marker_indexes:
+        start = marker_indexes[-1] + 1
+        end = len(lines)
+        for index in range(start, len(lines)):
+            if re.match(r"^##\s+", lines[index][1]):
+                end = index
+                break
+        mapping_line_numbers = {
+            number for number, line in lines[start:end] if line.lstrip().startswith("|")
+        }
+    else:
+        mapping_line_numbers = {
+            number for number, line in lines if line.lstrip().startswith("|")
+        }
+    row_requirements: dict[int, set[str]] = {}
+    row_acceptances: dict[int, set[str]] = {}
+    for number, _raw, target in markdown_links(text):
+        if number not in mapping_line_numbers:
+            continue
+        target_path, fragment = split_link_target(target)
+        if not target_path or is_external_link_target(target_path) or not fragment:
+            continue
+        resolved = resolve_link_path(source, target_path, use_worktree_content)
+        try:
+            relative = resolved.relative_to(root).as_posix()
+        except ValueError:
+            continue
+        if relative != expected_prd:
+            continue
+        normalized = fragment.upper()
+        if normalized.startswith("REQ-") and re.fullmatch(r"REQ-[A-Z0-9][A-Z0-9_-]*", normalized):
+            row_requirements.setdefault(number, set()).add(normalized)
+        elif normalized.startswith("AC-") and re.fullmatch(r"AC-[A-Z0-9][A-Z0-9_-]*", normalized):
+            row_acceptances.setdefault(number, set()).add(normalized)
+    relations: set[tuple[str, str]] = set()
+    for number in row_requirements.keys() & row_acceptances.keys():
+        relations.update(
+            (requirement, acceptance)
+            for requirement in row_requirements[number]
+            for acceptance in row_acceptances[number]
+        )
+    return (
+        set().union(*row_requirements.values()) if row_requirements else set(),
+        set().union(*row_acceptances.values()) if row_acceptances else set(),
+        relations,
+    )
+
+
+def check_design_prd_mapping(
+    root: Path,
+    head: str,
+    path: str,
+    text: str,
+    errors: list[str],
+    use_worktree_content: bool,
+) -> None:
+    source = root / path
+    expected_prd = path.removesuffix(".design.md") + ".prd.md"
+    prd_path = root / expected_prd
+    prd_text = selected_target_text(root, head, source, prd_path, text, use_worktree_content)
+    if prd_text is None:
+        return
+    expected_requirements, expected_acceptances, expected_relations = declared_prd_relations(prd_text)
+    mapped_requirements, mapped_acceptances, mapped_relations = design_mapping_relations(
+        root,
+        source,
+        expected_prd,
+        text,
+        use_worktree_content,
+    )
+    missing_requirements = expected_requirements - mapped_requirements
+    missing_acceptances = expected_acceptances - mapped_acceptances
+    missing_relations = expected_relations - mapped_relations
+    if missing_requirements or missing_acceptances:
+        detail = []
+        if missing_requirements:
+            detail.append(f"REQ missing={','.join(sorted(missing_requirements))}")
+        if missing_acceptances:
+            detail.append(f"AC missing={','.join(sorted(missing_acceptances))}")
+        if missing_relations:
+            detail.append(
+                "relations missing="
+                + ",".join(f"{requirement}->{acceptance}" for requirement, acceptance in sorted(missing_relations))
+            )
+        fail(errors, "design-prd-mapping-incomplete", path, "; ".join(detail))
+    extra_requirements = mapped_requirements - expected_requirements
+    extra_acceptances = mapped_acceptances - expected_acceptances
+    extra_relations = mapped_relations - expected_relations
+    if not (missing_requirements or missing_acceptances) and (
+        extra_requirements or extra_acceptances or extra_relations or missing_relations
+    ):
+        detail = []
+        if extra_requirements:
+            detail.append(f"REQ extra={','.join(sorted(extra_requirements))}")
+        if extra_acceptances:
+            detail.append(f"AC extra={','.join(sorted(extra_acceptances))}")
+        relation_mismatch = extra_relations | missing_relations
+        if relation_mismatch:
+            detail.append(
+                "relations extra="
+                + ",".join(f"{requirement}->{acceptance}" for requirement, acceptance in sorted(relation_mismatch))
+            )
+        fail(errors, "design-prd-mapping-inconsistent", path, "; ".join(detail))
+
+
+def check_active_topic_design_contract(
+    root: Path,
+    head: str,
+    path: str,
+    text: str,
+    errors: list[str],
+    use_worktree_content: bool,
+) -> None:
+    identity = document_identity_text("\n".join(line for _, line in visible_lines(text)))
+    lifecycle = metadata_value(identity, "生命周期")
+    if not lifecycle or lifecycle.strip().strip("`").lower() != "active":
+        return
+    visible = "\n".join(line for _, line in visible_lines(text))
+    decision = re.search(
+        r"设计判定\s*[:：]\s*`?([a-z][a-z-]+)`?",
+        visible,
+        re.IGNORECASE,
+    )
+    source = root / path
+    expected_design = path.removesuffix(".prd.md") + ".design.md"
+    expected_design_exists = (root / expected_design).is_file()
+    if not decision:
+        code = "missing-design-decision" if expected_design_exists else "missing-design-or-exemption"
+        fail(errors, code, path, "active topic must declare paired-design or simple-topic-exemption")
+        return
+    mode = decision.group(1).lower()
+    if mode == "paired-design":
+        if expected_design not in linked_repository_paths(root, source, text, use_worktree_content):
+            fail(errors, "missing-paired-design-link", path, expected_design)
+            return
+        design_text = selected_target_text(
+            root,
+            head,
+            source,
+            root / expected_design,
+            text,
+            use_worktree_content,
+        )
+        if design_text is None:
+            fail(errors, "missing-paired-design-link", path, expected_design)
+            return
+        design_identity = document_identity_text(
+            "\n".join(line for _, line in visible_lines(design_text))
+        )
+        design_lifecycle = metadata_value(design_identity, "生命周期")
+        if not design_lifecycle or design_lifecycle.strip().strip("`").lower() != "active":
+            fail(errors, "inactive-paired-design", path, f"active topic requires active design: {expected_design}")
+        return
+    if mode == "simple-topic-exemption":
+        reason_match = re.search(r"设计适用性理由[ \t]*[:：][ \t]*(.*)", visible)
+        if not reason_match or lifecycle_field_value(reason_match.group(1)) in DESIGN_EXEMPTION_REASON_PLACEHOLDERS:
+            fail(errors, "missing-design-exemption-reason", path, "simple-topic-exemption requires 设计适用性理由")
+        task_binding = re.search(
+            r"设计判定\s+task\s+issue\s*[:：]\s*#?([0-9]+)",
+            visible,
+            re.IGNORECASE,
+        )
+        if not task_binding:
+            fail(errors, "missing-design-exemption-task", path, "simple-topic-exemption requires an explicit 设计判定 task issue binding")
+        evidence_lines = [
+            number
+            for number, line in visible_lines(text)
+            if re.search(r"当前\s+GitHub\s+task\s+evidence\s*[:：]", line, re.IGNORECASE)
+        ]
+        valid_evidence_link = False
+        evidence_issue_numbers: set[str] = set()
+        for number, _raw, target in markdown_links(text):
+            if number not in evidence_lines:
+                continue
+            link_path, fragment = split_link_target(target)
+            locator = link_path + (f"#{fragment}" if fragment else "")
+            evidence_match = re.fullmatch(
+                r"https://github\.com/eng-cc/oasis7/issues/([0-9]+)#issuecomment-[0-9]+",
+                locator,
+                re.IGNORECASE,
+            )
+            if evidence_match:
+                valid_evidence_link = True
+                evidence_issue_numbers.add(evidence_match.group(1))
+        if not valid_evidence_link:
+            fail(errors, "missing-design-exemption-evidence", path, "simple-topic-exemption requires a current GitHub task issue-comment evidence link")
+        elif len(evidence_issue_numbers) != 1:
+            fail(errors, "ambiguous-design-exemption-task", path, "simple-topic-exemption evidence links must bind to one task issue")
+        elif task_binding and task_binding.group(1) not in evidence_issue_numbers:
+            fail(errors, "mismatched-design-exemption-task", path, "simple-topic-exemption evidence must match its bound task issue")
+        return
+    fail(errors, "missing-design-or-exemption", path, "active topic design decision must be paired-design or simple-topic-exemption")
+
+
+def trace_table_cells(line: str) -> list[str]:
+    stripped = line.strip()
+    if not stripped.startswith("|"):
+        return []
+    if stripped.endswith("|"):
+        stripped = stripped[:-1]
+    stripped = stripped[1:]
+    return [cell.strip() for cell in re.split(r"(?<!\\)\|", stripped)]
+
+
+def is_trace_table_separator(line: str) -> bool:
+    cells = trace_table_cells(line)
+    if not cells:
+        return False
+    return all(bool(re.fullmatch(r":?\s*-{3,}\s*:?", cell)) for cell in cells)
+
+
+def normalized_trace_header(cell: str) -> str:
+    value = html.unescape(cell)
+    value = re.sub(r"`([^`]*)`", r"\1", value)
+    value = HTML_TAG_RE.sub("", value)
+    return value.strip().lower()
+
+
+def trace_header_has_id(header: str, identifier: str) -> bool:
+    return bool(re.search(rf"(?<![a-z0-9]){identifier}(?![a-z0-9])", header, re.IGNORECASE))
+
+
+def trace_heading_is_explicit(line: str) -> bool:
+    if not HEADING_PREFIX_RE.match(line):
+        return False
+    return (
+        bool(re.search(r"追踪|trace", line, re.IGNORECASE))
+        and bool(re.search(r"owner|authority|测试层级|test[_ ]?tier", line, re.IGNORECASE))
+    )
+
+
+def trace_table_semantics(
+    text: str,
+) -> list[tuple[int, dict[str, tuple[int, ...]], list[tuple[int, list[str]]]]]:
+    """Return explicitly structured semantic trace tables.
+
+    Ordinary two-column REQ/AC mapping tables are intentionally ignored. A
+    table is a semantic trace table only when it declares a relation header
+    plus at least one trace field, declares aggregate criteria plus at least
+    one trace field, or sits under an explicit owner/authority/test-tier trace
+    heading. This keeps prose and legacy mapping tables out of the row-level
+    contract while allowing aggregate criterion definitions to be checked
+    separately.
+    """
+    lines = visible_lines(text)
+    tables: list[tuple[int, dict[str, tuple[int, ...]], list[tuple[int, list[str]]]]] = []
+    for index in range(len(lines) - 1):
+        header_number, header_line = lines[index]
+        headers = trace_table_cells(header_line)
+        if not headers or not is_trace_table_separator(lines[index + 1][1]):
+            continue
+        rows: list[tuple[int, list[str]]] = []
+        row_index = index + 2
+        while row_index < len(lines):
+            number, line = lines[row_index]
+            cells = trace_table_cells(line)
+            if not cells:
+                break
+            rows.append((number, cells))
+            row_index += 1
+
+        normalized = [normalized_trace_header(header) for header in headers]
+        req_columns = tuple(
+            index for index, header in enumerate(normalized) if trace_header_has_id(header, "REQ")
+        )
+        ac_columns = tuple(
+            index for index, header in enumerate(normalized) if trace_header_has_id(header, "AC")
+        )
+        relation_columns = tuple(
+            index for index in req_columns if index in ac_columns
+        )
+        if not relation_columns and req_columns and ac_columns:
+            relation_columns = tuple(sorted(set(req_columns + ac_columns)))
+        semantic_columns = {
+            "owner": tuple(
+                index
+                for index, header in enumerate(normalized)
+                if re.search(r"\bowner\b|专业\s*(?:owner|负责人|责任)", header, re.IGNORECASE)
+            ),
+            "authority": tuple(
+                index
+                for index, header in enumerate(normalized)
+                if re.search(r"\bauthority\b|权威", header, re.IGNORECASE)
+            ),
+            "evidence": tuple(
+                index
+                for index, header in enumerate(normalized)
+                if re.search(r"\bevidence\b|证据", header, re.IGNORECASE)
+            ),
+            "tier": tuple(
+                index
+                for index, header in enumerate(normalized)
+                if re.search(r"测试层级|test[_ ]?tier|\btier\b", header, re.IGNORECASE)
+            ),
+        }
+        criterion_columns = tuple(
+            index
+            for index, header in enumerate(normalized)
+            if re.search(
+                r"成功标准|产品承诺|验收标准|\bcriterion\b|\bcriteria\b",
+                header,
+                re.IGNORECASE,
+            )
+        )
+        relation_signal = bool(req_columns or ac_columns or relation_columns)
+        semantic_signal = any(semantic_columns.values())
+        criterion_signal = bool(
+            criterion_columns
+            and any(
+                trace_criterion_ids(cells[index])
+                or strict_trace_ids(cells[index])
+                for _number, cells in rows
+                for index in criterion_columns
+                if index < len(cells)
+            )
+        )
+        explicit_heading = False
+        for heading_index in range(index - 1, -1, -1):
+            if HEADING_PREFIX_RE.match(lines[heading_index][1]):
+                explicit_heading = trace_heading_is_explicit(lines[heading_index][1])
+                break
+        if ((relation_signal or criterion_signal) and semantic_signal) or explicit_heading:
+            tables.append(
+                (
+                    header_number,
+                    {
+                        "req": req_columns,
+                        "ac": ac_columns,
+                        "relation": relation_columns,
+                        "criterion": criterion_columns,
+                        **semantic_columns,
+                    },
+                    rows,
+                )
+            )
+    return tables
+
+
+def trace_cell_text(cell: str) -> str:
+    value = re.sub(r"!\[([^]]*)\]\([^)]*\)", r"\1", cell)
+    value = re.sub(r"\[([^]]+)\]\([^)]*\)", r"\1", value)
+    value = re.sub(r"`([^`]*)`", r"\1", value)
+    value = HTML_TAG_RE.sub("", html.unescape(value))
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def trace_criterion_ids(value: str) -> set[str]:
+    """Return aggregate criterion IDs from a trace-table cell."""
+    return {
+        match.group(0).upper()
+        for match in TRACE_CRITERION_ID_RE.finditer(trace_cell_text(value))
+        if not match.group(0).upper().startswith(("REQ-", "AC-", "PRD-"))
+    }
+
+
+TRACE_EMPTY_VALUES = frozenset(
+    {
+        "",
+        "-",
+        "—",
+        "–",
+        "n/a",
+        "na",
+        "none",
+        "tbd",
+        "todo",
+        "待补",
+        "待定",
+        "未定",
+        "证据",
+        "evidence",
+    }
+)
+
+
+def trace_cell_is_nonempty(cell: str) -> bool:
+    value = trace_cell_text(cell)
+    return value.casefold() not in TRACE_EMPTY_VALUES and bool(value)
+
+
+def strict_trace_ids(value: str) -> set[str]:
+    return {
+        token
+        for token in id_tokens(value)
+        if re.fullmatch(r"(?:REQ|AC)-[A-Z0-9][A-Z0-9_-]*", token, re.IGNORECASE)
+    }
+
+
+def trace_navigable_ids(
+    source: Path,
+    cell: str,
+    use_worktree_content: bool,
+) -> set[str]:
+    """Return only fragment IDs that navigate within the current topic."""
+    identifiers: set[str] = set()
+    for link in parse_markdown_links(cell):
+        target_path, fragment = split_link_target(link.target)
+        if not fragment or is_external_link_target(target_path):
+            continue
+        if target_path and not target_path.lower().endswith(".md"):
+            continue
+        resolved_target = (
+            source
+            if not target_path
+            else resolve_link_path(source, target_path, use_worktree_content)
+        )
+        same_topic = (
+            resolved_target.resolve() == source.resolve()
+            if use_worktree_content
+            else resolved_target == source
+        )
+        if not same_topic:
+            continue
+        identifier = fragment.upper()
+        if re.fullmatch(r"(?:REQ|AC)-[A-Z0-9][A-Z0-9_-]*", identifier, re.IGNORECASE):
+            identifiers.add(identifier)
+    return identifiers
+
+
+def check_active_topic_trace_tables(
+    root: Path,
+    path: str,
+    text: str,
+    errors: list[str],
+    use_worktree_content: bool,
+) -> None:
+    """Check active-topic leaf traces and aggregate criterion definitions.
+
+    Existing error codes retain the ``paired-trace`` prefix for compatibility
+    with the focused gate and its consumers; the contract now applies to
+    every active topic that declares a row-level REQ/AC trace table.
+    """
+    if not path.endswith(".prd.md") or path.endswith("/prd.md"):
+        return
+    identity = document_identity_text("\n".join(line for _, line in visible_lines(text)))
+    lifecycle = metadata_value(identity, "生命周期")
+    if (
+        not lifecycle
+        or lifecycle.strip().strip("`").lower() != "active"
+    ):
+        return
+    traced_relations: set[tuple[str, str]] = set()
+    traced_ids: set[str] = set()
+    relation_table_seen = False
+    source = root / path
+    for header_line, columns, rows in trace_table_semantics(text):
+        trace_id_columns = tuple(
+            sorted(set(columns["relation"] + columns["criterion"]))
+        )
+        for _number, cells in rows:
+            for index in trace_id_columns:
+                if index < len(cells):
+                    traced_ids.update(strict_trace_ids(cells[index]))
+        criterion_ids = {
+            criterion_id
+            for _number, cells in rows
+            for index in columns["criterion"]
+            if index < len(cells)
+            for criterion_id in trace_criterion_ids(cells[index])
+        }
+        if criterion_ids:
+            body_text = "\n".join(
+                line
+                for _number, line in visible_lines(text)
+                if not line.lstrip().startswith("|")
+            )
+            for criterion_id in sorted(criterion_ids):
+                if not re.search(
+                    rf"(?<![A-Z0-9]){re.escape(criterion_id)}(?![A-Z0-9])",
+                    body_text,
+                ):
+                    fail(
+                        errors,
+                        "trace-criterion-missing-body-definition",
+                        path,
+                        f"aggregate criterion {criterion_id} must be defined outside its trace table",
+                    )
+
+        # Existing aggregate contracts intentionally remain valid without
+        # REQ/AC columns. Only relation tables enter the same-row leaf
+        # contract below.
+        if not (columns["req"] or columns["ac"] or columns["relation"]):
+            continue
+        relation_table_seen = True
+        missing_columns = []
+        if not columns["req"] or not columns["ac"] or not columns["relation"]:
+            missing_columns.append("REQ/AC relation")
+        for field in ("owner", "authority", "evidence", "tier"):
+            if not columns[field]:
+                missing_columns.append(field)
+        if missing_columns:
+            fail(
+                errors,
+                "paired-trace-missing-column",
+                path,
+                f"trace table at line {header_line} requires {', '.join(missing_columns)} column(s)",
+            )
+
+        for number, cells in rows:
+            relation_cells = [
+                cells[index]
+                for index in columns["relation"]
+                if index < len(cells)
+            ]
+            relation_text = " ".join(relation_cells)
+            declared_ids = strict_trace_ids(relation_text)
+            linked_ids = set().union(
+                *(
+                    trace_navigable_ids(source, cell, use_worktree_content)
+                    for cell in relation_cells
+                )
+            )
+            requirement_ids = {
+                identifier for identifier in linked_ids if identifier.startswith("REQ-")
+            }
+            acceptance_ids = {
+                identifier for identifier in linked_ids if identifier.startswith("AC-")
+            }
+            if not requirement_ids or not acceptance_ids:
+                fail(
+                    errors,
+                    "paired-trace-missing-relation",
+                    path,
+                    f"trace row at line {number} must contain REQ and AC in the same row",
+                )
+            unlinked_ids = declared_ids - linked_ids
+            if unlinked_ids:
+                fail(
+                    errors,
+                    "paired-trace-unlinked-relation",
+                    path,
+                    f"trace row at line {number} requires navigable links for {', '.join(sorted(unlinked_ids))}",
+                )
+            traced_relations.update(
+                (requirement, acceptance)
+                for requirement in requirement_ids
+                for acceptance in acceptance_ids
+            )
+
+            for field in ("owner", "evidence"):
+                indices = columns[field]
+                values = [cells[index] for index in indices if index < len(cells)]
+                if not values or not any(trace_cell_is_nonempty(value) for value in values):
+                    fail(
+                        errors,
+                        f"paired-trace-empty-{field}",
+                        path,
+                        f"trace row at line {number} requires non-empty {field}",
+                    )
+
+            authority_values = [
+                cells[index] for index in columns["authority"] if index < len(cells)
+            ]
+            authority_link = False
+            for cell in authority_values:
+                for link in parse_markdown_links(cell):
+                    target_path, fragment = split_link_target(link.target)
+                    if (
+                        target_path
+                        and not is_external_link_target(target_path)
+                        and target_path.lower().endswith(".md")
+                        and fragment
+                    ):
+                        authority_link = True
+                        break
+                if authority_link:
+                    break
+            if not authority_link:
+                fail(
+                    errors,
+                    "paired-trace-authority-not-link",
+                    path,
+                    f"trace row at line {number} requires a repository-relative authority Markdown link",
+                )
+
+            tier_values = [cells[index] for index in columns["tier"] if index < len(cells)]
+            tier_text = " ".join(tier_values)
+            if not re.search(
+                r"(?<![A-Za-z0-9_])test_tier_(?:required|full)(?![A-Za-z0-9_])",
+                tier_text,
+            ):
+                fail(
+                    errors,
+                    "paired-trace-invalid-test-tier",
+                    path,
+                    f"trace row at line {number} requires exact test_tier_required or test_tier_full",
+                )
+
+    if not relation_table_seen:
+        fail(
+            errors,
+            "paired-trace-missing-table",
+            path,
+            "active topic requires a semantic REQ/AC trace table",
+        )
+        return
+
+    declared_requirements, declared_acceptances, expected_relations = declared_prd_relations(text)
+    missing_relations = expected_relations - traced_relations
+    if missing_relations:
+        fail(
+            errors,
+            "paired-trace-missing-relation",
+            path,
+            "declared REQ/AC relations lack same-row trace: "
+            + ", ".join(
+                f"{requirement}->{acceptance}"
+                for requirement, acceptance in sorted(missing_relations)
+            ),
+        )
+    missing_ids = (declared_requirements | declared_acceptances) - traced_ids
+    if missing_ids:
+        fail(
+            errors,
+            "paired-trace-missing-relation",
+            path,
+            "declared REQ/AC IDs lack same-row trace: " + ", ".join(sorted(missing_ids)),
+        )
 
 
 def check_requirements(path: str, text: str, errors: list[str]) -> None:
@@ -537,31 +1445,108 @@ def check_requirements(path: str, text: str, errors: list[str]) -> None:
                     fail(errors, "unresolved-requirement", path, f"{identifier} -> {reference}")
 
 
-def check_document(root: Path, head: str, path: str, text: str, errors: list[str], use_worktree_content: bool) -> None:
+def check_root_document(path: str, text: str, errors: list[str]) -> None:
+    """Validate the root identity/content subset owned by the full-corpus contract."""
+    identity = document_identity_text("\n".join(line for _, line in visible_lines(text)))
+    slug = Path(path).parent.name
+    expected = {
+        "产品模块 slug": slug,
+        "产品层唯一 PRD": path,
+        "产品模块总入口": "doc/product/README.md",
+        "生命周期": "active",
+        "Owner role": "producer_system_designer",
+        "后继文档": "无",
+    }
+    for label, value in expected.items():
+        actual = metadata_value(identity, label)
+        if not actual or actual.strip().strip("`") != value:
+            fail(errors, "root-metadata-contract", path, f"{label} expected {value!r}, got {actual!r}")
+    prd_id = metadata_value(identity, "Product PRD-ID")
+    if not prd_id or not re.fullmatch(r"`?PRD-PRODUCT-\d{3}`?", prd_id.strip()):
+        fail(errors, "root-metadata-contract", path, f"Product PRD-ID is missing or invalid: {prd_id!r}")
+    if not metadata_value(identity, "产品模块"):
+        fail(errors, "root-metadata-contract", path, "产品模块 is required")
+    review_date = metadata_value(identity, "Last reviewed")
+    if not review_date:
+        fail(errors, "root-metadata-contract", path, "Last reviewed is required")
+    elif not is_review_date(review_date):
+        fail(errors, "root-metadata-contract", path, f"Last reviewed is invalid: {review_date}")
+    if not re.search(r"^- 下层专业域：.+", identity, re.MULTILINE):
+        fail(errors, "root-authority-contract", path, "下层专业域 is required")
+    for heading in (
+        "## 1. 产品承诺",
+        "## 2. 范围",
+        "## 3. 权威与冲突处理",
+        "## 4. 路线图",
+        "## 5. Done：成功标准与验收",
+        "### 5.1 验收追踪",
+        "## 6. Non-Goals",
+    ):
+        if heading not in text:
+            fail(errors, "root-section-contract", path, f"missing heading prefix {heading!r}")
+
+
+def check_document(
+    root: Path,
+    head: str,
+    path: str,
+    text: str,
+    errors: list[str],
+    use_worktree_content: bool,
+    full_corpus: bool = False,
+) -> None:
     source = root / path
-    if path.endswith("/prd.md"):
-        # Canonical module roots retain their existing identity/SC contract;
-        # product-doc-governance-check.py is their owner.
-        return
+    is_root_document = path.endswith("/prd.md")
+    if is_root_document:
+        if full_corpus:
+            check_root_document(path, text, errors)
+        else:
+            return
     lines = visible_lines(text)
-    check_metadata(path, text, errors)
-    if path.endswith(".prd.md"):
-        check_minimum_topic_content(path, text, errors)
-    if path.endswith(".design.md"):
-        check_minimum_design_content(path, text, errors)
+    inactive_lifecycle = False
+    if not is_root_document:
+        check_metadata(path, text, errors)
+        check_lifecycle_closure(root, head, path, text, errors, use_worktree_content)
+        identity = document_identity_text("\n".join(line for _, line in lines))
+        lifecycle = metadata_value(identity, "生命周期")
+        inactive_lifecycle = bool(
+            lifecycle
+            and lifecycle.strip().strip("`").lower() in {"superseded", "retired"}
+        )
+        if path.endswith(".prd.md") and not inactive_lifecycle:
+            check_minimum_topic_content(path, text, errors)
+            check_active_topic_cardinality(path, text, errors)
+            check_active_topic_trace_tables(root, path, text, errors, use_worktree_content)
+            if full_corpus:
+                check_active_topic_design_contract(root, head, path, text, errors, use_worktree_content)
+    if not is_root_document and path.endswith(".design.md"):
+        if not inactive_lifecycle:
+            check_minimum_design_content(path, text, errors)
         expected_prd = path.removesuffix(".design.md") + ".prd.md"
         pair_targets = []
         links = markdown_links(text)
+        prd_requirement_fragment = False
+        prd_acceptance_fragment = False
         for _number, _raw, target in links:
-            target_path, _fragment = split_link_target(target)
+            target_path, fragment = split_link_target(target)
             if target_path:
                 resolved = resolve_link_path(source, target_path, use_worktree_content)
                 try:
-                    pair_targets.append(resolved.relative_to(root).as_posix())
+                    relative = resolved.relative_to(root).as_posix()
+                    pair_targets.append(relative)
+                    if relative == expected_prd and fragment:
+                        if re.fullmatch(r"req-[a-z0-9][a-z0-9_-]*", fragment, re.IGNORECASE):
+                            prd_requirement_fragment = True
+                        if re.fullmatch(r"ac-[a-z0-9][a-z0-9_-]*", fragment, re.IGNORECASE):
+                            prd_acceptance_fragment = True
                 except ValueError:
                     pass
         if expected_prd not in pair_targets:
             fail(errors, "missing-paired-prd-link", path, expected_prd)
+        if not inactive_lifecycle and not (prd_requirement_fragment and prd_acceptance_fragment):
+            fail(errors, "design-missing-prd-trace-fragment", path, "paired design requires PRD REQ-* and AC-* fragment links")
+        if not inactive_lifecycle:
+            check_design_prd_mapping(root, head, path, text, errors, use_worktree_content)
     links = markdown_links(text)
     for number, line in authority_lines(lines):
         authority_targets = [target for line_number, _raw, target in links if line_number == number]
@@ -618,14 +1603,66 @@ def collect_documents(root: Path, base: str, head: str, worktree: bool) -> tuple
     return documents, None
 
 
+def collect_full_corpus(root: Path) -> tuple[list[ChangedDocument], list[str]]:
+    """Select regular current-tree product PRD/design files in stable path order."""
+    documents: list[ChangedDocument] = []
+    errors: list[str] = []
+    product_root = root / PRODUCT_ROOT
+    for path in sorted(product_root.rglob("*")):
+        relative = path.relative_to(root).as_posix()
+        if not is_product_doc(relative) and not is_product_root(relative):
+            continue
+        if path.is_symlink():
+            errors.append(
+                f"product-doc-content: symlink-not-allowed: {relative}: "
+                "product-document corpus entries must be regular files"
+            )
+            continue
+        if not path.is_file():
+            continue
+        documents.append(
+            ChangedDocument(
+                path=relative,
+                status="full-corpus",
+                old_text=None,
+                new_text=path.read_text(encoding="utf-8"),
+            )
+        )
+    return documents, errors
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parent.parent)
     parser.add_argument("--base")
     parser.add_argument("--head")
     parser.add_argument("--worktree", action="store_true")
+    parser.add_argument("--full-corpus", action="store_true")
     args = parser.parse_args()
     root = args.repo_root.resolve()
+    if args.full_corpus and (args.base is not None or args.head is not None or args.worktree):
+        parser.error("--full-corpus cannot be combined with --base, --head, or --worktree")
+    if args.full_corpus:
+        try:
+            head = run_git(root, "rev-parse", "--verify", "HEAD^{commit}").strip()
+            documents, corpus_errors = collect_full_corpus(root)
+        except (OSError, ValueError) as exc:
+            print(f"product-doc-content: error: {exc}")
+            return 2
+        if corpus_errors:
+            print("\n".join(corpus_errors))
+            return 1
+        if not documents:
+            print("product-doc-content: checked 0: reason=no current-tree product PRD/design documents")
+            return 0
+        errors: list[str] = []
+        for document in documents:
+            check_document(root, head, document.path, document.new_text, errors, True, full_corpus=True)
+        if errors:
+            print("\n".join(errors))
+            return 1
+        print(f"product-doc-content: OK (full-corpus checked {len(documents)} current-tree product documents)")
+        return 0
     if args.worktree and not (args.base and args.head):
         print("product-doc-content: error: --worktree requires explicit --base and --head commit OIDs")
         return 2

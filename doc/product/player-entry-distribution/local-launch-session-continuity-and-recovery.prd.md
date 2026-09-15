@@ -7,6 +7,7 @@
 - 配对产品设计：[`local-launch-session-continuity-and-recovery.design.md`](local-launch-session-continuity-and-recovery.design.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 公开状态权威：[`README.md`](../../../README.md)
 - 专业域权威：[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`Launcher 子域入口`](../../world-simulator/launcher/README.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
@@ -14,6 +15,11 @@
 
 配对产品设计的 canonical 路径为 `doc/product/player-entry-distribution/local-launch-session-continuity-and-recovery.design.md`。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`paired-design`。
+- 配对关系：[local-launch-session-continuity-and-recovery.design.md](local-launch-session-continuity-and-recovery.design.md) 承接本 PRD 的玩家经历、信息层级、状态反馈与恢复解释；产品真值仍由本 PRD 拥有。
+- 设计适用性理由：本地 session 的状态优先级、恢复动作和 blocked 边界由同名 design 承接。
 ## 1. 目标
 
 玩家通过受支持的本地 Launcher 进入已声明的 `viewer` 或 `pure_api` 路径时，能够理解当前会话是在准备、可用、阻塞、停止还是恢复中；发生中断、陈旧状态或配置问题时，能够采取真实的恢复下一步，而不是把已启动进程、旧本地状态、浏览器页面或设置编辑误认为当前世界已经健康、已连接或可玩。
@@ -42,6 +48,34 @@
 
 - 当 Launcher 的 Web 表面不可初始化、不可轮询或发生致命错误时，玩家得到可理解的失败或恢复状态，而不是无限加载、假连接或假成功。
 - native 与 Web 可以使用不同的表现、存储和恢复机制，但不能因入口不同而把配置编辑、本地 session 或诊断成功表达为不同的 primary-mode 或权威世界结果。
+
+## 2.5 叶级产品要求与验收
+
+<a id="req-entry-launch-001"></a>
+### REQ-ENTRY-LAUNCH-001：本地 session 可用不得代签世界结果
+
+- 要求：Launcher 必须把入口、primary mode、本地 session、配置和当前 authority 的可用性与 Agent/world 行动结果分开表达；进程存在、页面可见、本地保存或请求受理不能单独证明可玩或世界行动成功。
+- 验收：AC-ENTRY-LAUNCH-001
+
+<a id="ac-entry-launch-001"></a>
+### AC-ENTRY-LAUNCH-001：启动子步骤成功仍保持结果边界
+
+- 覆盖要求：REQ-ENTRY-LAUNCH-001
+- 场景与结果：启动、配置应用、Web 初始化或控制面局部成功但权威条件未确认时，玩家看到准备/恢复中/blocked/未知语义；世界行动保持未确认，且玩家能查看原因和适用下一步。
+- 证据边界：进程、配置、Web/WASM、runtime 和 world 结果由专业 authority/QA 分别验证；产品层不定义命令、字段或错误码。
+
+<a id="req-entry-launch-002"></a>
+### REQ-ENTRY-LAUNCH-002：停止、陈旧和失败恢复必须重新验证
+
+- 要求：停止、重启、清理、陈旧状态或启动失败后的重新进入必须重新验证当前 authority、session、配置和 primary mode，不得静默复用旧上下文、权限或待决行动。
+- 验收：AC-ENTRY-LAUNCH-002
+
+<a id="ac-entry-launch-002"></a>
+### AC-ENTRY-LAUNCH-002：没有安全路径时保持 blocked
+
+- 覆盖要求：REQ-ENTRY-LAUNCH-002
+- 场景与结果：停止后重入、陈旧本地状态、Web 初始化失败和恢复证据冲突的样例只进入重新验证、blocked、未知/中断或安全返回；重启、刷新或自动恢复不确认、回滚、保存或重放世界结果。
+- 证据边界：恢复协议、存储、时钟、Web API 和 session 分类由 Launcher/runtime/WASM/Viewer/QA authority 决定；产品层只规定禁止推断和安全下一步。
 
 ## 3. 组合验收
 
@@ -87,3 +121,15 @@
 - 把本地进程、浏览器页面或旧输出误写成进入权威世界或可玩成功。
 - 把配置保存或请求受理误写成 Agent/runtime 已应用或世界行动已经成立。
 - 删除仍承担启动器、运行时、存储、Web/WASM 或验证真值的专业源文件。
+
+## 9. 未决问题与假设
+
+- 未决：具体 Launcher、Web/WASM、runtime 和 Viewer 的状态分类、恢复路径与证据组合仍由对应专业 authority 与 QA 在同一候选窗口内确认；本分册不预先宣称跨入口恢复或可玩结论。
+- 假设：当本地 session 证据缺失、过期或互相冲突时，玩家看到未知/中断或 blocked，并重新验证当前 authority；本地重启、页面可见或保存成功不改变这一边界。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-ENTRY-LAUNCH-001](#req-entry-launch-001) / [AC-ENTRY-LAUNCH-001](#ac-entry-launch-001) | `producer_system_designer` | [`doc/world-simulator/prd.md`](../../world-simulator/prd.md#目标)、[`Launcher 子域入口`](../../world-simulator/launcher/README.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-ENTRY-LAUNCH-002](#req-entry-launch-002) / [AC-ENTRY-LAUNCH-002](#ac-entry-launch-002) | `producer_system_designer` | [`doc/world-simulator/prd.md`](../../world-simulator/prd.md#目标)、[`Launcher 子域入口`](../../world-simulator/launcher/README.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

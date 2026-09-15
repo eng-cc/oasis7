@@ -6,10 +6,17 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
 本文是长期产品分册，定义沟通、合同、争端、情境声誉与研究开发归因的产品边界。它不定义聊天/Agent UI、合同字段、抵押数值、争端随机算法、证据格式、仲裁规则、声誉分数、身份技术、专利/法律结论、版税比例或当前实现/readiness。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
+- 设计适用性理由：本 PRD 的合同、服务失败、声誉和 R&D 连续性是产品结果合同；独立 design 不增加另一层玩家信息或控件语义。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 玩家可以自由协商、委托 Agent 并在同一世界中形成可信协作，但非绑定交流不能被误当作已成交或强制义务。只有经有效授权、明确接受和权威校验的 Agent-rendered 合同才产生绑定世界后果。持续服务允许有成本的违约、证据和救济，而争端、声誉与 R&D 归因保持局部、可审计、可更新且不把身份永久污名化或私有化。
@@ -53,6 +60,53 @@
 - 参与的 Agent 保留永久 provenance：其身份、授权下的贡献、所用训练/模块来源和关键 receipt 可被追溯。Agent provenance 不是把 Agent 变成法律人格、永久锁定人员或自动赋予所有经济权利。
 - 研究产生的 share、许可或其他可转让份额只在明确的转让/继受合同下移动；Agent/玩家/组织的身份、个人政治 credential、一般声誉或历史因果不因 R&D 份额转移而自动转移。
 
+### 2.5 可验证的合同、救济与归因要求
+
+<a id="req-wr-cr-001"></a>
+### REQ-WR-CR-001：绑定合同必须经过授权、接受与权威校验
+
+- 要求：人类沟通、草稿、未接受提议和 Agent 建议保持非绑定；只有授权范围内渲染的明确条款、主体明确接受并获得权威校验 receipt 后，才可以创建绑定义务和世界效果。
+- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)
+- 验收：[AC-WR-CR-001](#ac-wr-cr-001)
+
+<a id="ac-wr-cr-001"></a>
+### AC-WR-CR-001：预览与待校验接受不伪装成交付
+
+- 覆盖要求：REQ-WR-CR-001
+- 给定：一份包含授权来源、范围和义务的 Agent-rendered offer，以及一份普通聊天或草稿。
+- 当：玩家查看、接受或重连到这两类沟通结果。
+- 则：普通沟通和 `offered`/`accepted_pending_validation` 只显示非绑定状态且不预留、扣款或改变权限；只有授权、明确接受和权威 receipt 同时成立时才显示 active 义务。
+
+<a id="req-wr-cr-002"></a>
+### REQ-WR-CR-002：持续服务失败必须提供有界恢复而不重复效果
+
+- 要求：跨时间服务按检查点保留已完成结果、未履行范围、责任和可执行下一步；玩家可选择修复/重新履行、终止/结清、最小争议保全或显式继受，且 retry、reconnect 和续期不能重复交付、扣款或静默转移责任。
+- 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
+- 验收：[AC-WR-CR-002](#ac-wr-cr-002)
+
+<a id="ac-wr-cr-002"></a>
+### AC-WR-CR-002：检查点失败只影响对应范围
+
+- 覆盖要求：REQ-WR-CR-002
+- 给定：一个已 active 的持续维护、运输或协作合同在检查点部分完成或 default。
+- 当：玩家重连并选择修复、终止或 dispute/preserve。
+- 则：receipt 区分已完成和未完成范围，只冻结直接相关的新高风险承诺；修复不重放已完成效果，争议不扩大为全面冻结，续期必须重新报价并明确接受。
+
+<a id="req-wr-cr-003"></a>
+### REQ-WR-CR-003：声誉与 R&D 归因必须局部可更新且可追溯
+
+- 要求：声誉按主体与情境记录并支持到期、更新和申诉；R&D 在工作前以 charter 声明贡献与份额，Agent provenance 持续可追溯，份额转移不得自动转移个人 credential 或一般声誉。
+- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
+- 验收：[AC-WR-CR-003](#ac-wr-cr-003)
+
+<a id="ac-wr-cr-003"></a>
+### AC-WR-CR-003：转让、更新与申诉保持情境边界
+
+- 覆盖要求：REQ-WR-CR-003
+- 给定：一个主体在特定地点、服务和时间范围内产生声誉记录，并参与已声明 R&D charter 的工作。
+- 当：控制权或份额转让、声誉到期更新或主体提出复核。
+- 则：历史 receipt、贡献和 provenance 仍可追溯；新主体不会继承个人 credential 或全球信用，声誉可按情境更新/申诉，份额只有经显式合同转移。
+
 ## 3. 权威与冲突处理
 
 | 产品层拥有 | 专业与执行权威 |
@@ -94,3 +148,11 @@
 - 不把本分册中的持续服务结果标签冻结为 runtime enum、状态 schema 或 UI 字段，也不据此声称 preview、检查点、恢复或玩家 surface 已实现。
 - 不把人类聊天、草稿、Agent 建议、社交事实、产业活动或组织身份自动升级为绑定合同、全球信用或 R&D 权利。
 - 不把本专题写成当前 provider、社交、合同、声誉、R&D、preview 或发行 readiness。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-WR-CR-001](#req-wr-cr-001) / [AC-WR-CR-001](#ac-wr-cr-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-CR-002](#req-wr-cr-002) / [AC-WR-CR-002](#ac-wr-cr-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-CR-003](#req-wr-cr-003) / [AC-WR-CR-003](#ac-wr-cr-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

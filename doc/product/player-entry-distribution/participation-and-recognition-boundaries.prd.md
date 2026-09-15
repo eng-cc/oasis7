@@ -6,10 +6,18 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- 专业域权威：[`readme 产品与治理 PRD`](../../readme/prd.md)、[`testing PRD`](../../testing/prd.md)、[`README.md`](../../../README.md)
 - 专业与执行入口：[`doc/readme/prd.md`](../../readme/prd.md)
+- Last reviewed：2026-09-13
 
 本文是长期产品分册，定义有限预览中参与、贡献、认可与权益之间的产品边界。它不定义奖励金额、比例、兑换、资格评分、审批字段、发放流程、渠道活动或历史记录的字段、存储与归档实现；具体 intake、审核、台账和对外执行状态仍由适用专业权威定义。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
+- 设计适用性理由：本 PRD 直接表达贡献信号、审核、失效和补救边界；独立 design 会重复该资格与 claim 分离合同。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 有限预览中的参与者可以通过反馈、测试、建设、文档或其他可验证的协作行为，形成可由团队审核的贡献信号。玩家应能理解：参与和贡献可以被认真对待，但产品不会把进入、游玩、互动或贡献本身表述为自动取得任何权益。
@@ -39,6 +47,40 @@
 
 产品层不得用认可语言暗示固定金额、比例、兑换、收益率、按时长获得回报或 play-to-earn。涉及具体资格、审核结论、分配、渠道活动或公开说明时，以相应专业计划、当前证据和审批结果为准；冲突或缺证时采用更窄边界。
 
+## 3.1 决策、失败、恢复与未决
+
+- 决策：产品只决定参与信号可被提交、核验、记录和转入适用计划；是否认可、分配或形成权益由相应治理计划和执行权威单独决定。
+- 失败与恢复：入口不可用、证据不足、身份不确定、范围不符或窗口关闭时，玩家应看到真实 blocker，并按适用计划补充证据、等待核验、转入正确入口或结束流程；重试和切换入口不能伪造认可或重置机会。
+- 未决：具体资格、评分、审批、台账与发布路径仍由 `liveops_community` 及 readme 治理专题确认；缺少当前权威时保持为未核验、延期或关闭。
+
+## 3.2 叶级产品要求与验收
+
+<a id="req-entry-part-001"></a>
+### REQ-ENTRY-PART-001：贡献信号必须与批准权益分离
+
+- 要求：产品必须区分已收到/待核验、核验中、结果已记录、关闭/延期/需补充与已批准/执行的语义；参与、访问、游玩、互动或贡献本身不得自动产生代币、支付、所有权、治理权或后续访问权。
+- 验收：AC-ENTRY-PART-001
+
+<a id="ac-entry-part-001"></a>
+### AC-ENTRY-PART-001：审核路径不会代签权益
+
+- 覆盖要求：REQ-ENTRY-PART-001
+- 场景与结果：代表性贡献进入 intake、核验、记录、延期或关闭时，玩家能看到范围、证据摘要/无证据说明、当前状态、blocker 和下一步；只有适用计划另行批准并执行后才表达认可或权益。
+- 证据边界：intake 字段、评分、台账、审批与渠道执行由 readme 治理和 LiveOps authority/QA 验证；产品层不定义奖励数值或资格算法。
+
+<a id="req-entry-part-002"></a>
+### REQ-ENTRY-PART-002：重复或失效信号不得复制认可机会
+
+- 要求：重复提交、跨渠道申报、重连重试、证据撤回/失效、超出计划范围或窗口关闭时，产品必须保持不可变 trace、来源和处置原因，不得产生第二条认可依据、优先权、资格或隐性债务。
+- 验收：AC-ENTRY-PART-002
+
+<a id="ac-entry-part-002"></a>
+### AC-ENTRY-PART-002：失效证据回到真实补救路径
+
+- 覆盖要求：REQ-ENTRY-PART-002
+- 场景与结果：重复或跨渠道信号被关联/合并，失效证据显示不可核验、待补充、延期或关闭；窗口关闭、入口切换或重新注册不能重置资格，玩家只能按计划补证、等待、改投适用路径或结束。
+- 证据边界：canonical status/ledger、来源引用、证据可用性和执行记录由 readme/LiveOps/QA authority 定义；产品层不把删除的源内容呈现为仍可访问。
+
 ## 4. 组合验收
 
 - PR-1：有限预览入口和说明能区分“可提交或被审核的贡献信号”与“已批准的后续决定”。
@@ -63,3 +105,10 @@
 - 不定义贡献评分、资格阈值、金额、比例、代币兑换或发放机制。
 - 不替代治理计划、渠道运营包、审核台账、执行记录或公开沟通流程。
 - 不把有限预览参与包装为投资、收益计划、空投、登录奖励、时长奖励或 play-to-earn。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-ENTRY-PART-001](#req-entry-part-001) / [AC-ENTRY-PART-001](#ac-entry-part-001) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md#目标)、[`testing PRD`](../../testing/prd.md)、[`README.md`](../../../README.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-ENTRY-PART-002](#req-entry-part-002) / [AC-ENTRY-PART-002](#ac-entry-part-002) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md#目标)、[`testing PRD`](../../testing/prd.md)、[`README.md`](../../../README.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

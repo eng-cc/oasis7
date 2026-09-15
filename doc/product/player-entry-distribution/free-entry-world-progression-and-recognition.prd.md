@@ -7,9 +7,16 @@
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
+- Last reviewed：2026-09-13
 
 本文是长期产品分册，定义免费基础进入、可选服务、世界内成长、认可和区域互赖之间的产品边界。它不定义支付渠道、定价、账户或 onboarding 实现、具体资格算法、奖励数值、OC 发放/兑换、治理字段或当前 preview 放行结论。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
+- 设计适用性理由：本 PRD 只规定便利服务、独立基线和认可资格的产品边界；独立 design 不会增加不同的玩家操作语义。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 长期产品目标是让玩家无需购买客户端、账户或基础进入资格即可进入受支持世界路径；付费只能购买可选的 hosting、storage、support 等便利服务，不能购买、租用或跳过世界中的实质权力。早期体验应容易进入，并让愿意继续的玩家自愿展开真实的工业、训练、模块、合同、凭证、关系和区域协作深度，而不是用永久账号天赋树或全局战力分替代世界历史。
@@ -78,6 +85,34 @@
 3. 有界协作：使独立基线可行，并让区域互赖和认可在可审计、有限且不自动授予权力的规则下提供额外机会。
 4. 诚实发行：只在当前候选证据支持时，将其中已实现的部分写入公开 claim。
 
+## 4.1 叶级产品要求与验收
+
+<a id="req-entry-free-001"></a>
+### REQ-ENTRY-FREE-001：便利服务不得购买世界权力
+
+- 要求：免费基础进入必须与世界权力分离；hosting、storage 或 support 等可选服务只能改善便利交付，不能购买、租用、跳过或自动恢复资源、权限、治理、合同、Agent 能力或区域控制。
+- 验收：AC-ENTRY-FREE-001
+
+<a id="ac-entry-free-001"></a>
+### AC-ENTRY-FREE-001：服务中断保留独立基线与历史
+
+- 覆盖要求：REQ-ENTRY-FREE-001
+- 场景与结果：便利服务不可用、降级、到期、取消或续费失败时，玩家身份、Agent 控制权、已确认世界结果和仍有效义务保持可追溯；玩家仍有不依赖该服务的读取、等待、重新进入、独立行动或安全停止路径，重购/换商不自动扩权。
+- 证据边界：支付、托管、存储、迁移和世界执行由对应专业 authority 验证；产品层不声称服务当前上线或可用。
+
+<a id="req-entry-free-002"></a>
+### REQ-ENTRY-FREE-002：认可与机会必须有界且可失效
+
+- 要求：贡献、信誉或区域历史产生的机会必须绑定来源、范围、用途、期限和复核条件；认可不得自动变成世界资产、OC、治理权、区域控制或永久全局权力，失效也不得抹除历史或封锁独立基线。
+- 验收：AC-ENTRY-FREE-002
+
+<a id="ac-entry-free-002"></a>
+### AC-ENTRY-FREE-002：认可到期不会重放为新资格
+
+- 覆盖要求：REQ-ENTRY-FREE-002
+- 场景与结果：代表性授予、使用、到期、拒绝、暂停或撤销样例能读到来源/范围/时间边界；历史认可、旧 receipt、重复申领或重连重试不会产生第二次分配、隐性优先权或永久权力，失败方仍可走独立路径、补证或复核。
+- 证据边界：资格、评分、分配、OC、治理和反滥用实现由 gameplay/runtime/blockchain/QA authority 定义；产品层不冻结数值或算法。
+
 ## 5. Done：成功标准与验收
 
 - FE-1：产品说明能区分免费客户端/账户/基础进入、世界内需要取得和维护的实质能力，以及不授予世界权力的可选付费便利服务；不会把其中任何一项误写成当前 preview 已广泛可用。
@@ -108,3 +143,10 @@
 - 不改变首个 Agent 的 claim/upkeep 合同、受限资助语义或 OC 到 quota 的既有单向桥接。
 - 不定义永久等级、全局战力分、职业数值、资格算法、奖励分配、OC 经济、治理权或区域控制的执行规则。
 - 不把长期免费进入、世界内成长或区域互赖目标当作当前 preview readiness、release gate、可玩性或公开承诺的替代证据。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-ENTRY-FREE-001](#req-entry-free-001) / [AC-ENTRY-FREE-001](#ac-entry-free-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-ENTRY-FREE-002](#req-entry-free-002) / [AC-ENTRY-FREE-002](#ac-entry-free-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

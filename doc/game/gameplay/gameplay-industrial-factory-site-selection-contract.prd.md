@@ -2,6 +2,7 @@
 
 - 主题范围：工厂建设前的站点候选、输入/输出拓扑取舍、失败恢复与下一工业动力；本文件是 gameplay 详细 authority，不新增独立玩法系统。
 - 上层产品映射：承接 `doc/product/world-rules-core-gameplay/prd.md` §2「工厂选址与网络拓扑决策」；该产品章节拥有站点候选与产品承诺，本文件拥有玩家节奏、取舍、收益、失败和 progression 表达。
+- 产品语义入口：[`工厂选址与网络拓扑决策`](../../product/world-rules-core-gameplay/prd.md#工厂选址与网络拓扑决策（补齐-buildfactory-的地点选择产品缺口）)；本合同保留站点比较、提交与恢复权威。
 - M4 authority：`doc/world-simulator/m4/industrial-resource-flow-contract.prd.md` 拥有 factory/material ledger、path/edge、capacity、loss、power、buffer 与 terminal 的领域事实；本文件不复制或改写这些事实。
 - gameplay 路由：由 `doc/game/gameplay/gameplay-top-level-design.prd.md` §2.5 的 `BuildFactory` 规则进入；产品、M4、world-runtime 的当前状态仍以各自 authority 与 fresh evidence 为准。
 

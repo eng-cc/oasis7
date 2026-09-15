@@ -6,10 +6,17 @@
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
 本文定义组织持续经营、解散和长期不活跃时的玩家结果与制度边界。它补充成熟世界成长、Agent 所有权与冲突恢复分册；不定义治理权重、身份技术、时长、清算价格、estate schema、链上交易、runtime 状态机、运营处置或当前放行结论。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
+- 设计适用性理由：本 PRD 已完整表达组织解散、不活跃保护、交接和 reclaim 的产品阶段边界；具体 lifecycle surface 由专业 authority 决定。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品承诺
 
 组织可以围绕共同目标持续协作、重组或退出，但不能把成员、独立资产、Agent 或历史变成可任意抹除、秘密没收或失去因果记录的对象。解散和不活跃是同一持续世界中的可理解状态变化：玩家能知道触发原因、当前范围、保留价值、义务、异议或申诉，以及下一次可执行决策。
@@ -59,6 +66,53 @@
 
 本文定义 `持续经营 -> 风险冻结或保护 -> 合同/托管/责任处理 -> 持续业务处置或有限恢复 -> 剩余分配或后续处置` 的产品语义。`game` 拥有玩法、经济和相关平衡；`world-runtime` 拥有资格、状态、执行、receipt、去重与恢复；`p2p` 拥有治理授权、签名和分布式状态边界；QA 拥有具体证据和 verdict。它不取代 Agent 所有权分册的控制权规则、冲突分册的战利品/恢复规则，或专业域的实现合同。
 
+### 4.1 可验证的连续性与处置要求
+
+<a id="req-wr-oc-001"></a>
+### REQ-WR-OC-001：解散处置必须先保护权利与责任连续性
+
+- 要求：组织解散或重组按风险冻结、合同/托管/债权与责任处理、Agent/设施/持续业务处置、剩余分配的顺序推进；成员独立资产、已有合同、身份来源和历史 receipt 不得被静默没收、删除或追溯改写。
+- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)
+- 验收：[AC-WR-OC-001](#ac-wr-oc-001)
+
+<a id="ac-wr-oc-001"></a>
+### AC-WR-OC-001：解散阶段保留可审计的后果顺序
+
+- 覆盖要求：REQ-WR-OC-001
+- 给定：一个包含独立资产、未完成合同、托管资产和持续 Agent/设施业务的组织进入解散或重组。
+- 当：世界推进处置阶段。
+- 则：每个阶段显示范围、责任和下一步并留下 receipt；未完成事项不被自动转给新主体，独立资产与历史不能因组织状态变化被删除或越权处分。
+
+<a id="req-wr-oc-002"></a>
+### REQ-WR-OC-002：长期不活跃先保护再进入受限连续性
+
+- 要求：长期不活跃必须经过可读通知和保护期；estate 或可撤销 delegation 只能在明确维护/风险隔离需要下以有限、可撤销范围生效，reclaim/申诉待决不能自动取回控制或解除全部义务。
+- 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
+- 验收：[AC-WR-OC-002](#ac-wr-oc-002)
+
+<a id="ac-wr-oc-002"></a>
+### AC-WR-OC-002：不活跃保护与恢复请求不越级
+
+- 覆盖要求：REQ-WR-OC-002
+- 给定：一个组织满足不活跃事实，但通知、保护、受限持续和 reclaim/申诉请求处于不同阶段。
+- 当：主体查看状态、提交恢复或重复请求。
+- 则：各阶段能区分允许/禁止动作；通知不产生处置权，保护不表示没收，待决请求不取得控制/资产，拒绝或过期只终止该请求而保留基础保护。
+
+<a id="req-wr-oc-003"></a>
+### REQ-WR-OC-003：替代授权在重叠范围内必须唯一且原子交接
+
+- 要求：同一处置范围最多一个可执行授权和一个权威 receipt 结果；替代授权确认时旧授权在重叠范围原子终止或收缩，旧授权未确认请求不得自动迁移、继承优先级或产生第二次效果。
+- 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
+- 验收：[AC-WR-OC-003](#ac-wr-oc-003)
+
+<a id="ac-wr-oc-003"></a>
+### AC-WR-OC-003：交接竞态保持单一有效授权
+
+- 覆盖要求：REQ-WR-OC-003
+- 给定：同范围替代 delegation、部分交接、旧授权待决请求与 reclaim/申诉同时存在。
+- 当：旧、新授权及重连/重试请求抵达权威世界。
+- 则：确认前新授权保持待决；确认时只产生一次原子交接，旧待决请求被拒绝或需显式重提，玩家能读到新旧范围、原因和下一步，不能出现并行处置或重复维护效果。
+
 ## 5. 组合验收
 
 - OC-1：代表性 charter 样例证明组织配置不能越过成员独立资产、已有合同、可理解退出、审计历史和 Agent 身份/来源的保护底线。
@@ -85,3 +139,11 @@
 - 不实现 charter、estate、delegation、reclaim、申诉、资产处置、账户/身份聚合、签名、runtime/P2P 状态机、Viewer 控件或运营 runbook。
 - 不允许组织、普通治理、紧急机制或运营便利越过本文保护底线，制造静默没收、历史重写、身份删除、无审计处置或重复世界效果。
 - 不以本文、历史任务状态或局部证据声称组织连续性能力当前已实现、已平衡、可玩或可公开发布。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-WR-OC-001](#req-wr-oc-001) / [AC-WR-OC-001](#ac-wr-oc-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-OC-002](#req-wr-oc-002) / [AC-WR-OC-002](#ac-wr-oc-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-OC-003](#req-wr-oc-003) / [AC-WR-OC-003](#ac-wr-oc-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

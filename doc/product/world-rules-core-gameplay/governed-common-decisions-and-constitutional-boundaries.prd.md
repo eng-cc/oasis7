@@ -6,10 +6,17 @@
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
 本文定义普通共同治理可处理的有限事项，以及它与玩家基本保护、系统安全权威和宪制修订之间不可绕过的产品边界。它不定义资格、权重、阈值、锁定时长、身份技术、链上结构、runtime/P2P 状态机或当前可用性结论。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
+- 设计适用性理由：本 PRD 只定义普通治理、宪制轨道、拒绝和可读结果的制度边界；投票与流程交互仍由专业 authority 决定。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 玩家和组织可以在同一个持续、可审计的世界中共同决定有限的运行事项，而不能把持有、付费、组织章程、普通投票、局部多数或历史声望扩展为无界世界主权。
@@ -83,6 +90,53 @@
 
 这项执行闸门保持 **world-first**：世界效果只来自执行时仍有效的权威条件；保持 **emergence-first**：共同决策可产生行动机会，但不能冻结世界或制造治理套利；保持 **persistent / auditable**：通过、失效、拒绝与唯一生效结果之间的因果连续可复核；保持 **extensible**：未来可增加普通事项类别或执行机制，但仍须保留保护优先、当前再校验和单次世界效果。
 
+### 6.2 可验证的治理边界要求
+
+<a id="req-wr-gcb-001"></a>
+### REQ-WR-GCB-001：普通治理只处理白名单事项
+
+- 要求：普通提案必须在提交时声明类别、目标、范围和授权来源；不匹配白名单或触及保护边界的事项必须原子拒绝或明确路由，不得以紧急、技术升级、复合提案或先行实现产生部分效果。
+- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
+- 验收：[AC-WR-GCB-001](#ac-wr-gcb-001)
+
+<a id="ac-wr-gcb-001"></a>
+### AC-WR-GCB-001：越界事项拒绝且不占用世界资源
+
+- 覆盖要求：REQ-WR-GCB-001
+- 给定：一个普通治理提交，分别覆盖白名单内政策/财库/既有 charter 日常事项和触及独立资产、安全 finality 或治理自身边界的事项。
+- 当：系统分类并处理提交。
+- 则：白名单事项显示范围与授权并进入普通流程；越界事项原子拒绝或路由到独立轨道，不产生资金占用、权限变更、部分执行或事实上的先行效果。
+
+<a id="req-wr-gcb-002"></a>
+### REQ-WR-GCB-002：宪制变更必须满足独立条件才生效
+
+- 要求：改变非保护性宪制规则的事项必须同时具备影响说明、延迟/复核窗口、适用的独立确认、审计、申诉和连续 receipt；缺少任一条件时保持待决或拒绝。
+- 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
+- 验收：[AC-WR-GCB-002](#ac-wr-gcb-002)
+
+<a id="ac-wr-gcb-002"></a>
+### AC-WR-GCB-002：条件缺失不产生部分宪制效果
+
+- 覆盖要求：REQ-WR-GCB-002
+- 给定：一项会改变宪制规则但不直接改写保护底线的提案。
+- 当：审议、延迟、独立确认、审计或申诉条件中任一项尚未满足，或授权在执行前失效。
+- 则：玩家能读到缺失条件和下一步，提案保持待决、过期或原子拒绝；不会改变规则、资产、权限或已确认历史。
+
+<a id="req-wr-gcb-003"></a>
+### REQ-WR-GCB-003：已通过事项执行时必须重新校验并只生效一次
+
+- 要求：普通事项通过只取得有限执行资格；执行时必须重新校验当前授权、范围、前置条件和反滥用边界，同一事项最多产生一个 receipt 支持的世界效果。
+- 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
+- 验收：[AC-WR-GCB-003](#ac-wr-gcb-003)
+
+<a id="ac-wr-gcb-003"></a>
+### AC-WR-GCB-003：授权漂移与重试不能扩大或重复执行
+
+- 覆盖要求：REQ-WR-GCB-003
+- 给定：一项已通过但尚未执行的普通事项，随后发生授权撤销/收缩、范围变化、并发提交或重连重试。
+- 当：执行闸门处理原请求及其重复请求。
+- 则：只有当前条件仍有效且范围匹配的请求可产生一次 receipt；其他请求原子拒绝、过期或保持待决，不能部分拨付、继承旧条件、取得第二次资金/权限/优先级。
+
 ## 7. 组合验收
 
 - GCB-1：白名单内的代表性政策、公共财库和既有 charter 日常事项能够进入普通治理；宪制、基本权利、安全、validator/finality、signer 与 custody 事项被原子拒绝或明确路由到非普通轨道，且不产生部分世界效果。
@@ -107,3 +161,11 @@
 - 不定义 OC 外部转让、游戏内权利绑定或既有 `OC -> LetAI Run quota` 桥。
 - 不实现投票、提案、宪制修订、申诉、runtime/P2P 状态机、validator/finality、signer 或 custody 操作。
 - 不把本文、历史证据或局部实现写成当前功能、preview readiness、主网、发行或公开 claim。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-WR-GCB-001](#req-wr-gcb-001) / [AC-WR-GCB-001](#ac-wr-gcb-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-GCB-002](#req-wr-gcb-002) / [AC-WR-GCB-002](#ac-wr-gcb-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-GCB-003](#req-wr-gcb-003) / [AC-WR-GCB-003](#ac-wr-gcb-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

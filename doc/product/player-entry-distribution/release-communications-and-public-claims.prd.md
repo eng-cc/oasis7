@@ -6,11 +6,19 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- 专业域权威：[`readme 产品与治理 PRD`](../../readme/prd.md)、[`testing PRD`](../../testing/prd.md)、[`Gameplay Agent 认领经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md#public-claim-boundary)、[`Gameplay Agent 认领经济合同 design`](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#public-claim-boundary)、[`restricted grant LiveOps runbook`](../../game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md#public-claim-boundary)、[`README.md`](../../../README.md)
 - 公开状态权威：[`README.md`](../../../README.md)
 - 专业与执行入口：[`doc/readme/prd.md`](../../readme/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
+- Last reviewed：2026-09-13
 
 本文是长期产品分册，定义内部候选证据如何形成可审查、可发布、可纠正和可撤回的公开说明。它不保存具体候选 verdict、公告正文、渠道排期、字段模板、任务状态或历史发布记录。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
+- 设计适用性理由：本 PRD 是公开 claim 的证据与审核生命周期合同；其 authority 在发行与 LiveOps 专业文档，独立 design 不增加玩家交互设计。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 玩家和社区应能明确区分内部候选状态、待审核文案和已经发布的公开事实。任何渠道说明都必须忠实反映同一候选、primary mode 与当前证据范围，并在事实变化时及时纠正，而不能把内部 `go`、QA green 或已批准草稿包装成已经发布或更高阶段。
@@ -34,6 +42,20 @@
 - 静态 docs hub 与 Viewer 手册的 CN/EN 镜像是公共发现面的派生呈现，不是独立事实源。涉及手册操作、模式、限制或恢复的变更，必须先由对应专业 canonical source 决定；涉及当前公开状态或 claim 时，还必须符合根 `README.md` 的 claim envelope，再在相关镜像中成对同步。镜像与 canonical 不一致时应同时纠正、收窄或标记失效，不得以历史静态文案背书。
 - 当当前事实、证据或限制漂移时，所有配对 surface 必须在同一纠正/收窄动作中更新；不能仅修正一侧，或继续以另一侧的旧文案背书。
 - 玩家价值可以先于技术实现说明，但信息层级不构成当前状态、发行就绪或公开 claim 的独立证据；当前结论仍以根 `README.md` 和同一证据窗口为准。
+
+<a id="public-claim-four-layer-model"></a>
+### 2.0 四层口径分离
+
+每次准备对外说明时，必须把下面四类内容分别记录；任何一类都不能替代另外三类：
+
+| 层级 | 定义 | 发布限制 |
+| --- | --- | --- |
+| 当前事实（current fact） | 在明确版本、primary mode、入口和时间窗口内，已由根 `README.md`、对应专业 authority 与同一证据束共同支持的现状观察。 | 只能陈述证据实际覆盖的范围；不能从设计目标、局部 green、渠道存在或历史记录外推。 |
+| 产品目标（product goal） | 产品希望玩家、运营者或系统最终获得的行为、体验或边界。 | 是需求和验收输入，不是当前已实现、已部署或已发行的事实。 |
+| 假设（assumption） | 尚未由当前证据确认、但用于推进设计或运营判断的前提。 | 必须显式标记为假设；未转为当前事实前，不得进入可发布 claim。 |
+| 证据边界（evidence limit） | 当前证据能够证明和不能证明的版本、模式、入口、时间、能力与风险范围。 | 缺失、过期、冲突或仅覆盖局部的证据会收窄 claim；无法证明的部分必须写成未承诺或 blocked。 |
+
+只有当当前事实、适用范围和证据边界已经对齐，且产品审核、QA 证据复核和根 README claim envelope 均通过时，才可形成可发布公开 claim（releasable public claim）。可发布 claim 是一条面向外部读者的受范围约束的现状陈述，不得把产品目标或假设改写成当前事实，也不得借此暗示更高阶段、无条件可用性或未批准的后续计划。
 
 ## 3. 沟通生命周期
 
@@ -59,6 +81,47 @@
 - 公开内容只披露理解影响和采取行动所需的最小信息，不暴露内部运行目录、命令、敏感配置、私密 issue/comment、账号标识、未脱敏事故报告或不必要的个人复现数据。
 - 内部 evidence link 与可公开 source link 必须区分；内部审核路径不得原样外发。
 
+## 5.1 叶级产品要求与验收
+
+<a id="req-entry-claim-001"></a>
+### REQ-ENTRY-CLAIM-001：公开 claim 必须绑定同一证据窗口
+
+- 要求：每条发行沟通必须绑定同一候选或版本、primary mode、适用入口、证据范围、更新时间和根 README claim envelope；内部 readiness、QA green、草稿或历史 verdict 不得单独生成公开事实。
+- 验收：AC-ENTRY-CLAIM-001
+
+<a id="ac-entry-claim-001"></a>
+### AC-ENTRY-CLAIM-001：局部 green 不会升级公开状态
+
+- 覆盖要求：REQ-ENTRY-CLAIM-001
+- 场景与结果：代表性候选文案能区分已证实事实、适用限制、未承诺内容/风险和下一步；入口、专业 authority、QA 与根 README 不一致时采用更窄 claim，不能把局部进程、帖子、认证或历史样本写成当前集成、发行就绪或可用性。
+- 证据边界：公开状态由根 README 与同一证据窗口拥有；LiveOps、产品、QA 和专业 authority 提供输入与审核，产品层不保存公告正文或发布记录。
+
+<a id="req-entry-claim-002"></a>
+### REQ-ENTRY-CLAIM-002：事实漂移必须触发纠正或撤回
+
+- 要求：当前事实、证据或限制漂移时，所有 active public surfaces 必须同步纠正、降级或撤回受影响文案；messaging rollback 不得被表达为软件回滚、QA 放行或事故恢复。
+- 验收：AC-ENTRY-CLAIM-002
+
+<a id="ac-entry-claim-002"></a>
+### AC-ENTRY-CLAIM-002：撤回只改变 claim 状态
+
+- 覆盖要求：REQ-ENTRY-CLAIM-002
+- 场景与结果：证据失效、blocker 或事故回退后，旧文案标记 stale/withdrawn 或收窄并引回根 README；公开说明只陈述确认影响、受影响入口、当前恢复动作和可信下一步，不承诺恢复时间或泄露内部证据。
+- 证据边界：LiveOps 执行渠道同步，QA 复核证据，专业 owner 决定产品边界，技术 rollback/incident 由对应 authority 决定；产品层不越权代签。
+
+<a id="req-entry-claim-003"></a>
+### REQ-ENTRY-CLAIM-003：当前事实、产品目标、假设与证据边界必须分离
+
+- 要求：每个拟发布的公开 claim 必须同时给出当前事实、产品目标、假设和证据边界；只有当前事实在适用范围内得到根 README、对应专业 authority 与同一证据窗口支持时，才可将其标记为可发布公开 claim。
+- 验收：AC-ENTRY-CLAIM-003
+
+<a id="ac-entry-claim-003"></a>
+### AC-ENTRY-CLAIM-003：目标或假设不会伪装成当前事实
+
+- 覆盖要求：REQ-ENTRY-CLAIM-003
+- 场景与结果：候选文案分别标记当前事实、产品目标、假设和证据边界；若目标、假设、局部验证、历史记录或渠道存在没有同一证据窗口与根 README 支持，则候选只能保持 `draft`、`reviewed`、`blocked` 或 `withdrawn/stale`，不能标记 `publish_ready` 或对外声称已发布。
+- 证据边界：产品 PRD 定义分类和发布门槛；根 README 拥有当前公开状态；专业 authority 与 QA 提供各自范围内的输入；具体候选 verdict 和发布记录留在对应 task/channel evidence。
+
 ## 6. 组合验收
 
 - RC-1：每条发行沟通都绑定同一候选或版本、primary mode、适用入口、当前证据范围与更新时间。
@@ -73,6 +136,7 @@
 - RC-9：抽样 channel profile、帖子和回复能区分渠道 presence 与产品集成/访问；CTA 只指向当前受支持公开入口或正式反馈/贡献路径。
 - RC-10：产品、缺陷与合作信号都有 owner 和下一步，互动指标不会升级 claim、readiness 或 roadmap。
 - RC-11：公共发现、静态 docs hub 与 Viewer 手册镜像的配对语言 surface 对同一事实保持 primary mode、证据窗口、限制、下一步及 canonical source 的语义等价；任一事实漂移时，相关 surface 同时纠正或收窄，且亮点与技术说明不掩盖边界。
+- RC-12：每个拟发布 claim 都明确区分当前事实、产品目标、假设和证据边界；仅当前事实在同一证据窗口内获得根 README、专业 authority 与 QA 支持时，才可进入 `publish_ready`。
 
 ### 6.1 验收追踪
 
@@ -84,6 +148,7 @@
 | RC-7 / RC-8 | liveops_community / qa_engineer / runtime_engineer / viewer_engineer / blockchain_ops_engineer | `doc/readme/prd.md`; `doc/testing/prd.md` | incident/rollback 抽样与最小披露审计 | test_tier_required |
 | RC-9 / RC-10 | liveops_community / producer_system_designer / qa_engineer | `README.md`; `doc/readme/prd.md`; `doc/testing/prd.md` | 渠道 presence/integration 负例、CTA 与信号 owner/next-action 审计 | test_tier_required |
 | RC-11 | liveops_community / producer_system_designer / viewer_engineer / qa_engineer | `README.md`; `doc/readme/prd.md`; `doc/testing/prd.md` | CN/EN 公共发现 surface 的 primary mode、证据窗口、限制、下一步及 drift 纠正对账 | test_tier_required |
+| RC-12 | liveops_community / producer_system_designer / qa_engineer | `README.md`; `doc/readme/prd.md`; `doc/testing/prd.md`; 对应专业 authority | 候选 brief 抽样核对四层字段及 publish-ready 门槛 | test_tier_required |
 
 ## 7. Non-Goals
 
@@ -91,3 +156,16 @@
 - 不定义具体模板字段、渠道排期、运营 runbook、事故流程或技术回滚步骤。
 - 不替代根 README、正式 changelog、GitHub task evidence、QA gate 或 LiveOps 执行记录。
 - 不把内部审批、草稿完成或互动量当作 publication evidence。
+
+## 8. 未决问题与假设
+
+- 未决：具体候选的公开 verdict、渠道排期、公告正文和纠正/撤回记录，必须由 LiveOps、QA、产品与根 README 在同一证据窗口内确认；本分册不预先替代这些记录。
+- 假设：当公开 surface、专业权威和证据窗口不一致时，采用更窄 claim，标记 draft/review/blocked 或撤回，并把读者引回当前根 README，而不是沿用旧文案。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-ENTRY-CLAIM-001](#req-entry-claim-001) / [AC-ENTRY-CLAIM-001](#ac-entry-claim-001) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md)、[`testing PRD`](../../testing/prd.md)、[`Gameplay Agent 认领经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md#public-claim-boundary)、[`Gameplay Agent 认领经济合同 design`](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#public-claim-boundary)、[`restricted grant LiveOps runbook`](../../game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md#public-claim-boundary)、[`README.md`](../../../README.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-ENTRY-CLAIM-002](#req-entry-claim-002) / [AC-ENTRY-CLAIM-002](#ac-entry-claim-002) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md)、[`testing PRD`](../../testing/prd.md)、[`Gameplay Agent 认领经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md#public-claim-boundary)、[`Gameplay Agent 认领经济合同 design`](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#public-claim-boundary)、[`restricted grant LiveOps runbook`](../../game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md#public-claim-boundary)、[`README.md`](../../../README.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-ENTRY-CLAIM-003](#req-entry-claim-003) / [AC-ENTRY-CLAIM-003](#ac-entry-claim-003) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md)、[`testing PRD`](../../testing/prd.md)、[`Gameplay Agent 认领经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md#public-claim-boundary)、[`Gameplay Agent 认领经济合同 design`](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#public-claim-boundary)、[`restricted grant LiveOps runbook`](../../game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md#public-claim-boundary)、[`README.md`](../../../README.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

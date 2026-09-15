@@ -6,11 +6,18 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 公开状态权威：[`README.md`](../../../README.md)
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
 本文是长期产品分册，承载玩家访问模式、入口能力等价、可解释失败恢复以及发行升阶的组合承诺。它不保存历史阶段 verdict、协议字段、命令、样本阈值、任务状态或渠道执行记录。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
+- 设计适用性理由：本 PRD 以入口能力、证据边界和失败恢复为单一产品合同；它不新增独立的信息架构或交互状态编排。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 玩家能够选择一个被明确支持的入口，理解该入口当前是可玩、仅观察还是被阻塞，并在同一版本和模式下完成发现、进入、核验、失败恢复与继续游玩。团队只有在同一候选版本的入口、运行恢复、QA 和公开沟通证据共同成立后，才能评估扩大阶段或对外 claim。
@@ -59,6 +66,34 @@ UI 私有聚合或 API 客户端自行推导不能成为第二事实源。协议
 - release gate 通过只是升阶前提，不自动改变当前阶段或公开 claim。正式变更还需要产品决策、QA 结论、LiveOps 同步，并最终反映到根 `README.md`。
 - 根 `README.md` 始终是当前公开状态与 claim envelope 的唯一权威；本分册不固化某次 Alpha、Beta 或 preview verdict。
 
+## 5.1 叶级产品要求与验收
+
+<a id="req-entry-mode-001"></a>
+### REQ-ENTRY-MODE-001：每个入口必须绑定唯一 primary mode
+
+- 要求：玩家入口必须明确其 primary mode、当前阶段、受支持能力和证据范围；viewer、pure_api、observer 或 blocked 结论不得由 alias、provider、deployment 或 session context 隐式推导或互相代签。
+- 验收：AC-ENTRY-MODE-001
+
+<a id="ac-entry-mode-001"></a>
+### AC-ENTRY-MODE-001：入口证据独立证明模式能力
+
+- 覆盖要求：REQ-ENTRY-MODE-001
+- 场景与结果：同一候选版本分别核对入口与 primary mode；玩家能辨认可玩、仅观察、blocked 和受支持的下一步，局部 launcher、浏览器、自动化 green 或另一模式证据不会扩大当前 claim。
+- 证据边界：模式分类、runtime/Viewer 证据和公开状态由对应专业 authority、QA 与根 README 共同确认；本产品层不保存候选 verdict。
+
+<a id="req-entry-mode-002"></a>
+### REQ-ENTRY-MODE-002：失败入口必须给出真实恢复路径
+
+- 要求：入口前置缺失、身份/会话失效、provider 初始化失败、模式不受支持或后端不可用时，产品必须如实呈现 blocked/observer 分类、主要原因和适用恢复路径，不得用 fallback 或自动重试伪装成功。
+- 验收：AC-ENTRY-MODE-002
+
+<a id="ac-entry-mode-002"></a>
+### AC-ENTRY-MODE-002：blocked 与可玩不会被静默互换
+
+- 覆盖要求：REQ-ENTRY-MODE-002
+- 场景与结果：代表性前置失败和 fallback 样例保持 blocked/observer 语义；玩家可选择修复配置、重新验证、选择受支持模式、等待或安全返回，重试不会恢复旧权限或制造世界进展。
+- 证据边界：具体错误、会话、配置和恢复动作由 Launcher/runtime/Viewer/WASM/QA authority 定义；产品层不冻结状态字段或命令。
+
 ## 6. 组合验收
 
 ### 6.1 受控 Limited Preview
@@ -104,3 +139,15 @@ UI 私有聚合或 API 客户端自行推导不能成为第二事实源。协议
 - 不冻结趋势阈值、运行时长、样本数量、性能预算或自动化命令。
 - 不保存某次候选版本的 pass/block、阶段判断或任务完成状态。
 - 不替代发行 runbook、渠道文案模板、事故处理或社区反馈记录。
+
+## 8. 未决问题与假设
+
+- 未决：每个候选版本的具体入口、primary mode、恢复证据和公开 claim 仍由 runtime、Viewer、QA 与 LiveOps 在同一证据窗口内确认；本分册不预先宣称任何当前模式可玩或可发行。
+- 假设：当入口证据缺失、状态冲突或恢复路径未经当前 authority 支持时，产品结论保持 blocked/observer 或更窄范围，并等待重新验证、修复或重新评估。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-ENTRY-MODE-001](#req-entry-mode-001) / [AC-ENTRY-MODE-001](#ac-entry-mode-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-ENTRY-MODE-002](#req-entry-mode-002) / [AC-ENTRY-MODE-002](#ac-entry-mode-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

@@ -2,6 +2,7 @@
 
 - 状态：`target-contract`；当前只有 Product/M4 静态权威与窄 `RecipePlan` / `ScheduleRecipe` / `RecipeScheduled` 证据，没有原料替代的 runtime、Viewer、pure API 与 Agent 组合证据。
 - 权威：Product SC-30 拥有同料换源、异料替代、换配方及因果边界；M4/runtime 拥有 quality/custody、batch applicability、join/split/mix/merge、数量守恒与执行 receipt；本文只拥有玩家比较、机会成本、恢复和验收投影。
+- 产品语义入口：[`原料替代、替代来源与换配方决策`](../../product/world-rules-core-gameplay/prd.md#原料替代、替代来源与换配方决策（补齐输入阻塞后的合法替代边界）)；本合同保留原料适用性、替代与恢复的玩法权威。
 - 边界：异料替代默认禁止。Gameplay 不定义材料 taxonomy、质量等级、替代比例、rounding/residual、产率、产出/value class、terminal 资格或经济公式，也不从同名、`degraded`、客户端缓存或 Agent 推荐推断合法替代。
 
 ## 1. 玩家问题与成功收益

@@ -1,6 +1,7 @@
 # 游戏可玩性设计总纲 v0.1设计
 
 - 对应需求文档: `doc/game/gameplay/gameplay-top-level-design.prd.md`
+- 产品承诺入口：[`首局与持续游玩`](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-industrial-001)、[`可玩性证据与承诺边界`](../../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-001)
 - 可变执行状态: 对应 GitHub Project task 与 issue evidence comments
 
 ## 1. 设计定位

@@ -6,6 +6,7 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`gameplay 工业 walkthrough 合同`](../../game/gameplay/gameplay-industrial-representative-execution-walkthrough.prd.md#3-五阶段玩家-walkthrough)、[`world-runtime 专业 PRD`](../../world-runtime/prd.md#consumer-compatibility-industrial-profile-and-stage-execution)、[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md#4-technical-specifications)、[`testing 专业 PRD`](../../testing/prd.md#6-validation-decision-record)
 
 本文说明玩家怎样把一个 demand goal 变成可比较、可追溯、可恢复的工业承诺。配对 PRD 拥有 SC-31 叶子要求和验收；专业 authority 拥有批量、产率、receipt、状态、队列、API 和测试实现。本设计不复制任务状态、实现字段或专业数值。
@@ -80,3 +81,17 @@ Viewer、pure API 和 Agent 可以采用不同表达方式，但必须使用同�
 ## 10. 相邻权威与未决边界
 
 [`game` 专业 PRD](../../game/prd.md#3-player-facing-authority-boundary) 拥有玩家动作和机会成本，[`world-runtime` 专业 PRD](../../world-runtime/prd.md#consumer-compatibility-industrial-profile-and-stage-execution) 拥有状态、root/revision、receipt、持久化和 replay，[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md#4-technical-specifications) 拥有批次、物流、终端、守恒和 profile，[`testing` 专业 PRD](../../testing/prd.md#6-validation-decision-record) 拥有组合证据；本设计只拥有产品体验和跨域连接。三张未决卡保留在配对 PRD 中，任务链接仅提供稳定追踪入口；在专业合同和组合证据明确前，不把未声明路径写成可选，也不把未决事项写成完成决定。
+## PRD REQ/AC fragment mapping
+
+This design delegates product requirements and acceptance semantics to its paired PRD. Every row below is a navigable fragment mapping; this design does not create a second requirement authority.
+
+| PRD requirement | PRD acceptance |
+| --- | --- |
+| [REQ-SC31-001](industrial-demand-goals-and-settlement.prd.md#req-sc31-001) | [AC-SC31-001](industrial-demand-goals-and-settlement.prd.md#ac-sc31-001) |
+| [REQ-SC31-002](industrial-demand-goals-and-settlement.prd.md#req-sc31-002) | [AC-SC31-002](industrial-demand-goals-and-settlement.prd.md#ac-sc31-002) |
+| [REQ-SC31-003](industrial-demand-goals-and-settlement.prd.md#req-sc31-003) | [AC-SC31-003](industrial-demand-goals-and-settlement.prd.md#ac-sc31-003) |
+| [REQ-SC31-004](industrial-demand-goals-and-settlement.prd.md#req-sc31-004) | [AC-SC31-004](industrial-demand-goals-and-settlement.prd.md#ac-sc31-004) / [AC-SC31-005](industrial-demand-goals-and-settlement.prd.md#ac-sc31-005) |
+| [REQ-SC31-005](industrial-demand-goals-and-settlement.prd.md#req-sc31-005) | [AC-SC31-006](industrial-demand-goals-and-settlement.prd.md#ac-sc31-006) |
+| [REQ-SC31-006](industrial-demand-goals-and-settlement.prd.md#req-sc31-006) | [AC-SC31-007](industrial-demand-goals-and-settlement.prd.md#ac-sc31-007) |
+| [REQ-SC31-007](industrial-demand-goals-and-settlement.prd.md#req-sc31-007) | [AC-SC31-008](industrial-demand-goals-and-settlement.prd.md#ac-sc31-008) |
+| [REQ-SC31-008](industrial-demand-goals-and-settlement.prd.md#req-sc31-008) | [AC-SC31-009](industrial-demand-goals-and-settlement.prd.md#ac-sc31-009) |

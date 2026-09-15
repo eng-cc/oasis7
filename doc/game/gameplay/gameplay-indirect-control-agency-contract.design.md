@@ -1,6 +1,7 @@
 # Gameplay 间接控制 agency 合同设计文档
 
 - 对应需求文档: `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md`
+- 产品承诺入口：[`间接控制下的玩家能动性与续接`](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-001)
 - 可变执行状态: 对应 GitHub Project task 与 issue evidence comments
 
 审计轮次: 1

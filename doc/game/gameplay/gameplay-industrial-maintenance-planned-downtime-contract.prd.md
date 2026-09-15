@@ -1,6 +1,7 @@
 # 工业工厂维护与计划停机合同
 
 - 上层产品映射：本合同承接 `doc/product/world-rules-core-gameplay/prd.md` 的 SC-22 维护/计划停机产品承诺。
+- 产品语义入口：[`工业流水线生命周期到玩家决策的收口`](../../product/world-rules-core-gameplay/prd.md#工业流水线生命周期到玩家决策的收口)；本合同保留维护前比较、停机处置与恢复节奏权威。
 - 主题 authority：本文件只拥有维护前玩家选择、机会成本、计划停机处置、恢复节奏与 gameplay 验收语义；Product 继续拥有维护承诺，M4/runtime 继续拥有未来维护事实、bucket、receipt、执行、持久化与 replay。
 - 可变执行状态：对应 GitHub Project task 与 issue evidence comments；本文是 target gameplay contract，不声明 maintenance runtime、Viewer、pure API 或 Agent 已完成。
 

@@ -1,9 +1,21 @@
 # Gameplay Agent 认领经济合同
 
 - 对应设计文档: `doc/game/gameplay/gameplay-agent-claim-economy-contract.design.md`
+- 产品承诺入口：[`Agent 所有权与持续经营`](../../product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#req-wr-aos-001)
 - 可变执行状态: 对应 GitHub Project task 与 issue evidence comments
 
 审计轮次: 8
+
+<a id="public-claim-boundary"></a>
+## Public claim boundary
+
+本文件是 claim 经济规则的玩法专业权威，不是当前发行状态或公开可用性的证明。它消费玩家入口与发行模块的 [`REQ-ENTRY-CLAIM-003`](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#req-entry-claim-003) 与 [`四层口径分离`](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#public-claim-four-layer-model)。
+
+- 当前事实（current fact）：本文件只能确认已写入并经专业审查的 claim 规则、约束和失败边界；它不能单独确认某个版本、模式、入口或受控 grant 当前已经部署、开放或可供公众使用。
+- 产品目标（product goal）：首个 claim 保持非零成本，受限 starter balance 只服务 `slot-1` 的窄用途，并保留 funding provenance、过期和回收边界。
+- 假设（assumption）：受控 preview、allowlist 或 QA 窗口可能在当前权限、资金、runtime 和证据条件满足时使用 restricted grant；每个窗口都必须重新核验，不能从本文件的设计或历史执行记录推断当前可发放。
+- 证据边界（evidence limit）：本文件和配套 design 证明规则意图与玩法约束，不证明运行时部署、真实账户资格、资金余额、QA 放行、public launch、可转账价值或一般公开 entitlement。
+- 可发布公开 claim（releasable public claim）：只有在根 [`README.md`](../../../README.md)、产品 PRD、当前 runtime/QA 证据和对应 [`restricted grant LiveOps runbook`](gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md#public-claim-boundary) 对同一窗口结论一致时，才可引用本文件支持一条受范围约束的公开事实；否则保持 draft/blocked，不把目标或假设写成已上线能力。
 
 ## 1. Executive Summary
 - Problem Statement: 当前规则把 agent 认领完全绑定到 `liquid main token`。在“首个 claim 也不免费”生效后，limited preview / allowlist / QA seed 账号若没有可流通余额就无法进入中循环；但直接空投可转账 main token 又会打开刷号和套现路径。

@@ -6,10 +6,17 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
+- Last reviewed：2026-09-13
 - 专业域权威：[`区域设施合同`](../../game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md)、[`玩家发布实体合同`](../../world-runtime/module/player-published-entities.prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
 本文承载受治理的区域设施与工业能力扩展的长期产品承诺：玩家以有限、可读和可审计的方式改变局部世界，授权创作者也只能经治理把新的可用能力接入同一权威世界。它不把每项设施或每个制成品写成独立产品入口，也不冻结实现合同、数值或当前可用性。
 
+## 设计适用性与生命周期闭合
+
+- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 设计判定 task issue：#3680。
+- 设计适用性理由：本 PRD 已表达区域能力选择、授权漂移和退出的产品合同；独立 design 不增加新的产品信息层级。
+- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品承诺
 
 在完成基础能力后，玩家可以针对可读的区域压力评估并投入有限资源，获得有明确作用域、收益、维护或耗尽边界以及可追溯结果的区域能力。设施不是默认必点税、第一轮教学动作、自由建造或全局治理权。
@@ -38,6 +45,53 @@
 - 受影响的玩家、创作者和相关主体必须能读到原授权、改变原因、当前适用范围、既有能力是继续受限、停止产生新效果还是退出中，以及可用的等待、重新提交、申诉或重新规划路径。待决退出、迁移或替代不等于旧能力已经安全停止或新能力已经可用。
 
 本节只定义产品结果和默认 fail-closed 边界：`game` 仍拥有区域能力的玩法/经济后果，`world-runtime` 与 WASM 专业域仍拥有授权状态、依赖处理、执行、去重、receipt 与恢复合同，`p2p` 仍拥有治理授权与分布式状态边界。它不规定撤销理由、时钟、兼容策略、模块实现、数据迁移或退出补偿。
+
+### 2.2 可验证的区域能力与扩展要求
+
+<a id="req-wr-gr-001"></a>
+### REQ-WR-GR-001：区域设施必须形成有界的玩家选择循环
+
+- 要求：设施从区域压力发现到报价、明确提交、有限服务、维护/耗尽、恢复或退役，每一步都要让玩家看到成本、取舍、失败边界和下一步；报价不预留资源、容量、资格或排队顺位。
+- 专业权威：[`区域设施合同`](../../game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)
+- 验收：[AC-WR-GR-001](#ac-wr-gr-001)
+
+<a id="ac-wr-gr-001"></a>
+### AC-WR-GR-001：设施提交按当前事实接受或原子拒绝
+
+- 覆盖要求：REQ-WR-GR-001
+- 给定：玩家针对一个区域 blocker 查看设施报价，报价包含作用域、资源投入、预期价值、维护和恢复边界。
+- 当：玩家提交时资源、容量、资格或区域状态仍有效，或已发生漂移。
+- 则：有效提交产生一次可审计的有限能力结果并显示后续维护/耗尽路径；漂移时原子拒绝并返回 blocker/取舍/下一步，不能预留或部分扣减。
+
+<a id="req-wr-gr-002"></a>
+### REQ-WR-GR-002：治理扩展的发布与激活必须逐次重验授权
+
+- 要求：扩展批准只提供受限准入资格；每次发布或激活都必须按当前授权、能力范围和世界前置重新校验，不能以技术构建成功、旧 receipt 或本地缓存替代权威生效。
+- 专业权威：[`player-published-entities.prd.md`](../../world-runtime/module/player-published-entities.prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
+- 验收：[AC-WR-GR-002](#ac-wr-gr-002)
+
+<a id="ac-wr-gr-002"></a>
+### AC-WR-GR-002：扩展授权漂移时不静默发布
+
+- 覆盖要求：REQ-WR-GR-002
+- 给定：一个已经获批但尚未完成发布/激活的扩展，随后授权到期、撤销、收缩或能力范围不再匹配。
+- 当：发布请求、重连或跨入口重试到达权威世界。
+- 则：请求明确拒绝、过期、取消或要求在当前轨道重提；不继承旧批准、不产生部分可用能力，也不因本地构建或缓存表示为已生效。
+
+<a id="req-wr-gr-003"></a>
+### REQ-WR-GR-003：已生效扩展的限制或退出必须保持历史与单一授权
+
+- 要求：撤销、到期、收缩或替代必须声明对既有能力的后续结果；历史 receipt 保留，同一重叠范围最多一个可执行授权，限制/退出期间只允许声明范围内的最小安全、价值保全或既有义务动作。
+- 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
+- 验收：[AC-WR-GR-003](#ac-wr-gr-003)
+
+<a id="ac-wr-gr-003"></a>
+### AC-WR-GR-003：替代授权原子交接且不重放旧能力
+
+- 覆盖要求：REQ-WR-GR-003
+- 给定：一个已生效扩展进入限制或受控退出，并有新授权覆盖相同范围。
+- 当：替代 receipt 尚未确认、确认或旧请求重连重试。
+- 则：确认前保持待决且不并行产生效果；确认时新授权原子生效、旧授权在重叠范围收缩/终止，旧待决请求需拒绝或显式重提，历史效果保留且不新增未授权能力。
 
 ## 3. 权威边界
 
@@ -77,3 +131,11 @@
 - 不冻结设施资源成本、库存、吞吐、ROI、服务半径或回收规则。
 - 不定义 WASM ABI、module hash、profile schema、审批角色、签名阈值、发布 SLA、状态机或 replay 实现。
 - 不把技术提案、内部测试或文档迁移表述为已经公开可用或广泛发行。
+
+## 全量语义追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-WR-GR-001](#req-wr-gr-001) / [AC-WR-GR-001](#ac-wr-gr-001) | `producer_system_designer` | [`区域设施合同`](../../game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md#目标)、[`玩家发布实体合同`](../../world-runtime/module/player-published-entities.prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-GR-002](#req-wr-gr-002) / [AC-WR-GR-002](#ac-wr-gr-002) | `producer_system_designer` | [`区域设施合同`](../../game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md#目标)、[`玩家发布实体合同`](../../world-runtime/module/player-published-entities.prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-GR-003](#req-wr-gr-003) / [AC-WR-GR-003](#ac-wr-gr-003) | `producer_system_designer` | [`区域设施合同`](../../game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md#目标)、[`玩家发布实体合同`](../../world-runtime/module/player-published-entities.prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
