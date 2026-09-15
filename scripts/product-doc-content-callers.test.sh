@@ -89,6 +89,12 @@ grep -Fq -- '--head "$SOURCE_HEAD" --worktree' ./scripts/prepare-task-pr.sh
 grep -Fq './scripts/doc-governance-check.sh --full-corpus' ./scripts/prepare-task-pr.sh
 grep -Fq 'SYSTEM_DESIGN_TRACEABILITY_CHECKER=' ./scripts/prepare-task-pr.sh
 grep -Fq 'system-design-traceability-check.py' ./scripts/prepare-task-pr.sh
+workflow_source='doc/engineering/workflow/source-of-truth.md'
+grep -Fq '**Product-document and system-design content gate integration.**' "$workflow_source"
+grep -Fq 'The system-design checker is changed-scope-only' "$workflow_source"
+grep -Fq 'Target-only changes already present in a divergent checkout are not source' "$workflow_source"
+grep -Fq 'no caller-controlled skip is available' "$workflow_source"
+grep -Fq 'run_system_design_traceability_check()' ./scripts/doc-governance-check.sh
 
 sed -n '/^  full-regression:/,/^  full-escalation:/p' .github/workflows/rust.yml >"$tmp_dir/full-regression.yml"
 sed -n '/^  full-escalation:/,$p' .github/workflows/rust.yml >"$tmp_dir/full-escalation.yml"
