@@ -309,6 +309,35 @@ def _has_verified_task_complete(record: dict) -> bool:
     return False
 
 
+def _verify_non_pr_closeout_projection(record: dict, task_uid: str, body: str) -> None:
+    """Require terminal non-PR claims to match the live Issue projection."""
+    if str(record.get("completion_mode") or "") != "non_pr_task":
+        return
+    if (str(record.get("status") or "") != "done"
+            or str(record.get("workflow_phase") or "")
+            not in {"task_done", "closed_without_merge"}):
+        return
+    expected_closed_at = str(record.get("last_closed_at") or "")
+    closed_at_matches = re.findall(r"(?m)^- last_closed_at: `([^`]*)`$", body)
+    if len(closed_at_matches) != 1 or not expected_closed_at or closed_at_matches[0] != expected_closed_at:
+        fail(f"{task_uid} non-PR closeout timestamp is missing or disagrees with the live Issue")
+    encoded_claims = re.findall(r"(?m)^- claim_verifications_b64: `([^`]*)`$", body)
+    expected_claims = record.get("claim_verifications")
+    if len(encoded_claims) != 1 or not isinstance(expected_claims, list):
+        fail(f"{task_uid} non-PR closeout claim projection is missing")
+    try:
+        padding = "=" * (-len(encoded_claims[0]) % 4)
+        live_claims = json.loads(base64.b64decode(
+            encoded_claims[0] + padding, altchars=b"-_", validate=True,
+        ).decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        fail(f"{task_uid} non-PR closeout claim projection is malformed: {exc}")
+    if not isinstance(live_claims, list) or any(not isinstance(claim, dict) for claim in live_claims):
+        fail(f"{task_uid} non-PR closeout claim projection is malformed")
+    if live_claims != expected_claims:
+        fail(f"{task_uid} non-PR closeout claim projection disagrees with the live Issue")
+
+
 def _identity_issue(record: dict, task_uid: str, *, allow_closed: bool = False) -> dict:
     repository = str(record.get("repository") or "")
     issue_number = str(record.get("issue_number") or "")
@@ -334,6 +363,7 @@ def _identity_issue(record: dict, task_uid: str, *, allow_closed: bool = False) 
             fail("Issue non-PR classification evidence is malformed")
         if live_evidence != str(record.get("non_pr_completion_evidence") or ""):
             fail("Issue non-PR classification evidence disagrees with task mapping")
+    _verify_non_pr_closeout_projection(record, task_uid, body)
     body_pr_urls = re.findall(r"(?m)^- pr_url: `([^`]*)`$", body)
     body_pr_numbers = re.findall(r"(?m)^- pr_number: `([^`]*)`$", body)
     mapped_pr_url = str(record.get("pr_url") or "")

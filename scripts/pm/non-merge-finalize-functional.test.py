@@ -342,12 +342,22 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
                 "owner": "fixture", "number": 1, "id": "P1"
             }, "tasks": {UID: record}}, sort_keys=True) + "\n")
             encoded = base64.urlsafe_b64encode(evidence.encode()).decode().rstrip("=")
+            claims = record.get("claim_verifications") or []
+            encoded_claims = base64.urlsafe_b64encode(
+                json.dumps(claims, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            ).decode("ascii").rstrip("=") if claims else ""
+            closeout_fields = ""
+            if record.get("last_closed_at"):
+                closeout_fields += f"- last_closed_at: `{record['last_closed_at']}`\n"
+            if encoded_claims:
+                closeout_fields += f"- claim_verifications_b64: `{encoded_claims}`\n"
             self.issue_body.write_text(
                 f"<!-- oasis7-pm-task -->\ntask_uid: {UID}\n"
                 f"- status: `{record.get('status')}`\n"
                 f"- workflow_phase: `{record.get('workflow_phase')}`\n"
                 "- completion_mode: `non_pr_task`\n"
                 f"- non_pr_completion_evidence_b64: `{encoded}`\n"
+                f"{closeout_fields}"
             )
         return path
 
@@ -1780,6 +1790,74 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
             self.read_json(default_mapping_path)["tasks"][UID].get("non_pr_completion_evidence_sha256"),
             hashlib.sha256(evidence_path.read_bytes()).hexdigest(),
         )
+
+    def test_finalizer_rejects_stale_local_claim_after_issue_claim_changes(self) -> None:
+        """A changed live claim cannot be bypassed by finalizing stale cache state."""
+        evidence = "changed claim fixture: no PR is required"
+        task_worktree, default_mapping_path, evidence_path = self.registered_non_pr_worktrees(evidence)
+        classified = self.classify_non_pr(evidence, repo_root=task_worktree)
+        self.assertEqual(classified.returncode, 0, classified.stderr)
+        claim = {
+            "claim_type": "task_complete", "status": "verified",
+            "allowed_to_claim": True, "verification_exit_code": 0,
+            "verified_at": "2026-09-16T00:00:00+08:00",
+        }
+        closeout = subprocess.run([
+            sys.executable, str(PROJECT_TASK), "closeout-task", str(task_worktree),
+            "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
+            "--to-status", "done", "--claim-json", json.dumps(claim), "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+        self.assertEqual(closeout.returncode, 0, closeout.stderr)
+        refreshed = subprocess.run([
+            sys.executable, str(PROJECT_TASK), "refresh-task", str(self.root),
+            "--repo", REPO, "--project-owner", "fixture", "--project-number", "1",
+            "--task-uid", UID, "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+        self.assertEqual(refreshed.returncode, 0, refreshed.stderr)
+
+        altered = {**claim, "allowed_to_claim": False, "verification_exit_code": 1}
+        encoded = base64.urlsafe_b64encode(
+            json.dumps([altered], sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).decode("ascii").rstrip("=")
+        body = self.issue_body.read_text(encoding="utf-8")
+        body, count = re.subn(
+            r"(?m)^- claim_verifications_b64: `[^`]+`$",
+            f"- claim_verifications_b64: `{encoded}`",
+            body,
+            count=1,
+        )
+        self.assertEqual(count, 1)
+        self.issue_body.write_text(body, encoding="utf-8")
+
+        mapping_before = default_mapping_path.read_bytes()
+        refresh_calls_before = len(self.calls())
+        refresh_loss = subprocess.run([
+            sys.executable, str(PROJECT_TASK), "refresh-task", str(self.root),
+            "--repo", REPO, "--project-owner", "fixture", "--project-number", "1",
+            "--task-uid", UID, "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+
+        project_before = self.read_json(self.project_fields)
+        comments_before = self.read_json(self.comments)
+        closes_before = self.read_json(self.closes)
+        finalized = self.invoke("non_pr_completed", evidence_path, repo_root=self.root)
+        self.assertNotEqual(refresh_loss.returncode, 0)
+        self.assertIn("trace-projection-loss", refresh_loss.stderr)
+        self.assertNotEqual(finalized.returncode, 0)
+        self.assertRegex(finalized.stderr.lower(), r"claim|verification|projection")
+        self.assertEqual(default_mapping_path.read_bytes(), mapping_before)
+        self.assertEqual(self.read_json(self.issue_state), {"state": "OPEN"})
+        self.assertEqual(self.read_json(self.project_fields), project_before)
+        self.assertEqual(self.read_json(self.comments), comments_before)
+        self.assertEqual(self.read_json(self.closes), closes_before)
+        self.assertFalse(
+            (self.root / ".git/oasis7-workflow-receipts" / UID /
+             "closed-without-merge-receipt.json").exists()
+        )
+        self.assertFalse(any(
+            call[:2] in (["issue", "close"], ["issue", "comment"], ["project", "item-edit"])
+            for call in self.calls()[refresh_calls_before:]
+        ))
 
     def test_non_pr_finalization_rejects_alternate_and_tampered_classification_evidence(self) -> None:
         self.mapping()

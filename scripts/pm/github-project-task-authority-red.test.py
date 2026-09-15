@@ -481,6 +481,7 @@ class AuthoritativeMappingContract(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, r"trace-projection-loss"):
                 MODULE.command_refresh_task(args)
         self.assertEqual(mapping_path.read_bytes(), before)
+
         self.assertTrue(evidence_path.is_file())
         self.assertEqual(hashlib.sha256(evidence_path.read_bytes()).hexdigest(), digest)
 
@@ -557,6 +558,24 @@ class AuthoritativeMappingContract(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, r"trace-projection-loss"):
                 MODULE.command_refresh_task(args)
         self.assertEqual(mapping_path.read_bytes(), before)
+
+        for altered_claims in (
+            [],
+            [{**claim, "allowed_to_claim": False, "verification_exit_code": 1}],
+        ):
+            with self.subTest(altered_claims=altered_claims):
+                live["last_closed_at"] = closed_at
+                live["claim_verifications"] = altered_claims
+                before = mapping_path.read_bytes()
+                with (
+                    mock.patch.object(MODULE, "github_issue_record", return_value=live),
+                    mock.patch.object(MODULE, "project_refresh_graphql",
+                                      return_value={"data": {"nodes": [node]}}),
+                    mock.patch("builtins.print"),
+                ):
+                    with self.assertRaisesRegex(SystemExit, r"trace-projection-loss"):
+                        MODULE.command_refresh_task(args)
+                self.assertEqual(mapping_path.read_bytes(), before)
 
     def test_refresh_rejects_conflicting_registered_task_identities_without_mutation(self) -> None:
         other = pathlib.Path(self.tmp.name) / "other-task-worktree"

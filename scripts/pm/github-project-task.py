@@ -1903,6 +1903,11 @@ def preserve_identity_bound_cache(
                     task_uid,
                     f"live Issue omitted previously projected {key}",
                 )
+            if key == "claim_verifications" and existing.get(key) != live.get(key):
+                trace_projection_loss(
+                    task_uid,
+                    "live Issue claim_verifications changed from the refreshed cache",
+                )
     if "last_closed_at" in live:
         record["last_closed_at"] = live["last_closed_at"]
     if "claim_verifications" in live:
