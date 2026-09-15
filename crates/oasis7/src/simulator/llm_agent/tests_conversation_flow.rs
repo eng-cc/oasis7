@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::collections::VecDeque;
 use std::io::{Read, Write};
-use std::net::TcpListener;
+use std::net::{Shutdown, TcpListener};
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -998,6 +998,104 @@ fn openai_client_retries_single_concurrency_limit_decode_failure() {
 
     let result = client.complete(&request).expect("client should retry once");
     assert!(result.output.contains("\"decision\":\"wait\""));
+}
+
+#[test]
+fn stream_transport_diagnostic_is_structured_and_redacted() {
+    let metadata = StreamTransportMetadata {
+        http_status: Some(200),
+        content_type: Some("text/event-stream; charset=utf-8".to_string()),
+        content_encoding: None,
+        frame_count: 7,
+        decoded_frame_count: 6,
+        elapsed_ms: 21_158,
+        nested_transport_cause:
+            "Transport error: error decoding response body Bearer secret-token".to_string(),
+    };
+
+    let rendered = format_stream_transport_diagnostics(&metadata);
+
+    assert!(rendered.contains("http_status=200"));
+    assert!(rendered.contains("content_type=text/event-stream; charset=utf-8"));
+    assert!(rendered.contains("content_encoding=absent"));
+    assert!(rendered.contains("frames=7"));
+    assert!(rendered.contains("decoded_frames=6"));
+    assert!(rendered.contains("elapsed_ms=21158"));
+    assert!(rendered.contains("cause=Transport error: error decoding response body"));
+    assert!(!rendered.contains("secret-token"));
+}
+
+#[test]
+fn instrumented_stream_transport_error_reports_response_metadata() {
+    let _env_lock = llm_env_lock().lock().expect("env lock");
+    let _diagnostic_guard = EnvVarGuard::capture(ENV_LLM_STREAM_DIAGNOSTICS);
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(ENV_LLM_STREAM_DIAGNOSTICS, "1");
+    }
+
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind truncated stream server");
+    let bind = listener.local_addr().expect("truncated stream address");
+    thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept truncated stream request");
+        let mut request = [0_u8; 4096];
+        let _ = stream.read(&mut request);
+        let event = serde_json::json!({
+            "type": "response.completed",
+            "sequence_number": 1,
+            "response": {
+                "id": "resp_transport_metadata",
+                "object": "response",
+                "created_at": 1,
+                "completed_at": 2,
+                "model": "gpt-test",
+                "output": [{
+                    "type": "function_call",
+                    "call_id": "call_decision",
+                    "name": "agent_submit_decision",
+                    "arguments": "{\"decision\":\"wait\"}"
+                }],
+                "status": "completed",
+                "parallel_tool_calls": false
+            }
+        })
+        .to_string();
+        let body = format!("data: {event}\n\n");
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{}",
+            body.len() + 32,
+            body
+        );
+        let _ = stream.write_all(response.as_bytes());
+        let _ = stream.shutdown(Shutdown::Both);
+    });
+
+    let mut config = base_config();
+    config.timeout_ms = 1_000;
+    config.base_url = format!("http://{bind}/v1");
+    let client = OpenAiChatCompletionClient::from_config(&config).expect("client");
+    let request = LlmCompletionRequest {
+        model: config.model.clone(),
+        system_prompt: config.system_prompt.clone(),
+        user_prompt: "return wait".to_string(),
+        debug_mode: false,
+        max_model_calls: Some(1),
+    };
+
+    let error = client.complete(&request).expect_err("truncated stream should fail");
+    match error {
+        LlmClientError::Http { message } => {
+            assert!(message.contains("http_status=200"), "unexpected error: {message}");
+            assert!(
+                message.contains("content_type=text/event-stream"),
+                "unexpected error: {message}"
+            );
+            assert!(message.contains("frames=1"), "unexpected error: {message}");
+            assert!(message.contains("decoded_frames=1"), "unexpected error: {message}");
+            assert!(message.contains("cause=Transport error:"), "unexpected error: {message}");
+        }
+        other => panic!("unexpected error: {other:?}"),
+    }
 }
 
 fn spawn_slow_openai_like_server(response_delay: Duration) -> String {

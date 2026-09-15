@@ -6101,6 +6101,7 @@ dependencies = [
  "blake3",
  "ctrlc",
  "ed25519-dalek 3.0.0",
+ "eventsource-stream",
  "futures-util",
  "getrandom 0.4.3",
  "hex",
