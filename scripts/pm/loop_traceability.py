@@ -306,7 +306,136 @@ def _reader_kind(readback: dict[str, Any]) -> str:
     return kind
 
 
-def _validate_record_shape(record: Any) -> list[str]:
+TRACE_APPLICABILITIES = {"required", "not_applicable"}
+TRACE_UPSTREAM_KINDS = {"product_requirement", "professional_acceptance"}
+
+
+def _trace_diagnostic(code: str, obligation: Any, detail: str) -> str:
+    identity = obligation.get("obligation_id") if isinstance(obligation, dict) else None
+    return f"{code}: obligation {identity or '<unknown>'}: {detail}"
+
+
+def _validate_na_disposition(
+    disposition: Any, obligation: dict[str, Any], field: str,
+) -> list[str]:
+    """Validate an explicit, auditable not-applicable disposition."""
+    errors: list[str] = []
+    if not isinstance(disposition, dict):
+        return [_trace_diagnostic("trace-na-incomplete", obligation, f"{field} must be a complete N/A disposition")]
+    if disposition.get("applicability") != "not_applicable":
+        errors.append(_trace_diagnostic("trace-na-incomplete", obligation, f"{field}.applicability must be not_applicable"))
+    for name in ("reason", "scope", "owner_role", "reevaluation_trigger"):
+        value = disposition.get(name)
+        if not isinstance(value, str) or not value.strip():
+            errors.append(_trace_diagnostic("trace-na-incomplete", obligation, f"{field}.{name} is required"))
+    evidence_ref = disposition.get("evidence_ref")
+    if not isinstance(evidence_ref, dict):
+        errors.append(_trace_diagnostic("trace-na-incomplete", obligation, f"{field}.evidence_ref is required"))
+    else:
+        try:
+            _authority_reference(evidence_ref, f"{field}.evidence_ref")
+        except TraceabilityError as exc:
+            errors.append(_trace_diagnostic("trace-na-incomplete", obligation, _error_text(exc)))
+    declared_role = disposition.get("owner_role")
+    obligation_role = obligation.get("owner_role")
+    if (
+        isinstance(declared_role, str)
+        and declared_role.strip()
+        and isinstance(obligation_role, str)
+        and obligation_role.strip()
+        and declared_role != obligation_role
+    ):
+        errors.append(_trace_diagnostic("trace-owner-mismatch", obligation, f"{field}.owner_role does not match obligation owner_role"))
+    return errors
+
+
+def _validate_trace_reference(
+    reference: Any, obligation: dict[str, Any], field: str, *,
+    expected_kind: str | None = None,
+) -> tuple[str | None, list[str]]:
+    """Validate a required typed relation and return its applicability kind."""
+    errors: list[str] = []
+    if not isinstance(reference, dict):
+        return None, [_trace_diagnostic("trace-ref-unresolved", obligation, f"{field} is not structured")]
+    applicability = reference.get("applicability")
+    if applicability not in TRACE_APPLICABILITIES:
+        return applicability, [_trace_diagnostic("trace-required-alias-mismatch", obligation, f"{field}.applicability is invalid or missing")]
+    if applicability == "not_applicable":
+        return applicability, _validate_na_disposition(reference, obligation, field)
+    kind = reference.get("kind")
+    if expected_kind is not None:
+        kind = expected_kind
+    elif kind not in TRACE_UPSTREAM_KINDS:
+        errors.append(_trace_diagnostic("trace-ref-unresolved", obligation, f"{field}.kind is invalid or missing"))
+    try:
+        _reference_value(reference, field)
+        if reference.get("repository") != REPOSITORY:
+            raise TraceabilityError(f"{field} repository mismatch")
+        _validate_bound_identity(reference, field)
+    except TraceabilityError as exc:
+        errors.append(_trace_diagnostic("trace-ref-unresolved", obligation, _error_text(exc)))
+    return kind, errors
+
+
+def _validate_obligation_trace(obligation: dict[str, Any]) -> list[str]:
+    """Validate one obligation's cross-layer applicability and trace relation."""
+    errors: list[str] = []
+    applicability = obligation.get("applicability")
+    required_alias = obligation.get("required")
+    if applicability not in TRACE_APPLICABILITIES or type(required_alias) is not bool:
+        errors.append(_trace_diagnostic("trace-required-alias-mismatch", obligation, "applicability and required aliases are both required"))
+    elif (applicability == "required") != required_alias:
+        errors.append(_trace_diagnostic("trace-required-alias-mismatch", obligation, "applicability and required aliases disagree"))
+
+    trace = obligation.get("trace")
+    if not isinstance(trace, dict):
+        return errors + [
+            _trace_diagnostic("trace-upstream-missing", obligation, "trace.upstream_refs is missing"),
+            _trace_diagnostic("trace-system-design-missing", obligation, "trace.system_design is missing"),
+        ]
+
+    upstream_refs = trace.get("upstream_refs")
+    if not isinstance(upstream_refs, list) or not upstream_refs:
+        errors.append(_trace_diagnostic("trace-upstream-missing", obligation, "at least one typed upstream reference is required"))
+        upstream_refs = []
+
+    required_kinds: set[str] = set()
+    na_kinds: set[str] = set()
+    for index, reference in enumerate(upstream_refs):
+        field = f"trace.upstream_refs[{index}]"
+        kind, reference_errors = _validate_trace_reference(reference, obligation, field)
+        errors.extend(reference_errors)
+        if kind in TRACE_UPSTREAM_KINDS:
+            if isinstance(reference, dict) and reference.get("applicability") == "required":
+                required_kinds.add(kind)
+            elif isinstance(reference, dict) and reference.get("applicability") == "not_applicable":
+                na_kinds.add(kind)
+
+    delivery_work = applicability == "required" or required_alias is True
+    if delivery_work and not required_kinds.intersection(TRACE_UPSTREAM_KINDS):
+        errors.append(_trace_diagnostic("trace-upstream-missing", obligation, "delivery obligation requires a required product_requirement or professional_acceptance"))
+    if delivery_work and {"product_requirement", "professional_acceptance"}.issubset(na_kinds):
+        errors.append(_trace_diagnostic("trace-upstream-missing", obligation, "product_requirement and professional_acceptance cannot both be N/A"))
+
+    system_design = trace.get("system_design")
+    product_required = "product_requirement" in required_kinds
+    if system_design is None:
+        if delivery_work:
+            errors.append(_trace_diagnostic("trace-system-design-missing", obligation, "system_design relation is missing"))
+    else:
+        kind, reference_errors = _validate_trace_reference(
+            system_design, obligation, "trace.system_design", expected_kind="system_design"
+        )
+        del kind
+        errors.extend(reference_errors)
+        if isinstance(system_design, dict) and system_design.get("applicability") == "required" and product_required:
+            # Required product work must retain an explicit system-design
+            # relation; reference validation above checks its exact identity.
+            pass
+    return errors
+
+
+def _validate_record_shape(record: Any, *, require_trace: bool = False) -> list[str]:
     errors: list[str] = []
     if not isinstance(record, dict):
         return ["coordinating record must be an object"]
@@ -380,6 +509,31 @@ def _validate_record_shape(record: Any) -> list[str]:
                 errors.append(f"{obligation_id} owner_loop is invalid or missing")
             if not isinstance(obligation.get("owner_role"), str) or not obligation["owner_role"].strip():
                 errors.append(f"{obligation_id} owner_role is invalid or missing")
+    if isinstance(obligations, list):
+        trace_marked = [
+            isinstance(item, dict) and ("applicability" in item or "trace" in item)
+            for item in obligations
+        ]
+        if require_trace and trace_marked and not any(trace_marked):
+            errors.append("trace-legacy-upgrade-required: aggregate admission requires explicit obligation traces")
+        elif any(trace_marked):
+            for obligation in obligations:
+                if isinstance(obligation, dict):
+                    errors.extend(_validate_obligation_trace(obligation))
+            if isinstance(slots, list):
+                slot_by_id = {
+                    slot.get("slot_id"): slot for slot in slots if isinstance(slot, dict)
+                }
+                for obligation in obligations:
+                    if not isinstance(obligation, dict):
+                        continue
+                    slot = slot_by_id.get(obligation.get("mapping_slot"))
+                    if not isinstance(slot, dict):
+                        continue
+                    if slot.get("owner_loop") != obligation.get("owner_loop"):
+                        errors.append(_trace_diagnostic("trace-owner-mismatch", obligation, "mapping slot owner_loop does not match"))
+                    if slot.get("owner_role") != obligation.get("owner_role"):
+                        errors.append(_trace_diagnostic("trace-owner-mismatch", obligation, "mapping slot owner_role does not match"))
     if "consumed_clause_refs" in record and not isinstance(record["consumed_clause_refs"], list):
         errors.append("consumed_clause_refs must be a list when present")
     feedback = record.get("feedback")
@@ -1128,6 +1282,15 @@ def _validate_matrix(
     by_obligation: set[str] = set()
     by_slot: set[str] = set()
     rules = candidate.get("equivalence_rules") if isinstance(candidate.get("equivalence_rules"), list) else []
+    row_task_uids: dict[str, int] = {}
+    required_obligation_ids = {
+        item.get("obligation_id") for item in obligations
+        if isinstance(item, dict) and item.get("applicability") == "required"
+    }
+    required_slots = {
+        item.get("mapping_slot") for item in obligations
+        if isinstance(item, dict) and item.get("applicability") == "required"
+    }
     for row in matrix:
         if not isinstance(row, dict):
             errors.append("applicability_matrix row must be an object")
@@ -1137,10 +1300,12 @@ def _validate_matrix(
                 _leaf_result_locator(row.get("leaf_evidence_locator"))
             except TraceabilityError as exc:
                 errors.append(f"leaf_evidence_locator: {exc}")
+                errors.append(f"trace-evidence-identity: matrix leaf locator is invalid ({exc})")
         obligation_id = row.get("obligation_id")
         slot_id = row.get("mapping_slot")
         if obligation_id in by_obligation or slot_id in by_slot:
             errors.append("duplicate applicability_matrix row")
+            errors.append(f"trace-slot-cardinality: obligation {obligation_id} and mapping slot {slot_id} require exactly one row")
         by_obligation.add(obligation_id)
         by_slot.add(slot_id)
         obligation = obligation_by_id.get(obligation_id)
@@ -1151,15 +1316,20 @@ def _validate_matrix(
             errors.append("unknown mapping_slot in applicability_matrix")
         if obligation is not None and obligation.get("mapping_slot") != slot_id:
             errors.append(f"mapping_slot does not match obligation {obligation_id}")
+        if obligation is not None and obligation.get("applicability") == "not_applicable":
+            errors.append(f"trace-slot-cardinality: N/A obligation {obligation_id} must not have a leaf row")
         if obligation is not None and slot is not None:
             if slot.get("owner_loop") != obligation.get("owner_loop"):
                 errors.append(f"mapping_slot owner_loop does not match obligation {obligation_id}")
             if slot.get("owner_role") != obligation.get("owner_role"):
                 errors.append(f"mapping_slot owner_role does not match obligation {obligation_id}")
         uid = row.get("leaf_task_uid")
+        if isinstance(uid, str):
+            row_task_uids[uid] = row_task_uids.get(uid, 0) + 1
         item = evidence_by_uid.get(uid)
         if item is None:
             errors.append("unknown Task UID in applicability_matrix")
+            errors.append(f"trace-evidence-identity: matrix row {obligation_id} has no matching leaf Task UID")
             continue
         if slot is not None and "allowed_task_uids" in slot:
             allowed = slot.get("allowed_task_uids")
@@ -1171,6 +1341,7 @@ def _validate_matrix(
             continue
         if row.get("leaf_evidence_digest") != item.get("evidence_digest"):
             errors.append("matrix evidence_digest mismatch")
+            errors.append(f"trace-evidence-identity: matrix row {obligation_id} leaf evidence digest does not match its leaf result")
         try:
             _digest(item.get("evidence_digest"), "leaf evidence_digest")
             verification_digest_value = item.get("verification_digest")
@@ -1184,6 +1355,7 @@ def _validate_matrix(
         except (KeyError, TypeError, TraceabilityError):
             errors.append("leaf evidence candidate is incomplete")
         equivalence = _matching_equivalence(candidate, rules, uid, str(leaf_candidate.get("source_head_oid")))
+        candidate_identity_mismatch = False
         for field in CANDIDATE_FIELDS:
             if field == "change_id" and field not in row:
                 # W1's matrix examples inherit change_id from the enclosing
@@ -1191,20 +1363,20 @@ def _validate_matrix(
                 continue
             if row.get(field) != leaf_candidate.get(field):
                 errors.append(f"{field} mismatch between matrix and evidence")
+                candidate_identity_mismatch = True
             if field in candidate and row.get(field) != candidate.get(field) and field not in (equivalence or {}).get("allowed_to_differ", []):
                 errors.append(f"{field} matrix mismatch")
-    required_obligation_ids = {
-        item.get("obligation_id") for item in obligations
-        if isinstance(item, dict) and item.get("required") is True
-    }
-    required_slots = {
-        item.get("mapping_slot") for item in obligations
-        if isinstance(item, dict) and item.get("required") is True
-    }
+        if candidate_identity_mismatch:
+            errors.append(f"trace-evidence-identity: matrix row {obligation_id} candidate identity does not match leaf evidence")
+    for uid, count in sorted(row_task_uids.items()):
+        if count > 1:
+            errors.append(f"trace-evidence-identity: leaf Task UID {uid} is mapped by {count} matrix rows")
     for missing in sorted(required_obligation_ids - by_obligation):
         errors.append(f"applicability_matrix missing {missing}")
+        errors.append(f"trace-slot-cardinality: required obligation {missing} must have exactly one matrix row")
     for missing in sorted(required_slots - by_slot):
         errors.append(f"applicability_matrix missing {missing}")
+        errors.append(f"trace-slot-cardinality: required mapping slot {missing} must have exactly one matrix row")
     return errors
 
 
@@ -1428,7 +1600,7 @@ def validate_aggregate(
             source_commit = effective_tool_commit
         _oid(effective_tool_commit, "effective_tool_commit")
         _oid(record_source_commit, "record_source_commit")
-        errors.extend(_validate_record_shape(record))
+        errors.extend(_validate_record_shape(record, require_trace=True))
         if errors:
             return _result(errors)
         candidate_shape_errors = _candidate_shape(candidate)
