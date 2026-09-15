@@ -30,6 +30,10 @@ SERVICES = {
         "service": "oasis7-triad-storage.service",
         "ports": frozenset({"6632", "6832"}),
     },
+    "validator-47": {
+        "service": "oasis7-triad-validator-47.service",
+        "ports": frozenset({"6634", "6834"}),
+    },
 }
 READBACK_SCHEMA = "oasis7.human_direct_ssh_readback.v1"
 COMMAND_TIMEOUT_SECONDS = 5

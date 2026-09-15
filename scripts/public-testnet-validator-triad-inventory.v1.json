@@ -1,0 +1,67 @@
+{
+  "schema_version": "oasis7.public_testnet_validator_triad_inventory.v1",
+  "repository": "eng-cc/oasis7",
+  "network_tier": "public_testnet",
+  "topology": "three_equal_validator",
+  "validator_set": {
+    "count": 3,
+    "stakes": [
+      100,
+      100,
+      100
+    ],
+    "total_stake": 300,
+    "required_stake": 200,
+    "quorum": {
+      "numerator": 2,
+      "denominator": 3
+    }
+  },
+  "governance": {
+    "signer_count": 3,
+    "threshold": 2,
+    "threshold_bps": 6667
+  },
+  "nodes": {
+    "sequencer-204": {
+      "node_id": "triad-testnet-sequencer",
+      "host": "root@39.104.204.172",
+      "roles": [
+        "validator",
+        "sequencer"
+      ],
+      "service": "oasis7-triad-sequencer.service",
+      "ports": [
+        "6631",
+        "6831"
+      ]
+    },
+    "storage-205": {
+      "node_id": "triad-testnet-storage",
+      "host": "root@39.104.205.67",
+      "roles": [
+        "validator",
+        "storage"
+      ],
+      "service": "oasis7-triad-storage.service",
+      "ports": [
+        "6632",
+        "6832"
+      ]
+    },
+    "validator-47": {
+      "node_id": "triad-testnet-validator-47",
+      "host": "root@47.111.225.27",
+      "roles": [
+        "validator",
+        "checkpoint_provider",
+        "full_storage_provider"
+      ],
+      "service": "oasis7-triad-validator-47.service",
+      "ports": [
+        "6634",
+        "6834"
+      ]
+    }
+  }
+}
