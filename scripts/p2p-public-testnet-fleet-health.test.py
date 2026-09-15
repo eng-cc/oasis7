@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import importlib.util
 import subprocess
 import sys
 import tempfile
@@ -13,6 +15,7 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -20,6 +23,15 @@ COLLECTOR = ROOT_DIR / "scripts" / "p2p-public-testnet-fleet-health.py"
 RUNBOOK = ROOT_DIR / "doc" / "p2p" / "blockchain" / "public-testnet-governed-bootstrap.runbook.md"
 INVENTORY = ROOT_DIR / "doc" / "testing" / "evidence" / "public-testnet-five-node-inventory-2026-06-23.md"
 NO_CHECKPOINT = object()
+
+
+def load_collector_module() -> Any:
+    spec = importlib.util.spec_from_file_location("p2p_public_testnet_fleet_health", COLLECTOR)
+    if spec is None or spec.loader is None:
+        raise AssertionError("fleet-health collector module could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def status(
@@ -95,6 +107,41 @@ class FleetHealthFixture:
 
 
 class FleetHealthCollectorContractTest(unittest.TestCase):
+    def test_triad_authority_rejects_self_consistent_noncanonical_source_or_peer_refs(self) -> None:
+        module = load_collector_module()
+        inventory = json.loads(
+            (ROOT_DIR / "scripts" / "public-testnet-validator-triad-inventory.v1.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        cases = {
+            "source_registry": (
+                "source_registry_ref",
+                "source_registry_sha256",
+                module.TRIAD_BOOTSTRAP_PEER_RELATIVE,
+                module.TRIAD_BOOTSTRAP_PEER_SHA256,
+            ),
+            "bootstrap_peer": (
+                "bootstrap_peer_ref",
+                "bootstrap_peer_sha256",
+                module.TRIAD_SOURCE_REGISTRY_RELATIVE,
+                module.TRIAD_SOURCE_REGISTRY_SHA256,
+            ),
+        }
+        for case, (ref_key, digest_key, ref, digest) in cases.items():
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temp_dir:
+                mutated = json.loads(json.dumps(inventory))
+                mutated["authority"][ref_key] = ref
+                mutated["authority"][digest_key] = digest
+                staged_inventory = Path(temp_dir) / "inventory.json"
+                staged_bytes = (json.dumps(mutated, indent=2) + "\n").encode("utf-8")
+                staged_inventory.write_bytes(staged_bytes)
+                with (
+                    patch.object(module, "TRIAD_INVENTORY_PATH", staged_inventory),
+                    patch.object(module, "TRIAD_INVENTORY_SHA256", hashlib.sha256(staged_bytes).hexdigest()),
+                ):
+                    self.assertIsNone(module.triad_inventory_authority())
+
     def run_collector(
         self,
         fixture: FleetHealthFixture,

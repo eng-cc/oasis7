@@ -33,8 +33,24 @@ pub(crate) fn build_chain_validator_status(
         .validator_stakes
         .get(snapshot.node_id.as_str())
         .copied();
+    let authority_identity_matches = authority_binding.is_none_or(|binding| {
+        binding
+            .validator_signer_public_keys
+            .get(snapshot.node_id.as_str())
+            .is_some_and(|expected| {
+                local_validator
+                    .and_then(|proof| proof.signer_public_key_hex.as_deref())
+                    .is_some_and(|actual| actual.eq_ignore_ascii_case(expected))
+                    && stake
+                        == binding
+                            .validator_stakes
+                            .get(snapshot.node_id.as_str())
+                            .copied()
+            })
+    });
     let membership_active = local_validator.is_some()
         && stake.is_some_and(|stake| stake > 0)
+        && authority_identity_matches
         && !snapshot
             .consensus
             .quarantined_validators
@@ -63,6 +79,8 @@ pub(crate) fn build_chain_validator_status(
         stake_root: snapshot.consensus.validator_stake_root.clone(),
         registry_ref: authority_binding.map(|binding| binding.registry_ref.clone()),
         registry_sha256: authority_binding.map(|binding| binding.registry_sha256.clone()),
+        registry_semantic_sha256: authority_binding
+            .map(|binding| binding.registry_semantic_sha256.clone()),
         inventory_ref: authority_binding.map(|binding| binding.inventory_ref.clone()),
         inventory_sha256: authority_binding.map(|binding| binding.inventory_sha256.clone()),
     }
@@ -74,9 +92,20 @@ pub(crate) fn build_chain_provider_status(
     chain_proof: &ChainProofStatus,
     storage_metrics: &storage_metrics::StorageMetricsSnapshot,
     replication: &ChainReplicationDebugStatus,
+    authority_binding: Option<&RuntimeAuthorityBinding>,
 ) -> ChainProviderStatus {
-    let provider_id =
+    let observed_provider_id =
         (!replication.local_peer_id.trim().is_empty()).then(|| replication.local_peer_id.clone());
+    let provider_id = match (
+        observed_provider_id,
+        authority_binding.and_then(|binding| binding.validator_47_provider_peer_id.as_deref()),
+    ) {
+        (Some(actual), Some(expected)) if snapshot.node_id == "triad-testnet-validator-47" => {
+            (actual == expected).then_some(actual)
+        }
+        (Some(actual), _) => Some(actual),
+        (None, _) => None,
+    };
     let storage_runtime_healthy = matches!(snapshot.role, NodeRole::Storage)
         && snapshot.replication_enabled
         && provider_id.is_some()
@@ -211,6 +240,7 @@ pub(crate) struct ChainValidatorStatus {
     /// runtime paths/digests. Fleet health treats absence as a hard failure.
     pub(crate) registry_ref: Option<String>,
     pub(crate) registry_sha256: Option<String>,
+    pub(crate) registry_semantic_sha256: Option<String>,
     pub(crate) inventory_ref: Option<String>,
     pub(crate) inventory_sha256: Option<String>,
 }

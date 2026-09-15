@@ -33,6 +33,17 @@ MAX_PROVIDER_CHECKPOINT_HEIGHT_DELTA = 1
 TRIAD_STATUS_PROJECTION_SCHEMA = "oasis7.chain_validator_provider_status.v1"
 TRIAD_INVENTORY_RELATIVE = "scripts/public-testnet-validator-triad-inventory.v1.json"
 TRIAD_INVENTORY_PATH = Path(__file__).resolve().parent / "public-testnet-validator-triad-inventory.v1.json"
+TRIAD_INVENTORY_SHA256 = "3313a899630e3013d623adfee252556a124c25d059406bcf98a541ae2fcdacd5"
+TRIAD_SOURCE_REGISTRY_RELATIVE = (
+    "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json"
+)
+TRIAD_SOURCE_REGISTRY_SHA256 = "a6bfa524e32f2f54c4665d58f18e87b5fa21845e17c14269be1cb1f978adb50f"
+TRIAD_GENERATED_REGISTRY_SHA256 = "8bfb4411f3895ab5f1a2a3de1bcaa08ce97567202d4198444b323ef437a88f78"
+TRIAD_GENERATED_REGISTRY_SEMANTIC_SHA256 = "aa6f6f7f367470d3b2c7282d489422d3eef14370446aa1fe8420fc94d776950d"
+TRIAD_BOOTSTRAP_PEER_RELATIVE = (
+    "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-bootstrap-peers-2026-09-15.txt"
+)
+TRIAD_BOOTSTRAP_PEER_SHA256 = "c7d0b977937adb5d27733ed0ad3e2212ccd0f3ac1b2273214e8cc57df110e5d6"
 MANAGED_TRIAD_NODE_IDS = {
     "sequencer-204": "triad-testnet-sequencer",
     "storage-205": "triad-testnet-storage",
@@ -62,30 +73,181 @@ MANAGED_TRIAD_GOVERNANCE = {
 }
 
 
-def triad_inventory_authority() -> tuple[str, str] | None:
-    """Read the immutable triad inventory; never synthesize its digest."""
+def triad_inventory_authority() -> tuple[dict[str, Any], str] | None:
+    """Read and semantically validate the immutable triad authority chain."""
     try:
         raw = TRIAD_INVENTORY_PATH.read_bytes()
         inventory = json.loads(raw.decode("utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None
+    if hashlib.sha256(raw).hexdigest() != TRIAD_INVENTORY_SHA256:
+        return None
     if not isinstance(inventory, dict):
         return None
     if inventory.get("schema_version") != "oasis7.public_testnet_validator_triad_inventory.v1":
+        return None
+    if inventory.get("repository") != "eng-cc/oasis7":
         return None
     if inventory.get("network_tier") != "public_testnet":
         return None
     if inventory.get("topology") != "three_equal_validator":
         return None
+    authority = inventory.get("authority")
+    validator_set = inventory.get("validator_set")
+    governance = inventory.get("governance")
     nodes = inventory.get("nodes")
-    validator = nodes.get("validator-47") if isinstance(nodes, dict) else None
-    if not isinstance(validator, dict):
+    if (
+        not isinstance(authority, dict)
+        or not isinstance(validator_set, dict)
+        or not isinstance(governance, dict)
+        or not isinstance(nodes, dict)
+        or set(nodes) != MANAGED_TRIAD_NAMES
+    ):
         return None
-    if validator.get("node_id") != MANAGED_TRIAD_NODE_IDS["validator-47"]:
+    if (
+        authority.get("world_id") != "oasis7-public-testnet-governed-20260606"
+        or authority.get("chain_id") != authority.get("world_id")
+        or authority.get("network_tier") != "public_testnet"
+        or authority.get("registry_ref")
+        != "config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json"
+        or authority.get("source_registry_ref") != TRIAD_SOURCE_REGISTRY_RELATIVE
+        or authority.get("source_registry_sha256") != TRIAD_SOURCE_REGISTRY_SHA256
+        or authority.get("generated_registry_sha256") != TRIAD_GENERATED_REGISTRY_SHA256
+        or authority.get("generated_registry_semantic_sha256")
+        != TRIAD_GENERATED_REGISTRY_SEMANTIC_SHA256
+        or authority.get("bootstrap_peer_ref") != TRIAD_BOOTSTRAP_PEER_RELATIVE
+        or authority.get("bootstrap_peer_sha256") != TRIAD_BOOTSTRAP_PEER_SHA256
+        or validator_set
+        != {
+            "count": 3,
+            "stakes": [100, 100, 100],
+            "total_stake": 300,
+            "required_stake": 200,
+            "quorum": {"numerator": 2, "denominator": 3},
+        }
+        or governance != MANAGED_TRIAD_GOVERNANCE
+    ):
         return None
-    if validator.get("roles") != ["validator", "checkpoint_provider", "full_storage_provider"]:
+    for name, expected_node_id in MANAGED_TRIAD_NODE_IDS.items():
+        node = nodes.get(name)
+        if not isinstance(node, dict):
+            return None
+        if node.get("node_id") != expected_node_id or node.get("stake") != 100:
+            return None
+        signer = node.get("finality_signer_public_key")
+        if not isinstance(signer, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", signer):
+            return None
+        if name == "validator-47":
+            if node.get("roles") != ["validator", "checkpoint_provider", "full_storage_provider"]:
+                return None
+            if not isinstance(node.get("libp2p_peer_id"), str) or not node["libp2p_peer_id"].strip():
+                return None
+
+    repo_root = Path(__file__).resolve().parent.parent
+
+    def authority_file(raw_ref: object, expected_ref: str) -> bytes | None:
+        if raw_ref != expected_ref or not isinstance(raw_ref, str):
+            return None
+        relative = Path(raw_ref)
+        if relative.is_absolute():
+            return None
+        candidate = repo_root / relative
+        if candidate.is_symlink() or not candidate.is_file():
+            return None
+        try:
+            resolved = candidate.resolve()
+            resolved.relative_to(repo_root)
+            return resolved.read_bytes()
+        except (OSError, ValueError):
+            return None
+
+    source_bytes = authority_file(authority.get("source_registry_ref"), TRIAD_SOURCE_REGISTRY_RELATIVE)
+    peer_bytes = authority_file(authority.get("bootstrap_peer_ref"), TRIAD_BOOTSTRAP_PEER_RELATIVE)
+    if source_bytes is None or peer_bytes is None:
         return None
-    return TRIAD_INVENTORY_RELATIVE, hashlib.sha256(raw).hexdigest()
+    if hashlib.sha256(source_bytes).hexdigest() != TRIAD_SOURCE_REGISTRY_SHA256:
+        return None
+    if hashlib.sha256(peer_bytes).hexdigest() != TRIAD_BOOTSTRAP_PEER_SHA256:
+        return None
+
+    try:
+        source_registry = json.loads(source_bytes.decode("utf-8"))
+        peer_lines = [line.strip() for line in peer_bytes.decode("utf-8").splitlines() if line.strip()]
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(source_registry, dict):
+        return None
+    if (
+        source_registry.get("schema_version") != "oasis7.public_testnet_validator_triad_registry.v1"
+        or source_registry.get("network_tier") != "public_testnet"
+        or source_registry.get("topology") != "three_equal_validator"
+        or source_registry.get("slot_id") != "governance.finality.v1"
+        or source_registry.get("threshold") != 2
+        or source_registry.get("threshold_bps") != 0
+    ):
+        return None
+    source_validators = source_registry.get("validators")
+    if not isinstance(source_validators, list) or len(source_validators) != 3:
+        return None
+    source_by_id = {
+        item.get("node_id"): item
+        for item in source_validators
+        if isinstance(item, dict) and isinstance(item.get("node_id"), str)
+    }
+    if set(source_by_id) != {node["node_id"] for node in nodes.values()}:
+        return None
+    for node in nodes.values():
+        source = source_by_id[node["node_id"]]
+        for field in ("stake", "finality_signer_public_key"):
+            if str(source.get(field, "")).lower() != str(node.get(field, "")).lower():
+                return None
+        if node["node_id"] == MANAGED_TRIAD_NODE_IDS["validator-47"]:
+            for field in ("root_public_key", "finality_public_key", "libp2p_peer_id"):
+                if source.get(field) != node.get(field):
+                    return None
+    if triad_registry_semantic_digest(inventory) != authority["generated_registry_semantic_sha256"]:
+        return None
+    if len(peer_lines) != 3:
+        return None
+    for node in nodes.values():
+        host = str(node.get("host", "")).removeprefix("root@")
+        ports = node.get("ports")
+        if not host or not isinstance(ports, list) or len(ports) < 2:
+            return None
+        prefix = f"/ip4/{host}/tcp/{ports[1]}/p2p/"
+        matches = [line for line in peer_lines if line.startswith(prefix)]
+        if len(matches) != 1:
+            return None
+        peer_id = node.get("libp2p_peer_id")
+        if peer_id and matches[0] != f"{prefix}{peer_id}":
+            return None
+    return inventory, hashlib.sha256(raw).hexdigest()
+
+
+def triad_registry_semantic_digest(inventory: dict[str, Any]) -> str:
+    """Match the runtime's canonical effective-registry semantic digest."""
+    nodes = inventory["nodes"]
+    signer_bindings = {
+        f"governance.finality.v1.{nodes[name]['node_id']}": nodes[name][
+            "finality_signer_public_key"
+        ].lower()
+        for name in sorted(nodes)
+    }
+    validator_stakes = {node_id: 100 for node_id in sorted(signer_bindings)}
+    return hashlib.sha256(
+        json.dumps(
+            {
+                "signer_bindings": signer_bindings,
+                "slot_id": "governance.finality.v1",
+                "threshold": 2,
+                "threshold_bps": 0,
+                "validator_stakes": validator_stakes,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 def utc_now() -> str:
@@ -186,8 +348,12 @@ def provider_checkpoint_gates(captured: dict[str, dict[str, Any]]) -> list[str]:
     return gates
 
 
-def triad_validator_gates(name: str, status: dict[str, Any]) -> list[str]:
-    """Require an active, canonical validator identity for managed triad mode."""
+def triad_validator_gates(
+    name: str,
+    status: dict[str, Any],
+    inventory_authority: tuple[dict[str, Any], str] | None,
+) -> list[str]:
+    """Require an active validator identity anchored to governed inventory."""
     gates: list[str] = []
     expected_node_id = MANAGED_TRIAD_NODE_IDS[name]
     if status.get("node_id") != expected_node_id:
@@ -197,6 +363,41 @@ def triad_validator_gates(name: str, status: dict[str, Any]) -> list[str]:
     p2p = status.get("p2p")
     if not isinstance(p2p, dict) or p2p.get("node_role_claim") != MANAGED_TRIAD_P2P_ROLES[name]:
         gates.append("p2p_role_invalid")
+    if inventory_authority is None:
+        return gates + ["inventory_authority_unavailable"]
+
+    inventory, inventory_sha256 = inventory_authority
+    inventory_node = inventory["nodes"][name]
+    expected_world_id = inventory["authority"]["world_id"]
+    expected_chain_id = inventory["authority"]["chain_id"]
+    expected_registry_sha256 = inventory["authority"]["generated_registry_sha256"]
+    expected_signer = inventory_node["finality_signer_public_key"].lower()
+    if status.get("world_id") != expected_world_id:
+        gates.append("world_identity_mismatch")
+    network_tier = status.get("network_tier")
+    if not isinstance(network_tier, dict):
+        gates.append("network_tier_identity_missing")
+    else:
+        if network_tier.get("tier") != "public_testnet":
+            gates.append("network_tier_identity_mismatch")
+        if network_tier.get("network_id") != expected_world_id:
+            gates.append("network_identity_mismatch")
+        if network_tier.get("chain_id") != expected_chain_id:
+            gates.append("chain_identity_mismatch")
+        if network_tier.get("target_validator_count") != 3:
+            gates.append("validator_count_mismatch")
+    world_resource = status.get("world_resource")
+    if not isinstance(world_resource, dict):
+        gates.append("world_resource_identity_missing")
+    else:
+        if world_resource.get("world_id") != expected_world_id:
+            gates.append("world_identity_mismatch")
+        if world_resource.get("chain_id") != expected_chain_id:
+            gates.append("chain_identity_mismatch")
+    chain_proof = status.get("chain_proof")
+    latest_proof = chain_proof.get("latest_world_head_proof") if isinstance(chain_proof, dict) else None
+    if not isinstance(latest_proof, dict) or latest_proof.get("world_id") != expected_world_id:
+        gates.append("world_identity_mismatch")
 
     validator = status.get("validator")
     if not isinstance(validator, dict):
@@ -208,13 +409,15 @@ def triad_validator_gates(name: str, status: dict[str, Any]) -> list[str]:
     if validator.get("membership") != "active":
         gates.append("validator_membership_invalid")
     stake = validator.get("stake")
-    if isinstance(stake, bool) or not isinstance(stake, int) or stake != 100:
+    if isinstance(stake, bool) or not isinstance(stake, int) or stake != inventory_node["stake"]:
         gates.append("validator_stake_mismatch")
     if validator.get("signer_binding") != expected_node_id:
         gates.append("validator_signer_binding_mismatch")
     signer = validator.get("signer_public_key_hex")
     if not isinstance(signer, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", signer):
         gates.append("signer_identity_missing")
+    elif signer.lower() != expected_signer:
+        gates.append("signer_identity_mismatch")
     stake_proof = validator.get("stake_proof")
     if not isinstance(stake_proof, dict):
         gates.append("validator_stake_proof_missing")
@@ -247,6 +450,18 @@ def triad_validator_gates(name: str, status: dict[str, Any]) -> list[str]:
         value = validator.get(field)
         if not isinstance(value, str) or not value.strip():
             gates.append("registry_identity_missing")
+    actual_registry_sha256 = validator.get("registry_sha256")
+    if (
+        not isinstance(actual_registry_sha256, str)
+        or actual_registry_sha256.lower() != expected_registry_sha256
+    ):
+        gates.append("registry_authority_digest_mismatch")
+    if validator.get("registry_semantic_sha256") != inventory["authority"]["generated_registry_semantic_sha256"]:
+        gates.append("registry_semantic_identity_mismatch")
+    if validator.get("inventory_ref") != TRIAD_INVENTORY_RELATIVE:
+        gates.append("inventory_authority_ref_mismatch")
+    if validator.get("inventory_sha256", "").lower() != inventory_sha256:
+        gates.append("inventory_authority_digest_mismatch")
     for field in ("inventory_ref", "inventory_sha256"):
         value = validator.get(field)
         if not isinstance(value, str) or not value.strip():
@@ -254,12 +469,21 @@ def triad_validator_gates(name: str, status: dict[str, Any]) -> list[str]:
     return gates
 
 
-def triad_provider_gates(status: dict[str, Any]) -> list[str]:
+def triad_provider_gates(
+    status: dict[str, Any],
+    inventory_authority: tuple[dict[str, Any], str] | None,
+) -> list[str]:
     """Require validator-47 to close both checkpoint and full-storage roles."""
     provider = status.get("provider")
     if not isinstance(provider, dict):
         return ["validator_47_provider_metadata_missing"]
     gates: list[str] = []
+    if inventory_authority is None:
+        return ["inventory_authority_unavailable"]
+    inventory, _inventory_sha256 = inventory_authority
+    inventory_node = inventory["nodes"]["validator-47"]
+    expected_world_id = inventory["authority"]["world_id"]
+    expected_chain_id = inventory["authority"]["chain_id"]
     if provider.get("schema_version") != TRIAD_STATUS_PROJECTION_SCHEMA:
         gates.append("validator_47_provider_schema_invalid")
     if provider.get("node_id") != MANAGED_TRIAD_NODE_IDS["validator-47"]:
@@ -267,6 +491,8 @@ def triad_provider_gates(status: dict[str, Any]) -> list[str]:
     provider_id = provider.get("provider_id")
     if not isinstance(provider_id, str) or not provider_id.strip():
         gates.append("validator_47_provider_identity_missing")
+    elif provider_id != inventory_node.get("libp2p_peer_id"):
+        gates.append("provider_identity_mismatch")
     if provider.get("checkpoint") is not True:
         gates.append("validator_47_provider_checkpoint_missing")
     if provider.get("full_storage") is not True:
@@ -295,8 +521,8 @@ def triad_provider_gates(status: dict[str, Any]) -> list[str]:
         ):
             gates.append("provider_checkpoint_height_invalid")
         world_resource = status.get("world_resource")
-        expected_world_id = status.get("world_id")
-        expected_chain_id = world_resource.get("chain_id") if isinstance(world_resource, dict) else None
+        expected_world_id = inventory["authority"]["world_id"]
+        expected_chain_id = inventory["authority"]["chain_id"]
         expected_manifest_hash = (
             world_resource.get("seed_manifest_hash") if isinstance(world_resource, dict) else None
         )
@@ -336,11 +562,10 @@ def triad_provider_gates(status: dict[str, Any]) -> list[str]:
         if full_storage.get("provider_id") != provider_id:
             gates.append("provider_identity_mismatch")
         world_resource = status.get("world_resource")
-        if full_storage.get("world_id") != status.get("world_id"):
+        if full_storage.get("world_id") != expected_world_id:
             gates.append("provider_full_storage_world_identity_mismatch")
         if (
-            isinstance(world_resource, dict)
-            and full_storage.get("chain_id") != world_resource.get("chain_id")
+            full_storage.get("chain_id") != expected_chain_id
         ):
             gates.append("provider_full_storage_chain_identity_mismatch")
         if (
@@ -354,7 +579,10 @@ def triad_provider_gates(status: dict[str, Any]) -> list[str]:
     return gates
 
 
-def triad_projection_consistency_gates(captured: dict[str, dict[str, Any]]) -> list[str]:
+def triad_projection_consistency_gates(
+    captured: dict[str, dict[str, Any]],
+    inventory_authority: tuple[dict[str, Any], str] | None,
+) -> list[str]:
     """Cross-bind node-emitted validator/provider projections without inference."""
     gates: list[str] = []
     validator_set_hashes: set[str] = set()
@@ -369,9 +597,15 @@ def triad_projection_consistency_gates(captured: dict[str, dict[str, Any]]) -> l
     network_ids: set[str] = set()
     network_tiers: set[str] = set()
     validator_counts: set[int] = set()
-    inventory_authority = triad_inventory_authority()
     if inventory_authority is None:
         gates.append("inventory_authority_unavailable")
+        return gates
+    inventory, inventory_sha256 = inventory_authority
+    expected_world_id = inventory["authority"]["world_id"]
+    expected_chain_id = inventory["authority"]["chain_id"]
+    expected_registry_ref = inventory["authority"]["registry_ref"]
+    expected_registry_sha256 = inventory["authority"]["generated_registry_sha256"]
+    expected_registry_semantic_sha256 = inventory["authority"]["generated_registry_semantic_sha256"]
     for status in captured.values():
         validator = status.get("validator")
         if isinstance(validator, dict):
@@ -386,8 +620,7 @@ def triad_projection_consistency_gates(captured: dict[str, dict[str, Any]]) -> l
                 if isinstance(value, str) and value.strip():
                     values.add(value.lower())
             if inventory_authority is not None:
-                inventory_ref, inventory_sha256 = inventory_authority
-                if validator.get("inventory_ref") != inventory_ref:
+                if validator.get("inventory_ref") != TRIAD_INVENTORY_RELATIVE:
                     gates.append("inventory_authority_ref_mismatch")
                 actual_inventory_sha256 = validator.get("inventory_sha256")
                 if (
@@ -395,9 +628,19 @@ def triad_projection_consistency_gates(captured: dict[str, dict[str, Any]]) -> l
                     or actual_inventory_sha256.lower() != inventory_sha256
                 ):
                     gates.append("inventory_authority_digest_mismatch")
+            if validator.get("registry_semantic_sha256") != expected_registry_semantic_sha256:
+                gates.append("registry_semantic_identity_mismatch")
+            registry_ref = validator.get("registry_ref")
+            if not isinstance(registry_ref, str) or not (
+                registry_ref == expected_registry_ref
+                or registry_ref.replace("\\", "/").endswith("/" + expected_registry_ref)
+            ):
+                gates.append("registry_authority_ref_mismatch")
         world_id = status.get("world_id")
         if isinstance(world_id, str) and world_id.strip():
             world_ids.add(world_id)
+            if world_id != expected_world_id:
+                gates.append("world_identity_mismatch")
         network_tier = status.get("network_tier")
         if isinstance(network_tier, dict):
             tier = network_tier.get("tier")
@@ -406,6 +649,8 @@ def triad_projection_consistency_gates(captured: dict[str, dict[str, Any]]) -> l
             network_id = network_tier.get("network_id")
             if isinstance(network_id, str) and network_id.strip():
                 network_ids.add(network_id)
+                if network_id != expected_world_id:
+                    gates.append("network_identity_mismatch")
             target_validator_count = network_tier.get("target_validator_count")
             if (
                 isinstance(target_validator_count, int)
@@ -415,11 +660,15 @@ def triad_projection_consistency_gates(captured: dict[str, dict[str, Any]]) -> l
             chain_id = network_tier.get("chain_id")
             if isinstance(chain_id, str) and chain_id.strip():
                 chain_ids.add(chain_id)
+                if chain_id != expected_chain_id:
+                    gates.append("chain_identity_mismatch")
         world_resource = status.get("world_resource")
         if isinstance(world_resource, dict):
             chain_id = world_resource.get("chain_id")
             if isinstance(chain_id, str) and chain_id.strip():
                 chain_ids.add(chain_id)
+                if chain_id != expected_chain_id:
+                    gates.append("chain_identity_mismatch")
             manifest_hash = world_resource.get("seed_manifest_hash")
             if isinstance(manifest_hash, str) and manifest_hash.strip():
                 manifest_hashes.add(manifest_hash.lower())
@@ -429,6 +678,8 @@ def triad_projection_consistency_gates(captured: dict[str, dict[str, Any]]) -> l
         gates.append("validator_stake_root_mismatch")
     if len(registry_refs) != 1 or len(registry_digests) != 1:
         gates.append("registry_identity_mismatch")
+    if registry_digests != {expected_registry_sha256}:
+        gates.append("registry_authority_digest_mismatch")
     if len(inventory_refs) != 1 or len(inventory_digests) != 1:
         gates.append("inventory_identity_mismatch")
     if len(world_ids) != 1:
@@ -439,6 +690,12 @@ def triad_projection_consistency_gates(captured: dict[str, dict[str, Any]]) -> l
         gates.append("manifest_identity_mismatch")
     if network_tiers != {"public_testnet"} or len(network_ids) != 1 or validator_counts != {3}:
         gates.append("network_tier_identity_mismatch")
+    if network_ids != {expected_world_id}:
+        gates.append("network_identity_mismatch")
+    if world_ids != {expected_world_id}:
+        gates.append("world_identity_mismatch")
+    if chain_ids != {expected_chain_id}:
+        gates.append("chain_identity_mismatch")
     return gates
 
 
@@ -537,6 +794,9 @@ def main() -> int:
     started_monotonic = time.monotonic()
     captured: dict[str, dict[str, Any]] = {}
     failed_gates: list[str] = []
+    inventory_authority = triad_inventory_authority() if args.managed_triad else None
+    if args.managed_triad and inventory_authority is None:
+        failed_gates.append("inventory_authority_unavailable")
     for name, url in nodes.items():
         node_evidence: dict[str, Any] = {"url": url, "captured_at": utc_now()}
         try:
@@ -563,12 +823,12 @@ def main() -> int:
         for name in MANAGED_TRIAD_NAMES:
             node_evidence = captured[name]
             if "collection_error" not in node_evidence:
-                failed_gates.extend(triad_validator_gates(name, node_evidence))
+                failed_gates.extend(triad_validator_gates(name, node_evidence, inventory_authority))
         validator_47 = captured["validator-47"]
         if "collection_error" not in validator_47:
-            failed_gates.extend(triad_provider_gates(validator_47))
+            failed_gates.extend(triad_provider_gates(validator_47, inventory_authority))
         if all("collection_error" not in captured[name] for name in MANAGED_TRIAD_NAMES):
-            failed_gates.extend(triad_projection_consistency_gates(captured))
+            failed_gates.extend(triad_projection_consistency_gates(captured, inventory_authority))
     if args.managed_five_node:
         failed_gates.extend(provider_checkpoint_gates(captured))
 

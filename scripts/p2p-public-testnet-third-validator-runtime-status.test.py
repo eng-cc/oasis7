@@ -54,13 +54,28 @@ NODE_ROLES = {
 SIGNERS = {
     "triad-testnet-sequencer": "e01e5c34dee2da3087653bc4cec02be01632f56250a800994c96ea44ae6f3690",
     "triad-testnet-storage": "1f530cae002d7adb9a6c3dd8f4bc861226f112f88fdd252b28b6494019e21c33",
-    # This is a deterministic fixture key only; production status must emit
-    # the configured NodePosConfig/governance signer binding.
-    "triad-testnet-validator-47": hashlib.sha256(
-        b"oasis7-test-fixture-third-validator-signer"
-    ).hexdigest(),
+    "triad-testnet-validator-47": "cf8c9c2b5637d20d0efa585f0fb7f503b19a1aaba02fb807637e67ed40919fc2",
 }
 TRIAD_STAKES = {node_id: 100 for node_id in NODE_IDS.values()}
+VALIDATOR_47_PEER_ID = "12D3KooWCdQLY6Qm9sWqPqEhJTmPdY3Ykw1w5QnTh7qmSgYDazQZ"
+TRIAD_REGISTRY_SEMANTIC_DIGEST = hashlib.sha256(
+    json.dumps(
+        {
+            "signer_bindings": {
+                f"governance.finality.v1.{node_id}": SIGNERS[node_id].lower()
+                for node_id in sorted(SIGNERS)
+            },
+            "slot_id": "governance.finality.v1",
+            "threshold": 2,
+            "threshold_bps": 0,
+            "validator_stakes": {
+                f"governance.finality.v1.{node_id}": 100 for node_id in sorted(SIGNERS)
+            },
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+).hexdigest()
 
 CURRENT_STATUS_REQUIRED_TOP_LEVEL_KEYS = {
     "ok",
@@ -206,7 +221,11 @@ def triad_registry() -> dict[str, Any]:
     return value
 
 
-TRIAD_REGISTRY_DIGEST = canonical_digest(triad_registry())
+# ``registry_sha256`` is the exact-byte digest of the generated deployment
+# registry bound by the immutable inventory.  The source registry is retained
+# as a separate build-time input, while the runtime also emits the canonical
+# effective-registry semantic digest below.
+TRIAD_REGISTRY_DIGEST = "8bfb4411f3895ab5f1a2a3de1bcaa08ce97567202d4198444b323ef437a88f78"
 INVENTORY_DIGEST = hashlib.sha256(INVENTORY.read_bytes()).hexdigest()
 
 
@@ -267,8 +286,9 @@ def projected_status(node_name: str) -> dict[str, Any]:
         },
         "validator_set_hash": status["consensus"]["validator_set_hash"],
         "stake_root": status["consensus"]["validator_stake_root"],
-        "registry_ref": str(REGISTRY.relative_to(ROOT)),
+        "registry_ref": "config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json",
         "registry_sha256": TRIAD_REGISTRY_DIGEST,
+        "registry_semantic_sha256": TRIAD_REGISTRY_SEMANTIC_DIGEST,
         "inventory_ref": str(INVENTORY.relative_to(ROOT)),
         "inventory_sha256": INVENTORY_DIGEST,
     }
@@ -285,14 +305,14 @@ def projected_status(node_name: str) -> dict[str, Any]:
     status["provider"] = {
         "schema_version": PROJECTION_SCHEMA,
         "node_id": node_id,
-        "provider_id": f"peer-{node_id}",
+        "provider_id": VALIDATOR_47_PEER_ID if is_validator_47 else f"peer-{node_id}",
         "checkpoint": is_validator_47,
         "full_storage": is_validator_47,
         "checkpoint_proof": checkpoint if is_validator_47 else None,
         "full_storage_proof": (
             {
                 "status": "ready",
-                "provider_id": f"peer-{node_id}",
+                "provider_id": VALIDATOR_47_PEER_ID,
                 "world_id": WORLD_ID,
                 "chain_id": WORLD_ID,
                 "manifest_hash": world_resource["seed_manifest_hash"],
@@ -400,7 +420,10 @@ class ThirdValidatorRuntimeStatusContractTest(unittest.TestCase):
             self.assertEqual(status["validator"]["inventory_sha256"], INVENTORY_DIGEST)
             self.assertEqual(status["provider"]["schema_version"], PROJECTION_SCHEMA)
             self.assertEqual(status["provider"]["node_id"], NODE_IDS[name])
-            self.assertEqual(status["provider"]["provider_id"], f"peer-{NODE_IDS[name]}")
+            expected_provider_id = (
+                VALIDATOR_47_PEER_ID if name == "validator-47" else f"peer-{NODE_IDS[name]}"
+            )
+            self.assertEqual(status["provider"]["provider_id"], expected_provider_id)
             if name == "validator-47":
                 self.assertTrue(status["provider"]["checkpoint"])
                 self.assertTrue(status["provider"]["full_storage"])
@@ -454,9 +477,68 @@ class ThirdValidatorRuntimeStatusContractTest(unittest.TestCase):
         statuses["validator-47"]["world_id"] = "oasis7-wrong-world"
         self.assert_identity_rejected(statuses, "world_identity_mismatch")
 
+    def test_self_consistent_wrong_node_identity_is_not_triad_ready(self) -> None:
+        statuses = {name: projected_status(name) for name in NODE_IDS}
+        status = statuses["validator-47"]
+        attacker_id = "attacker-validator-47"
+        status["node_id"] = attacker_id
+        status["validator"]["signer_binding"] = attacker_id
+        status["validator"]["stake_proof"]["validator_id"] = attacker_id
+        status["provider"]["node_id"] = attacker_id
+        self.assert_identity_rejected(statuses, "validator_identity_mismatch")
+
+    def test_self_consistent_wrong_stake_root_is_not_triad_ready(self) -> None:
+        statuses = {name: projected_status(name) for name in NODE_IDS}
+        status = statuses["validator-47"]
+        wrong_root = "0" * 64
+        status["consensus"]["validator_stake_root"] = wrong_root
+        status["validator"]["stake_root"] = wrong_root
+        self.assert_identity_rejected(statuses, "validator_stake_root_mismatch")
+
+    def test_self_consistent_wrong_finality_signer_is_not_triad_ready(self) -> None:
+        statuses = {name: projected_status(name) for name in NODE_IDS}
+        status = statuses["validator-47"]
+        wrong_signer = "11" * 32
+        status["validator"]["signer_public_key_hex"] = wrong_signer
+        status["validator"]["stake_proof"]["signer_public_key_hex"] = wrong_signer
+        self.assert_identity_rejected(statuses, "signer_identity_mismatch")
+
+    def test_self_consistent_wrong_peer_is_not_triad_ready(self) -> None:
+        statuses = {name: projected_status(name) for name in NODE_IDS}
+        status = statuses["validator-47"]
+        wrong_peer = "12D3KooWAttackerPeer"
+        status["provider"]["provider_id"] = wrong_peer
+        status["provider"]["full_storage_proof"]["provider_id"] = wrong_peer
+        self.assert_identity_rejected(statuses, "provider_identity_mismatch")
+
+    def test_all_consistent_wrong_world_is_not_triad_ready(self) -> None:
+        statuses = {name: projected_status(name) for name in NODE_IDS}
+        for status in statuses.values():
+            status["world_id"] = "oasis7-unapproved-world"
+            status["network_tier"]["network_id"] = "oasis7-unapproved-world"
+            status["network_tier"]["chain_id"] = "oasis7-unapproved-world"
+            status["world_resource"]["world_id"] = "oasis7-unapproved-world"
+            status["world_resource"]["chain_id"] = "oasis7-unapproved-world"
+            status["chain_proof"]["latest_world_head_proof"]["world_id"] = "oasis7-unapproved-world"
+            if status["provider"]["checkpoint_proof"] is not None:
+                status["provider"]["checkpoint_proof"]["world_id"] = "oasis7-unapproved-world"
+                status["provider"]["full_storage_proof"]["world_id"] = "oasis7-unapproved-world"
+        self.assert_identity_rejected(statuses, "world_identity_mismatch")
+
     def test_wrong_chain_is_not_triad_ready(self) -> None:
         statuses = {name: projected_status(name) for name in NODE_IDS}
         statuses["storage-205"]["network_tier"]["chain_id"] = "oasis7-wrong-chain"
+        self.assert_identity_rejected(statuses, "chain_identity_mismatch")
+
+    def test_all_consistent_wrong_chain_is_not_triad_ready(self) -> None:
+        statuses = {name: projected_status(name) for name in NODE_IDS}
+        wrong_chain = "oasis7-unapproved-chain"
+        for status in statuses.values():
+            status["network_tier"]["chain_id"] = wrong_chain
+            status["world_resource"]["chain_id"] = wrong_chain
+            if status["provider"]["checkpoint_proof"] is not None:
+                status["provider"]["checkpoint_proof"]["chain_id"] = wrong_chain
+                status["provider"]["full_storage_proof"]["chain_id"] = wrong_chain
         self.assert_identity_rejected(statuses, "chain_identity_mismatch")
 
     def test_wrong_manifest_is_not_triad_ready(self) -> None:
@@ -468,6 +550,18 @@ class ThirdValidatorRuntimeStatusContractTest(unittest.TestCase):
         statuses = {name: projected_status(name) for name in NODE_IDS}
         statuses["sequencer-204"]["validator"]["registry_sha256"] = "0" * 64
         self.assert_identity_rejected(statuses, "registry_identity_mismatch")
+
+    def test_all_consistent_wrong_registry_is_not_triad_ready(self) -> None:
+        statuses = {name: projected_status(name) for name in NODE_IDS}
+        for status in statuses.values():
+            status["validator"]["registry_semantic_sha256"] = "0" * 64
+        self.assert_identity_rejected(statuses, "registry_semantic_identity_mismatch")
+
+    def test_all_consistent_wrong_registry_digest_is_not_triad_ready(self) -> None:
+        statuses = {name: projected_status(name) for name in NODE_IDS}
+        for status in statuses.values():
+            status["validator"]["registry_sha256"] = "0" * 64
+        self.assert_identity_rejected(statuses, "registry_authority_digest_mismatch")
 
     def test_wrong_inventory_is_not_triad_ready(self) -> None:
         statuses = {name: projected_status(name) for name in NODE_IDS}
