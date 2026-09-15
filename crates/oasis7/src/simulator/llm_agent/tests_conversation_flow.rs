@@ -1004,6 +1004,7 @@ fn openai_client_retries_single_concurrency_limit_decode_failure() {
 fn stream_transport_diagnostic_is_structured_and_redacted() {
     let metadata = StreamTransportMetadata {
         http_status: Some(200),
+        request_timeout_ms: 30_000,
         response_version: Some("HTTP/1.1".to_string()),
         content_type: Some("text/event-stream; charset=utf-8".to_string()),
         content_encoding: None,
@@ -1020,6 +1021,7 @@ fn stream_transport_diagnostic_is_structured_and_redacted() {
     let rendered = format_stream_transport_diagnostics(&metadata);
 
     assert!(rendered.contains("http_status=200"));
+    assert!(rendered.contains("request_timeout_ms=30000"));
     assert!(rendered.contains("response_version=HTTP/1.1"));
     assert!(rendered.contains("content_type=text/event-stream; charset=utf-8"));
     assert!(rendered.contains("content_encoding=absent"));
@@ -1094,6 +1096,10 @@ fn instrumented_stream_transport_error_reports_response_metadata() {
     match error {
         LlmClientError::Http { message } => {
             assert!(message.contains("http_status=200"), "unexpected error: {message}");
+            assert!(
+                message.contains("request_timeout_ms=1000"),
+                "unexpected error: {message}"
+            );
             assert!(
                 message.contains("response_version=HTTP/1.1"),
                 "unexpected error: {message}"

@@ -28,6 +28,7 @@ impl fmt::Debug for OpenAiChatCompletionClient {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StreamTransportMetadata {
     pub(super) http_status: Option<u16>,
+    pub(super) request_timeout_ms: u64,
     pub(super) response_version: Option<String>,
     pub(super) content_type: Option<String>,
     pub(super) content_encoding: Option<String>,
@@ -62,10 +63,11 @@ fn redact_transport_cause(raw: &str) -> String {
 
 pub(super) fn format_stream_transport_diagnostics(metadata: &StreamTransportMetadata) -> String {
     format!(
-        "responses stream transport diagnostics: http_status={} response_version={} content_type={} content_encoding={} transfer_encoding={} content_length={} connection={} frames={} decoded_frames={} elapsed_ms={} cause={}",
+        "responses stream transport diagnostics: http_status={} request_timeout_ms={} response_version={} content_type={} content_encoding={} transfer_encoding={} content_length={} connection={} frames={} decoded_frames={} elapsed_ms={} cause={}",
         metadata
             .http_status
             .map_or_else(|| "absent".to_string(), |status| status.to_string()),
+        metadata.request_timeout_ms,
         metadata.response_version.as_deref().unwrap_or("absent"),
         metadata.content_type.as_deref().unwrap_or("absent"),
         metadata.content_encoding.as_deref().unwrap_or("absent"),
@@ -256,6 +258,7 @@ impl OpenAiChatCompletionClient {
             .map_err(|error| {
                 stream_transport_error(StreamTransportMetadata {
                     http_status: None,
+                    request_timeout_ms: self.request_timeout_ms,
                     response_version: None,
                     content_type: None,
                     content_encoding: None,
@@ -271,6 +274,7 @@ impl OpenAiChatCompletionClient {
 
         let mut metadata = StreamTransportMetadata {
             http_status: Some(response.status().as_u16()),
+            request_timeout_ms: self.request_timeout_ms,
             response_version: Some(format!("{:?}", response.version())),
             content_type: response
                 .headers()

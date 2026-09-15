@@ -97,7 +97,11 @@ const AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS: &str = "agent_direct_connect";
 const DEFAULT_AGENT_PROVIDER_URL: &str = "http://127.0.0.1:5841";
 const DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS: u64 = 15_000;
 const DEFAULT_AGENT_PROVIDER_PROFILE: &str = "oasis7_p0_low_freq_npc";
-const DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS: u64 = 10_000;
+// Keep the launcher default aligned with the viewer live bounded ceiling. The
+// underlying LLM config defaults to 180s, while viewer live deliberately
+// caps an inherited budget at 30s; injecting a smaller 10s value here made
+// launcher-spawned gameplay time out before the viewer policy was applied.
+const DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS: u64 = 30_000;
 const LLM_TIMEOUT_MS_ENV: &str = "OASIS7_LLM_TIMEOUT_MS";
 const VIEWER_AGENT_DECISION_SOURCE_ENV: &str = "OASIS7_AGENT_DECISION_SOURCE";
 const VIEWER_AGENT_PROVIDER_BACKEND_ENV: &str = "OASIS7_AGENT_PROVIDER_BACKEND";

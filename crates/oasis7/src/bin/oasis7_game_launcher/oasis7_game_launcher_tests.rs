@@ -561,8 +561,9 @@ fn builtin_viewer_live_env_applies_default_llm_timeout_when_parent_is_unset() {
 
     assert_eq!(
         command_env_value(&command, LLM_TIMEOUT_MS_ENV),
-        Some(Some(DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS.to_string()))
+        Some(Some("30000".to_string()))
     );
+    assert_eq!(DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS, 30_000);
     assert_eq!(
         command_env_value(&command, VIEWER_AGENT_DECISION_SOURCE_ENV),
         Some(None)
@@ -764,8 +765,9 @@ fn build_viewer_live_command_wires_llm_timeout_default_into_spawn_path() {
     assert!(!args.iter().any(|arg| arg == DEFAULT_SCENARIO));
     assert_eq!(
         command_env_value(&command, LLM_TIMEOUT_MS_ENV),
-        Some(Some(DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS.to_string()))
+        Some(Some("30000".to_string()))
     );
+    assert_eq!(DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS, 30_000);
 }
 
 #[test]
