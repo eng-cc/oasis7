@@ -49,7 +49,8 @@ printf 'exact verification bytes\n' >"$VERIFY"
 python3 - "$ARTIFACT" "$LEDGER" "$TASK" "$HEAD_OID" "$EPOCH" "$VERIFY" <<'PY'
 import hashlib, json, pathlib, sys
 artifact_path, ledger_path, task, head, epoch, verify = sys.argv[1:]
-finding = {"id": "P1", "summary": "evidence-backed fixture"}
+finding = {"id": "P1", "summary": "evidence-backed fixture",
+           "triage": {"classification": "blocking", "basis": "fixture evidence"}}
 artifact = json.loads(pathlib.Path(artifact_path).read_text())
 artifact.update({"status":"completed", "disposition":"findings", "findings":[finding], "residual_risk":"fixture risk"})
 pathlib.Path(artifact_path).write_text(json.dumps(artifact, sort_keys=True) + "\n")

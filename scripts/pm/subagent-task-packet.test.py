@@ -345,6 +345,133 @@ class PacketTest(unittest.TestCase):
         }), encoding="utf-8")
         return prior_path, prior_head, prior_epoch, collection_path
 
+    def create_incremental_context_plan(self) -> Path:
+        prior_path, prior_head, prior_epoch, collection_path = self.write_incremental_prior()
+        (self.repo / "repair.txt").write_text("repair\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.repo), "add", "repair.txt"], check=True)
+        subprocess.run(["git", "-C", str(self.repo), "commit", "-m", "repair"], check=True, capture_output=True)
+
+        packet_ref = f".pm/scratch/{TASK_UID}/slice-packets/qa-review.json"
+        plan = self.create_review_plan(packet_ref)
+        current_head = self.git("rev-parse", "HEAD")
+        delta_paths = ["repair.txt"]
+        delta_paths_digest = hashlib.sha256(json.dumps(
+            delta_paths, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        role_review_modes = {
+            "qa_engineer": "impact_confirmation",
+            "repository_health_engineer": "full_review",
+        }
+        role_review_modes_digest = hashlib.sha256(json.dumps(
+            role_review_modes, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        scope_digest = hashlib.sha256(json.dumps({
+            "prior_head_oid": prior_head,
+            "current_head_oid": current_head,
+            "delta_paths_digest": delta_paths_digest,
+            "role_review_modes_digest": role_review_modes_digest,
+        }, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+        role_review_obligations = {
+            role: {
+                "mode": mode,
+                "prior_head_oid": prior_head,
+                "current_head_oid": current_head,
+                "delta_paths_digest": delta_paths_digest,
+                "scope_digest": scope_digest,
+            }
+            for role, mode in role_review_modes.items()
+        }
+        context = {
+            "schema": "oasis7-review-context/v1", "authority": "context_only",
+            "task_uid": TASK_UID, "prior_plan_path": str(prior_path.relative_to(self.repo)),
+            "prior_plan_digest": hashlib.sha256(prior_path.read_bytes()).hexdigest(),
+            "prior_head_oid": prior_head, "prior_epoch": prior_epoch,
+            "current_head_oid": current_head,
+            "prior_source_review_digest": "b" * 64, "prior_integration_ci_digest": None,
+            "prior_roles": ["repository_health_engineer", "qa_engineer", "producer_system_designer"],
+            "delta_paths": delta_paths,
+            "prior_collection_path": str(collection_path.relative_to(self.repo)),
+            "prior_collection_digest": hashlib.sha256(collection_path.read_bytes()).hexdigest(),
+            "prior_collection_ledger_digest": json.loads(collection_path.read_text())[
+                "ledger_digest"
+            ],
+            "delta_paths_digest": delta_paths_digest,
+            "delta_patch_digest": hashlib.sha256(subprocess.check_output([
+                "git", "-C", str(self.repo), "diff", "--binary", "--no-renames", prior_head, current_head,
+            ])).hexdigest(),
+            "review_scope": "scoped",
+            "escalation_reasons": [],
+            "role_review_modes": role_review_modes,
+            "role_review_modes_digest": role_review_modes_digest,
+            "scope_digest": scope_digest,
+            "role_review_obligations": role_review_obligations,
+            "reviewer_guidance": "confirm impact",
+        }
+        plan_payload = json.loads(plan.read_text(encoding="utf-8"))
+        plan_payload["incremental_review_context"] = context
+        plan.write_text(json.dumps(plan_payload), encoding="utf-8")
+        return plan
+
+    def admit_incremental_context(self, changes: dict[str, object]) -> subprocess.CompletedProcess[str]:
+        plan = self.create_incremental_context_plan()
+        plan_payload = json.loads(plan.read_text(encoding="utf-8"))
+        context = plan_payload["incremental_review_context"]
+        assert isinstance(context, dict)
+        context.update(changes)
+        plan.write_text(json.dumps(plan_payload), encoding="utf-8")
+        packet = self.invoke(self.create_args() + ["--review-plan", str(plan)]).stdout.splitlines()[0]
+        return self.review_admission(packet, plan, self.create_snapshot(), ok=False)
+
+    def test_review_admission_rejects_missing_role_review_mode(self) -> None:
+        rejected = self.admit_incremental_context({
+            "role_review_modes": {"repository_health_engineer": "full_review"},
+        })
+        self.assertRegex(rejected.stderr.lower(), r"review context|role|mode|obligation")
+
+    def test_review_admission_rejects_invalid_role_review_mode(self) -> None:
+        rejected = self.admit_incremental_context({
+            "role_review_modes": {
+                "qa_engineer": "bogus_mode",
+                "repository_health_engineer": "full_review",
+            },
+        })
+        self.assertRegex(rejected.stderr.lower(), r"review context|role|mode|obligation")
+
+    def test_review_admission_rejects_mismatched_current_packet_role_obligation(self) -> None:
+        plan = self.create_incremental_context_plan()
+        plan_payload = json.loads(plan.read_text(encoding="utf-8"))
+        context = plan_payload["incremental_review_context"]
+        assert isinstance(context, dict)
+        obligations = context["role_review_obligations"]
+        assert isinstance(obligations, dict)
+        qa_obligation = obligations["qa_engineer"]
+        assert isinstance(qa_obligation, dict)
+        qa_obligation["mode"] = "full_review"
+        plan.write_text(json.dumps(plan_payload), encoding="utf-8")
+        packet = self.invoke(self.create_args() + ["--review-plan", str(plan)]).stdout.splitlines()[0]
+        rejected = self.review_admission(packet, plan, self.create_snapshot(), ok=False)
+        self.assertRegex(rejected.stderr.lower(), r"review context|role|mode|obligation")
+
+    def test_review_admission_rejects_invalid_incremental_scope_digest(self) -> None:
+        rejected = self.admit_incremental_context({"scope_digest": "0" * 64})
+        self.assertRegex(rejected.stderr.lower(), r"review context|scope|digest")
+
+    def test_review_admission_rejects_invalid_role_obligation_schema(self) -> None:
+        rejected = self.admit_incremental_context({
+            "role_review_obligations": {
+                "qa_engineer": {"mode": "impact_confirmation"},
+                "repository_health_engineer": {"mode": "full_review"},
+            },
+        })
+        self.assertRegex(rejected.stderr.lower(), r"review context|role|mode|obligation")
+
+    def test_review_admission_rejects_full_scope_with_confirmation_obligation(self) -> None:
+        rejected = self.admit_incremental_context({
+            "review_scope": "full",
+            "escalation_reasons": ["unknown_impact"],
+        })
+        self.assertRegex(rejected.stderr.lower(), r"review context|full|escalat|role|mode")
+
     def test_review_admission_requires_current_cross_bound_packet_plan_and_snapshot(self) -> None:
         packet = self.invoke(self.create_args()).stdout.splitlines()[0]
         snapshot = self.create_snapshot()

@@ -418,6 +418,57 @@ class ReviewPlanTests(unittest.TestCase):
         )
         self.assertNotEqual(prior["epoch"], current["epoch"])
 
+    def test_prior_review_context_unknown_impact_escalates_to_full_review(self) -> None:
+        prior_path = self.root / ".pm/scratch" / TASK / "review-plans" / "unknown-impact-prior.json"
+        prior = self.plan(
+            "--out", str(prior_path),
+            "--preflight-dir", str(self.root / ".pm/scratch" / TASK / "unknown-impact-preflight"),
+        )
+        self.complete_collected_plan(prior)
+
+        (self.root / "unknown-impact.bin").write_bytes(b"unclassified change\n")
+        self.git("add", "unknown-impact.bin")
+        self.git("commit", "-m", "unknown impact")
+        self.head = self.git("rev-parse", "HEAD")
+        current = self.plan(
+            "--prior-review-plan", str(prior_path),
+            "--out", str(self.root / ".pm/scratch" / TASK / "review-plans" / "unknown-impact-current.json"),
+        )
+
+        context = current["incremental_review_context"]
+        self.assertEqual("full", context["review_scope"])
+        self.assertEqual(["unknown_impact"], context["escalation_reasons"])
+
+    def test_prior_review_context_binds_full_and_impact_confirmation_obligations(self) -> None:
+        prior_path = self.root / ".pm/scratch" / TASK / "review-plans" / "scoped-prior.json"
+        prior = self.plan(
+            "--out", str(prior_path),
+            "--preflight-dir", str(self.root / ".pm/scratch" / TASK / "scoped-preflight"),
+        )
+        self.complete_collected_plan(prior)
+
+        (self.root / "repair.txt").write_text("repair\n", encoding="utf-8")
+        self.git("add", "repair.txt")
+        self.git("commit", "-m", "scoped repair")
+        self.head = self.git("rev-parse", "HEAD")
+        current = self.plan(
+            "--prior-review-plan", str(prior_path),
+            "--impacted-role", "repository_health_engineer",
+            "--out", str(self.root / ".pm/scratch" / TASK / "review-plans" / "scoped-current.json"),
+        )
+
+        context = current["incremental_review_context"]
+        expected_modes = {
+            "qa_engineer": "impact_confirmation",
+            "repository_health_engineer": "full_review",
+        }
+        self.assertEqual("scoped", context["review_scope"])
+        self.assertEqual(expected_modes, context["role_review_modes"])
+        self.assertEqual(
+            REVIEW_PLAN.digest(expected_modes),
+            context["role_review_modes_digest"],
+        )
+
     def test_prior_review_context_rejects_deleted_collected_artifact(self) -> None:
         prior_path = self.root / ".pm/scratch" / TASK / "review-plans" / "deleted-artifact.json"
         prior = self.plan(
