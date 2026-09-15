@@ -608,14 +608,8 @@ canonical pair transaction；旧 `p2p-public-testnet-rebuild-validators.sh` 只�
 其 204 sequencer 参数不属于本 contract。两台 host staging 成功后才进入启动步骤。
 
 ### C3.1. Validator-47 no-start staging and cold cutover
-The managed triad inventory at `scripts/public-testnet-validator-triad-inventory.v1.json`
-is authority for validator-47 host/service/role/port/provider/world/manifest/registry
-bindings. Retain its SHA-256 in deployment truth and the bootstrap receipt; stale
-pair `node.env`, wrong fields, or a different inventory digest fail preflight.
-The inventory role is `validator`, while runtime `NODE_ROLE=storage` and
-`P2P_NODE_ROLE=full_storage` are independent supported settings; retain both
-provider flags in `node.env`. PoS validator identity comes from the governed
-consensus/registry truth, not an unsupported runtime `NODE_ROLE=validator`.
+The managed triad inventory at `scripts/public-testnet-validator-triad-inventory.v1.json` is authority for validator-47 host/service/role/port/provider/world/manifest/registry bindings. Retain its SHA-256 in deployment truth and the bootstrap receipt; stale pair `node.env`, wrong fields, or a different inventory digest fail preflight.
+The inventory role is `validator`, while runtime `NODE_ROLE=storage` and `P2P_NODE_ROLE=full_storage` are independent supported settings; retain both provider flags in `node.env`. PoS validator identity comes from the governed consensus/registry truth, not an unsupported runtime `NODE_ROLE=validator`.
 The validator-47 node identity is a separately staged ceremony output. Require
 its `node-keypair.toml` and public `identity-receipt.json` to be regular files
 with mode `0600` and matching ownership before staging. The final host imports
