@@ -410,7 +410,7 @@ record = payload["tasks"]["task_33333333333333333333333333333333"]
 record.update({
     "doc_refs": ["doc/cached.md"],
     "related_prd": ["doc/cached.prd.md"],
-    "completion_mode": "non_pr_task",
+    "completion_mode": "pr_task",
     "non_pr_completion_evidence_sha256": "a" * 64,
     "acceptance": ["authoritative acceptance"],
 })

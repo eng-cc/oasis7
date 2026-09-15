@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import importlib.util
 import json
 import pathlib
@@ -109,6 +111,8 @@ def normalized_acceptance(body: str) -> list[str]:
         return []
     values: list[str] = []
     for line in lines[start:]:
+        if line.strip() in {"Source refs:", "Doc refs:", "Related PRD:", "Acceptance:"}:
+            break
         if not line.strip():
             if values:
                 break
@@ -118,6 +122,63 @@ def normalized_acceptance(body: str) -> list[str]:
             break
         values.append(match.group(1).strip())
     return values
+
+
+TRACEABILITY_SECTIONS = ("Source refs:", "Doc refs:", "Related PRD:", "Acceptance:")
+
+
+def _normalized_issue_section(body: str, header: str, *, references: bool) -> list[str] | None:
+    lines = body.replace("\r\n", "\n").splitlines()
+    try:
+        start = next(index for index, line in enumerate(lines) if line.strip() == header) + 1
+    except StopIteration:
+        return None
+    values: list[str] = []
+    for line in lines[start:]:
+        stripped = line.strip()
+        if stripped in TRACEABILITY_SECTIONS:
+            break
+        if not stripped:
+            if values:
+                break
+            continue
+        match = (
+            re.fullmatch(r"- `([^`]+)`", line)
+            if references
+            else re.fullmatch(r"-\s+(?:\[[ xX]\]\s*)?(.*\S)\s*", line)
+        )
+        if not match:
+            break
+        values.append(match.group(1).strip())
+    return values
+
+
+def normalized_issue_traceability(body: str) -> dict[str, Any]:
+    """Extract Issue-authoritative trace fields for bounded audit comparison."""
+    body = body.replace("\r\n", "\n")
+    fields: dict[str, Any] = {}
+    for key in ("workflow_phase", "completion_mode", "non_pr_completion_evidence_sha256"):
+        match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
+        if match:
+            fields[key] = match.group(1)
+    evidence_match = re.search(r"^- non_pr_completion_evidence_b64: `([^`]+)`$", body, re.MULTILINE)
+    if evidence_match:
+        try:
+            encoded = evidence_match.group(1)
+            fields["non_pr_completion_evidence"] = base64.urlsafe_b64decode(
+                encoded + "=" * (-len(encoded) % 4)
+            ).decode("utf-8")
+        except (ValueError, UnicodeDecodeError):
+            fields["non_pr_completion_evidence"] = ""
+    if "non_pr_completion_evidence_sha256" not in fields and fields.get("non_pr_completion_evidence"):
+        fields["non_pr_completion_evidence_sha256"] = hashlib.sha256(
+            fields["non_pr_completion_evidence"].encode("utf-8")
+        ).hexdigest()
+    for key, header in (("source_refs", "Source refs:"), ("doc_refs", "Doc refs:"), ("related_prd", "Related PRD:")):
+        values = _normalized_issue_section(body, header, references=True)
+        if values is not None:
+            fields[key] = values
+    return fields
 
 
 def parse_scalar(value: str) -> Any:
@@ -641,6 +702,25 @@ def command_audit(args: argparse.Namespace) -> int:
         ]
         if cached_acceptance != live_acceptance:
             errors.append(f"{uid}: cached acceptance drift; refresh explicitly from authoritative GitHub issue")
+        live_traceability = normalized_issue_traceability(body)
+        for key in ("doc_refs", "related_prd"):
+            if key not in live_traceability:
+                continue
+            cached_values = sorted({str(value) for value in (record.get(key) or [])})
+            live_values = sorted({str(value) for value in (live_traceability.get(key) or [])})
+            if cached_values != live_values:
+                errors.append(
+                    f"{uid}: cached {key} drift; refresh explicitly from authoritative GitHub issue"
+                )
+        for key in ("completion_mode", "non_pr_completion_evidence_sha256"):
+            if key not in live_traceability:
+                continue
+            cached_value = str(record.get(key) or "")
+            live_value = str(live_traceability.get(key) or "")
+            if cached_value != live_value:
+                errors.append(
+                    f"{uid}: cached {key} drift; refresh explicitly from authoritative GitHub issue"
+                )
         item_fields = normalized_field_values(item)
         for field_name, expected in expected_project_values(task).items():
             if not expected:
@@ -678,6 +758,9 @@ def command_audit(args: argparse.Namespace) -> int:
             "coordination_record",
             "traceability_candidate",
             "aggregate_candidate",
+            "doc_refs",
+            "related_prd",
+            "non_pr_completion_evidence_sha256",
         ):
             if key in task and task[key] is not None:
                 selected_task[key] = task[key]
