@@ -143,7 +143,21 @@ pub(super) fn ensure_local_test_provider_authority(
             .map_err(|error| {
                 format!("validate existing local test provider grant failed: {error:?}")
             })?;
+        let promoted = world
+            .promote_cognition_runtime_finality()
+            .map_err(|error| {
+                format!("promote existing local Runtime finality failed: {error:?}")
+            })?;
         if !should_reissue_local_test_provider_grant(status) {
+            if promoted {
+                persist_local_test_provider_world(
+                    options,
+                    world_dir,
+                    authority_path,
+                    &world,
+                    &authority,
+                )?;
+            }
             return Ok(());
         }
         let provisioning = world

@@ -560,6 +560,10 @@ impl World {
             allowance: request.allowance,
         };
         let receipt = self.bootstrap_provider_backed_authority(bootstrap_authority.clone())?;
+        // The authority record is finalized while the initial Runtime
+        // binding is still the conservative `pending` wire projection. Align
+        // the cognition wire status before any provider turn can capture it.
+        self.promote_cognition_runtime_finality()?;
         Ok(LocalTestProviderProvisioning {
             bootstrap_authority,
             receipt,
@@ -1107,6 +1111,13 @@ mod tests {
         let first = world
             .initialize_local_test_provider_authority(config.clone(), artifact.clone())
             .expect("initialize local authority");
+        assert_eq!(
+            world
+                .current_cognition_runtime_binding()
+                .expect("promoted Runtime binding")
+                .finality_status,
+            "verified"
+        );
         let event_count = world.journal.events.len();
         let replay = world
             .initialize_local_test_provider_authority(config, artifact)

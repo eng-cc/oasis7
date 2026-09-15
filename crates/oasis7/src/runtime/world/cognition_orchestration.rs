@@ -21,6 +21,8 @@ use serde_json::{Value as JsonValue, json};
 
 const CONTINUATION_SCHEMA: &str = "agent-continuation.v1";
 
+#[path = "cognition_finality_projection.rs"]
+mod cognition_finality_projection;
 #[path = "cognition_orchestration_support.rs"]
 mod cognition_orchestration_support;
 #[path = "cognition_reorg.rs"]
