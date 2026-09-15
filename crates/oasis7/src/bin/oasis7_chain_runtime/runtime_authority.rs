@@ -201,7 +201,7 @@ mod tests {
                     denied_claims: vec!["mainnet_live".to_string()],
                 },
                 promotion_policy: NetworkTierPromotionPolicy {
-                    promote_from: vec!["shared_devnet".to_string()],
+                    promote_from: vec!["local_devnet".to_string()],
                     required_gates: vec!["runtime_bootstrap".to_string()],
                 },
                 evidence_refs: Vec::new(),
