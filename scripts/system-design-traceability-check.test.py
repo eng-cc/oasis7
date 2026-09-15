@@ -168,6 +168,74 @@ def scenario_committed_range_reads_trusted_head_content() -> None:
         shutil.rmtree(root)
 
 
+def scenario_committed_target_symlink_does_not_redirect_selected_head() -> None:
+    root, base, _head = make_repo()
+    try:
+        (root / "doc/product/alternate.prd.md").write_text("# alternate product\n", encoding="utf-8")
+        (root / DESIGN).write_text(DESIGN_HEADER + "\nSubstantive committed design revision.\n", encoding="utf-8")
+        head = commit(root, "revise design with alternate target")
+        product = root / PRODUCT
+        product.unlink()
+        product.symlink_to("alternate.prd.md")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CHECKER),
+                "--repo-root",
+                str(root),
+                "--base",
+                base,
+                "--head",
+                head,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        output = result.stdout + result.stderr
+        assert result.returncode == 0, output
+        assert "checked 1 changed/new system designs" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_worktree_symlinks_are_contained() -> None:
+    module = load_checker()
+    root, base, _head = make_repo()
+    outside = Path(tempfile.mkdtemp(prefix="system-design-traceability-outside-"))
+    try:
+        outside_target = outside / "alternate.prd.md"
+        outside_target.write_text(PRODUCT_TEXT, encoding="utf-8")
+        product = root / PRODUCT
+        product.unlink()
+        product.symlink_to(outside_target)
+        (root / DESIGN).write_text(DESIGN_HEADER + "\nSubstantive worktree design revision.\n", encoding="utf-8")
+        paths = module.changed_system_design_paths(root, base, base, True)
+        assert [path.relative_to(root).as_posix() for path in paths] == [DESIGN], paths
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CHECKER),
+                "--repo-root",
+                str(root),
+                "--base",
+                base,
+                "--head",
+                base,
+                "--worktree",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        output = result.stdout + result.stderr
+        assert result.returncode == 1, output
+        assert "reference escapes the repository" in output, output
+    finally:
+        shutil.rmtree(root)
+        shutil.rmtree(outside)
+
+
 def scenario_missing_demand_allocation() -> None:
     module = load_checker()
     root, _base, _head = make_repo(design_text=DESIGN_HEADER.replace("### 2.1 需求承接与相关角色", "### 2.1 需求承接与相关角色"))
@@ -405,6 +473,8 @@ def main() -> None:
     scenarios = (
         scenario_valid_new_design,
         scenario_committed_range_reads_trusted_head_content,
+        scenario_committed_target_symlink_does_not_redirect_selected_head,
+        scenario_worktree_symlinks_are_contained,
         scenario_missing_demand_allocation,
         scenario_missing_validation_mapping,
         scenario_unresolved_upstream_fragment,

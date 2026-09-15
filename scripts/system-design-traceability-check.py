@@ -14,6 +14,7 @@ import argparse
 from collections.abc import Callable
 from dataclasses import dataclass
 import html
+import posixpath
 from pathlib import Path
 import re
 import subprocess
@@ -331,13 +332,31 @@ def fragment_occurrences(text: str, fragment: str) -> int:
     return anchor_occurrences + heading_occurrences
 
 
-def resolve_target(root: Path, source: Path, target: str) -> Path | None:
-    candidate = (source.parent / target).resolve()
+def resolve_target(root: Path, source: Path, target: str, *, follow_symlinks: bool) -> Path | None:
+    """Resolve a repository-relative link without weakening trusted-head reads."""
+    root = root.resolve()
     try:
-        candidate.relative_to(root.resolve())
+        source_relative = source.absolute().relative_to(root)
     except ValueError:
         return None
-    return candidate
+    candidate_relative = posixpath.normpath(
+        posixpath.join(source_relative.parent.as_posix(), target)
+    )
+    if (
+        posixpath.isabs(candidate_relative)
+        or candidate_relative == ".."
+        or candidate_relative.startswith("../")
+    ):
+        return None
+    candidate = root / Path(candidate_relative)
+    if not follow_symlinks:
+        return candidate
+    try:
+        resolved = candidate.resolve(strict=False)
+        resolved.relative_to(root)
+    except (OSError, ValueError):
+        return None
+    return resolved
 
 
 def link_nodes(cell: str) -> list[str]:
@@ -354,13 +373,19 @@ def validate_reference(
     errors: list[str],
     require_fragment: bool,
     markdown_target: bool,
+    follow_symlinks: bool,
     read_target: TargetTextReader,
 ) -> tuple[Path | None, str | None]:
     target, fragment = split_link_target(raw_target)
     if (not target and fragment is None) or external_target(target) or (require_fragment and not fragment):
         fail(errors, code, path, f"reference must be a repository-relative path#fragment link; repair the table row: {raw_target!r}")
         return None, fragment
-    target_path = source if not target else resolve_target(root, source, target)
+    target_path = source if not target else resolve_target(
+        root,
+        source,
+        target,
+        follow_symlinks=follow_symlinks,
+    )
     if target_path is None:
         fail(errors, code, path, f"reference escapes the repository; repair the path: {raw_target!r}")
         return None, fragment
@@ -405,6 +430,7 @@ def first_valid_link(
     errors: list[str],
     require_fragment: bool,
     markdown_target: bool,
+    follow_symlinks: bool,
     read_target: TargetTextReader,
 ) -> tuple[Path | None, str | None]:
     targets = link_nodes(cell)
@@ -422,6 +448,7 @@ def first_valid_link(
             errors=errors,
             require_fragment=require_fragment,
             markdown_target=markdown_target,
+            follow_symlinks=follow_symlinks,
             read_target=read_target,
         )
         if resolved is not None:
@@ -438,6 +465,7 @@ def relation_from_demand_row(
     row_number: int,
     cells: tuple[str, ...],
     errors: list[str],
+    follow_symlinks: bool,
     read_target: TargetTextReader,
 ) -> Relation | None:
     row_path = f"{source.relative_to(root).as_posix()}:{row_number}"
@@ -458,6 +486,7 @@ def relation_from_demand_row(
         errors=errors,
         require_fragment=True,
         markdown_target=True,
+        follow_symlinks=follow_symlinks,
         read_target=read_target,
     )
     local_path, local_fragment = first_valid_link(
@@ -469,6 +498,7 @@ def relation_from_demand_row(
         errors=errors,
         require_fragment=True,
         markdown_target=True,
+        follow_symlinks=follow_symlinks,
         read_target=read_target,
     )
     if upstream_path is None or upstream_fragment is None or local_path is None or local_fragment is None:
@@ -507,6 +537,8 @@ def check_design_content(
     source: Path,
     text: str,
     read_target: TargetTextReader,
+    *,
+    follow_symlinks: bool,
 ) -> list[str]:
     errors: list[str] = []
     relative = source.relative_to(root).as_posix()
@@ -526,7 +558,15 @@ def check_design_content(
 
     relations: list[Relation] = []
     for row_number, cells in demand.rows:
-        relation = relation_from_demand_row(root, source, row_number, cells, errors, read_target)
+        relation = relation_from_demand_row(
+            root,
+            source,
+            row_number,
+            cells,
+            errors,
+            follow_symlinks,
+            read_target,
+        )
         if relation is not None:
             occurrences = fragment_occurrences(text, relation.local_fragment)
             if occurrences == 0:
@@ -557,6 +597,7 @@ def check_design_content(
             errors=errors,
             require_fragment=True,
             markdown_target=True,
+            follow_symlinks=follow_symlinks,
             read_target=read_target,
         )
         local_path, local_fragment = first_valid_link(
@@ -568,6 +609,7 @@ def check_design_content(
             errors=errors,
             require_fragment=True,
             markdown_target=True,
+            follow_symlinks=follow_symlinks,
             read_target=read_target,
         )
         if upstream_path is None or upstream_fragment is None or local_path is None or local_fragment is None:
@@ -602,6 +644,7 @@ def check_design_content(
                 errors=errors,
                 require_fragment=False,
                 markdown_target=False,
+                follow_symlinks=follow_symlinks,
                 read_target=read_target,
             )
             if resolved is not None and is_test_or_manual_source(resolved, source):
@@ -650,6 +693,7 @@ def check_system_design(path: Path) -> list[str]:
         source,
         source.read_text(encoding="utf-8"),
         lambda target: target.read_text(encoding="utf-8") if target.is_file() else None,
+        follow_symlinks=True,
     )
 
 
@@ -692,7 +736,15 @@ def main() -> int:
         if text is None:
             fail(errors, "trace-ref-unresolved", path.relative_to(root).as_posix(), "design content is missing; repair the selected head/worktree file")
             continue
-        errors.extend(check_design_content(root, path, text, read_target))
+        errors.extend(
+            check_design_content(
+                root,
+                path,
+                text,
+                read_target,
+                follow_symlinks=args.worktree,
+            )
+        )
     if errors:
         print("\n".join(errors))
         return 1
