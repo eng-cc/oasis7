@@ -140,7 +140,7 @@ git diff --check
 
 这些条件是“可以作为实现输入”的最低内容合同，不等同于实现完成、专业规则通过、玩家体验成立或发行承诺。自动检查只判断可机械判断的字段、引用、锚点和路径；是否有趣、是否足够有策略深度、数值是否合理和玩家是否愿意继续，仍由对应专业 role 与适用证据判断。
 
-跨层 trace relation 继续复用现有协调记录：`trace.upstream_refs` MUST 使用 typed `product_requirement` 或 `professional_acceptance` 引用，`trace.system_design` MUST 使用准确 `path#fragment` 或显式 N/A disposition；`applicability` MUST 为 `required` 或 `not_applicable`，且存在 `required=true` 时两者必须一致。产品价值、玩家承诺、产品范围或产品 AC 变更至少需要一个 product requirement；纯工程、治理或专业合同变更必须使用 professional acceptance；消费技术合同、跨组件行为、状态、接口、迁移、恢复、安全边界或实现 obligation 时 system design 必须 required。任何 N/A MUST 说明非空理由、有界范围、applicability owner role、review/evidence locator 和重新评估触发器；省略、`null`、空引用、`required=false`、`unknown` 或 `pending` 都不能冒充 N/A，声称有交付工作时 product 与 professional 不得同时为 N/A。
+跨层 trace relation 继续复用现有协调记录：`trace.upstream_refs` MUST 使用 typed `product_requirement` 或 `professional_acceptance` 引用，`trace.system_design` MUST 使用准确 `path#fragment` 或显式 N/A disposition；`applicability` MUST 为 `required` 或 `not_applicable`，每个新建或实质修改的记录 MUST 同时发出 `applicability` 与兼容别名 `required`，并使 `applicability=required` 与 `required=true`、`applicability=not_applicable` 与 `required=false` 一致。产品价值、玩家承诺、产品范围或产品 AC 变更至少需要一个 product requirement；纯工程、治理或专业合同变更必须使用 professional acceptance；消费技术合同、跨组件行为、状态、接口、迁移、恢复、安全边界或实现 obligation 时 system design 必须 required。任何 N/A MUST 说明非空理由、有界范围、applicability owner role、review/evidence locator 和重新评估触发器；省略、`null`、空引用、`required=false`、`unknown` 或 `pending` 都不能冒充 N/A，声称有交付工作时 product 与 professional 不得同时为 N/A。
 
 ### 10.3 新建与实质变更产品文档的机械准入
 

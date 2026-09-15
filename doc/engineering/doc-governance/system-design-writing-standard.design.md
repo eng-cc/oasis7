@@ -56,7 +56,7 @@
 
 跨层关系按语义适用：变更产品价值、玩家承诺、产品范围或产品 AC 时，至少一个 typed `product_requirement` upstream ref MUST 为 `required`；纯工程、治理或专业合同变更 MUST 引用 `professional_acceptance`，此时 product requirement MAY 显式标为 `not_applicable`；声称存在交付工作的 obligation MUST NOT 同时把 product 与 professional 上游都标为 `not_applicable`。消费或改变技术合同、跨组件行为、状态、接口、迁移、恢复、安全边界或实现 obligation 时，`trace.system_design.applicability` MUST 为 `required` 并引用准确 `path#fragment`；只有不消费这些技术义务时才可以标为 `not_applicable`。
 
-任何 N/A disposition MUST 包含非空 reason、有界适用范围、applicability owner role、可回读的 review/evidence locator 和重新评估触发器。省略、`null`、空引用、`required=false`、`unknown` 或 `pending` 均不等于 N/A；新建或实质修改的协调记录同时写入 `applicability` 与兼容别名 `required=true` 时，两者必须一致。
+任何 N/A disposition MUST 包含非空 reason、有界适用范围、applicability owner role、可回读的 review/evidence locator 和重新评估触发器。省略、`null`、空引用、`required=false`、`unknown` 或 `pending` 均不等于 N/A；每个新建或实质修改的记录 MUST 同时写入 `applicability` 与兼容别名 `required`，并使 `applicability=required` 与 `required=true`、`applicability=not_applicable` 与 `required=false` 分别一致。
 
 ## 3. 当前状态、目标状态与差距
 

@@ -54,7 +54,7 @@ GitHub Project 只投影可管理字段，不能覆盖 Issue 或 cache 中的细
 
 输入改变与目标分支推进是两类事件。上游语义、权限、合同资格或验收发生实质变化时，按影响范围保留旧基线、暂停并迁移、或缩小 scope，并按现行 workflow 重新绑定/验证；main 因无关变更推进时，更新 integration/CI 证据，不自动重写产品或系统要求。不能在执行中静默换合同版本。
 
-跨层协调记录继续复用 `oasis7.loop-change/v1`：`trace.upstream_refs` MUST 是 typed `product_requirement` 或 `professional_acceptance` 引用，`trace.system_design` MUST 是准确 `path#fragment` 或显式 N/A disposition；`applicability` MUST 为 `required` 或 `not_applicable`，兼容别名 `required=true` 存在时必须一致。产品价值、玩家承诺、产品范围或产品 AC 变更至少需要一个 product requirement；纯工程、治理或专业合同变更需要 professional acceptance；消费技术合同、跨组件行为、状态、接口、迁移、恢复、安全边界或实现 obligation 时 system design 必须 required。N/A MUST 带非空理由、有界范围、applicability owner role、review/evidence locator 和重新评估触发器；任何省略、`null`、空引用、`required=false`、`unknown` 或 `pending` 都不构成 N/A，声称存在交付工作时 product 与 professional 不能同时为 N/A。
+跨层协调记录继续复用 `oasis7.loop-change/v1`：`trace.upstream_refs` MUST 是 typed `product_requirement` 或 `professional_acceptance` 引用，`trace.system_design` MUST 是准确 `path#fragment` 或显式 N/A disposition；`applicability` MUST 为 `required` 或 `not_applicable`，每个新建或实质修改的记录 MUST 同时发出 `applicability` 与兼容别名 `required`，并使 `applicability=required` 与 `required=true`、`applicability=not_applicable` 与 `required=false` 一致。产品价值、玩家承诺、产品范围或产品 AC 变更至少需要一个 product requirement；纯工程、治理或专业合同变更需要 professional acceptance；消费技术合同、跨组件行为、状态、接口、迁移、恢复、安全边界或实现 obligation 时 system design 必须 required。N/A MUST 带非空理由、有界范围、applicability owner role、review/evidence locator 和重新评估触发器；任何省略、`null`、空引用、`required=false`、`unknown` 或 `pending` 都不构成 N/A，声称存在交付工作时 product 与 professional 不能同时为 N/A。
 
 ## 4. 叶子任务最小内容
 
