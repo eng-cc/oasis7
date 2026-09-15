@@ -80,6 +80,11 @@ track="public_testnet_rehearsal"
 sequencer_node_id="triad-testnet-sequencer"
 storage_node_id="triad-testnet-storage"
 stake="100"
+quorum_numerator="2"
+quorum_denominator="3"
+governance_signer_count="3"
+governance_threshold="2"
+governance_threshold_bps="6667"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -206,13 +211,20 @@ temp_genesis="$out_dir/.tmp-genesis.json"
 cp "$bootstrap_peers_file" "$bootstrap_out"
 cp "$bootstrap_out" "$out_dir/config/doc/testing/evidence/"
 
-python3 - "$registry_path" "${validator_specs[@]}" <<'PY'
+python3 - "$registry_path" "$quorum_numerator" "$quorum_denominator" \
+  "$governance_signer_count" "$governance_threshold" "$governance_threshold_bps" \
+  "${validator_specs[@]}" <<'PY'
 import json
 import pathlib
 import sys
 
 path = pathlib.Path(sys.argv[1])
-specs = sys.argv[2:]
+quorum_numerator = int(sys.argv[2])
+quorum_denominator = int(sys.argv[3])
+governance_signer_count = int(sys.argv[4])
+governance_threshold = int(sys.argv[5])
+governance_threshold_bps = int(sys.argv[6])
+specs = sys.argv[7:]
 if len(specs) < 2:
     raise SystemExit("at least two validators are required")
 
@@ -241,10 +253,23 @@ for spec in specs:
     })
 
 threshold = max(2, (len(validators) * 2 + 2) // 3)
+stake_total = sum(validator["stake"] for validator in validators)
+required_stake = (stake_total * quorum_numerator + quorum_denominator - 1) // quorum_denominator
 payload = {
     "slot_id": "governance.finality.v1",
     "threshold": threshold,
     "threshold_bps": 0,
+    "quorum": {
+        "numerator": quorum_numerator,
+        "denominator": quorum_denominator,
+        "total_stake": stake_total,
+        "required_stake": required_stake,
+    },
+    "governance": {
+        "signer_count": governance_signer_count,
+        "threshold": governance_threshold,
+        "threshold_bps": governance_threshold_bps,
+    },
     "validators": validators,
 }
 path.write_text(json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")

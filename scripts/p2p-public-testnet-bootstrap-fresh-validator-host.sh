@@ -8,6 +8,8 @@ set -euo pipefail
 readonly PRODUCTION_ROOT=/opt/oasis7/p2p-testnet
 readonly PRODUCTION_UNIT=/etc/systemd/system/oasis7-triad-sequencer.service
 readonly SERVICE_NAME=oasis7-triad-sequencer.service
+readonly VALIDATOR_47_PRODUCTION_UNIT=/etc/systemd/system/oasis7-triad-validator-47.service
+readonly VALIDATOR_47_SERVICE_NAME=oasis7-triad-validator-47.service
 readonly BUNDLE_DIR_NAME=oasis7-linux-x64
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
@@ -24,8 +26,9 @@ Usage:
     --receipt <public receipt path>
 
 Production uses exactly /opt/oasis7/p2p-testnet and
-/etc/systemd/system/oasis7-triad-sequencer.service.  It renders and installs
-the unit but never enables or starts it.
+/etc/systemd/system/oasis7-triad-sequencer.service for the existing pair, or
+/etc/systemd/system/oasis7-triad-validator-47.service for validator-47.  It
+renders and installs the unit but never enables or starts it.
 
 Test-only override (both gates are required):
   OASIS7_TEST_ONLY=1 ... --allow-test-stack-root --test-root-prefix <absolute>
@@ -192,6 +195,7 @@ ensure_service_account() {
 
 stack_root=$PRODUCTION_ROOT
 systemd_unit_dir=/etc/systemd/system
+service_name=$SERVICE_NAME
 package_deb=""
 ops_tools_tar=""
 config_dir=""
@@ -209,9 +213,7 @@ while [[ $# -gt 0 ]]; do
     --config-dir) config_dir=${2:-}; shift 2 ;;
     --world-dir) world_dir=${2:-}; shift 2 ;;
     --node-id) node_id=${2:-}; shift 2 ;;
-    --service-name)
-      [[ ${2:-} == "$SERVICE_NAME" ]] || die "service must be exactly $SERVICE_NAME"
-      shift 2 ;;
+    --service-name) service_name=${2:-}; shift 2 ;;
     --receipt) receipt=${2:-}; shift 2 ;;
     --allow-test-stack-root) allow_test_stack_root=1; shift ;;
     --test-root-prefix) test_root_prefix=${2:-}; shift 2 ;;
@@ -248,17 +250,30 @@ if [[ ${OASIS7_TEST_ONLY:-} == 1 ]]; then
 else
   [[ $allow_test_stack_root -eq 0 && -z "$test_root_prefix" ]] || die "test-only flags require OASIS7_TEST_ONLY=1"
   [[ "$stack_root" == "$PRODUCTION_ROOT" ]] || die "production stack root must be $PRODUCTION_ROOT"
-  [[ "$systemd_unit_dir/$SERVICE_NAME" == "$PRODUCTION_UNIT" ]] || die "production unit must be $PRODUCTION_UNIT"
+  if [[ "$node_id" == triad-testnet-validator-47 ]]; then
+    [[ "$service_name" == "$VALIDATOR_47_SERVICE_NAME" ]] || die "validator-47 service must be exactly $VALIDATOR_47_SERVICE_NAME"
+    production_unit=$VALIDATOR_47_PRODUCTION_UNIT
+  else
+    [[ "$service_name" == "$SERVICE_NAME" ]] || die "service must be exactly $SERVICE_NAME"
+    production_unit=$PRODUCTION_UNIT
+  fi
+  [[ "$systemd_unit_dir/$service_name" == "$production_unit" ]] || die "production unit must be $production_unit"
   assert_physical_path "$stack_root"
   assert_physical_path "$systemd_unit_dir"
   [[ "$receipt" == "$stack_root/evidence/fresh-validator-host-bootstrap-receipt.json" ]] \
     || die "production receipt must be exactly $stack_root/evidence/fresh-validator-host-bootstrap-receipt.json"
   require_command systemctl
-  [[ ! -e "$PRODUCTION_UNIT" ]] || die "fresh host already has service unit: $PRODUCTION_UNIT"
-  if systemctl is-active --quiet "$SERVICE_NAME"; then
+  [[ ! -e "$production_unit" ]] || die "fresh host already has service unit: $production_unit"
+  if systemctl is-active --quiet "$service_name"; then
     die "service is active; fresh bootstrap never stops or replaces an active service"
   fi
   ensure_service_account
+fi
+
+if [[ "$node_id" == triad-testnet-validator-47 ]]; then
+  [[ "$service_name" == "$VALIDATOR_47_SERVICE_NAME" ]] || die "validator-47 service must be exactly $VALIDATOR_47_SERVICE_NAME"
+else
+  [[ "$service_name" == "$SERVICE_NAME" ]] || die "service must be exactly $SERVICE_NAME"
 fi
 
 require_file "$package_deb"; require_file "$ops_tools_tar"; require_dir "$config_dir"; require_dir "$world_dir"
@@ -363,16 +378,16 @@ if [[ ${OASIS7_TEST_ONLY:-} != 1 ]]; then
 fi
 
 mkdir -p "$systemd_unit_dir"
-installed_unit_path="$systemd_unit_dir/$SERVICE_NAME"
+installed_unit_path="$systemd_unit_dir/$service_name"
 render_unit "$template" "$installed_unit_path" "$stack_root"
 if [[ ${OASIS7_TEST_ONLY:-} != 1 ]]; then
   systemctl daemon-reload
-  if systemctl is-active --quiet "$SERVICE_NAME"; then
+  if systemctl is-active --quiet "$service_name"; then
     die "service is active; fresh bootstrap never stops or replaces an active service"
   fi
-  systemctl disable "$SERVICE_NAME" >/dev/null 2>&1 || true
-  service_active=$(systemctl is-active "$SERVICE_NAME" 2>&1 || true)
-  service_enabled=$(systemctl is-enabled "$SERVICE_NAME" 2>&1 || true)
+  systemctl disable "$service_name" >/dev/null 2>&1 || true
+  service_active=$(systemctl is-active "$service_name" 2>&1 || true)
+  service_enabled=$(systemctl is-enabled "$service_name" 2>&1 || true)
   [[ "$service_active" == inactive ]] || die "service must be inactive after install"
   [[ "$service_enabled" == disabled ]] || die "service must be disabled after install"
 else
@@ -422,6 +437,7 @@ receipt_parent=$(dirname "$receipt")
 mkdir -p "$receipt_parent"
 jq -n \
   --arg time "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" --arg root "$stack_root" \
+  --arg service_name "$service_name" \
   --arg unit "$installed_unit_path" --arg unit_sha "$unit_sha" --arg active "$service_active" --arg enabled "$service_enabled" \
   --arg commit "$build_commit" --arg package_version "$build_version" --arg run_id "$build_run_id" \
   --arg package_deb "$package_deb" --arg package_sha "$package_sha" --argjson package_size "$package_size" \
@@ -441,8 +457,8 @@ jq -n \
     node:{node_id:$node.node_id,public_key:$node.root_public_key,finality_public_key:$node.finality_public_key,libp2p_peer_id:$node.libp2p_peer_id,key:($key + {owner_valid:$key_owner_valid})},
     config:{node_env:$config_node_env,bundle:$config_bundle,manifest:$config_manifest,genesis:$config_genesis,validator_registry:$config_registry,bootstrap_peers:$config_peers},
     world:{snapshot:$world_snapshot,provenance:$world_provenance},
-    service:{name:"oasis7-triad-sequencer.service",unit_path:$unit,unit_sha256:$unit_sha,active:$active,enabled:$enabled,account:{uid:$service_uid,gid:$service_gid}}}' \
+    service:{name:$service_name,unit_path:$unit,unit_sha256:$unit_sha,active:$active,enabled:$enabled,account:{uid:$service_uid,gid:$service_gid}}}' \
   >"$receipt"
 chmod 0600 "$receipt"
 bootstrap_complete=1
-printf 'fresh_validator_host_bootstrap=complete root=%s service=%s state=not_started\n' "$stack_root" "$SERVICE_NAME"
+printf 'fresh_validator_host_bootstrap=complete root=%s service=%s state=not_started\n' "$stack_root" "$service_name"
