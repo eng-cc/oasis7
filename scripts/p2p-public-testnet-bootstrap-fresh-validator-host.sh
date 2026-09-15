@@ -10,6 +10,22 @@ readonly PRODUCTION_UNIT=/etc/systemd/system/oasis7-triad-sequencer.service
 readonly SERVICE_NAME=oasis7-triad-sequencer.service
 readonly VALIDATOR_47_PRODUCTION_UNIT=/etc/systemd/system/oasis7-triad-validator-47.service
 readonly VALIDATOR_47_SERVICE_NAME=oasis7-triad-validator-47.service
+readonly TRIAD_INVENTORY_RELATIVE=scripts/public-testnet-validator-triad-inventory.v1.json
+readonly TRIAD_INVENTORY_FILE=public-testnet-validator-triad-inventory.v1.json
+readonly VALIDATOR_47_NODE_ID=triad-testnet-validator-47
+# Inventory role is validator.  The runtime role is storage and its independent
+# P2P provider role is full_storage; PoS identity comes from consensus truth.
+readonly VALIDATOR_47_INVENTORY_ROLE=validator # inventory NODE_ROLE=validator
+readonly VALIDATOR_47_RUNTIME_NODE_ROLE=storage
+readonly VALIDATOR_47_P2P_NODE_ROLE=full_storage
+readonly VALIDATOR_47_STATUS_BIND=0.0.0.0:6634
+readonly VALIDATOR_47_NODE_GOSSIP_BIND=0.0.0.0:6834
+readonly VALIDATOR_47_WORLD_ID=oasis7-public-testnet-governed-20260606
+readonly VALIDATOR_47_MANIFEST_PATH=config/public-testnet-governed-bootstrap-manifest-2026-06-06.json
+readonly VALIDATOR_47_REGISTRY_PATH=config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json
+readonly VALIDATOR_47_EXECUTION_WORLD_DIR=staged-world
+readonly VALIDATOR_47_IDENTITY_KEY_FILE=node-keypair.toml
+readonly VALIDATOR_47_IDENTITY_RECEIPT_FILE=identity-receipt.json
 readonly BUNDLE_DIR_NAME=oasis7-linux-x64
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
@@ -22,6 +38,7 @@ Usage:
     --ops-tools-tar <oasis7-linux-x64-ops-tools.tar.gz> \
     --config-dir <governed stage config directory> \
     --world-dir <generated world directory> \
+    [--identity-dir <already-staged validator-47 identity directory>] \
     --node-id triad-testnet-sequencer \
     --receipt <public receipt path>
 
@@ -55,6 +72,7 @@ public_file_json() {
 
 key_owner_json() {
   python3 - "$1" <<'PY'
+import hashlib
 import json
 import os
 import stat
@@ -162,6 +180,190 @@ verify_bundle() {
   [[ "$runtime_sum" == "$expected_sum" ]] || die "BUILDINFO governed runtime checksum mismatch"
 }
 
+validate_validator_47_stage() {
+  local inventory_path="$config_dir/$TRIAD_INVENTORY_FILE"
+  require_file "$inventory_path"
+  [[ ! -L "$inventory_path" ]] || die "triad inventory authority must not be a symlink"
+  triad_inventory_sha256=$(sha256_file "$inventory_path")
+  python3 - "$inventory_path" "$config_dir/node.env" \
+    "$config_dir/public-testnet-governed-bootstrap-manifest-2026-06-06.json" \
+    "$config_dir/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json" \
+    "$triad_inventory_sha256" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+
+inventory_path = pathlib.Path(sys.argv[1])
+env_path = pathlib.Path(sys.argv[2])
+manifest_path = pathlib.Path(sys.argv[3])
+registry_path = pathlib.Path(sys.argv[4])
+expected_inventory_sha256 = sys.argv[5]
+actual_inventory_sha256 = hashlib.sha256(inventory_path.read_bytes()).hexdigest()
+if actual_inventory_sha256 != expected_inventory_sha256:
+    raise SystemExit("triad inventory digest mismatch")
+
+inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+if inventory.get("schema_version") != "oasis7.public_testnet_validator_triad_inventory.v1":
+    raise SystemExit("triad inventory schema mismatch")
+if inventory.get("network_tier") != "public_testnet" or inventory.get("topology") != "three_equal_validator":
+    raise SystemExit("triad inventory network/topology mismatch")
+target = inventory.get("nodes", {}).get("validator-47")
+if not isinstance(target, dict):
+    raise SystemExit("triad inventory validator-47 binding missing")
+expected_target = {
+    "node_id": "triad-testnet-validator-47",
+    "roles": ["validator", "checkpoint_provider", "full_storage_provider"],
+    "service": "oasis7-triad-validator-47.service",
+    "ports": ["6634", "6834"],
+}
+for key, expected in expected_target.items():
+    if target.get(key) != expected:
+        raise SystemExit(f"validator-47 inventory {key} mismatch")
+
+values = {}
+for line_number, raw_line in enumerate(env_path.read_text(encoding="utf-8").splitlines(), 1):
+    line = raw_line.strip()
+    if not line or line.startswith("#"):
+        continue
+    if "=" not in line:
+        raise SystemExit(f"validator-47 node.env malformed line {line_number}")
+    key, value = line.split("=", 1)
+    if not key or key in values:
+        raise SystemExit(f"validator-47 node.env duplicate or empty key at line {line_number}")
+    values[key] = value
+expected_env = {
+    "NODE_ID": "triad-testnet-validator-47",
+    "NODE_ROLE": "storage",
+    "P2P_NODE_ROLE": "full_storage",
+    "STATUS_BIND": "0.0.0.0:6634",
+    "NODE_GOSSIP_BIND": "0.0.0.0:6834",
+    "CHECKPOINT_PROVIDER": "1",
+    "FULL_STORAGE_PROVIDER": "1",
+    "WORLD_ID": "oasis7-public-testnet-governed-20260606",
+    "NETWORK_TIER_MANIFEST_PATH": "config/public-testnet-governed-bootstrap-manifest-2026-06-06.json",
+    "GENESIS_VALIDATOR_REGISTRY_PATH": "config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json",
+    "EXECUTION_WORLD_DIR": "staged-world",
+    "DEPLOYMENT_INVENTORY_PATH": "config/public-testnet-validator-triad-inventory.v1.json",
+    "DEPLOYMENT_INVENTORY_SHA256": actual_inventory_sha256,
+}
+for key, expected in expected_env.items():
+    if values.get(key) != expected:
+        raise SystemExit(f"validator-47 node.env {key} mismatch")
+
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+if manifest.get("network_id") != "oasis7-public-testnet-governed-20260606":
+    raise SystemExit("validator-47 manifest network identity mismatch")
+if manifest.get("chain_id") != "oasis7-public-testnet-governed-20260606":
+    raise SystemExit("validator-47 manifest chain identity mismatch")
+if manifest.get("tier") != "public_testnet":
+    raise SystemExit("validator-47 manifest network tier mismatch")
+inventory_binding = manifest.get("deployment_inventory")
+if inventory_binding != {"ref": "scripts/public-testnet-validator-triad-inventory.v1.json", "sha256": actual_inventory_sha256}:
+    raise SystemExit("validator-47 manifest inventory binding mismatch")
+
+registry = json.loads(registry_path.read_text(encoding="utf-8"))
+validators = registry.get("validators")
+if not isinstance(validators, list):
+    raise SystemExit("validator-47 registry validators missing")
+if len(validators) != 3:
+    raise SystemExit("validator-47 registry validator count mismatch")
+if sorted(item.get("node_id") for item in validators) != sorted(
+    [inventory["nodes"][name]["node_id"] for name in ("sequencer-204", "storage-205", "validator-47")]
+):
+    raise SystemExit("validator-47 registry identity mismatch")
+if any(item.get("stake") != 100 for item in validators):
+    raise SystemExit("validator-47 registry stake mismatch")
+PY
+}
+
+validate_validator_47_identity_source() {
+  [[ "$node_id" == "$VALIDATOR_47_NODE_ID" ]] || return 0
+  [[ -n "$identity_dir" ]] || die "validator-47 requires --identity-dir for an already-staged identity"
+  [[ ! -e "$config_dir/$VALIDATOR_47_IDENTITY_KEY_FILE" ]] \
+    || die "validator-47 config stage contains a stale node-keypair.toml; use --identity-dir"
+  python3 - "$identity_dir" "$config_dir/node.env" "$config_dir/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json" <<'PY'
+import hashlib
+import json
+import os
+import stat
+import sys
+from pathlib import Path
+
+identity_dir = Path(sys.argv[1])
+node_env_path = Path(sys.argv[2])
+registry_path = Path(sys.argv[3])
+current = Path(identity_dir.anchor or "/")
+for component in identity_dir.parts[1:]:
+    current /= component
+    if current.is_symlink():
+        # macOS exposes /var and /tmp as stable aliases below /private; these
+        # platform-owned aliases are safe, but caller-controlled redirects are
+        # not accepted.
+        resolved = os.path.realpath(current)
+        if str(current) not in {"/var", "/tmp"} or not resolved.startswith("/private/"):
+            raise SystemExit(f"validator-47 identity source path contains a symlink: {current}")
+if not identity_dir.is_dir():
+    raise SystemExit("validator-47 identity source must be a directory")
+directory_metadata = os.lstat(identity_dir)
+if stat.S_IMODE(directory_metadata.st_mode) != 0o700:
+    raise SystemExit("validator-47 identity source directory must have mode 0700")
+
+def secure_regular(path: Path, label: str) -> os.stat_result:
+    metadata = os.lstat(path)
+    if not stat.S_ISREG(metadata.st_mode):
+        raise SystemExit(f"validator-47 {label} must be a regular file")
+    if stat.S_IMODE(metadata.st_mode) != 0o600:
+        raise SystemExit(f"validator-47 {label} must have mode 0600")
+    if (metadata.st_uid, metadata.st_gid) != (directory_metadata.st_uid, directory_metadata.st_gid):
+        raise SystemExit(f"validator-47 {label} ownership differs from identity directory")
+    return metadata
+
+key_path = identity_dir / "node-keypair.toml"
+receipt_path = identity_dir / "identity-receipt.json"
+key_metadata = secure_regular(key_path, "identity source key")
+receipt_metadata = secure_regular(receipt_path, "identity source receipt")
+try:
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+except (OSError, UnicodeError, ValueError) as error:
+    raise SystemExit(f"validator-47 identity or registry JSON is malformed: {error.__class__.__name__}")
+if receipt.get("schema_version") != "oasis7.identity_provision.v1":
+    raise SystemExit("validator-47 staged identity receipt schema mismatch")
+if receipt.get("node_id") != "triad-testnet-validator-47":
+    raise SystemExit("validator-47 staged identity receipt node mismatch")
+for field in ("root_public_key", "finality_public_key", "libp2p_peer_id"):
+    if not isinstance(receipt.get(field), str) or not receipt[field].strip():
+        raise SystemExit(f"validator-47 staged identity receipt missing {field}")
+if "private_key" in json.dumps(receipt, ensure_ascii=False).lower():
+    raise SystemExit("validator-47 public identity receipt must not contain private key material")
+node_env_values = {}
+for line_number, raw_line in enumerate(node_env_path.read_text(encoding="utf-8").splitlines(), 1):
+    line = raw_line.strip()
+    if not line or line.startswith("#"):
+        continue
+    if "=" not in line:
+        raise SystemExit(f"validator-47 node.env malformed line {line_number}")
+    key, value = line.split("=", 1)
+    if not key or key in node_env_values:
+        raise SystemExit(f"validator-47 node.env duplicate or empty key at line {line_number}")
+    node_env_values[key] = value
+if node_env_values.get("IDENTITY_KEY_PATH") != "config/node-keypair.toml":
+    raise SystemExit("validator-47 node.env identity key path mismatch")
+if node_env_values.get("IDENTITY_RECEIPT_PATH") != "config/identity-receipt.json":
+    raise SystemExit("validator-47 node.env identity receipt path mismatch")
+if node_env_values.get("IDENTITY_KEY_SHA256") != hashlib.sha256(key_path.read_bytes()).hexdigest():
+    raise SystemExit("validator-47 node.env identity key digest mismatch")
+if node_env_values.get("IDENTITY_RECEIPT_SHA256") != hashlib.sha256(receipt_path.read_bytes()).hexdigest():
+    raise SystemExit("validator-47 node.env identity receipt digest mismatch")
+matches = [item for item in registry.get("validators", []) if item.get("node_id") == receipt["node_id"]]
+if len(matches) != 1:
+    raise SystemExit("validator-47 staged identity node is absent or duplicated in governed registry")
+if matches[0].get("finality_signer_public_key", "").lower() != receipt["finality_public_key"].lower():
+    raise SystemExit("validator-47 staged public identity does not match governed registry")
+PY
+}
+
 render_unit() {
   local template=$1 output=$2 stack_root=$3
   sed "s|@STACK_ROOT@|$stack_root|g" "$template" >"$output"
@@ -200,6 +402,7 @@ package_deb=""
 ops_tools_tar=""
 config_dir=""
 world_dir=""
+identity_dir=""
 node_id=""
 receipt=""
 allow_test_stack_root=0
@@ -212,6 +415,7 @@ while [[ $# -gt 0 ]]; do
     --ops-tools-tar) ops_tools_tar=${2:-}; shift 2 ;;
     --config-dir) config_dir=${2:-}; shift 2 ;;
     --world-dir) world_dir=${2:-}; shift 2 ;;
+    --identity-dir) identity_dir=${2:-}; shift 2 ;;
     --node-id) node_id=${2:-}; shift 2 ;;
     --service-name) service_name=${2:-}; shift 2 ;;
     --receipt) receipt=${2:-}; shift 2 ;;
@@ -235,6 +439,9 @@ package_deb=$(absolute_path "$package_deb")
 ops_tools_tar=$(absolute_path "$ops_tools_tar")
 config_dir=$(absolute_path "$config_dir")
 world_dir=$(absolute_path "$world_dir")
+if [[ -n "$identity_dir" ]]; then
+  identity_dir=$(python3 -c 'import os,sys; print(os.path.abspath(os.path.expanduser(sys.argv[1])))' "$identity_dir")
+fi
 receipt=$(absolute_path "$receipt")
 if [[ ${OASIS7_TEST_ONLY:-} == 1 ]]; then
   [[ $allow_test_stack_root -eq 1 && -n "$test_root_prefix" ]] \
@@ -297,6 +504,16 @@ if [[ ${OASIS7_TEST_ONLY:-} != 1 ]]; then
     || die "config manifest JSON is malformed"
 fi
 
+if [[ "$node_id" == "$VALIDATOR_47_NODE_ID" ]]; then
+  [[ "$service_name" == "$VALIDATOR_47_SERVICE_NAME" ]] \
+    || die "validator-47 service binding mismatch"
+  validate_validator_47_stage
+  validate_validator_47_identity_source
+else
+  [[ -z "$identity_dir" ]] || die "--identity-dir is only valid for validator-47"
+  triad_inventory_sha256=""
+fi
+
 [[ ! -e "$stack_root" ]] || [[ -d "$stack_root" && -z "$(find "$stack_root" -mindepth 1 -print -quit)" ]] \
   || die "stack root must be empty: $stack_root"
 
@@ -323,6 +540,46 @@ for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasi
 done
 require_dir "$bundle_root"
 verify_bundle "$bundle_root" "$config_dir"
+identity_import_mode="generated"
+identity_source_key_sha256=""
+identity_source_receipt_sha256=""
+staged_identity_receipt_json='null'
+if [[ "$node_id" == "$VALIDATOR_47_NODE_ID" ]]; then
+  identity_import_mode="imported"
+  identity_source_key_sha256=$(sha256_file "$identity_dir/$VALIDATOR_47_IDENTITY_KEY_FILE")
+  identity_source_receipt_sha256=$(sha256_file "$identity_dir/$VALIDATOR_47_IDENTITY_RECEIPT_FILE")
+  [[ -x "$bundle_root/bin/oasis7_chain_runtime" ]] \
+    || die "validator-47 identity readback runtime is not executable"
+  staged_identity_receipt_json=$("$bundle_root/bin/oasis7_chain_runtime" identity-receipt \
+    --config-dir "$identity_dir" --node-id "$node_id") \
+    || die "validator-47 staged identity readback failed before materialization"
+  python3 - "$identity_dir" "$staged_identity_receipt_json" "$identity_source_key_sha256" \
+    "$config_dir/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+identity_dir = Path(sys.argv[1])
+runtime_receipt = json.loads(sys.argv[2])
+expected_key_sha = sys.argv[3]
+registry_path = Path(sys.argv[4])
+if runtime_receipt.get("schema_version") != "oasis7.identity_receipt.v1":
+    raise SystemExit("validator-47 runtime identity readback schema mismatch")
+if runtime_receipt.get("node_id") != "triad-testnet-validator-47":
+    raise SystemExit("validator-47 runtime identity readback node mismatch")
+if runtime_receipt.get("key_sha256") != expected_key_sha:
+    raise SystemExit("validator-47 runtime identity key digest mismatch")
+if runtime_receipt.get("key_mode") not in (0o600, 384):
+    raise SystemExit("validator-47 runtime identity key mode mismatch")
+receipt = json.loads((identity_dir / "identity-receipt.json").read_text(encoding="utf-8"))
+if runtime_receipt.get("peer_id") != receipt.get("libp2p_peer_id"):
+    raise SystemExit("validator-47 runtime identity peer id mismatch")
+registry = json.loads(registry_path.read_text(encoding="utf-8"))
+matches = [item for item in registry.get("validators", []) if item.get("node_id") == receipt.get("node_id")]
+if len(matches) != 1 or matches[0].get("finality_signer_public_key", "").lower() != receipt.get("finality_public_key", "").lower():
+    raise SystemExit("validator-47 staged public identity does not match governed registry")
+PY
+fi
 mkdir -p "$bundle_root/bin"
 cp -a "$ops_bundle_root/bin/." "$bundle_root/bin/"
 python3 "$SCRIPT_DIR/p2p-rebuild-linux-bundle-checksums.py" "$bundle_root" \
@@ -342,14 +599,56 @@ mv "$bundle_root" "$release_dir"
 ln -s "releases/$(basename "$release_dir")" "$stack_root/current"
 cp -a "$config_dir/." "$stack_root/config/"
 cp -a "$world_dir/." "$stack_root/staged-world/"
+if [[ "$node_id" == "$VALIDATOR_47_NODE_ID" ]]; then
+  # Import the already-staged identity byte-for-byte.  This path is deliberately
+  # separate from the governed config stage so a stale pair key cannot be
+  # mistaken for validator-47.  No runtime provisioning command is used here.
+  identity_key_path="$stack_root/config/$VALIDATOR_47_IDENTITY_KEY_FILE"
+  identity_receipt_path="$stack_root/config/$VALIDATOR_47_IDENTITY_RECEIPT_FILE"
+  install -m 0600 "$identity_dir/$VALIDATOR_47_IDENTITY_KEY_FILE" "$identity_key_path"
+  install -m 0600 "$identity_dir/$VALIDATOR_47_IDENTITY_RECEIPT_FILE" "$identity_receipt_path"
+  python3 - "$identity_dir" "$identity_key_path" "$identity_receipt_path" <<'PY'
+import os
+import stat
+import sys
+from pathlib import Path
+
+source_dir = Path(sys.argv[1])
+destination_key = Path(sys.argv[2])
+destination_receipt = Path(sys.argv[3])
+source_directory_metadata = os.lstat(source_dir)
+for name, destination in (("node-keypair.toml", destination_key), ("identity-receipt.json", destination_receipt)):
+    source = source_dir / name
+    source_metadata = os.lstat(source)
+    destination_metadata = os.lstat(destination)
+    if not stat.S_ISREG(destination_metadata.st_mode) or stat.S_IMODE(destination_metadata.st_mode) != 0o600:
+        raise SystemExit(f"validator-47 imported {name} is not a regular file with mode 0600")
+    if (source_metadata.st_uid, source_metadata.st_gid) != (destination_metadata.st_uid, destination_metadata.st_gid):
+        raise SystemExit(f"validator-47 imported {name} ownership mismatch")
+    if source.read_bytes() != destination.read_bytes():
+        raise SystemExit(f"validator-47 imported {name} bytes changed")
+if (destination_key.stat().st_uid, destination_key.stat().st_gid) != (destination_receipt.stat().st_uid, destination_receipt.stat().st_gid):
+    raise SystemExit("validator-47 imported identity key/receipt ownership mismatch")
+PY
+fi
 install -d -m 0755 "$stack_root/bin"
 install -m 0755 "$start_script" "$stack_root/bin/start-node.sh"
 find "$stack_root/config" "$stack_root/staged-world" -type d -exec chmod 0700 {} +
 find "$stack_root/config" "$stack_root/staged-world" -type f -exec chmod 0600 {} +
 
-identity_json=$("$stack_root/current/bin/oasis7_chain_runtime" provision-identity \
-  --config-dir "$stack_root/config" --node-id "$node_id") \
-  || die "identity provisioning failed"
+if [[ "$node_id" == "$VALIDATOR_47_NODE_ID" ]]; then
+  identity_json=$("$stack_root/current/bin/oasis7_chain_runtime" identity-receipt \
+    --config-dir "$stack_root/config" --node-id "$node_id") \
+    || die "validator-47 imported identity readback failed"
+  identity_public_receipt_json=$(jq -c . "$stack_root/config/$VALIDATOR_47_IDENTITY_RECEIPT_FILE")
+  identity_json=$(jq -cn \
+    --argjson readback "$identity_json" --argjson public "$identity_public_receipt_json" \
+    '$readback + {root_public_key:$public.root_public_key,finality_public_key:$public.finality_public_key,libp2p_peer_id:$public.libp2p_peer_id,node_keypair_config_path:$readback.key_path,node_keypair_config_exists:true,node_keypair_config_mode:"0600"}')
+else
+  identity_json=$("$stack_root/current/bin/oasis7_chain_runtime" provision-identity \
+    --config-dir "$stack_root/config" --node-id "$node_id") \
+    || die "identity provisioning failed"
+fi
 config_dir_physical=$(python3 - "$stack_root/config" <<'PY'
 import pathlib
 import sys
@@ -365,10 +664,16 @@ printf '%s' "$identity_json" | jq -e \
     and (.root_public_key | type == "string" and length > 0)
     and (.finality_public_key | type == "string" and length > 0)
     and (.libp2p_peer_id | type == "string" and length > 0)' >/dev/null \
-  || die "identity provisioning returned invalid public receipt"
+  || die "identity readback returned invalid public receipt"
 key_path="$stack_root/config/node-keypair.toml"
 require_file "$key_path"
 chmod 0600 "$key_path"
+if [[ "$node_id" == "$VALIDATOR_47_NODE_ID" ]]; then
+  [[ "$(sha256_file "$key_path")" == "$identity_source_key_sha256" ]] \
+    || die "validator-47 imported identity key digest changed"
+  [[ "$(sha256_file "$stack_root/config/$VALIDATOR_47_IDENTITY_RECEIPT_FILE")" == "$identity_source_receipt_sha256" ]] \
+    || die "validator-47 imported identity receipt digest changed"
+fi
 
 # The unit deliberately runs unprivileged while config remains 0700/0600.
 # Production bootstrap therefore requires the managed service account before
@@ -390,9 +695,24 @@ if [[ ${OASIS7_TEST_ONLY:-} != 1 ]]; then
   service_enabled=$(systemctl is-enabled "$service_name" 2>&1 || true)
   [[ "$service_active" == inactive ]] || die "service must be inactive after install"
   [[ "$service_enabled" == disabled ]] || die "service must be disabled after install"
+  service_unit_file_state=$(systemctl show --no-page --property=UnitFileState "$service_name" | sed -n 's/^UnitFileState=//p')
+  [[ "$service_unit_file_state" == disabled ]] || die "UnitFileState must be disabled after install"
 else
   service_active=rendered_test_only
   service_enabled=rendered_test_only
+  # Test-only mode renders a unit without a service manager; the explicit
+  # no-start receipt still records the state required of production staging.
+  service_unit_file_state=disabled
+fi
+
+# Keep service-manager state independent in the receipt.  The packaged
+# service-readback command is the independent process/listener observation.
+no_process=true
+no_listener=true
+listeners_json='[]'
+if [[ ${OASIS7_TEST_ONLY:-} != 1 ]]; then
+  no_process=null
+  no_listener=null
 fi
 
 runtime_path="$stack_root/current/bin/oasis7_chain_runtime"
@@ -419,6 +739,7 @@ config_genesis_json=$(public_file_json "$stack_root/config/public-testnet-govern
 config_registry_json=$(public_file_json "$stack_root/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json")
 config_peers_json=$(public_file_json "$stack_root/config/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt")
 config_node_env_json=$(public_file_json "$stack_root/config/node.env")
+config_inventory_json=$(public_file_json "$stack_root/config/$TRIAD_INVENTORY_FILE")
 world_snapshot_json=$(public_file_json "$stack_root/staged-world/snapshot.json")
 world_provenance_json=$(public_file_json "$stack_root/staged-world/world-generation-provenance.json")
 buildinfo_json=$(public_file_json "$release_dir/BUILDINFO")
@@ -433,21 +754,48 @@ else
   service_gid=null
   key_owner_valid=$(jq -e '.mode == "0600"' <<<"$key_json" >/dev/null && printf true || printf false)
 fi
+identity_ownership_valid=true
+if [[ "$node_id" == "$VALIDATOR_47_NODE_ID" ]]; then
+  identity_ownership_valid=$(python3 - "$stack_root/config" "$key_path" "$stack_root/config/$VALIDATOR_47_IDENTITY_RECEIPT_FILE" <<'PY'
+import os
+import stat
+import sys
+from pathlib import Path
+
+config_dir, key_path, receipt_path = map(Path, sys.argv[1:])
+config_metadata = os.lstat(config_dir)
+result = True
+for path in (key_path, receipt_path):
+    metadata = os.lstat(path)
+    result = result and stat.S_ISREG(metadata.st_mode)
+    result = result and stat.S_IMODE(metadata.st_mode) == 0o600
+    result = result and (metadata.st_uid, metadata.st_gid) == (config_metadata.st_uid, config_metadata.st_gid)
+print("true" if result else "false")
+PY
+  )
+  [[ "$identity_ownership_valid" == true ]] || die "validator-47 imported identity ownership contract failed"
+fi
 receipt_parent=$(dirname "$receipt")
 mkdir -p "$receipt_parent"
 jq -n \
   --arg time "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" --arg root "$stack_root" \
   --arg service_name "$service_name" \
   --arg unit "$installed_unit_path" --arg unit_sha "$unit_sha" --arg active "$service_active" --arg enabled "$service_enabled" \
+  --arg unit_file_state "$service_unit_file_state" --argjson no_process "$no_process" --argjson no_listener "$no_listener" --argjson listeners "$listeners_json" \
+  --arg inventory_ref "$TRIAD_INVENTORY_RELATIVE" --arg inventory_sha256 "$triad_inventory_sha256" \
   --arg commit "$build_commit" --arg package_version "$build_version" --arg run_id "$build_run_id" \
   --arg package_deb "$package_deb" --arg package_sha "$package_sha" --argjson package_size "$package_size" \
   --arg ops_tools "$ops_tools_tar" --arg ops_tools_sha "$ops_tools_sha" --argjson ops_tools_size "$ops_tools_size" \
   --arg runtime "$runtime_path" --arg runtime_sha "$runtime_sha" --argjson runtime_size "$runtime_size" \
   --argjson binaries "$binaries_json" --argjson node "$identity_json" --argjson key "$key_json" \
   --argjson key_owner_valid "$key_owner_valid" --argjson service_uid "$service_uid" --argjson service_gid "$service_gid" \
+  --arg identity_import_mode "$identity_import_mode" --arg identity_source_key_sha256 "$identity_source_key_sha256" \
+  --arg identity_source_receipt_sha256 "$identity_source_receipt_sha256" \
+  --argjson identity_ownership_valid "$identity_ownership_valid" \
+  --argjson staged_identity_receipt "$staged_identity_receipt_json" \
   --argjson config_bundle "$config_bundle_json" --argjson config_manifest "$config_manifest_json" \
   --argjson config_genesis "$config_genesis_json" --argjson config_registry "$config_registry_json" \
-  --argjson config_peers "$config_peers_json" --argjson config_node_env "$config_node_env_json" \
+  --argjson config_peers "$config_peers_json" --argjson config_node_env "$config_node_env_json" --argjson config_inventory "$config_inventory_json" \
   --argjson world_snapshot "$world_snapshot_json" --argjson world_provenance "$world_provenance_json" \
   --argjson buildinfo "$buildinfo_json" --argjson checksums "$checksums_json" \
   '{schema_version:"oasis7.fresh_validator_host_bootstrap.v1",generated_at:$time,
@@ -455,9 +803,10 @@ jq -n \
     package:{deb:{path:$package_deb,sha256:$package_sha,size_bytes:$package_size},ops_tools:{path:$ops_tools,sha256:$ops_tools_sha,size_bytes:$ops_tools_size},buildinfo:($buildinfo + {commit:$commit,package_version:$package_version,run_id:$run_id}),sha256sums:$checksums},
     runtime:{path:$runtime,sha256:$runtime_sha,size_bytes:$runtime_size,required_binaries:$binaries},
     node:{node_id:$node.node_id,public_key:$node.root_public_key,finality_public_key:$node.finality_public_key,libp2p_peer_id:$node.libp2p_peer_id,key:($key + {owner_valid:$key_owner_valid})},
-    config:{node_env:$config_node_env,bundle:$config_bundle,manifest:$config_manifest,genesis:$config_genesis,validator_registry:$config_registry,bootstrap_peers:$config_peers},
+    identity:{mode:$identity_import_mode,source_key_sha256:$identity_source_key_sha256,source_receipt_sha256:$identity_source_receipt_sha256,ownership_valid:$identity_ownership_valid,readback:$staged_identity_receipt},
+    config:{node_env:$config_node_env,bundle:$config_bundle,manifest:$config_manifest,genesis:$config_genesis,validator_registry:$config_registry,bootstrap_peers:$config_peers,inventory:$config_inventory,inventory_ref:$inventory_ref,inventory_sha256:$inventory_sha256},
     world:{snapshot:$world_snapshot,provenance:$world_provenance},
-    service:{name:$service_name,unit_path:$unit,unit_sha256:$unit_sha,active:$active,enabled:$enabled,account:{uid:$service_uid,gid:$service_gid}}}' \
+    service:{name:$service_name,unit_path:$unit,unit_sha256:$unit_sha,active:$active,enabled:$enabled,unit_file_state:$unit_file_state,no_process:$no_process,no_listener:$no_listener,listeners:$listeners,account:{uid:$service_uid,gid:$service_gid}}}' \
   >"$receipt"
 chmod 0600 "$receipt"
 bootstrap_complete=1

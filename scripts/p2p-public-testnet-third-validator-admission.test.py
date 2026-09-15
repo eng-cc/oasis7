@@ -20,6 +20,7 @@ phase pass.
 
 from __future__ import annotations
 
+import hashlib
 import http.server
 from importlib.machinery import SourceFileLoader
 import importlib.util
@@ -53,6 +54,13 @@ GOVERNANCE_THRESHOLD = 2
 GOVERNANCE_THRESHOLD_BPS = 6667
 VALIDATOR_47_SERVICE = "oasis7-triad-validator-47.service"
 VALIDATOR_47_PORTS = {"6634", "6834"}
+TRIAD_VALIDATOR_47_FIXTURE_SIGNER = hashlib.sha256(
+    b"oasis7-test-fixture-third-validator-signer"
+).hexdigest()
+TRIAD_REGISTRY_FIXTURE_DIGEST = hashlib.sha256(b"oasis7-test-fixture-triad-registry").hexdigest()
+TRIAD_INVENTORY_DIGEST = hashlib.sha256(INVENTORY.read_bytes()).hexdigest()
+TRIAD_WORLD_ID = "oasis7-public-testnet-governed-20260606"
+TRIAD_MANIFEST_HASH = hashlib.sha256(b"oasis7-test-fixture-triad-manifest").hexdigest()
 
 
 def load_python_module(path: Path, name: str) -> Any:
@@ -98,6 +106,123 @@ def triad_status(
             "full_storage": provider,
         },
     }
+
+
+def node_emitted_triad_status(node_name: str, *, provider: bool = False, head: int = 42) -> dict[str, Any]:
+    """Return a complete node-emitted projection fixture for managed triad.
+
+    This deliberately keeps the historical ``triad_status`` fixture above as
+    a negative-path fixture.  The collector must not upgrade that old shape
+    by guessing validator/provider state; only this complete versioned
+    projection may exercise the ready path.
+    """
+    node_id = TRIAD_NODE_IDS[node_name]
+    runtime_role = "sequencer" if node_name == "sequencer-204" else "storage"
+    p2p_role = "validator_core" if node_name == "sequencer-204" else "full_storage"
+    signer = (
+        hashlib.sha256(f"oasis7-test-fixture-signer:{node_id}".encode("utf-8")).hexdigest()
+    )
+    validator_set_hash = "runtime-validator-set-hash"
+    stake_root = hashlib.sha256(b"oasis7-test-fixture-triad-stake-root").hexdigest()
+    checkpoint_id = "checkpoint-42"
+    proof_hash = hashlib.sha256(b"oasis7-test-fixture-world-head-proof").hexdigest()
+    base = {
+        "node_id": node_id,
+        "world_id": TRIAD_WORLD_ID,
+        "role": runtime_role,
+        "running": True,
+        "last_error": None,
+        "readiness": {"status": "ready", "failed_gates": []},
+        "consensus": {
+            "committed_height": head,
+            "network_committed_height": head,
+            "last_execution_height": head,
+            "network_head": {"decision": "ready"},
+            "validator_set_hash": validator_set_hash,
+            "validator_stake_root": stake_root,
+        },
+        "network_tier": {
+            "tier": "public_testnet",
+            "network_id": TRIAD_WORLD_ID,
+            "chain_id": TRIAD_WORLD_ID,
+            "target_validator_count": 3,
+        },
+        "world_resource": {
+            "world_id": TRIAD_WORLD_ID,
+            "chain_id": TRIAD_WORLD_ID,
+            "seed_manifest_hash": TRIAD_MANIFEST_HASH,
+        },
+        "p2p": {"node_role_claim": p2p_role},
+        "chain_proof": {
+            "latest_execution_checkpoint": {
+                "schema_version": 2,
+                "checkpoint_id": checkpoint_id,
+                "height": head,
+                "manifest_hash": TRIAD_MANIFEST_HASH,
+            },
+            "latest_world_head_proof": {
+                "checkpoint_ref": checkpoint_id,
+                "height": head,
+                "proof_hash": proof_hash,
+                "world_id": TRIAD_WORLD_ID,
+            },
+        },
+        "validator": {
+            "schema_version": "oasis7.chain_validator_provider_status.v1",
+            "role": "validator",
+            "membership": "active",
+            "stake": 100,
+            "signer_binding": node_id,
+            "signer_public_key_hex": signer,
+            "stake_proof": {
+                "validator_id": node_id,
+                "player_id": node_id,
+                "stake": 100,
+                "signer_public_key_hex": signer,
+                "leaf_hash": hashlib.sha256(f"leaf:{node_id}".encode("utf-8")).hexdigest(),
+                "proof": [],
+            },
+            "validator_set_hash": validator_set_hash,
+            "stake_root": stake_root,
+            "registry_ref": "config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json",
+            "registry_sha256": TRIAD_REGISTRY_FIXTURE_DIGEST,
+            "inventory_ref": "scripts/public-testnet-validator-triad-inventory.v1.json",
+            "inventory_sha256": TRIAD_INVENTORY_DIGEST,
+        },
+        "provider": {
+            "schema_version": "oasis7.chain_validator_provider_status.v1",
+            "node_id": node_id,
+            "provider_id": f"peer-{node_id}",
+            "checkpoint": provider,
+            "full_storage": provider,
+            "checkpoint_proof": (
+                {
+                    "schema_version": 2,
+                    "checkpoint_id": checkpoint_id,
+                    "height": head,
+                    "manifest_hash": TRIAD_MANIFEST_HASH,
+                    "proof_hash": proof_hash,
+                    "world_id": TRIAD_WORLD_ID,
+                    "chain_id": TRIAD_WORLD_ID,
+                }
+                if provider
+                else None
+            ),
+            "full_storage_proof": (
+                {
+                    "status": "ready",
+                    "provider_id": f"peer-{node_id}",
+                    "world_id": TRIAD_WORLD_ID,
+                    "chain_id": TRIAD_WORLD_ID,
+                    "manifest_hash": TRIAD_MANIFEST_HASH,
+                    "height": head,
+                }
+                if provider
+                else None
+            ),
+        },
+    }
+    return base
 
 
 class JsonFixtureServer:
@@ -176,7 +301,40 @@ class ThirdValidatorAdmissionContractTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="oasis7-pg01-stage-") as temp_dir:
             temp = Path(temp_dir)
             runtime = temp / "oasis7_chain_runtime"
-            runtime.write_text("runtime\n", encoding="utf-8")
+            runtime.write_text(
+                "#!/usr/bin/env bash\n"
+                "set -eu\n"
+                "[[ \"${1:-}\" == identity-receipt ]] || exit 64\n"
+                "python3 - \"$3\" \"$5\" <<'PY'\n"
+                "import hashlib, json, pathlib, sys\n"
+                "config_dir = pathlib.Path(sys.argv[1])\n"
+                "node_id = sys.argv[2]\n"
+                "key_path = config_dir / 'node-keypair.toml'\n"
+                "print(json.dumps({'schema_version':'oasis7.identity_receipt.v1', 'node_id':node_id, 'peer_id':'validator-47-peer', 'key_path':str(key_path), 'key_sha256':hashlib.sha256(key_path.read_bytes()).hexdigest(), 'key_size_bytes':key_path.stat().st_size, 'key_mode':384, 'key_uid':key_path.stat().st_uid, 'key_gid':key_path.stat().st_gid}))\n"
+                "PY\n",
+                encoding="utf-8",
+            )
+            runtime.chmod(0o755)
+            identity_dir = temp / "identity"
+            identity_dir.mkdir()
+            identity_dir.chmod(0o700)
+            identity_key = identity_dir / "node-keypair.toml"
+            identity_key.write_text("already-staged-validator-47-key\n", encoding="utf-8")
+            identity_key.chmod(0o600)
+            (identity_dir / "identity-receipt.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "oasis7.identity_provision.v1",
+                        "node_id": "triad-testnet-validator-47",
+                        "root_public_key": "aa" * 32,
+                        "finality_public_key": TRIAD_VALIDATOR_47_FIXTURE_SIGNER,
+                        "libp2p_peer_id": "validator-47-peer",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (identity_dir / "identity-receipt.json").chmod(0o600)
             peers = temp / "bootstrap-peers.txt"
             peers.write_text(
                 "/ip4/127.0.0.1/tcp/6831/p2p/12D3KooWTestSequencer\n"
@@ -196,7 +354,9 @@ class ThirdValidatorAdmissionContractTest(unittest.TestCase):
                     "--storage-finality-public-key",
                     "858e97be96f238ef3f6e07ec36d4ba5f503755ecb232d06a80ef1ab8aaca44f6",
                     "--extra-validator",
-                    "triad-testnet-validator-47:47aabbccddeeff00112233445566778899aabbccddeeff001122334455667788:100",
+                    f"triad-testnet-validator-47:{TRIAD_VALIDATOR_47_FIXTURE_SIGNER}:100",
+                    "--validator-47-identity-dir",
+                    str(identity_dir),
                     "--out-dir",
                     str(output),
                 ],
@@ -208,6 +368,22 @@ class ThirdValidatorAdmissionContractTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             registry_path = output / "config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json"
             registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            staged_identity = output / "identity"
+            self.assertEqual(
+                (staged_identity / "node-keypair.toml").read_bytes(),
+                identity_key.read_bytes(),
+            )
+            self.assertEqual(
+                (staged_identity / "identity-receipt.json").read_bytes(),
+                (identity_dir / "identity-receipt.json").read_bytes(),
+            )
+            for identity_file in (staged_identity / "node-keypair.toml", staged_identity / "identity-receipt.json"):
+                self.assertTrue(identity_file.is_file())
+                self.assertFalse(identity_file.is_symlink())
+                self.assertEqual(identity_file.stat().st_mode & 0o777, 0o600)
+            staged_env = (output / "config/node.env").read_text(encoding="utf-8")
+            self.assertIn("IDENTITY_KEY_PATH=config/node-keypair.toml", staged_env)
+            self.assertIn("IDENTITY_RECEIPT_PATH=config/identity-receipt.json", staged_env)
 
         self.assertEqual([entry["stake"] for entry in registry["validators"]], TRIAD_STAKES)
         self.assertIn("quorum", registry, "staged triad registry missing quorum metadata")
@@ -262,9 +438,9 @@ class ThirdValidatorAdmissionContractTest(unittest.TestCase):
 
     def test_validator_aware_health_accepts_only_three_equal_validator_provider_closure(self) -> None:
         responses = {
-            "/sequencer-204": triad_status("triad-testnet-sequencer"),
-            "/storage-205": triad_status("triad-testnet-storage", provider=True),
-            "/validator-47": triad_status("triad-testnet-validator-47", provider=True),
+            "/sequencer-204": node_emitted_triad_status("sequencer-204"),
+            "/storage-205": node_emitted_triad_status("storage-205"),
+            "/validator-47": node_emitted_triad_status("validator-47", provider=True),
         }
         with tempfile.TemporaryDirectory(prefix="oasis7-pg01-health-") as temp_dir, JsonFixtureServer(responses) as fixture:
             output = Path(temp_dir) / "triad-health.json"
@@ -287,6 +463,27 @@ class ThirdValidatorAdmissionContractTest(unittest.TestCase):
         self.assertEqual(evidence["governance"]["threshold_bps"], GOVERNANCE_THRESHOLD_BPS)
         self.assertTrue(evidence["nodes"]["validator-47"]["provider"]["checkpoint"])
         self.assertTrue(evidence["nodes"]["validator-47"]["provider"]["full_storage"])
+
+    def test_historical_synthetic_status_stays_blocked(self) -> None:
+        """The pre-projection fixture must never be upgraded by the collector."""
+        responses = {
+            "/sequencer-204": triad_status("triad-testnet-sequencer"),
+            "/storage-205": triad_status("triad-testnet-storage", provider=True),
+            "/validator-47": triad_status("triad-testnet-validator-47", provider=True),
+        }
+        with tempfile.TemporaryDirectory(prefix="oasis7-pg01-historical-health-") as temp_dir, JsonFixtureServer(responses) as fixture:
+            output = Path(temp_dir) / "historical-health.json"
+            result = self._run_health(
+                fixture,
+                output,
+                [(name, fixture.url(f"/{name}")) for name in ("sequencer-204", "storage-205", "validator-47")],
+                managed_triad=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("projection", result.stderr.lower())
+            self.assertTrue(output.exists())
+            evidence = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(evidence["verdict"], "blocked")
 
     def test_pair_only_health_is_not_final_triad_evidence(self) -> None:
         responses = {

@@ -80,6 +80,8 @@ mod rebuild_status_tests;
 mod reward_runtime_settlement;
 #[path = "oasis7_chain_runtime/reward_runtime_worker.rs"]
 mod reward_runtime_worker;
+#[path = "oasis7_chain_runtime/runtime_authority.rs"]
+mod runtime_authority;
 #[path = "oasis7_chain_runtime/runtime_status_util.rs"]
 mod runtime_status_util;
 #[path = "oasis7_chain_runtime/startup_reconcile.rs"]
@@ -483,6 +485,11 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         .transpose()?;
     #[cfg(test)]
     let local_execution_bootstrap: Option<oasis7_node::NodeExecutionBootstrap> = None;
+    let runtime_authority_binding = runtime_authority::load_runtime_authority_binding(
+        options.genesis_validator_registry_path.as_deref(),
+        options.deployment_inventory_path.as_deref(),
+        options.loaded_network_tier_manifest.as_ref(),
+    )?;
     let effective_validator_signer_bindings =
         config.pos_config.validator_signer_public_keys.clone();
     let replication_remote_writer_allowlist =
@@ -671,6 +678,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         Arc::clone(&reward_runtime_metrics),
         Arc::clone(&storage_metrics),
         feedback_submit_signer,
+        runtime_authority_binding,
     )?;
 
     runtime_status_util::print_runtime_ready_summary(

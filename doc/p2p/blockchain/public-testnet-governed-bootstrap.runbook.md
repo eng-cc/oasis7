@@ -581,62 +581,67 @@ consumer-impact record 通过后，canonical `apply` 必须先进入 `preflight`
 每个 node 必须发出 `role`、`root`、`active=false`、`running=false`、`service_state=stopped`、`independently_observed=true`、`preflight_observer_mutation=false`，以及均为 `true` 的 `preflight_verified`、`runtime_executable`、`repair_rebuild_helper_executable`、`generated_world_dir_contract`、`governance_registry_importer_executable`、`python_available`、`tar_available`、`systemd_available`、`process_inspection_available` 字段。任何缺失、role/root mismatch、stale receipt 或 gate=false 都必须 fail closed；未取得完整双 validator receipt 不得进入 backup、reset、stage。
 
 ### C2. Reset both validators
-以下 stop 是在 live authority 下由人类单独执行的 stop 动作；`human_direct_ssh`
-executor 不执行 stop，只在 stop 完成后 read-only 复观测，再允许受治理的
-destructive reset 继续：
+以下 stop 是 live authority 下由人类单独执行的动作；`human_direct_ssh`
+executor 只在 stop 后 read-only 复观测，再允许受治理 destructive reset：
 
 ```bash
 systemctl stop oasis7-triad-sequencer.service
 systemctl stop oasis7-triad-storage.service
 ```
 
-必须先由人类按 live authority 分别停下两台 validator，并由同一 executor 在 reset 前、以及每次 mutation 前完成 direct read-only re-observation；之后才能向任一 host stage config/world。不要在 sequencer reset 后立即 staging，再处理 storage；该交错会让旧 storage runtime 与新 sequencer staging 短暂共存。
+人类必须分别停下两台 validator，并由同一 executor 在 reset 前及每次 mutation 前完成 direct read-only re-observation，之后才能 stage config/world。不要在 sequencer reset 后立即 staging，再处理 storage；旧 storage runtime 与新 sequencer staging 不得交错共存。
 
-从第一台 validator 停止开始，到 Phase G full-fleet health criteria 全部通过为止，必须按 testnet outage 窗口处理：validator 服务不可用，依赖 validator 的 public RPC、explorer 和 guarded faucet 可能不可用或返回 stale data。不得把缓存可读、单个 endpoint 恢复或 sequencer 单机存活当作网络恢复。
+从第一台 validator 停止到 Phase G full-fleet health criteria 全部通过，按 testnet outage 窗口处理；缓存可读、单个 endpoint 恢复或 sequencer 单机存活都不是网络恢复。
 
 必须清理旧链数据目录，但保留受保护的 `config/node-keypair.toml`，除非本轮明确要轮换 key。
-
-标准重建脚本必须清理以下运行态，以保证“从零重建”不会继承旧 peerstore、旧 runtime root 或未释放端口：
-
-- `data/execution-records`
-- `data/execution-world`
-- `data/execution-world-simulator-mirror`
-- `data/storage`
-- `data/runtime-root`
-- `data/replication-root`
-- `output/chain-runtime`
-- `output/node-distfs`
+标准重建脚本必须清理 `data/execution-records`、`data/execution-world`、
+`data/execution-world-simulator-mirror`、`data/storage`、`data/runtime-root`、
+`data/replication-root`、`output/chain-runtime` 和 `output/node-distfs`，避免继承
+旧 peerstore、runtime root 或未释放端口。
 
 在删除目录前，脚本必须等待或终止 stack-local 残留 `start-node.sh` / `oasis7_chain_runtime` 进程，避免旧进程继续占用 gossip/status/replication 端口。若 `systemctl stop` 后端口仍被旧 runtime 占用，本轮 rebuild 必须视为未清干净，不能继续把后续 readiness 失败归因于链同步慢。
 
 ### C3. Stage both validators
+reset 两台 validator 后，才向两台 host stage current package/runtime、manifest、
+genesis、validator registry、bootstrap peers 和 deployment-only world。使用上面的
+canonical pair transaction；旧 `p2p-public-testnet-rebuild-validators.sh` 只供历史审计，
+其 204 sequencer 参数不属于本 contract。两台 host staging 成功后才进入启动步骤。
 
-reset 两台 validator 完成后，才把以下内容放到两台 host：
-
-- current release package/runtime
-- manifest
-- genesis
-- validator registry
-- bootstrap peers
-- deployment-only bootstrap world
-
-建议直接使用上面的 canonical pair transaction，而不是临时拼接远程命令。旧的
-`p2p-public-testnet-rebuild-validators.sh` 仍可用于历史审计，但不属于本
-contract：它的 sequencer 参数要求完整 `/v1/chain/status`，因此不得用于本轮
-204 rebuild。canonical executor 会先把 world/config 绑定写入每台节点的受治理
-staging，再依照显式 mutation/startup order 记录 receipt。
-
-两台 host 的 package、config 和 deployment-only world staging 都成功后，才进入启动步骤。
-
+### C3.1. Validator-47 no-start staging and cold cutover
+The managed triad inventory at `scripts/public-testnet-validator-triad-inventory.v1.json`
+is authority for validator-47 host/service/role/port/provider/world/manifest/registry
+bindings. Retain its SHA-256 in deployment truth and the bootstrap receipt; stale
+pair `node.env`, wrong fields, or a different inventory digest fail preflight.
+The inventory role is `validator`, while runtime `NODE_ROLE=storage` and
+`P2P_NODE_ROLE=full_storage` are independent supported settings; retain both
+provider flags in `node.env`. PoS validator identity comes from the governed
+consensus/registry truth, not an unsupported runtime `NODE_ROLE=validator`.
+The validator-47 node identity is a separately staged ceremony output. Require
+its `node-keypair.toml` and public `identity-receipt.json` to be regular files
+with mode `0600` and matching ownership before staging. The final host imports
+those bytes exactly and validates the public finality key against the governed
+registry; it must not regenerate the identity.
+Add the inventory's validator-47 signer to the existing pair, then stage and read
+back the empty host with this explicit no-start contract:
+```bash
+./scripts/p2p-public-testnet-build-deployment-stage.sh --runtime-build-ref /srv/oasis7/oasis7_chain_runtime --bootstrap-peers-file /srv/oasis7/bootstrap-peers.txt --sequencer-finality-public-key <sequencer-finality-public-key> --storage-finality-public-key <storage-finality-public-key> --extra-validator triad-testnet-validator-47:<validator-47-finality-public-key>:100 --validator-47-identity-dir /srv/oasis7/staged-validator-47-identity --out-dir /srv/oasis7/stage/validator-47
+./scripts/p2p-public-testnet-bootstrap-fresh-validator-host.sh --package-deb /srv/oasis7/oasis7-linux-x64.deb --ops-tools-tar /srv/oasis7/oasis7-linux-x64-ops-tools.tar.gz --config-dir /srv/oasis7/stage/validator-47/config --world-dir /srv/oasis7/stage/validator-47/generated-world --identity-dir /srv/oasis7/stage/validator-47/identity --node-id triad-testnet-validator-47 --service-name oasis7-triad-validator-47.service --receipt /opt/oasis7/p2p-testnet/evidence/fresh-validator-host-bootstrap-receipt.json
+/opt/oasis7/p2p-testnet/current/bin/service-readback --read-only --role validator-47 --root /opt/oasis7/p2p-testnet --service oasis7-triad-validator-47.service
+```
+Bootstrap renders but never enables or starts validator-47 and must prove
+`UnitFileState=disabled`, inactive/dead, `no_process=true`, and `no_listener=true`.
+Readback is independent and precedes launch. Keep the existing pair unchanged
+(pair preservation); an approved cold cutover is staggered: stop/read back one
+member, stage/verify it, then handle the second, never both at once.
+On any failure leave validator-47 disabled, preserve the pair, and retain receipt
+and readback. After proving no process and no `6634`/`6834` listeners, clean redeploy
+from a newly generated stage and newly ceremonied identity; never reuse pair `node.env`,
+peerstore, runtime state, or world directories as rollback material.
 ### C4. Start sequencer and confirm liveness
-
 1. start `triad-testnet-sequencer`
 2. confirm sequencer liveness（`running=true` 且 `last_error` 为空）
-
 sequencer liveness 未通过时不得启动 storage，也不得开始恢复 observer 或对外 endpoint。
-
 ### C5. Start storage after sequencer liveness
-
 1. start `triad-testnet-storage`
 2. confirm storage joins sequencer
 
