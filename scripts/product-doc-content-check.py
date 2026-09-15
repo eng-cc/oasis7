@@ -1097,7 +1097,11 @@ def strict_trace_ids(value: str) -> set[str]:
     }
 
 
-def trace_navigable_ids(source: Path, cell: str) -> set[str]:
+def trace_navigable_ids(
+    source: Path,
+    cell: str,
+    use_worktree_content: bool,
+) -> set[str]:
     """Return only fragment IDs that navigate within the current topic."""
     identifiers: set[str] = set()
     for link in parse_markdown_links(cell):
@@ -1109,9 +1113,14 @@ def trace_navigable_ids(source: Path, cell: str) -> set[str]:
         resolved_target = (
             source
             if not target_path
-            else resolve_link_path(source, target_path, use_worktree_content=True)
+            else resolve_link_path(source, target_path, use_worktree_content)
         )
-        if resolved_target.resolve() != source.resolve():
+        same_topic = (
+            resolved_target.resolve() == source.resolve()
+            if use_worktree_content
+            else resolved_target == source
+        )
+        if not same_topic:
             continue
         identifier = fragment.upper()
         if re.fullmatch(r"(?:REQ|AC)-[A-Z0-9][A-Z0-9_-]*", identifier, re.IGNORECASE):
@@ -1124,6 +1133,7 @@ def check_active_topic_trace_tables(
     path: str,
     text: str,
     errors: list[str],
+    use_worktree_content: bool,
 ) -> None:
     """Check active-topic leaf traces and aggregate criterion definitions.
 
@@ -1206,7 +1216,10 @@ def check_active_topic_trace_tables(
             relation_text = " ".join(relation_cells)
             declared_ids = strict_trace_ids(relation_text)
             linked_ids = set().union(
-                *(trace_navigable_ids(source, cell) for cell in relation_cells)
+                *(
+                    trace_navigable_ids(source, cell, use_worktree_content)
+                    for cell in relation_cells
+                )
             )
             requirement_ids = {
                 identifier for identifier in linked_ids if identifier.startswith("REQ-")
@@ -1503,7 +1516,7 @@ def check_document(
         if path.endswith(".prd.md") and not inactive_lifecycle:
             check_minimum_topic_content(path, text, errors)
             check_active_topic_cardinality(path, text, errors)
-            check_active_topic_trace_tables(root, path, text, errors)
+            check_active_topic_trace_tables(root, path, text, errors, use_worktree_content)
             if full_corpus:
                 check_active_topic_design_contract(root, head, path, text, errors, use_worktree_content)
     if not is_root_document and path.endswith(".design.md"):

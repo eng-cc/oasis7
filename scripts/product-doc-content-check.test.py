@@ -1259,6 +1259,47 @@ def scenario_committed_target_existence_is_frozen() -> None:
         shutil.rmtree(root)
 
 
+def scenario_committed_trace_identity_is_frozen() -> None:
+    root, base, _head = make_repo()
+    try:
+        alias = root / "doc/product/world-rules-core-gameplay/trace-alias.md"
+        alias.write_text(
+            '<a id="req-sample-001"></a>\n<a id="ac-sample-001"></a>\n',
+            encoding="utf-8",
+        )
+        trace = TRACE_BLOCK.replace(
+            "](#req-sample-001)", "](trace-alias.md#req-sample-001)"
+        ).replace(
+            "](#ac-sample-001)", "](trace-alias.md#ac-sample-001)"
+        )
+        (root / TOPIC).write_text(
+            TOPIC_TEXT.replace(TRACE_BLOCK, trace) + "\ncommitted trace change\n",
+            encoding="utf-8",
+        )
+        run_git(root, "add", ".")
+        run_git(root, "commit", "-qm", "committed trace alias")
+        head = subprocess.check_output(
+            ["git", "-C", str(root), "rev-parse", "HEAD"], text=True
+        ).strip()
+
+        # The committed target is another file with matching anchors. A live
+        # symlink must not change the frozen path identity into the source.
+        alias.unlink()
+        alias.symlink_to(Path("sample.prd.md"))
+        result = invoke(root, base, head)
+        output = result.stdout + result.stderr
+        assert result.returncode != 0, output
+        assert "paired-trace-missing-relation" in output, output
+
+        # Worktree mode intentionally follows the live target overlay.
+        result = invoke(root, base, head, worktree=True)
+        output = result.stdout + result.stderr
+        assert result.returncode == 0, output
+        assert "product-doc-content: OK (checked 1" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
 def multiline_comment_before_authority(root: Path) -> None:
     marker = "- 专业域权威：[`gameplay authority`](../../game/prd.md#authority)"
     comment = "<!-- removed from the rendered document\nthis comment spans multiple source lines\n-->\n"
@@ -1463,6 +1504,7 @@ def main() -> None:
     scenario_committed_target_content_is_frozen()
     scenario_worktree_target_overlay_remains_valid()
     scenario_committed_target_existence_is_frozen()
+    scenario_committed_trace_identity_is_frozen()
     scenario_checked(lambda root: (root / TOPIC).write_text(
         TOPIC_TEXT.replace("玩家需要知道当前目标", "  玩家需要知道当前目标"), encoding="utf-8"
     ))
