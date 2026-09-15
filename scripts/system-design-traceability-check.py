@@ -44,6 +44,8 @@ VALIDATION_HEADING = re.compile(r"^\s*###\s+11\.1\s+验证映射表\s*$", re.IGN
 HEADING_RE = re.compile(r"^ {0,3}#{1,6}\s+")
 HTML_COMMENT_RE = re.compile(r"<!--[\s\S]*?-->")
 REQUIRED_NA_FIELDS = ("reason", "scope", "owner_role", "evidence_ref", "re-evaluate")
+DEMAND_ROW_CELLS = 5
+VALIDATION_ROW_CELLS = 6
 
 
 @dataclass(frozen=True)
@@ -321,14 +323,12 @@ def fragment_occurrences(text: str, fragment: str) -> int:
         for node in parse_markdown_html(without_html_comments(text))
         for anchor in re.findall(r"<a\s+[^>]*\bid\s*=\s*[\"']([^\"']+)[\"'][^>]*>", node.content, re.IGNORECASE)
     )
-    if anchor_occurrences:
-        return anchor_occurrences
-    occurrences = 0
+    heading_occurrences = 0
     for _number, line in visible_lines(text):
         match = re.match(r"^ {0,3}#{1,6}\s+(.+?)\s*#*\s*$", line)
         if match and github_heading_slug(match.group(1)) == wanted:
-            occurrences += 1
-    return occurrences
+            heading_occurrences += 1
+    return anchor_occurrences + heading_occurrences
 
 
 def resolve_target(root: Path, source: Path, target: str) -> Path | None:
@@ -382,6 +382,19 @@ def validate_reference(
     return target_path, fragment
 
 
+def is_test_or_manual_source(path: Path, design: Path) -> bool:
+    """Accept only repository-owned test or manual source paths."""
+    if path.resolve() == design.resolve() or path.name.casefold().endswith(".design.md"):
+        return False
+    parts = {part.casefold() for part in path.parts[:-1]}
+    name = path.name.casefold()
+    if parts.intersection({"test", "tests", "manual", "manuals"}):
+        return True
+    if name in {"testing-manual.md", "manual.md"} or name.endswith(".manual.md"):
+        return True
+    return bool(re.search(r"(?:^|[._-])(test|spec)(?:[._-]|$)", name))
+
+
 def first_valid_link(
     root: Path,
     source: Path,
@@ -428,8 +441,13 @@ def relation_from_demand_row(
     read_target: TargetTextReader,
 ) -> Relation | None:
     row_path = f"{source.relative_to(root).as_posix()}:{row_number}"
-    if len(cells) < 3:
-        fail(errors, "trace-upstream-missing", row_path, "add the five-column demand-allocation row from an exact upstream path#fragment to a local design fragment")
+    if len(cells) != DEMAND_ROW_CELLS or any(not cell.strip() for cell in cells):
+        fail(
+            errors,
+            "trace-demand-row-invalid",
+            row_path,
+            "demand-allocation row must contain exactly five non-empty cells; repair the row shape and every required column",
+        )
         return None
     upstream_path, upstream_fragment = first_valid_link(
         root,
@@ -522,8 +540,13 @@ def check_design_content(
     validation_keys: set[tuple[str, str]] = set()
     for row_number, cells in validation.rows:
         row_path = f"{relative}:{row_number}"
-        if len(cells) < 4:
-            fail(errors, "trace-validation-missing", row_path, "add upstream, local design, obligation, and validation-source cells; repair the row")
+        if len(cells) != VALIDATION_ROW_CELLS or any(not cell.strip() for cell in cells):
+            fail(
+                errors,
+                "trace-validation-row-invalid",
+                row_path,
+                "validation mapping row must contain exactly six non-empty cells; repair the row shape and every required column",
+            )
             continue
         upstream_path, upstream_fragment = first_valid_link(
             root,
@@ -581,10 +604,17 @@ def check_design_content(
                 markdown_target=False,
                 read_target=read_target,
             )
-            if resolved is not None:
+            if resolved is not None and is_test_or_manual_source(resolved, source):
                 valid_sources.append(resolved)
+            elif resolved is not None:
+                fail(
+                    errors,
+                    "trace-validation-source-invalid",
+                    row_path,
+                    "validation source must be a repository-owned test/manual file, not a design, product, or other document; repair the fourth cell",
+                )
         if len(valid_sources) != 1:
-            fail(errors, "trace-validation-missing", row_path, "validation source must resolve to exactly one test/manual file; repair the fourth cell")
+            fail(errors, "trace-validation-source-invalid", row_path, "validation source must resolve to exactly one repository-owned test/manual file; repair the fourth cell")
 
     # Keep the comparison explicit rather than relying on row order.
     expected_pairs = {
@@ -594,9 +624,9 @@ def check_design_content(
     missing = expected_pairs - validation_keys
     extra = validation_keys - expected_pairs
     if missing:
-        fail(errors, "trace-validation-missing", relative, "add validation rows for every local design relation: " + ", ".join(f"{upstream}->{local}" for upstream, local in sorted(missing)))
+        fail(errors, "trace-validation-missing", relative, "add validation rows for every local design relation: " + ", ".join(f"{upstream}->{local}" for upstream, local in sorted(missing)) + "; repair the validation table")
     if extra:
-        fail(errors, "trace-slot-cardinality", relative, "remove validation rows without a demand-allocation relation: " + ", ".join(f"{upstream}->{local}" for upstream, local in sorted(extra)))
+        fail(errors, "trace-slot-cardinality", relative, "remove validation rows without a demand-allocation relation: " + ", ".join(f"{upstream}->{local}" for upstream, local in sorted(extra)) + "; repair the validation table")
     return errors
 
 

@@ -74,8 +74,34 @@ printf '%s\n' 'fixture documentation landing page' >"$FIXTURE/doc/README.md"
 printf '%s\n' 'fixture many-doc landing page' >"$FIXTURE/doc/many/README.md"
 printf '%s\n' 'fixture retired archive landing page' >"$FIXTURE/doc/devlog/README.md"
 printf '%s\n' '# testing fixture landing page' >"$FIXTURE/doc/testing/README.md"
+cat >"$FIXTURE/doc/testing/upstream.md" <<'DOC'
+# Fixture upstream
+
+<a id="fixture-req"></a>
+## Fixture requirement
+DOC
+printf '%s\n' '# fixture test source' >"$FIXTURE/doc/testing/fixture.test.py"
+cat >"$FIXTURE/doc/testing/changed.design.md" <<'DOC'
+# Fixture system design
+
+### 2.1 需求承接与分配表
+
+| upstream | obligation | local design | owner | excluded |
+| --- | --- | --- | --- | --- |
+| [fixture requirement](upstream.md#fixture-req) | fixture obligation | [fixture local](#fixture-local) | repository_health_engineer | fixture exclusion |
+
+### Fixture Local
+
+Fixture local design.
+
+### 11.1 验证映射表
+
+| upstream | local design | obligation | validation | evidence | uncovered |
+| --- | --- | --- | --- | --- | --- |
+| [fixture requirement](upstream.md#fixture-req) | [fixture local](#fixture-local) | fixture obligation | [fixture test](fixture.test.py) | fixture evidence | fixture uncovered |
+DOC
 {
-  printf '%s\n' 'doc/many/README.md' 'doc/testing/README.md' 'doc/testing/prd.md'
+  printf '%s\n' 'doc/many/README.md' 'doc/testing/README.md' 'doc/testing/prd.md' 'doc/testing/changed.design.md' 'doc/testing/upstream.md'
   find "$FIXTURE/doc/many" -type f -name '*.md' | sed "s#^$FIXTURE/##" | sort
 } >"$FIXTURE/doc/.governance/module-root-md-allowlist.txt"
 cat >"$FIXTURE/doc/.governance/top-level-directory-registry.json" <<'JSON'
@@ -169,6 +195,40 @@ if ! (
   exit 1
 fi
 grep -Fxq -- '--full-corpus' "$TMPDIR/product-doc-content.args"
+
+# Full-corpus is product-only; the changed-scope system-design gate must still
+# receive the same trusted range and reject a malformed changed design.
+fixture_base="$(git -C "$FIXTURE" rev-parse HEAD^{commit})"
+fixture_head="$fixture_base"
+cp "$ROOT_DIR/scripts/product_doc_markdown.py" "$FIXTURE/scripts/product_doc_markdown.py"
+cp "$ROOT_DIR/scripts/system-design-traceability-check.py" "$FIXTURE/scripts/system-design-traceability-check.real.py"
+cat >"$FIXTURE/scripts/system-design-traceability-check.py" <<'PY'
+#!/usr/bin/env python3
+import os
+from pathlib import Path
+import runpy
+import sys
+
+Path(os.environ["SYSTEM_DESIGN_TRACEABILITY_ARGS"]).write_text(
+    "\n".join(sys.argv[1:]) + "\n", encoding="utf-8"
+)
+runpy.run_path(str(Path(__file__).with_name("system-design-traceability-check.real.py")), run_name="__main__")
+PY
+chmod +x "$FIXTURE/scripts/system-design-traceability-check.py"
+printf '%s\n' '# malformed changed system design' >"$FIXTURE/doc/testing/changed.design.md"
+if (
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" OASIS7_PRODUCT_DOC_BASE="$fixture_base" OASIS7_PRODUCT_DOC_HEAD="$fixture_head" SYSTEM_DESIGN_TRACEABILITY_ARGS="$TMPDIR/system-design.args" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh --full-corpus
+) >"$TMPDIR/full-corpus-system-design.out" 2>"$TMPDIR/full-corpus-system-design.err"; then
+  echo "doc-governance-check.test: --full-corpus allowed malformed changed system design" >&2
+  exit 1
+fi
+grep -Fq 'trace-upstream-missing' "$TMPDIR/full-corpus-system-design.out"
+grep -Fqx -- '--base' "$TMPDIR/system-design.args"
+grep -Fqx -- "$fixture_base" "$TMPDIR/system-design.args"
+grep -Fqx -- '--head' "$TMPDIR/system-design.args"
+grep -Fqx -- "$fixture_head" "$TMPDIR/system-design.args"
+grep -Fqx -- '--worktree' "$TMPDIR/system-design.args"
 
 REGISTRY_BASE="$TMPDIR/top-level-directory-registry.json"
 cp "$FIXTURE/doc/.governance/top-level-directory-registry.json" "$REGISTRY_BASE"

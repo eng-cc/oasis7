@@ -100,9 +100,6 @@ run_product_doc_content_check() {
 }
 
 run_system_design_traceability_check() {
-  if ((full_corpus == 1)); then
-    return 0
-  fi
   local base_oid="${OASIS7_PRODUCT_DOC_BASE:-}"
   local head_oid="${OASIS7_PRODUCT_DOC_HEAD:-}"
   if [[ -n "$base_oid" || -n "$head_oid" ]]; then

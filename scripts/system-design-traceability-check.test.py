@@ -21,6 +21,7 @@ CHECKER = ROOT / "scripts/system-design-traceability-check.py"
 DESIGN = "doc/system/sample.design.md"
 PRODUCT = "doc/product/sample.prd.md"
 TEST_SOURCE = "doc/tests/sample.test.py"
+MANUAL_SOURCE = "doc/manual/sample.md"
 
 
 PRODUCT_TEXT = """# Sample product requirement
@@ -42,7 +43,6 @@ DESIGN_HEADER = """# Sample system design
 | --- | --- | --- | --- | --- |
 | [REQ-SAMPLE-001](../product/sample.prd.md#req-sample) | 说明系统必须承接的结果与适用条件。 | [DES-SAMPLE-001](#des-sample-001) | `repository_health_engineer` | 不覆盖未声明的入口。 |
 
-<a id="des-sample-001"></a>
 ### DES-SAMPLE-001
 
 系统设计条款说明边界、拒绝条件和可观察结果。
@@ -55,6 +55,10 @@ DESIGN_HEADER = """# Sample system design
 | --- | --- | --- | --- | --- | --- |
 | [REQ-SAMPLE-001](../product/sample.prd.md#req-sample) | [DES-SAMPLE-001](#des-sample-001) | 验证该设计义务的拒绝与成功边界。 | [sample test](../tests/sample.test.py) | GitHub task evidence | 不覆盖生产发布。 |
 """
+
+
+DEMAND_ROW = "| [REQ-SAMPLE-001](../product/sample.prd.md#req-sample) | 说明系统必须承接的结果与适用条件。 | [DES-SAMPLE-001](#des-sample-001) | `repository_health_engineer` | 不覆盖未声明的入口。 |"
+VALIDATION_ROW = "| [REQ-SAMPLE-001](../product/sample.prd.md#req-sample) | [DES-SAMPLE-001](#des-sample-001) | 验证该设计义务的拒绝与成功边界。 | [sample test](../tests/sample.test.py) | GitHub task evidence | 不覆盖生产发布。 |"
 
 
 def load_checker():
@@ -89,11 +93,13 @@ def make_repo(*, design_text: str | None = DESIGN_HEADER, include_test: bool = T
     (root / "doc/system").mkdir(parents=True)
     if include_test:
         (root / "doc/tests").mkdir(parents=True)
+    (root / "doc/manual").mkdir(parents=True)
     (root / PRODUCT).write_text(PRODUCT_TEXT, encoding="utf-8")
     if design_text is not None:
         (root / DESIGN).write_text(design_text, encoding="utf-8")
     if include_test:
         (root / TEST_SOURCE).write_text("# test source\n", encoding="utf-8")
+    (root / MANUAL_SOURCE).write_text("# manual case\n", encoding="utf-8")
     run_git(root, "init", "-q", "-b", "main")
     run_git(root, "config", "user.email", "test@example.invalid")
     run_git(root, "config", "user.name", "Traceability Test")
@@ -169,7 +175,7 @@ def scenario_missing_demand_allocation() -> None:
         (root / DESIGN).write_text(DESIGN_HEADER.replace("### 2.1 需求承接与相关角色", "### 2.1 需求承接与相关角色"), encoding="utf-8")
         # Remove the complete allocation table while retaining the validation table.
         start = DESIGN_HEADER.index("### 2.1")
-        end = DESIGN_HEADER.index("<a id=\"des-sample-001\">")
+        end = DESIGN_HEADER.index("### DES-SAMPLE-001")
         (root / DESIGN).write_text(DESIGN_HEADER[:start] + DESIGN_HEADER[end:], encoding="utf-8")
         assert_code(module, root / DESIGN, "trace-upstream-missing")
     finally:
@@ -194,6 +200,85 @@ def scenario_unresolved_upstream_fragment() -> None:
     )
     try:
         assert_code(module, root / DESIGN, "trace-ref-unresolved")
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_required_row_shape_and_cells() -> None:
+    module = load_checker()
+    cases = (
+        (
+            DESIGN_HEADER.replace(DEMAND_ROW, "| [REQ-SAMPLE-001](../product/sample.prd.md#req-sample) | obligation | [DES-SAMPLE-001](#des-sample-001) |"),
+            "trace-demand-row-invalid",
+        ),
+        (
+            DESIGN_HEADER.replace(DEMAND_ROW, DEMAND_ROW.replace("`repository_health_engineer`", "")),
+            "trace-demand-row-invalid",
+        ),
+        (
+            DESIGN_HEADER.replace(VALIDATION_ROW, "| [REQ-SAMPLE-001](../product/sample.prd.md#req-sample) | [DES-SAMPLE-001](#des-sample-001) | obligation | [sample test](../tests/sample.test.py) |"),
+            "trace-validation-row-invalid",
+        ),
+        (
+            DESIGN_HEADER.replace(VALIDATION_ROW, VALIDATION_ROW.replace("GitHub task evidence", "")),
+            "trace-validation-row-invalid",
+        ),
+    )
+    for text, code in cases:
+        root, _base, _head = make_repo(design_text=text)
+        try:
+            assert_code(module, root / DESIGN, code)
+        finally:
+            shutil.rmtree(root)
+
+
+def scenario_validation_source_must_be_test_or_manual() -> None:
+    module = load_checker()
+    for method in (
+        "[self](#des-sample-001)",
+        "[product](../product/sample.prd.md#req-sample)",
+    ):
+        root, _base, _head = make_repo(
+            design_text=DESIGN_HEADER.replace("[sample test](../tests/sample.test.py)", method)
+        )
+        try:
+            assert_code(module, root / DESIGN, "trace-validation-source-invalid")
+        finally:
+            shutil.rmtree(root)
+
+    root, _base, _head = make_repo(
+        design_text=DESIGN_HEADER.replace(
+            "[sample test](../tests/sample.test.py)",
+            "[manual case](../manual/sample.md)",
+        )
+    )
+    try:
+        assert_no_errors(module, root / DESIGN)
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_anchor_and_heading_fragment_collision_is_ambiguous() -> None:
+    module = load_checker()
+    root, _base, _head = make_repo(
+        design_text=DESIGN_HEADER.replace(
+            "### DES-SAMPLE-001",
+            '<a id="des-sample-001"></a>\n### DES-SAMPLE-001',
+            1,
+        )
+    )
+    try:
+        assert_code(module, root / DESIGN, "trace-ref-ambiguous")
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_fenced_code_trace_decoy_is_ignored() -> None:
+    module = load_checker()
+    decoy = """```markdown\n<a id=\"des-sample-001\"></a>\n### 2.1 需求承接与分配表\n| upstream | obligation | design | owner | excluded |\n| --- | --- | --- | --- | --- |\n| [bad](missing.md#bad) | bad | [bad](#des-sample-001) | bad | bad |\n```\n\n"""
+    root, _base, _head = make_repo(design_text=decoy + DESIGN_HEADER)
+    try:
+        assert_no_errors(module, root / DESIGN)
     finally:
         shutil.rmtree(root)
 
@@ -267,6 +352,29 @@ def scenario_untracked_worktree_design_is_included() -> None:
         shutil.rmtree(root)
 
 
+def scenario_staged_worktree_design_is_included() -> None:
+    module = load_checker()
+    root, base, _head = make_repo(design_text=None)
+    try:
+        (root / DESIGN).write_text(DESIGN_HEADER, encoding="utf-8")
+        run_git(root, "add", DESIGN)
+        paths = module.changed_system_design_paths(root, base, base, True)
+        assert [path.relative_to(root).as_posix() for path in paths] == [DESIGN], paths
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_unstaged_worktree_design_is_included() -> None:
+    module = load_checker()
+    root, base, _head = make_repo()
+    try:
+        (root / DESIGN).write_text(DESIGN_HEADER + "\nAdditional substantive behavior.\n", encoding="utf-8")
+        paths = module.changed_system_design_paths(root, base, base, True)
+        assert [path.relative_to(root).as_posix() for path in paths] == [DESIGN], paths
+    finally:
+        shutil.rmtree(root)
+
+
 def scenario_untouched_legacy_design_is_excluded() -> None:
     module = load_checker()
     root, base, _head = make_repo(design_text="# legacy design without current trace contract\n")
@@ -300,11 +408,17 @@ def main() -> None:
         scenario_missing_demand_allocation,
         scenario_missing_validation_mapping,
         scenario_unresolved_upstream_fragment,
+        scenario_required_row_shape_and_cells,
+        scenario_validation_source_must_be_test_or_manual,
+        scenario_anchor_and_heading_fragment_collision_is_ambiguous,
+        scenario_fenced_code_trace_decoy_is_ignored,
         scenario_complete_na,
         scenario_incomplete_na,
         scenario_target_only_design_change_is_excluded,
         scenario_whitespace_and_comment_only_source_change_is_excluded,
         scenario_untracked_worktree_design_is_included,
+        scenario_staged_worktree_design_is_included,
+        scenario_unstaged_worktree_design_is_included,
         scenario_untouched_legacy_design_is_excluded,
         scenario_partial_or_malformed_range_is_rejected,
     )
