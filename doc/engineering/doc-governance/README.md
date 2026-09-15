@@ -34,6 +34,12 @@
 | testing evidence 与手册/门禁文档混叠 | `../../testing/evidence/README.md` | 现行 evidence 子域入口；与 testing 模块入口、文件级索引和 operator 手册分层 |
 | readme 外部口径、渠道 runbook 与入口职责混叠 | `../../readme/governance/README.md` | 已收口的热点路径；当前 landing page 承接分流与维护触发器 |
 
+## REQ/AC 追踪边界
+
+- 活跃专题 PRD 的行级 REQ/AC 追踪中，凡是用于满足本专题声明完整性的 fragment，都必须解析到同一专题的声明；跨专题或仅能在其他文件解析的 fragment 不能替代这项完整性关系。
+- 配对 design 仍可按其配对合同使用带路径和 fragment 的跨文件链接承接 PRD 的 REQ/AC；专业 authority、跨文件消费条款、迁移接收关系和证据入口也继续使用真实的 repository-relative path#fragment。它们表达承接或权威关系，不因此满足活跃专题 PRD 的本地 REQ/AC 声明完整性。
+- 具体规则以 [`workflow source of truth`](../workflow/source-of-truth.md) 和对应产品文档内容规范为准；本入口只保留分流与边界说明。
+
 ## 维护规则
 - 本页只做专题导航和抽象分流，不承载完整治理规则正文。
 - 就文档树共享治理规则而言，上游 `doc/README.md` 与 `doc/engineering/README.md` 只链接本页；其他模块或专题导航按各自职责保留。具体规则与专题正文必须从本页继续下钻；可变执行状态和证据直接归入 GitHub Issue/Project，避免上游入口各自固定某个专题文件。
