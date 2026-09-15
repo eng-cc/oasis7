@@ -65,6 +65,8 @@ mod main_token_submit_api;
 mod module_release_attestation_submit_api;
 #[path = "oasis7_chain_runtime/node_keypair_config.rs"]
 mod node_keypair_config;
+#[path = "oasis7_chain_runtime/node_runtime_policy.rs"]
+mod node_runtime_policy;
 #[path = "oasis7_chain_runtime/p2p_status.rs"]
 mod p2p_status;
 #[path = "oasis7_chain_runtime/publication_lifecycle.rs"]
@@ -117,6 +119,9 @@ use execution_role::{node_role_materializes_execution_state, node_role_requires_
 use feedback_submit_api::{
     ChainFeedbackSubmitResponse, FeedbackSubmitSigner, build_feedback_create_request,
     extract_http_json_body, parse_feedback_submit_request, write_feedback_submit_error,
+};
+use node_runtime_policy::{
+    node_role_materializes_execution_state, node_role_requires_execution_commit,
 };
 use p2p_status::{
     applied_runtime_user_mode_label, build_live_node_network_policy_recommendation,
