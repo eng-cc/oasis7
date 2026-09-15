@@ -25,6 +25,7 @@ SLICE_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{
 TERMINAL_DISPOSITIONS = {"addressed", "rejected_with_evidence", "non_actionable"}
 EVIDENCE_KINDS = {"repository_verification"}
 VERIFICATION_STATUSES = {"passed", "not_applicable"}
+TRIAGE_CLASSIFICATIONS = {"blocking", "nonblocking"}
 
 
 class ContractError(ValueError):
@@ -41,6 +42,20 @@ def sha256_bytes(value: bytes) -> str:
 
 def canonical_digest(value: object) -> str:
     return sha256_bytes(canonical_bytes(value))
+
+
+def validate_finding_triage(finding: object, role: str) -> str:
+    if not isinstance(finding, dict):
+        raise ContractError(f"review finding is not an object for role {role}")
+    triage = finding.get("triage")
+    if not isinstance(triage, dict) or set(triage) != {"classification", "basis"}:
+        raise ContractError(f"review finding triage is missing or invalid for role {role}")
+    classification = triage.get("classification")
+    if classification not in TRIAGE_CLASSIFICATIONS:
+        raise ContractError(f"review finding triage classification is invalid for role {role}")
+    if not isinstance(triage.get("basis"), str) or not triage["basis"].strip():
+        raise ContractError(f"review finding triage basis is missing for role {role}")
+    return classification
 
 
 def load_json(path: Path, label: str) -> object:
@@ -197,6 +212,8 @@ def validate_artifacts(root: Path, ledger_path: Path, rows: list[dict[str, objec
         if disposition == "findings":
             if any(not isinstance(finding, dict) for finding in findings):
                 raise ContractError(f"findings must be typed JSON objects for role {role}")
+            for finding in findings:
+                validate_finding_triage(finding, role)
             finding_roles.append({"role": role, "slice_id": slice_id, "findings": findings, "artifact": artifact})
         by_identity[identity] = {"row": row, "artifact": artifact, "epoch": artifact_epoch}
     if len(epochs) != 1:
@@ -234,8 +251,12 @@ def validate_entry(root: Path, entry: object, finding: dict[str, object], expect
     finding_digest = canonical_digest(finding)
     if entry.get("finding_digest") != finding_digest:
         raise ContractError(f"resolution finding digest mismatch for role {role}")
-    if entry.get("disposition") not in TERMINAL_DISPOSITIONS:
+    disposition = entry.get("disposition")
+    if disposition not in TERMINAL_DISPOSITIONS:
         raise ContractError(f"resolution disposition is invalid for role {role}")
+    classification = validate_finding_triage(finding, role)
+    if classification == "blocking" and disposition == "non_actionable":
+        raise ContractError(f"blocking finding cannot use non_actionable disposition for role {role}")
     if evidence_kind not in EVIDENCE_KINDS:
         raise ContractError(f"resolution evidence kind is invalid for role {role}")
     evidence_ref = require_string(evidence_ref, f"resolution evidence reference for {role}")

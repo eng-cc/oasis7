@@ -22,6 +22,15 @@ DELIVERY_MODES = {"minimal_head_bound_task_packet", "full_history_escalation"}
 ROLE_ACTIVATIONS = {"message_assigned_adapter_inactive", "named_role_adapter_backed"}
 INCREMENTAL_CONTEXT_SCHEMA = "oasis7-review-context/v1"
 SHA_RE = re.compile(r"[0-9a-f]{64}\Z")
+INCREMENTAL_REVIEW_SCOPES = {"full", "scoped"}
+INCREMENTAL_REVIEW_MODES = {"full_review", "impact_confirmation"}
+INCREMENTAL_ESCALATION_REASONS = {
+    "unknown_impact", "new_required_role", "authority_drift", "policy_drift",
+    "uncovered_finding", "invalid_prior_evidence",
+}
+INCREMENTAL_OBLIGATION_FIELDS = {
+    "mode", "prior_head_oid", "current_head_oid", "delta_paths_digest", "scope_digest",
+}
 
 
 class PacketError(RuntimeError):
@@ -257,7 +266,9 @@ def validate_collected_ledger(root: Path, batch: dict[str, object], ledger_path:
 
 
 def validate_incremental_context(root: Path, context: dict[str, object], task_uid: str,
-                                 current_head: str) -> None:
+                                 current_head: str, packet_role: str | None = None,
+                                 required_roles: list[str] | None = None,
+                                 enforce_semantics: bool = True) -> None:
     if context.get("schema") != INCREMENTAL_CONTEXT_SCHEMA or context.get("authority") != "context_only":
         fail("review context is not advisory oasis7-review-context/v1")
     if context.get("task_uid") != task_uid or context.get("current_head_oid") != current_head:
@@ -386,8 +397,97 @@ def validate_incremental_context(root: Path, context: dict[str, object], task_ui
     if context.get("delta_patch_digest") != expected_patch_digest:
         fail("review context patch digest does not match the prior-head to current-head diff")
 
+    semantic_fields = {
+        "review_scope", "escalation_reasons", "role_review_modes",
+        "role_review_modes_digest", "scope_digest", "role_review_obligations",
+    }
+    present_semantic_fields = semantic_fields.intersection(context)
+    if not enforce_semantics or not present_semantic_fields:
+        # Contexts produced before impact-scoped review was introduced remain
+        # valid advisory inputs.  New contexts must be complete as a unit.
+        return
+    if present_semantic_fields != semantic_fields:
+        missing = sorted(semantic_fields - present_semantic_fields)
+        fail(f"review context incremental scope schema is incomplete; missing: {', '.join(missing)}")
 
-def validate_packet(root: Path, packet: dict[str, object]) -> None:
+    review_scope = context.get("review_scope")
+    if review_scope not in INCREMENTAL_REVIEW_SCOPES:
+        fail("review context review_scope is invalid")
+    escalation_reasons = context.get("escalation_reasons")
+    if not isinstance(escalation_reasons, list) or any(
+        not isinstance(reason, str) or not reason.strip() for reason in escalation_reasons
+    ) or len(set(escalation_reasons)) != len(escalation_reasons):
+        fail("review context escalation_reasons are invalid")
+    if any(reason not in INCREMENTAL_ESCALATION_REASONS for reason in escalation_reasons):
+        fail("review context escalation_reasons contain an unknown reason")
+
+    role_modes = context.get("role_review_modes")
+    if not isinstance(role_modes, dict) or not role_modes or any(
+        not isinstance(role, str) or not role or mode not in INCREMENTAL_REVIEW_MODES
+        for role, mode in role_modes.items()
+    ):
+        fail("review context role_review_modes are invalid")
+    mode_roles = set(role_modes)
+    if required_roles is not None:
+        if any(not isinstance(role, str) for role in required_roles):
+            fail("review context required roles are invalid")
+        if mode_roles != set(required_roles):
+            fail("review context role_review_modes do not cover the required roles")
+    if packet_role is not None and packet_role not in mode_roles:
+        fail("review context has no role_review_mode for the current packet role")
+    if review_scope == "full":
+        if any(mode == "impact_confirmation" for mode in role_modes.values()):
+            fail("review context full scope cannot contain impact_confirmation")
+        if not escalation_reasons:
+            fail("review context full scope requires an escalation reason")
+    elif not any(mode == "full_review" for mode in role_modes.values()):
+        fail("review context scoped review requires a full_review role")
+    if review_scope == "scoped" and "unknown_impact" in escalation_reasons:
+        fail("review context scoped review cannot use unknown_impact escalation")
+
+    expected_modes_digest = hashlib.sha256(json.dumps(
+        role_modes, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")).hexdigest()
+    if context.get("role_review_modes_digest") != expected_modes_digest:
+        fail("review context role_review_modes_digest is invalid")
+    expected_scope_digest = hashlib.sha256(json.dumps({
+        "prior_head_oid": prior_head,
+        "current_head_oid": current_head,
+        "delta_paths_digest": context.get("delta_paths_digest"),
+        "role_review_modes_digest": expected_modes_digest,
+    }, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    scope_digest = context.get("scope_digest")
+    if not isinstance(scope_digest, str) or not SHA_RE.fullmatch(scope_digest):
+        fail("review context scope_digest is invalid")
+    if scope_digest != expected_scope_digest:
+        fail("review context scope_digest does not match its bound scope")
+
+    obligations = context.get("role_review_obligations")
+    if not isinstance(obligations, dict) or set(obligations) != mode_roles:
+        fail("review context role_review_obligations do not match role_review_modes")
+    for role, obligation in obligations.items():
+        if not isinstance(obligation, dict) or set(obligation) != INCREMENTAL_OBLIGATION_FIELDS:
+            fail(f"review context role obligation schema is invalid for role {role}")
+        if obligation.get("mode") != role_modes[role]:
+            fail(f"review context role obligation mode does not match role mode for {role}")
+        if obligation.get("prior_head_oid") != prior_head:
+            fail(f"review context role obligation prior head does not match for {role}")
+        if obligation.get("current_head_oid") != current_head:
+            fail(f"review context role obligation current head does not match for {role}")
+        if obligation.get("delta_paths_digest") != context.get("delta_paths_digest"):
+            fail(f"review context role obligation delta digest does not match for {role}")
+        if obligation.get("scope_digest") != scope_digest:
+            fail(f"review context role obligation scope digest does not match for {role}")
+    if packet_role is not None:
+        packet_obligation = obligations.get(packet_role)
+        if not isinstance(packet_obligation, dict):
+            fail("review context has no obligation for the current packet role")
+        if packet_obligation.get("mode") != role_modes[packet_role]:
+            fail("review context current packet role obligation does not match its mode")
+
+
+def validate_packet(root: Path, packet: dict[str, object],
+                    enforce_incremental_semantics: bool = True) -> None:
     if packet.get("schema") != SCHEMA:
         fail(f"unsupported packet schema: {packet.get('schema')}")
     identity = packet.get("identity")
@@ -456,7 +556,10 @@ def validate_packet(root: Path, packet: dict[str, object]) -> None:
     if review_context is not None:
         if not isinstance(review_context, dict):
             fail("packet review_context must be an object")
-        validate_incremental_context(root, review_context, task_uid, str(identity["head"]))
+        validate_incremental_context(
+            root, review_context, task_uid, str(identity["head"]), str(slice_contract["role"]),
+            enforce_semantics=enforce_incremental_semantics,
+        )
     if packet.get("packet_digest") != canonical_digest(packet):
         fail("packet digest mismatch")
 
@@ -487,6 +590,7 @@ def review_admission(root: Path, packet_path: Path, plan_path: Path,
     slice_contract = packet["slice"]
     assert isinstance(identity, dict) and isinstance(slice_contract, dict)
     task_uid = str(identity["task_uid"])
+    packet_role = str(slice_contract["role"])
 
     plan = load_object(plan_path, "review plan")
     plan_schema = plan.get("schema")
@@ -526,7 +630,9 @@ def review_admission(root: Path, packet_path: Path, plan_path: Path,
     else:
         if not isinstance(plan_context, dict) or packet_context != plan_context:
             fail("packet review context does not match its review plan")
-        validate_incremental_context(root, plan_context, task_uid, str(identity["head"]))
+        validate_incremental_context(
+            root, plan_context, task_uid, str(identity["head"]), str(slice_contract["role"])
+        )
 
     canonical_packet_dir = (root / ".pm" / "scratch" / task_uid / "slice-packets").resolve()
     if packet_path.parent != canonical_packet_dir:
@@ -564,6 +670,10 @@ def review_admission(root: Path, packet_path: Path, plan_path: Path,
     roles = plan.get("roles")
     if not isinstance(expected, list) or not isinstance(refs, list) or not isinstance(roles, list):
         fail("review plan is missing roles, expected_slices, or packet_refs")
+    if isinstance(plan_context, dict):
+        validate_incremental_context(
+            root, plan_context, task_uid, str(identity["head"]), packet_role, [str(role) for role in roles]
+        )
     if any(not isinstance(item, dict) for item in expected + refs):
         fail("review plan slice and packet references must be objects")
     canonical_expected = sorted(expected, key=lambda item: (str(item.get("role")), str(item.get("slice_id"))))
@@ -576,7 +686,6 @@ def review_admission(root: Path, packet_path: Path, plan_path: Path,
     if len(ref_identities) != len(expected_identities) or set(ref_identities) != expected_identities:
         fail("review plan packet refs do not cover the complete expected slice set")
 
-    packet_role = str(slice_contract["role"])
     packet_slice = str(slice_contract["slice_id"])
     if plan.get("task_uid") != task_uid:
         fail("review plan task UID does not match packet")
@@ -720,7 +829,9 @@ def main() -> int:
         if candidate_context is not None:
             if not isinstance(candidate_context, dict):
                 fail("review plan incremental context must be an object")
-            validate_incremental_context(root, candidate_context, args.task_uid, str(facts["head"]))
+            validate_incremental_context(
+                root, candidate_context, args.task_uid, str(facts["head"]), enforce_semantics=False
+            )
             review_context = candidate_context
     packet: dict[str, object] = {
         "schema": SCHEMA,
@@ -758,7 +869,7 @@ def main() -> int:
     if loop_admission['status'] != 'legacy':
         packet['loop_binding'] = task['loop_binding']
     packet["packet_digest"] = canonical_digest(packet)
-    validate_packet(root, packet)
+    validate_packet(root, packet, enforce_incremental_semantics=False)
     packet_dir = (root / f".pm/scratch/{args.task_uid}/slice-packets").resolve()
     path = Path(args.out) if args.out else packet_dir / f"{args.slice_id}.json"
     if not path.is_absolute():
