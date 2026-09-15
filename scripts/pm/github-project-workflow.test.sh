@@ -304,6 +304,52 @@ case "$*" in
     if [[ "$*" == *"rateLimit"* ]]; then printf '{"data":{"rateLimit":{"remaining":5000,"resetAt":"2099-01-01T00:00:00Z"}}}\n'; exit 0; fi
     if [[ "${GH_FAKE_METADATA_DRIFT:-0}" == "1" ]]; then
       printf '{"data":{"nodes":[{"id":"MAPPING_ITEM_ID","project":{"id":"PROJECT_ID","number":1,"owner":{"login":"eng-cc"}},"content":{"title":"[PM] authoritative changed title","body":"task_uid: task_33333333333333333333333333333333\\nAcceptance:\\n- authoritative acceptance\\n","number":303,"url":"https://github.com/eng-cc/oasis7/issues/303"},"fieldValues":{"pageInfo":{"hasNextPage":false},"nodes":[{"name":"In Progress","field":{"name":"Status"}},{"text":"task_33333333333333333333333333333333","field":{"name":"Task UID"}},{"name":"tpm","field":{"name":"Owner Role"}},{"name":"engineering","field":{"name":"Module"}},{"name":"committed","field":{"name":"PM Status"}},{"name":"execution","field":{"name":"Workflow Phase"}},{"name":"P2","field":{"name":"Priority"}},{"text":"/tmp/mapping-worktree","field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]}}]}}\n'
+    elif [[ "${GH_FAKE_TRACE_DRIFT:-0}" == "1" ]]; then
+      python3 - <<'PY'
+import json
+uid = "task_33333333333333333333333333333333"
+body = """<!-- oasis7-pm-task -->
+task_uid: task_33333333333333333333333333333333
+
+GitHub-backed oasis7 PM task.
+
+Task metadata:
+- owner_role: `tpm`
+- module: `engineering`
+- status: `committed`
+- workflow_phase: `execution`
+- priority: `P2`
+- worktree_hint: `/tmp/mapping-worktree`
+- completion_mode: `non_pr_task`
+- non_pr_completion_evidence_b64: `bGl2ZSBldmlkZW5jZQ`
+- non_pr_completion_evidence_sha256: `98694058bf71ded2899ac6011b78f767907a9baea31a618ec1dc66facca357d0`
+
+Source refs:
+- `source-live`
+
+Doc refs:
+- `doc/live.md`
+
+Related PRD:
+- `doc/live.prd.md`
+
+Acceptance:
+- authoritative acceptance
+"""
+fields = [
+    {"name": "In Progress", "field": {"name": "Status"}},
+    {"text": uid, "field": {"name": "Task UID"}},
+    {"name": "tpm", "field": {"name": "Owner Role"}},
+    {"name": "engineering", "field": {"name": "Module"}},
+    {"name": "committed", "field": {"name": "PM Status"}},
+    {"name": "execution", "field": {"name": "Workflow Phase"}},
+    {"name": "P2", "field": {"name": "Priority"}},
+    {"text": "/tmp/mapping-worktree", "field": {"name": "Canonical Worktree"}},
+    {"name": "n/a", "field": {"name": "Test Tier Required"}},
+]
+node = {"id": "MAPPING_ITEM_ID", "project": {"id": "PROJECT_ID", "number": 1, "owner": {"login": "eng-cc"}}, "content": {"title": "[PM] mapping only active task", "body": body, "number": 303, "url": "https://github.com/eng-cc/oasis7/issues/303"}, "fieldValues": {"pageInfo": {"hasNextPage": False}, "nodes": fields}}
+print(json.dumps({"data": {"nodes": [node]}}))
+PY
     elif [[ "${GH_FAKE_MAPPING_DRIFT:-0}" == "1" ]]; then
       printf '{"data":{"nodes":[{"id":"MAPPING_ITEM_ID","project":{"id":"PROJECT_ID","number":1,"owner":{"login":"eng-cc"}},"content":{"body":"task_uid: task_33333333333333333333333333333333","number":303,"url":"https://github.com/eng-cc/oasis7/issues/303"},"fieldValues":{"pageInfo":{"hasNextPage":false},"nodes":[{"name":"In Progress","field":{"name":"Status"}},{"text":"task_33333333333333333333333333333333","field":{"name":"Task UID"}},{"name":"tpm","field":{"name":"Owner Role"}},{"name":"engineering","field":{"name":"Module"}},{"name":"blocked","field":{"name":"PM Status"}},{"name":"blocked","field":{"name":"Workflow Phase"}},{"name":"P2","field":{"name":"Priority"}},{"text":"/tmp/mapping-worktree","field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]}}]}}\n'
     else
@@ -350,6 +396,50 @@ import json, pathlib, sys
 payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
 assert any("cached title drift" in item for item in payload["errors"]), payload
 assert any("cached acceptance drift" in item for item in payload["errors"]), payload
+PY
+
+# Optional Project fields cannot clear Issue-authoritative traceability. When
+# the live Issue carries those fields, selected-task audit must detect every
+# authoritative mismatch instead of treating the Project projection as a
+# substitute.
+python3 - "$MAPPING_ONLY/.pm/github-project-sync/tasks.json" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+record = payload["tasks"]["task_33333333333333333333333333333333"]
+record.update({
+    "doc_refs": ["doc/cached.md"],
+    "related_prd": ["doc/cached.prd.md"],
+    "completion_mode": "non_pr_task",
+    "non_pr_completion_evidence_sha256": "a" * 64,
+    "acceptance": ["authoritative acceptance"],
+})
+path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+TRACE_DRIFT_JSON="$TMPDIR/traceability-drift.json"
+set +e
+GH_FAKE_TRACE_DRIFT=1 python3 "$TMPDIR/github-project-workflow.py" "$MAPPING_ONLY" \
+  --repo eng-cc/oasis7 \
+  --project-owner eng-cc \
+  --project-number 1 \
+  --mapping "$MAPPING_ONLY/.pm/github-project-sync/tasks.json" \
+  --json audit --task-uid task_33333333333333333333333333333333 > "$TRACE_DRIFT_JSON"
+TRACE_DRIFT_EXIT=$?
+set -e
+[[ "$TRACE_DRIFT_EXIT" == "1" ]]
+python3 - "$TRACE_DRIFT_JSON" <<'PY'
+import json, pathlib, sys
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
+assert payload["status"] == "failed", payload
+for marker in ("doc_refs", "related_prd", "completion_mode", "non_pr_completion_evidence_sha256"):
+    assert any(marker in item for item in payload["errors"]), (marker, payload)
+PY
+python3 - "$MAPPING_ONLY/.pm/github-project-sync/tasks.json" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+payload["tasks"]["task_33333333333333333333333333333333"]["acceptance"] = []
+path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 PY
 
 TASK_AUDIT_JSON="$TMPDIR/task-audit.json"
