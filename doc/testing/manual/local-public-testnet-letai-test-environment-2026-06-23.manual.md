@@ -404,6 +404,25 @@ export NO_PROXY="$no_proxy"
    ```
 
    后续命令必须继续使用已显式赋值的 `LETAI_TOKEN_FILE`，避免把 platform key 当作 inference token。
+
+   如果本轮已经有由同一 W3 provisioning/topup 流程产生的权威 project mapping，必须把它
+   作为显式输入传给规范化 helper；不要再从另一个本地 token 文件猜测 project：
+
+   ```bash
+   export LETAI_AUTHORITATIVE_MAPPING_FILE="$RUN_DIR/authoritative-project-mapping.env"
+   rtk ./scripts/ensure-letai-local-token-config.sh \
+     --config "$LETAI_TOKEN_SOURCE_FILE" \
+     --authoritative-mapping "$LETAI_AUTHORITATIVE_MAPPING_FILE" \
+     --out "$LETAI_TOKEN_FILE" \
+     --model "$MODEL"
+   ```
+
+   mapping 文件必须显式包含 `token_key`/`api_key` 和 `platform_project_id`，可选包含
+   `platform_user_id`。helper 会在任何平台管理请求前比较所选 project token 与 mapping；
+   不一致时以 `authoritative project token mapping mismatch` 失败关闭，不输出 token，也不应
+   继续 topup 或 completion。匹配时只输出字段存在性、匹配结果和短 fingerprint，生成文件仍
+   必须留在私有 `0600` run 目录。该 mapping 是本轮 project 的唯一 authority；后续 wrapper、
+   native QA 和 provider retry 都必须继续使用同一个 `LETAI_TOKEN_FILE`。
 2. 运行 `rtk ./scripts/with-letai-llm-config.sh --config "$LETAI_TOKEN_FILE" --print-config`，只看 host、模型和字段存在性；不要输出 key。
 3. 在同一个 wrapper 环境内请求 `/v1/models`，只输出当前 model id；`200` 只证明可见性，不证明该模型能预扣费或完成 tool-call。
 4. Builtin Hosted W3 使用 `rtk ./scripts/check-active-llm-provider.sh --pretty` 验证 Responses 文本和 tool-call；local bridge 使用 `rtk ./scripts/check-letai-chat-completions.sh` 验证 chat-completions。两条协议的成功不能互相替代。
