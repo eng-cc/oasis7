@@ -1004,8 +1004,12 @@ fn openai_client_retries_single_concurrency_limit_decode_failure() {
 fn stream_transport_diagnostic_is_structured_and_redacted() {
     let metadata = StreamTransportMetadata {
         http_status: Some(200),
+        response_version: Some("HTTP/1.1".to_string()),
         content_type: Some("text/event-stream; charset=utf-8".to_string()),
         content_encoding: None,
+        transfer_encoding: Some("chunked".to_string()),
+        content_length: None,
+        connection: Some("keep-alive".to_string()),
         frame_count: 7,
         decoded_frame_count: 6,
         elapsed_ms: 21_158,
@@ -1016,8 +1020,12 @@ fn stream_transport_diagnostic_is_structured_and_redacted() {
     let rendered = format_stream_transport_diagnostics(&metadata);
 
     assert!(rendered.contains("http_status=200"));
+    assert!(rendered.contains("response_version=HTTP/1.1"));
     assert!(rendered.contains("content_type=text/event-stream; charset=utf-8"));
     assert!(rendered.contains("content_encoding=absent"));
+    assert!(rendered.contains("transfer_encoding=chunked"));
+    assert!(rendered.contains("content_length=absent"));
+    assert!(rendered.contains("connection=keep-alive"));
     assert!(rendered.contains("frames=7"));
     assert!(rendered.contains("decoded_frames=6"));
     assert!(rendered.contains("elapsed_ms=21158"));
@@ -1087,12 +1095,31 @@ fn instrumented_stream_transport_error_reports_response_metadata() {
         LlmClientError::Http { message } => {
             assert!(message.contains("http_status=200"), "unexpected error: {message}");
             assert!(
+                message.contains("response_version=HTTP/1.1"),
+                "unexpected error: {message}"
+            );
+            assert!(
                 message.contains("content_type=text/event-stream"),
+                "unexpected error: {message}"
+            );
+            assert!(
+                message.contains("content_length="),
                 "unexpected error: {message}"
             );
             assert!(message.contains("frames=1"), "unexpected error: {message}");
             assert!(message.contains("decoded_frames=1"), "unexpected error: {message}");
-            assert!(message.contains("cause=Transport error:"), "unexpected error: {message}");
+            assert!(
+                message.contains("cause=failure_kind=transport reqwest_kind=decode"),
+                "unexpected error: {message}"
+            );
+            assert!(
+                message.contains("source_chain=request or response body error"),
+                "unexpected error: {message}"
+            );
+            assert!(
+                message.contains("end of file before message length reached"),
+                "unexpected error: {message}"
+            );
         }
         other => panic!("unexpected error: {other:?}"),
     }

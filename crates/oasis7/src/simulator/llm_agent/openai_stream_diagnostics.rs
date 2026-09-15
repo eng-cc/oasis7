@@ -1,6 +1,6 @@
 use async_openai::error::OpenAIError;
 use async_openai::types::responses::{CreateResponse, ResponseStreamEvent};
-use eventsource_stream::EventStream;
+use eventsource_stream::{EventStream, EventStreamError};
 use futures_util::StreamExt;
 use std::error::Error;
 use std::fmt;
@@ -28,8 +28,12 @@ impl fmt::Debug for OpenAiChatCompletionClient {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StreamTransportMetadata {
     pub(super) http_status: Option<u16>,
+    pub(super) response_version: Option<String>,
     pub(super) content_type: Option<String>,
     pub(super) content_encoding: Option<String>,
+    pub(super) transfer_encoding: Option<String>,
+    pub(super) content_length: Option<String>,
+    pub(super) connection: Option<String>,
     pub(super) frame_count: usize,
     pub(super) decoded_frame_count: usize,
     pub(super) elapsed_ms: u64,
@@ -58,12 +62,16 @@ fn redact_transport_cause(raw: &str) -> String {
 
 pub(super) fn format_stream_transport_diagnostics(metadata: &StreamTransportMetadata) -> String {
     format!(
-        "responses stream transport diagnostics: http_status={} content_type={} content_encoding={} frames={} decoded_frames={} elapsed_ms={} cause={}",
+        "responses stream transport diagnostics: http_status={} response_version={} content_type={} content_encoding={} transfer_encoding={} content_length={} connection={} frames={} decoded_frames={} elapsed_ms={} cause={}",
         metadata
             .http_status
             .map_or_else(|| "absent".to_string(), |status| status.to_string()),
+        metadata.response_version.as_deref().unwrap_or("absent"),
         metadata.content_type.as_deref().unwrap_or("absent"),
         metadata.content_encoding.as_deref().unwrap_or("absent"),
+        metadata.transfer_encoding.as_deref().unwrap_or("absent"),
+        metadata.content_length.as_deref().unwrap_or("absent"),
+        metadata.connection.as_deref().unwrap_or("absent"),
         metadata.frame_count,
         metadata.decoded_frame_count,
         metadata.elapsed_ms,
@@ -73,6 +81,69 @@ pub(super) fn format_stream_transport_diagnostics(metadata: &StreamTransportMeta
 
 fn stream_transport_error(metadata: StreamTransportMetadata) -> OpenAiRequestError {
     OpenAiRequestError::StreamTransport(metadata)
+}
+
+fn bounded_response_header(response: &reqwest::Response, name: &str) -> Option<String> {
+    response
+        .headers()
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| summarize_trace_text(value, 96))
+}
+
+fn response_content_length(response: &reqwest::Response) -> Option<String> {
+    bounded_response_header(response, "content-length").map(|value| {
+        value
+            .parse::<u64>()
+            .map_or_else(|_| "invalid".to_string(), |length| length.to_string())
+    })
+}
+
+fn reqwest_transport_kind(error: &std::io::Error) -> &'static str {
+    let Some(source) = error.get_ref() else {
+        return "transport";
+    };
+    let Some(error) = source.downcast_ref::<reqwest::Error>() else {
+        return "transport";
+    };
+    if error.is_timeout() {
+        "timeout"
+    } else if error.is_decode() {
+        "decode"
+    } else if error.is_body() {
+        "body"
+    } else if error.is_request() {
+        "request"
+    } else {
+        "transport"
+    }
+}
+
+fn format_error_source_chain(source: Option<&(dyn Error + 'static)>) -> String {
+    let mut parts = Vec::new();
+    let mut current = source;
+    while let Some(error) = current {
+        parts.push(error.to_string());
+        current = error.source();
+    }
+    parts.join(" -> ")
+}
+
+fn format_event_stream_error(error: &EventStreamError<std::io::Error>) -> String {
+    let (failure_kind, source_chain) = match error {
+        EventStreamError::Transport(source) => (
+            format!("transport reqwest_kind={}", reqwest_transport_kind(source)),
+            format_error_source_chain(source.source()),
+        ),
+        EventStreamError::Utf8(_) => ("utf8".to_string(), String::new()),
+        EventStreamError::Parser(_) => ("parser".to_string(), String::new()),
+    };
+    let mut summary = format!("failure_kind={failure_kind} {error}");
+    if !source_chain.is_empty() {
+        summary.push_str(" source_chain=");
+        summary.push_str(source_chain.as_str());
+    }
+    summary
 }
 
 impl OpenAiChatCompletionClient {
@@ -185,8 +256,12 @@ impl OpenAiChatCompletionClient {
             .map_err(|error| {
                 stream_transport_error(StreamTransportMetadata {
                     http_status: None,
+                    response_version: None,
                     content_type: None,
                     content_encoding: None,
+                    transfer_encoding: None,
+                    content_length: None,
+                    connection: None,
                     frame_count: 0,
                     decoded_frame_count: 0,
                     elapsed_ms: started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
@@ -196,6 +271,7 @@ impl OpenAiChatCompletionClient {
 
         let mut metadata = StreamTransportMetadata {
             http_status: Some(response.status().as_u16()),
+            response_version: Some(format!("{:?}", response.version())),
             content_type: response
                 .headers()
                 .get(reqwest::header::CONTENT_TYPE)
@@ -206,6 +282,9 @@ impl OpenAiChatCompletionClient {
                 .get(reqwest::header::CONTENT_ENCODING)
                 .and_then(|value| value.to_str().ok())
                 .map(str::to_string),
+            transfer_encoding: bounded_response_header(&response, "transfer-encoding"),
+            content_length: response_content_length(&response),
+            connection: bounded_response_header(&response, "connection"),
             frame_count: 0,
             decoded_frame_count: 0,
             elapsed_ms: 0,
@@ -223,13 +302,13 @@ impl OpenAiChatCompletionClient {
         );
         let mut events = Vec::new();
         while let Some(event) = stream.next().await {
-            metadata.frame_count += 1;
             let event = event.map_err(|error| {
                 metadata.elapsed_ms =
                     started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
-                metadata.nested_transport_cause = error.to_string();
+                metadata.nested_transport_cause = format_event_stream_error(&error);
                 stream_transport_error(metadata.clone())
             })?;
+            metadata.frame_count += 1;
             if event.data == "[DONE]" {
                 continue;
             }
