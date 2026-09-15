@@ -11,6 +11,7 @@
 
 本文定义产品或专业要求、系统设计义务、GitHub Task 与实际证据之间的最小闭环。它复用现有 `oasis7.loop-change/v1` 协调记录，不创建第二台账、第四 loop、新 Project taxonomy 或新的 Product PRD-ID。
 
+<a id="traceability-goals"></a>
 ## 1. 问题与目标
 
 当前仓库分别具备产品追踪表、系统设计追踪写作规范、GitHub-backed PM 真值和可选 W2 traceability 校验，但普通任务没有统一、强制且可往返保存的跨层关系。结果是各局部门禁可以同时为绿色，而产品要求、系统设计条款、Task UID 和实际 evidence 仍可能无法互相定位。
@@ -31,6 +32,12 @@
 - 不在本变更中迁移全部历史文档、Issue 或旧 traceability record。
 - 不改变现有 workflow 状态、completion mode、loop、角色权限或 PR/终态门禁。
 - 不以结构检查代替产品正确性、系统可实现性、运行行为或 QA 放行判断。
+
+### 2.1 需求承接与分配表
+
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| [system-design writing contract](system-design-writing-standard.design.md#2-上游约束与相关角色) | 跨层记录必须把上游要求、系统设计义务和验证入口分别绑定，且保留各自 authority 边界。 | [traceability goals](#traceability-goals) | `repository_health_engineer`; product/system/QA review roles | 不证明产品语义、运行行为或发布就绪。 |
 
 ## 3. Authority 与冲突边界
 
@@ -178,6 +185,12 @@ Checker 必须输出稳定、可定位的诊断，至少区分：
 6. 由 repository health、producer/system 与 QA 按冻结 HEAD 审查。
 
 ## 11. 验收与验证
+
+### 11.1 验证映射表
+
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [system-design writing contract](system-design-writing-standard.design.md#2-上游约束与相关角色) | [traceability goals](#traceability-goals) | 验证 changed-scope 只准入可解析关系，并对缺失、歧义、N/A 不完整与目标侧专有变更 fail closed。 | [system-design traceability regression](../../../scripts/system-design-traceability-check.test.py) | GitHub task evidence and required CI | 不证明专业语义正确性或真实运行环境。 |
 
 ### test_tier_required
 

@@ -12,6 +12,7 @@ import importlib.util
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 
 
@@ -65,6 +66,7 @@ def load_checker():
     if spec is None or spec.loader is None:
         raise AssertionError("system-design-traceability: checker has no import loader")
     module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 
@@ -127,6 +129,35 @@ def scenario_valid_new_design() -> None:
         paths = module.changed_system_design_paths(root, base, head, False)
         assert [path.relative_to(root).as_posix() for path in paths] == [DESIGN], paths
         assert_no_errors(module, root / DESIGN)
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_committed_range_reads_trusted_head_content() -> None:
+    root, base, _head = make_repo(design_text=None)
+    try:
+        run_git(root, "checkout", "-qb", "source")
+        (root / DESIGN).write_text(DESIGN_HEADER, encoding="utf-8")
+        head = commit(root, "add source design")
+        run_git(root, "checkout", "-q", "main")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CHECKER),
+                "--repo-root",
+                str(root),
+                "--base",
+                base,
+                "--head",
+                head,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        output = result.stdout + result.stderr
+        assert result.returncode == 0, output
+        assert "checked 1 changed/new system designs" in output, output
     finally:
         shutil.rmtree(root)
 
@@ -265,6 +296,7 @@ def scenario_partial_or_malformed_range_is_rejected() -> None:
 def main() -> None:
     scenarios = (
         scenario_valid_new_design,
+        scenario_committed_range_reads_trusted_head_content,
         scenario_missing_demand_allocation,
         scenario_missing_validation_mapping,
         scenario_unresolved_upstream_fragment,

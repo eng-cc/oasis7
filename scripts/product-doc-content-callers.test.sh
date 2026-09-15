@@ -87,6 +87,8 @@ grep -Fq "CI requires explicit base/head OIDs" "$tmp_dir/no-event.out"
 
 grep -Fq -- '--head "$SOURCE_HEAD" --worktree' ./scripts/prepare-task-pr.sh
 grep -Fq './scripts/doc-governance-check.sh --full-corpus' ./scripts/prepare-task-pr.sh
+grep -Fq 'SYSTEM_DESIGN_TRACEABILITY_CHECKER=' ./scripts/prepare-task-pr.sh
+grep -Fq 'system-design-traceability-check.py' ./scripts/prepare-task-pr.sh
 
 sed -n '/^  full-regression:/,/^  full-escalation:/p' .github/workflows/rust.yml >"$tmp_dir/full-regression.yml"
 sed -n '/^  full-escalation:/,$p' .github/workflows/rust.yml >"$tmp_dir/full-escalation.yml"

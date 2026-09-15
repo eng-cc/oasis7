@@ -53,6 +53,10 @@ if args_file:
     Path(args_file).write_text("\n".join(sys.argv[1:]) + "\n", encoding="utf-8")
 print("product-doc-content: checked 0: reason=fixture")
 PY
+cat >"$FIXTURE/scripts/system-design-traceability-check.py" <<'PY'
+#!/usr/bin/env python3
+print("system-design-traceability: checked 0: reason=fixture")
+PY
 chmod +x "$FIXTURE/scripts/doc-governance-check.sh"
 
 cat >"$FIXTURE/doc/testing/prd.md" <<'DOC'
