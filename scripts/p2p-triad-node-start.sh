@@ -3,7 +3,14 @@ set -euo pipefail
 
 APP_ROOT="${APP_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 ENV_FILE="${ENV_FILE:-$APP_ROOT/config/node.env}"
-[[ -f "$ENV_FILE" ]] || { echo "missing env file: $ENV_FILE" >&2; exit 1; }
+require_regular_file() {
+  local path=$1 label=$2
+  [[ -e "$path" ]] || { echo "missing $label: $path" >&2; exit 1; }
+  [[ ! -L "$path" ]] || { echo "$label must be a regular non-symlink file: $path" >&2; exit 1; }
+  [[ -f "$path" ]] || { echo "$label must be a regular file: $path" >&2; exit 1; }
+}
+
+require_regular_file "$ENV_FILE" "env file"
 
 source "$ENV_FILE"
 
@@ -24,6 +31,29 @@ RELEASE_LINK="${RELEASE_LINK:-$APP_ROOT/current}"
 BIN="${BIN:-$RELEASE_LINK/bin/oasis7_chain_runtime}"
 [[ -x "$BIN" ]] || { echo "missing runtime binary: $BIN" >&2; exit 1; }
 
+network_tier_manifest_path="${NETWORK_TIER_MANIFEST_PATH:-}"
+genesis_validator_registry_path="${GENESIS_VALIDATOR_REGISTRY_PATH:-}"
+deployment_inventory_path="${DEPLOYMENT_INVENTORY_PATH:-}"
+if [[ -n "$deployment_inventory_path" ]]; then
+  require_regular_file "$deployment_inventory_path" "deployment inventory"
+fi
+if [[ -n "$network_tier_manifest_path" || -n "$genesis_validator_registry_path" ]]; then
+  [[ -n "$network_tier_manifest_path" ]] || {
+    echo "deployment inventory authority requires NETWORK_TIER_MANIFEST_PATH" >&2
+    exit 2
+  }
+  require_regular_file "$network_tier_manifest_path" "network-tier manifest"
+  [[ -n "$genesis_validator_registry_path" ]] || {
+    echo "public-testnet startup requires GENESIS_VALIDATOR_REGISTRY_PATH" >&2
+    exit 2
+  }
+  require_regular_file "$genesis_validator_registry_path" "genesis validator registry"
+  [[ -n "$deployment_inventory_path" ]] || {
+    echo "public-testnet startup requires DEPLOYMENT_INVENTORY_PATH" >&2
+    exit 2
+  }
+fi
+
 mkdir -p \
   "$APP_ROOT/logs" \
   "$APP_ROOT/data" \
@@ -43,7 +73,6 @@ IFS="," read -r -a peers <<< "${NODE_GOSSIP_PEERS_CSV:-}"
 IFS="," read -r -a replication_listens <<< "${REPLICATION_NETWORK_LISTEN_ADDRS_CSV:-}"
 IFS="," read -r -a replication_peers <<< "${REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV:-}"
 IFS="," read -r -a replication_remote_writers <<< "${REPLICATION_REMOTE_WRITERS_CSV:-}"
-network_tier_manifest_path="${NETWORK_TIER_MANIFEST_PATH:-}"
 
 if [[ -n "$network_tier_manifest_path" && "${ALLOW_NETWORK_TIER_REPLICATION_PEER_ENV_OVERRIDE:-0}" != "1" ]]; then
   replication_peers=()
@@ -188,7 +217,6 @@ if [[ -n "$network_tier_manifest_path" ]]; then
   cmd+=(--network-tier-manifest "$network_tier_manifest_path")
 fi
 
-genesis_validator_registry_path="${GENESIS_VALIDATOR_REGISTRY_PATH:-}"
 if [[ -n "$genesis_validator_registry_path" ]]; then
   cmd+=(--genesis-validator-registry "$genesis_validator_registry_path")
 elif [[ -z "$network_tier_manifest_path" || "${ALLOW_LEGACY_NODE_VALIDATORS_CSV:-0}" == "1" ]]; then
@@ -199,6 +227,10 @@ elif [[ -z "$network_tier_manifest_path" || "${ALLOW_LEGACY_NODE_VALIDATORS_CSV:
   for signer in "${legacy_validator_signers[@]-}"; do
     [[ -n "$signer" ]] && cmd+=(--node-validator-signer-public-key "$signer")
   done
+fi
+
+if [[ -n "$deployment_inventory_path" ]]; then
+  cmd+=(--deployment-inventory "$deployment_inventory_path")
 fi
 
 traffic_monitor_enable="${TRAFFIC_MONITOR_ENABLE:-0}"

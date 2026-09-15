@@ -104,6 +104,7 @@ pub(super) struct CliOptions {
     pub network_tier_manifest_path: Option<PathBuf>,
     pub loaded_network_tier_manifest: Option<LoadedNetworkTierManifest>,
     pub genesis_validator_registry_path: Option<PathBuf>,
+    pub deployment_inventory_path: Option<PathBuf>,
     pub config_path: String,
     pub runtime_root: Option<PathBuf>,
     pub execution_bridge_state_path: Option<PathBuf>,
@@ -167,6 +168,7 @@ impl Default for CliOptions {
             network_tier_manifest_path: None,
             loaded_network_tier_manifest: None,
             genesis_validator_registry_path: None,
+            deployment_inventory_path: None,
             config_path: DEFAULT_CONFIG_FILE.to_string(),
             runtime_root: None,
             execution_bridge_state_path: None,
@@ -398,6 +400,10 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             "--genesis-validator-registry" => {
                 let raw = parse_required_value(&mut iter, "--genesis-validator-registry")?;
                 options.genesis_validator_registry_path = Some(PathBuf::from(raw));
+            }
+            "--deployment-inventory" => {
+                let raw = parse_required_value(&mut iter, "--deployment-inventory")?;
+                options.deployment_inventory_path = Some(PathBuf::from(raw));
             }
             "--config" => options.config_path = parse_required_value(&mut iter, "--config")?,
             "--runtime-root" => {
@@ -990,6 +996,7 @@ Options:\n\
   --network-tier-manifest <path>    load formal network tier manifest json and bootstrap peer ref\n\
   --genesis-validator-registry <path>\n\
                                     initialize empty execution world validator registry from genesis manifest\n\
+  --deployment-inventory <path>     bind immutable deployment inventory to node-emitted status\n\
   --config <path>                   config file path for node keypair (default: {DEFAULT_CONFIG_FILE})\n\
   --runtime-root <path>             override chain runtime state root directory\n\
   --execution-bridge-state <path>   override execution bridge state file path\n\

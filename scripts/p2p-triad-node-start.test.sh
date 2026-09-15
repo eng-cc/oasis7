@@ -17,6 +17,7 @@ write_env() {
   local env_path=$1
   local manifest_path=${2:-}
   local adaptive_value=${3:-0}
+  local inventory_path=${4:-}
   cat >"$env_path" <<EOF
 STACK_ROOT=$TMP_DIR
 NODE_ID=test-node
@@ -42,17 +43,19 @@ STORAGE_ROOT=$TMP_DIR/data/storage
 REPLICATION_NETWORK_LISTEN_ADDRS_CSV=/ip4/127.0.0.1/tcp/19085
 REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV=/ip4/127.0.0.1/tcp/19086/p2p/12D3KooWLegacyPeer
 REPLICATION_REMOTE_WRITERS_CSV=
-TRAFFIC_MONITOR_ENABLE=0
+  TRAFFIC_MONITOR_ENABLE=0
 EOF
   if [[ -n "$manifest_path" ]]; then
     printf 'NETWORK_TIER_MANIFEST_PATH=%s\n' "$manifest_path" >>"$env_path"
+    printf 'GENESIS_VALIDATOR_REGISTRY_PATH=%s\n' "$TMP_DIR/config/registry.json" >>"$env_path"
+    printf 'DEPLOYMENT_INVENTORY_PATH=%s\n' "${inventory_path:-$TMP_DIR/config/deployment-inventory.json}" >>"$env_path"
   fi
 }
 
 write_env_without_adaptive() {
   local env_path=$1
   local manifest_path=${2:-}
-  write_env "$env_path" "$manifest_path" 0
+  write_env "$env_path" "$manifest_path" 0 "$TMP_DIR/config/deployment-inventory.json"
   python3 - "$env_path" <<'PY'
 from pathlib import Path
 import sys
@@ -69,10 +72,15 @@ PY
 
 manifest_path="$TMP_DIR/config/network-tier.json"
 printf '{}\n' >"$manifest_path"
+inventory_path="$TMP_DIR/config/deployment-inventory.json"
+printf '{}\n' >"$inventory_path"
+printf '{}\n' >"$TMP_DIR/config/registry.json"
 
-write_env "$TMP_DIR/manifest.env" "$manifest_path"
+write_env "$TMP_DIR/manifest.env" "$manifest_path" 0 "$inventory_path"
 manifest_output=$(APP_ROOT="$TMP_DIR" ENV_FILE="$TMP_DIR/manifest.env" OASIS7_NODE_START_DRY_RUN=1 "$ROOT_DIR/scripts/p2p-triad-node-start.sh")
 grep -q -- "--network-tier-manifest" <<<"$manifest_output"
+grep -q -- "--deployment-inventory" <<<"$manifest_output"
+grep -q -- "$inventory_path" <<<"$manifest_output"
 grep -q -- "--pos-no-adaptive-tick-scheduler" <<<"$manifest_output"
 if grep -q -- "--replication-network-peer" <<<"$manifest_output"; then
   echo "manifest-backed start must not pass REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV" >&2
@@ -83,6 +91,19 @@ write_env_without_adaptive "$TMP_DIR/manifest-default-adaptive.env" "$manifest_p
 manifest_default_adaptive_output=$(APP_ROOT="$TMP_DIR" ENV_FILE="$TMP_DIR/manifest-default-adaptive.env" OASIS7_NODE_START_DRY_RUN=1 "$ROOT_DIR/scripts/p2p-triad-node-start.sh")
 grep -q -- "--network-tier-manifest" <<<"$manifest_default_adaptive_output"
 grep -q -- "--pos-adaptive-tick-scheduler" <<<"$manifest_default_adaptive_output"
+
+write_env "$TMP_DIR/missing-inventory.env" "$manifest_path" 0 "$TMP_DIR/config/missing-inventory.json"
+if APP_ROOT="$TMP_DIR" ENV_FILE="$TMP_DIR/missing-inventory.env" OASIS7_NODE_START_DRY_RUN=1 "$ROOT_DIR/scripts/p2p-triad-node-start.sh" >/dev/null 2>&1; then
+  echo "manifest-backed start must reject a missing deployment inventory" >&2
+  exit 1
+fi
+
+ln -s "$inventory_path" "$TMP_DIR/config/symlink-inventory.json"
+write_env "$TMP_DIR/symlink-inventory.env" "$manifest_path" 0 "$TMP_DIR/config/symlink-inventory.json"
+if APP_ROOT="$TMP_DIR" ENV_FILE="$TMP_DIR/symlink-inventory.env" OASIS7_NODE_START_DRY_RUN=1 "$ROOT_DIR/scripts/p2p-triad-node-start.sh" >/dev/null 2>&1; then
+  echo "manifest-backed start must reject a symlinked deployment inventory" >&2
+  exit 1
+fi
 
 write_env "$TMP_DIR/legacy.env"
 legacy_output=$(APP_ROOT="$TMP_DIR" ENV_FILE="$TMP_DIR/legacy.env" OASIS7_NODE_START_DRY_RUN=1 "$ROOT_DIR/scripts/p2p-triad-node-start.sh")

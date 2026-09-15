@@ -12,8 +12,11 @@ the full chain-status endpoint.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
+import os
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -35,6 +38,15 @@ SERVICES = {
         "ports": frozenset({"6634", "6834"}),
     },
 }
+# The triad inventory is the code-owned authority for the validator-47
+# service/port target.  Keep the expected digest in the operator executable so
+# a copied or edited inventory can be rejected before readback is trusted.
+TRIAD_INVENTORY_RELATIVE = "scripts/public-testnet-validator-triad-inventory.v1.json"
+TRIAD_INVENTORY_FILE = "public-testnet-validator-triad-inventory.v1.json"
+TRIAD_RUNTIME_NODE_ROLE = "storage"
+TRIAD_P2P_NODE_ROLE = "full_storage"
+TRIAD_IDENTITY_KEY_FILE = "node-keypair.toml"
+TRIAD_IDENTITY_RECEIPT_FILE = "identity-receipt.json"
 READBACK_SCHEMA = "oasis7.human_direct_ssh_readback.v1"
 COMMAND_TIMEOUT_SECONDS = 5
 PORT_RE = re.compile(r":([0-9]{1,5})(?=\s|$)")
@@ -43,6 +55,16 @@ PORT_RE = re.compile(r":([0-9]{1,5})(?=\s|$)")
 def fail(message: str) -> NoReturn:
     print(f"error: service-readback: {message}", file=sys.stderr)
     raise SystemExit(2)
+
+
+def regular_file(path: Path, label: str) -> os.stat_result:
+    try:
+        metadata = os.lstat(path)
+    except OSError as error:
+        fail(f"{label} is unavailable: {error.__class__.__name__}")
+    if not stat.S_ISREG(metadata.st_mode):
+        fail(f"{label} must be a regular file")
+    return metadata
 
 
 def _physical_root_is_safe(root: str) -> None:
@@ -75,7 +97,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     expected = SERVICES[args.role]
     if args.service != expected["service"]:
         parser.error(f"--service does not match --role {args.role}")
-    _physical_root_is_safe(args.root)
+    # Resolve only after rejecting a caller-supplied symlink root.  This keeps
+    # the physical-root guard strict while allowing platform aliases such as
+    # macOS /var/folders to reach the same canonical directory.
+    raw_root = Path(args.root)
+    if raw_root.is_symlink():
+        parser.error("--root must not be a symlink")
+    physical_root = raw_root.resolve(strict=True)
+    _physical_root_is_safe(str(physical_root))
+    args.root = str(physical_root)
     return args
 
 
@@ -96,7 +126,128 @@ def run_read_only(command: list[str], label: str) -> str:
     return result.stdout
 
 
-def service_state(service: str) -> tuple[bool, bool]:
+def inventory_descriptor(root: str) -> dict[str, str]:
+    """Read the staged triad inventory when present and retain its digest."""
+    path = Path(root) / "config" / TRIAD_INVENTORY_FILE
+    regular_file(path, "triad inventory authority")
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        fail(f"triad inventory is malformed: {error.__class__.__name__}")
+    target = payload.get("nodes", {}).get("validator-47") if isinstance(payload, dict) else None
+    if not isinstance(target, dict):
+        fail("triad inventory validator-47 binding missing")
+    if (
+        target.get("node_id") != "triad-testnet-validator-47"
+        or target.get("service") != SERVICES["validator-47"]["service"]
+        or target.get("roles") != ["validator", "checkpoint_provider", "full_storage_provider"]
+        or target.get("ports") != ["6634", "6834"]
+    ):
+        fail("triad inventory validator-47 binding mismatch")
+    env_path = Path(root) / "config" / "node.env"
+    regular_file(env_path, "validator-47 node.env authority")
+    values: dict[str, str] = {}
+    try:
+        env_lines = env_path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as error:
+        fail(f"validator-47 node.env is unreadable: {error.__class__.__name__}")
+    for line_number, raw_line in enumerate(env_lines, 1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            fail(f"validator-47 node.env malformed line {line_number}")
+        key, value = line.split("=", 1)
+        if not key or key in values:
+            fail(f"validator-47 node.env duplicate or empty key at line {line_number}")
+        values[key] = value
+    expected_env = {
+        "NODE_ID": "triad-testnet-validator-47",
+        "NODE_ROLE": TRIAD_RUNTIME_NODE_ROLE,
+        "P2P_NODE_ROLE": TRIAD_P2P_NODE_ROLE,
+        "CHECKPOINT_PROVIDER": "1",
+        "FULL_STORAGE_PROVIDER": "1",
+        "IDENTITY_KEY_PATH": "config/node-keypair.toml",
+        "IDENTITY_RECEIPT_PATH": "config/identity-receipt.json",
+    }
+    if any(values.get(key) != expected for key, expected in expected_env.items()):
+        fail("validator-47 node.env runtime/provider role binding mismatch")
+    if values.get("DEPLOYMENT_INVENTORY_SHA256") != digest:
+        fail("validator-47 node.env inventory digest mismatch")
+    return {"ref": TRIAD_INVENTORY_RELATIVE, "sha256": digest}
+
+
+def identity_descriptor(root: str, inventory: dict[str, str]) -> dict[str, object]:
+    """Read the imported identity without exposing private key bytes."""
+    config_dir = Path(root) / "config"
+    key_path = config_dir / TRIAD_IDENTITY_KEY_FILE
+    receipt_path = config_dir / TRIAD_IDENTITY_RECEIPT_FILE
+    current = Path(config_dir.anchor or "/")
+    for component in config_dir.parts[1:]:
+        current /= component
+        if current.is_symlink():
+            fail("validator-47 config path contains a symlink component")
+    try:
+        config_metadata = os.lstat(config_dir)
+    except OSError as error:
+        fail(f"validator-47 config directory is unavailable: {error.__class__.__name__}")
+    if not stat.S_ISDIR(config_metadata.st_mode):
+        fail("validator-47 config directory is not a regular directory")
+    values: dict[str, object] = {}
+    for path, label in ((key_path, "identity key"), (receipt_path, "identity receipt")):
+        metadata = regular_file(path, f"validator-47 {label}")
+        if stat.S_IMODE(metadata.st_mode) != 0o600:
+            fail(f"validator-47 {label} must have mode 0600")
+        if (metadata.st_uid, metadata.st_gid) != (config_metadata.st_uid, config_metadata.st_gid):
+            fail(f"validator-47 {label} ownership does not match config directory")
+        values[label.replace(" ", "_")] = metadata
+    registry_path = config_dir / "public-testnet-governed-bootstrap-validator-registry-2026-06-06.json"
+    regular_file(registry_path, "validator-47 governed registry")
+    try:
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError) as error:
+        fail(f"validator-47 identity/registry readback failed: {error.__class__.__name__}")
+    if receipt.get("schema_version") != "oasis7.identity_provision.v1":
+        fail("validator-47 identity receipt schema mismatch")
+    if receipt.get("node_id") != "triad-testnet-validator-47":
+        fail("validator-47 identity receipt node mismatch")
+    if "private_key" in json.dumps(receipt, ensure_ascii=False).lower():
+        fail("validator-47 identity receipt contains private key material")
+    matches = [item for item in registry.get("validators", []) if item.get("node_id") == receipt.get("node_id")]
+    if len(matches) != 1 or matches[0].get("finality_signer_public_key", "").lower() != receipt.get("finality_public_key", "").lower():
+        fail("validator-47 public identity does not match governed registry")
+    key_digest = hashlib.sha256(key_path.read_bytes()).hexdigest()
+    if inventory.get("sha256") != hashlib.sha256((config_dir / TRIAD_INVENTORY_FILE).read_bytes()).hexdigest():
+        fail("validator-47 identity inventory binding changed")
+    node_env = {}
+    for raw_line in (config_dir / "node.env").read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, value = line.split("=", 1)
+            node_env[key] = value
+    if node_env.get("IDENTITY_KEY_SHA256") != key_digest:
+        fail("validator-47 node.env identity key digest mismatch")
+    receipt_digest = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+    if node_env.get("IDENTITY_RECEIPT_SHA256") != receipt_digest:
+        fail("validator-47 node.env identity receipt digest mismatch")
+    return {
+        "key_path": str(key_path),
+        "key_sha256": key_digest,
+        "key_mode": f"{stat.S_IMODE(values['identity_key'].st_mode):04o}",
+        "key_uid": values["identity_key"].st_uid,
+        "key_gid": values["identity_key"].st_gid,
+        "receipt_path": str(receipt_path),
+        "receipt_sha256": receipt_digest,
+        "node_id": receipt["node_id"],
+        "finality_public_key": receipt["finality_public_key"],
+        "libp2p_peer_id": receipt["libp2p_peer_id"],
+        "owner_valid": True,
+    }
+
+
+def service_state(service: str, *, require_disabled: bool = False) -> tuple[bool, bool, str, str]:
     output = run_read_only(
         [
             "systemctl",
@@ -106,6 +257,8 @@ def service_state(service: str) -> tuple[bool, bool]:
             "--property=LoadState",
             "--property=SubState",
             "--property=NRestarts",
+            "--property=UnitFileState",
+            "--property=MainPID",
             service,
         ],
         "service",
@@ -116,7 +269,7 @@ def service_state(service: str) -> tuple[bool, bool]:
             continue
         key, value = line.split("=", 1)
         values[key] = value.strip()
-    if not {"LoadState", "ActiveState", "SubState", "NRestarts"}.issubset(values):
+    if not {"LoadState", "ActiveState", "SubState", "NRestarts", "UnitFileState"}.issubset(values):
         fail("service read-only probe returned incomplete state")
     if values["LoadState"] != "loaded":
         fail("service unit is not loaded")
@@ -128,18 +281,20 @@ def service_state(service: str) -> tuple[bool, bool]:
         fail("service read-only probe reports a nonzero restart count")
     if values["ActiveState"] != "inactive" or values["SubState"] != "dead":
         fail("service unit is not in the expected inactive/dead state")
+    if require_disabled and values["UnitFileState"] != "disabled":
+        fail("validator-47 service unit is not disabled")
     active = values["ActiveState"] == "active"
     running = active and values["SubState"] in {"running", "listening", "exited"}
-    return active, running
+    return active, running, values["UnitFileState"], values.get("MainPID", "0")
 
 
-def process_running() -> bool:
-    output = run_read_only(["ps", "-eo", "pid=,args="], "process")
-    return any(
-        marker in line
-        for line in output.splitlines()
-        for marker in ("oasis7_chain_runtime", "start-node.sh")
-    )
+def process_running(main_pid: str) -> bool:
+    if not main_pid or main_pid == "0":
+        return False
+    if not main_pid.isdigit():
+        fail("service read-only probe returned malformed MainPID")
+    output = run_read_only(["ps", "-p", main_pid, "-o", "args="], "process")
+    return bool(output.strip())
 
 
 def listener_ports(expected_ports: frozenset[str]) -> list[str]:
@@ -151,8 +306,11 @@ def listener_ports(expected_ports: frozenset[str]) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(list(sys.argv[1:] if argv is None else argv))
     expected = SERVICES[args.role]
-    active, service_running = service_state(args.service)
-    process_is_running = process_running()
+    require_disabled = args.role == "validator-47"
+    active, service_running, unit_file_state, main_pid = service_state(
+        args.service, require_disabled=require_disabled
+    )
+    process_is_running = process_running(main_pid)
     listeners = listener_ports(expected["ports"])
     running = service_running or process_is_running or bool(listeners)
     payload = {
@@ -163,6 +321,22 @@ def main(argv: list[str] | None = None) -> int:
         "independently_observed": True,
         "listeners": listeners,
     }
+    if args.role == "validator-47":
+        if process_is_running:
+            fail("validator-47 no-start contract has a running process")
+        if listeners:
+            fail("validator-47 no-start contract has a listener")
+        inventory = inventory_descriptor(args.root)
+        identity = identity_descriptor(args.root, inventory)
+        payload.update(
+            {
+                "unit_file_state": unit_file_state,
+                "no_process": not process_is_running,
+                "no_listener": not bool(listeners),
+                "inventory": inventory,
+                "identity": identity,
+            }
+        )
     print(json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")))
     return 0
 

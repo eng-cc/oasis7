@@ -2,6 +2,7 @@ use super::execution_bridge::{
     ExecutionBridgeCommitTimingSnapshot, snapshot_execution_bridge_commit_timing,
 };
 use super::p2p_status::peer_reachability_as_str;
+use super::runtime_authority::RuntimeAuthorityBinding;
 use super::runtime_status_util::{consensus_status_to_string, now_unix_ms};
 use super::storage_metrics;
 use super::traffic_status::ChainTrafficStatus;
@@ -10,8 +11,8 @@ use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
 use oasis7::runtime::ReleaseSecurityPolicy;
 use oasis7::simulator::RuntimePerfSnapshot;
 use oasis7_node::{
-    Libp2pReachabilitySnapshot, NodeNetworkPolicy, NodeReachabilityAutoDetection, NodeSnapshot,
-    NodeUserModeRecommendation,
+    Libp2pReachabilitySnapshot, NodeNetworkPolicy, NodeReachabilityAutoDetection, NodeRole,
+    NodeSnapshot, NodeUserModeRecommendation, NodeValidatorStakeProofSnapshot,
 };
 use serde::Serialize;
 use std::path::Path;
@@ -92,6 +93,142 @@ const MODULE_TICK_SLOW_ROUTE_MIN_SAMPLES: u64 = 4;
 const MODULE_TICK_SLOW_ROUTE_RATIO_PPM: u64 = 50_000;
 const UDP_GOSSIP_SEND_FAILURE_MIN_ATTEMPTS: u64 = 4;
 const UDP_GOSSIP_SEND_FAILURE_RATIO_PPM: u64 = 50_000;
+const TRIAD_STATUS_PROJECTION_SCHEMA: &str = "oasis7.chain_validator_provider_status.v1";
+
+fn build_chain_validator_status(
+    snapshot: &NodeSnapshot,
+    authority_binding: Option<&RuntimeAuthorityBinding>,
+) -> ChainValidatorStatus {
+    let local_validator = snapshot
+        .consensus
+        .validator_stake_proofs
+        .iter()
+        .find(|proof| proof.validator_id == snapshot.node_id);
+    let stake = snapshot
+        .consensus
+        .validator_stakes
+        .get(snapshot.node_id.as_str())
+        .copied();
+    let membership_active = local_validator.is_some()
+        && stake.is_some_and(|stake| stake > 0)
+        && !snapshot
+            .consensus
+            .quarantined_validators
+            .iter()
+            .any(|validator| validator == &snapshot.node_id)
+        && !snapshot.consensus.validator_set_hash.is_empty()
+        && !snapshot.consensus.validator_stake_root.is_empty();
+    ChainValidatorStatus {
+        schema_version: TRIAD_STATUS_PROJECTION_SCHEMA.to_string(),
+        role: if membership_active {
+            "validator".to_string()
+        } else {
+            "non_validator".to_string()
+        },
+        membership: if membership_active {
+            "active".to_string()
+        } else {
+            "inactive".to_string()
+        },
+        stake,
+        signer_binding: local_validator.map(|proof| proof.validator_id.clone()),
+        signer_public_key_hex: local_validator
+            .and_then(|proof| proof.signer_public_key_hex.clone()),
+        stake_proof: local_validator.cloned(),
+        validator_set_hash: snapshot.consensus.validator_set_hash.clone(),
+        stake_root: snapshot.consensus.validator_stake_root.clone(),
+        registry_ref: authority_binding.map(|binding| binding.registry_ref.clone()),
+        registry_sha256: authority_binding.map(|binding| binding.registry_sha256.clone()),
+        inventory_ref: authority_binding.map(|binding| binding.inventory_ref.clone()),
+        inventory_sha256: authority_binding.map(|binding| binding.inventory_sha256.clone()),
+    }
+}
+
+fn build_chain_provider_status(
+    snapshot: &NodeSnapshot,
+    world_resource: &ChainWorldResourceStatus,
+    chain_proof: &ChainProofStatus,
+    storage_metrics: &storage_metrics::StorageMetricsSnapshot,
+    replication: &super::ChainReplicationDebugStatus,
+) -> ChainProviderStatus {
+    let provider_id =
+        (!replication.local_peer_id.trim().is_empty()).then(|| replication.local_peer_id.clone());
+    let storage_runtime_healthy = matches!(snapshot.role, NodeRole::Storage)
+        && snapshot.replication_enabled
+        && provider_id.is_some()
+        && storage_metrics.degraded_reason.is_none()
+        && world_resource.failed_gates.is_empty()
+        && storage_metrics.checkpoint_count > 0
+        && storage_metrics
+            .replay_summary
+            .latest_checkpoint_height
+            .is_some();
+    let checkpoint = chain_proof
+        .latest_execution_checkpoint
+        .as_ref()
+        .zip(chain_proof.latest_world_head_proof.as_ref())
+        .is_some_and(|(checkpoint, proof)| {
+            storage_runtime_healthy
+                && chain_proof.status == "available"
+                && checkpoint.schema_version >= 2
+                && checkpoint.height > 0
+                && storage_metrics.replay_summary.latest_checkpoint_height
+                    == Some(checkpoint.height)
+                && checkpoint.height == proof.height
+                && !checkpoint.checkpoint_id.trim().is_empty()
+                && !checkpoint.manifest_hash.trim().is_empty()
+                && !proof.proof_hash.trim().is_empty()
+                && proof.world_id == snapshot.world_id
+                && proof.world_id == world_resource.world_id
+                && !world_resource.chain_id.trim().is_empty()
+                && proof
+                    .checkpoint_ref
+                    .as_deref()
+                    .is_some_and(|value| !value.is_empty())
+        });
+    let (checkpoint_proof, full_storage_proof) = if checkpoint {
+        let checkpoint = chain_proof
+            .latest_execution_checkpoint
+            .as_ref()
+            .expect("checkpoint proof checked above");
+        let proof = chain_proof
+            .latest_world_head_proof
+            .as_ref()
+            .expect("world head proof checked above");
+        let provider_id = provider_id.clone().expect("provider id checked above");
+        let checkpoint_proof = ChainProviderCheckpointProof {
+            schema_version: checkpoint.schema_version,
+            checkpoint_id: checkpoint.checkpoint_id.clone(),
+            height: checkpoint.height,
+            manifest_hash: checkpoint.manifest_hash.clone(),
+            proof_hash: proof.proof_hash.clone(),
+            world_id: proof.world_id.clone(),
+            chain_id: world_resource.chain_id.clone(),
+        };
+        let full_storage_proof = ChainProviderFullStorageProof {
+            status: "ready".to_string(),
+            provider_id,
+            world_id: proof.world_id.clone(),
+            chain_id: world_resource.chain_id.clone(),
+            manifest_hash: checkpoint.manifest_hash.clone(),
+            height: checkpoint.height,
+        };
+        (Some(checkpoint_proof), Some(full_storage_proof))
+    } else {
+        (None, None)
+    };
+    ChainProviderStatus {
+        schema_version: TRIAD_STATUS_PROJECTION_SCHEMA.to_string(),
+        node_id: snapshot.node_id.clone(),
+        provider_id,
+        checkpoint,
+        // Full-storage readiness is only claimable once the local runtime has
+        // an actual retained checkpoint that is bound to the world-head proof.
+        full_storage: checkpoint,
+        checkpoint_proof,
+        full_storage_proof,
+    }
+}
 
 #[derive(Debug, Serialize)]
 pub(super) struct ChainStatusResponse {
@@ -126,6 +263,64 @@ pub(super) struct ChainStatusResponse {
     pub(super) replication: super::ChainReplicationDebugStatus,
     pub(super) execution_bridge_commit_timing: ExecutionBridgeCommitTimingSnapshot,
     pub(super) module_tick_routing: ChainModuleTickRoutingStatus,
+    /// Effective local validator admission data. This is derived only from
+    /// the node's consensus snapshot; collectors must not infer it when the
+    /// runtime cannot provide it.
+    pub(super) validator: ChainValidatorStatus,
+    /// Effective local provider data. Provider readiness requires a real
+    /// local peer id, storage capability, and an authenticated checkpoint.
+    pub(super) provider: ChainProviderStatus,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct ChainValidatorStatus {
+    pub(super) schema_version: String,
+    pub(super) role: String,
+    pub(super) membership: String,
+    pub(super) stake: Option<u64>,
+    pub(super) signer_binding: Option<String>,
+    pub(super) signer_public_key_hex: Option<String>,
+    pub(super) stake_proof: Option<NodeValidatorStakeProofSnapshot>,
+    pub(super) validator_set_hash: String,
+    pub(super) stake_root: String,
+    /// These bindings remain optional until deployment supplies immutable
+    /// runtime paths/digests. Fleet health treats absence as a hard failure.
+    pub(super) registry_ref: Option<String>,
+    pub(super) registry_sha256: Option<String>,
+    pub(super) inventory_ref: Option<String>,
+    pub(super) inventory_sha256: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct ChainProviderStatus {
+    pub(super) schema_version: String,
+    pub(super) node_id: String,
+    pub(super) provider_id: Option<String>,
+    pub(super) checkpoint: bool,
+    pub(super) full_storage: bool,
+    pub(super) checkpoint_proof: Option<ChainProviderCheckpointProof>,
+    pub(super) full_storage_proof: Option<ChainProviderFullStorageProof>,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct ChainProviderCheckpointProof {
+    pub(super) schema_version: u32,
+    pub(super) checkpoint_id: String,
+    pub(super) height: u64,
+    pub(super) manifest_hash: String,
+    pub(super) proof_hash: String,
+    pub(super) world_id: String,
+    pub(super) chain_id: String,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct ChainProviderFullStorageProof {
+    pub(super) status: String,
+    pub(super) provider_id: String,
+    pub(super) world_id: String,
+    pub(super) chain_id: String,
+    pub(super) manifest_hash: String,
+    pub(super) height: u64,
 }
 
 #[derive(Debug, Serialize)]
@@ -838,6 +1033,50 @@ pub(super) fn build_chain_status_payload_with_storage_root(
     transactions: super::transfer_submit_api::ChainTransferMetricsStatus,
     replication: super::ChainReplicationDebugStatus,
 ) -> ChainStatusResponse {
+    build_chain_status_payload_with_storage_root_and_authority(
+        snapshot,
+        execution_world_dir,
+        execution_records_dir,
+        execution_storage_root,
+        loaded_network_tier_manifest,
+        live_p2p_recommendation,
+        applied_effective_user_mode,
+        effective_p2p_policy,
+        live_snapshot,
+        p2p_detection,
+        release_security_policy,
+        reward_runtime_metrics,
+        storage_metrics,
+        wasm,
+        runtime_perf,
+        traffic,
+        transactions,
+        replication,
+        None,
+    )
+}
+
+pub(super) fn build_chain_status_payload_with_storage_root_and_authority(
+    snapshot: NodeSnapshot,
+    execution_world_dir: &Path,
+    execution_records_dir: Option<&Path>,
+    execution_storage_root: Option<&Path>,
+    loaded_network_tier_manifest: Option<&LoadedNetworkTierManifest>,
+    live_p2p_recommendation: &NodeUserModeRecommendation,
+    applied_effective_user_mode: Option<String>,
+    effective_p2p_policy: NodeNetworkPolicy,
+    live_snapshot: &Libp2pReachabilitySnapshot,
+    p2p_detection: NodeReachabilityAutoDetection,
+    release_security_policy: ReleaseSecurityPolicy,
+    reward_runtime_metrics: super::reward_runtime_worker::RewardRuntimeMetricsSnapshot,
+    storage_metrics: storage_metrics::StorageMetricsSnapshot,
+    wasm: ChainWasmStatus,
+    runtime_perf: Option<RuntimePerfSnapshot>,
+    traffic: ChainTrafficStatus,
+    transactions: super::transfer_submit_api::ChainTransferMetricsStatus,
+    replication: super::ChainReplicationDebugStatus,
+    authority_binding: Option<&RuntimeAuthorityBinding>,
+) -> ChainStatusResponse {
     let observed_at_unix_ms = now_unix_ms();
     let p2p = build_chain_p2p_status(
         live_p2p_recommendation,
@@ -962,6 +1201,14 @@ pub(super) fn build_chain_status_payload_with_storage_root(
         loaded_network_tier_manifest,
     );
     let chain_proof = build_chain_proof_status(execution_records_dir, execution_storage_root);
+    let validator = build_chain_validator_status(&snapshot, authority_binding);
+    let provider = build_chain_provider_status(
+        &snapshot,
+        &world_resource,
+        &chain_proof,
+        &storage_metrics,
+        &replication,
+    );
     let execution_bridge_commit_timing = snapshot_execution_bridge_commit_timing();
     let pending_proposal = snapshot
         .consensus
@@ -1164,5 +1411,7 @@ pub(super) fn build_chain_status_payload_with_storage_root(
         replication,
         execution_bridge_commit_timing,
         module_tick_routing,
+        validator,
+        provider,
     }
 }
