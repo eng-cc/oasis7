@@ -374,8 +374,9 @@ impl RuntimeLlmSidecar {
                 ));
             }
             // The actor now owns the provider call. Returning without a
-            // decision lets the caller advance the Runtime world immediately;
-            // a later poll will surface the completed outcome.
+            // decision lets the caller poll again without admitting another
+            // turn; the caller must preserve this request's Runtime base
+            // until a later poll surfaces the completed outcome.
             return None;
         }
         None

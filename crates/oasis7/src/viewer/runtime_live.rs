@@ -43,6 +43,8 @@ pub(super) fn canonical_runtime_provider_env_lock() -> &'static Mutex<()> {
     LOCK.get_or_init(|| Mutex::new(()))
 }
 
+#[path = "runtime_live/advance_tick.rs"]
+mod advance_tick;
 mod authoritative;
 mod auto_play;
 mod branch_commitment;
@@ -1026,9 +1028,7 @@ impl ViewerRuntimeLiveServer {
                     }
                 }
             }
-            // Runtime cognition finalization already advances the World once;
-            // avoid a second logical tick for the same provider action.
-            if self.world.state().time == iteration_logical_time {
+            if self.should_advance_compatibility_tick(iteration_logical_time) {
                 if let Err(error) = self.world.step() {
                     let (delta_logical_time, delta_event_seq) =
                         self.control_completion_delta(baseline_logical_time, baseline_event_seq);

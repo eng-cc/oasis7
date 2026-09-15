@@ -5,12 +5,12 @@ use super::auth_actions::{
 use super::*;
 use std::sync::{Arc, Mutex};
 #[test]
-fn runtime_background_play_replans_stale_provider_response_without_transport_retry() {
+fn runtime_background_play_commits_provider_response_without_latency_stale_base() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
     let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
     let decision_count = Arc::new(Mutex::new(0_usize));
-    // Keep capacity for the stale rejection and replan Wait feedback. The
+    // Keep capacity for the committed Act and replan Wait feedback. The
     // bounded listener must outlive any request already in flight while the
     // test observes the durable result.
     let base_url = spawn_runtime_live_mock_http_server(8, {
@@ -33,7 +33,7 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
                             .expect("decode outer decision request");
                     decoded
                         .validate_production_lane()
-                        .expect("stale test request must be complete");
+                        .expect("provider freshness test request must be complete");
                     let decision = if request_number == 1 {
                         crate::simulator::ProviderDecision::Act {
                             action_ref: "move_agent".to_string(),
@@ -72,18 +72,13 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
                 ("POST", "/v1/world-simulator/feedback-context") => {
                     let feedback: crate::simulator::FeedbackEnvelopeV1 =
                         serde_json::from_slice(request.body.as_slice())
-                            .expect("decode stale Runtime feedback");
-                    assert!(
-                        matches!(
-                            (feedback.status.as_str(), feedback.reject_reason.as_deref()),
-                            ("rejected", Some("stale_base"))
-                                | ("pending", Some(_))
-                                | ("rejected", Some("no_effect"))
-                        ),
-                        "unexpected provider feedback: {feedback:?}"
-                    );
+                            .expect("decode Runtime feedback");
                     if feedback.status != "pending" {
-                        assert!(feedback.runtime_receipt_id.is_none());
+                        assert_eq!(
+                            feedback.status, "committed",
+                            "provider action should commit on the captured base: {feedback:?}"
+                        );
+                        assert!(feedback.runtime_receipt_id.is_some());
                     }
                     MockHttpResponse {
                         status_code: 200,
@@ -168,6 +163,16 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
                 feedback.status == "rejected"
                     && feedback.reject_reason.as_deref() == Some("stale_base")
             });
+        let committed_feedback_seen = recorded
+            .iter()
+            .filter(|request| request.path == "/v1/world-simulator/feedback-context")
+            .map(|request| {
+                serde_json::from_slice::<crate::simulator::FeedbackEnvelopeV1>(
+                    request.body.as_slice(),
+                )
+                .expect("decode committed feedback")
+            })
+            .any(|feedback| feedback.status == "committed");
         let wait_feedback_seen = recorded
             .iter()
             .filter(|request| request.path == "/v1/world-simulator/feedback-context")
@@ -196,6 +201,7 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
             });
         (
             stale_feedback_seen,
+            committed_feedback_seen,
             decisions >= 2,
             wait_feedback_seen,
             wait_scheduled,
@@ -203,41 +209,47 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
     };
     let poll_deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
     while std::time::Instant::now() < poll_deadline {
-        let (stale_feedback_seen, replan_request_seen, wait_feedback_seen, wait_scheduled) =
-            read_progress(&server.world);
-        if stale_feedback_seen && replan_request_seen {
-            if wait_feedback_seen {
-                break;
-            }
-            if wait_scheduled {
-                // The provider outcome has already been admitted durably.
-                // Wait for its feedback request without advancing into the
-                // continuation's next Runtime turn.
-                std::thread::sleep(std::time::Duration::from_millis(5));
-                continue;
-            }
-            // The actor may still be completing its request. Continue
-            // polling until the durable Wait admission is visible.
+        let (
+            stale_feedback_seen,
+            committed_feedback_seen,
+            next_request_seen,
+            wait_feedback_seen,
+            _wait_scheduled,
+        ) = read_progress(&server.world);
+        if stale_feedback_seen {
+            break;
+        }
+        if committed_feedback_seen && next_request_seen && wait_feedback_seen {
+            break;
         }
         server
             .advance_runtime(&mut session, &mut writer, "play", 1, None, false)
-            .expect("stale provider response should be handled");
+            .expect("provider response should be handled");
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
-    let (stale_feedback_seen, replan_request_seen, wait_feedback_seen, _wait_scheduled) =
-        read_progress(&server.world);
+    let (
+        stale_feedback_seen,
+        committed_feedback_seen,
+        next_request_seen,
+        _wait_feedback_seen,
+        _wait_scheduled,
+    ) = read_progress(&server.world);
     // No provider work remains after the bounded poll. Release the process
     // environment lock before inspecting the recorded evidence so a later
     // assertion failure cannot poison the shared test lock and cascade.
     clear_runtime_provider_env();
     drop(_guard);
     assert!(
-        stale_feedback_seen,
-        "stale response must produce typed feedback"
+        !stale_feedback_seen,
+        "provider latency must not invalidate its captured Runtime base"
     );
     assert!(
-        replan_request_seen,
-        "stale response must schedule a new request"
+        committed_feedback_seen,
+        "provider action should produce committed feedback"
+    );
+    assert!(
+        next_request_seen,
+        "the next provider turn should be dispatched"
     );
     let recorded = recorded.lock().expect("recorded lock");
     let decisions: Vec<crate::simulator::ContinuousAgentRequestContextV1> = recorded
@@ -250,7 +262,7 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
     assert_eq!(
         session.transient_play_failures,
         0,
-        "stale replan left transient failures; decisions={}",
+        "provider polling left transient failures; decisions={}",
         decisions.len()
     );
     assert!(decisions.len() >= 2);
@@ -259,7 +271,6 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
         decisions[0].decision_request_id,
         decisions[1].decision_request_id
     );
-    assert!(decisions[1].retry_seq > decisions[0].retry_seq);
     assert_eq!(decisions[1].transport_attempt, 1);
     let recent_events = &decisions[1]
         .base_decision_request
@@ -268,10 +279,8 @@ fn runtime_background_play_replans_stale_provider_response_without_transport_ret
     assert!(
         recent_events
             .iter()
-            .any(|summary| summary.contains("stale_base_replan")
-                && summary.contains(decisions[0].decision_request_id.as_str())
-                && summary.contains("replan_count=1")),
-        "replan request must retain a bounded causal reference: {recent_events:?}"
+            .all(|summary| !summary.contains("stale_base_replan")),
+        "normal next turn must not carry a stale-base replan marker: {recent_events:?}"
     );
     let feedbacks: Vec<crate::simulator::FeedbackEnvelopeV1> = recorded
         .iter()
