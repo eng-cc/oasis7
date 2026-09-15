@@ -297,10 +297,10 @@ impl ViewerRuntimeLiveServer {
         }
         let next_virtual_event_id = latest_runtime_event_seq(&world).saturating_add(1).max(1);
         let mut server = Self {
+            auto_play_paused: !config.auto_play_on_connect,
             config,
             world,
             initial_world_time,
-            auto_play_paused: false,
             next_auto_play_step_at: None,
             last_chain_committed_height: 0,
             confirmed_player_gameplay_progress_time: None,
