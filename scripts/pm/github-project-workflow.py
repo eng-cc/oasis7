@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import base64
-import hashlib
 import importlib.util
 import json
 import pathlib
@@ -165,15 +164,13 @@ def normalized_issue_traceability(body: str) -> dict[str, Any]:
     if evidence_match:
         try:
             encoded = evidence_match.group(1)
-            fields["non_pr_completion_evidence"] = base64.urlsafe_b64decode(
-                encoded + "=" * (-len(encoded) % 4)
+            fields["non_pr_completion_evidence"] = base64.b64decode(
+                encoded + "=" * (-len(encoded) % 4), altchars=b"-_", validate=True
             ).decode("utf-8")
         except (ValueError, UnicodeDecodeError):
-            fields["non_pr_completion_evidence"] = ""
-    if "non_pr_completion_evidence_sha256" not in fields and fields.get("non_pr_completion_evidence"):
-        fields["non_pr_completion_evidence_sha256"] = hashlib.sha256(
-            fields["non_pr_completion_evidence"].encode("utf-8")
-        ).hexdigest()
+            fields["trace_projection_error"] = (
+                "trace-projection-loss: malformed non-PR completion evidence encoding"
+            )
     for key, header in (("source_refs", "Source refs:"), ("doc_refs", "Doc refs:"), ("related_prd", "Related PRD:")):
         values = _normalized_issue_section(body, header, references=True)
         if values is not None:
@@ -703,6 +700,10 @@ def command_audit(args: argparse.Namespace) -> int:
         if cached_acceptance != live_acceptance:
             errors.append(f"{uid}: cached acceptance drift; refresh explicitly from authoritative GitHub issue")
         live_traceability = normalized_issue_traceability(body)
+        trace_projection_error = live_traceability.get("trace_projection_error")
+        if trace_projection_error:
+            errors.append(f"{uid}: {trace_projection_error}")
+            continue
         for key in ("doc_refs", "related_prd"):
             if key not in live_traceability:
                 continue

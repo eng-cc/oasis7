@@ -1845,9 +1845,13 @@ def preserve_identity_bound_cache(
     repository_identity: dict[str, str],
 ) -> None:
     """Retain local non-PR evidence only after checking its full binding."""
-    if existing.get("repository") not in (None, "", repository_identity["repository"]):
-        trace_projection_loss(task_uid, "cached repository identity drift")
-    for key in ("canonical_worktree", "task_branch", "default_branch"):
+    cached_identity = {
+        key: existing.get(key) for key in identity_bound_cache_keys
+    }
+    for key in sorted(identity_bound_cache_keys - {
+        "non_pr_completion_evidence_file",
+        "non_pr_completion_evidence_sha256",
+    }):
         cached = str(existing.get(key) or "")
         if cached and cached != repository_identity[key]:
             trace_projection_loss(task_uid, f"cached {key} identity drift")
@@ -1868,14 +1872,14 @@ def preserve_identity_bound_cache(
         evidence = str(evidence)
         record["non_pr_completion_evidence"] = evidence
     live_digest = str(live.get("non_pr_completion_evidence_sha256") or "")
-    cached_digest = str(existing.get("non_pr_completion_evidence_sha256") or "")
+    cached_digest = str(cached_identity.get("non_pr_completion_evidence_sha256") or "")
     if live_digest and cached_digest and live_digest != cached_digest:
         trace_projection_loss(task_uid, "non-PR evidence digest disagrees between Issue and cache")
     digest = live_digest or cached_digest
     if evidence and digest:
         record["non_pr_completion_evidence_sha256"] = digest
 
-    evidence_file = str(existing.get("non_pr_completion_evidence_file") or "")
+    evidence_file = str(cached_identity.get("non_pr_completion_evidence_file") or "")
     requires_evidence = mode == "non_pr_task" and (
         str(record.get("status") or "") in {"done", "deferred"}
         or str(record.get("workflow_phase") or "") in TERMINAL_WORKFLOW_PHASES
@@ -2093,7 +2097,11 @@ def command_refresh_task(args: argparse.Namespace) -> int:
                 die(f"refresh-task: live Project {name} differs from frozen Issue binding")
     elif project_fields.get("Loop") or project_fields.get("Change ID"):
         die("refresh-task: live Project loop lineage exists but Issue binding is missing")
-    project_status = project_fields.get("PM Status", "")
+    project_lifecycle = {
+        "status": project_fields.get("PM Status", ""),
+        "workflow_phase": project_fields.get("Workflow Phase", ""),
+    }
+    project_status = project_lifecycle["status"] if "status" in project_lifecycle_keys else ""
     lifecycle_rank = {
         "candidate": 0, "committed": 1, "blocked": 2, "ready": 3,
         "pr_watch": 4, "done": 5, "deferred": 5,
@@ -2102,8 +2110,13 @@ def command_refresh_task(args: argparse.Namespace) -> int:
     if project_status in lifecycle_rank and lifecycle_rank[project_status] >= lifecycle_rank.get(issue_status, -1):
         record["status"] = project_status
         record["project_status"] = project_fields.get("Status", "")
-        project_phase = project_fields.get("Workflow Phase", "")
+        project_phase = (
+            project_lifecycle["workflow_phase"]
+            if "workflow_phase" in project_lifecycle_keys
+            else ""
+        )
         existing_phase = str(existing.get("workflow_phase") or "")
+        issue_phase = str(record.get("workflow_phase") or "")
         fine_terminal_phases = {
             "task_done",
             "closed_without_" + "merge",
@@ -2116,10 +2129,18 @@ def command_refresh_task(args: argparse.Namespace) -> int:
                 # Coarse Project `done` is an in-flight terminal side effect,
                 # not authority to rewrite the predecessor bound by intent.
                 record["status"] = pending_intent["previous_status"]
-        elif project_status == "done" and existing_phase in fine_terminal_phases:
-            # Project exposes both terminal receipt phases as coarse `done`;
-            # refreshing its fields must not erase the finer local phase.
-            record["workflow_phase"] = existing_phase
+        elif project_status == "done":
+            # Project exposes terminal phases as coarse `done`; Issue remains
+            # the fine-grained authority, with cache as a recovery fallback.
+            if issue_phase in fine_terminal_phases:
+                record["workflow_phase"] = issue_phase
+            elif existing_phase in fine_terminal_phases:
+                record["workflow_phase"] = existing_phase
+            else:
+                trace_projection_loss(
+                    args.task_uid,
+                    "Project done cannot be classified without a fine terminal Issue/cache phase",
+                )
         else:
             record["workflow_phase"] = project_phase
         record["reconciled_from_project"] = project_status != issue_status

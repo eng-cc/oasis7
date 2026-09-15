@@ -108,6 +108,12 @@ draft = {"status": "committed", "workflow_phase": "verification"}
 assert module.expected_project_values(draft)["Workflow Phase"] == "verification"
 ordinary = {"status": "committed", "workflow_phase": "execution"}
 assert module.expected_project_values(ordinary)["Workflow Phase"] == "execution"
+legacy_trace = module.normalized_issue_traceability(
+    "- completion_mode: `non_pr_task`\n"
+    "- non_pr_completion_evidence_b64: `bGVnYWN5IGV2aWRlbmNl`\n"
+)
+assert legacy_trace["non_pr_completion_evidence"] == "legacy evidence", legacy_trace
+assert "non_pr_completion_evidence_sha256" not in legacy_trace, legacy_trace
 PY
 
 AUDIT_JSON="$TMPDIR/audit.json"
@@ -350,6 +356,43 @@ fields = [
 node = {"id": "MAPPING_ITEM_ID", "project": {"id": "PROJECT_ID", "number": 1, "owner": {"login": "eng-cc"}}, "content": {"title": "[PM] mapping only active task", "body": body, "number": 303, "url": "https://github.com/eng-cc/oasis7/issues/303"}, "fieldValues": {"pageInfo": {"hasNextPage": False}, "nodes": fields}}
 print(json.dumps({"data": {"nodes": [node]}}))
 PY
+    elif [[ "${GH_FAKE_MALFORMED_TRACE:-0}" == "1" || "${GH_FAKE_INVALID_UTF8:-0}" == "1" ]]; then
+      python3 - <<'PY'
+import json, os
+uid = "task_33333333333333333333333333333333"
+encoded = "!!!" if os.environ.get("GH_FAKE_MALFORMED_TRACE") == "1" else "//4"
+body = f"""<!-- oasis7-pm-task -->
+task_uid: {uid}
+
+GitHub-backed oasis7 PM task.
+
+Task metadata:
+- owner_role: `tpm`
+- module: `engineering`
+- status: `committed`
+- workflow_phase: `execution`
+- priority: `P2`
+- worktree_hint: `/tmp/mapping-worktree`
+- completion_mode: `non_pr_task`
+- non_pr_completion_evidence_b64: `{encoded}`
+
+Acceptance:
+- authoritative acceptance
+"""
+fields = [
+    {"name": "In Progress", "field": {"name": "Status"}},
+    {"text": uid, "field": {"name": "Task UID"}},
+    {"name": "tpm", "field": {"name": "Owner Role"}},
+    {"name": "engineering", "field": {"name": "Module"}},
+    {"name": "committed", "field": {"name": "PM Status"}},
+    {"name": "execution", "field": {"name": "Workflow Phase"}},
+    {"name": "P2", "field": {"name": "Priority"}},
+    {"text": "/tmp/mapping-worktree", "field": {"name": "Canonical Worktree"}},
+    {"name": "n/a", "field": {"name": "Test Tier Required"}},
+]
+node = {"id": "MAPPING_ITEM_ID", "project": {"id": "PROJECT_ID", "number": 1, "owner": {"login": "eng-cc"}}, "content": {"title": "[PM] mapping only active task", "body": body, "number": 303, "url": "https://github.com/eng-cc/oasis7/issues/303"}, "fieldValues": {"pageInfo": {"hasNextPage": False}, "nodes": fields}}
+print(json.dumps({"data": {"nodes": [node]}}))
+PY
     elif [[ "${GH_FAKE_MAPPING_DRIFT:-0}" == "1" ]]; then
       printf '{"data":{"nodes":[{"id":"MAPPING_ITEM_ID","project":{"id":"PROJECT_ID","number":1,"owner":{"login":"eng-cc"}},"content":{"body":"task_uid: task_33333333333333333333333333333333","number":303,"url":"https://github.com/eng-cc/oasis7/issues/303"},"fieldValues":{"pageInfo":{"hasNextPage":false},"nodes":[{"name":"In Progress","field":{"name":"Status"}},{"text":"task_33333333333333333333333333333333","field":{"name":"Task UID"}},{"name":"tpm","field":{"name":"Owner Role"}},{"name":"engineering","field":{"name":"Module"}},{"name":"blocked","field":{"name":"PM Status"}},{"name":"blocked","field":{"name":"Workflow Phase"}},{"name":"P2","field":{"name":"Priority"}},{"text":"/tmp/mapping-worktree","field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]}}]}}\n'
     else
@@ -434,11 +477,46 @@ assert payload["status"] == "failed", payload
 for marker in ("doc_refs", "related_prd", "completion_mode", "non_pr_completion_evidence_sha256"):
     assert any(marker in item for item in payload["errors"]), (marker, payload)
 PY
+
+# Malformed evidence encodings are projection loss, not an empty optional
+# value. Both invalid base64 and valid base64 with invalid UTF-8 must expose
+# the stable diagnostic so refresh/audit cannot silently clear evidence.
+for trace_mode in malformed invalid_utf8; do
+  TRACE_LOSS_JSON="$TMPDIR/traceability-loss-$trace_mode.json"
+  set +e
+  if [[ "$trace_mode" == "malformed" ]]; then
+    GH_FAKE_MALFORMED_TRACE=1 python3 "$TMPDIR/github-project-workflow.py" "$MAPPING_ONLY" \
+      --repo eng-cc/oasis7 \
+      --project-owner eng-cc \
+      --project-number 1 \
+      --mapping "$MAPPING_ONLY/.pm/github-project-sync/tasks.json" \
+      --json audit --task-uid task_33333333333333333333333333333333 > "$TRACE_LOSS_JSON"
+  else
+    GH_FAKE_INVALID_UTF8=1 python3 "$TMPDIR/github-project-workflow.py" "$MAPPING_ONLY" \
+      --repo eng-cc/oasis7 \
+      --project-owner eng-cc \
+      --project-number 1 \
+      --mapping "$MAPPING_ONLY/.pm/github-project-sync/tasks.json" \
+      --json audit --task-uid task_33333333333333333333333333333333 > "$TRACE_LOSS_JSON"
+  fi
+  TRACE_LOSS_EXIT=$?
+  set -e
+  [[ "$TRACE_LOSS_EXIT" == "1" ]]
+  python3 - "$TRACE_LOSS_JSON" <<'PY'
+import json, pathlib, sys
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
+assert payload["status"] == "failed", payload
+assert any("trace-projection-loss" in item for item in payload["errors"]), payload
+PY
+done
 python3 - "$MAPPING_ONLY/.pm/github-project-sync/tasks.json" <<'PY'
 import json, pathlib, sys
 path = pathlib.Path(sys.argv[1])
 payload = json.loads(path.read_text(encoding="utf-8"))
-payload["tasks"]["task_33333333333333333333333333333333"]["acceptance"] = []
+record = payload["tasks"]["task_33333333333333333333333333333333"]
+record["acceptance"] = []
+for key in ("doc_refs", "related_prd", "completion_mode", "non_pr_completion_evidence_sha256"):
+    record.pop(key, None)
 path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 PY
 

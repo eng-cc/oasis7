@@ -935,7 +935,7 @@ record = {
     "priority": "P2",
     "completion_mode": "non_pr_task",
     "non_pr_completion_evidence": evidence,
-    "non_pr_completion_evidence_sha256": hashlib.sha256(evidence.encode()).hexdigest(),
+    "non_pr_completion_evidence_sha256": hashlib.sha256((evidence + "\n").encode()).hexdigest(),
     "source_refs": ["doc/engineering/workflow/source-of-truth.md#traceability-record-contract"],
     "doc_refs": [
         "doc/engineering/doc-governance/project-management-record-standard.design.md#3",
@@ -985,7 +985,9 @@ with tempfile.TemporaryDirectory() as temp:
     cache.parent.mkdir(parents=True)
     worktree = root / "task-worktree"
     worktree.mkdir()
-    evidence_path = root / ".pm/scratch" / uid / "non-pr-completion-evidence.txt"
+    evidence_path = worktree / ".pm/scratch" / uid / "non-pr-completion-evidence.txt"
+    evidence_path.parent.mkdir(parents=True)
+    evidence_path.write_text(evidence + "\n", encoding="utf-8")
     cached = {
         "task_uid": uid,
         "title": record["title"],
@@ -1024,12 +1026,53 @@ with tempfile.TemporaryDirectory() as temp:
     }
     module.pending_non_merge_phase = lambda *_args: None
     module.loop_lineage_path = lambda *_args: root / "missing-lineage.json"
+    args = Namespace(root=root, mapping=str(cache), task_uid=uid, repo="eng-cc/oasis7", project_owner="eng-cc", project_number=1, json=True)
+
+    # Positive Issue -> coarse Project done -> cache refresh round-trip. The
+    # Issue's fine terminal phase and all traceability/evidence fields must be
+    # reconstructed without loss.
+    module.command_refresh_task(args)
+    refreshed = json.loads(cache.read_text(encoding="utf-8"))["tasks"][uid]
+    assert refreshed["status"] == "done", refreshed
+    assert refreshed["workflow_phase"] == "task_done", refreshed
+    assert refreshed["completion_mode"] == "non_pr_task", refreshed
+    assert refreshed["non_pr_completion_evidence"] == evidence, refreshed
+    assert refreshed["non_pr_completion_evidence_sha256"] == record["non_pr_completion_evidence_sha256"], refreshed
+    assert refreshed["non_pr_completion_evidence_file"] == str(evidence_path.resolve()), refreshed
+    assert refreshed["doc_refs"] == record["doc_refs"], refreshed
+    assert refreshed["related_prd"] == record["related_prd"], refreshed
+
+    # I-1: even when the cache loses its phase key, the live Issue phase remains
+    # the fine terminal authority and cannot be replaced by Project `done`.
+    cache_payload = json.loads(cache.read_text(encoding="utf-8"))
+    cache_payload["tasks"][uid].pop("workflow_phase", None)
+    cache.write_text(json.dumps(cache_payload) + "\n", encoding="utf-8")
+    module.command_refresh_task(args)
+    refreshed = json.loads(cache.read_text(encoding="utf-8"))["tasks"][uid]
+    assert refreshed["workflow_phase"] == "task_done", refreshed
+
+    # A coarse Project `done` without a fine terminal Issue or cache phase is
+    # ambiguous and must fail closed instead of manufacturing `done`.
     captured = []
     def fail(message):
         captured.append(message)
         raise SystemExit(1)
     module.die = fail
-    args = Namespace(root=root, mapping=str(cache), task_uid=uid, repo="eng-cc/oasis7", project_owner="eng-cc", project_number=1, json=True)
+    issue["workflow_phase"] = "execution"
+    cache_payload = json.loads(cache.read_text(encoding="utf-8"))
+    cache_payload["tasks"][uid].pop("workflow_phase", None)
+    cache.write_text(json.dumps(cache_payload) + "\n", encoding="utf-8")
+    try:
+        module.command_refresh_task(args)
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError("ambiguous terminal refresh unexpectedly succeeded")
+    assert captured and captured[0].startswith("trace-projection-loss:"), captured
+
+    captured.clear()
+    issue["workflow_phase"] = "task_done"
+    evidence_path.unlink()
     try:
         module.command_refresh_task(args)
     except SystemExit:
