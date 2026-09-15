@@ -1105,6 +1105,79 @@ class TraceabilityTests(unittest.TestCase):
         result = self.aggregate(candidate, evidence, legacy, readers)
         self.assert_trace_blocked(result, "trace-legacy-upgrade-required")
 
+    def test_task2_trace_refs_require_frozen_path_and_publication_content_readback(self):
+        variants = (
+            (
+                "unresolved frozen path",
+                lambda ref: ref.update(fragment="missing-fragment"),
+                None,
+            ),
+            (
+                "frozen publication content mismatch",
+                lambda ref: ref.update(source_digest="sha256:" + "9" * 64),
+                "immutable source digest mismatch",
+            ),
+        )
+        for label, mutate, reader_failure in variants:
+            with self.subTest(case=label):
+                record = deepcopy(self.record)
+                trace_ref = record["required_obligations"][0]["trace"]["upstream_refs"][0]
+                mutate(trace_ref)
+                record["coordination_ref"]["record_digest"] = _record_digest(record)
+                readers = FixtureReaders(record)
+                if reader_failure is None:
+                    result = self.leaf(record, self.refresh_record_binding(record), readers)
+                else:
+                    original_contract = readers.contract
+
+                    def contract(reference):
+                        if reference.get("path") == trace_ref.get("path"):
+                            return {"status": "blocked", "blockers": [reader_failure]}
+                        return original_contract(reference)
+
+                    readers.contract = contract
+                    result = self.leaf(record, self.refresh_record_binding(record), readers)
+                self.assert_trace_blocked(result, "trace-ref-unresolved")
+
+    def test_task2_malformed_na_upstream_kind_blocks_alongside_valid_required_peer(self):
+        for label, kind in (("missing", None), ("unknown", "unclassified")):
+            with self.subTest(kind=label):
+                record = deepcopy(self.record)
+                obligation = record["required_obligations"][0]
+                malformed = _trace_na(obligation["owner_role"])
+                if kind is not None:
+                    malformed["kind"] = kind
+                obligation["trace"]["upstream_refs"].append(malformed)
+                record["coordination_ref"]["record_digest"] = _record_digest(record)
+                self.assert_trace_blocked(
+                    self.api.validate_record(record), "trace-ref-unresolved"
+                )
+
+    def test_task2_not_applicable_obligation_requires_system_design_disposition(self):
+        record = _populate_trace(
+            deepcopy(self.record), upstream_kind="professional_acceptance", system_required=False
+        )
+        obligation = record["required_obligations"][0]
+        obligation["applicability"] = "not_applicable"
+        obligation["required"] = False
+        obligation["trace"].pop("system_design")
+        record["coordination_ref"]["record_digest"] = _record_digest(record)
+        self.assert_trace_blocked(
+            self.api.validate_record(record), "trace-system-design-missing"
+        )
+
+    def test_task2_trace_diagnostics_include_record_context_and_repair_hint(self):
+        record = deepcopy(self.record)
+        record["required_obligations"][0].pop("applicability")
+        record["coordination_ref"]["record_digest"] = _record_digest(record)
+        result = self.api.validate_record(record)
+        self.assert_trace_blocked(result, "trace-required-alias-mismatch")
+        blockers = "\n".join(str(item) for item in result.get("blockers", []))
+        self.assertIn(record["task_uid"], blockers)
+        self.assertIn(record["change_id"], blockers)
+        self.assertIn("repair:", blockers)
+        self.assertIn("trace", blockers)
+
     def _sync_candidate_field(self, candidate, evidence, field, value):
         candidate[field] = deepcopy(value)
         for row, item in zip(candidate["applicability_matrix"], evidence):
