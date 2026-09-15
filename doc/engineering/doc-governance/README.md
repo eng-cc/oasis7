@@ -5,6 +5,7 @@
 ## 首读路径
 - 专业系统设计的十二段骨架、需求承接、验证映射与证据边界：`doc/engineering/doc-governance/system-design-writing-standard.design.md`
 - GitHub-backed 项目记录、任务合同、专业 slice 与组合验收：`doc/engineering/doc-governance/project-management-record-standard.design.md`
+- 产品/专业要求、系统设计、Task UID 与 evidence 的跨层追踪闭环：[`cross-layer-requirements-traceability.design.md`](cross-layer-requirements-traceability.design.md) 与 [`workflow source of truth`](../workflow/source-of-truth.md#traceability-record-contract)
 - 文档组织规则、后缀职责、模块 README 边界：`doc/engineering/doc-governance/doc-structure-standard.design.md`
 - 产品文档内容要求、四模块边界与三类采纳试点：`doc/engineering/doc-governance/product-documentation-standard.design.md`
 - 产品文档存量全量治理、外部语义迁移与 full-corpus 验证：`doc/engineering/doc-governance/product-documentation-full-corpus-governance.design.md`
@@ -22,6 +23,7 @@
 | 新文档应该放在哪里、承担什么职责 | `doc-structure-standard.design.md` | 顶层组织规范；定义模块、专题、分册、README、PRD/design/manual/runbook 边界，并将任务追踪定向到 GitHub Issue/Project |
 | 产品文档应该写什么、如何验收和追踪 | `product-documentation-standard.design.md` | 在现有四模块与专业 authority 上补充内容合同、REQ/AC 追踪、状态/证据边界和三类试点 |
 | 产品文档如何套用结构、迁移代表性主题 | `product-documentation-standard.templates.md` | 提供根/专题/design 模板、需求/验收卡和 Prompt/首局/SC-31 迁移模式 |
+| 产品/专业要求到系统设计、Task UID 和 evidence 的跨层关系 | `cross-layer-requirements-traceability.design.md` 与 workflow traceability contract | 复用 `oasis7.loop-change/v1`；定义 typed upstream refs、system-design/N/A、changed-scope 与投影边界 |
 | 已采纳规范如何覆盖全部存量产品文档 | `product-documentation-full-corpus-governance.design.md` | 定义 active/retired 内容闭合、外部语义迁移、配对 design 判定与全量检查 |
 | 专业系统设计如何承接需求、表达合同并映射验证 | `system-design-writing-standard.design.md` | 十二段技术骨架；不替代产品设计、实现、运行或发布证据 |
 | 任务、slice、固定输入和组合验收如何留证 | `project-management-record-standard.design.md` | 复用现有 GitHub Issue/Project 与 workflow；不新增本地台账或状态机 |

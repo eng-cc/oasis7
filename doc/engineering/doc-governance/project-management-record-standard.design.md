@@ -20,6 +20,8 @@ GitHub Issue 是任务身份和正式证据 envelope；GitHub Project item 与�
 
 同一事实只保留一个可写权威。产品文档保留产品价值、范围、玩家承诺与体验验收；专业系统设计保留技术合同、边界与验证设计；源码、测试与运行配置保留实现事实；GitHub task truth 保留本次交付的身份、范围、依赖、过程和实际证据；workflow source of truth 保留生命周期、权限和门禁。发生冲突时，在当前 Issue evidence 中记录冲突、影响、裁决 owner 与后续动作，不在本规范静默覆盖其他 authority。
 
+GitHub Project 只投影可管理字段，不能覆盖 Issue 或 cache 中的细粒度终态与追踪事实。Issue、Project/cache refresh MUST 保留 `workflow_phase`、`completion_mode`、`non_pr_completion_evidence`（含 canonical file/digest binding）、`doc_refs` 和 `related_prd`；粗粒度 `done` 不得清空或覆盖 `task_done`、`closed_without_merge` 或 `post_merge_done`。live Issue 缺少可选投影字段而 identity-bound cache 仍有受信值时，refresh 按字段 authority 保留或 fail closed，不能静默清空。
+
 ## 2. 对象、角色与交付关系
 
 项目管理记录区分长期主题、一次变更、叶子任务、PR 和组合验收：
@@ -51,6 +53,8 @@ GitHub Issue 是任务身份和正式证据 envelope；GitHub Project item 与�
 固定输入至少应能定位到：来源路径或对象、不可变提交/发布记录、内容摘要或 digest、批准来源、消费条款、适用 owner 和失效条件。源文档仍是 proposal 时必须明确标为 proposal；本任务的 source snapshot、当前 HEAD 与 live 状态不得被历史附件中的旧 PR/分支叙述替换。
 
 输入改变与目标分支推进是两类事件。上游语义、权限、合同资格或验收发生实质变化时，按影响范围保留旧基线、暂停并迁移、或缩小 scope，并按现行 workflow 重新绑定/验证；main 因无关变更推进时，更新 integration/CI 证据，不自动重写产品或系统要求。不能在执行中静默换合同版本。
+
+跨层协调记录继续复用 `oasis7.loop-change/v1`：`trace.upstream_refs` MUST 是 typed `product_requirement` 或 `professional_acceptance` 引用，`trace.system_design` MUST 是准确 `path#fragment` 或显式 N/A disposition；`applicability` MUST 为 `required` 或 `not_applicable`，兼容别名 `required=true` 存在时必须一致。产品价值、玩家承诺、产品范围或产品 AC 变更至少需要一个 product requirement；纯工程、治理或专业合同变更需要 professional acceptance；消费技术合同、跨组件行为、状态、接口、迁移、恢复、安全边界或实现 obligation 时 system design 必须 required。N/A MUST 带非空理由、有界范围、applicability owner role、review/evidence locator 和重新评估触发器；任何省略、`null`、空引用、`required=false`、`unknown` 或 `pending` 都不构成 N/A，声称存在交付工作时 product 与 professional 不能同时为 N/A。
 
 ## 4. 叶子任务最小内容
 
@@ -157,7 +161,7 @@ GitHub Issue 是任务身份和正式证据 envelope；GitHub Project item 与�
 
 需要反向查询受影响消费者时，从现有合同绑定和 Task evidence 按需生成只读追踪视图，标明查询范围和未读取部分；不得维护另一份手工消费者清单或把该视图当作第二任务真值。
 
-新增 PM/系统内容目前按人工内容规则和现有结构/link checks 维护；没有新增 metadata parser、semantic checker、Project field 或 required gate。后续只有在代表性文档和明确 owner/授权到位后，才可由 source-of-truth-first 变更实现机械校验，并补充正反例与迁移边界。
+新增或实质修改的 PM/系统内容及 trace records 的 changed-scope gate 将在本次实现完成后适用；未触达的 legacy content 保持在强制迁移范围之外。当前仍按人工内容规则和现有结构/link checks 维护，不因此宣称 metadata parser、semantic checker、Project field 或其他机械校验已经实现；后续只有在代表性文档和明确 owner/授权到位后，才可由 source-of-truth-first 变更实现机械校验，并补充正反例与迁移边界。
 
 ## 11. 可复用记录模板
 
