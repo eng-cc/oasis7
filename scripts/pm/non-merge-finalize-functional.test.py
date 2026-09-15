@@ -351,6 +351,53 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
             )
         return path
 
+    def registered_non_pr_worktrees(self, evidence: str) -> tuple[Path, Path, Path]:
+        """Build distinct default/task worktrees and seed the bound evidence path."""
+        subprocess.run(["git", "-C", str(self.root), "config", "user.email", "test@example.invalid"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "config", "user.name", "Test"], check=True)
+        (self.root / "tracked").write_text("base\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.root), "add", "tracked"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "commit", "-qm", "base"], check=True)
+        task_worktree = Path(self.tmp.name) / "canonical-task-worktree"
+        subprocess.run([
+            "git", "-C", str(self.root), "worktree", "add", "-qb",
+            "task/fixture", str(task_worktree),
+        ], check=True, stdout=subprocess.DEVNULL)
+        evidence_path = task_worktree / ".pm" / "scratch" / UID / "non-pr-completion-evidence.txt"
+        evidence_path.parent.mkdir(parents=True, exist_ok=True)
+        evidence_path.write_text(evidence + "\n", encoding="utf-8")
+        digest = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+        record = {
+            "task_uid": UID, "repository": REPO, "issue_number": ISSUE,
+            "issue_url": ISSUE_URL, "project_item_id": "ITEM1", "status": "committed",
+            "workflow_phase": "execution", "owner_role": "repository_health_engineer",
+            "module": "engineering", "priority": "P2",
+            "canonical_worktree": str(task_worktree.resolve()),
+            "task_branch": "task/fixture", "default_branch": "main",
+            "non_pr_completion_evidence_file": str(evidence_path.resolve()),
+            "non_pr_completion_evidence_sha256": digest,
+            "doc_refs": ["doc/engineering/doc-governance/project-management-record-standard.design.md#3"],
+            "related_prd": ["doc/product/oasis7.prd.md#REQ-TRACE"],
+        }
+        payload = {"version": 1, "project": {
+            "owner": "fixture", "number": 1, "id": "P1",
+        }, "tasks": {UID: record}}
+        mapping_paths = []
+        for worktree in (self.root, task_worktree):
+            path = worktree / ".pm" / "github-project-sync" / "tasks.json"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+            mapping_paths.append(path)
+        self.issue_body.write_text(
+            f"<!-- oasis7-pm-task -->\ntask_uid: {UID}\nTask metadata:\n"
+            "- owner_role: `repository_health_engineer`\n"
+            "- module: `engineering`\n- status: `committed`\n"
+            "- workflow_phase: `execution`\n- priority: `P2`\n"
+            f"- worktree_hint: `{task_worktree.resolve()}`\n",
+            encoding="utf-8",
+        )
+        return task_worktree, mapping_paths[0], evidence_path
+
     def reset_runtime(self) -> None:
         """Reset mutable fake-remote and receipt state for another reason."""
         for path, value in (
@@ -1069,7 +1116,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(self.read_json(self.closes), ["completed"])
 
     def test_retry_recovers_after_project_done_then_selected_refresh_without_manual_edits(self) -> None:
-        canonical_worktree = Path(self.tmp.name) / "canonical-task-worktree"
+        canonical_worktree = (Path(self.tmp.name) / "canonical-task-worktree").resolve()
         subprocess.run(["git", "-C", str(self.root), "config", "user.email", "test@example.invalid"], check=True)
         subprocess.run(["git", "-C", str(self.root), "config", "user.name", "Test"], check=True)
         (self.root / "tracked").write_text("base\n")
@@ -1577,6 +1624,162 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(finalized.returncode, 0, finalized.stderr)
         self.assertEqual(self.read_json(self.closes), ["completed"])
         self.assertEqual(len(self.read_json(self.comments)), 3)
+
+    def test_registered_default_refresh_then_non_pr_terminal_closure(self) -> None:
+        """Prove the full task-worktree -> default-worktree terminal path."""
+        evidence = "registered worktree classification: no PR is required"
+        task_worktree, default_mapping_path, evidence_path = self.registered_non_pr_worktrees(evidence)
+
+        worktrees = subprocess.check_output(
+            ["git", "-C", str(self.root), "worktree", "list", "--porcelain"],
+            text=True,
+        )
+        self.assertIn(f"worktree {Path(os.path.realpath(self.root))}\n", worktrees)
+        self.assertIn("branch refs/heads/main\n", worktrees)
+        self.assertIn(f"worktree {Path(os.path.realpath(task_worktree))}\n", worktrees)
+        self.assertIn("branch refs/heads/task/fixture\n", worktrees)
+        default_common = subprocess.check_output(
+            ["git", "-C", str(self.root), "rev-parse", "--git-common-dir"], text=True,
+        ).strip()
+        task_common = subprocess.check_output(
+            ["git", "-C", str(task_worktree), "rev-parse", "--git-common-dir"], text=True,
+        ).strip()
+        default_common_path = Path(default_common)
+        if not default_common_path.is_absolute():
+            default_common_path = self.root / default_common_path
+        task_common_path = Path(task_common)
+        if not task_common_path.is_absolute():
+            task_common_path = task_worktree / task_common_path
+        self.assertEqual(default_common_path.resolve(), task_common_path.resolve())
+
+        classified = self.classify_non_pr(evidence, repo_root=task_worktree)
+        self.assertEqual(classified.returncode, 0, classified.stderr)
+        claim = json.dumps({
+            "claim_type": "task_complete", "status": "verified",
+            "allowed_to_claim": True, "verification_exit_code": 0,
+            "verified_at": "2026-09-16T00:00:00+08:00",
+        })
+        closeout = subprocess.run([
+            sys.executable, str(PROJECT_TASK), "closeout-task", str(task_worktree),
+            "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
+            "--to-status", "done", "--claim-json", claim, "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+        self.assertEqual(closeout.returncode, 0, closeout.stderr)
+        task_record = self.read_json(
+            task_worktree / ".pm/github-project-sync/tasks.json"
+        )["tasks"][UID]
+        self.assertEqual(task_record["workflow_phase"], "task_done")
+        self.assertEqual(task_record["completion_mode"], "non_pr_task")
+        self.assertEqual(
+            task_record["non_pr_completion_evidence_sha256"],
+            hashlib.sha256(evidence_path.read_bytes()).hexdigest(),
+        )
+        self.assertTrue(task_record["last_closed_at"])
+        self.assertEqual(task_record["claim_verifications"][-1], json.loads(claim))
+
+        refreshed = subprocess.run([
+            sys.executable, str(PROJECT_TASK), "refresh-task", str(self.root),
+            "--repo", REPO, "--project-owner", "fixture", "--project-number", "1",
+            "--task-uid", UID, "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+        self.assertEqual(refreshed.returncode, 0, refreshed.stderr)
+        default_record = self.read_json(default_mapping_path)["tasks"][UID]
+        self.assertEqual(default_record["status"], "done")
+        self.assertEqual(default_record["workflow_phase"], "task_done")
+        self.assertEqual(default_record["completion_mode"], "non_pr_task")
+        self.assertEqual(default_record["last_closed_at"], task_record["last_closed_at"])
+        self.assertEqual(default_record["claim_verifications"], task_record["claim_verifications"])
+        self.assertEqual(default_record["non_pr_completion_evidence"], evidence)
+        self.assertEqual(
+            default_record["non_pr_completion_evidence_file"],
+            str(evidence_path.resolve()),
+        )
+        self.assertEqual(default_record["doc_refs"], [
+            "doc/engineering/doc-governance/project-management-record-standard.design.md#3",
+        ])
+        self.assertEqual(default_record["related_prd"], ["doc/product/oasis7.prd.md#REQ-TRACE"])
+
+        finalized = self.invoke("non_pr_completed", evidence_path, repo_root=self.root)
+        self.assertEqual(finalized.returncode, 0, finalized.stderr + "\ndefault_record=" + repr(self.read_json(default_mapping_path)["tasks"][UID]))
+        payload = json.loads(finalized.stdout[finalized.stdout.find("{"):])
+        receipt_path = Path(payload["receipt"])
+        receipt = self.read_json(receipt_path)
+        self.assertEqual(payload["status"], "finalized")
+        self.assertEqual(receipt["task_uid"], UID)
+        self.assertEqual(receipt["repository"], REPO)
+        self.assertEqual(receipt["issue_number"], ISSUE)
+        self.assertEqual(receipt["project_item_id"], "ITEM1")
+        self.assertEqual(receipt["reason"], "non_pr_completed")
+        self.assertEqual(receipt["evidence_sha256"], hashlib.sha256(evidence_path.read_bytes()).hexdigest())
+        self.assertIsNone(receipt["pr_number"])
+        self.assertIsNone(receipt["pr_url"])
+        self.assertNotIn("merge_receipt", receipt)
+        self.assertNotIn("merge_receipt_sha256", receipt)
+
+        terminal_record = self.read_json(default_mapping_path)["tasks"][UID]
+        self.assertEqual(terminal_record["status"], "done")
+        self.assertEqual(terminal_record["workflow_phase"], "closed_without_merge")
+        for forbidden in (
+            "merge_receipt", "merge_receipt_sha256", "main_sync_receipt",
+            "main_sync_receipt_sha256", "cleanup_receipt", "cleanup_authority",
+            "pr_number", "pr_url",
+        ):
+            self.assertNotIn(forbidden, terminal_record)
+        self.assertEqual(self.read_json(self.issue_state), {
+            "state": "CLOSED", "stateReason": "COMPLETED",
+        })
+        self.assertEqual(self.read_json(self.project_fields), {
+            "Status": "Done", "PM Status": "done", "Workflow Phase": "done",
+        })
+        tombstone = receipt_path.with_name("terminal-tombstone.json")
+        self.assertTrue(tombstone.is_file())
+        self.assertTrue(self.read_json(tombstone)["checkout_recreation_forbidden"])
+        self.assertEqual(len(self.read_json(self.comments)), 3)
+        self.assertEqual(self.read_json(self.closes), ["completed"])
+
+    def test_refresh_loss_of_non_pr_evidence_binding_fails_without_terminal_effects(self) -> None:
+        evidence = "lossy refresh fixture: no PR is required"
+        _task_worktree, default_mapping_path, evidence_path = self.registered_non_pr_worktrees(evidence)
+        classified = self.classify_non_pr(evidence, repo_root=_task_worktree)
+        self.assertEqual(classified.returncode, 0, classified.stderr)
+        claim = json.dumps({
+            "claim_type": "task_complete", "status": "verified",
+            "allowed_to_claim": True, "verification_exit_code": 0,
+            "verified_at": "2026-09-16T00:00:00+08:00",
+        })
+        closeout = subprocess.run([
+            sys.executable, str(PROJECT_TASK), "closeout-task", str(_task_worktree),
+            "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
+            "--to-status", "done", "--claim-json", claim, "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+        self.assertEqual(closeout.returncode, 0, closeout.stderr)
+
+        default_mapping = self.read_json(default_mapping_path)
+        default_mapping["tasks"][UID].pop("non_pr_completion_evidence_file")
+        default_mapping_path.write_text(json.dumps(default_mapping, sort_keys=True) + "\n")
+        calls_before = len(self.calls())
+        refreshed = subprocess.run([
+            sys.executable, str(PROJECT_TASK), "refresh-task", str(self.root),
+            "--repo", REPO, "--project-owner", "fixture", "--project-number", "1",
+            "--task-uid", UID, "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+        self.assertNotEqual(refreshed.returncode, 0)
+        self.assertIn("trace-projection-loss", refreshed.stderr)
+        self.assertFalse(
+            (self.root / ".git/oasis7-workflow-receipts" / UID /
+             "closed-without-merge-receipt.json").exists()
+        )
+        self.assertEqual(self.read_json(self.issue_state), {"state": "OPEN"})
+        self.assertEqual(self.read_json(self.closes), [])
+        self.assertEqual(len(self.read_json(self.comments)), 2)
+        self.assertFalse(any(
+            call[:2] in (["issue", "edit"], ["issue", "close"], ["issue", "comment"], ["project", "item-edit"])
+            for call in self.calls()[calls_before:]
+        ))
+        self.assertEqual(
+            self.read_json(default_mapping_path)["tasks"][UID].get("non_pr_completion_evidence_sha256"),
+            hashlib.sha256(evidence_path.read_bytes()).hexdigest(),
+        )
 
     def test_non_pr_finalization_rejects_alternate_and_tampered_classification_evidence(self) -> None:
         self.mapping()

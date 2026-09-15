@@ -82,7 +82,7 @@ class AuthoritativeMappingContract(unittest.TestCase):
         mapping = MODULE.load_mapping(self.worktree / args.mapping)
         self.assert_complete_identity(mapping["tasks"][self.uid])
 
-    def test_refresh_replaces_stale_identity_with_authoritative_git_facts(self) -> None:
+    def test_refresh_rejects_stale_identity_until_explicit_migration(self) -> None:
         args = self.args()
         args.task_uid = self.uid
         mapping_path = self.worktree / args.mapping
@@ -101,14 +101,15 @@ class AuthoritativeMappingContract(unittest.TestCase):
             "priority": "P2", "worktree_hint": str(self.worktree),
         }
         sync = types.SimpleNamespace(recover_project_mapping=lambda *_: {})
+        before = mapping_path.read_bytes()
         with (
             mock.patch.object(MODULE, "github_issue_record", return_value=live),
             mock.patch.object(MODULE, "load_sync_module", return_value=sync),
             mock.patch("builtins.print"),
         ):
-            self.assertEqual(0, MODULE.command_refresh_task(args))
-        mapping = MODULE.load_mapping(mapping_path)
-        self.assert_complete_identity(mapping["tasks"][self.uid])
+            with self.assertRaisesRegex(SystemExit, r"trace-projection-loss"):
+                MODULE.command_refresh_task(args)
+        self.assertEqual(mapping_path.read_bytes(), before)
 
     def test_selected_refresh_preserves_closed_without_merge_workflow_phase(self) -> None:
         args = self.args()
@@ -423,6 +424,139 @@ class AuthoritativeMappingContract(unittest.TestCase):
         self.assert_complete_identity(refreshed)
         self.assertNotEqual(str(self.repo.resolve()), refreshed["canonical_worktree"])
         self.assertNotEqual("main", refreshed["task_branch"])
+
+    def test_default_root_refresh_rejects_lost_non_pr_evidence_binding(self) -> None:
+        """A default-worktree refresh must not erase task-worktree evidence authority."""
+        args = self.args()
+        args.root = self.repo
+        args.task_uid = self.uid
+        evidence = "registered task evidence"
+        evidence_path = self.worktree / ".pm" / "scratch" / self.uid / "non-pr-completion-evidence.txt"
+        evidence_path.parent.mkdir(parents=True, exist_ok=True)
+        evidence_path.write_text(evidence + "\n", encoding="utf-8")
+        digest = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+        mapping_path = self.repo / args.mapping
+        original = {
+            "version": 1,
+            "project": {"owner": "eng-cc", "number": 1, "id": "PROJECT_ID"},
+            "tasks": {self.uid: {
+                "task_uid": self.uid, "status": "done", "workflow_phase": "task_done",
+                "completion_mode": "non_pr_task",
+                "non_pr_completion_evidence": evidence,
+                "non_pr_completion_evidence_file": str(evidence_path),
+                "non_pr_completion_evidence_sha256": digest,
+                "project_item_id": "ITEM_ID", **self.expected,
+            }},
+        }
+        MODULE.save_mapping(mapping_path, original)
+        live = {
+            "task_uid": self.uid, "title": "Authority mapping contract",
+            "issue_number": 1,
+            "issue_url": "https://github.com/eng-cc/oasis7/issues/1",
+            "owner_role": "tpm", "module": "engineering", "status": "done",
+            "workflow_phase": "task_done", "priority": "P2",
+            "worktree_hint": str(self.worktree), "completion_mode": "non_pr_task",
+            "non_pr_completion_evidence": evidence,
+            "non_pr_completion_evidence_sha256": digest,
+        }
+        node = {
+            "id": "ITEM_ID",
+            "project": {"id": "PROJECT_ID", "number": 1, "owner": {"login": "eng-cc"}},
+            "fieldValues": {"pageInfo": {"hasNextPage": False}, "nodes": [
+                {"name": "Done", "field": {"name": "Status"}},
+                {"name": "done", "field": {"name": "PM Status"}},
+                {"name": "done", "field": {"name": "Workflow Phase"}},
+            ]},
+        }
+        lossy = json.loads(json.dumps(original))
+        lossy["tasks"][self.uid].pop("non_pr_completion_evidence_file")
+        MODULE.save_mapping(mapping_path, lossy)
+        before = mapping_path.read_bytes()
+        with (
+            mock.patch.object(MODULE, "github_issue_record", return_value=live),
+            mock.patch.object(MODULE, "project_refresh_graphql",
+                              return_value={"data": {"nodes": [node]}}),
+            mock.patch("builtins.print"),
+        ):
+            with self.assertRaisesRegex(SystemExit, r"trace-projection-loss"):
+                MODULE.command_refresh_task(args)
+        self.assertEqual(mapping_path.read_bytes(), before)
+        self.assertTrue(evidence_path.is_file())
+        self.assertEqual(hashlib.sha256(evidence_path.read_bytes()).hexdigest(), digest)
+
+    def test_default_root_refresh_preserves_verified_non_pr_closeout(self) -> None:
+        """Refresh must project the Issue's verified closeout facts losslessly."""
+        args = self.args()
+        args.root = self.repo
+        args.task_uid = self.uid
+        mapping_path = self.repo / args.mapping
+        evidence = "registered task evidence"
+        evidence_path = self.worktree / ".pm" / "scratch" / self.uid / "non-pr-completion-evidence.txt"
+        evidence_path.parent.mkdir(parents=True, exist_ok=True)
+        evidence_path.write_text(evidence + "\n", encoding="utf-8")
+        digest = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+        claim = {
+            "claim_type": "task_complete", "status": "verified",
+            "allowed_to_claim": True, "verification_exit_code": 0,
+            "verified_at": "2026-09-16T00:00:00+08:00",
+        }
+        closed_at = "2026-09-16T00:01:00+08:00"
+        original = {
+            "version": 1,
+            "project": {"owner": "eng-cc", "number": 1, "id": "PROJECT_ID"},
+            "tasks": {self.uid: {
+                "task_uid": self.uid, "status": "done", "workflow_phase": "task_done",
+                "completion_mode": "non_pr_task",
+                "non_pr_completion_evidence": evidence,
+                "non_pr_completion_evidence_file": str(evidence_path),
+                "non_pr_completion_evidence_sha256": digest,
+                "project_item_id": "ITEM_ID", **self.expected,
+            }},
+        }
+        MODULE.save_mapping(mapping_path, original)
+        live = {
+            "task_uid": self.uid, "title": "Authority mapping contract",
+            "issue_number": 1,
+            "issue_url": "https://github.com/eng-cc/oasis7/issues/1",
+            "owner_role": "tpm", "module": "engineering", "status": "done",
+            "workflow_phase": "task_done", "priority": "P2",
+            "worktree_hint": str(self.worktree), "completion_mode": "non_pr_task",
+            "non_pr_completion_evidence": evidence,
+            "non_pr_completion_evidence_sha256": digest,
+            "last_closed_at": closed_at,
+            "claim_verifications": [claim],
+        }
+        node = {
+            "id": "ITEM_ID",
+            "project": {"id": "PROJECT_ID", "number": 1, "owner": {"login": "eng-cc"}},
+            "fieldValues": {"pageInfo": {"hasNextPage": False}, "nodes": [
+                {"name": "Done", "field": {"name": "Status"}},
+                {"name": "done", "field": {"name": "PM Status"}},
+                {"name": "done", "field": {"name": "Workflow Phase"}},
+            ]},
+        }
+        with (
+            mock.patch.object(MODULE, "github_issue_record", return_value=live),
+            mock.patch.object(MODULE, "project_refresh_graphql",
+                              return_value={"data": {"nodes": [node]}}),
+            mock.patch("builtins.print"),
+        ):
+            self.assertEqual(0, MODULE.command_refresh_task(args))
+        refreshed = MODULE.load_mapping(mapping_path)["tasks"][self.uid]
+        self.assertEqual(refreshed["last_closed_at"], closed_at)
+        self.assertEqual(refreshed["claim_verifications"], [claim])
+        before = mapping_path.read_bytes()
+        live.pop("last_closed_at")
+        live.pop("claim_verifications")
+        with (
+            mock.patch.object(MODULE, "github_issue_record", return_value=live),
+            mock.patch.object(MODULE, "project_refresh_graphql",
+                              return_value={"data": {"nodes": [node]}}),
+            mock.patch("builtins.print"),
+        ):
+            with self.assertRaisesRegex(SystemExit, r"trace-projection-loss"):
+                MODULE.command_refresh_task(args)
+        self.assertEqual(mapping_path.read_bytes(), before)
 
     def test_refresh_rejects_conflicting_registered_task_identities_without_mutation(self) -> None:
         other = pathlib.Path(self.tmp.name) / "other-task-worktree"

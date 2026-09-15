@@ -32,6 +32,7 @@ issue_authoritative_keys = frozenset(
         "loop_binding", "bootstrap_base_oid", "completion_mode",
         "non_pr_completion_evidence", "non_pr_completion_evidence_sha256",
         "source_refs", "doc_refs", "related_prd", "acceptance",
+        "last_closed_at", "claim_verifications",
     }
 )
 project_lifecycle_keys = frozenset({"status", "workflow_phase"})
@@ -425,10 +426,25 @@ def issue_task_fields(body: str) -> dict[str, Any]:
         except (ValueError, UnicodeError) as exc:
             die(f"invalid loop binding: {exc}")
         fields["loop_binding"] = binding
-    for key in ("owner_role", "module", "status", "workflow_phase", "priority", "worktree_hint", "source_signal", "source_type", "severity", "completion_mode", "bootstrap_base_oid", "non_pr_completion_evidence_sha256"):
+    for key in ("owner_role", "module", "status", "workflow_phase", "priority", "worktree_hint", "source_signal", "source_type", "severity", "completion_mode", "bootstrap_base_oid", "non_pr_completion_evidence_sha256", "last_closed_at"):
         match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
         if match:
             fields[key] = match.group(1)
+    claim_matches = re.findall(r"^- claim_verifications_b64: `([^`]+)`$", body, re.MULTILINE)
+    if "claim_verifications_b64:" in body:
+        if len(claim_matches) != 1:
+            fields["trace_projection_error"] = "claim verification projection is malformed or duplicated"
+        else:
+            try:
+                padding = "=" * (-len(claim_matches[0]) % 4)
+                claims = json.loads(base64.b64decode(
+                    claim_matches[0] + padding, altchars=b"-_", validate=True,
+                ).decode("utf-8"))
+                if not isinstance(claims, list) or any(not isinstance(claim, dict) for claim in claims):
+                    raise ValueError("claim verifications must be an array of objects")
+                fields["claim_verifications"] = claims
+            except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                fields["trace_projection_error"] = f"malformed claim verification projection: {exc}"
     evidence_match = re.search(r"^- non_pr_completion_evidence_b64: `([^`]+)`$", body, re.MULTILINE)
     if evidence_match:
         encoded = evidence_match.group(1)
@@ -576,6 +592,8 @@ def task_from_record(uid: str, record: dict[str, Any]) -> OrderedDict[str, Any]:
             ("non_pr_completion_evidence", record.get("non_pr_completion_evidence") or ""),
             ("non_pr_completion_evidence_file", record.get("non_pr_completion_evidence_file") or ""),
             ("non_pr_completion_evidence_sha256", record.get("non_pr_completion_evidence_sha256") or ""),
+            ("last_closed_at", record.get("last_closed_at") or ""),
+            ("claim_verifications", record.get("claim_verifications") or []),
             ("source_refs", record.get("source_refs") or []),
             ("doc_refs", record.get("doc_refs") or []),
             ("related_prd", record.get("related_prd") or []),
@@ -624,6 +642,14 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
         lines.append(f"- non_pr_completion_evidence_b64: `{encoded}`")
         if task.get("non_pr_completion_evidence_sha256"):
             lines.append(f"- non_pr_completion_evidence_sha256: `{task.get('non_pr_completion_evidence_sha256')}`")
+    if task.get("last_closed_at"):
+        lines.append(f"- last_closed_at: `{task.get('last_closed_at')}`")
+    claims = task.get("claim_verifications") or []
+    if claims:
+        encoded_claims = base64.urlsafe_b64encode(
+            json.dumps(claims, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        ).decode("ascii").rstrip("=")
+        lines.append(f"- claim_verifications_b64: `{encoded_claims}`")
     if task.get("merge_hold"):
         hold = task["merge_hold"]
         for key in ("kind", "requester", "reason", "resume_authority", "active"):
@@ -1865,6 +1891,22 @@ def preserve_identity_bound_cache(
     mode = live_mode or existing_mode
     if mode:
         record["completion_mode"] = mode
+
+    # Closeout claims and its timestamp are Issue-authoritative projections,
+    # not recoverable from a stale local cache.  If a previously refreshed
+    # cache had them but the live Issue no longer carries either field, stop
+    # before merge_task_mapping can silently retain the old claim.
+    for key in ("last_closed_at", "claim_verifications"):
+        if key in existing and existing.get(key) not in (None, "", [], {}):
+            if key not in live:
+                trace_projection_loss(
+                    task_uid,
+                    f"live Issue omitted previously projected {key}",
+                )
+    if "last_closed_at" in live:
+        record["last_closed_at"] = live["last_closed_at"]
+    if "claim_verifications" in live:
+        record["claim_verifications"] = live["claim_verifications"]
 
     evidence = live.get("non_pr_completion_evidence")
     cached_evidence = existing.get("non_pr_completion_evidence")
