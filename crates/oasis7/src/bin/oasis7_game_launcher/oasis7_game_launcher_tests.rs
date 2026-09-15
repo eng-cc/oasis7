@@ -747,30 +747,6 @@ fn build_viewer_live_command_wires_generated_world_dir() {
 }
 
 #[test]
-fn build_viewer_live_command_wires_llm_timeout_default_into_spawn_path() {
-    let mut options = CliOptions::default();
-    options.agent_decision_source = BUILTIN_LLM_DECISION_SOURCE.to_string();
-    let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
-    let args: Vec<String> = command
-        .get_args()
-        .map(|arg| arg.to_string_lossy().into_owned())
-        .collect();
-
-    assert!(args.contains(&"--llm".to_string()));
-    assert!(args.contains(&"--chain-status-bind".to_string()));
-    assert!(args.contains(&options.chain_status_bind));
-    assert!(args.contains(&"--chain-link-policy".to_string()));
-    assert!(args.contains(&options.chain_link_policy));
-    assert!(!args.iter().any(|arg| arg.is_empty()));
-    assert!(!args.iter().any(|arg| arg == DEFAULT_SCENARIO));
-    assert_eq!(
-        command_env_value(&command, LLM_TIMEOUT_MS_ENV),
-        Some(Some("30000".to_string()))
-    );
-    assert_eq!(DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS, 30_000);
-}
-
-#[test]
 fn build_viewer_live_command_skips_default_llm_timeout_when_repo_config_exists() {
     let options = CliOptions::default();
     let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, true);

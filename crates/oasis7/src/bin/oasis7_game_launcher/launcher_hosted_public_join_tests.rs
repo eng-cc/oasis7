@@ -1,6 +1,9 @@
 use std::path::Path;
 
-use super::{build_oasis7_viewer_live_command, parse_options};
+use super::{
+    BUILTIN_LLM_DECISION_SOURCE, CliOptions, DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS, DEFAULT_SCENARIO,
+    LLM_TIMEOUT_MS_ENV, build_oasis7_viewer_live_command, parse_options,
+};
 
 #[test]
 fn build_viewer_live_command_keeps_explicit_chain_status_bind_for_hosted_public_join() {
@@ -84,4 +87,29 @@ fn build_viewer_live_command_derives_trusted_registration_issuer_key() {
         "the hosted viewer child must explicitly remove the issuer private key"
     );
     assert_eq!(trusted_public_key.len(), 64);
+}
+
+#[test]
+fn build_viewer_live_command_wires_llm_timeout_default_into_spawn_path() {
+    let mut options = CliOptions::default();
+    options.agent_decision_source = BUILTIN_LLM_DECISION_SOURCE.to_string();
+    let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
+    let args: Vec<String> = command
+        .get_args()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+
+    assert!(args.contains(&"--llm".to_string()));
+    assert!(args.contains(&"--chain-status-bind".to_string()));
+    assert!(args.contains(&options.chain_status_bind));
+    assert!(args.contains(&"--chain-link-policy".to_string()));
+    assert!(args.contains(&options.chain_link_policy));
+    assert!(!args.iter().any(|arg| arg.is_empty()));
+    assert!(!args.iter().any(|arg| arg == DEFAULT_SCENARIO));
+    let timeout_env = command
+        .get_envs()
+        .find(|(key, _)| key.to_string_lossy() == LLM_TIMEOUT_MS_ENV)
+        .map(|(_, value)| value.map(|value| value.to_string_lossy().into_owned()));
+    assert_eq!(timeout_env, Some(Some("30000".to_string())));
+    assert_eq!(DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS, 30_000);
 }
