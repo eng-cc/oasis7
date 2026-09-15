@@ -1042,8 +1042,25 @@ with tempfile.TemporaryDirectory() as temp:
     assert refreshed["doc_refs"] == record["doc_refs"], refreshed
     assert refreshed["related_prd"] == record["related_prd"], refreshed
 
+    # I-1: an explicit non-terminal live Issue phase must not fall back to a
+    # stale fine-terminal cache phase when Project exposes coarse `done`.
+    captured = []
+    def fail(message):
+        captured.append(message)
+        raise SystemExit(1)
+    module.die = fail
+    issue["workflow_phase"] = "execution"
+    try:
+        module.command_refresh_task(args)
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError("stale terminal cache phase unexpectedly survived live Issue phase")
+    assert captured and captured[0].startswith("trace-projection-loss:"), captured
+
     # I-1: even when the cache loses its phase key, the live Issue phase remains
     # the fine terminal authority and cannot be replaced by Project `done`.
+    issue["workflow_phase"] = "task_done"
     cache_payload = json.loads(cache.read_text(encoding="utf-8"))
     cache_payload["tasks"][uid].pop("workflow_phase", None)
     cache.write_text(json.dumps(cache_payload) + "\n", encoding="utf-8")
@@ -1053,11 +1070,7 @@ with tempfile.TemporaryDirectory() as temp:
 
     # A coarse Project `done` without a fine terminal Issue or cache phase is
     # ambiguous and must fail closed instead of manufacturing `done`.
-    captured = []
-    def fail(message):
-        captured.append(message)
-        raise SystemExit(1)
-    module.die = fail
+    captured.clear()
     issue["workflow_phase"] = "execution"
     cache_payload = json.loads(cache.read_text(encoding="utf-8"))
     cache_payload["tasks"][uid].pop("workflow_phase", None)
@@ -1070,8 +1083,50 @@ with tempfile.TemporaryDirectory() as temp:
         raise AssertionError("ambiguous terminal refresh unexpectedly succeeded")
     assert captured and captured[0].startswith("trace-projection-loss:"), captured
 
+    # I-3: parser failures retain context, and refresh surfaces the same
+    # stable projection-loss diagnostic even before evidence reconstruction.
+    for encoded in ("!!!", "//4"):
+        parsed_loss = module.issue_task_fields(
+            f"- non_pr_completion_evidence_b64: `{encoded}`\n"
+        )
+        assert parsed_loss.get("trace_projection_error") == (
+            "malformed non-PR completion evidence encoding"
+        ), parsed_loss
+    cache_payload = json.loads(cache.read_text(encoding="utf-8"))
+    cache_record = cache_payload["tasks"][uid]
+    cache_record.update({"status": "committed", "workflow_phase": "execution"})
+    for key in ("non_pr_completion_evidence", "non_pr_completion_evidence_file", "non_pr_completion_evidence_sha256"):
+        cache_record.pop(key, None)
+    cache.write_text(json.dumps(cache_payload) + "\n", encoding="utf-8")
+    issue.update({"status": "committed", "workflow_phase": "execution"})
+    for key in ("non_pr_completion_evidence", "non_pr_completion_evidence_sha256"):
+        issue.pop(key, None)
+    issue["trace_projection_error"] = "malformed non-PR completion evidence encoding"
+    project_node["fieldValues"]["nodes"][1]["name"] = "committed"
+    project_node["fieldValues"]["nodes"][2]["name"] = "execution"
     captured.clear()
-    issue["workflow_phase"] = "task_done"
+    try:
+        module.command_refresh_task(args)
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError("malformed evidence refresh unexpectedly succeeded")
+    assert captured and captured[0].startswith("trace-projection-loss:"), captured
+
+    captured.clear()
+    issue.pop("trace_projection_error")
+    issue.update({"status": "done", "workflow_phase": "task_done",
+                  "non_pr_completion_evidence": evidence,
+                  "non_pr_completion_evidence_sha256": record["non_pr_completion_evidence_sha256"]})
+    project_node["fieldValues"]["nodes"][1]["name"] = "done"
+    project_node["fieldValues"]["nodes"][2]["name"] = "done"
+    cache_payload = json.loads(cache.read_text(encoding="utf-8"))
+    cache_record = cache_payload["tasks"][uid]
+    cache_record.update({"status": cached["status"], "workflow_phase": cached["workflow_phase"],
+                         "non_pr_completion_evidence": cached["non_pr_completion_evidence"],
+                         "non_pr_completion_evidence_file": cached["non_pr_completion_evidence_file"],
+                         "non_pr_completion_evidence_sha256": cached["non_pr_completion_evidence_sha256"]})
+    cache.write_text(json.dumps(cache_payload) + "\n", encoding="utf-8")
     evidence_path.unlink()
     try:
         module.command_refresh_task(args)

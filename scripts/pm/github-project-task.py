@@ -434,9 +434,11 @@ def issue_task_fields(body: str) -> dict[str, Any]:
         encoded = evidence_match.group(1)
         try:
             padding = "=" * (-len(encoded) % 4)
-            fields["non_pr_completion_evidence"] = base64.urlsafe_b64decode(encoded + padding).decode("utf-8")
+            fields["non_pr_completion_evidence"] = base64.b64decode(
+                encoded + padding, altchars=b"-_", validate=True
+            ).decode("utf-8")
         except (ValueError, UnicodeDecodeError):
-            fields["non_pr_completion_evidence"] = ""
+            fields["trace_projection_error"] = "malformed non-PR completion evidence encoding"
     hold_values: dict[str, Any] = {}
     for key in ("kind", "requester", "reason", "resume_authority", "active"):
         match = re.search(rf"^- merge_hold_{key}: `([^`]+)`$", body, re.MULTILINE)
@@ -1927,6 +1929,8 @@ def command_refresh_task(args: argparse.Namespace) -> int:
     live = github_issue_record(args.repo, args.task_uid)
     if not live:
         die(f"refresh-task: authoritative GitHub issue not found for {args.task_uid}")
+    if live.get("trace_projection_error"):
+        trace_projection_loss(args.task_uid, str(live["trace_projection_error"]))
     if existing.get("loop_binding") is not None and live.get("loop_binding") is None:
         die("refresh-task: live loop binding disappeared; explicit reconciliation required")
     lineage_path = loop_lineage_path(root, args.task_uid)
@@ -2134,6 +2138,11 @@ def command_refresh_task(args: argparse.Namespace) -> int:
             # the fine-grained authority, with cache as a recovery fallback.
             if issue_phase in fine_terminal_phases:
                 record["workflow_phase"] = issue_phase
+            elif issue_phase:
+                trace_projection_loss(
+                    args.task_uid,
+                    "live Issue workflow phase conflicts with cached terminal phase",
+                )
             elif existing_phase in fine_terminal_phases:
                 record["workflow_phase"] = existing_phase
             else:
