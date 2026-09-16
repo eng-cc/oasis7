@@ -367,6 +367,18 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
+      - name: Compute Linux package cache save eligibility
+        id: linux-package-cache-write
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cache_write=false
+          live_head="$(git rev-parse HEAD)"
+          if [[ "${GITHUB_REF}" == "refs/heads/main" && "${live_head}" == "${GITHUB_SHA}" ]]; then
+            cache_write=true
+          fi
+          echo "save=${cache_write}" >> "${GITHUB_OUTPUT}"
       - name: Install pinned Rust toolchain
         shell: bash
         run: |
@@ -392,6 +404,13 @@ jobs:
             libasound2-dev \
             libudev-dev
       - uses: Swatinem/rust-cache@v2
+        if: runner.os == 'Linux'
+        with:
+          shared-key: oasis7-package-native-${{ runner.os }}-${{ matrix.target_triple }}-packaging-v1
+          cache-on-failure: false
+          save-if: ${{ steps.linux-package-cache-write.outputs.save == 'true' }}
+      - uses: Swatinem/rust-cache@v2
+        if: runner.os != 'Linux'
         with:
           shared-key: release-packages-package-native-${{ runner.os }}-${{ matrix.target_triple }}-v2
           cache-on-failure: true
