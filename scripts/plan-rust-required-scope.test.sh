@@ -167,8 +167,10 @@ assert_reason_absent "$static_governance_output" "unclassified_or_unresolvable:"
 rust_gate_helper_output="$(plan_for_paths \
   scripts/cargo-dev.sh \
   scripts/cargo-dev-lib.sh \
+  scripts/cargo-dev-lib.test.sh \
   scripts/cargo-dev-windows-toolchain.test.sh \
   scripts/check-standalone-tool-lockfiles.sh \
+  scripts/check-standalone-tool-lockfiles.test.sh \
   scripts/check-rust-file-size.sh \
   scripts/check-rust-file-size.test.sh \
   scripts/check-rustsec-ignore-baseline.sh \
@@ -179,8 +181,10 @@ assert_key_equals "$rust_gate_helper_output" needs_rust_toolchain true
 for rust_gate_helper_path in \
   scripts/cargo-dev.sh \
   scripts/cargo-dev-lib.sh \
+  scripts/cargo-dev-lib.test.sh \
   scripts/cargo-dev-windows-toolchain.test.sh \
   scripts/check-standalone-tool-lockfiles.sh \
+  scripts/check-standalone-tool-lockfiles.test.sh \
   scripts/check-rust-file-size.sh \
   scripts/check-rust-file-size.test.sh \
   scripts/check-rustsec-ignore-baseline.sh \
@@ -234,6 +238,17 @@ assert_key_equals "$operational_contract_output" needs_system_deps false
 assert_reason_contains "$operational_contract_output" \
   "operational_contracts:scripts/p2p-public-testnet-package-rollout.test.sh"
 assert_reason_absent "$operational_contract_output" "unclassified_or_unresolvable:"
+
+service_readback_output="$(plan_for_path scripts/p2p-public-testnet-service-readback.test.sh)"
+assert_key_equals "$service_readback_output" scope targeted
+assert_key_equals "$service_readback_output" selected_capabilities operational_contracts
+assert_key_equals "$service_readback_output" run_operational_contracts true
+assert_key_equals "$service_readback_output" run_rust_baseline false
+assert_key_equals "$service_readback_output" needs_rust_toolchain false
+assert_key_equals "$service_readback_output" needs_node false
+assert_reason_contains "$service_readback_output" \
+  "operational_contracts:scripts/p2p-public-testnet-service-readback.test.sh"
+assert_reason_absent "$service_readback_output" "unclassified_or_unresolvable:"
 
 # Keep the implementation sources paired with their fixture-backed operational
 # contracts. Source-only changes must select the same non-Rust lane rather than
@@ -332,6 +347,92 @@ assert_reason_contains "$governance_helper_output" "governance_script:scripts/pm
 assert_reason_contains "$governance_helper_output" "governance_script:scripts/prepare-task-pr.test.sh"
 assert_reason_contains "$governance_helper_output" "governance_script:scripts/plan-rust-required-scope.test.sh"
 assert_reason_absent "$governance_helper_output" "unclassified_or_unresolvable:"
+
+# Traceability checkers and their caller contract are required-gate governance
+# fixtures.  Keep them on the minimal lane so adding these checks does not
+# widen an otherwise documentation-only change through the unmatched fallback.
+traceability_governance_output="$(plan_for_paths \
+  scripts/system-design-traceability-check.py \
+  scripts/system-design-traceability-check.test.py \
+  scripts/product-doc-content-check.py \
+  scripts/product-doc-content-check.test.py \
+  scripts/product-doc-content-callers.test.sh)"
+assert_key_equals "$traceability_governance_output" scope minimal
+assert_key_equals "$traceability_governance_output" selected_capabilities required_gate_baseline
+assert_key_equals "$traceability_governance_output" run_rust_baseline false
+assert_key_equals "$traceability_governance_output" needs_rust_toolchain false
+assert_key_equals "$traceability_governance_output" needs_node false
+for traceability_governance_path in \
+  scripts/system-design-traceability-check.py \
+  scripts/system-design-traceability-check.test.py \
+  scripts/product-doc-content-check.py \
+  scripts/product-doc-content-check.test.py \
+  scripts/product-doc-content-callers.test.sh; do
+  assert_reason_contains "$traceability_governance_output" \
+    "governance_script:$traceability_governance_path"
+done
+assert_reason_absent "$traceability_governance_output" "unclassified_or_unresolvable:"
+
+# Document inventory helpers form a document-only static-validation closure:
+# the two inventory checkers inspect JSON/Markdown snapshots (the corpus
+# checker delegates only to the evidence checker), the report uses Python
+# stdlib to count Markdown files, and the pinned Markdown adapter is consumed
+# only by product-document gates.  None invokes Rust, Node, runtime, build,
+# launcher, or generated-artifact paths, so keep each exact path on the
+# minimal governance lane.
+document_governance_paths=(
+  scripts/doc-evidence-inventory-check.py
+  scripts/doc-evidence-inventory-check.test.py
+  scripts/document-corpus-inventory-check.py
+  scripts/document-corpus-inventory-check.test.py
+  scripts/doc-inventory-report.sh
+  scripts/doc-governance-requirements.txt
+  scripts/product_doc_markdown.py
+)
+document_governance_output="$(plan_for_paths "${document_governance_paths[@]}")"
+assert_key_equals "$document_governance_output" scope minimal
+assert_key_equals "$document_governance_output" selected_capabilities required_gate_baseline
+assert_key_equals "$document_governance_output" run_rust_baseline false
+assert_key_equals "$document_governance_output" needs_rust_toolchain false
+assert_key_equals "$document_governance_output" needs_node false
+assert_key_equals "$document_governance_output" needs_system_deps false
+for document_governance_path in "${document_governance_paths[@]}"; do
+  assert_reason_contains "$document_governance_output" \
+    "governance_script:$document_governance_path"
+done
+assert_reason_absent "$document_governance_output" "unclassified_or_unresolvable:"
+
+# The legacy hook is explicitly a silent compatibility no-op.  Its focused
+# fixture supplies forbidden-command shims and proves that the hook emits no
+# output or validation call; keep only the hook and its fixture test minimal.
+precommit_noop_output="$(plan_for_paths \
+  scripts/pre-commit.sh \
+  scripts/pre-commit.test.sh)"
+assert_key_equals "$precommit_noop_output" scope minimal
+assert_key_equals "$precommit_noop_output" selected_capabilities required_gate_baseline
+assert_key_equals "$precommit_noop_output" run_rust_baseline false
+assert_key_equals "$precommit_noop_output" needs_rust_toolchain false
+assert_key_equals "$precommit_noop_output" needs_node false
+assert_key_equals "$precommit_noop_output" needs_system_deps false
+assert_reason_contains "$precommit_noop_output" \
+  "governance_script:scripts/pre-commit.sh"
+assert_reason_contains "$precommit_noop_output" \
+  "governance_script:scripts/pre-commit.test.sh"
+assert_reason_absent "$precommit_noop_output" "unclassified_or_unresolvable:"
+
+# Explicit repair is a different contract: it runs Cargo formatting, mutates
+# the index with git add -u, and invokes the commit-tier ci-tests entrypoint.
+# Keep it on the shared full required-gate rule so an isolated change cannot
+# under-plan those Rust/staging/commit effects.
+precommit_repair_output="$(plan_for_path scripts/fix-precommit.sh)"
+assert_key_equals "$precommit_repair_output" scope full
+assert_key_equals "$precommit_repair_output" run_rust_baseline true
+assert_key_equals "$precommit_repair_output" needs_rust_toolchain true
+assert_key_equals "$precommit_repair_output" needs_node true
+assert_key_equals "$precommit_repair_output" needs_system_deps true
+assert_reason_contains "$precommit_repair_output" \
+  "shared_required_gate:scripts/fix-precommit.sh"
+assert_reason_absent "$precommit_repair_output" "unclassified_or_unresolvable:"
 
 # These seven shell fixtures validate required-gate workflow wiring.  Keep
 # every path exact so a missing mapping cannot silently widen this plan to the
@@ -571,7 +672,11 @@ viewer_launcher_wrapper_output="$(plan_for_paths \
   scripts/run-launcher-stack.sh \
   scripts/run-producer-playtest.sh \
   scripts/worktree-harness.sh \
-  scripts/worktree-harness-contract.test.sh)"
+  scripts/worktree-harness-lib.sh \
+  scripts/worktree-harness-contract.test.sh \
+  scripts/worktree-harness-lifecycle.test.sh \
+  scripts/worktree-harness-lifecycle-races.test.sh \
+  scripts/run-launcher-stack-local-mock-lane.test.sh)"
 assert_key_equals "$viewer_launcher_wrapper_output" scope targeted
 assert_key_equals "$viewer_launcher_wrapper_output" run_viewer_contract_tests true
 assert_key_equals "$viewer_launcher_wrapper_output" run_viewer_wasm_check true
@@ -580,8 +685,62 @@ assert_key_equals "$viewer_launcher_wrapper_output" needs_trunk true
 assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/run-launcher-stack.sh"
 assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/run-producer-playtest.sh"
 assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/worktree-harness.sh"
+assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/worktree-harness-lib.sh"
 assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/worktree-harness-contract.test.sh"
+assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/worktree-harness-lifecycle.test.sh"
+assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/worktree-harness-lifecycle-races.test.sh"
+assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/run-launcher-stack-local-mock-lane.test.sh"
 assert_reason_absent "$viewer_launcher_wrapper_output" "unclassified_or_unresolvable:"
+
+# The harness library is shared by launcher code and workflow-governance
+# entrypoints (new-task-worktree, PR preparation, and review closeout).  Its
+# isolated plan must retain both classifications so the governance contracts
+# run without dropping the launcher checks.
+worktree_harness_lib_output="$(plan_for_path scripts/worktree-harness-lib.sh)"
+assert_key_equals "$worktree_harness_lib_output" scope targeted
+assert_key_equals "$worktree_harness_lib_output" selected_capabilities \
+  'launcher_web;viewer_js_required;workflow_governance'
+assert_key_equals "$worktree_harness_lib_output" run_operational_contracts true
+assert_reason_contains "$worktree_harness_lib_output" \
+  "viewer_launcher_wrapper:scripts/worktree-harness-lib.sh"
+assert_reason_contains "$worktree_harness_lib_output" \
+  "workflow_governance:scripts/worktree-harness-lib.sh"
+assert_reason_absent "$worktree_harness_lib_output" "unclassified_or_unresolvable:"
+
+# The local launcher mock lane remains launcher-only; it must not inherit the
+# governance overlap added for the shared harness library.
+launcher_mock_lane_output="$(plan_for_path \
+  scripts/run-launcher-stack-local-mock-lane.test.sh)"
+assert_key_equals "$launcher_mock_lane_output" scope targeted
+assert_key_equals "$launcher_mock_lane_output" \
+  selected_capabilities 'launcher_web;viewer_js_required'
+assert_key_equals "$launcher_mock_lane_output" run_operational_contracts false
+assert_reason_contains "$launcher_mock_lane_output" \
+  "viewer_launcher_wrapper:scripts/run-launcher-stack-local-mock-lane.test.sh"
+assert_reason_absent "$launcher_mock_lane_output" \
+  "workflow_governance:scripts/run-launcher-stack-local-mock-lane.test.sh"
+assert_reason_absent "$launcher_mock_lane_output" "unclassified_or_unresolvable:"
+
+# The standalone viewer server is retained as a compatibility/debug entrypoint
+# outside the current launcher caller graph.  Keep its ambiguous/deprecated
+# path on the fail-closed full fallback until its ownership and active caller
+# contract are made unambiguous.
+legacy_viewer_web_output="$(plan_for_path scripts/run-viewer-web.sh)"
+assert_key_equals "$legacy_viewer_web_output" scope full
+assert_key_equals "$legacy_viewer_web_output" run_rust_baseline true
+assert_reason_contains "$legacy_viewer_web_output" \
+  "unclassified_or_unresolvable:scripts/run-viewer-web.sh"
+
+# The baseline LLM fixture is intentionally full: it runs several test_tier_full
+# Rust cases and is only invoked by the full/full-support tiers.  Keep it
+# unmatched so the fail-closed full fallback remains explicit until a dedicated
+# capability can prove an equivalent focused lane.
+llm_baseline_fixture_output="$(plan_for_path scripts/llm-baseline-fixture-smoke.sh)"
+assert_key_equals "$llm_baseline_fixture_output" scope full
+assert_key_equals "$llm_baseline_fixture_output" run_rust_baseline true
+assert_key_equals "$llm_baseline_fixture_output" needs_rust_toolchain true
+assert_reason_contains "$llm_baseline_fixture_output" \
+  "unclassified_or_unresolvable:scripts/llm-baseline-fixture-smoke.sh"
 
 viewer_gameplay_hardening_output="$(plan_for_path scripts/pm/verify-gameplay-high-risk-hardening.sh)"
 assert_key_equals "$viewer_gameplay_hardening_output" scope targeted
