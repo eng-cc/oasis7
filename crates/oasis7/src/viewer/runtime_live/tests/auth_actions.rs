@@ -315,9 +315,11 @@ fn runtime_background_play_tolerates_transient_llm_failure_after_confirmed_progr
                     let feedback: crate::simulator::FeedbackEnvelopeV1 =
                         serde_json::from_slice(request.body.as_slice())
                             .expect("decode Runtime feedback");
-                    assert_eq!(feedback.status, "rejected");
-                    assert_eq!(feedback.reject_reason.as_deref(), Some("stale_base"));
-                    assert!(feedback.runtime_receipt_id.is_none());
+                    assert_eq!(
+                        feedback.status, "committed",
+                        "the initial provider action should retain its captured base"
+                    );
+                    assert!(feedback.runtime_receipt_id.is_some());
                     MockHttpResponse {
                         status_code: 200,
                         body: serde_json::json!({"ok": true}).to_string(),
@@ -426,8 +428,8 @@ fn runtime_background_play_tolerates_transient_llm_failure_after_confirmed_progr
     );
     assert_eq!(session.transient_play_failures, 1);
     assert!(
-        server.world.state().time > advanced_time,
-        "ticks while the transient provider response was pending must remain visible"
+        server.world.state().time == advanced_time,
+        "the Runtime base must remain stable while the transient provider response is pending"
     );
     assert!(
         !server.world.journal().events[baseline_journal_len..]

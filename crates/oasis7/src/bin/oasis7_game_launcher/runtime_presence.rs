@@ -1,10 +1,17 @@
 use super::*;
+#[cfg(test)]
 use oasis7::simulator::WorldSnapshot;
 use oasis7::viewer::{VIEWER_PROTOCOL_VERSION, ViewerRequest, ViewerResponse};
+use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 
-const HOSTED_SESSION_RUNTIME_PROBE_TIMEOUT_MS: u64 = 300;
+// Runtime snapshots in the hosted W3 world are approximately 400 KiB and
+// are produced behind the live runtime lock. The observed commit path takes
+// up to about 1 second, so 300 ms expires probes while the runtime is healthy.
+const HOSTED_SESSION_RUNTIME_PROBE_TIMEOUT_MS: u64 = 2_000;
 const HOSTED_SESSION_RUNTIME_PROBE_INTERVAL_MS: u64 = 1_000;
 const RUNTIME_PRESENCE_PROBE_CLIENT: &str = "oasis7_game_launcher_hosted_session_probe";
+static NEXT_RUNTIME_PRESENCE_PROBE_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 pub(super) fn run_runtime_presence_monitor(
     stop_requested: Arc<AtomicBool>,
@@ -20,13 +27,22 @@ pub(super) fn run_runtime_presence_monitor(
 }
 
 pub(super) fn query_runtime_bound_players(live_bind: &str) -> Result<BTreeSet<String>, String> {
+    query_runtime_bound_players_with_probe_sequence(live_bind).map(|(_, players)| players)
+}
+
+pub(super) fn query_runtime_bound_players_with_probe_sequence(
+    live_bind: &str,
+) -> Result<(u64, BTreeSet<String>), String> {
+    let probe_sequence = NEXT_RUNTIME_PRESENCE_PROBE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
     let mut client = ViewerRuntimeProbeClient::connect(
         live_bind,
         Duration::from_millis(HOSTED_SESSION_RUNTIME_PROBE_TIMEOUT_MS),
         RUNTIME_PRESENCE_PROBE_CLIENT,
     )?;
     client.request_snapshot()?;
-    client.wait_for_snapshot()
+    client
+        .wait_for_snapshot()
+        .map(|players| (probe_sequence, players))
 }
 
 fn run_runtime_presence_monitor_with_interval(
@@ -37,9 +53,13 @@ fn run_runtime_presence_monitor_with_interval(
 ) {
     while !stop_requested.load(Ordering::SeqCst) {
         let probe_started_at = Instant::now();
-        match query_runtime_bound_players(live_bind.as_str()) {
-            Ok(active_players) => {
-                observe_runtime_presence_snapshot(&hosted_session_issuer, &active_players);
+        match query_runtime_bound_players_with_probe_sequence(live_bind.as_str()) {
+            Ok((probe_sequence, active_players)) => {
+                observe_runtime_presence_snapshot(
+                    &hosted_session_issuer,
+                    probe_sequence,
+                    &active_players,
+                );
             }
             Err(err) => {
                 if let Ok(mut issuer) = hosted_session_issuer.lock() {
@@ -53,10 +73,14 @@ fn run_runtime_presence_monitor_with_interval(
 
 fn observe_runtime_presence_snapshot(
     hosted_session_issuer: &Arc<Mutex<HostedPlayerSessionIssuer>>,
+    probe_sequence: u64,
     active_players: &BTreeSet<String>,
 ) {
     if let Ok(mut issuer) = hosted_session_issuer.lock() {
-        issuer.observe_runtime_active_players(active_players.iter().map(String::as_str));
+        issuer.observe_runtime_active_players_for_probe(
+            probe_sequence,
+            active_players.iter().map(String::as_str),
+        );
     }
 }
 
@@ -101,11 +125,8 @@ impl ViewerRuntimeProbeClient {
     fn wait_for_snapshot(&mut self) -> Result<BTreeSet<String>, String> {
         loop {
             match self.read_response_line()? {
-                ViewerResponseLine::Response(response) => {
-                    if let Some(active_players) = runtime_players_from_response(&response) {
-                        return Ok(active_players);
-                    }
-                }
+                ViewerResponseLine::Snapshot(active_players) => return Ok(active_players),
+                ViewerResponseLine::Response(_) => {}
                 ViewerResponseLine::Timeout => {
                     return Err("runtime probe timed out waiting for snapshot".to_string());
                 }
@@ -121,6 +142,7 @@ impl ViewerRuntimeProbeClient {
             match self.read_response_line()? {
                 ViewerResponseLine::Response(ViewerResponse::HelloAck { .. }) => return Ok(()),
                 ViewerResponseLine::Response(_) => {}
+                ViewerResponseLine::Snapshot(_) => {}
                 ViewerResponseLine::Timeout => {
                     return Err("runtime probe timed out waiting for hello_ack".to_string());
                 }
@@ -149,9 +171,7 @@ impl ViewerRuntimeProbeClient {
         let mut line = String::new();
         match self.reader.read_line(&mut line) {
             Ok(0) => Ok(ViewerResponseLine::Closed),
-            Ok(_) => serde_json::from_str(line.trim_end())
-                .map(ViewerResponseLine::Response)
-                .map_err(|err| format!("decode runtime presence response failed: {err}")),
+            Ok(_) => decode_runtime_presence_response(line.trim_end()),
             Err(err) if is_timeout_error(&err) => Ok(ViewerResponseLine::Timeout),
             Err(err) => Err(format!("read runtime presence response failed: {err}")),
         }
@@ -160,10 +180,51 @@ impl ViewerRuntimeProbeClient {
 
 enum ViewerResponseLine {
     Response(ViewerResponse),
+    Snapshot(BTreeSet<String>),
     Timeout,
     Closed,
 }
 
+fn decode_runtime_presence_response(line: &str) -> Result<ViewerResponseLine, String> {
+    let value: serde_json::Value = serde_json::from_str(line)
+        .map_err(|err| format!("decode runtime presence response failed: {err}"))?;
+    if value.get("type").and_then(serde_json::Value::as_str) == Some("snapshot") {
+        return decode_runtime_presence_snapshot(&value).map(ViewerResponseLine::Snapshot);
+    }
+    serde_json::from_value(value)
+        .map(ViewerResponseLine::Response)
+        .map_err(|err| format!("decode runtime presence response failed: {err}"))
+}
+
+fn decode_runtime_presence_snapshot(
+    response: &serde_json::Value,
+) -> Result<BTreeSet<String>, String> {
+    let snapshot = response
+        .get("snapshot")
+        .ok_or_else(|| "runtime presence snapshot is missing snapshot payload".to_string())?;
+    let wire: RuntimePresenceSnapshotWire = serde_json::from_value(snapshot.clone())
+        .map_err(|err| format!("decode runtime presence snapshot structure failed: {err}"))?;
+    Ok(wire
+        .model
+        .agent_player_bindings
+        .values()
+        .map(|player_id| player_id.trim())
+        .filter(|player_id| !player_id.is_empty())
+        .map(ToOwned::to_owned)
+        .collect())
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct RuntimePresenceSnapshotWire {
+    model: RuntimePresenceModelWire,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct RuntimePresenceModelWire {
+    agent_player_bindings: BTreeMap<String, String>,
+}
+
+#[cfg(test)]
 fn runtime_players_from_response(response: &ViewerResponse) -> Option<BTreeSet<String>> {
     let ViewerResponse::Snapshot { snapshot } = response else {
         return None;
@@ -171,6 +232,7 @@ fn runtime_players_from_response(response: &ViewerResponse) -> Option<BTreeSet<S
     Some(runtime_players_from_snapshot(snapshot))
 }
 
+#[cfg(test)]
 fn runtime_players_from_snapshot(snapshot: &WorldSnapshot) -> BTreeSet<String> {
     snapshot
         .model
@@ -215,6 +277,32 @@ mod tests {
     use std::io::{BufRead, BufReader, BufWriter, Write};
     use std::net::{TcpListener, TcpStream};
     use std::thread;
+
+    #[test]
+    fn runtime_presence_decoder_accepts_decimal_string_snapshot_numbers() {
+        let response = serde_json::json!({
+            "type": "snapshot",
+            "snapshot": {
+                "version": 1,
+                "time": "0",
+                "next_event_id": "0",
+                "journal_len": "0",
+                "model": {
+                    "agent_player_bindings": {
+                        "agent-0": "player-wire",
+                        "agent-empty": "  "
+                    }
+                }
+            }
+        });
+
+        let decoded = decode_runtime_presence_response(response.to_string().as_str())
+            .expect("decode runtime presence snapshot");
+        let ViewerResponseLine::Snapshot(active_players) = decoded else {
+            panic!("expected snapshot response");
+        };
+        assert_eq!(active_players, BTreeSet::from(["player-wire".to_string()]));
+    }
 
     #[test]
     fn query_runtime_bound_players_reads_snapshot() {
@@ -266,6 +354,59 @@ mod tests {
             BTreeSet::from(["player-a".to_string(), "player-b".to_string()])
         );
 
+        handle.join().expect("join mock");
+    }
+
+    #[test]
+    fn query_runtime_bound_players_allows_runtime_snapshot_generation_delay() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind mock");
+        let addr = listener.local_addr().expect("local addr");
+        let handle = thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("accept");
+            let reader_stream = stream.try_clone().expect("clone");
+            let mut reader = BufReader::new(reader_stream);
+            let mut writer = BufWriter::new(stream);
+
+            expect_request_type(&mut reader, |request| {
+                matches!(
+                    request,
+                    ViewerRequest::Hello {
+                        version: VIEWER_PROTOCOL_VERSION,
+                        ..
+                    }
+                )
+            });
+            write_response(
+                &mut writer,
+                &ViewerResponse::HelloAck {
+                    server: "oasis7".to_string(),
+                    version: VIEWER_PROTOCOL_VERSION,
+                    min_version: 1,
+                    max_version: VIEWER_PROTOCOL_VERSION,
+                    capabilities: Vec::new(),
+                    world_id: "test-world".to_string(),
+                    control_profile: oasis7::viewer::ViewerControlProfile::Live,
+                    authority_epoch: None,
+                },
+            );
+            expect_request_type(&mut reader, |request| {
+                matches!(request, ViewerRequest::RequestSnapshot)
+            });
+            thread::sleep(Duration::from_millis(350));
+            write_response(
+                &mut writer,
+                &ViewerResponse::Snapshot {
+                    snapshot: world_snapshot(["player-delayed"]),
+                },
+            );
+        });
+
+        let active_players =
+            query_runtime_bound_players(format!("{addr}").as_str()).expect("delayed snapshot");
+        assert_eq!(
+            active_players,
+            BTreeSet::from(["player-delayed".to_string()])
+        );
         handle.join().expect("join mock");
     }
 

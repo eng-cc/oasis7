@@ -15,6 +15,139 @@ function createFeedbackModule(state) {
 
 describe("viewer feedback module", () => {
   it.each([
+    ["accepted", "accepted"],
+    ["applied", "applied"],
+    ["stale", "stale"],
+    ["rejected", "rejected"],
+    ["blocked", "blocked"],
+  ])("presents enhanced prompt result status %s", (status, expectedText) => {
+    const module = createFeedbackModule({ uiLocale: "en" });
+    const feedback = {
+      id: "prompt-result",
+      kind: "prompt",
+      action: "prompt_control_apply",
+      agentId: "agent-0",
+      accepted: status === "accepted" || status === "applied",
+      ok: status === "accepted" || status === "applied",
+      stage: status,
+      response: {
+        status,
+        operation: "apply",
+        preview: status === "accepted",
+        version: 5,
+        applied_fields: ["system_prompt"],
+        applied_scope: "runtime_instance",
+        persistence_scope: "none",
+        sync_scope: "none",
+        reason_code: status,
+        next_step: status === "stale" ? "refresh_version_and_retry" : "continue_runtime",
+      },
+    };
+    const description = module.describeSemanticFeedback(feedback, "en");
+    expect(description.label.toLowerCase()).toContain(expectedText);
+    expect(description.summary.toLowerCase()).toContain(expectedText);
+    if (status === "applied") {
+      expect(description.detail).toContain("persistence: none");
+      expect(description.detail).toContain("sync: none");
+    }
+  });
+
+  it("redacts protected metadata from hidden prompt-control receipts", () => {
+    const module = createFeedbackModule({ uiLocale: "en" });
+    const snapshot = module.snapshotSemanticFeedback({
+      id: "hidden-result",
+      kind: "prompt",
+      action: "prompt_control_apply",
+      agentId: "agent-0",
+      accepted: false,
+      ok: false,
+      stage: "blocked",
+      response: {
+        request_id: "pc-hidden",
+        status: "blocked",
+        value_visibility: "hidden",
+        reason_code: "control_lost",
+        next_step: "reauthenticate_and_refresh_binding",
+        player_id: "player-secret",
+        binding_epoch: 12,
+        version: 9,
+        digest: "digest-secret",
+        applied_fields: ["system_prompt"],
+        system_prompt: "latest secret prompt",
+      },
+    });
+
+    expect(snapshot.response).toEqual({
+      request_id: "pc-hidden",
+      status: "blocked",
+      value_visibility: "hidden",
+      reason_code: "control_lost",
+      next_step: "reauthenticate_and_refresh_binding",
+    });
+    expect(JSON.stringify(snapshot)).not.toContain("player-secret");
+    expect(JSON.stringify(snapshot)).not.toContain("digest-secret");
+    expect(JSON.stringify(snapshot)).not.toContain("latest secret prompt");
+    expect(module.describeSemanticFeedback(snapshot, "en").detail).toContain("Re-authenticate and refresh the current binding");
+  });
+
+  it("reports a replayed applied receipt without implying a second mutation", () => {
+    const module = createFeedbackModule({ uiLocale: "en" });
+    const description = module.describeSemanticFeedback({
+      kind: "prompt",
+      action: "prompt_control_apply",
+      stage: "applied",
+      accepted: true,
+      ok: true,
+      response: {
+        status: "applied",
+        operation: "apply",
+        version: 6,
+        idempotent_replay: true,
+        mutation_count: 1,
+        applied_scope: "runtime_instance",
+        persistence_scope: "none",
+        sync_scope: "none",
+      },
+    }, "en");
+
+    expect(description.detail).toContain("no second mutation");
+  });
+
+  it("projects a hidden chat authority refusal as safe control-loss recovery", () => {
+    const module = createFeedbackModule({ uiLocale: "en" });
+    const snapshot = module.snapshotSemanticFeedback({
+      id: "chat-control-lost",
+      kind: "chat",
+      action: "agent_chat",
+      agentId: "agent-0",
+      accepted: false,
+      ok: false,
+      stage: "error",
+      response: {
+        status: "blocked",
+        value_visibility: "hidden",
+        reason_code: "control_lost",
+        next_step: "reauthenticate_and_refresh_binding",
+        message: "Agent control was lost; re-authenticate and refresh the current binding before retrying.",
+        player_id: "player-secret",
+        provider_trace: "trace-secret",
+      },
+    });
+
+    expect(snapshot.response).toEqual(expect.objectContaining({
+      status: "blocked",
+      value_visibility: "hidden",
+      reason_code: "control_lost",
+      next_step: "reauthenticate_and_refresh_binding",
+    }));
+    expect(JSON.stringify(snapshot)).not.toContain("player-secret");
+    expect(JSON.stringify(snapshot)).not.toContain("trace-secret");
+    const description = module.describeSemanticFeedback(snapshot, "en");
+    expect(description.label).toBe("Control lost");
+    expect(description.detail).toContain("Re-authenticate and refresh the current binding");
+  });
+
+  it.each([
     ["en", "unknown_internal_code", "Current blocker"],
     ["zh", "unknown_internal_code", "当前阻塞"],
     ["en", "power_shortage", "Missing Power"],

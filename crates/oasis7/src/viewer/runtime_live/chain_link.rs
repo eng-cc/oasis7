@@ -6,6 +6,7 @@ use crate::runtime::{
     CognitionProvisioningRequestV1, MainTokenConfig, MainTokenSupplyState,
     WorldEvent as RuntimeWorldEvent, production_hardened_main_token_config,
 };
+use crate::simulator::RuntimeBindingV1;
 use std::collections::BTreeSet;
 use std::net::ToSocketAddrs;
 
@@ -377,9 +378,55 @@ impl ViewerRuntimeLiveServer {
         .map_err(ViewerRuntimeLiveServerError::Init)?;
         let materially_different_world = prepared_snapshot_hash != baseline_snapshot_hash
             && chain_linked_runtime_has_playable_state(&prepared.world);
-        if prepared.committed_height < self.last_chain_committed_height
-            || (prepared.committed_height == self.last_chain_committed_height
-                && !materially_different_world)
+        if prepared.committed_height < self.last_chain_committed_height {
+            return Ok(ChainLinkedRuntimeDispatch {
+                advanced: false,
+                responses: Vec::new(),
+            });
+        }
+
+        // A provider turn owns a short-lived local Runtime projection while
+        // its outcome is in flight. Keep that projection intact only while
+        // the chain binding is unchanged and the prepared chain world has not
+        // already published the same lease. A binding change remains
+        // fail-closed: it replaces the projection so the old lease is fenced.
+        let provider_lease_agents = self
+            .llm_sidecar
+            .provider_cognition_lease_agents_in_flight(&self.world);
+        let prepared_provider_lease_agents = self
+            .llm_sidecar
+            .provider_cognition_lease_agents_in_flight(&prepared.world);
+        let provider_lease_requires_continuity = !provider_lease_agents.is_empty()
+            && provider_lease_agents
+                .iter()
+                .any(|agent_id| !prepared_provider_lease_agents.contains(agent_id))
+            && provider_lease_agents.iter().all(|agent_id| {
+                self.world
+                    .capability_revocation_state()
+                    .agent_identities
+                    .get(agent_id)
+                    == prepared
+                        .world
+                        .capability_revocation_state()
+                        .agent_identities
+                        .get(agent_id)
+            })
+            && match (
+                self.world.current_cognition_runtime_binding(),
+                prepared.world.current_cognition_runtime_binding(),
+            ) {
+                (Ok(current), Ok(prepared)) => chain_runtime_authority_matches(&current, &prepared),
+                _ => false,
+            };
+        if provider_lease_requires_continuity {
+            return Ok(ChainLinkedRuntimeDispatch {
+                advanced: false,
+                responses: Vec::new(),
+            });
+        }
+
+        if prepared.committed_height == self.last_chain_committed_height
+            && !materially_different_world
         {
             return Ok(ChainLinkedRuntimeDispatch {
                 advanced: false,
@@ -645,6 +692,23 @@ fn chain_linked_runtime_sync_watermark(committed_height: u64, world: &RuntimeWor
         .max(latest_runtime_event_seq(world))
 }
 
+fn chain_runtime_authority_matches(
+    current: &RuntimeBindingV1,
+    prepared: &RuntimeBindingV1,
+) -> bool {
+    // A normal canonical tick changes the request snapshot's base tick and
+    // base-world hash. The authority boundary is the stable world/finality/
+    // reorg/manifest tuple; rotation of any of those fields must still fence
+    // the in-flight lease through the normal chain replacement path.
+    current.world_id == prepared.world_id
+        && current.branch_id == prepared.branch_id
+        && current.finality_epoch == prepared.finality_epoch
+        && current.finality_block_hash == prepared.finality_block_hash
+        && current.finality_status == prepared.finality_status
+        && current.reorg_epoch == prepared.reorg_epoch
+        && current.runtime_manifest_hash == prepared.runtime_manifest_hash
+}
+
 fn chain_linked_runtime_has_playable_state(world: &RuntimeWorld) -> bool {
     let state = world.state();
     !state.agents.is_empty() || !state.resources.is_empty() || !state.factories.is_empty()
@@ -902,6 +966,7 @@ pub(super) fn load_chain_execution_world(
     RuntimeWorld::load_from_dir(execution_world_dir)
         .map(|world| {
             let mut world = world.with_release_security_policy(release_security_policy.clone());
+            world.detach_persistence_dir();
             normalize_chain_execution_world_main_token_config(&mut world, release_security_policy);
             world
         })

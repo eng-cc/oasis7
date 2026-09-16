@@ -19,11 +19,8 @@ use super::{
     VIEWER_AGENT_PROVIDER_MODE_ENV, VIEWER_AGENT_PROVIDER_PROFILE_ENV,
     VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, VIEWER_AGENT_PROVIDER_URL_ENV, WORLDSIM_PROVIDER_CONTRACT,
     apply_viewer_live_env_overrides, build_game_url, build_oasis7_chain_runtime_args,
-    build_oasis7_viewer_live_command, content_type_for_path,
-    missing_execution_world_persistence_files, parse_host_port, parse_options,
-    query_runtime_bound_players, resolve_static_asset_path,
-    resolve_viewer_static_dir_with_override, sanitize_index_html_for_embedded_server,
-    sanitize_relative_request_path, start_static_http_server, stop_static_http_server,
+    build_oasis7_viewer_live_command, parse_host_port, parse_options, query_runtime_bound_players,
+    resolve_viewer_static_dir_with_override, viewer_deployment_mode_from_options,
     viewer_dev_dist_candidates,
 };
 use oasis7::launcher_bootstrap_peers::DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS;
@@ -478,6 +475,83 @@ fn parse_options_accepts_agent_direct_connect_alias() {
 }
 
 #[test]
+fn parse_options_accepts_local_test_authority_for_builtin_llm() {
+    let options = parse_options(
+        [
+            "--deployment-mode",
+            "trusted_local_only",
+            "--allow-trusted-local-playtest",
+            "--chain-local-standalone-test",
+            "--agent-decision-source",
+            "builtin_llm",
+            "--local-test-provider-authority",
+            "/tmp/local-test-provider-authority.json",
+            "--local-test-provider-wasm",
+            "/tmp/local-test-provider.wasm",
+            "--local-test-provider-metadata",
+            "/tmp/local-test-provider.metadata.json",
+            "--local-test-provider-finality-block-hash",
+            "blake3:0000000000000000000000000000000000000000000000000000000000000000",
+        ]
+        .into_iter(),
+    )
+    .expect("local authority setup should accept the native Builtin LLM lane");
+
+    assert_eq!(options.agent_decision_source, BUILTIN_LLM_DECISION_SOURCE);
+    assert!(options.chain_enabled);
+    assert!(options.chain_local_standalone_test);
+    assert_eq!(options.local_test_provider_agent_id, "starter-agent-0");
+    assert_eq!(
+        options.local_test_provider_session_mode,
+        "hosted_public_join"
+    );
+    assert_eq!(
+        viewer_deployment_mode_from_options(&options),
+        DeploymentMode::HostedPublicJoin
+    );
+    let viewer_command =
+        build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
+    let viewer_args = viewer_command
+        .get_args()
+        .map(|value| value.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    let deployment_mode_index = viewer_args
+        .iter()
+        .position(|value| value == "--deployment-mode")
+        .expect("viewer deployment mode argument");
+    assert_eq!(
+        viewer_args
+            .get(deployment_mode_index + 1)
+            .map(String::as_str),
+        Some("hosted_public_join")
+    );
+}
+
+#[test]
+fn parse_options_rejects_local_test_authority_for_provider_backed_lane() {
+    let err = parse_options(
+        [
+            "--deployment-mode",
+            "trusted_local_only",
+            "--allow-trusted-local-playtest",
+            "--chain-local-standalone-test",
+            "--local-test-provider-authority",
+            "/tmp/local-test-provider-authority.json",
+            "--local-test-provider-wasm",
+            "/tmp/local-test-provider.wasm",
+            "--local-test-provider-metadata",
+            "/tmp/local-test-provider.metadata.json",
+            "--local-test-provider-finality-block-hash",
+            "blake3:0000000000000000000000000000000000000000000000000000000000000000",
+        ]
+        .into_iter(),
+    )
+    .expect_err("local authority setup must stay on the native Builtin LLM lane");
+
+    assert!(err.contains("builtin_llm"));
+}
+
+#[test]
 fn builtin_viewer_live_env_applies_default_llm_timeout_when_parent_is_unset() {
     let mut options = CliOptions::default();
     options.agent_decision_source = BUILTIN_LLM_DECISION_SOURCE.to_string();
@@ -487,8 +561,9 @@ fn builtin_viewer_live_env_applies_default_llm_timeout_when_parent_is_unset() {
 
     assert_eq!(
         command_env_value(&command, LLM_TIMEOUT_MS_ENV),
-        Some(Some(DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS.to_string()))
+        Some(Some("30000".to_string()))
     );
+    assert_eq!(DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS, 30_000);
     assert_eq!(
         command_env_value(&command, VIEWER_AGENT_DECISION_SOURCE_ENV),
         Some(None)
@@ -669,29 +744,6 @@ fn build_viewer_live_command_wires_generated_world_dir() {
             .any(|arg| arg == "output/public-testnet/generated-world")
     );
     assert!(!args.iter().any(|arg| arg == DEFAULT_SCENARIO));
-}
-
-#[test]
-fn build_viewer_live_command_wires_llm_timeout_default_into_spawn_path() {
-    let mut options = CliOptions::default();
-    options.agent_decision_source = BUILTIN_LLM_DECISION_SOURCE.to_string();
-    let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
-    let args: Vec<String> = command
-        .get_args()
-        .map(|arg| arg.to_string_lossy().into_owned())
-        .collect();
-
-    assert!(args.contains(&"--llm".to_string()));
-    assert!(args.contains(&"--chain-status-bind".to_string()));
-    assert!(args.contains(&options.chain_status_bind));
-    assert!(args.contains(&"--chain-link-policy".to_string()));
-    assert!(args.contains(&options.chain_link_policy));
-    assert!(!args.iter().any(|arg| arg.is_empty()));
-    assert!(!args.iter().any(|arg| arg == DEFAULT_SCENARIO));
-    assert_eq!(
-        command_env_value(&command, LLM_TIMEOUT_MS_ENV),
-        Some(Some(DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS.to_string()))
-    );
 }
 
 #[test]
@@ -1122,79 +1174,4 @@ fn parse_options_still_validates_chain_node_role_when_manifest_is_present() {
     )
     .expect_err("should fail");
     assert!(err.contains("--chain-node-role"));
-}
-
-#[test]
-fn missing_execution_world_persistence_files_reports_snapshot_and_journal() {
-    let temp_dir = make_temp_dir("execution_world_missing");
-    let missing = missing_execution_world_persistence_files(temp_dir.as_path());
-    assert_eq!(missing.len(), 2);
-    assert!(missing.iter().any(|path| path.ends_with("snapshot.json")));
-    assert!(missing.iter().any(|path| path.ends_with("journal.json")));
-    let _ = fs::remove_dir_all(temp_dir);
-}
-
-#[test]
-fn missing_execution_world_persistence_files_ignores_ready_world_dir() {
-    let temp_dir = make_temp_dir("execution_world_ready");
-    fs::write(temp_dir.join("snapshot.json"), "{}").expect("write snapshot");
-    fs::write(temp_dir.join("journal.json"), "{}").expect("write journal");
-    let missing = missing_execution_world_persistence_files(temp_dir.as_path());
-    assert!(missing.is_empty());
-    let _ = fs::remove_dir_all(temp_dir);
-}
-
-#[test]
-fn sanitize_relative_request_path_rejects_traversal() {
-    let err = sanitize_relative_request_path("/../etc/passwd").expect_err("should fail");
-    assert!(err.contains("traversal"));
-}
-
-#[test]
-fn resolve_static_asset_path_supports_spa_fallback() {
-    let temp_dir = make_temp_dir("spa_fallback");
-    fs::write(temp_dir.join("index.html"), "<html>ok</html>").expect("write index");
-    let resolved = resolve_static_asset_path(temp_dir.as_path(), "/app/route?x=1")
-        .expect("resolve should succeed")
-        .expect("should fallback to index");
-    assert_eq!(resolved, temp_dir.join("index.html"));
-    let _ = fs::remove_dir_all(temp_dir);
-}
-
-#[test]
-fn resolve_static_asset_path_returns_none_for_missing_static_asset() {
-    let temp_dir = make_temp_dir("missing_asset");
-    fs::write(temp_dir.join("index.html"), "<html>ok</html>").expect("write index");
-    let resolved = resolve_static_asset_path(temp_dir.as_path(), "/assets/missing.js")
-        .expect("resolve should succeed");
-    assert!(resolved.is_none());
-    let _ = fs::remove_dir_all(temp_dir);
-}
-
-#[test]
-fn content_type_for_path_covers_wasm_and_js() {
-    assert_eq!(
-        content_type_for_path(Path::new("a.wasm")),
-        "application/wasm"
-    );
-    assert_eq!(
-        content_type_for_path(Path::new("a.js")),
-        "text/javascript; charset=utf-8"
-    );
-}
-
-#[test]
-fn sanitize_index_html_for_embedded_server_removes_trunk_reload_script() {
-    let html = concat!(
-        "<html><body>",
-        "<script>window.bootstrap = true;</script>",
-        "<script>const url = 'ws://{{__TRUNK_ADDRESS__}}{{__TRUNK_WS_BASE__}}.well-known/trunk/ws';</script>",
-        "</body></html>"
-    );
-    let sanitized =
-        sanitize_index_html_for_embedded_server(Path::new("index.html"), html.as_bytes(), None);
-    let sanitized = String::from_utf8(sanitized).expect("utf-8");
-    assert!(sanitized.contains("window.bootstrap = true"));
-    assert!(!sanitized.contains(".well-known/trunk/ws"));
-    assert!(!sanitized.contains("__TRUNK_ADDRESS__"));
 }

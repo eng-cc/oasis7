@@ -4,15 +4,13 @@ import { buildValidationUnlockPreviewDisplayModel } from "./viewer_validation_un
 import { buildWaitResolutionQuoteDisplayModel } from "./viewer_wait_resolution_quote_display_model.js";
 import { normalizeFirstDeliveryPreview } from "./first_delivery_preview_display_model.js";
 import { normalizeFactoryProductionFailureDisposition } from "./viewer_factory_failure_disposition_display_model.js";
+import { createViewerPromptFeedbackModule } from "./viewer_prompt_feedback_module.js";
 function isRecord(value) {
   return value != null && typeof value === "object" && !Array.isArray(value);
 }
 function displayableStrings(value) {
   return Array.isArray(value)
-    ? value
-      .filter((entry) => typeof entry === "string")
-      .map((entry) => entry.trim())
-      .filter(Boolean)
+    ? value.filter((entry) => typeof entry === "string").map((entry) => entry.trim()).filter(Boolean)
     : [];
 }
 function displayableString(value) {
@@ -27,6 +25,7 @@ export function createViewerFeedbackModule({
   localeText,
   state,
 }) {
+  const promptFeedback = createViewerPromptFeedbackModule({ feedbackBadgeClass, isLocaleZh, localeText });
   function snapshotControlFeedback(feedback) {
     if (!feedback) return null;
     return {
@@ -44,24 +43,32 @@ export function createViewerFeedbackModule({
   }
   function snapshotSemanticFeedback(feedback) {
     if (!feedback) return null;
+    const response = promptFeedback.redactPromptControlResponse(feedback.response);
     return {
       id: feedback.id,
       kind: feedback.kind,
       action: feedback.action,
       agentId: feedback.agentId || null,
+      requestId: feedback.requestId || response?.request_id || null,
       accepted: feedback.accepted,
       stage: feedback.stage,
       ok: feedback.ok,
       reason: feedback.reason || null,
       effect: feedback.effect || null,
-      response: clone(feedback.response) || null,
+      response: clone(response) || null,
     };
   }
   function semanticFeedbackCode(feedback) {
+    if (feedback?.kind === "prompt") {
+      const resultCode = promptFeedback.semanticPromptFeedbackCode(feedback);
+      if (resultCode) {
+        return resultCode;
+      }
+    }
     if (feedback?.stage !== "error") {
       return null;
     }
-    const responseCode = String(feedback?.response?.code || "").trim();
+    const responseCode = String(feedback?.response?.reason_code || feedback?.response?.code || "").trim();
     if (responseCode) {
       return responseCode;
     }
@@ -79,23 +86,6 @@ export function createViewerFeedbackModule({
   function formatPromptVersionLabel(value) {
     return `v${Math.max(0, Math.floor(Number(value || 0)))}`;
   }
-  function humanizePromptField(field) {
-    return String(field || "")
-      .trim()
-      .replaceAll("_", " ");
-  }
-  function summarizeAppliedFields(feedback) {
-    const fields = Array.isArray(feedback?.response?.applied_fields)
-      ? feedback.response.applied_fields
-          .map(humanizePromptField)
-          .filter(Boolean)
-      : [];
-    if (!fields.length) {
-      return null;
-    }
-    return fields.join(", ");
-  }
-
   function describeSemanticFeedback(feedback, locale = state.uiLocale) {
     if (!feedback) {
       return null;
@@ -125,8 +115,17 @@ export function createViewerFeedbackModule({
       diagnostics,
       badgeClass: feedbackBadgeClass(feedback),
     };
-
     if (feedback.stage === "error") {
+      if (code === "control_lost") {
+        description.label = isLocaleZh(locale) ? "控制权已丢失" : "Control lost";
+        description.summary = isLocaleZh(locale)
+          ? "当前 Agent 控制权已失效。"
+          : "Control of this Agent is no longer available.";
+        description.detail = isLocaleZh(locale)
+          ? "请重新认证并刷新当前绑定后再试。"
+          : "Re-authenticate and refresh the current binding before retrying.";
+        return description;
+      }
       if (code === "llm_init_failed") {
         description.label = isLocaleZh(locale) ? "LLM 不可用" : "LLM unavailable";
         description.summary = isLocaleZh(locale)
@@ -192,10 +191,15 @@ export function createViewerFeedbackModule({
         : "Open diagnostics for the raw backend payload.";
       return description;
     }
-
     if (feedback.kind === "prompt") {
+      const promptResultDescription = promptFeedback.describePromptResult(feedback, locale);
+      if (promptResultDescription) {
+        return promptResultDescription;
+      }
       const version = Number(feedback?.response?.version || 0);
-      const appliedFields = summarizeAppliedFields(feedback);
+      const appliedFields = Array.isArray(feedback?.response?.applied_fields)
+        ? feedback.response.applied_fields.map((field) => String(field || "").trim().replaceAll("_", " ")).filter(Boolean).join(", ") || null
+        : null;
       if (feedback.stage === "preview_ack") {
         description.label = isLocaleZh(locale) ? "预览已就绪" : "Preview ready";
         description.summary = isLocaleZh(locale)
@@ -256,7 +260,6 @@ export function createViewerFeedbackModule({
         : "Wait for ack/error before sending another message.";
       return description;
     }
-
     if (feedback.kind === "gameplay_action") {
       if (feedback.stage === "ack") {
         const acceptedAtTick = Number(feedback?.response?.accepted_at_tick || 0);
@@ -283,10 +286,8 @@ export function createViewerFeedbackModule({
         : "Wait for ack/error or a new gameplay snapshot update.";
       return description;
     }
-
     return description;
   }
-
   function describePromptVersionState(feedback = state.lastPromptFeedback, locale = state.uiLocale) {
     const currentVersion = Math.max(0, Math.floor(Number(state.promptDraft.currentVersion || 0)));
     const nextRollbackTargetVersion = Math.max(
@@ -329,7 +330,6 @@ export function createViewerFeedbackModule({
     if (!gameplay || typeof gameplay !== "object") {
       return null;
     }
-
     const modelAgents = state.snapshot?.model?.agents || {};
     const agents = Object.keys(modelAgents)
       .filter((agentId) => isAgentVisibleToCurrentSession?.(agentId) !== false);
@@ -367,7 +367,6 @@ export function createViewerFeedbackModule({
         };
       })()
       : null;
-
     const progressRaw = Number(gameplay.progress_percent);
     const progressPercent = Number.isFinite(progressRaw)
       ? Math.max(0, Math.min(100, Math.floor(progressRaw)))

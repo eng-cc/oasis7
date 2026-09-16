@@ -131,7 +131,11 @@ pub use world::{
     CognitionLeaseQuoteV1, CognitionLeaseRequestV1, CognitionLeaseStatusV1, CognitionLeaseV1,
     CognitionProvisioningEventV1, CognitionProvisioningReceiptV1, CognitionProvisioningRecordV1,
     CognitionProvisioningRequestV1, CognitionQuoteV1, CognitionReceipt, CognitionReceiptV1,
-    CognitionResourceBalanceV1, ProviderBackedBootstrapAuthorityV1,
+    CognitionResourceBalanceV1, LOCAL_TEST_PROVIDER_GRANT_RENEWAL_THRESHOLD_TICKS,
+    LOCAL_TEST_PROVIDER_GRANT_TTL_TICKS, LocalTestProviderAuthorityConfig,
+    LocalTestProviderAuthorityMode, LocalTestProviderGrantStatus, LocalTestProviderModuleArtifact,
+    LocalTestProviderProvisioning, LocalTestProviderSessionMode,
+    ProviderBackedBootstrapAuthorityV1,
 };
 
 // Durable cognition scheduler, wake and continuation projections

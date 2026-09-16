@@ -54,6 +54,7 @@ mod network_bridge_gap_sync_observability;
 mod network_error_classification;
 mod node_engine_core;
 mod node_engine_gap_sync_outcome;
+mod node_engine_local_bootstrap;
 mod node_engine_network;
 mod node_engine_network_hash;
 mod node_engine_peer_types;
@@ -72,6 +73,7 @@ mod node_engine_transfer_filter;
 mod node_runtime_batch_retention;
 mod node_runtime_core;
 mod node_runtime_lifecycle;
+mod node_runtime_local_bootstrap;
 mod node_runtime_replicated_input;
 mod pos_engine_gossip;
 mod pos_schedule;
@@ -88,7 +90,6 @@ mod runtime_util;
 mod types;
 mod types_action_budgets;
 mod types_consensus;
-
 pub use consensus_support::compute_consensus_action_root;
 use consensus_support::{
     checked_consensus_successor, checked_replication_successor, dequeue_pending_consensus_actions,
@@ -100,13 +101,14 @@ use consensus_support::{
 };
 pub use error::NodeError;
 pub use execution_hook::{
-    NodeExecutionCheckpointBlob, NodeExecutionCheckpointBlobRef, NodeExecutionCheckpointBundle,
-    NodeExecutionCheckpointDescriptor, NodeExecutionCheckpointInstallContext,
-    NodeExecutionCommitContext, NodeExecutionCommitResult, NodeExecutionHook,
-    NodeReplicatedExecutionInputV1, PROVIDER_BACKED_BOOTSTRAP_EXECUTION_INPUT_KIND,
-    REPLICATED_EXECUTION_INPUT_ACTION_ID, REPLICATED_EXECUTION_INPUT_SUBMITTER,
-    REPLICATED_EXECUTION_INPUT_VERSION, bind_replicated_execution_input_action,
-    decode_replicated_execution_input_action, validate_replicated_execution_input_actions,
+    NodeExecutionBootstrap, NodeExecutionCheckpointBlob, NodeExecutionCheckpointBlobRef,
+    NodeExecutionCheckpointBundle, NodeExecutionCheckpointDescriptor,
+    NodeExecutionCheckpointInstallContext, NodeExecutionCommitContext, NodeExecutionCommitResult,
+    NodeExecutionHook, NodeReplicatedExecutionInputV1,
+    PROVIDER_BACKED_BOOTSTRAP_EXECUTION_INPUT_KIND, REPLICATED_EXECUTION_INPUT_ACTION_ID,
+    REPLICATED_EXECUTION_INPUT_SUBMITTER, REPLICATED_EXECUTION_INPUT_VERSION,
+    bind_replicated_execution_input_action, decode_replicated_execution_input_action,
+    validate_replicated_execution_input_actions,
 };
 use gossip_udp::{
     GossipAttestationMessage, GossipCommitMessage, GossipEndpoint, GossipMessage,
@@ -240,6 +242,7 @@ fn with_execution_hook<T>(
 
 pub struct NodeRuntime {
     config: NodeConfig,
+    local_execution_bootstrap: Option<execution_hook::NodeExecutionBootstrap>,
     replication_network: Option<NodeReplicationNetworkHandle>,
     replication_network_consensus_enabled: bool,
     gossip_endpoint: Option<Arc<GossipEndpoint>>,
@@ -326,6 +329,7 @@ impl NodeRuntime {
                 return Err(err);
             }
         };
+        self.initialize_local_execution_bootstrap(&mut engine)?;
         let effective_replication_config = self
             .config
             .replication
@@ -356,6 +360,7 @@ impl NodeRuntime {
                         self.running.store(false, Ordering::SeqCst);
                         return Err(err);
                     }
+                    self.validate_local_execution_bootstrap_after_restore(&engine)?;
                 }
                 Ok(None) => {}
                 Err(err) => {

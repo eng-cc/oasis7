@@ -1,6 +1,29 @@
 use super::*;
 
 #[test]
+fn provider_lease_continuity_requires_exact_reserved_runtime_record() {
+    let mut world = bound_provider_lease_test_world(&["agent-a"]);
+    let context = valid_test_provider_context(&world, "agent-a", "turn-live", "request-live");
+    let lease = reserve_test_provider_lease(&mut world, &context);
+    let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    sidecar.bind_provider_cognition_lease("agent-a", lease.clone());
+
+    assert!(
+        sidecar.provider_cognition_lease_in_flight(&world),
+        "continuity requires the sidecar lease and Runtime record to agree"
+    );
+
+    let mut closed_world = world.clone();
+    closed_world
+        .release_cognition_lease(lease.lease_id.as_str())
+        .expect("release test lease");
+    assert!(
+        !sidecar.provider_cognition_lease_in_flight(&closed_world),
+        "a terminal Runtime record must not defer chain binding checks"
+    );
+}
+
+#[test]
 fn generation_changed_restore_releases_active_reserved_lease_before_fresh_planning() {
     let mut old_world = bound_provider_lease_test_world(&["agent-a"]);
     let old_context = valid_test_provider_context(&old_world, "agent-a", "turn-old", "request-old");

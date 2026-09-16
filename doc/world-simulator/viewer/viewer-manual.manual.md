@@ -52,6 +52,11 @@ set `public` or `restricted` only when its operator/session policy has supplied 
 `denied` explicitly suppresses the event. Login, Agent selection/control, hosted join, and Director
 diagnostics never change this option implicitly.
 
+For the isolated synthetic loopback DevLocal W3 recipe, pass
+`--major-world-event-visibility restricted` explicitly. This is an operator policy for that
+synthetic lane only; the launcher default remains `unknown`, and hosted/public runs must not
+inherit this value without their own authority decision.
+
 - `oasis7_viewer_live` 当前默认走 runtime/world 链路。
 - `oasis7_viewer_live` 负责 Viewer live server 与可选 Web bridge，不内嵌 node、consensus、reward runtime、topology 或 execution-world persistence，也不提供 `--tick-ms` 作为外部推进时钟。它仍可通过 `--chain-status-bind` 观察 committed world，并在配置 status bind 时通过 `--chain-submit-bind` 提交 chain-linked action；这些是 client endpoints，不授予 node ownership。Viewer event delivery 不能等同于 node/consensus tick。
 - 正式 gameplay 要求已配置且可连通的 LLM provider。
@@ -76,6 +81,27 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 - 支持最小 prompt/chat 控制面；仅在 auth/bootstrap 可用时开放。
 - 在 `hosted_public_join` 路径下，页面支持获取/释放 hosted `player_session`、`reconnect_sync` 恢复，以及 `prompt_control` 的 preview-grade `strong_auth`（需 `Backend Approval Code`）。
 - 面向普通用户的启动入口现在默认且只暴露 `hosted_public_join`。旧的 `trusted_local_only` 本地可信预览不再作为可选用户流程；本地旧配置应迁移到 hosted join，并走邮箱 hosted account / player session 登录链路。
+
+### Hosted public join email-free test login（仅本地 QA）
+
+该入口只用于验证 hosted join 后续的 W3 runtime、签名和 registration grant 闭环，默认关闭，不替代邮箱 OTP、邮箱所有权验证或 hosted account 映射。
+
+- 启用条件同时满足：launcher 使用 `hosted_public_join`；Viewer 静态 HTTP 只绑定 loopback（`127.0.0.1`、`::1` 或 `localhost`）；并显式设置 `OASIS7_HOSTED_TEST_LOGIN_ENABLED=1`。未满足任一条件时，test-login route 返回 `404`。
+- 页面还必须在 URL 中显式加入 `hosted_test_login=1`；浏览器随后生成正常的临时 Ed25519 device key，只提交 public key，并消费后端实际签发的 player/session/release/registration grant。浏览器不生成 player id、release token、grant 或签名。
+- 若验证 W3 的 hosted `prompt_control` strong-auth，启动前只检查以下三个变量均已存在且非空：`OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY`、`OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY`、`OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE`。检查只输出 presence，不输出任何值；缺少任一项时保持 blocked，不能用占位值或伪造批准继续。
+- 本地 QA 启动 recipe（沿用现有 launcher/provider 前置条件）：
+
+```bash
+OASIS7_HOSTED_TEST_LOGIN_ENABLED=1 \
+OASIS7_HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY=<issuer-private-key> \
+./scripts/run-launcher-stack.sh \
+  --deployment-mode hosted_public_join \
+  --viewer-host 127.0.0.1
+```
+
+打开 launcher 输出的 `GAME_URL`，或直接访问 `http://127.0.0.1:<viewer-port>/software_safe.html?hosted_test_login=1`，再选择 `Email-free Test Login`。不要用 `--viewer-host 0.0.0.0`、`::` 或其它非 loopback 地址启用该入口。
+
+- 这条 recipe 只证明 issuer 签发之后的 W3 downstream 行为；它不覆盖 OTP 发送/校验、邮箱所有权、hosted account 绑定或生产登录验收。生产及普通 hosted join 仍使用页面现有邮箱登录流程。
 - `main_token_transfer` 仍保持阻断，页面只显示 lane verdict，不提供资产转账表单。
 - 页面不再提供第二 Viewer 跳转，也不再承担退役视觉专项工具职责。
 

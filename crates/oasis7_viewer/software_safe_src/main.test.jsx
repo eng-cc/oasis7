@@ -6,7 +6,7 @@ import {
   LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE,
 } from "./software_safe_constants.js";
 import { buildAuthEnvelope } from "./viewer_auth_crypto.js";
-
+import { settleLocalTestAuthStartup } from "./viewer_test_startup.js";
 vi.mock("./pixel_world_host.jsx", () => ({
   PixelWorldHost: (props) => (
     <div data-testid="pixel-world-host">
@@ -184,11 +184,11 @@ function bindLocalTestAgent(core, agentId = "agent-0", playerId = "local-test-pl
     ...core.state.auth,
     available: true,
     playerId,
-    publicKey: "abcdef0123456789abcdef0123456789",
-    privateKey: "private-key-must-stay-hidden",
+    publicKey: "ab".repeat(32),
+    privateKey: "07".repeat(32),
     source: "local_test_api_ephemeral",
     registrationStatus: "registered",
-    runtimeStatus: "registered",
+    runtimeStatus: "registered", syncInFlight: false,
     boundAgentId: agentId,
   };
 }
@@ -332,6 +332,8 @@ async function setupConnectedSemanticCore({
   core.initializeSoftwareSafeCore();
   sockets[0].open();
   sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+  await settleLocalTestAuthStartup(core, sentMessages);
+  sentMessages.length = 0;
   core.injectSnapshot(snapshot);
   core.applySelection({ kind: "agent", id: agentId });
   bindLocalTestAgent(core, agentId);
@@ -345,7 +347,6 @@ async function setupConnectedSemanticCore({
   };
   return { core, sockets, sentMessages };
 }
-
 beforeEach(() => {
   vi.restoreAllMocks();
   window.history.replaceState({}, "", viewerUrl());
@@ -356,7 +357,6 @@ beforeEach(() => {
   });
   document.body.innerHTML = "";
 });
-
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();

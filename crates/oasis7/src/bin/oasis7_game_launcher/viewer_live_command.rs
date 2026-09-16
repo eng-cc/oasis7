@@ -16,7 +16,11 @@ pub(super) fn build_oasis7_viewer_live_command(
         .arg("--web-bind")
         .arg(options.web_bind.as_str())
         .arg("--deployment-mode")
-        .arg(options.deployment_mode.as_str());
+        .arg(viewer_deployment_mode_from_options(options).as_str())
+        .arg("--major-world-event-visibility")
+        .arg(major_world_event_visibility_as_str(
+            options.major_world_event_visibility,
+        ));
     if !options.generated_world_dir.trim().is_empty() {
         command
             .arg("--generated-world-dir")
@@ -32,14 +36,19 @@ pub(super) fn build_oasis7_viewer_live_command(
             .arg("--provider-bootstrap-authority")
             .arg(path.as_str());
     }
-    if options.chain_enabled || options.deployment_mode == "hosted_public_join" {
+    // Hosted public join may deliberately run without a launcher-managed chain.
+    // Only pass the viewer's chain client endpoint when the chain is enabled or
+    // the operator explicitly supplied an external status endpoint. Passing the
+    // launcher's default here makes a chain-disabled stack try an absent service
+    // during the first snapshot and close the client after ConnectionRefused.
+    if options.chain_enabled || options.chain_status_bind_explicit {
         command
             .arg("--chain-status-bind")
             .arg(options.chain_status_bind.as_str())
             .arg("--chain-link-policy")
             .arg(options.chain_link_policy.as_str());
     }
-    if options.deployment_mode == "hosted_public_join" {
+    if viewer_deployment_mode_from_options(options) == DeploymentMode::HostedPublicJoin {
         command.env_remove(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV);
         if let Ok(issuer_private_key) =
             std::env::var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV)

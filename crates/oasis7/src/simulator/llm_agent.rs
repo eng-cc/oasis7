@@ -2,12 +2,10 @@
 
 use async_openai::Client as AsyncOpenAiClient;
 use async_openai::config::OpenAIConfig;
-use async_openai::error::OpenAIError;
 use async_openai::types::responses::{
-    CreateResponse, CreateResponseArgs, FunctionTool, OutputItem, Response, ResponseStreamEvent,
-    Tool, ToolChoiceOptions, ToolChoiceParam,
+    CreateResponse, CreateResponseArgs, FunctionTool, OutputItem, Response, Tool,
+    ToolChoiceOptions, ToolChoiceParam,
 };
-use futures_util::StreamExt;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
@@ -43,6 +41,7 @@ mod execution_controls;
 mod memory_selector;
 mod openai_payload;
 mod openai_retry;
+mod openai_stream_diagnostics;
 mod prompt_assembly;
 mod recipe_coverage;
 use recipe_coverage::RecipeCoverageProgress;
@@ -68,14 +67,17 @@ use config_helpers::{
 };
 use openai_payload::{
     build_responses_request_payload, build_text_probe_request_payload,
-    build_tool_probe_request_payload, completion_result_from_sdk_stream_events,
-    normalize_openai_api_base_url, text_output_from_sdk_stream_events,
+    build_tool_probe_request_payload, normalize_openai_api_base_url,
 };
 #[cfg(test)]
 use openai_payload::{
-    output_item_to_completion_turn, responses_tools, responses_tools_with_debug_mode,
+    completion_result_from_sdk_stream_events, output_item_to_completion_turn, responses_tools,
+    responses_tools_with_debug_mode,
 };
 use openai_retry::{RATE_LIMIT_RETRY_DELAY_MS, is_concurrency_limit_error, retry_attempts};
+#[cfg(test)]
+pub(super) use openai_stream_diagnostics::StreamTransportMetadata;
+use openai_stream_diagnostics::{OpenAiRequestError, format_stream_transport_diagnostics};
 
 pub const ENV_LLM_MODEL: &str = "OASIS7_LLM_MODEL";
 pub const ENV_LLM_BASE_URL: &str = "OASIS7_LLM_BASE_URL";
@@ -95,6 +97,7 @@ pub const ENV_LLM_HARVEST_MAX_AMOUNT_CAP: &str = "OASIS7_LLM_HARVEST_MAX_AMOUNT_
 pub const ENV_LLM_EXECUTE_UNTIL_AUTO_REENTER_TICKS: &str =
     "OASIS7_LLM_EXECUTE_UNTIL_AUTO_REENTER_TICKS";
 pub const ENV_LLM_DEBUG_MODE: &str = "OASIS7_LLM_DEBUG_MODE";
+pub const ENV_LLM_STREAM_DIAGNOSTICS: &str = "OASIS7_LLM_STREAM_DIAGNOSTICS";
 const TOML_LLM_TABLE: &str = "llm";
 const TOML_LLM_MODEL: &str = "model";
 const TOML_LLM_BASE_URL: &str = "base_url";
@@ -776,25 +779,37 @@ pub struct LlmCompletionResult {
     pub total_tokens: Option<u64>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct OpenAiChatCompletionClient {
     client: AsyncOpenAiClient<OpenAIConfig>,
+    diagnostic_http_client: reqwest::Client,
+    api_base: String,
+    api_key: String,
     request_timeout_ms: u64,
+    stream_diagnostics_enabled: bool,
 }
 
 impl OpenAiChatCompletionClient {
     pub fn from_config(config: &LlmAgentConfig) -> Result<Self, LlmClientError> {
         let request_timeout_ms = config.timeout_ms.max(1);
         let api_base = normalize_openai_api_base_url(config.base_url.as_str());
-        let client = Self::build_client(
+        let http_client = Self::build_http_client(request_timeout_ms)?;
+        let client = Self::build_client_with_http_client(
             api_base.as_str(),
             config.api_key.as_str(),
-            request_timeout_ms,
+            http_client.clone(),
         )?;
 
         Ok(Self {
             client,
+            diagnostic_http_client: http_client,
+            api_base,
+            api_key: config.api_key.clone(),
             request_timeout_ms,
+            stream_diagnostics_enabled: std::env::var(ENV_LLM_STREAM_DIAGNOSTICS)
+                .ok()
+                .and_then(|value| parse_debug_mode_flag(value.as_str()))
+                .unwrap_or(false),
         })
     }
 
@@ -815,6 +830,9 @@ impl OpenAiChatCompletionClient {
                 ),
             }),
             Err(OpenAiRequestError::Completion(err)) => Err(err),
+            Err(OpenAiRequestError::StreamTransport(metadata)) => Err(LlmClientError::Http {
+                message: format_stream_transport_diagnostics(&metadata),
+            }),
             Err(OpenAiRequestError::Other(err)) => Err(LlmClientError::Http { message: err }),
         }
     }
@@ -839,6 +857,9 @@ impl OpenAiChatCompletionClient {
                 ),
             }),
             Err(OpenAiRequestError::Completion(err)) => Err(err),
+            Err(OpenAiRequestError::StreamTransport(metadata)) => Err(LlmClientError::Http {
+                message: format_stream_transport_diagnostics(&metadata),
+            }),
             Err(OpenAiRequestError::Other(err)) => Err(LlmClientError::Http { message: err }),
         }
     }
@@ -859,103 +880,16 @@ impl OpenAiChatCompletionClient {
         })
     }
 
-    fn build_client(
+    fn build_client_with_http_client(
         api_base: &str,
         api_key: &str,
-        timeout_ms: u64,
+        http_client: reqwest::Client,
     ) -> Result<AsyncOpenAiClient<OpenAIConfig>, LlmClientError> {
         let config = OpenAIConfig::new()
             .with_api_base(api_base.to_string())
             .with_api_key(api_key.to_string());
 
-        let http_client = Self::build_http_client(timeout_ms)?;
         Ok(AsyncOpenAiClient::with_config(config).with_http_client(http_client))
-    }
-
-    fn send_responses_request(
-        &self,
-        client: &AsyncOpenAiClient<OpenAIConfig>,
-        payload: CreateResponse,
-    ) -> Result<LlmCompletionResult, OpenAiRequestError> {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(|err| OpenAiRequestError::Other(err.to_string()))?;
-
-        runtime.block_on(async {
-            let mut stream = client
-                .responses()
-                .create_stream(payload)
-                .await
-                .map_err(OpenAiRequestError::from)?;
-            let mut events = Vec::<ResponseStreamEvent>::new();
-            while let Some(event) = stream.next().await {
-                events.push(event.map_err(OpenAiRequestError::from)?);
-            }
-            completion_result_from_sdk_stream_events(events).map_err(OpenAiRequestError::Completion)
-        })
-    }
-
-    fn send_responses_request_for_text(
-        &self,
-        client: &AsyncOpenAiClient<OpenAIConfig>,
-        payload: CreateResponse,
-    ) -> Result<String, OpenAiRequestError> {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(|err| OpenAiRequestError::Other(err.to_string()))?;
-
-        runtime.block_on(async {
-            let mut stream = client
-                .responses()
-                .create_stream(payload)
-                .await
-                .map_err(OpenAiRequestError::from)?;
-            let mut events = Vec::<ResponseStreamEvent>::new();
-            while let Some(event) = stream.next().await {
-                events.push(event.map_err(OpenAiRequestError::from)?);
-            }
-            text_output_from_sdk_stream_events(events).map_err(OpenAiRequestError::Completion)
-        })
-    }
-}
-
-#[derive(Debug)]
-enum OpenAiRequestError {
-    Timeout(String),
-    ParseBody(String),
-    Completion(LlmClientError),
-    Other(String),
-}
-
-impl From<OpenAIError> for OpenAiRequestError {
-    fn from(value: OpenAIError) -> Self {
-        fn error_chain_contains_timeout(err: &dyn Error) -> bool {
-            let mut current = Some(err);
-            while let Some(err) = current {
-                let message = err.to_string().to_ascii_lowercase();
-                if message.contains("timed out")
-                    || message.contains("timeout")
-                    || message.contains("deadline has elapsed")
-                {
-                    return true;
-                }
-                current = err.source();
-            }
-            false
-        }
-
-        match value {
-            OpenAIError::Reqwest(err) if err.is_timeout() || error_chain_contains_timeout(&err) => {
-                Self::Timeout(err.to_string())
-            }
-            OpenAIError::JSONDeserialize(_, raw_body) => Self::ParseBody(raw_body),
-            OpenAIError::StreamError(err) if error_chain_contains_timeout(err.as_ref()) => {
-                Self::Timeout(err.to_string())
-            }
-            other => Self::Other(other.to_string()),
-        }
     }
 }
 
@@ -1046,6 +980,11 @@ impl LlmCompletionClient for OpenAiChatCompletionClient {
                 }
                 Err(OpenAiRequestError::Completion(err)) => {
                     return Err(err);
+                }
+                Err(OpenAiRequestError::StreamTransport(metadata)) => {
+                    return Err(LlmClientError::Http {
+                        message: format_stream_transport_diagnostics(&metadata),
+                    });
                 }
                 Err(OpenAiRequestError::Other(err)) => {
                     return Err(LlmClientError::Http { message: err });

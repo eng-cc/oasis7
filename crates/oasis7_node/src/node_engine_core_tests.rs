@@ -1,6 +1,32 @@
 use super::*;
+use crate::NodeExecutionBootstrap;
 
 struct GapWaitingExecutionHook;
+
+#[test]
+fn local_execution_bootstrap_starts_consensus_at_successor_height() {
+    let config = NodeConfig::new("node-local", "world-local-bootstrap", NodeRole::Sequencer)
+        .expect("config");
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    let bootstrap = NodeExecutionBootstrap {
+        height: 2,
+        consensus_block_hash: "local-finality-h2".to_string(),
+        execution_block_hash: "local-execution-h2".to_string(),
+        execution_state_root: "local-state-root-h2".to_string(),
+    };
+
+    engine
+        .apply_local_execution_bootstrap(&bootstrap)
+        .expect("apply local execution boundary");
+
+    assert_eq!(engine.committed_height, 2);
+    assert_eq!(engine.next_height, 3);
+    assert_eq!(engine.last_execution_height, 2);
+    assert_eq!(engine.replication_persisted_height, 2);
+    engine
+        .validate_local_execution_bootstrap(&bootstrap)
+        .expect("validate local execution boundary");
+}
 
 impl NodeExecutionHook for GapWaitingExecutionHook {
     fn on_commit(

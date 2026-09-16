@@ -252,6 +252,7 @@ impl NodeRuntime {
         });
         Self {
             config,
+            local_execution_bootstrap: None,
             replication_network: None,
             replication_network_consensus_enabled: true,
             gossip_endpoint: None,
@@ -290,6 +291,18 @@ impl NodeRuntime {
         T: NodeExecutionHook + 'static,
     {
         self.execution_hook = Some(Arc::new(Mutex::new(Box::new(hook))));
+        self
+    }
+
+    /// Seed an explicit local execution boundary before consensus starts.
+    /// This is reserved for a caller that has persisted and independently
+    /// validated the corresponding runtime world; ordinary nodes remain at
+    /// the genesis height.
+    pub fn with_local_execution_bootstrap(
+        mut self,
+        bootstrap: crate::NodeExecutionBootstrap,
+    ) -> Self {
+        self.local_execution_bootstrap = Some(bootstrap);
         self
     }
 

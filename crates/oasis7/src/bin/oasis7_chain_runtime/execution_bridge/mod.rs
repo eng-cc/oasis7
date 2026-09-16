@@ -802,17 +802,20 @@ mod driver_checkpoint_install;
 mod driver_committed_heights;
 mod driver_observability;
 mod driver_persistence;
+mod driver_replay_validation;
 mod driver_replicated_input;
 mod durable_transaction;
 mod external_effect;
+mod local_bootstrap;
 mod simulator_mirror;
 #[cfg(test)]
 mod tests;
 
 #[allow(unused_imports)]
 pub(super) use self::driver::NodeRuntimeExecutionDriver;
+pub(super) use self::driver::derive_local_execution_bootstrap;
 #[allow(unused_imports)]
-pub(crate) use self::driver::load_execution_world;
+pub(crate) use self::driver::{load_execution_world, load_execution_world_with_policy};
 #[allow(unused_imports)]
 pub(super) use self::driver_committed_heights::bridge_committed_heights;
 #[cfg(test)]

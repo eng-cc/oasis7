@@ -737,7 +737,7 @@ fn hosted_registration_grant_rotates_reload_key_without_requiring_login() {
     assert_eq!(agent_ids.len(), 2, "two bases must seed two agents");
     let agent_id = agent_ids[0].clone();
     let other_agent_id = agent_ids[1].clone();
-    let hosted_player_id = "hosted-player-account-reload-key";
+    let hosted_player_id = "hosted-player-test-login-reload-key";
     let (old_public_key, _) = test_signer(97);
     let (new_public_key, new_private_key) = test_signer(98);
 

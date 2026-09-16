@@ -23,7 +23,7 @@ import {
   isHostedPublicJoinDeploymentMode,
 } from "./software_safe_constants.js";
 import { recoveryOptionVisualFixture } from "./viewer_recovery_option_fixture.js";
-import { AgentActivitySurface } from "./agent_activity_surface.jsx";
+import { AgentActivitySurface } from "./agent_activity_surface.jsx"; import { HostedTestLoginOptIn } from "./viewer_hosted_test_login_view.jsx";
 import { AgentIntentSurface } from "./agent_intent_surface.jsx";
 import { FactoryProductionFailureDispositionCard } from "./factory_production_failure_disposition_card.jsx";
 import { AgentContextLite } from "./agent_context_lite.jsx";
@@ -489,13 +489,13 @@ function InlineHelpTip(props) {
     </div>
   );
 }
-
 function FeedbackCard(props) {
   const feedbackStage = () => normalizedFeedbackStage(props.feedbackStage);
   return (
     <div
       class="feedback-card"
       data-feedback-stage={feedbackStage()}
+      data-feedback-kind={props.feedback?.kind} data-prompt-value-visibility={props.feedback?.kind === "prompt" ? props.feedback?.response?.value_visibility : undefined}
       role={props.liveRegion ? "status" : undefined}
       aria-live={props.liveRegion ? "polite" : undefined}
     >
@@ -512,6 +512,7 @@ function FeedbackCard(props) {
       <Show when={props.feedback}>
         <DiagnosticDetails value={props.feedback} />
       </Show>
+      <Show when={props.recoveryAction && props.display.code === "control_lost"}><div class="toolbar" data-control-loss-recovery="binding"><button type="button" data-testid="control-loss-recovery" onClick={props.recoveryAction}>{props.recoveryLabel}</button></div></Show>
     </div>
   );
 }
@@ -793,6 +794,7 @@ function HostedLoginGate() {
             handleId="gate-hosted-login-handle"
             codeId="gate-hosted-login-code"
           />
+          <HostedTestLoginOptIn core={core} locale={locale} tr={tr} />
           <Show when={core.state.auth.rebindNotice || core.state.auth.error}>
             <EmptyState>{core.state.auth.rebindNotice || core.state.auth.error}</EmptyState>
           </Show>
@@ -3348,10 +3350,13 @@ function InteractionPanel() {
       "当前 Agent 已绑定到你的本地玩家会话。可以直接发送第一条聊天指令；提示词和资产治理能力先收在后置区域。",
       "This Agent is bound to your local player session. Send the first chat command here; prompt and asset/governance controls stay in the deferred area.",
     );
-  const commandBoundaryCopy = () =>
-    canControlSelectedAgent()
-      ? playerSessionReadyCopy()
-      : selectedAgentControlReason();
+  const commandBoundaryCopy = () => canControlSelectedAgent() ? (interactionEnabled() ? playerSessionReadyCopy() : promptCapability().reason) : selectedAgentControlReason();
+  const promptControlDisabledReason = () => canControlSelectedAgent() ? promptCapability().reason : selectedAgentControlReason();
+  const promptRecoveryRequired = () => {
+    const feedback = promptFeedback();
+    return feedback?.kind === "prompt" && feedback?.stage === "blocked"
+      && (feedback?.response?.value_visibility === "hidden" || !!String(feedback?.response?.next_step || "").trim());
+  };
   return (
     <Show
       when={agentId()}
@@ -3481,7 +3486,7 @@ function InteractionPanel() {
           </button>
         </div>
         <Show when={chatFeedback()} fallback={<EmptyState>{tr(locale(), "还没有聊天反馈。", "No chat feedback yet.")}</EmptyState>}>
-          {(feedback) => <FeedbackCard feedback={feedback()} display={chatFeedbackDisplay()} />}
+          {(feedback) => <FeedbackCard feedback={feedback()} display={chatFeedbackDisplay()} recoveryAction={() => void core.refreshPromptControlBinding()} recoveryLabel={tr(locale(), "刷新权限与 Agent 绑定", "Refresh authority and Agent binding")} />}
         </Show>
         <div>
           <div class="panel__title panel__title--spaced">{tr(locale(), "消息流", "Message Flow")}</div>
@@ -3535,6 +3540,9 @@ function InteractionPanel() {
         <PanelSection title={tr(locale(), "提示词覆盖", "Prompt Overrides")}>
           <div class="feedback-detail">{promptVersionState().summary}</div>
           <div class="feedback-detail">{promptVersionState().detail}</div>
+          <Show when={!promptControlsEnabled()}>
+            <div class="feedback-detail" data-prompt-readiness="blocked" role="status" aria-live="polite">{promptControlDisabledReason()}</div>
+          </Show>
           <Show
             when={
               authSurface().capabilities.prompt_control.enabled
@@ -3640,6 +3648,9 @@ function InteractionPanel() {
           </div>
           <Show when={promptFeedback()} fallback={<EmptyState>{tr(locale(), "还没有提示词反馈。", "No prompt feedback yet.")}</EmptyState>}>
             {(feedback) => <FeedbackCard feedback={feedback()} display={promptFeedbackDisplay()} />}
+          </Show>
+          <Show when={promptRecoveryRequired()}>
+            <div class="toolbar" data-prompt-recovery="binding"><button type="button" data-testid="prompt-recovery-cta" data-prompt-recovery-action="refresh-binding" onClick={() => void core.refreshPromptControlBinding()}>{tr(locale(), "刷新权限与 Agent 绑定", "Refresh authority and Agent binding")}</button></div>
           </Show>
           <Show when={core.state.strongAuth.lastGrantActionId}>
             <EmptyState>

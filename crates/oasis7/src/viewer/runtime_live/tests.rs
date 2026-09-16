@@ -25,6 +25,7 @@ mod background_play;
 mod chain_sync;
 #[path = "tests/mock_http.rs"]
 mod mock_http;
+mod paused_start;
 #[path = "tests/provider_continuation_drains.rs"]
 mod provider_continuation_drains;
 pub(super) use chain_sync::TestChainStatusServer;
@@ -976,60 +977,6 @@ fn runtime_decision_trace_reads_provider_retryable_flag() {
     };
 
     assert_eq!(decision_trace_provider_error_retryable(&trace), Some(false));
-}
-
-#[test]
-fn runtime_auto_play_uses_shared_server_gate_across_sessions() {
-    let mut server = ViewerRuntimeLiveServer::new(
-        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal).with_auto_play_on_connect(true),
-    )
-    .expect("runtime server");
-    let mut first = RuntimeLiveSession::new();
-    let mut second = RuntimeLiveSession::new();
-
-    server.enable_auto_play_for_session_if_available(&mut first);
-    assert!(first.playing);
-    assert!(server.should_advance_auto_play_step());
-    assert!(
-        !server.should_advance_auto_play_step(),
-        "a second session should not advance the same server-level auto-play tick"
-    );
-
-    server.enable_auto_play_for_session_if_available(&mut second);
-    assert!(second.playing);
-    assert!(
-        !server.should_advance_auto_play_step(),
-        "joining sessions share the same background play gate instead of becoming owners"
-    );
-
-    server.next_auto_play_step_at = Some(Instant::now() - Duration::from_millis(1));
-    assert!(server.should_advance_auto_play_step());
-}
-
-#[test]
-fn runtime_auto_play_pause_and_resume_are_global() {
-    let mut server = ViewerRuntimeLiveServer::new(
-        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal).with_auto_play_on_connect(true),
-    )
-    .expect("runtime server");
-    let mut first = RuntimeLiveSession::new();
-    let mut second = RuntimeLiveSession::new();
-
-    server.enable_auto_play_for_session_if_available(&mut first);
-    assert!(first.playing);
-    server.pause_auto_play(&mut first);
-    assert!(!first.playing);
-    assert!(!server.should_advance_auto_play_step());
-
-    server.enable_auto_play_for_session_if_available(&mut second);
-    assert!(
-        !second.playing,
-        "new sessions should respect a global pause until the user resumes live play"
-    );
-
-    server.resume_auto_play(&mut second);
-    assert!(second.playing);
-    assert!(server.should_advance_auto_play_step());
 }
 
 #[test]

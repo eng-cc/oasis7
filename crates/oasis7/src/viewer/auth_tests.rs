@@ -698,10 +698,10 @@ fn session_register_auth_verify_rejects_tampered_force_rebind() {
 }
 
 #[test]
-fn hosted_session_register_rejects_arbitrary_self_signed_player_claim() {
+fn hosted_session_register_rejects_arbitrary_self_signed_hosted_player_claim() {
     let (attacker_public_key, attacker_private_key) = test_signer_with_seed(41);
     let request = AuthoritativeSessionRegisterRequest {
-        player_id: "hosted-player-account-00000001".to_string(),
+        player_id: "hosted-player-test-login".to_string(),
         public_key: Some(attacker_public_key.clone()),
         registration_grant: None,
         auth: None,
@@ -741,7 +741,7 @@ fn hosted_session_register_grant_is_bound_and_single_use_across_ledger_reload() 
         std::env::set_var(HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV, &ledger_path);
     }
     let grant = issue_hosted_registration_grant(
-        "hosted-player-account-test",
+        "hosted-player-test-login",
         public_key.as_str(),
         "device-1",
         "nonce-1",
@@ -750,7 +750,7 @@ fn hosted_session_register_grant_is_bound_and_single_use_across_ledger_reload() 
     )
     .expect("issue registration grant");
     let request = AuthoritativeSessionRegisterRequest {
-        player_id: "hosted-player-account-test".to_string(),
+        player_id: "hosted-player-test-login".to_string(),
         public_key: Some(public_key.clone()),
         registration_grant: Some(grant),
         auth: None,
@@ -762,7 +762,7 @@ fn hosted_session_register_grant_is_bound_and_single_use_across_ledger_reload() 
             .expect("sign session request");
 
     let mut mismatched_request = request.clone();
-    mismatched_request.player_id = "hosted-player-account-other".to_string();
+    mismatched_request.player_id = "hosted-player-other".to_string();
     let mismatched_proof = sign_session_register_auth_proof(
         &mismatched_request,
         92,
@@ -775,7 +775,7 @@ fn hosted_session_register_grant_is_bound_and_single_use_across_ledger_reload() 
     assert!(mismatch.contains("binding"), "unexpected error: {mismatch}");
 
     let expired_grant = issue_hosted_registration_grant(
-        "hosted-player-account-test",
+        "hosted-player-test-login",
         public_key.as_str(),
         "device-1",
         "nonce-expired",

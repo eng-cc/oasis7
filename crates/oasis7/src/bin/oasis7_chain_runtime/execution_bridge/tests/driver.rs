@@ -1,7 +1,7 @@
 use super::super::checkpoint::{execution_bridge_record_path, load_execution_bridge_record};
 use super::super::driver::{
-    NodeRuntimeExecutionDriver, load_execution_bridge_state, load_execution_world,
-    load_execution_world_with_policy, persist_execution_world,
+    NodeRuntimeExecutionDriver, derive_local_execution_bootstrap, load_execution_bridge_state,
+    load_execution_world, load_execution_world_with_policy, persist_execution_world,
     simulator_world_dir_from_execution_world_dir,
 };
 use super::super::external_effect::load_execution_external_effect_materialization;
@@ -16,6 +16,7 @@ use oasis7::runtime::{
 };
 use oasis7::simulator::{Action as SimulatorAction, ActionSubmitter};
 use oasis7_node::{NodeExecutionCommitContext, NodeExecutionHook, compute_consensus_action_root};
+use oasis7_proto::storage_profile::StorageProfileConfig;
 use oasis7_wasm_abi::ModuleCallFailure;
 use oasis7_wasm_executor::FixedSandbox;
 
@@ -321,6 +322,122 @@ fn load_execution_world_with_dev_local_policy_clears_pristine_frozen_supply_from
         &ReleaseSecurityPolicy::default()
     );
     assert_eq!(loaded_world.main_token_config().initial_supply, 0);
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn local_execution_bootstrap_accepts_first_successor_and_recovers_durable_head() {
+    let dir = temp_dir("execution-driver-local-bootstrap");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let world_id = "world-local-bootstrap";
+    let mut world = RuntimeWorld::new();
+    world.step().expect("persist local setup tick one");
+    world.step().expect("persist local setup tick two");
+    assert_eq!(world.state().time, 2);
+    persist_execution_world(world_dir.as_path(), &world).expect("persist local setup world");
+
+    let baseline = derive_local_execution_bootstrap(
+        world_dir.as_path(),
+        records_dir.as_path(),
+        world_id,
+        2,
+        "local-finality-h2",
+        &ReleaseSecurityPolicy::default(),
+    )
+    .expect("derive persisted local execution boundary");
+    let storage_profile = StorageProfileConfig::default();
+    let mut driver = NodeRuntimeExecutionDriver::new_with_local_bootstrap(
+        state_path.clone(),
+        world_dir.clone(),
+        records_dir.clone(),
+        storage_root.clone(),
+        &storage_profile,
+        baseline.clone(),
+    )
+    .expect("start driver at persisted local boundary");
+    let action_root = compute_consensus_action_root(&[]).expect("empty action root");
+
+    let first = driver
+        .on_commit(NodeExecutionCommitContext {
+            world_id: world_id.to_string(),
+            node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
+            height: 3,
+            slot: 3,
+            epoch: 0,
+            node_block_hash: "node-h3".to_string(),
+            action_root: action_root.clone(),
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 3_000,
+        })
+        .expect("first consensus successor should advance runtime time");
+    assert_eq!(first.execution_height, 3);
+    assert_eq!(
+        load_execution_world_with_policy(world_dir.as_path(), ReleaseSecurityPolicy::default())
+            .expect("load h3 world")
+            .state()
+            .time,
+        3
+    );
+    assert!(execution_bridge_record_path(records_dir.as_path(), 3).exists());
+    drop(driver);
+
+    let mut restarted = NodeRuntimeExecutionDriver::new_with_local_bootstrap(
+        state_path.clone(),
+        world_dir.clone(),
+        records_dir.clone(),
+        storage_root.clone(),
+        &storage_profile,
+        baseline,
+    )
+    .expect("restore durable h3 execution head");
+    let second = restarted
+        .on_commit(NodeExecutionCommitContext {
+            world_id: world_id.to_string(),
+            node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
+            height: 4,
+            slot: 4,
+            epoch: 0,
+            node_block_hash: "node-h4".to_string(),
+            action_root,
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 4_000,
+        })
+        .expect("restarted driver should advance to h4");
+    assert_eq!(second.execution_height, 4);
+    assert_eq!(
+        load_execution_world_with_policy(world_dir.as_path(), ReleaseSecurityPolicy::default())
+            .expect("load h4 world")
+            .state()
+            .time,
+        4
+    );
+
+    drop(restarted);
+    let durable_baseline = derive_local_execution_bootstrap(
+        world_dir.as_path(),
+        records_dir.as_path(),
+        world_id,
+        4,
+        "local-finality-h4",
+        &ReleaseSecurityPolicy::default(),
+    )
+    .expect("derive durable later-height execution boundary");
+    assert_eq!(durable_baseline.consensus_block_hash, "node-h4");
+    let _durable_restarted = NodeRuntimeExecutionDriver::new_with_local_bootstrap(
+        state_path,
+        world_dir,
+        records_dir,
+        storage_root,
+        &storage_profile,
+        durable_baseline,
+    )
+    .expect("restore durable later-height execution head");
 
     let _ = fs::remove_dir_all(dir);
 }

@@ -5,7 +5,7 @@
 - 想先判断测试分层、门禁与通用执行顺序：读仓库级 [`testing-manual.md`](../../../testing-manual.md)。
 - 想采样 Viewer Web 页面、保存截图 / state / console 证据：读 [`web-ui-agent-browser-closure-manual.manual.md`](web-ui-agent-browser-closure-manual.manual.md)。
 - 想跑真实本地栈、真实 UI 输入与玩家流程矩阵：读 [`web-ui-playwright-closure-manual.manual.md`](web-ui-playwright-closure-manual.manual.md)。
-- 想让本地入口接入 formal `public_testnet` world state，并验证 quota / provider 链路：读 [`local-public-testnet-letai-test-environment-2026-06-23.manual.md`](local-public-testnet-letai-test-environment-2026-06-23.manual.md)。
+- 想让本地入口接入 formal `public_testnet` world state，或排查 LetAI 配置、代理继承、模型选择、quota 与受控 auto-topup：读 [`local-public-testnet-letai-test-environment-2026-06-23.manual.md`](local-public-testnet-letai-test-environment-2026-06-23.manual.md)。
 - 想在受治理 deployment truth 下只物化一台已擦除 validator host、保持服务 disabled/inactive 并输出 public receipt：先读 blockchain ops authority [`../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md`](../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md)，再按 [`public-testnet-fresh-validator-host-bootstrap-2026-07-28.manual.md`](public-testnet-fresh-validator-host-bootstrap-2026-07-28.manual.md) 执行其 narrow subprocedure。
 - 想用截图加模型视觉评审替代 routine 人工 review：读 [`model-visual-review-sop-2026-05-29.manual.md`](model-visual-review-sop-2026-05-29.manual.md)，并使用 [`../templates/model-visual-review-card-template.md`](../templates/model-visual-review-card-template.md)。
 

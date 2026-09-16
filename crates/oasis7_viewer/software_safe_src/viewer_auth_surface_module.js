@@ -161,29 +161,83 @@ export function createViewerAuthSurfaceModule({
     return actionId === "prompt_control" || actionId === "main_token_transfer";
   }
 
+  function promptControlProtocolGate() {
+    const protocol = state.viewerProtocol;
+    if (!protocol || protocol.negotiated == null) {
+      return null;
+    }
+    if (protocol.negotiated === false) {
+      return {
+        code: "prompt_protocol_negotiating",
+        reason: "waiting for runtime hello_v2 prompt-control capability negotiation",
+      };
+    }
+    const capabilities = Array.isArray(protocol.capabilities) ? protocol.capabilities : [];
+    if (!capabilities.includes("prompt_control_result_v1")) {
+      return null;
+    }
+    if (!String(protocol.authorityEpoch || state.auth.authorityEpoch || "").trim()) {
+      return {
+        code: "prompt_authority_epoch_unavailable",
+        reason: "prompt control is waiting for a current runtime authority epoch",
+      };
+    }
+    if (state.auth.registrationStatus !== "registered" || state.auth.sessionEpoch == null) {
+      return {
+        code: "prompt_session_not_ready",
+        reason: "prompt control is waiting for a current registered player session",
+      };
+    }
+    if (!String(state.auth.boundAgentId || "").trim() || state.auth.bindingEpoch == null) {
+      return {
+        code: "prompt_binding_not_ready",
+        reason: "prompt control is waiting for a current Agent binding recovery ack",
+      };
+    }
+    if (!Number.isSafeInteger(Number(state.promptDraft?.currentVersion))) {
+      return {
+        code: "prompt_version_unavailable",
+        reason: "prompt control is waiting for the authorized prompt version",
+      };
+    }
+    return null;
+  }
+
   function buildSemanticCapability(actionId) {
     const deploymentHint = authDeploymentHint(state.auth);
     const strongAuthSensitive = isStrongAuthSensitiveAction(actionId);
     const policy = hostedActionPolicy(actionId);
+    const protocolGate = actionId === "prompt_control" ? promptControlProtocolGate() : null;
+    const finalize = (result) => {
+      if (protocolGate && result.enabled) {
+        return {
+          ...result,
+          enabled: false,
+          code: protocolGate.code,
+          reason: protocolGate.reason,
+        };
+      }
+      return result;
+    };
     if (policy) {
       if (policy.required_auth === "strong_auth") {
         const isLocalPreviewOnly = policy.availability === "trusted_local_preview_only";
         const isBackendGrantPreview = policy.availability === "public_player_plane_with_backend_reauth_preview";
         if (isLocalPreviewOnly && state.auth.available && !isHostedPublicJoinHint(deploymentHint)) {
-          return {
+          return finalize({
             actionId,
             enabled: true,
             code: null,
             reason: policy.reason || "trusted local preview currently allows this strong-auth-marked action through preview bootstrap",
-          };
+          });
         }
         if (isBackendGrantPreview && state.auth.available) {
-          return {
+          return finalize({
             actionId,
             enabled: true,
             code: null,
             reason: policy.reason || `${actionId} is available through browser-local player auth plus backend re-authorization`,
-          };
+          });
         }
         if (isBackendGrantPreview && !state.auth.available) {
           return {
@@ -193,66 +247,66 @@ export function createViewerAuthSurfaceModule({
             reason: `${actionId} requires player_session before backend re-authorization can upgrade it to strong_auth`,
           };
         }
-        return {
+        return finalize({
           actionId,
           enabled: false,
           code: "strong_auth_required",
           reason: policy.reason || strongAuthReason(),
-        };
+        });
       }
       if (!state.auth.available) {
-        return {
+        return finalize({
           actionId,
           enabled: false,
           code: "auth_level_insufficient",
           reason: `${actionId} requires ${policy.required_auth}; current browser remains guest_session only`,
-        };
+        });
       }
-      return {
+      return finalize({
         actionId,
         enabled: true,
         code: null,
         reason: policy.reason || `${actionId} is allowed on the ${policy.required_auth} lane`,
-      };
+      });
     }
     if (strongAuthSensitive && isHostedPublicJoinHint(deploymentHint)) {
       const hostedStrongAuthReason = state.auth.available
         ? `${actionId} still requires strong_auth on the hosted public join path; this browser only has a legacy preview player_session, so backend re-authorization or a private operator plane must take over`
         : `${actionId} requires strong_auth on the hosted public join path; acquire a player_session first, then complete the hosted re-authorization step for this action`;
-      return {
+      return finalize({
         actionId,
         enabled: false,
         code: "strong_auth_required",
         reason: hostedStrongAuthReason,
-      };
+      });
     }
     if (strongAuthSensitive && state.auth.available && deploymentHint === "remote_origin_legacy_bootstrap") {
-      return {
+      return finalize({
         actionId,
         enabled: false,
         code: "strong_auth_required",
         reason: `${actionId} is blocked on remote-origin legacy bootstrap; hosted/public prompt control must move to strong_auth or private operator plane`,
-      };
+      });
     }
     if (!state.auth.available) {
       const reason = isHostedPublicJoinHint(deploymentHint)
         ? `${actionId} requires player_session; this browser is still guest_session only on the hosted public join path`
         : `${actionId} requires viewer auth bootstrap; current status: ${state.auth.error || "missing"}`;
-      return {
+      return finalize({
         actionId,
         enabled: false,
         code: "auth_level_insufficient",
         reason,
-      };
+      });
     }
-    return {
+    return finalize({
       actionId,
       enabled: true,
       code: null,
       reason: strongAuthSensitive
         ? "prompt_control stays enabled only in trusted_local_preview via legacy viewer auth bootstrap; hosted/public strong_auth remains pending"
         : "player_session is active via legacy viewer auth bootstrap preview",
-    };
+    });
   }
 
   function buildAuthSurfaceModel() {

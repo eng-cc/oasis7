@@ -274,13 +274,13 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
             .advance_runtime(&mut session, &mut writer, "step", 2, None, true)
             .map_err(|error| format!("multi-step control failed: {error:?}"))
             .and_then(|_| {
-                (server.world.state().time == baseline_time + 2)
+                (server.world.state().time == baseline_time)
                     .then_some(())
                     .ok_or_else(|| {
                         format!(
-                            "Step {{ count: 2 }} advanced to {}, expected {}",
+                            "Step {{ count: 2 }} must retain the provider base while its turn is pending: got {}, expected {}",
                             server.world.state().time,
-                            baseline_time + 2
+                            baseline_time
                         )
                     })
             })
@@ -292,7 +292,7 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
     clear_runtime_provider_env();
     drop(_guard);
     phase_result.expect("provider context phases should complete");
-    step_result.expect("multi-step control should advance each requested iteration");
+    step_result.expect("multi-step control should preserve an in-flight provider base");
     step_drain_result.expect("multi-step provider response should be accepted and drained");
     // A simulated Viewer restart restores the adapter checkpoint against the
     // same Runtime world.  The committed identity is terminal and therefore

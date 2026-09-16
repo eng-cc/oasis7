@@ -122,10 +122,16 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             }
             "--chain-status-bind" => {
                 options.chain_status_bind = parse_required_value(&mut iter, "--chain-status-bind")?;
+                options.chain_status_bind_explicit = true;
             }
             "--chain-link-policy" => {
                 let raw = parse_required_value(&mut iter, "--chain-link-policy")?;
                 options.chain_link_policy = parse_chain_link_policy(raw.as_str())?.to_string();
+            }
+            "--major-world-event-visibility" => {
+                let raw = parse_required_value(&mut iter, "--major-world-event-visibility")?;
+                options.major_world_event_visibility =
+                    parse_major_world_event_visibility(raw.as_str())?;
             }
             "--chain-node-id" => {
                 options.chain_node_id = parse_required_value(&mut iter, "--chain-node-id")?;
@@ -174,6 +180,42 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                         &mut iter,
                         "--provider-bootstrap-authority",
                     )?);
+            }
+            "--local-test-provider-authority" => {
+                options.local_test_provider_authority_path = Some(parse_required_value(
+                    &mut iter,
+                    "--local-test-provider-authority",
+                )?);
+            }
+            "--local-test-provider-wasm" => {
+                options.local_test_provider_wasm_path = Some(parse_required_value(
+                    &mut iter,
+                    "--local-test-provider-wasm",
+                )?);
+            }
+            "--local-test-provider-metadata" => {
+                options.local_test_provider_metadata_path = Some(parse_required_value(
+                    &mut iter,
+                    "--local-test-provider-metadata",
+                )?);
+            }
+            "--local-test-provider-agent-id" => {
+                options.local_test_provider_agent_id =
+                    parse_required_value(&mut iter, "--local-test-provider-agent-id")?;
+            }
+            "--local-test-provider-owner-binding" => {
+                options.local_test_provider_owner_binding =
+                    parse_required_value(&mut iter, "--local-test-provider-owner-binding")?;
+            }
+            "--local-test-provider-finality-block-hash" => {
+                options.local_test_provider_finality_block_hash = Some(parse_required_value(
+                    &mut iter,
+                    "--local-test-provider-finality-block-hash",
+                )?);
+            }
+            "--local-test-provider-session-mode" => {
+                options.local_test_provider_session_mode =
+                    parse_required_value(&mut iter, "--local-test-provider-session-mode")?;
             }
             "--chain-local-standalone-test" => {
                 options.chain_local_standalone_test = true;
@@ -339,7 +381,105 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
         }
     }
 
+    validate_local_test_provider_options(&options)?;
+
     Ok(options)
+}
+
+fn validate_local_test_provider_options(options: &CliOptions) -> Result<(), String> {
+    let any_setup_option = options.local_test_provider_authority_path.is_some()
+        || options.local_test_provider_wasm_path.is_some()
+        || options.local_test_provider_metadata_path.is_some()
+        || options.local_test_provider_finality_block_hash.is_some()
+        || options.local_test_provider_agent_id != "starter-agent-0"
+        || options.local_test_provider_owner_binding != "local-test-owner-0"
+        || options.local_test_provider_session_mode != "hosted_public_join";
+    if !any_setup_option {
+        return Ok(());
+    }
+    if !options.chain_enabled {
+        return Err("local test authority setup requires --chain-enable".to_string());
+    }
+    if !options.chain_local_standalone_test {
+        return Err(
+            "local test authority setup requires --chain-local-standalone-test".to_string(),
+        );
+    }
+    if options.chain_storage_profile != StorageProfile::DevLocal {
+        return Err(
+            "local test authority setup requires --chain-storage-profile dev_local".to_string(),
+        );
+    }
+    if !options.chain_network_tier_manifest.trim().is_empty() {
+        return Err(
+            "local test authority setup cannot use --chain-network-tier-manifest".to_string(),
+        );
+    }
+    for (flag, present) in [
+        (
+            "--local-test-provider-authority",
+            options.local_test_provider_authority_path.is_some(),
+        ),
+        (
+            "--local-test-provider-wasm",
+            options.local_test_provider_wasm_path.is_some(),
+        ),
+        (
+            "--local-test-provider-metadata",
+            options.local_test_provider_metadata_path.is_some(),
+        ),
+        (
+            "--local-test-provider-finality-block-hash",
+            options.local_test_provider_finality_block_hash.is_some(),
+        ),
+    ] {
+        if !present {
+            return Err(format!(
+                "{flag} is required when local test authority setup is enabled"
+            ));
+        }
+    }
+    if options.local_test_provider_agent_id.trim().is_empty() {
+        return Err("--local-test-provider-agent-id requires a non-empty value".to_string());
+    }
+    if options.local_test_provider_owner_binding.trim().is_empty() {
+        return Err("--local-test-provider-owner-binding requires a non-empty value".to_string());
+    }
+    if !matches!(
+        options.local_test_provider_session_mode.as_str(),
+        "hosted_public_join" | "loopback"
+    ) {
+        return Err(
+            "--local-test-provider-session-mode must be hosted_public_join or loopback".to_string(),
+        );
+    }
+    let finality = options
+        .local_test_provider_finality_block_hash
+        .as_deref()
+        .unwrap_or_default();
+    let Some(digest) = finality.strip_prefix("blake3:") else {
+        return Err(
+            "--local-test-provider-finality-block-hash must be blake3:<64 lowercase hex characters>"
+                .to_string(),
+        );
+    };
+    if digest.len() != 64
+        || !digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(
+            "--local-test-provider-finality-block-hash must be blake3:<64 lowercase hex characters>"
+                .to_string(),
+        );
+    }
+    if options.agent_decision_source != BUILTIN_LLM_DECISION_SOURCE {
+        return Err(
+            "local test provider authority setup requires --agent-decision-source builtin_llm"
+                .to_string(),
+        );
+    }
+    Ok(())
 }
 
 fn validate_generated_world_options(options: &CliOptions) -> Result<(), String> {
@@ -390,6 +530,19 @@ rerun with `--allow-debug-scenario` only for targeted diagnostics, or omit `--sc
 pub(super) fn deployment_mode_from_options(options: &CliOptions) -> DeploymentMode {
     DeploymentMode::parse(options.deployment_mode.as_str(), "deployment_mode")
         .unwrap_or(DeploymentMode::HostedPublicJoin)
+}
+
+/// The local chain writer remains explicitly trusted-local, while an opted-in
+/// hosted session still needs the HostedPublicJoin player-plane contract for
+/// the Viewer state and launcher HTTP issuer routes.
+pub(super) fn viewer_deployment_mode_from_options(options: &CliOptions) -> DeploymentMode {
+    if options.local_test_provider_authority_path.is_some()
+        && options.local_test_provider_session_mode == "hosted_public_join"
+    {
+        DeploymentMode::HostedPublicJoin
+    } else {
+        deployment_mode_from_options(options)
+    }
 }
 
 pub(super) fn uses_provider_http_transport(options: &CliOptions) -> bool {
@@ -506,6 +659,31 @@ fn parse_chain_link_policy(raw: &str) -> Result<&'static str, String> {
         })
 }
 
+fn parse_major_world_event_visibility(
+    raw: &str,
+) -> Result<oasis7::runtime::MajorWorldEventVisibilityPermission, String> {
+    match raw.trim() {
+        "unknown" => Ok(oasis7::runtime::MajorWorldEventVisibilityPermission::Unknown),
+        "public" => Ok(oasis7::runtime::MajorWorldEventVisibilityPermission::Public),
+        "restricted" => Ok(oasis7::runtime::MajorWorldEventVisibilityPermission::Restricted),
+        "denied" => Ok(oasis7::runtime::MajorWorldEventVisibilityPermission::Denied),
+        value => Err(format!(
+            "--major-world-event-visibility must be one of unknown|public|restricted|denied, got `{value}`"
+        )),
+    }
+}
+
+pub(super) fn major_world_event_visibility_as_str(
+    visibility: oasis7::runtime::MajorWorldEventVisibilityPermission,
+) -> &'static str {
+    match visibility {
+        oasis7::runtime::MajorWorldEventVisibilityPermission::Unknown => "unknown",
+        oasis7::runtime::MajorWorldEventVisibilityPermission::Public => "public",
+        oasis7::runtime::MajorWorldEventVisibilityPermission::Restricted => "restricted",
+        oasis7::runtime::MajorWorldEventVisibilityPermission::Denied => "denied",
+    }
+}
+
 pub(super) fn print_help() {
     let pos_defaults = oasis7::chain_pos_defaults::defaults();
     println!(
@@ -530,6 +708,8 @@ Options:\n\
   --chain-disable              disable oasis7_chain_runtime\n\
   --chain-status-bind <addr>   oasis7_chain_runtime status bind (default: {DEFAULT_CHAIN_STATUS_BIND})\n\
   --chain-link-policy <mode>   viewer chain sync policy: enforcing|shadow (default: {DEFAULT_CHAIN_LINK_POLICY})\n\
+  --major-world-event-visibility <policy>\n\
+                               explicit audience policy: unknown|public|restricted|denied (default: unknown)\n\
   --chain-node-id <id>         oasis7_chain_runtime node id (default: {DEFAULT_CHAIN_NODE_ID})\n\
   --chain-network-tier-manifest <path>\n\
                                formal network tier manifest json; when set, chain bootstrap peers/status tier metadata load from manifest and explicit storage profile becomes optional\n\
@@ -545,6 +725,20 @@ Options:\n\
                                oasis7_chain_runtime replication bootstrap peer multiaddr (repeatable; first explicit value replaces bundled defaults)\n\
   --provider-bootstrap-authority <path>\n\
                                explicit provider authority bundle for chain runtime/viewer (repeatable; no default)\n\
+  --local-test-provider-authority <path>\n\
+                               explicit DevLocal authority output bundle (local standalone + builtin_llm)\n\
+  --local-test-provider-wasm <path>\n\
+                               real WASM artifact for the explicit DevLocal provider setup\n\
+  --local-test-provider-metadata <path>\n\
+                               canonical build-suite metadata JSON for the WASM artifact\n\
+  --local-test-provider-agent-id <id>\n\
+                               starter agent to provision (default: starter-agent-0)\n\
+  --local-test-provider-owner-binding <id>\n\
+                               stable local session owner binding (default: local-test-owner-0)\n\
+  --local-test-provider-finality-block-hash <hash>\n\
+                               explicit local finality marker, blake3:<64 lowercase hex>\n\
+  --local-test-provider-session-mode <mode>\n\
+                               hosted_public_join|loopback (default: hosted_public_join)\n\
   --chain-local-standalone-test\n\
                                do not join external testnet peers; configure a self-validating single-node local commit loop\n\
   --chain-node-tick-ms <n>     oasis7_chain_runtime worker poll/fallback interval ms (default: {DEFAULT_CHAIN_NODE_TICK_MS})\n\

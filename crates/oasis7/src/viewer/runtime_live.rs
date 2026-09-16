@@ -43,6 +43,8 @@ pub(super) fn canonical_runtime_provider_env_lock() -> &'static Mutex<()> {
     LOCK.get_or_init(|| Mutex::new(()))
 }
 
+#[path = "runtime_live/advance_tick.rs"]
+mod advance_tick;
 mod authoritative;
 mod auto_play;
 mod branch_commitment;
@@ -295,10 +297,10 @@ impl ViewerRuntimeLiveServer {
         }
         let next_virtual_event_id = latest_runtime_event_seq(&world).saturating_add(1).max(1);
         let mut server = Self {
+            auto_play_paused: !config.auto_play_on_connect,
             config,
             world,
             initial_world_time,
-            auto_play_paused: false,
             next_auto_play_step_at: None,
             last_chain_committed_height: 0,
             confirmed_player_gameplay_progress_time: None,
@@ -1026,9 +1028,7 @@ impl ViewerRuntimeLiveServer {
                     }
                 }
             }
-            // Runtime cognition finalization already advances the World once;
-            // avoid a second logical tick for the same provider action.
-            if self.world.state().time == iteration_logical_time {
+            if self.should_advance_compatibility_tick(iteration_logical_time) {
                 if let Err(error) = self.world.step() {
                     let (delta_logical_time, delta_event_seq) =
                         self.control_completion_delta(baseline_logical_time, baseline_event_seq);

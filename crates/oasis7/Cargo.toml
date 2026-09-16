@@ -36,6 +36,7 @@ oasis7_wasm_executor = { version = "0.1.0", path = "../oasis7_wasm_executor", de
 oasis7_wasm_router = { version = "0.1.0", path = "../oasis7_wasm_router" }
 oasis7_wasm_store = { version = "0.1.0", path = "../oasis7_wasm_store" }
 async-openai = { version = "0.41.3", default-features = false, features = ["responses", "rustls"] }
+eventsource-stream = "0.2.3"
 ctrlc = { version = "3.4", features = ["termination"] }
 futures-util = "0.3"
 hmac = "0.13"
