@@ -295,6 +295,7 @@ pub(super) fn web_launcher_public_endpoints() -> &'static [&'static str] {
         "/api/public/player-session/refresh",
         "/api/public/hosted-account/login/start",
         "/api/public/hosted-account/login/complete",
+        "/api/public/hosted-account/test-login",
         "/api/public/state",
         "/api/public/player-session/issue",
         "/api/public/player-session/release",
@@ -505,5 +506,6 @@ mod tests {
         assert!(
             web_launcher_public_endpoints().contains(&"/api/public/hosted-account/login/complete")
         );
+        assert!(web_launcher_public_endpoints().contains(&"/api/public/hosted-account/test-login"));
     }
 }

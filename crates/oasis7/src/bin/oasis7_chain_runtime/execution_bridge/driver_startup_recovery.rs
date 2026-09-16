@@ -302,6 +302,12 @@ impl NodeRuntimeExecutionDriver {
                         record.height
                     )
                 })?
+        } else if let Some(baseline) = self
+            .local_execution_bootstrap
+            .as_ref()
+            .filter(|baseline| record.height == baseline.height.saturating_add(1))
+        {
+            baseline.execution_block_hash.clone()
         } else if record.height == 1 {
             "genesis".to_string()
         } else {

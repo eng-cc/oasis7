@@ -156,7 +156,7 @@ impl World {
         Ok(())
     }
 
-    fn preflight_domain_event(&self, body: &WorldEventBody) -> Result<(), WorldError> {
+    pub(super) fn preflight_domain_event(&self, body: &WorldEventBody) -> Result<(), WorldError> {
         let WorldEventBody::Domain(event) = body else {
             return Ok(());
         };

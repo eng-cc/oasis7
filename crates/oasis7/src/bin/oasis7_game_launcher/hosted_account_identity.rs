@@ -17,6 +17,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub(super) const HOSTED_ACCOUNT_LOGIN_START_ROUTE: &str = "/api/public/hosted-account/login/start";
 pub(super) const HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE: &str =
     "/api/public/hosted-account/login/complete";
+pub(super) const HOSTED_ACCOUNT_TEST_LOGIN_ROUTE: &str = "/api/public/hosted-account/test-login";
 const HOSTED_LOGIN_DELIVERY_MODE_SMTP: &str = "smtp";
 const HOSTED_LOGIN_SMTP_HOST_ENV: &str = "OASIS7_HOSTED_LOGIN_SMTP_HOST";
 const HOSTED_LOGIN_SMTP_PORT_ENV: &str = "OASIS7_HOSTED_LOGIN_SMTP_PORT";

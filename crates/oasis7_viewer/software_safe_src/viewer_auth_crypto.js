@@ -181,3 +181,45 @@ export function buildAuthEnvelope(payload) {
     payload,
   });
 }
+
+// Keep this property order aligned with PromptControlEnhancedSigningPayload in
+// crates/oasis7/src/viewer/auth.rs. The runtime signs the CBOR envelope, so
+// insertion order is part of the protocol contract.
+export function promptFieldPatchV1(patch) {
+  if (!patch || patch.mode === "unchanged") {
+    return "unchanged";
+  }
+  if (patch.mode === "clear") {
+    return "clear";
+  }
+  const value = String(patch.value ?? "").trim();
+  return value ? { set: value } : "clear";
+}
+
+export function buildPromptControlSigningPayload(mode, request, auth) {
+  const normalizedMode = String(mode || "").trim().toLowerCase();
+  const rollback = normalizedMode === "rollback";
+  const preview = normalizedMode === "preview";
+  return {
+    operation: rollback
+      ? "prompt_control_rollback"
+      : preview
+        ? "prompt_control_preview"
+        : "prompt_control_apply",
+    preview,
+    request_id: String(request?.request_id || "").trim(),
+    agent_id: String(request?.agent_id || "").trim(),
+    player_id: String(auth?.playerId || request?.player_id || "").trim(),
+    public_key: String(auth?.publicKey || request?.public_key || "").trim().toLowerCase(),
+    nonce: request?.nonce,
+    session_epoch: Number(request?.session_epoch),
+    binding_epoch: Number(request?.binding_epoch),
+    expected_authority_epoch: String(request?.expected_authority_epoch || "").trim(),
+    expected_version: Number(request?.expected_version),
+    system_prompt: rollback ? "unchanged" : promptFieldPatchV1(request?.system_prompt_override),
+    short_term_goal: rollback ? "unchanged" : promptFieldPatchV1(request?.short_term_goal_override),
+    long_term_goal: rollback ? "unchanged" : promptFieldPatchV1(request?.long_term_goal_override),
+    rollback_target: rollback ? Number(request?.to_version) : null,
+    updated_by: String(request?.updated_by || "").trim() || undefined,
+  };
+}

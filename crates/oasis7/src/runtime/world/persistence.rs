@@ -490,6 +490,16 @@ impl World {
         *self.persistence_dir.borrow_mut() = Some(dir.to_path_buf());
     }
 
+    /// Stop automatic persistence for an in-memory observer projection.
+    ///
+    /// A world loaded from disk is normally a writer-owned world and therefore
+    /// keeps its persistence directory. Chain-linked viewers load that same
+    /// snapshot as an observer; detaching here prevents viewer-side recovery
+    /// or provider bookkeeping from writing the chain writer's directory.
+    pub(crate) fn detach_persistence_dir(&mut self) {
+        *self.persistence_dir.borrow_mut() = None;
+    }
+
     pub fn save_to_dir_with_modules(&self, dir: impl AsRef<Path>) -> Result<(), WorldError> {
         self.save_to_dir(dir)
     }

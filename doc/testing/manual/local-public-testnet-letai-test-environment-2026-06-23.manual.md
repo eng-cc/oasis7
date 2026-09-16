@@ -359,6 +359,143 @@ rtk curl -sS -X POST "$BRIDGE_BASE_URL/v1/bridge/reconcile" | jq '{
 
 ## 9. 准备 LetAI provider bridge 配置
 
+### 9.1 配置、代理与预检排障顺序
+
+先区分字段用途：`token_key` / `api_key` 明确是 project inference token，供
+`/v1/responses` 或 `/v1/chat/completions` 使用；未标注的旧 `Key` 是 ambiguous legacy
+字段，可能是 inference token，也可能是 platform key；`platform_key` 是管理
+user/project 和 topup 的平台凭据，不能直接作为 inference token；`platform_user_id`
+用于 direct auto-topup，`platform_project_id` 仅保留映射/审计关联。`Doc` 不是 API
+endpoint。`with-letai-llm-config.sh` 要求 inference token，所以第一次调用 wrapper
+前必须先识别/规范化来源文件；旧 `Key` 会按长度启发式分类（至少 50 个字符视为
+platform key），新配置应显式写 `token_key` 或 `platform_key`。
+
+macOS `scutil --proxy` 的 GUI 设置不会自动进入当前进程。若同一凭据直连返回 HTML
+Cloudflare `403`，而经本机代理返回 JSON API 错误，先把 operator 确认的代理显式传给
+同一个 shell，再判断凭据：
+
+```bash
+rtk scutil --proxy | sed -n '1,80p'
+export http_proxy="${OASIS7_PROXY_URL:?set approved HTTP proxy URL}"
+export HTTP_PROXY="$http_proxy"
+export https_proxy="$http_proxy"
+export HTTPS_PROXY="$https_proxy"
+if [[ -n "${OASIS7_SOCKS_PROXY_URL:-}" ]]; then
+  export all_proxy="$OASIS7_SOCKS_PROXY_URL"
+  export ALL_PROXY="$all_proxy"
+else
+  unset all_proxy ALL_PROXY
+fi
+export no_proxy="127.0.0.1,localhost,::1${no_proxy:+,$no_proxy}"
+export NO_PROXY="$no_proxy"
+```
+
+然后按一次性、低成本顺序操作，不要扫遍历史模型或无限重试付费请求：
+
+1. 先把来源文件规范化到私有 run 目录；已有 inference token 只会被安全复制，平台 key 或 ambiguous `Key` 则按 helper 规则生成/保留 project token：
+
+   ```bash
+   LETAI_TOKEN_SOURCE_FILE="$LETAI_TOKEN_FILE"
+   export LETAI_TOKEN_FILE="$RUN_DIR/letai-local-token.env"
+   rtk ./scripts/ensure-letai-local-token-config.sh \
+     --config "$LETAI_TOKEN_SOURCE_FILE" \
+     --out "$LETAI_TOKEN_FILE" \
+     --model "$MODEL"
+   ```
+
+   后续命令必须继续使用已显式赋值的 `LETAI_TOKEN_FILE`，避免把 platform key 当作 inference token。
+
+   如果本轮已经有由同一 W3 provisioning/topup 流程产生的权威 project mapping，必须把它
+   作为显式输入传给规范化 helper；不要再从另一个本地 token 文件猜测 project：
+
+   ```bash
+   export LETAI_AUTHORITATIVE_MAPPING_FILE="$RUN_DIR/authoritative-project-mapping.env"
+   rtk ./scripts/ensure-letai-local-token-config.sh \
+     --config "$LETAI_TOKEN_SOURCE_FILE" \
+     --authoritative-mapping "$LETAI_AUTHORITATIVE_MAPPING_FILE" \
+     --out "$LETAI_TOKEN_FILE" \
+     --model "$MODEL"
+   ```
+
+   mapping 文件必须显式包含 `token_key`/`api_key` 和 `platform_project_id`，可选包含
+   `platform_user_id`。helper 会在任何平台管理请求前比较所选 project token 与 mapping；
+   不一致时以 `authoritative project token mapping mismatch` 失败关闭，不输出 token，也不应
+   继续 topup 或 completion。匹配时只输出字段存在性、匹配结果和短 fingerprint，生成文件仍
+   必须留在私有 `0600` run 目录。该 mapping 是本轮 project 的唯一 authority；后续 wrapper、
+   native QA 和 provider retry 都必须继续使用同一个 `LETAI_TOKEN_FILE`。
+2. 运行 `rtk ./scripts/with-letai-llm-config.sh --config "$LETAI_TOKEN_FILE" --print-config`，只看 host、模型和字段存在性；不要输出 key。
+3. 在同一个 wrapper 环境内请求 `/v1/models`，只输出当前 model id；`200` 只证明可见性，不证明该模型能预扣费或完成 tool-call。
+4. Builtin Hosted W3 使用 `rtk ./scripts/check-active-llm-provider.sh --pretty` 验证 Responses 文本和 tool-call；local bridge 使用 `rtk ./scripts/check-letai-chat-completions.sh` 验证 chat-completions。两条协议的成功不能互相替代。
+
+安全的模型列表请求可通过环境变量承载 token，避免 token 出现在命令参数或输出中：
+
+```bash
+rtk ./scripts/with-letai-llm-config.sh --config "$LETAI_TOKEN_FILE" -- python3 - <<'PY'
+import json, os, ssl, urllib.error, urllib.request
+base = os.environ["OASIS7_LLM_BASE_URL"].rstrip("/")
+request = urllib.request.Request(base + "/models", headers={"Authorization": "Bearer " + os.environ["OASIS7_LLM_API_KEY"]})
+try:
+    with urllib.request.urlopen(request, timeout=30, context=ssl.create_default_context()) as response:
+        payload = json.load(response)
+except urllib.error.HTTPError as error:
+    print(f"models_http_status={error.code}")
+    raise SystemExit(1)
+except (urllib.error.URLError, json.JSONDecodeError) as error:
+    print(f"models_request_error={type(error).__name__}")
+    raise SystemExit(1)
+models = payload.get("data") if isinstance(payload, dict) else []
+print(json.dumps({"models": sorted(str(item["id"]) for item in models if isinstance(item, dict) and item.get("id"))}, ensure_ascii=False))
+PY
+```
+
+### 9.2 错误分类
+
+| 签名 | 分类 | 下一步 |
+| --- | --- | --- |
+| 直连 HTML/Cloudflare `403`、`decode_error` | `edge403`，常见原因是进程没有继承代理 | 对同一 host/凭据显式代理重试一次；不要先改 API path |
+| 代理后 `401 Invalid token`，或 `/models` 为 `401` | `API401`，inference token 无效、过期或字段取错 | 重新核对 project token；平台 key 只能用于管理 API |
+| `404/503 model_not_found`、`no available channel` | `model_not_found`，当前 credential/channel 不支持该模型 | 重新读当前 `/models`，选当时可见模型；模型列表不是永久清单 |
+| `403 insufficient_user_quota` 或包含 `余额` | `quota403`，请求已到额度检查但余额不足 | 见 9.3 的单次受控 topup；先降低输出上限 |
+
+`/v1/provider/health` 的 degraded 不能单独判定失败，因为 `/models` 探测可能被 provider
+以 `401` 拒绝；应结合选定 lane 的实际 completion/decision 结果。反过来，模型列表
+返回 `200` 也不能替代实际 provider preflight。
+
+### 9.3 受控 auto-topup 与不确定响应
+
+`5841` provider auto-topup 只补 LetAI provider quota，不提交 OC transfer，也不替代
+`5852` bridge 的 bind/deposit/reconcile。现有 provider CLI 只有在 completion 明确返回
+`insufficient_user_quota`/`余额`，并同时设置正数的
+`OASIS7_REMOTE_LLM_AUTO_TOPUP_USD`（或 `LETAI_AUTO_TOPUP_USD`）、
+`OASIS7_REMOTE_LLM_PLATFORM_KEY` 和 `OASIS7_REMOTE_LLM_PLATFORM_USER_ID` 时才会尝试
+管理 API topup；platform project id 不是 direct topup 的必需字段。
+
+`run-local-letai-game-test.sh --auto-topup-usd <amount>` 与
+`run-local-letai-provider-bridge.sh --auto-topup-usd <amount>` 设置
+`OASIS7_LETAI_AUTO_TOPUP_USD`，bridge 再映射到 remote 变量。当前 local helper 默认
+`$0.10`；它只是本地默认金额，不是生产或 OC 充值规则。topup 后 completion 最多默认
+重试 3 次、间隔 1000ms，可用 `OASIS7_REMOTE_LLM_AUTO_TOPUP_RETRY_COUNT` 和
+`OASIS7_REMOTE_LLM_AUTO_TOPUP_RETRY_DELAY_MS` 在本轮内缩小或保持有界。
+
+管理 API 的 endpoint 是 `/api/platform/open/users/<platform_user_id>/topups`，helper
+使用 `oasis7-local-auto-topup-<unix-seconds>` 作为 `external_order_id`；平台必须按该
+外部订单号幂等处理。成功事件只在 POST 返回后写入 stderr；如果响应超时、连接断开或
+无法确定：停止，不要盲目重跑；保留私有时间、user mapping 和脱敏错误，交由
+provider/QA owner 通过订单号或平台后台确认“已创建 / 明确未创建”后再继续。当前
+helper 没有 pending-order journal 或订单查询命令，无法自行证明 ambiguous POST 没有
+扣款；任何不确定订单必须保持 pending。
+
+因此必须分别记录 `topup`（未启用/明确成功/明确失败/状态未知）、`provider_preflight`
+和 real Hosted W3/browser acceptance。topup 成功不等于 preflight 成功，preflight 成功
+也不等于 Hosted W3 或 OC -> NewAPI/LetAI 充值链路完成。
+
+通用成功判据是：平台 topup 请求返回 `2xx` 且不是 `success=false`，随后同一请求的
+有界 completion retry 成功，并由 provider/QA 的权威订单回执确认已创建/结算，才可将
+本轮 provider topup 记为“明确成功”；若缺少回执，或只有 HTTP 响应、helper trace 或
+一次 `/models` `200`，仍只能记为“已接受/未确证结算”。
+`provider_preflight` 还必须在选定协议中得到结构化 completion/decision；Hosted W3
+和 OC 充值则分别满足各自 lane 的真实 browser、reconcile 与 receipt 条件。
+
 如果 LetAI token 文件已经包含 `platform_key`、`platform_user_id`、`platform_project_id`，可直接使用该文件。若它只包含 `Key:` 和 `base_url:`，用本地临时文件合并 token 与平台字段：
 
 ```bash

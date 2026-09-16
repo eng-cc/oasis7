@@ -1,7 +1,12 @@
 import { createViewerAuthSurfaceModule } from "./viewer_auth_surface_module.js";
 import { createViewerFeedbackModule } from "./viewer_feedback_module.js";
 import { createViewerHostedAuthStateModule } from "./viewer_hosted_auth_state_module.js";
+import { createViewerHostedTestLoginModule } from "./viewer_hosted_test_login_module.js";
+import { createViewerAgentChatAuthModule } from "./viewer_agent_chat_auth_module.js";
 import { createViewerHostedSessionRefreshModule } from "./viewer_hosted_session_refresh_module.js";
+import { createViewerHostedSessionReconnectModule } from "./viewer_hosted_session_reconnect_module.js";
+import { createViewerPromptControlModule } from "./viewer_prompt_control_module.js";
+import { createViewerControlLossModule } from "./viewer_control_loss_module.js";
 import { resetHostedLoginChallenge as resetHostedLoginChallengeState } from "./viewer_hosted_login_state_module.js";
 import { createViewerLocalePreferencesModule } from "./viewer_locale_preferences_module.js";
 import { createViewerBrowserPersistenceModule } from "./viewer_browser_persistence_module.js";
@@ -21,6 +26,7 @@ import {
   DEFAULT_WS_ADDR,
   HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE,
   HOSTED_ACCOUNT_LOGIN_START_ROUTE,
+  HOSTED_ACCOUNT_TEST_LOGIN_ROUTE,
   HOSTED_PLAYER_SESSION_ADMISSION_ROUTE,
   HOSTED_PLAYER_SESSION_REFRESH_INTERVAL_MS,
   HOSTED_PLAYER_SESSION_REFRESH_ROUTE,
@@ -46,6 +52,7 @@ import {
 import { createSoftwareSafeState } from "./software_safe_state.js"; import { createWorldFeedTransport } from "./world_feed_transport.js"; import { isWorldScopedCrisisRuntimeEvent } from "./world_event_attention_policy.js";
 import {
   buildAuthEnvelope,
+  buildPromptControlSigningPayload,
   generateEphemeralEd25519Keypair,
   signAuthPayload,
 } from "./viewer_auth_crypto.js";
@@ -67,6 +74,8 @@ let firstAgentClaimAutoAdvanceTimer = null;
 let firstAgentClaimAutoRefreshTimer = null;
 let requestId = 0;
 let authNonceCounter = 0;
+let viewerPromptControlModule = null;
+let viewerControlLossModule = null;
 let semanticSendLoop = null;
 const pendingControlFeedback = new Map();
 const pendingSemanticCommands = [];
@@ -92,6 +101,7 @@ const CHAT_HISTORY_STORAGE_PREFIX = "oasis7.viewer.chatHistory.v1";
 const CHAT_HISTORY_LIMIT = 40;
 const STARTER_AGENT_ID = "starter-agent-0";
 const LOCAL_TEST_PLAYER_ID_PREFIX = "local-test-player-";
+const PROMPT_CONTROL_RESULT_CAPABILITY = "prompt_control_result_v1";
 let localTestStarterRebindAttemptKey = null;
 function normalizeUiLocale(raw) {
   const value = String(raw || "").trim().toLowerCase();
@@ -211,7 +221,6 @@ function normalizeU64Display(value) {
   }
   return /^\d+$/.test(text) ? text : `invalid_u64(${text})`;
 }
-
 function normalizeFiniteNumber(value) {
   if (value == null) {
     return null;
@@ -219,7 +228,6 @@ function normalizeFiniteNumber(value) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
 }
-
 function finitePositionComponents(pos) {
   if (!pos || typeof pos !== "object") {
     return null;
@@ -232,7 +240,6 @@ function finitePositionComponents(pos) {
   }
   return { x, y, z };
 }
-
 function trimFixed(value, digits) {
   if (!Number.isFinite(value)) {
     return null;
@@ -240,7 +247,6 @@ function trimFixed(value, digits) {
   const fixed = value.toFixed(digits);
   return fixed.replace(/\.0+$/, "").replace(/(\.\d*[1-9])0+$/, "$1");
 }
-
 const {
   formatPhysicalDistanceCm,
   formatWorldPositionCm,
@@ -258,7 +264,6 @@ const {
   softwareSafeRenderModeAlias: SOFTWARE_SAFE_RENDER_MODE_ALIAS,
   viewerRenderMode: VIEWER_RENDER_MODE,
 });
-
 const {
   authDeploymentHint,
   buildAuthSurfaceModel,
@@ -273,7 +278,6 @@ const {
   state,
   windowRef: window,
 });
-
 const {
   buildGameplaySummary,
   describePromptVersionState,
@@ -289,12 +293,10 @@ const {
   localeText,
   state,
 });
-
 function initialWsUrl() {
   const params = getSearchParams();
   return normalizeWsAddr(params.get("ws") || params.get("addr") || DEFAULT_WS_ADDR);
 }
-
 const {
   chatHistoryStorageKey,
   hydrateChatHistoryFromStorage,
@@ -313,17 +315,14 @@ const {
   state,
   windowRef: window,
 });
-
 function shouldConnectViewerWs() {
   const mode = String(getSearchParams().get("connect") || "").trim().toLowerCase();
   return mode !== "0" && mode !== "false" && mode !== "off";
 }
-
 function shouldRunHostedBootstrap() {
   const mode = String(getSearchParams().get("hosted_bootstrap") || "").trim().toLowerCase();
   return mode !== "0" && mode !== "false" && mode !== "off";
 }
-
 const {
   authHasSigningKeyMaterial,
   clearHostedPlayerSession,
@@ -339,11 +338,10 @@ const {
   viewerPlayerIdKey: VIEWER_PLAYER_ID_KEY,
   windowRef: window,
 });
-
 function resetHostedLoginChallenge() {
   resetHostedLoginChallengeState(state.hostedLogin);
 }
-
+const { start: startHostedTestLogin, waitForStart: waitForHostedTestLogin } = createViewerHostedTestLoginModule({ clone, fetchImpl: (...args) => fetch(...args), generateEphemeralEd25519Keypair, getSearchParams, isHostedPublicJoinDeploymentMode, persistHostedPlayerSession, render, resetHostedLoginChallenge, route: HOSTED_ACCOUNT_TEST_LOGIN_ROUTE, state });
 async function ensureHostedAuthSigningKey(auth = state.auth) {
   if (!auth?.available || auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
     return auth;
@@ -355,6 +353,8 @@ async function ensureHostedAuthSigningKey(auth = state.auth) {
   auth.publicKey = keypair.publicKey;
   auth.privateKey = keypair.privateKey;
   auth.registrationStatus = "issued";
+  auth.sessionEpoch = auth.bindingEpoch = auth.authorityEpoch = auth.boundAgentId = null;
+  viewerPromptControlModule?.clearPendingAuthoritativeRefresh();
   auth.runtimeStatus = "recovery_pending_key";
   auth.syncInFlight = false;
   auth.recoveryErrorCode = null;
@@ -362,7 +362,6 @@ async function ensureHostedAuthSigningKey(auth = state.auth) {
   persistHostedPlayerSession(auth);
   return auth;
 }
-
 async function refreshHostedAdmissionState() {
   if (!isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)) {
     state.hostedAdmission = null;
@@ -381,7 +380,6 @@ async function refreshHostedAdmissionState() {
     return state.hostedAdmission;
   }
 }
-
 const { refreshHostedPlayerLease } = createViewerHostedSessionRefreshModule({
   clone,
   ensureHostedAuthSigningKey,
@@ -391,7 +389,6 @@ const { refreshHostedPlayerLease } = createViewerHostedSessionRefreshModule({
   refreshRoute: HOSTED_PLAYER_SESSION_REFRESH_ROUTE,
   state,
 });
-
 function stopHostedSessionRefreshLoop() {
   if (hostedSessionRefreshTimer) {
     window.clearInterval(hostedSessionRefreshTimer);
@@ -428,6 +425,14 @@ function nextAuthNonce() {
   return Date.now() + authNonceCounter;
 }
 
+const viewerAgentChatAuthModule = createViewerAgentChatAuthModule({ buildAuthEnvelope, nextAuthNonce, signAuthPayload, state });
+
+function resetViewerProtocolForConnection() { viewerPromptControlModule?.resetForConnection(); }
+function promptControlCapabilitySelected() { return viewerPromptControlModule?.capabilitySelected() === true; }
+function promptControlResultSelected() { return viewerPromptControlModule?.resultSelected() === true; }
+function promptControlReadinessError(agentId) { return viewerPromptControlModule?.readinessError(agentId) || null; }
+function attachPromptControlIdentity(request) { return viewerPromptControlModule?.attachIdentity(request) || request; }
+
 function getState() {
   const authSurface = buildAuthSurfaceModel();
   const hostedActionMatrixView = buildHostedActionMatrixView();
@@ -435,6 +440,7 @@ function getState() {
   const gameplaySummary = buildGameplaySummary();
   return {
     connectionStatus: state.connectionStatus,
+    viewerProtocol: clone(state.viewerProtocol),
     logicalTime: state.logicalTime,
     eventSeq: state.eventSeq,
     tick: state.tick,
@@ -476,11 +482,12 @@ function getState() {
     authRevokeReason: state.auth.revokeReason,
     authRevokedBy: state.auth.revokedBy,
     authRegistrationStatus: state.auth.registrationStatus,
-    authSessionEpoch: state.auth.sessionEpoch,
+    authSessionEpoch: state.auth.sessionEpoch, authBindingEpoch: state.auth.bindingEpoch, authAuthorityEpoch: state.auth.authorityEpoch,
     authRecoveryErrorCode: state.auth.recoveryErrorCode,
     authRecoveryErrorMessage: state.auth.recoveryErrorMessage,
     authRuntimeStatus: state.auth.runtimeStatus,
     authBoundAgentId: state.auth.boundAgentId,
+    authControlLostAgentId: state.auth.controlLostAgentId,
     authPendingRequestedAgentId: state.auth.pendingRequestedAgentId,
     authPendingForceRebind: state.auth.pendingForceRebind,
     authRebindNotice: state.auth.rebindNotice,
@@ -604,7 +611,14 @@ function currentBoundAgentControlError(agentId, actionLabel = "agent action") {
   if (id !== boundAgentId) {
     return `${actionLabel} target ${id} does not match current bound Agent ${boundAgentId}`;
   }
+  if (viewerControlLossModule?.isControlLost(id)) {
+    return `${actionLabel} control was lost; re-authenticate and refresh the current Agent binding`;
+  }
   return null;
+}
+
+function isAgentControlLost(agentId) {
+  return viewerControlLossModule?.isControlLost(agentId) === true;
 }
 
 function selectedAgentId() {
@@ -667,6 +681,14 @@ function syncAgentInteractionDrafts(force = false) {
       dirty: false,
     };
   }
+}
+
+function promptDraftValuesForRequest(request) {
+  return viewerPromptControlModule?.draftValuesForRequest(request) || null;
+}
+
+function reconcilePendingPromptAuthoritativeRefresh(snapshot) {
+  return viewerPromptControlModule?.reconcilePendingAuthoritativeRefresh(snapshot) === true;
 }
 
 function applySelection(selection) {
@@ -1378,7 +1400,7 @@ function handleSnapshot(snapshot) {
     if (!applySelection({ kind: state.selectedKind, id: state.selectedId })) { state.selectedKind = null; state.selectedId = null; state.selectedObject = null; syncAgentInteractionDrafts(true); }
   }
   hydrateChatHistoryFromStorage();
-  syncAgentInteractionDrafts(false);
+  syncAgentInteractionDrafts(reconcilePendingPromptAuthoritativeRefresh(snapshot));
   syncEmptyEntitySnapshotRefreshLoop(); if (snapshot?.model?.agents?.[STARTER_AGENT_ID]) { clearFirstAgentClaimAutoAdvanceTimers(); } worldFeedTransport.refreshAfterSnapshot();
 }
 
@@ -1616,29 +1638,7 @@ function handleControlCompletionAck(ack) {
 }
 
 async function buildAgentChatAuthProof(request, auth) {
-  const nonce = nextAuthNonce();
-  const payload = {
-    operation: "agent_chat",
-    agent_id: request.agent_id,
-    player_id: auth.playerId,
-    public_key: auth.publicKey,
-    nonce,
-    message: request.message,
-  };
-  if (request.intent_tick != null) {
-    payload.intent_tick = request.intent_tick;
-  }
-  if (request.intent_seq != null) {
-    payload.intent_seq = request.intent_seq;
-  }
-  const signingPayload = buildAuthEnvelope(payload);
-  return {
-    scheme: "ed25519",
-    player_id: auth.playerId,
-    public_key: auth.publicKey,
-    nonce,
-    signature: await signAuthPayload(signingPayload, auth),
-  };
+  return viewerAgentChatAuthModule.buildAuthProof(request, auth);
 }
 
 function promptPatchFromDraft(currentValue, draftValue) {
@@ -1654,49 +1654,11 @@ function promptPatchFromDraft(currentValue, draftValue) {
 }
 
 async function buildPromptControlAuthProof(mode, request, auth) {
-  const nonce = nextAuthNonce();
-  const payload = {
-    operation: mode === "preview" ? "prompt_control_preview" : "prompt_control_apply",
-    agent_id: request.agent_id,
-    player_id: auth.playerId,
-    public_key: auth.publicKey,
-    nonce,
-    expected_version: request.expected_version ?? null,
-    updated_by: request.updated_by ?? null,
-    system_prompt_override: request.system_prompt_override,
-    short_term_goal_override: request.short_term_goal_override,
-    long_term_goal_override: request.long_term_goal_override,
-  };
-  const signingPayload = buildAuthEnvelope(payload);
-  return {
-    scheme: "ed25519",
-    player_id: auth.playerId,
-    public_key: auth.publicKey,
-    nonce,
-    signature: await signAuthPayload(signingPayload, auth),
-  };
+  return viewerPromptControlModule?.buildAuthProof(mode, request, auth);
 }
 
 async function buildPromptRollbackAuthProof(request, auth) {
-  const nonce = nextAuthNonce();
-  const payload = {
-    operation: "prompt_control_rollback",
-    agent_id: request.agent_id,
-    player_id: auth.playerId,
-    public_key: auth.publicKey,
-    nonce,
-    to_version: request.to_version,
-    expected_version: request.expected_version ?? null,
-    updated_by: request.updated_by ?? null,
-  };
-  const signingPayload = buildAuthEnvelope(payload);
-  return {
-    scheme: "ed25519",
-    player_id: auth.playerId,
-    public_key: auth.publicKey,
-    nonce,
-    signature: await signAuthPayload(signingPayload, auth),
-  };
+  return viewerPromptControlModule?.buildRollbackAuthProof(request, auth);
 }
 
 async function buildSessionRegisterAuthProof(request, auth) {
@@ -1842,6 +1804,12 @@ async function issueLocalTestPlayerSession() {
     return state.auth;
   }
   const keypair = await generateEphemeralEd25519Keypair();
+  // Auth can be installed by a test fixture or another login path while key
+  // generation is suspended. Preserve that newer session instead of replacing
+  // it with the stale local-test issuance that started from guest state.
+  if (state.auth.available) {
+    return state.auth;
+  }
   const playerId = `local-test-player-${Date.now().toString(36)}-${authNonceCounter + 1}`;
   state.auth = {
     available: true,
@@ -1866,6 +1834,7 @@ async function issueLocalTestPlayerSession() {
     syncInFlight: false,
     runtimeStatus: "issued",
     boundAgentId: null,
+    controlLostAgentId: null,
     pendingRequestedAgentId: null,
     pendingForceRebind: false,
     rebindNotice: null,
@@ -2001,6 +1970,8 @@ async function completeHostedAccountLogin() {
       source: "hosted_browser_storage",
       registrationStatus: "issued",
       sessionEpoch: null,
+      bindingEpoch: null,
+      authorityEpoch: null,
       issuedAtUnixMs: payload?.grant?.issued_at_unix_ms == null ? Date.now() : Number(payload.grant.issued_at_unix_ms),
       recoveryErrorCode: null,
       recoveryErrorMessage: null,
@@ -2008,6 +1979,7 @@ async function completeHostedAccountLogin() {
       syncInFlight: false,
       runtimeStatus: "issued",
       boundAgentId: null,
+      controlLostAgentId: null,
       pendingRequestedAgentId: null,
       pendingForceRebind: false,
       rebindNotice: null,
@@ -2052,6 +2024,11 @@ async function retryHostedPlayerIdentityIssue() {
     playerId: auth?.playerId || null,
     error: auth?.error || state.hostedLogin.error,
   };
+}
+
+async function refreshPromptControlBinding() {
+  return viewerPromptControlModule?.refreshBinding()
+    || { ok: false, reason: "prompt control module is not ready" };
 }
 
 async function requestHostedStrongAuthGrant(actionId, agentId) {
@@ -2189,6 +2166,7 @@ function resetHostedPlayerAuthState(errorMessage = null, revocationMeta = null) 
         syncInFlight: false,
         runtimeStatus: "guest",
         boundAgentId: null,
+        controlLostAgentId: null,
         pendingRequestedAgentId: null,
         pendingForceRebind: false,
         rebindNotice: null,
@@ -2227,12 +2205,24 @@ async function logoutHostedPlayerSession() {
   return { ok: true };
 }
 
-function syncHostedPlayerSessionOnConnect() {
-  if (!state.auth.available || state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE || state.auth.syncInFlight) {
-    return;
-  }
-  void sendReconnectSync();
+function markHostedSessionRefreshFailure() {
+  state.auth.syncInFlight = false;
+  state.auth.registrationStatus = "issued";
+  state.auth.runtimeStatus = "error";
+  state.auth.recoveryErrorCode = "session_refresh_failed";
+  state.auth.recoveryErrorMessage = state.auth.error || "hosted player session refresh failed; retry to recover this browser session";
+  render();
 }
+
+const { syncHostedPlayerSessionOnConnect } = createViewerHostedSessionReconnectModule({
+  authHasSigningKeyMaterial,
+  legacyViewerAuthBootstrapSource: LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE,
+  onRefreshFailure: markHostedSessionRefreshFailure,
+  refreshHostedPlayerLease,
+  registerHostedPlayerSession: () => ensureRegisteredPlayerSession(latestRequestedAgentId()),
+  sendReconnectSync,
+  state,
+});
 
 function clearPendingSessionRegisterWaiter(error = null, options = {}) {
   if (!pendingSessionRegisterWaiter) {
@@ -2266,6 +2256,10 @@ function recoverConnectedSessionStateAfterRuntimeAck(ack = null) {
   if (ack?.session_epoch != null) {
     state.auth.sessionEpoch = Number(ack.session_epoch);
   }
+  if (Object.prototype.hasOwnProperty.call(ack || {}, "binding_epoch")) {
+    state.auth.bindingEpoch = ack.binding_epoch == null ? null : Number(ack.binding_epoch);
+  }
+  state.auth.authorityEpoch = state.viewerProtocol.authorityEpoch || null;
 }
 
 function resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack = null) {
@@ -2386,6 +2380,7 @@ function recoveryErrorRequiresExplicitRebind(error) {
 }
 
 async function ensureRegisteredPlayerSession(requestedAgentId = null, options = {}) {
+  await waitForHostedTestLogin();
   await ensureHostedPlayerAuthAvailable();
   if (!state.auth.available) {
     throw new Error(state.auth.error || "player session auth is unavailable");
@@ -2468,7 +2463,7 @@ function buildPromptRequestFromDraft(agentId, draftOverrides) {
   if (!agentId || !currentProfile) {
     throw new Error("select an agent before editing prompt overrides");
   }
-  return {
+  const request = {
     agent_id: agentId,
     player_id: state.auth.playerId,
     public_key: state.auth.publicKey,
@@ -2478,6 +2473,8 @@ function buildPromptRequestFromDraft(agentId, draftOverrides) {
     short_term_goal_override: promptPatchFromDraft(currentProfile.short_term_goal_override, draftOverrides.shortTermGoal),
     long_term_goal_override: promptPatchFromDraft(currentProfile.long_term_goal_override, draftOverrides.longTermGoal),
   };
+  if (promptControlCapabilitySelected()) request.request_id = `pc-${String(nextRequestId()).padStart(8, "0")}`;
+  return request;
 }
 
 function encodePromptRequestForJson(request) {
@@ -2493,6 +2490,8 @@ function encodePromptRequestForJson(request) {
   return {
     agent_id: request.agent_id,
     player_id: request.player_id,
+    ...(request.request_id ? { request_id: request.request_id } : {}), ...(request.session_epoch != null ? { session_epoch: request.session_epoch } : {}),
+    ...(request.binding_epoch != null ? { binding_epoch: request.binding_epoch } : {}), ...(request.expected_authority_epoch ? { expected_authority_epoch: request.expected_authority_epoch } : {}),
     public_key: request.public_key,
     expected_version: request.expected_version,
     updated_by: request.updated_by,
@@ -2511,7 +2510,7 @@ function buildPromptRollbackRequest(agentId, toVersion) {
   if (!Number.isInteger(targetVersion) || targetVersion < 0) {
     throw new Error("prompt rollback requires integer toVersion >= 0");
   }
-  return {
+  const request = {
     agent_id: agentId,
     player_id: state.auth.playerId,
     public_key: state.auth.publicKey,
@@ -2519,6 +2518,8 @@ function buildPromptRollbackRequest(agentId, toVersion) {
     expected_version: Number(profile.version || 0),
     updated_by: state.auth.playerId,
   };
+  if (promptControlCapabilitySelected()) request.request_id = `pc-${String(nextRequestId()).padStart(8, "0")}`;
+  return request;
 }
 
 function pushChatHistory(entry) {
@@ -2619,15 +2620,12 @@ function handleSemanticCommandError(command, error) {
     }
     clearPendingPromptControlAckTimer();
   }
-  command.feedback.stage = "error";
-  command.feedback.ok = false;
-  command.feedback.reason = String(error);
-  command.feedback.effect = "request build/send failed";
-  if (command.kind === "chat") {
-    state.lastChatFeedback = command.feedback;
-  } else {
-    state.lastPromptFeedback = command.feedback;
-  }
+  const feedback = command.kind === "chat" ? state.lastChatFeedback : state.lastPromptFeedback;
+  feedback.stage = "error";
+  feedback.ok = false;
+  feedback.accepted = false;
+  feedback.reason = String(error);
+  feedback.effect = "request build/send failed";
   render();
 }
 
@@ -2754,6 +2752,10 @@ function sendPromptControl(mode, payload = null) {
   if (controlError) {
     return { ok: false, reason: controlError };
   }
+  const protocolError = promptControlReadinessError(agentId);
+  if (protocolError) {
+    return { ok: false, reason: protocolError };
+  }
   let request;
   try {
     if (normalizedMode === "rollback") {
@@ -2775,6 +2777,7 @@ function sendPromptControl(mode, payload = null) {
   const feedback = createSemanticFeedback("prompt", `prompt_${normalizedMode}`, agentId, {
     effect: "queued for signing and send",
     toVersion: request.to_version ?? null,
+    requestId: request.request_id || null,
   });
   state.lastPromptFeedback = feedback;
   enqueueSemanticCommand({
@@ -2790,6 +2793,7 @@ function sendPromptControl(mode, payload = null) {
       render();
       await ensureRegisteredPlayerSession(agentId);
       assertPromptFeedbackActive(feedback);
+      attachPromptControlIdentity(request);
       let strongAuthGrant = null;
       if (isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)) {
         feedback.stage = "authorizing";
@@ -2824,6 +2828,8 @@ function sendPromptControl(mode, payload = null) {
       feedback.stage = "sent";
       feedback.effect = `prompt ${normalizedMode} request sent; waiting for ack`;
       state.lastPromptFeedback = feedback;
+      feedback.requestId = request.request_id || null;
+      feedback.submittedDraft = promptDraftValuesForRequest(request);
       sendJson({
         type: "prompt_control",
         command: {
@@ -3149,43 +3155,11 @@ function applyPromptAckLocally(ack) {
 }
 
 function handlePromptControlAck(ack) {
-  clearPendingPromptControlAckTimer();
-  const feedback = state.lastPromptFeedback || createSemanticFeedback("prompt", "prompt_ack", ack?.agent_id || null);
-  const operation = String(ack?.operation || (ack?.preview ? "preview" : "apply"));
-  feedback.stage = ack?.preview ? "preview_ack" : operation === "rollback" ? "rollback_ack" : "apply_ack";
-  feedback.ok = true;
-  feedback.accepted = true;
-  feedback.reason = null;
-  feedback.effect = ack?.preview
-    ? `prompt preview ready: version=${ack.version}`
-    : operation === "rollback"
-      ? `prompt rolled back via version=${ack.version} → target=${Number(ack?.rolled_back_to_version || 0)}`
-      : `prompt applied: version=${ack.version}`;
-  feedback.response = clone(ack);
-  state.lastPromptFeedback = feedback;
-  if (ack?.preview) {
-    return;
-  }
-  if (operation === "rollback") {
-    state.promptDraft.currentVersion = Number(ack?.version || state.promptDraft.currentVersion || 0);
-    state.promptDraft.rollbackTargetVersion = Math.max(0, state.promptDraft.currentVersion - 1);
-    state.promptDraft.dirty = false;
-    requestSnapshotSafe();
-    return;
-  }
-  applyPromptAckLocally(ack);
+  viewerPromptControlModule?.handleAck(ack);
 }
 
 function handlePromptControlError(error) {
-  clearPendingPromptControlAckTimer();
-  const feedback = state.lastPromptFeedback || createSemanticFeedback("prompt", "prompt_error", error?.agent_id || selectedAgentId());
-  feedback.stage = "error";
-  feedback.ok = false;
-  feedback.accepted = false;
-  feedback.reason = error?.message || error?.code || "prompt control failed";
-  feedback.effect = error?.code || "prompt control error";
-  feedback.response = clone(error);
-  state.lastPromptFeedback = feedback;
+  viewerPromptControlModule?.handleError(error);
 }
 
 function handleAgentChatAck(ack) {
@@ -3217,25 +3191,28 @@ function handleAgentChatError(error) {
   clearPendingAgentChatAckTimer();
   clearPendingAgentChatOverallTimer();
   const feedback = state.lastChatFeedback || createSemanticFeedback("chat", "agent_chat", error?.agent_id || selectedAgentId());
+  const agentId = error?.agent_id || feedback.agentId || selectedAgentId() || null;
+  const controlLost = viewerControlLossModule?.isControlLossError(error) === true;
+  const response = controlLost ? viewerControlLossModule.markControlLost(agentId) : clone(error);
   feedback.stage = "error";
   feedback.ok = false;
   feedback.accepted = false;
-  feedback.reason = error?.message || error?.code || "agent chat failed";
-  feedback.effect = error?.code || "agent chat error";
-  feedback.response = clone(error);
+  feedback.reason = controlLost ? "control_lost" : error?.message || error?.code || "agent chat failed";
+  feedback.effect = controlLost ? "control_lost" : error?.code || "agent chat error";
+  feedback.response = response;
   state.lastChatFeedback = feedback;
   pushChatHistory({
     id: `chat-error-${feedback.id}`,
     source: "error",
-    agentId: error?.agent_id || feedback.agentId || selectedAgentId() || null,
-    targetAgentId: error?.agent_id || feedback.agentId || selectedAgentId() || null,
+    agentId,
+    targetAgentId: agentId,
     playerId: feedback.pendingPlayerId || state.auth.playerId || null,
     speaker: "runtime",
     message: feedback.reason,
-    code: error?.code || null,
+    code: controlLost ? "control_lost" : error?.code || null,
     tick: Number(error?.accepted_at_tick || state.logicalTime || 0),
     locationId: error?.location_id || null,
-    response: clone(error),
+    response,
   });
 }
 
@@ -3247,7 +3224,9 @@ function adoptHostedRecoveryAck(ack) {
   const usesLegacyPreviewBootstrap = state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE;
   const hadPendingForceRebind = state.auth.pendingForceRebind === true;
   const previousRequestedAgentId = state.auth.pendingRequestedAgentId;
-  const nextBoundAgentId = ack.agent_id || state.auth.boundAgentId || null;
+  const nextBoundAgentId = Object.prototype.hasOwnProperty.call(ack, "agent_id")
+    ? (ack.agent_id || null)
+    : (state.auth.boundAgentId || null);
   const nextRequestedAgentId = ack.agent_id || state.auth.pendingRequestedAgentId || state.auth.boundAgentId || null;
   state.auth.syncInFlight = false;
   state.auth.recoveryErrorCode = null;
@@ -3264,7 +3243,13 @@ function adoptHostedRecoveryAck(ack) {
   if (ack.session_epoch != null) {
     state.auth.sessionEpoch = Number(ack.session_epoch);
   }
+  if (Object.prototype.hasOwnProperty.call(ack, "binding_epoch")) {
+    state.auth.bindingEpoch = ack.binding_epoch == null ? null : Number(ack.binding_epoch);
+  }
   state.auth.boundAgentId = nextBoundAgentId;
+  if (ack.status === "session_registered" || ack.status === "catch_up_ready") {
+    viewerControlLossModule?.clearControlLost(nextBoundAgentId);
+  }
   state.auth.pendingRequestedAgentId = nextRequestedAgentId;
   state.auth.pendingForceRebind = false;
   if (ack.status === "session_registered" && hadPendingForceRebind) {
@@ -3453,6 +3438,7 @@ function handleViewerMessage(message, sourceSocket = null) { if (sourceSocket &&
   switch (message?.type) {
     case "hello_ack":
       clearHelloAckTimer();
+      viewerPromptControlModule?.handleHelloAck(message);
       state.server = message.server || null;
       state.worldId = message.world_id || null;
       state.controlProfile = message.control_profile || "playback";
@@ -3526,6 +3512,7 @@ function handleViewerMessage(message, sourceSocket = null) { if (sourceSocket &&
 
 function attachSocket(ws) {
   ws.addEventListener("open", () => { if (socket !== ws) return; worldFeedTransport.resetGeneration(ws);
+    resetViewerProtocolForConnection();
     state.connectionStatus = "connected";
     state.lastError = null;
     state.server = null;
@@ -3534,7 +3521,7 @@ function attachSocket(ws) {
     initialSnapshotRetryCount = 0;
     clearHelloAckTimer();
     clearInitialSnapshotRetryTimer();
-    sendJson({ type: "hello", client: "viewer", version: 1 });
+    sendJson({ type: "hello_v2", client: "viewer", version: 2, capabilities: [PROMPT_CONTROL_RESULT_CAPABILITY] });
     scheduleHelloAckTimeout(ws);
     syncHostedSessionRefreshLoop();
     render();
@@ -3554,6 +3541,7 @@ function attachSocket(ws) {
   });
 
   ws.addEventListener("close", () => { if (socket !== ws) return; worldFeedTransport.markDisconnected(ws);
+    resetViewerProtocolForConnection();
     state.connectionStatus = "connecting";
     clearHostedRuntimeSyncTimer();
     if (state.auth.available && state.auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
@@ -4278,7 +4266,9 @@ function installTestApi() {
     logoutHostedPlayerSession,
     startHostedAccountLogin,
     completeHostedAccountLogin,
+    startHostedTestLogin,
     retryHostedPlayerIdentityIssue,
+    refreshPromptControlBinding,
     registerPlayerSessionForTest,
     expirePendingSessionRegisterWaiterForTest,
     expireHostedRuntimeSyncTimeoutForTest,
@@ -4287,6 +4277,13 @@ function installTestApi() {
     reportFatalError,
   };
 }
+
+viewerControlLossModule = createViewerControlLossModule({ render, state });
+viewerPromptControlModule = createViewerPromptControlModule({
+  applyPromptAckLocally, assertPromptFeedbackActive, buildAuthEnvelope, buildPromptControlSigningPayload, clearPendingPromptControlAckTimer,
+  clearPendingSessionRegisterWaiter, clone, createSemanticFeedback, ensureHostedPlayerAuthAvailable, ensureRegisteredPlayerSession,
+  nextRequestId, nextAuthNonce, onControlLost: (agentId) => viewerControlLossModule?.markControlLost(agentId), render, requestSnapshotSafe, selectedAgentId, selectedAgentPromptProfile, signAuthPayload, state,
+});
 
 function bootstrap() {
   state.uiLocale = resolveInitialUiLocale();
@@ -4394,6 +4391,7 @@ export {
   injectPowerSaleQuoteForTest, injectPowerSurvivalQuoteForTest, injectWarDeclarationQuoteForTest, injectScheduleRecipeQuoteForTest, injectTransferMaterialQuoteForTest,
   isEmptyEntitySnapshotRefreshPendingForTest,
   isAgentChatInFlight,
+  isAgentControlLost,
   isAgentVisibleToCurrentSession,
   modelLists,
   needsEmptyEntitySnapshotRefreshForTest,
@@ -4408,7 +4406,9 @@ export {
   resourceSummary,
   startHostedAccountLogin,
   completeHostedAccountLogin,
+  startHostedTestLogin,
   retryHostedPlayerIdentityIssue,
+  refreshPromptControlBinding,
   registerPlayerSessionForTest,
   runSteps,
   select,

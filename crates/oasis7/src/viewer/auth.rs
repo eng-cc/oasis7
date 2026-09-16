@@ -86,6 +86,7 @@ mod director_capability;
 pub use director_capability::{sign_director_capability_grant, verify_director_capability_grant};
 
 const VIEWER_PLAYER_AUTH_PAYLOAD_VERSION: u8 = 1;
+const HOSTED_PLAYER_ID_PREFIX: &str = "hosted-player-";
 pub const HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV: &str =
     "OASIS7_HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY";
 pub const HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV: &str =
@@ -506,7 +507,10 @@ fn verify_session_register_auth_proof_inner(
         proof.signature.as_str(),
         signing_payload.as_slice(),
     )?;
-    let hosted_registration_nonce = if request_player_id.starts_with("hosted-player-account-") {
+    // Both the public issuer and the hosted account broker issue player IDs in
+    // the hosted-player namespace.  The namespace selects the grant-required
+    // path; the signed grant remains the authority for every such identity.
+    let hosted_registration_nonce = if request_player_id.starts_with(HOSTED_PLAYER_ID_PREFIX) {
         Some(verify_hosted_registration_grant(
             request.registration_grant.as_deref().ok_or_else(|| {
                 "hosted session registration requires a registration grant".to_string()

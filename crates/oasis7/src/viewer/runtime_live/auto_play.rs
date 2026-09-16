@@ -8,9 +8,8 @@ impl ViewerRuntimeLiveServer {
         &mut self,
         session: &mut RuntimeLiveSession,
     ) {
-        if !self.config.auto_play_on_connect {
-            return;
-        }
+        // The configuration chooses initial playback. Explicit Play/Pause
+        // controls the shared server thereafter, including new connections.
         session.playing = !self.auto_play_paused;
         session.next_play_step_at = None;
         session.transient_play_failures = 0;
@@ -31,7 +30,7 @@ impl ViewerRuntimeLiveServer {
     }
 
     pub(super) fn should_advance_auto_play_step(&mut self) -> bool {
-        if !self.config.auto_play_on_connect || self.auto_play_paused {
+        if self.auto_play_paused {
             self.next_auto_play_step_at = None;
             return false;
         }
@@ -46,7 +45,7 @@ impl ViewerRuntimeLiveServer {
     }
 
     pub(super) fn defer_next_auto_play_step_after_completion(&mut self, interval: Duration) {
-        if self.config.auto_play_on_connect && !self.auto_play_paused {
+        if !self.auto_play_paused {
             self.next_auto_play_step_at = Some(Instant::now() + interval);
         }
     }
@@ -80,10 +79,7 @@ impl ViewerRuntimeLiveServer {
         session: &mut RuntimeLiveSession,
         writer: &mut BufWriter<TcpStream>,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
-        if !self.config.auto_play_on_connect
-            || self.auto_play_paused
-            || !session.initial_snapshot_sent
-        {
+        if self.auto_play_paused || !session.initial_snapshot_sent {
             return Ok(());
         }
         session.playing = true;

@@ -29,6 +29,36 @@ fn hosted_player_session_issue_returns_structured_grant() {
 }
 
 #[test]
+fn hosted_player_session_test_login_issues_identity_and_registration_grant_for_browser_key() {
+    unsafe {
+        std::env::set_var(
+            oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV,
+            hex::encode([71_u8; 32]),
+        );
+    }
+    let browser_key = hex::encode([72_u8; 32]);
+    let mut issuer = HostedPlayerSessionIssuer::default();
+    let response = issuer.issue_with_key(DeploymentMode::HostedPublicJoin, &browser_key);
+    unsafe {
+        std::env::remove_var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV);
+    }
+    assert!(
+        response.ok,
+        "test login must use the real hosted issuer: {response:?}"
+    );
+    let grant = response.grant.expect("test login grant");
+    assert!(grant.player_id.starts_with("hosted-player-"));
+    assert!(
+        grant
+            .device_session_id
+            .starts_with("hosted-device-session-")
+    );
+    assert_eq!(grant.auth_mode, "browser_local_ephemeral_ed25519");
+    assert!(grant.registration_grant.is_some());
+    assert_eq!(grant.release_token.len(), 64);
+}
+
+#[test]
 fn hosted_player_session_issue_for_player_reuses_stable_player_id() {
     let mut issuer = HostedPlayerSessionIssuer::default();
     let first = issuer.issue_for_player(DeploymentMode::HostedPublicJoin, "stable-player-1");
@@ -344,7 +374,7 @@ fn hosted_player_session_runtime_reconcile_releases_seen_players_missing_from_ru
     let issue = issuer.issue(DeploymentMode::HostedPublicJoin);
     let grant = issue.grant.expect("grant");
 
-    issuer.observe_runtime_active_players([grant.player_id.as_str()]);
+    issuer.observe_runtime_active_players_for_probe(100, [grant.player_id.as_str()]);
     let admission = issuer.admission(DeploymentMode::HostedPublicJoin);
     assert_eq!(admission.admission.active_player_sessions, 1);
     assert_eq!(admission.admission.effective_player_sessions, 1);
@@ -352,13 +382,27 @@ fn hosted_player_session_runtime_reconcile_releases_seen_players_missing_from_ru
     assert_eq!(admission.admission.runtime_only_player_sessions, 0);
     assert_eq!(admission.admission.runtime_probe_status, "ok");
 
-    issuer.observe_runtime_active_players(std::iter::empty::<&str>());
+    issuer.observe_runtime_active_players_for_probe(101, std::iter::empty::<&str>());
+    issuer.observe_runtime_active_players_for_probe(101, std::iter::empty::<&str>());
+    let admission = issuer.admission(DeploymentMode::HostedPublicJoin);
+    assert_eq!(admission.admission.active_player_sessions, 1);
+    assert_eq!(admission.admission.effective_player_sessions, 1);
+    assert_eq!(admission.admission.released_players_total, 0);
+
+    issuer.observe_runtime_active_players_for_probe(102, std::iter::empty::<&str>());
     let admission = issuer.admission(DeploymentMode::HostedPublicJoin);
     assert_eq!(admission.admission.active_player_sessions, 0);
     assert_eq!(admission.admission.effective_player_sessions, 0);
     assert_eq!(admission.admission.runtime_bound_player_sessions, 0);
     assert_eq!(admission.admission.runtime_only_player_sessions, 0);
     assert_eq!(admission.admission.released_players_total, 1);
+    let telemetry = admission
+        .admission
+        .release_telemetry
+        .expect("runtime release telemetry");
+    assert_eq!(telemetry.reason_counts.get("runtime_absence"), Some(&1));
+    assert_eq!(telemetry.last_reason.as_deref(), Some("runtime_absence"));
+    assert_eq!(telemetry.last_probe_sequence, Some(102));
 
     let refresh = issuer.refresh(
         DeploymentMode::HostedPublicJoin,
@@ -368,6 +412,57 @@ fn hosted_player_session_runtime_reconcile_releases_seen_players_missing_from_ru
     );
     assert!(!refresh.ok);
     assert_eq!(refresh.error_code.as_deref(), Some("session_revoked"));
+}
+
+#[test]
+fn hosted_player_session_explicit_release_does_not_look_like_runtime_revoke() {
+    let mut issuer = HostedPlayerSessionIssuer::default();
+    let grant = issuer
+        .issue(DeploymentMode::HostedPublicJoin)
+        .grant
+        .expect("grant");
+    issuer.observe_runtime_active_players([grant.player_id.as_str()]);
+
+    let release = issuer.release(
+        DeploymentMode::HostedPublicJoin,
+        grant.player_id.as_str(),
+        grant.release_token.as_str(),
+    );
+    assert!(release.ok);
+    assert!(
+        !issuer
+            .runtime_revoked_players
+            .contains(grant.player_id.as_str())
+    );
+    let telemetry = issuer
+        .admission(DeploymentMode::HostedPublicJoin)
+        .admission
+        .release_telemetry
+        .expect("explicit release telemetry");
+    assert_eq!(telemetry.reason_counts.get("explicit_release"), Some(&1));
+    assert_eq!(telemetry.last_reason.as_deref(), Some("explicit_release"));
+    assert_eq!(telemetry.last_probe_sequence, None);
+}
+
+#[test]
+fn hosted_player_session_probe_failure_breaks_missing_presence_confirmation() {
+    let mut issuer = HostedPlayerSessionIssuer::default();
+    let grant = issuer
+        .issue(DeploymentMode::HostedPublicJoin)
+        .grant
+        .expect("grant");
+    issuer.observe_runtime_active_players([grant.player_id.as_str()]);
+    issuer.observe_runtime_active_players(std::iter::empty::<&str>());
+    issuer.record_runtime_probe_failure("runtime snapshot timed out".to_string());
+    issuer.observe_runtime_active_players(std::iter::empty::<&str>());
+
+    assert_eq!(
+        issuer
+            .admission(DeploymentMode::HostedPublicJoin)
+            .admission
+            .active_player_sessions,
+        1
+    );
 }
 
 #[test]
@@ -381,6 +476,37 @@ fn hosted_player_session_runtime_probe_failure_surfaces_in_admission() {
         Some("connect runtime live failed")
     );
     assert!(response.admission.last_runtime_probe_unix_ms.is_some());
+}
+
+#[test]
+fn hosted_player_session_probe_failure_keeps_pending_slot_within_bounded_lease() {
+    let mut issuer = HostedPlayerSessionIssuer::default();
+    let grant = issuer
+        .issue(DeploymentMode::HostedPublicJoin)
+        .grant
+        .expect("grant");
+    issuer.record_runtime_probe_failure("runtime snapshot timed out".to_string());
+    issuer.last_seen_unix_ms_by_release_token.insert(
+        release_token_digest(grant.release_token.as_str()),
+        now_unix_ms()
+            .saturating_sub(PENDING_REGISTRATION_TTL_MS)
+            .saturating_sub(1),
+    );
+
+    let admission = issuer.admission(DeploymentMode::HostedPublicJoin);
+    assert_eq!(admission.admission.active_player_sessions, 1);
+    assert_eq!(admission.admission.runtime_probe_status, "error");
+    assert!(
+        issuer
+            .refresh(
+                DeploymentMode::HostedPublicJoin,
+                grant.player_id.as_str(),
+                grant.release_token.as_str(),
+                None,
+            )
+            .ok,
+        "a probe failure must not turn an unobserved slot into an invalid token"
+    );
 }
 
 #[test]
@@ -416,6 +542,41 @@ fn hosted_player_session_pending_registration_slots_expire_before_full_lease_ttl
     assert_eq!(response.admission.active_player_sessions, 0);
     assert_eq!(response.admission.effective_player_sessions, 0);
     assert_eq!(response.admission.released_players_total, 1);
+    assert_eq!(
+        response
+            .admission
+            .release_telemetry
+            .as_ref()
+            .and_then(|telemetry| telemetry.reason_counts.get("pending_expiry")),
+        Some(&1)
+    );
+}
+
+#[test]
+fn hosted_player_session_seen_expiry_reports_distinct_release_reason() {
+    let mut issuer = HostedPlayerSessionIssuer::default();
+    let grant = issuer
+        .issue(DeploymentMode::HostedPublicJoin)
+        .grant
+        .expect("grant");
+    issuer.observe_runtime_active_players([grant.player_id.as_str()]);
+    issuer.last_seen_unix_ms_by_release_token.insert(
+        release_token_digest(grant.release_token.as_str()),
+        now_unix_ms()
+            .saturating_sub(SLOT_LEASE_TTL_MS)
+            .saturating_sub(1),
+    );
+
+    let response = issuer.admission(DeploymentMode::HostedPublicJoin);
+    assert_eq!(response.admission.active_player_sessions, 0);
+    assert_eq!(
+        response
+            .admission
+            .release_telemetry
+            .as_ref()
+            .and_then(|telemetry| telemetry.reason_counts.get("seen_expiry")),
+        Some(&1)
+    );
 }
 
 #[test]

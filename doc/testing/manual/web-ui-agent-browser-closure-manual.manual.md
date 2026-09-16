@@ -30,6 +30,107 @@
 - 不要把单独的 `run-viewer-web.sh` 当作本地真实 provider-backed gameplay 启动方式；它不负责 provider bridge 或 launcher bootstrap。
 - 若目标是本地启动 test 环境并证明本机入口接入 formal `public_testnet` 大世界，而不是纯本地 LetAI playtest 栈，先按 `doc/testing/manual/local-public-testnet-letai-test-environment-2026-06-23.manual.md` 启动并复核，再用本手册做页面采样。
 
+### W3：DevLocal Builtin LLM 免邮箱启动
+
+W3 的本地验收需要真实 WASM 与 build-suite metadata、DevLocal authority、Builtin LLM
+和 HostedPublicJoin 的 loopback session projection。它不使用 ProviderBacked authority，
+也不连接 formal/public testnet。先确认本 worktree 构建出的 launcher、viewer、chain
+runtime 和 probe 来自同一个 HEAD，并确认真实 artifact 存在：
+
+```bash
+ROOT_DIR="$(pwd)"
+LOCAL_PROVIDER_DIR="$ROOT_DIR/.tmp/wasm-build-suite/local-test-provider"
+test -f "$LOCAL_PROVIDER_DIR/module.runtime.local-test-provider.wasm"
+test -f "$LOCAL_PROVIDER_DIR/module.runtime.local-test-provider.metadata.json"
+env -u RUSTC_WRAPPER cargo build -p oasis7 \
+  --bin oasis7_llm_provider_probe \
+  --bin oasis7_game_launcher \
+  --bin oasis7_viewer_live \
+  --bin oasis7_chain_runtime
+```
+
+为每次运行选择新的输出目录和空闲端口；下面端口只是示例。显式开启 loopback 的免邮箱
+test-login，并将四个 local authority 参数一起传给 `run-launcher-stack.sh`：
+
+```bash
+RUN_ID="w3-local-builtin-$(date +%Y%m%d-%H%M%S)"
+OUTPUT_DIR="$ROOT_DIR/.pm/scratch/w3-real-qa/$RUN_ID"
+mkdir -p "$OUTPUT_DIR"
+export OASIS7_HOSTED_TEST_LOGIN_ENABLED=1
+export OASIS7_LOCAL_TEST_PROVIDER_SESSION_MODE=hosted_public_join
+test -n "${OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY:-}"
+test -n "${OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY:-}"
+test -n "${OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE:-}"
+
+./scripts/run-launcher-stack.sh \
+  --run-id "$RUN_ID" \
+  --output-dir "$OUTPUT_DIR" \
+  --viewer-host 127.0.0.1 \
+  --viewer-port 4289 \
+  --live-bind 127.0.0.1:5189 \
+  --web-bind 127.0.0.1:5289 \
+  --deployment-mode trusted_local_only \
+  --allow-trusted-local-playtest \
+  --major-world-event-visibility restricted \
+  --chain-enable \
+  --chain-local-standalone-test \
+  --agent-decision-source builtin_llm \
+  --skip-llm-provider-preflight \
+  --local-test-provider-authority "$OUTPUT_DIR/local-test-provider-authority.json" \
+  --local-test-provider-wasm "$LOCAL_PROVIDER_DIR/module.runtime.local-test-provider.wasm" \
+  --local-test-provider-metadata "$LOCAL_PROVIDER_DIR/module.runtime.local-test-provider.metadata.json" \
+  --local-test-provider-agent-id starter-agent-0 \
+  --local-test-provider-owner-binding local-test-owner-0 \
+  --local-test-provider-finality-block-hash "blake3:0000000000000000000000000000000000000000000000000000000000000000" \
+  --local-test-provider-session-mode hosted_public_join \
+  --with-llm \
+  --auto-play \
+  --json-ready
+```
+
+The launcher defaults its chain storage profile to `dev_local`; direct
+`oasis7_game_launcher` invocations must add `--chain-storage-profile dev_local` explicitly.
+The wrapper creates run-scoped file account/session/replay ledgers and a local issuer key in
+the process environment; do not replace those with values copied into a command, report, or
+task log. Keep `--agent-decision-source builtin_llm`: the local authority opt-in is rejected
+for `provider_backed`. The DevLocal provider command grant has a finite 300-tick lifetime.
+Startup reuses it only when at least 240 ticks remain; otherwise startup issues one fresh
+canonical grant through Runtime admission and atomically persists the new authority/context.
+The prior grant remains immutable. This is a startup-only local lifecycle: HostedPublicJoin
+login, browser refresh, Prompt strong-auth, and periodic timers do not renew it, and it grants
+no clock/time capability.
+
+Check the output `session.meta` for `STACK_READY=1`, then verify the actual chain process and
+the email-free issuer route:
+
+```bash
+CHAIN_STATUS_BIND="127.0.0.1:5399"
+curl -sS "http://$CHAIN_STATUS_BIND/v1/chain/status" | jq '{ok, readiness: .readiness.status, h: .consensus.committed_height, nh: .consensus.network_committed_height, runtime_last_error}'
+curl -sS -X POST "http://127.0.0.1:4289/api/public/hosted-account/test-login" \
+  -H 'Content-Type: application/json' \
+  -d '{"public_key":"4848484848484848484848484848484848484848484848484848484848484848"}' \
+  | jq '{ok, player_id, has_registration_grant: (.registration_grant != null)}'
+```
+
+The chain process smoke is green only when status is `ok=true`, readiness is `ready`, the
+committed height advances to at least 3, and the persisted execution snapshot time matches
+that height. The local authority setup leaves the persisted world at baseline height 2, so
+the first real proposal is height 3; do not synthesize a height-2 record or reset the world
+clock. A fresh DevLocal setup also applies the canonical 325 OC genesis and immediate vesting
+claim for `starter-agent-0` at that baseline without advancing the clock; reuse validates the
+immutable funding journal and does not refill a spent balance. A subsequent restart should
+restore height 3 and advance to height 4. This process
+smoke is separate from the focused Rust driver regression and is required before browser
+claims for ordinary starter completion.
+
+Before browser interaction, read the execution-world snapshot and record only safe structural
+fields: current `state.time`; active local provider module/version; matching identity, owner
+binding, and generation; a matching grant with `state.time < expires_at_tick`; invocation
+context grant identity equality; available cognition allowance; and matching world/branch/
+finality audience. If the grant is expired or below the 240-tick startup margin, discard the
+generated run outputs and start a fresh run-scoped root. Do not edit snapshots, authority JSON,
+signatures, or expiry values.
+
 ## 底层 Viewer Debug 闭环
 
 ### 1. 启动 live server

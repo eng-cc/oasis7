@@ -8,10 +8,10 @@ use oasis7::runtime::{
 };
 use oasis7::simulator::{Action as SimulatorAction, ActionSubmitter, WorldEventKind, WorldKernel};
 use oasis7_node::{
-    EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE, NodeExecutionCheckpointBlob,
-    NodeExecutionCheckpointBundle, NodeExecutionCheckpointInstallContext,
-    NodeExecutionCommitContext, NodeExecutionCommitResult, NodeExecutionHook,
-    compute_consensus_action_root,
+    EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE, NodeExecutionBootstrap,
+    NodeExecutionCheckpointBlob, NodeExecutionCheckpointBundle,
+    NodeExecutionCheckpointInstallContext, NodeExecutionCommitContext, NodeExecutionCommitResult,
+    NodeExecutionHook, compute_consensus_action_root,
 };
 use oasis7_proto::storage_profile::StorageProfileConfig;
 use oasis7_wasm_abi::ModuleSandbox;
@@ -42,10 +42,10 @@ use super::execution_hash::{
 };
 use super::external_effect::{
     build_execution_external_effect_materialization_with_pre_step_root,
-    execution_world_snapshot_root, load_execution_external_effect_materialization,
-    persist_execution_external_effect_materialization,
+    execution_world_snapshot_root, persist_execution_external_effect_materialization,
     validate_execution_external_effect_for_context,
 };
+pub(crate) use super::local_bootstrap::derive_local_execution_bootstrap;
 use super::product_validation_intent::{
     ProductValidationIntentMarkerV1, build_product_validation_intent_marker,
     clear_product_validation_intent, load_product_validation_intent,
@@ -61,7 +61,6 @@ use super::{
 use crate::{
     EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER, EXECUTION_BRIDGE_RETENTION_IN_PROGRESS_MARKER,
 };
-
 pub(crate) struct NodeRuntimeExecutionDriver {
     pub(super) state_path: std::path::PathBuf,
     pub(super) world_dir: std::path::PathBuf,
@@ -81,147 +80,10 @@ pub(crate) struct NodeRuntimeExecutionDriver {
     /// It is deliberately outside the runtime state root and is cleared after
     /// the authoritative per-height record is published.
     pub(super) pending_product_validation_intent: Option<ProductValidationIntentMarkerV1>,
+    pub(super) local_execution_bootstrap: Option<NodeExecutionBootstrap>,
 }
 
 impl NodeRuntimeExecutionDriver {
-    fn validate_equal_height_replay_identity(
-        &self,
-        record: &ExecutionBridgeRecord,
-        context: &NodeExecutionCommitContext,
-    ) -> Result<(), String> {
-        if record.schema_version < super::EXECUTION_BRIDGE_RECORD_SCHEMA_V3 {
-            return Ok(());
-        }
-        let checkpoint_install_record = record.checkpoint_ref.is_some()
-            && record.proposer_id.is_none()
-            && record.action_root.is_none();
-        if checkpoint_install_record {
-            return Err(format!(
-                "execution driver equal-height checkpoint-install record cannot authenticate consensus replay at height {}",
-                context.height
-            ));
-        }
-
-        let node_block_hash = record.node_block_hash.as_deref().ok_or_else(|| {
-            format!(
-                "execution driver equal-height V3 record missing node_block_hash at height {}",
-                context.height
-            )
-        })?;
-        if node_block_hash != context.node_block_hash {
-            return Err(format!(
-                "execution driver equal-height V3 node_block_hash mismatch at height {}: expected={} actual={}",
-                context.height, node_block_hash, context.node_block_hash
-            ));
-        }
-        let proposer_id = record.proposer_id.as_deref().ok_or_else(|| {
-            format!(
-                "execution driver equal-height V3 record missing proposer_id at height {}",
-                context.height
-            )
-        })?;
-        if proposer_id != context.proposer_id {
-            return Err(format!(
-                "execution driver equal-height V3 proposer_id mismatch at height {}: expected={} actual={}",
-                context.height, proposer_id, context.proposer_id
-            ));
-        }
-        let action_root = record.action_root.as_deref().ok_or_else(|| {
-            format!(
-                "execution driver equal-height V3 record missing action_root at height {}",
-                context.height
-            )
-        })?;
-        if action_root != context.action_root {
-            return Err(format!(
-                "execution driver equal-height V3 action_root mismatch at height {}: expected={} actual={}",
-                context.height, action_root, context.action_root
-            ));
-        }
-        if record.timestamp_ms != context.committed_at_unix_ms {
-            return Err(format!(
-                "execution driver equal-height V3 committed_at_unix_ms mismatch at height {}: expected={} actual={}",
-                context.height, record.timestamp_ms, context.committed_at_unix_ms
-            ));
-        }
-
-        let external_effect_ref = record.external_effect_ref.as_deref().ok_or_else(|| {
-            format!(
-                "execution driver equal-height V3 record missing authoritative external effect at height {}",
-                context.height
-            )
-        })?;
-        let external_effect = load_execution_external_effect_materialization(
-            &self.execution_store,
-            external_effect_ref,
-        )?;
-        if external_effect.world_id != context.world_id {
-            return Err(format!(
-                "execution driver equal-height V3 authoritative effect world_id mismatch at height {}: expected={} actual={}",
-                context.height, context.world_id, external_effect.world_id
-            ));
-        }
-        if external_effect.node_id != context.node_id {
-            return Err(format!(
-                "execution driver equal-height V3 authoritative effect node_id mismatch at height {}: expected={} actual={}",
-                context.height, context.node_id, external_effect.node_id
-            ));
-        }
-        if external_effect.height != context.height {
-            return Err(format!(
-                "execution driver equal-height V3 authoritative effect height mismatch: expected={} actual={}",
-                context.height, external_effect.height
-            ));
-        }
-        if external_effect.slot != context.slot {
-            return Err(format!(
-                "execution driver equal-height V3 authoritative effect slot mismatch at height {}: expected={} actual={}",
-                context.height, context.slot, external_effect.slot
-            ));
-        }
-        if external_effect.epoch != context.epoch {
-            return Err(format!(
-                "execution driver equal-height V3 authoritative effect epoch mismatch at height {}: expected={} actual={}",
-                context.height, context.epoch, external_effect.epoch
-            ));
-        }
-        if external_effect.node_block_hash != context.node_block_hash {
-            return Err(format!(
-                "execution driver equal-height V3 authoritative effect node_block_hash mismatch at height {}: expected={} actual={}",
-                context.height, context.node_block_hash, external_effect.node_block_hash
-            ));
-        }
-        if external_effect.action_root != context.action_root {
-            return Err(format!(
-                "execution driver equal-height V3 authoritative effect action_root mismatch at height {}: expected={} actual={}",
-                context.height, context.action_root, external_effect.action_root
-            ));
-        }
-        if external_effect.committed_at_unix_ms != context.committed_at_unix_ms {
-            return Err(format!(
-                "execution driver equal-height V3 authoritative effect committed_at_unix_ms mismatch at height {}: expected={} actual={}",
-                context.height, context.committed_at_unix_ms, external_effect.committed_at_unix_ms
-            ));
-        }
-        let mut committed_actions: Vec<_> = context
-            .committed_actions
-            .iter()
-            .map(|action| super::ExecutionCommittedActionAnchor {
-                action_id: action.action_id,
-                submitter_player_id: action.submitter_player_id.clone(),
-                payload_hash: action.payload_hash.clone(),
-            })
-            .collect();
-        committed_actions.sort_by(|left, right| left.action_id.cmp(&right.action_id));
-        if external_effect.committed_actions != committed_actions {
-            return Err(format!(
-                "execution driver equal-height V3 committed_actions mismatch at height {}",
-                context.height
-            ));
-        }
-        Ok(())
-    }
-
     pub(crate) fn new(
         state_path: std::path::PathBuf,
         world_dir: std::path::PathBuf,
@@ -243,6 +105,24 @@ impl NodeRuntimeExecutionDriver {
         records_dir: std::path::PathBuf,
         storage_root: std::path::PathBuf,
         storage_profile: &StorageProfileConfig,
+    ) -> Result<Self, String> {
+        Self::new_with_storage_profile_and_local_bootstrap(
+            state_path,
+            world_dir,
+            records_dir,
+            storage_root,
+            storage_profile,
+            None,
+        )
+    }
+
+    pub(super) fn new_with_storage_profile_and_local_bootstrap(
+        state_path: std::path::PathBuf,
+        world_dir: std::path::PathBuf,
+        records_dir: std::path::PathBuf,
+        storage_root: std::path::PathBuf,
+        storage_profile: &StorageProfileConfig,
+        local_execution_bootstrap: Option<NodeExecutionBootstrap>,
     ) -> Result<Self, String> {
         let checkpoint_install_transaction =
             super::driver_checkpoint_install::load_checkpoint_install_transaction(
@@ -275,6 +155,10 @@ impl NodeRuntimeExecutionDriver {
             storage_profile.execution_checkpoint_keep as usize,
         );
         driver.pending_product_validation_intent = durable_product_validation_intent;
+        driver.local_execution_bootstrap = local_execution_bootstrap;
+        if let Some(baseline) = driver.local_execution_bootstrap.clone() {
+            driver.apply_local_execution_bootstrap(&baseline)?;
+        }
         if let Some(marker) = driver.pending_product_validation_intent.clone() {
             let authoritative_record_exists =
                 execution_bridge_record_path(driver.records_dir.as_path(), marker.height).exists();
@@ -316,11 +200,15 @@ impl NodeRuntimeExecutionDriver {
         let has_execution_records =
             !list_execution_bridge_record_heights(driver.records_dir.as_path())?.is_empty()
                 || driver.records_dir.join("latest.json").exists();
+        let unmaterialized_local_bootstrap =
+            driver.is_unmaterialized_local_execution_bootstrap()?;
         if driver.pending_product_validation_intent.is_some() {
             // The world directory is the crash-safe continuation for the
             // pre-call intent. The authoritative height record does not exist
             // yet, so restoring it here would erase the intent.
-        } else if driver.state.last_applied_committed_height > 0 || has_execution_records {
+        } else if (driver.state.last_applied_committed_height > 0 || has_execution_records)
+            && !unmaterialized_local_bootstrap
+        {
             driver.restore_startup_execution_head()?;
         } else {
             if execution_world_bootstrap_required {
@@ -374,6 +262,7 @@ impl NodeRuntimeExecutionDriver {
             retention_reconcile_pending,
             retention_reconcile_next_height,
             pending_product_validation_intent: None,
+            local_execution_bootstrap: None,
         }
     }
 
@@ -801,6 +690,10 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                     })
             );
         }
+        // Publish the ordinary cache only after peer-hash/CAS acceptance;
+        // otherwise rejects persist mutation and startup can prefer an
+        // uncommitted cache. Product-validation intents use the explicit
+        // staged-world callback above.
         let runtime_step_ms = runtime_step_started_at.elapsed();
         let simulator_step_started_at = Instant::now();
         let (simulator_mirror, simulator_observation) = rollback_on_error!(
@@ -968,12 +861,35 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         self.state.last_execution_state_root = Some(execution_state_root);
         self.state.last_node_block_hash = node_block_hash;
 
-        let state_persist_started_at = Instant::now();
         rollback_on_error!(persist_execution_bridge_state(
             self.state_path.as_path(),
             &self.state
         ));
-        let state_persist_ms = state_persist_started_at.elapsed();
+        let persist_world_started_at = Instant::now();
+        if self.local_execution_bootstrap.is_some() {
+            // A local bootstrap owns an explicit persisted world boundary.
+            // Publish its accepted successor only after the authoritative
+            // record and bridge state are durable, while ordinary commits
+            // keep the materialized cache unchanged and recover from CAS.
+            if let Err(err) =
+                persist_execution_world(self.world_dir.as_path(), &self.execution_world)
+            {
+                // The record and bridge state are authoritative. A cache
+                // publish failure remains recoverable through startup head
+                // restoration, so do not turn an accepted commit into a
+                // retry that could duplicate its durable record.
+                oasis7::observability::emit_stderr_or_event(
+                    tracing::Level::WARN,
+                    format!(
+                        "execution driver local bootstrap cache publish failed at height {}: {}",
+                        context.height, err
+                    )
+                    .as_str(),
+                    "local bootstrap cache publish deferred to recovery",
+                );
+            }
+        }
+        let persist_world_ms = persist_world_started_at.elapsed();
         if self.pending_product_validation_intent.is_some()
             || load_product_validation_intent(self.records_dir.as_path())?.is_some()
         {
@@ -993,7 +909,6 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             }
             self.pending_product_validation_intent = None;
         }
-        let persist_world_ms = state_persist_ms;
         let retention_started_at = Instant::now();
         let reconcile_due = self.retention_reconcile_pending
             && self

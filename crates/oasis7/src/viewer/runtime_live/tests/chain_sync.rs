@@ -352,6 +352,13 @@ fn chain_linked_provider_authority_is_chain_published_across_tick_and_restart() 
         .expect("admit chain-published authority");
     let _ = read_response_line(&peer, Duration::from_millis(200));
 
+    // The loaded execution world is an observer projection. A local provider
+    // bookkeeping mutation must not write back into the chain writer's dir.
+    viewer
+        .world
+        .set_cognition_resource_balance("observer-local", "cognition_units", 1)
+        .expect("mutate detached observer economy");
+
     let persisted_after_viewer =
         crate::runtime::World::load_from_dir(execution_world_dir.as_path())
             .expect("reload provider world after viewer sync");
@@ -366,7 +373,44 @@ fn chain_linked_provider_authority_is_chain_published_across_tick_and_restart() 
     // A later canonical chain tick must retain the original one-time
     // provisioning record and allowance. This is the durable handoff the
     // viewer observes on every subsequent poll.
-    let mut chain_tick = persisted_after_viewer;
+    // Preserve the locally admitted provider lease across a newer chain poll
+    // while its outcome is pending. The poll must not replace the Runtime
+    // projection with a chain snapshot that lacks that exact lease.
+    let binding = viewer
+        .world
+        .current_cognition_runtime_binding()
+        .expect("viewer Runtime binding after authority sync");
+    let provider_lease = viewer
+        .world
+        .reserve_cognition_lease(crate::runtime::CognitionLeaseRequestV1::new(
+            "chain-viewer-provider-continuity",
+            authority.owner_binding.clone(),
+            authority.agent_id.clone(),
+            "chain-viewer-session",
+            "chain-viewer-turn",
+            "chain-viewer-request",
+            "chain-viewer-request-digest",
+            crate::runtime::CognitionLeaseQuoteV1::new(
+                "chain-viewer-provider-quote",
+                "cognition_units",
+                1,
+            )
+            .with_authority(
+                authority.owner_binding.clone(),
+                crate::runtime::COGNITION_RESOURCE_VERSION_V1,
+                "provider_cognition",
+                "agent_turn",
+                crate::runtime::COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION,
+                "chain-provider-authority",
+                binding.base_world_hash.to_string(),
+            ),
+        ))
+        .expect("reserve viewer provider lease for continuity test");
+    viewer
+        .llm_sidecar
+        .bind_provider_cognition_lease(authority.agent_id.clone(), provider_lease.clone());
+
+    let mut chain_tick = persisted_after_viewer.clone();
     chain_tick.step().expect("advance canonical chain tick");
     chain_tick
         .save_to_dir_with_chain_resource_context(
@@ -385,6 +429,27 @@ fn chain_linked_provider_authority_is_chain_published_across_tick_and_restart() 
         )
         .expect("persist canonical chain tick");
     chain_status.committed_height.store(2, Ordering::SeqCst);
+    let (mut writer, peer) = test_writer_pair();
+    let deferred = viewer
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect("defer chain tick while provider lease is in flight");
+    assert!(
+        !deferred,
+        "in-flight provider lease must retain its Runtime projection"
+    );
+    assert_eq!(
+        viewer.world.state().time,
+        persisted_after_viewer.state().time,
+        "deferred chain sync must not replace the in-flight provider world"
+    );
+    let _ = read_response_line(&peer, Duration::from_millis(50));
+    viewer
+        .world
+        .release_cognition_lease(provider_lease.lease_id.as_str())
+        .expect("release continuity test lease");
+    viewer
+        .llm_sidecar
+        .clear_provider_cognition_lease(authority.agent_id.as_str());
     let (mut writer, peer) = test_writer_pair();
     viewer
         .sync_chain_linked_runtime(&mut session, &mut writer)

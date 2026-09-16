@@ -14,6 +14,8 @@ config_json="$tmp_dir/provider-config.json"
   --deployment-mode trusted_local_only \
   --allow-trusted-local-playtest \
   --agent-provider-lane local-mock \
+  --provider-bootstrap-authority "$tmp_dir/provider-authority-one.json" \
+  --provider-bootstrap-authority "$tmp_dir/provider authority-two.json" \
   --print-agent-provider-config \
   >"$config_json"
 
@@ -32,9 +34,39 @@ assert payload["agent_provider_contract"] == "worldsim_provider_v1"
 assert payload["agent_provider_transport"] == "loopback_http"
 assert payload["agent_provider_url"] == "http://127.0.0.1:5841"
 assert payload["agent_provider_profile"] == "oasis7_p0_low_freq_npc"
+assert payload["provider_bootstrap_authority_count"] == "2"
+assert payload["major_world_event_visibility"] == "unknown"
 assert payload["chain_link_policy"] == "shadow"
 assert payload["agent_chat_echo"] == "0"
 PY
+
+./scripts/run-launcher-stack.sh \
+  --deployment-mode trusted_local_only \
+  --allow-trusted-local-playtest \
+  --agent-provider-lane local-mock \
+  --major-world-event-visibility restricted \
+  --print-agent-provider-config \
+  >"$config_json"
+
+python3 - "$config_json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text())
+assert payload["major_world_event_visibility"] == "restricted"
+PY
+
+invalid_error="$tmp_dir/invalid-visibility.stderr"
+if ./scripts/run-launcher-stack.sh \
+  --agent-provider-lane local-mock \
+  --major-world-event-visibility invalid \
+  --print-agent-provider-config \
+  >"$config_json" 2>"$invalid_error"; then
+  echo "invalid visibility policy unexpectedly succeeded" >&2
+  exit 1
+fi
+grep -Fq -- "--major-world-event-visibility must be one of" "$invalid_error"
 
 OASIS7_RUNTIME_AGENT_CHAT_ECHO=1 ./scripts/run-launcher-stack.sh \
   --deployment-mode trusted_local_only \

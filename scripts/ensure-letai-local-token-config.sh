@@ -3,6 +3,7 @@ set -euo pipefail
 
 CONFIG_PATH="${OASIS7_LETAI_CONFIG_PATH:-/Users/scc/Documents/keys/letai.txt}"
 OUTPUT_PATH=""
+AUTHORITATIVE_MAPPING_PATH=""
 MODEL="${OASIS7_LETAI_CHAT_MODEL:-gpt-5.4}"
 CHAT_BASE_URL="${OASIS7_LETAI_BASE_URL:-https://api.letai.run/v1}"
 PLATFORM_BASE_URL="${LETAI_PLATFORM_BASE_URL:-https://api.letai.run}"
@@ -20,6 +21,8 @@ a stable local test user/project and writes the returned token_key.
 
 Options:
   --config <path>              Source LetAI config (default: /Users/scc/Documents/keys/letai.txt)
+  --authoritative-mapping <path>
+                               Mapping config whose explicit project token must match the source
   --out <path>                 Output config containing token_key; written 0600
   --model <id>                 Model for output config (default: gpt-5.4)
   --chat-base-url <url>        Chat API base URL (default: https://api.letai.run/v1)
@@ -34,6 +37,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --config)
       CONFIG_PATH="${2:-}"
+      shift 2
+      ;;
+    --authoritative-mapping)
+      AUTHORITATIVE_MAPPING_PATH="${2:-}"
       shift 2
       ;;
     --out)
@@ -80,12 +87,17 @@ if [[ ! -f "$CONFIG_PATH" ]]; then
   echo "error: LetAI config not found: $CONFIG_PATH" >&2
   exit 2
 fi
+if [[ -n "$AUTHORITATIVE_MAPPING_PATH" && ! -f "$AUTHORITATIVE_MAPPING_PATH" ]]; then
+  echo "error: authoritative LetAI mapping not found: $AUTHORITATIVE_MAPPING_PATH" >&2
+  exit 2
+fi
 
 mkdir -p "$(dirname "$OUTPUT_PATH")"
 
-python3 - "$CONFIG_PATH" "$OUTPUT_PATH" "$MODEL" "$CHAT_BASE_URL" "$PLATFORM_BASE_URL" "$EXTERNAL_USER_ID" "$EXTERNAL_PROJECT_ID" <<'PY'
+python3 - "$CONFIG_PATH" "$OUTPUT_PATH" "$MODEL" "$CHAT_BASE_URL" "$PLATFORM_BASE_URL" "$EXTERNAL_USER_ID" "$EXTERNAL_PROJECT_ID" "$AUTHORITATIVE_MAPPING_PATH" <<'PY'
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -103,6 +115,7 @@ chat_base_url = sys.argv[4].strip().rstrip("/")
 platform_base_url = sys.argv[5].strip().rstrip("/")
 external_user_id = sys.argv[6].strip()
 external_project_id = sys.argv[7].strip()
+authoritative_mapping_path = sys.argv[8].strip()
 
 aliases = {
     "base_url": "chat_base_url",
@@ -123,26 +136,31 @@ aliases = {
     "oasis7_remote_llm_platform_project_id": "platform_project_id",
 }
 
-parsed: dict[str, str] = {}
-raw_key = ""
-for line in source.read_text(errors="replace").splitlines():
-    raw = line.strip()
-    if not raw or raw.startswith("#"):
-        continue
-    sep = "=" if "=" in raw else ":" if ":" in raw else None
-    if not sep:
-        continue
-    key, value = raw.split(sep, 1)
-    clean_key = key.strip().lower()
-    value = value.strip().strip('"').strip("'")
-    if not value:
-        continue
-    if clean_key == "key":
-        raw_key = value
-        continue
-    normalized = aliases.get(clean_key)
-    if normalized:
-        parsed[normalized] = value
+def parse_config(path: Path) -> tuple[dict[str, str], str]:
+    parsed: dict[str, str] = {}
+    raw_key = ""
+    for line in path.read_text(errors="replace").splitlines():
+        raw = line.strip()
+        if not raw or raw.startswith("#"):
+            continue
+        sep = "=" if "=" in raw else ":" if ":" in raw else None
+        if not sep:
+            continue
+        key, value = raw.split(sep, 1)
+        clean_key = key.strip().lower()
+        value = value.strip().strip('"').strip("'")
+        if not value:
+            continue
+        if clean_key == "key":
+            raw_key = value
+            continue
+        normalized = aliases.get(clean_key)
+        if normalized:
+            parsed[normalized] = value
+    return parsed, raw_key
+
+
+parsed, raw_key = parse_config(source)
 
 if parsed.get("chat_base_url"):
     chat_base_url = parsed["chat_base_url"].rstrip("/")
@@ -158,6 +176,40 @@ if raw_key and not api_key and not platform_key:
         platform_key = raw_key
     else:
         api_key = raw_key
+
+authoritative_mapping_present = bool(authoritative_mapping_path)
+authoritative_mapping_match = False
+authoritative_project_id = ""
+authoritative_user_id = ""
+mapping_fingerprint = ""
+if authoritative_mapping_present:
+    mapping_config, _ = parse_config(Path(authoritative_mapping_path))
+    authoritative_token = mapping_config.get("api_key", "").strip()
+    authoritative_project_id = mapping_config.get("platform_project_id", "").strip()
+    authoritative_user_id = mapping_config.get("platform_user_id", "").strip()
+    if not authoritative_token or not authoritative_project_id:
+        raise SystemExit(
+            "error: authoritative mapping requires explicit token_key/api_key and platform_project_id"
+        )
+    if not api_key:
+        raise SystemExit(
+            "error: authoritative mapping requires the selected config to contain token_key/api_key"
+        )
+    selected_project_id = parsed.get("platform_project_id", "").strip()
+    selected_user_id = parsed.get("platform_user_id", "").strip()
+    if (
+        api_key != authoritative_token
+        or (selected_project_id and selected_project_id != authoritative_project_id)
+        or (authoritative_user_id and selected_user_id and selected_user_id != authoritative_user_id)
+    ):
+        raise SystemExit("error: authoritative project token mapping mismatch")
+    authoritative_mapping_match = True
+    mapping_fingerprint = hashlib.sha256(
+        f"{authoritative_project_id}\0{api_key}".encode("utf-8")
+    ).hexdigest()[:16]
+    if authoritative_user_id:
+        platform_user_id = authoritative_user_id
+    platform_project_id = authoritative_project_id
 
 if not chat_base_url.startswith(("http://", "https://")):
     raise SystemExit("error: chat base URL must start with http:// or https://")
@@ -270,5 +322,9 @@ print(json.dumps({
     "token_key_len": len(api_key),
     "platform_key_present": bool(platform_key),
     "platform_user_id_present": bool(platform_user_id),
+    "authoritative_mapping_present": authoritative_mapping_present,
+    "authoritative_mapping_match": authoritative_mapping_match,
+    "authoritative_project_id_present": bool(authoritative_project_id),
+    "mapping_fingerprint": mapping_fingerprint,
 }, sort_keys=True))
 PY

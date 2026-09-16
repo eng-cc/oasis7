@@ -3,6 +3,7 @@ use oasis7::launcher_bootstrap_peers::default_chain_replication_bootstrap_peers_
 use oasis7::observability::{
     TRACE_SESSION_ID_ENV, emit_stderr_or_event, init_tracing, resolve_trace_session_id,
 };
+use oasis7::runtime::MajorWorldEventVisibilityPermission;
 use oasis7::simulator::{ProviderExecutionMode, WorldScenario};
 use oasis7_proto::storage_profile::StorageProfile;
 use std::collections::BTreeSet;
@@ -17,6 +18,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tracing::{Level, error, info};
+#[path = "oasis7_game_launcher/chain_command.rs"]
+mod chain_command;
 #[path = "oasis7_game_launcher/cli.rs"]
 mod cli;
 #[path = "oasis7_game_launcher/director_capability.rs"]
@@ -41,9 +44,13 @@ mod static_http;
 mod url_encoding;
 #[path = "oasis7_game_launcher/viewer_live_command.rs"]
 mod viewer_live_command;
+use chain_command::{
+    build_oasis7_chain_runtime_args, chain_config_path, chain_execution_world_dir, chain_world_id,
+    missing_execution_world_persistence_files,
+};
 use cli::{
-    deployment_mode_from_options, parse_host_port, parse_options, print_help,
-    uses_provider_http_transport,
+    major_world_event_visibility_as_str, parse_host_port, parse_options, print_help,
+    uses_provider_http_transport, viewer_deployment_mode_from_options,
 };
 use hosted_access::{DEFAULT_DEPLOYMENT_MODE, DeploymentMode};
 use hosted_account_identity::HostedAccountIdentityBroker;
@@ -90,7 +97,11 @@ const AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS: &str = "agent_direct_connect";
 const DEFAULT_AGENT_PROVIDER_URL: &str = "http://127.0.0.1:5841";
 const DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS: u64 = 15_000;
 const DEFAULT_AGENT_PROVIDER_PROFILE: &str = "oasis7_p0_low_freq_npc";
-const DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS: u64 = 10_000;
+// Keep the launcher default aligned with the viewer live bounded ceiling. The
+// underlying LLM config defaults to 180s, while viewer live deliberately
+// caps an inherited budget at 30s; injecting a smaller 10s value here made
+// launcher-spawned gameplay time out before the viewer policy was applied.
+const DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS: u64 = 30_000;
 const LLM_TIMEOUT_MS_ENV: &str = "OASIS7_LLM_TIMEOUT_MS";
 const VIEWER_AGENT_DECISION_SOURCE_ENV: &str = "OASIS7_AGENT_DECISION_SOURCE";
 const VIEWER_AGENT_PROVIDER_BACKEND_ENV: &str = "OASIS7_AGENT_PROVIDER_BACKEND";
@@ -177,7 +188,9 @@ struct CliOptions {
     open_browser: bool,
     chain_enabled: bool,
     chain_status_bind: String,
+    chain_status_bind_explicit: bool,
     chain_link_policy: String,
+    major_world_event_visibility: MajorWorldEventVisibilityPermission,
     chain_node_id: String,
     chain_network_tier_manifest: String,
     chain_storage_profile: StorageProfile,
@@ -187,6 +200,13 @@ struct CliOptions {
     chain_p2p_accept_public_entry: bool,
     chain_replication_bootstrap_peers: Vec<String>,
     provider_bootstrap_authority_paths: Vec<String>,
+    local_test_provider_authority_path: Option<String>,
+    local_test_provider_wasm_path: Option<String>,
+    local_test_provider_metadata_path: Option<String>,
+    local_test_provider_agent_id: String,
+    local_test_provider_owner_binding: String,
+    local_test_provider_finality_block_hash: Option<String>,
+    local_test_provider_session_mode: String,
     chain_local_standalone_test: bool,
     chain_node_tick_ms: u64,
     chain_pos_slot_duration_ms: u64,
@@ -228,7 +248,9 @@ impl Default for CliOptions {
             open_browser: true,
             chain_enabled: true,
             chain_status_bind: DEFAULT_CHAIN_STATUS_BIND.to_string(),
+            chain_status_bind_explicit: false,
             chain_link_policy: DEFAULT_CHAIN_LINK_POLICY.to_string(),
+            major_world_event_visibility: MajorWorldEventVisibilityPermission::Unknown,
             chain_node_id: default_chain_node_id(),
             chain_network_tier_manifest: DEFAULT_CHAIN_NETWORK_TIER_MANIFEST.to_string(),
             chain_storage_profile: StorageProfile::DevLocal,
@@ -238,6 +260,13 @@ impl Default for CliOptions {
             chain_p2p_accept_public_entry: false,
             chain_replication_bootstrap_peers: default_chain_replication_bootstrap_peers_vec(),
             provider_bootstrap_authority_paths: Vec::new(),
+            local_test_provider_authority_path: None,
+            local_test_provider_wasm_path: None,
+            local_test_provider_metadata_path: None,
+            local_test_provider_agent_id: "starter-agent-0".to_string(),
+            local_test_provider_owner_binding: "local-test-owner-0".to_string(),
+            local_test_provider_finality_block_hash: None,
+            local_test_provider_session_mode: "hosted_public_join".to_string(),
             chain_local_standalone_test: false,
             chain_node_tick_ms: DEFAULT_CHAIN_NODE_TICK_MS,
             chain_pos_slot_duration_ms: pos_defaults.slot_duration_ms,
@@ -303,7 +332,7 @@ fn run_launcher(options: &CliOptions, trace_session_id: &str) -> Result<(), Stri
                 .to_string(),
         );
     }
-    if options.deployment_mode == "hosted_public_join" {
+    if viewer_deployment_mode_from_options(options) == DeploymentMode::HostedPublicJoin {
         let issuer_private_key =
             env::var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV)
                 .map_err(|_| "hosted registration issuer private key is required".to_string())?;
@@ -340,7 +369,7 @@ fn run_launcher(options: &CliOptions, trace_session_id: &str) -> Result<(), Stri
             }
         };
     let mut server = match start_static_http_server(
-        deployment_mode_from_options(options),
+        viewer_deployment_mode_from_options(options),
         options.live_bind.as_str(),
         options.viewer_host.as_str(),
         options.viewer_port,
@@ -473,110 +502,6 @@ fn spawn_oasis7_chain_runtime(
     })
 }
 
-fn chain_world_id(options: &CliOptions) -> String {
-    options
-        .chain_world_id
-        .clone()
-        .unwrap_or_else(|| default_chain_world_id(options.scenario.as_str()))
-}
-
-fn chain_execution_world_dir(node_id: &str) -> String {
-    Path::new("output")
-        .join("chain-runtime")
-        .join(node_id)
-        .join("reward-runtime-execution-world")
-        .to_string_lossy()
-        .into_owned()
-}
-
-fn chain_config_path(node_id: &str) -> String {
-    Path::new("output")
-        .join("chain-runtime")
-        .join(node_id)
-        .join("config.toml")
-        .to_string_lossy()
-        .into_owned()
-}
-
-fn missing_execution_world_persistence_files(world_dir: &Path) -> Vec<PathBuf> {
-    ["snapshot.json", "journal.json"]
-        .into_iter()
-        .map(|name| world_dir.join(name))
-        .filter(|path| !path.exists())
-        .collect()
-}
-
-fn build_oasis7_chain_runtime_args(options: &CliOptions) -> Vec<String> {
-    let execution_world_dir = chain_execution_world_dir(options.chain_node_id.as_str());
-    let mut args = vec![
-        "--node-id".to_string(),
-        options.chain_node_id.clone(),
-        "--world-id".to_string(),
-        chain_world_id(options),
-        "--status-bind".to_string(),
-        options.chain_status_bind.clone(),
-        "--config".to_string(),
-        chain_config_path(options.chain_node_id.as_str()),
-        "--execution-world-dir".to_string(),
-        execution_world_dir,
-        "--node-role".to_string(),
-        options.chain_node_role.clone(),
-        "--p2p-user-mode".to_string(),
-        options.chain_p2p_user_mode.clone(),
-        "--node-tick-ms".to_string(),
-        options.chain_node_tick_ms.to_string(),
-        "--pos-slot-duration-ms".to_string(),
-        options.chain_pos_slot_duration_ms.to_string(),
-        "--pos-ticks-per-slot".to_string(),
-        options.chain_pos_ticks_per_slot.to_string(),
-        "--pos-proposal-tick-phase".to_string(),
-        options.chain_pos_proposal_tick_phase.to_string(),
-        if options.chain_pos_adaptive_tick_scheduler_enabled {
-            "--pos-adaptive-tick-scheduler".to_string()
-        } else {
-            "--pos-no-adaptive-tick-scheduler".to_string()
-        },
-        "--pos-max-past-slot-lag".to_string(),
-        options.chain_pos_max_past_slot_lag.to_string(),
-    ];
-    if options.chain_node_auto_attest_all_validators {
-        args.push("--node-auto-attest-all".to_string());
-    } else {
-        args.push("--node-no-auto-attest-all".to_string());
-    }
-    if options.chain_network_tier_manifest.trim().is_empty() {
-        args.push("--storage-profile".to_string());
-        args.push(options.chain_storage_profile.as_str().to_string());
-    } else {
-        args.push("--network-tier-manifest".to_string());
-        args.push(options.chain_network_tier_manifest.trim().to_string());
-    }
-    args.push(if options.chain_p2p_accept_public_entry {
-        "--p2p-accept-public-entry".to_string()
-    } else {
-        "--p2p-reject-public-entry".to_string()
-    });
-    if let Some(genesis) = options.chain_pos_slot_clock_genesis_unix_ms {
-        args.push("--pos-slot-clock-genesis-unix-ms".to_string());
-        args.push(genesis.to_string());
-    }
-    for validator in &options.chain_node_validators {
-        args.push("--node-validator".to_string());
-        args.push(validator.clone());
-    }
-    for peer in &options.chain_replication_bootstrap_peers {
-        args.push("--replication-network-peer".to_string());
-        args.push(peer.clone());
-    }
-    if options.chain_enabled {
-        for path in &options.provider_bootstrap_authority_paths {
-            args.push("--provider-bootstrap-authority".to_string());
-            args.push(path.clone());
-        }
-    }
-    args
-}
-
 fn start_static_http_server(
     deployment_mode: DeploymentMode,
     live_bind: &str,
@@ -587,6 +512,7 @@ fn start_static_http_server(
 ) -> Result<StaticHttpServer, String> {
     let listener = TcpListener::bind((host, port))
         .map_err(|err| format!("failed to bind static HTTP server at {host}:{port}: {err}"))?;
+    let allow_hosted_test_login = static_http::hosted_test_login_allowed_on_host(host);
     listener
         .set_nonblocking(true)
         .map_err(|err| format!("failed to set static HTTP listener nonblocking: {err}"))?;
@@ -643,6 +569,7 @@ fn start_static_http_server(
             default_viewer_player_id,
             hosted_session_issuer,
             hosted_account_broker,
+            allow_hosted_test_login,
             stop_rx,
         ) {
             let _ = error_tx.send(err);
@@ -666,6 +593,7 @@ fn run_static_http_loop(
     default_viewer_player_id: Arc<Option<String>>,
     hosted_session_issuer: Arc<Mutex<HostedPlayerSessionIssuer>>,
     hosted_account_broker: Arc<Mutex<HostedAccountIdentityBroker>>,
+    allow_hosted_test_login: bool,
     stop_rx: Receiver<()>,
 ) -> Result<(), String> {
     loop {
@@ -689,6 +617,7 @@ fn run_static_http_loop(
                         stream,
                         root_dir.as_path(),
                         live_bind.as_str(),
+                        allow_hosted_test_login,
                         default_viewer_player_id.as_deref(),
                         deployment_mode,
                         &hosted_session_issuer,
@@ -997,7 +926,7 @@ fn build_game_url(options: &CliOptions) -> String {
     let bridge_host = host_for_url(bridge_host.as_str());
     let ws_url = format!("ws://{bridge_host}:{bridge_port}");
     let hosted_access_hint = serde_json::to_string(&hosted_access::hosted_viewer_access_hint(
-        deployment_mode_from_options(options),
+        viewer_deployment_mode_from_options(options),
     ))
     .unwrap_or_else(|_| "{}".to_string());
     format!(
@@ -1156,6 +1085,9 @@ fn open_browser(url: &str) -> Result<(), String> {
     }
 }
 
+#[cfg(test)]
+#[path = "oasis7_game_launcher/launcher_visibility_policy_tests.rs"]
+mod launcher_visibility_policy_tests;
 #[cfg(test)]
 #[path = "oasis7_game_launcher/oasis7_game_launcher_tests.rs"]
 mod oasis7_game_launcher_tests;
