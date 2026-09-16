@@ -611,9 +611,11 @@ viewer_launcher_wrapper_output="$(plan_for_paths \
   scripts/run-launcher-stack.sh \
   scripts/run-producer-playtest.sh \
   scripts/worktree-harness.sh \
+  scripts/worktree-harness-lib.sh \
   scripts/worktree-harness-contract.test.sh \
   scripts/worktree-harness-lifecycle.test.sh \
-  scripts/worktree-harness-lifecycle-races.test.sh)"
+  scripts/worktree-harness-lifecycle-races.test.sh \
+  scripts/run-launcher-stack-local-mock-lane.test.sh)"
 assert_key_equals "$viewer_launcher_wrapper_output" scope targeted
 assert_key_equals "$viewer_launcher_wrapper_output" run_viewer_contract_tests true
 assert_key_equals "$viewer_launcher_wrapper_output" run_viewer_wasm_check true
@@ -622,10 +624,22 @@ assert_key_equals "$viewer_launcher_wrapper_output" needs_trunk true
 assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/run-launcher-stack.sh"
 assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/run-producer-playtest.sh"
 assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/worktree-harness.sh"
+assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/worktree-harness-lib.sh"
 assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/worktree-harness-contract.test.sh"
 assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/worktree-harness-lifecycle.test.sh"
 assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/worktree-harness-lifecycle-races.test.sh"
+assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/run-launcher-stack-local-mock-lane.test.sh"
 assert_reason_absent "$viewer_launcher_wrapper_output" "unclassified_or_unresolvable:"
+
+# The standalone viewer server is retained as a compatibility/debug entrypoint
+# outside the current launcher caller graph.  Keep its ambiguous/deprecated
+# path on the fail-closed full fallback until its ownership and active caller
+# contract are made unambiguous.
+legacy_viewer_web_output="$(plan_for_path scripts/run-viewer-web.sh)"
+assert_key_equals "$legacy_viewer_web_output" scope full
+assert_key_equals "$legacy_viewer_web_output" run_rust_baseline true
+assert_reason_contains "$legacy_viewer_web_output" \
+  "unclassified_or_unresolvable:scripts/run-viewer-web.sh"
 
 # The baseline LLM fixture is intentionally full: it runs several test_tier_full
 # Rust cases and is only invoked by the full/full-support tiers.  Keep it
