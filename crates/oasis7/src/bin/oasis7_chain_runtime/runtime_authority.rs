@@ -119,7 +119,12 @@ pub(super) fn load_runtime_authority_binding(
             }
             let explicit_registry =
                 super::governance_registry::load_genesis_finality_registry(registry_path)?;
-            validate_registry_against_inventory(&explicit_registry, &inventory_authority)?;
+            let canonical_explicit_registry =
+                canonicalize_registry_for_authority(explicit_registry);
+            validate_registry_against_inventory(
+                &canonical_explicit_registry,
+                &inventory_authority,
+            )?;
             let world = super::execution_bridge::load_execution_world(execution_world_dir)?;
             let effective_registry = world
                 .resolve_governance_effective_finality_signer_registry()
@@ -128,10 +133,15 @@ pub(super) fn load_runtime_authority_binding(
                         "failed to resolve effective governance registry for authority preflight: {err:?}"
                     )
                 })?;
-            let registry_for_status = effective_registry.as_ref().unwrap_or(&explicit_registry);
-            if effective_registry
+            let canonical_effective_registry = effective_registry
                 .as_ref()
-                .is_some_and(|effective| effective != &explicit_registry)
+                .map(|effective| canonicalize_registry_for_authority(effective.clone()));
+            let registry_for_status = canonical_effective_registry
+                .as_ref()
+                .unwrap_or(&canonical_explicit_registry);
+            if canonical_effective_registry
+                .as_ref()
+                .is_some_and(|effective| effective != &canonical_explicit_registry)
             {
                 return Err(
                         "explicit genesis validator registry does not match persisted effective governance registry"
@@ -375,6 +385,36 @@ fn validate_inventory_against_manifest(
         generated_registry_sha256: expected_generated_registry_sha256,
         generated_registry_semantic_sha256: expected_generated_registry_semantic_sha256,
     })
+}
+
+/// Keep the deployment authority digest stable across the runtime's two
+/// equivalent registry encodings.  Genesis documents use threshold_bps=0 as
+/// a derived-value sentinel, while World validation persists the derived
+/// percentage.  The authority contract canonicalizes only that exact derived
+/// value; a non-default explicit percentage remains distinct and is rejected
+/// by the inventory binding.
+fn canonicalize_registry_for_authority(
+    mut registry: GovernanceFinalitySignerRegistry,
+) -> GovernanceFinalitySignerRegistry {
+    let derived_threshold_bps =
+        default_threshold_bps(registry.threshold, registry.signer_bindings.len());
+    if registry.threshold_bps == derived_threshold_bps {
+        registry.threshold_bps = 0;
+    }
+    registry
+}
+
+fn default_threshold_bps(required_signers: u16, total_signers: usize) -> u16 {
+    if required_signers == 0 || total_signers == 0 {
+        return 0;
+    }
+    let total_signers = total_signers as u128;
+    let required_signers = u128::from(required_signers);
+    required_signers
+        .saturating_mul(10_000)
+        .saturating_add(total_signers.saturating_sub(1))
+        .saturating_div(total_signers)
+        .min(10_000) as u16
 }
 
 fn validate_registry_against_inventory(
@@ -857,5 +897,46 @@ mod tests {
         )
         .expect_err("stale explicit registry must fail closed");
         assert!(error.contains("does not match persisted effective governance registry"));
+    }
+
+    #[test]
+    fn accepts_governed_registry_after_persisted_world_normalizes_threshold_bps() {
+        let (registry, inventory, manifest_path) = write_authority_fixture();
+        let world_dir = manifest_path.parent().expect("fixture root").join("world");
+        let explicit_registry =
+            super::super::governance_registry::load_genesis_finality_registry(registry.as_path())
+                .expect("load fixture registry");
+        assert_eq!(explicit_registry.threshold_bps, 0);
+        let mut world = RuntimeWorld::new_production_hardened();
+        world
+            .set_governance_finality_signer_registry(explicit_registry)
+            .expect("set persisted effective registry");
+        assert_eq!(
+            world
+                .resolve_governance_effective_finality_signer_registry()
+                .expect("resolve effective registry")
+                .expect("effective registry")
+                .threshold_bps,
+            6667
+        );
+        world.save_to_dir(world_dir.as_path()).expect("save world");
+
+        let expected_registry_semantic_sha256 = semantic_registry_sha256(
+            &super::super::governance_registry::load_genesis_finality_registry(registry.as_path())
+                .expect("reload fixture registry"),
+        )
+        .expect("fixture semantic digest");
+        let binding = load_runtime_authority_binding(
+            world_dir.as_path(),
+            Some(registry.as_path()),
+            Some(inventory.as_path()),
+            Some(&loaded_manifest(manifest_path.as_path())),
+        )
+        .expect("same governed authority must survive persisted normalization")
+        .expect("binding present");
+        assert_eq!(
+            binding.registry_semantic_sha256,
+            expected_registry_semantic_sha256
+        );
     }
 }

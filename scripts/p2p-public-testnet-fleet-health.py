@@ -460,7 +460,11 @@ def triad_validator_gates(
         gates.append("registry_semantic_identity_mismatch")
     if validator.get("inventory_ref") != TRIAD_INVENTORY_RELATIVE:
         gates.append("inventory_authority_ref_mismatch")
-    if validator.get("inventory_sha256", "").lower() != inventory_sha256:
+    actual_inventory_sha256 = validator.get("inventory_sha256")
+    if (
+        not isinstance(actual_inventory_sha256, str)
+        or actual_inventory_sha256.lower() != inventory_sha256
+    ):
         gates.append("inventory_authority_digest_mismatch")
     for field in ("inventory_ref", "inventory_sha256"):
         value = validator.get(field)
