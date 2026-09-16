@@ -100,7 +100,8 @@ print(json.dumps({
 PY
 elif [[ "$command_name" == identity-receipt ]]; then
   test -f "$key_path"
-  python3 - "$config_dir" "$node_id" "$key_path" <<'PY'
+  peer_id=${OASIS7_TEST_RUNTIME_PEER_ID:-validator-47-peer}
+  python3 - "$config_dir" "$node_id" "$key_path" "$peer_id" <<'PY'
 import hashlib
 import json
 import pathlib
@@ -109,11 +110,12 @@ import sys
 config_dir = pathlib.Path(sys.argv[1]).resolve()
 node_id = sys.argv[2]
 key_path = pathlib.Path(sys.argv[3]).resolve()
+peer_id = sys.argv[4]
 metadata = key_path.stat()
 print(json.dumps({
     "schema_version": "oasis7.identity_receipt.v1",
     "node_id": node_id,
-    "peer_id": "validator-47-peer",
+    "peer_id": peer_id,
     "key_path": str(key_path),
     "key_sha256": hashlib.sha256(key_path.read_bytes()).hexdigest(),
     "key_size_bytes": metadata.st_size,
@@ -240,22 +242,53 @@ chmod 0700 "$validator47_identity"
 cp -a "$config_dir/." "$validator47_config/"
 cp "$ROOT_DIR/scripts/public-testnet-validator-triad-inventory.v1.json" \
   "$validator47_config/public-testnet-validator-triad-inventory.v1.json"
+cp "$ROOT_DIR/doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-bootstrap-peers-2026-09-15.txt" \
+  "$validator47_config/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt"
 triad_inventory_sha256="$(shasum -a 256 "$validator47_config/public-testnet-validator-triad-inventory.v1.json" | awk '{print $1}')"
+python3 - "$validator47_config/public-testnet-validator-triad-inventory.v1.json" \
+  "$validator47_config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json" <<'PY'
+import json
+import pathlib
+import sys
+
+inventory = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+validators = []
+for name in ("sequencer-204", "storage-205", "validator-47"):
+    node = inventory["nodes"][name]
+    entry = {
+        "node_id": node["node_id"],
+        "scheme": "ed25519",
+        "finality_signer_public_key": node["finality_signer_public_key"],
+        "stake": node["stake"],
+    }
+    if name == "validator-47":
+        entry.update({field: node[field] for field in ("root_public_key", "finality_public_key", "libp2p_peer_id")})
+    validators.append(entry)
+payload = {
+    "slot_id": "governance.finality.v1",
+    "threshold": 2,
+    "threshold_bps": 0,
+    "quorum": {"numerator": 2, "denominator": 3, "total_stake": 300, "required_stake": 200},
+    "governance": {"signer_count": 3, "threshold": 2, "threshold_bps": 6667},
+    "validators": validators,
+}
+pathlib.Path(sys.argv[2]).write_text(json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
+PY
+validator47_finality_key="$(jq -r '.validators[] | select(.node_id == "triad-testnet-validator-47") | .finality_signer_public_key' "$validator47_config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json")"
+validator47_root_key="$(jq -r '.nodes["validator-47"].root_public_key' "$validator47_config/public-testnet-validator-triad-inventory.v1.json")"
+validator47_peer_id="$(jq -r '.nodes["validator-47"].libp2p_peer_id' "$validator47_config/public-testnet-validator-triad-inventory.v1.json")"
 validator47_key="$validator47_identity/node-keypair.toml"
 validator47_public_receipt="$validator47_identity/identity-receipt.json"
 printf 'already-staged-validator-47-key\n' >"$validator47_key"
 chmod 0600 "$validator47_key"
-cat >"$validator47_public_receipt" <<'EOF'
-{"schema_version":"oasis7.identity_provision.v1","node_id":"triad-testnet-validator-47","root_public_key":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","finality_public_key":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","libp2p_peer_id":"validator-47-peer"}
+cat >"$validator47_public_receipt" <<EOF
+{"schema_version":"oasis7.identity_provision.v1","node_id":"triad-testnet-validator-47","root_public_key":"$validator47_root_key","finality_public_key":"$validator47_finality_key","libp2p_peer_id":"$validator47_peer_id"}
 EOF
 chmod 0600 "$validator47_public_receipt"
 validator47_key_sha256="$(shasum -a 256 "$validator47_key" | awk '{print $1}')"
 validator47_receipt_sha256="$(shasum -a 256 "$validator47_public_receipt" | awk '{print $1}')"
 cat >"$validator47_config/public-testnet-governed-bootstrap-manifest-2026-06-06.json" <<EOF
-{"network_id":"oasis7-public-testnet-governed-20260606","chain_id":"oasis7-public-testnet-governed-20260606","tier":"public_testnet","deployment_inventory":{"ref":"scripts/public-testnet-validator-triad-inventory.v1.json","sha256":"$triad_inventory_sha256"}}
-EOF
-cat >"$validator47_config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json" <<'EOF'
-{"validators":[{"node_id":"triad-testnet-sequencer","finality_signer_public_key":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","stake":100},{"node_id":"triad-testnet-storage","finality_signer_public_key":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","stake":100},{"node_id":"triad-testnet-validator-47","finality_signer_public_key":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","stake":100}]}
+{"network_id":"oasis7-public-testnet-governed-20260606","chain_id":"oasis7-public-testnet-governed-20260606","tier":"public_testnet","deployment_inventory":{"ref":"scripts/public-testnet-validator-triad-inventory.v1.json","sha256":"$triad_inventory_sha256"},"bootstrap_peer_authority":{"ref":"public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt","sha256":"c7d0b977937adb5d27733ed0ad3e2212ccd0f3ac1b2273214e8cc57df110e5d6"},"deployment_validator_registry":{"ref":"config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json","sha256":"8bfb4411f3895ab5f1a2a3de1bcaa08ce97567202d4198444b323ef437a88f78","semantic_sha256":"aa6f6f7f367470d3b2c7282d489422d3eef14370446aa1fe8420fc94d776950d"}}
 EOF
 cat >"$validator47_config/node.env" <<EOF
 NODE_ID=triad-testnet-validator-47
@@ -268,15 +301,20 @@ FULL_STORAGE_PROVIDER=1
 WORLD_ID=oasis7-public-testnet-governed-20260606
 NETWORK_TIER_MANIFEST_PATH=config/public-testnet-governed-bootstrap-manifest-2026-06-06.json
 GENESIS_VALIDATOR_REGISTRY_PATH=config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json
+GENESIS_VALIDATOR_REGISTRY_SHA256=8bfb4411f3895ab5f1a2a3de1bcaa08ce97567202d4198444b323ef437a88f78
+GENESIS_VALIDATOR_REGISTRY_SEMANTIC_SHA256=aa6f6f7f367470d3b2c7282d489422d3eef14370446aa1fe8420fc94d776950d
 EXECUTION_WORLD_DIR=staged-world
 DEPLOYMENT_INVENTORY_PATH=config/public-testnet-validator-triad-inventory.v1.json
 DEPLOYMENT_INVENTORY_SHA256=$triad_inventory_sha256
+BOOTSTRAP_PEER_PATH=config/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt
+BOOTSTRAP_PEER_SHA256=c7d0b977937adb5d27733ed0ad3e2212ccd0f3ac1b2273214e8cc57df110e5d6
 IDENTITY_KEY_PATH=config/node-keypair.toml
 IDENTITY_RECEIPT_PATH=config/identity-receipt.json
 IDENTITY_KEY_SHA256=$validator47_key_sha256
 IDENTITY_RECEIPT_SHA256=$validator47_receipt_sha256
 EOF
 baseline_runtime_commands="$(wc -l <"$OASIS7_TEST_RUNTIME_LOG" | tr -d ' ')"
+export OASIS7_TEST_RUNTIME_PEER_ID="$validator47_peer_id"
 OASIS7_TEST_ONLY=1 "$BOOTSTRAP" \
   --allow-test-stack-root \
   --test-root-prefix "$TMP_DIR" \
@@ -309,7 +347,7 @@ test "$(tail -n +$((baseline_runtime_commands + 1)) "$OASIS7_TEST_RUNTIME_LOG" |
 # A public identity mismatch must fail before the new stack root is
 # materialized; the already-running pair and the staged source remain intact.
 cp "$validator47_public_receipt" "$TMP_DIR/validator47-public-receipt.valid"
-sed 's/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd/' \
+sed "s/$validator47_finality_key/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd/" \
   "$validator47_public_receipt" >"$TMP_DIR/validator47-public-receipt.bad"
 mv "$TMP_DIR/validator47-public-receipt.bad" "$validator47_public_receipt"
 chmod 0600 "$validator47_public_receipt"
@@ -317,7 +355,7 @@ validator47_bad_receipt_sha256="$(shasum -a 256 "$validator47_public_receipt" | 
 sed -i.bak "s/^IDENTITY_RECEIPT_SHA256=.*/IDENTITY_RECEIPT_SHA256=$validator47_bad_receipt_sha256/" \
   "$validator47_config/node.env"
 rm -f "$validator47_config/node.env.bak"
-expect_fail "does not match governed registry" env OASIS7_TEST_ONLY=1 "$BOOTSTRAP" \
+expect_fail "does not match governed inventory" env OASIS7_TEST_ONLY=1 "$BOOTSTRAP" \
   --allow-test-stack-root --test-root-prefix "$TMP_DIR" \
   --systemd-unit-dir "$TMP_DIR/validator47-mismatch-systemd" \
   --stack-root "$TMP_DIR/validator47-mismatch-opt/oasis7/p2p-testnet" \
