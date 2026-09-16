@@ -373,6 +373,35 @@ for traceability_governance_path in \
 done
 assert_reason_absent "$traceability_governance_output" "unclassified_or_unresolvable:"
 
+# Document inventory helpers form a document-only static-validation closure:
+# the two inventory checkers inspect JSON/Markdown snapshots (the corpus
+# checker delegates only to the evidence checker), the report uses Python
+# stdlib to count Markdown files, and the pinned Markdown adapter is consumed
+# only by product-document gates.  None invokes Rust, Node, runtime, build,
+# launcher, or generated-artifact paths, so keep each exact path on the
+# minimal governance lane.
+document_governance_paths=(
+  scripts/doc-evidence-inventory-check.py
+  scripts/doc-evidence-inventory-check.test.py
+  scripts/document-corpus-inventory-check.py
+  scripts/document-corpus-inventory-check.test.py
+  scripts/doc-inventory-report.sh
+  scripts/doc-governance-requirements.txt
+  scripts/product_doc_markdown.py
+)
+document_governance_output="$(plan_for_paths "${document_governance_paths[@]}")"
+assert_key_equals "$document_governance_output" scope minimal
+assert_key_equals "$document_governance_output" selected_capabilities required_gate_baseline
+assert_key_equals "$document_governance_output" run_rust_baseline false
+assert_key_equals "$document_governance_output" needs_rust_toolchain false
+assert_key_equals "$document_governance_output" needs_node false
+assert_key_equals "$document_governance_output" needs_system_deps false
+for document_governance_path in "${document_governance_paths[@]}"; do
+  assert_reason_contains "$document_governance_output" \
+    "governance_script:$document_governance_path"
+done
+assert_reason_absent "$document_governance_output" "unclassified_or_unresolvable:"
+
 # These seven shell fixtures validate required-gate workflow wiring.  Keep
 # every path exact so a missing mapping cannot silently widen this plan to the
 # full Rust baseline/toolchain.
