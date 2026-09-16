@@ -611,7 +611,9 @@ viewer_launcher_wrapper_output="$(plan_for_paths \
   scripts/run-launcher-stack.sh \
   scripts/run-producer-playtest.sh \
   scripts/worktree-harness.sh \
-  scripts/worktree-harness-contract.test.sh)"
+  scripts/worktree-harness-contract.test.sh \
+  scripts/worktree-harness-lifecycle.test.sh \
+  scripts/worktree-harness-lifecycle-races.test.sh)"
 assert_key_equals "$viewer_launcher_wrapper_output" scope targeted
 assert_key_equals "$viewer_launcher_wrapper_output" run_viewer_contract_tests true
 assert_key_equals "$viewer_launcher_wrapper_output" run_viewer_wasm_check true
@@ -621,7 +623,20 @@ assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrappe
 assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/run-producer-playtest.sh"
 assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/worktree-harness.sh"
 assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/worktree-harness-contract.test.sh"
+assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/worktree-harness-lifecycle.test.sh"
+assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/worktree-harness-lifecycle-races.test.sh"
 assert_reason_absent "$viewer_launcher_wrapper_output" "unclassified_or_unresolvable:"
+
+# The baseline LLM fixture is intentionally full: it runs several test_tier_full
+# Rust cases and is only invoked by the full/full-support tiers.  Keep it
+# unmatched so the fail-closed full fallback remains explicit until a dedicated
+# capability can prove an equivalent focused lane.
+llm_baseline_fixture_output="$(plan_for_path scripts/llm-baseline-fixture-smoke.sh)"
+assert_key_equals "$llm_baseline_fixture_output" scope full
+assert_key_equals "$llm_baseline_fixture_output" run_rust_baseline true
+assert_key_equals "$llm_baseline_fixture_output" needs_rust_toolchain true
+assert_reason_contains "$llm_baseline_fixture_output" \
+  "unclassified_or_unresolvable:scripts/llm-baseline-fixture-smoke.sh"
 
 viewer_gameplay_hardening_output="$(plan_for_path scripts/pm/verify-gameplay-high-risk-hardening.sh)"
 assert_key_equals "$viewer_gameplay_hardening_output" scope targeted
