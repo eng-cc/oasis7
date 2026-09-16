@@ -140,6 +140,8 @@ git diff --check
 
 这些条件是“可以作为实现输入”的最低内容合同，不等同于实现完成、专业规则通过、玩家体验成立或发行承诺。自动检查只判断可机械判断的字段、引用、锚点和路径；是否有趣、是否足够有策略深度、数值是否合理和玩家是否愿意继续，仍由对应专业 role 与适用证据判断。
 
+跨层 trace relation 继续复用现有协调记录：`trace.upstream_refs` MUST 使用 typed `product_requirement` 或 `professional_acceptance` 引用，`trace.system_design` MUST 使用准确 `path#fragment` 或显式 N/A disposition；`applicability` MUST 为 `required` 或 `not_applicable`，每个新建或实质修改的记录 MUST 同时发出 `applicability` 与兼容别名 `required`，并使 `applicability=required` 与 `required=true`、`applicability=not_applicable` 与 `required=false` 一致。产品价值、玩家承诺、产品范围或产品 AC 变更至少需要一个 product requirement；纯工程、治理或专业合同变更必须使用 professional acceptance；消费技术合同、跨组件行为、状态、接口、迁移、恢复、安全边界或实现 obligation 时 system design 必须 required。任何 N/A MUST 说明非空理由、有界范围、applicability owner role、review/evidence locator 和重新评估触发器；省略、`null`、空引用、`required=false`、`unknown` 或 `pending` 都不能冒充 N/A，声称有交付工作时 product 与 professional 不得同时为 N/A。
+
 ### 10.3 新建与实质变更产品文档的机械准入
 
 作者、CI 和 PR-prep 的准入检查必须接收明确的 `base`、`head` 和工作树路径，并按该比较范围计算变更文件；不能用作者填写的标签、评论或 allowlist 任意绕过。为保持普通本地维护调用兼容，只有在没有任何显式 env 且没有 CI 事件输入时，裸运行 `doc-governance-check.sh` 才可以推导 `base=merge-base(HEAD, main)`、`head=HEAD`；这条便利路径不适用于作者提交、CI 或 PR-prep。显式 env 只提供一半，或存在 CI 事件但其 base/head 缺失、部分或格式错误时，必须失败而不能回退。适用路径是 `doc/product/**/*.prd.md` 与 `doc/product/**/*.design.md`：
@@ -152,7 +154,7 @@ git diff --check
 - 同一文件中的 `REQ-*`/`AC-*` 引用可以使用稳定局部标识；跨文件引用必须使用带路径和 fragment 的真实 Markdown 链接（例如 design 指向 paired PRD 的 `#req-*` 或 `#ac-*`）。裸的跨文件 token、反引号路径和普通字符串不能替代链接。authority 引用同样必须以真实可解析目标为准。
 - REQ/AC 需求块、验收块和追踪表中的 REQ/AC 单元格都是显式关联。每个关联必须解析到同一文件中已声明且有 anchor 的目标，或解析到带路径与 fragment 的跨文件目标；只要某个追踪行出现 `REQ-X → AC-TYPO` 等未声明/拼写错误关联，该文档就失败，即使其他 ID 在文档别处存在。不能用“文档中出现过同名 token”替代该块或该追踪行的关联。
 
-检查范围与通过结果只证明文档满足机械准入，不代替产品、玩法、交互、QA、LiveOps 或专业实现评审。新规则先在本节落定，再由 `repository_health_engineer` 接入脚本、测试、CI 和 PR-prep。
+检查范围与通过结果只证明文档满足机械准入，不代替产品、玩法、交互、QA、LiveOps 或专业实现评审。changed-scope gate 在本次实现完成后适用于新增或实质修改的产品文档和新 trace records；未触达的 legacy content 保持在强制迁移范围之外。新规则先在本节落定，再由 `repository_health_engineer` 接入脚本、测试、CI 和 PR-prep。
 
 ### 10.4 现行 bounded checker 契约
 

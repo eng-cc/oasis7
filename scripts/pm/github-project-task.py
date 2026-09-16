@@ -21,6 +21,27 @@ from typing import Any
 ALL_STATUSES = ("candidate", "committed", "blocked", "ready", "pr_watch", "done", "deferred")
 GATE_OWNED_STATUSES = {"ready", "pr_watch"}
 TERMINAL_WORKFLOW_PHASES = {"task_done", "main_sync", "post_merge_done", "closed_without_merge"}
+# Issue bodies carry the fine-grained task record. Project fields are only a
+# lifecycle projection and local evidence paths are retained only after their
+# task/worktree identity and digest have been verified.
+issue_authoritative_keys = frozenset(
+    {
+        "task_uid", "title", "issue_number", "issue_url", "owner_role", "module",
+        "status", "workflow_phase", "priority", "worktree_hint", "source_signal",
+        "source_type", "severity", "pr_url", "pr_number", "merge_hold",
+        "loop_binding", "bootstrap_base_oid", "completion_mode",
+        "non_pr_completion_evidence", "non_pr_completion_evidence_sha256",
+        "source_refs", "doc_refs", "related_prd", "acceptance",
+        "last_closed_at", "claim_verifications",
+    }
+)
+project_lifecycle_keys = frozenset({"status", "workflow_phase"})
+identity_bound_cache_keys = frozenset(
+    {
+        "repository", "canonical_worktree", "task_branch", "default_branch",
+        "non_pr_completion_evidence_file", "non_pr_completion_evidence_sha256",
+    }
+)
 DEFAULT_REPO = "eng-cc/oasis7"
 DEFAULT_PROJECT_OWNER = "eng-cc"
 DEFAULT_PROJECT_NUMBER = 1
@@ -361,6 +382,35 @@ def pr_number_from_url(pr_url: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+ISSUE_LIST_SECTIONS = ("Source refs:", "Doc refs:", "Related PRD:", "Acceptance:")
+
+
+def issue_section_rows(body: str, header: str, *, references: bool) -> list[str] | None:
+    """Read one Issue list without allowing adjacent sections to bleed into it."""
+    lines = body.replace("\r\n", "\n").splitlines()
+    try:
+        start = next(index for index, line in enumerate(lines) if line.strip() == header) + 1
+    except StopIteration:
+        return None
+    values: list[str] = []
+    for line in lines[start:]:
+        stripped = line.strip()
+        if stripped in ISSUE_LIST_SECTIONS:
+            break
+        if not stripped:
+            if values:
+                break
+            continue
+        if references:
+            match = re.fullmatch(r"- `([^`]+)`", line)
+        else:
+            match = re.fullmatch(r"-\s+(?:\[[ xX]\]\s*)?(.*\S)\s*", line)
+        if not match:
+            break
+        values.append(match.group(1).strip())
+    return values
+
+
 def issue_task_fields(body: str) -> dict[str, Any]:
     body = body.replace("\r\n", "\n")
     fields: dict[str, Any] = {}
@@ -376,18 +426,35 @@ def issue_task_fields(body: str) -> dict[str, Any]:
         except (ValueError, UnicodeError) as exc:
             die(f"invalid loop binding: {exc}")
         fields["loop_binding"] = binding
-    for key in ("owner_role", "module", "status", "workflow_phase", "priority", "worktree_hint", "source_signal", "source_type", "severity", "completion_mode", "bootstrap_base_oid"):
+    for key in ("owner_role", "module", "status", "workflow_phase", "priority", "worktree_hint", "source_signal", "source_type", "severity", "completion_mode", "bootstrap_base_oid", "non_pr_completion_evidence_sha256", "last_closed_at"):
         match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
         if match:
             fields[key] = match.group(1)
+    claim_matches = re.findall(r"^- claim_verifications_b64: `([^`]+)`$", body, re.MULTILINE)
+    if "claim_verifications_b64:" in body:
+        if len(claim_matches) != 1:
+            fields["trace_projection_error"] = "claim verification projection is malformed or duplicated"
+        else:
+            try:
+                padding = "=" * (-len(claim_matches[0]) % 4)
+                claims = json.loads(base64.b64decode(
+                    claim_matches[0] + padding, altchars=b"-_", validate=True,
+                ).decode("utf-8"))
+                if not isinstance(claims, list) or any(not isinstance(claim, dict) for claim in claims):
+                    raise ValueError("claim verifications must be an array of objects")
+                fields["claim_verifications"] = claims
+            except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                fields["trace_projection_error"] = f"malformed claim verification projection: {exc}"
     evidence_match = re.search(r"^- non_pr_completion_evidence_b64: `([^`]+)`$", body, re.MULTILINE)
     if evidence_match:
         encoded = evidence_match.group(1)
         try:
             padding = "=" * (-len(encoded) % 4)
-            fields["non_pr_completion_evidence"] = base64.urlsafe_b64decode(encoded + padding).decode("utf-8")
+            fields["non_pr_completion_evidence"] = base64.b64decode(
+                encoded + padding, altchars=b"-_", validate=True
+            ).decode("utf-8")
         except (ValueError, UnicodeDecodeError):
-            fields["non_pr_completion_evidence"] = ""
+            fields["trace_projection_error"] = "malformed non-PR completion evidence encoding"
     hold_values: dict[str, Any] = {}
     for key in ("kind", "requester", "reason", "resume_authority", "active"):
         match = re.search(rf"^- merge_hold_{key}: `([^`]+)`$", body, re.MULTILINE)
@@ -400,21 +467,11 @@ def issue_task_fields(body: str) -> dict[str, Any]:
         match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
         if match:
             fields[key] = match.group(1)
-    source_refs = re.findall(r"^- `([^`]+)`$", body, re.MULTILINE)
-    if source_refs:
-        fields["source_refs"] = source_refs
-    lines = body.splitlines()
-    acceptance: list[str] = []
-    for index, line in enumerate(lines):
-        if line.strip() != "Acceptance:":
-            continue
-        for item in lines[index + 1:]:
-            match = re.match(r"^-\s+(?:\[[ xX]\]\s*)?(.*\S)\s*$", item)
-            if not match:
-                break
-            acceptance.append(match.group(1).strip())
-        break
-    fields["acceptance"] = acceptance
+    for key, header in (("source_refs", "Source refs:"), ("doc_refs", "Doc refs:"), ("related_prd", "Related PRD:")):
+        values = issue_section_rows(body, header, references=True)
+        if values is not None:
+            fields[key] = values
+    fields["acceptance"] = issue_section_rows(body, "Acceptance:", references=False) or []
     return fields
 
 
@@ -533,7 +590,13 @@ def task_from_record(uid: str, record: dict[str, Any]) -> OrderedDict[str, Any]:
             ("bootstrap_base_oid", record.get("bootstrap_base_oid")),
             ("completion_mode", record.get("completion_mode") or ""),
             ("non_pr_completion_evidence", record.get("non_pr_completion_evidence") or ""),
+            ("non_pr_completion_evidence_file", record.get("non_pr_completion_evidence_file") or ""),
+            ("non_pr_completion_evidence_sha256", record.get("non_pr_completion_evidence_sha256") or ""),
+            ("last_closed_at", record.get("last_closed_at") or ""),
+            ("claim_verifications", record.get("claim_verifications") or []),
             ("source_refs", record.get("source_refs") or []),
+            ("doc_refs", record.get("doc_refs") or []),
+            ("related_prd", record.get("related_prd") or []),
             ("acceptance", record.get("acceptance") or []),
             ("updated_at", record.get("updated_at") or now()),
         ]
@@ -577,6 +640,16 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
         evidence = str(task.get("non_pr_completion_evidence") or "").encode("utf-8")
         encoded = base64.urlsafe_b64encode(evidence).decode("ascii").rstrip("=")
         lines.append(f"- non_pr_completion_evidence_b64: `{encoded}`")
+        if task.get("non_pr_completion_evidence_sha256"):
+            lines.append(f"- non_pr_completion_evidence_sha256: `{task.get('non_pr_completion_evidence_sha256')}`")
+    if task.get("last_closed_at"):
+        lines.append(f"- last_closed_at: `{task.get('last_closed_at')}`")
+    claims = task.get("claim_verifications") or []
+    if claims:
+        encoded_claims = base64.urlsafe_b64encode(
+            json.dumps(claims, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        ).decode("ascii").rstrip("=")
+        lines.append(f"- claim_verifications_b64: `{encoded_claims}`")
     if task.get("merge_hold"):
         hold = task["merge_hold"]
         for key in ("kind", "requester", "reason", "resume_authority", "active"):
@@ -587,6 +660,18 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
         lines.append("")
         lines.append("Source refs:")
         for ref in source_refs:
+            lines.append(f"- `{ref}`")
+    doc_refs = sorted({str(ref) for ref in (task.get("doc_refs") or [])})
+    if doc_refs:
+        lines.append("")
+        lines.append("Doc refs:")
+        for ref in doc_refs:
+            lines.append(f"- `{ref}`")
+    related_prd = sorted({str(ref) for ref in (task.get("related_prd") or [])})
+    if related_prd:
+        lines.append("")
+        lines.append("Related PRD:")
+        for ref in related_prd:
             lines.append(f"- `{ref}`")
     acceptance = task.get("acceptance") or []
     if acceptance:
@@ -1776,6 +1861,100 @@ def refresh_project_identity(
     return {"id": project_id, "number": project_number, "owner": project_owner}
 
 
+def trace_projection_loss(task_uid: str, reason: str) -> None:
+    die(f"trace-projection-loss: {task_uid}: {reason}")
+
+
+def preserve_identity_bound_cache(
+    task_uid: str,
+    existing: dict[str, Any],
+    live: dict[str, Any],
+    record: dict[str, Any],
+    repository_identity: dict[str, str],
+) -> None:
+    """Retain local non-PR evidence only after checking its full binding."""
+    cached_identity = {
+        key: existing.get(key) for key in identity_bound_cache_keys
+    }
+    for key in sorted(identity_bound_cache_keys - {
+        "non_pr_completion_evidence_file",
+        "non_pr_completion_evidence_sha256",
+    }):
+        cached = str(existing.get(key) or "")
+        if cached and cached != repository_identity[key]:
+            trace_projection_loss(task_uid, f"cached {key} identity drift")
+
+    existing_mode = str(existing.get("completion_mode") or "")
+    live_mode = str(live.get("completion_mode") or "")
+    if existing_mode and live_mode and existing_mode != live_mode:
+        trace_projection_loss(task_uid, "completion_mode cannot be reconstructed consistently")
+    mode = live_mode or existing_mode
+    if mode:
+        record["completion_mode"] = mode
+
+    # Closeout claims and its timestamp are Issue-authoritative projections,
+    # not recoverable from a stale local cache.  If a previously refreshed
+    # cache had them but the live Issue no longer carries either field, stop
+    # before merge_task_mapping can silently retain the old claim.
+    for key in ("last_closed_at", "claim_verifications"):
+        if key in existing and existing.get(key) not in (None, "", [], {}):
+            if key not in live:
+                trace_projection_loss(
+                    task_uid,
+                    f"live Issue omitted previously projected {key}",
+                )
+            if key == "claim_verifications" and existing.get(key) != live.get(key):
+                trace_projection_loss(
+                    task_uid,
+                    "live Issue claim_verifications changed from the refreshed cache",
+                )
+    if "last_closed_at" in live:
+        record["last_closed_at"] = live["last_closed_at"]
+    if "claim_verifications" in live:
+        record["claim_verifications"] = live["claim_verifications"]
+
+    evidence = live.get("non_pr_completion_evidence")
+    cached_evidence = existing.get("non_pr_completion_evidence")
+    if evidence is None:
+        evidence = cached_evidence
+    if evidence is not None:
+        evidence = str(evidence)
+        record["non_pr_completion_evidence"] = evidence
+    live_digest = str(live.get("non_pr_completion_evidence_sha256") or "")
+    cached_digest = str(cached_identity.get("non_pr_completion_evidence_sha256") or "")
+    if live_digest and cached_digest and live_digest != cached_digest:
+        trace_projection_loss(task_uid, "non-PR evidence digest disagrees between Issue and cache")
+    digest = live_digest or cached_digest
+    if evidence and digest:
+        record["non_pr_completion_evidence_sha256"] = digest
+
+    evidence_file = str(cached_identity.get("non_pr_completion_evidence_file") or "")
+    requires_evidence = mode == "non_pr_task" and (
+        str(record.get("status") or "") in {"done", "deferred"}
+        or str(record.get("workflow_phase") or "") in TERMINAL_WORKFLOW_PHASES
+        or bool(evidence)
+    )
+    if mode == "non_pr_task" and (requires_evidence or evidence_file or digest):
+        if not evidence_file or not digest:
+            trace_projection_loss(task_uid, "identity-bound non-PR evidence path or digest is missing")
+        canonical = pathlib.Path(repository_identity["canonical_worktree"]).resolve()
+        expected_file = canonical / ".pm" / "scratch" / task_uid / "non-pr-completion-evidence.txt"
+        try:
+            actual_file = pathlib.Path(evidence_file).expanduser()
+            if not actual_file.is_absolute() or actual_file.resolve() != expected_file:
+                trace_projection_loss(task_uid, "identity-bound non-PR evidence path is not canonical")
+            if not actual_file.is_file():
+                trace_projection_loss(task_uid, "identity-bound non-PR evidence file is unavailable")
+            if hashlib.sha256(actual_file.read_bytes()).hexdigest() != digest:
+                trace_projection_loss(task_uid, "identity-bound non-PR evidence file digest mismatch")
+            if evidence is not None and actual_file.read_text(encoding="utf-8").rstrip("\n") != str(evidence).rstrip("\n"):
+                trace_projection_loss(task_uid, "identity-bound non-PR evidence file differs from Issue evidence")
+        except (OSError, UnicodeError):
+            trace_projection_loss(task_uid, "identity-bound non-PR evidence file cannot be read")
+        record["non_pr_completion_evidence_file"] = str(expected_file)
+        record["non_pr_completion_evidence_sha256"] = digest
+
+
 def command_refresh_task(args: argparse.Namespace) -> int:
     mapping_path = mapping_path_for(args.root.resolve(), args.mapping)
     latest = load_mapping(mapping_path)
@@ -1797,6 +1976,8 @@ def command_refresh_task(args: argparse.Namespace) -> int:
     live = github_issue_record(args.repo, args.task_uid)
     if not live:
         die(f"refresh-task: authoritative GitHub issue not found for {args.task_uid}")
+    if live.get("trace_projection_error"):
+        trace_projection_loss(args.task_uid, str(live["trace_projection_error"]))
     if existing.get("loop_binding") is not None and live.get("loop_binding") is None:
         die("refresh-task: live loop binding disappeared; explicit reconciliation required")
     lineage_path = loop_lineage_path(root, args.task_uid)
@@ -1944,18 +2125,18 @@ def command_refresh_task(args: argparse.Namespace) -> int:
                 field_value = str(value.get("name") or value.get("text") or "")
                 if field_name and field_value:
                     project_fields[field_name] = field_value
-    authoritative_keys = {
-        "task_uid", "title", "issue_number", "issue_url", "owner_role", "module",
-        "status", "priority", "worktree_hint", "source_signal", "source_type",
-        "severity", "pr_url", "pr_number", "merge_hold", "source_refs", "acceptance",
-        "loop_binding", "bootstrap_base_oid",
-    }
+    authoritative_keys = issue_authoritative_keys
     record: dict[str, Any] = {}
     for key in authoritative_keys:
         if key in live:
             record[key] = live[key]
         elif key == "acceptance":
             record[key] = []
+        elif key in {"source_refs", "doc_refs", "related_prd"} and key in existing:
+            # An older Issue may not yet have an optional section. Retain the
+            # identity-bound cache value until an explicit Issue edit removes
+            # it; Project refresh must never erase it by omission.
+            record[key] = existing[key]
     record.update({key: value for key, value in recovered.items() if value not in (None, "")})
     if record.get("loop_binding") is not None:
         validate_loop_binding(record["loop_binding"])
@@ -1967,7 +2148,11 @@ def command_refresh_task(args: argparse.Namespace) -> int:
                 die(f"refresh-task: live Project {name} differs from frozen Issue binding")
     elif project_fields.get("Loop") or project_fields.get("Change ID"):
         die("refresh-task: live Project loop lineage exists but Issue binding is missing")
-    project_status = project_fields.get("PM Status", "")
+    project_lifecycle = {
+        "status": project_fields.get("PM Status", ""),
+        "workflow_phase": project_fields.get("Workflow Phase", ""),
+    }
+    project_status = project_lifecycle["status"] if "status" in project_lifecycle_keys else ""
     lifecycle_rank = {
         "candidate": 0, "committed": 1, "blocked": 2, "ready": 3,
         "pr_watch": 4, "done": 5, "deferred": 5,
@@ -1976,9 +2161,15 @@ def command_refresh_task(args: argparse.Namespace) -> int:
     if project_status in lifecycle_rank and lifecycle_rank[project_status] >= lifecycle_rank.get(issue_status, -1):
         record["status"] = project_status
         record["project_status"] = project_fields.get("Status", "")
-        project_phase = project_fields.get("Workflow Phase", "")
+        project_phase = (
+            project_lifecycle["workflow_phase"]
+            if "workflow_phase" in project_lifecycle_keys
+            else ""
+        )
         existing_phase = str(existing.get("workflow_phase") or "")
+        issue_phase = str(record.get("workflow_phase") or "")
         fine_terminal_phases = {
+            "task_done",
             "closed_without_" + "merge",
             "post_" + "merge_done",
         }
@@ -1989,10 +2180,23 @@ def command_refresh_task(args: argparse.Namespace) -> int:
                 # Coarse Project `done` is an in-flight terminal side effect,
                 # not authority to rewrite the predecessor bound by intent.
                 record["status"] = pending_intent["previous_status"]
-        elif project_status == "done" and existing_phase in fine_terminal_phases:
-            # Project exposes both terminal receipt phases as coarse `done`;
-            # refreshing its fields must not erase the finer local phase.
-            record["workflow_phase"] = existing_phase
+        elif project_status == "done":
+            # Project exposes terminal phases as coarse `done`; Issue remains
+            # the fine-grained authority, with cache as a recovery fallback.
+            if issue_phase in fine_terminal_phases:
+                record["workflow_phase"] = issue_phase
+            elif issue_phase:
+                trace_projection_loss(
+                    args.task_uid,
+                    "live Issue workflow phase conflicts with cached terminal phase",
+                )
+            elif existing_phase in fine_terminal_phases:
+                record["workflow_phase"] = existing_phase
+            else:
+                trace_projection_loss(
+                    args.task_uid,
+                    "Project done cannot be classified without a fine terminal Issue/cache phase",
+                )
         else:
             record["workflow_phase"] = project_phase
         record["reconciled_from_project"] = project_status != issue_status
@@ -2003,6 +2207,9 @@ def command_refresh_task(args: argparse.Namespace) -> int:
         record["workflow_phase"] = pending_phase
         if isinstance(pending_intent, dict) and pending_intent.get("previous_status"):
             record["status"] = pending_intent["previous_status"]
+    preserve_identity_bound_cache(
+        args.task_uid, existing, live, record, repository_identity,
+    )
     record["cache_refreshed_at"] = now()
     # Local cache identity is never accepted from stale issue/project/cache
     # values.  Every refresh overwrites it from current registered git facts.

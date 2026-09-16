@@ -113,6 +113,89 @@ def _contract_ref(path="doc/engineering/workflow/source-of-truth.md", fragment="
     }
 
 
+def _trace_na(owner_role, *, reason="This relation is outside the bounded change.", scope="Only this bounded traceability fixture."):
+    return {
+        "applicability": "not_applicable",
+        "reason": reason,
+        "scope": scope,
+        "owner_role": owner_role,
+        "evidence_ref": {
+            "repository": REPOSITORY,
+            "issue_number": 3671,
+            "comment_id": 5636906114,
+        },
+        "reevaluation_trigger": "Reevaluate when the bounded change starts consuming this relation.",
+    }
+
+
+def _trace_ref(kind=None, *, path, fragment, clause_id):
+    reference = _contract_ref(path=path, fragment=fragment, clause_id=clause_id)
+    if kind is not None:
+        reference["kind"] = kind
+    reference["applicability"] = "required"
+    return reference
+
+
+def _populate_trace(record, *, upstream_kind="product_requirement", system_required=True):
+    """Attach the approved cross-layer trace shape to each fixture obligation."""
+    for obligation in record["required_obligations"]:
+        owner_role = obligation["owner_role"]
+        obligation["applicability"] = "required"
+        obligation["required"] = True
+        if upstream_kind == "professional_acceptance":
+            upstream_refs = [
+                _trace_ref(
+                    "professional_acceptance",
+                    path="doc/engineering/doc-governance/project-management-record-standard.design.md",
+                    fragment="固定输入与证据身份",
+                    clause_id=obligation["obligation_id"],
+                ),
+                {"kind": "product_requirement", **_trace_na(
+                    owner_role,
+                    reason="This governance-only fixture changes no product promise or scope.",
+                    scope="Product value, player promise, product scope, and product ACs.",
+                )},
+            ]
+            system_design = _trace_na(
+                owner_role,
+                reason="This fixture does not consume a technical system-design obligation.",
+                scope="Cross-component behavior, state, interface, migration, recovery, security, and implementation contracts.",
+            )
+        else:
+            upstream_refs = [
+                _trace_ref(
+                    "product_requirement",
+                    path="doc/engineering/prd.md",
+                    fragment="prd-engineering-001",
+                    clause_id=obligation["obligation_id"],
+                )
+            ]
+            system_design = (
+                _trace_ref(
+                    path="doc/engineering/doc-governance/cross-layer-requirements-traceability.design.md",
+                    fragment="canonical-trace-relation",
+                    clause_id=obligation["obligation_id"],
+                )
+                if system_required
+                else _trace_na(owner_role)
+            )
+        obligation["trace"] = {
+            "upstream_refs": upstream_refs,
+            "system_design": system_design,
+        }
+    record["coordination_ref"]["record_digest"] = _record_digest(record)
+    return record
+
+
+def _legacy_record(record):
+    legacy = deepcopy(record)
+    for obligation in legacy["required_obligations"]:
+        obligation.pop("applicability", None)
+        obligation.pop("trace", None)
+    legacy["coordination_ref"]["record_digest"] = _record_digest(legacy)
+    return legacy
+
+
 def _record():
     record = {
         "schema": "oasis7.loop-change/v1",
@@ -168,6 +251,7 @@ def _record():
         },
         "feedback": [],
     }
+    _populate_trace(record)
     record["coordination_ref"]["record_digest"] = _record_digest(record)
     return record
 
@@ -830,6 +914,269 @@ class TraceabilityTests(unittest.TestCase):
         self.assertEqual(result.get("status"), "blocked", result)
         blockers = "\n".join(str(item) for item in result.get("blockers", []))
         self.assertTrue(all(token in blockers for token in tokens), blockers)
+
+    def complete_live_aggregate(self, record=None):
+        record = record or self.record
+        candidate, evidence = self.complete_aggregate(record)
+        candidate["configuration_digest"] = _configuration_digest(candidate)
+        for row, item in zip(candidate["applicability_matrix"], evidence):
+            item["candidate"]["configuration_digest"] = candidate["configuration_digest"]
+            row["configuration_digest"] = candidate["configuration_digest"]
+        readers = FixtureReaders(record)
+        readers.install_live_leaf_results(
+            candidate, evidence, profile="repository_required", mode="live_nonfinal"
+        )
+        readers.install_authority_map_and_approval(record, candidate, evidence)
+        return candidate, evidence, readers
+
+    def assert_trace_blocked(self, result, diagnostic):
+        self.assert_blocked_for(result, diagnostic)
+
+    def test_task2_schema_declares_traceability_shapes(self):
+        schema = json.loads((HERE / "schemas" / "loop-change.schema.json").read_text())
+        obligation = schema["$defs"]["obligation"]
+        properties = obligation["properties"]
+        self.assertIn("applicability", properties)
+        self.assertIn("trace", properties)
+        applicability_schema = properties["applicability"]
+        if "$ref" in applicability_schema:
+            applicability_schema = schema["$defs"][applicability_schema["$ref"].rsplit("/", 1)[-1]]
+        self.assertEqual(applicability_schema.get("enum"), ["required", "not_applicable"])
+        trace_schema = properties["trace"]
+        if "$ref" in trace_schema:
+            trace_schema = schema["$defs"][trace_schema["$ref"].rsplit("/", 1)[-1]]
+        self.assertIn("upstream_refs", trace_schema["properties"])
+        self.assertIn("system_design", trace_schema["properties"])
+
+    def test_task2_professional_only_upstream_with_complete_na_dispositions_passes(self):
+        record = _populate_trace(deepcopy(self.record), upstream_kind="professional_acceptance", system_required=False)
+        result = self.api.validate_record(record)
+        self.assertEqual(result.get("status"), "passed", result)
+
+    def test_task2_product_upstream_with_required_system_design_passes(self):
+        record = _populate_trace(deepcopy(self.record), upstream_kind="product_requirement", system_required=True)
+        result = self.api.validate_record(record)
+        self.assertEqual(result.get("status"), "passed", result)
+
+    def test_task2_omitted_applicability_blocks_with_stable_diagnostic(self):
+        record = deepcopy(self.record)
+        record["required_obligations"][0].pop("applicability")
+        record["coordination_ref"]["record_digest"] = _record_digest(record)
+        self.assert_trace_blocked(self.api.validate_record(record), "trace-required-alias-mismatch")
+
+    def test_task2_omitted_required_alias_blocks_with_stable_diagnostic(self):
+        record = deepcopy(self.record)
+        record["required_obligations"][0].pop("required")
+        record["coordination_ref"]["record_digest"] = _record_digest(record)
+        self.assert_trace_blocked(self.api.validate_record(record), "trace-required-alias-mismatch")
+
+    def test_task2_applicability_alias_mismatch_blocks_with_stable_diagnostic(self):
+        variants = (("required", False), ("not_applicable", True))
+        for applicability, required in variants:
+            with self.subTest(applicability=applicability, required=required):
+                record = deepcopy(self.record)
+                obligation = record["required_obligations"][0]
+                obligation["applicability"] = applicability
+                obligation["required"] = required
+                record["coordination_ref"]["record_digest"] = _record_digest(record)
+                self.assert_trace_blocked(
+                    self.api.validate_record(record), "trace-required-alias-mismatch"
+                )
+
+    def test_task2_required_false_without_complete_na_blocks(self):
+        record = _populate_trace(
+            deepcopy(self.record), upstream_kind="professional_acceptance", system_required=False
+        )
+        obligation = record["required_obligations"][0]
+        obligation["required"] = False
+        obligation["applicability"] = "not_applicable"
+        obligation["trace"]["system_design"].pop("evidence_ref")
+        record["coordination_ref"]["record_digest"] = _record_digest(record)
+        self.assert_trace_blocked(self.api.validate_record(record), "trace-na-incomplete")
+
+    def test_task2_unknown_and_pending_applicability_never_imply_na(self):
+        for value in (None, "unknown", "pending"):
+            with self.subTest(applicability=value):
+                record = deepcopy(self.record)
+                record["required_obligations"][0]["applicability"] = value
+                record["coordination_ref"]["record_digest"] = _record_digest(record)
+                self.assert_trace_blocked(
+                    self.api.validate_record(record), "trace-required-alias-mismatch"
+                )
+
+    def test_task2_missing_upstream_blocks_delivery_obligation(self):
+        record = deepcopy(self.record)
+        record["required_obligations"][0]["trace"]["upstream_refs"] = []
+        record["coordination_ref"]["record_digest"] = _record_digest(record)
+        self.assert_trace_blocked(self.api.validate_record(record), "trace-upstream-missing")
+
+    def test_task2_missing_required_system_design_blocks_with_stable_diagnostic(self):
+        record = deepcopy(self.record)
+        record["required_obligations"][0]["trace"].pop("system_design")
+        record["coordination_ref"]["record_digest"] = _record_digest(record)
+        self.assert_trace_blocked(self.api.validate_record(record), "trace-system-design-missing")
+
+    def test_task2_delivery_work_cannot_mark_both_upstream_kinds_na(self):
+        record = deepcopy(self.record)
+        obligation = record["required_obligations"][0]
+        owner_role = obligation["owner_role"]
+        obligation["trace"]["upstream_refs"] = [
+            {"kind": "product_requirement", **_trace_na(owner_role)},
+            {"kind": "professional_acceptance", **_trace_na(owner_role)},
+        ]
+        record["coordination_ref"]["record_digest"] = _record_digest(record)
+        self.assert_trace_blocked(self.api.validate_record(record), "trace-upstream-missing")
+
+    def test_task2_incomplete_system_na_blocks_with_stable_diagnostic(self):
+        record = _populate_trace(
+            deepcopy(self.record), upstream_kind="professional_acceptance", system_required=False
+        )
+        for field in ("reason", "scope", "owner_role", "evidence_ref", "reevaluation_trigger"):
+            with self.subTest(field=field):
+                incomplete = deepcopy(record)
+                incomplete["required_obligations"][0]["trace"]["system_design"].pop(field)
+                incomplete["coordination_ref"]["record_digest"] = _record_digest(incomplete)
+                self.assert_trace_blocked(
+                    self.api.validate_record(incomplete), "trace-na-incomplete"
+                )
+
+    def test_task2_wrong_repository_and_missing_fragment_are_unresolved_refs(self):
+        variants = (
+            ("wrong repository", lambda ref: ref.update(repository="foreign/repo")),
+            ("missing fragment", lambda ref: ref.update(fragment="")),
+        )
+        for label, mutate in variants:
+            with self.subTest(case=label):
+                record = deepcopy(self.record)
+                mutate(record["required_obligations"][0]["trace"]["upstream_refs"][0])
+                record["coordination_ref"]["record_digest"] = _record_digest(record)
+                self.assert_trace_blocked(self.api.validate_record(record), "trace-ref-unresolved")
+
+    def test_task2_obligation_and_mapping_slot_owner_mismatch_blocks(self):
+        variants = (
+            ("owner_loop", lambda obligation, slot: obligation.update(owner_loop="system")),
+            ("owner_role", lambda obligation, slot: obligation.update(owner_role="runtime_engineer")),
+            ("slot_owner_loop", lambda obligation, slot: slot.update(owner_loop="system")),
+            ("slot_owner_role", lambda obligation, slot: slot.update(owner_role="runtime_engineer")),
+        )
+        for label, mutate in variants:
+            with self.subTest(field=label):
+                record = deepcopy(self.record)
+                obligation = record["required_obligations"][0]
+                slot = record["mapping_slots"][0]
+                mutate(obligation, slot)
+                record["coordination_ref"]["record_digest"] = _record_digest(record)
+                self.assert_trace_blocked(self.api.validate_record(record), "trace-owner-mismatch")
+
+    def test_task2_aggregate_duplicate_and_missing_rows_use_slot_cardinality_diagnostic(self):
+        for label, mutate in (
+            (
+                "duplicate",
+                lambda matrix: matrix.append(deepcopy(matrix[0])),
+            ),
+            ("missing", lambda matrix: matrix.pop()),
+        ):
+            with self.subTest(case=label):
+                candidate, evidence, readers = self.complete_live_aggregate()
+                mutate(candidate["applicability_matrix"])
+                result = self.aggregate(candidate, evidence, self.record, readers)
+                self.assert_trace_blocked(result, "trace-slot-cardinality")
+
+    def test_task2_aggregate_evidence_identity_gaps_use_stable_diagnostic(self):
+        for label, mutate in (
+            ("missing locator", lambda row, item: row.pop("leaf_evidence_locator")),
+            ("missing digest", lambda row, item: row.pop("leaf_evidence_digest")),
+            ("task identity drift", lambda row, item: row.update(leaf_task_uid=SECOND_LEAF_UID)),
+            ("candidate identity drift", lambda row, item: item["candidate"].update(entry="scripts/pm/other.py")),
+        ):
+            with self.subTest(case=label):
+                candidate, evidence, readers = self.complete_live_aggregate()
+                mutate(candidate["applicability_matrix"][0], evidence[0])
+                self.assert_trace_blocked(
+                    self.aggregate(candidate, evidence, self.record, readers),
+                    "trace-evidence-identity",
+                )
+
+    def test_task2_untouched_legacy_record_is_readable_but_new_aggregate_requires_upgrade(self):
+        legacy = _legacy_record(self.record)
+        self.assertEqual(self.api.validate_record(legacy).get("status"), "passed")
+
+        candidate, evidence, readers = self.complete_live_aggregate(legacy)
+        result = self.aggregate(candidate, evidence, legacy, readers)
+        self.assert_trace_blocked(result, "trace-legacy-upgrade-required")
+
+    def test_task2_trace_refs_require_frozen_path_and_publication_content_readback(self):
+        variants = (
+            (
+                "unresolved frozen path",
+                lambda ref: ref.update(fragment="missing-fragment"),
+                None,
+            ),
+            (
+                "frozen publication content mismatch",
+                lambda ref: ref.update(source_digest="sha256:" + "9" * 64),
+                "immutable source digest mismatch",
+            ),
+        )
+        for label, mutate, reader_failure in variants:
+            with self.subTest(case=label):
+                record = deepcopy(self.record)
+                trace_ref = record["required_obligations"][0]["trace"]["upstream_refs"][0]
+                mutate(trace_ref)
+                record["coordination_ref"]["record_digest"] = _record_digest(record)
+                readers = FixtureReaders(record)
+                if reader_failure is None:
+                    result = self.leaf(record, self.refresh_record_binding(record), readers)
+                else:
+                    original_contract = readers.contract
+
+                    def contract(reference):
+                        if reference.get("path") == trace_ref.get("path"):
+                            return {"status": "blocked", "blockers": [reader_failure]}
+                        return original_contract(reference)
+
+                    readers.contract = contract
+                    result = self.leaf(record, self.refresh_record_binding(record), readers)
+                self.assert_trace_blocked(result, "trace-ref-unresolved")
+
+    def test_task2_malformed_na_upstream_kind_blocks_alongside_valid_required_peer(self):
+        for label, kind in (("missing", None), ("unknown", "unclassified")):
+            with self.subTest(kind=label):
+                record = deepcopy(self.record)
+                obligation = record["required_obligations"][0]
+                malformed = _trace_na(obligation["owner_role"])
+                if kind is not None:
+                    malformed["kind"] = kind
+                obligation["trace"]["upstream_refs"].append(malformed)
+                record["coordination_ref"]["record_digest"] = _record_digest(record)
+                self.assert_trace_blocked(
+                    self.api.validate_record(record), "trace-ref-unresolved"
+                )
+
+    def test_task2_not_applicable_obligation_requires_system_design_disposition(self):
+        record = _populate_trace(
+            deepcopy(self.record), upstream_kind="professional_acceptance", system_required=False
+        )
+        obligation = record["required_obligations"][0]
+        obligation["applicability"] = "not_applicable"
+        obligation["required"] = False
+        obligation["trace"].pop("system_design")
+        record["coordination_ref"]["record_digest"] = _record_digest(record)
+        self.assert_trace_blocked(
+            self.api.validate_record(record), "trace-system-design-missing"
+        )
+
+    def test_task2_trace_diagnostics_include_record_context_and_repair_hint(self):
+        record = deepcopy(self.record)
+        record["required_obligations"][0].pop("applicability")
+        record["coordination_ref"]["record_digest"] = _record_digest(record)
+        result = self.api.validate_record(record)
+        self.assert_trace_blocked(result, "trace-required-alias-mismatch")
+        blockers = "\n".join(str(item) for item in result.get("blockers", []))
+        self.assertIn(record["task_uid"], blockers)
+        self.assertIn(record["change_id"], blockers)
+        self.assertIn("repair:", blockers)
+        self.assertIn("trace", blockers)
 
     def _sync_candidate_field(self, candidate, evidence, field, value):
         candidate[field] = deepcopy(value)

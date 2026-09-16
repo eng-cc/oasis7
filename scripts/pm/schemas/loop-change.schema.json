@@ -64,6 +64,103 @@
         "revision": {"type": "integer", "minimum": 1}
       }
     },
+    "applicability": {
+      "type": "string",
+      "enum": ["required", "not_applicable"]
+    },
+    "evidence_ref": {
+      "type": "object",
+      "required": ["repository", "issue_number", "comment_id"],
+      "properties": {
+        "repository": {"const": "eng-cc/oasis7"},
+        "issue_number": {"type": "integer", "minimum": 1},
+        "comment_id": {"type": "integer", "minimum": 1}
+      }
+    },
+    "na_disposition": {
+      "type": "object",
+      "required": ["applicability", "reason", "scope", "owner_role", "evidence_ref", "reevaluation_trigger"],
+      "properties": {
+        "applicability": {"const": "not_applicable"},
+        "reason": {"type": "string", "minLength": 1},
+        "scope": {"type": "string", "minLength": 1},
+        "owner_role": {"type": "string", "minLength": 1},
+        "evidence_ref": {"$ref": "#/$defs/evidence_ref"},
+        "reevaluation_trigger": {"type": "string", "minLength": 1}
+      }
+    },
+    "typed_upstream_ref": {
+      "allOf": [
+        {
+          "type": "object",
+          "required": ["kind", "applicability"],
+          "properties": {
+            "kind": {"enum": ["product_requirement", "professional_acceptance"]},
+            "applicability": {"$ref": "#/$defs/applicability"},
+            "repository": {"const": "eng-cc/oasis7"},
+            "path": {"type": "string", "minLength": 1},
+            "fragment": {"type": "string", "minLength": 1},
+            "contract_id": {"type": "string", "minLength": 1},
+            "revision": {"anyOf": [{"type": "integer", "minimum": 1}, {"type": "string", "minLength": 1}]},
+            "contract_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            "publication_ref": {"$ref": "#/$defs/publication_ref"}
+          }
+        },
+        {
+          "oneOf": [
+            {
+              "properties": {"applicability": {"const": "required"}},
+              "required": ["repository", "path", "fragment", "contract_id", "revision", "contract_digest", "publication_ref"]
+            },
+            {
+              "allOf": [
+                {"$ref": "#/$defs/na_disposition"}
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "system_design_ref": {
+      "allOf": [
+        {
+          "type": "object",
+          "required": ["applicability"],
+          "properties": {
+            "applicability": {"$ref": "#/$defs/applicability"},
+            "repository": {"const": "eng-cc/oasis7"},
+            "path": {"type": "string", "minLength": 1},
+            "fragment": {"type": "string", "minLength": 1},
+            "contract_id": {"type": "string", "minLength": 1},
+            "revision": {"anyOf": [{"type": "integer", "minimum": 1}, {"type": "string", "minLength": 1}]},
+            "contract_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            "publication_ref": {"$ref": "#/$defs/publication_ref"},
+            "reason": {"type": ["string", "null"]},
+            "scope": {"type": ["string", "null"]},
+            "owner_role": {"type": ["string", "null"]},
+            "evidence_ref": {"anyOf": [{"$ref": "#/$defs/evidence_ref"}, {"type": "null"}]},
+            "reevaluation_trigger": {"type": ["string", "null"]}
+          }
+        },
+        {
+          "oneOf": [
+            {
+              "properties": {"applicability": {"const": "required"}},
+              "required": ["repository", "path", "fragment", "contract_id", "revision", "contract_digest", "publication_ref"]
+            },
+            {"$ref": "#/$defs/na_disposition"}
+          ]
+        }
+      ]
+    },
+    "obligation_trace": {
+      "type": "object",
+      "required": ["upstream_refs", "system_design"],
+      "properties": {
+        "upstream_refs": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/typed_upstream_ref"}},
+        "system_design": {"$ref": "#/$defs/system_design_ref"}
+      }
+    },
     "obligation": {
       "type": "object",
       "required": ["obligation_id", "mapping_slot", "required", "acceptance_refs", "owner_loop", "owner_role"],
@@ -71,6 +168,8 @@
         "obligation_id": {"type": "string", "minLength": 1},
         "mapping_slot": {"type": "string", "minLength": 1},
         "required": {"type": "boolean"},
+        "applicability": {"$ref": "#/$defs/applicability"},
+        "trace": {"$ref": "#/$defs/obligation_trace"},
         "acceptance_refs": {"type": "array", "minItems": 1, "items": {"anyOf": [{"$ref": "#/$defs/path_ref"}, {"type": "string", "minLength": 1}]}},
         "owner_loop": {"enum": ["product", "system", "code"]},
         "owner_role": {"type": "string", "minLength": 1}

@@ -32,6 +32,8 @@ Checks:
      root-navigation coverage, and lifecycle fields for controlled exceptions.
   9. New or materially changed product PRD/design files must pass the scoped
      content contract with the selected base/head and worktree changes.
+  10. New or materially changed professional system-design files must carry
+      exact upstream, local-design, and validation traceability.
 USAGE
 }
 
@@ -94,6 +96,29 @@ run_product_doc_content_check() {
     return 1
   fi
   "$PYTHON_BIN" scripts/product-doc-content-check.py \
+    --repo-root "$repo_root" --base "$base_oid" --head "$head_oid" --worktree
+}
+
+run_system_design_traceability_check() {
+  local base_oid="${OASIS7_PRODUCT_DOC_BASE:-}"
+  local head_oid="${OASIS7_PRODUCT_DOC_HEAD:-}"
+  if [[ -n "$base_oid" || -n "$head_oid" ]]; then
+    if [[ -z "$base_oid" || -z "$head_oid" ]]; then
+      echo "system-design-traceability: explicit base/head must be supplied together" >&2
+      return 1
+    fi
+  else
+    head_oid="$(git rev-parse --verify HEAD^{commit})"
+    base_oid="$(git merge-base HEAD main 2>/dev/null || true)"
+    if [[ -z "$base_oid" ]]; then
+      base_oid="$(git rev-parse --verify HEAD^ 2>/dev/null || true)"
+    fi
+  fi
+  if [[ -z "$base_oid" || -z "$head_oid" ]]; then
+    echo "system-design-traceability: error: unable to derive explicit base/head for worktree check" >&2
+    return 1
+  fi
+  "$PYTHON_BIN" scripts/system-design-traceability-check.py \
     --repo-root "$repo_root" --base "$base_oid" --head "$head_oid" --worktree
 }
 
@@ -556,6 +581,10 @@ fi
 
 if ! run_product_doc_content_check; then
   fail "product document content contract failed"
+fi
+
+if ! run_system_design_traceability_check; then
+  fail "system-design traceability contract failed"
 fi
 
 if ((failures > 0)); then

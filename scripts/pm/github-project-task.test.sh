@@ -909,6 +909,234 @@ assert record["status"] == "done" and record["workflow_phase"] == "task_done", r
 assert payload["updated_field_values"] == 3, payload
 PY
 
+# Cross-layer traceability fields must survive the Issue serializer/parser and
+# remain section-scoped. The Project projection is intentionally coarse; the
+# Issue/cache retain the finer terminal and evidence authority.
+python3 - "$TMPDIR/github-project-task.py" <<'PY'
+import hashlib
+import importlib.util
+import json
+import pathlib
+import sys
+import tempfile
+from argparse import Namespace
+
+spec = importlib.util.spec_from_file_location("task_impl", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+uid = "task_88888888888888888888888888888888"
+evidence = "Read-only workflow audit completed without a PR."
+record = {
+    "title": "Traceability round-trip",
+    "owner_role": "repository_health_engineer",
+    "module": "engineering",
+    "status": "done",
+    "workflow_phase": "task_done",
+    "priority": "P2",
+    "completion_mode": "non_pr_task",
+    "non_pr_completion_evidence": evidence,
+    "non_pr_completion_evidence_sha256": hashlib.sha256((evidence + "\n").encode()).hexdigest(),
+    "source_refs": ["doc/engineering/workflow/source-of-truth.md#traceability-record-contract"],
+    "doc_refs": [
+        "doc/engineering/doc-governance/project-management-record-standard.design.md#3",
+        "doc/engineering/doc-governance/system-design-writing-standard.design.md#11",
+    ],
+    "related_prd": ["doc/product/oasis7.prd.md#REQ-TRACE"],
+    "acceptance": ["Project done does not erase task_done or evidence."],
+}
+task = module.task_from_record(uid, record)
+body = module.issue_body(task)
+assert "Doc refs:\n- `doc/engineering/doc-governance/project-management-record-standard.design.md#3`\n- `doc/engineering/doc-governance/system-design-writing-standard.design.md#11`" in body, body
+assert "Related PRD:\n- `doc/product/oasis7.prd.md#REQ-TRACE`" in body, body
+assert f"- non_pr_completion_evidence_sha256: `{record['non_pr_completion_evidence_sha256']}`" in body, body
+parsed = module.issue_task_fields(body)
+assert parsed["source_refs"] == record["source_refs"], parsed
+assert parsed["doc_refs"] == record["doc_refs"], parsed
+assert parsed["related_prd"] == record["related_prd"], parsed
+assert parsed["acceptance"] == record["acceptance"], parsed
+assert parsed["completion_mode"] == "non_pr_task", parsed
+assert parsed["non_pr_completion_evidence"] == evidence, parsed
+assert parsed["non_pr_completion_evidence_sha256"] == record["non_pr_completion_evidence_sha256"], parsed
+
+section_body = """Source refs:
+- `source-only`
+
+Doc refs:
+- `doc-only`
+
+Related PRD:
+- `prd-only`
+
+Acceptance:
+- accepted-only
+"""
+section_fields = module.issue_task_fields(section_body)
+assert section_fields["source_refs"] == ["source-only"], section_fields
+assert section_fields["doc_refs"] == ["doc-only"], section_fields
+assert section_fields["related_prd"] == ["prd-only"], section_fields
+assert section_fields["acceptance"] == ["accepted-only"], section_fields
+
+# A terminal non-PR cache entry with a missing identity-bound evidence file is
+# lossy. Refresh must stop with the stable diagnostic rather than silently
+# clearing completion mode/evidence authority.
+with tempfile.TemporaryDirectory() as temp:
+    root = pathlib.Path(temp)
+    cache = root / ".pm/github-project-sync/tasks.json"
+    cache.parent.mkdir(parents=True)
+    worktree = root / "task-worktree"
+    worktree.mkdir()
+    evidence_path = worktree / ".pm/scratch" / uid / "non-pr-completion-evidence.txt"
+    evidence_path.parent.mkdir(parents=True)
+    evidence_path.write_text(evidence + "\n", encoding="utf-8")
+    cached = {
+        "task_uid": uid,
+        "title": record["title"],
+        "owner_role": record["owner_role"],
+        "module": record["module"],
+        "status": "done",
+        "workflow_phase": "task_done",
+        "completion_mode": "non_pr_task",
+        "non_pr_completion_evidence": evidence,
+        "non_pr_completion_evidence_file": str(evidence_path),
+        "non_pr_completion_evidence_sha256": record["non_pr_completion_evidence_sha256"],
+        "doc_refs": record["doc_refs"],
+        "related_prd": record["related_prd"],
+        "worktree_hint": str(worktree),
+        "repository": "eng-cc/oasis7",
+        "canonical_worktree": str(worktree),
+        "task_branch": "task/traceability-round-trip",
+        "default_branch": "main",
+        "issue_number": 808,
+        "issue_url": "https://github.com/eng-cc/oasis7/issues/808",
+        "project_item_id": "TRACE_ITEM",
+    }
+    cache.write_text(json.dumps({"version": 1, "project": {"id": "PROJECT_ID", "number": 1, "owner": "eng-cc", "repo": "eng-cc/oasis7"}, "tasks": {uid: cached}}) + "\n", encoding="utf-8")
+    issue = dict(module.issue_task_fields(module.issue_body(module.task_from_record(uid, record))))
+    issue.update({"task_uid": uid, "title": record["title"], "issue_number": 808, "issue_url": cached["issue_url"], "issue_state": "OPEN"})
+    project_node = {"id": "TRACE_ITEM", "project": {"id": "PROJECT_ID", "number": 1, "owner": {"login": "eng-cc"}}, "fieldValues": {"pageInfo": {"hasNextPage": False}, "nodes": [
+        {"name": "Done", "field": {"name": "Status"}},
+        {"name": "done", "field": {"name": "PM Status"}},
+        {"name": "done", "field": {"name": "Workflow Phase"}},
+    ]}}
+    module.github_issue_record = lambda _repo, _uid: issue
+    module.project_refresh_graphql = lambda _query, _variables: {"data": {"nodes": [project_node]}}
+    module.authoritative_repository_identity = lambda _root, _repo, _hint: {
+        "repository": "eng-cc/oasis7", "canonical_worktree": str(worktree),
+        "task_branch": "task/traceability-round-trip", "default_branch": "main",
+    }
+    module.pending_non_merge_phase = lambda *_args: None
+    module.loop_lineage_path = lambda *_args: root / "missing-lineage.json"
+    args = Namespace(root=root, mapping=str(cache), task_uid=uid, repo="eng-cc/oasis7", project_owner="eng-cc", project_number=1, json=True)
+
+    # Positive Issue -> coarse Project done -> cache refresh round-trip. The
+    # Issue's fine terminal phase and all traceability/evidence fields must be
+    # reconstructed without loss.
+    module.command_refresh_task(args)
+    refreshed = json.loads(cache.read_text(encoding="utf-8"))["tasks"][uid]
+    assert refreshed["status"] == "done", refreshed
+    assert refreshed["workflow_phase"] == "task_done", refreshed
+    assert refreshed["completion_mode"] == "non_pr_task", refreshed
+    assert refreshed["non_pr_completion_evidence"] == evidence, refreshed
+    assert refreshed["non_pr_completion_evidence_sha256"] == record["non_pr_completion_evidence_sha256"], refreshed
+    assert refreshed["non_pr_completion_evidence_file"] == str(evidence_path.resolve()), refreshed
+    assert refreshed["doc_refs"] == record["doc_refs"], refreshed
+    assert refreshed["related_prd"] == record["related_prd"], refreshed
+
+    # I-1: an explicit non-terminal live Issue phase must not fall back to a
+    # stale fine-terminal cache phase when Project exposes coarse `done`.
+    captured = []
+    def fail(message):
+        captured.append(message)
+        raise SystemExit(1)
+    module.die = fail
+    issue["workflow_phase"] = "execution"
+    try:
+        module.command_refresh_task(args)
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError("stale terminal cache phase unexpectedly survived live Issue phase")
+    assert captured and captured[0].startswith("trace-projection-loss:"), captured
+
+    # I-1: even when the cache loses its phase key, the live Issue phase remains
+    # the fine terminal authority and cannot be replaced by Project `done`.
+    issue["workflow_phase"] = "task_done"
+    cache_payload = json.loads(cache.read_text(encoding="utf-8"))
+    cache_payload["tasks"][uid].pop("workflow_phase", None)
+    cache.write_text(json.dumps(cache_payload) + "\n", encoding="utf-8")
+    module.command_refresh_task(args)
+    refreshed = json.loads(cache.read_text(encoding="utf-8"))["tasks"][uid]
+    assert refreshed["workflow_phase"] == "task_done", refreshed
+
+    # A coarse Project `done` without a fine terminal Issue or cache phase is
+    # ambiguous and must fail closed instead of manufacturing `done`.
+    captured.clear()
+    issue["workflow_phase"] = "execution"
+    cache_payload = json.loads(cache.read_text(encoding="utf-8"))
+    cache_payload["tasks"][uid].pop("workflow_phase", None)
+    cache.write_text(json.dumps(cache_payload) + "\n", encoding="utf-8")
+    try:
+        module.command_refresh_task(args)
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError("ambiguous terminal refresh unexpectedly succeeded")
+    assert captured and captured[0].startswith("trace-projection-loss:"), captured
+
+    # I-3: parser failures retain context, and refresh surfaces the same
+    # stable projection-loss diagnostic even before evidence reconstruction.
+    for encoded in ("!!!", "//4"):
+        parsed_loss = module.issue_task_fields(
+            f"- non_pr_completion_evidence_b64: `{encoded}`\n"
+        )
+        assert parsed_loss.get("trace_projection_error") == (
+            "malformed non-PR completion evidence encoding"
+        ), parsed_loss
+    cache_payload = json.loads(cache.read_text(encoding="utf-8"))
+    cache_record = cache_payload["tasks"][uid]
+    cache_record.update({"status": "committed", "workflow_phase": "execution"})
+    for key in ("non_pr_completion_evidence", "non_pr_completion_evidence_file", "non_pr_completion_evidence_sha256"):
+        cache_record.pop(key, None)
+    cache.write_text(json.dumps(cache_payload) + "\n", encoding="utf-8")
+    issue.update({"status": "committed", "workflow_phase": "execution"})
+    for key in ("non_pr_completion_evidence", "non_pr_completion_evidence_sha256"):
+        issue.pop(key, None)
+    issue["trace_projection_error"] = "malformed non-PR completion evidence encoding"
+    project_node["fieldValues"]["nodes"][1]["name"] = "committed"
+    project_node["fieldValues"]["nodes"][2]["name"] = "execution"
+    captured.clear()
+    try:
+        module.command_refresh_task(args)
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError("malformed evidence refresh unexpectedly succeeded")
+    assert captured and captured[0].startswith("trace-projection-loss:"), captured
+
+    captured.clear()
+    issue.pop("trace_projection_error")
+    issue.update({"status": "done", "workflow_phase": "task_done",
+                  "non_pr_completion_evidence": evidence,
+                  "non_pr_completion_evidence_sha256": record["non_pr_completion_evidence_sha256"]})
+    project_node["fieldValues"]["nodes"][1]["name"] = "done"
+    project_node["fieldValues"]["nodes"][2]["name"] = "done"
+    cache_payload = json.loads(cache.read_text(encoding="utf-8"))
+    cache_record = cache_payload["tasks"][uid]
+    cache_record.update({"status": cached["status"], "workflow_phase": cached["workflow_phase"],
+                         "non_pr_completion_evidence": cached["non_pr_completion_evidence"],
+                         "non_pr_completion_evidence_file": cached["non_pr_completion_evidence_file"],
+                         "non_pr_completion_evidence_sha256": cached["non_pr_completion_evidence_sha256"]})
+    cache.write_text(json.dumps(cache_payload) + "\n", encoding="utf-8")
+    evidence_path.unlink()
+    try:
+        module.command_refresh_task(args)
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError("lossy terminal refresh unexpectedly succeeded")
+    assert captured and captured[0].startswith("trace-projection-loss:"), captured
+PY
+
 CONCURRENT_ROOT="$TMPDIR/concurrent-cache"
 mkdir -p "$CONCURRENT_ROOT"
 printf '{"version":1,"tasks":{}}\n' >"$CONCURRENT_ROOT/tasks.json"
