@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""PG-01 RED contract for governed public-testnet triad admission.
+"""PG-01 GREEN contract for governed public-testnet triad admission.
 
 This file is intentionally tests-only.  It freezes the approved triad
-deployment truth before the PG-02 implementation work starts:
+deployment truth before any validator-47 cutover decision:
 
 * three unique validators with equal 100 stake (300 total, 200 required);
 * a separate three-signer governance domain with a 2-of-3 / 6667-bps
@@ -13,9 +13,9 @@ deployment truth before the PG-02 implementation work starts:
   started or enabled; and
 * pair-only and generic fleet-health output cannot be final triad evidence.
 
-The expected failures in the initial RED run are deliberately tied to missing
-triad production behavior.  Do not weaken these assertions to make the RED
-phase pass.
+The implementation now supplies this governed triad contract.  Keep these
+assertions strict so future changes cannot regress authority, provider closure,
+no-start safety, or the distinction between pair-only and triad evidence.
 """
 
 from __future__ import annotations
@@ -89,7 +89,7 @@ TRIAD_REGISTRY_SEMANTIC_DIGEST = hashlib.sha256(
 
 def load_python_module(path: Path, name: str) -> Any:
     # ``service-readback`` intentionally has no ``.py`` suffix.  Use the
-    # source loader explicitly so the test reaches the missing triad registry
+    # source loader explicitly so the test reaches the triad registry
     # assertion instead of failing in the harness itself.
     loader = SourceFileLoader(name, str(path))
     spec = importlib.util.spec_from_loader(name, loader)

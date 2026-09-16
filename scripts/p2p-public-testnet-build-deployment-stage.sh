@@ -71,6 +71,20 @@ sha256_file() {
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
+# Validator-47's generated environment is consumed directly by
+# p2p-triad-node-start.sh, which runs with `set -u`.  Keep the staged paths
+# and explicit runtime knobs here so a fresh host does not depend on an
+# inherited pair environment.  PoS timing is sourced from the repo-owned
+# defaults file, the same file embedded by the runtime.
+readonly TRIAD_CHAIN_POS_DEFAULTS_PATH="$repo_root/config/chain-pos-defaults.env"
+[[ -f "$TRIAD_CHAIN_POS_DEFAULTS_PATH" ]] || die "missing chain PoS defaults: $TRIAD_CHAIN_POS_DEFAULTS_PATH"
+# shellcheck source=/dev/null
+source "$TRIAD_CHAIN_POS_DEFAULTS_PATH"
+readonly VALIDATOR_47_POS_SLOT_DURATION_MS="${POS_SLOT_DURATION_MS:?missing POS_SLOT_DURATION_MS in $TRIAD_CHAIN_POS_DEFAULTS_PATH}"
+readonly VALIDATOR_47_POS_TICKS_PER_SLOT="${POS_TICKS_PER_SLOT:?missing POS_TICKS_PER_SLOT in $TRIAD_CHAIN_POS_DEFAULTS_PATH}"
+readonly VALIDATOR_47_POS_PROPOSAL_TICK_PHASE="${POS_PROPOSAL_TICK_PHASE:?missing POS_PROPOSAL_TICK_PHASE in $TRIAD_CHAIN_POS_DEFAULTS_PATH}"
+readonly VALIDATOR_47_POS_MAX_PAST_SLOT_LAG="${POS_MAX_PAST_SLOT_LAG:?missing POS_MAX_PAST_SLOT_LAG in $TRIAD_CHAIN_POS_DEFAULTS_PATH}"
+
 # This inventory is the operator authority for the managed public-testnet
 # triad.  The staged copy and its digest travel with the deployment truth so
 # a host cannot silently reinterpret a pair stage as validator-47.
@@ -96,7 +110,17 @@ readonly VALIDATOR_47_GOSSIP_BIND="0.0.0.0:6834"
 readonly VALIDATOR_47_WORLD_ID="oasis7-public-testnet-governed-20260606"
 readonly VALIDATOR_47_MANIFEST_PATH="config/public-testnet-governed-bootstrap-manifest-2026-06-06.json"
 readonly VALIDATOR_47_REGISTRY_PATH="config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json"
+readonly VALIDATOR_47_CONFIG_PATH="config/node-keypair.toml"
 readonly VALIDATOR_47_EXECUTION_WORLD_DIR="staged-world"
+readonly VALIDATOR_47_EXECUTION_RECORDS_DIR="data/execution-records"
+readonly VALIDATOR_47_STORAGE_ROOT="data/storage"
+readonly VALIDATOR_47_STORAGE_PROFILE="release_default"
+# These explicit values match the public-testnet long-run runtime profile.
+readonly VALIDATOR_47_NODE_TICK_MS="200"
+readonly VALIDATOR_47_REWARD_RUNTIME_ENABLE="1"
+readonly VALIDATOR_47_REWARD_RUNTIME_EPOCH_DURATION_SECS="60"
+readonly VALIDATOR_47_REWARD_POINTS_PER_CREDIT="100"
+readonly VALIDATOR_47_REWARD_RUNTIME_AUTO_REDEEM="0"
 readonly VALIDATOR_47_IDENTITY_KEY_FILE="node-keypair.toml"
 readonly VALIDATOR_47_IDENTITY_RECEIPT_FILE="identity-receipt.json"
 
@@ -1115,7 +1139,13 @@ cp "$manifest_path" "$out_dir/config/doc/testing/evidence/"
 # validator-47 node.env that could be mistaken for a third validator.
 if jq -e --arg node "$VALIDATOR_47_NODE_ID" \
   '[.validators[] | select(.node_id == $node)] | length == 1' "$registry_path" >/dev/null; then
-  python3 - "$TRIAD_INVENTORY_PATH" "$registry_path" "$manifest_path" "$node_env_path" "$triad_inventory_sha256" "$identity_key_sha256" "$identity_receipt_sha256" <<'PY'
+  python3 - "$TRIAD_INVENTORY_PATH" "$registry_path" "$manifest_path" "$node_env_path" "$triad_inventory_sha256" "$identity_key_sha256" "$identity_receipt_sha256" \
+    "$VALIDATOR_47_CONFIG_PATH" "$VALIDATOR_47_EXECUTION_RECORDS_DIR" "$VALIDATOR_47_STORAGE_ROOT" \
+    "$VALIDATOR_47_STORAGE_PROFILE" "$VALIDATOR_47_NODE_TICK_MS" \
+    "$VALIDATOR_47_POS_SLOT_DURATION_MS" "$VALIDATOR_47_POS_TICKS_PER_SLOT" \
+    "$VALIDATOR_47_POS_PROPOSAL_TICK_PHASE" "$VALIDATOR_47_POS_MAX_PAST_SLOT_LAG" \
+    "$VALIDATOR_47_REWARD_RUNTIME_ENABLE" "$VALIDATOR_47_REWARD_RUNTIME_EPOCH_DURATION_SECS" \
+    "$VALIDATOR_47_REWARD_POINTS_PER_CREDIT" "$VALIDATOR_47_REWARD_RUNTIME_AUTO_REDEEM" <<'PY'
 import hashlib
 import json
 import pathlib
@@ -1128,6 +1158,19 @@ node_env_path = pathlib.Path(sys.argv[4])
 expected_inventory_sha256 = sys.argv[5]
 identity_key_sha256 = sys.argv[6]
 identity_receipt_sha256 = sys.argv[7]
+config_path = sys.argv[8]
+execution_records_dir = sys.argv[9]
+storage_root = sys.argv[10]
+storage_profile = sys.argv[11]
+node_tick_ms = sys.argv[12]
+pos_slot_duration_ms = sys.argv[13]
+pos_ticks_per_slot = sys.argv[14]
+pos_proposal_tick_phase = sys.argv[15]
+pos_max_past_slot_lag = sys.argv[16]
+reward_runtime_enable = sys.argv[17]
+reward_runtime_epoch_duration_secs = sys.argv[18]
+reward_points_per_credit = sys.argv[19]
+reward_runtime_auto_redeem = sys.argv[20]
 actual_inventory_sha256 = hashlib.sha256(inventory_path.read_bytes()).hexdigest()
 if actual_inventory_sha256 != expected_inventory_sha256:
     raise SystemExit("triad inventory digest mismatch before node.env materialization")
@@ -1196,6 +1239,20 @@ lines = [
     f"GENESIS_VALIDATOR_REGISTRY_SHA256={actual_registry_sha256}",
     f"GENESIS_VALIDATOR_REGISTRY_SEMANTIC_SHA256={actual_registry_semantic_sha256}",
     "EXECUTION_WORLD_DIR=staged-world",
+    f"CONFIG_PATH={config_path}",
+    f"EXECUTION_RECORDS_DIR={execution_records_dir}",
+    f"STORAGE_ROOT={storage_root}",
+    f"STORAGE_PROFILE={storage_profile}",
+    f"NODE_TICK_MS={node_tick_ms}",
+    f"POS_SLOT_DURATION_MS={pos_slot_duration_ms}",
+    f"POS_TICKS_PER_SLOT={pos_ticks_per_slot}",
+    f"POS_PROPOSAL_TICK_PHASE={pos_proposal_tick_phase}",
+    f"POS_MAX_PAST_SLOT_LAG={pos_max_past_slot_lag}",
+    f"POS_ADAPTIVE_TICK_SCHEDULER=1",
+    f"REWARD_RUNTIME_ENABLE={reward_runtime_enable}",
+    f"REWARD_RUNTIME_EPOCH_DURATION_SECS={reward_runtime_epoch_duration_secs}",
+    f"REWARD_POINTS_PER_CREDIT={reward_points_per_credit}",
+    f"REWARD_RUNTIME_AUTO_REDEEM={reward_runtime_auto_redeem}",
     "DEPLOYMENT_INVENTORY_PATH=config/public-testnet-validator-triad-inventory.v1.json",
     f"DEPLOYMENT_INVENTORY_SHA256={actual_inventory_sha256}",
     "BOOTSTRAP_PEER_PATH=config/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt",

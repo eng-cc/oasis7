@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PG-02R-B RED contract for validator-47 host staging.
+"""PG-02R-B GREEN contract for validator-47 host staging.
 
 This file is intentionally tests-only.  It freezes the operator-side
 contract required before validator-47 can be staged on the empty host:
@@ -12,9 +12,10 @@ contract required before validator-47 can be staged on the empty host:
 * the stable runbook and fresh-host manual provide an executable no-start,
   pair-preserving, cold-cutover, clean-redeploy rollback path.
 
-The current implementation intentionally lacks these validator-47 host
-contracts.  The tests must remain immutable through the GREEN implementation;
-do not weaken them to accommodate the current pair-only behavior.
+The implementation now supplies these validator-47 host contracts.  The tests
+must remain strict through future changes; in particular, a staged environment
+must remain executable by the isolated launcher before any live start is
+considered.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import stat
 import subprocess
 import tempfile
@@ -41,6 +43,7 @@ STAGE = ROOT / "scripts/p2p-public-testnet-build-deployment-stage.sh"
 BOOTSTRAP = ROOT / "scripts/p2p-public-testnet-bootstrap-fresh-validator-host.sh"
 FLEET_HEALTH = ROOT / "scripts/p2p-public-testnet-fleet-health.py"
 SERVICE_READBACK = ROOT / "scripts/service-readback"
+START_NODE = ROOT / "scripts/p2p-triad-node-start.sh"
 RUNBOOK = ROOT / "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md"
 MANUAL = ROOT / "doc/testing/manual/public-testnet-fresh-validator-host-bootstrap-2026-07-28.manual.md"
 
@@ -75,6 +78,29 @@ VALIDATOR_47_ENV = {
     "GENESIS_VALIDATOR_REGISTRY_PATH": "config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json",
     "EXECUTION_WORLD_DIR": "staged-world",
 }
+
+# These are the variables that p2p-triad-node-start.sh expands without a
+# fallback.  The test intentionally removes any same-named inherited values
+# before invoking the launcher so a generated node.env must provide them.
+LAUNCHER_REQUIRED_ENV = (
+    "CONFIG_PATH",
+    "NODE_ID",
+    "WORLD_ID",
+    "STATUS_BIND",
+    "NODE_ROLE",
+    "EXECUTION_WORLD_DIR",
+    "EXECUTION_RECORDS_DIR",
+    "STORAGE_ROOT",
+    "STORAGE_PROFILE",
+    "NODE_TICK_MS",
+    "POS_SLOT_DURATION_MS",
+    "POS_TICKS_PER_SLOT",
+    "POS_PROPOSAL_TICK_PHASE",
+    "POS_MAX_PAST_SLOT_LAG",
+    "REWARD_RUNTIME_EPOCH_DURATION_SECS",
+    "REWARD_POINTS_PER_CREDIT",
+    "NODE_GOSSIP_BIND",
+)
 
 
 def load_module(path: Path, name: str):
@@ -242,7 +268,21 @@ def run_validator_47_stage(
     )
 
 
-class Validator47HostStagingRedTests(unittest.TestCase):
+def parse_env_file(path: Path) -> dict[str, str]:
+    """Parse the generated simple KEY=value node.env contract."""
+    values: dict[str, str] = {}
+    for line_number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, separator, value = line.partition("=")
+        if not separator or not key or key in values:
+            raise AssertionError(f"invalid or duplicate node.env line {line_number}: {raw_line!r}")
+        values[key] = value
+    return values
+
+
+class Validator47HostStagingContractTests(unittest.TestCase):
     def test_stage_identity_binding_is_before_output_materialization(self) -> None:
         """A public identity mismatch must fail before the stage root is touched."""
         source = STAGE.read_text(encoding="utf-8")
@@ -280,7 +320,7 @@ class Validator47HostStagingRedTests(unittest.TestCase):
 
         self.assertTrue(
             INVENTORY.is_file(),
-            f"RED: missing governed triad inventory authority: {INVENTORY}",
+            f"contract: missing governed triad inventory authority: {INVENTORY}",
         )
         self.assertFalse(INVENTORY.is_symlink(), "triad inventory authority must not be a symlink")
         value = json.loads(INVENTORY.read_text(encoding="utf-8"))
@@ -292,20 +332,20 @@ class Validator47HostStagingRedTests(unittest.TestCase):
             source = path.read_text(encoding="utf-8")
             self.assertTrue(
                 INVENTORY_RELATIVE in source,
-                f"RED: {path.name} does not consume the triad inventory authority",
+                f"contract: {path.name} does not consume the triad inventory authority",
             )
             self.assertTrue(
                 re.search(r"(?i)(sha256|digest)", source),
-                f"RED: {path.name} does not retain an inventory digest binding",
+                f"contract: {path.name} does not retain an inventory digest binding",
             )
 
     def test_stage_contract_renders_validator47_node_env_bindings(self) -> None:
         """The deployment stage must emit a complete validator-47 env contract."""
         source = STAGE.read_text(encoding="utf-8")
-        self.assertTrue("node.env" in source, "RED: stage does not render or validate node.env")
+        self.assertTrue("node.env" in source, "contract: stage does not render or validate node.env")
         self.assertTrue(
             VALIDATOR_47_SERVICE in source,
-            "RED: stage does not bind the validator-47 systemd service",
+            "contract: stage does not bind the validator-47 systemd service",
         )
 
     def test_stage_emits_storage_runtime_and_full_storage_p2p_roles(self) -> None:
@@ -325,6 +365,94 @@ class Validator47HostStagingRedTests(unittest.TestCase):
             self.assertIn("NODE_ROLE=storage\n", staged_env)
             self.assertIn("P2P_NODE_ROLE=full_storage\n", staged_env)
             self.assertNotIn("NODE_ROLE=validator\n", staged_env)
+
+    def test_generated_stage_env_survives_bootstrap_and_launcher_dry_run(self) -> None:
+        """Generated validator-47 env must execute in a bootstrap-shaped stack."""
+        receipt = {
+            "schema_version": "oasis7.identity_provision.v1",
+            "node_id": VALIDATOR_47_NODE_ID,
+            "root_public_key": VALIDATOR_47_ROOT_PUBLIC_KEY,
+            "finality_public_key": VALIDATOR_47_FINALITY_PUBLIC_KEY,
+            "libp2p_peer_id": VALIDATOR_47_PEER_ID,
+        }
+        with tempfile.TemporaryDirectory(prefix="oasis7-pg02r-b-launcher-env-") as temp_dir:
+            temp = Path(temp_dir)
+            result = run_validator_47_stage(temp, receipt=receipt)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+            stage = temp / "stage"
+            staged_config = stage / "config"
+            staged_env_path = staged_config / "node.env"
+            staged_values = parse_env_file(staged_env_path)
+            for key in LAUNCHER_REQUIRED_ENV:
+                self.assertIn(key, staged_values, f"generated node.env missing {key}")
+                self.assertTrue(staged_values[key], f"generated node.env has empty {key}")
+            self.assertEqual(staged_values["NODE_ID"], VALIDATOR_47_NODE_ID)
+            self.assertEqual(staged_values["NODE_ROLE"], "storage")
+            self.assertEqual(staged_values["P2P_NODE_ROLE"], "full_storage")
+            self.assertEqual(staged_values["EXECUTION_WORLD_DIR"], "staged-world")
+
+            # Mirror the bootstrap's config/world materialization into an
+            # isolated stack.  No host or service-manager operation occurs.
+            stack = temp / "stack"
+            stack_config = stack / "config"
+            shutil.copytree(staged_config, stack_config)
+            shutil.copytree(stage / "generated-world", stack / "staged-world")
+            for name in ("node-keypair.toml", "identity-receipt.json"):
+                shutil.copy2(stage / "identity" / name, stack_config / name)
+            self.assertEqual(
+                staged_env_path.read_bytes(),
+                (stack_config / "node.env").read_bytes(),
+                "bootstrap-shaped config must preserve generated node.env bytes",
+            )
+
+            runtime = stack / "current/bin/oasis7_chain_runtime"
+            runtime.parent.mkdir(parents=True)
+            runtime.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+            runtime.chmod(0o755)
+            launcher_env = os.environ.copy()
+            for key in set(LAUNCHER_REQUIRED_ENV) | {"APP_ROOT", "ENV_FILE", "RELEASE_LINK", "BIN"}:
+                launcher_env.pop(key, None)
+            launcher_env.update(
+                {
+                    "APP_ROOT": str(stack),
+                    "ENV_FILE": str(stack_config / "node.env"),
+                    "OASIS7_NODE_START_DRY_RUN": "1",
+                }
+            )
+            launcher = subprocess.run(
+                [str(START_NODE)],
+                cwd=stack,
+                env=launcher_env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(launcher.returncode, 0, launcher.stderr)
+            self.assertIn("runtime command:", launcher.stdout)
+            for flag in (
+                "--node-id",
+                "--world-id",
+                "--storage-profile",
+                "--status-bind",
+                "--node-role",
+                "--node-tick-ms",
+                "--pos-slot-duration-ms",
+                "--pos-ticks-per-slot",
+                "--pos-proposal-tick-phase",
+                "--pos-max-past-slot-lag",
+                "--config",
+                "--execution-world-dir",
+                "--execution-records-dir",
+                "--storage-root",
+                "--reward-runtime-epoch-duration-secs",
+                "--reward-points-per-credit",
+                "--node-gossip-bind",
+                "--network-tier-manifest",
+                "--genesis-validator-registry",
+                "--deployment-inventory",
+            ):
+                self.assertIn(flag, launcher.stdout, f"launcher dry-run omitted {flag}")
 
     def test_identity_import_is_explicit_byte_preserving_and_registry_bound(self) -> None:
         """The final stack must import, never regenerate, validator-47 identity."""
@@ -434,8 +562,8 @@ class Validator47HostStagingRedTests(unittest.TestCase):
             self.assertIn("triad-testnet-storage", env_path.read_text(encoding="utf-8"))
 
         source = BOOTSTRAP.read_text(encoding="utf-8")
-        self.assertTrue(VALIDATOR_47_NODE_ID in source, "RED: bootstrap has no validator-47 target")
-        self.assertTrue(VALIDATOR_47_SERVICE in source, "RED: bootstrap has no validator-47 service target")
+        self.assertTrue(VALIDATOR_47_NODE_ID in source, "contract: bootstrap has no validator-47 target")
+        self.assertTrue(VALIDATOR_47_SERVICE in source, "contract: bootstrap has no validator-47 service target")
         self.assertNotIn("systemctl start", source, "validator-47 staging must remain no-start")
         self.assertNotIn("systemctl enable", source, "validator-47 staging must remain disabled")
         for marker in (
@@ -453,7 +581,7 @@ class Validator47HostStagingRedTests(unittest.TestCase):
         ):
             self.assertTrue(
                 marker in source,
-                f"RED: bootstrap does not reject stale validator-47 binding field {marker}",
+                f"contract: bootstrap does not reject stale validator-47 binding field {marker}",
             )
 
     def test_readback_proves_disabled_inactive_no_process_and_no_listener(self) -> None:
@@ -548,7 +676,7 @@ class Validator47HostStagingRedTests(unittest.TestCase):
                     result = module.main(args)
                 except SystemExit as exc:
                     raise AssertionError(
-                        "RED: readback rejected the validator-47 role before proving "
+                        "contract: readback rejected the validator-47 role before proving "
                         f"the no-start contract (exit {exc.code})"
                     ) from None
             self.assertEqual(result, 0)
@@ -688,7 +816,7 @@ class Validator47HostStagingRedTests(unittest.TestCase):
         ):
             self.assertTrue(
                 marker in bootstrap_source or marker in readback_source,
-                f"RED: no-start receipt/readback does not prove {marker}",
+                f"contract: no-start receipt/readback does not prove {marker}",
             )
 
     def test_runbook_and_manual_define_executable_validator47_recovery_path(self) -> None:
@@ -712,12 +840,12 @@ class Validator47HostStagingRedTests(unittest.TestCase):
             for marker in command_markers:
                 self.assertTrue(
                     marker.lower() in source,
-                    f"RED: {path.name} lacks executable validator-47 command {marker}",
+                    f"contract: {path.name} lacks executable validator-47 command {marker}",
                 )
             for marker, pattern in contract_patterns.items():
                 self.assertTrue(
                     re.search(pattern, source),
-                    f"RED: {path.name} lacks executable validator-47 contract marker {marker}",
+                    f"contract: {path.name} lacks executable validator-47 contract marker {marker}",
                 )
 
 
