@@ -546,16 +546,30 @@ mod tests {
     };
     use oasis7::runtime::{GovernanceFinalitySignerRegistry, World as RuntimeWorld};
     use std::collections::BTreeMap;
+    use std::io::ErrorKind;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    static TEMP_DIR_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
     fn unique_temp_dir() -> std::path::PathBuf {
-        let suffix = SystemTime::now()
+        let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock")
             .as_nanos();
-        let path = std::env::temp_dir().join(format!("oasis7-runtime-authority-{suffix}"));
-        fs::create_dir_all(path.as_path()).expect("create temp dir");
-        path
+        let process_id = std::process::id();
+        for _ in 0..64 {
+            let sequence = TEMP_DIR_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "oasis7-runtime-authority-{process_id}-{timestamp}-{sequence}"
+            ));
+            match fs::create_dir(path.as_path()) {
+                Ok(()) => return path,
+                Err(error) if error.kind() == ErrorKind::AlreadyExists => continue,
+                Err(error) => panic!("create temp dir {} failed: {error}", path.display()),
+            }
+        }
+        panic!("create unique temp dir failed after 64 attempts");
     }
 
     fn loaded_manifest(path: &Path) -> LoadedNetworkTierManifest {
