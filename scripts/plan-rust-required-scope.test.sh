@@ -692,6 +692,35 @@ assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrappe
 assert_reason_contains "$viewer_launcher_wrapper_output" "viewer_launcher_wrapper:scripts/run-launcher-stack-local-mock-lane.test.sh"
 assert_reason_absent "$viewer_launcher_wrapper_output" "unclassified_or_unresolvable:"
 
+# The harness library is shared by launcher code and workflow-governance
+# entrypoints (new-task-worktree, PR preparation, and review closeout).  Its
+# isolated plan must retain both classifications so the governance contracts
+# run without dropping the launcher checks.
+worktree_harness_lib_output="$(plan_for_path scripts/worktree-harness-lib.sh)"
+assert_key_equals "$worktree_harness_lib_output" scope targeted
+assert_key_equals "$worktree_harness_lib_output" selected_capabilities \
+  'launcher_web;viewer_js_required;workflow_governance'
+assert_key_equals "$worktree_harness_lib_output" run_operational_contracts true
+assert_reason_contains "$worktree_harness_lib_output" \
+  "viewer_launcher_wrapper:scripts/worktree-harness-lib.sh"
+assert_reason_contains "$worktree_harness_lib_output" \
+  "workflow_governance:scripts/worktree-harness-lib.sh"
+assert_reason_absent "$worktree_harness_lib_output" "unclassified_or_unresolvable:"
+
+# The local launcher mock lane remains launcher-only; it must not inherit the
+# governance overlap added for the shared harness library.
+launcher_mock_lane_output="$(plan_for_path \
+  scripts/run-launcher-stack-local-mock-lane.test.sh)"
+assert_key_equals "$launcher_mock_lane_output" scope targeted
+assert_key_equals "$launcher_mock_lane_output" \
+  selected_capabilities 'launcher_web;viewer_js_required'
+assert_key_equals "$launcher_mock_lane_output" run_operational_contracts false
+assert_reason_contains "$launcher_mock_lane_output" \
+  "viewer_launcher_wrapper:scripts/run-launcher-stack-local-mock-lane.test.sh"
+assert_reason_absent "$launcher_mock_lane_output" \
+  "workflow_governance:scripts/run-launcher-stack-local-mock-lane.test.sh"
+assert_reason_absent "$launcher_mock_lane_output" "unclassified_or_unresolvable:"
+
 # The standalone viewer server is retained as a compatibility/debug entrypoint
 # outside the current launcher caller graph.  Keep its ambiguous/deprecated
 # path on the fail-closed full fallback until its ownership and active caller
