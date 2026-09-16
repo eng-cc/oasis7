@@ -168,18 +168,26 @@ fi
 
 source "$ROOT_DIR/scripts/agent-browser-lib.sh"
 mkdir -p "$OUT_DIR"
-RUN_ID="viewer-prompt-control-${CASE_ID}-$(date -u +%Y%m%dT%H%M%SZ)"
+RUN_ID="viewer-prompt-control-${CASE_ID}-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 LAUNCH_LOG="$OUT_DIR/launcher.log"
 LAUNCH_PID=""
-SESSION="${RUN_ID}"
+SESSION=""
 cleanup() {
+  local exit_code=$?
+  trap - EXIT INT TERM
   if [[ -n "$LAUNCH_PID" ]] && kill -0 "$LAUNCH_PID" 2>/dev/null; then
     kill "$LAUNCH_PID" 2>/dev/null || true
+    wait "$LAUNCH_PID" >/dev/null 2>&1 || true
   fi
+  if [[ -n "$SESSION" ]]; then
+    ab_session_cleanup "$SESSION" "$OUT_DIR" || ab_cmd "$SESSION" close >/dev/null 2>&1 || true
+  fi
+  exit "$exit_code"
 }
 trap cleanup EXIT
 
 ab_require
+SESSION="$(ab_session_begin "viewer-prompt-control-${CASE_ID}-${RUN_ID}" "$OUT_DIR")"
 
 if [[ -z "$GAME_URL" ]]; then
   if ((${#STACK_ARGS[@]} > 0)); then
@@ -237,9 +245,10 @@ PY
 )"
 
 ab_open "$SESSION" 1 "$GAME_URL"
-ab_cmd "$SESSION" wait --load-state networkidle >/dev/null
-ab_cmd "$SESSION" wait --text "Advanced Prompt Settings" --timeout "$ACTION_TIMEOUT_MS" >/dev/null
-ab_eval "$SESSION" 'window.__AW_TEST__.getState()' >"$OUT_DIR/state-before.json"
+ab_read_retry "$SESSION" wait --load networkidle >/dev/null
+AGENT_BROWSER_DEFAULT_TIMEOUT="$ACTION_TIMEOUT_MS" \
+  ab_read_retry "$SESSION" wait --text "Advanced Prompt Settings" >/dev/null
+ab_read_eval "$SESSION" 'window.__AW_TEST__.getState()' >"$OUT_DIR/state-before.json"
 
 # All control changes below are visible browser actions. The test API is used
 # only for state readback and artifact capture, never to select, type, submit,
@@ -250,11 +259,11 @@ ab_cmd "$SESSION" click '.pixel-world-focus-control--primary' >/dev/null 2>&1 ||
 ab_cmd "$SESSION" click 'details.command-surface__advanced-details > summary' >/dev/null 2>&1 || true
 ab_cmd "$SESSION" fill "#prompt-short" "$PROMPT_GOAL" >/dev/null
 ab_cmd "$SESSION" click 'button[data-prompt-action="preview"]' >/dev/null
-ab_eval "$SESSION" 'window.__AW_TEST__.getState()' >"$OUT_DIR/state-after-preview.json"
+ab_read_eval "$SESSION" 'window.__AW_TEST__.getState()' >"$OUT_DIR/state-after-preview.json"
 ab_cmd "$SESSION" click 'button[data-prompt-action="apply"]' >/dev/null
-ab_eval "$SESSION" 'window.__AW_TEST__.getState()' >"$OUT_DIR/state-after-apply.json"
+ab_read_eval "$SESSION" 'window.__AW_TEST__.getState()' >"$OUT_DIR/state-after-apply.json"
 ab_cmd "$SESSION" click 'button[data-prompt-action="rollback"]' >/dev/null
-ab_eval "$SESSION" 'window.__AW_TEST__.getState()' >"$OUT_DIR/state-after-rollback.json"
+ab_read_eval "$SESSION" 'window.__AW_TEST__.getState()' >"$OUT_DIR/state-after-rollback.json"
 ab_screenshot "$SESSION" "$OUT_DIR/prompt-control.png" >/dev/null
 ab_cmd "$SESSION" snapshot >/dev/null 2>&1 || true
 

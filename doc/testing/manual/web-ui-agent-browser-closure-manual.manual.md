@@ -1,6 +1,6 @@
 # oasis7：Web UI agent-browser 闭环测试操作手册
 
-审计轮次: 10
+审计轮次: 11
 
 ## 文档定位
 - 本文件是 Web UI `agent-browser` 闭环的 canonical `*.manual.md` 操作手册。
@@ -14,10 +14,19 @@
 - 若目标是纯本地真实 LetAI provider-backed 游戏试玩或复现 `agent_chat`，先使用 `./scripts/run-local-letai-game-test.sh --local-world-playtest` 启动完整 bridge + runtime/game/local-standalone-chain 栈；下方 live server + `run-viewer-web.sh` 步骤只作为 Viewer/debug 闭环。该入口不连接 formal/public testnet；纯本地测试不等同于“本地启动 test 环境”。
 
 ## 前置条件
-- 已安装 `agent-browser`
+- 已安装并验证当前仓库基线 `agent-browser 0.37.1`（`agent-browser --version`）
 - 已安装 Node.js / npm
 - 已安装 `python3`
-- 建议先执行一次 `agent-browser close-all`
+- 首次安装或浏览器二进制异常时执行 `agent-browser install`；daemon/session 异常优先执行 `agent-browser doctor --offline --quick --json`
+- 每轮必须使用 worktree-scoped named session；禁止使用默认 session 或影响其他任务的全局清理
+
+### agent-browser 会话生命周期约定
+
+- 运行前使用 `agent-browser session id --scope worktree --prefix <purpose>` 生成本轮唯一 session；同时保留 `session info --json` 作为 daemon/浏览器诊断证据。需要核对并行任务时使用 `agent-browser session list --json`，不得猜测或复用其他任务的 session。
+- 所有命令显式传 `--session "$AB_SESSION"`，不要依赖 unnamed/default session。并行 actor 使用不同 session；共享 CDP 时额外使用一次性 `--pin-tab`，避免 tab fallback。
+- `open` 后先使用 `wait --load domcontentloaded`，再使用 `wait --fn` 或 `wait --text` 等应用就绪信号；长连接 Viewer 不把 `networkidle` 作为唯一就绪条件。
+- 退出路径必须通过 `trap` 只关闭本轮拥有的 `$AB_SESSION`。禁止全局关闭其他任务 session；回收失败必须保留诊断并标为 blocker。
+- 需要持久登录时使用 `--restore --restore-save auto`，并用 `--restore-check-url`、`--restore-check-text` 或 `--restore-check-fn` 校验恢复结果；一次性验收默认不启用 restore。
 
 ## 纯本地真实 LLM 游戏测试入口
 ```bash
@@ -150,16 +159,28 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 
 ### 3. 打开页面并采样
 ```bash
+set -euo pipefail
 command -v agent-browser >/dev/null || { echo "missing agent-browser" >&2; exit 1; }
+agent-browser --version
+agent-browser doctor --offline --quick --json
+AB_SESSION="$(agent-browser session id --scope worktree --prefix viewer-manual)"
+export AB_SESSION
+cleanup() {
+  local status=$?
+  trap - EXIT INT TERM
+  agent-browser --session "$AB_SESSION" close >/dev/null 2>&1 || true
+  exit "$status"
+}
+trap cleanup EXIT INT TERM
 mkdir -p output/playwright/viewer
-agent-browser close-all || true
-agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&render_mode=viewer&test_api=1"
-agent-browser wait --load networkidle
-agent-browser snapshot -i
-agent-browser eval "JSON.stringify(window.__AW_TEST__?.getState?.() ?? null)" | tee output/playwright/viewer/state.json
-agent-browser console | tee output/playwright/viewer/console.log
-agent-browser screenshot output/playwright/viewer/viewer-web.png
-agent-browser close
+agent-browser --session "$AB_SESSION" --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&render_mode=viewer&test_api=1"
+agent-browser --session "$AB_SESSION" wait --load domcontentloaded
+agent-browser --session "$AB_SESSION" wait --fn "typeof window.__AW_TEST__ === 'object'"
+agent-browser --session "$AB_SESSION" session info --json | tee output/playwright/viewer/session-info.json
+agent-browser --session "$AB_SESSION" snapshot -i
+agent-browser --session "$AB_SESSION" eval "JSON.stringify(window.__AW_TEST__?.getState?.() ?? null)" | tee output/playwright/viewer/state.json
+agent-browser --session "$AB_SESSION" console | tee output/playwright/viewer/console.log
+agent-browser --session "$AB_SESSION" screenshot output/playwright/viewer/viewer-web.png
 ```
 
 ## 推荐回归脚本
@@ -203,6 +224,7 @@ OASIS7_RUNTIME_AGENT_CHAT_ECHO=1
 - F3 长时间无推进：优先使用 `viewer-software-safe-step-regression.sh` 判断是正常 blocker 还是异常卡死。
 - F4 URL 被 shell 截断：带 `&` 的 URL 一律加引号。
 - F5 `connecting` 且 `logicalTime=0`：读取 `window.__AW_TEST__.getState().lastError` / `errorCount`，归档 screenshot、console 与 state；WebGL/SwiftShader fatal 按 S6 环境/图形失败分类，已知 fatal 最多允许一次自动 reload，不能当作 gameplay 进展。
+- F6 `agent-browser` daemon/IPC 读取失败（如 `Resource temporarily unavailable`）：保留 `session info --json` 与命令日志，确认本轮 session 仍存在后只重建本轮 session；不得重放非幂等 UI 动作，也不得全局关闭其他 session。
 
 ## 发布与延伸入口
 - 系统总手册：`testing-manual.md`

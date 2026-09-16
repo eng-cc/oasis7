@@ -11,7 +11,7 @@ BUNDLE_DIR=""
 PROFILE="packaging"
 REBUILD=0
 OPEN_HEADED=0
-SESSION_NAME="producer-playtest"
+SESSION_NAME=""
 STARTUP_TIMEOUT_SECS=120
 STARTUP_LOG=""
 STACK_ARGS=()
@@ -42,7 +42,7 @@ Options:
                            with default hardware WebGL args, and close that browser session when
                            the script exits
   --startup-log <path>     Override startup log path used by --open-headed mode
-  --session <name>         `agent-browser` session name for `--open-headed` (default: producer-playtest)
+  --session <name>         optional owned session id from a parent runner (default: scoped generated id)
   --startup-timeout <secs> Wait timeout for stack URL when `--open-headed` is used (default: 120)
   -h, --help               Show this help
 
@@ -98,7 +98,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ "$PROFILE" == "packaging" || "$PROFILE" == "dev" ]] || { echo "error: --profile must be packaging or dev" >&2; exit 2; }
-[[ -n "$SESSION_NAME" ]] || { echo "error: --session cannot be empty" >&2; exit 2; }
 [[ "$STARTUP_TIMEOUT_SECS" =~ ^[0-9]+$ ]] && [[ "$STARTUP_TIMEOUT_SECS" -gt 0 ]] || { echo "error: --startup-timeout must be a positive integer" >&2; exit 2; }
 
 if [[ -z "$BUNDLE_DIR" ]]; then
@@ -135,7 +134,7 @@ fi
 ab_require
 WORKTREE_HARNESS_ROOT="$(wh_harness_root "$ROOT_DIR" "$(wh_worktree_id)")"
 mkdir -p "$WORKTREE_HARNESS_ROOT"
-RUN_ID="$(date +%Y%m%d-%H%M%S)"
+RUN_ID="$(date +%Y%m%d-%H%M%S)-$$"
 if [[ -n "$STARTUP_LOG" ]]; then
   if [[ "$STARTUP_LOG" != /* ]]; then
     RUN_LOG="$ROOT_DIR/$STARTUP_LOG"
@@ -147,18 +146,25 @@ else
 fi
 mkdir -p "$(dirname "$RUN_LOG")"
 STACK_PID=""
-BROWSER_OPENED=0
 META_FILE="$WORKTREE_HARNESS_ROOT/producer-launch-${RUN_ID}.meta"
+
+if [[ -z "$SESSION_NAME" ]]; then
+  SESSION_NAME="$(ab_session_begin "producer-playtest-${RUN_ID}" "$WORKTREE_HARNESS_ROOT")"
+else
+  # A parent runner may hand us an already generated, owned session.  Adopt
+  # that exact id so the child and parent observe and close one browser.
+  ab_session_adopt "$SESSION_NAME" "$WORKTREE_HARNESS_ROOT" >/dev/null
+fi
 
 cleanup() {
   local exit_code=$?
   trap - EXIT INT TERM
+  if [[ -n "$SESSION_NAME" ]]; then
+    ab_session_cleanup "$SESSION_NAME" "$WORKTREE_HARNESS_ROOT" >/dev/null 2>&1 || true
+  fi
   if [[ -n "$STACK_PID" ]] && kill -0 "$STACK_PID" >/dev/null 2>&1; then
     kill "$STACK_PID" >/dev/null 2>&1 || true
     wait "$STACK_PID" >/dev/null 2>&1 || true
-  fi
-  if [[ "$BROWSER_OPENED" == "1" ]]; then
-    ab_cmd "$SESSION_NAME" close >/dev/null 2>&1 || true
   fi
   exit "$exit_code"
 }
@@ -199,8 +205,7 @@ else
   echo "info: agent-browser args: <none>"
 fi
 ab_open "$SESSION_NAME" 1 "$GAME_URL"
-BROWSER_OPENED=1
-ab_cmd "$SESSION_NAME" wait --load networkidle >/dev/null 2>&1 || true
+ab_read_retry "$SESSION_NAME" wait --load networkidle >/dev/null 2>&1 || true
 
 echo "info: browser session: $SESSION_NAME"
 echo "info: startup log: $RUN_LOG"

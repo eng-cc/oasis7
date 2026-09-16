@@ -13,8 +13,31 @@ fake_bin="$tmp_root/bin"
 mkdir -p "$fake_bin"
 cat >"$fake_bin/agent-browser" <<'EOF'
 #!/usr/bin/env bash
-printf 'agent-browser must not be invoked during contract-only verification\n' >&2
-exit 91
+set -euo pipefail
+
+# Minimal 0.37.1 lifecycle fixture.  The real runner owns the generated
+# session and asks the CLI for diagnostics before closing that exact session;
+# keep those commands observable without contacting a browser daemon.
+if [[ "${1:-}" == "session" && "${2:-}" == "id" ]]; then
+  printf '%s\n' "fixture-prompt-control-session"
+  exit 0
+fi
+if [[ "${1:-}" == "session" && "${2:-}" == "info" ]]; then
+  printf '%s\n' '{"session":"fixture-prompt-control-session","status":"open"}'
+  exit 0
+fi
+if [[ "${1:-}" == "tab" && "${2:-}" == "list" ]]; then
+  printf '%s\n' '[]'
+  exit 0
+fi
+if [[ "${1:-}" == "record" && "${2:-}" == "stop" ]]; then
+  exit 0
+fi
+if [[ "${1:-}" == "close" ]]; then
+  exit 0
+fi
+# All other calls are harmless no-ops for this blocked-status launch probe.
+exit 0
 EOF
 chmod +x "$fake_bin/agent-browser"
 
@@ -99,6 +122,11 @@ printf '%s\n' '- URL: http://127.0.0.1:9'
 EOF
   cat >"$sandbox/bin/agent-browser" <<'EOF'
 #!/usr/bin/env bash
+if [[ " $* " == *" session id "* ]]; then
+  printf '%s\n' 'viewer-prompt-control-test-session'
+elif [[ " $* " == *" session info "* || " $* " == *" tab list "* ]]; then
+  printf '%s\n' '{"success":true,"data":{}}'
+fi
 exit 0
 EOF
   chmod +x "$sandbox/scripts/run-launcher-stack.sh" "$sandbox/bin/agent-browser"

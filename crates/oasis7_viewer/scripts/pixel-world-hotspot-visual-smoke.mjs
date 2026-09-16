@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { completionEvidence } from './pixel-world-completion-evidence.mjs';
+import { createOwnedSessionLifecycle } from "./agent-browser-visual-runner-lifecycle.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const viewerRoot = resolve(scriptDir, "..");
@@ -32,7 +33,9 @@ function serveFile(request, response) {
   try { if (!statSync(filePath).isFile()) throw new Error("not file"); response.writeHead(200, { "Content-Type": contentType(filePath), "Cache-Control": "no-store" }); response.end(readFileSync(filePath)); } catch { response.writeHead(404); response.end("not found"); }
 }
 function ensureBrowser() { if (spawnSync(agentBrowserBin, ["--version"], { stdio: "ignore" }).status !== 0) fail(`missing required browser automation command: ${agentBrowserBin}`); }
-function closeBrowser() { spawnSync(agentBrowserBin, ["--session", session, "close"], { stdio: "ignore", timeout: 10_000 }); }
+const browserLifecycle = createOwnedSessionLifecycle({ command: agentBrowserBin, session });
+const closeBrowser = browserLifecycle.close;
+const prepareBrowserSession = browserLifecycle.prepare;
 function runBrowser(args, options = {}) {
   return new Promise((resolveRun, rejectRun) => {
     const child = spawn(agentBrowserBin, ["--session", session, ...args], { stdio: ["pipe", "pipe", "pipe"] }); let stdout = ""; let stderr = "";
@@ -187,7 +190,7 @@ try {
   await new Promise((resolveServer) => server.listen(0, "127.0.0.1", resolveServer));
   const address = server.address();
   const url = `http://127.0.0.1:${address.port}/viewer.html?test_api=1&connect=0&locale=en&pixel_world_visual_fixture=${fixtureName}`;
-  summary.url = url; closeBrowser(); await browserJson(["open", url], { timeout: 45_000 });
+  summary.url = url; prepareBrowserSession(); await browserJson(["open", url], { timeout: 45_000 });
   for (const [name, width, height] of [["desktop", 1440, 1000], ["narrow", 390, 844], ...((completionRun || routeMotionEvidence) ? [['compact',320,568]] : [])]) {
     await browserJson(["set", "viewport", String(width), String(height)]);
     if (name !== 'desktop') await browserJson(['open',url]);
@@ -256,7 +259,7 @@ try {
     // The viewport correction intentionally moves the world for visible
     // hotspot evidence. Reload the fixture before the independent selection
     // projection check so its agent target starts from the normal camera fit.
-    closeBrowser();
+    prepareBrowserSession();
     await browserJson(['open', url], { timeout: 45_000 });
     await browserJson(['set', 'viewport', String(width), String(height)]);
     await evalJson(String.raw`(async()=>{const deadline=Date.now()+5000; while(Date.now()<deadline){const s=${pageStateScript()}; if(s.rendererReady && s.runtimeStatus==='ready') return true; await new Promise(r=>setTimeout(r,100));} throw new Error('renderer not ready after viewport evidence reset');})()`);

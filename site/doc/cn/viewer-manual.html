@@ -81,16 +81,29 @@
           <li><code>./scripts/viewer-software-safe-chat-regression.sh --headed</code></li>
         </ul>
         <p>若要手工采样，可执行：</p>
-        <pre><code>command -v agent-browser >/dev/null || { echo "missing agent-browser" >&2; exit 1; }
+        <p>使用并通过 <code>agent-browser 0.37.1</code> 的 <code>--version</code> 验证，先运行 <code>doctor --offline --quick --json</code>；每轮创建 worktree-scoped named session，必要时用 <code>session info/list --json</code> 记录诊断，并只关闭本轮自有 session。</p>
+        <pre><code>set -euo pipefail
+command -v agent-browser >/dev/null || { echo "missing agent-browser" >&2; exit 1; }
+agent-browser --version
+agent-browser doctor --offline --quick --json
+AB_SESSION="$(agent-browser session id --scope worktree --prefix viewer)"
+export AB_SESSION
+cleanup() {
+  local status=$?
+  trap - EXIT INT TERM
+  agent-browser --session "$AB_SESSION" close &gt;/dev/null 2&gt;&amp;1 || true
+  exit "$status"
+}
+trap cleanup EXIT INT TERM
 mkdir -p output/playwright/viewer
-agent-browser close-all || true
-agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&amp;render_mode=viewer&amp;test_api=1"
-agent-browser wait --load networkidle
-agent-browser snapshot -i
-agent-browser eval "JSON.stringify(window.__AW_TEST__?.getState?.() ?? null)"
-agent-browser console | tee output/playwright/viewer/console.log
-agent-browser screenshot output/playwright/viewer/viewer-web.png
-agent-browser close</code></pre>
+agent-browser --session "$AB_SESSION" --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&amp;render_mode=viewer&amp;test_api=1"
+agent-browser --session "$AB_SESSION" wait --load domcontentloaded
+agent-browser --session "$AB_SESSION" wait --fn "typeof window.__AW_TEST__ === 'object'"
+agent-browser --session "$AB_SESSION" session info --json | tee output/playwright/viewer/session-info.json
+agent-browser --session "$AB_SESSION" snapshot -i
+agent-browser --session "$AB_SESSION" eval "JSON.stringify(window.__AW_TEST__?.getState?.() ?? null)"
+agent-browser --session "$AB_SESSION" console | tee output/playwright/viewer/console.log
+agent-browser --session "$AB_SESSION" screenshot output/playwright/viewer/viewer-web.png</code></pre>
         <p>最小通过标准：页面加载成功、<code>__AW_TEST__</code> 可用、<code>renderMode=viewer</code>（或兼容 alias <code>software_safe</code>）、并产出截图与日志。</p>
       </section>
 

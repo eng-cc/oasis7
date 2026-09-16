@@ -4,6 +4,7 @@ import { readFileSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, extname, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
+import { createOwnedSessionLifecycle } from "./agent-browser-visual-runner-lifecycle.mjs";
 
 // QA-owned S6 browser fixture. It exercises the player-visible Viewer shell
 // with a deterministic local bridge and fake world-feed transport. It does
@@ -124,9 +125,9 @@ async function evalJson(source) {
   return typeof result === "string" ? JSON.parse(result) : result;
 }
 
-function closeBrowser() {
-  spawnSync(browserBin, ["--session", session, "close"], { stdio: "ignore", timeout: 10_000 });
-}
+const browserLifecycle = createOwnedSessionLifecycle({ command: browserBin, session });
+const closeBrowser = browserLifecycle.close;
+const prepareBrowserSession = browserLifecycle.prepare;
 
 function contentType(pathname) {
   const type = extname(pathname);
@@ -1226,7 +1227,7 @@ async function main() {
   const address = server.address();
   const port = address.port;
   try {
-    closeBrowser();
+    prepareBrowserSession();
     if (onlyOffscreen) {
       await runOffscreenRegression(port);
     } else if (onlyThirdReview) {

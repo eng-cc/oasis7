@@ -1,6 +1,6 @@
 # oasis7 Viewer 使用说明书
 
-审计轮次: 10
+审计轮次: 11
 
 ## 文档定位
 - 本文件是 Viewer 使用说明的 canonical `*.manual.md` 入口。
@@ -73,7 +73,15 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 ### 3）前置依赖
 - Node.js / npm
 - `python3`
-- 若要跑 agent-browser 闭环，还需安装 `agent-browser`
+- 若要跑 agent-browser 闭环，使用并通过 `agent-browser 0.37.1` 的 `agent-browser --version` 验证；首次安装浏览器二进制执行 `agent-browser install`
+- 每轮闭环先执行 `agent-browser doctor --offline --quick --json`；若 daemon/session 异常，只诊断并回收本轮自有 session，不影响其他任务
+- 每轮 agent-browser 操作必须使用 worktree-scoped named session；禁止使用默认 session 或全局清理
+
+### agent-browser 会话生命周期
+- 创建：`AB_SESSION="$(agent-browser session id --scope worktree --prefix viewer)"`，并把 `AB_SESSION` 传给本轮的每一条命令。
+- 记录：执行 `agent-browser --session "$AB_SESSION" session info --json`；需要审计并行任务时使用 `agent-browser session list --json`，不要猜测或复用其他任务的 session。
+- 等待：页面加载使用 `wait --load domcontentloaded`，应用就绪使用 `wait --fn` / `wait --text`；Viewer 的长连接不以 `networkidle` 作为唯一稳定条件。
+- 回收：headed session 不依赖默认 idle 回收；脚本必须用 `trap` 在退出时显式关闭本轮自有 session。共享 CDP tab 时先使用 `--pin-tab`，仍由创建者负责关闭。
 
 ## 页面能力
 - 当前页面聚焦 `viewer` 实时观察与正式玩法摘要。
@@ -357,16 +365,28 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 
 终端 C：
 ```bash
+set -euo pipefail
 command -v agent-browser >/dev/null || { echo "missing agent-browser" >&2; exit 1; }
+agent-browser --version
+agent-browser doctor --offline --quick --json
+AB_SESSION="$(agent-browser session id --scope worktree --prefix viewer-manual)"
+export AB_SESSION
+cleanup() {
+  local status=$?
+  trap - EXIT INT TERM
+  agent-browser --session "$AB_SESSION" close >/dev/null 2>&1 || true
+  exit "$status"
+}
+trap cleanup EXIT INT TERM
 mkdir -p output/playwright/viewer
-agent-browser close-all || true
-agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&render_mode=viewer&test_api=1"
-agent-browser wait --load networkidle
-agent-browser snapshot -i
-agent-browser eval "JSON.stringify(window.__AW_TEST__?.getState?.() ?? null)"
-agent-browser console | tee output/playwright/viewer/console.log
-agent-browser screenshot output/playwright/viewer/viewer-web.png
-agent-browser close
+agent-browser --session "$AB_SESSION" --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&render_mode=viewer&test_api=1"
+agent-browser --session "$AB_SESSION" wait --load domcontentloaded
+agent-browser --session "$AB_SESSION" wait --fn "typeof window.__AW_TEST__ === 'object'"
+agent-browser --session "$AB_SESSION" session info --json | tee output/playwright/viewer/session-info.json
+agent-browser --session "$AB_SESSION" snapshot -i
+agent-browser --session "$AB_SESSION" eval "JSON.stringify(window.__AW_TEST__?.getState?.() ?? null)"
+agent-browser --session "$AB_SESSION" console | tee output/playwright/viewer/console.log
+agent-browser --session "$AB_SESSION" screenshot output/playwright/viewer/viewer-web.png
 ```
 
 ### 推荐自动化脚本
@@ -400,7 +420,7 @@ agent-browser close
 - 页面空白：确认 `run-viewer-web.sh` 已完成构建并监听目标端口。
 - 连接失败：确认 `oasis7_viewer_live` 已启动，且 `ws=` 参数与 `--web-bind` 一致。
 - 无法进入正式玩法：检查 LLM provider 配置；若显式 `--no-llm`，只允许 observer/debug。
-- `agent-browser` 失败：先检查 `agent-browser --version` 与浏览器依赖。
+- `agent-browser` 失败：先运行 `agent-browser --version`、`agent-browser doctor --offline --quick --json` 与 `agent-browser --session <owned-session> session info --json`；若是 daemon/IPC 读取失败，只重建本轮 session，不重放非幂等动作，也不影响其他任务 session。
 - 有状态但不推进：优先跑 `viewer-software-safe-step-regression.sh`，确认是正常推进还是显式 blocker。
 - `test_api=1` 下停在 `connecting` 且 `logicalTime=0`：立即检查 `getState().lastError` / `errorCount` 并归档 state、console、screenshot。已知 WebGL/SwiftShader fatal 最多自动 reload 一次；再次失败是 S6 环境/图形 blocker，不得当作 gameplay 证据。只有确认 Web 图形阻塞后，native 才可作为诊断 fallback。
 - 如果只看到 `--no-llm` 截图证据：不要把它当成 formal gameplay PASS；回到 `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md` 看 LLM-enabled follow-up 结论。

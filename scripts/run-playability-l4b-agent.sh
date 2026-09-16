@@ -19,7 +19,7 @@ Options:
   --l4-manifest <path>          Existing `prepare-playability-l4-review.sh` manifest.json
   --artifact-dir <path>         Existing or new artifact root to write evidence under
   --bundle-dir <path>           Forwarded to `run-producer-playtest.sh`
-  --session <name>              `agent-browser` session name (default: producer-playtest)
+  --session <name>              Optional `agent-browser` session prefix (default: scoped generated id)
   --startup-timeout <secs>      Wait timeout for stack/browser readiness (default: 180)
   --step-wait-ms <ms>           Max wait window for `推进一步` to reach a completed world delta (default: 10000)
   --submit-wait-ms <ms>         Max wait window for gameplay submit to reach final `ack` (default: 60000)
@@ -36,11 +36,11 @@ Examples:
 USAGE
 }
 
-RUN_ID="$(date +%Y%m%d-%H%M%S)"
+RUN_ID="$(date +%Y%m%d-%H%M%S)-$$"
 L4_MANIFEST=""
 ARTIFACT_DIR=""
 BUNDLE_DIR=""
-SESSION_NAME="producer-playtest"
+SESSION_NAME=""
 AUTOMATION_SESSION=""
 PRIMARY_SESSION=""
 STARTUP_TIMEOUT_SECS=180
@@ -116,9 +116,6 @@ done
 
 ab_require
 wh_require_git_worktree
-[[ -n "$SESSION_NAME" ]] || { echo "error: --session cannot be empty" >&2; exit 2; }
-PRIMARY_SESSION="$SESSION_NAME"
-AUTOMATION_SESSION="${SESSION_NAME}-l4b-driver"
 [[ -n "$SUBMIT_ACTION_ID" ]] || { echo "error: --submit-action cannot be empty" >&2; exit 2; }
 [[ "$STARTUP_TIMEOUT_SECS" =~ ^[0-9]+$ && "$STARTUP_TIMEOUT_SECS" -gt 0 ]] || { echo "error: --startup-timeout must be a positive integer" >&2; exit 2; }
 [[ "$STEP_WAIT_MS" =~ ^[0-9]+$ && "$STEP_WAIT_MS" -ge 0 ]] || { echo "error: --step-wait-ms must be a non-negative integer" >&2; exit 2; }
@@ -169,6 +166,10 @@ mkdir -p "$ARTIFACT_DIR"
 EVIDENCE_DIR="$ARTIFACT_DIR/evidence/l4b-agent-$RUN_ID"
 mkdir -p "$EVIDENCE_DIR"
 
+SESSION_NAME="$(ab_session_begin "${SESSION_NAME:-producer-playtest}-${RUN_ID}" "$ARTIFACT_DIR")"
+PRIMARY_SESSION="$SESSION_NAME"
+AUTOMATION_SESSION="$(ab_session_begin "${SESSION_NAME}-l4b-driver" "$EVIDENCE_DIR")"
+
 WRAPPER_LOG="$EVIDENCE_DIR/run-producer-playtest.log"
 STARTUP_LOG="$EVIDENCE_DIR/producer-launch.log"
 SNAPSHOT_PATH="$EVIDENCE_DIR/interactive-snapshot.txt"
@@ -191,7 +192,10 @@ cleanup() {
     wait "$PLAYTEST_PID" >/dev/null 2>&1 || true
   fi
   if [[ -n "$AUTOMATION_SESSION" ]]; then
-    ab_cmd "$AUTOMATION_SESSION" close >/dev/null 2>&1 || true
+    ab_session_cleanup "$AUTOMATION_SESSION" "$EVIDENCE_DIR" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$PRIMARY_SESSION" ]]; then
+    ab_session_cleanup "$PRIMARY_SESSION" "$ARTIFACT_DIR" >/dev/null 2>&1 || true
   fi
   exit "$exit_code"
 }
@@ -240,7 +244,7 @@ capture_state() {
   local out_path=$1
   local script=${2:-'JSON.stringify(window.__AW_TEST__ ? window.__AW_TEST__.getState() : null)'}
   local raw normalized
-  raw=$(ab_eval "$SESSION_NAME" "$script")
+  raw=$(ab_read_eval "$SESSION_NAME" "$script")
   normalized=$(normalize_ab_payload "$raw")
   write_pretty_json "$normalized" "$out_path"
   printf '%s\n' "$normalized"
@@ -386,7 +390,7 @@ for ((i = 0; i < STARTUP_TIMEOUT_SECS; i++)); do
   if [[ -n "$CURRENT_URL" ]]; then
     if [[ "$AUTOMATION_OPENED" != "1" ]]; then
       ab_open "$AUTOMATION_SESSION" 0 "$CURRENT_URL" >>"$WRAPPER_LOG" 2>&1 || true
-      ab_cmd "$AUTOMATION_SESSION" wait --load networkidle >/dev/null 2>&1 || true
+      ab_read_retry "$AUTOMATION_SESSION" wait --load networkidle >/dev/null 2>&1 || true
       AUTOMATION_OPENED=1
     fi
     SESSION_NAME="$AUTOMATION_SESSION"
@@ -412,7 +416,7 @@ fi
 
 SESSION_NAME="$AUTOMATION_SESSION"
 
-SNAPSHOT_OUTPUT="$(ab_cmd "$SESSION_NAME" snapshot -i)"
+SNAPSHOT_OUTPUT="$(ab_read_retry "$SESSION_NAME" snapshot -i)"
 printf '%s\n' "$SNAPSHOT_OUTPUT" >"$SNAPSHOT_PATH"
 STEP_REF="$(extract_button_ref "$SNAPSHOT_PATH" "推进一步")"
 if [[ -z "$STEP_REF" ]]; then
@@ -448,8 +452,8 @@ ab_screenshot "$SESSION_NAME" "$SCREENSHOT_PATH" >>"$WRAPPER_LOG" 2>&1 || true
 
 STACK_LOG_DIR="$(extract_log_value "info: stack logs: ")"
 STARTUP_LOG_REPORTED="$(extract_log_value "info: startup log: ")"
-PLAYER_BROWSER_URL="$(ab_cmd "$SESSION_NAME" get url 2>/dev/null || true)"
-TITLE="$(ab_cmd "$SESSION_NAME" get title 2>/dev/null || true)"
+PLAYER_BROWSER_URL="$(ab_read_retry "$SESSION_NAME" get url 2>/dev/null || true)"
+TITLE="$(ab_read_retry "$SESSION_NAME" get title 2>/dev/null || true)"
 
 SUMMARY_PAYLOAD="$(python3 - "$INITIAL_STATE_PATH" "$STEP_STATE_PATH" "$SUBMIT_IMMEDIATE_PATH" "$FINAL_STATE_PATH" "$PLAYER_BROWSER_URL" "$TITLE" "$STACK_LOG_DIR" "$STARTUP_LOG_REPORTED" "$SCREENSHOT_PATH" "$SESSION_NAME" "$SUBMIT_ACTION_ID" "$PERSONA_ID" "$CHANGE_SCOPE" "$TARGET_CLAIM" "$STARTED_AT_UNIX_MS" <<'PY'
 from __future__ import annotations

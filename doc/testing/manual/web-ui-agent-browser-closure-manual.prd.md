@@ -4,7 +4,7 @@
 - 对应设计文档: `doc/testing/manual/web-ui-playwright-closure-manual.design.md`
 - 可变任务状态与历史: GitHub task issue evidence comments
 
-审计轮次: 9
+审计轮次: 11
 
 ## 1. Executive Summary
 - Problem Statement: Web UI 验收若缺少统一启动、采样、门禁与故障分级，且未区分 Viewer 页面与 launcher 控制面的驱动优先级，容易出现“看起来可用但证据不可复现”的假通过。
@@ -50,7 +50,7 @@
 | GPU 硬门禁 | `--headed`、`--use-angle=gl,--ignore-gpu-blocklist`、renderer/console 关键字 (`SwiftShader` 等) | 采样前执行硬门禁检查 | `gating -> pass/fail` | headed 若仍是软件渲染也 fail | 发布/测试共同遵循 |
 | agent-browser 采样 | `snapshot`、`eval`、`console`、`screenshot`、`getState` | 基于 `__AW_TEST__` 执行语义步骤 | `sampling -> evidence` | 至少 1 张截图 + state 字段完整 | 执行者产出，发布者审阅 |
 | launcher 控制面驱动 | `/api/gui-agent/capabilities`、`/api/gui-agent/state`、`/api/gui-agent/action`、页面字段快照 | 先通过 GUI Agent 执行动作，再用浏览器页面校验结果 | `action_requested -> applied -> verified` | launcher 控制面默认优先，不得被 canvas 直点替代 | 执行者与发布负责人共同审阅 |
-| 会话防抖 | `close-all`、fail-fast 预检查 | 每轮清理残留会话并快速失败 | `cleanup -> opened -> stable` | 先清会话后 open，减少残留干扰 | 执行者维护 |
+| 会话隔离与回收 | worktree-scoped named session、`session id/info/list`、owned `close`、fail-fast 预检查 | 每轮创建并回收自身 session；共享 CDP tab 时显式 pin | `created -> opened -> stable -> closed` | 先 doctor/session info，再 open；只回收自身 session，避免跨任务干扰 | 执行者维护 |
 | 发行验收脚本 | `viewer-primary-web-entry-regression.sh`、`viewer-software-safe-step-regression.sh`、`viewer-software-safe-chat-regression.sh` | 一键执行当前 Web 门禁并输出总结 | `running -> summarized` | 先主入口，再 gameplay/blocker，再 prompt/chat | 发布负责人触发 |
 | software_safe prompt/chat 回归 | `scripts/viewer-software-safe-chat-regression.sh`、`chatHistory`、`lastPromptFeedback`、`lastChatFeedback` | 强制进入 `software_safe` 并执行 apply/rollback/chat smoke | `bootstrapped -> acked -> evidenced` | 先验 apply/rollback/chat ack，再看 `agent_spoke` 是否在时限内出现 | QA/Viewer owner 共审 |
 | 故障分级 | F1~F4 签名、处置动作、证据清单 | 识别错误并匹配处置流程 | `detected -> triaged -> archived` | 连接问题优先于可玩性判定 | 值守与维护者执行 |
@@ -64,13 +64,14 @@
   - AC-7: 手册必须显式声明 `Viewer(agent-browser)` 与 `launcher(GUI Agent first)` 的执行边界，不得让执行者误把 launcher 控制面当作纯 agent-browser 页面驱动对象。
   - AC-8: `scripts/viewer-software-safe-chat-regression.sh` 能产出 `software-safe-chat-summary.json/md`、浏览器环境快照与状态快照，稳定覆盖 prompt apply/rollback、chat ack 与玩家出站消息流；若在时限内未观测到 `agent_spoke`，必须输出可追溯 warning/fail 签名。
   - AC-9: 当 runtime 开启 `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1` 时，手工或自动化 Web 闭环都能观测到一条标准 `AgentSpoke` 事件进入 `chatHistory`，且不依赖自然 LLM 回复。
+  - AC-10: 所有 live agent-browser 流程必须使用 worktree-scoped named session，提供版本/doctor/session 诊断并显式关闭本轮自有 session；不得使用默认 session 或跨任务全局清理。
 - Non-Goals:
   - 不在本专题替代 native 抓图应急链路。
   - 不在本专题重构 Viewer 业务逻辑或渲染实现。
   - 不在本专题扩展非 Web 场景测试规范。
 
 ## 3. AI System Requirements (If Applicable)
-- Tool Requirements: `agent-browser` CLI（二进制命令）用于 Viewer 页面自动化，默认通过 `--use-angle=gl,--ignore-gpu-blocklist` 固定硬件 WebGL 路径（可用 `AGENT_BROWSER_ARGS` 覆盖）；`oasis7_web_launcher` 的 GUI Agent 接口用于 launcher 控制面动作驱动；执行环境需保证两者均可直接调用。
+- Tool Requirements: 使用并通过 `agent-browser 0.37.1` 的 `--version` 验证（二进制缺失时先安装；浏览器依赖用 `agent-browser install` 补齐），并先运行 `doctor --offline --quick --json`；Viewer 页面自动化的每条命令必须绑定 worktree-scoped named session，通过 `session info/list` 记录诊断并显式关闭本轮自有 session。默认通过 `--use-angle=gl,--ignore-gpu-blocklist` 固定硬件 WebGL 路径（可用 `AGENT_BROWSER_ARGS` 覆盖）；`oasis7_web_launcher` 的 GUI Agent 接口用于 launcher 控制面动作驱动；执行环境需保证两者均可直接调用。
 - Evaluation Strategy: 通过语义动作成功率（`__AW_TEST__` 可用性）、门禁通过率和故障分级命中率评估闭环质量。
 
 ## 4. Technical Specifications
@@ -82,7 +83,7 @@
   - `scripts/viewer-primary-web-entry-regression.sh`
   - `scripts/viewer-software-safe-step-regression.sh`
   - `scripts/viewer-software-safe-chat-regression.sh`
-  - `agent-browser` CLI（通过 `PATH` 调用）
+  - `agent-browser 0.37.1` CLI（通过 `PATH` 调用并用 `--version` 验证）
   - `oasis7_web_launcher` GUI Agent 接口（`/api/gui-agent/*`）
   - `window.__AW_TEST__`（`runSteps/setMode/focus/select/sendControl/getState`）
 - Edge Cases & Error Handling:
@@ -90,7 +91,7 @@
   - F2 渲染初始化崩溃（如 `RuntimeError: unreachable`、`CONTEXT_LOST_WEBGL`）：立即归档证据并标记失败。
   - F3 `connecting + tick=0` 长时间不推进：先执行 `play` 并额外观察约 12 秒，仍无推进则失败。
   - F4 URL 在 `source` 场景解析失败：强制使用带引号 URL，避免 `&` 被 shell 截断。
-  - 会话残留：每轮前 `close-all`，同名 session 在重新 `open` 前也应先执行 `close`，降低 daemon/session 干扰。
+  - 会话残留或 daemon/IPC 异常：先执行 `doctor --offline --quick --json` 与本轮 named session 的 `session info --json`；仅重建并关闭本轮自有 session，不重放非幂等动作，也不影响其他任务 session。
   - headed 仍落到 SwiftShader/software renderer：按环境阻断处理，不得把“窗口能打开”误判成可玩性通过；默认先尝试 `--use-angle=gl,--ignore-gpu-blocklist`，并归档 `browser_env.json`。
   - 视觉门禁假通过：full coverage 需额外校验 `capture_status.txt` 的 `connection_status=connected` 与 `snapshot_ready=1`。
 - Non-Functional Requirements:
@@ -99,6 +100,7 @@
   - NFR-WEB-3: 门禁误报率可控，必须通过 fail-fast 分类输出原因。
   - NFR-WEB-4: 关键脚本参数/命令口径在主手册与分册中保持一致。
   - NFR-WEB-5: Viewer Web 验收必须归档 renderer 证据（如 `browser_env.json`），确保能区分硬件路径与 software renderer。
+  - NFR-WEB-6: 每个 Web browser run 都必须可由 named session、version/doctor/session 诊断和 owned close 复盘；并行任务不得共享默认 session 或互相回收。
 - Security & Privacy: 采样日志与截图不得包含凭据，控制台输出仅保留问题定位所需信息。
 
 ## 5. Risks & Roadmap
@@ -130,10 +132,11 @@
 | DEC-WEB-004 | 失败分级 F1~F4 + 证据归档 | 仅记录通用失败日志 | 缩短定位时间并提升复盘质量。 |
 | DEC-WEB-005 | legacy 文档逐篇人工迁移 | 脚本批量改写 | 保证历史约束和执行语义完整。 |
 | DEC-WEB-006 | Viewer Web 默认固定 `--use-angle=gl,--ignore-gpu-blocklist`，若 headed 仍是 software renderer 则继续阻断 | 仅要求 `--headed` 不固定后端 | 当前环境中 headed 默认仍可能回退 SwiftShader，必须把硬件后端策略写进脚本与手册。 |
+| DEC-WEB-007 | 使用 worktree-scoped named session，记录 session/doctor 诊断并由创建者显式 owned close | 默认 session 或跨任务全局清理 | agent-browser 0.37.1 的 session 生命周期必须隔离并可审计，避免并行运行相互干扰。 |
 
 ## 原文约束点映射（内容保真）
 - 原“目标：统一 Web 闭环启动、采样、门禁、排障” -> 第 1 章 Problem/Solution/SC。
-- 原“S6 启动命令、自检、GPU+headed、采样步骤与会话防抖” -> 第 2 章流程/规格矩阵 + 第 4 章技术规格。
+- 原“S6 启动命令、自检、GPU+headed、采样步骤与会话防抖” -> 第 2 章流程/规格矩阵 + 第 4 章技术规格；会话约束收口为 named session、诊断与 owned close。
 - 原“最小通过标准（canvas、`__AW_TEST__`、console、截图）” -> 第 2 章 AC。
 - 原“Fail Fast F1~F4 与处置” -> 第 4 章 Edge Cases & Error Handling。
 - 原“一键发行验收与 full coverage 门禁” -> 第 2 章 Flow-WEB-005 + 第 5 章 roadmap。
