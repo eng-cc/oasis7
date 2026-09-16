@@ -29,6 +29,64 @@ require_strong_auth_regex() {
   fi
 }
 
+run_full_gameplay_contract_checks() {
+  local failures=""
+  local required_text
+  while IFS= read -r required_text; do
+    if ! rg -Fq -- "$required_text" "$runner"; then
+      failures="${failures}\n- missing ${required_text}"
+    fi
+  done <<'EOF'
+--full-gameplay
+--deployment-mode
+trusted_local_only
+--allow-trusted-local-playtest
+--chain-enable
+--chain-local-standalone-test
+--chain-node-auto-attest-all
+--chain-link-policy
+shadow
+--major-world-event-visibility
+restricted
+--local-test-provider-authority
+local-test-provider-authority.json
+--local-test-provider-wasm
+.tmp/wasm-build-suite/local-test-provider/module.runtime.local-test-provider.wasm
+--local-test-provider-metadata
+.tmp/wasm-build-suite/local-test-provider/module.runtime.local-test-provider.metadata.json
+--local-test-provider-agent-id
+starter-agent-0
+--local-test-provider-owner-binding
+local-test-owner-0
+--local-test-provider-finality-block-hash
+blake3:0000000000000000000000000000000000000000000000000000000000000000
+--local-test-provider-session-mode
+hosted_public_join
+LOCAL_TEST_PROVIDER_SETUP_ENABLED
+STACK_READY
+authority_grant
+capability_invocation_context
+local test provider artifact
+EOF
+
+  if rg -Fq -- 'PROVIDER_BOOTSTRAP_AUTHORITY_COUNT' "$runner"; then
+    failures="${failures}\n- full-gameplay readiness must not use PROVIDER_BOOTSTRAP_AUTHORITY_COUNT"
+  fi
+  if ! rg -q -- '\[\[.*-f.*LOCAL_PROVIDER.*WASM|test -f.*LOCAL_PROVIDER.*WASM' "$runner"; then
+    failures="${failures}\n- missing fail-closed local provider WASM artifact check"
+  fi
+  if ! rg -q -- '\[\[.*-f.*LOCAL_PROVIDER.*METADATA|test -f.*LOCAL_PROVIDER.*METADATA' "$runner"; then
+    failures="${failures}\n- missing fail-closed local provider metadata artifact check"
+  fi
+
+  if [[ -n "$failures" ]]; then
+    echo "viewer-prompt-control full-gameplay contract: RED (expected)" >&2
+    printf '%b\n' "$failures" >&2
+    return 1
+  fi
+  echo "viewer-prompt-control full-gameplay contract: passed"
+}
+
 run_strong_auth_contract_checks() {
   require_strong_auth_text '--test-login' 'explicit test-login option'
   require_strong_auth_text 'hosted_test_login=1' 'test-login query opt-in'
@@ -139,6 +197,11 @@ if [[ "${1:-}" == "--strong-auth-contract-only" ]]; then
   run_strong_auth_contract_checks
   exit $?
 fi
+
+# PWT-004 gameplay settlement is an explicit runner lane.  Keep this source
+# contract before all browser/launcher fixtures so a missing implementation
+# fails deterministically without starting external processes.
+run_full_gameplay_contract_checks
 
 # Contract-only verification must never touch a browser or launcher/provider.
 fake_bin="$tmp_root/bin"

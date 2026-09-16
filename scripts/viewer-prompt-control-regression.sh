@@ -6,6 +6,7 @@ CASE_ID="PWT-004"
 OUT_DIR="output/playwright/prompt-control/${CASE_ID}"
 HEADED=0
 CONTRACT_ONLY=0
+FULL_GAMEPLAY=0
 GAME_URL=""
 AGENT_ID="starter-agent-0"
 PROMPT_GOAL="Inspect the selected agent's prompt control state."
@@ -28,6 +29,7 @@ browser, game process, or model provider.
 Options:
   --headed | --headless
   --contract-only
+  --full-gameplay         launch the trusted-local chain-backed gameplay lane
   --case-id ID
   --out-dir DIR
   --url URL
@@ -44,6 +46,7 @@ while (($# > 0)); do
     --headed) HEADED=1 ;;
     --headless) HEADED=0 ;;
     --contract-only) CONTRACT_ONLY=1 ;;
+    --full-gameplay) FULL_GAMEPLAY=1 ;;
     --case-id) shift; CASE_ID="${1:?missing value for --case-id}" ;;
     --out-dir) shift; OUT_DIR="${1:?missing value for --out-dir}" ;;
     --url) shift; GAME_URL="${1:?missing value for --url}" ;;
@@ -83,6 +86,21 @@ fi
 if ! [[ "$STARTUP_TIMEOUT" =~ ^[1-9][0-9]*$ && "$ACTION_TIMEOUT_MS" =~ ^[1-9][0-9]*$ ]]; then
   echo "error: timeouts must be positive integers" >&2
   exit 2
+fi
+
+LOCAL_PROVIDER_AUTHORITY="$OUT_DIR/runtime/local-test-provider-authority.json"
+LOCAL_PROVIDER_WASM="$ROOT_DIR/.tmp/wasm-build-suite/local-test-provider/module.runtime.local-test-provider.wasm"
+LOCAL_PROVIDER_METADATA="$ROOT_DIR/.tmp/wasm-build-suite/local-test-provider/module.runtime.local-test-provider.metadata.json"
+
+if (( FULL_GAMEPLAY == 1 )); then
+  if [[ ! -f "$LOCAL_PROVIDER_WASM" ]]; then
+    echo "error: local test provider artifact WASM is missing: $LOCAL_PROVIDER_WASM" >&2
+    exit 2
+  fi
+  if [[ ! -f "$LOCAL_PROVIDER_METADATA" ]]; then
+    echo "error: local test provider artifact metadata is missing: $LOCAL_PROVIDER_METADATA" >&2
+    exit 2
+  fi
 fi
 
 AGENT_SELECTOR="[data-pixel-world-agent-marker=\"true\"][data-agent-id=\"${AGENT_ID}\"]"
@@ -158,6 +176,59 @@ wait_for_authoritative_hosted_url() {
     sleep 1
   done
   echo "error: authoritative hosted URL with hosted_access was not published under $OUT_DIR/runtime/oasis7_viewer_live.log" >&2
+  return 1
+}
+
+meta_value() {
+  local key="$1"
+  local path="$2"
+  sed -n "s/^${key}=//p" "$path" | tail -n 1
+}
+
+wait_for_full_gameplay_readiness() {
+  local stack_meta="$OUT_DIR/runtime/session.meta"
+  local deadline=$((SECONDS + STARTUP_TIMEOUT))
+  while (( SECONDS < deadline )); do
+    if [[ -n "$LAUNCH_PID" ]] && ! kill -0 "$LAUNCH_PID" 2>/dev/null; then
+      echo "error: full-gameplay launcher exited before readiness" >&2
+      return 1
+    fi
+    if [[ -f "$stack_meta" ]] \
+      && [[ "$(meta_value STACK_READY "$stack_meta")" == "1" ]] \
+      && [[ "$(meta_value LOCAL_TEST_PROVIDER_SETUP_ENABLED "$stack_meta")" == "1" ]] \
+      && [[ "$(meta_value CHAIN_ENABLED "$stack_meta")" == "1" ]] \
+      && [[ "$(meta_value DEPLOYMENT_MODE "$stack_meta")" == "trusted_local_only" ]] \
+      && [[ -f "$LOCAL_PROVIDER_AUTHORITY" ]]; then
+      if python3 - "$LOCAL_PROVIDER_AUTHORITY" "$AGENT_ID" <<'PY'
+import json
+import pathlib
+import sys
+
+authority_path = pathlib.Path(sys.argv[1])
+agent_id = sys.argv[2]
+try:
+    authority = json.loads(authority_path.read_text(encoding="utf-8"))
+except (OSError, ValueError):
+    raise SystemExit(1)
+authority_grant = authority.get("grant")
+capability_invocation_context = authority.get("invocation_context")
+if not isinstance(authority_grant, dict) or not isinstance(capability_invocation_context, dict):
+    raise SystemExit(1)
+if authority.get("agent_id") != agent_id:
+    raise SystemExit(1)
+if not authority_grant.get("grant_id") or authority_grant.get("grant_id") != capability_invocation_context.get("grant_id"):
+    raise SystemExit(1)
+subject = capability_invocation_context.get("subject")
+if isinstance(subject, dict) and subject.get("agent_id") not in (None, agent_id):
+    raise SystemExit(1)
+PY
+      then
+        return 0
+      fi
+    fi
+    sleep 1
+  done
+  echo "error: full-gameplay readiness requires STACK_READY=1, LOCAL_TEST_PROVIDER_SETUP_ENABLED=1, CHAIN_ENABLED=1, DEPLOYMENT_MODE=trusted_local_only, and consistent authority_grant/capability_invocation_context" >&2
   return 1
 }
 
@@ -614,7 +685,24 @@ wait_for_prompt_feedback() {
 
 if [[ -z "$GAME_URL" ]]; then
   STACK_BOOTSTRAPPED=1
-  if (( STACK_CHAIN_ARG_EXPLICIT == 0 )); then
+  if (( FULL_GAMEPLAY == 1 )); then
+    STACK_ARGS=(
+      --allow-trusted-local-playtest
+      --chain-enable
+      --chain-local-standalone-test
+      --chain-node-auto-attest-all
+      --chain-link-policy shadow
+      --major-world-event-visibility restricted
+      --local-test-provider-authority "$LOCAL_PROVIDER_AUTHORITY"
+      --local-test-provider-wasm "$LOCAL_PROVIDER_WASM"
+      --local-test-provider-metadata "$LOCAL_PROVIDER_METADATA"
+      --local-test-provider-agent-id starter-agent-0
+      --local-test-provider-owner-binding local-test-owner-0
+      --local-test-provider-finality-block-hash blake3:0000000000000000000000000000000000000000000000000000000000000000
+      --local-test-provider-session-mode hosted_public_join
+      "${STACK_ARGS[@]}"
+    )
+  elif (( STACK_CHAIN_ARG_EXPLICIT == 0 )); then
     # Hosted bootstrap defaults to a chain-disabled page-play lane.  Any
     # explicit --chain-* caller argument remains authoritative.
     STACK_ARGS+=(--chain-disable)
@@ -623,7 +711,7 @@ if [[ -z "$GAME_URL" ]]; then
     "$ROOT_DIR/scripts/run-launcher-stack.sh" \
       --with-llm \
       --agent-decision-source builtin_llm \
-      --deployment-mode hosted_public_join \
+      --deployment-mode "$([[ "$FULL_GAMEPLAY" == "1" ]] && printf trusted_local_only || printf hosted_public_join)" \
       --json-ready \
       --run-id "$RUN_ID" \
       --output-dir "$OUT_DIR/runtime" \
@@ -632,12 +720,15 @@ if [[ -z "$GAME_URL" ]]; then
     "$ROOT_DIR/scripts/run-launcher-stack.sh" \
       --with-llm \
       --agent-decision-source builtin_llm \
-      --deployment-mode hosted_public_join \
+      --deployment-mode "$([[ "$FULL_GAMEPLAY" == "1" ]] && printf trusted_local_only || printf hosted_public_join)" \
       --json-ready \
       --run-id "$RUN_ID" \
       --output-dir "$OUT_DIR/runtime" >"$LAUNCH_LOG" 2>&1 &
   fi
   LAUNCH_PID=$!
+  if (( FULL_GAMEPLAY == 1 )); then
+    wait_for_full_gameplay_readiness || exit 1
+  fi
   deadline=$((SECONDS + STARTUP_TIMEOUT))
   while (( SECONDS < deadline )); do
     GAME_URL="$(python3 - "$LAUNCH_LOG" <<'PY'
