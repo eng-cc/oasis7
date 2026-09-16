@@ -52,6 +52,12 @@
 
 `path#fragment` 是被消费条款的身份，而不是可由上下文猜测的标签；完整身份还包括继承自冻结合同/发布记录的不可变 contract/publication repository（当前 canonical `eng-cc/oasis7`），并须在每个消费者匹配，不能隐式取当前仓库。固定合同、Task 或证据若跨文件消费本表关系，必须保留能够在固定内容中唯一解析的路径与 fragment；局部 `REQ-*`/`AC-*` 只有在同一文件内且无歧义时才可使用。文件或 anchor 迁移时记录旧到新的映射或明确处置，不能静默选择同名条款。
 
+### 2.2 适用关系与显式 N/A
+
+跨层关系按语义适用：变更产品价值、玩家承诺、产品范围或产品 AC 时，至少一个 typed `product_requirement` upstream ref MUST 为 `required`；纯工程、治理或专业合同变更 MUST 引用 `professional_acceptance`，此时 product requirement MAY 显式标为 `not_applicable`；声称存在交付工作的 obligation MUST NOT 同时把 product 与 professional 上游都标为 `not_applicable`。消费或改变技术合同、跨组件行为、状态、接口、迁移、恢复、安全边界或实现 obligation 时，`trace.system_design.applicability` MUST 为 `required` 并引用准确 `path#fragment`；只有不消费这些技术义务时才可以标为 `not_applicable`。
+
+任何 N/A disposition MUST 包含非空 reason、有界适用范围、applicability owner role、可回读的 review/evidence locator 和重新评估触发器。省略、`null`、空引用、`required=false`、`unknown` 或 `pending` 均不等于 N/A；每个新建或实质修改的记录 MUST 同时写入 `applicability` 与兼容别名 `required`，并使 `applicability=required` 与 `required=true`、`applicability=not_applicable` 与 `required=false` 分别一致。
+
 ## 3. 当前状态、目标状态与差距
 
 必须把当前基线、目标、差距和假设分开。推荐使用下表；当前状态没有证据时写 unknown 或 未验证，不能以目标描述代替现状。
@@ -148,7 +154,7 @@
 
 ### 11.1 验证映射表
 
-该表是持久的设计验证计划，每行 MUST 把 AC 或专业接受条款、设计义务和准确的测试/手册入口连起来。表中的 candidate/environment 要求或选择规则表达适用的候选选择规则、环境要求与能力边界；协调记录先冻结批准的必要集合、映射槽位和选择规则，不预先伪造未来 Task/contract/evidence identity；实际 candidate、source/integration/tested tree、通过/失败、退出码和产物必须在组合前写入当前 task evidence，缺失引用保持 pending 并阻断整体完成，不阻止已批准叶子执行，也不要求长期设计随每次代码迭代回写实际提交。只有描述已由证据证明的历史基线时，才保留明确标注的历史 candidate，并链接其对应 evidence。
+该表是持久的设计验证计划，每行 MUST 把 typed `trace.upstream_refs`、`trace.system_design`（准确 `path#fragment` 或完整 N/A disposition）、设计义务和准确的测试/手册入口连起来。表中的 candidate/environment 要求或选择规则表达适用的候选选择规则、环境要求与能力边界；协调记录先冻结批准的必要集合、映射槽位和选择规则，不预先伪造未来 Task/contract/evidence identity；实际 candidate、source/integration/tested tree、通过/失败、退出码和产物必须在组合前写入当前 task evidence，缺失引用保持 pending 并阻断整体完成，不阻止已批准叶子执行，也不要求长期设计随每次代码迭代回写实际提交。只有描述已由证据证明的历史基线时，才保留明确标注的历史 candidate，并链接其对应 evidence。
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
@@ -166,7 +172,7 @@
 
 本规范当前交付：专业技术设计的十二段骨架、需求承接表、当前/目标/差距表、接口/质量/验证映射、固定输入和证据边界，以及附录模板。
 
-本规范当前不激活：机器可执行的 oasis7.doc/v1 metadata schema、metadata/lifecycle checker、新的 PM 或 loop 状态、新 Project 字段、scheduler/service、自动下游任务和代表性技术 pilot。本文的引用、验证计划和记录边界是内容契约，不等于 checker/schema 已实现或 loop 已启用；它们只有在各自 authority、adapter、检查范围和验证证据具备后才能单独采纳。这里的列举不是待办台账，也不改变当前 workflow。
+本规范当前不激活：机器可执行的 oasis7.doc/v1 metadata schema、metadata/lifecycle checker、新的 PM 或 loop 状态、新 Project 字段、scheduler/service、自动下游任务和代表性技术 pilot。changed-scope gate 在本次实现完成后适用于新增或实质修改的系统设计和 trace records；未触达的 legacy content 保持在强制迁移范围之外。本文的引用、验证计划和记录边界是内容契约，不等于 checker/schema 已实现或 loop 已启用；它们只有在各自 authority、adapter、检查范围和验证证据具备后才能单独采纳。这里的列举不是待办台账，也不改变当前 workflow。
 
 ---
 

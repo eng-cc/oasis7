@@ -301,6 +301,10 @@ run_site_contract_tests() {
   run bash ./scripts/site-checks-contract.test.sh
 }
 
+run_system_design_traceability_tests() {
+  run python3 ./scripts/system-design-traceability-check.test.py
+}
+
 product_doc_range() {
   local base_oid="${OASIS7_PRODUCT_DOC_BASE:-}"
   local head_oid="${OASIS7_PRODUCT_DOC_HEAD:-}"
@@ -383,6 +387,7 @@ run_required_gate_checks() {
   run_product_doc_governance_check
   run python3 ./scripts/product-doc-governance-check.test.py
   run python3 ./scripts/product-doc-content-check.test.py
+  run_system_design_traceability_tests
   run bash ./scripts/product-doc-content-callers.test.sh
   run python3 ./scripts/p2p-public-testnet-full-network-clean-room.test.py
   run python3 ./scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py
@@ -448,6 +453,7 @@ run_full_support_tier_tests() {
 
 run_full_required_superset() {
   run_required_gate_checks
+  run_system_design_traceability_tests
   run_site_contract_tests
   run_oasis7_required_tier_tests
   run_scenario_regression_tests

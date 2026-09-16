@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import importlib.util
 import json
 import pathlib
@@ -109,6 +111,8 @@ def normalized_acceptance(body: str) -> list[str]:
         return []
     values: list[str] = []
     for line in lines[start:]:
+        if line.strip() in {"Source refs:", "Doc refs:", "Related PRD:", "Acceptance:"}:
+            break
         if not line.strip():
             if values:
                 break
@@ -118,6 +122,98 @@ def normalized_acceptance(body: str) -> list[str]:
             break
         values.append(match.group(1).strip())
     return values
+
+
+TRACEABILITY_SECTIONS = ("Source refs:", "Doc refs:", "Related PRD:", "Acceptance:")
+
+
+def _normalized_issue_section(body: str, header: str, *, references: bool) -> list[str] | None:
+    lines = body.replace("\r\n", "\n").splitlines()
+    try:
+        start = next(index for index, line in enumerate(lines) if line.strip() == header) + 1
+    except StopIteration:
+        return None
+    values: list[str] = []
+    for line in lines[start:]:
+        stripped = line.strip()
+        if stripped in TRACEABILITY_SECTIONS:
+            break
+        if not stripped:
+            if values:
+                break
+            continue
+        match = (
+            re.fullmatch(r"- `([^`]+)`", line)
+            if references
+            else re.fullmatch(r"-\s+(?:\[[ xX]\]\s*)?(.*\S)\s*", line)
+        )
+        if not match:
+            break
+        values.append(match.group(1).strip())
+    return values
+
+
+def normalized_issue_traceability(body: str) -> dict[str, Any]:
+    """Extract Issue-authoritative trace fields for bounded audit comparison."""
+    body = body.replace("\r\n", "\n")
+    fields: dict[str, Any] = {}
+    for key in ("workflow_phase", "completion_mode", "non_pr_completion_evidence_sha256"):
+        match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
+        if match:
+            fields[key] = match.group(1)
+    evidence_match = re.search(r"^- non_pr_completion_evidence_b64: `([^`]+)`$", body, re.MULTILINE)
+    if evidence_match:
+        try:
+            encoded = evidence_match.group(1)
+            fields["non_pr_completion_evidence"] = base64.b64decode(
+                encoded + "=" * (-len(encoded) % 4), altchars=b"-_", validate=True
+            ).decode("utf-8")
+        except (ValueError, UnicodeDecodeError):
+            fields["trace_projection_error"] = (
+                "trace-projection-loss: malformed non-PR completion evidence encoding"
+            )
+    for key, header in (("source_refs", "Source refs:"), ("doc_refs", "Doc refs:"), ("related_prd", "Related PRD:")):
+        values = _normalized_issue_section(body, header, references=True)
+        if values is not None:
+            fields[key] = values
+    return fields
+
+
+def canonical_non_pr_evidence_digest(value: object) -> str:
+    """Return the digest used by the canonical non-PR evidence file."""
+    return hashlib.sha256((str(value) + "\n").encode("utf-8")).hexdigest()
+
+
+def read_canonical_non_pr_evidence(
+    task_uid: str, record: dict[str, Any]
+) -> tuple[bytes | None, str | None]:
+    """Read the identity-bound non-PR evidence file without following unsafe paths."""
+    recorded_value = record.get("non_pr_completion_evidence_file")
+    if recorded_value in (None, ""):
+        return None, "canonical non_pr_completion_evidence file is missing"
+    if not isinstance(recorded_value, str):
+        return None, "canonical non_pr_completion_evidence path is not canonical"
+    worktree_value = record.get("canonical_worktree")
+    if worktree_value in (None, "") or not isinstance(worktree_value, str):
+        return None, "canonical non_pr_completion_evidence path has no canonical worktree"
+    try:
+        canonical_worktree_path = pathlib.Path(worktree_value).expanduser()
+        if not canonical_worktree_path.is_absolute():
+            return None, "canonical non_pr_completion_evidence path has no absolute canonical worktree"
+        canonical_worktree = canonical_worktree_path.resolve(strict=True)
+        recorded_path = pathlib.Path(recorded_value).expanduser()
+        if not recorded_path.is_absolute():
+            return None, "canonical non_pr_completion_evidence path is not canonical"
+        expected_path = canonical_worktree / ".pm" / "scratch" / task_uid / "non-pr-completion-evidence.txt"
+        if recorded_path.resolve(strict=False) != expected_path:
+            return None, "canonical non_pr_completion_evidence path is not canonical"
+        if recorded_path.is_symlink():
+            return None, "canonical non_pr_completion_evidence path is a symlink"
+        if not recorded_path.is_file():
+            return None, "canonical non_pr_completion_evidence file is unavailable"
+        return recorded_path.read_bytes(), None
+    except (OSError, RuntimeError, ValueError, UnicodeError) as exc:
+        return None, f"canonical non_pr_completion_evidence file cannot be read: {exc}"
 
 
 def parse_scalar(value: str) -> Any:
@@ -641,6 +737,126 @@ def command_audit(args: argparse.Namespace) -> int:
         ]
         if cached_acceptance != live_acceptance:
             errors.append(f"{uid}: cached acceptance drift; refresh explicitly from authoritative GitHub issue")
+        live_traceability = normalized_issue_traceability(body)
+        trace_projection_error = live_traceability.get("trace_projection_error")
+        if trace_projection_error:
+            errors.append(f"{uid}: {trace_projection_error}")
+            continue
+        for key in ("doc_refs", "related_prd"):
+            if key not in live_traceability:
+                continue
+            cached_values = sorted({str(value) for value in (record.get(key) or [])})
+            live_values = sorted({str(value) for value in (live_traceability.get(key) or [])})
+            if cached_values != live_values:
+                errors.append(
+                    f"{uid}: cached {key} drift; refresh explicitly from authoritative GitHub issue"
+                )
+        for key in ("workflow_phase", "completion_mode"):
+            if key not in live_traceability:
+                if key == "workflow_phase" and str(record.get(key) or ""):
+                    errors.append(
+                        f"{uid}: live workflow_phase projection is missing; refresh explicitly from authoritative GitHub issue"
+                    )
+                continue
+            cached_value = str(record.get(key) or "")
+            live_value = str(live_traceability.get(key) or "")
+            if cached_value != live_value:
+                errors.append(
+                    f"{uid}: cached {key} drift; refresh explicitly from authoritative GitHub issue"
+                )
+        live_evidence_present = "non_pr_completion_evidence" in live_traceability
+        live_digest_present = (
+            "non_pr_completion_evidence_sha256" in live_traceability
+            and bool(str(live_traceability.get("non_pr_completion_evidence_sha256") or ""))
+        )
+        cached_evidence = record.get("non_pr_completion_evidence")
+        cached_digest = record.get("non_pr_completion_evidence_sha256")
+        cached_evidence_present = cached_evidence not in (None, "")
+        cached_digest_present = bool(str(cached_digest or ""))
+        canonical_file_claimed = record.get("non_pr_completion_evidence_file") not in (None, "")
+        non_pr_mode_claimed = (
+            str(live_traceability.get("completion_mode") or "") == "non_pr_task"
+            or str(record.get("completion_mode") or "") == "non_pr_task"
+        )
+        evidence_claimed = (
+            non_pr_mode_claimed
+            or live_evidence_present
+            or live_digest_present
+            or cached_evidence_present
+            or cached_digest_present
+            or canonical_file_claimed
+        )
+        if evidence_claimed:
+            if not live_evidence_present:
+                errors.append(
+                    f"{uid}: live non_pr_completion_evidence projection is missing; refresh explicitly from authoritative GitHub issue"
+                )
+            if not live_digest_present:
+                errors.append(
+                    f"{uid}: live non_pr_completion_evidence_sha256 projection is missing; refresh explicitly from authoritative GitHub issue"
+                )
+            if not cached_evidence_present:
+                errors.append(
+                    f"{uid}: cached non_pr_completion_evidence is missing; refresh explicitly from authoritative GitHub issue"
+                )
+            if not cached_digest_present:
+                errors.append(
+                    f"{uid}: cached non_pr_completion_evidence_sha256 is missing; refresh explicitly from authoritative GitHub issue"
+                )
+            if live_evidence_present and cached_evidence_present:
+                live_value = str(live_traceability.get("non_pr_completion_evidence") or "")
+                cached_value = str(cached_evidence)
+                if live_value != cached_value:
+                    errors.append(
+                        f"{uid}: cached non_pr_completion_evidence drift; refresh explicitly from authoritative GitHub issue"
+                    )
+            if live_digest_present and cached_digest_present:
+                live_value = str(live_traceability.get("non_pr_completion_evidence_sha256") or "")
+                cached_value = str(cached_digest)
+                if live_value != cached_value:
+                    errors.append(
+                        f"{uid}: cached non_pr_completion_evidence_sha256 drift; refresh explicitly from authoritative GitHub issue"
+                    )
+            if live_evidence_present and live_digest_present:
+                live_value = str(live_traceability.get("non_pr_completion_evidence") or "")
+                live_digest = str(live_traceability.get("non_pr_completion_evidence_sha256") or "")
+                if live_digest != canonical_non_pr_evidence_digest(live_value):
+                    errors.append(
+                        f"{uid}: live non_pr_completion_evidence digest binding is invalid; refresh explicitly from authoritative GitHub issue"
+                    )
+            if cached_evidence_present and cached_digest_present:
+                cached_value = str(cached_evidence)
+                cached_digest_value = str(cached_digest)
+                if cached_digest_value != canonical_non_pr_evidence_digest(cached_value):
+                    errors.append(
+                        f"{uid}: cached non_pr_completion_evidence digest binding is invalid; refresh explicitly from authoritative GitHub issue"
+                    )
+            if canonical_file_claimed:
+                canonical_bytes, canonical_error = read_canonical_non_pr_evidence(uid, record)
+                if canonical_error:
+                    errors.append(f"{uid}: {canonical_error}")
+                else:
+                    canonical_digest = hashlib.sha256(canonical_bytes or b"").hexdigest()
+                    if live_digest_present and canonical_digest != str(live_traceability.get("non_pr_completion_evidence_sha256") or ""):
+                        errors.append(
+                            f"{uid}: canonical non_pr_completion_evidence digest disagrees with live Issue authority"
+                        )
+                    if cached_digest_present and canonical_digest != str(cached_digest):
+                        errors.append(
+                            f"{uid}: canonical non_pr_completion_evidence digest disagrees with cache authority"
+                        )
+                    if live_evidence_present:
+                        expected_live_bytes = (str(live_traceability.get("non_pr_completion_evidence") or "") + "\n").encode("utf-8")
+                        if canonical_bytes != expected_live_bytes:
+                            errors.append(
+                                f"{uid}: canonical non_pr_completion_evidence content disagrees with live Issue authority"
+                            )
+                    if cached_evidence_present:
+                        expected_cached_bytes = (str(cached_evidence) + "\n").encode("utf-8")
+                        if canonical_bytes != expected_cached_bytes:
+                            errors.append(
+                                f"{uid}: canonical non_pr_completion_evidence content disagrees with cache authority"
+                            )
         item_fields = normalized_field_values(item)
         for field_name, expected in expected_project_values(task).items():
             if not expected:
@@ -678,6 +894,9 @@ def command_audit(args: argparse.Namespace) -> int:
             "coordination_record",
             "traceability_candidate",
             "aggregate_candidate",
+            "doc_refs",
+            "related_prd",
+            "non_pr_completion_evidence_sha256",
         ):
             if key in task and task[key] is not None:
                 selected_task[key] = task[key]
