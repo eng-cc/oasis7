@@ -64,7 +64,7 @@
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
 | `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md` | `doc/game/gameplay/gameplay-agent-claim-economy-contract.design.md` |
-| `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md` | `doc/game/gameplay/gameplay-indirect-control-agency-contract.design.md` |
+| `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md` | PRD-only；产品分册承载长期玩家承诺，本文保留 gameplay 保证项、字段、状态、失败签名与专业验收，不另设重复 design |
 | `doc/game/gameplay/gameplay-industrial-backpressure-recovery-contract.prd.md` | PRD-only；本专题只承载玩家选择、节奏、机会成本与验收，不新增实现结构 |
 | `doc/game/gameplay/gameplay-industrial-demand-change-disposition-contract.prd.md` | PRD-only；本专题只承载需求变化后的既有工作选择、机会成本与验收，不新增实现结构 |
 | `doc/game/gameplay/gameplay-industrial-externality-contract.prd.md` | PRD-only；本专题只承载工业外部性的玩家可读影响、处置选择与验收，不新增实现结构 |

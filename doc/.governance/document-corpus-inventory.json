@@ -510,20 +510,6 @@
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
     },
     {
-      "path": "doc/game/gameplay/gameplay-indirect-control-agency-contract.design.md",
-      "content_sha256": "68318d108be6dfdb3d5eb0a9a485548d143d0572f1e9b669917e29da4ed5f6f4",
-      "registry_type": "professional_domain",
-      "structural_owner": "gameplay_designer",
-      "authority_entry": "doc/game/README.md",
-      "authority_layer": "professional_domain",
-      "semantic_decision_owner": "gameplay_designer",
-      "object_kind": "design",
-      "lifecycle_candidate": "active_candidate",
-      "inventory_disposition": "retain_for_owner_review",
-      "routing_batch": "game-corpus-review",
-      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
-    },
-    {
       "path": "doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md",
       "content_sha256": "d43bb1e51e58d6057807f66100c3f135e88d5d53bc9784654b23aa5c6908e445",
       "registry_type": "professional_domain",

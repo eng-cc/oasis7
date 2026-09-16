@@ -44,7 +44,7 @@
 | 玩家入口与 Agent | 正式入口能够表达同一意图、因果、干预和续接结果 | `world-simulator`、Agent 与 Viewer 专业文档定义 API/UI、记忆和交互实现 |
 | 验证 | 组合证据必须证明玩家能理解并继续决策 | `testing` 与 QA 权威拥有测试矩阵、命令、样本和当前 verdict |
 
-`PRD-GAME-014` 的长期产品承诺由本文承载；其专业合同以 [`gameplay-indirect-control-agency-contract.prd.md`](../../game/gameplay/gameplay-indirect-control-agency-contract.prd.md) 为主入口，继续拥有玩法保证、失败判据与专业验证。IA-1 至 IA-6 只裁定组合体验，不能替代该专业合同；本分册不复制其中的字段矩阵、状态 taxonomy、bounded-response 规则、API parity、失败签名或任务证据。
+`PRD-GAME-014` 的长期产品承诺由本文承载；其专业合同以 [`gameplay-indirect-control-agency-contract.prd.md`](../../game/gameplay/gameplay-indirect-control-agency-contract.prd.md) 为主入口，继续拥有玩法保证、失败判据与专业验证。IA-1 至 IA-7 只裁定组合体验，不能替代该专业合同；本分册不复制其中的字段矩阵、状态 taxonomy、bounded-response 规则、API parity、失败签名或任务证据。
 
 ## 4. 组合验收
 

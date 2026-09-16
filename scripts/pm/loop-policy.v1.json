@@ -14,7 +14,6 @@
     {"pattern": "doc/game/README.md", "loop": "product"},
     {"pattern": "doc/game/gameplay/README.md", "loop": "product"},
     {"pattern": "doc/game/gameplay/*.prd.md", "loop": "product"},
-    {"pattern": "doc/game/gameplay/gameplay-indirect-control-agency-contract.design.md", "loop": "product"},
     {"pattern": "doc/game/gameplay/gameplay-war-politics-mvp-baseline.design.md", "loop": "product"},
     {"pattern": "doc/**", "loop": "system"},
     {"pattern": "README.md", "loop": "system"},
