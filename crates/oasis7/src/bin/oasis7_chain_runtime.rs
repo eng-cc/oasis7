@@ -65,6 +65,8 @@ mod main_token_submit_api;
 mod module_release_attestation_submit_api;
 #[path = "oasis7_chain_runtime/node_keypair_config.rs"]
 mod node_keypair_config;
+#[path = "oasis7_chain_runtime/node_runtime_policy.rs"]
+mod node_runtime_policy;
 #[path = "oasis7_chain_runtime/p2p_status.rs"]
 mod p2p_status;
 #[path = "oasis7_chain_runtime/publication_lifecycle.rs"]
@@ -80,6 +82,8 @@ mod rebuild_status_tests;
 mod reward_runtime_settlement;
 #[path = "oasis7_chain_runtime/reward_runtime_worker.rs"]
 mod reward_runtime_worker;
+#[path = "oasis7_chain_runtime/runtime_authority.rs"]
+mod runtime_authority;
 #[path = "oasis7_chain_runtime/runtime_status_util.rs"]
 mod runtime_status_util;
 #[path = "oasis7_chain_runtime/startup_reconcile.rs"]
@@ -115,6 +119,9 @@ use execution_role::{node_role_materializes_execution_state, node_role_requires_
 use feedback_submit_api::{
     ChainFeedbackSubmitResponse, FeedbackSubmitSigner, build_feedback_create_request,
     extract_http_json_body, parse_feedback_submit_request, write_feedback_submit_error,
+};
+use node_runtime_policy::{
+    node_role_materializes_execution_state, node_role_requires_execution_commit,
 };
 use p2p_status::{
     applied_runtime_user_mode_label, build_live_node_network_policy_recommendation,
@@ -443,6 +450,12 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     }
 
     config = apply_traffic_profile_to_node_config(config, &options)?;
+    let runtime_authority_binding = runtime_authority::load_runtime_authority_binding(
+        paths.execution_world_dir.as_path(),
+        options.genesis_validator_registry_path.as_deref(),
+        options.deployment_inventory_path.as_deref(),
+        options.loaded_network_tier_manifest.as_ref(),
+    )?;
     governance_registry::ensure_world_governance_validator_registry(
         paths.execution_world_dir.as_path(),
         options.genesis_validator_registry_path.as_deref(),
@@ -671,6 +684,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         Arc::clone(&reward_runtime_metrics),
         Arc::clone(&storage_metrics),
         feedback_submit_signer,
+        runtime_authority_binding,
     )?;
 
     runtime_status_util::print_runtime_ready_summary(

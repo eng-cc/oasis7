@@ -1,0 +1,93 @@
+{
+  "schema_version": "oasis7.public_testnet_validator_triad_authority.v1",
+  "network_tier": "public_testnet",
+  "world_id": "oasis7-public-testnet-governed-20260606",
+  "chain_id": "oasis7-public-testnet-governed-20260606",
+  "topology": "three_equal_validator",
+  "status": "candidate_cold_cutover_hold",
+  "validator_set": {
+    "members": [
+      {
+        "node_id": "triad-testnet-sequencer",
+        "stake": 100,
+        "finality_signer_public_key": "e01e5c34dee2da3087653bc4cec02be01632f56250a800994c96ea44ae6f3690"
+      },
+      {
+        "node_id": "triad-testnet-storage",
+        "stake": 100,
+        "finality_signer_public_key": "1f530cae002d7adb9a6c3dd8f4bc861226f112f88fdd252b28b6494019e21c33"
+      },
+      {
+        "node_id": "triad-testnet-validator-47",
+        "stake": 100,
+        "finality_public_key": "cf8c9c2b5637d20d0efa585f0fb7f503b19a1aaba02fb807637e67ed40919fc2",
+        "finality_signer_public_key": "cf8c9c2b5637d20d0efa585f0fb7f503b19a1aaba02fb807637e67ed40919fc2",
+        "root_public_key": "b21137667506c6c9d5eb30e2cefac73950396d1a58e70665cfdb5afec8943ec6",
+        "libp2p_peer_id": "12D3KooWCdQLY6Qm9sWqPqEhJTmPdY3Ykw1w5QnTh7qmSgYDazQZ"
+      }
+    ],
+    "total_stake": 300,
+    "required_stake": 200,
+    "quorum": {
+      "numerator": 2,
+      "denominator": 3
+    }
+  },
+  "governance": {
+    "signer_count": 3,
+    "threshold": 2,
+    "threshold_bps": 6667,
+    "separate_from_validator_finality": true
+  },
+  "bindings": {
+    "inventory": {
+      "ref": "scripts/public-testnet-validator-triad-inventory.v1.json",
+      "sha256": "3313a899630e3013d623adfee252556a124c25d059406bcf98a541ae2fcdacd5"
+    },
+    "registry": {
+      "ref": "config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json",
+      "sha256": "8bfb4411f3895ab5f1a2a3de1bcaa08ce97567202d4198444b323ef437a88f78",
+      "semantic_sha256": "aa6f6f7f367470d3b2c7282d489422d3eef14370446aa1fe8420fc94d776950d",
+      "role": "generated_deployment_registry"
+    },
+    "source_registry": {
+      "ref": "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json",
+      "sha256": "a6bfa524e32f2f54c4665d58f18e87b5fa21845e17c14269be1cb1f978adb50f",
+      "role": "source_registry_input"
+    },
+    "manifest": {
+      "ref": "doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json",
+      "sha256": "649c9923e71da2f8002a3e700b16efdb3aec3105eaa0600a71ebdf6a9bb38cbc",
+      "role": "historical_base_input",
+      "requires_regeneration_for_triad": true
+    },
+    "genesis": {
+      "ref": "doc/testing/evidence/public-testnet-governed-bootstrap-genesis-2026-06-06.json",
+      "sha256": "5dcffd05fac78b432de9ac43ab64b7180401141b4f2687941a5fd959d04368e3",
+      "role": "historical_base_input",
+      "requires_regeneration_for_triad": true
+    },
+    "bootstrap_peers": {
+      "ref": "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-bootstrap-peers-2026-09-15.txt",
+      "sha256": "c7d0b977937adb5d27733ed0ad3e2212ccd0f3ac1b2273214e8cc57df110e5d6"
+    }
+  },
+  "digest_policy": {
+    "algorithm": "sha256",
+    "chain_order": [
+      "inventory",
+      "registry",
+      "genesis",
+      "manifest",
+      "bootstrap_peers",
+      "generated_world",
+      "runtime_package"
+    ],
+    "missing_or_mismatched_binding": "blocked",
+    "private_material": "excluded"
+  },
+  "hold_reasons": [
+    "manifest and genesis are historical two-validator base inputs until a fresh triad stage is generated",
+    "validator-47 service must remain disabled, inactive, and unstarted until exact-head review and QA GO"
+  ]
+}

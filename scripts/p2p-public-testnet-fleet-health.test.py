@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import importlib.util
 import subprocess
 import sys
 import tempfile
@@ -13,6 +15,7 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -20,6 +23,15 @@ COLLECTOR = ROOT_DIR / "scripts" / "p2p-public-testnet-fleet-health.py"
 RUNBOOK = ROOT_DIR / "doc" / "p2p" / "blockchain" / "public-testnet-governed-bootstrap.runbook.md"
 INVENTORY = ROOT_DIR / "doc" / "testing" / "evidence" / "public-testnet-five-node-inventory-2026-06-23.md"
 NO_CHECKPOINT = object()
+
+
+def load_collector_module() -> Any:
+    spec = importlib.util.spec_from_file_location("p2p_public_testnet_fleet_health", COLLECTOR)
+    if spec is None or spec.loader is None:
+        raise AssertionError("fleet-health collector module could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def status(
@@ -94,7 +106,163 @@ class FleetHealthFixture:
         return f"http://{host}:{port}/{name}"
 
 
+def managed_triad_status(module: Any, name: str, *, inventory_sha256: object) -> dict[str, Any]:
+    """Build a complete node-emitted projection for the managed triad path."""
+    authority = module.triad_inventory_authority()
+    if authority is None:
+        raise AssertionError("the checked-in triad authority must load for this fixture")
+    inventory, _inventory_digest = authority
+    node = inventory["nodes"][name]
+    node_id = node["node_id"]
+    world_id = inventory["authority"]["world_id"]
+    registry_ref = inventory["authority"]["registry_ref"]
+    registry_digest = inventory["authority"]["generated_registry_sha256"]
+    registry_semantic_digest = inventory["authority"]["generated_registry_semantic_sha256"]
+    signer = node["finality_signer_public_key"]
+    validator_set_hash = "fixture-validator-set"
+    stake_root = "fixture-stake-root"
+    manifest_hash = "f" * 64
+    checkpoint_id = "fixture-checkpoint-42"
+    proof_hash = "fixture-proof-42"
+    is_validator_47 = name == "validator-47"
+    provider_id = node.get("libp2p_peer_id", f"peer-{node_id}")
+    return {
+        "node_id": node_id,
+        "world_id": world_id,
+        "role": "sequencer" if name == "sequencer-204" else "storage",
+        "running": True,
+        "last_error": None,
+        "readiness": {"status": "ready", "failed_gates": []},
+        "consensus": {
+            "committed_height": 42,
+            "network_committed_height": 42,
+            "last_execution_height": 42,
+            "network_head": {"decision": "ready"},
+            "validator_set_hash": validator_set_hash,
+            "validator_stake_root": stake_root,
+        },
+        "network_tier": {
+            "tier": "public_testnet",
+            "network_id": world_id,
+            "chain_id": world_id,
+            "target_validator_count": 3,
+        },
+        "world_resource": {
+            "world_id": world_id,
+            "chain_id": world_id,
+            "seed_manifest_hash": manifest_hash,
+        },
+        "p2p": {
+            "node_role_claim": "validator_core" if name == "sequencer-204" else "full_storage"
+        },
+        "chain_proof": {
+            "latest_execution_checkpoint": {
+                "schema_version": 2,
+                "checkpoint_id": checkpoint_id,
+                "height": 42,
+                "manifest_hash": manifest_hash,
+            },
+            "latest_world_head_proof": {
+                "checkpoint_ref": checkpoint_id,
+                "height": 42,
+                "proof_hash": proof_hash,
+                "world_id": world_id,
+            },
+        },
+        "validator": {
+            "schema_version": module.TRIAD_STATUS_PROJECTION_SCHEMA,
+            "role": "validator",
+            "membership": "active",
+            "stake": 100,
+            "signer_binding": node_id,
+            "signer_public_key_hex": signer,
+            "stake_proof": {
+                "validator_id": node_id,
+                "player_id": node_id,
+                "stake": 100,
+                "signer_public_key_hex": signer,
+                "leaf_hash": f"leaf-{node_id}",
+                "proof": [],
+            },
+            "validator_set_hash": validator_set_hash,
+            "stake_root": stake_root,
+            "registry_ref": registry_ref,
+            "registry_sha256": registry_digest,
+            "registry_semantic_sha256": registry_semantic_digest,
+            "inventory_ref": module.TRIAD_INVENTORY_RELATIVE,
+            "inventory_sha256": inventory_sha256,
+        },
+        "provider": {
+            "schema_version": module.TRIAD_STATUS_PROJECTION_SCHEMA,
+            "node_id": node_id,
+            "provider_id": provider_id,
+            "checkpoint": is_validator_47,
+            "full_storage": is_validator_47,
+            "checkpoint_proof": (
+                {
+                    "schema_version": 2,
+                    "checkpoint_id": checkpoint_id,
+                    "height": 42,
+                    "manifest_hash": manifest_hash,
+                    "proof_hash": proof_hash,
+                    "world_id": world_id,
+                    "chain_id": world_id,
+                }
+                if is_validator_47
+                else None
+            ),
+            "full_storage_proof": (
+                {
+                    "status": "ready",
+                    "provider_id": provider_id,
+                    "world_id": world_id,
+                    "chain_id": world_id,
+                    "manifest_hash": manifest_hash,
+                    "height": 42,
+                }
+                if is_validator_47
+                else None
+            ),
+        },
+    }
+
+
 class FleetHealthCollectorContractTest(unittest.TestCase):
+    def test_triad_authority_rejects_self_consistent_noncanonical_source_or_peer_refs(self) -> None:
+        module = load_collector_module()
+        inventory = json.loads(
+            (ROOT_DIR / "scripts" / "public-testnet-validator-triad-inventory.v1.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        cases = {
+            "source_registry": (
+                "source_registry_ref",
+                "source_registry_sha256",
+                module.TRIAD_BOOTSTRAP_PEER_RELATIVE,
+                module.TRIAD_BOOTSTRAP_PEER_SHA256,
+            ),
+            "bootstrap_peer": (
+                "bootstrap_peer_ref",
+                "bootstrap_peer_sha256",
+                module.TRIAD_SOURCE_REGISTRY_RELATIVE,
+                module.TRIAD_SOURCE_REGISTRY_SHA256,
+            ),
+        }
+        for case, (ref_key, digest_key, ref, digest) in cases.items():
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temp_dir:
+                mutated = json.loads(json.dumps(inventory))
+                mutated["authority"][ref_key] = ref
+                mutated["authority"][digest_key] = digest
+                staged_inventory = Path(temp_dir) / "inventory.json"
+                staged_bytes = (json.dumps(mutated, indent=2) + "\n").encode("utf-8")
+                staged_inventory.write_bytes(staged_bytes)
+                with (
+                    patch.object(module, "TRIAD_INVENTORY_PATH", staged_inventory),
+                    patch.object(module, "TRIAD_INVENTORY_SHA256", hashlib.sha256(staged_bytes).hexdigest()),
+                ):
+                    self.assertIsNone(module.triad_inventory_authority())
+
     def run_collector(
         self,
         fixture: FleetHealthFixture,
@@ -102,6 +270,7 @@ class FleetHealthCollectorContractTest(unittest.TestCase):
         *,
         max_span_seconds: float | str = 1.0,
         nodes: list[tuple[str, str]] | None = None,
+        managed_triad: bool = False,
         managed_five_node: bool = False,
     ) -> subprocess.CompletedProcess[str]:
         nodes = nodes or [
@@ -113,10 +282,12 @@ class FleetHealthCollectorContractTest(unittest.TestCase):
             sys.executable,
             str(COLLECTOR),
             "--sequencer",
-            "sequencer",
+            "sequencer-204" if managed_triad else "sequencer",
         ]
         for name, endpoint in nodes:
             command.extend(["--node", f"{name}={endpoint}"])
+        if managed_triad:
+            command.append("--managed-triad")
         if managed_five_node:
             command.append("--managed-five-node")
         command.extend([
@@ -132,6 +303,41 @@ class FleetHealthCollectorContractTest(unittest.TestCase):
             capture_output=True,
             check=False,
         )
+
+    def test_managed_triad_non_string_inventory_digest_writes_bounded_blocked_evidence(self) -> None:
+        module = load_collector_module()
+        node_names = ("sequencer-204", "storage-205", "validator-47")
+        inventory_authority = module.triad_inventory_authority()
+        self.assertIsNotNone(inventory_authority)
+        _inventory, inventory_digest = inventory_authority
+
+        for malformed_digest in (None, 17, []):
+            with self.subTest(malformed_digest=malformed_digest), tempfile.TemporaryDirectory() as temp_dir:
+                statuses = {
+                    name: managed_triad_status(
+                        module,
+                        name,
+                        inventory_sha256=malformed_digest if name == "sequencer-204" else inventory_digest,
+                    )
+                    for name in node_names
+                }
+                responses = {f"/{name}": (statuses[name], 0.0) for name in node_names}
+                with FleetHealthFixture(responses) as fixture:
+                    output = Path(temp_dir) / "triad-health.json"
+                    result = self.run_collector(
+                        fixture,
+                        output,
+                        nodes=[(name, fixture.endpoint(name)) for name in node_names],
+                        managed_triad=True,
+                    )
+
+                self.assertNotEqual(result.returncode, 0, result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertTrue(output.exists(), "malformed node status must still emit blocked evidence")
+                evidence = json.loads(output.read_text(encoding="utf-8"))
+                self.assertEqual(evidence["scope"], "managed_triad")
+                self.assertEqual(evidence["verdict"], "blocked")
+                self.assertIn("inventory_authority_digest_mismatch", evidence["failed_gates"])
 
     def test_ready_fleet_writes_timestamped_json_evidence(self) -> None:
         responses = {f"/{name}": (status(), 0.0) for name in ("sequencer", "storage", "observer")}

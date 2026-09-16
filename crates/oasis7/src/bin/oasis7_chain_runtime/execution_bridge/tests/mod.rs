@@ -44,6 +44,10 @@ mod driver_checkpoint_transaction;
 mod driver_compacted_checkpoint_recovery;
 mod driver_observability;
 mod driver_storage_profile;
+// The fixture helpers live behind `test_tier_required` in the external
+// `oasis7` library. Keep this binary-test module on the same feature boundary;
+// `cfg(test)` on the binary does not propagate to its library dependency.
+#[cfg(feature = "test_tier_required")]
 mod provider_bootstrap;
 mod replay;
 mod retention;

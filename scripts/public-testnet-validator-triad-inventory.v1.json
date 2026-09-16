@@ -1,0 +1,101 @@
+{
+  "schema_version": "oasis7.public_testnet_validator_triad_inventory.v1",
+  "repository": "eng-cc/oasis7",
+  "network_tier": "public_testnet",
+  "topology": "three_equal_validator",
+  "validator_set": {
+    "count": 3,
+    "stakes": [
+      100,
+      100,
+      100
+    ],
+    "total_stake": 300,
+    "required_stake": 200,
+    "quorum": {
+      "numerator": 2,
+      "denominator": 3
+    }
+  },
+  "authority": {
+    "status": "candidate_cold_cutover_hold",
+    "digest_algorithm": "sha256",
+    "binding_order": [
+      "inventory",
+      "registry",
+      "genesis",
+      "manifest",
+      "generated_world",
+      "runtime_package"
+    ],
+    "world_id": "oasis7-public-testnet-governed-20260606",
+    "chain_id": "oasis7-public-testnet-governed-20260606",
+    "network_tier": "public_testnet",
+    "manifest_ref": "config/public-testnet-governed-bootstrap-manifest-2026-06-06.json",
+    "genesis_ref": "config/public-testnet-governed-bootstrap-genesis-2026-06-06.json",
+    "registry_ref": "config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json",
+    "source_registry_ref": "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json",
+    "source_registry_sha256": "a6bfa524e32f2f54c4665d58f18e87b5fa21845e17c14269be1cb1f978adb50f",
+    "generated_registry_sha256": "8bfb4411f3895ab5f1a2a3de1bcaa08ce97567202d4198444b323ef437a88f78",
+    "generated_registry_semantic_sha256": "aa6f6f7f367470d3b2c7282d489422d3eef14370446aa1fe8420fc94d776950d",
+    "bootstrap_peer_ref": "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-bootstrap-peers-2026-09-15.txt",
+    "bootstrap_peer_sha256": "c7d0b977937adb5d27733ed0ad3e2212ccd0f3ac1b2273214e8cc57df110e5d6",
+    "digest_policy": "Every staged artifact records the sha256 of its exact bytes; missing or mismatched links keep the triad blocked."
+  },
+  "governance": {
+    "signer_count": 3,
+    "threshold": 2,
+    "threshold_bps": 6667
+  },
+  "nodes": {
+    "sequencer-204": {
+      "node_id": "triad-testnet-sequencer",
+      "host": "root@39.104.204.172",
+      "roles": [
+        "validator",
+        "sequencer"
+      ],
+      "stake": 100,
+      "finality_signer_public_key": "e01e5c34dee2da3087653bc4cec02be01632f56250a800994c96ea44ae6f3690",
+      "service": "oasis7-triad-sequencer.service",
+      "ports": [
+        "6631",
+        "6831"
+      ]
+    },
+    "storage-205": {
+      "node_id": "triad-testnet-storage",
+      "host": "root@39.104.205.67",
+      "roles": [
+        "validator",
+        "storage"
+      ],
+      "stake": 100,
+      "finality_signer_public_key": "1f530cae002d7adb9a6c3dd8f4bc861226f112f88fdd252b28b6494019e21c33",
+      "service": "oasis7-triad-storage.service",
+      "ports": [
+        "6632",
+        "6832"
+      ]
+    },
+    "validator-47": {
+      "node_id": "triad-testnet-validator-47",
+      "host": "root@47.111.225.27",
+      "roles": [
+        "validator",
+        "checkpoint_provider",
+        "full_storage_provider"
+      ],
+      "stake": 100,
+      "root_public_key": "b21137667506c6c9d5eb30e2cefac73950396d1a58e70665cfdb5afec8943ec6",
+      "finality_public_key": "cf8c9c2b5637d20d0efa585f0fb7f503b19a1aaba02fb807637e67ed40919fc2",
+      "finality_signer_public_key": "cf8c9c2b5637d20d0efa585f0fb7f503b19a1aaba02fb807637e67ed40919fc2",
+      "libp2p_peer_id": "12D3KooWCdQLY6Qm9sWqPqEhJTmPdY3Ykw1w5QnTh7qmSgYDazQZ",
+      "service": "oasis7-triad-validator-47.service",
+      "ports": [
+        "6634",
+        "6834"
+      ]
+    }
+  }
+}
