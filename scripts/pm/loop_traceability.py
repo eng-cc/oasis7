@@ -1742,7 +1742,7 @@ def _validate_live_leaf_results(
     if not isinstance(matrix, list):
         return []
     errors: list[str] = []
-    verified_locators: set[tuple[Any, ...]] = set()
+    readbacks_by_locator: dict[tuple[Any, ...], dict[str, Any]] = {}
     evidence_by_uid = {
         item.get("task_uid"): item for item in evidence if isinstance(item, dict)
     }
@@ -1752,11 +1752,11 @@ def _validate_live_leaf_results(
         try:
             locator = _leaf_result_locator(row.get("leaf_evidence_locator"))
             locator_key = tuple(locator.get(field) for field in ("repository", "issue_number", "comment_id", "body_digest"))
-            if locator_key in verified_locators:
-                continue
-            readback = _reader_result(authority_reader, locator, "leaf result live readback")
+            readback = readbacks_by_locator.get(locator_key)
+            if readback is None:
+                readback = _reader_result(authority_reader, locator, "leaf result live readback")
+                readbacks_by_locator[locator_key] = readback
             errors.extend(_validate_leaf_result_readback(readback, locator, record, row))
-            verified_locators.add(locator_key)
             item = evidence_by_uid.get(row.get("leaf_task_uid"))
             if item is None:
                 continue

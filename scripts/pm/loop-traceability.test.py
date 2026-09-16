@@ -929,6 +929,55 @@ class TraceabilityTests(unittest.TestCase):
         readers.install_authority_map_and_approval(record, candidate, evidence)
         return candidate, evidence, readers
 
+    def bind_shared_leaf_with_independent_live_result(self, candidate, evidence, readers):
+        first_row = candidate["applicability_matrix"][0]
+        second_row = candidate["applicability_matrix"][1]
+        first_item = evidence[0]
+        second_row["leaf_task_uid"] = first_row["leaf_task_uid"]
+        for field in CANDIDATE_FIELDS:
+            if field in first_row:
+                second_row[field] = deepcopy(first_row[field])
+        leaf_candidate = deepcopy(first_item["candidate"])
+        verification = {
+            "profile": "repository_required",
+            "mode": "live_nonfinal",
+            "frozen_source_head": leaf_candidate["source_head_oid"],
+            "frozen_source_tree": leaf_candidate["tested_tree_oid"],
+            "repository_fingerprint_before": "1" * 64,
+            "repository_fingerprint_after": "1" * 64,
+            "verification_epoch_stable": True,
+            "verification_exit_code": 0,
+        }
+        result = build_leaf_result(
+            task_uid=first_row["leaf_task_uid"],
+            change_id=candidate["change_id"],
+            obligation_id=second_row["obligation_id"],
+            mapping_slot=second_row["mapping_slot"],
+            candidate=leaf_candidate,
+            verification=verification,
+        )
+        body = canonical_body(result)
+        comment_id = LEAF_RESULT_COMMENT_IDS[LEAF_UID] + 100
+        issue_number = LEAF_RESULT_ISSUE_NUMBERS[LEAF_UID] + 100
+        readers.issue_by_number[issue_number] = {
+            "number": issue_number,
+            "html_url": f"https://github.com/{REPOSITORY}/issues/{issue_number}",
+            "body": f"<!-- oasis7-pm-task -->\ntask_uid: {LEAF_UID}\n",
+        }
+        readers.comments[comment_id] = {
+            "id": comment_id,
+            "issue_url": f"https://api.github.com/repos/{REPOSITORY}/issues/{issue_number}",
+            "body": body,
+            "user": {"login": "leaf-result-publisher"},
+            "created_at": "2026-09-11T00:00:00Z",
+        }
+        readers.comment_issue_numbers[comment_id] = issue_number
+        second_row["leaf_evidence_locator"] = leaf_result_locator(
+            REPOSITORY, issue_number, comment_id, body
+        )
+        second_row["leaf_evidence_digest"] = result["evidence_digest"]
+        first_item["evidence_digest"] = result["evidence_digest"]
+
     def assert_trace_blocked(self, result, diagnostic):
         self.assert_blocked_for(result, diagnostic)
 
@@ -1241,7 +1290,14 @@ class TraceabilityTests(unittest.TestCase):
                 second_row[field] = deepcopy(first_row[field])
         self.assertEqual(self.api._validate_matrix(self.record, candidate, evidence), [])
 
-    def test_task2_live_aggregate_reuses_one_leaf_evidence_for_distinct_obligation_slots(self):
+    def test_task2_live_aggregate_reuses_one_leaf_task_with_independently_bound_evidence(self):
+        candidate, evidence, readers = self.complete_live_aggregate()
+        self.bind_shared_leaf_with_independent_live_result(candidate, evidence, readers)
+        candidate["equivalence_rules"] = []
+        result = self.aggregate(candidate, evidence[:1], self.record, readers)
+        self.assertEqual(result.get("status"), "passed", result)
+
+    def test_task2_live_aggregate_rejects_shared_leaf_locator_bound_to_other_row(self):
         candidate, evidence, readers = self.complete_live_aggregate()
         first_row = candidate["applicability_matrix"][0]
         second_row = candidate["applicability_matrix"][1]
@@ -1253,7 +1309,7 @@ class TraceabilityTests(unittest.TestCase):
                 second_row[field] = deepcopy(first_row[field])
         candidate["equivalence_rules"] = []
         result = self.aggregate(candidate, evidence[:1], self.record, readers)
-        self.assertEqual(result.get("status"), "passed", result)
+        self.assert_trace_blocked(result, "leaf result obligation_id mismatch")
 
     def test_task2_untouched_legacy_record_is_readable_but_new_aggregate_requires_upgrade(self):
         legacy = _legacy_record(self.record)
