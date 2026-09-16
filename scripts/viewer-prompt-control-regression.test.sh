@@ -58,6 +58,36 @@ run_strong_auth_contract_checks() {
   require_strong_auth_text 'hosted_access' 'hosted access URL requirement'
   require_strong_auth_text 'authoritative hosted URL' 'fail-closed hosted URL diagnostic'
   require_strong_auth_text 'no-proxy-server' 'loopback headed browser no-proxy default'
+  require_strong_auth_text 'Darwin' 'Darwin browser backend handling'
+  require_strong_auth_text '--use-angle=gl' 'agent-browser library GL default handling'
+  require_strong_auth_text '--use-angle=metal' 'Darwin WebGL2 Metal default'
+  require_strong_auth_text 'getContext("webgl2")' 'WebGL2 readiness probe'
+  require_strong_auth_text 'WebGL2 readiness' 'WebGL2 readiness phase label'
+  require_strong_auth_text 'AGENT_ID="starter-agent-0"' 'starter agent default'
+  require_strong_auth_text '--chain-disable' 'hosted bootstrap chain-disabled default'
+  require_strong_auth_text 'chain argument' 'explicit chain argument override'
+  require_strong_auth_text 'Claim First Agent' 'visible first-agent claim label'
+  require_strong_auth_text '认领第一个 Agent' 'visible first-agent claim zh label'
+  require_strong_auth_text 'a[href="#viewer-targets-panel"]' 'visible targets-panel navigation action'
+  require_strong_auth_text '//*[@id="viewer-targets-panel"]//button' 'targets-panel scoped claim XPath'
+  require_strong_auth_text 'normalize-space' 'normalized claim CTA text matching'
+  if rg -n 'viewer-playthrough-action-claim-first-agent' "$runner"; then
+    strong_auth_contract_failures="${strong_auth_contract_failures}\n- claim must not depend on the stale data-testid selector"
+  fi
+  require_strong_auth_text 'Claim Your First OC' 'starter OC onboarding heading'
+  require_strong_auth_text 'Claim Starter OC' 'starter OC onboarding CTA'
+  require_strong_auth_text 'claim_starter_oc' 'starter OC gameplay authority action'
+  require_strong_auth_text 'starter_oc_required_gate' 'starter OC onboarding overlay scope'
+  require_strong_auth_text 'overlay dismissal' 'starter OC overlay dismissal phase'
+  if rg -n 'viewer-playthrough-action-claim-starter-oc' "$runner"; then
+    strong_auth_contract_failures="${strong_auth_contract_failures}\n- starter OC claim must use scoped visible text/XPath, not a test id"
+  fi
+  require_strong_auth_text 'entityCounts' 'empty-world entity count gate'
+  require_strong_auth_text 'lastGameplayActionFeedback' 'first-agent gameplay authority ack wait'
+  require_strong_auth_text 'claim first agent action' 'first-agent claim action phase label'
+  if rg -n '__AW_TEST__\.(claim|sendGameplayAction)' "$runner"; then
+    strong_auth_contract_failures="${strong_auth_contract_failures}\n- first-agent claim must use the visible button, not the test API"
+  fi
   require_strong_auth_text 'run_visible_action' 'visible action failure wrapper'
   require_strong_auth_text 'test-login action' 'test-login action phase label'
   if rg -n 'ab_cmd "\$SESSION" (click|fill).*\/dev\/null' "$runner"; then
@@ -76,7 +106,12 @@ run_strong_auth_contract_checks() {
     strong_auth_contract_failures="${strong_auth_contract_failures}\n- networkidle cannot be the sole long-lived Viewer readiness gate"
   fi
 
-  require_strong_auth_text 'registerPlayerSessionForTest' 'permitted server binding hook'
+  require_strong_auth_text 'registerPlayerSessionForTest(null)' 'permitted hosted session-registration hook'
+  require_strong_auth_text 'hosted player session registration action' 'session-registration action phase label'
+  require_strong_auth_text 'registered_unbound' 'unbound runtime registration wait'
+  if rg -n 'ab_read_eval.*registerPlayerSessionForTest' "$runner"; then
+    strong_auth_contract_failures="${strong_auth_contract_failures}\n- hosted session registration must use non-retrying ab_eval"
+  fi
   require_strong_auth_text 'fill "#strong-auth-approval-code"' 'visible approval-code input'
   require_strong_auth_text 'lastPromptFeedback' 'authority feedback readback'
   require_strong_auth_text 'strongAuthLastGrantActionId' 'strong-auth grant action readback'
@@ -135,11 +170,47 @@ if [[ " $* " == *" open "* ]]; then
       exit 1
       ;;
   esac
+  if [[ "${VIEWER_PROMPT_FIXTURE_REQUIRE_METAL:-0}" == "1" && ( " $* " != *"--use-angle=metal"* || " $* " == *"--use-angle=gl"* ) ]]; then
+    echo "fixture browser open args missing Darwin Metal backend" >&2
+    exit 1
+  fi
+  if [[ "${VIEWER_PROMPT_FIXTURE_REQUIRE_EXPLICIT_GL:-0}" == "1" && ( " $* " != *"--use-angle=gl"* || " $* " == *"--use-angle=metal"* ) ]]; then
+    echo "fixture browser open args did not preserve explicit GL backend" >&2
+    exit 1
+  fi
   exit 0
 fi
 if [[ "${VIEWER_PROMPT_FIXTURE_FAIL_DOM_WAIT:-0}" == "1" && " $* " == *" wait --load domcontentloaded"* ]]; then
   echo "fixture domcontentloaded wait timeout" >&2
   exit 17
+fi
+if [[ "${VIEWER_PROMPT_FIXTURE_FAIL_CLAIM_BUTTON_WAIT:-0}" == "1" && ( "$*" == *normalize-space* || "$*" == *claim-first-agent* ) ]]; then
+  echo "fixture Claim First Agent button wait failed" >&2
+  exit 23
+fi
+if [[ "${1:-}" == "click" && "${2:-}" == 'a[href="#viewer-targets-panel"]' && -n "${VIEWER_PROMPT_FIXTURE_PANEL_NAV_COUNT:-}" ]]; then
+  panel_nav_count=0
+  if [[ -f "$VIEWER_PROMPT_FIXTURE_PANEL_NAV_COUNT" ]]; then
+    panel_nav_count=$(<"$VIEWER_PROMPT_FIXTURE_PANEL_NAV_COUNT")
+  fi
+  printf '%s\n' "$((panel_nav_count + 1))" >"$VIEWER_PROMPT_FIXTURE_PANEL_NAV_COUNT"
+  exit 0
+fi
+if [[ "${1:-}" == "click" && "${2:-}" == *'viewer-targets-panel'* && "${2:-}" == *'normalize-space'* && -n "${VIEWER_PROMPT_FIXTURE_CLAIM_ACTION_COUNT:-}" ]]; then
+  claim_action_count=0
+  if [[ -f "$VIEWER_PROMPT_FIXTURE_CLAIM_ACTION_COUNT" ]]; then
+    claim_action_count=$(<"$VIEWER_PROMPT_FIXTURE_CLAIM_ACTION_COUNT")
+  fi
+  printf '%s\n' "$((claim_action_count + 1))" >"$VIEWER_PROMPT_FIXTURE_CLAIM_ACTION_COUNT"
+  exit 0
+fi
+if [[ "${1:-}" == "click" && "${2:-}" == *'starter_oc_required_gate'* && "${2:-}" == *'normalize-space'* && -n "${VIEWER_PROMPT_FIXTURE_STARTER_OC_ACTION_COUNT:-}" ]]; then
+  starter_oc_action_count=0
+  if [[ -f "$VIEWER_PROMPT_FIXTURE_STARTER_OC_ACTION_COUNT" ]]; then
+    starter_oc_action_count=$(<"$VIEWER_PROMPT_FIXTURE_STARTER_OC_ACTION_COUNT")
+  fi
+  printf '%s\n' "$((starter_oc_action_count + 1))" >"$VIEWER_PROMPT_FIXTURE_STARTER_OC_ACTION_COUNT"
+  exit 0
 fi
 if [[ "${1:-}" == "click" && "${2:-}" == '[data-auth-action="test-login"]' && "${VIEWER_PROMPT_FIXTURE_FAIL_ACTION:-}" == "test-login" ]]; then
   action_count=0
@@ -152,15 +223,50 @@ if [[ "${1:-}" == "click" && "${2:-}" == '[data-auth-action="test-login"]' && "$
   echo "fixture test-login action failure" >&2
   exit 19
 fi
-if [[ "${1:-}" == "eval" && "${2:-}" == "--stdin" ]]; then
+if [[ "${1:-}" == "eval" ]]; then
   script=$(cat)
-  if [[ "$script" == 'document.readyState === "complete" || document.readyState === "interactive"' ]]; then
+  if [[ "$script" == *'document.readyState === "complete"'* && "$script" == *'document.readyState === "interactive"'* ]]; then
     if [[ -n "${VIEWER_PROMPT_FIXTURE_FALLBACK_MARKER:-}" ]]; then
       : >"$VIEWER_PROMPT_FIXTURE_FALLBACK_MARKER"
     fi
     printf '%s\n' 'true'
+  elif [[ "$script" == *'registerPlayerSessionForTest(null)'* ]]; then
+    if [[ -n "${VIEWER_PROMPT_FIXTURE_SESSION_REGISTRATION_COUNT:-}" ]]; then
+      registration_count=0
+      if [[ -f "$VIEWER_PROMPT_FIXTURE_SESSION_REGISTRATION_COUNT" ]]; then
+        registration_count=$(<"$VIEWER_PROMPT_FIXTURE_SESSION_REGISTRATION_COUNT")
+      fi
+      printf '%s\n' "$((registration_count + 1))" >"$VIEWER_PROMPT_FIXTURE_SESSION_REGISTRATION_COUNT"
+    fi
+    if [[ "${VIEWER_PROMPT_FIXTURE_FAIL_SESSION_REGISTRATION:-0}" == "1" ]]; then
+      echo "fixture hosted player session registration failure" >&2
+      exit 29
+    fi
+    printf '%s\n' 'true'
+  elif [[ "$script" == *'starter_oc_required_gate'* && "$script" == *'Claim Starter OC'* ]]; then
+    if [[ "${VIEWER_PROMPT_FIXTURE_STARTER_OC_ONBOARDING:-0}" == "1" ]]; then
+      printf '%s\n' 'true'
+    else
+      printf '%s\n' 'false'
+    fi
   elif [[ "$script" == 'window.__AW_TEST__.getState()' ]]; then
-    printf '%s\n' '{"authReady":true,"authRegistrationStatus":"registered","authRuntimeStatus":"registered","authBoundAgentId":"agent-1","authSessionEpoch":1,"authBindingEpoch":1,"viewerProtocol":{"negotiated":true,"capabilities":["prompt_control_result_v1"],"authorityEpoch":"fixture-authority"},"selectedId":"agent-1","selectedPromptVersion":0,"lastPromptFeedback":null,"strongAuthLastGrantActionId":null,"strongAuthLastGrantError":null}'
+    printf '%s\n' '{"authReady":true,"authRegistrationStatus":"registered","authRuntimeStatus":"registered","authBoundAgentId":"starter-agent-0","authSessionEpoch":1,"authBindingEpoch":1,"viewerProtocol":{"negotiated":true,"capabilities":["prompt_control_result_v1"],"authorityEpoch":"fixture-authority"},"selectedId":"starter-agent-0","selectedPromptVersion":0,"lastPromptFeedback":null,"strongAuthLastGrantActionId":null,"strongAuthLastGrantError":null}'
+  elif [[ "$script" == *"entityCounts"* && "$script" == *"document.querySelector"* ]]; then
+    if [[ "${VIEWER_PROMPT_FIXTURE_EMPTY_WORLD:-0}" == "1" ]]; then
+      printf '%s\n' 'true'
+    else
+      printf '%s\n' 'false'
+    fi
+  elif [[ "$script" == *"lastGameplayActionFeedback"* && "$script" == *"claim_starter_oc"* ]]; then
+    if [[ -n "${VIEWER_PROMPT_FIXTURE_STARTER_OC_ACK_MARKER:-}" ]]; then
+      : >"$VIEWER_PROMPT_FIXTURE_STARTER_OC_ACK_MARKER"
+    fi
+    printf '%s\n' 'true'
+  elif [[ "$script" == *"lastGameplayActionFeedback"* && "$script" == *"claim_first_agent"* ]]; then
+    if [[ -n "${VIEWER_PROMPT_FIXTURE_CLAIM_ACK_MARKER:-}" ]]; then
+      : >"$VIEWER_PROMPT_FIXTURE_CLAIM_ACK_MARKER"
+    fi
+    printf '%s\n' 'true'
   else
     printf '%s\n' 'true'
   fi
@@ -195,6 +301,7 @@ fallback_out="$tmp_root/domcontentloaded-fallback"
 fallback_marker="$tmp_root/domcontentloaded-fallback-seen"
 VIEWER_PROMPT_FIXTURE_FAIL_DOM_WAIT=1 \
   VIEWER_PROMPT_FIXTURE_FALLBACK_MARKER="$fallback_marker" \
+  VIEWER_PROMPT_FIXTURE_REQUIRE_METAL=1 \
   OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=fixture \
   OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=fixture \
   OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=fixture \
@@ -211,6 +318,8 @@ action_count_file="$tmp_root/test-login-action-count"
 set +e
 VIEWER_PROMPT_FIXTURE_FAIL_ACTION=test-login \
   VIEWER_PROMPT_FIXTURE_ACTION_COUNT="$action_count_file" \
+  VIEWER_PROMPT_FIXTURE_REQUIRE_EXPLICIT_GL=1 \
+  AGENT_BROWSER_ARGS='--use-angle=gl' \
   OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=fixture \
   OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=fixture \
   OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=fixture \
@@ -223,6 +332,83 @@ test -f "$action_count_file"
 test "$(<"$action_count_file")" = 1
 rg -Fq '[action:test-login action] command failed' "$action_failure_out/agent-browser.log"
 test -f "$action_failure_out/failure-test-login_action-session-info.json"
+
+claim_out="$tmp_root/claim-first-agent"
+claim_count_file="$tmp_root/claim-first-agent-count"
+panel_nav_count_file="$tmp_root/claim-first-agent-panel-nav-count"
+session_registration_count_file="$tmp_root/claim-first-agent-session-registration-count"
+claim_ack_marker="$tmp_root/claim-first-agent-ack-seen"
+starter_oc_action_count_file="$tmp_root/claim-starter-oc-count"
+starter_oc_ack_marker="$tmp_root/claim-starter-oc-ack-seen"
+VIEWER_PROMPT_FIXTURE_EMPTY_WORLD=1 \
+  VIEWER_PROMPT_FIXTURE_STARTER_OC_ONBOARDING=1 \
+  VIEWER_PROMPT_FIXTURE_CLAIM_ACTION_COUNT="$claim_count_file" \
+  VIEWER_PROMPT_FIXTURE_PANEL_NAV_COUNT="$panel_nav_count_file" \
+  VIEWER_PROMPT_FIXTURE_SESSION_REGISTRATION_COUNT="$session_registration_count_file" \
+  VIEWER_PROMPT_FIXTURE_STARTER_OC_ACTION_COUNT="$starter_oc_action_count_file" \
+  VIEWER_PROMPT_FIXTURE_STARTER_OC_ACK_MARKER="$starter_oc_ack_marker" \
+  VIEWER_PROMPT_FIXTURE_CLAIM_ACK_MARKER="$claim_ack_marker" \
+  OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=fixture \
+  OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=fixture \
+  OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=fixture \
+  PATH="$fake_bin:$PATH" "$runner" \
+  --headed --test-login --url http://127.0.0.1:9 --out-dir "$claim_out"
+test -f "$claim_count_file"
+test "$(<"$claim_count_file")" = 1
+test -f "$panel_nav_count_file"
+test "$(<"$panel_nav_count_file")" = 1
+test -f "$session_registration_count_file"
+test "$(<"$session_registration_count_file")" = 1
+test -f "$starter_oc_action_count_file"
+test "$(<"$starter_oc_action_count_file")" = 1
+test -f "$starter_oc_ack_marker"
+test -f "$claim_ack_marker"
+rg -Fq '[action:claim first agent action]' "$claim_out/agent-browser.log"
+
+claim_fail_out="$tmp_root/claim-first-agent-failure"
+claim_fail_count="$tmp_root/claim-first-agent-failure-count"
+claim_fail_panel_nav_count="$tmp_root/claim-first-agent-failure-panel-nav-count"
+set +e
+VIEWER_PROMPT_FIXTURE_EMPTY_WORLD=1 \
+  VIEWER_PROMPT_FIXTURE_FAIL_CLAIM_BUTTON_WAIT=1 \
+  VIEWER_PROMPT_FIXTURE_CLAIM_ACTION_COUNT="$claim_fail_count" \
+  VIEWER_PROMPT_FIXTURE_PANEL_NAV_COUNT="$claim_fail_panel_nav_count" \
+  OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=fixture \
+  OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=fixture \
+  OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=fixture \
+  PATH="$fake_bin:$PATH" "$runner" \
+  --headed --test-login --url http://127.0.0.1:9 --out-dir "$claim_fail_out"
+claim_fail_rc=$?
+set -e
+test "$claim_fail_rc" -ne 0
+if [[ -f "$claim_fail_count" ]]; then
+  test "$(<"$claim_fail_count")" = 0
+fi
+test -f "$claim_fail_panel_nav_count"
+test "$(<"$claim_fail_panel_nav_count")" = 1
+
+registration_fail_out="$tmp_root/session-registration-failure"
+registration_fail_count="$tmp_root/session-registration-failure-count"
+registration_fail_panel_nav_count="$tmp_root/session-registration-failure-panel-nav-count"
+set +e
+VIEWER_PROMPT_FIXTURE_FAIL_SESSION_REGISTRATION=1 \
+  VIEWER_PROMPT_FIXTURE_SESSION_REGISTRATION_COUNT="$registration_fail_count" \
+  VIEWER_PROMPT_FIXTURE_PANEL_NAV_COUNT="$registration_fail_panel_nav_count" \
+  OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=fixture \
+  OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=fixture \
+  OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=fixture \
+  PATH="$fake_bin:$PATH" "$runner" \
+  --headed --test-login --url http://127.0.0.1:9 --out-dir "$registration_fail_out"
+registration_fail_rc=$?
+set -e
+test "$registration_fail_rc" -ne 0
+test -f "$registration_fail_count"
+test "$(<"$registration_fail_count")" = 1
+if [[ -f "$registration_fail_panel_nav_count" ]]; then
+  test "$(<"$registration_fail_panel_nav_count")" = 0
+fi
+test -f "$registration_fail_out/failure-hosted_player_session_registration_action-session-info.json"
+test -f "$claim_fail_out/failure-claim_first_agent_button-session-info.json"
 
 first_manifest=$(find "$first_out" -name artifact-manifest.json -type f -print -quit)
 second_manifest=$(find "$second_out" -name artifact-manifest.json -type f -print -quit)
@@ -296,14 +482,19 @@ set -euo pipefail
 [[ "${OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE:-}" == "fixture" ]]
 [[ "${OASIS7_HOSTED_TEST_LOGIN_ENABLED:-}" == "1" ]]
 output_dir=""
+chain_disable_seen=0
 while (($# > 0)); do
   if [[ "${1:-}" == "--output-dir" ]]; then
     output_dir="${2:?missing output dir}"
     shift 2
+  elif [[ "${1:-}" == "--chain-disable" ]]; then
+    chain_disable_seen=1
+    shift
   else
     shift
   fi
 done
+[[ "$chain_disable_seen" == "1" ]]
 mkdir -p "$output_dir"
 printf '%s\n' '- URL: http://127.0.0.1:9'
 printf '%s\n' '- URL: http://127.0.0.1:9/?render_mode=viewer&ws=ws%3A%2F%2F127.0.0.1%3A11&hosted_access=fixture-authority' \
@@ -329,6 +520,10 @@ elif [[ " $* " == *" open "* ]]; then
     echo "fixture browser open args missing --no-proxy-server" >&2
     exit 1
   fi
+  if [[ "${VIEWER_PROMPT_FIXTURE_REQUIRE_METAL:-0}" == "1" && ( " $* " != *"--use-angle=metal"* || " $* " == *"--use-angle=gl"* ) ]]; then
+    echo "fixture browser open args missing Darwin Metal backend" >&2
+    exit 1
+  fi
 elif [[ "${1:-}" == "eval" && "${2:-}" == "--stdin" ]]; then
   script=$(cat)
   if [[ "$script" == 'window.__AW_TEST__.getState()' ]]; then
@@ -343,6 +538,7 @@ EOF
   set +e
   VIEWER_PROMPT_FIXTURE_REQUIRE_HOSTED_ACCESS=1 \
     VIEWER_PROMPT_FIXTURE_REQUIRE_NO_PROXY=1 \
+    VIEWER_PROMPT_FIXTURE_REQUIRE_METAL=1 \
   OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=fixture \
     OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=fixture \
     OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=fixture \

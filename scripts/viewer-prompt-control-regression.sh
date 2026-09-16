@@ -7,13 +7,15 @@ OUT_DIR="output/playwright/prompt-control/${CASE_ID}"
 HEADED=0
 CONTRACT_ONLY=0
 GAME_URL=""
-AGENT_ID="agent-1"
+AGENT_ID="starter-agent-0"
 PROMPT_GOAL="Inspect the selected agent's prompt control state."
 STARTUP_TIMEOUT=180
 ACTION_TIMEOUT_MS=10000
 TEST_LOGIN=0
 STACK_ARGS=()
 STACK_BOOTSTRAPPED=0
+STACK_CHAIN_ARG_EXPLICIT=0
+FIRST_AGENT_CLAIM_PERFORMED=0
 
 usage() {
   cat <<'EOF'
@@ -55,6 +57,16 @@ while (($# > 0)); do
   esac
   shift
 done
+
+if ((${#STACK_ARGS[@]} > 0)); then
+  for stack_arg in "${STACK_ARGS[@]}"; do
+    # An explicit chain argument from the caller is authoritative.
+    if [[ "$stack_arg" == --chain-* ]]; then
+      STACK_CHAIN_ARG_EXPLICIT=1
+      break
+    fi
+  done
+fi
 
 if (( HEADED == 0 )); then
   echo "error: --headed is required for PWT-004; headed evidence is mandatory" >&2
@@ -155,6 +167,11 @@ configure_loopback_browser_args() {
     args="$AGENT_BROWSER_ARGS"
   else
     args="$(ab_browser_args)"
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+      # The library default is GL, but headed macOS Chrome exposes no WebGL2
+      # canvas with that backend. Preserve an explicit caller override.
+      args="${args//--use-angle=gl/--use-angle=metal}"
+    fi
   fi
   case ",$args," in
     *,--no-proxy-server,*) ;;
@@ -391,6 +408,89 @@ run_visible_action() {
   return "$result"
 }
 
+register_hosted_player_session() {
+  local result
+  # This hook only registers the server-side session; it is intentionally an
+  # action-bearing eval with no retry because it may already have committed.
+  if ab_eval "$SESSION" "window.__AW_TEST__.registerPlayerSessionForTest(null)" >>"$AB_LOG" 2>&1; then
+    printf '[action:hosted player session registration action] completed\n' >>"$AB_LOG"
+    return 0
+  else
+    result=$?
+  fi
+  printf '[action:hosted player session registration action] command failed (exit=%s)\n' "$result" >>"$AB_LOG"
+  capture_failure_diagnostics "hosted player session registration action"
+  echo "error: hosted player session registration action failed (phase: hosted player session registration action; diagnostics: ${OUT_DIR}/failure-$(diagnostic_slug "hosted player session registration action")-*)" >&2
+  return "$result"
+}
+
+maybe_claim_first_agent() {
+  local agent_selector_json="$1"
+  local empty_world
+  local claim_button_xpath
+  local claim_button_xpath_json
+  empty_world="$(ab_read_eval "$SESSION" "(() => { const s = window.__AW_TEST__.getState(); const g = s?.gameplaySummary || {}; return !document.querySelector(${agent_selector_json}) && Number(g?.entityCounts?.agents) === 0; })()" 2>/dev/null || true)"
+  case "$empty_world" in
+    true|\"true\")
+      FIRST_AGENT_CLAIM_PERFORMED=1
+      ;;
+    false|\"false\")
+      return 0
+      ;;
+    *)
+      capture_failure_diagnostics "empty-world entity gate"
+      echo "error: empty-world entity gate state was unavailable (phase: empty-world entity gate)" >&2
+      return 1
+      ;;
+  esac
+
+  run_visible_action "claim first agent panel navigation action" click \
+    'a[href="#viewer-targets-panel"]'
+  claim_button_xpath='//*[@id="viewer-targets-panel"]//button[contains(normalize-space(.), "Claim First Agent") or contains(normalize-space(.), "认领第一个 Agent")]'
+  claim_button_xpath_json="$(json_quote "$claim_button_xpath")"
+  wait_for_cli_stage "claim first agent button" wait --fn \
+    "Boolean((() => { const node = document.evaluate(${claim_button_xpath_json}, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; return node && !node.disabled; })())"
+  run_visible_action "claim first agent action" click "xpath=$claim_button_xpath"
+  wait_for_js_true \
+    '(() => { const s = window.__AW_TEST__.getState(); const f = s?.lastGameplayActionFeedback; return f?.kind === "gameplay_action" && f?.action === "claim_first_agent" && f?.stage === "ack" && f?.accepted === true && f?.response?.action_id === "claim_first_agent"; })()' \
+    "claim first agent gameplay authority ack"
+  wait_for_js_true \
+    '(() => { const s = window.__AW_TEST__.getState(); return Number(s?.gameplaySummary?.entityCounts?.agents) > 0; })()' \
+    "claim first agent snapshot entity count"
+  wait_for_js_true "(() => window.__AW_TEST__.getState()?.selectedId === ${agent_selector_json})()" \
+    "claim first agent authoritative selection"
+}
+
+maybe_claim_starter_oc() {
+  local agent_id_json="$1"
+  local starter_oc_xpath
+  local starter_oc_xpath_json
+  local onboarding_visible
+  # The player-facing overlay is titled Claim Your First OC.
+  starter_oc_xpath='//*[@data-viewer-fixture-state="starter_oc_required_gate"]//button[contains(normalize-space(.), "Claim Starter OC") or contains(normalize-space(.), "领取初始 OC")]'
+  starter_oc_xpath_json="$(json_quote "$starter_oc_xpath")"
+  onboarding_visible="$(ab_read_eval "$SESSION" "Boolean((() => { const node = document.evaluate(${starter_oc_xpath_json}, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; return node && !node.disabled && node.getClientRects().length > 0; })())" 2>/dev/null || true)"
+  case "$onboarding_visible" in
+    false|\"false\")
+      return 0
+      ;;
+    true|\"true\")
+      ;;
+    *)
+      capture_failure_diagnostics "starter OC onboarding visibility"
+      echo "error: starter OC onboarding visibility was unavailable (phase: starter OC onboarding visibility)" >&2
+      return 1
+      ;;
+  esac
+
+  run_visible_action "claim starter oc action" click "xpath=$starter_oc_xpath"
+  wait_for_js_true \
+    '(() => { const s = window.__AW_TEST__.getState(); const f = s?.lastGameplayActionFeedback; return f?.kind === "gameplay_action" && f?.action === "claim_starter_oc" && f?.stage === "ack" && f?.accepted === true && f?.response?.action_id === "claim_starter_oc"; })()' \
+    "claim starter oc gameplay authority ack"
+  wait_for_js_true "(() => { const s = window.__AW_TEST__.getState(); const p = s?.viewerProtocol || {}; return !document.querySelector('[data-viewer-fixture-state=\"starter_oc_required_gate\"]') && Boolean(document.querySelector('#prompt-short')) && s?.authBoundAgentId === ${agent_id_json} && s?.authBindingEpoch != null && p?.negotiated === true && Array.isArray(p?.capabilities) && p.capabilities.includes('prompt_control_result_v1'); })()" \
+    "starter OC overlay dismissal and control readiness"
+}
+
 wait_for_js_true() {
   local script="$1"
   local label="$2"
@@ -429,6 +529,12 @@ wait_for_domcontentloaded() {
   fi
   echo "error: domcontentloaded readiness failed after CLI wait and JS fallback (phase: domcontentloaded)" >&2
   return "$result"
+}
+
+wait_for_webgl2() {
+  wait_for_js_true \
+    'Boolean(document.createElement("canvas").getContext("webgl2"))' \
+    "WebGL2 readiness" "$ACTION_TIMEOUT_MS"
 }
 
 state_raw() {
@@ -508,6 +614,11 @@ wait_for_prompt_feedback() {
 
 if [[ -z "$GAME_URL" ]]; then
   STACK_BOOTSTRAPPED=1
+  if (( STACK_CHAIN_ARG_EXPLICIT == 0 )); then
+    # Hosted bootstrap defaults to a chain-disabled page-play lane.  Any
+    # explicit --chain-* caller argument remains authoritative.
+    STACK_ARGS+=(--chain-disable)
+  fi
   if ((${#STACK_ARGS[@]} > 0)); then
     "$ROOT_DIR/scripts/run-launcher-stack.sh" \
       --with-llm \
@@ -576,18 +687,22 @@ fi
 
 ab_open "$SESSION" 1 "$GAME_URL"
 wait_for_domcontentloaded
+wait_for_webgl2
 wait_for_cli_stage "test-api" wait --fn 'typeof window.__AW_TEST__ === "object"'
 wait_for_cli_stage "test-login selector" wait --fn "Boolean(document.querySelector('[data-auth-action=\"test-login\"]'))"
 run_visible_action "test-login action" click '[data-auth-action="test-login"]'
 wait_for_js_true '(() => { const s = window.__AW_TEST__.getState(); return s?.authReady === true && s?.authRegistrationStatus === "issued" && s?.authRuntimeStatus === "issued"; })()' "hosted test-login auth issuance"
+register_hosted_player_session
+wait_for_js_true '(() => { const s = window.__AW_TEST__.getState(); return s?.authReady === true && s?.authRegistrationStatus === "registered" && s?.authRuntimeStatus === "registered_unbound" && s?.authBoundAgentId == null && s?.authSessionEpoch != null; })()' "hosted player session registration"
 
 AGENT_ID_JSON="$(json_quote "$AGENT_ID")"
-run_visible_action "exact agent selection action" click "$AGENT_SELECTOR"
-wait_for_js_true "(() => window.__AW_TEST__.getState()?.selectedId === ${AGENT_ID_JSON})()" "exact agent selection"
+maybe_claim_first_agent "$AGENT_ID_JSON"
+if (( FIRST_AGENT_CLAIM_PERFORMED == 0 )); then
+  run_visible_action "exact agent selection action" click "$AGENT_SELECTOR"
+  wait_for_js_true "(() => window.__AW_TEST__.getState()?.selectedId === ${AGENT_ID_JSON})()" "exact agent selection"
+fi
+maybe_claim_starter_oc "$AGENT_ID_JSON"
 
-# This is the permitted server-binding hook. It does not select, type, submit,
-# or replace any player-facing prompt action.
-ab_eval "$SESSION" "window.__AW_TEST__.registerPlayerSessionForTest(${AGENT_ID_JSON})" >/dev/null 2>&1
 wait_for_js_true "(() => { const s = window.__AW_TEST__.getState(); const p = s?.viewerProtocol || {}; return s?.authReady === true && s?.authRegistrationStatus === \"registered\" && [\"registered\", \"registered_unbound\"].includes(s?.authRuntimeStatus) && s?.authBoundAgentId === ${AGENT_ID_JSON} && s?.authSessionEpoch != null && s?.authBindingEpoch != null && p?.negotiated === true && Array.isArray(p?.capabilities) && p.capabilities.includes(\"prompt_control_result_v1\") && String(p?.authorityEpoch || \"\").length > 0; })()" "auth binding and prompt-result protocol readiness"
 
 AGENT_BROWSER_DEFAULT_TIMEOUT="$ACTION_TIMEOUT_MS" \
