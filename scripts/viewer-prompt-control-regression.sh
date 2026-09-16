@@ -13,6 +13,7 @@ STARTUP_TIMEOUT=180
 ACTION_TIMEOUT_MS=10000
 TEST_LOGIN=0
 STACK_ARGS=()
+STACK_BOOTSTRAPPED=0
 
 usage() {
   cat <<'EOF'
@@ -103,6 +104,67 @@ PY
     echo "error: --test-login is restricted to a loopback URL" >&2
     exit 2
   fi
+}
+
+read_authoritative_hosted_url() {
+  local runtime_log="$OUT_DIR/runtime/oasis7_viewer_live.log"
+  python3 - "$runtime_log" <<'PY'
+import pathlib
+import re
+import sys
+from urllib.parse import parse_qsl, urlsplit
+
+path = pathlib.Path(sys.argv[1])
+if not path.is_file():
+    raise SystemExit(0)
+for line in path.read_text(errors="replace").splitlines():
+    match = re.search(r"^- URL: (https?://\S+)", line)
+    if not match:
+        continue
+    url = match.group(1)
+    query = dict(parse_qsl(urlsplit(url).query, keep_blank_values=True))
+    if query.get("hosted_access", "").strip():
+        print(url)
+        raise SystemExit(0)
+raise SystemExit(0)
+PY
+}
+
+wait_for_authoritative_hosted_url() {
+  local deadline=$((SECONDS + STARTUP_TIMEOUT))
+  local authoritative_url
+  while (( SECONDS < deadline )); do
+    authoritative_url="$(read_authoritative_hosted_url)"
+    if [[ -n "$authoritative_url" ]]; then
+      printf '%s\n' "$authoritative_url"
+      return 0
+    fi
+    if [[ -n "$LAUNCH_PID" ]] && ! kill -0 "$LAUNCH_PID" 2>/dev/null; then
+      echo "error: hosted_public_join launcher exited before publishing authoritative hosted URL" >&2
+      return 1
+    fi
+    sleep 1
+  done
+  echo "error: authoritative hosted URL with hosted_access was not published under $OUT_DIR/runtime/oasis7_viewer_live.log" >&2
+  return 1
+}
+
+configure_loopback_browser_args() {
+  local args
+  if [[ ${AGENT_BROWSER_ARGS+x} ]]; then
+    args="$AGENT_BROWSER_ARGS"
+  else
+    args="$(ab_browser_args)"
+  fi
+  case ",$args," in
+    *,--no-proxy-server,*) ;;
+    *)
+      [[ -n "$args" ]] && args+=","
+      args+="--no-proxy-server"
+      ;;
+  esac
+  AGENT_BROWSER_ARGS="$args"
+  export AGENT_BROWSER_ARGS
 }
 
 visible_action_contract() {
@@ -226,6 +288,7 @@ source "$ROOT_DIR/scripts/agent-browser-lib.sh"
 mkdir -p "$OUT_DIR"
 RUN_ID="viewer-prompt-control-${CASE_ID}-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 LAUNCH_LOG="$OUT_DIR/launcher.log"
+AB_LOG="$OUT_DIR/agent-browser.log"
 LAUNCH_PID=""
 SESSION=""
 cleanup() {
@@ -245,6 +308,89 @@ trap cleanup EXIT
 ab_require
 SESSION="$(ab_session_begin "viewer-prompt-control-${CASE_ID}-${RUN_ID}" "$OUT_DIR")"
 
+diagnostic_slug() {
+  printf '%s' "$1" | tr -cs '[:alnum:]_.-' '_' | sed 's/^_//; s/_$//'
+}
+
+capture_failure_diagnostics() {
+  local stage="$1"
+  local slug
+  local base
+  local page_summary
+  local state
+  slug="$(diagnostic_slug "$stage")"
+  base="$OUT_DIR/failure-${slug}"
+
+  printf '[failure:%s] collecting browser diagnostics\n' "$stage" >>"$AB_LOG"
+  AB_READ_RETRY_ATTEMPTS=1 ab_read_retry "$SESSION" session info --json \
+    >"${base}-session-info.json" 2>&1 || true
+  AB_READ_RETRY_ATTEMPTS=1 ab_read_retry "$SESSION" tab list --json \
+    >"${base}-tabs.json" 2>&1 || true
+  AB_READ_RETRY_ATTEMPTS=1 ab_read_retry "$SESSION" console \
+    >"${base}-console.log" 2>&1 || true
+  AB_READ_RETRY_ATTEMPTS=1 ab_read_retry "$SESSION" errors \
+    >"${base}-errors.log" 2>&1 || true
+  AB_READ_RETRY_ATTEMPTS=1 ab_read_retry "$SESSION" snapshot -i \
+    >"${base}-snapshot.txt" 2>&1 || true
+  ab_screenshot "$SESSION" "${base}.png" \
+    >"${base}-screenshot.log" 2>&1 || true
+
+  page_summary="$(AB_READ_RETRY_ATTEMPTS=1 ab_read_eval "$SESSION" \
+    'JSON.stringify({readyState:document.readyState,title:document.title,url:location.href,awTest:typeof window.__AW_TEST__,testLogin:Boolean(document.querySelector("[data-auth-action=\\"test-login\\"]"))})' \
+    2>/dev/null || true)"
+  printf '%s\n' "$page_summary" >"${base}-page-summary.json"
+
+  state="$(AB_READ_RETRY_ATTEMPTS=1 ab_read_eval "$SESSION" \
+    'window.__AW_TEST__?.getState?.() ?? null' 2>/dev/null || true)"
+  if [[ -n "$state" ]]; then
+    write_safe_state "$state" "${base}-state.json" || true
+  fi
+  printf '[failure:%s] diagnostics written under %s\n' "$stage" "$OUT_DIR" >>"$AB_LOG"
+}
+
+wait_for_cli_stage() {
+  local stage="$1"
+  shift
+  local defer_failure=0
+  local output
+  local result
+  if [[ "${1:-}" == "--defer-failure" ]]; then
+    defer_failure=1
+    shift
+  fi
+  if output="$(ab_read_retry "$SESSION" "$@" 2>&1)"; then
+    printf '[%s] %s\n' "$stage" "$output" >>"$AB_LOG"
+    return 0
+  else
+    result=$?
+  fi
+  printf '[%s] command failed (exit=%s):\n%s\n' "$stage" "$result" "$output" >>"$AB_LOG"
+  capture_failure_diagnostics "$stage"
+  if (( defer_failure == 0 )); then
+    echo "error: ${stage} wait failed (phase: ${stage}; diagnostics: ${OUT_DIR}/failure-$(diagnostic_slug "$stage")-*)" >&2
+  fi
+  return "$result"
+}
+
+run_visible_action() {
+  local phase="$1"
+  shift
+  local output
+  local result
+  # Visible actions intentionally call ab_cmd directly: an uncertain click or
+  # fill must never be replayed because it may already have reached the page.
+  if output="$(ab_cmd "$SESSION" "$@" 2>&1)"; then
+    printf '[action:%s] %s\n' "$phase" "$output" >>"$AB_LOG"
+    return 0
+  else
+    result=$?
+  fi
+  printf '[action:%s] command failed (exit=%s):\n%s\n' "$phase" "$result" "$output" >>"$AB_LOG"
+  capture_failure_diagnostics "$phase"
+  echo "error: visible action ${phase} failed (phase: ${phase}; diagnostics: ${OUT_DIR}/failure-$(diagnostic_slug "$phase")-*)" >&2
+  return "$result"
+}
+
 wait_for_js_true() {
   local script="$1"
   local label="$2"
@@ -261,8 +407,28 @@ wait_for_js_true() {
     fi
     sleep 0.2
   done
-  echo "error: timed out waiting for ${label}" >&2
+  printf '[%s] JS wait timed out; last value=%s\n' "$label" "${value:-<empty>}" >>"$AB_LOG"
+  capture_failure_diagnostics "$label"
+  echo "error: timed out waiting for ${label} (phase: ${label}; diagnostics: ${OUT_DIR}/failure-$(diagnostic_slug "$label")-*)" >&2
   return 1
+}
+
+wait_for_domcontentloaded() {
+  local result
+  if wait_for_cli_stage "domcontentloaded" --defer-failure wait --load domcontentloaded; then
+    return 0
+  else
+    result=$?
+  fi
+  if wait_for_js_true \
+    'document.readyState === "complete" || document.readyState === "interactive"' \
+    "domcontentloaded fallback" "$ACTION_TIMEOUT_MS"; then
+    printf '[domcontentloaded fallback] JS readyState accepted after CLI wait failure\n' >>"$AB_LOG"
+    echo "warning: domcontentloaded CLI wait failed; readyState fallback passed (phase: domcontentloaded fallback)" >&2
+    return 0
+  fi
+  echo "error: domcontentloaded readiness failed after CLI wait and JS fallback (phase: domcontentloaded)" >&2
+  return "$result"
 }
 
 state_raw() {
@@ -341,6 +507,7 @@ wait_for_prompt_feedback() {
 }
 
 if [[ -z "$GAME_URL" ]]; then
+  STACK_BOOTSTRAPPED=1
   if ((${#STACK_ARGS[@]} > 0)); then
     "$ROOT_DIR/scripts/run-launcher-stack.sh" \
       --with-llm \
@@ -383,6 +550,10 @@ PY
     sleep 1
   done
   [[ -n "$GAME_URL" ]] || { echo "error: launcher URL timeout" >&2; exit 1; }
+  if (( TEST_LOGIN == 1 )); then
+    GAME_URL="$(wait_for_authoritative_hosted_url)" || exit 1
+    [[ -n "$GAME_URL" ]] || exit 1
+  fi
 fi
 
 GAME_URL="$(python3 - "$GAME_URL" "$TEST_LOGIN" <<'PY'
@@ -399,16 +570,19 @@ PY
 )"
 
 require_loopback_url "$GAME_URL"
+if (( HEADED == 1 )); then
+  configure_loopback_browser_args
+fi
 
 ab_open "$SESSION" 1 "$GAME_URL"
-ab_read_retry "$SESSION" wait --load domcontentloaded >/dev/null
-ab_read_retry "$SESSION" wait --fn 'typeof window.__AW_TEST__ === "object"' >/dev/null
-ab_read_retry "$SESSION" wait --fn "Boolean(document.querySelector('[data-auth-action=\"test-login\"]'))" >/dev/null
-ab_cmd "$SESSION" click '[data-auth-action="test-login"]' >/dev/null 2>&1
+wait_for_domcontentloaded
+wait_for_cli_stage "test-api" wait --fn 'typeof window.__AW_TEST__ === "object"'
+wait_for_cli_stage "test-login selector" wait --fn "Boolean(document.querySelector('[data-auth-action=\"test-login\"]'))"
+run_visible_action "test-login action" click '[data-auth-action="test-login"]'
 wait_for_js_true '(() => { const s = window.__AW_TEST__.getState(); return s?.authReady === true && s?.authRegistrationStatus === "issued" && s?.authRuntimeStatus === "issued"; })()' "hosted test-login auth issuance"
 
 AGENT_ID_JSON="$(json_quote "$AGENT_ID")"
-ab_cmd "$SESSION" click "$AGENT_SELECTOR" >/dev/null 2>&1
+run_visible_action "exact agent selection action" click "$AGENT_SELECTOR"
 wait_for_js_true "(() => window.__AW_TEST__.getState()?.selectedId === ${AGENT_ID_JSON})()" "exact agent selection"
 
 # This is the permitted server-binding hook. It does not select, type, submit,
@@ -417,12 +591,12 @@ ab_eval "$SESSION" "window.__AW_TEST__.registerPlayerSessionForTest(${AGENT_ID_J
 wait_for_js_true "(() => { const s = window.__AW_TEST__.getState(); const p = s?.viewerProtocol || {}; return s?.authReady === true && s?.authRegistrationStatus === \"registered\" && [\"registered\", \"registered_unbound\"].includes(s?.authRuntimeStatus) && s?.authBoundAgentId === ${AGENT_ID_JSON} && s?.authSessionEpoch != null && s?.authBindingEpoch != null && p?.negotiated === true && Array.isArray(p?.capabilities) && p.capabilities.includes(\"prompt_control_result_v1\") && String(p?.authorityEpoch || \"\").length > 0; })()" "auth binding and prompt-result protocol readiness"
 
 AGENT_BROWSER_DEFAULT_TIMEOUT="$ACTION_TIMEOUT_MS" \
-  ab_read_retry "$SESSION" wait --text "Advanced Prompt Settings" >/dev/null
-ab_cmd "$SESSION" click 'details.command-surface__advanced-details > summary' >/dev/null 2>&1
+wait_for_cli_stage "advanced prompt text" wait --text "Advanced Prompt Settings"
+run_visible_action "advanced prompt disclosure action" click 'details.command-surface__advanced-details > summary'
 wait_for_js_true 'Boolean(document.querySelector("details.command-surface__advanced-details[open]"))' "advanced prompt disclosure"
 wait_for_js_true 'Boolean(document.querySelector("#strong-auth-approval-code"))' "strong-auth approval input"
-ab_cmd "$SESSION" fill "#strong-auth-approval-code" "$OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE" >/dev/null 2>&1
-ab_cmd "$SESSION" fill "#prompt-short" "$PROMPT_GOAL" >/dev/null 2>&1
+run_visible_action "strong-auth approval fill action" fill "#strong-auth-approval-code" "$OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE"
+run_visible_action "short-term goal fill action" fill "#prompt-short" "$PROMPT_GOAL"
 
 before_state="$(state_raw)"
 write_safe_state "$before_state" "$OUT_DIR/state-before.json"
@@ -434,18 +608,18 @@ fi
 
 # All prompt changes below are visible browser actions. The test API is used
 # only for the permitted server binding, state readback, and artifact capture.
-ab_cmd "$SESSION" click 'button[data-prompt-action="preview"]' >/dev/null 2>&1
+run_visible_action "preview action" click 'button[data-prompt-action="preview"]'
 wait_for_prompt_feedback preview
 preview_state="$(state_raw)"
 write_safe_state "$preview_state" "$OUT_DIR/state-after-preview.json"
 
-ab_cmd "$SESSION" click 'button[data-prompt-action="apply"]' >/dev/null 2>&1
+run_visible_action "apply action" click 'button[data-prompt-action="apply"]'
 wait_for_prompt_feedback apply
 apply_state="$(state_raw)"
 write_safe_state "$apply_state" "$OUT_DIR/state-after-apply.json"
 
-ab_cmd "$SESSION" fill "#prompt-rollback-version" "$before_version" >/dev/null 2>&1
-ab_cmd "$SESSION" click 'button[data-prompt-action="rollback"]' >/dev/null 2>&1
+run_visible_action "rollback target fill action" fill "#prompt-rollback-version" "$before_version"
+run_visible_action "rollback action" click 'button[data-prompt-action="rollback"]'
 wait_for_prompt_feedback rollback "$before_version"
 rollback_state="$(state_raw)"
 write_safe_state "$rollback_state" "$OUT_DIR/state-after-rollback.json"

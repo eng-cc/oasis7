@@ -46,6 +46,23 @@ run_strong_auth_contract_checks() {
   fi
 
   require_strong_auth_text 'wait --load domcontentloaded' 'DOM readiness wait'
+  require_strong_auth_text 'document.readyState === "complete"' 'DOM readyState complete fallback'
+  require_strong_auth_text 'document.readyState === "interactive"' 'DOM readyState interactive fallback'
+  require_strong_auth_text 'domcontentloaded fallback' 'DOM fallback phase label'
+  require_strong_auth_text 'capture_failure_diagnostics' 'readiness failure diagnostics'
+  require_strong_auth_text 'agent-browser.log' 'agent-browser command diagnostics log'
+  require_strong_auth_text 'snapshot' 'failure DOM snapshot diagnostics'
+  require_strong_auth_text 'session info --json' 'failure browser session diagnostics'
+  require_strong_auth_text 'tab list --json' 'failure browser tab diagnostics'
+  require_strong_auth_text 'runtime/oasis7_viewer_live.log' 'runtime authoritative hosted URL source'
+  require_strong_auth_text 'hosted_access' 'hosted access URL requirement'
+  require_strong_auth_text 'authoritative hosted URL' 'fail-closed hosted URL diagnostic'
+  require_strong_auth_text 'no-proxy-server' 'loopback headed browser no-proxy default'
+  require_strong_auth_text 'run_visible_action' 'visible action failure wrapper'
+  require_strong_auth_text 'test-login action' 'test-login action phase label'
+  if rg -n 'ab_cmd "\$SESSION" (click|fill).*\/dev\/null' "$runner"; then
+    strong_auth_contract_failures="${strong_auth_contract_failures}\n- visible click/fill actions must not silently discard failures"
+  fi
   require_strong_auth_text 'typeof window.__AW_TEST__ ===' 'test API readiness wait'
   require_strong_auth_text 'authReady' 'auth readiness wait'
   require_strong_auth_text 'authRegistrationStatus' 'auth registration wait'
@@ -120,9 +137,29 @@ if [[ " $* " == *" open "* ]]; then
   esac
   exit 0
 fi
+if [[ "${VIEWER_PROMPT_FIXTURE_FAIL_DOM_WAIT:-0}" == "1" && " $* " == *" wait --load domcontentloaded"* ]]; then
+  echo "fixture domcontentloaded wait timeout" >&2
+  exit 17
+fi
+if [[ "${1:-}" == "click" && "${2:-}" == '[data-auth-action="test-login"]' && "${VIEWER_PROMPT_FIXTURE_FAIL_ACTION:-}" == "test-login" ]]; then
+  action_count=0
+  if [[ -n "${VIEWER_PROMPT_FIXTURE_ACTION_COUNT:-}" && -f "$VIEWER_PROMPT_FIXTURE_ACTION_COUNT" ]]; then
+    action_count=$(<"$VIEWER_PROMPT_FIXTURE_ACTION_COUNT")
+  fi
+  if [[ -n "${VIEWER_PROMPT_FIXTURE_ACTION_COUNT:-}" ]]; then
+    printf '%s\n' "$((action_count + 1))" >"$VIEWER_PROMPT_FIXTURE_ACTION_COUNT"
+  fi
+  echo "fixture test-login action failure" >&2
+  exit 19
+fi
 if [[ "${1:-}" == "eval" && "${2:-}" == "--stdin" ]]; then
   script=$(cat)
-  if [[ "$script" == 'window.__AW_TEST__.getState()' ]]; then
+  if [[ "$script" == 'document.readyState === "complete" || document.readyState === "interactive"' ]]; then
+    if [[ -n "${VIEWER_PROMPT_FIXTURE_FALLBACK_MARKER:-}" ]]; then
+      : >"$VIEWER_PROMPT_FIXTURE_FALLBACK_MARKER"
+    fi
+    printf '%s\n' 'true'
+  elif [[ "$script" == 'window.__AW_TEST__.getState()' ]]; then
     printf '%s\n' '{"authReady":true,"authRegistrationStatus":"registered","authRuntimeStatus":"registered","authBoundAgentId":"agent-1","authSessionEpoch":1,"authBindingEpoch":1,"viewerProtocol":{"negotiated":true,"capabilities":["prompt_control_result_v1"],"authorityEpoch":"fixture-authority"},"selectedId":"agent-1","selectedPromptVersion":0,"lastPromptFeedback":null,"strongAuthLastGrantActionId":null,"strongAuthLastGrantError":null}'
   else
     printf '%s\n' 'true'
@@ -153,6 +190,39 @@ first_out="$tmp_root/first"
 second_out="$tmp_root/second"
 run_contract "$first_out"
 run_contract "$second_out"
+
+fallback_out="$tmp_root/domcontentloaded-fallback"
+fallback_marker="$tmp_root/domcontentloaded-fallback-seen"
+VIEWER_PROMPT_FIXTURE_FAIL_DOM_WAIT=1 \
+  VIEWER_PROMPT_FIXTURE_FALLBACK_MARKER="$fallback_marker" \
+  OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=fixture \
+  OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=fixture \
+  OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=fixture \
+  PATH="$fake_bin:$PATH" "$runner" \
+  --headed --test-login --url http://127.0.0.1:9 --out-dir "$fallback_out"
+test -f "$fallback_out/agent-browser.log"
+test -f "$fallback_marker"
+rg -Fq 'domcontentloaded fallback' "$fallback_out/agent-browser.log"
+test -f "$fallback_out/failure-domcontentloaded-session-info.json"
+test -f "$fallback_out/failure-domcontentloaded-tabs.json"
+
+action_failure_out="$tmp_root/action-failure"
+action_count_file="$tmp_root/test-login-action-count"
+set +e
+VIEWER_PROMPT_FIXTURE_FAIL_ACTION=test-login \
+  VIEWER_PROMPT_FIXTURE_ACTION_COUNT="$action_count_file" \
+  OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=fixture \
+  OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=fixture \
+  OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=fixture \
+  PATH="$fake_bin:$PATH" "$runner" \
+  --headed --test-login --url http://127.0.0.1:9 --out-dir "$action_failure_out"
+action_failure_rc=$?
+set -e
+test "$action_failure_rc" -ne 0
+test -f "$action_count_file"
+test "$(<"$action_count_file")" = 1
+rg -Fq '[action:test-login action] command failed' "$action_failure_out/agent-browser.log"
+test -f "$action_failure_out/failure-test-login_action-session-info.json"
 
 first_manifest=$(find "$first_out" -name artifact-manifest.json -type f -print -quit)
 second_manifest=$(find "$second_out" -name artifact-manifest.json -type f -print -quit)
@@ -218,14 +288,26 @@ else
   cp "$runner" "$sandbox/scripts/viewer-prompt-control-regression.sh"
   ln -s "$repo_root/scripts/agent-browser-lib.sh" "$sandbox/scripts/agent-browser-lib.sh"
   ln -s "$repo_root/scripts/viewer-web-dist-contract.sh" "$sandbox/scripts/viewer-web-dist-contract.sh"
-  cat >"$sandbox/scripts/run-launcher-stack.sh" <<'EOF'
+cat >"$sandbox/scripts/run-launcher-stack.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 [[ "${OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY:-}" == "fixture" ]]
 [[ "${OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY:-}" == "fixture" ]]
 [[ "${OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE:-}" == "fixture" ]]
 [[ "${OASIS7_HOSTED_TEST_LOGIN_ENABLED:-}" == "1" ]]
+output_dir=""
+while (($# > 0)); do
+  if [[ "${1:-}" == "--output-dir" ]]; then
+    output_dir="${2:?missing output dir}"
+    shift 2
+  else
+    shift
+  fi
+done
+mkdir -p "$output_dir"
 printf '%s\n' '- URL: http://127.0.0.1:9'
+printf '%s\n' '- URL: http://127.0.0.1:9/?render_mode=viewer&ws=ws%3A%2F%2F127.0.0.1%3A11&hosted_access=fixture-authority' \
+  >"$output_dir/oasis7_viewer_live.log"
 EOF
   cat >"$sandbox/bin/agent-browser" <<'EOF'
 #!/usr/bin/env bash
@@ -239,6 +321,14 @@ elif [[ " $* " == *" open "* ]]; then
     *"hosted_test_login=1"*) ;;
     *) exit 1 ;;
   esac
+  if [[ "${VIEWER_PROMPT_FIXTURE_REQUIRE_HOSTED_ACCESS:-0}" == "1" && " $* " != *"hosted_access=fixture-authority"* ]]; then
+    echo "fixture browser open URL missing authoritative hosted_access" >&2
+    exit 1
+  fi
+  if [[ "${VIEWER_PROMPT_FIXTURE_REQUIRE_NO_PROXY:-0}" == "1" && " $* " != *"--no-proxy-server"* ]]; then
+    echo "fixture browser open args missing --no-proxy-server" >&2
+    exit 1
+  fi
 elif [[ "${1:-}" == "eval" && "${2:-}" == "--stdin" ]]; then
   script=$(cat)
   if [[ "$script" == 'window.__AW_TEST__.getState()' ]]; then
@@ -251,6 +341,8 @@ exit 0
 EOF
   chmod +x "$sandbox/scripts/run-launcher-stack.sh" "$sandbox/bin/agent-browser"
   set +e
+  VIEWER_PROMPT_FIXTURE_REQUIRE_HOSTED_ACCESS=1 \
+    VIEWER_PROMPT_FIXTURE_REQUIRE_NO_PROXY=1 \
   OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=fixture \
     OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=fixture \
     OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=fixture \
