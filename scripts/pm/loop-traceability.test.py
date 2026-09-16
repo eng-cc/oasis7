@@ -953,6 +953,48 @@ class TraceabilityTests(unittest.TestCase):
         result = self.api.validate_record(record)
         self.assertEqual(result.get("status"), "passed", result)
 
+    def test_task2_na_evidence_ref_is_live_read_back_for_leaf_admission(self):
+        record = _populate_trace(
+            deepcopy(self.record), upstream_kind="professional_acceptance", system_required=False
+        )
+        readers = FixtureReaders(record)
+        result = self.leaf(record, self.refresh_record_binding(record), readers)
+        self.assertEqual(result.get("status"), "passed", result)
+        observed_refs = [
+            args[0]
+            for args, _kwargs in readers.authority_calls
+            if args and isinstance(args[0], dict)
+            and args[0].get("comment_id") == EQUIVALENCE_APPROVAL_COMMENT_ID
+        ]
+        self.assertEqual(len(observed_refs), 4, readers.authority_calls)
+
+    def test_task2_na_evidence_ref_missing_live_comment_blocks_leaf_admission(self):
+        record = _populate_trace(
+            deepcopy(self.record), upstream_kind="professional_acceptance", system_required=False
+        )
+        readers = FixtureReaders(record)
+        readers.comments.pop(EQUIVALENCE_APPROVAL_COMMENT_ID)
+        result = self.leaf(record, self.refresh_record_binding(record), readers)
+        self.assert_trace_blocked(result, "trace-na-evidence-unresolved")
+
+    def test_task2_na_evidence_ref_live_identity_mismatch_blocks_leaf_admission(self):
+        record = _populate_trace(
+            deepcopy(self.record), upstream_kind="professional_acceptance", system_required=False
+        )
+        readers = FixtureReaders(record)
+        original = readers.authority
+
+        def authority(*args, **kwargs):
+            result = original(*args, **kwargs)
+            reference = args[0] if args else kwargs.get("authority_ref") or kwargs.get("coordination_ref")
+            if isinstance(reference, dict) and reference.get("comment_id") == EQUIVALENCE_APPROVAL_COMMENT_ID:
+                result["comment"]["issue_url"] = "https://api.github.com/repos/eng-cc/oasis7/issues/9999"
+            return result
+
+        readers.authority = authority
+        result = self.leaf(record, self.refresh_record_binding(record), readers)
+        self.assert_trace_blocked(result, "trace-na-evidence-unresolved")
+
     def test_task2_product_upstream_with_required_system_design_passes(self):
         record = _populate_trace(deepcopy(self.record), upstream_kind="product_requirement", system_required=True)
         result = self.api.validate_record(record)

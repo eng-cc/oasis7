@@ -25,7 +25,7 @@ printf '\n' >> "$GH_CALL_LOG"
 case "$*" in
   api\ graphql*)
     python3 - "$GH_MAPPING_PATH" <<'PY'
-import json, os, sys
+import base64, json, os, sys
 m=json.load(open(sys.argv[1])); uid,next_record=next(iter(m["tasks"].items())); pm_status=next_record["status"]
 def read_state(name, fallback):
     path=os.environ.get(name)
@@ -45,7 +45,17 @@ issue={"number":next_record["issue_number"],"url":next_record["issue_url"],"body
 # Keep both GraphQL response shapes used by the bounded workflow commands:
 # classify/refresh search uses the aliased s0 search result, while the selected
 # audit fetches the bound Project item through the top-level nodes result.
-project_item["content"]={"body":f"task_uid: {uid}","number":next_record["issue_number"],"title":"[PM] "+next_record["title"],"url":next_record["issue_url"]}
+trace_lines = [f"task_uid: {uid}", "Task metadata:"]
+for key in ("workflow_phase", "completion_mode", "non_pr_completion_evidence_sha256"):
+    value = next_record.get(key)
+    if value:
+        trace_lines.append(f"- {key}: `{value}`")
+evidence = next_record.get("non_pr_completion_evidence")
+if evidence is not None:
+    encoded = base64.urlsafe_b64encode(str(evidence).encode("utf-8")).decode("ascii").rstrip("=")
+    trace_lines.append(f"- non_pr_completion_evidence_b64: `{encoded}`")
+trace_lines.append("Acceptance:")
+project_item["content"]={"body":"\n".join(trace_lines)+"\n","number":next_record["issue_number"],"title":"[PM] "+next_record["title"],"url":next_record["issue_url"]}
 print(json.dumps({"data":{"nodes":[project_item],"s0":{"nodes":[issue]}}}))
 PY
     ;;
@@ -619,9 +629,12 @@ assert "OPT_PR_WATCH_PHASE" in calls, calls
 PY
 
 python3 - "$TMPDIR/.pm/github-project-sync/tasks.json" "$TASK_UID" <<'PY'
-import json,sys
+import hashlib, json, sys
 p=sys.argv[1]; m=json.load(open(p,encoding='utf-8')); r=m['tasks'][sys.argv[2]]
 r['completion_mode']='non_pr_task'; r['non_pr_completion_evidence']='persisted fixture completion truth'
+r['non_pr_completion_evidence_sha256'] = hashlib.sha256(
+    (r['non_pr_completion_evidence'] + '\n').encode('utf-8')
+).hexdigest()
 open(p,'w',encoding='utf-8').write(json.dumps(m)+'\n')
 PY
 

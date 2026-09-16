@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import importlib.util
 import json
 import pathlib
@@ -176,6 +177,11 @@ def normalized_issue_traceability(body: str) -> dict[str, Any]:
         if values is not None:
             fields[key] = values
     return fields
+
+
+def canonical_non_pr_evidence_digest(value: object) -> str:
+    """Return the digest used by the canonical non-PR evidence file."""
+    return hashlib.sha256((str(value) + "\n").encode("utf-8")).hexdigest()
 
 
 def parse_scalar(value: str) -> Any:
@@ -713,8 +719,12 @@ def command_audit(args: argparse.Namespace) -> int:
                 errors.append(
                     f"{uid}: cached {key} drift; refresh explicitly from authoritative GitHub issue"
                 )
-        for key in ("completion_mode", "non_pr_completion_evidence_sha256"):
+        for key in ("workflow_phase", "completion_mode"):
             if key not in live_traceability:
+                if key == "workflow_phase" and str(record.get(key) or ""):
+                    errors.append(
+                        f"{uid}: live workflow_phase projection is missing; refresh explicitly from authoritative GitHub issue"
+                    )
                 continue
             cached_value = str(record.get(key) or "")
             live_value = str(live_traceability.get(key) or "")
@@ -722,6 +732,71 @@ def command_audit(args: argparse.Namespace) -> int:
                 errors.append(
                     f"{uid}: cached {key} drift; refresh explicitly from authoritative GitHub issue"
                 )
+        live_evidence_present = "non_pr_completion_evidence" in live_traceability
+        live_digest_present = (
+            "non_pr_completion_evidence_sha256" in live_traceability
+            and bool(str(live_traceability.get("non_pr_completion_evidence_sha256") or ""))
+        )
+        cached_evidence = record.get("non_pr_completion_evidence")
+        cached_digest = record.get("non_pr_completion_evidence_sha256")
+        cached_evidence_present = cached_evidence not in (None, "")
+        cached_digest_present = bool(str(cached_digest or ""))
+        non_pr_mode_claimed = (
+            str(live_traceability.get("completion_mode") or "") == "non_pr_task"
+            or str(record.get("completion_mode") or "") == "non_pr_task"
+        )
+        evidence_claimed = (
+            non_pr_mode_claimed
+            or live_evidence_present
+            or live_digest_present
+            or cached_evidence_present
+            or cached_digest_present
+        )
+        if evidence_claimed:
+            if not live_evidence_present:
+                errors.append(
+                    f"{uid}: live non_pr_completion_evidence projection is missing; refresh explicitly from authoritative GitHub issue"
+                )
+            if not live_digest_present:
+                errors.append(
+                    f"{uid}: live non_pr_completion_evidence_sha256 projection is missing; refresh explicitly from authoritative GitHub issue"
+                )
+            if not cached_evidence_present:
+                errors.append(
+                    f"{uid}: cached non_pr_completion_evidence is missing; refresh explicitly from authoritative GitHub issue"
+                )
+            if not cached_digest_present:
+                errors.append(
+                    f"{uid}: cached non_pr_completion_evidence_sha256 is missing; refresh explicitly from authoritative GitHub issue"
+                )
+            if live_evidence_present and cached_evidence_present:
+                live_value = str(live_traceability.get("non_pr_completion_evidence") or "")
+                cached_value = str(cached_evidence)
+                if live_value != cached_value:
+                    errors.append(
+                        f"{uid}: cached non_pr_completion_evidence drift; refresh explicitly from authoritative GitHub issue"
+                    )
+            if live_digest_present and cached_digest_present:
+                live_value = str(live_traceability.get("non_pr_completion_evidence_sha256") or "")
+                cached_value = str(cached_digest)
+                if live_value != cached_value:
+                    errors.append(
+                        f"{uid}: cached non_pr_completion_evidence_sha256 drift; refresh explicitly from authoritative GitHub issue"
+                    )
+            if live_evidence_present and live_digest_present:
+                live_value = str(live_traceability.get("non_pr_completion_evidence") or "")
+                live_digest = str(live_traceability.get("non_pr_completion_evidence_sha256") or "")
+                if live_digest != canonical_non_pr_evidence_digest(live_value):
+                    errors.append(
+                        f"{uid}: live non_pr_completion_evidence digest binding is invalid; refresh explicitly from authoritative GitHub issue"
+                    )
+            if cached_evidence_present and cached_digest_present:
+                cached_value = str(cached_evidence)
+                cached_digest_value = str(cached_digest)
+                if cached_digest_value != canonical_non_pr_evidence_digest(cached_value):
+                    errors.append(
+                        f"{uid}: cached non_pr_completion_evidence digest binding is invalid; refresh explicitly from authoritative GitHub issue"
+                    )
         item_fields = normalized_field_values(item)
         for field_name, expected in expected_project_values(task).items():
             if not expected:

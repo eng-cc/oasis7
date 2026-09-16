@@ -432,6 +432,39 @@ def scenario_staged_worktree_design_is_included() -> None:
         shutil.rmtree(root)
 
 
+def scenario_staged_tracked_worktree_design_uses_index_content() -> None:
+    module = load_checker()
+    root, base, _head = make_repo()
+    try:
+        staged_text = DESIGN_HEADER.replace(VALIDATION_ROW, "")
+        (root / DESIGN).write_text(staged_text, encoding="utf-8")
+        run_git(root, "add", DESIGN)
+        run_git(root, "restore", "--source=HEAD", "--worktree", "--", DESIGN)
+        paths = module.changed_system_design_paths(root, base, base, True)
+        assert [path.relative_to(root).as_posix() for path in paths] == [DESIGN], paths
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CHECKER),
+                "--repo-root",
+                str(root),
+                "--base",
+                base,
+                "--head",
+                base,
+                "--worktree",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        output = result.stdout + result.stderr
+        assert result.returncode == 1, output
+        assert "trace-validation-missing" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
 def scenario_unstaged_worktree_design_is_included() -> None:
     module = load_checker()
     root, base, _head = make_repo()
@@ -441,6 +474,58 @@ def scenario_unstaged_worktree_design_is_included() -> None:
         assert [path.relative_to(root).as_posix() for path in paths] == [DESIGN], paths
     finally:
         shutil.rmtree(root)
+
+
+def scenario_duplicate_validation_rows_fail_cardinality() -> None:
+    module = load_checker()
+    root, _base, _head = make_repo(
+        design_text=DESIGN_HEADER.replace(VALIDATION_ROW, VALIDATION_ROW + "\n" + VALIDATION_ROW)
+    )
+    try:
+        assert_code(module, root / DESIGN, "trace-slot-cardinality")
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_committed_validation_symlink_sources_fail_closed() -> None:
+    for label in ("dangling", "external"):
+        root, base, _head = make_repo()
+        outside = Path(tempfile.mkdtemp(prefix="system-design-traceability-outside-"))
+        try:
+            source = root / TEST_SOURCE
+            source.unlink()
+            if label == "dangling":
+                source.symlink_to("missing.test.py")
+            else:
+                outside_target = outside / "external.test.py"
+                outside_target.write_text("# external source\n", encoding="utf-8")
+                source.symlink_to(outside_target)
+            (root / DESIGN).write_text(
+                DESIGN_HEADER + f"\nCommitted {label} validation source revision.\n",
+                encoding="utf-8",
+            )
+            head = commit(root, f"add committed {label} validation source")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(CHECKER),
+                    "--repo-root",
+                    str(root),
+                    "--base",
+                    base,
+                    "--head",
+                    head,
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            output = result.stdout + result.stderr
+            assert result.returncode == 1, output
+            assert "trace-validation-source-invalid" in output, output
+        finally:
+            shutil.rmtree(root)
+            shutil.rmtree(outside)
 
 
 def scenario_untouched_legacy_design_is_excluded() -> None:
@@ -488,7 +573,10 @@ def main() -> None:
         scenario_whitespace_and_comment_only_source_change_is_excluded,
         scenario_untracked_worktree_design_is_included,
         scenario_staged_worktree_design_is_included,
+        scenario_staged_tracked_worktree_design_uses_index_content,
         scenario_unstaged_worktree_design_is_included,
+        scenario_duplicate_validation_rows_fail_cardinality,
+        scenario_committed_validation_symlink_sources_fail_closed,
         scenario_untouched_legacy_design_is_excluded,
         scenario_partial_or_malformed_range_is_rejected,
     )

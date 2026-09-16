@@ -312,6 +312,7 @@ TRACE_REPAIR_HINTS = {
     "trace-upstream-missing": "add one required typed upstream relation",
     "trace-system-design-missing": "add system_design or a complete explicit N/A disposition",
     "trace-na-incomplete": "complete reason, scope, owner_role, evidence_ref, and reevaluation_trigger",
+    "trace-na-evidence-unresolved": "rebind the N/A evidence_ref to a live canonical Issue/comment",
     "trace-ref-unresolved": "rebind the relation to the canonical frozen publication/path/fragment",
     "trace-required-alias-mismatch": "set applicability and required to matching values",
     "trace-slot-cardinality": "provide exactly one row for each required obligation and mapping slot",
@@ -371,6 +372,64 @@ def _validate_na_disposition(
         and declared_role != obligation_role
     ):
         errors.append(_trace_diagnostic("trace-owner-mismatch", obligation, f"{field}.owner_role does not match obligation owner_role", record=record))
+    return errors
+
+
+def _validate_na_evidence_readback(
+    record: dict[str, Any], obligation: dict[str, Any], disposition: Any, field: str,
+    authority_reader: Callable[..., Any] | None,
+) -> list[str]:
+    """Require a complete N/A locator to resolve through repository authority.
+
+    Structural record validation intentionally remains side-effect free.  Leaf
+    and aggregate admission call this helper from their bound-reference pass,
+    where the authenticated/fake authority reader is available.  A shaped
+    locator is not evidence until its canonical Issue and comment identities
+    have been read back and bound to this coordinating record's Task UID.
+    """
+    errors: list[str] = []
+    try:
+        evidence_ref = disposition.get("evidence_ref") if isinstance(disposition, dict) else None
+        _authority_reference(evidence_ref, f"{field}.evidence_ref")
+        if authority_reader is None:
+            raise TraceabilityError("N/A evidence locator requires live authority readback")
+        readback = _reader_result(authority_reader, evidence_ref, "N/A evidence readback")
+        _reader_kind(readback)
+        if readback.get("repository") != REPOSITORY:
+            raise TraceabilityError("N/A evidence repository identity mismatch")
+
+        issue = readback.get("issue")
+        issue_number = evidence_ref["issue_number"]
+        if (
+            not isinstance(issue, dict)
+            or issue.get("number") != issue_number
+            or issue.get("html_url") != _issue_url(issue_number)
+        ):
+            raise TraceabilityError("N/A evidence Issue identity mismatch")
+        if _issue_task_uid(issue) != record.get("task_uid"):
+            raise TraceabilityError("N/A evidence canonical task_uid mismatch")
+
+        comment = readback.get("comment")
+        comment_id = evidence_ref["comment_id"]
+        if not isinstance(comment, dict) or comment.get("id") != comment_id:
+            raise TraceabilityError("N/A evidence comment identity mismatch")
+        if comment.get("issue_url") != _api_issue_url(issue_number):
+            raise TraceabilityError("N/A evidence Issue URL mismatch")
+        author = (comment.get("user") or {}).get("login")
+        if not isinstance(author, str) or not author.strip():
+            raise TraceabilityError("N/A evidence server author unavailable")
+        body = comment.get("body")
+        if not isinstance(body, str) or not body.strip():
+            raise TraceabilityError("N/A evidence comment body unavailable")
+
+        comments = readback.get("comments")
+        duplicates = [item for item in _flatten_comments(comments) if item.get("id") == comment_id]
+        if len(duplicates) > 1:
+            raise TraceabilityError("duplicate N/A evidence comment")
+    except (TraceabilityError, KeyError, TypeError) as exc:
+        errors.append(_trace_diagnostic(
+            "trace-na-evidence-unresolved", obligation, _error_text(exc), record=record,
+        ))
     return errors
 
 
@@ -695,7 +754,11 @@ def _validate_trace_relation_readback(
     authority_reader: Callable[..., Any] | None,
 ) -> list[str]:
     """Resolve a required trace relation against its frozen source authority."""
-    if not isinstance(reference, dict) or reference.get("applicability") != "required":
+    if not isinstance(reference, dict):
+        return []
+    if reference.get("applicability") == "not_applicable":
+        return _validate_na_evidence_readback(record, obligation, reference, field, authority_reader)
+    if reference.get("applicability") != "required":
         return []
     errors: list[str] = []
     try:

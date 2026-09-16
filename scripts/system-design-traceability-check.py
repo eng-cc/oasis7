@@ -155,6 +155,110 @@ def git_text(root: Path, commit: str, path: str) -> str | None:
     return result.stdout
 
 
+def git_index_text(root: Path, path: str) -> str | None:
+    result = subprocess.run(
+        ["git", "-C", str(root), "show", f":{path}"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout
+
+
+def git_tree_entry(root: Path, commit: str, path: str) -> tuple[str, str] | None:
+    result = subprocess.run(
+        ["git", "-C", str(root), "ls-tree", "-z", commit, "--", path],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0 or not result.stdout:
+        return None
+    record = result.stdout.split("\0", 1)[0]
+    metadata, separator, tree_path = record.partition("\t")
+    fields = metadata.split()
+    if not separator or len(fields) < 1:
+        return None
+    return fields[0], tree_path
+
+
+def committed_target_text(root: Path, commit: str, target: Path) -> str | None:
+    """Read a trusted-head target while fail-closing unsafe symlinks.
+
+    ``git show COMMIT:path`` returns the link payload for a symlink rather than
+    the target file.  Resolve committed symlinks from the Git tree instead so
+    dangling, escaping, and cyclic links cannot masquerade as validation
+    sources.  In-repository symlinks remain usable when their full target
+    chain resolves to a committed blob.
+    """
+    try:
+        current = target.relative_to(root).as_posix()
+    except ValueError:
+        return None
+    visited: set[str] = set()
+    while current not in visited:
+        visited.add(current)
+        entry = git_tree_entry(root, commit, current)
+        if entry is None:
+            return None
+        mode, _tree_path = entry
+        if mode != "120000":
+            return git_text(root, commit, current)
+        link_target = git_text(root, commit, current)
+        if link_target is None:
+            return None
+        link_target = link_target.rstrip("\r\n")
+        candidate = posixpath.normpath(posixpath.join(posixpath.dirname(current), link_target))
+        if (
+            posixpath.isabs(candidate)
+            or candidate == ".."
+            or candidate.startswith("../")
+        ):
+            return None
+        current = candidate
+    return None
+
+
+def worktree_file_text(root: Path, checkout_head: str, path: str) -> str | None:
+    """Read the effective worktree content, preserving staged-only changes.
+
+    ``git diff HEAD`` reports the union of index and worktree changes, but a
+    staged tracked file can have its worktree restored to HEAD.  In that case
+    the filesystem is intentionally stale relative to the staged candidate,
+    so the index blob is the content that the worktree gate must inspect.
+    An unstaged change remains authoritative when both index and worktree
+    contain edits because it is the content the local gate will observe.
+    """
+    target = root / path
+    unstaged = parse_name_status(run_git(root, "diff", "--name-status", "-M", "--", "."))
+    staged = parse_name_status(
+        run_git(root, "diff", "--cached", "--name-status", "-M", checkout_head, "--", ".")
+    )
+    if path in unstaged:
+        status = unstaged[path]
+        current = target.read_text(encoding="utf-8") if not status.startswith("D") and target.is_file() else None
+        staged_status = staged.get(path)
+        if staged_status is not None and not staged_status.startswith("D"):
+            head_text = git_text(root, checkout_head, path)
+            if current == head_text:
+                return git_index_text(root, path)
+        return current
+    if path in staged:
+        status = staged[path]
+        return git_index_text(root, path) if not status.startswith("D") else None
+
+    untracked = {
+        candidate.strip()
+        for candidate in run_git(root, "ls-files", "--others", "--exclude-standard", "--", ".").splitlines()
+        if candidate.strip()
+    }
+    if path in untracked:
+        return target.read_text(encoding="utf-8") if target.is_file() else None
+    return target.read_text(encoding="utf-8") if target.is_file() else None
+
+
 def worktree_overlay(root: Path, checkout_head: str) -> dict[str, str]:
     overlay = parse_name_status(
         run_git(root, "diff", "--name-status", "-M", checkout_head, "--", ".")
@@ -194,6 +298,8 @@ def changed_system_design_paths(
     if include_worktree:
         checkout_head = run_git(root, "rev-parse", "--verify", "HEAD^{commit}").strip()
         changed.update(worktree_overlay(root, checkout_head))
+    else:
+        checkout_head = ""
 
     selected: list[Path] = []
     for path, status in sorted(changed.items()):
@@ -201,7 +307,11 @@ def changed_system_design_paths(
             continue
         old_text = git_text(root, source_base, path)
         target = root / path
-        new_text = target.read_text(encoding="utf-8") if include_worktree and target.is_file() else git_text(root, head_oid, path)
+        new_text = (
+            worktree_file_text(root, checkout_head, path)
+            if include_worktree
+            else git_text(root, head_oid, path)
+        )
         if new_text is None:
             continue
         if status.startswith(("A", "R", "C", "??")) or normalized_for_change(old_text) != normalized_for_change(new_text):
@@ -618,6 +728,8 @@ def check_design_content(
             fail(errors, "trace-validation-missing", row_path, "local design validation mapping must point to this file#fragment; repair the second cell")
             continue
         relation_key = (upstream_path.relative_to(root).as_posix() + f"#{upstream_fragment}", local_fragment)
+        if relation_key in validation_keys:
+            fail(errors, "trace-slot-cardinality", row_path, "each validation relation must appear exactly once; repair duplicate rows")
         if not any(
             item.upstream_path + f"#{item.upstream_fragment}" == relation_key[0] and item.local_fragment == local_fragment
             for item in relations
@@ -718,21 +830,24 @@ def main() -> int:
     if not selected:
         print("system-design-traceability: checked 0: reason=no new or substantive system-design changes in selected range")
         return 0
+    checkout_head = run_git(root, "rev-parse", "--verify", "HEAD^{commit}").strip() if args.worktree else ""
+
     def read_target(target: Path) -> str | None:
         if args.worktree:
-            return target.read_text(encoding="utf-8") if target.is_file() else None
+            try:
+                relative = target.relative_to(root).as_posix()
+            except ValueError:
+                return None
+            return worktree_file_text(root, checkout_head, relative)
         try:
-            relative = target.relative_to(root).as_posix()
+            target.relative_to(root)
         except ValueError:
             return None
-        return git_text(root, head, relative)
+        return committed_target_text(root, head, target)
 
     errors: list[str] = []
     for path in selected:
-        if args.worktree:
-            text = path.read_text(encoding="utf-8") if path.is_file() else None
-        else:
-            text = read_target(path)
+        text = read_target(path)
         if text is None:
             fail(errors, "trace-ref-unresolved", path.relative_to(root).as_posix(), "design content is missing; repair the selected head/worktree file")
             continue

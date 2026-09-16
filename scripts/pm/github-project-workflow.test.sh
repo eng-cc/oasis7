@@ -310,10 +310,31 @@ case "$*" in
     if [[ "$*" == *"rateLimit"* ]]; then printf '{"data":{"rateLimit":{"remaining":5000,"resetAt":"2099-01-01T00:00:00Z"}}}\n'; exit 0; fi
     if [[ "${GH_FAKE_METADATA_DRIFT:-0}" == "1" ]]; then
       printf '{"data":{"nodes":[{"id":"MAPPING_ITEM_ID","project":{"id":"PROJECT_ID","number":1,"owner":{"login":"eng-cc"}},"content":{"title":"[PM] authoritative changed title","body":"task_uid: task_33333333333333333333333333333333\\nAcceptance:\\n- authoritative acceptance\\n","number":303,"url":"https://github.com/eng-cc/oasis7/issues/303"},"fieldValues":{"pageInfo":{"hasNextPage":false},"nodes":[{"name":"In Progress","field":{"name":"Status"}},{"text":"task_33333333333333333333333333333333","field":{"name":"Task UID"}},{"name":"tpm","field":{"name":"Owner Role"}},{"name":"engineering","field":{"name":"Module"}},{"name":"committed","field":{"name":"PM Status"}},{"name":"execution","field":{"name":"Workflow Phase"}},{"name":"P2","field":{"name":"Priority"}},{"text":"/tmp/mapping-worktree","field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]}}]}}\n'
-    elif [[ "${GH_FAKE_TRACE_DRIFT:-0}" == "1" ]]; then
+    elif [[ "${GH_FAKE_TRACE_DRIFT:-0}" == "1" || "${GH_FAKE_TRACE_CONTENT_DRIFT:-0}" == "1" || "${GH_FAKE_TRACE_DIGEST_DRIFT:-0}" == "1" || "${GH_FAKE_WORKFLOW_PHASE_DRIFT:-0}" == "1" ]]; then
       python3 - <<'PY'
+import base64
+import hashlib
 import json
+import os
 uid = "task_33333333333333333333333333333333"
+content_drift = os.environ.get("GH_FAKE_TRACE_CONTENT_DRIFT") == "1"
+digest_drift = os.environ.get("GH_FAKE_TRACE_DIGEST_DRIFT") == "1"
+workflow_phase_drift = os.environ.get("GH_FAKE_WORKFLOW_PHASE_DRIFT") == "1"
+cached_evidence = "cached evidence"
+if content_drift:
+    evidence = "tampered evidence"
+    evidence_digest = hashlib.sha256((cached_evidence + "\n").encode()).hexdigest()
+elif digest_drift:
+    evidence = cached_evidence
+    evidence_digest = "0" * 64
+elif workflow_phase_drift:
+    evidence = cached_evidence
+    evidence_digest = hashlib.sha256((cached_evidence + "\n").encode()).hexdigest()
+else:
+    evidence = "live evidence"
+    evidence_digest = "98694058bf71ded2899ac6011b78f767907a9baea31a618ec1dc66facca357d0"
+encoded_evidence = base64.urlsafe_b64encode(evidence.encode()).decode().rstrip("=")
+workflow_phase = "verification" if workflow_phase_drift else "execution"
 body = """<!-- oasis7-pm-task -->
 task_uid: task_33333333333333333333333333333333
 
@@ -323,12 +344,12 @@ Task metadata:
 - owner_role: `tpm`
 - module: `engineering`
 - status: `committed`
-- workflow_phase: `execution`
+- workflow_phase: `{workflow_phase}`
 - priority: `P2`
 - worktree_hint: `/tmp/mapping-worktree`
 - completion_mode: `non_pr_task`
-- non_pr_completion_evidence_b64: `bGl2ZSBldmlkZW5jZQ`
-- non_pr_completion_evidence_sha256: `98694058bf71ded2899ac6011b78f767907a9baea31a618ec1dc66facca357d0`
+- non_pr_completion_evidence_b64: `{encoded_evidence}`
+- non_pr_completion_evidence_sha256: `{evidence_digest}`
 
 Source refs:
 - `source-live`
@@ -341,7 +362,7 @@ Related PRD:
 
 Acceptance:
 - authoritative acceptance
-"""
+""".format(workflow_phase=workflow_phase, encoded_evidence=encoded_evidence, evidence_digest=evidence_digest)
 fields = [
     {"name": "In Progress", "field": {"name": "Status"}},
     {"text": uid, "field": {"name": "Task UID"}},
@@ -478,6 +499,96 @@ for marker in ("doc_refs", "related_prd", "completion_mode", "non_pr_completion_
     assert any(marker in item for item in payload["errors"]), (marker, payload)
 PY
 
+python3 - "$MAPPING_ONLY/.pm/github-project-sync/tasks.json" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+record = payload["tasks"]["task_33333333333333333333333333333333"]
+record.update({
+    "workflow_phase": "execution",
+    "completion_mode": "non_pr_task",
+    "non_pr_completion_evidence": "cached evidence",
+    "non_pr_completion_evidence_sha256": hashlib.sha256(b"cached evidence\n").hexdigest(),
+    "doc_refs": ["doc/live.md"],
+    "related_prd": ["doc/live.prd.md"],
+})
+path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+
+REGRESSION_FAILURES=0
+TRACE_CONTENT_DRIFT_JSON="$TMPDIR/trace-content-drift.json"
+set +e
+GH_FAKE_TRACE_CONTENT_DRIFT=1 python3 "$TMPDIR/github-project-workflow.py" "$MAPPING_ONLY" \
+  --repo eng-cc/oasis7 \
+  --project-owner eng-cc \
+  --project-number 1 \
+  --mapping "$MAPPING_ONLY/.pm/github-project-sync/tasks.json" \
+  --json audit --task-uid task_33333333333333333333333333333333 > "$TRACE_CONTENT_DRIFT_JSON"
+TRACE_CONTENT_DRIFT_EXIT=$?
+set -e
+if [[ "$TRACE_CONTENT_DRIFT_EXIT" != "1" ]]; then
+  echo "non-PR evidence content drift unexpectedly passed audit" >&2
+  REGRESSION_FAILURES=1
+else
+  python3 - "$TRACE_CONTENT_DRIFT_JSON" <<'PY'
+import json
+import pathlib
+import sys
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
+assert any("non_pr_completion_evidence" in item for item in payload["errors"]), payload
+PY
+fi
+
+TRACE_DIGEST_DRIFT_JSON="$TMPDIR/trace-digest-drift.json"
+set +e
+GH_FAKE_TRACE_DIGEST_DRIFT=1 python3 "$TMPDIR/github-project-workflow.py" "$MAPPING_ONLY" \
+  --repo eng-cc/oasis7 \
+  --project-owner eng-cc \
+  --project-number 1 \
+  --mapping "$MAPPING_ONLY/.pm/github-project-sync/tasks.json" \
+  --json audit --task-uid task_33333333333333333333333333333333 > "$TRACE_DIGEST_DRIFT_JSON"
+TRACE_DIGEST_DRIFT_EXIT=$?
+set -e
+if [[ "$TRACE_DIGEST_DRIFT_EXIT" != "1" ]]; then
+  echo "non-PR evidence digest drift unexpectedly passed audit" >&2
+  REGRESSION_FAILURES=1
+else
+  python3 - "$TRACE_DIGEST_DRIFT_JSON" <<'PY'
+import json
+import pathlib
+import sys
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
+assert any("non_pr_completion_evidence_sha256" in item for item in payload["errors"]), payload
+PY
+fi
+
+TRACE_WORKFLOW_PHASE_JSON="$TMPDIR/trace-workflow-phase-drift.json"
+set +e
+GH_FAKE_WORKFLOW_PHASE_DRIFT=1 python3 "$TMPDIR/github-project-workflow.py" "$MAPPING_ONLY" \
+  --repo eng-cc/oasis7 \
+  --project-owner eng-cc \
+  --project-number 1 \
+  --mapping "$MAPPING_ONLY/.pm/github-project-sync/tasks.json" \
+  --json audit --task-uid task_33333333333333333333333333333333 > "$TRACE_WORKFLOW_PHASE_JSON"
+TRACE_WORKFLOW_PHASE_EXIT=$?
+set -e
+if [[ "$TRACE_WORKFLOW_PHASE_EXIT" != "1" ]]; then
+  echo "workflow_phase drift unexpectedly passed audit" >&2
+  REGRESSION_FAILURES=1
+else
+  python3 - "$TRACE_WORKFLOW_PHASE_JSON" <<'PY'
+import json
+import pathlib
+import sys
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
+assert any("workflow_phase" in item for item in payload["errors"]), payload
+PY
+fi
+[[ "$REGRESSION_FAILURES" == "0" ]] || exit 1
+
 # Malformed evidence encodings are projection loss, not an empty optional
 # value. Both invalid base64 and valid base64 with invalid UTF-8 must expose
 # the stable diagnostic so refresh/audit cannot silently clear evidence.
@@ -515,7 +626,7 @@ path = pathlib.Path(sys.argv[1])
 payload = json.loads(path.read_text(encoding="utf-8"))
 record = payload["tasks"]["task_33333333333333333333333333333333"]
 record["acceptance"] = []
-for key in ("doc_refs", "related_prd", "completion_mode", "non_pr_completion_evidence_sha256"):
+for key in ("doc_refs", "related_prd", "workflow_phase", "completion_mode", "non_pr_completion_evidence", "non_pr_completion_evidence_sha256"):
     record.pop(key, None)
 path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 PY
