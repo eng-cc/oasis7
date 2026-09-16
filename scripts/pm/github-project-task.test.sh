@@ -629,12 +629,15 @@ assert "OPT_PR_WATCH_PHASE" in calls, calls
 PY
 
 python3 - "$TMPDIR/.pm/github-project-sync/tasks.json" "$TASK_UID" <<'PY'
-import hashlib, json, sys
+import hashlib, json, pathlib, sys
 p=sys.argv[1]; m=json.load(open(p,encoding='utf-8')); r=m['tasks'][sys.argv[2]]
 r['completion_mode']='non_pr_task'; r['non_pr_completion_evidence']='persisted fixture completion truth'
 r['non_pr_completion_evidence_sha256'] = hashlib.sha256(
     (r['non_pr_completion_evidence'] + '\n').encode('utf-8')
 ).hexdigest()
+pathlib.Path(r['non_pr_completion_evidence_file']).write_text(
+    r['non_pr_completion_evidence'] + '\n', encoding='utf-8'
+)
 open(p,'w',encoding='utf-8').write(json.dumps(m)+'\n')
 PY
 

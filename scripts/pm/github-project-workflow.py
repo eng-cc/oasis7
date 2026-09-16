@@ -184,6 +184,38 @@ def canonical_non_pr_evidence_digest(value: object) -> str:
     return hashlib.sha256((str(value) + "\n").encode("utf-8")).hexdigest()
 
 
+def read_canonical_non_pr_evidence(
+    task_uid: str, record: dict[str, Any]
+) -> tuple[bytes | None, str | None]:
+    """Read the identity-bound non-PR evidence file without following unsafe paths."""
+    recorded_value = record.get("non_pr_completion_evidence_file")
+    if recorded_value in (None, ""):
+        return None, "canonical non_pr_completion_evidence file is missing"
+    if not isinstance(recorded_value, str):
+        return None, "canonical non_pr_completion_evidence path is not canonical"
+    worktree_value = record.get("canonical_worktree")
+    if worktree_value in (None, "") or not isinstance(worktree_value, str):
+        return None, "canonical non_pr_completion_evidence path has no canonical worktree"
+    try:
+        canonical_worktree_path = pathlib.Path(worktree_value).expanduser()
+        if not canonical_worktree_path.is_absolute():
+            return None, "canonical non_pr_completion_evidence path has no absolute canonical worktree"
+        canonical_worktree = canonical_worktree_path.resolve(strict=True)
+        recorded_path = pathlib.Path(recorded_value).expanduser()
+        if not recorded_path.is_absolute():
+            return None, "canonical non_pr_completion_evidence path is not canonical"
+        expected_path = canonical_worktree / ".pm" / "scratch" / task_uid / "non-pr-completion-evidence.txt"
+        if recorded_path.resolve(strict=False) != expected_path:
+            return None, "canonical non_pr_completion_evidence path is not canonical"
+        if recorded_path.is_symlink():
+            return None, "canonical non_pr_completion_evidence path is a symlink"
+        if not recorded_path.is_file():
+            return None, "canonical non_pr_completion_evidence file is unavailable"
+        return recorded_path.read_bytes(), None
+    except (OSError, RuntimeError, ValueError, UnicodeError) as exc:
+        return None, f"canonical non_pr_completion_evidence file cannot be read: {exc}"
+
+
 def parse_scalar(value: str) -> Any:
     value = value.strip()
     if value in {"null", "None"}:
@@ -741,6 +773,7 @@ def command_audit(args: argparse.Namespace) -> int:
         cached_digest = record.get("non_pr_completion_evidence_sha256")
         cached_evidence_present = cached_evidence not in (None, "")
         cached_digest_present = bool(str(cached_digest or ""))
+        canonical_file_claimed = record.get("non_pr_completion_evidence_file") not in (None, "")
         non_pr_mode_claimed = (
             str(live_traceability.get("completion_mode") or "") == "non_pr_task"
             or str(record.get("completion_mode") or "") == "non_pr_task"
@@ -751,6 +784,7 @@ def command_audit(args: argparse.Namespace) -> int:
             or live_digest_present
             or cached_evidence_present
             or cached_digest_present
+            or canonical_file_claimed
         )
         if evidence_claimed:
             if not live_evidence_present:
@@ -797,6 +831,32 @@ def command_audit(args: argparse.Namespace) -> int:
                     errors.append(
                         f"{uid}: cached non_pr_completion_evidence digest binding is invalid; refresh explicitly from authoritative GitHub issue"
                     )
+            if canonical_file_claimed:
+                canonical_bytes, canonical_error = read_canonical_non_pr_evidence(uid, record)
+                if canonical_error:
+                    errors.append(f"{uid}: {canonical_error}")
+                else:
+                    canonical_digest = hashlib.sha256(canonical_bytes or b"").hexdigest()
+                    if live_digest_present and canonical_digest != str(live_traceability.get("non_pr_completion_evidence_sha256") or ""):
+                        errors.append(
+                            f"{uid}: canonical non_pr_completion_evidence digest disagrees with live Issue authority"
+                        )
+                    if cached_digest_present and canonical_digest != str(cached_digest):
+                        errors.append(
+                            f"{uid}: canonical non_pr_completion_evidence digest disagrees with cache authority"
+                        )
+                    if live_evidence_present:
+                        expected_live_bytes = (str(live_traceability.get("non_pr_completion_evidence") or "") + "\n").encode("utf-8")
+                        if canonical_bytes != expected_live_bytes:
+                            errors.append(
+                                f"{uid}: canonical non_pr_completion_evidence content disagrees with live Issue authority"
+                            )
+                    if cached_evidence_present:
+                        expected_cached_bytes = (str(cached_evidence) + "\n").encode("utf-8")
+                        if canonical_bytes != expected_cached_bytes:
+                            errors.append(
+                                f"{uid}: canonical non_pr_completion_evidence content disagrees with cache authority"
+                            )
         item_fields = normalized_field_values(item)
         for field_name, expected in expected_project_values(task).items():
             if not expected:
