@@ -270,7 +270,8 @@ packaging_contract_output="$(plan_for_paths \
   scripts/package-viewer-web-delivery.sh \
   scripts/packaging-artifact-size-contract.test.sh \
   scripts/copy-viewer-web-dist.test.sh \
-  scripts/native-packaging-contract.test.sh)"
+  scripts/native-packaging-contract.test.sh \
+  scripts/package-workflow-cache-reuse-contract.test.sh)"
 assert_key_equals "$packaging_contract_output" scope targeted
 assert_key_equals "$packaging_contract_output" selected_capabilities packaging_contracts
 assert_key_equals "$packaging_contract_output" run_operational_contracts true
@@ -284,11 +285,26 @@ for packaging_path in \
   scripts/package-viewer-web-delivery.sh \
   scripts/packaging-artifact-size-contract.test.sh \
   scripts/copy-viewer-web-dist.test.sh \
-  scripts/native-packaging-contract.test.sh; do
+  scripts/native-packaging-contract.test.sh \
+  scripts/package-workflow-cache-reuse-contract.test.sh; do
   assert_reason_contains "$packaging_contract_output" \
     "packaging_contracts:$packaging_path"
 done
 assert_reason_absent "$packaging_contract_output" "unclassified_or_unresolvable:"
+
+for package_workflow_path in \
+  .github/workflows/testnet-packages.yml \
+  .github/workflows/mainnet-packages.yml \
+  .github/workflows/release-packages.yml; do
+  package_workflow_output="$(plan_for_path "$package_workflow_path")"
+  assert_key_equals "$package_workflow_output" scope full
+  assert_key_equals "$package_workflow_output" run_operational_contracts true
+  assert_key_equals "$package_workflow_output" run_rust_baseline true
+  assert_key_equals "$package_workflow_output" needs_rust_toolchain true
+  assert_reason_contains "$package_workflow_output" \
+    "packaging_workflow:$package_workflow_path"
+  assert_reason_absent "$package_workflow_output" "unclassified_or_unresolvable:"
+done
 
 # Release workflows and Rust-producing bundle boundaries remain full even
 # though their packaging consumers have a focused non-Rust capability.

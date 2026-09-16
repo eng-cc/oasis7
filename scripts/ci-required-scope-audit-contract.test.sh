@@ -93,7 +93,8 @@ packaging_plan="$($planner --event-name pull_request \
   --changed-path scripts/package-viewer-web-delivery.sh \
   --changed-path scripts/packaging-artifact-size-contract.test.sh \
   --changed-path scripts/copy-viewer-web-dist.test.sh \
-  --changed-path scripts/native-packaging-contract.test.sh)"
+  --changed-path scripts/native-packaging-contract.test.sh \
+  --changed-path scripts/package-workflow-cache-reuse-contract.test.sh)"
 require_key "$packaging_plan" scope targeted
 require_key "$packaging_plan" selected_capabilities packaging_contracts
 require_key "$packaging_plan" run_operational_contracts true
@@ -107,7 +108,8 @@ for packaging_path in \
   scripts/package-viewer-web-delivery.sh \
   scripts/packaging-artifact-size-contract.test.sh \
   scripts/copy-viewer-web-dist.test.sh \
-  scripts/native-packaging-contract.test.sh; do
+  scripts/native-packaging-contract.test.sh \
+  scripts/package-workflow-cache-reuse-contract.test.sh; do
   require_reason_contains "$packaging_plan" "packaging_contracts:$packaging_path"
 done
 require_reason_contains "$packaging_plan" "required_gate_baseline:always_on"
@@ -163,6 +165,10 @@ if ! grep -Fqx '  run bash ./scripts/copy-viewer-web-dist.test.sh' <<<"$packagin
   echo "packaging contract runner is not wired to Viewer delivery fixtures" >&2
   exit 1
 fi
+if ! grep -Fqx '  run bash ./scripts/package-workflow-cache-reuse-contract.test.sh' <<<"$packaging_runner_source"; then
+  echo "packaging contract runner is not wired to package workflow cache fixtures" >&2
+  exit 1
+fi
 if ! grep -Fqx '  run_packaging_contract_tests' <<<"$(sed -n '/^run_operational_contract_tests() {/,/^}/p' "$ci_tests")"; then
   echo "operational contract runner must include the focused packaging runner" >&2
   exit 1
@@ -175,6 +181,17 @@ if grep -Eiq '(^|[[:space:];|&()])(cargo|rustup)([[:space:]]|$)' <<<"$packaging_
   echo "packaging contract runner must not invoke Cargo or rustup directly" >&2
   exit 1
 fi
+
+for package_workflow_path in \
+  .github/workflows/testnet-packages.yml \
+  .github/workflows/mainnet-packages.yml \
+  .github/workflows/release-packages.yml; do
+  package_workflow_plan="$($planner --event-name pull_request --changed-path "$package_workflow_path")"
+  require_key "$package_workflow_plan" scope full
+  require_key "$package_workflow_plan" run_operational_contracts true
+  require_key "$package_workflow_plan" run_rust_baseline true
+  require_reason_contains "$package_workflow_plan" "packaging_workflow:$package_workflow_path"
+done
 
 python3 - \
   "$repo_root/scripts/ci-required-scope.v2.json" \

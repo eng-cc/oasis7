@@ -182,6 +182,7 @@ run_provider_remote_https_smoke() {
 run_packaging_contract_tests() {
   run bash ./scripts/native-packaging-contract.test.sh
   run bash ./scripts/packaging-artifact-size-contract.test.sh
+  run bash ./scripts/package-workflow-cache-reuse-contract.test.sh
   run bash ./scripts/copy-viewer-web-dist.test.sh
 }
 
