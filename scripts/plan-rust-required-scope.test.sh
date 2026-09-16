@@ -402,6 +402,38 @@ for document_governance_path in "${document_governance_paths[@]}"; do
 done
 assert_reason_absent "$document_governance_output" "unclassified_or_unresolvable:"
 
+# The legacy hook is explicitly a silent compatibility no-op.  Its focused
+# fixture supplies forbidden-command shims and proves that the hook emits no
+# output or validation call; keep only the hook and its fixture test minimal.
+precommit_noop_output="$(plan_for_paths \
+  scripts/pre-commit.sh \
+  scripts/pre-commit.test.sh)"
+assert_key_equals "$precommit_noop_output" scope minimal
+assert_key_equals "$precommit_noop_output" selected_capabilities required_gate_baseline
+assert_key_equals "$precommit_noop_output" run_rust_baseline false
+assert_key_equals "$precommit_noop_output" needs_rust_toolchain false
+assert_key_equals "$precommit_noop_output" needs_node false
+assert_key_equals "$precommit_noop_output" needs_system_deps false
+assert_reason_contains "$precommit_noop_output" \
+  "governance_script:scripts/pre-commit.sh"
+assert_reason_contains "$precommit_noop_output" \
+  "governance_script:scripts/pre-commit.test.sh"
+assert_reason_absent "$precommit_noop_output" "unclassified_or_unresolvable:"
+
+# Explicit repair is a different contract: it runs Cargo formatting, mutates
+# the index with git add -u, and invokes the commit-tier ci-tests entrypoint.
+# Keep it on the shared full required-gate rule so an isolated change cannot
+# under-plan those Rust/staging/commit effects.
+precommit_repair_output="$(plan_for_path scripts/fix-precommit.sh)"
+assert_key_equals "$precommit_repair_output" scope full
+assert_key_equals "$precommit_repair_output" run_rust_baseline true
+assert_key_equals "$precommit_repair_output" needs_rust_toolchain true
+assert_key_equals "$precommit_repair_output" needs_node true
+assert_key_equals "$precommit_repair_output" needs_system_deps true
+assert_reason_contains "$precommit_repair_output" \
+  "shared_required_gate:scripts/fix-precommit.sh"
+assert_reason_absent "$precommit_repair_output" "unclassified_or_unresolvable:"
+
 # These seven shell fixtures validate required-gate workflow wiring.  Keep
 # every path exact so a missing mapping cannot silently widen this plan to the
 # full Rust baseline/toolchain.
