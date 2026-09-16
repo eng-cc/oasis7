@@ -524,18 +524,10 @@ def triad_provider_gates(
             or checkpoint.get("height", 0) <= 0
         ):
             gates.append("provider_checkpoint_height_invalid")
-        world_resource = status.get("world_resource")
-        expected_world_id = inventory["authority"]["world_id"]
-        expected_chain_id = inventory["authority"]["chain_id"]
-        expected_manifest_hash = (
-            world_resource.get("seed_manifest_hash") if isinstance(world_resource, dict) else None
-        )
         if checkpoint.get("world_id") != expected_world_id:
             gates.append("provider_checkpoint_world_identity_mismatch")
         if checkpoint.get("chain_id") != expected_chain_id:
             gates.append("provider_checkpoint_chain_identity_mismatch")
-        if checkpoint.get("manifest_hash") != expected_manifest_hash:
-            gates.append("provider_checkpoint_manifest_mismatch")
         chain_proof = status.get("chain_proof")
         latest_proof = (
             chain_proof.get("latest_world_head_proof")
@@ -565,21 +557,18 @@ def triad_provider_gates(
             gates.append("validator_47_provider_full_storage_not_ready")
         if full_storage.get("provider_id") != provider_id:
             gates.append("provider_identity_mismatch")
-        world_resource = status.get("world_resource")
         if full_storage.get("world_id") != expected_world_id:
             gates.append("provider_full_storage_world_identity_mismatch")
         if (
             full_storage.get("chain_id") != expected_chain_id
         ):
             gates.append("provider_full_storage_chain_identity_mismatch")
-        if (
-            isinstance(world_resource, dict)
-            and full_storage.get("manifest_hash") != world_resource.get("seed_manifest_hash")
-        ):
-            gates.append("provider_full_storage_manifest_mismatch")
-        checkpoint = provider.get("checkpoint_proof")
-        if isinstance(checkpoint, dict) and full_storage.get("height") != checkpoint.get("height"):
-            gates.append("provider_full_storage_height_mismatch")
+        checkpoint_proof = provider.get("checkpoint_proof")
+        if isinstance(checkpoint_proof, dict):
+            if full_storage.get("manifest_hash") != checkpoint_proof.get("manifest_hash"):
+                gates.append("provider_full_storage_manifest_mismatch")
+            if full_storage.get("height") != checkpoint_proof.get("height"):
+                gates.append("provider_full_storage_height_mismatch")
     return gates
 
 

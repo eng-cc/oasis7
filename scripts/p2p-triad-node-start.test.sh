@@ -92,6 +92,16 @@ manifest_default_adaptive_output=$(APP_ROOT="$TMP_DIR" ENV_FILE="$TMP_DIR/manife
 grep -q -- "--network-tier-manifest" <<<"$manifest_default_adaptive_output"
 grep -q -- "--pos-adaptive-tick-scheduler" <<<"$manifest_default_adaptive_output"
 
+write_env "$TMP_DIR/non-triad-public.env" "$manifest_path"
+sed -i.bak '/^DEPLOYMENT_INVENTORY_PATH=/d' "$TMP_DIR/non-triad-public.env"
+rm -f "$TMP_DIR/non-triad-public.env.bak"
+non_triad_public_output=$(APP_ROOT="$TMP_DIR" ENV_FILE="$TMP_DIR/non-triad-public.env" OASIS7_NODE_START_DRY_RUN=1 "$ROOT_DIR/scripts/p2p-triad-node-start.sh")
+grep -q -- "--network-tier-manifest" <<<"$non_triad_public_output"
+if grep -q -- "--deployment-inventory" <<<"$non_triad_public_output"; then
+  echo "non-triad public-testnet start must not invent a deployment inventory" >&2
+  exit 1
+fi
+
 write_env "$TMP_DIR/missing-inventory.env" "$manifest_path" 0 "$TMP_DIR/config/missing-inventory.json"
 if APP_ROOT="$TMP_DIR" ENV_FILE="$TMP_DIR/missing-inventory.env" OASIS7_NODE_START_DRY_RUN=1 "$ROOT_DIR/scripts/p2p-triad-node-start.sh" >/dev/null 2>&1; then
   echo "manifest-backed start must reject a missing deployment inventory" >&2

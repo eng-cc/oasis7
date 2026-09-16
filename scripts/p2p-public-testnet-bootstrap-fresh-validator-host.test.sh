@@ -52,7 +52,10 @@ done
 cat >"$ops_bundle_dir/bin/service-readback" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' '{"schema_version":"oasis7.human_direct_ssh_readback.v1","active":false,"running":false,"service_state":"stopped","independently_observed":true,"listeners":[]}'
+if [[ -n "${OASIS7_TEST_READBACK_LOG:-}" ]]; then
+  printf '%s\n' "$*" >>"$OASIS7_TEST_READBACK_LOG"
+fi
+printf '%s\n' '{"schema_version":"oasis7.human_direct_ssh_readback.v1","active":false,"running":false,"service_state":"stopped","independently_observed":true,"unit_file_state":"disabled","no_process":true,"no_listener":true,"listeners":[]}'
 SH
 chmod +x "$ops_bundle_dir/bin/service-readback"
 cat >"$bundle_dir/bin/oasis7_chain_runtime" <<'SH'
@@ -158,6 +161,7 @@ SH
 chmod +x "$TMP_DIR/fake-bin/dpkg-deb"
 export PATH="$TMP_DIR/fake-bin:$PATH"
 export OASIS7_TEST_RUNTIME_LOG="$TMP_DIR/runtime-commands.log"
+export OASIS7_TEST_READBACK_LOG="$TMP_DIR/service-readback.log"
 
 cat >"$config_dir/public-testnet-governed-bootstrap-bundle-2026-06-06.json" <<EOF
 {"git_commit":"abcdef1234567890abcdef1234567890abcdef12","runtime_build":{"git_commit":"abcdef1234567890abcdef1234567890abcdef12","sha256":"$runtime_sha","size_bytes":$runtime_size}}
@@ -377,6 +381,15 @@ jq -e \
    and .identity.source_key_sha256 == $key_sha
    and .no_service_started == true
    and ((tostring | test("private_key|secret"; "i")) | not)' \
+  "$validator47_receipt" >/dev/null
+test -s "$OASIS7_TEST_READBACK_LOG"
+validator47_stack_root_abs="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$validator47_stack_root")"
+grep -Fq -- "--read-only --role validator-47 --root $validator47_stack_root_abs --service oasis7-triad-validator-47.service" "$OASIS7_TEST_READBACK_LOG"
+jq -e \
+  '.service.unit_file_state == "disabled"
+   and .service.no_process == true
+   and .service.no_listener == true
+   and .service.listeners == []' \
   "$validator47_receipt" >/dev/null
 test "$(tail -n +$((baseline_runtime_commands + 1)) "$OASIS7_TEST_RUNTIME_LOG" | grep -c '^provision-identity$' || true)" = 0
 test "$(tail -n +$((baseline_runtime_commands + 1)) "$OASIS7_TEST_RUNTIME_LOG" | grep -c '^identity-receipt$' || true)" = 2

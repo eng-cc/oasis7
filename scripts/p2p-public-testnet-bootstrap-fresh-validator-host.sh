@@ -822,14 +822,41 @@ else
   service_unit_file_state=disabled
 fi
 
-# Keep service-manager state independent in the receipt.  The packaged
-# service-readback command is the independent process/listener observation.
+# Keep service-manager state independent in the receipt.  For validator-47,
+# the packaged service-readback command is the required post-install
+# process/listener observation; it is deliberately run after the unit is
+# rendered and before the success receipt is emitted.
+validator47_readback_json='null'
 no_process=true
 no_listener=true
 listeners_json='[]'
 if [[ ${OASIS7_TEST_ONLY:-} != 1 ]]; then
   no_process=null
   no_listener=null
+fi
+if [[ "$node_id" == "$VALIDATOR_47_NODE_ID" ]]; then
+  validator47_service_readback="$stack_root/current/bin/service-readback"
+  [[ -x "$validator47_service_readback" ]] || die "validator-47 service-readback is not executable"
+  validator47_readback_json=$("$validator47_service_readback" \
+    --read-only \
+    --role validator-47 \
+    --root "$stack_root" \
+    --service "$service_name") \
+    || die "validator-47 post-install service-readback failed"
+  printf '%s\n' "$validator47_readback_json" | jq -e '
+    type == "object"
+    and .active == false
+    and .running == false
+    and .service_state == "stopped"
+    and .independently_observed == true
+    and .unit_file_state == "disabled"
+    and .no_process == true
+    and .no_listener == true
+    and (.listeners | type == "array" and length == 0)
+  ' >/dev/null || die "validator-47 post-install readback did not prove the no-start contract"
+  no_process=$(printf '%s\n' "$validator47_readback_json" | jq -c '.no_process')
+  no_listener=$(printf '%s\n' "$validator47_readback_json" | jq -c '.no_listener')
+  listeners_json=$(printf '%s\n' "$validator47_readback_json" | jq -c '.listeners')
 fi
 
 runtime_path="$stack_root/current/bin/oasis7_chain_runtime"
@@ -910,6 +937,7 @@ jq -n \
   --arg identity_source_receipt_sha256 "$identity_source_receipt_sha256" \
   --argjson identity_ownership_valid "$identity_ownership_valid" \
   --argjson staged_identity_receipt "$staged_identity_receipt_json" \
+  --argjson readback "$validator47_readback_json" \
   --argjson config_bundle "$config_bundle_json" --argjson config_manifest "$config_manifest_json" \
   --argjson config_genesis "$config_genesis_json" --argjson config_registry "$config_registry_json" \
   --argjson config_peers "$config_peers_json" --argjson config_node_env "$config_node_env_json" --argjson config_inventory "$config_inventory_json" \
@@ -923,7 +951,7 @@ jq -n \
     identity:{mode:$identity_import_mode,source_key_sha256:$identity_source_key_sha256,source_receipt_sha256:$identity_source_receipt_sha256,ownership_valid:$identity_ownership_valid,readback:$staged_identity_receipt},
     config:{node_env:$config_node_env,bundle:$config_bundle,manifest:$config_manifest,genesis:$config_genesis,validator_registry:$config_registry,bootstrap_peers:$config_peers,inventory:$config_inventory,inventory_ref:$inventory_ref,inventory_sha256:$inventory_sha256},
     world:{snapshot:$world_snapshot,provenance:$world_provenance},
-    service:{name:$service_name,unit_path:$unit,unit_sha256:$unit_sha,active:$active,enabled:$enabled,unit_file_state:$unit_file_state,no_process:$no_process,no_listener:$no_listener,listeners:$listeners,account:{uid:$service_uid,gid:$service_gid}}}' \
+    service:{name:$service_name,unit_path:$unit,unit_sha256:$unit_sha,active:$active,enabled:$enabled,unit_file_state:$unit_file_state,no_process:$no_process,no_listener:$no_listener,listeners:$listeners,readback:$readback,account:{uid:$service_uid,gid:$service_gid}}}' \
   >"$receipt"
 chmod 0600 "$receipt"
 bootstrap_complete=1

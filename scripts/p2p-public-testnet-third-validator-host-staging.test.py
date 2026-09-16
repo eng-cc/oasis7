@@ -741,6 +741,33 @@ class Validator47HostStagingContractTests(unittest.TestCase):
                 with self.assertRaises(SystemExit):
                     enabled_module.main(args)
 
+    def test_readback_rejects_parent_component_symlink_before_resolve(self) -> None:
+        """A symlinked parent must not redirect the canonical root before validation."""
+        with tempfile.TemporaryDirectory(prefix="oasis7-pg02r-b-root-symlink-") as temp_dir:
+            temp = Path(temp_dir)
+            real_parent = temp / "real-parent"
+            real_root = real_parent / "stack"
+            real_root.mkdir(parents=True)
+            alias_parent = temp / "alias-parent"
+            alias_parent.symlink_to(real_parent, target_is_directory=True)
+            aliased_root = alias_parent / real_root.name
+
+            module = load_module(SERVICE_READBACK, "service_readback_pg02r_b_root_symlink")
+            module.CANONICAL_ROOT = str(aliased_root)
+            args = [
+                "--read-only",
+                "--role",
+                "validator-47",
+                "--root",
+                str(aliased_root),
+                "--service",
+                VALIDATOR_47_SERVICE,
+            ]
+            error = io.StringIO()
+            with contextlib.redirect_stderr(error), self.assertRaises(SystemExit):
+                module.parse_args(args)
+            self.assertIn("symlink path component", error.getvalue())
+
     def test_readback_rejects_orphan_validator_process_not_attached_to_unit(self) -> None:
         """A stray runtime process must block no-start even when MainPID is zero."""
         with tempfile.TemporaryDirectory(prefix="oasis7-pg02r-b-orphan-") as temp_dir:

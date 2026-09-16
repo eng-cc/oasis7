@@ -339,6 +339,41 @@ class FleetHealthCollectorContractTest(unittest.TestCase):
                 self.assertEqual(evidence["verdict"], "blocked")
                 self.assertIn("inventory_authority_digest_mismatch", evidence["failed_gates"])
 
+    def test_managed_triad_compares_checkpoint_manifest_to_execution_checkpoint_identity(self) -> None:
+        module = load_collector_module()
+        node_names = ("sequencer-204", "storage-205", "validator-47")
+        inventory_authority = module.triad_inventory_authority()
+        self.assertIsNotNone(inventory_authority)
+        _inventory, inventory_digest = inventory_authority
+        statuses = {
+            name: managed_triad_status(module, name, inventory_sha256=inventory_digest)
+            for name in node_names
+        }
+        execution_manifest_hash = "e" * 64
+        for node_status in statuses.values():
+            node_status["chain_proof"]["latest_execution_checkpoint"]["manifest_hash"] = execution_manifest_hash
+            provider = node_status["provider"]
+            if provider["checkpoint_proof"] is not None:
+                provider["checkpoint_proof"]["manifest_hash"] = execution_manifest_hash
+            if provider["full_storage_proof"] is not None:
+                provider["full_storage_proof"]["manifest_hash"] = execution_manifest_hash
+
+        responses = {f"/{name}": (statuses[name], 0.0) for name in node_names}
+        with tempfile.TemporaryDirectory() as temp_dir, FleetHealthFixture(responses) as fixture:
+            output = Path(temp_dir) / "triad-health.json"
+            result = self.run_collector(
+                fixture,
+                output,
+                nodes=[(name, fixture.endpoint(name)) for name in node_names],
+                managed_triad=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            evidence = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(evidence["scope"], "managed_triad")
+            self.assertEqual(evidence["verdict"], "ready")
+            self.assertNotIn("provider_checkpoint_manifest_mismatch", evidence["failed_gates"])
+            self.assertNotIn("provider_full_storage_manifest_mismatch", evidence["failed_gates"])
+
     def test_ready_fleet_writes_timestamped_json_evidence(self) -> None:
         responses = {f"/{name}": (status(), 0.0) for name in ("sequencer", "storage", "observer")}
         with tempfile.TemporaryDirectory() as temp_dir, FleetHealthFixture(responses) as fixture:

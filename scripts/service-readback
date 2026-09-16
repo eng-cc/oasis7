@@ -58,6 +58,14 @@ TRIAD_IDENTITY_RECEIPT_FILE = "identity-receipt.json"
 READBACK_SCHEMA = "oasis7.human_direct_ssh_readback.v1"
 COMMAND_TIMEOUT_SECONDS = 5
 PORT_RE = re.compile(r":([0-9]{1,5})(?=\s|$)")
+# macOS exposes these root-owned aliases while the temporary test fixtures and
+# some local operator paths retain the lexical spelling.  They are allowed
+# only when their raw link target is the exact system target; every other raw
+# symlink component remains forbidden.
+PLATFORM_ROOT_SYMLINK_TARGETS = {
+    Path("/var"): "private/var",
+    Path("/tmp"): "private/tmp",
+}
 
 
 def fail(message: str) -> NoReturn:
@@ -75,6 +83,26 @@ def regular_file(path: Path, label: str) -> os.stat_result:
     return metadata
 
 
+def _is_trusted_platform_root_alias(path: Path) -> bool:
+    expected_target = PLATFORM_ROOT_SYMLINK_TARGETS.get(path)
+    if expected_target is None:
+        return False
+    try:
+        return os.readlink(path) == expected_target
+    except OSError:
+        return False
+
+
+def _untrusted_raw_root_symlink(path: Path) -> Path | None:
+    """Return a caller-controlled raw root component that is a symlink."""
+    current = Path(path.anchor or "/")
+    for component in path.parts[1:]:
+        current /= component
+        if current.is_symlink() and not _is_trusted_platform_root_alias(current):
+            return current
+    return None
+
+
 def _physical_root_is_safe(root: str) -> None:
     """Require the canonical root and reject redirecting path components."""
     path = Path(root)
@@ -82,11 +110,8 @@ def _physical_root_is_safe(root: str) -> None:
         fail("canonical root does not exist")
     if not path.is_dir():
         fail("canonical root is not a directory")
-    current = Path(path.anchor or "/")
-    for component in path.parts[1:]:
-        current /= component
-        if current.is_symlink():
-            fail("root contains a symlink path component")
+    if _untrusted_raw_root_symlink(path) is not None:
+        fail("root contains a symlink path component")
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -105,12 +130,19 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     expected = SERVICES[args.role]
     if args.service != expected["service"]:
         parser.error(f"--service does not match --role {args.role}")
-    # Resolve only after rejecting a caller-supplied symlink root.  This keeps
-    # the physical-root guard strict while allowing platform aliases such as
-    # macOS /var/folders to reach the same canonical directory.
+    # Validate the raw lexical path before resolve().  Otherwise a symlinked
+    # parent component can redirect the canonical root and disappear from the
+    # resolved path before the physical-root guard sees it.  Root-owned macOS
+    # aliases are handled explicitly by _untrusted_raw_root_symlink().
     raw_root = Path(args.root)
     if raw_root.is_symlink():
         parser.error("--root must not be a symlink")
+    symlink_component = _untrusted_raw_root_symlink(raw_root)
+    if symlink_component is not None:
+        parser.error(
+            "--root must not contain a symlink path component: "
+            f"{symlink_component}"
+        )
     physical_root = raw_root.resolve(strict=True)
     _physical_root_is_safe(str(physical_root))
     args.root = str(physical_root)

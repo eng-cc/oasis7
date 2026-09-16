@@ -48,10 +48,17 @@ if [[ -n "$network_tier_manifest_path" || -n "$genesis_validator_registry_path" 
     exit 2
   }
   require_regular_file "$genesis_validator_registry_path" "genesis validator registry"
-  [[ -n "$deployment_inventory_path" ]] || {
-    echo "public-testnet startup requires DEPLOYMENT_INVENTORY_PATH" >&2
-    exit 2
-  }
+  # The managed triad stages carry an inventory authority. Other public-
+  # testnet producers (for example local observers) intentionally use the
+  # network manifest and registry without the triad-only inventory contract.
+  case "$NODE_ID" in
+    triad-testnet-sequencer|triad-testnet-storage|triad-testnet-validator-47)
+      [[ -n "$deployment_inventory_path" ]] || {
+        echo "managed triad startup requires DEPLOYMENT_INVENTORY_PATH" >&2
+        exit 2
+      }
+      ;;
+  esac
 fi
 
 mkdir -p \
