@@ -1231,6 +1231,7 @@ lines = [
     "P2P_NODE_ROLE=full_storage",
     "STATUS_BIND=0.0.0.0:6634",
     "NODE_GOSSIP_BIND=0.0.0.0:6834",
+    "REPLICATION_NETWORK_LISTEN_ADDRS_CSV=/ip4/0.0.0.0/tcp/6834",
     "CHECKPOINT_PROVIDER=1",
     "FULL_STORAGE_PROVIDER=1",
     "WORLD_ID=oasis7-public-testnet-governed-20260606",

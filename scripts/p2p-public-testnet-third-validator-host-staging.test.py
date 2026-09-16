@@ -101,6 +101,7 @@ LAUNCHER_REQUIRED_ENV = (
     "REWARD_POINTS_PER_CREDIT",
     "NODE_GOSSIP_BIND",
 )
+VALIDATOR_47_REPLICATION_LISTEN = "/ip4/0.0.0.0/tcp/6834"
 
 
 def load_module(path: Path, name: str):
@@ -367,7 +368,7 @@ class Validator47HostStagingContractTests(unittest.TestCase):
             self.assertNotIn("NODE_ROLE=validator\n", staged_env)
 
     def test_generated_stage_env_survives_bootstrap_and_launcher_dry_run(self) -> None:
-        """Generated validator-47 env must execute in a bootstrap-shaped stack."""
+        """Generated env must dry-run and reach the isolated runtime command."""
         receipt = {
             "schema_version": "oasis7.identity_provision.v1",
             "node_id": VALIDATOR_47_NODE_ID,
@@ -387,6 +388,11 @@ class Validator47HostStagingContractTests(unittest.TestCase):
             for key in LAUNCHER_REQUIRED_ENV:
                 self.assertIn(key, staged_values, f"generated node.env missing {key}")
                 self.assertTrue(staged_values[key], f"generated node.env has empty {key}")
+            self.assertEqual(
+                staged_values.get("REPLICATION_NETWORK_LISTEN_ADDRS_CSV"),
+                VALIDATOR_47_REPLICATION_LISTEN,
+                "generated node.env must bind validator-47 replication on its gossip port",
+            )
             self.assertEqual(staged_values["NODE_ID"], VALIDATOR_47_NODE_ID)
             self.assertEqual(staged_values["NODE_ROLE"], "storage")
             self.assertEqual(staged_values["P2P_NODE_ROLE"], "full_storage")
@@ -408,16 +414,26 @@ class Validator47HostStagingContractTests(unittest.TestCase):
 
             runtime = stack / "current/bin/oasis7_chain_runtime"
             runtime.parent.mkdir(parents=True)
-            runtime.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+            runtime_args = stack / "runtime-args.txt"
+            runtime.write_text(
+                "#!/usr/bin/env bash\n"
+                "set -eu\n"
+                "printf '%s\\n' \"$@\" > \"$RUNTIME_ARG_CAPTURE\"\n",
+                encoding="utf-8",
+            )
             runtime.chmod(0o755)
             launcher_env = os.environ.copy()
-            for key in set(LAUNCHER_REQUIRED_ENV) | {"APP_ROOT", "ENV_FILE", "RELEASE_LINK", "BIN"}:
+            for key in (
+                set(LAUNCHER_REQUIRED_ENV)
+                | {"REPLICATION_NETWORK_LISTEN_ADDRS_CSV", "APP_ROOT", "ENV_FILE", "RELEASE_LINK", "BIN"}
+            ):
                 launcher_env.pop(key, None)
             launcher_env.update(
                 {
                     "APP_ROOT": str(stack),
                     "ENV_FILE": str(stack_config / "node.env"),
                     "OASIS7_NODE_START_DRY_RUN": "1",
+                    "RUNTIME_ARG_CAPTURE": str(runtime_args),
                 }
             )
             launcher = subprocess.run(
@@ -448,11 +464,32 @@ class Validator47HostStagingContractTests(unittest.TestCase):
                 "--reward-runtime-epoch-duration-secs",
                 "--reward-points-per-credit",
                 "--node-gossip-bind",
+                "--replication-network-listen",
                 "--network-tier-manifest",
                 "--genesis-validator-registry",
                 "--deployment-inventory",
             ):
                 self.assertIn(flag, launcher.stdout, f"launcher dry-run omitted {flag}")
+
+            launcher_env.pop("OASIS7_NODE_START_DRY_RUN")
+            launcher = subprocess.run(
+                [str(START_NODE)],
+                cwd=stack,
+                env=launcher_env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(launcher.returncode, 0, launcher.stderr)
+            self.assertTrue(runtime_args.is_file(), "launcher did not reach the fake runtime command")
+            runtime_argv = runtime_args.read_text(encoding="utf-8").splitlines()
+            self.assertIn("--replication-network-listen", runtime_argv)
+            replication_index = runtime_argv.index("--replication-network-listen")
+            self.assertEqual(
+                runtime_argv[replication_index + 1],
+                VALIDATOR_47_REPLICATION_LISTEN,
+                "launcher passed an unexpected replication listen address",
+            )
 
     def test_identity_import_is_explicit_byte_preserving_and_registry_bound(self) -> None:
         """The final stack must import, never regenerate, validator-47 identity."""

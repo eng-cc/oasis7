@@ -187,7 +187,8 @@ triad_env="$triad_stage/config/node.env"
 for required_env in \
   CONFIG_PATH EXECUTION_WORLD_DIR EXECUTION_RECORDS_DIR STORAGE_ROOT STORAGE_PROFILE \
   NODE_TICK_MS POS_SLOT_DURATION_MS POS_TICKS_PER_SLOT POS_PROPOSAL_TICK_PHASE \
-  POS_MAX_PAST_SLOT_LAG REWARD_RUNTIME_EPOCH_DURATION_SECS REWARD_POINTS_PER_CREDIT NODE_GOSSIP_BIND; do
+  POS_MAX_PAST_SLOT_LAG REWARD_RUNTIME_EPOCH_DURATION_SECS REWARD_POINTS_PER_CREDIT \
+  NODE_GOSSIP_BIND REPLICATION_NETWORK_LISTEN_ADDRS_CSV; do
   grep -q "^${required_env}=" "$triad_env" || {
     echo "triad node.env missing launcher variable: $required_env" >&2
     exit 1
@@ -202,6 +203,7 @@ grep -qx 'POS_SLOT_DURATION_MS=8000' "$triad_env"
 grep -qx 'POS_TICKS_PER_SLOT=10' "$triad_env"
 grep -qx 'POS_PROPOSAL_TICK_PHASE=9' "$triad_env"
 grep -qx 'POS_MAX_PAST_SLOT_LAG=256' "$triad_env"
+grep -qx 'REPLICATION_NETWORK_LISTEN_ADDRS_CSV=/ip4/0.0.0.0/tcp/6834' "$triad_env"
 (
   cd "$triad_stage"
   APP_ROOT="$PWD" ENV_FILE="$PWD/config/node.env" BIN="$TMP_DIR/validator-47-runtime" \
@@ -209,6 +211,7 @@ grep -qx 'POS_MAX_PAST_SLOT_LAG=256' "$triad_env"
     >"$TMP_DIR/triad-launcher-dry-run.out"
 )
 grep -q '^runtime command:' "$TMP_DIR/triad-launcher-dry-run.out"
+grep -Eq -- '--replication-network-listen[[:space:]]+/ip4/0\.0\.0\.0/tcp/6834' "$TMP_DIR/triad-launcher-dry-run.out"
 
 # Optional pair provenance is absent in the first invocation above and must be
 # forwarded/validated when explicitly supplied in this second invocation.
