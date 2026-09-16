@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use std::env;
-use std::fs;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::path::{Path, PathBuf};
@@ -65,8 +64,6 @@ mod main_token_submit_api;
 mod module_release_attestation_submit_api;
 #[path = "oasis7_chain_runtime/node_keypair_config.rs"]
 mod node_keypair_config;
-#[path = "oasis7_chain_runtime/node_runtime_policy.rs"]
-mod node_runtime_policy;
 #[path = "oasis7_chain_runtime/p2p_status.rs"]
 mod p2p_status;
 #[path = "oasis7_chain_runtime/publication_lifecycle.rs"]
@@ -84,6 +81,8 @@ mod reward_runtime_settlement;
 mod reward_runtime_worker;
 #[path = "oasis7_chain_runtime/runtime_authority.rs"]
 mod runtime_authority;
+#[path = "oasis7_chain_runtime/runtime_file_io.rs"]
+mod runtime_file_io;
 #[path = "oasis7_chain_runtime/runtime_status_util.rs"]
 mod runtime_status_util;
 #[path = "oasis7_chain_runtime/startup_reconcile.rs"]
@@ -120,9 +119,6 @@ use feedback_submit_api::{
     ChainFeedbackSubmitResponse, FeedbackSubmitSigner, build_feedback_create_request,
     extract_http_json_body, parse_feedback_submit_request, write_feedback_submit_error,
 };
-use node_runtime_policy::{
-    node_role_materializes_execution_state, node_role_requires_execution_commit,
-};
 use p2p_status::{
     applied_runtime_user_mode_label, build_live_node_network_policy_recommendation,
     build_node_network_policy,
@@ -131,6 +127,7 @@ use reward_runtime_worker::{
     RewardRuntimeWorkerConfig, SharedRewardRuntimeMetrics, init_shared_metrics, poll_worker_error,
     snapshot_metrics, start_reward_runtime_worker, stop_reward_runtime_worker,
 };
+pub(crate) use runtime_file_io::write_bytes_atomic;
 #[cfg(test)]
 use status_payload::build_chain_status_payload;
 #[cfg(test)]
@@ -1142,27 +1139,6 @@ fn build_validator_signer_public_keys(
         }
     }
     Ok(bindings)
-}
-
-#[allow(dead_code)]
-fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)
-                .map_err(|err| format!("create state dir {} failed: {}", parent.display(), err))?;
-        }
-    }
-    let temp_path = path.with_extension("json.tmp");
-    fs::write(&temp_path, bytes)
-        .map_err(|err| format!("write state temp {} failed: {}", temp_path.display(), err))?;
-    fs::rename(&temp_path, path).map_err(|err| {
-        format!(
-            "rename state temp {} -> {} failed: {}",
-            temp_path.display(),
-            path.display(),
-            err
-        )
-    })
 }
 
 #[cfg(test)]
