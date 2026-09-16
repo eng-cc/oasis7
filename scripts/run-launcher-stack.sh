@@ -1032,9 +1032,11 @@ else
   WORLD_ARGS+=(--chain-disable)
 fi
 WORLD_ARGS+=(--with-llm)
-for authority_path in "${PROVIDER_BOOTSTRAP_AUTHORITY_PATHS[@]}"; do
-  WORLD_ARGS+=(--provider-bootstrap-authority "$authority_path")
-done
+if ((${#PROVIDER_BOOTSTRAP_AUTHORITY_PATHS[@]} > 0)); then
+  for authority_path in "${PROVIDER_BOOTSTRAP_AUTHORITY_PATHS[@]}"; do
+    WORLD_ARGS+=(--provider-bootstrap-authority "$authority_path")
+  done
+fi
 if [[ "$LOCAL_TEST_PROVIDER_SETUP_ENABLED" == "1" ]]; then
   WORLD_ARGS+=(
     --local-test-provider-authority "$LOCAL_TEST_PROVIDER_AUTHORITY_PATH"

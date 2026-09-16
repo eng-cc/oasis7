@@ -82,4 +82,38 @@ rg -Fq 'button[data-prompt-action="preview"]' "$runner"
 rg -Fq 'button[data-prompt-action="apply"]' "$runner"
 rg -Fq 'button[data-prompt-action="rollback"]' "$runner"
 
+# macOS ships Bash 3.2, where set -u expands an empty array as unbound.
+# Exercise the real launch branch in a sandbox so no browser or provider is
+# contacted while checking that zero passthrough arguments remain valid.
+if /bin/bash -c 'set -u; empty=(); : "${empty[@]}"' >/dev/null 2>&1; then
+  echo "Bash 3 empty-array compatibility probe unavailable; using source guard"
+else
+  sandbox="$tmp_root/bash3-sandbox"
+  mkdir -p "$sandbox/scripts" "$sandbox/bin"
+  cp "$runner" "$sandbox/scripts/viewer-prompt-control-regression.sh"
+  ln -s "$repo_root/scripts/agent-browser-lib.sh" "$sandbox/scripts/agent-browser-lib.sh"
+  ln -s "$repo_root/scripts/viewer-web-dist-contract.sh" "$sandbox/scripts/viewer-web-dist-contract.sh"
+  cat >"$sandbox/scripts/run-launcher-stack.sh" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' '- URL: http://127.0.0.1:9'
+EOF
+  cat >"$sandbox/bin/agent-browser" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+  chmod +x "$sandbox/scripts/run-launcher-stack.sh" "$sandbox/bin/agent-browser"
+  set +e
+  PATH="$sandbox/bin:$PATH" /bin/bash "$sandbox/scripts/viewer-prompt-control-regression.sh" \
+    --headed --out-dir "$tmp_root/bash3-run"
+  status=$?
+  set -e
+  if [[ "$status" -eq 3 ]]; then
+    echo "Bash 3 empty-array compatibility flow completed with expected blocked status"
+  else
+    echo "Bash 3 empty-array compatibility flow failed: $status" >&2
+    exit 1
+  fi
+fi
+rg -Fq 'if ((${#STACK_ARGS[@]} > 0)); then' "$runner"
+
 echo "viewer-prompt-control runner contract: passed"

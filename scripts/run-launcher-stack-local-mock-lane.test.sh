@@ -55,6 +55,7 @@ from pathlib import Path
 
 payload = json.loads(Path(sys.argv[1]).read_text())
 assert payload["major_world_event_visibility"] == "restricted"
+assert payload["provider_bootstrap_authority_count"] == "0"
 PY
 
 invalid_error="$tmp_dir/invalid-visibility.stderr"
@@ -83,3 +84,13 @@ from pathlib import Path
 payload = json.loads(Path(sys.argv[1]).read_text())
 assert payload["agent_chat_echo"] == "1"
 PY
+
+# macOS Bash 3.2 raises under set -u when an empty array is iterated. Keep the
+# reproduction local and require the launcher source to guard the zero-path
+# case before expanding PROVIDER_BOOTSTRAP_AUTHORITY_PATHS.
+if /bin/bash -c 'set -u; paths=(); for path in "${paths[@]}"; do :; done' >/dev/null 2>&1; then
+  echo "Bash 3 empty-array reproduction unavailable" >&2
+  exit 1
+fi
+rg -Fq 'if ((${#PROVIDER_BOOTSTRAP_AUTHORITY_PATHS[@]} > 0)); then' \
+  ./scripts/run-launcher-stack.sh

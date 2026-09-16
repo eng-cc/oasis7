@@ -182,14 +182,24 @@ trap cleanup EXIT
 ab_require
 
 if [[ -z "$GAME_URL" ]]; then
-  "$ROOT_DIR/scripts/run-launcher-stack.sh" \
-    --with-llm \
-    --agent-decision-source builtin_llm \
-    --deployment-mode hosted_public_join \
-    --json-ready \
-    --run-id "$RUN_ID" \
-    --output-dir "$OUT_DIR/runtime" \
-    "${STACK_ARGS[@]}" >"$LAUNCH_LOG" 2>&1 &
+  if ((${#STACK_ARGS[@]} > 0)); then
+    "$ROOT_DIR/scripts/run-launcher-stack.sh" \
+      --with-llm \
+      --agent-decision-source builtin_llm \
+      --deployment-mode hosted_public_join \
+      --json-ready \
+      --run-id "$RUN_ID" \
+      --output-dir "$OUT_DIR/runtime" \
+      "${STACK_ARGS[@]}" >"$LAUNCH_LOG" 2>&1 &
+  else
+    "$ROOT_DIR/scripts/run-launcher-stack.sh" \
+      --with-llm \
+      --agent-decision-source builtin_llm \
+      --deployment-mode hosted_public_join \
+      --json-ready \
+      --run-id "$RUN_ID" \
+      --output-dir "$OUT_DIR/runtime" >"$LAUNCH_LOG" 2>&1 &
+  fi
   LAUNCH_PID=$!
   deadline=$((SECONDS + STARTUP_TIMEOUT))
   while (( SECONDS < deadline )); do
